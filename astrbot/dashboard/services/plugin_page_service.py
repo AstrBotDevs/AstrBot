@@ -6,19 +6,21 @@ import os
 import posixpath
 import re
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import cast
 from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 
 import aiofiles
-import jwt
 from aiofiles import ospath as aio_ospath
 
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.star.star import StarMetadata
 from astrbot.core.star.star_manager import PluginManager
+from astrbot.dashboard.auth_tokens import (
+    DashboardTokenError,
+    decode_plugin_asset_token,
+    issue_plugin_asset_token,
+)
 
 PLUGIN_PAGE_ASSET_TOKEN_TYPE = "plugin_page_asset"
 PLUGIN_PAGE_ASSET_TOKEN_TTL_SECONDS = 60
@@ -90,9 +92,14 @@ class PluginPageService:
         self.bridge_file = PLUGIN_PAGE_BRIDGE_FILE
 
     def _jwt_secret(self) -> str | None:
+        """Return the plugin-page asset signing secret.
+
+        Returns:
+            Secret dedicated to short-lived plugin page assets.
+        """
         if self.config is None:
             return None
-        return self.config.get("dashboard", {}).get("jwt_secret")
+        return self.config.get("dashboard", {}).get("plugin_asset_jwt_secret")
 
     def get_plugin_metadata_by_name(self, plugin_name: str) -> StarMetadata | None:
         for plugin in self.plugin_manager.context.get_all_stars():
@@ -169,10 +176,8 @@ class PluginPageService:
             return None
 
         try:
-            payload = jwt.decode(asset_token, jwt_secret, algorithms=["HS256"])
-        except jwt.InvalidTokenError:
-            return None
-        if payload.get("token_type") != PLUGIN_PAGE_ASSET_TOKEN_TYPE:
+            payload = decode_plugin_asset_token(asset_token, secret=jwt_secret)
+        except DashboardTokenError:
             return None
 
         plugin_name = payload.get("plugin_name")
@@ -906,17 +911,13 @@ class PluginPageService:
         if not isinstance(username, str) or not username.strip():
             return None
 
-        now = datetime.now(timezone.utc)
-        payload = {
-            "username": username,
-            "token_type": PLUGIN_PAGE_ASSET_TOKEN_TYPE,
-            "plugin_name": plugin_name,
-            "page_name": page_name,
-            "locale": locale,
-            "iat": now,
-            "exp": now + timedelta(seconds=PLUGIN_PAGE_ASSET_TOKEN_TTL_SECONDS),
-        }
-        return cast(str, jwt.encode(payload, jwt_secret, algorithm="HS256"))
+        return issue_plugin_asset_token(
+            username=username,
+            plugin_name=plugin_name,
+            page_name=page_name,
+            locale=locale,
+            secret=jwt_secret,
+        )
 
 
 __all__ = [

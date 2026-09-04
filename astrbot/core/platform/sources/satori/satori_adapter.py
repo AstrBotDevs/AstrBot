@@ -1,6 +1,7 @@
 import asyncio
 import json
 import time
+from pathlib import Path
 from typing import TYPE_CHECKING
 from xml.etree import ElementTree as ET
 
@@ -322,6 +323,8 @@ class SatoriPlatformAdapter(Platform):
         login: dict,
         timestamp: int | None = None,
     ) -> AstrBotMessage | None:
+        temporary_local_files: list[str] = []
+        temporary_files_transferred = False
         try:
             abm = AstrBotMessage()
             abm.message_id = message.get("id", "")
@@ -372,7 +375,10 @@ class SatoriPlatformAdapter(Platform):
 
             if quote:
                 # 引用消息
-                quote_abm = await self._convert_quote_message(quote)
+                quote_abm = await self._convert_quote_message(
+                    quote,
+                    temporary_local_files,
+                )
                 if quote_abm:
                     sender_id = quote_abm.sender.user_id
                     if isinstance(sender_id, str) and sender_id.isdigit():
@@ -393,7 +399,10 @@ class SatoriPlatformAdapter(Platform):
                     abm.message.append(reply_component)
 
             # 解析消息内容
-            content_elements = await self.parse_satori_elements(content_for_parsing)
+            content_elements = await self.parse_satori_elements(
+                content_for_parsing,
+                temporary_local_files,
+            )
             abm.message.extend(content_elements)
 
             abm.message_str = ""
@@ -407,11 +416,24 @@ class SatoriPlatformAdapter(Platform):
             else:
                 abm.timestamp = int(time.time())
 
+            abm._temporary_local_files = temporary_local_files
+            temporary_files_transferred = True
             return abm
 
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             logger.error(f"转换 Satori 消息失败: {e}")
             return None
+        finally:
+            if not temporary_files_transferred:
+                for temporary_path in temporary_local_files:
+                    try:
+                        Path(temporary_path).unlink(missing_ok=True)
+                    except OSError:
+                        logger.warning(
+                            "Failed to clean a temporary Satori media file after conversion error"
+                        )
 
     def _extract_namespace_prefixes(self, content: str) -> set:
         """提取XML内容中的命名空间前缀"""
@@ -559,7 +581,11 @@ class SatoriPlatformAdapter(Platform):
             "content_without_quote": content_without_quote,
         }
 
-    async def _convert_quote_message(self, quote: dict) -> AstrBotMessage | None:
+    async def _convert_quote_message(
+        self,
+        quote: dict,
+        temporary_local_files: list[str] | None = None,
+    ) -> AstrBotMessage | None:
         """转换引用消息"""
         try:
             quote_abm = AstrBotMessage()
@@ -581,7 +607,10 @@ class SatoriPlatformAdapter(Platform):
 
             # 解析引用消息内容
             quote_content = quote.get("content", "")
-            quote_abm.message = await self.parse_satori_elements(quote_content)
+            quote_abm.message = await self.parse_satori_elements(
+                quote_content,
+                temporary_local_files,
+            )
 
             quote_abm.message_str = ""
             for comp in quote_abm.message:
@@ -599,7 +628,11 @@ class SatoriPlatformAdapter(Platform):
             logger.error(f"转换引用消息失败: {e}")
             return None
 
-    async def parse_satori_elements(self, content: str) -> list:
+    async def parse_satori_elements(
+        self,
+        content: str,
+        temporary_local_files: list[str] | None = None,
+    ) -> list:
         """解析 Satori 消息元素"""
         elements = []
 
@@ -628,7 +661,7 @@ class SatoriPlatformAdapter(Platform):
                 processed_content = content
 
             root = ET.fromstring(processed_content)
-            await self._parse_xml_node(root, elements)
+            await self._parse_xml_node(root, elements, temporary_local_files)
         except ET.ParseError as e:
             logger.warning(f"解析 Satori 元素时发生解析错误: {e}, 错误内容: {content}")
             # 如果解析失败，将整个内容当作纯文本
@@ -644,7 +677,12 @@ class SatoriPlatformAdapter(Platform):
 
         return elements
 
-    async def _parse_xml_node(self, node: ET.Element, elements: list) -> None:
+    async def _parse_xml_node(
+        self,
+        node: ET.Element,
+        elements: list,
+        temporary_local_files: list[str] | None = None,
+    ) -> None:
         """递归解析 XML 节点"""
         if node.text and node.text.strip():
             elements.append(Plain(text=node.text))
@@ -678,11 +716,13 @@ class SatoriPlatformAdapter(Platform):
                 src = attrs.get("src", "")
                 if not src:
                     continue
-                path_wav = await MediaResolver(
+                path_wav, cleanup_paths = await MediaResolver(
                     src,
                     media_type="audio",
                     default_suffix=".wav",
-                ).to_path(target_format="wav")
+                ).to_path_with_cleanup(target_format="wav")
+                if temporary_local_files is not None:
+                    temporary_local_files.extend(cleanup_paths)
                 elements.append(Record(file=path_wav, url=path_wav))
 
             elif tag_name == "quote":
@@ -729,7 +769,11 @@ class SatoriPlatformAdapter(Platform):
                 # 未知标签，递归处理其内容
                 if child.text and child.text.strip():
                     elements.append(Plain(text=child.text))
-                await self._parse_xml_node(child, elements)
+                await self._parse_xml_node(
+                    child,
+                    elements,
+                    temporary_local_files,
+                )
 
             # 处理标签后的文本
             if child.tail and child.tail.strip():
@@ -746,13 +790,16 @@ class SatoriPlatformAdapter(Platform):
         """
         from .satori_event import SatoriPlatformEvent
 
-        return SatoriPlatformEvent(
+        event = SatoriPlatformEvent(
             message_str=message.message_str,
             message_obj=message,
             platform_meta=self.meta(),
             session_id=message.session_id,
             adapter=self,
         )
+        for path in getattr(message, "_temporary_local_files", []):
+            event.track_temporary_local_file(path)
+        return event
 
     async def handle_msg(self, message: AstrBotMessage) -> None:
         self.commit_event(self.create_event(message))

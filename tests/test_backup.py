@@ -28,6 +28,7 @@ from astrbot.core.db.po import (
     ConversationV2,
 )
 from astrbot.core.utils.version_comparator import VersionComparator
+from astrbot.core.utils.archive_limits import ZipArchivePolicy
 from astrbot.dashboard.services.backup_service import (
     generate_unique_filename,
     secure_filename,
@@ -658,6 +659,68 @@ class TestAstrBotImporter:
 
         assert result.success is False
         assert any("主版本不兼容" in err for err in result.errors)
+
+    @pytest.mark.asyncio
+    async def test_import_revalidates_archive_before_database_mutation(
+        self, mock_main_db, tmp_path, monkeypatch
+    ):
+        """Direct import must enforce ZIP limits even when pre_check was skipped."""
+        zip_path = tmp_path / "compressed_bomb.zip"
+        manifest = {
+            "version": "1.1",
+            "astrbot_version": VERSION,
+            "tables": {},
+        }
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("manifest.json", json.dumps(manifest))
+            zf.writestr("databases/main_db.json", "{}")
+            zf.writestr("files/attachments/bomb.bin", b"0" * 4096)
+
+        monkeypatch.setattr(
+            "astrbot.core.backup.importer.BACKUP_ARCHIVE_POLICY",
+            ZipArchivePolicy(
+                max_entries=10,
+                max_total_bytes=10_000,
+                max_file_bytes=5_000,
+                max_compression_ratio=10,
+            ),
+        )
+        importer = AstrBotImporter(main_db=mock_main_db)
+        importer._clear_main_db = AsyncMock()
+
+        result = await importer.import_all(str(zip_path), mode="replace")
+
+        assert result.success is False
+        assert any("compression-ratio" in error for error in result.errors)
+        importer._clear_main_db.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_import_bounds_structured_json_before_database_mutation(
+        self, mock_main_db, tmp_path, monkeypatch
+    ):
+        """Archive-wide binary limits must not permit giant in-memory JSON reads."""
+        zip_path = tmp_path / "oversized_json.zip"
+        manifest = {
+            "version": "1.1",
+            "astrbot_version": VERSION,
+            "tables": {},
+        }
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_STORED) as zf:
+            zf.writestr("manifest.json", json.dumps(manifest))
+            zf.writestr("databases/main_db.json", json.dumps({"padding": "x" * 128}))
+
+        monkeypatch.setattr(
+            "astrbot.core.backup.importer.DATABASE_JSON_MAX_BYTES",
+            64,
+        )
+        importer = AstrBotImporter(main_db=mock_main_db)
+        importer._clear_main_db = AsyncMock()
+
+        result = await importer.import_all(str(zip_path), mode="replace")
+
+        assert result.success is False
+        assert any("JSON member exceeds byte limit" in error for error in result.errors)
+        importer._clear_main_db.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_import_replace_fails_when_clear_main_db_fails(

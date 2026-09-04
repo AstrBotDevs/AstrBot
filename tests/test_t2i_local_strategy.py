@@ -1,9 +1,13 @@
+import asyncio
+from unittest.mock import AsyncMock
+
 import pytest
 
 from astrbot.core.utils.t2i.local_strategy import (
     CodeBlock,
     FontManager,
     HeadingBlock,
+    ImageBlock,
     MarkdownParser,
     MarkdownRenderer,
     MathBlock,
@@ -81,3 +85,41 @@ result = "abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz"
 
     assert image.width == 420
     assert image.height > 400
+
+
+@pytest.mark.asyncio
+async def test_markdown_parser_rejects_image_fanout_before_fetch(monkeypatch) -> None:
+    """A compact Markdown payload must not fan out unbounded remote requests."""
+    load = AsyncMock()
+    monkeypatch.setattr(ImageBlock, "load", load)
+    markdown = "\n\n".join(
+        f"![image-{index}](https://example.com/{index}.png)" for index in range(17)
+    )
+
+    with pytest.raises(ValueError, match="too many remote images"):
+        await MarkdownParser.parse(markdown)
+
+    load.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_markdown_parser_bounds_concurrent_image_fetches(monkeypatch) -> None:
+    """Accepted remote images are loaded through a small semaphore."""
+    active = 0
+    peak = 0
+
+    async def fake_load(_block) -> None:
+        nonlocal active, peak
+        active += 1
+        peak = max(peak, active)
+        await asyncio.sleep(0.01)
+        active -= 1
+
+    monkeypatch.setattr(ImageBlock, "load", fake_load)
+    markdown = "\n\n".join(
+        f"![image-{index}](https://example.com/{index}.png)" for index in range(8)
+    )
+
+    await MarkdownParser.parse(markdown)
+
+    assert peak == 4

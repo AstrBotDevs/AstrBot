@@ -10,6 +10,7 @@ from astrbot.core.utils.webhook_utils import ensure_platform_webhook_config
 
 from .platform import Platform, PlatformStatus
 from .register import platform_cls_map
+from .security_validation import validate_platform_security_config
 from .sources.webchat.webchat_adapter import WebChatAdapter
 
 
@@ -107,6 +108,7 @@ class PlatformManager:
         try:
             if not platform_config["enable"]:
                 return
+            validate_platform_security_config(platform_config)
             platform_id = platform_config.get("id")
             if not self._is_valid_platform_id(platform_id):
                 sanitized_id, changed = self._sanitize_platform_id(platform_id)

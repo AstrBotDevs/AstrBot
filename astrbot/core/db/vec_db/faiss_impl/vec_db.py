@@ -47,13 +47,29 @@ class FaissVecDB(BaseVecDB):
         str_id = id or str(uuid.uuid4())  # 使用 UUID 作为原始 ID
 
         vector = await self.embedding_provider.get_embedding(content)
-        vector = np.array(vector, dtype=np.float32)
+        try:
+            vector = np.asarray(vector, dtype=np.float32)
+        except (TypeError, ValueError) as exc:
+            raise KnowledgeBaseUploadError(
+                stage="embedding",
+                user_message="向量化失败：嵌入模型返回的向量格式不正确。",
+            ) from exc
+        if vector.ndim != 1 or vector.shape[0] != self.embedding_storage.dimension:
+            raise KnowledgeBaseUploadError(
+                stage="embedding",
+                user_message=("向量化失败：返回向量维度与当前知识库索引维度不一致。"),
+                details={
+                    "expected_dimension": self.embedding_storage.dimension,
+                    "actual_shape": list(vector.shape),
+                },
+            )
 
-        # 使用 DocumentStorage 的方法插入文档
         int_id = await self.document_storage.insert_document(str_id, content, metadata)
-
-        # 插入向量到 FAISS
-        await self.embedding_storage.insert(vector, int_id)
+        try:
+            await self.embedding_storage.insert(vector, int_id)
+        except Exception:
+            await self._rollback_partial_insert(ids=[str_id], int_ids=[int_id])
+            raise
         return int_id
 
     async def insert_batch(

@@ -53,7 +53,7 @@ export function useVADRecording() {
     // 初始化 VAD
     async function initVAD() {
         if (!window.vad) {
-            console.error('VAD library not loaded. Please ensure the scripts are included in index.html');
+            console.error('VAD library is unavailable. Ensure the Dashboard runtime assets were built.');
             return;
         }
 
@@ -102,8 +102,8 @@ export function useVADRecording() {
                 minSpeechMs: 400,
                 submitUserSpeechOnPause: false,
                 model: 'v5',
-                baseAssetPath: 'https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@0.0.29/dist/',
-                onnxWASMBasePath: 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/'
+                baseAssetPath: `${import.meta.env.BASE_URL}vad/`,
+                onnxWASMBasePath: `${import.meta.env.BASE_URL}vad/onnx/`
             });
 
             isInitialized.value = true;

@@ -1,6 +1,6 @@
 {
   "metadata": {
     "display_name": "内置指令",
-    "desc": "AstrBot 自带插件，提供 /reset、/help、/sid 等内置指令。"
+    "desc": "AstrBot 自带插件，提供 /reset、/help、/sid 等内置指令，以及仅管理员可用的 /workspace-control 审批指令。"
   }
 }

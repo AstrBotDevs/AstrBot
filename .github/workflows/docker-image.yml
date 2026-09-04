@@ -5,202 +5,316 @@ on:
     tags:
       - "v*"
   schedule:
-    # Run at 00:00 UTC every day
     - cron: "0 0 * * *"
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing Git tag to build and publish (for example: v4.28.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write
 
 jobs:
   build-nightly-image:
     if: github.repository == 'AstrBotDevs/AstrBot' && github.event_name == 'schedule'
     runs-on: ubuntu-latest
+    concurrency:
+      group: astrbot-docker-nightly
+      cancel-in-progress: false
     env:
-      DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
-      GHCR_OWNER: astrbotdevs
       HAS_GHCR_TOKEN: ${{ secrets.GHCR_GITHUB_TOKEN != '' }}
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 1
-          fetch-tag: true
 
       - name: Check for new commits today
-        if: github.event_name == 'schedule'
         id: check-commits
+        shell: bash
         run: |
-          # Get commits from the last 24 hours
-          commits=$(git log --since="24 hours ago" --oneline)
+          commits="$(git log --since="24 hours ago" --oneline)"
           if [ -z "$commits" ]; then
-            echo "No commits in the last 24 hours, skipping build"
-            echo "has_commits=false" >> $GITHUB_OUTPUT
+            echo "has_commits=false" >> "$GITHUB_OUTPUT"
           else
-            echo "Found commits in the last 24 hours:"
-            echo "$commits"
-            echo "has_commits=true" >> $GITHUB_OUTPUT
+            echo "has_commits=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Exit if no commits
-        if: github.event_name == 'schedule' && steps.check-commits.outputs.has_commits == 'false'
+        if: steps.check-commits.outputs.has_commits == 'false'
         run: exit 0
 
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          version: 10.28.2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '24.13.0'
+          cache: pnpm
+          cache-dependency-path: dashboard/pnpm-lock.yaml
+
       - name: Build Dashboard
+        shell: bash
         run: |
-          dashboard_version=$(python3 - <<'PY'
+          dashboard_version="$(python3 - <<'PY'
           import tomllib
-          with open("pyproject.toml", "rb") as f:
-              print("v" + tomllib.load(f)["project"]["version"])
+          with open("pyproject.toml", "rb") as project_file:
+              print("v" + tomllib.load(project_file)["project"]["version"])
           PY
-          )
-          cd dashboard
-          npm install
-          npm run build
-          mkdir -p dist/assets
-          echo "$dashboard_version" > dist/assets/version
-          cd ..
+          )"
+          pnpm --dir dashboard install --frozen-lockfile
+          pnpm --dir dashboard run build
+          mkdir -p dashboard/dist/assets
+          printf '%s\n' "$dashboard_version" > dashboard/dist/assets/version
           mkdir -p astrbot/dashboard
-          rm -rf astrbot/dashboard/dist
-          cp -r dashboard/dist astrbot/dashboard/dist
+          cp -a dashboard/dist astrbot/dashboard/dist
 
-      - name: Determine test image tags
-        id: test-meta
+      - name: Determine nightly image tags
+        id: image-meta
+        shell: bash
         run: |
-          short_sha=$(echo "${GITHUB_SHA}" | cut -c1-12)
-          build_date=$(date +%Y%m%d)
-          echo "short_sha=$short_sha" >> $GITHUB_OUTPUT
-          echo "build_date=$build_date" >> $GITHUB_OUTPUT
+          echo "short_sha=${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+          echo "build_date=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
+          echo "lock_sha256=$(sha256sum uv.lock | awk '{print $1}')" >> "$GITHUB_OUTPUT"
 
-      - name: Set QEMU
-        uses: docker/setup-qemu-action@v4.2.0
+      - name: Refuse to overwrite immutable nightly tag
+        env:
+          DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
+          GHCR_TOKEN: ${{ secrets.GHCR_GITHUB_TOKEN }}
+          NIGHTLY_TAG: nightly-${{ steps.image-meta.outputs.build_date }}-${{ steps.image-meta.outputs.short_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          hub_status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            "https://hub.docker.com/v2/repositories/${DOCKER_HUB_USERNAME}/astrbot/tags/${NIGHTLY_TAG}/")"
+          if [ "$hub_status" != "404" ]; then
+            echo "Docker Hub nightly tag ${NIGHTLY_TAG} already exists or cannot be checked (HTTP ${hub_status})." >&2
+            exit 1
+          fi
+          if [ -n "$GHCR_TOKEN" ]; then
+            ghcr_bearer="$(
+              curl --fail --silent --show-error \
+                --user "astrbotdevs:${GHCR_TOKEN}" \
+                "https://ghcr.io/token?service=ghcr.io&scope=repository:astrbotdevs/astrbot:pull" \
+                | python3 -c 'import json, sys; print(json.load(sys.stdin).get("token", ""))'
+            )"
+            if [ -z "$ghcr_bearer" ]; then
+              echo "Could not acquire a GHCR read token for immutable-tag verification." >&2
+              exit 1
+            fi
+            ghcr_status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+              --header "Authorization: Bearer ${ghcr_bearer}" \
+              --header 'Accept: application/vnd.oci.image.index.v1+json' \
+              "https://ghcr.io/v2/astrbotdevs/astrbot/manifests/${NIGHTLY_TAG}")"
+            if [ "$ghcr_status" != "404" ]; then
+              echo "GHCR nightly tag ${NIGHTLY_TAG} already exists or cannot be checked (HTTP ${ghcr_status})." >&2
+              exit 1
+            fi
+          fi
 
-      - name: Set Docker Buildx
-        uses: docker/setup-buildx-action@v4.3.0
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
 
-      - name: Log in to DockerHub
-        uses: docker/login-action@v4.6.0
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_PASSWORD }}
 
-      - name: Login to GitHub Container Registry
+      - name: Log in to GitHub Container Registry
         if: env.HAS_GHCR_TOKEN == 'true'
-        uses: docker/login-action@v4.6.0
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
-          username: ${{ env.GHCR_OWNER }}
+          username: astrbotdevs
           password: ${{ secrets.GHCR_GITHUB_TOKEN }}
 
-      - name: Build nightly image tags list
-        id: test-tags
-        run: |
-          TAGS="${{ env.DOCKER_HUB_USERNAME }}/astrbot:nightly-latest
-          ${{ env.DOCKER_HUB_USERNAME }}/astrbot:nightly-${{ steps.test-meta.outputs.build_date }}-${{ steps.test-meta.outputs.short_sha }}"
-          if [ "${{ env.HAS_GHCR_TOKEN }}" = "true" ]; then
-            TAGS="$TAGS
-          ghcr.io/${{ env.GHCR_OWNER }}/astrbot:nightly-latest
-          ghcr.io/${{ env.GHCR_OWNER }}/astrbot:nightly-${{ steps.test-meta.outputs.build_date }}-${{ steps.test-meta.outputs.short_sha }}"
-          fi
-          echo "tags<<EOF" >> $GITHUB_OUTPUT
-          echo "$TAGS" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
-      - name: Build and Push Nightly Image
-        uses: docker/build-push-action@v7.3.0
+      - name: Build and push nightly image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ steps.test-tags.outputs.tags }}
-
-      - name: Post build notifications
-        run: echo "Test Docker image has been built and pushed successfully"
+          build-args: |
+            VCS_REF=${{ github.sha }}
+            VERSION=nightly-${{ steps.image-meta.outputs.build_date }}-${{ steps.image-meta.outputs.short_sha }}
+            UV_LOCK_SHA256=${{ steps.image-meta.outputs.lock_sha256 }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=nightly-${{ steps.image-meta.outputs.build_date }}-${{ steps.image-meta.outputs.short_sha }}
+            org.astrbot.uv-lock-sha256=${{ steps.image-meta.outputs.lock_sha256 }}
+          tags: |
+            ${{ secrets.DOCKER_HUB_USERNAME }}/astrbot:nightly-latest
+            ${{ secrets.DOCKER_HUB_USERNAME }}/astrbot:nightly-${{ steps.image-meta.outputs.build_date }}-${{ steps.image-meta.outputs.short_sha }}
+            ${{ env.HAS_GHCR_TOKEN == 'true' && 'ghcr.io/astrbotdevs/astrbot:nightly-latest' || '' }}
+            ${{ env.HAS_GHCR_TOKEN == 'true' && format('ghcr.io/astrbotdevs/astrbot:nightly-{0}-{1}', steps.image-meta.outputs.build_date, steps.image-meta.outputs.short_sha) || '' }}
 
   build-release-image:
     if: github.repository == 'AstrBotDevs/AstrBot' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')))
     runs-on: ubuntu-latest
+    concurrency:
+      group: astrbot-docker-release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+      cancel-in-progress: false
     env:
-      DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
-      GHCR_OWNER: astrbotdevs
       HAS_GHCR_TOKEN: ${{ secrets.GHCR_GITHUB_TOKEN != '' }}
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v7
+      - name: Checkout tagged release
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          fetch-depth: 1
-          fetch-tag: true
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
 
-      - name: Get latest tag (only on manual trigger)
-        id: get-latest-tag
-        if: github.event_name == 'workflow_dispatch'
-        run: |
-          tag=$(git describe --tags --abbrev=0)
-          echo "latest_tag=$tag" >> $GITHUB_OUTPUT
-
-      - name: Checkout to latest tag (only on manual trigger)
-        if: github.event_name == 'workflow_dispatch'
-        run: git checkout ${{ steps.get-latest-tag.outputs.latest_tag }}
-
-      - name: Compute release metadata
+      - name: Verify release tag and checkout
         id: release-meta
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+        shell: bash
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            version="${{ steps.get-latest-tag.outputs.latest_tag }}"
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            version="$INPUT_TAG"
           else
             version="${GITHUB_REF#refs/tags/}"
           fi
-          if [[ "$version" == *"beta"* ]] || [[ "$version" == *"alpha"* ]]; then
-            echo "is_prerelease=true" >> $GITHUB_OUTPUT
-            echo "Version $version marked as pre-release"
-          else
-            echo "is_prerelease=false" >> $GITHUB_OUTPUT
-            echo "Version $version marked as stable"
+          if [[ ! "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z][0-9A-Za-z.-]*)?$ ]]; then
+            echo "Release tag must be a safe semantic version: $version" >&2
+            exit 1
           fi
-          echo "version=$version" >> $GITHUB_OUTPUT
+          git fetch --force --tags origin "refs/tags/$version:refs/tags/$version"
+          tag_commit="$(git rev-list -n1 "$version")"
+          head_commit="$(git rev-parse HEAD)"
+          if [ "$tag_commit" != "$head_commit" ]; then
+            echo "Checked out commit does not match release tag $version." >&2
+            exit 1
+          fi
+          if [[ "$version" == *beta* ]] || [[ "$version" == *alpha* ]]; then
+            echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "lock_sha256=$(sha256sum uv.lock | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+
+      - name: Refuse to overwrite immutable release tags
+        env:
+          DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
+          GHCR_TOKEN: ${{ secrets.GHCR_GITHUB_TOKEN }}
+          VERSION: ${{ steps.release-meta.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          hub_status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            "https://hub.docker.com/v2/repositories/${DOCKER_HUB_USERNAME}/astrbot/tags/${VERSION}/")"
+          if [ "$hub_status" != "404" ]; then
+            echo "Docker Hub tag ${VERSION} already exists (HTTP ${hub_status})." >&2
+            exit 1
+          fi
+          if [ -n "$GHCR_TOKEN" ]; then
+            ghcr_bearer="$(
+              curl --fail --silent --show-error \
+                --user "astrbotdevs:${GHCR_TOKEN}" \
+                "https://ghcr.io/token?service=ghcr.io&scope=repository:astrbotdevs/astrbot:pull" \
+                | python3 -c 'import json, sys; print(json.load(sys.stdin).get("token", ""))'
+            )"
+            if [ -z "$ghcr_bearer" ]; then
+              echo "Could not acquire a GHCR read token for immutable-tag verification." >&2
+              exit 1
+            fi
+            ghcr_status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+              --header "Authorization: Bearer ${ghcr_bearer}" \
+              --header 'Accept: application/vnd.oci.image.index.v1+json' \
+              "https://ghcr.io/v2/astrbotdevs/astrbot/manifests/${VERSION}")"
+            if [ "$ghcr_status" != "404" ]; then
+              echo "GHCR tag ${VERSION} already exists or cannot be checked (HTTP ${ghcr_status})." >&2
+              exit 1
+            fi
+          fi
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          version: 10.28.2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '24.13.0'
+          cache: pnpm
+          cache-dependency-path: dashboard/pnpm-lock.yaml
 
       - name: Build Dashboard
+        shell: bash
         run: |
-          cd dashboard
-          npm install
-          npm run build
-          mkdir -p dist/assets
-          echo "${{ steps.release-meta.outputs.version }}" > dist/assets/version
-          cd ..
+          pnpm --dir dashboard install --frozen-lockfile
+          pnpm --dir dashboard run build
+          mkdir -p dashboard/dist/assets
+          printf '%s\n' "${{ steps.release-meta.outputs.version }}" > dashboard/dist/assets/version
           mkdir -p astrbot/dashboard
-          rm -rf astrbot/dashboard/dist
-          cp -r dashboard/dist astrbot/dashboard/dist
+          cp -a dashboard/dist astrbot/dashboard/dist
 
-      - name: Set QEMU
-        uses: docker/setup-qemu-action@v4.2.0
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
 
-      - name: Set Docker Buildx
-        uses: docker/setup-buildx-action@v4.3.0
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
 
-      - name: Log in to DockerHub
-        uses: docker/login-action@v4.6.0
+      - name: Log in to Docker Hub
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_PASSWORD }}
 
-      - name: Login to GitHub Container Registry
+      - name: Log in to GitHub Container Registry
         if: env.HAS_GHCR_TOKEN == 'true'
-        uses: docker/login-action@v4.6.0
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
-          username: ${{ env.GHCR_OWNER }}
+          username: astrbotdevs
           password: ${{ secrets.GHCR_GITHUB_TOKEN }}
 
-      - name: Build and Push Release Image
-        uses: docker/build-push-action@v7.3.0
+      - name: Build and push immutable release image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
+          build-args: |
+            VCS_REF=${{ github.sha }}
+            VERSION=${{ steps.release-meta.outputs.version }}
+            UV_LOCK_SHA256=${{ steps.release-meta.outputs.lock_sha256 }}
           tags: |
-            ${{ steps.release-meta.outputs.is_prerelease == 'false' && format('{0}/astrbot:latest', env.DOCKER_HUB_USERNAME) || '' }}
-            ${{ steps.release-meta.outputs.is_prerelease == 'false' && env.HAS_GHCR_TOKEN == 'true' && format('ghcr.io/{0}/astrbot:latest', env.GHCR_OWNER) || '' }}
-            ${{ format('{0}/astrbot:{1}', env.DOCKER_HUB_USERNAME, steps.release-meta.outputs.version) }}
-            ${{ env.HAS_GHCR_TOKEN == 'true' && format('ghcr.io/{0}/astrbot:{1}', env.GHCR_OWNER, steps.release-meta.outputs.version) || '' }}
+            ${{ secrets.DOCKER_HUB_USERNAME }}/astrbot:${{ steps.release-meta.outputs.version }}
+            ${{ env.HAS_GHCR_TOKEN == 'true' && format('ghcr.io/astrbotdevs/astrbot:{0}', steps.release-meta.outputs.version) || '' }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.release-meta.outputs.version }}
+            org.astrbot.uv-lock-sha256=${{ steps.release-meta.outputs.lock_sha256 }}
 
-      - name: Post build notifications
-        run: echo "Release Docker image has been built and pushed successfully"
+      - name: Promote stable release to latest
+        if: steps.release-meta.outputs.is_prerelease == 'false'
+        env:
+          DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
+          HAS_GHCR_TOKEN: ${{ env.HAS_GHCR_TOKEN }}
+          VERSION: ${{ steps.release-meta.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker buildx imagetools create \
+            --tag "${DOCKER_HUB_USERNAME}/astrbot:latest" \
+            "${DOCKER_HUB_USERNAME}/astrbot:${VERSION}"
+          if [ "$HAS_GHCR_TOKEN" = "true" ]; then
+            docker buildx imagetools create \
+              --tag "ghcr.io/astrbotdevs/astrbot:latest" \
+              "ghcr.io/astrbotdevs/astrbot:${VERSION}"
+          fi

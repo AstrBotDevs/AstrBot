@@ -30,7 +30,7 @@ cd AstrBot
 
 2. 在终端执行(AstrBot 目录下)
 ```bash
-uv sync
+uv sync --locked
 uv run main.py
 ```
 
@@ -42,6 +42,8 @@ uv run --no-sync main.py
 :::
 
 ::: details Python 内置 venv 安装依赖
+
+> AstrBot 支持 Python 3.12 至 3.14。
 
 在 AstrBot 源码目录下，使用终端运行以下命令：
 

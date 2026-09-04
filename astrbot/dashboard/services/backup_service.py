@@ -28,6 +28,8 @@ from astrbot.core.utils.astrbot_path import (
 )
 
 CHUNK_SIZE = 1024 * 1024
+MAX_DIRECT_UPLOAD_BYTES = 128 * 1024 * 1024
+MAX_CHUNKED_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024
 UPLOAD_EXPIRE_SECONDS = 3600
 
 
@@ -80,19 +82,53 @@ class BackupService:
         return data if isinstance(data, dict) else {}
 
     @staticmethod
-    async def _save_upload(file: Any, target_path: str) -> None:
+    async def _save_upload(
+        file: Any,
+        target_path: str,
+        *,
+        max_bytes: int,
+    ) -> int:
+        """Stream an uploaded file to disk with exact byte accounting.
+
+        Args:
+            file: Upload object exposing async ``read`` or bounded ``save``.
+            target_path: Final local output path.
+            max_bytes: Maximum number of bytes to write.
+
+        Returns:
+            Number of bytes written.
+
+        Raises:
+            BackupServiceError: If the upload is invalid or too large.
+        """
+        path = Path(target_path)
         if hasattr(file, "save"):
-            result = file.save(target_path)
-            if hasattr(result, "__await__"):
-                await result
-            return
+            try:
+                result = file.save(target_path, max_bytes=max_bytes)
+                if hasattr(result, "__await__"):
+                    result = await result
+                return int(result or path.stat().st_size)
+            except TypeError:
+                pass
 
         if hasattr(file, "read"):
-            data = file.read()
-            if hasattr(data, "__await__"):
-                data = await data
-            Path(target_path).write_bytes(data)
-            return
+            written = 0
+            try:
+                with path.open("wb") as output:
+                    while True:
+                        chunk = file.read(1024 * 1024)
+                        if hasattr(chunk, "__await__"):
+                            chunk = await chunk
+                        if not chunk:
+                            break
+                        written += len(chunk)
+                        if written > max_bytes:
+                            raise BackupServiceError("上传文件超过大小限制")
+                        output.write(chunk)
+            except Exception:
+                path.unlink(missing_ok=True)
+                raise
+            return written
 
         raise BackupServiceError("无效的上传文件")
 
@@ -315,7 +351,11 @@ class BackupService:
 
         Path(self.backup_dir).mkdir(parents=True, exist_ok=True)
         zip_path = os.path.join(self.backup_dir, unique_filename)
-        await self._save_upload(file, zip_path)
+        await self._save_upload(
+            file,
+            zip_path,
+            max_bytes=MAX_DIRECT_UPLOAD_BYTES,
+        )
 
         logger.info(
             f"上传的备份文件已保存: {unique_filename} (原始名称: {file.filename})"
@@ -335,8 +375,10 @@ class BackupService:
             raise BackupServiceError("缺少 filename 参数")
         if not filename.endswith(".zip"):
             raise BackupServiceError("请上传 ZIP 格式的备份文件")
-        if total_size <= 0:
+        if not isinstance(total_size, int) or total_size <= 0:
             raise BackupServiceError("无效的文件大小")
+        if total_size > MAX_CHUNKED_UPLOAD_BYTES:
+            raise BackupServiceError("备份文件超过 2 GiB 限制")
 
         total_chunks = math.ceil(total_size / CHUNK_SIZE)
         upload_id = str(uuid.uuid4())
@@ -392,9 +434,23 @@ class BackupService:
         session = self.upload_sessions[upload_id]
         if chunk_index < 0 or chunk_index >= session["total_chunks"]:
             raise BackupServiceError("分片索引超出范围")
+        if chunk_index in session["received_chunks"]:
+            raise BackupServiceError("分片已上传")
 
         chunk_path = os.path.join(session["chunk_dir"], f"{chunk_index}.part")
-        await self._save_upload(chunk_file, chunk_path)
+        written = await self._save_upload(
+            chunk_file,
+            chunk_path,
+            max_bytes=CHUNK_SIZE,
+        )
+        expected_size = (
+            CHUNK_SIZE
+            if chunk_index < session["total_chunks"] - 1
+            else session["total_size"] - CHUNK_SIZE * (session["total_chunks"] - 1)
+        )
+        if written != expected_size:
+            Path(chunk_path).unlink(missing_ok=True)
+            raise BackupServiceError("分片大小与声明不一致")
         session["received_chunks"].add(chunk_index)
         session["last_activity"] = time.time()
 
@@ -463,6 +519,8 @@ class BackupService:
                             outfile.write(data_block)
 
             file_size = os.path.getsize(output_path)
+            if file_size != session["total_size"]:
+                raise BackupServiceError("合并文件大小与声明不一致")
             self.mark_backup_as_uploaded(output_path)
             logger.info(f"分片上传完成: {filename}, size={file_size}, chunks={total}")
             await self.cleanup_upload_session(upload_id)

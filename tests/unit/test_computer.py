@@ -4,6 +4,7 @@ This module tests the ComputerClient, Booter implementations (local, shipyard, b
 filesystem operations, Python execution, shell execution, and security restrictions.
 """
 
+import asyncio
 import shlex
 import sys
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -574,6 +575,383 @@ class TestComputerClient:
 
         # Cleanup
         computer_client.session_booter.clear()
+
+    @pytest.mark.asyncio
+    async def test_get_booter_boots_one_sandbox_per_session(self):
+        """Concurrent first callers share one boot operation and result."""
+        from astrbot.core.computer import computer_client
+
+        computer_client.session_booter.clear()
+        computer_client.session_boot_inflight.clear()
+        computer_client.computer_shutdown_started = False
+        boot_started = asyncio.Event()
+        release_boot = asyncio.Event()
+
+        class FakeBooter:
+            boot_calls = 0
+
+            def __init__(self, **kwargs):
+                pass
+
+            async def boot(self, _session_id):
+                type(self).boot_calls += 1
+                boot_started.set()
+                await release_boot.wait()
+
+            async def shutdown(self, **kwargs):
+                pass
+
+        context = MagicMock()
+        context.get_config.return_value = {
+            "provider_settings": {
+                "computer_use_runtime": "sandbox",
+                "sandbox": {"booter": "shipyard"},
+            },
+        }
+        with (
+            patch(
+                "astrbot.core.computer.booters.shipyard.ShipyardBooter",
+                FakeBooter,
+            ),
+            patch(
+                "astrbot.core.computer.computer_client._sync_skills_to_sandbox",
+                AsyncMock(),
+            ),
+        ):
+            first = asyncio.create_task(
+                computer_client.get_booter(context, "single-flight")
+            )
+            await boot_started.wait()
+            second = asyncio.create_task(
+                computer_client.get_booter(context, "single-flight")
+            )
+            await asyncio.sleep(0)
+            release_boot.set()
+            first_booter, second_booter = await asyncio.gather(first, second)
+
+        assert FakeBooter.boot_calls == 1
+        assert first_booter is second_booter
+        computer_client.session_booter.clear()
+
+    @pytest.mark.asyncio
+    async def test_shutdown_waits_for_inflight_boot_and_cleans_remote_sandbox(self):
+        """Shutdown must not re-enable booting before a creator has cleaned up."""
+        from astrbot.core.computer import computer_client
+
+        computer_client.session_booter.clear()
+        computer_client.session_boot_inflight.clear()
+        computer_client.computer_shutdown_started = False
+        boot_started = asyncio.Event()
+        release_boot = asyncio.Event()
+
+        class FakeBooter:
+            shutdown_calls = 0
+
+            def __init__(self, **_kwargs):
+                pass
+
+            async def boot(self, _session_id):
+                boot_started.set()
+                await release_boot.wait()
+
+            async def shutdown(self, **_kwargs):
+                type(self).shutdown_calls += 1
+
+        context = MagicMock()
+        context.get_config.return_value = {
+            "provider_settings": {
+                "computer_use_runtime": "sandbox",
+                "sandbox": {"booter": "shipyard"},
+            },
+        }
+        with (
+            patch(
+                "astrbot.core.computer.booters.shipyard.ShipyardBooter",
+                FakeBooter,
+            ),
+            patch(
+                "astrbot.core.computer.computer_client._sync_skills_to_sandbox",
+                AsyncMock(),
+            ),
+            patch(
+                "astrbot.core.computer.computer_client.shutdown_local_booter",
+                AsyncMock(),
+            ),
+        ):
+            boot_task = asyncio.create_task(
+                computer_client.get_booter(context, "shutdown-race")
+            )
+            await boot_started.wait()
+            shutdown_task = asyncio.create_task(computer_client.shutdown_all_booters())
+            await asyncio.sleep(0)
+            assert not shutdown_task.done()
+
+            release_boot.set()
+            with pytest.raises(RuntimeError, match="shutting down"):
+                await boot_task
+            await shutdown_task
+
+        assert FakeBooter.shutdown_calls == 1
+        assert computer_client.session_booter == {}
+        assert computer_client.session_boot_inflight == {}
+        assert computer_client.computer_shutdown_started is False
+
+    @pytest.mark.asyncio
+    async def test_shutdown_bounds_stuck_boot_and_prevents_late_registration(self):
+        """A creator that ignores cancellation cannot hang stop or register later."""
+        from astrbot.core.computer import computer_client
+
+        computer_client.session_booter.clear()
+        computer_client.session_boot_inflight.clear()
+        computer_client.session_boot_creators.clear()
+        computer_client.session_boot_candidates.clear()
+        computer_client._abandoned_shutdown_tasks.clear()
+        computer_client.computer_shutdown_started = False
+        boot_started = asyncio.Event()
+        release_boot = asyncio.Event()
+
+        class StuckBooter:
+            shutdown_calls = 0
+
+            def __init__(self, **_kwargs):
+                pass
+
+            async def boot(self, _session_id):
+                boot_started.set()
+                try:
+                    await release_boot.wait()
+                except asyncio.CancelledError:
+                    # Model a third-party SDK that catches cancellation and
+                    # remains blocked in native/network cleanup.
+                    await release_boot.wait()
+
+            async def shutdown(self, **_kwargs):
+                type(self).shutdown_calls += 1
+
+        context = MagicMock()
+        context.get_config.return_value = {
+            "provider_settings": {
+                "computer_use_runtime": "sandbox",
+                "sandbox": {"booter": "shipyard"},
+            },
+        }
+        with (
+            patch(
+                "astrbot.core.computer.booters.shipyard.ShipyardBooter",
+                StuckBooter,
+            ),
+            patch(
+                "astrbot.core.computer.computer_client._sync_skills_to_sandbox",
+                AsyncMock(),
+            ),
+            patch(
+                "astrbot.core.computer.computer_client.shutdown_local_booter",
+                AsyncMock(),
+            ),
+            patch.object(computer_client, "COMPUTER_BOOT_DRAIN_TIMEOUT_SECONDS", 0.01),
+            patch.object(computer_client, "COMPUTER_SHUTDOWN_TIMEOUT_SECONDS", 0.01),
+        ):
+            boot_task = asyncio.create_task(
+                computer_client.get_booter(context, "stuck-shutdown")
+            )
+            await boot_started.wait()
+
+            await asyncio.wait_for(
+                computer_client.shutdown_all_booters(),
+                timeout=0.25,
+            )
+
+            assert not boot_task.done()
+            assert "stuck-shutdown" not in computer_client.session_booter
+            release_boot.set()
+            with pytest.raises(RuntimeError, match="shutting down"):
+                await boot_task
+
+        assert StuckBooter.shutdown_calls == 1
+        assert computer_client.session_booter == {}
+        assert computer_client.session_boot_inflight == {}
+        assert computer_client.session_boot_candidates == {}
+        assert computer_client.computer_shutdown_started is False
+
+    @pytest.mark.asyncio
+    async def test_shutdown_releases_waiters_when_creator_ignores_cancellation(self):
+        """Single-flight waiters must not remain attached to an abandoned future."""
+        from astrbot.core.computer import computer_client
+
+        computer_client.session_booter.clear()
+        computer_client.session_boot_inflight.clear()
+        computer_client.session_boot_creators.clear()
+        computer_client.session_boot_candidates.clear()
+        computer_client.computer_shutdown_started = False
+        boot_started = asyncio.Event()
+        release_boot = asyncio.Event()
+
+        class StuckBooter:
+            def __init__(self, **_kwargs):
+                pass
+
+            async def boot(self, _session_id):
+                boot_started.set()
+                try:
+                    await release_boot.wait()
+                except asyncio.CancelledError:
+                    await release_boot.wait()
+
+            async def shutdown(self, **_kwargs):
+                return None
+
+        context = MagicMock()
+        context.get_config.return_value = {
+            "provider_settings": {
+                "computer_use_runtime": "sandbox",
+                "sandbox": {"booter": "shipyard"},
+            },
+        }
+        with (
+            patch(
+                "astrbot.core.computer.booters.shipyard.ShipyardBooter",
+                StuckBooter,
+            ),
+            patch(
+                "astrbot.core.computer.computer_client._sync_skills_to_sandbox",
+                AsyncMock(),
+            ),
+            patch(
+                "astrbot.core.computer.computer_client.shutdown_local_booter",
+                AsyncMock(),
+            ),
+            patch.object(computer_client, "COMPUTER_BOOT_DRAIN_TIMEOUT_SECONDS", 0.01),
+            patch.object(computer_client, "COMPUTER_SHUTDOWN_TIMEOUT_SECONDS", 0.01),
+        ):
+            creator = asyncio.create_task(
+                computer_client.get_booter(context, "stuck-waiter")
+            )
+            await boot_started.wait()
+            waiter = asyncio.create_task(
+                computer_client.get_booter(context, "stuck-waiter")
+            )
+            await asyncio.sleep(0)
+
+            await asyncio.wait_for(
+                computer_client.shutdown_all_booters(),
+                timeout=0.25,
+            )
+            with pytest.raises(RuntimeError, match="shut down"):
+                await asyncio.wait_for(waiter, timeout=0.1)
+
+            release_boot.set()
+            with pytest.raises(RuntimeError, match="shutting down"):
+                await creator
+
+    @pytest.mark.asyncio
+    async def test_shutdown_is_hard_bounded_when_resource_ignores_cancellation(self):
+        """A third-party shutdown coroutine cannot hold core shutdown forever."""
+        from astrbot.core.computer import computer_client
+
+        computer_client.session_booter.clear()
+        computer_client.session_boot_inflight.clear()
+        computer_client.session_boot_creators.clear()
+        computer_client.session_boot_candidates.clear()
+        computer_client._abandoned_shutdown_tasks.clear()
+        computer_client.computer_shutdown_started = False
+        release_shutdown = asyncio.Event()
+        shutdown_finished = asyncio.Event()
+
+        class CancellationIgnoringBooter:
+            async def shutdown(self, **_kwargs):
+                try:
+                    await release_shutdown.wait()
+                except asyncio.CancelledError:
+                    await release_shutdown.wait()
+                finally:
+                    shutdown_finished.set()
+
+        computer_client.session_booter["stuck-resource"] = (
+            CancellationIgnoringBooter()
+        )
+        with (
+            patch(
+                "astrbot.core.computer.computer_client.shutdown_local_booter",
+                AsyncMock(),
+            ),
+            patch.object(computer_client, "COMPUTER_SHUTDOWN_TIMEOUT_SECONDS", 0.01),
+        ):
+            await asyncio.wait_for(
+                computer_client.shutdown_all_booters(),
+                timeout=0.25,
+            )
+
+            assert computer_client.session_booter == {}
+            assert computer_client.computer_shutdown_started is False
+            assert computer_client._abandoned_shutdown_tasks
+
+            release_shutdown.set()
+            await asyncio.wait_for(shutdown_finished.wait(), timeout=0.1)
+            await asyncio.wait_for(
+                asyncio.gather(
+                    *list(computer_client._abandoned_shutdown_tasks),
+                    return_exceptions=True,
+                ),
+                timeout=0.1,
+            )
+            await asyncio.sleep(0)
+
+        assert computer_client._abandoned_shutdown_tasks == set()
+
+    @pytest.mark.asyncio
+    async def test_cancelled_core_shutdown_keeps_claimed_cleanup_alive(self):
+        """Cancelling the lifecycle waiter must not cancel claimed cleanup work."""
+        from astrbot.core.computer import computer_client
+
+        computer_client.session_booter.clear()
+        computer_client.session_boot_inflight.clear()
+        computer_client.session_boot_creators.clear()
+        computer_client.session_boot_candidates.clear()
+        computer_client._abandoned_shutdown_tasks.clear()
+        computer_client.computer_shutdown_started = False
+        shutdown_started = asyncio.Event()
+        release_shutdown = asyncio.Event()
+        shutdown_finished = asyncio.Event()
+
+        class SlowBooter:
+            async def shutdown(self, **_kwargs):
+                shutdown_started.set()
+                try:
+                    await release_shutdown.wait()
+                finally:
+                    shutdown_finished.set()
+
+        computer_client.session_booter["cancelled-shutdown"] = SlowBooter()
+        with patch(
+            "astrbot.core.computer.computer_client.shutdown_local_booter",
+            AsyncMock(),
+        ):
+            lifecycle_shutdown = asyncio.create_task(
+                computer_client.shutdown_all_booters()
+            )
+            await shutdown_started.wait()
+            lifecycle_shutdown.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await lifecycle_shutdown
+
+            assert computer_client.computer_shutdown_started is True
+            assert computer_client.session_booter == {}
+            assert computer_client._abandoned_shutdown_tasks
+
+            release_shutdown.set()
+            await asyncio.wait_for(shutdown_finished.wait(), timeout=0.1)
+            await asyncio.wait_for(
+                asyncio.gather(
+                    *list(computer_client._abandoned_shutdown_tasks),
+                    return_exceptions=True,
+                ),
+                timeout=0.1,
+            )
+            await asyncio.sleep(0)
+            computer_client.enable_computer_booters()
+
+        assert computer_client._abandoned_shutdown_tasks == set()
+        assert computer_client.computer_shutdown_started is False
 
     @pytest.mark.asyncio
     async def test_get_booter_unknown_type(self):

@@ -35,9 +35,10 @@ sudo docker compose up -d
 ```bash
 git clone https://github.com/AstrBotDevs/AstrBot
 cd AstrBot
-# 修改 compose-with-shipyard.yml 文件中的环境变量配置，例如 Shipyard 的 access token 等
+# 请先在专用主机运行 Shipyard Bay，再提供其 HTTPS 地址和高强度令牌
+export SHIPYARD_ENDPOINT=https://shipyard.example.com
+export SHIPYARD_ACCESS_TOKEN='<high-entropy-token>'
 docker compose -f compose-with-shipyard.yml up -d
-docker pull soulter/shipyard-ship:latest
 ```
 
 配置和使用详见 [Agent 沙盒环境](/use/astrbot-agent-sandbox.md) 文档。
@@ -62,14 +63,14 @@ sudo docker compose -f astrbot.yml up -d
 ```bash
 mkdir astrbot
 cd astrbot
-sudo docker run -itd -p 6185:6185 -p 6199:6199 -v $PWD/data:/AstrBot/data -v /etc/localtime:/etc/localtime:ro -v /etc/timezone:/etc/timezone:ro --name astrbot soulter/astrbot:latest
+sudo docker run -itd -p 127.0.0.1:6185:6185 -e ASTRBOT_DASHBOARD_HOST=0.0.0.0 -e ASTRBOT_DASHBOARD_ACCESS_MODE=container_loopback -v $PWD/data:/AstrBot/data -v /etc/localtime:/etc/localtime:ro -v /etc/timezone:/etc/timezone:ro --name astrbot soulter/astrbot:latest
 ```
 
 > [!TIP]
 > 如果您的网络环境在中国大陆境内，上述命令将无法正常拉取。请使用以下命令拉取镜像：
 >
 > ```bash
-> sudo docker run -itd -p 6185:6185 -p 6199:6199 -v $PWD/data:/AstrBot/data -v /etc/localtime:/etc/localtime:ro -v /etc/timezone:/etc/timezone:ro --name astrbot m.daocloud.io/docker.io/soulter/astrbot:latest
+> sudo docker run -itd -p 127.0.0.1:6185:6185 -e ASTRBOT_DASHBOARD_HOST=0.0.0.0 -e ASTRBOT_DASHBOARD_ACCESS_MODE=container_loopback -v $PWD/data:/AstrBot/data -v /etc/localtime:/etc/localtime:ro -v /etc/timezone:/etc/timezone:ro --name astrbot m.daocloud.io/docker.io/soulter/astrbot:latest
 > ```
 >
 > (感谢 DaoCloud ❤️)
@@ -96,13 +97,13 @@ sudo docker logs -f astrbot
 `TZ` 的值请设置为 **IANA 时区标准格式**（地区/城市），例如中国为 `Asia/Shanghai`
 
 ```bash
-docker run -itd -p 6185:6185 -p 6199:6199 -e TZ=Asia/Shanghai -v "%cd%\data:/AstrBot/data" --name astrbot soulter/astrbot:latest
+docker run -itd -p 127.0.0.1:6185:6185 -e ASTRBOT_DASHBOARD_HOST=0.0.0.0 -e ASTRBOT_DASHBOARD_ACCESS_MODE=container_loopback -e TZ=Asia/Shanghai -v "%cd%\data:/AstrBot/data" --name astrbot soulter/astrbot:latest
 ```
 > [!TIP]
 > 如果您的网络环境在中国大陆境内，上述命令将无法正常拉取。请使用以下命令拉取镜像：
 >
 > ```bash
-> docker run -itd -p 6185:6185 -p 6199:6199 -e TZ=Asia/Shanghai -v "%cd%\data:/AstrBot/data" --name astrbot m.daocloud.io/docker.io/soulter/astrbot:latest
+> docker run -itd -p 127.0.0.1:6185:6185 -e ASTRBOT_DASHBOARD_HOST=0.0.0.0 -e ASTRBOT_DASHBOARD_ACCESS_MODE=container_loopback -e TZ=Asia/Shanghai -v "%cd%\data:/AstrBot/data" --name astrbot m.daocloud.io/docker.io/soulter/astrbot:latest
 > ```
 >
 > (感谢 DaoCloud ❤️)
@@ -112,13 +113,13 @@ docker run -itd -p 6185:6185 -p 6199:6199 -e TZ=Asia/Shanghai -v "%cd%\data:/Ast
 `TZ` 的值请设置为 **IANA 时区标准格式**（地区/城市），例如中国为 `Asia/Shanghai`
 
 ```powershell
-docker run -itd -p 6185:6185 -p 6199:6199 -e TZ=Asia/Shanghai -v "${PWD}\data:/AstrBot/data" --name astrbot soulter/astrbot:latest
+docker run -itd -p 127.0.0.1:6185:6185 -e ASTRBOT_DASHBOARD_HOST=0.0.0.0 -e ASTRBOT_DASHBOARD_ACCESS_MODE=container_loopback -e TZ=Asia/Shanghai -v "${PWD}\data:/AstrBot/data" --name astrbot soulter/astrbot:latest
 ```
 > [!TIP]
 > 如果您的网络环境在中国大陆境内，上述命令将无法正常拉取。请使用以下命令拉取镜像：
 >
 > ```powershell
-> docker run -itd -p 6185:6185 -p 6199:6199 -e TZ=Asia/Shanghai -v "${PWD}\data:/AstrBot/data" --name astrbot m.daocloud.io/docker.io/soulter/astrbot:latest
+> docker run -itd -p 127.0.0.1:6185:6185 -e ASTRBOT_DASHBOARD_HOST=0.0.0.0 -e ASTRBOT_DASHBOARD_ACCESS_MODE=container_loopback -e TZ=Asia/Shanghai -v "${PWD}\data:/AstrBot/data" --name astrbot m.daocloud.io/docker.io/soulter/astrbot:latest
 > ```
 >
 > (感谢 DaoCloud ❤️)
@@ -133,10 +134,10 @@ docker run -itd -p 6185:6185 -p 6199:6199 -e TZ=Asia/Shanghai -v "${PWD}\data:/A
 如果没有报错，你会看到一条日志显示类似 `🌈 管理面板已启动，可访问` 并附带了几条链接。打开其中一个链接即可访问 AstrBot 管理面板。
 
 > [!TIP]
-> 由于 Docker 隔离了网络环境，所以不能使用 `localhost` 访问管理面板。
+> 默认仅映射到 `http://localhost:6185`。远程访问必须使用 TLS 反向代理或内置 HTTPS。
 >
 > 首次登录请使用启动日志中打印的随机初始密码（用户名通常为 `astrbot`）。登录后请立即修改密码。
 >
-> 如果部署在云服务器上，需要在相应厂商控制台里放行对应端口。
+> 不要把 6185 或 6199 直接暴露到公网；OneBot 必须配置非空令牌并使用私有网络。
 
 接下来，你需要部署任何一个消息平台，才能够实现在消息平台上使用 AstrBot。

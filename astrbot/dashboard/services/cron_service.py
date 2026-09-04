@@ -6,10 +6,27 @@ from datetime import datetime, timezone
 
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
+from astrbot.core.utils.totp import is_totp_enabled, verify_configured_2fa_code
 
 
 class CronServiceError(Exception):
-    pass
+    """Error returned while validating or managing cron jobs.
+
+    Args:
+        message: Safe user-facing error message.
+        status_code: HTTP status code used by the Dashboard route.
+        data: Optional structured Dashboard error data.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        status_code: int = 400,
+        data: object | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+        self.data = data
 
 
 class CronService:
@@ -51,11 +68,20 @@ class CronService:
             logger.error(traceback.format_exc())
             raise CronServiceError(f"Failed to list jobs: {exc!s}") from exc
 
-    async def create_job(self, payload: object) -> dict:
+    async def create_job(
+        self,
+        payload: object,
+        *,
+        allow_privileged_execution: bool = False,
+        created_by: str | None = None,
+        two_factor_code: str | None = None,
+    ) -> dict:
         try:
             cron_mgr = self._get_cron_manager()
             if not isinstance(payload, dict):
                 raise CronServiceError("Invalid payload")
+            if allow_privileged_execution:
+                await self._verify_privileged_execution_2fa(two_factor_code)
 
             name = payload.get("name") or "active_agent_task"
             cron_expression = payload.get("cron_expression")
@@ -103,6 +129,9 @@ class CronService:
                 enabled=enabled,
                 run_once=run_once,
                 run_at=run_at_dt,
+                allow_privileged_execution=allow_privileged_execution,
+                created_by=created_by,
+                created_via="dashboard" if created_by else "api",
             )
             return self.serialize_job(job)
         except CronServiceError:
@@ -111,7 +140,14 @@ class CronService:
             logger.error(traceback.format_exc())
             raise CronServiceError(f"Failed to create job: {exc!s}") from exc
 
-    async def update_job(self, job_id: str, payload: object) -> dict:
+    async def update_job(
+        self,
+        job_id: str,
+        payload: object,
+        *,
+        allow_privileged_execution: bool | None = None,
+        two_factor_code: str | None = None,
+    ) -> dict:
         try:
             cron_mgr = self._get_cron_manager()
             if not isinstance(payload, dict):
@@ -120,6 +156,9 @@ class CronService:
             job = await cron_mgr.db.get_cron_job(job_id)
             if not job:
                 raise CronServiceError("Job not found")
+
+            if allow_privileged_execution and not job.allow_privileged_execution:
+                await self._verify_privileged_execution_2fa(two_factor_code)
 
             updates = {}
             if "name" in payload:
@@ -130,6 +169,9 @@ class CronService:
 
             if "enabled" in payload:
                 updates["enabled"] = bool(payload.get("enabled"))
+
+            if allow_privileged_execution is not None:
+                updates["allow_privileged_execution"] = allow_privileged_execution
 
             if "timezone" in payload:
                 timezone_name = payload.get("timezone")
@@ -174,6 +216,35 @@ class CronService:
         except Exception as exc:
             logger.error(traceback.format_exc())
             raise CronServiceError(f"Failed to run job: {exc!s}") from exc
+
+    async def _verify_privileged_execution_2fa(
+        self,
+        two_factor_code: str | None,
+    ) -> None:
+        """Require a one-time TOTP code when Dashboard TOTP is configured.
+
+        Args:
+            two_factor_code: TOTP code sent in the privileged cron request.
+
+        Raises:
+            CronServiceError: If the Dashboard configuration requires a valid
+                TOTP code before enabling privileged execution.
+        """
+        config = self.core_lifecycle.astrbot_config_mgr.get_conf(None)
+        if not is_totp_enabled(config):
+            return
+        code = (two_factor_code or "").strip()
+        if code and await verify_configured_2fa_code(
+            config,
+            code,
+            allow_recovery=False,
+        ):
+            return
+        raise CronServiceError(
+            "TOTP verification is required to enable privileged cron execution",
+            status_code=401,
+            data={"totp_required": True},
+        )
 
     @staticmethod
     def _parse_optional_run_at(run_at: object) -> datetime | None:

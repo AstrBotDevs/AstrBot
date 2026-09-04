@@ -7,7 +7,8 @@ import {
   ref,
   watch,
 } from "vue";
-import axios from "axios";
+import { externalHttpClient } from "@/api/http";
+import { normalizeExternalHttpUrl } from "@/utils/requestPolicy.mjs";
 import DOMPurify from "dompurify";
 import MarkdownIt from "markdown-it";
 import defaultPluginIcon from "/favicon.svg";
@@ -555,8 +556,10 @@ const buildCommandComponentRows = (commandComponents) => {
 };
 
 const openExternal = (url) => {
-  if (!url) return;
-  window.open(url, "_blank", "noopener,noreferrer");
+  const target = normalizeExternalHttpUrl(url);
+  if (!target) return;
+  const opened = window.open(target, "_blank", "noopener,noreferrer");
+  if (opened) opened.opener = null;
 };
 
 const goBack = () => {
@@ -578,10 +581,15 @@ const renderMarkdown = (source) => {
   container.innerHTML = cleanHtml;
 
   container.querySelectorAll("a").forEach((link) => {
-    const href = link.getAttribute("href") || "";
-    if (href.startsWith("http") || href.startsWith("//")) {
+    const href = normalizeExternalHttpUrl(link.getAttribute("href"));
+    if (href) {
+      link.setAttribute("href", href);
       link.setAttribute("target", "_blank");
       link.setAttribute("rel", "noopener noreferrer");
+    } else {
+      link.removeAttribute("href");
+      link.removeAttribute("target");
+      link.removeAttribute("rel");
     }
   });
 
@@ -628,7 +636,9 @@ const getDocumentUrl = (fieldName) => {
 };
 
 const fetchRemoteMarkdown = async (url) => {
-  const res = await axios.get(url, {
+  const target = normalizeExternalHttpUrl(url);
+  if (!target) throw new Error("Invalid external document URL.");
+  const res = await externalHttpClient.get(target, {
     responseType: "text",
     transformResponse: [(data) => data],
   });

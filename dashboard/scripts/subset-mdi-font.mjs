@@ -31,6 +31,7 @@ const UTILITY_CLASSES = new Set([
     "mdi-rotate-180", "mdi-rotate-225", "mdi-rotate-270", "mdi-rotate-315",
     "mdi-flip-h", "mdi-flip-v", "mdi-light", "mdi-dark", "mdi-inactive",
     "mdi-18px", "mdi-24px", "mdi-36px", "mdi-48px",
+    "mdi-subset",
 ]);
 
 // Icons used indirectly by Vuetify internals, so they won't appear in src/ static scans.
@@ -74,6 +75,8 @@ export const REQUIRED_ICONS = new Set([
 
 // Regex to match individual icon class definitions in MDI CSS
 export const ICON_CLASS_PATTERN = /\.(mdi-[a-z][a-z0-9-]*)::before\s*\{\s*content:\s*"\\([0-9A-Fa-f]+)"\s*;?\s*}/g;
+
+export class MissingMdiIconsError extends Error {}
 
 // ── Helper functions ────────────────────────────────────────────────────────
 
@@ -128,6 +131,15 @@ export function resolveUsedIcons(usedIcons, iconMap) {
         }
     }
     return { resolvedIcons, missingIcons, subsetChars };
+}
+
+/** Throw when source code references an icon absent from the installed font. */
+export function assertNoMissingIcons(missingIcons) {
+    if (missingIcons.length > 0) {
+        throw new MissingMdiIconsError(
+            `Icons not found in MDI CSS: ${[...missingIcons].sort().join(", ")}`,
+        );
+    }
 }
 
 /**
@@ -223,9 +235,7 @@ export async function runMdiSubset() {
 
         // Step 3: Resolve codepoints for used icons
         const { resolvedIcons, missingIcons, subsetChars } = resolveUsedIcons(usedIcons, iconMap);
-        if (missingIcons.length > 0) {
-            console.warn(`⚠️  ${missingIcons.length} icons not found in MDI CSS:`, missingIcons.join(", "));
-        }
+        assertNoMissingIcons(missingIcons);
         if (resolvedIcons.length === 0) {
             throw new Error("No icon codepoints could be resolved. Icon name format may have changed.");
         }
@@ -309,6 +319,9 @@ export async function runMdiSubset() {
         console.log(`\n✅ MDI font subset generated successfully!`);
 
     } catch (err) {
+        if (err instanceof MissingMdiIconsError) {
+            throw err;
+        }
         // Fallback: any failure → use original full font so build never breaks
         try {
             fallbackToFullFont(err.message);

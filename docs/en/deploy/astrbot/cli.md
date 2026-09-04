@@ -31,7 +31,7 @@ Alternatively, download the source code directly from GitHub and extract it:
 
 2. Execute in terminal (in the AstrBot directory)
 ```bash
-uv sync
+uv sync --locked
 uv run main.py
 ```
 
@@ -43,6 +43,8 @@ uv run --no-sync main.py
 :::
 
 ::: details Install Dependencies with Python Built-in venv
+
+> AstrBot supports Python 3.12 through 3.14.
 
 In the AstrBot source code directory, run the following command in the terminal:
 

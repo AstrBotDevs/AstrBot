@@ -19,7 +19,7 @@ from asyncio import Queue
 from astrbot.api import logger, sp
 from astrbot.core import LogBroker, LogManager
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
-from astrbot.core.computer.computer_client import shutdown_local_booter
+from astrbot.core.computer.computer_client import shutdown_all_booters
 from astrbot.core.config.default import VERSION
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.cron import CronJobManager
@@ -207,7 +207,20 @@ class AstrBotCoreLifecycle:
             logger.error(traceback.format_exc())
 
         # 初始化事件队列
-        self.event_queue = Queue()
+        # Keep platform ingress bounded. Individual adapters can reject or drop
+        # overflow instead of allowing an unbounded memory backlog.
+        try:
+            event_queue_maxsize = int(
+                self.astrbot_config.get("platform_settings", {}).get(
+                    "event_queue_maxsize", 1000
+                )
+            )
+        except (TypeError, ValueError):
+            event_queue_maxsize = 1000
+        if not 100 <= event_queue_maxsize <= 10_000:
+            logger.warning("Invalid event queue size; using 1000.")
+            event_queue_maxsize = 1000
+        self.event_queue = Queue(maxsize=event_queue_maxsize)
 
         # 初始化人格管理器
         self.persona_mgr = PersonaManager(self.db, self.astrbot_config_mgr)
@@ -391,7 +404,7 @@ class AstrBotCoreLifecycle:
         if self.cron_manager:
             await self.cron_manager.shutdown()
 
-        await shutdown_local_booter()
+        await shutdown_all_booters()
 
         for plugin in self.plugin_manager.context.get_all_stars():
             try:
@@ -426,7 +439,7 @@ class AstrBotCoreLifecycle:
 
     async def restart(self) -> None:
         """重启 AstrBot 核心生命周期管理类, 终止各个管理器并重新加载平台实例"""
-        await shutdown_local_booter()
+        await shutdown_all_booters()
         await self.provider_manager.terminate()
         await self.platform_manager.terminate()
         await self.kb_manager.terminate()

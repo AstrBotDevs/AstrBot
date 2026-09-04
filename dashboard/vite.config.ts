@@ -7,9 +7,42 @@ import webfontDl from 'vite-plugin-webfont-dl';
 // @ts-ignore — .mjs not in TS project scope; Vite resolves this at runtime
 import { runMdiSubset } from './scripts/subset-mdi-font.mjs';
 
-const t2iShikiRuntimePath = fileURLToPath(
-  new URL('../astrbot/core/utils/t2i/template/shiki_runtime.iife.js', import.meta.url)
-);
+const vadRuntimeAssets = new Map<string, string>([
+  [
+    '/vad/bundle.min.js',
+    fileURLToPath(new URL('./node_modules/@ricky0123/vad-web/dist/bundle.min.js', import.meta.url))
+  ],
+  [
+    '/vad/vad.worklet.bundle.min.js',
+    fileURLToPath(
+      new URL('./node_modules/@ricky0123/vad-web/dist/vad.worklet.bundle.min.js', import.meta.url)
+    )
+  ],
+  [
+    '/vad/silero_vad_v5.onnx',
+    fileURLToPath(new URL('./node_modules/@ricky0123/vad-web/dist/silero_vad_v5.onnx', import.meta.url))
+  ],
+  [
+    '/vad/silero_vad_legacy.onnx',
+    fileURLToPath(new URL('./node_modules/@ricky0123/vad-web/dist/silero_vad_legacy.onnx', import.meta.url))
+  ],
+  [
+    '/vad/onnx/ort.wasm.min.js',
+    fileURLToPath(new URL('./node_modules/onnxruntime-web/dist/ort.wasm.min.js', import.meta.url))
+  ],
+  [
+    '/vad/onnx/ort-wasm-simd-threaded.mjs',
+    fileURLToPath(
+      new URL('./node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.mjs', import.meta.url)
+    )
+  ],
+  [
+    '/vad/onnx/ort-wasm-simd-threaded.wasm',
+    fileURLToPath(
+      new URL('./node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.wasm', import.meta.url)
+    )
+  ]
+]);
 
 // Vite plugin: run MDI icon font subsetting (build only)
 function mdiSubset() {
@@ -22,34 +55,38 @@ function mdiSubset() {
   };
 }
 
-function t2iShikiRuntimeAsset(): Plugin {
+function vadRuntimeAssetsPlugin(): Plugin {
   return {
-    name: 'vite-plugin-t2i-shiki-runtime',
+    name: 'vite-plugin-vad-runtime-assets',
     configureServer(server) {
-      server.middlewares.use('/t2i/shiki_runtime.iife.js', (_req, res) => {
-        try {
-          res.statusCode = 200;
-          res.setHeader('Content-Type', 'text/javascript; charset=utf-8');
-          res.end(readFileSync(t2iShikiRuntimePath));
-        } catch (error) {
-          res.statusCode = 404;
-          res.end(`T2I Shiki runtime not found: ${error instanceof Error ? error.message : String(error)}`);
+      server.middlewares.use((request, response, next) => {
+        const pathname = new URL(request.url ?? '/', 'http://localhost').pathname;
+        const assetPath = vadRuntimeAssets.get(pathname);
+        if (!assetPath) {
+          next();
+          return;
         }
+
+        const extension = pathname.slice(pathname.lastIndexOf('.') + 1);
+        response.statusCode = 200;
+        response.setHeader(
+          'Content-Type',
+          extension === 'wasm'
+            ? 'application/wasm'
+            : extension === 'onnx'
+              ? 'application/octet-stream'
+              : 'text/javascript; charset=utf-8'
+        );
+        response.end(readFileSync(assetPath));
       });
     },
     generateBundle() {
-      try {
+      for (const [path, sourcePath] of vadRuntimeAssets) {
         this.emitFile({
           type: 'asset',
-          fileName: 't2i/shiki_runtime.iife.js',
-          source: readFileSync(t2iShikiRuntimePath)
+          fileName: path.slice(1),
+          source: readFileSync(sourcePath)
         });
-      } catch (error) {
-        this.warn(
-          `Skipping T2I Shiki runtime asset because it could not be read: ${
-            error instanceof Error ? error.message : String(error)
-          }`
-        );
       }
     }
   };
@@ -60,7 +97,7 @@ export default defineConfig(({ command }) => ({
   plugins: [
     // Only run MDI subsetting during production builds, skip in dev server
     ...(command === 'build' ? [mdiSubset()] : []),
-    t2iShikiRuntimeAsset(),
+    vadRuntimeAssetsPlugin(),
     vue({
       template: {
         compilerOptions: {

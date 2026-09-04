@@ -10,12 +10,18 @@
 import asyncio
 import base64
 import hashlib
+import hmac
 import json
+import time
+from collections import OrderedDict
 from collections.abc import Awaitable, Callable
 
 from Crypto.Cipher import AES
 
 from astrbot.api import logger
+
+LARK_REPLAY_WINDOW_SECONDS = 300
+LARK_REPLAY_CACHE_SIZE = 4096
 
 
 class AESCipher:
@@ -66,6 +72,8 @@ class LarkWebhookServer:
 
         self.event_queue = event_queue
         self.callback: Callable[[dict], Awaitable[None]] | None = None
+        self._seen_signatures: OrderedDict[str, float] = OrderedDict()
+        self._replay_lock = asyncio.Lock()
 
         # 初始化加密工具
         self.cipher = None
@@ -97,7 +105,7 @@ class LarkWebhookServer:
         bytes_b = bytes_b1 + body
         h = hashlib.sha256(bytes_b)
         calculated_signature = h.hexdigest()
-        return calculated_signature == signature
+        return hmac.compare_digest(calculated_signature, signature)
 
     def decrypt_event(self, encrypted_data: str) -> dict:
         """解密事件数据
@@ -156,32 +164,58 @@ class LarkWebhookServer:
             nonce = request.headers.get("X-Lark-Request-Nonce", "")
             signature = request.headers.get("X-Lark-Signature", "")
 
-            if timestamp and nonce and signature:
-                if not self.verify_signature(
-                    timestamp, nonce, self.encrypt_key, body, signature
-                ):
-                    logger.error("[Lark Webhook] 签名验证失败")
-                    return {"error": "Invalid signature"}, 401
+            if not timestamp or not nonce or not signature:
+                logger.error("[Lark Webhook] Required signature headers are missing")
+                return {"error": "Missing signature headers"}, 401
+            try:
+                request_time = int(timestamp)
+            except ValueError:
+                return {"error": "Invalid signature timestamp"}, 401
+            now = time.time()
+            if abs(now - request_time) > LARK_REPLAY_WINDOW_SECONDS:
+                return {"error": "Expired signature timestamp"}, 401
+            if not self.verify_signature(
+                timestamp, nonce, self.encrypt_key, body, signature
+            ):
+                logger.error("[Lark Webhook] Signature validation failed")
+                return {"error": "Invalid signature"}, 401
+
+            replay_key = hashlib.sha256(
+                f"{timestamp}:{nonce}:{signature}".encode()
+            ).hexdigest()
+            async with self._replay_lock:
+                cutoff = now - LARK_REPLAY_WINDOW_SECONDS
+                while self._seen_signatures:
+                    _, first_seen = next(iter(self._seen_signatures.items()))
+                    if first_seen >= cutoff:
+                        break
+                    self._seen_signatures.popitem(last=False)
+                if replay_key in self._seen_signatures:
+                    return {"error": "Replayed signature"}, 401
+                self._seen_signatures[replay_key] = now
+                while len(self._seen_signatures) > LARK_REPLAY_CACHE_SIZE:
+                    self._seen_signatures.popitem(last=False)
 
         # 检查是否是加密事件
         if "encrypt" in event_data:
             try:
                 event_data = self.decrypt_event(event_data["encrypt"])
-                logger.debug(f"[Lark Webhook] 解密后的事件: {event_data}")
             except Exception as e:
                 logger.error(f"[Lark Webhook] 解密事件失败: {e}")
                 return {"error": "Decryption failed"}, 400
 
         # 验证 token
-        if self.verification_token:
-            header = event_data.get("header", {})
-            if header:
-                token = header.get("token", "")
-            else:
-                token = event_data.get("token", "")
-            if token != self.verification_token:
-                logger.error("[Lark Webhook] Verification Token 不匹配。")
-                return {"error": "Invalid verification token"}, 401
+        if not self.verification_token:
+            logger.error("[Lark Webhook] Verification token is not configured")
+            return {"error": "Webhook authentication is not configured"}, 401
+        header = event_data.get("header", {})
+        if header:
+            token = header.get("token", "")
+        else:
+            token = event_data.get("token", "")
+        if not hmac.compare_digest(str(token), str(self.verification_token)):
+            logger.error("[Lark Webhook] Verification token validation failed")
+            return {"error": "Invalid verification token"}, 401
 
         # 处理 URL 验证 (challenge)
         if event_data.get("type") == "url_verification":

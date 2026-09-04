@@ -6,6 +6,10 @@ from pathlib import Path
 
 from astrbot.core import logger
 from astrbot.core.config.default import VERSION
+from astrbot.core.utils.archive_limits import (
+    PLUGIN_ARCHIVE_POLICY,
+    validate_zip_archive,
+)
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_path
 from astrbot.core.utils.io import download_file, ensure_dir
 from astrbot.core.utils.version_comparator import VersionComparator
@@ -142,7 +146,11 @@ def resolve_dashboard_dist(webui_dir: str | Path | None = None) -> Path | None:
         None when an existing managed dist is incomplete.
     """
     explicit_dist = Path(webui_dir).absolute() if webui_dir else None
-    if explicit_dist is not None and explicit_dist.exists():
+    if explicit_dist is not None:
+        if not explicit_dist.is_dir() or not (explicit_dist / "index.html").is_file():
+            raise ValueError(
+                f"Explicit WebUI directory must contain index.html: {explicit_dist}"
+            )
         if not _is_dist_compatible(explicit_dist, VERSION):
             explicit_version = _read_dashboard_version(explicit_dist) or "unknown"
             logger.warning(
@@ -322,6 +330,19 @@ def _extract_package(
     extract_root = Path(extract_path).resolve()
     ensure_dir(extract_root)
     with zipfile.ZipFile(zip_path, "r") as archive:
+        try:
+            validate_zip_archive(archive, policy=PLUGIN_ARCHIVE_POLICY)
+        except ValueError as exc:
+            # Preserve the dashboard updater's established error contract while
+            # retaining the archive validator as the single security gate.
+            # Callers use this wording to distinguish an unsafe package from a
+            # failed download or a resource-limit violation.
+            if str(exc).startswith("Unsafe ZIP archive path:"):
+                raise ValueError(
+                    "Unsafe dashboard archive path: "
+                    f"{str(exc).removeprefix('Unsafe ZIP archive path: ').strip()}"
+                ) from exc
+            raise
         for member in archive.infolist():
             target_path = (extract_root / member.filename).resolve()
             if not target_path.is_relative_to(extract_root):

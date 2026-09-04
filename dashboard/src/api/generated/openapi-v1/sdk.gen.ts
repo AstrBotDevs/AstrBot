@@ -2957,7 +2957,7 @@ export const listCronJobs = <ThrowOnError extends boolean = false>(options?: Opt
 };
 
 /**
- * Create a cron job
+ * Create a cron job (Dashboard session required for privileged execution)
  */
 export const createCronJob = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<CreateCronJobData, ThrowOnError>) => {
     return (options?.client ?? client).post<CreateCronJobResponse, CreateCronJobError, ThrowOnError>({
@@ -2967,7 +2967,7 @@ export const createCronJob = <ThrowOnError extends boolean = false>(options: Opt
 };
 
 /**
- * Update a cron job
+ * Update a cron job (Dashboard session required for privileged execution)
  */
 export const updateCronJob = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<UpdateCronJobData, ThrowOnError>) => {
     return (options?.client ?? client).patch<UpdateCronJobResponse, UpdateCronJobError, ThrowOnError>({

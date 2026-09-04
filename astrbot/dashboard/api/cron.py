@@ -29,7 +29,11 @@ def _payload_dict(payload: CronJobRequest) -> dict:
 
 
 def _raise_cron_error(exc: CronServiceError) -> None:
-    raise ApiError(str(exc)) from exc
+    raise ApiError(
+        str(exc),
+        status_code=exc.status_code,
+        data=exc.data,
+    ) from exc
 
 
 async def _list_jobs(job_type: str | None, service: CronService):
@@ -39,16 +43,49 @@ async def _list_jobs(job_type: str | None, service: CronService):
         _raise_cron_error(exc)
 
 
-async def _create_job(payload: CronJobRequest, service: CronService):
+async def _create_job(
+    payload: CronJobRequest,
+    service: CronService,
+    *,
+    dashboard_username: str | None = None,
+    two_factor_code: str | None = None,
+):
     try:
-        return ok(await service.create_job(_payload_dict(payload)))
+        requested = bool(payload.allow_privileged_execution)
+        if requested and dashboard_username is None:
+            raise ApiError("Privileged cron jobs require a Dashboard session", 403)
+        return ok(
+            await service.create_job(
+                _payload_dict(payload),
+                allow_privileged_execution=requested,
+                created_by=dashboard_username,
+                two_factor_code=two_factor_code,
+            )
+        )
     except CronServiceError as exc:
         _raise_cron_error(exc)
 
 
-async def _update_job(job_id: str, payload: CronJobRequest, service: CronService):
+async def _update_job(
+    job_id: str,
+    payload: CronJobRequest,
+    service: CronService,
+    *,
+    dashboard_username: str | None = None,
+    two_factor_code: str | None = None,
+):
     try:
-        return ok(await service.update_job(job_id, _payload_dict(payload)))
+        requested = payload.allow_privileged_execution
+        if requested and dashboard_username is None:
+            raise ApiError("Privileged cron jobs require a Dashboard session", 403)
+        return ok(
+            await service.update_job(
+                job_id,
+                _payload_dict(payload),
+                allow_privileged_execution=requested,
+                two_factor_code=two_factor_code,
+            )
+        )
     except CronServiceError as exc:
         _raise_cron_error(exc)
 
@@ -81,20 +118,33 @@ async def list_cron_jobs(
 @router.post("/cron/jobs")
 async def create_cron_job(
     payload: CronJobRequest,
-    _auth: AuthContext = Depends(require_system_scope),
+    request: Request,
+    auth: AuthContext = Depends(require_system_scope),
     service: CronService = Depends(get_service),
 ):
-    return await _create_job(payload, service)
+    return await _create_job(
+        payload,
+        service,
+        dashboard_username=auth.username if auth.via == "jwt" else None,
+        two_factor_code=request.headers.get("X-2FA-Code"),
+    )
 
 
 @router.patch("/cron/jobs/{job_id}")
 async def update_cron_job(
     job_id: str,
     payload: CronJobRequest,
-    _auth: AuthContext = Depends(require_system_scope),
+    request: Request,
+    auth: AuthContext = Depends(require_system_scope),
     service: CronService = Depends(get_service),
 ):
-    return await _update_job(job_id, payload, service)
+    return await _update_job(
+        job_id,
+        payload,
+        service,
+        dashboard_username=auth.username if auth.via == "jwt" else None,
+        two_factor_code=request.headers.get("X-2FA-Code"),
+    )
 
 
 @router.delete("/cron/jobs/{job_id}")
@@ -127,20 +177,33 @@ async def list_dashboard_cron_jobs(
 @legacy_router.post("/jobs")
 async def create_dashboard_cron_job(
     payload: CronJobRequest,
+    request: Request,
     _username: str = Depends(require_dashboard_user),
     service: CronService = Depends(get_service),
 ):
-    return await _create_job(payload, service)
+    return await _create_job(
+        payload,
+        service,
+        dashboard_username=_username,
+        two_factor_code=request.headers.get("X-2FA-Code"),
+    )
 
 
 @legacy_router.patch("/jobs/{job_id}")
 async def update_dashboard_cron_job(
     job_id: str,
     payload: CronJobRequest,
+    request: Request,
     _username: str = Depends(require_dashboard_user),
     service: CronService = Depends(get_service),
 ):
-    return await _update_job(job_id, payload, service)
+    return await _update_job(
+        job_id,
+        payload,
+        service,
+        dashboard_username=_username,
+        two_factor_code=request.headers.get("X-2FA-Code"),
+    )
 
 
 @legacy_router.delete("/jobs/{job_id}")

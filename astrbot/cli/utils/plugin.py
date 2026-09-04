@@ -1,7 +1,7 @@
 import shutil
 import tempfile
 import uuid
-from enum import Enum
+from enum import StrEnum
 from io import BytesIO
 from pathlib import Path
 from zipfile import ZipFile
@@ -10,10 +10,15 @@ import click
 import httpx
 import yaml
 
+from astrbot.core.utils.archive_limits import (
+    PLUGIN_ARCHIVE_POLICY,
+    validate_zip_archive,
+)
+
 from .version_comparator import VersionComparator
 
 
-class PluginStatus(str, Enum):
+class PluginStatus(StrEnum):
     INSTALLED = "installed"
     NEED_UPDATE = "needs-update"
     NOT_INSTALLED = "not-installed"
@@ -99,10 +104,16 @@ def download_repository(
             download_url = f"{proxy.rstrip('/')}/{download_url}"
 
         with httpx.Client(follow_redirects=True, trust_env=True) as client:
-            response = client.get(download_url)
-            response.raise_for_status()
-            zip_content = BytesIO(response.content)
+            with client.stream("GET", download_url) as response:
+                response.raise_for_status()
+                zip_content = BytesIO()
+                for chunk in response.iter_bytes():
+                    zip_content.write(chunk)
+                    if zip_content.tell() > 128 * 1024 * 1024:
+                        raise ValueError("Plugin archive exceeds the 128 MiB limit")
+                zip_content.seek(0)
         with ZipFile(zip_content) as z:
+            validate_zip_archive(z, policy=PLUGIN_ARCHIVE_POLICY)
             z.extractall(temp_dir)
             namelist = z.namelist()
             root_dir = Path(namelist[0]).parts[0] if namelist else ""

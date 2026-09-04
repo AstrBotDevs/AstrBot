@@ -193,7 +193,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch, onMounted } from 'vue';
-import axios from 'axios';
+import { externalHttpClient } from '@/api/http';
 import AddNewPlatform from '@/components/platform/AddNewPlatform.vue';
 import ProviderConfigDialog from '@/components/chat/ProviderConfigDialog.vue';
 import { configProfileApi, providerApi, systemConfigApi } from '@/api/v1';
@@ -453,7 +453,7 @@ async function saveComputerAccessRuntime() {
 
 async function loadWelcomeAnnouncement() {
   try {
-    const res = await axios.get('https://cloud.astrbot.app/api/v1/announcement');
+    const res = await externalHttpClient.get('https://cloud.astrbot.app/api/v1/announcement');
     welcomeAnnouncementRaw.value = res?.data?.data?.notice?.welcome_page ?? null;
   } catch (e) {
     welcomeAnnouncementRaw.value = null;

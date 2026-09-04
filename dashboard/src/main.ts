@@ -5,6 +5,18 @@ import { router } from './router';
 import vuetify from './plugins/vuetify';
 import confirmPlugin from './plugins/confirmPlugin';
 import { setupI18n } from './i18n/composables';
+import '@fontsource/outfit/400.css';
+import '@fontsource/outfit/500.css';
+import '@fontsource/outfit/600.css';
+import '@fontsource/outfit/700.css';
+import '@fontsource/outfit/800.css';
+import '@fontsource/outfit/900.css';
+import '@fontsource/noto-sans/400.css';
+import '@fontsource/noto-sans/500.css';
+import '@fontsource/noto-sans/600.css';
+import '@fontsource/noto-sans/700.css';
+import '@fontsource/noto-sans/800.css';
+import '@fontsource/noto-sans/900.css';
 import '@/scss/style.scss';
 import VueApexCharts from 'vue3-apexcharts';
 

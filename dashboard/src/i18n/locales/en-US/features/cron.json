@@ -148,7 +148,19 @@
     "session": "Deliver to",
     "noUmos": "No sessions available",
     "timezone": "Timezone (optional, e.g. Asia/Shanghai)",
-    "enabled": "Enabled"
+    "enabled": "Enabled",
+    "privilegedExecution": "Allow administrator-level side effects",
+    "privilegedExecutionHint": "This can grant scheduled tasks access to administrator-only tools, including local or sandbox computer tools."
+  },
+  "privileged": {
+    "confirmTitle": "Enable privileged execution?",
+    "confirmDescription": "This task may use administrator-level side-effect tools when it runs. Enable it only for a task you fully trust.",
+    "confirmAction": "Enable privileged execution",
+    "totpTitle": "Verify privileged execution",
+    "totpDescription": "Enter your current authenticator code to enable this task.",
+    "totpCode": "Authenticator code",
+    "totpConfirm": "Verify and save",
+    "totpError": "A current authenticator code is required."
   },
   "messages": {
     "loadFailed": "Failed to load tasks",

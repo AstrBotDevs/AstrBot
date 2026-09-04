@@ -4,15 +4,11 @@ import asyncio
 import hashlib
 import json
 import os
-import ssl
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-
-import aiohttp
-import certifi
 
 from astrbot.api import sp
 from astrbot.core import DEMO_MODE, file_token_service, logger
@@ -34,6 +30,12 @@ from astrbot.core.star.star_manager import (
     PluginVersionUnsupportedError,
 )
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_temp_path
+from astrbot.core.utils.safe_http import (
+    RemoteFetchPolicy,
+    fetch_public_json,
+    parse_private_target_rules,
+    safe_url_for_log,
+)
 
 PLUGIN_UPDATE_CONCURRENCY = 3
 PLUGIN_OPERATION_FAILED_MESSAGE = "插件操作失败，请查看服务端日志。"
@@ -42,6 +44,7 @@ PLUGIN_INSTALL_SOURCES_KEY = "plugin_install_sources"
 PLUGIN_DEFAULT_REGISTRY_NAME = "Default"
 PLUGIN_UPDATE_DISABLED_MESSAGE = "该插件不是通过插件市场安装，无法检测或执行更新。"
 PLUGIN_UPDATE_SOURCE_REQUIRED_MESSAGE = "请先选择插件安装源后再更新。"
+PLUGIN_REGISTRY_MAX_BYTES = 5 * 1024 * 1024
 PLUGIN_COMPONENT_TYPE_ORDER = {
     "page": 0,
     "skill": 1,
@@ -314,7 +317,7 @@ class PluginService:
         try:
             return datetime.fromtimestamp(
                 plugin_dir.stat().st_mtime,
-                timezone.utc,
+                UTC,
             ).isoformat()
         except OSError as exc:
             logger.warning(
@@ -542,7 +545,7 @@ class PluginService:
             "download_url": str(
                 download_url or payload.get("download_url") or ""
             ).strip(),
-            "installed_at": datetime.now(timezone.utc).isoformat(),
+            "installed_at": datetime.now(UTC).isoformat(),
         }
 
         market_plugin_id = self.get_market_plugin_id(payload)
@@ -982,49 +985,38 @@ class PluginService:
                 return cached_data, None
 
         remote_data = None
-        ssl_context = ssl.create_default_context(cafile=certifi.where())
-        connector = aiohttp.TCPConnector(ssl=ssl_context)
+        policy = self._registry_fetch_policy()
 
         for url in source.urls:
             try:
-                async with (
-                    aiohttp.ClientSession(
-                        trust_env=True,
-                        connector=connector,
-                    ) as session,
-                    session.get(url) as response,
-                ):
-                    if response.status == 200:
-                        try:
-                            remote_data = await response.json()
-                        except aiohttp.ContentTypeError:
-                            remote_text = await response.text()
-                            remote_data = json.loads(remote_text)
-
-                        if not remote_data or (
-                            isinstance(remote_data, dict) and len(remote_data) == 0
-                        ):
-                            logger.warning(
-                                f"Remote plugin marketplace data is empty: {url}"
-                            )
-                            continue
-
-                        logger.info(
-                            "Fetched remote plugin marketplace data successfully; "
-                            f"received {len(remote_data)} plugins."
-                        )
-                        current_md5 = await self.fetch_remote_md5(source.md5_url)
-                        self.save_plugin_cache(
-                            source.cache_file,
-                            remote_data,
-                            current_md5,
-                        )
-                        return remote_data, None
-                    logger.error(
-                        f"Request to {url} failed with status {response.status}."
+                remote_data = await fetch_public_json(url, policy=policy)
+                if not isinstance(remote_data, dict | list):
+                    raise ValueError("Plugin registry must contain an object or array")
+                if not remote_data:
+                    logger.warning(
+                        "Remote plugin marketplace data is empty: %s",
+                        safe_url_for_log(url),
                     )
+                    continue
+
+                logger.info(
+                    "Fetched remote plugin marketplace data successfully; "
+                    "received %d plugins.",
+                    len(remote_data),
+                )
+                current_md5 = await self.fetch_remote_md5(source.md5_url, policy)
+                self.save_plugin_cache(
+                    source.cache_file,
+                    remote_data,
+                    current_md5,
+                )
+                return remote_data, None
             except Exception as exc:
-                logger.error(f"Request to {url} failed: {exc}")
+                logger.error(
+                    "Request to %s failed: %s",
+                    safe_url_for_log(url),
+                    exc,
+                )
 
         if not cached_data:
             cached_data = self.load_plugin_cache(source.cache_file)
@@ -1083,27 +1075,45 @@ class PluginService:
             return None
 
     @staticmethod
-    async def fetch_remote_md5(md5_url: str | None) -> str | None:
+    async def fetch_remote_md5(
+        md5_url: str | None,
+        policy: RemoteFetchPolicy,
+    ) -> str | None:
         if not md5_url:
             return None
 
         try:
-            ssl_context = ssl.create_default_context(cafile=certifi.where())
-            connector = aiohttp.TCPConnector(ssl=ssl_context)
-
-            async with (
-                aiohttp.ClientSession(
-                    trust_env=True,
-                    connector=connector,
-                ) as session,
-                session.get(md5_url) as response,
-            ):
-                if response.status == 200:
-                    data = await response.json()
-                    return data.get("md5", "")
+            data = await fetch_public_json(md5_url, policy=policy)
+            if isinstance(data, dict):
+                return str(data.get("md5") or "")
         except Exception as exc:
-            logger.debug(f"Failed to fetch remote MD5: {exc}")
+            logger.debug(
+                "Failed to fetch remote MD5 from %s: %s",
+                safe_url_for_log(md5_url),
+                exc,
+            )
         return None
+
+    def _registry_fetch_policy(self) -> RemoteFetchPolicy:
+        """Build the policy for plugin registry requests.
+
+        Returns:
+            Bounded public-fetch policy with configured private exceptions.
+
+        Raises:
+            ValueError: If the private target configuration is invalid.
+        """
+        config = getattr(self.core_lifecycle, "astrbot_config", {})
+        outbound = config.get("security", {}).get("outbound_fetch", {})
+        rules = parse_private_target_rules(
+            outbound.get("plugin_registry_private_targets", [])
+        )
+        return RemoteFetchPolicy(
+            max_bytes=PLUGIN_REGISTRY_MAX_BYTES,
+            total_timeout_seconds=20,
+            max_redirects=3,
+            allow_private_targets=rules,
+        )
 
     async def is_cache_valid(self, source: RegistrySource) -> bool:
         try:
@@ -1112,7 +1122,10 @@ class PluginService:
                 logger.debug("MD5 not found in cache, treating cache as invalid")
                 return False
 
-            remote_md5 = await self.fetch_remote_md5(source.md5_url)
+            remote_md5 = await self.fetch_remote_md5(
+                source.md5_url,
+                self._registry_fetch_policy(),
+            )
             if remote_md5 is None:
                 logger.warning(
                     "Cannot fetch remote MD5, using cache without validation"
@@ -1411,7 +1424,7 @@ class PluginService:
                 old_record.get("installed_at")
                 if isinstance(old_record, dict) and old_record.get("installed_at")
                 else self.get_plugin_installed_at(plugin)
-                or datetime.now(timezone.utc).isoformat()
+                or datetime.now(UTC).isoformat()
             )
             record = {
                 "schema_version": 1,
@@ -1422,7 +1435,7 @@ class PluginService:
                 "repo": plugin_repo,
                 "download_url": "",
                 "installed_at": installed_at,
-                "updated_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": datetime.now(UTC).isoformat(),
             }
             plugin_name_value = str(plugin.name or "").strip()
             if plugin_name_value:
@@ -1497,8 +1510,7 @@ class PluginService:
         installed_at = (
             old_record.get("installed_at")
             if isinstance(old_record, dict) and old_record.get("installed_at")
-            else self.get_plugin_installed_at(plugin)
-            or datetime.now(timezone.utc).isoformat()
+            else self.get_plugin_installed_at(plugin) or datetime.now(UTC).isoformat()
         )
         record = {
             "schema_version": 1,
@@ -1510,7 +1522,7 @@ class PluginService:
             "repo": repo_url,
             "download_url": str(market_plugin.get("download_url") or "").strip(),
             "installed_at": installed_at,
-            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(UTC).isoformat(),
         }
 
         for key in (plugin.root_dir_name, plugin.name):
@@ -1556,7 +1568,7 @@ class PluginService:
                 or ""
             ).strip()
         record["root_dir_name"] = plugin.root_dir_name
-        record["updated_at"] = datetime.now(timezone.utc).isoformat()
+        record["updated_at"] = datetime.now(UTC).isoformat()
         records[plugin.root_dir_name] = record
         await self.save_plugin_install_sources(records)
 

@@ -207,6 +207,9 @@ class CronJob(TimestampMixin, SQLModel, table=True):
     last_run_at: datetime | None = Field(default=None)
     next_run_time: datetime | None = Field(default=None)
     last_error: str | None = Field(default=None, sa_type=Text)
+    allow_privileged_execution: bool = Field(default=False, nullable=False)
+    created_by: str | None = Field(default=None, max_length=255)
+    created_via: str = Field(default="legacy", max_length=32, nullable=False)
 
 
 class Preference(TimestampMixin, SQLModel, table=True):

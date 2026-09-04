@@ -9,11 +9,15 @@ import tempfile
 import uuid
 import zipfile
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 
 import yaml
 
+from astrbot.core.utils.archive_limits import (
+    PLUGIN_ARCHIVE_POLICY,
+    validate_zip_archive,
+)
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_builtin_plugin_path,
     get_astrbot_data_path,
@@ -478,7 +482,7 @@ class SkillManager:
 
     def _save_sandbox_skills_cache(self, cache: dict) -> None:
         cache["version"] = _SANDBOX_SKILLS_CACHE_VERSION
-        cache["updated_at"] = datetime.now(timezone.utc).isoformat()
+        cache["updated_at"] = datetime.now(UTC).isoformat()
         with open(self.sandbox_skills_cache_path, "w", encoding="utf-8") as f:
             json.dump(cache, f, ensure_ascii=False, indent=2)
 
@@ -766,6 +770,7 @@ class SkillManager:
         installed_skills = []
 
         with zipfile.ZipFile(zip_path) as zf:
+            validate_zip_archive(zf, policy=PLUGIN_ARCHIVE_POLICY)
             names = [
                 name
                 for name in (entry.replace("\\", "/") for entry in zf.namelist())

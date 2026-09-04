@@ -1,4 +1,6 @@
+from collections.abc import Mapping
 from pathlib import Path
+from typing import Any, Literal, cast
 
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.astr_agent_context import AstrAgentContext
@@ -50,8 +52,27 @@ def is_local_runtime(context: ContextWrapper[AstrAgentContext]) -> bool:
         umo=context.context.event.unified_msg_origin
     )
     provider_settings = cfg.get("provider_settings", {})
-    runtime = str(provider_settings.get("computer_use_runtime", "local"))
-    return runtime == "local"
+    return resolve_computer_use_runtime(provider_settings) == "local"
+
+
+def resolve_computer_use_runtime(
+    provider_settings: Mapping[str, Any],
+) -> Literal["none", "local", "sandbox"]:
+    """Resolve Computer Use runtime and fail closed for invalid values.
+
+    Args:
+        provider_settings: Effective provider settings for the current UMO.
+
+    Returns:
+        A supported runtime. Missing and invalid settings resolve to ``none``.
+    """
+    runtime = str(provider_settings.get("computer_use_runtime", "none")).strip().lower()
+    if runtime not in {"none", "local", "sandbox"}:
+        from astrbot.core import logger
+
+        logger.warning("Unknown computer use runtime; disabling computer use.")
+        return "none"
+    return cast(Literal["none", "local", "sandbox"], runtime)
 
 
 def check_admin_permission(

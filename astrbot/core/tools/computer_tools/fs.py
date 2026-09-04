@@ -55,6 +55,7 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_system_tmp_path,
     get_astrbot_temp_path,
 )
+from astrbot.core.workspace_control import is_workspace_control_path
 
 from ..registry import builtin_tool
 from . import util as computer_util
@@ -288,6 +289,13 @@ def _normalize_rw_path(
             f"{access} access is restricted for this user. "
             f"Allowed directories: {allowed}. Blocked path: {normalized_path}."
         )
+    if restricted and write and local_env:
+        workspace_root = current_workspace_root or _workspace_root(umo)
+        if is_workspace_control_path(workspace_root, Path(normalized_path)):
+            raise PermissionError(
+                "Write access to workspace prompts, skills, and approval metadata "
+                "is restricted to administrators."
+            )
     if restricted:
         _reject_multi_link_file(normalized_path)
     return normalized_path

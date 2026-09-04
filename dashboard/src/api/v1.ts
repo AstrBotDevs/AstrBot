@@ -1041,12 +1041,21 @@ export const cronApi = {
   list(params?: CronJobListParams) {
     return typed<any>(openApiV1.listCronJobs({ query: generatedQuery(params) }));
   },
-  create(payload: CronJobRequest) {
-    return typed<any>(openApiV1.createCronJob({ body: payload }));
-  },
-  update(jobId: string, payload: CronJobPatchRequest) {
+  create(payload: CronJobRequest, twoFactorCode?: string) {
     return typed<any>(
-      openApiV1.updateCronJob({ path: { job_id: jobId }, body: payload }),
+      openApiV1.createCronJob({
+        body: payload,
+        headers: twoFactorCode ? { 'X-2FA-Code': twoFactorCode } : undefined,
+      }),
+    );
+  },
+  update(jobId: string, payload: CronJobPatchRequest, twoFactorCode?: string) {
+    return typed<any>(
+      openApiV1.updateCronJob({
+        path: { job_id: jobId },
+        body: payload,
+        headers: twoFactorCode ? { 'X-2FA-Code': twoFactorCode } : undefined,
+      }),
     );
   },
   delete(jobId: string) {

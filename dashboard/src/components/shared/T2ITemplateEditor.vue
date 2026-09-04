@@ -160,6 +160,7 @@
               <iframe
                 ref="previewFrame"
                 :srcdoc="previewContent"
+                sandbox=""
                 style="width: 100%; height: 100%; border: none; zoom: 0.6;"
               />
             </div>
@@ -247,9 +248,12 @@
 <script setup>
 import { ref, computed, nextTick, watch } from 'vue'
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
+import DOMPurify from 'dompurify'
+import MarkdownIt from 'markdown-it'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
 import { useToast } from '@/utils/toast'
 import { statsApi, t2iApi } from '@/api/v1'
+import { buildT2iPreviewDocument, escapePreviewHtml } from '@/utils/t2iPreviewPolicy.mjs'
 
 const { t } = useI18n()
 const { tm } = useModuleI18n('core.shared')
@@ -308,79 +312,53 @@ const previewData = computed(() => ({
   version: previewVersion.value
 }))
 
-const injectShikiRuntime = (content) => {
-  if (content.includes('astrbot-t2i-shiki-runtime')) {
-    return content
-  }
+const previewMarkdown = new MarkdownIt({ html: false, linkify: false, typographer: false })
+const PREVIEW_FORBIDDEN_TAGS = [
+  'script', 'noscript', 'iframe', 'frame', 'frameset', 'object', 'embed',
+  'applet', 'base', 'form', 'input', 'button', 'textarea', 'select',
+  'option', 'meta', 'link'
+]
+const PREVIEW_FORBIDDEN_ATTRIBUTES = [
+  'src', 'srcset', 'href', 'xlink:href', 'action', 'formaction'
+]
 
-  const runtimeScript = getShikiRuntimeScript()
-  const headClose = content.search(/<\/head\s*>/i)
-  if (headClose >= 0) {
-    return `${content.slice(0, headClose)}  ${runtimeScript}\n${content.slice(headClose)}`
-  }
-
-  return `${runtimeScript}\n${content}`
-}
-
-const getShikiRuntimeScript = () => '<script id="astrbot-t2i-shiki-runtime" src="/t2i/shiki_runtime.iife.js"></scr' + 'ipt>'
-
-const hasMarkdownSource = (content) => /<[^>]+\bid=["']markdown-source["']/i.test(content)
-
-const insertMarkdownSource = (content) => {
-  const sourceElement = '  <textarea id="markdown-source" hidden>{{ text | safe }}</textarea>\n'
-  const markedScript = content.search(/^[ \t]*<script\s+src=["']https:\/\/cdn\.jsdelivr\.net\/npm\/marked\/marked\.min\.js["']><\/script>[ \t]*\r?\n?/im)
-  if (markedScript >= 0) {
-    return `${content.slice(0, markedScript)}${sourceElement}${content.slice(markedScript)}`
-  }
-
-  const bodyClose = content.search(/<\/body\s*>/i)
-  if (bodyClose >= 0) {
-    return `${content.slice(0, bodyClose)}${sourceElement}${content.slice(bodyClose)}`
-  }
-
-  return `${sourceElement}${content}`
-}
-
-const normalizeMarkdownSource = (content) => {
-  let normalized = content.replace(
-    /<script\s+id=["']markdown-source["']\s+type=["']text\/plain["']>\s*\{\{\s*text\s*\|\s*safe\s*\}\}\s*<\/script>/gi,
-    '<textarea id="markdown-source" hidden>{{ text | safe }}</textarea>'
+const renderStaticPreview = (content) => {
+  const sanitizedTemplate = DOMPurify.sanitize(content, {
+    WHOLE_DOCUMENT: true,
+    FORBID_TAGS: PREVIEW_FORBIDDEN_TAGS,
+    FORBID_ATTR: PREVIEW_FORBIDDEN_ATTRIBUTES
+  })
+  const previewDocument = new DOMParser().parseFromString(sanitizedTemplate, 'text/html')
+  const renderedMarkdown = DOMPurify.sanitize(
+    previewMarkdown.render(previewData.value.text),
+    {
+      FORBID_TAGS: PREVIEW_FORBIDDEN_TAGS,
+      FORBID_ATTR: PREVIEW_FORBIDDEN_ATTRIBUTES
+    }
   )
-
-  normalized = normalized.replace(
-    /decodeBase64Utf8\("\{\{\s*text_base64\s*\}\}"\)/g,
-    'document.getElementById("markdown-source").value'
-  )
-  normalized = normalized.replace(
-    /document\.getElementById\(["']markdown-source["']\)\.textContent/g,
-    'document.getElementById("markdown-source").value'
-  )
-
-  if (/\{\{\s*text_base64\s*\}\}/.test(normalized) && !hasMarkdownSource(normalized)) {
-    normalized = insertMarkdownSource(normalized)
+  const contentElement = previewDocument.getElementById('content')
+  if (contentElement) {
+    contentElement.innerHTML = renderedMarkdown
+  } else {
+    const fallback = previewDocument.createElement('div')
+    fallback.id = 'content'
+    fallback.innerHTML = renderedMarkdown
+    previewDocument.body.appendChild(fallback)
   }
-
-  return normalized
+  return `<!doctype html>${previewDocument.documentElement.outerHTML}`
 }
 
 const previewContent = computed(() => {
   try {
-    let content = normalizeMarkdownSource(templateContent.value)
-    content = content.replace(/\{\{\s*text\s*\|\s*safe\s*\}\}/g, () => previewData.value.text)
-    content = content.replace(/\{\{\s*version\s*\}\}/g, () => previewData.value.version)
-    let usedExistingShikiPlaceholder = false
-    content = content.replace(/<script\b[^>]*>\s*\{\{\s*shiki_runtime\s*\|\s*safe\s*\}\}\s*<\/script>/gi, () => {
-      usedExistingShikiPlaceholder = true
-      return getShikiRuntimeScript()
-    })
-    content = content.replace(/\{\{\s*shiki_runtime\s*\|\s*safe\s*\}\}/g, () => {
-      usedExistingShikiPlaceholder = true
-      return getShikiRuntimeScript()
-    })
-    return usedExistingShikiPlaceholder ? content : injectShikiRuntime(content)
+    let content = templateContent.value
+    content = content.replace(/\{\{\s*text\s*\|\s*safe\s*\}\}/g, () => escapePreviewHtml(previewData.value.text))
+    content = content.replace(/\{\{\s*version\s*\}\}/g, () => escapePreviewHtml(previewData.value.version))
+    return buildT2iPreviewDocument(renderStaticPreview(content))
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error)
-    return `<div style="color: red; padding: 20px;">模板渲染错误: ${errorMessage}</div>`
+    return buildT2iPreviewDocument(
+      `<div style="color: red; padding: 20px;">模板渲染错误: ${escapePreviewHtml(errorMessage)}</div>`
+    )
   }
 })
 

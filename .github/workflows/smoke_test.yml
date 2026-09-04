@@ -24,8 +24,6 @@ jobs:
           - macos-latest
           - windows-latest
         python-version:
-          - '3.10'
-          - '3.11'
           - '3.12'
           - '3.13'
           - '3.14'
@@ -40,8 +38,7 @@ jobs:
         uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
-          cache: 'pip'
-          cache-dependency-path: requirements.txt
+          cache: 'uv'
 
       - name: Install uv
         run: |
@@ -50,10 +47,10 @@ jobs:
 
       - name: Install dependencies
         run: |
-          uv pip install --system -r requirements.txt
+          uv sync --locked --no-dev
         timeout-minutes: 15
 
       - name: Run smoke tests
         run: |
-          python scripts/smoke_startup_check.py
+          uv run python scripts/smoke_startup_check.py
         timeout-minutes: 2

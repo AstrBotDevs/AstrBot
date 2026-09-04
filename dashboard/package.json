@@ -16,9 +16,12 @@
     "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix --ignore-path .gitignore"
   },
   "dependencies": {
+    "@fontsource/noto-sans": "5.3.0",
+    "@fontsource/outfit": "5.3.0",
     "@guolao/vue-monaco-editor": "^1.5.4",
     "@hey-api/client-axios": "0.2.12",
     "@lucide/vue": "^1.23.0",
+    "@ricky0123/vad-web": "0.0.29",
     "@tiptap/starter-kit": "2.1.7",
     "@tiptap/vue-3": "2.1.7",
     "apexcharts": "3.42.0",
@@ -35,6 +38,7 @@
     "markstream-vue": "1.0.5-beta.0",
     "mermaid": "^11.12.2",
     "monaco-editor": "^0.52.2",
+    "onnxruntime-web": "1.22.0",
     "pinia": "2.1.6",
     "pinyin-pro": "^3.26.0",
     "qrcode": "^1.5.4",

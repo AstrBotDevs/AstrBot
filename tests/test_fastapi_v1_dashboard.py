@@ -1,12 +1,12 @@
 import copy
 import json
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
 import httpx
-import jwt
 import pytest
 import pytest_asyncio
 from fastapi import FastAPI, Request
@@ -24,6 +24,10 @@ from astrbot.dashboard.asgi_runtime import (
 from astrbot.dashboard.asgi_runtime import (
     request as dashboard_request,
 )
+from astrbot.dashboard.auth_tokens import (
+    decode_dashboard_session_token,
+    issue_dashboard_session_token,
+)
 from astrbot.dashboard.responses import ok
 from astrbot.dashboard.services.api_key_service import ApiKeyService
 from astrbot.dashboard.services.auth_service import DASHBOARD_JWT_COOKIE_NAME
@@ -35,6 +39,7 @@ from astrbot.dashboard.services.plugin_service import (
 from astrbot.dashboard.services.skills_service import SkillArchive, SkillsServiceError
 
 JWT_SECRET = "fastapi-v1-test-secret-with-32-bytes"
+PLUGIN_ASSET_JWT_SECRET = "fastapi-v1-plugin-asset-secret-32bytes"
 
 
 @dataclass
@@ -669,8 +674,7 @@ def _register_dashboard_alias_routes(
     def _alias_username(request: Request) -> str:
         auth_header = request.headers.get("Authorization", "")
         token = auth_header.removeprefix("Bearer ").strip()
-        payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
-        return payload["username"]
+        return decode_dashboard_session_token(token, secret=JWT_SECRET)
 
     def alias_get(path: str):
         return app.get(path, include_in_schema=False)
@@ -1013,6 +1017,7 @@ def asgi_app(fake_core_lifecycle, fake_db: FakeDb):
         core_lifecycle=fake_core_lifecycle,
         db=fake_db,
         jwt_secret=JWT_SECRET,
+        plugin_asset_jwt_secret=PLUGIN_ASSET_JWT_SECRET,
     )
     app.state.dashboard_app_adapter = FastAPIAppAdapter(app)
     _register_dashboard_alias_routes(
@@ -1034,10 +1039,11 @@ async def asgi_client(asgi_app):
 
 
 def _jwt_headers() -> dict[str, str]:
-    token = jwt.encode(
-        {"username": "fastapi-v1-test"},
-        JWT_SECRET,
-        algorithm="HS256",
+    token = issue_dashboard_session_token(
+        username="fastapi-v1-test",
+        secret=JWT_SECRET,
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
+        auth_source="test",
     )
     return {"Authorization": f"Bearer {token}"}
 
@@ -1087,10 +1093,11 @@ def test_fastapi_app_adapter_registers_on_app_state():
 async def test_v1_scope_dependencies_accept_dashboard_cookie(
     asgi_client: httpx.AsyncClient,
 ):
-    token = jwt.encode(
-        {"username": "fastapi-v1-cookie-test"},
-        JWT_SECRET,
-        algorithm="HS256",
+    token = issue_dashboard_session_token(
+        username="fastapi-v1-cookie-test",
+        secret=JWT_SECRET,
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
+        auth_source="test",
     )
 
     response = await asgi_client.get(
@@ -1637,6 +1644,67 @@ async def test_v1_system_config_update_preserves_independent_bot_provider_sectio
         "default_provider_id": "gpt-mini"
     }
     assert fake_core_lifecycle.reloaded_config_ids == ["default"]
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "legacy_payload"),
+    [
+        ("PUT", "/api/v1/system-config", False),
+        ("POST", "/api/config/astrbot/update", True),
+    ],
+)
+@pytest.mark.asyncio
+async def test_security_policy_updates_require_dedicated_scope(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+    fake_db: FakeDb,
+    monkeypatch: pytest.MonkeyPatch,
+    method: str,
+    path: str,
+    legacy_payload: bool,
+):
+    """Both v1 and compatibility routes must fail closed for network policy."""
+
+    def fake_save_config(post_config: dict, config: FakeAstrBotConfig, is_core=False):
+        config.save_config(post_config)
+
+    monkeypatch.setattr(config_service, "save_config", fake_save_config)
+    current = fake_core_lifecycle.astrbot_config
+    current["security"] = {"outbound_fetch": {"media_private_targets": []}}
+    payload = copy.deepcopy(current)
+    payload["security"]["outbound_fetch"]["media_private_targets"] = [
+        {"host": "metadata.internal", "cidrs": ["169.254.169.254/32"]}
+    ]
+    request_json = (
+        {"conf_id": "default", "config": payload} if legacy_payload else payload
+    )
+
+    base_key = f"abk_base_config_{method.lower()}"
+    fake_db.add_api_key(base_key, scopes=["config"])
+    denied = await asgi_client.request(
+        method,
+        path,
+        headers={"X-API-Key": base_key},
+        json=request_json,
+    )
+
+    assert denied.status_code == 403
+    assert current["security"]["outbound_fetch"]["media_private_targets"] == []
+
+    security_key = f"abk_security_config_{method.lower()}"
+    fake_db.add_api_key(security_key, scopes=["config:security"])
+    allowed = await asgi_client.request(
+        method,
+        path,
+        headers={"X-API-Key": security_key},
+        json=request_json,
+    )
+
+    assert allowed.status_code == 200
+    assert allowed.json()["status"] == "ok"
+    assert current["security"]["outbound_fetch"]["media_private_targets"] == [
+        {"host": "metadata.internal", "cidrs": ["169.254.169.254/32"]}
+    ]
 
 
 @pytest.mark.asyncio

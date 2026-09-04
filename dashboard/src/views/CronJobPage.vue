@@ -413,6 +413,19 @@
                     </v-chip>
                   </template>
                 </v-autocomplete>
+
+                <div class="privileged-execution-field">
+                  <v-switch
+                    v-model="newJob.allow_privileged_execution"
+                    :label="tm('form.privilegedExecution')"
+                    color="warning"
+                    hide-details
+                    @update:model-value="onPrivilegedExecutionChange"
+                  />
+                  <div class="text-caption text-medium-emphasis ms-2 mt-1">
+                    {{ tm('form.privilegedExecutionHint') }}
+                  </div>
+                </div>
               </div>
             </v-card-text>
             <v-card-actions class="justify-end px-5 pb-5">
@@ -426,6 +439,60 @@
                 @click="submitJob"
               >
                 {{ dialogSubmitText }}
+              </v-btn>
+            </v-card-actions>
+          </v-card>
+        </v-dialog>
+
+        <v-dialog v-model="privilegedConfirmDialog" max-width="520">
+          <v-card class="dashboard-dialog-card">
+            <v-card-title class="text-h3 pa-4 pb-0 pl-6">
+              {{ tm('privileged.confirmTitle') }}
+            </v-card-title>
+            <v-card-text class="px-5 pb-2">
+              {{ tm('privileged.confirmDescription') }}
+            </v-card-text>
+            <v-card-actions class="justify-end px-5 pb-5">
+              <v-btn variant="text" @click="cancelPrivilegedExecution">
+                {{ tm('actions.cancel') }}
+              </v-btn>
+              <v-btn color="warning" variant="tonal" @click="confirmPrivilegedExecution">
+                {{ tm('privileged.confirmAction') }}
+              </v-btn>
+            </v-card-actions>
+          </v-card>
+        </v-dialog>
+
+        <v-dialog v-model="privilegedTotpDialog" max-width="520">
+          <v-card class="dashboard-dialog-card">
+            <v-card-title class="text-h3 pa-4 pb-0 pl-6">
+              {{ tm('privileged.totpTitle') }}
+            </v-card-title>
+            <v-card-text class="px-5 pb-2">
+              <p class="mb-3">{{ tm('privileged.totpDescription') }}</p>
+              <v-text-field
+                v-model="privilegedTotpCode"
+                :label="tm('privileged.totpCode')"
+                maxlength="6"
+                autocomplete="one-time-code"
+                inputmode="numeric"
+                prepend-inner-icon="mdi-shield-key"
+                :error-messages="privilegedTotpError"
+                variant="outlined"
+                @keyup.enter="submitPrivilegedTotp"
+              />
+            </v-card-text>
+            <v-card-actions class="justify-end px-5 pb-5">
+              <v-btn variant="text" @click="privilegedTotpDialog = false">
+                {{ tm('actions.cancel') }}
+              </v-btn>
+              <v-btn
+                color="primary"
+                variant="tonal"
+                :disabled="privilegedTotpCode.length !== 6"
+                @click="submitPrivilegedTotp"
+              >
+                {{ tm('privileged.totpConfirm') }}
               </v-btn>
             </v-card-actions>
           </v-card>
@@ -463,6 +530,11 @@ const createDialog = ref(false);
 const creating = ref(false);
 const editingJobId = ref("");
 const runningJobIds = ref(new Set<string>());
+const privilegedConfirmDialog = ref(false);
+const privilegedTotpDialog = ref(false);
+const privilegedTotpCode = ref("");
+const privilegedTotpError = ref("");
+const privilegedExecutionConfirmed = ref(false);
 const NO_DELIVERY_TARGET_FILTER = "__astrbot_no_delivery_target__";
 type ScheduleMode =
   | "once"
@@ -498,6 +570,7 @@ const newJob = ref({
   session: "",
   timezone: "",
   enabled: true,
+  allow_privileged_execution: false,
 });
 
 const snackbar = ref({ show: false, message: "", color: "success" });
@@ -948,7 +1021,11 @@ function resetNewJob() {
     session: "",
     timezone: "",
     enabled: true,
+    allow_privileged_execution: false,
   };
+  privilegedExecutionConfirmed.value = false;
+  privilegedTotpCode.value = "";
+  privilegedTotpError.value = "";
 }
 
 function openEdit(job: any) {
@@ -974,7 +1051,9 @@ function openEdit(job: any) {
     session: job.session || job?.payload?.session || "",
     timezone: job.timezone || "",
     enabled: job.enabled !== false,
+    allow_privileged_execution: Boolean(job.allow_privileged_execution),
   };
+  privilegedExecutionConfirmed.value = Boolean(job.allow_privileged_execution);
   createDialog.value = true;
   loadUmos(true);
 }
@@ -1175,7 +1254,43 @@ function buildPayload() {
     session: newJob.value.session,
     timezone: newJob.value.timezone,
     enabled: newJob.value.enabled,
+    allow_privileged_execution: newJob.value.allow_privileged_execution,
   };
+}
+
+function onPrivilegedExecutionChange(enabled: boolean | null) {
+  if (!enabled) {
+    privilegedExecutionConfirmed.value = false;
+    return;
+  }
+  if (!privilegedExecutionConfirmed.value) {
+    privilegedConfirmDialog.value = true;
+  }
+}
+
+function cancelPrivilegedExecution() {
+  newJob.value.allow_privileged_execution = false;
+  privilegedExecutionConfirmed.value = false;
+  privilegedConfirmDialog.value = false;
+}
+
+function confirmPrivilegedExecution() {
+  privilegedExecutionConfirmed.value = true;
+  privilegedConfirmDialog.value = false;
+}
+
+function shouldRequestPrivilegedTotp(error: any): boolean {
+  return Boolean(
+    error?.response?.status === 401
+      && error?.response?.data?.data?.totp_required,
+  );
+}
+
+async function submitPrivilegedTotp() {
+  if (privilegedTotpCode.value.length !== 6) return;
+  privilegedTotpError.value = "";
+  privilegedTotpDialog.value = false;
+  await submitJob(privilegedTotpCode.value);
 }
 
 function validateJobForm(): boolean {
@@ -1255,7 +1370,7 @@ function validateScheduleFields(): boolean {
   return true;
 }
 
-async function createJob() {
+async function createJob(twoFactorCode?: string) {
   if (!validateJobForm()) {
     return;
   }
@@ -1263,7 +1378,7 @@ async function createJob() {
   creating.value = true;
   try {
     const payload = buildPayload();
-    const res = await cronApi.create(payload);
+    const res = await cronApi.create(payload, twoFactorCode);
     if (res.data.status === "ok") {
       toast(tm("messages.createSuccess"));
       createDialog.value = false;
@@ -1274,13 +1389,18 @@ async function createJob() {
       toast(res.data.message || tm("messages.createFailed"), "error");
     }
   } catch (e: any) {
+    if (shouldRequestPrivilegedTotp(e)) {
+      privilegedTotpError.value = tm("privileged.totpError");
+      privilegedTotpDialog.value = true;
+      return;
+    }
     toast(e?.response?.data?.message || tm("messages.createFailed"), "error");
   } finally {
     creating.value = false;
   }
 }
 
-async function updateJob() {
+async function updateJob(twoFactorCode?: string) {
   if (!editingJobId.value) {
     return;
   }
@@ -1294,7 +1414,7 @@ async function updateJob() {
       ...buildPayload(),
       description: newJob.value.note,
     };
-    const res = await cronApi.update(editingJobId.value, payload);
+    const res = await cronApi.update(editingJobId.value, payload, twoFactorCode);
     if (res.data.status === "ok") {
       toast(tm("messages.updateSuccess"));
       createDialog.value = false;
@@ -1305,18 +1425,30 @@ async function updateJob() {
       toast(res.data.message || tm("messages.updateFailed"), "error");
     }
   } catch (e: any) {
+    if (shouldRequestPrivilegedTotp(e)) {
+      privilegedTotpError.value = tm("privileged.totpError");
+      privilegedTotpDialog.value = true;
+      return;
+    }
     toast(e?.response?.data?.message || tm("messages.updateFailed"), "error");
   } finally {
     creating.value = false;
   }
 }
 
-async function submitJob() {
-  if (isEditing.value) {
-    await updateJob();
+async function submitJob(twoFactorCode?: string) {
+  if (
+    newJob.value.allow_privileged_execution
+    && !privilegedExecutionConfirmed.value
+  ) {
+    privilegedConfirmDialog.value = true;
     return;
   }
-  await createJob();
+  if (isEditing.value) {
+    await updateJob(twoFactorCode);
+    return;
+  }
+  await createJob(twoFactorCode);
 }
 
 onMounted(() => {

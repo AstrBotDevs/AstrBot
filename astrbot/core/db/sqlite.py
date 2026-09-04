@@ -72,11 +72,41 @@ class SQLiteDatabase(BaseDatabase):
             await self._ensure_persona_custom_error_message_column(conn)
             await self._ensure_platform_message_history_checkpoint_column(conn)
             await self._ensure_chatui_project_workspace_columns(conn)
+            await self._ensure_cron_security_columns(conn)
             await self._ensure_conversation_indexes(conn)
             # The table-level unique constraint already provides an index for UMO
             # lookups. Older schemas also created this redundant explicit index.
             await conn.execute(text("DROP INDEX IF EXISTS ix_umo_aliases_umo"))
             await conn.commit()
+
+    async def _ensure_cron_security_columns(self, conn) -> None:
+        """Add additive security metadata to cron jobs created by older releases.
+
+        Args:
+            conn: Active SQLAlchemy connection used during initialization.
+        """
+        result = await conn.execute(text("PRAGMA table_info(cron_jobs)"))
+        columns = {row[1] for row in result.fetchall()}
+        if "allow_privileged_execution" not in columns:
+            await conn.execute(
+                text(
+                    "ALTER TABLE cron_jobs ADD COLUMN allow_privileged_execution "
+                    "BOOLEAN NOT NULL DEFAULT 0"
+                )
+            )
+        if "created_by" not in columns:
+            await conn.execute(
+                text(
+                    "ALTER TABLE cron_jobs ADD COLUMN created_by VARCHAR(255) DEFAULT NULL"
+                )
+            )
+        if "created_via" not in columns:
+            await conn.execute(
+                text(
+                    "ALTER TABLE cron_jobs ADD COLUMN created_via VARCHAR(32) "
+                    "NOT NULL DEFAULT 'legacy'"
+                )
+            )
 
     async def _ensure_conversation_indexes(self, conn) -> None:
         """Create indexes used by the dashboard conversation list.
@@ -2459,6 +2489,9 @@ class SQLiteDatabase(BaseDatabase):
         run_once: bool = False,
         status: str | None = None,
         job_id: str | None = None,
+        allow_privileged_execution: bool = False,
+        created_by: str | None = None,
+        created_via: str = "legacy",
     ) -> CronJob:
         async with self.get_db() as session:
             session: AsyncSession
@@ -2474,6 +2507,9 @@ class SQLiteDatabase(BaseDatabase):
                     persistent=persistent,
                     run_once=run_once,
                     status=status or "scheduled",
+                    allow_privileged_execution=allow_privileged_execution,
+                    created_by=created_by,
+                    created_via=created_via,
                 )
                 if job_id:
                     job.job_id = job_id
@@ -2498,6 +2534,9 @@ class SQLiteDatabase(BaseDatabase):
         next_run_time: datetime | None | object = CRON_FIELD_NOT_SET,
         last_run_at: datetime | None | object = CRON_FIELD_NOT_SET,
         last_error: str | None | object = CRON_FIELD_NOT_SET,
+        allow_privileged_execution: bool | object = CRON_FIELD_NOT_SET,
+        created_by: str | None | object = CRON_FIELD_NOT_SET,
+        created_via: str | object = CRON_FIELD_NOT_SET,
     ) -> CronJob | None:
         async with self.get_db() as session:
             session: AsyncSession
@@ -2516,6 +2555,9 @@ class SQLiteDatabase(BaseDatabase):
                     "next_run_time": next_run_time,
                     "last_run_at": last_run_at,
                     "last_error": last_error,
+                    "allow_privileged_execution": allow_privileged_execution,
+                    "created_by": created_by,
+                    "created_via": created_via,
                 }.items():
                     if val is CRON_FIELD_NOT_SET:
                         continue

@@ -2,6 +2,8 @@ import re
 from pathlib import Path
 
 import pytest
+from packaging.requirements import Requirement
+from packaging.version import Version
 
 from astrbot.core.utils.toml_parser import read_pyproject_project_dependencies
 
@@ -32,12 +34,18 @@ def _read_pyproject_dependencies() -> list[str]:
     return read_pyproject_project_dependencies(PYPROJECT_PATH)
 
 
-def test_requirements_include_httpx_socks_dependency() -> None:
-    requirements_dependency = _read_httpx_socks_dependency(_read_requirements())
+def _read_pinned_version(package: str) -> Version | None:
+    pattern = re.compile(rf"^{re.escape(package)}==([^\s\\]+)")
+    for entry in _read_requirements():
+        if match := pattern.match(entry):
+            return Version(match.group(1))
+    return None
 
-    assert requirements_dependency is not None, (
-        "Expected httpx[socks] dependency in requirements.txt for SOCKS proxy support"
-    )
+
+def test_requirements_include_locked_httpx_socks_dependencies() -> None:
+    """The flattened, hash-pinned export must retain the SOCKS dependency graph."""
+    assert _read_pinned_version("httpx") is not None
+    assert _read_pinned_version("socksio") is not None
 
 
 def test_pyproject_declares_httpx_socks_dependency() -> None:
@@ -48,20 +56,17 @@ def test_pyproject_declares_httpx_socks_dependency() -> None:
     )
 
 
-def test_httpx_socks_dependency_spec_matches_between_dependency_files() -> None:
-    requirements_dependency = _read_httpx_socks_dependency(_read_requirements())
+def test_locked_httpx_version_satisfies_direct_dependency_spec() -> None:
+    locked_version = _read_pinned_version("httpx")
     pyproject_dependency = _read_httpx_socks_dependency(_read_pyproject_dependencies())
 
-    assert requirements_dependency is not None, (
-        "Expected httpx[socks] dependency in requirements.txt for SOCKS proxy support"
-    )
+    assert locked_version is not None
     assert pyproject_dependency is not None, (
         "Expected httpx[socks] dependency in pyproject.toml for SOCKS proxy support"
     )
-    assert requirements_dependency == pyproject_dependency, (
-        "Expected httpx[socks] dependency spec to match between requirements.txt "
-        "and pyproject.toml for SOCKS proxy support"
-    )
+    direct_requirement = Requirement(pyproject_dependency)
+    assert "socks" in direct_requirement.extras
+    assert locked_version in direct_requirement.specifier
 
 
 @pytest.mark.parametrize(

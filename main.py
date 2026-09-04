@@ -95,10 +95,14 @@ async def check_dashboard_files(webui_dir: str | None = None):
 
     # 指定webui目录
     if webui_dir:
-        if os.path.exists(webui_dir):
-            logger.info("Using WebUI directory: %s", webui_dir)
-            return webui_dir
-        logger.warning("WebUI directory not found: %s. Using default.", webui_dir)
+        explicit_path = Path(webui_dir).resolve()
+        if not explicit_path.is_dir() or not (explicit_path / "index.html").is_file():
+            raise ValueError(
+                "Explicit WebUI directory must be a directory containing index.html: "
+                f"{explicit_path}"
+            )
+        logger.info("Using WebUI directory: %s", explicit_path)
+        return str(explicit_path)
 
     try:
         return str(await AstrBotUpdater().ensure_dashboard())

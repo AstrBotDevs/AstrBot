@@ -10,10 +10,11 @@ services:
     security_opt:
       - no-new-privileges:true
     ports:
-      - "6185:6185" # AstrBot WebUI
-      - "6199:6199" # Optional. OneBot v11 Napcat Websocket Port
+      - "127.0.0.1:6185:6185" # AstrBot WebUI; use a TLS reverse proxy for remote access
     environment:
       - TZ=Asia/Shanghai
+      - ASTRBOT_DASHBOARD_HOST=0.0.0.0
+      - ASTRBOT_DASHBOARD_ACCESS_MODE=container_loopback
     volumes:
       - ./data:/AstrBot/data
       # - /etc/timezone:/etc/timezone:ro

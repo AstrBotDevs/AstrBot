@@ -33,6 +33,7 @@ from astrbot.dashboard.schemas import (
     PluginValidateRepoRequest,
     PluginVersionSupportRequest,
 )
+from astrbot.dashboard.services.auth_service import CONFIG_SECRETS_SCOPE
 from astrbot.dashboard.services.config_service import (
     ConfigDisplayService,
     ConfigFileService,
@@ -57,6 +58,22 @@ legacy_router = APIRouter(tags=["Dashboard Plugins"], include_in_schema=False)
 
 
 require_plugin_scope = ScopeDependency("plugin")
+
+
+def _can_change_plugin_secrets(auth: AuthContext) -> bool:
+    """Return whether the caller can replace write-only plugin secrets.
+
+    Args:
+        auth: Authentication context for the current request.
+
+    Returns:
+        True for dashboard sessions or API keys with config:secrets.
+    """
+    return (
+        auth.via != "api_key"
+        or "*" in auth.scopes
+        or CONFIG_SECRETS_SCOPE in auth.scopes
+    )
 
 
 def get_service(request: Request) -> PluginService:
@@ -735,7 +752,7 @@ async def get_plugin_config_by_id(
 @router.put("/plugins/config")
 async def update_plugin_config_by_id(
     payload: PluginConfigUpdateRequest,
-    _auth: AuthContext = Depends(require_plugin_scope),
+    auth: AuthContext = Depends(require_plugin_scope),
     service: ConfigFileService = Depends(get_config_file_service),
 ):
     body = _model_dict(payload)
@@ -746,6 +763,7 @@ async def update_plugin_config_by_id(
         message=await service.save_plugin_configs_from_dashboard_payload(
             config,
             plugin_name=plugin_id,
+            allow_secret_change=_can_change_plugin_secrets(auth),
         )
     )
 
@@ -1003,7 +1021,7 @@ async def update_plugin_log_level(
 async def update_plugin_config(
     plugin_id: str,
     payload: PluginConfigPayload,
-    _auth: AuthContext = Depends(require_plugin_scope),
+    auth: AuthContext = Depends(require_plugin_scope),
     service: ConfigFileService = Depends(get_config_file_service),
 ):
     body = _model_dict(payload)
@@ -1013,6 +1031,7 @@ async def update_plugin_config(
         message=await service.save_plugin_configs_from_dashboard_payload(
             config,
             plugin_name=plugin_id,
+            allow_secret_change=_can_change_plugin_secrets(auth),
         )
     )
 

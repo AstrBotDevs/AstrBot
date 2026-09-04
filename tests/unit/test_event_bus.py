@@ -7,6 +7,18 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from astrbot.core.event_bus import EventBus
+from astrbot.core.platform.platform import Platform
+from astrbot.core.platform.platform_metadata import PlatformMetadata
+
+
+class _QueueTestPlatform(Platform):
+    """Minimal concrete platform for ingress queue tests."""
+
+    async def run(self) -> None:
+        return None
+
+    def meta(self) -> PlatformMetadata:
+        return PlatformMetadata(name="queue-test", description="", id="queue-test")
 
 
 @pytest.fixture
@@ -31,6 +43,17 @@ def mock_config_manager():
         return_value={"id": "test-conf-id", "name": "Test Config"}
     )
     return config_mgr
+
+
+def test_platform_commit_event_reports_queue_saturation() -> None:
+    """Platform ingress must return False instead of growing an unbounded queue."""
+    queue: asyncio.Queue = asyncio.Queue(maxsize=1)
+    platform = _QueueTestPlatform({}, queue)
+    first_event = MagicMock()
+    dropped_event = MagicMock()
+    assert platform.commit_event(first_event) is True
+    assert platform.commit_event(dropped_event) is False
+    dropped_event.cleanup_temporary_local_files.assert_called_once_with()
 
 
 @pytest.fixture

@@ -103,15 +103,17 @@ outline: deep
 - **包含权限:** `bot`、`provider`
 
 - **敏感子权限 `config:edit_admin`:** 允许具有 `config` 权限的 Key 修改 `admins_id`。该子权限必须显式授予。
+- **敏感子权限 `config:secrets`:** 允许具有 `config` 权限的 Key 替换或清除仅可写的业务密钥。配置读取永不返回密钥原文。
+- **敏感子权限 `config:security`:** 允许具有 `config` 权限的 Key 修改 Dashboard 暴露方式和出站网络安全策略。
 
 | 方法 | 接口 | 条件性敏感子权限 |
 | --- | --- | --- |
 | `POST` | `/api/v1/bot-types/{bot_type}/registration` | — |
 | `GET` | `/api/v1/config-profiles` | — |
-| `POST` | `/api/v1/config-profiles` | `config:edit_admin` |
+| `POST` | `/api/v1/config-profiles` | `config:edit_admin`, `config:secrets`, `config:security` |
 | `GET` | `/api/v1/config-profiles/schema` | — |
 | `GET` | `/api/v1/config-profiles/{config_id}` | — |
-| `PUT` | `/api/v1/config-profiles/{config_id}` | `config:edit_admin` |
+| `PUT` | `/api/v1/config-profiles/{config_id}` | `config:edit_admin`, `config:secrets`, `config:security` |
 | `PATCH` | `/api/v1/config-profiles/{config_id}` | — |
 | `DELETE` | `/api/v1/config-profiles/{config_id}` | — |
 | `GET` | `/api/v1/config-routes` | — |
@@ -122,7 +124,7 @@ outline: deep
 | `GET` | `/api/v1/subagents/config` | — |
 | `PUT` | `/api/v1/subagents/config` | — |
 | `GET` | `/api/v1/system-config` | — |
-| `PUT` | `/api/v1/system-config` | `config:edit_admin` |
+| `PUT` | `/api/v1/system-config` | `config:edit_admin`, `config:secrets`, `config:security` |
 | `GET` | `/api/v1/system-config/runtime` | — |
 | `GET` | `/api/v1/system-config/schema` | — |
 | `GET` | `/api/v1/t2i/templates` | — |

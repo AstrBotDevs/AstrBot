@@ -12,7 +12,6 @@ from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlsplit, urlunsplit
 
-import jwt
 import pyotp
 import pytest
 import pytest_asyncio
@@ -35,6 +34,7 @@ from astrbot.core.utils.totp import (
     generate_recovery_code,
 )
 from astrbot.dashboard.asgi_runtime import FastAPIAppAdapter, jsonify
+from astrbot.dashboard.auth_tokens import decode_dashboard_session_token
 from astrbot.dashboard.password_state import (
     get_dashboard_password_hash,
     is_password_change_required,
@@ -517,16 +517,18 @@ async def test_desktop_session_issues_jwt_without_password(
 
     assert response.status_code == 200
     assert data["status"] == "ok"
-    assert data["data"]["username"] == core_lifecycle_td.astrbot_config[
-        "dashboard"
-    ]["username"]
-    token = data["data"]["token"]
-    payload = jwt.decode(
-        token,
-        core_lifecycle_td.astrbot_config["dashboard"]["jwt_secret"],
-        algorithms=["HS256"],
+    assert (
+        data["data"]["username"]
+        == core_lifecycle_td.astrbot_config["dashboard"]["username"]
     )
-    assert payload["auth_source"] == "desktop"
+    token = data["data"]["token"]
+    assert (
+        decode_dashboard_session_token(
+            token,
+            secret=core_lifecycle_td.astrbot_config["dashboard"]["jwt_secret"],
+        )
+        == core_lifecycle_td.astrbot_config["dashboard"]["username"]
+    )
 
 
 @pytest.mark.asyncio
@@ -651,12 +653,19 @@ async def test_auth_rate_limit_uses_same_bucket_across_paths(
     cfg = core_lifecycle_td.astrbot_config["dashboard"]
     rl_original = cfg.get("auth_rate_limit", {})
     tp_original = cfg.get("trust_proxy_headers", False)
+    access_mode_original = cfg.get("access_mode", "local")
+    reverse_proxy_original = cfg.get("reverse_proxy", {})
     cfg["auth_rate_limit"] = {
         "enable": True,
         "average_interval": 3600.0,
         "max_burst": 1,
     }
     cfg["trust_proxy_headers"] = True
+    cfg["access_mode"] = "reverse_proxy"
+    cfg["reverse_proxy"] = {
+        "public_url": "https://dashboard.example",
+        "trusted_proxy_cidrs": ["127.0.0.0/8"],
+    }
 
     try:
         client = app.test_client()
@@ -673,6 +682,8 @@ async def test_auth_rate_limit_uses_same_bucket_across_paths(
     finally:
         cfg["auth_rate_limit"] = rl_original
         cfg["trust_proxy_headers"] = tp_original
+        cfg["access_mode"] = access_mode_original
+        cfg["reverse_proxy"] = reverse_proxy_original
 
 
 @pytest.mark.asyncio
@@ -687,12 +698,19 @@ async def test_auth_rate_limit_separates_different_client_ips(
     cfg = core_lifecycle_td.astrbot_config["dashboard"]
     rl_original = cfg.get("auth_rate_limit", {})
     tp_original = cfg.get("trust_proxy_headers", False)
+    access_mode_original = cfg.get("access_mode", "local")
+    reverse_proxy_original = cfg.get("reverse_proxy", {})
     cfg["auth_rate_limit"] = {
         "enable": True,
         "average_interval": 3600.0,
         "max_burst": 1,
     }
     cfg["trust_proxy_headers"] = True
+    cfg["access_mode"] = "reverse_proxy"
+    cfg["reverse_proxy"] = {
+        "public_url": "https://dashboard.example",
+        "trusted_proxy_cidrs": ["127.0.0.0/8"],
+    }
 
     try:
         client = app.test_client()
@@ -721,6 +739,8 @@ async def test_auth_rate_limit_separates_different_client_ips(
     finally:
         cfg["auth_rate_limit"] = rl_original
         cfg["trust_proxy_headers"] = tp_original
+        cfg["access_mode"] = access_mode_original
+        cfg["reverse_proxy"] = reverse_proxy_original
 
 
 @pytest.mark.asyncio
@@ -2549,6 +2569,15 @@ async def test_plugins(
 ):
     """测试插件 API 端点，使用 Mock 避免真实网络调用。"""
     test_client = app.test_client()
+
+    async def fake_market_query(*, custom_registry, force_refresh):
+        return [{"name": "fixture", "repo": "https://github.com/test/fixture"}], None
+
+    monkeypatch.setattr(
+        app._dashboard_server.asgi_app.state.services.plugins,
+        "get_online_plugins_from_dashboard_query",
+        fake_market_query,
+    )
 
     # 已经安装的插件
     response = await test_client.get("/api/plugin/get", headers=authenticated_header)

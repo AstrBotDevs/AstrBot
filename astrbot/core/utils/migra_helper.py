@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import json
 import logging
+import secrets
 import traceback
 from pathlib import Path
 from typing import Any
@@ -283,7 +284,10 @@ def _migrate_agent_runner_config(
             provider_settings.pop(key, None)
         changed = True
 
-    if config.get("config_version") != 3:
+    if (
+        not isinstance(config.get("config_version"), int)
+        or config.get("config_version") < 3
+    ):
         config["config_version"] = 3
         changed = True
     return changed
@@ -318,7 +322,51 @@ def migrate_config_on_load(config: dict[str, Any], config_path: Path) -> bool:
                 resolved_path,
                 exc,
             )
-    return _migrate_agent_runner_config(config, fallback_config)
+    changed = _migrate_agent_runner_config(config, fallback_config)
+    default_path = (Path(get_astrbot_data_path()) / "cmd_config.json").resolve()
+    if config.get("config_version", 0) < 4:
+        dashboard = config.setdefault("dashboard", {})
+        if not isinstance(dashboard, dict):
+            dashboard = {}
+            config["dashboard"] = dashboard
+        if resolved_path == default_path:
+            # Previous configuration reads exposed the old key, so replace it
+            # instead of preserving sessions signed by that secret.
+            dashboard["jwt_secret"] = secrets.token_hex(32)
+            dashboard["plugin_asset_jwt_secret"] = secrets.token_hex(32)
+            previous_host = str(dashboard.get("host") or "").strip().lower()
+            dashboard["host"] = "127.0.0.1"
+            dashboard["access_mode"] = "local"
+            dashboard["reverse_proxy"] = {
+                "public_url": "",
+                "trusted_proxy_cidrs": [],
+            }
+            dashboard["trust_proxy_headers"] = False
+            logger.info("Rotated dashboard signing secrets during config v4 migration.")
+            if previous_host not in {"", "127.0.0.1", "localhost", "::1"}:
+                logger.warning(
+                    "Dashboard remote binding was reset to loopback during the "
+                    "security migration. Configure an explicit secure access mode "
+                    "before exposing it again."
+                )
+        else:
+            # Authentication state is global and must never be copied into a
+            # per-session configuration profile.
+            for key in (
+                "jwt_secret",
+                "plugin_asset_jwt_secret",
+                "password",
+                "pbkdf2_password",
+            ):
+                dashboard[key] = ""
+            dashboard["totp"] = {
+                "enable": False,
+                "secret": "",
+                "recovery_code_hash": "",
+            }
+        config["config_version"] = 4
+        changed = True
+    return changed
 
 
 def finalize_config_migrations(configs: list[dict[str, Any]]) -> bool:

@@ -3,7 +3,7 @@
   "info": {
     "title": "AstrBot OpenAPI v1",
     "version": "0.1.0",
-    "description": "Target REST contract for migrating AstrBot HTTP APIs to /api/v1. Dynamic AstrBot configuration payloads are intentionally modeled as open JSON objects because their schemas are provided at runtime by template endpoints. Developer API keys currently support these scopes only: bot, provider, persona, im, config, chat, data, file, plugin, mcp, skill, plus the sensitive config:edit_admin and chat:admin sub-scopes. The config scope also grants bot and provider access, but no parent scope grants a sensitive sub-scope.\n"
+    "description": "Target REST contract for migrating AstrBot HTTP APIs to /api/v1. Dynamic AstrBot configuration payloads are intentionally modeled as open JSON objects because their schemas are provided at runtime by template endpoints. Developer API keys currently support these scopes only: bot, provider, persona, im, config, chat, data, file, plugin, mcp, skill, plus the sensitive config:edit_admin, config:secrets, config:security, and chat:admin sub-scopes. The config scope also grants bot and provider access, but no parent scope grants a sensitive sub-scope.\n"
   },
   "x-astrbot-scope-definitions": {
     "bot": {
@@ -33,6 +33,18 @@
     "config:edit_admin": {
       "description": "Allow a `config`-scoped key to change `admins_id`. This sub-scope must be granted explicitly.",
       "description_zh": "允许具有 `config` 权限的 Key 修改 `admins_id`。该子权限必须显式授予。",
+      "parent": "config",
+      "sensitive": true
+    },
+    "config:secrets": {
+      "description": "Allow a `config`-scoped key to replace or clear write-only business secrets. Secret values are never returned by configuration reads.",
+      "description_zh": "允许具有 `config` 权限的 Key 替换或清除仅可写的业务密钥。配置读取永不返回密钥原文。",
+      "parent": "config",
+      "sensitive": true
+    },
+    "config:security": {
+      "description": "Allow a `config`-scoped key to change dashboard exposure and outbound network security policy.",
+      "description_zh": "允许具有 `config` 权限的 Key 修改 Dashboard 暴露方式和出站网络安全策略。",
       "parent": "config",
       "sensitive": true
     },
@@ -180,7 +192,9 @@
         "operationId": "updateSystemConfig",
         "x-astrbot-scope": "config",
         "x-astrbot-sensitive-scopes": [
-          "config:edit_admin"
+          "config:edit_admin",
+          "config:secrets",
+          "config:security"
         ],
         "requestBody": {
           "required": true,
@@ -197,7 +211,7 @@
             "$ref": "#/components/responses/Ok"
           }
         },
-        "description": "**Required scope:** `config`\n\n**Conditional sensitive scope:** `config:edit_admin`"
+        "description": "**Required scope:** `config`\n\n**Conditional sensitive scope:** `config:edit_admin`, `config:secrets`, `config:security`"
       }
     },
     "/api/v1/system-config/runtime": {
@@ -255,7 +269,9 @@
         "operationId": "createConfigProfile",
         "x-astrbot-scope": "config",
         "x-astrbot-sensitive-scopes": [
-          "config:edit_admin"
+          "config:edit_admin",
+          "config:secrets",
+          "config:security"
         ],
         "requestBody": {
           "required": true,
@@ -272,7 +288,7 @@
             "$ref": "#/components/responses/Ok"
           }
         },
-        "description": "**Required scope:** `config`\n\n**Conditional sensitive scope:** `config:edit_admin`"
+        "description": "**Required scope:** `config`\n\n**Conditional sensitive scope:** `config:edit_admin`, `config:secrets`, `config:security`"
       }
     },
     "/api/v1/config-profiles/{config_id}": {
@@ -303,7 +319,9 @@
         "operationId": "updateConfigProfileContent",
         "x-astrbot-scope": "config",
         "x-astrbot-sensitive-scopes": [
-          "config:edit_admin"
+          "config:edit_admin",
+          "config:secrets",
+          "config:security"
         ],
         "parameters": [
           {
@@ -325,7 +343,7 @@
             "$ref": "#/components/responses/Ok"
           }
         },
-        "description": "**Required scope:** `config`\n\n**Conditional sensitive scope:** `config:edit_admin`"
+        "description": "**Required scope:** `config`\n\n**Conditional sensitive scope:** `config:edit_admin`, `config:secrets`, `config:security`"
       },
       "patch": {
         "tags": [

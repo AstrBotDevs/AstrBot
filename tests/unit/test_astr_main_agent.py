@@ -1,6 +1,7 @@
 """Tests for astr_main_agent module."""
 
 import datetime
+import hashlib
 import os
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -21,6 +22,7 @@ from astrbot.core.provider.entities import ProviderRequest, ProviderType
 from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.skills.skill_manager import SkillInfo
 from astrbot.core.star.star import StarMetadata
+from astrbot.core.workspace_control import approve_workspace_control_artifact
 
 
 @pytest.fixture
@@ -980,6 +982,16 @@ class TestEnsurePersonaAndSkills:
         workspace_skill_dir.joinpath("SKILL.md").write_text(
             "---\ndescription: Workspace scoped skill.\n---\n",
             encoding="utf-8",
+        )
+        skill_relative_path = "skills/workspace-skill/SKILL.md"
+        skill_digest = hashlib.sha256(
+            workspace_skill_dir.joinpath("SKILL.md").read_bytes()
+        ).hexdigest()
+        approve_workspace_control_artifact(
+            workspace_root,
+            skill_relative_path,
+            expected_sha256=skill_digest,
+            approved_by="admin-1",
         )
 
         monkeypatch.setattr(

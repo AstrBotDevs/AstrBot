@@ -264,6 +264,10 @@ export type CronJobRequest = {
     enabled?: boolean;
     run_once?: boolean;
     run_at?: string;
+    /**
+     * Enables administrator-level side-effect tools for an active-agent job. This field is accepted only for Dashboard-session requests and requires X-2FA-Code when Dashboard TOTP is enabled.
+     */
+    allow_privileged_execution?: boolean;
     payload?: {
         [key: string]: unknown;
     };
@@ -453,6 +457,11 @@ export type ParameterSourceId = string;
 export type ParameterTaskId = string;
 
 export type ParameterToolId = string;
+
+/**
+ * Required when enabling privileged cron execution and Dashboard TOTP is enabled. Recovery codes are not accepted.
+ */
+export type ParameterTwoFactorCode = string;
 
 /**
  * URL-encoded unified message origin.
@@ -3523,6 +3532,12 @@ export type ListCronJobsError = unknown;
 
 export type CreateCronJobData = {
     body: CronJobRequest;
+    headers?: {
+        /**
+         * Required when enabling privileged cron execution and Dashboard TOTP is enabled. Recovery codes are not accepted.
+         */
+        'X-2FA-Code'?: string;
+    };
 };
 
 export type CreateCronJobResponse = (SuccessEnvelope);
@@ -3531,6 +3546,12 @@ export type CreateCronJobError = unknown;
 
 export type UpdateCronJobData = {
     body: CronJobPatchRequest;
+    headers?: {
+        /**
+         * Required when enabling privileged cron execution and Dashboard TOTP is enabled. Recovery codes are not accepted.
+         */
+        'X-2FA-Code'?: string;
+    };
     path: {
         job_id: string;
     };

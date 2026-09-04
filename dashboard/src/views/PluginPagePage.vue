@@ -1,9 +1,8 @@
 <script setup>
-import axios from "axios";
 import { computed, onBeforeUnmount, onMounted, ref, toRaw, watch } from "vue";
 import { useRoute } from "vue-router";
 import { pluginApi } from "@/api/v1";
-import { fetchWithAuth } from "@/api/http";
+import { fetchWithAuth, httpClient } from "@/api/http";
 import { useModuleI18n } from "@/i18n/composables";
 import { usePluginI18n } from "@/utils/pluginI18n";
 import { useCustomizerStore } from "@/stores/customizer";
@@ -380,7 +379,7 @@ const handleBridgeRequest = async (message) => {
     }
 
     if (action === "api:get") {
-      const response = await axios.get(buildPluginApiPath(message.endpoint), {
+      const response = await httpClient.get(buildPluginApiPath(message.endpoint), {
         params: message.params || {},
       });
       if (response.data?.status === "error") {
@@ -391,7 +390,7 @@ const handleBridgeRequest = async (message) => {
     }
 
     if (action === "api:post") {
-      const response = await axios.post(
+      const response = await httpClient.post(
         buildPluginApiPath(message.endpoint),
         message.body || {},
       );
@@ -415,7 +414,7 @@ const handleBridgeRequest = async (message) => {
         message.fileLastModified,
       );
       formData.append("file", uploadFile, fileName);
-      const response = await axios.post(
+      const response = await httpClient.post(
         buildPluginApiPath(message.endpoint),
         formData,
         {
@@ -434,7 +433,7 @@ const handleBridgeRequest = async (message) => {
     }
 
     if (action === "files:download") {
-      const response = await axios.get(buildPluginApiPath(message.endpoint), {
+      const response = await httpClient.get(buildPluginApiPath(message.endpoint), {
         params: message.params || {},
         responseType: "blob",
       });

@@ -3,18 +3,23 @@ import html
 import logging
 import math
 import re
+import warnings
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
 
-import aiohttp
 from PIL import Image, ImageDraw, ImageFont
 
 from astrbot.core.config import VERSION
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
-from astrbot.core.utils.http_ssl import build_tls_connector
 from astrbot.core.utils.io import save_temp_img
+from astrbot.core.utils.safe_http import (
+    RemoteFetchPolicy,
+    parse_private_target_rules,
+    read_public_bytes,
+    safe_url_for_log,
+)
 
 from . import RenderStrategy
 
@@ -29,6 +34,14 @@ SOFT_FILL = (242, 243, 243)
 CODE_FILL = (244, 245, 245)
 ACCENT = (47, 134, 189)
 CONTENT_MARGIN = 32
+LOCAL_T2I_MAX_MARKDOWN_BYTES = 256 * 1024
+LOCAL_T2I_MAX_BLOCKS = 200
+LOCAL_T2I_MAX_IMAGE_BYTES = 16 * 1024 * 1024
+LOCAL_T2I_MAX_IMAGE_PIXELS = 25_000_000
+LOCAL_T2I_MAX_CANVAS_PIXELS = 50_000_000
+LOCAL_T2I_MAX_CANVAS_HEIGHT = 16_384
+LOCAL_T2I_MAX_REMOTE_IMAGES = 16
+LOCAL_T2I_MAX_CONCURRENT_IMAGE_FETCHES = 4
 
 
 class FontManager:
@@ -1093,30 +1106,36 @@ class ImageBlock(MarkdownBlock):
 
     async def load(self) -> None:
         """Load the image over HTTP with a bounded timeout."""
-        timeout = aiohttp.ClientTimeout(total=12)
         try:
-            async with (
-                aiohttp.ClientSession(
-                    trust_env=True,
-                    connector=build_tls_connector(),
-                    timeout=timeout,
-                ) as session,
-                session.get(self.image_url) as response,
-            ):
-                if response.status != 200:
-                    logger.warning(
-                        "Failed to load local T2I image %s: HTTP %s",
-                        self.image_url,
-                        response.status,
-                    )
-                    return
-                image_data = await response.read()
-            with Image.open(BytesIO(image_data)) as loaded:
-                self.image = loaded.convert("RGBA").copy()
+            from astrbot.core import astrbot_config
+
+            outbound = astrbot_config.get("security", {}).get("outbound_fetch", {})
+            image_data = await read_public_bytes(
+                self.image_url,
+                policy=RemoteFetchPolicy(
+                    max_bytes=LOCAL_T2I_MAX_IMAGE_BYTES,
+                    total_timeout_seconds=12,
+                    max_redirects=3,
+                    allow_private_targets=parse_private_target_rules(
+                        outbound.get("media_private_targets", [])
+                    ),
+                ),
+            )
+            with warnings.catch_warnings():
+                warnings.simplefilter("error", Image.DecompressionBombWarning)
+                previous_limit = Image.MAX_IMAGE_PIXELS
+                Image.MAX_IMAGE_PIXELS = LOCAL_T2I_MAX_IMAGE_PIXELS
+                try:
+                    with Image.open(BytesIO(image_data)) as loaded:
+                        if loaded.width * loaded.height > LOCAL_T2I_MAX_IMAGE_PIXELS:
+                            raise ValueError("Remote image exceeds the pixel limit")
+                        self.image = loaded.convert("RGBA").copy()
+                finally:
+                    Image.MAX_IMAGE_PIXELS = previous_limit
         except Exception as err:
             logger.warning(
                 "Failed to load local T2I image %s: %s",
-                self.image_url,
+                safe_url_for_log(self.image_url),
                 err,
             )
 
@@ -1419,8 +1438,18 @@ class MarkdownParser:
                 index += 1
             blocks.append(ParagraphBlock("\n".join(paragraph_lines)))
 
+        if len(blocks) > LOCAL_T2I_MAX_BLOCKS:
+            raise ValueError("Markdown contains too many render blocks")
+        if len(image_blocks) > LOCAL_T2I_MAX_REMOTE_IMAGES:
+            raise ValueError("Markdown contains too many remote images")
         if image_blocks:
-            await asyncio.gather(*(block.load() for block in image_blocks))
+            image_slots = asyncio.Semaphore(LOCAL_T2I_MAX_CONCURRENT_IMAGE_FETCHES)
+
+            async def load_image(block: ImageBlock) -> None:
+                async with image_slots:
+                    await block.load()
+
+            await asyncio.gather(*(load_image(block) for block in image_blocks))
         return blocks
 
 
@@ -1504,7 +1533,11 @@ class MarkdownRenderer:
         Returns:
             Rendered RGB image.
         """
+        if len(markdown_text.encode("utf-8")) > LOCAL_T2I_MAX_MARKDOWN_BYTES:
+            raise ValueError("Markdown exceeds the local T2I input limit")
         blocks = await MarkdownParser.parse(markdown_text)
+        if len(blocks) > LOCAL_T2I_MAX_BLOCKS:
+            raise ValueError("Markdown contains too many render blocks")
         content_width = self.width - CONTENT_MARGIN * 2
         masthead_height = 91
         bottom_padding = 34
@@ -1512,9 +1545,16 @@ class MarkdownRenderer:
         for block in blocks:
             total_height += block.measure(content_width, self.font_size)
 
+        canvas_height = max(140, total_height)
+        if (
+            canvas_height > LOCAL_T2I_MAX_CANVAS_HEIGHT
+            or self.width * canvas_height > LOCAL_T2I_MAX_CANVAS_PIXELS
+        ):
+            raise ValueError("Rendered image exceeds the local T2I canvas limit")
+
         image = Image.new(
             "RGB",
-            (self.width, max(140, total_height)),
+            (self.width, canvas_height),
             self.bg_color,
         )
         draw = ImageDraw.Draw(image)
