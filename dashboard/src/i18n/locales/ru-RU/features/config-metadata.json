@@ -1708,6 +1708,9 @@
             "dashscope_embedding": {
                 "hint": "Embedding Aliyun DashScope. URL по умолчанию: https://dashscope.aliyuncs.com/api/v1."
             },
+            "volcengine_tts_v3": {
+                "hint": "API генерации аудио Volcengine (/api/v3/tts/create). Создайте API Key в новой консоли. Подробнее: https://docs.volcengine.com/docs/6561/2550782."
+            },
             "volcengine_cluster": {
                 "description": "Кластер Volcengine",
                 "hint": "Для моделей клонирования голоса выберите volcano_icl или volcano_icl_concurr; по умолчанию volcano_tts."
@@ -1723,6 +1726,30 @@
             "volcengine_volume_ratio": {
                 "description": "Громкость",
                 "hint": "Громкость, от 0.0 до 2.0, по умолчанию 1.0."
+            },
+            "volcengine_v3_speaker": {
+                "description": "Голос Volcengine (v3)",
+                "hint": "ID голоса для API генерации аудио. Оставьте пустым, чтобы сгенерировать аудио по текстовому описанию без эталонного голоса."
+            },
+            "volcengine_v3_format": {
+                "description": "Формат аудио",
+                "hint": "Поддерживаются wav, mp3, pcm и ogg_opus; в профиле AstrBot используется mp3."
+            },
+            "volcengine_v3_sample_rate": {
+                "description": "Частота дискретизации",
+                "hint": "Поддерживаются 8000, 16000, 24000, 32000, 44100 и 48000 Гц; в профиле AstrBot используется 48000 Гц."
+            },
+            "volcengine_v3_speech_rate": {
+                "description": "Скорость речи",
+                "hint": "Диапазон от -50 до 100: -50 означает 0,5x, 100 — 2x, 0 — без изменения."
+            },
+            "volcengine_v3_loudness_rate": {
+                "description": "Громкость",
+                "hint": "Диапазон от -50 до 100: -50 означает 0,5x, 100 — 2x, 0 — без изменения."
+            },
+            "volcengine_v3_pitch_rate": {
+                "description": "Высота тона",
+                "hint": "Диапазон от -12 до 12; 0 — без изменения высоты тона."
             },
             "azure_tts_voice": {
                 "description": "Стиль голоса",
