@@ -100,6 +100,7 @@ const umoQuery = ref(
 );
 const sortValue = ref("updated_at:desc");
 const groupBySession = ref(false);
+const showWebchat = ref(false);
 const mobileFiltersOpen = ref(false);
 const expandedSessions = ref<Record<string, boolean>>({});
 const page = ref(1);
@@ -135,6 +136,7 @@ const hasFilters = computed(
     Boolean(umoQuery.value.trim()) ||
     selectedBotIds.value.length > 0 ||
     selectedTypes.value.length > 0 ||
+    showWebchat.value ||
     sortValue.value !== "updated_at:desc",
 );
 const selectedItems = computed(() => Object.values(selectedByKey.value));
@@ -284,7 +286,7 @@ watch([keyword, umoQuery], () => {
   scheduleFetch();
 });
 
-watch([selectedBotIds, selectedTypes, sortValue, groupBySession], () => {
+watch([selectedBotIds, selectedTypes, sortValue, groupBySession, showWebchat], () => {
   cancelScheduledFetch();
   page.value = 1;
   expandedSessions.value =
@@ -419,7 +421,9 @@ async function fetchConversations() {
     params.umo = umoQuery.value.trim();
   } else {
     params.exclude_ids = "astrbot";
-    params.exclude_platforms = "webchat";
+    if (!showWebchat.value) {
+      params.exclude_platforms = "webchat";
+    }
   }
   if (selectedBotIds.value.length) {
     params.platforms = selectedBotIds.value.join(",");
@@ -480,6 +484,7 @@ function resetFilters() {
   clearUmoQuery();
   selectedBotIds.value = [];
   selectedTypes.value = [];
+  showWebchat.value = false;
   sortValue.value = "updated_at:desc";
   page.value = 1;
 }
@@ -946,6 +951,20 @@ function changePage(nextPage: number) {
               </button>
             </template>
           </v-text-field>
+        </div>
+
+        <div class="filter-block">
+          <div class="filter-label">
+            {{ tm("workspace.filters.includeWebchat") }}
+          </div>
+          <v-switch
+            v-model="showWebchat"
+            color="primary"
+            density="compact"
+            hide-details
+            inset
+            :aria-label="tm('workspace.filters.includeWebchat')"
+          />
         </div>
 
         <div class="filter-block filter-block--last">

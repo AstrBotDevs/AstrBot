@@ -6,7 +6,8 @@
     "platform": "Platform",
     "type": "Type",
     "search": "Search Keywords",
-    "reset": "Reset"
+    "reset": "Reset",
+    "includeWebchat": "Show WebChat conversations"
   },
   "history": {
     "title": "Conversation History",
@@ -117,6 +118,7 @@
       "types": "Conversation type",
       "umo": "UMO",
       "umoPlaceholder": "Enter a full or partial UMO",
+      "includeWebchat": "Show WebChat conversations",
       "sort": "Sort",
       "reset": "Clear filters",
       "close": "Close filters",
