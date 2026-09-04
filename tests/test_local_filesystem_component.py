@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from astrbot.core.computer import process_sandbox
 from astrbot.core.computer.booters import local as local_booter
 from astrbot.core.computer.booters.local import LocalFileSystemComponent
 
@@ -230,19 +231,19 @@ def test_local_file_system_component_runs_restricted_search_in_read_only_sandbox
     sandbox_calls = []
 
     class FakeSandbox:
-        def run(self, argv, spec, *, env=None, **kwargs):
+        def run(self, argv, spec, *, env=None, timeout=None, **kwargs):
             sandbox_calls.append(
                 {
                     "argv": argv,
                     "workspace": spec.workspace,
                     "env": env,
                     "workspace_writable": spec.workspace_writable,
+                    "timeout": timeout,
                     "kwargs": kwargs,
                 }
             )
-            return subprocess.CompletedProcess(
-                argv,
-                0,
+            return process_sandbox.SandboxRunResult(
+                returncode=0,
                 stdout=b"target.txt:1:needle\n",
                 stderr=b"",
             )
@@ -294,7 +295,8 @@ def test_local_file_system_component_runs_restricted_search_in_read_only_sandbox
             "workspace": tmp_path,
             "env": None,
             "workspace_writable": False,
-            "kwargs": {"capture_output": True, "timeout": 30},
+            "timeout": 30,
+            "kwargs": {},
         }
     ]
 

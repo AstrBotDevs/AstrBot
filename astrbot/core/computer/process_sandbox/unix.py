@@ -3,16 +3,21 @@ from __future__ import annotations
 import asyncio
 import os
 import signal as signal_module
+import subprocess
 import sys
+import tempfile
+from abc import abstractmethod
 from pathlib import Path
 
 from .base import (
     ProcessSandbox,
     SandboxLimits,
     SandboxProcess,
+    SandboxRunResult,
     SandboxSpec,
     SandboxStdin,
     SandboxStdout,
+    SandboxTimeoutError,
 )
 
 
@@ -78,6 +83,90 @@ class UnixSandboxProcess:
 class UnixProcessSandbox(ProcessSandbox):
     """Common launcher behavior for Unix sandbox implementations."""
 
+    def build_command(
+        self,
+        argv: list[str],
+        spec: SandboxSpec,
+        *,
+        env: dict[str, str] | None = None,
+    ) -> list[str]:
+        """Build a Unix sandbox wrapper command.
+
+        Args:
+            argv: Command and arguments to execute inside the sandbox.
+            spec: Filesystem, network, and resource policy.
+            env: Additional environment variables exposed inside the sandbox.
+
+        Returns:
+            Platform sandbox command and arguments.
+        """
+        argv, workspace, env = self._prepare_command(argv, spec, env=env)
+        return self._build_command(argv, workspace, spec, env)
+
+    def run(
+        self,
+        argv: list[str],
+        spec: SandboxSpec,
+        *,
+        env: dict[str, str] | None = None,
+        timeout: float | None = None,
+        output_limit: int | None = None,
+        discard_stdout: bool = False,
+    ) -> SandboxRunResult:
+        """Run a command through the Unix sandbox wrapper.
+
+        Args:
+            argv: Command and arguments to execute inside the sandbox.
+            spec: Filesystem, network, and resource policy.
+            env: Additional environment variables exposed inside the sandbox.
+            timeout: Maximum wall-clock runtime in seconds.
+            output_limit: Maximum captured bytes for each output stream.
+            discard_stdout: Whether to discard standard output.
+
+        Returns:
+            Captured process result.
+
+        Raises:
+            SandboxTimeoutError: If the process exceeds ``timeout``.
+            ValueError: If ``output_limit`` is not positive.
+        """
+        if output_limit is not None and output_limit <= 0:
+            raise ValueError("Sandbox output limit must be greater than 0.")
+
+        with (
+            tempfile.TemporaryFile() as stdout_file,
+            tempfile.TemporaryFile() as stderr_file,
+        ):
+            try:
+                result = subprocess.run(
+                    self.build_command(argv, spec, env=env),
+                    cwd=spec.workspace.resolve(),
+                    env={"PATH": os.defpath},
+                    timeout=timeout,
+                    stdout=subprocess.DEVNULL if discard_stdout else stdout_file,
+                    stderr=stderr_file,
+                )
+            except subprocess.TimeoutExpired as exc:
+                raise SandboxTimeoutError(
+                    f"Sandbox command timed out after {timeout} seconds."
+                ) from exc
+
+            read_size = None if output_limit is None else output_limit + 1
+            if discard_stdout:
+                stdout = b""
+            else:
+                stdout_file.seek(0)
+                stdout = stdout_file.read(read_size)
+            stderr_file.seek(0)
+            stderr = stderr_file.read(read_size)
+        return SandboxRunResult(
+            returncode=result.returncode,
+            stdout=stdout[:output_limit] if output_limit is not None else stdout,
+            stderr=stderr[:output_limit] if output_limit is not None else stderr,
+            stdout_limited=output_limit is not None and len(stdout) > output_limit,
+            stderr_limited=output_limit is not None and len(stderr) > output_limit,
+        )
+
     async def spawn_shell(
         self,
         command: str,
@@ -105,6 +194,16 @@ class UnixProcessSandbox(ProcessSandbox):
             start_new_session=True,
         )
         return UnixSandboxProcess(process)
+
+    @abstractmethod
+    def _build_command(
+        self,
+        argv: list[str],
+        workspace: Path,
+        spec: SandboxSpec,
+        env: dict[str, str],
+    ) -> list[str]:
+        """Build a Unix sandbox command after common input validation."""
 
 
 def build_resource_limited_argv(

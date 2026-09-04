@@ -32,7 +32,6 @@ Local path resolution rule:
 
 import os
 import stat
-import sys
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -72,9 +71,6 @@ _SANDBOX_RUNTIME_TOOL_CONFIG = {
     "provider_settings.computer_use_runtime": "sandbox",
 }
 _IMAGE_FILE_SUFFIXES = {".bmp", ".gif", ".jpeg", ".jpg", ".png", ".webp"}
-_RACE_RESISTANT_LOCAL_ACCESS = sys.platform.startswith("linux") or (
-    sys.platform == "darwin"
-)
 
 
 def _remote_basename(path: str) -> str:
@@ -400,7 +396,7 @@ class FileReadTool(FunctionTool):
                 context.context.event.unified_msg_origin,
             )
             file_descriptor = None
-            if restricted and _RACE_RESISTANT_LOCAL_ACCESS:
+            if restricted:
                 file_descriptor = open_file_in_allowed_roots(
                     normalized_path,
                     _read_allowed_roots(
@@ -496,7 +492,7 @@ class FileWriteTool(FunctionTool):
                 context.context.event.unified_msg_origin,
             )
             file_descriptor = None
-            if restricted and _RACE_RESISTANT_LOCAL_ACCESS:
+            if restricted:
                 file_descriptor = open_file_in_allowed_roots(
                     normalized_path,
                     _write_allowed_roots(
@@ -609,7 +605,7 @@ class FileEditTool(FunctionTool):
                 context.context.event.unified_msg_origin,
             )
             file_descriptor = None
-            if restricted and _RACE_RESISTANT_LOCAL_ACCESS:
+            if restricted:
                 file_descriptor = open_file_in_allowed_roots(
                     normalized_path,
                     _write_allowed_roots(
@@ -868,7 +864,7 @@ class GrepTool(FunctionTool):
             )
             contents: list[str] = []
             for search_path in search_paths:
-                sandboxed = restricted and _RACE_RESISTANT_LOCAL_ACCESS
+                sandboxed = restricted
                 if sandboxed:
                     path_object = Path(search_path)
                     matching_roots = [

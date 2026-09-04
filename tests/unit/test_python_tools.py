@@ -81,11 +81,9 @@ async def test_local_python_tool_uses_session_workspace(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("platform_name", ["linux", "darwin"])
-async def test_local_member_python_uses_platform_sandbox(
+async def test_local_member_python_uses_sandbox_backend(
     tmp_path,
     monkeypatch,
-    platform_name,
 ):
     """Local member Python execution should require an OS sandbox."""
     from astrbot.core.tools.computer_tools import util as computer_util
@@ -99,7 +97,7 @@ async def test_local_member_python_uses_platform_sandbox(
         "astrbot.core.tools.computer_tools.python.get_local_booter",
         lambda: SimpleNamespace(python=local_python),
     )
-    monkeypatch.setattr(computer_util.sys, "platform", platform_name)
+    monkeypatch.setattr(computer_util, "create_process_sandbox", object)
     monkeypatch.setattr(
         "astrbot.core.tools.computer_tools.python.workspace_root_for_context",
         AsyncMock(return_value=tmp_path),
@@ -140,10 +138,13 @@ async def test_local_member_python_uses_platform_sandbox(
 
 @pytest.mark.asyncio
 async def test_local_member_python_is_denied_without_supported_sandbox(monkeypatch):
-    """Local member Python execution should fail closed on other platforms."""
+    """Local member Python execution should fail without a sandbox backend."""
     from astrbot.core.tools.computer_tools import util as computer_util
 
-    monkeypatch.setattr(computer_util.sys, "platform", "win32")
+    def unavailable_sandbox():
+        raise RuntimeError("No Local process sandbox backend is available.")
+
+    monkeypatch.setattr(computer_util, "create_process_sandbox", unavailable_sandbox)
     monkeypatch.setattr(
         "astrbot.core.tools.computer_tools.python.get_local_booter",
         lambda: pytest.fail("Local Python must not start without an OS sandbox"),
@@ -169,4 +170,4 @@ async def test_local_member_python_is_denied_without_supported_sandbox(monkeypat
 
     result = await LocalPythonTool().call(context, code="print('ok')")
 
-    assert "Linux with bubblewrap or macOS with Seatbelt" in result
+    assert "No Local process sandbox backend" in result

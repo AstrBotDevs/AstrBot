@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-import os
-import subprocess
 import sys
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Protocol
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,6 +62,29 @@ class SandboxSpec:
     allow_network: bool = False
     filesystem_scope: str = "workspace"
     limits: SandboxLimits = field(default_factory=SandboxLimits)
+
+
+@dataclass(frozen=True, slots=True)
+class SandboxRunResult:
+    """Result returned by a synchronous sandbox execution.
+
+    Args:
+        returncode: Process exit status.
+        stdout: Captured standard output.
+        stderr: Captured standard error.
+        stdout_limited: Whether standard output exceeded the requested limit.
+        stderr_limited: Whether standard error exceeded the requested limit.
+    """
+
+    returncode: int
+    stdout: bytes = b""
+    stderr: bytes = b""
+    stdout_limited: bool = False
+    stderr_limited: bool = False
+
+
+class SandboxTimeoutError(TimeoutError):
+    """Raised when a sandbox process exceeds its execution timeout."""
 
 
 class SandboxStdin(Protocol):
@@ -129,14 +150,14 @@ class SandboxProcess(Protocol):
 class ProcessSandbox(ABC):
     """Platform-independent launcher for restricted child processes."""
 
-    def build_command(
+    def _prepare_command(
         self,
         argv: list[str],
         spec: SandboxSpec,
         *,
         env: dict[str, str] | None = None,
-    ) -> list[str]:
-        """Validate common inputs and build a platform sandbox command.
+    ) -> tuple[list[str], Path, dict[str, str]]:
+        """Validate and normalize a command before platform-specific launch.
 
         Args:
             argv: Command and arguments to execute inside the sandbox.
@@ -144,7 +165,7 @@ class ProcessSandbox(ABC):
             env: Additional environment variables exposed inside the sandbox.
 
         Returns:
-            Platform sandbox command and arguments.
+            Normalized arguments, workspace, and environment values.
 
         Raises:
             RuntimeError: If the workspace does not exist.
@@ -172,33 +193,36 @@ class ProcessSandbox(ABC):
                 raise ValueError(f"Invalid sandbox environment variable name: {key!r}.")
             normalized_env[key] = value
 
-        return self._build_command(sandbox_argv, workspace, spec, normalized_env)
+        return sandbox_argv, workspace, normalized_env
 
+    @abstractmethod
     def run(
         self,
         argv: list[str],
         spec: SandboxSpec,
         *,
         env: dict[str, str] | None = None,
-        **kwargs: Any,
-    ) -> subprocess.CompletedProcess[Any]:
+        timeout: float | None = None,
+        output_limit: int | None = None,
+        discard_stdout: bool = False,
+    ) -> SandboxRunResult:
         """Run a restricted process synchronously.
 
         Args:
             argv: Command and arguments to execute inside the sandbox.
             spec: Filesystem and network access granted to the process.
             env: Additional environment variables exposed inside the sandbox.
-            **kwargs: Extra keyword arguments passed to ``subprocess.run``.
+            timeout: Maximum wall-clock runtime in seconds.
+            output_limit: Maximum captured bytes for each output stream.
+            discard_stdout: Whether to discard standard output.
 
         Returns:
-            Completed restricted process.
+            Platform-independent process result.
+
+        Raises:
+            SandboxTimeoutError: If the process exceeds ``timeout``.
         """
-        return subprocess.run(
-            self.build_command(argv, spec, env=env),
-            cwd=spec.workspace.resolve(),
-            env={"PATH": os.defpath},
-            **kwargs,
-        )
+        raise NotImplementedError
 
     @abstractmethod
     async def spawn_shell(
@@ -219,13 +243,3 @@ class ProcessSandbox(ABC):
             Running restricted process.
         """
         raise NotImplementedError
-
-    @abstractmethod
-    def _build_command(
-        self,
-        argv: list[str],
-        workspace: Path,
-        spec: SandboxSpec,
-        env: dict[str, str],
-    ) -> list[str]:
-        """Build a platform command after common input validation."""

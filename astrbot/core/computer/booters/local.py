@@ -8,7 +8,6 @@ import shutil
 import signal
 import subprocess
 import sys
-import tempfile
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -27,6 +26,7 @@ from astrbot.core.computer.file_read_utils import (
 from astrbot.core.computer.process_sandbox import (
     SandboxProcess,
     SandboxSpec,
+    SandboxTimeoutError,
     create_process_sandbox,
 )
 from astrbot.core.utils.astrbot_path import (
@@ -935,46 +935,21 @@ class LocalPythonComponent(PythonComponent):
                 )
                 if sandboxed:
                     sandbox = create_process_sandbox()
-                    sandbox_spec = SandboxSpec(
-                        workspace=working_dir,
-                        allow_network=allow_network,
-                        filesystem_scope=filesystem_scope,
+                    result = sandbox.run(
+                        [sys.executable, "-c", code],
+                        SandboxSpec(
+                            workspace=working_dir,
+                            allow_network=allow_network,
+                            filesystem_scope=filesystem_scope,
+                        ),
+                        timeout=timeout,
+                        output_limit=_LOCAL_SANDBOX_MAX_OUTPUT_BYTES,
+                        discard_stdout=silent,
                     )
-                    with (
-                        tempfile.TemporaryFile() as stdout_file,
-                        tempfile.TemporaryFile() as stderr_file,
-                    ):
-                        result = sandbox.run(
-                            [sys.executable, "-c", code],
-                            sandbox_spec,
-                            timeout=timeout,
-                            stdout=subprocess.DEVNULL if silent else stdout_file,
-                            stderr=stderr_file,
-                        )
-                        if silent:
-                            stdout = ""
-                            stdout_limited = False
-                        else:
-                            stdout_file.seek(0)
-                            stdout_bytes = stdout_file.read(
-                                _LOCAL_SANDBOX_MAX_OUTPUT_BYTES + 1
-                            )
-                            stdout_limited = (
-                                len(stdout_bytes) > _LOCAL_SANDBOX_MAX_OUTPUT_BYTES
-                            )
-                            stdout = _decode_shell_output(
-                                stdout_bytes[:_LOCAL_SANDBOX_MAX_OUTPUT_BYTES]
-                            )
-                        stderr_file.seek(0)
-                        stderr_bytes = stderr_file.read(
-                            _LOCAL_SANDBOX_MAX_OUTPUT_BYTES + 1
-                        )
-                        stderr_limited = (
-                            len(stderr_bytes) > _LOCAL_SANDBOX_MAX_OUTPUT_BYTES
-                        )
-                        stderr = _decode_shell_output(
-                            stderr_bytes[:_LOCAL_SANDBOX_MAX_OUTPUT_BYTES]
-                        )
+                    stdout = _decode_shell_output(result.stdout)
+                    stderr = _decode_shell_output(result.stderr)
+                    stdout_limited = result.stdout_limited
+                    stderr_limited = result.stderr_limited
                 else:
                     run_command = [
                         os.environ.get("PYTHON", sys.executable),
@@ -1008,7 +983,7 @@ class LocalPythonComponent(PythonComponent):
                         "error": execution_error,
                     }
                 }
-            except subprocess.TimeoutExpired:
+            except (SandboxTimeoutError, subprocess.TimeoutExpired):
                 return {
                     "data": {
                         "output": {"text": "", "images": []},
@@ -1129,10 +1104,6 @@ class LocalFileSystemComponent(FileSystemComponent):
                 if before_context is not None:
                     command.extend(["-B", str(before_context)])
                 command.extend(["--", path or "."])
-            run_kwargs: dict[str, Any] = {
-                "capture_output": True,
-                "timeout": 30,
-            }
             sandbox_workspace: Path | None = None
             if sandboxed:
                 if not sandbox_root:
@@ -1152,11 +1123,15 @@ class LocalFileSystemComponent(FileSystemComponent):
                             workspace=sandbox_workspace,
                             workspace_writable=False,
                         ),
-                        **run_kwargs,
+                        timeout=30,
                     )
                 else:
-                    result = subprocess.run(command, **run_kwargs)
-            except subprocess.TimeoutExpired:
+                    result = subprocess.run(
+                        command,
+                        capture_output=True,
+                        timeout=30,
+                    )
+            except (SandboxTimeoutError, subprocess.TimeoutExpired):
                 return {
                     "success": False,
                     "content": "",

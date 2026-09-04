@@ -139,10 +139,13 @@ def test_local_permission_policy_denies_disabled_execution():
     assert "Local Permission Policies" in error
 
 
-def test_windows_local_execution_requires_a_full_trust_policy(monkeypatch):
+def test_unavailable_local_sandbox_requires_a_full_trust_policy(monkeypatch):
     from astrbot.core.tools.computer_tools import util as computer_util
 
-    monkeypatch.setattr(computer_util.sys, "platform", "win32")
+    def unavailable_sandbox():
+        raise RuntimeError("No Local process sandbox backend is available.")
+
+    monkeypatch.setattr(computer_util, "create_process_sandbox", unavailable_sandbox)
     restricted = {
         "member": {
             "allow_execution": True,
@@ -168,7 +171,7 @@ def test_windows_local_execution_requires_a_full_trust_policy(monkeypatch):
     )
 
     assert restricted_error is not None
-    assert "only supported on Linux" in restricted_error
+    assert "No Local process sandbox backend" in restricted_error
     assert "Third-party sandbox" in restricted_error
     assert "Computer Use Runtime" in restricted_error
     assert full_error is None

@@ -17,6 +17,7 @@ from astrbot.core.computer.booters.local import (
     LocalPythonComponent,
     LocalShellComponent,
 )
+from astrbot.core.computer.process_sandbox.unix import UnixProcessSandbox
 
 
 class _FakePopen:
@@ -68,7 +69,9 @@ def _build_sandbox_command(
     Returns:
         Platform sandbox command and arguments.
     """
-    return process_sandbox.create_process_sandbox().build_command(
+    sandbox = process_sandbox.create_process_sandbox()
+    assert isinstance(sandbox, UnixProcessSandbox)
+    return sandbox.build_command(
         argv,
         process_sandbox.SandboxSpec(
             workspace=workspace,
@@ -278,7 +281,7 @@ def test_process_sandbox_selects_system_implementation(
 def test_process_sandbox_fails_closed_on_unsupported_system(monkeypatch):
     monkeypatch.setattr(process_sandbox.sys, "platform", "win32")
 
-    with pytest.raises(RuntimeError, match="only available on Linux and macOS"):
+    with pytest.raises(RuntimeError, match="No Local process sandbox backend"):
         process_sandbox.create_process_sandbox()
 
 
@@ -1015,6 +1018,27 @@ async def test_sandboxed_local_python_caps_returned_output(monkeypatch, tmp_path
 
     assert result["data"]["output"]["text"] == "12345"
     assert result["data"]["error"] == "Execution output exceeded 5 bytes."
+
+
+@pytest.mark.asyncio
+async def test_sandboxed_local_python_handles_backend_timeout(monkeypatch, tmp_path):
+    class FakeSandbox:
+        def run(self, *_args, **_kwargs):
+            raise process_sandbox.SandboxTimeoutError
+
+    monkeypatch.setattr(
+        local_booter,
+        "create_process_sandbox",
+        lambda: FakeSandbox(),
+    )
+
+    result = await LocalPythonComponent().exec(
+        "while True: pass",
+        cwd=str(tmp_path),
+        sandboxed=True,
+    )
+
+    assert result["data"]["error"] == "Execution timed out."
 
 
 @pytest.mark.asyncio

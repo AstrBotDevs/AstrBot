@@ -277,11 +277,9 @@ async def test_local_shell_tools_fail_closed_without_sender_identity(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("platform_name", ["linux", "darwin"])
-async def test_local_member_shell_uses_platform_sandbox(
+async def test_local_member_shell_uses_sandbox_backend(
     monkeypatch,
     tmp_path,
-    platform_name,
 ):
     from astrbot.core.tools.computer_tools import shell as shell_tools
     from astrbot.core.tools.computer_tools import util as computer_util
@@ -328,7 +326,7 @@ async def test_local_member_shell_uses_platform_sandbox(
     async def fake_get_booter(context, session_id):
         return booter
 
-    monkeypatch.setattr(computer_util.sys, "platform", platform_name)
+    monkeypatch.setattr(computer_util, "create_process_sandbox", object)
     monkeypatch.setattr(shell_tools, "get_booter", fake_get_booter)
     monkeypatch.setattr(
         shell_tools,
@@ -385,11 +383,14 @@ async def test_local_member_shell_is_denied_without_supported_sandbox(monkeypatc
         },
     )()
 
-    monkeypatch.setattr(computer_util.sys, "platform", "win32")
+    def unavailable_sandbox():
+        raise RuntimeError("No Local process sandbox backend is available.")
+
+    monkeypatch.setattr(computer_util, "create_process_sandbox", unavailable_sandbox)
 
     result = await LocalExecuteShellTool().call(wrapper, command="pwd")
 
-    assert "Linux with bubblewrap or macOS with Seatbelt" in result
+    assert "No Local process sandbox backend" in result
 
 
 @pytest.mark.asyncio

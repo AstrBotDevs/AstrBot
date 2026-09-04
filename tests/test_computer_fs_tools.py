@@ -36,9 +36,7 @@ def _make_context(
     if local_permissions is not None:
         provider_settings["computer_use_local_permissions"] = local_permissions
     config_holder = SimpleNamespace(
-        get_config=lambda umo=None: {
-            "provider_settings": provider_settings
-        }
+        get_config=lambda umo=None: {"provider_settings": provider_settings}
     )
     event = SimpleNamespace(
         role=role,
@@ -544,6 +542,32 @@ async def test_restricted_local_member_rejects_workspace_hardlink_alias(
 
 
 @pytest.mark.asyncio
+async def test_restricted_local_write_fails_closed_without_safe_file_access(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    workspace = _setup_local_fs_tools(monkeypatch, tmp_path)
+
+    def unavailable_file_access(*_args, **_kwargs):
+        raise RuntimeError("Restricted file access is unavailable.")
+
+    monkeypatch.setattr(
+        fs_tools,
+        "open_file_in_allowed_roots",
+        unavailable_file_access,
+    )
+
+    result = await fs_tools.FileWriteTool().call(
+        _make_context(role="member"),
+        path="blocked.txt",
+        content="must not be written\n",
+    )
+
+    assert "Restricted file access is unavailable" in result
+    assert not (workspace / "blocked.txt").exists()
+
+
+@pytest.mark.asyncio
 @pytest.mark.skipif(
     not (sys.platform.startswith("linux") or sys.platform == "darwin"),
     reason="Descriptor-safe Local access is POSIX-only.",
@@ -674,10 +698,6 @@ async def test_restricted_local_edit_reuses_first_opened_file(
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(
-    not (sys.platform.startswith("linux") or sys.platform == "darwin"),
-    reason="Restricted Local execution sandbox is POSIX-only.",
-)
 async def test_restricted_local_grep_requests_read_only_os_sandbox(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,

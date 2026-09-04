@@ -1,10 +1,10 @@
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.astr_agent_context import AstrAgentContext
+from astrbot.core.computer.process_sandbox import create_process_sandbox
 from astrbot.core.db import BaseDatabase
 from astrbot.core.utils.astrbot_path import get_astrbot_workspaces_path
 from astrbot.core.workspace import (
@@ -162,14 +162,13 @@ def check_local_execution_permission(
             "for this role in AstrBot WebUI -> Config -> Normal Config -> AI -> "
             "Agent Computer Use -> Local Permission Policies."
         )
-    if policy.requires_sandbox and not (
-        sys.platform.startswith("linux") or sys.platform == "darwin"
-    ):
-        return policy, (
-            "error: Permission denied. Restricted Local execution is only supported "
-            "on Linux with bubblewrap or macOS with Seatbelt. To use restricted "
-            "execution on this platform, select `Third-party sandbox` under AstrBot "
-            "WebUI -> Config -> Normal Config -> AI -> Agent Computer Use -> "
-            "Computer Use Runtime."
-        )
+    if policy.requires_sandbox:
+        try:
+            create_process_sandbox()
+        except RuntimeError as exc:
+            return policy, (
+                "error: Permission denied. Restricted Local execution is unavailable: "
+                f"{exc} Select `Third-party sandbox` under AstrBot WebUI -> Config -> "
+                "Normal Config -> AI -> Agent Computer Use -> Computer Use Runtime."
+            )
     return policy, None
