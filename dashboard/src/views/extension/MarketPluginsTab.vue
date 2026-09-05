@@ -75,6 +75,8 @@ const {
   showPluginFullName,
   marketIsListView,
   marketPluginHeaders,
+  marketItemsPerPage,
+  marketItemsPerPageOptions,
   marketSearch,
   debouncedMarketSearch,
   refreshingMarket,
