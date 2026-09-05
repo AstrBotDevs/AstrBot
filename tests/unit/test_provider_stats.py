@@ -114,6 +114,88 @@ async def test_record_agent_runner_stats_only_passes_public_segment_token_fields
 
 
 @pytest.mark.asyncio
+async def test_record_agent_runner_stats_observes_end_time_for_cancelled_runner():
+    db = SimpleNamespace(insert_provider_stat=AsyncMock())
+    provider = SimpleNamespace(
+        provider_config={"id": "provider-1"},
+        meta=lambda: SimpleNamespace(id="provider-1"),
+        get_model=lambda: "test-model",
+    )
+    stats = AgentStats(
+        token_usage=TokenUsage(),
+        start_time=100.0,
+        end_time=0.0,
+    )
+    runner = SimpleNamespace(
+        provider=provider,
+        stats=stats,
+        provider_stat_segments=[],
+        was_aborted=lambda: True,
+    )
+
+    await record_agent_runner_stats(
+        db,
+        umo="test:cancelled-before-response",
+        request=None,
+        agent_runner=runner,
+        final_response=None,
+    )
+
+    call = db.insert_provider_stat.await_args.kwargs
+    assert call["status"] == "aborted"
+    assert call["stats"]["end_time"] >= call["stats"]["start_time"]
+    assert stats.end_time == 0.0
+
+
+@pytest.mark.asyncio
+async def test_record_agent_runner_stats_normalizes_end_after_segment_start():
+    db = SimpleNamespace(insert_provider_stat=AsyncMock())
+    primary = SimpleNamespace(
+        provider_config={"id": "primary"},
+        meta=lambda: SimpleNamespace(id="primary"),
+        get_model=lambda: "primary-model",
+    )
+    fallback = SimpleNamespace(
+        provider_config={"id": "fallback"},
+        meta=lambda: SimpleNamespace(id="fallback"),
+        get_model=lambda: "fallback-model",
+    )
+    stats = AgentStats(
+        token_usage=TokenUsage(input_other=13),
+        start_time=100.0,
+        end_time=110.0,
+    )
+    runner = SimpleNamespace(
+        provider=fallback,
+        stats=stats,
+        provider_stat_segments=[
+            ProviderStatSegment(
+                provider=primary,
+                usage=TokenUsage(input_other=13),
+                start_time=100.0,
+                end_time=120.0,
+            )
+        ],
+        was_aborted=lambda: True,
+    )
+
+    await record_agent_runner_stats(
+        db,
+        umo="test:cancelled-after-fallback",
+        request=None,
+        agent_runner=runner,
+        final_response=None,
+    )
+
+    final_call = db.insert_provider_stat.await_args_list[-1].kwargs
+    assert final_call["provider_id"] == "fallback"
+    assert final_call["status"] == "aborted"
+    assert final_call["stats"]["start_time"] == 120.0
+    assert final_call["stats"]["end_time"] >= 120.0
+    assert stats.end_time == 110.0
+
+
+@pytest.mark.asyncio
 async def test_record_internal_agent_stats_persists_provider_stat(
     temp_db,
     monkeypatch: pytest.MonkeyPatch,

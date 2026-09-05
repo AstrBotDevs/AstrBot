@@ -23,6 +23,7 @@ from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest, TokenUsage
 from astrbot.core.provider.provider import Provider
+from astrbot.core.provider.stats import record_agent_runner_stats
 
 
 class MockProvider(Provider):
@@ -1375,6 +1376,171 @@ async def test_fallback_tracks_failed_primary_usage_by_provider(
     segment = runner.provider_stat_segments[0]
     assert segment.provider is primary_provider
     assert segment.usage == TokenUsage(input_other=8, input_cached=4, output=6)
+
+
+@pytest.mark.asyncio
+async def test_fallback_attributes_prior_tool_round_usage_to_primary_provider(
+    mock_tool_executor,
+    mock_hooks,
+):
+    class ToolThenFailureProvider(MockProvider):
+        async def text_chat(self, **kwargs) -> LLMResponse:
+            self.call_count += 1
+            if self.call_count == 1:
+                return LLMResponse(
+                    role="assistant",
+                    tools_call_name=["test_tool"],
+                    tools_call_args=[{"query": "test"}],
+                    tools_call_ids=["call_primary"],
+                    usage=TokenUsage(input_other=10),
+                )
+            error = RuntimeError("primary failed after tool round")
+            error._astrbot_token_usage = TokenUsage(input_other=3)  # type: ignore[attr-defined]
+            raise error
+
+    class FinalFallbackProvider(MockProvider):
+        async def text_chat(self, **kwargs) -> LLMResponse:
+            self.call_count += 1
+            return LLMResponse(
+                role="assistant",
+                completion_text="fallback final",
+                usage=TokenUsage(input_other=20),
+            )
+
+    primary = ToolThenFailureProvider()
+    primary.provider_config.update({"id": "primary", "model": "primary-model"})
+    fallback = FinalFallbackProvider()
+    fallback.provider_config.update({"id": "fallback", "model": "fallback-model"})
+    tool = FunctionTool(
+        name="test_tool",
+        description="test",
+        parameters={"type": "object", "properties": {}},
+        handler=AsyncMock(),
+    )
+    request = ProviderRequest(
+        prompt="run tool",
+        func_tool=ToolSet(tools=[tool]),
+    )
+    runner = ToolLoopAgentRunner()
+    await runner.reset(
+        provider=primary,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        fallback_providers=[fallback],
+    )
+
+    async for _ in runner.step_until_done(3):
+        pass
+
+    assert runner.stats.token_usage == TokenUsage(input_other=33)
+    assert len(runner.provider_stat_segments) == 1
+    assert runner.provider_stat_segments[0].provider is primary
+    assert runner.provider_stat_segments[0].usage == TokenUsage(input_other=13)
+    assert runner.stats.token_usage - runner.provider_stat_segments[0].usage == (
+        TokenUsage(input_other=20)
+    )
+
+    db = SimpleNamespace(insert_provider_stat=AsyncMock())
+    await record_agent_runner_stats(
+        db,
+        umo="test:provider-attribution",
+        request=request,
+        agent_runner=runner,
+        final_response=runner.get_final_llm_resp(),
+    )
+    calls = db.insert_provider_stat.await_args_list
+    assert [call.kwargs["provider_id"] for call in calls] == ["primary", "fallback"]
+    assert [call.kwargs["stats"]["token_usage"]["input_other"] for call in calls] == [
+        13,
+        20,
+    ]
+
+
+@pytest.mark.asyncio
+async def test_fallback_attributes_skills_like_requery_and_repair_to_primary(
+    mock_tool_executor,
+    mock_hooks,
+):
+    class SkillsLikeThenFailureProvider(MockProvider):
+        async def text_chat(self, **kwargs) -> LLMResponse:
+            self.call_count += 1
+            if self.call_count == 1:
+                return LLMResponse(
+                    role="assistant",
+                    tools_call_name=["test_tool"],
+                    tools_call_args=[{"query": "select"}],
+                    tools_call_ids=["call_select"],
+                    usage=TokenUsage(input_other=10),
+                )
+            if self.call_count == 2:
+                return LLMResponse(
+                    role="assistant",
+                    completion_text="",
+                    usage=TokenUsage(input_other=5),
+                )
+            if self.call_count == 3:
+                return LLMResponse(
+                    role="assistant",
+                    tools_call_name=["test_tool"],
+                    tools_call_args=[{"query": "repair"}],
+                    tools_call_ids=["call_repair"],
+                    usage=TokenUsage(input_other=7),
+                )
+            error = RuntimeError("primary failed after schema requery")
+            error._astrbot_token_usage = TokenUsage(input_other=3)  # type: ignore[attr-defined]
+            raise error
+
+    class FinalFallbackProvider(MockProvider):
+        async def text_chat(self, **kwargs) -> LLMResponse:
+            self.call_count += 1
+            return LLMResponse(
+                role="assistant",
+                completion_text="fallback final",
+                usage=TokenUsage(input_other=20),
+            )
+
+    primary = SkillsLikeThenFailureProvider()
+    primary.provider_config.update({"id": "primary", "model": "primary-model"})
+    fallback = FinalFallbackProvider()
+    fallback.provider_config.update({"id": "fallback", "model": "fallback-model"})
+    tool = FunctionTool(
+        name="test_tool",
+        description="test",
+        parameters={
+            "type": "object",
+            "properties": {"query": {"type": "string"}},
+        },
+        handler=AsyncMock(),
+    )
+    request = ProviderRequest(
+        prompt="run tool",
+        func_tool=ToolSet(tools=[tool]),
+    )
+    runner = ToolLoopAgentRunner()
+    await runner.reset(
+        provider=primary,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        fallback_providers=[fallback],
+        tool_schema_mode="skills_like",
+    )
+
+    async for _ in runner.step_until_done(3):
+        pass
+
+    assert primary.call_count == 4
+    assert fallback.call_count == 1
+    assert runner.stats.token_usage == TokenUsage(input_other=45)
+    assert len(runner.provider_stat_segments) == 1
+    assert runner.provider_stat_segments[0].provider is primary
+    assert runner.provider_stat_segments[0].usage == TokenUsage(input_other=25)
+    assert runner.stats.token_usage - runner.provider_stat_segments[0].usage == (
+        TokenUsage(input_other=20)
+    )
 
 
 @pytest.mark.asyncio

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -107,6 +108,14 @@ async def record_agent_runner_stats(
                 0.0,
                 aggregate_stats["time_to_first_token"]
                 - (aggregate_start - original_start),
+            )
+        if (
+            aggregate_stats["end_time"] <= 0
+            or aggregate_stats["end_time"] < aggregate_stats["start_time"]
+        ):
+            aggregate_stats["end_time"] = max(
+                time.time(),
+                aggregate_stats["start_time"],
             )
 
         await db.insert_provider_stat(

@@ -329,6 +329,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.stats = AgentStats()
         self.stats.start_time = time.time()
         self.provider_stat_segments: list[ProviderStatSegment] = []
+        self._provider_token_usage: dict[int, TokenUsage] = {}
+        self._provider_usage_start_times: dict[int, float] = {}
 
     def _read_tool_hint(self) -> str:
         if self.read_tool is not None:
@@ -473,13 +475,49 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         finally:
             provider_stats_managed_by_agent.reset(token)
 
-    def _accumulate_token_usage(self, usage: TokenUsage | None) -> None:
+    def _mark_provider_attempt_started(
+        self,
+        provider: Provider,
+        start_time: float,
+    ) -> float:
+        provider_key = id(provider)
+        return self._provider_usage_start_times.setdefault(provider_key, start_time)
+
+    def _accumulate_token_usage(
+        self,
+        usage: TokenUsage | None,
+        provider: Provider | None = None,
+    ) -> None:
         if usage is None:
             return
         self.stats.token_usage += usage
+        usage_provider = provider or self.provider
+        provider_key = id(usage_provider)
+        provider_usage = self._provider_token_usage.get(provider_key, TokenUsage())
+        self._provider_token_usage[provider_key] = provider_usage + usage
         self.stats.current_context_tokens = usage.input
         if self.req and self.req.conversation:
             self.req.conversation.token_usage = usage.total
+
+    def _settle_provider_stat_segment(
+        self,
+        provider: Provider,
+        *,
+        fallback_start_time: float,
+        end_time: float,
+    ) -> None:
+        provider_key = id(provider)
+        self.provider_stat_segments.append(
+            ProviderStatSegment(
+                provider=provider,
+                usage=self._provider_token_usage.pop(provider_key, TokenUsage()),
+                start_time=self._provider_usage_start_times.pop(
+                    provider_key,
+                    fallback_start_time,
+                ),
+                end_time=end_time,
+            )
+        )
 
     async def _await_additional_provider_response(
         self,
@@ -603,7 +641,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     candidate_id,
                 )
             self.provider = candidate
-            candidate_start_time = time.time()
+            candidate_start_time = self._mark_provider_attempt_started(
+                candidate,
+                time.time(),
+            )
             try:
                 retrying = AsyncRetrying(
                     retry=retry_if_exception_type(EmptyModelOutputError),
@@ -638,14 +679,14 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                     last_err_response = resp
                                     last_exception = None
                                     failed_usage = resp.usage or TokenUsage()
-                                    self.stats.token_usage += failed_usage
-                                    self.provider_stat_segments.append(
-                                        ProviderStatSegment(
-                                            provider=candidate,
-                                            usage=failed_usage,
-                                            start_time=candidate_start_time,
-                                            end_time=time.time(),
-                                        )
+                                    self._accumulate_token_usage(
+                                        failed_usage,
+                                        candidate,
+                                    )
+                                    self._settle_provider_stat_segment(
+                                        candidate,
+                                        fallback_start_time=candidate_start_time,
+                                        end_time=time.time(),
                                     )
                                     logger.warning(
                                         "Chat Model %s returns error response, trying fallback to next provider.",
@@ -681,15 +722,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 failed_usage = getattr(exc, "_astrbot_token_usage", None)
                 if not isinstance(failed_usage, TokenUsage):
                     failed_usage = TokenUsage()
-                self.stats.token_usage += failed_usage
+                self._accumulate_token_usage(failed_usage, candidate)
                 if not is_last_candidate:
-                    self.provider_stat_segments.append(
-                        ProviderStatSegment(
-                            provider=candidate,
-                            usage=failed_usage,
-                            start_time=candidate_start_time,
-                            end_time=time.time(),
-                        )
+                    self._settle_provider_stat_segment(
+                        candidate,
+                        fallback_start_time=candidate_start_time,
+                        end_time=time.time(),
                     )
                 logger.warning(
                     "Chat Model %s request error: %s",
@@ -931,10 +969,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             if llm_response.usage:
                 # Keep cumulative usage for billing and expose the latest request
                 # input separately for context-window occupancy displays.
-                self.stats.token_usage += llm_response.usage
-                self.stats.current_context_tokens = llm_response.usage.input
-                if self.req.conversation:
-                    self.req.conversation.token_usage = llm_response.usage.total
+                self._accumulate_token_usage(llm_response.usage)
             # end_time must be set before the yield serializes to_dict().
             self.stats.end_time = time.time()
             yield AgentResponse(
