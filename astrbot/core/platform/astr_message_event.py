@@ -153,10 +153,10 @@ class AstrMessageEvent(abc.ABC):
                 parts.append("[图片]")
             elif isinstance(i, Face):
                 parts.append(f"[表情:{i.id}]")
-            elif isinstance(i, At):
-                parts.append(f"[At:{i.qq}]")
             elif isinstance(i, AtAll):
                 parts.append("[At:全体成员]")
+            elif isinstance(i, At):
+                parts.append(f"[At:{i.qq}]")
             elif isinstance(i, Forward):
                 # 转发消息
                 parts.append("[转发消息]")
