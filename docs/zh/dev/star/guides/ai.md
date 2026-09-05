@@ -23,7 +23,7 @@ provider_id = await self.context.get_current_chat_provider_id(umo=umo)
 
 ```py
 llm_resp = await self.context.llm_generate(
-    chat_provider_id=provider_id, # 聊天模型 ID
+    chat_provider_id=provider_id,  # 聊天模型 ID
     prompt="Hello, world!",
 )
 # print(llm_resp.completion_text) # 获取返回的文本
@@ -95,13 +95,15 @@ class MyPlugin(Star):
 除了上述的通过 `@dataclass` 定义 Tool 的方式之外，你也可以使用装饰器的方式注册 tool 到 AstrBot。请务必按照以下格式编写一个工具（包括函数注释，AstrBot 会解析该函数注释，请务必将注释格式写对）：
 
 ```py{3,4,5,6,7}
-@filter.llm_tool(name="get_weather") # 如果 name 不填，将使用函数名
-async def get_weather(self, event: AstrMessageEvent, location: str) -> MessageEventResult:
-    '''获取天气信息。
+@filter.llm_tool(name="get_weather")  # 如果 name 不填，将使用函数名
+async def get_weather(
+    self, event: AstrMessageEvent, location: str
+) -> MessageEventResult:
+    """获取天气信息。
 
     Args:
         location(string): 地点
-    '''
+    """
     resp = self.get_weather_from_api(location)
     yield event.plain_result("天气信息: " + resp)
 ```
@@ -132,8 +134,8 @@ llm_resp = await self.context.tool_loop_agent(
     chat_provider_id=prov_id,
     prompt="搜索一下 bilibili 上关于 AstrBot 的相关视频。",
     tools=ToolSet([BilibiliTool()]),
-    max_steps=30, # Agent 最大执行步骤
-    tool_call_timeout=60, # 工具调用超时时间
+    max_steps=30,  # Agent 最大执行步骤
+    tool_call_timeout=60,  # 工具调用超时时间
 )
 # print(llm_resp.completion_text) # 获取返回的文本
 ```
@@ -161,6 +163,7 @@ from astrbot.api import logger
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool, ToolExecResult, ToolSet
 from astrbot.core.astr_agent_context import AstrAgentContext
+
 
 @dataclass
 class AssignAgentTool(FunctionTool[AstrAgentContext]):
@@ -354,8 +357,10 @@ provider_id = await self.context.get_current_chat_provider_id(event.unified_msg_
 curr_cid = await conv_mgr.get_curr_conversation_id(event.unified_msg_origin)
 user_msg = UserMessageSegment(content=[TextPart(text="hi")])
 llm_resp = await self.context.llm_generate(
-    chat_provider_id=provider_id, # 聊天模型 ID
-    contexts=[user_msg], # 当未指定 prompt 时，使用 contexts 作为输入；同时指定 prompt 和 contexts 时，prompt 会被添加到 LLM 输入的最后
+    chat_provider_id=provider_id,  # 聊天模型 ID
+    contexts=[
+        user_msg
+    ],  # 当未指定 prompt 时，使用 contexts 作为输入；同时指定 prompt 和 contexts 时，prompt 会被添加到 LLM 输入的最后
 )
 await conv_mgr.add_message_pair(
     cid=curr_cid,
@@ -523,7 +528,6 @@ persona_mgr = self.context.persona_manager
 ::: details Persona / Personality 类型定义
 
 ```py
-
 class Persona(SQLModel, table=True):
     """Persona is a set of instructions for LLMs to follow.
 
