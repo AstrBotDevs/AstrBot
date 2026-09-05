@@ -22,6 +22,7 @@ from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest, TokenUsage
 from astrbot.core.provider.provider import Provider
+from astrbot.core.provider.sources.openai_oauth_source import ProviderOpenAIOAuth
 
 
 class MockProvider(Provider):
@@ -183,6 +184,14 @@ class MockFailingProvider(MockProvider):
         raise RuntimeError("primary provider failed")
 
 
+class MockRateLimitedProvider(MockProvider):
+    async def text_chat(self, **kwargs) -> LLMResponse:
+        self.call_count += 1
+        error = RuntimeError("primary provider rate limited")
+        error.status_code = 429  # type: ignore[attr-defined]
+        raise error
+
+
 class MockErrProvider(MockProvider):
     async def text_chat(self, **kwargs) -> LLMResponse:
         self.call_count += 1
@@ -247,6 +256,23 @@ class MockAbortableStreamProvider(MockProvider):
             completion_text="partial final",
             is_chunk=False,
         )
+
+
+class MockPartialStreamFailureProvider(MockProvider):
+    """Emit one visible chunk before raising the configured stream failure."""
+
+    def __init__(self, exception_type: type[Exception]):
+        super().__init__()
+        self.exception_type = exception_type
+
+    async def text_chat_stream(self, **kwargs):
+        self.call_count += 1
+        yield LLMResponse(
+            role="assistant",
+            completion_text="visible partial",
+            is_chunk=True,
+        )
+        raise self.exception_type("stream failed after visible output")
 
 
 class MockBlockingProvider(MockProvider):
@@ -1370,6 +1396,81 @@ async def test_empty_output_retries_exhausted_then_uses_fallback_provider(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("exception_type", [RuntimeError, EmptyModelOutputError])
+async def test_partial_stream_failure_does_not_retry_or_replay_fallback(
+    exception_type,
+    runner,
+    provider_request,
+    mock_tool_executor,
+    mock_hooks,
+    monkeypatch,
+):
+    monkeypatch.setattr(runner, "EMPTY_OUTPUT_RETRY_WAIT_MIN_S", 0)
+    monkeypatch.setattr(runner, "EMPTY_OUTPUT_RETRY_WAIT_MAX_S", 0)
+    primary_provider = MockPartialStreamFailureProvider(exception_type)
+    primary_provider.provider_config["id"] = "primary"
+    fallback_provider = MockProvider()
+    fallback_provider.provider_config["id"] = "fallback"
+    fallback_provider.should_call_tools = False
+
+    await runner.reset(
+        provider=primary_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=True,
+        fallback_providers=[fallback_provider],
+    )
+
+    responses = [response async for response in runner.step()]
+
+    assert any(response.type == "streaming_delta" for response in responses)
+    assert any(response.type == "err" for response in responses)
+    assert primary_provider.call_count == 1
+    assert fallback_provider.call_count == 0
+    final_resp = runner.get_final_llm_resp()
+    assert final_resp is not None
+    assert final_resp.role == "err"
+    assert "stream failed after visible output" in final_resp.completion_text
+
+
+@pytest.mark.asyncio
+async def test_stream_failure_before_first_chunk_still_uses_fallback(
+    runner,
+    provider_request,
+    mock_tool_executor,
+    mock_hooks,
+):
+    primary_provider = MockFailingProvider()
+    primary_provider.provider_config["id"] = "primary"
+    fallback_provider = MockProvider()
+    fallback_provider.provider_config["id"] = "fallback"
+    fallback_provider.should_call_tools = False
+
+    await runner.reset(
+        provider=primary_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=True,
+        fallback_providers=[fallback_provider],
+    )
+
+    responses = [response async for response in runner.step()]
+
+    assert any(response.type == "streaming_delta" for response in responses)
+    assert not any(response.type == "err" for response in responses)
+    assert primary_provider.call_count == 1
+    assert fallback_provider.call_count == 1
+    final_resp = runner.get_final_llm_resp()
+    assert final_resp is not None
+    assert final_resp.role == "assistant"
+    assert final_resp.completion_text == "这是我的最终回答"
+
+
+@pytest.mark.asyncio
 async def test_stop_signal_returns_aborted_and_discards_partial_message(
     runner, provider_request, mock_tool_executor, mock_hooks
 ):
@@ -1658,10 +1759,19 @@ async def test_skills_like_requery_passes_extra_user_content_parts():
     from astrbot.core.agent.message import TextPart
 
     captured_kwargs = {}
+    policy_scope_values = []
 
     class SkillsLikeProvider(MockProvider):
         async def text_chat(self, **kwargs) -> LLMResponse:
+            from astrbot.core.provider.sources.request_retry import (
+                provider_oauth_web_search,
+                provider_retry_rate_limits,
+            )
+
             self.call_count += 1
+            policy_scope_values.append(
+                (provider_oauth_web_search.get(), provider_retry_rate_limits.get())
+            )
             if self.call_count == 1:
                 # 第一次调用：返回工具选择（light schema）
                 return LLMResponse(
@@ -1705,6 +1815,8 @@ async def test_skills_like_requery_passes_extra_user_content_parts():
         func_tool=tool_set,
         contexts=[],
         extra_user_content_parts=[caption_part],
+        oauth_web_search="disabled",
+        retry_rate_limits=False,
     )
 
     event = MockEvent(umo="test_umo", sender_id="test_sender")
@@ -1731,6 +1843,10 @@ async def test_skills_like_requery_passes_extra_user_content_parts():
     parts = captured_kwargs["extra_user_content_parts"]
     assert len(parts) == 1
     assert parts[0].text == "<image_caption>一张猫的照片</image_caption>"
+    assert policy_scope_values == [
+        ("disabled", False),
+        ("disabled", False),
+    ]
 
 
 @pytest.mark.asyncio
@@ -2115,6 +2231,272 @@ async def test_follow_up_after_stop_not_merged_into_tool_result(
         # If tool execution was aborted by stop, the ticket should still be resolved
         # but not consumed (since there was no tool call to merge into)
         assert ticket_before.resolved.is_set()
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_policy_stops_fallback_and_preserves_status_code(
+    provider_request, mock_tool_executor, mock_hooks
+):
+    primary_provider = MockRateLimitedProvider()
+    fallback_provider = MockProvider()
+    runner = ToolLoopAgentRunner()
+    provider_request.retry_rate_limits = False
+    provider_request.fallback_on_rate_limit = False
+
+    await runner.reset(
+        provider=primary_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        fallback_providers=[fallback_provider],
+    )
+
+    responses = [response async for response in runner.step()]
+
+    assert primary_provider.call_count == 1
+    assert fallback_provider.call_count == 0
+    assert any(response.type == "err" for response in responses)
+    llm_response = runner.get_final_llm_resp()
+    assert llm_response is not None
+    assert llm_response.role == "err"
+    assert llm_response.status_code == 429
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_error_response_stops_fallback(
+    provider_request, mock_tool_executor, mock_hooks
+):
+    class RateLimitResponseProvider(MockProvider):
+        async def text_chat(self, **kwargs) -> LLMResponse:
+            self.call_count += 1
+            return LLMResponse(
+                role="err",
+                completion_text="rate limited",
+                status_code=429,
+            )
+
+    primary_provider = RateLimitResponseProvider()
+    fallback_provider = MockProvider()
+    provider_request.fallback_on_rate_limit = False
+    runner = ToolLoopAgentRunner()
+    await runner.reset(
+        provider=primary_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        fallback_providers=[fallback_provider],
+    )
+
+    async for _ in runner.step():
+        pass
+
+    assert primary_provider.call_count == 1
+    assert fallback_provider.call_count == 0
+    assert runner.get_final_llm_resp().status_code == 429
+
+
+@pytest.mark.asyncio
+async def test_oauth_http_429_is_requested_once_and_does_not_use_fallback(
+    mock_tool_executor, mock_hooks
+):
+    provider = ProviderOpenAIOAuth(
+        {
+            "id": "oauth-primary",
+            "type": "openai_oauth_chat_completion",
+            "model": "gpt-6-astra",
+            "oauth_access_token": "test-token",
+            "oauth_refresh_token": "test-refresh",
+            "oauth_account_id": "test-account",
+            "oauth_web_search": "live",
+            "custom_extra_body": {
+                "tools": [{"type": "web_search", "external_web_access": True}]
+            },
+        },
+        {},
+    )
+    backend_calls = 0
+    sent_payload = None
+
+    async def fake_request_backend_once(payload):
+        nonlocal backend_calls, sent_payload
+        backend_calls += 1
+        sent_payload = payload
+        return 429, '{"error":{"code":"rate_limit_exceeded"}}', 0
+
+    provider._request_backend_once = fake_request_backend_once
+    fallback_provider = MockProvider()
+    runner = ToolLoopAgentRunner()
+    function_tool = FunctionTool(
+        name="keep_me",
+        description="ordinary function",
+        parameters={"type": "object", "properties": {}},
+        handler=AsyncMock(),
+    )
+    request = ProviderRequest(
+        prompt="hello",
+        func_tool=ToolSet(tools=[function_tool]),
+        oauth_web_search="disabled",
+        retry_rate_limits=False,
+        fallback_on_rate_limit=False,
+    )
+    try:
+        await runner.reset(
+            provider=provider,
+            request=request,
+            run_context=ContextWrapper(context=None),
+            tool_executor=mock_tool_executor,
+            agent_hooks=mock_hooks,
+            fallback_providers=[fallback_provider],
+            request_max_retries=5,
+        )
+        async for _ in runner.step():
+            pass
+    finally:
+        await provider.terminate()
+
+    assert backend_calls == 1
+    assert fallback_provider.call_count == 0
+    assert runner.get_final_llm_resp().status_code == 429
+    assert [tool["type"] for tool in sent_payload["tools"]] == ["function"]
+    assert sent_payload["tools"][0]["name"] == "keep_me"
+
+
+@pytest.mark.asyncio
+async def test_request_policies_reach_every_tool_round(mock_tool_executor, mock_hooks):
+    captured: list[tuple[str, bool]] = []
+
+    class PolicyCapturingProvider(SingleToolThenFinalProvider):
+        async def text_chat(self, **kwargs) -> LLMResponse:
+            from astrbot.core.provider.sources.request_retry import (
+                provider_oauth_web_search,
+                provider_retry_rate_limits,
+            )
+
+            captured.append(
+                (provider_oauth_web_search.get(), provider_retry_rate_limits.get())
+            )
+            return await super().text_chat(**kwargs)
+
+    provider = PolicyCapturingProvider("test_tool")
+    tool = FunctionTool(
+        name="test_tool",
+        description="test",
+        parameters={"type": "object", "properties": {}},
+        handler=AsyncMock(),
+    )
+    request = ProviderRequest(
+        prompt="run tool",
+        func_tool=ToolSet(tools=[tool]),
+        oauth_web_search="disabled",
+        retry_rate_limits=False,
+        fallback_on_rate_limit=False,
+    )
+    runner = ToolLoopAgentRunner()
+
+    await runner.reset(
+        provider=provider,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+    )
+    async for _ in runner.step_until_done(3):
+        pass
+
+    assert captured == [("disabled", False), ("disabled", False)]
+
+
+@pytest.mark.asyncio
+async def test_oauth_sse_429_does_not_use_fallback(mock_tool_executor, mock_hooks):
+    provider = ProviderOpenAIOAuth(
+        {
+            "id": "oauth-primary",
+            "type": "openai_oauth_chat_completion",
+            "model": "gpt-6-astra",
+            "oauth_access_token": "test-token",
+            "oauth_refresh_token": "test-refresh",
+            "oauth_account_id": "test-account",
+        },
+        {},
+    )
+
+    async def fake_stream(_payload):
+        yield {
+            "type": "response.failed",
+            "response": {"error": {"code": "rate_limit_exceeded"}},
+        }
+
+    provider._stream_backend_events = fake_stream
+    fallback_provider = MockProvider()
+    runner = ToolLoopAgentRunner()
+    request = ProviderRequest(
+        prompt="hello",
+        retry_rate_limits=False,
+        fallback_on_rate_limit=False,
+    )
+    try:
+        await runner.reset(
+            provider=provider,
+            request=request,
+            run_context=ContextWrapper(context=None),
+            tool_executor=mock_tool_executor,
+            agent_hooks=mock_hooks,
+            streaming=True,
+            fallback_providers=[fallback_provider],
+        )
+        async for _ in runner.step():
+            pass
+    finally:
+        await provider.terminate()
+
+    assert fallback_provider.call_count == 0
+    assert runner.get_final_llm_resp().status_code == 429
+
+
+@pytest.mark.asyncio
+async def test_non_rate_limit_fallback_keeps_request_policy(
+    mock_tool_executor, mock_hooks
+):
+    captured = []
+
+    class PolicyCapturingFallback(MockProvider):
+        async def text_chat(self, **kwargs) -> LLMResponse:
+            from astrbot.core.provider.sources.request_retry import (
+                provider_oauth_web_search,
+                provider_retry_rate_limits,
+            )
+
+            captured.append(
+                (provider_oauth_web_search.get(), provider_retry_rate_limits.get())
+            )
+            return await super().text_chat(**kwargs)
+
+    primary_provider = MockFailingProvider()
+    fallback_provider = PolicyCapturingFallback()
+    fallback_provider.should_call_tools = False
+    request = ProviderRequest(
+        prompt="hello",
+        oauth_web_search="disabled",
+        retry_rate_limits=False,
+        fallback_on_rate_limit=False,
+    )
+    runner = ToolLoopAgentRunner()
+    await runner.reset(
+        provider=primary_provider,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        fallback_providers=[fallback_provider],
+    )
+
+    async for _ in runner.step():
+        pass
+
+    assert captured == [("disabled", False)]
+    assert runner.get_final_llm_resp().role == "assistant"
 
 
 if __name__ == "__main__":
