@@ -63,6 +63,19 @@ class FunctionTool(ToolSchema, Generic[TContext]):
     Declare this tool as a background task. Background tasks return immediately
     with a task identifier while the real work continues asynchronously.
     """
+    declared_permission_type: str | None = None
+    """
+    The permission level declared by the tool author via ``@llm_tool(permission_type=...)``.
+    One of ``"admin"`` / ``"member"`` / ``None``.
+
+    This is only a *default*: it is used when the dashboard has no explicit
+    per-tool permission override configured for this tool. It lets plugin
+    authors ship a sane default permission requirement (e.g. ADMIN for a
+    dangerous tool) without requiring the bot owner to visit the WebUI panel.
+    An explicit override saved via the dashboard always takes precedence.
+    This field is a special field for AstrBot; you can ignore it when
+    integrating with other frameworks.
+    """
 
     def __repr__(self) -> str:
         return f"FuncTool(name={self.name}, parameters={self.parameters}, description={self.description})"
