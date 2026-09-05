@@ -2,7 +2,7 @@
   <transition name="slide-left">
     <aside v-if="modelValue" class="reasoning-sidebar">
       <div class="reasoning-sidebar-header">
-        <div class="reasoning-sidebar-title">{{ tm("reasoning.thinking") }}</div>
+        <div class="reasoning-sidebar-title">{{ reasoningTitle }}</div>
         <v-btn icon="mdi-close" size="small" variant="text" @click="close" />
       </div>
 
@@ -14,7 +14,7 @@
           :is-dark="isDark"
         />
         <div v-else class="reasoning-sidebar-empty">
-          {{ tm("reasoning.thinking") }}
+          {{ reasoningTitle }}
         </div>
       </div>
     </aside>
@@ -22,11 +22,16 @@
 </template>
 
 <script setup lang="ts">
-import type { MessagePart } from "@/composables/useMessages";
+import { computed } from "vue";
+import {
+  reasoningActivityCounts,
+  reasoningActivityTitle,
+  type MessagePart,
+} from "@/composables/useMessages";
 import { useModuleI18n } from "@/i18n/composables";
 import ReasoningTimeline from "@/components/chat/message_list_comps/ReasoningTimeline.vue";
 
-defineProps<{
+const props = defineProps<{
   modelValue: boolean;
   parts: MessagePart[];
   reasoning?: string;
@@ -39,6 +44,14 @@ const emit = defineEmits<{
 
 const { tm } = useModuleI18n("features/chat");
 
+const activityCounts = computed(() =>
+  reasoningActivityCounts(props.parts, props.reasoning || ""),
+);
+
+const reasoningTitle = computed(() =>
+  reasoningActivityTitle(activityCounts.value, tm),
+);
+
 function close() {
   emit("update:modelValue", false);
 }
@@ -47,9 +60,10 @@ function close() {
 <style scoped>
 .reasoning-sidebar {
   width: 380px;
-  height: 100%;
-  border-left: 1px solid rgba(var(--v-theme-on-surface), 0.1);
-  background: rgb(var(--v-theme-surface));
+  height: calc(100% - var(--chat-panel-top-offset, 0px));
+  margin-top: var(--chat-panel-top-offset, 0px);
+  border-left: 1px solid var(--chat-border, rgba(var(--v-theme-on-surface), 0.1));
+  background: var(--chat-page-bg, rgb(var(--v-theme-surface)));
   color: rgb(var(--v-theme-on-surface));
   display: flex;
   flex-direction: column;
@@ -103,13 +117,14 @@ function close() {
     z-index: 1300;
     width: 100vw;
     height: 100dvh;
+    margin-top: 0;
     border-left: 0;
   }
 
   .reasoning-sidebar-header {
     min-height: 52px;
     padding: calc(10px + env(safe-area-inset-top)) 12px 8px;
-    border-bottom: 1px solid rgba(var(--v-border-color), 0.12);
+    border-bottom: 1px solid var(--chat-border, rgba(var(--v-border-color), 0.12));
   }
 
   .reasoning-sidebar-body {

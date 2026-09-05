@@ -1,9 +1,7 @@
 import asyncio
-import base64
 import json
 import os
 import uuid
-from io import BytesIO
 
 import lark_oapi as lark
 from lark_oapi.api.cardkit.v1 import (
@@ -22,6 +20,8 @@ from lark_oapi.api.im.v1 import (
     CreateMessageReactionRequest,
     CreateMessageReactionRequestBody,
     Emoji,
+    GetChatMembersRequest,
+    GetChatRequest,
     ReplyMessageRequest,
     ReplyMessageRequestBody,
 )
@@ -30,9 +30,9 @@ from astrbot import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import At, File, Json, Plain, Record, Video
 from astrbot.api.message_components import Image as AstrBotImage
-from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-from astrbot.core.utils.io import download_image_by_url
+from astrbot.api.platform import Group, MessageMember
 from astrbot.core.utils.media_utils import (
+    MediaResolver,
     convert_audio_to_opus,
     convert_video_format,
     get_media_duration,
@@ -51,6 +51,141 @@ class LarkMessageEvent(AstrMessageEvent):
     ) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.bot = bot
+
+    async def get_group(
+        self,
+        group_id: str | None = None,
+        **kwargs,
+    ) -> Group | None:
+        """Get Lark chat details and members.
+
+        Args:
+            group_id: Chat ID to query. Defaults to the current chat ID.
+            **kwargs: Reserved for platform-compatible query options.
+
+        Returns:
+            Enriched group details, a basic group when the API is unavailable, or
+            ``None`` when no chat ID can be resolved.
+        """
+        resolved_group_id = str(group_id or self.get_group_id())
+        if not resolved_group_id:
+            return None
+
+        basic_group = Group(group_id=resolved_group_id)
+        if (
+            self.message_obj.group
+            and self.message_obj.group.group_id == resolved_group_id
+        ):
+            basic_group = self.message_obj.group
+
+        if self.bot.im is None:
+            logger.warning("[Lark] IM API is unavailable while getting chat details")
+            return basic_group
+
+        try:
+            request = (
+                GetChatRequest.builder()
+                .chat_id(resolved_group_id)
+                .user_id_type("open_id")
+                .build()
+            )
+            response = await self.bot.im.v1.chat.aget(request)
+        except Exception as exc:
+            logger.warning(
+                "[Lark] Failed to get chat details for %s: %s",
+                resolved_group_id,
+                exc,
+            )
+            return basic_group
+
+        if not response.success() or response.data is None:
+            logger.warning(
+                "[Lark] Failed to get chat details for %s (%s): %s",
+                resolved_group_id,
+                response.code,
+                response.msg,
+            )
+            return basic_group
+
+        chat_data = response.data
+        member_count = None
+        if chat_data.user_count is not None:
+            try:
+                member_count = int(chat_data.user_count)
+            except (TypeError, ValueError):
+                logger.warning(
+                    "[Lark] Chat %s returned an invalid user count: %r",
+                    resolved_group_id,
+                    chat_data.user_count,
+                )
+
+        group = Group(
+            group_id=resolved_group_id,
+            group_name=chat_data.name or basic_group.group_name,
+            group_avatar=chat_data.avatar or basic_group.group_avatar,
+            group_owner=chat_data.owner_id or basic_group.group_owner,
+            group_admins=list(chat_data.user_manager_id_list or []),
+            member_count=member_count,
+        )
+
+        members: list[MessageMember] = []
+        members_complete = False
+        page_token: str | None = None
+        try:
+            while True:
+                request_builder = (
+                    GetChatMembersRequest.builder()
+                    .chat_id(resolved_group_id)
+                    .member_id_type("open_id")
+                    .page_size(100)
+                )
+                if page_token:
+                    request_builder.page_token(page_token)
+                members_response = await self.bot.im.v1.chat_members.aget(
+                    request_builder.build(),
+                )
+                if not members_response.success() or members_response.data is None:
+                    logger.warning(
+                        "[Lark] Failed to get members for chat %s (%s): %s",
+                        resolved_group_id,
+                        members_response.code,
+                        members_response.msg,
+                    )
+                    break
+
+                members_data = members_response.data
+                for member in members_data.items or []:
+                    if member.member_id:
+                        members.append(
+                            MessageMember(
+                                user_id=member.member_id,
+                                nickname=member.name,
+                            ),
+                        )
+                if group.member_count is None and members_data.member_total is not None:
+                    group.member_count = members_data.member_total
+
+                if getattr(members_data, "trigger_security_conf_limit", False):
+                    logger.warning(
+                        "[Lark] Member list for chat %s was truncated by its security policy",
+                        resolved_group_id,
+                    )
+                    break
+
+                page_token = members_data.page_token
+                if not members_data.has_more or not page_token:
+                    members_complete = True
+                    break
+        except Exception as exc:
+            logger.warning(
+                "[Lark] Failed to get members for chat %s: %s",
+                resolved_group_id,
+                exc,
+            )
+
+        if members_complete:
+            group.members = members
+        return group
 
     @staticmethod
     async def _send_im_message(
@@ -200,54 +335,38 @@ class LarkMessageEvent(AstrMessageEvent):
             elif isinstance(comp, At):
                 _stage.append({"tag": "at", "user_id": comp.qq, "style": []})
             elif isinstance(comp, AstrBotImage):
-                file_path = ""
-                image_file = None
-
-                if comp.file and comp.file.startswith("file:///"):
-                    file_path = comp.file.replace("file:///", "")
-                elif comp.file and comp.file.startswith("http"):
-                    image_file_path = await download_image_by_url(comp.file)
-                    file_path = image_file_path if image_file_path else ""
-                elif comp.file and comp.file.startswith("base64://"):
-                    base64_str = comp.file.removeprefix("base64://")
-                    image_data = base64.b64decode(base64_str)
-                    # save as temp file
-                    temp_dir = get_astrbot_temp_path()
-                    file_path = os.path.join(
-                        temp_dir,
-                        f"lark_image_{uuid.uuid4().hex[:8]}.jpg",
-                    )
-                    with open(file_path, "wb") as f:
-                        f.write(BytesIO(image_data).getvalue())
-                else:
-                    file_path = comp.file if comp.file else ""
-
-                if image_file is None:
-                    if not file_path:
-                        logger.error("[Lark] 图片路径为空，无法上传")
-                        continue
-                    try:
-                        image_file = open(file_path, "rb")
-                    except Exception as e:
-                        logger.error(f"[Lark] 无法打开图片文件: {e}")
-                        continue
-
-                request = (
-                    CreateImageRequest.builder()
-                    .request_body(
-                        CreateImageRequestBody.builder()
-                        .image_type("message")
-                        .image(image_file)
-                        .build(),
-                    )
-                    .build()
-                )
-
-                if lark_client.im is None:
-                    logger.error("[Lark] API Client im 模块未初始化，无法上传图片")
+                if not comp.file:
+                    logger.error("[Lark] 图片路径为空，无法上传")
                     continue
 
-                response = await lark_client.im.v1.image.acreate(request)
+                try:
+                    async with MediaResolver(
+                        comp.file,
+                        media_type="image",
+                    ).as_path() as image:
+                        with image.open("rb") as image_file:
+                            request = (
+                                CreateImageRequest.builder()
+                                .request_body(
+                                    CreateImageRequestBody.builder()
+                                    .image_type("message")
+                                    .image(image_file)
+                                    .build(),
+                                )
+                                .build()
+                            )
+
+                            if lark_client.im is None:
+                                logger.error(
+                                    "[Lark] API Client im 模块未初始化，无法上传图片"
+                                )
+                                continue
+
+                            response = await lark_client.im.v1.image.acreate(request)
+                except Exception as e:
+                    logger.error(f"[Lark] 无法打开或上传图片文件: {e}")
+                    continue
+
                 if not response.success():
                     logger.error(f"无法上传飞书图片({response.code}): {response.msg}")
                     continue
@@ -258,9 +377,10 @@ class LarkMessageEvent(AstrMessageEvent):
 
                 image_key = response.data.image_key
                 logger.debug(image_key)
-                ret.append(_stage)
+                if _stage:
+                    ret.append(_stage.copy())
+                    _stage.clear()
                 ret.append([{"tag": "img", "image_key": image_key}])
-                _stage.clear()
             elif isinstance(comp, File):
                 # 文件将通过 _send_file_message 方法单独发送，这里跳过
                 logger.debug("[Lark] 检测到文件组件，将单独发送")
@@ -949,7 +1069,9 @@ class LarkMessageEvent(AstrMessageEvent):
             buffer.squash_plain()
             await self.send(buffer)
 
-        await Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name)
+        asyncio.create_task(
+            Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name)
+        )
         self._has_send_oper = True
 
     async def send_streaming(self, generator, use_fallback: bool = False):
@@ -1000,7 +1122,9 @@ class LarkMessageEvent(AstrMessageEvent):
             if buffer:
                 buffer.squash_plain()
                 await self.send(buffer)
-            await Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name)
+            asyncio.create_task(
+                Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name)
+            )
             self._has_send_oper = True
 
         async def _flush_and_close_card() -> None:
@@ -1075,8 +1199,10 @@ class LarkMessageEvent(AstrMessageEvent):
         # If no text was produced at all, no card was created
         if card_id is None:
             if not fallback_used:
-                await Metric.upload(
-                    msg_event_tick=1, adapter_name=self.platform_meta.name
+                asyncio.create_task(
+                    Metric.upload(
+                        msg_event_tick=1, adapter_name=self.platform_meta.name
+                    )
                 )
                 self._has_send_oper = True
             return
@@ -1084,5 +1210,7 @@ class LarkMessageEvent(AstrMessageEvent):
         await _flush_and_close_card()
 
         # 内联父类 send_streaming 的副作用
-        await Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name)
+        asyncio.create_task(
+            Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name)
+        )
         self._has_send_oper = True

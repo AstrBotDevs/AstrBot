@@ -130,7 +130,9 @@ export default defineConfig({
                 link: "/start",
                 collapsed: true,
                 items: [
+                  { text: "MiraRouter", link: "/mirarouter" },
                   { text: "NewAPI", link: "/newapi" },
+                  { text: "胜算云", link: "/shengsuanyun" },
                   { text: "AIHubMix", link: "/aihubmix" },
                   { text: "PPIO 派欧云", link: "/ppio" },
                   { text: "硅基流动", link: "/siliconflow" },
@@ -159,6 +161,7 @@ export default defineConfig({
             base: "/use",
             items: [
               { text: "WebUI", link: "/webui" },
+              { text: "CLI 指令", link: "/cli" },
               { text: "插件", link: "/plugin" },
               { text: "内置指令", link: "/command" },
               { text: "工具使用 Tools", link: "/function-calling" },
@@ -191,6 +194,8 @@ export default defineConfig({
                   { text: "接收消息事件", link: "/guides/listen-message-event" },
                   { text: "发送消息", link: "/guides/send-message" },
                   { text: "插件配置", link: "/guides/plugin-config" },
+                  { text: "插件 Pages", link: "/guides/plugin-pages" },
+                  { text: "插件国际化", link: "/guides/plugin-i18n" },
                   { text: "调用 AI", link: "/guides/ai" },
                   { text: "存储", link: "/guides/storage" },
                   { text: "文转图", link: "/guides/html-to-pic" },
@@ -201,12 +206,25 @@ export default defineConfig({
                 ],
               },
               {
+                text: "插件市场规范",
+                base: "/dev/plugin-market",
+                collapsed: true,
+                items: [
+                  { text: "版本列表", link: "/" },
+                  { text: "2026-06-27", link: "/2026-06-27" },
+                ],
+              },
+              {
                 text: "接入平台适配器",
                 link: "/plugin-platform-adapter",
               },
               {
                 text: "AstrBot HTTP API",
                 link: "/openapi",
+              },
+              {
+                text: "API Scope 与接口对照",
+                link: "/openapi-scopes",
               },
               {
                 text: "AstrBot 配置文件",
@@ -219,6 +237,7 @@ export default defineConfig({
             base: "/others",
             collapsed: true,
             items: [
+              { text: "异常诊断", link: "/diagnostics" },
               { text: "自部署文转图", link: "/self-host-t2i" },
               { text: "插件下载不了?试试自建 GitHub 加速服务", link: "/github-proxy" },
             ],
@@ -285,6 +304,7 @@ export default defineConfig({
             collapsed: false,
             items: [
               { text: "Package Manager", link: "/astrbot/package" },
+              { text: "Desktop Client", link: "/astrbot/desktop" },
               { text: "One-click Launcher", link: "/astrbot/launcher" },
               { text: "Docker", link: "/astrbot/docker" },
               { text: "Kubernetes", link: "/astrbot/kubernetes" },
@@ -341,6 +361,7 @@ export default defineConfig({
               { text: "Mattermost", link: "/mattermost" },
               { text: "Misskey", link: "/misskey" },
               { text: "Discord", link: "/discord" },
+              { text: "KOOK", link: "/kook" },
               {
                 text: "Satori",
                 base: "/en/platform/satori",
@@ -355,7 +376,6 @@ export default defineConfig({
                 collapsed: false,
                 items: [
                   { text: "Matrix", link: "/matrix" },
-                  { text: "KOOK", link: "/kook" },
                   { text: "VoceChat", link: "/vocechat" },
                 ],
               },
@@ -371,7 +391,9 @@ export default defineConfig({
                 link: "/start",
                 collapsed: true,
                 items: [
+                  { text: "MiraRouter", link: "/mirarouter" },
                   { text: "NewAPI", link: "/newapi" },
+                  { text: "ShengSuanYun", link: "/shengsuanyun" },
                   { text: "AIHubMix", link: "/aihubmix" },
                   { text: "PPIO Cloud", link: "/ppio" },
                   { text: "SiliconFlow", link: "/siliconflow" },
@@ -401,6 +423,7 @@ export default defineConfig({
             collapsed: true,
             items: [
               { text: "WebUI", link: "/webui" },
+              { text: "CLI Commands", link: "/cli" },
               { text: "Plugins", link: "/plugin" },
               { text: "Built-in Commands", link: "/command" },
               { text: "Tool Use", link: "/function-calling" },
@@ -433,11 +456,22 @@ export default defineConfig({
                   { text: "Listen to Message Events", link: "/guides/listen-message-event" },
                   { text: "Send Messages", link: "/guides/send-message" },
                   { text: "Plugin Configuration", link: "/guides/plugin-config" },
+                  { text: "Plugin Pages", link: "/guides/plugin-pages" },
+                  { text: "Plugin Internationalization", link: "/guides/plugin-i18n" },
                   { text: "AI", link: "/guides/ai" },
                   { text: "Storage", link: "/guides/storage" },
                   { text: "HTML to Image", link: "/guides/html-to-pic" },
                   { text: "Session Control", link: "/guides/session-control" },
                   { text: "Publish Plugin", link: "/plugin-publish" },
+                ],
+              },
+              {
+                text: "Plugin Market Specification",
+                base: "/en/dev/plugin-market",
+                collapsed: true,
+                items: [
+                  { text: "Versions", link: "/" },
+                  { text: "2026-06-27", link: "/2026-06-27" },
                 ],
               },
               {
@@ -447,6 +481,10 @@ export default defineConfig({
               {
                 text: "AstrBot HTTP API",
                 link: "/openapi",
+              },
+              {
+                text: "API Scope–Endpoint Reference",
+                link: "/openapi-scopes",
               },
               {
                 text: "AstrBot Configuration File",
@@ -459,6 +497,7 @@ export default defineConfig({
             base: "/en/others",
             collapsed: true,
             items: [
+              { text: "Diagnostics", link: "/diagnostics" },
               { text: "Self-hosted HTML to Image", link: "/self-host-t2i" },
             ],
           },

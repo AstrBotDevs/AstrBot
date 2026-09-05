@@ -35,7 +35,7 @@ You can find the public IP in Console -> Basic Network (Public).
 
 ![WebUI](https://www-s.ucloud.cn/2025/07/7e9fc6edc1dfa916abc069f4cecc24cf_1753940381771.png)
 
-Login with username `astrbot` and password `astrbot`.
+Use the random password printed in startup logs for first-time login, and use the username shown in the logs (usually `astrbot`). Change it immediately after login.
 
 After logging in, you can reset your password and continue setup.
 

@@ -1,3 +1,6 @@
+import re
+from urllib.parse import urlparse
+
 import httpx
 from openai import AsyncOpenAI
 
@@ -6,6 +9,13 @@ from astrbot import logger
 from ..entities import ProviderType
 from ..provider import EmbeddingProvider
 from ..register import register_provider_adapter
+
+
+def _normalize_api_base(api_base: str) -> str:
+    api_base = api_base.strip().removesuffix("/").removesuffix("/embeddings")
+    if api_base and not re.search(r"/v\d+$", api_base):
+        api_base = api_base + "/v1"
+    return api_base
 
 
 @register_provider_adapter(
@@ -24,15 +34,9 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         if proxy:
             logger.info(f"[OpenAI Embedding] {provider_id} Using proxy: {proxy}")
             http_client = httpx.AsyncClient(proxy=proxy)
-        api_base = (
+        api_base = _normalize_api_base(
             provider_config.get("embedding_api_base", "https://api.openai.com/v1")
-            .strip()
-            .removesuffix("/")
-            .removesuffix("/embeddings")
         )
-        if api_base and not api_base.endswith("/v1") and not api_base.endswith("/v4"):
-            # /v4 see #5699
-            api_base = api_base + "/v1"
         logger.info(f"[OpenAI Embedding] {provider_id} Using API Base: {api_base}")
         self.client = AsyncOpenAI(
             api_key=provider_config.get("embedding_api_key"),
@@ -63,9 +67,41 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         return [item.embedding for item in embeddings.data]
 
     def _embedding_kwargs(self) -> dict:
-        """构建嵌入请求的可选参数"""
+        """Build optional embedding request parameters."""
         kwargs = {}
-        if "embedding_dimensions" in self.provider_config:
+        dimensions_mode = self.provider_config.get("embedding_dimensions_mode", "auto")
+        if dimensions_mode not in {"auto", "always", "never"}:
+            logger.warning(
+                f"Unknown embedding_dimensions_mode in embedding configs: '{dimensions_mode}', fallback to 'auto'."
+            )
+            dimensions_mode = "auto"
+        send_dimensions = dimensions_mode == "always"
+        if dimensions_mode == "auto":
+            api_base = _normalize_api_base(
+                self.provider_config.get(
+                    "embedding_api_base", "https://api.openai.com/v1"
+                )
+                or "https://api.openai.com/v1"
+            )
+            parsed_api_base = urlparse(api_base)
+            model = (
+                getattr(self, "model", None)
+                or self.provider_config.get("embedding_model")
+                or "text-embedding-3-small"
+            )
+            model_lower = str(model).lower()
+            model_name = model_lower.rsplit("/", 1)[-1]
+            send_dimensions = (
+                parsed_api_base.scheme == "https"
+                and parsed_api_base.hostname == "api.openai.com"
+                and parsed_api_base.path.rstrip("/") == "/v1"
+                and model_name.startswith("text-embedding-3")
+            ) or (
+                parsed_api_base.scheme == "https"
+                and parsed_api_base.hostname == "api.siliconflow.cn"
+                and model_name.startswith("qwen")
+            )
+        if send_dimensions and "embedding_dimensions" in self.provider_config:
             try:
                 kwargs["dimensions"] = int(self.provider_config["embedding_dimensions"])
             except (ValueError, TypeError):

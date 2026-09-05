@@ -1,352 +1,422 @@
 <template>
   <div class="provider-page">
     <v-container fluid class="pa-0">
-      <!-- 页面标题 -->
-      <v-row class="d-flex justify-space-between align-center px-4 py-3 pb-4">
-        <div>
-          <h1 class="text-h1 font-weight-bold mb-2">
-            <v-icon class="me-2">mdi-creation</v-icon>{{ tm('title') }}
-          </h1>
-          <p class="text-subtitle-1 text-medium-emphasis mb-4">
-            {{ tm('subtitle') }}
-          </p>
+      <div class="provider-tabs-scroll">
+        <div
+          class="provider-tabs"
+          role="tablist"
+          :aria-label="tm('providerTypes.title')"
+        >
+          <button
+            v-for="type in providerTypes"
+            :key="type.value"
+            type="button"
+            class="provider-tab"
+            :class="{ 'provider-tab--active': selectedProviderType === type.value }"
+            role="tab"
+            :aria-selected="selectedProviderType === type.value"
+            @click="selectedProviderType = type.value"
+          >
+            <v-icon :icon="type.icon" size="16" />
+            <span>{{ type.label }}</span>
+          </button>
         </div>
-        <div v-if="selectedProviderType !== 'chat_completion'">
-          <v-btn color="primary" prepend-icon="mdi-plus" variant="tonal" @click="showAddProviderDialog = true"
-            rounded="xl" size="x-large">
-            {{ tm('providers.addProvider') }}
-          </v-btn>
-        </div>
-      </v-row>
+      </div>
 
-      <div>
-        <!-- Provider Type 标签页 -->
-        <v-tabs v-model="selectedProviderType" bg-color="transparent" class="mb-4">
-          <v-tab v-for="type in providerTypes" :key="type.value" :value="type.value" class="font-weight-medium px-3">
-            <v-icon start>{{ type.icon }}</v-icon>
-            {{ type.label }}
-          </v-tab>
-        </v-tabs>
+      <div class="provider-content">
+        <div class="provider-workbench">
+          <div class="provider-workbench__sidebar">
+            <ProviderSourcesPanel
+              :displayed-provider-sources="selectedProviderType === 'chat_completion'
+                ? displayedProviderSources
+                : displayedLegacyProviders"
+              :selected-provider-source="selectedProviderType === 'chat_completion'
+                ? selectedProviderSource
+                : selectedLegacyProvider"
+              :available-source-types="availableSourceTypes"
+              :title="selectedProviderType === 'chat_completion' ? '' : tm('providers.title')"
+              :empty-text="selectedProviderType === 'chat_completion' ? '' : getEmptyText()"
+              :select-hint="selectedProviderType === 'chat_completion'
+                ? ''
+                : tm('providers.selectHint')"
+              :delete-label="selectedProviderType === 'chat_completion'
+                ? ''
+                : tm('providers.deleteProvider')"
+              :loading="loadingSources"
+              :tm="tm"
+              :resolve-source-icon="resolveSourceIcon"
+              :is-monochrome-source-icon="isMonochromeSourceIcon"
+              :get-source-display-name="getSourceDisplayName"
+              @add-provider-source="selectedProviderType === 'chat_completion'
+                ? addProviderSource($event)
+                : addLegacyProvider($event)"
+              @select-provider-source="selectedProviderType === 'chat_completion'
+                ? selectProviderSource($event)
+                : selectLegacyProvider($event)"
+              @delete-provider-source="selectedProviderType === 'chat_completion'
+                ? deleteProviderSource($event)
+                : deleteLegacyProvider($event)"
+            />
+          </div>
 
-        <!-- Chat Completion: 左侧列表 + 右侧上下卡片布局 -->
-        <div v-if="selectedProviderType === 'chat_completion'" class="provider-workbench">
-          <v-row class="provider-workbench__shell">
-            <v-col cols="12" md="4" lg="3" class="provider-workbench__sources">
-              <ProviderSourcesPanel
-                :displayed-provider-sources="displayedProviderSources"
-                :selected-provider-source="selectedProviderSource"
-                :available-source-types="availableSourceTypes"
-                :tm="tm"
-                :resolve-source-icon="resolveSourceIcon"
-                :get-source-display-name="getSourceDisplayName"
-                @add-provider-source="addProviderSource"
-                @select-provider-source="selectProviderSource"
-                @delete-provider-source="deleteProviderSource"
-              />
-            </v-col>
+          <div class="provider-workbench__divider"></div>
 
-            <v-col cols="12" md="8" lg="9" class="provider-workbench__settings">
-              <v-card class="provider-config-card provider-settings-panel h-100" elevation="0">
-                <div v-if="selectedProviderSource" class="provider-config-header">
-                  <div class="provider-config-headline">
-                    <div class="provider-config-kicker">{{ tm('providers.settings') }}</div>
-                    <div class="provider-config-title">{{ selectedProviderSource.id }}</div>
-                    <div class="provider-config-subtitle">
-                      {{ selectedProviderSource.api_base || 'N/A' }}
-                    </div>
-                  </div>
-
-                  <div class="provider-config-actions">
-                    <v-btn
-                      color="primary"
-                      prepend-icon="mdi-content-save-outline"
-                      :loading="savingSource"
-                      :disabled="!isSourceModified"
-                      @click="saveProviderSource"
-                      variant="tonal"
-                    >
-                      {{ tm('providerSources.save') }}
-                    </v-btn>
+          <div class="provider-workbench__main">
+            <template v-if="selectedProviderType === 'chat_completion'">
+            <div v-if="selectedProviderSource" class="provider-config-shell">
+              <div class="provider-config-header">
+                <div class="provider-config-headline">
+                  <div class="provider-config-title">{{ selectedProviderSource.id }}</div>
+                  <div class="provider-config-subtitle">
+                    {{ selectedProviderSource.api_base || 'N/A' }}
                   </div>
                 </div>
 
-                <v-card-text class="provider-config-body">
-                  <template v-if="selectedProviderSource">
-                    <section class="provider-section">
-                      <div class="provider-section-head">
-                        <div class="provider-section-title">{{ tm('providers.settings') }}</div>
-                      </div>
-                      <AstrBotConfig v-if="basicSourceConfig" :iterable="basicSourceConfig" :metadata="providerSourceSchema"
-                        metadataKey="provider" :is-editing="true" />
-                    </section>
+                <div class="provider-config-actions">
+                  <v-btn
+                    color="primary"
+                    prepend-icon="mdi-content-save-outline"
+                    :loading="savingSource"
+                    :disabled="!isSourceModified"
+                    variant="tonal"
+                    rounded="xl"
+                    @click="saveProviderSource"
+                  >
+                    {{ tm('providerSources.save') }}
+                  </v-btn>
+                </div>
+              </div>
 
-                    <section v-if="isOpenAIOAuthSupportedSource" class="provider-section">
-                      <v-card class="mb-4" variant="tonal" color="primary">
-                        <v-card-title class="text-h6">{{ tm('providerSources.oauth.title') }}</v-card-title>
-                        <v-card-text class="pt-2">
-                          <div class="text-body-2 text-medium-emphasis mb-4">
-                            {{ tm('providerSources.oauth.description') }}
-                          </div>
+              <v-divider></v-divider>
 
-                          <div class="d-flex flex-wrap ga-2 mb-4">
-                            <v-chip :color="isOpenAIOAuthBound ? 'success' : 'default'" variant="flat">
-                              {{ isOpenAIOAuthBound ? tm('providerSources.oauth.modeOAuth') : tm('providerSources.oauth.modeManual') }}
-                            </v-chip>
-                            <v-chip v-if="openaiOauthAccountEmail" variant="outlined">
-                              {{ tm('providerSources.oauth.boundAs', { email: openaiOauthAccountEmail }) }}
-                            </v-chip>
-                            <v-chip v-if="openaiOauthExpiresAt" variant="outlined">
-                              {{ tm('providerSources.oauth.expiresAtShort', { time: formatOpenAIOAuthTime(openaiOauthExpiresAt) }) }}
-                            </v-chip>
-                          </div>
-
-                          <v-alert v-if="isOpenAIOAuthBound" type="success" variant="tonal" class="mb-4">
-                            {{ tm('providerSources.oauth.connectedHint') }}
-                          </v-alert>
-                          <v-alert v-else type="info" variant="tonal" class="mb-4">
-                            {{ tm('providerSources.oauth.manualHint') }}
-                          </v-alert>
-
-                          <div class="d-flex flex-wrap ga-2 mb-4">
-                            <v-btn color="primary" prepend-icon="mdi-login-variant" :loading="openaiOauthLoading.start"
-                              @click="startOpenAIOAuth">
-                              {{ tm('providerSources.oauth.start') }}
-                            </v-btn>
-                            <v-btn variant="tonal" prepend-icon="mdi-open-in-new" :disabled="!openaiAuthorizeUrl"
-                              @click="openOpenAIAuthorizeUrl">
-                              {{ tm('providerSources.oauth.openAuthorize') }}
-                            </v-btn>
-                            <v-btn variant="text" prepend-icon="mdi-content-copy" :disabled="!openaiAuthorizeUrl"
-                              @click="copyOpenAIAuthorizeUrl">
-                              {{ tm('providerSources.oauth.copyAuthorize') }}
-                            </v-btn>
-                          </div>
-
-                          <v-text-field :model-value="openaiAuthorizeUrl" :label="tm('providerSources.oauth.authorizeUrl')"
-                            readonly variant="solo-filled" flat class="mb-3"></v-text-field>
-
-                          <v-textarea v-model="openaiOauthInput" :label="tm('providerSources.oauth.callbackInput')"
-                            :hint="tm('providerSources.oauth.callbackHint')" persistent-hint rows="3" auto-grow
-                            variant="solo-filled" flat class="mb-3"></v-textarea>
-
-                          <div class="d-flex flex-wrap ga-2">
-                            <v-btn color="primary" :loading="openaiOauthLoading.complete" @click="completeOpenAIOAuth">
-                              {{ tm('providerSources.oauth.complete') }}
-                            </v-btn>
-                            <v-btn variant="tonal" :disabled="!isOpenAIOAuthBound" :loading="openaiOauthLoading.refresh"
-                              @click="refreshOpenAIOAuth">
-                              {{ tm('providerSources.oauth.refresh') }}
-                            </v-btn>
-                            <v-btn color="error" variant="tonal" :disabled="!isOpenAIOAuthBound"
-                              :loading="openaiOauthLoading.disconnect" @click="disconnectOpenAIOAuth">
-                              {{ tm('providerSources.oauth.disconnect') }}
-                            </v-btn>
-                          </div>
-                        </v-card-text>
-                      </v-card>
-                    </section>
-
-                    <section v-if="advancedSourceConfig" class="provider-section">
-                      <div class="provider-section-head">
-                        <div class="provider-section-title">{{ tm('providerSources.advancedConfig') }}</div>
-                      </div>
-                      <AstrBotConfig
-                        :iterable="advancedSourceConfig"
-                        :metadata="providerSourceSchema"
-                        metadataKey="provider"
-                        :is-editing="true"
-                      />
-                    </section>
-
-                    <section class="provider-section provider-section--models">
-                      <ProviderModelsPanel
-                        :entries="filteredMergedModelEntries"
-                        :available-count="availableModels.length"
-                        v-model:model-search="modelSearch"
-                        :loading-models="loadingModels"
-                        :is-source-modified="isSourceModified"
-                        :supports-image-input="supportsImageInput"
-                        :supports-audio-input="supportsAudioInput"
-                        :supports-tool-call="supportsToolCall"
-                        :supports-reasoning="supportsReasoning"
-                        :format-context-limit="formatContextLimit"
-                        :testing-providers="testingProviders"
-                        :tm="tm"
-                        @fetch-models="fetchAvailableModels"
-                        @open-manual-model="openManualModelDialog"
-                        @open-provider-edit="openProviderEdit"
-                        @toggle-provider-enable="toggleProviderEnable"
-                        @test-provider="testProvider"
-                        @delete-provider="deleteProvider"
-                        @add-model-provider="addModelProvider"
-                      />
-                    </section>
-                  </template>
-                  <div v-else class="provider-empty-state">
-                    <v-icon size="48" color="grey-lighten-1">mdi-cursor-default-click</v-icon>
-                    <p class="mt-2">{{ tm('providerSources.selectHint') }}</p>
+              <div class="provider-config-body">
+                <section class="provider-section">
+                  <div class="provider-section-head">
+                    <div class="provider-section-title">{{ tm('providers.settings') }}</div>
                   </div>
-                </v-card-text>
-              </v-card>
-            </v-col>
-          </v-row>
-        </div>
+                  <AstrBotConfig
+                    v-if="basicSourceConfig"
+                    :iterable="basicSourceConfig"
+                    :metadata="providerSourceSchema"
+                    metadataKey="provider"
+                    :is-editing="true"
+                  />
+                </section>
 
-        <!-- 其他类型: 卡片布局 -->
-        <template v-else>
-          <v-row v-if="filteredProviders.length === 0">
-            <v-col cols="12" class="text-center pa-8">
-              <v-icon size="64" color="grey-lighten-1">mdi-api-off</v-icon>
-              <p class="text-grey mt-4">{{ getEmptyText() }}</p>
-            </v-col>
-          </v-row>
-          <v-row v-else>
-            <v-col v-for="(provider, index) in filteredProviders" :key="index" cols="12" md="6" lg="4" xl="3">
-              <item-card :item="provider" title-field="id" enabled-field="enable"
-                :loading="isProviderTesting(provider.id)" @toggle-enabled="toggleProviderEnable(provider, !provider.enable)"
-                :bglogo="getProviderIcon(provider.provider)" @delete="deleteProvider" @edit="configExistingProvider"
-                @copy="copyProvider" :show-copy-button="true">
+                <v-divider v-if="isOpenAIOAuthSupportedSource || advancedSourceConfig"></v-divider>
 
-                <template #item-details="{ item }">
-                  <!-- 测试状态 chip -->
-                  <v-tooltip v-if="getProviderStatus(item.id)" location="top" max-width="300">
-                    <template v-slot:activator="{ props }">
-                      <v-chip v-bind="props" :color="getStatusColor(getProviderStatus(item.id).status)" size="small">
-                        <v-icon start size="small">
-                          {{ getProviderStatus(item.id).status === 'available' ? 'mdi-check-circle' :
-                            getProviderStatus(item.id).status === 'unavailable' ? 'mdi-alert-circle' :
-                              'mdi-clock-outline' }}
-                        </v-icon>
-                        {{ getStatusText(getProviderStatus(item.id).status) }}
-                      </v-chip>
-                    </template>
-                    <span v-if="getProviderStatus(item.id).status === 'unavailable'">
-                      {{ getProviderStatus(item.id).error }}
-                    </span>
-                    <span v-else>{{ getStatusText(getProviderStatus(item.id).status) }}</span>
-                  </v-tooltip>
-                </template>
-                <template #actions="{ item }">
-                  <v-btn style="z-index: 100000;" variant="tonal" color="info" rounded="xl" size="small"
-                    :loading="isProviderTesting(item.id)" @click="testSingleProvider(item)">
+                <section v-if="isOpenAIOAuthSupportedSource" class="provider-section">
+                  <v-card class="mb-4" variant="tonal" color="primary">
+                    <v-card-title class="text-h6">{{ tm('providerSources.oauth.title') }}</v-card-title>
+                    <v-card-text class="pt-2">
+                      <div class="text-body-2 text-medium-emphasis mb-4">
+                        {{ tm('providerSources.oauth.description') }}
+                      </div>
+
+                      <div class="d-flex flex-wrap ga-2 mb-4">
+                        <v-chip :color="isOpenAIOAuthBound ? 'success' : 'default'" variant="flat">
+                          {{
+                            isOpenAIOAuthBound
+                              ? tm('providerSources.oauth.modeOAuth')
+                              : tm('providerSources.oauth.modeManual')
+                          }}
+                        </v-chip>
+                        <v-chip v-if="openaiOauthAccountEmail" variant="outlined">
+                          {{ tm('providerSources.oauth.boundAs', { email: openaiOauthAccountEmail }) }}
+                        </v-chip>
+                        <v-chip v-if="openaiOauthExpiresAt" variant="outlined">
+                          {{
+                            tm('providerSources.oauth.expiresAtShort', {
+                              time: formatOpenAIOAuthTime(openaiOauthExpiresAt)
+                            })
+                          }}
+                        </v-chip>
+                      </div>
+
+                      <v-alert v-if="isOpenAIOAuthBound" type="success" variant="tonal" class="mb-4">
+                        {{ tm('providerSources.oauth.connectedHint') }}
+                      </v-alert>
+                      <v-alert v-else type="info" variant="tonal" class="mb-4">
+                        {{ tm('providerSources.oauth.manualHint') }}
+                      </v-alert>
+
+                      <div class="d-flex flex-wrap ga-2 mb-4">
+                        <v-btn
+                          color="primary"
+                          prepend-icon="mdi-login-variant"
+                          :loading="openaiOauthLoading.start"
+                          @click="startOpenAIOAuth"
+                        >
+                          {{ tm('providerSources.oauth.start') }}
+                        </v-btn>
+                        <v-btn
+                          variant="tonal"
+                          prepend-icon="mdi-open-in-new"
+                          :disabled="!openaiAuthorizeUrl"
+                          @click="openOpenAIAuthorizeUrl"
+                        >
+                          {{ tm('providerSources.oauth.openAuthorize') }}
+                        </v-btn>
+                        <v-btn
+                          variant="text"
+                          prepend-icon="mdi-content-copy"
+                          :disabled="!openaiAuthorizeUrl"
+                          @click="copyOpenAIAuthorizeUrl"
+                        >
+                          {{ tm('providerSources.oauth.copyAuthorize') }}
+                        </v-btn>
+                      </div>
+
+                      <v-text-field
+                        :model-value="openaiAuthorizeUrl"
+                        :label="tm('providerSources.oauth.authorizeUrl')"
+                        readonly
+                        variant="solo-filled"
+                        flat
+                        class="mb-3"
+                      ></v-text-field>
+
+                      <v-textarea
+                        v-model="openaiOauthInput"
+                        :label="tm('providerSources.oauth.callbackInput')"
+                        :hint="tm('providerSources.oauth.callbackHint')"
+                        persistent-hint
+                        rows="3"
+                        auto-grow
+                        variant="solo-filled"
+                        flat
+                        class="mb-3"
+                      ></v-textarea>
+
+                      <div class="d-flex flex-wrap ga-2">
+                        <v-btn color="primary" :loading="openaiOauthLoading.complete" @click="completeOpenAIOAuth">
+                          {{ tm('providerSources.oauth.complete') }}
+                        </v-btn>
+                        <v-btn
+                          variant="tonal"
+                          :disabled="!isOpenAIOAuthBound"
+                          :loading="openaiOauthLoading.refresh"
+                          @click="refreshOpenAIOAuth"
+                        >
+                          {{ tm('providerSources.oauth.refresh') }}
+                        </v-btn>
+                        <v-btn
+                          color="error"
+                          variant="tonal"
+                          :disabled="!isOpenAIOAuthBound"
+                          :loading="openaiOauthLoading.disconnect"
+                          @click="disconnectOpenAIOAuth"
+                        >
+                          {{ tm('providerSources.oauth.disconnect') }}
+                        </v-btn>
+                      </div>
+                    </v-card-text>
+                  </v-card>
+                </section>
+
+                <v-divider v-if="advancedSourceConfig"></v-divider>
+
+                <section v-if="advancedSourceConfig" class="provider-section">
+                  <div class="provider-section-head">
+                    <div class="provider-section-title">{{ tm('providerSources.advancedConfig') }}</div>
+                  </div>
+                  <AstrBotConfig
+                    :iterable="advancedSourceConfig"
+                    :metadata="providerSourceSchema"
+                    metadataKey="provider"
+                    :is-editing="true"
+                  />
+                </section>
+
+                <v-divider></v-divider>
+
+                <section class="provider-section provider-section--models">
+                  <ProviderModelsPanel
+                    :entries="filteredMergedModelEntries"
+                    :available-count="availableModels.length"
+                    v-model:model-search="modelSearch"
+                    :loading-models="loadingModels"
+                    :is-source-modified="isSourceModified"
+                    :supports-image-input="supportsImageInput"
+                    :supports-audio-input="supportsAudioInput"
+                    :supports-tool-call="supportsToolCall"
+                    :supports-reasoning="supportsReasoning"
+                    :format-context-limit="formatContextLimit"
+                    :testing-providers="testingProviders"
+                    :tm="tm"
+                    @fetch-models="fetchAvailableModels"
+                    @open-manual-model="openManualModelDialog"
+                    @open-provider-edit="openProviderEdit"
+                    @toggle-provider-enable="toggleProviderEnable"
+                    @test-provider="testProvider"
+                    @delete-provider="deleteProvider"
+                    @add-model-provider="openModelAddDialog"
+                  />
+                </section>
+              </div>
+            </div>
+
+            <div v-else class="provider-empty-state">
+              <v-icon size="48" color="grey-lighten-1">mdi-cursor-default-click</v-icon>
+              <p class="mt-2">{{ tm('providerSources.selectHint') }}</p>
+            </div>
+            </template>
+
+            <template v-else>
+            <div v-if="selectedLegacyProvider" class="provider-config-shell">
+              <div class="provider-config-header">
+                <div class="provider-config-headline">
+                  <div class="provider-config-title">
+                    {{ newSelectedProviderConfig.id || selectedLegacyProvider.id }}
+                  </div>
+                  <div class="provider-config-subtitle">
+                    {{
+                      newSelectedProviderConfig.api_base ||
+                      newSelectedProviderConfig.embedding_api_base ||
+                      newSelectedProviderConfig.rerank_api_base ||
+                      newSelectedProviderConfig.type ||
+                      'N/A'
+                    }}
+                  </div>
+                </div>
+
+                <div class="provider-config-actions d-flex align-center ga-2">
+                  <v-btn
+                    v-if="updatingMode"
+                    color="primary"
+                    prepend-icon="mdi-connection"
+                    :loading="isProviderTesting(selectedLegacyProvider.id)"
+                    :disabled="selectedLegacyProvider.enable === false"
+                    variant="text"
+                    rounded="xl"
+                    @click="testSingleProvider(selectedLegacyProvider)"
+                  >
                     {{ tm('availability.test') }}
                   </v-btn>
-                </template>
-              </item-card>
-            </v-col>
-          </v-row>
-        </template>
+                  <v-btn
+                    color="primary"
+                    prepend-icon="mdi-content-save-outline"
+                    :loading="loading"
+                    :disabled="!isLegacyProviderModified"
+                    variant="tonal"
+                    rounded="xl"
+                    @click="saveLegacyProvider"
+                  >
+                    {{ tm('dialogs.config.save') }}
+                  </v-btn>
+                </div>
+              </div>
+
+              <v-divider></v-divider>
+
+              <div class="provider-config-body">
+                <section class="provider-section">
+                  <div class="provider-section-head">
+                    <div class="provider-section-title">{{ tm('providers.settings') }}</div>
+                  </div>
+                  <AstrBotConfig
+                    :iterable="newSelectedProviderConfig"
+                    :metadata="configSchema"
+                    metadataKey="provider"
+                    :is-editing="updatingMode"
+                  />
+                </section>
+              </div>
+            </div>
+
+            <div v-else class="provider-empty-state">
+              <v-icon size="48" color="grey-lighten-1">mdi-cursor-default-click</v-icon>
+              <p class="mt-2">{{ tm('providers.selectHint') }}</p>
+            </div>
+            </template>
+          </div>
+        </div>
       </div>
     </v-container>
 
-    <!-- 添加提供商对话框 -->
-    <AddNewProvider v-model:show="showAddProviderDialog" :metadata="configSchema"
-      :current-provider-type="selectedProviderType"
-      @select-template="selectProviderTemplate" />
-
-    <!-- 手动添加模型对话框 -->
     <v-dialog v-model="showManualModelDialog" max-width="400">
-      <v-card :title="tm('models.manualDialogTitle')">
+      <v-card>
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">
+          {{ tm('models.manualDialogTitle') }}
+        </v-card-title>
         <v-card-text class="py-4">
-          <v-text-field v-model="manualModelId" :label="tm('models.manualDialogModelLabel')" flat variant="solo-filled" autofocus clearable></v-text-field>
-          <v-text-field :model-value="manualProviderId" flat variant="solo-filled" :label="tm('models.manualDialogPreviewLabel')" persistent-hint
-            :hint="tm('models.manualDialogPreviewHint')"></v-text-field>
+          <v-text-field
+            v-model="manualModelId"
+            :label="tm('models.manualDialogModelLabel')"
+            flat
+            variant="solo-filled"
+            autofocus
+            clearable
+          ></v-text-field>
+          <v-text-field
+            :model-value="manualProviderId"
+            flat
+            variant="solo-filled"
+            :label="tm('models.manualDialogPreviewLabel')"
+            persistent-hint
+            :hint="tm('models.manualDialogPreviewHint')"
+          ></v-text-field>
         </v-card-text>
         <v-card-actions class="pa-4">
           <v-spacer></v-spacer>
           <v-btn variant="text" @click="showManualModelDialog = false">取消</v-btn>
-          <v-btn color="primary" @click="confirmManualModel">添加</v-btn>
+          <v-btn color="primary" variant="tonal" @click="confirmManualModel">添加</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
 
-    <!-- 配置对话框 -->
-    <v-dialog v-model="showProviderCfg" width="900" persistent>
-      <v-card
-        :title="updatingMode ? tm('dialogs.config.editTitle') : tm('dialogs.config.addTitle') + ` ${newSelectedProviderName} ` + tm('dialogs.config.provider')">
-        <v-card-text class="py-4">
-          <AstrBotConfig :iterable="newSelectedProviderConfig" :metadata="configSchema"
-            metadataKey="provider" :is-editing="updatingMode" />
-        </v-card-text>
-
-        <v-divider></v-divider>
-
-        <v-card-actions class="pa-4">
-          <v-spacer></v-spacer>
-          <v-btn variant="text" @click="showProviderCfg = false" :disabled="loading">
-            {{ tm('dialogs.config.cancel') }}
-          </v-btn>
-          <v-btn color="primary" @click="newProvider" :loading="loading">
-            {{ tm('dialogs.config.save') }}
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-
-    <!-- 已配置模型编辑对话框 -->
     <v-dialog v-model="showProviderEditDialog" width="800">
-      <v-card :title="providerEditData?.id || tm('dialogs.config.editTitle')">
+      <v-card>
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">
+          {{ providerEditDialogTitle }}
+        </v-card-title>
         <v-card-text class="py-4">
-          <small style="color: gray;">不建议修改 ID，可能会导致指向该模型的相关配置（如默认模型、插件相关配置等）失效。旧版本 AstrBot 的 “提供商 ID” 是下方的 “ID”。</small>
-          <AstrBotConfig v-if="providerEditData" :iterable="providerEditData" :metadata="configSchema"
-            metadataKey="provider" :is-editing="true" />
+          <AstrBotConfig
+            v-if="providerEditData"
+            :iterable="providerEditData"
+            :metadata="providerModelConfigSchema"
+            metadataKey="provider"
+            :is-editing="true"
+          />
         </v-card-text>
         <v-card-actions class="pa-4">
           <v-spacer></v-spacer>
-          <v-btn variant="text" @click="showProviderEditDialog = false"
-            :disabled="savingProviders.includes(providerEditData?.id)">
+          <v-btn
+            variant="text"
+            :disabled="savingProviders.includes(providerEditData?.id)"
+            @click="showProviderEditDialog = false"
+          >
             {{ tm('dialogs.config.cancel') }}
           </v-btn>
-          <v-btn color="primary" @click="saveEditedProvider" :loading="savingProviders.includes(providerEditData?.id)">
+          <v-btn
+            color="primary"
+            variant="tonal"
+            :loading="savingProviders.includes(providerEditData?.id)"
+            @click="saveEditedProvider"
+          >
             {{ tm('dialogs.config.save') }}
           </v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
 
-    <!-- 消息提示 -->
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" :timeout="3000" location="top">
       {{ snackbar.message }}
     </v-snackbar>
 
-    <!-- Agent Runner 测试提示对话框 -->
-    <v-dialog v-model="showAgentRunnerDialog" max-width="520" persistent>
-      <v-card>
-        <v-card-title class="text-h3 d-flex align-center">
-          <v-icon start class="me-2">mdi-information</v-icon>
-          请前往「配置文件」页测试 Agent 执行器
-        </v-card-title>
-        <v-card-text class="py-4 text-body-1 text-medium-emphasis">
-          Agent 执行器的测试请在「配置文件」页进行。
-          <ol class="ml-4 mt-4 mb-4">
-            <li>找到对应的配置文件并打开。</li>
-            <li>找到 Agent 执行方式部分，修改执行器后点击保存。</li>
-            <li>点击右下角的 💬 聊天按钮进行测试。</li>
-          </ol>
-          要让机器人应用这个 Agent 执行器，你也需要前往修改 Agent 执行器。
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer></v-spacer>
-          <v-btn color="grey" variant="text" @click="showAgentRunnerDialog = false">好的</v-btn>
-          <v-btn color="primary" variant="flat" @click="goToConfigPage">点击前往</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
   </div>
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
 import axios from 'axios'
+import { computed, nextTick, ref, watch } from 'vue'
+import { providerApi } from '@/api/v1'
 import { useModuleI18n } from '@/i18n/composables'
 import AstrBotConfig from '@/components/shared/AstrBotConfig.vue'
-import ItemCard from '@/components/shared/ItemCard.vue'
-import AddNewProvider from '@/components/provider/AddNewProvider.vue'
 import ProviderModelsPanel from '@/components/provider/ProviderModelsPanel.vue'
 import ProviderSourcesPanel from '@/components/provider/ProviderSourcesPanel.vue'
+import { useProviderModelConfigDialog } from '@/composables/useProviderModelConfigDialog'
 import { useProviderSources } from '@/composables/useProviderSources'
-import { getProviderIcon } from '@/utils/providerUtils'
 
 const props = defineProps({
   defaultTab: {
@@ -356,7 +426,6 @@ const props = defineProps({
 })
 
 const { tm } = useModuleI18n('features/provider')
-const router = useRouter()
 
 const snackbar = ref({
   show: false,
@@ -375,6 +444,7 @@ const {
   selectedProviderSource,
   editableProviderSource,
   availableModels,
+  loadingSources,
   loadingModels,
   savingSource,
   testingProviders,
@@ -392,6 +462,7 @@ const {
   advancedSourceConfig,
   manualProviderId,
   resolveSourceIcon,
+  isMonochromeSourceIcon,
   getSourceDisplayName,
   supportsImageInput,
   supportsAudioInput,
@@ -404,33 +475,55 @@ const {
   deleteProviderSource,
   saveProviderSource,
   fetchAvailableModels,
-  addModelProvider,
+  buildModelProviderConfig,
   deleteProvider,
   modelAlreadyConfigured,
+  toggleProviderEnable,
   testProvider,
-  loadConfig,
+  loadConfig
 } = useProviderSources({
   defaultTab: props.defaultTab,
   tm,
   showMessage
 })
 
-// 非 chat 类型的状态
-const showAddProviderDialog = ref(false)
-const showProviderCfg = ref(false)
-const newSelectedProviderName = ref('')
+const unsavedLegacyProviderMarker = Symbol('unsavedLegacyProvider')
+const legacyProviderDrafts = ref([])
+const selectedLegacyProvider = ref(null)
 const newSelectedProviderConfig = ref({})
 const newProviderOriginalId = ref('')
 const updatingMode = ref(false)
 const loading = ref(false)
-const providerStatuses = ref([])
-const showAgentRunnerDialog = ref(false)
-const showProviderEditDialog = ref(false)
-const providerEditData = ref(null)
-const providerEditOriginalId = ref('')
+const isLegacyProviderModified = ref(false)
 const showManualModelDialog = ref(false)
+let suppressLegacyProviderWatch = false
 
-const savingProviders = ref([])
+const displayedLegacyProviders = computed(() => [
+  ...filteredProviders.value,
+  ...legacyProviderDrafts.value.filter(
+    (provider) => provider.provider_type === selectedProviderType.value
+  )
+])
+
+const {
+  showProviderEditDialog,
+  providerEditData,
+  savingProviders,
+  providerModelConfigSchema,
+  providerEditDialogTitle,
+  openProviderEdit,
+  openModelAddDialog,
+  saveEditedProvider
+} = useProviderModelConfigDialog({
+  selectedProviderSource,
+  configSchema,
+  buildModelProviderConfig,
+  modelAlreadyConfigured,
+  loadConfig,
+  tm,
+  showMessage
+})
+
 const openaiAuthorizeUrl = ref('')
 const openaiOauthInput = ref('')
 const openaiOauthLoading = ref({
@@ -497,7 +590,10 @@ async function startOpenAIOAuth() {
 
   openaiOauthLoading.value.start = true
   try {
-    const res = await axios.post('/api/config/provider_sources/openai_oauth/start', { source_id: sourceId, config: editableProviderSource.value })
+    const res = await axios.post('/api/config/provider_sources/openai_oauth/start', {
+      source_id: sourceId,
+      config: editableProviderSource.value
+    })
     if (res.data?.status !== 'ok') {
       throw new Error(res.data?.message || tm('providerSources.oauth.startError'))
     }
@@ -596,12 +692,6 @@ async function disconnectOpenAIOAuth() {
   }
 }
 
-function openProviderEdit(provider) {
-  providerEditData.value = JSON.parse(JSON.stringify(provider))
-  providerEditOriginalId.value = provider.id
-  showProviderEditDialog.value = true
-}
-
 function openManualModelDialog() {
   if (!selectedProviderSource.value) {
     showMessage(tm('providerSources.selectHint'), 'error')
@@ -625,8 +715,8 @@ async function confirmManualModel() {
     showMessage(tm('models.manualModelExists'), 'error')
     return
   }
-  await addModelProvider(modelId)
   showManualModelDialog.value = false
+  openModelAddDialog(modelId)
 }
 
 watch(() => props.defaultTab, (val) => {
@@ -638,30 +728,75 @@ watch(() => selectedProviderSource.value?.id, () => {
   openaiOauthInput.value = ''
 })
 
-// ===== 非 chat 类型的方法 =====
-function getEmptyText() {
-  return tm('providers.empty.typed', { type: selectedProviderType.value })
-}
-
-function selectProviderTemplate(name) {
-  newSelectedProviderName.value = name
+watch(selectedProviderType, () => {
+  selectedLegacyProvider.value = null
   newProviderOriginalId.value = ''
-  showProviderCfg.value = true
   updatingMode.value = false
-  newSelectedProviderConfig.value = JSON.parse(JSON.stringify(
-    configSchema.value.provider.config_template[name] || {}
-  ))
+  isLegacyProviderModified.value = false
+  suppressLegacyProviderWatch = true
+  newSelectedProviderConfig.value = {}
+  nextTick(() => {
+    suppressLegacyProviderWatch = false
+  })
+})
+
+watch(newSelectedProviderConfig, (config) => {
+  if (suppressLegacyProviderWatch || !selectedLegacyProvider.value) return
+
+  isLegacyProviderModified.value = true
+  if (selectedLegacyProvider.value[unsavedLegacyProviderMarker]) {
+    Object.assign(
+      selectedLegacyProvider.value,
+      JSON.parse(JSON.stringify(config))
+    )
+  }
+}, { deep: true })
+
+function getEmptyText() {
+  const selectedType = providerTypes.value.find(
+    (type) => type.value === selectedProviderType.value
+  )
+  return tm('providers.empty.typed', {
+    type: selectedType?.label || selectedProviderType.value
+  })
 }
 
-function configExistingProvider(provider) {
-  newSelectedProviderName.value = provider.id
-  newProviderOriginalId.value = provider.id
+function addLegacyProvider(name) {
+  const template = configSchema.value.provider?.config_template?.[name]
+  if (!template) {
+    showMessage(tm('dialogs.addProvider.noTemplates'), 'error')
+    return
+  }
+
+  const draft = JSON.parse(JSON.stringify(template))
+  const existingIds = new Set([
+    ...providers.value.map((provider) => provider.id),
+    ...legacyProviderDrafts.value.map((provider) => provider.id)
+  ])
+  const baseId = String(draft.id || name)
+  let nextId = baseId
+  let counter = 1
+  while (existingIds.has(nextId)) {
+    nextId = `${baseId}_${counter}`
+    counter += 1
+  }
+  draft.id = nextId
+  draft[unsavedLegacyProviderMarker] = true
+  legacyProviderDrafts.value.push(draft)
+  selectLegacyProvider(draft)
+}
+
+function selectLegacyProvider(provider) {
+  selectedLegacyProvider.value = provider
+  newProviderOriginalId.value = provider[unsavedLegacyProviderMarker]
+    ? ''
+    : provider.id
+  suppressLegacyProviderWatch = true
   newSelectedProviderConfig.value = {}
 
-  // 比对默认配置模版，看看是否有更新
-  let templates = configSchema.value.provider.config_template || {}
+  const templates = configSchema.value.provider?.config_template || {}
   let defaultConfig = {}
-  for (let key in templates) {
+  for (const key in templates) {
     if (templates[key]?.type === provider.type) {
       defaultConfig = templates[key]
       break
@@ -670,8 +805,8 @@ function configExistingProvider(provider) {
 
   const mergeConfigWithOrder = (target, source, reference) => {
     if (source && typeof source === 'object' && !Array.isArray(source)) {
-      for (let key in source) {
-        if (source.hasOwnProperty(key)) {
+      for (const key in source) {
+        if (Object.prototype.hasOwnProperty.call(source, key)) {
           if (typeof source[key] === 'object' && source[key] !== null) {
             target[key] = Array.isArray(source[key]) ? [...source[key]] : { ...source[key] }
           } else {
@@ -681,7 +816,7 @@ function configExistingProvider(provider) {
       }
     }
 
-    for (let key in reference) {
+    for (const key in reference) {
       if (typeof reference[key] === 'object' && reference[key] !== null) {
         if (!(key in target)) {
           if (Array.isArray(reference[key])) {
@@ -707,89 +842,47 @@ function configExistingProvider(provider) {
     mergeConfigWithOrder(newSelectedProviderConfig.value, provider, defaultConfig)
   }
 
-  showProviderCfg.value = true
-  updatingMode.value = true
+  updatingMode.value = !provider[unsavedLegacyProviderMarker]
+  isLegacyProviderModified.value = Boolean(provider[unsavedLegacyProviderMarker])
+  nextTick(() => {
+    suppressLegacyProviderWatch = false
+  })
 }
 
-async function newProvider() {
+async function saveLegacyProvider() {
+  if (!selectedLegacyProvider.value) return
+
   loading.value = true
   const wasUpdating = updatingMode.value
+  const selectedDraft = selectedLegacyProvider.value
+  const savedId = newSelectedProviderConfig.value.id
   try {
     if (wasUpdating) {
-      const res = await axios.post('/api/config/provider/update', {
-        id: newProviderOriginalId.value || newSelectedProviderName.value,
-        config: newSelectedProviderConfig.value
-      })
+      const res = await providerApi.update(
+        newProviderOriginalId.value,
+        newSelectedProviderConfig.value
+      )
       if (res.data.status === 'error') {
-        showMessage(res.data.message || "更新失败!", 'error')
-        return
+        throw new Error(res.data.message || '更新失败!')
       }
-      showMessage(res.data.message || "更新成功!")
-      if (wasUpdating) {
-        updatingMode.value = false
-      }
+      showMessage(res.data.message || '更新成功!')
     } else {
-      const res = await axios.post('/api/config/provider/new', newSelectedProviderConfig.value)
+      const res = await providerApi.create(newSelectedProviderConfig.value)
       if (res.data.status === 'error') {
-        showMessage(res.data.message || "添加失败!", 'error')
-        return
+        throw new Error(res.data.message || '添加失败!')
       }
-      showMessage(res.data.message || "添加成功!")
-    }
-    showProviderCfg.value = false
-  } catch (err) {
-    showMessage(err.response?.data?.message || err.message, 'error')
-  } finally {
-    loading.value = false
-    await loadConfig()
-  }
-}
-
-async function saveEditedProvider() {
-  if (!providerEditData.value) return
-
-  savingProviders.value.push(providerEditData.value.id)
-  try {
-    const res = await axios.post('/api/config/provider/update', {
-      id: providerEditOriginalId.value || providerEditData.value.id,
-      config: providerEditData.value
-    })
-
-    if (res.data.status === 'error') {
-      throw new Error(res.data.message)
+      showMessage(res.data.message || '添加成功!')
+      legacyProviderDrafts.value = legacyProviderDrafts.value.filter(
+        (provider) => provider !== selectedDraft
+      )
     }
 
-    showMessage(res.data.message || tm('providerSources.saveSuccess'))
-    showProviderEditDialog.value = false
     await loadConfig()
-  } catch (err) {
-    showMessage(err.response?.data?.message || err.message || tm('providerSources.saveError'), 'error')
-  } finally {
-    savingProviders.value = savingProviders.value.filter(id => id !== providerEditData.value?.id)
-  }
-}
-
-async function copyProvider(providerToCopy) {
-  const newProviderConfig = JSON.parse(JSON.stringify(providerToCopy))
-
-  const generateUniqueId = (baseId) => {
-    let newId = `${baseId}_copy`
-    let counter = 1
-    const existingIds = providers.value.map(p => p.id)
-    while (existingIds.includes(newId)) {
-      newId = `${baseId}_copy_${counter}`
-      counter++
+    const savedProvider = providers.value.find((provider) => provider.id === savedId)
+    if (savedProvider) {
+      selectLegacyProvider(savedProvider)
+      isLegacyProviderModified.value = false
     }
-    return newId
-  }
-  newProviderConfig.id = generateUniqueId(providerToCopy.id)
-  newProviderConfig.enable = false
-
-  loading.value = true
-  try {
-    const res = await axios.post('/api/config/provider/new', newProviderConfig)
-    showMessage(res.data.message || `成功复制并创建了 ${newProviderConfig.id}`)
-    await loadConfig()
   } catch (err) {
     showMessage(err.response?.data?.message || err.message, 'error')
   } finally {
@@ -797,23 +890,28 @@ async function copyProvider(providerToCopy) {
   }
 }
 
-async function toggleProviderEnable(provider, value) {
-  provider.enable = value
-
-  try {
-    const res = await axios.post('/api/config/provider/update', {
-      id: provider.id,
-      config: provider
-    })
-
-    if (res.data.status === 'error') {
-      throw new Error(res.data.message)
+async function deleteLegacyProvider(provider) {
+  if (provider[unsavedLegacyProviderMarker]) {
+    legacyProviderDrafts.value = legacyProviderDrafts.value.filter(
+      (draft) => draft !== provider
+    )
+    if (selectedLegacyProvider.value === provider) {
+      selectedLegacyProvider.value = null
+      newSelectedProviderConfig.value = {}
+      newProviderOriginalId.value = ''
+      updatingMode.value = false
+      isLegacyProviderModified.value = false
     }
-    showMessage(res.data.message || tm('messages.success.statusUpdate'))
-  } catch (error) {
-    showMessage(error.response?.data?.message || error.message || tm('providerSources.saveError'), 'error')
-  } finally {
-    await loadConfig()
+    return
+  }
+
+  const deleted = await deleteProvider(provider)
+  if (deleted && selectedLegacyProvider.value?.id === provider.id) {
+    selectedLegacyProvider.value = null
+    newSelectedProviderConfig.value = {}
+    newProviderOriginalId.value = ''
+    updatingMode.value = false
+    isLegacyProviderModified.value = false
   }
 }
 
@@ -821,202 +919,189 @@ function isProviderTesting(providerId) {
   return testingProviders.value.includes(providerId)
 }
 
-function getProviderStatus(providerId) {
-  return providerStatuses.value.find(s => s.id === providerId)
-}
-
 async function testSingleProvider(provider) {
   if (isProviderTesting(provider.id)) return
-
-  testingProviders.value.push(provider.id)
-
-  const statusIndex = providerStatuses.value.findIndex(s => s.id === provider.id)
-  const pendingStatus = {
-    id: provider.id,
-    name: provider.id,
-    status: 'pending',
-    error: null
+  if (provider.enable === false) {
+    showMessage('该提供商未被用户启用', 'error')
+    return
   }
-  if (statusIndex !== -1) {
-    providerStatuses.value.splice(statusIndex, 1, pendingStatus)
-  } else {
-    providerStatuses.value.unshift(pendingStatus)
-  }
-
-  try {
-    if (!provider.enable) {
-      throw new Error('该提供商未被用户启用')
-    }
-    if (provider.provider_type === 'agent_runner') {
-      showAgentRunnerDialog.value = true
-      providerStatuses.value = providerStatuses.value.filter(s => s.id !== provider.id)
-      return
-    }
-
-    const startTime = performance.now()
-    const res = await axios.get(`/api/config/provider/check_one?id=${provider.id}`)
-    if (res.data && res.data.status === 'ok') {
-      const index = providerStatuses.value.findIndex(s => s.id === provider.id)
-      if (index !== -1) {
-        providerStatuses.value.splice(index, 1, res.data.data)
-      }
-      const latency = Math.max(0, Math.round(performance.now() - startTime))
-      showMessage(tm('models.testSuccessWithLatency', { id: provider.id, latency }))
-    } else {
-      throw new Error(res.data?.message || `Failed to check status for ${provider.id}`)
-    }
-  } catch (err) {
-    const errorMessage = err.response?.data?.message || err.message || 'Unknown error'
-    const index = providerStatuses.value.findIndex(s => s.id === provider.id)
-    const failedStatus = {
-      id: provider.id,
-      name: provider.id,
-      status: 'unavailable',
-      error: errorMessage
-    }
-    if (index !== -1) {
-      providerStatuses.value.splice(index, 1, failedStatus)
-    }
-  } finally {
-    const index = testingProviders.value.indexOf(provider.id)
-    if (index > -1) {
-      testingProviders.value.splice(index, 1)
-    }
-  }
+  await testProvider(provider)
 }
-
-function getStatusColor(status) {
-  switch (status) {
-    case 'available':
-      return 'success'
-    case 'unavailable':
-      return 'error'
-    case 'pending':
-      return 'grey'
-    default:
-      return 'default'
-  }
-}
-
-function getStatusText(status) {
-  const messages = {
-    available: tm('availability.available'),
-    unavailable: tm('availability.unavailable'),
-    pending: tm('availability.pending')
-  }
-  return messages[status] || status
-}
-
-function goToConfigPage() {
-  router.push('/config')
-  showAgentRunnerDialog.value = false
-}
-
 </script>
 
 <style scoped>
 .provider-page {
   --provider-surface: rgb(var(--v-theme-surface));
-  --provider-text: rgb(var(--v-theme-on-surface));
-  --provider-muted: rgba(var(--v-theme-on-surface), 0.68);
-  --provider-subtle: rgba(var(--v-theme-on-surface), 0.56);
-  --provider-border: rgba(var(--v-theme-on-surface), 0.1);
-  --provider-border-strong: rgba(var(--v-theme-on-surface), 0.14);
-  --provider-soft: rgba(var(--v-theme-primary), 0.08);
-  padding: 20px;
-  padding-top: 8px;
-  padding-bottom: 40px;
+  --provider-border: rgba(var(--v-theme-on-surface), 0.08);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+  overflow: hidden;
+  width: 100%;
+}
+
+.provider-page > .v-container {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.provider-tabs-scroll {
+  flex: 0 0 auto;
+  overflow-x: auto;
+  padding: 4px 12px 8px;
+  scrollbar-width: none;
+}
+
+.provider-tabs-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.provider-tabs {
+  align-items: center;
+  display: inline-flex;
+  gap: 2px;
+  min-width: max-content;
+}
+
+.provider-tab {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  color: rgba(var(--v-theme-on-surface), 0.58);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px;
+  white-space: nowrap;
+}
+
+.provider-tab:hover {
+  background: rgba(var(--v-theme-on-surface), 0.045);
+  color: rgba(var(--v-theme-on-surface), 0.78);
+}
+
+.provider-tab--active {
+  background: rgba(var(--v-theme-on-surface), 0.065);
+  color: rgba(var(--v-theme-on-surface), 0.86);
+}
+
+.provider-tab--active:hover {
+  background: rgba(var(--v-theme-on-surface), 0.09);
+  color: rgba(var(--v-theme-on-surface), 0.9);
+}
+
+.provider-content {
+  display: flex;
+  flex: 1;
+  margin: 0 auto;
+  max-width: 1200px;
+  min-height: 0;
+  padding: 16px 12px 12px;
+  width: 100%;
 }
 
 .provider-workbench {
-  display: flex;
-  justify-content: center;
-}
-
-.provider-workbench__shell {
-  width: 100%;
-  max-width: 1500px;
-}
-
-.provider-workbench__sources,
-.provider-workbench__settings {
-  min-width: 0;
-}
-
-.provider-config-card {
-  min-height: 280px;
   border: 1px solid var(--provider-border);
   border-radius: 16px;
   background: var(--provider-surface);
+  display: grid;
+  flex: 1;
+  grid-template-columns: minmax(280px, 320px) 1px minmax(0, 1fr);
+  min-height: 0;
+  overflow: hidden;
+  width: 100%;
+}
+
+.provider-workbench__sidebar,
+.provider-workbench__main {
+  min-height: 0;
+  min-width: 0;
   overflow: hidden;
 }
 
-.provider-settings-panel {
+.provider-workbench__divider {
+  background: var(--provider-border);
+}
+
+.provider-workbench__main {
+  display: flex;
+}
+
+.provider-config-shell {
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .provider-config-header {
+  background: var(--provider-surface);
   display: flex;
+  flex: 0 0 auto;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 12px;
-  padding: 20px 20px 16px;
-  border-bottom: 1px solid var(--provider-border);
+  gap: 16px;
+  padding: 18px 22px 14px;
+  position: relative;
+  z-index: 1;
+}
+
+.provider-config-shell > :deep(.v-divider) {
+  flex: 0 0 auto;
 }
 
 .provider-config-headline {
   min-width: 0;
 }
 
-.provider-config-kicker {
-  color: var(--provider-subtle);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
 .provider-config-title {
-  margin-top: 8px;
-  font-size: 22px;
+  font-size: 21px;
   line-height: 1.1;
-  font-weight: 650;
+  font-weight: 680;
   letter-spacing: -0.03em;
   overflow-wrap: anywhere;
-  color: var(--provider-text);
 }
 
 .provider-config-subtitle {
-  margin-top: 8px;
-  color: var(--provider-muted);
+  margin-top: 6px;
+  color: rgba(var(--v-theme-on-surface), 0.62);
   font-size: 13px;
   line-height: 1.6;
   overflow-wrap: anywhere;
 }
 
 .provider-config-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
   flex-shrink: 0;
 }
 
 .provider-config-body {
-  display: grid;
-  gap: 14px;
-  padding: 18px 20px 20px;
+  flex: 1;
+  min-height: 0;
+  overscroll-behavior: contain;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 .provider-section {
-  border: 1px solid var(--provider-border);
-  border-radius: 14px;
-  background: rgba(var(--v-theme-primary), 0.02);
-  padding: 16px;
+  padding: 18px 22px;
 }
 
 .provider-section--models {
-  padding: 18px;
+  padding-top: 16px;
+}
+
+.provider-section--models :deep(.provider-models-list--available) {
+  max-height: none;
+  overflow: visible;
 }
 
 .provider-section-head {
@@ -1027,30 +1112,69 @@ function goToConfigPage() {
   font-size: 16px;
   font-weight: 650;
   line-height: 1.4;
-  color: var(--provider-text);
 }
 
 .provider-empty-state {
+  flex: 1;
   min-height: 420px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  color: var(--provider-muted);
+  color: rgba(var(--v-theme-on-surface), 0.56);
 }
 
 @media (max-width: 960px) {
-  .provider-config-card {
-    min-height: auto;
+  .provider-workbench {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1px minmax(0, 1fr);
+  }
+
+  .provider-workbench__divider {
+    height: 1px;
   }
 
   .provider-config-header {
     flex-direction: column;
-    align-items: flex-start;
+    align-items: stretch;
+    padding: 16px;
   }
 
-  .provider-config-body {
-    padding: 18px;
+  .provider-config-actions :deep(.v-btn) {
+    width: 100%;
+  }
+
+  .provider-config-actions {
+    align-items: stretch !important;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .provider-section {
+    padding: 16px;
+  }
+}
+
+@media (max-width: 600px) {
+  .provider-tabs-scroll {
+    padding-inline: 4px;
+  }
+
+  .provider-workbench {
+    border-radius: 12px;
+  }
+
+  .provider-tab {
+    padding-inline: 11px;
+  }
+
+  .provider-config-title {
+    font-size: 18px;
+  }
+
+  .provider-empty-state {
+    min-height: 260px;
+    padding: 24px;
   }
 }
 </style>

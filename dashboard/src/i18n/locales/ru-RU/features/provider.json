@@ -5,11 +5,12 @@
         "title": "Сервис-провайдеры",
         "settings": "Настройки",
         "addProvider": "Добавить провайдера",
+        "deleteProvider": "Удалить провайдера",
+        "selectHint": "Выберите провайдера",
         "providerType": "Тип провайдера",
         "tabs": {
             "all": "Все",
             "chatCompletion": "Диалоги",
-            "agentRunner": "Агенты",
             "speechToText": "STT (Речь -> Текст)",
             "textToSpeech": "TTS (Текст -> Речь)",
             "embedding": "Эмбеддинги",
@@ -47,7 +48,6 @@
             "title": "Новый провайдер",
             "tabs": {
                 "basic": "Диалоги",
-                "agentRunner": "Агенты",
                 "speechToText": "Преобразование текста в речь",
                 "textToSpeech": "Переранжирование",
                 "embedding": "Эмбеддинги",
@@ -94,12 +94,14 @@
     "providerSources": {
         "title": "Источник провайдера",
         "add": "Добавить",
+        "delete": "Удалить источник провайдера",
         "empty": "Источники не найдены",
         "selectHint": "Пожалуйста, выберите источник провайдера",
         "selectCreated": "Выбрать существующий источник",
         "save": "Сохранить конфиг",
         "saveAndFetchModels": "Сохранить и загрузить модели",
         "fetchModels": "Загрузить список моделей",
+        "getApiKey": "Получить API-ключ",
         "saveSuccess": "Источник успешно сохранен",
         "saveError": "Ошибка сохранения источника",
         "deleteConfirm": "Вы уверены, что хотите удалить источник «{id}»? Все связанные конфигурации моделей будут удалены.",
@@ -124,6 +126,7 @@
         }
     },
     "models": {
+        "title": "Модели",
         "available": "Доступные модели",
         "configured": "Настроенные модели",
         "empty": "Модели не настроены. Нажмите «Загрузить список моделей» выше.",
@@ -134,6 +137,7 @@
         "deleteSuccess": "Модель удалена",
         "deleteError": "Ошибка удаления модели",
         "testSuccess": "Тест модели «{id}» пройден успешно",
+        "testSuccessWithLatency": "Тест модели «{id}» пройден успешно, задержка {latency} мс",
         "testError": "Тест модели провален",
         "searchPlaceholder": "Поиск по имени или ID",
         "manualAddButton": "Добавить вручную",
@@ -144,6 +148,17 @@
         "manualModelRequired": "Укажите ID модели",
         "manualModelExists": "Эта модель уже добавлена",
         "configure": "Настроить",
+        "testButton": "Тестировать модель",
+        "metadata": {
+            "image": "Ввод изображений",
+            "audio": "Ввод аудио",
+            "toolUse": "Использование инструментов",
+            "reasoning": "Рассуждение",
+            "context": "Контекстное окно {tokens}",
+            "available": "Metadata модели поддерживает {capability}",
+            "enabled": "{capability} включено",
+            "supportedDisabled": "Metadata модели поддерживает {capability}, но эта возможность не включена в modalities текущего провайдера."
+        },
         "tooltips": {
             "providerId": "ID провайдера",
             "modelId": "ID модели"

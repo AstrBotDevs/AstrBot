@@ -6,8 +6,9 @@
   "page": {
     "title": "Future Task Management",
     "beta": "Experimental",
-    "subtitle": "See scheduled tasks for AstrBot. AstrBot will wake up, run them, and deliver the results.",
+    "subtitle": "AstrBot wakes up at the scheduled time, completes the task, and sends the result back to the target conversation.",
     "proactive": {
+      "link": "Supported platforms",
       "supported": "Proactive delivery is available only on the configured platforms below",
       "unsupported": "No proactive messaging platforms enabled. Turn them on in Platform settings."
     }
@@ -18,8 +19,35 @@
     "refresh": "Refresh",
     "delete": "Delete",
     "cancel": "Cancel",
+    "close": "Close",
+    "more": "More actions",
+    "runNow": "Run now",
     "save": "Save",
     "submit": "Create"
+  },
+  "platformDialog": {
+    "title": "Supported Platforms",
+    "description": "Only the following platforms support proactive message delivery. AstrBot can send future task results back only to target conversations on these platforms."
+  },
+  "card": {
+    "onceAt": "One-off · {time}",
+    "runAt": "Run at: {time}",
+    "nextRun": "Next run: {time}",
+    "dailyAt": "Daily at {time}",
+    "weeklyAt": "Every {day} at {time}",
+    "monthlyAt": "Monthly on day {day} at {time}",
+    "everyMinutes": "Every {count} minutes",
+    "everyHours": "Every {count} hours",
+    "everyDays": "Every {count} days",
+    "customCron": "Custom · {cron}",
+    "noDeliveryTarget": "No delivery target"
+  },
+  "filters": {
+    "search": "Search title and content",
+    "umo": "Filter by delivery target",
+    "noUmos": "No UMOs",
+    "noDeliveryTarget": "No delivery target",
+    "noMatches": "No matching future tasks."
   },
   "overview": {
     "totalTasks": "Total Tasks",
@@ -82,12 +110,43 @@
     "editTitle": "Edit Task",
     "chatHint": "You can ask AstrBot in chat to create future tasks instead of adding them here.",
     "runOnce": "One-off task",
-    "name": "Task name",
-    "note": "Task description",
-    "cron": "Cron expression",
+    "name": "Task name *",
+    "note": "Task requirements *",
+    "scheduleMode": "Execution time *",
+    "scheduleModes": {
+      "once": "One-off",
+      "interval": "Interval",
+      "daily": "Daily",
+      "weekly": "Weekly",
+      "monthly": "Monthly",
+      "cron": "Custom Cron"
+    },
+    "intervalEvery": "Every *",
+    "intervalUnit": "Unit *",
+    "intervalUnits": {
+      "minutes": "Minutes",
+      "hours": "Hours",
+      "days": "Days"
+    },
+    "dailyTime": "Time *",
+    "weeklyDay": "Weekday *",
+    "weeklyTime": "Time *",
+    "monthlyDay": "Day *",
+    "monthlyTime": "Time *",
+    "weekdays": {
+      "sunday": "Sunday",
+      "monday": "Monday",
+      "tuesday": "Tuesday",
+      "wednesday": "Wednesday",
+      "thursday": "Thursday",
+      "friday": "Friday",
+      "saturday": "Saturday"
+    },
+    "cron": "Cron expression *",
     "cronPlaceholder": "0 9 * * *",
-    "runAt": "Run at",
-    "session": "Target session (platform_id:message_type:session_id)",
+    "runAt": "Run at *",
+    "session": "Deliver to",
+    "noUmos": "No sessions available",
     "timezone": "Timezone (optional, e.g. Asia/Shanghai)",
     "enabled": "Enabled"
   },
@@ -97,11 +156,18 @@
     "updateFailed": "Failed to update",
     "deleteSuccess": "Deleted",
     "deleteFailed": "Failed to delete",
-    "sessionRequired": "Session is required",
-    "noteRequired": "Description is required",
+    "nameRequired": "Task name is required",
+    "sessionRequired": "Delivery target is required",
+    "noteRequired": "Task requirements are required",
     "cronRequired": "Cron expression is required",
     "runAtRequired": "Please select run time",
+    "intervalRequired": "Please enter a valid interval",
+    "dailyTimeRequired": "Please select the daily run time",
+    "weeklyTimeRequired": "Please select the weekly day and time",
+    "monthlyTimeRequired": "Please select the monthly day and time",
     "createSuccess": "Created successfully",
-    "createFailed": "Failed to create"
+    "createFailed": "Failed to create",
+    "runStarted": "Started",
+    "runFailed": "Failed to run"
   }
 }

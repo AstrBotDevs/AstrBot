@@ -49,6 +49,8 @@ export function clearSidebarCustomization() {
  * @param {boolean} [options.assembleMoreGroup=false] - 是否组装带更多分组的整体数组
  * @returns {{ mainItems: Array, moreItems: Array, merged?: Array }}
  */
+import { MORE_GROUP_KEY } from "@/layouts/full/vertical-sidebar/sidebarItem";
+
 export function resolveSidebarItems(defaultItems, customization, options = {}) {
   const { cloneItems = false, assembleMoreGroup = false } = options;
 
@@ -73,7 +75,7 @@ export function resolveSidebarItems(defaultItems, customization, options = {}) {
 
   // 收集所有条目，按 title 建索引
   defaultItems.forEach(item => {
-    if (item.children && item.title === 'core.navigation.groups.more') {
+    if (item.children && item.title === MORE_GROUP_KEY) {
       item.children.forEach(child => {
         all.set(child.title, cloneItems ? { ...child } : child);
         defaultMore.push(child.title);
@@ -138,7 +140,7 @@ export function resolveSidebarItems(defaultItems, customization, options = {}) {
       merged = [
         ...mainItems,
         {
-          title: 'core.navigation.groups.more',
+          title: MORE_GROUP_KEY,
           icon: 'mdi-dots-horizontal',
           children
         }

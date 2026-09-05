@@ -89,6 +89,43 @@ Windows 同步 Host Time（需要WSL2）
 sudo docker logs -f astrbot
 ```
 
+## 通过 Windows Docker Desktop 部署
+
+### 使用`Windows CMD`
+
+`TZ` 的值请设置为 **IANA 时区标准格式**（地区/城市），例如中国为 `Asia/Shanghai`
+
+```bash
+docker run -itd -p 6185:6185 -p 6199:6199 -e TZ=Asia/Shanghai -v "%cd%\data:/AstrBot/data" --name astrbot soulter/astrbot:latest
+```
+> [!TIP]
+> 如果您的网络环境在中国大陆境内，上述命令将无法正常拉取。请使用以下命令拉取镜像：
+>
+> ```bash
+> docker run -itd -p 6185:6185 -p 6199:6199 -e TZ=Asia/Shanghai -v "%cd%\data:/AstrBot/data" --name astrbot m.daocloud.io/docker.io/soulter/astrbot:latest
+> ```
+>
+> (感谢 DaoCloud ❤️)
+> 
+### 使用`PowerShell`
+
+`TZ` 的值请设置为 **IANA 时区标准格式**（地区/城市），例如中国为 `Asia/Shanghai`
+
+```powershell
+docker run -itd -p 6185:6185 -p 6199:6199 -e TZ=Asia/Shanghai -v "${PWD}\data:/AstrBot/data" --name astrbot soulter/astrbot:latest
+```
+> [!TIP]
+> 如果您的网络环境在中国大陆境内，上述命令将无法正常拉取。请使用以下命令拉取镜像：
+>
+> ```powershell
+> docker run -itd -p 6185:6185 -p 6199:6199 -e TZ=Asia/Shanghai -v "${PWD}\data:/AstrBot/data" --name astrbot m.daocloud.io/docker.io/soulter/astrbot:latest
+> ```
+>
+> (感谢 DaoCloud ❤️)
+> 
+
+
+
 ## 🎉 大功告成
 
 如果一切顺利，你会看到 AstrBot 打印出的日志。
@@ -98,7 +135,7 @@ sudo docker logs -f astrbot
 > [!TIP]
 > 由于 Docker 隔离了网络环境，所以不能使用 `localhost` 访问管理面板。
 >
-> 默认用户名和密码是 `astrbot` 和 `astrbot`。
+> 首次登录请使用启动日志中打印的随机初始密码（用户名通常为 `astrbot`）。登录后请立即修改密码。
 >
 > 如果部署在云服务器上，需要在相应厂商控制台里放行对应端口。
 

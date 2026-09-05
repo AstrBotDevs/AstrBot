@@ -12,9 +12,13 @@ Behavior when `provider_settings.computer_use_require_admin=True`:
   access depends on the local runtime implementation and host OS permissions.
   Upload and download tools are defined here, but `LocalBooter` does not
   implement them and the main agent does not expose them in local mode.
-- Member + local: read/write/edit/grep are restricted to `data/skills`,
-  `data/workspaces/{normalized_umo}`, and `/tmp/.astrbot`. Upload/download are
-  denied by `check_admin_permission` if invoked.
+- Member + local: read/grep are restricted to `data/skills`,
+  plugin-provided `data/plugins/*/skills`,
+  built-in plugin `astrbot/builtin_stars/*/skills`,
+  the current session or project workspace, and `/tmp/.astrbot`; write/edit are
+  restricted to the current workspace and temporary directories. Globally
+  installed and plugin-provided Skills are read-only. Upload/download are denied
+  by `check_admin_permission` if invoked.
 - Admin + sandbox: read/write/edit/grep are not path-restricted by this
   module;
   sandbox filesystem boundaries are enforced by the sandbox runtime. Upload and
@@ -26,12 +30,12 @@ When `computer_use_require_admin=False`, member behavior in this module matches
 admin behavior.
 
 Local path resolution rule:
-- In local runtime, relative paths are resolved under
-  `data/workspaces/{normalized_umo}`.
+- In local runtime, relative paths are resolved under the primary workspace.
 - In sandbox runtime, relative paths are passed through unchanged.
 """
 
 import os
+import stat
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -43,8 +47,10 @@ from astrbot.core.agent.tool import ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.computer.computer_client import get_booter
 from astrbot.core.computer.file_read_utils import read_file_tool_result
-from astrbot.core.message.components import File
+from astrbot.core.message.components import File, Image
 from astrbot.core.utils.astrbot_path import (
+    get_astrbot_builtin_plugin_path,
+    get_astrbot_plugin_path,
     get_astrbot_skills_path,
     get_astrbot_system_tmp_path,
     get_astrbot_temp_path,
@@ -56,6 +62,7 @@ from .util import (
     check_admin_permission,
     is_local_runtime,
     normalize_umo_for_workspace,
+    workspace_root_for_context,
 )
 
 _COMPUTER_RUNTIME_TOOL_CONFIG = {
@@ -64,17 +71,39 @@ _COMPUTER_RUNTIME_TOOL_CONFIG = {
 _SANDBOX_RUNTIME_TOOL_CONFIG = {
     "provider_settings.computer_use_runtime": "sandbox",
 }
+_IMAGE_FILE_SUFFIXES = {".bmp", ".gif", ".jpeg", ".jpg", ".png", ".webp"}
 
 
-def _restricted_env_path_labels(umo: str) -> list[str]:
+def _remote_basename(path: str) -> str:
+    # Sandbox paths may come from POSIX or Windows runtimes; normalize separators
+    # without interpreting the path against the host filesystem.
+    return path.replace("\\", "/").rstrip("/").split("/")[-1]
+
+
+def _restricted_env_path_labels(
+    umo: str,
+    *,
+    include_global_skills: bool,
+    current_workspace_root: Path | None = None,
+) -> list[str]:
     """Labels for the allowed directories in a local(not sandbox) and restricted(not admin) environment"""
-    normalized_umo = normalize_umo_for_workspace(umo)
-    return [
-        "data/skills",
-        f"data/workspaces/{normalized_umo}",
-        get_astrbot_system_tmp_path(),
-        get_astrbot_temp_path(),
-    ]
+    labels = []
+    if include_global_skills:
+        labels.extend(
+            [
+                "data/skills",
+                "data/plugins/*/skills",
+                "astrbot/builtin_stars/*/skills",
+            ]
+        )
+    labels.extend(
+        [
+            str(current_workspace_root or _workspace_root(umo)),
+            get_astrbot_system_tmp_path(),
+            get_astrbot_temp_path(),
+        ]
+    )
+    return labels
 
 
 def get_astrbot_workspaces_path() -> str:
@@ -88,11 +117,43 @@ def _workspace_root(umo: str) -> Path:
     return (Path(get_astrbot_workspaces_path()) / normalized_umo).resolve(strict=False)
 
 
-def _read_allowed_roots(umo: str) -> tuple[Path, ...]:
+def _plugin_skill_roots() -> tuple[Path, ...]:
+    roots: list[Path] = []
+    for plugins_root in (
+        Path(get_astrbot_plugin_path()),
+        Path(get_astrbot_builtin_plugin_path()),
+    ):
+        if not plugins_root.is_dir():
+            continue
+        roots.extend(
+            (plugin_dir / "skills").resolve(strict=False)
+            for plugin_dir in plugins_root.iterdir()
+            if plugin_dir.is_dir() and (plugin_dir / "skills").is_dir()
+        )
+    return tuple(roots)
+
+
+def _read_allowed_roots(
+    umo: str,
+    current_workspace_root: Path | None = None,
+) -> tuple[Path, ...]:
     """Non-admin users can only read files within these directories (and their subdirectories)"""
     return (
         Path(get_astrbot_skills_path()).resolve(strict=False),
-        _workspace_root(umo),
+        *_plugin_skill_roots(),
+        current_workspace_root or _workspace_root(umo),
+        Path(get_astrbot_system_tmp_path()).resolve(strict=False),
+        Path(get_astrbot_temp_path()).resolve(strict=False),
+    )
+
+
+def _write_allowed_roots(
+    umo: str,
+    current_workspace_root: Path | None = None,
+) -> tuple[Path, ...]:
+    """Non-admin users can modify only workspace and temporary files."""
+    return (
+        current_workspace_root or _workspace_root(umo),
         Path(get_astrbot_system_tmp_path()).resolve(strict=False),
         Path(get_astrbot_temp_path()).resolve(strict=False),
     )
@@ -109,7 +170,13 @@ def _is_restricted_env(context: ContextWrapper[AstrAgentContext]) -> bool:
     return require_admin and context.context.event.role != "admin"
 
 
-def _resolve_tool_path(path: str, *, local_env: bool, umo: str) -> str:
+def _resolve_tool_path(
+    path: str,
+    *,
+    local_env: bool,
+    umo: str,
+    current_workspace_root: Path | None = None,
+) -> str:
     normalized_path = path.strip()
     if not normalized_path:
         return normalized_path
@@ -117,25 +184,67 @@ def _resolve_tool_path(path: str, *, local_env: bool, umo: str) -> str:
     if candidate.is_absolute():
         return str(candidate.resolve(strict=False))
     if local_env:
-        return str((_workspace_root(umo) / candidate).resolve(strict=False))
+        return str(
+            ((current_workspace_root or _workspace_root(umo)) / candidate).resolve(
+                strict=False
+            )
+        )
     return normalized_path
 
 
-def _resolve_user_path(path: str, *, local_env: bool, umo: str) -> Path:
+def _resolve_user_path(
+    path: str,
+    *,
+    local_env: bool,
+    umo: str,
+    current_workspace_root: Path | None = None,
+) -> Path:
     candidate = Path(path).expanduser()
     if candidate.is_absolute():
         return candidate.resolve(strict=False)
     if local_env:
-        return (_workspace_root(umo) / candidate).resolve(strict=False)
+        return ((current_workspace_root or _workspace_root(umo)) / candidate).resolve(
+            strict=False
+        )
     return (Path.cwd() / candidate).resolve(strict=False)
 
 
-def _is_path_within_allowed_roots(path: str, umo: str) -> bool:
-    resolved = _resolve_user_path(path, local_env=True, umo=umo)
+def _is_path_within_allowed_roots(
+    path: str,
+    *,
+    umo: str,
+    allowed_roots: tuple[Path, ...],
+    current_workspace_root: Path | None = None,
+) -> bool:
+    resolved = _resolve_user_path(
+        path,
+        local_env=True,
+        umo=umo,
+        current_workspace_root=current_workspace_root,
+    )
     return any(
         resolved == allowed_root or resolved.is_relative_to(allowed_root)
-        for allowed_root in _read_allowed_roots(umo)
+        for allowed_root in allowed_roots
     )
+
+
+def _reject_multi_link_file(path: str) -> None:
+    try:
+        path_stat = os.stat(path)
+    except FileNotFoundError:
+        return
+    except OSError as exc:
+        raise PermissionError(
+            "Access denied: unable to inspect restricted path link count. "
+            f"Blocked path: {path}."
+        ) from exc
+
+    if stat.S_ISREG(path_stat.st_mode) and path_stat.st_nlink > 1:
+        raise PermissionError(
+            "Access denied: file has multiple hard links and may alias content "
+            "outside allowed directories. "
+            f"Link count: {path_stat.st_nlink}. Blocked path: {path}."
+        )
 
 
 def _normalize_rw_path(
@@ -144,16 +253,43 @@ def _normalize_rw_path(
     restricted: bool,
     local_env: bool,
     umo: str,
+    write: bool = False,
+    current_workspace_root: Path | None = None,
 ) -> str:
-    normalized_path = _resolve_tool_path(path, local_env=local_env, umo=umo)
+    normalized_path = _resolve_tool_path(
+        path,
+        local_env=local_env,
+        umo=umo,
+        current_workspace_root=current_workspace_root,
+    )
     if not normalized_path:
         raise ValueError("`path` must be a non-empty string.")
-    if restricted and not _is_path_within_allowed_roots(normalized_path, umo):
-        allowed = ", ".join(_restricted_env_path_labels(umo))
+    if restricted:
+        allowed_roots = (
+            _write_allowed_roots(umo, current_workspace_root)
+            if write
+            else _read_allowed_roots(umo, current_workspace_root)
+        )
+    if restricted and not _is_path_within_allowed_roots(
+        normalized_path,
+        umo=umo,
+        allowed_roots=allowed_roots,
+        current_workspace_root=current_workspace_root,
+    ):
+        allowed = ", ".join(
+            _restricted_env_path_labels(
+                umo,
+                include_global_skills=not write,
+                current_workspace_root=current_workspace_root,
+            )
+        )
+        access = "Write" if write else "Read"
         raise PermissionError(
-            "Read access is restricted for this user. "
+            f"{access} access is restricted for this user. "
             f"Allowed directories: {allowed}. Blocked path: {normalized_path}."
         )
+    if restricted:
+        _reject_multi_link_file(normalized_path)
     return normalized_path
 
 
@@ -215,6 +351,9 @@ class FileReadTool(FunctionTool):
     ) -> ToolExecResult:
         local_env = is_local_runtime(context)
         restricted = _is_restricted_env(context)
+        current_workspace_root = (
+            await workspace_root_for_context(context) if local_env else None
+        )
         try:
             normalized_path = (
                 _normalize_rw_path(
@@ -222,12 +361,18 @@ class FileReadTool(FunctionTool):
                     restricted=restricted,
                     local_env=local_env,
                     umo=context.context.event.unified_msg_origin,
+                    current_workspace_root=current_workspace_root,
                 )
                 if local_env
                 else path.strip()
             )
             if not normalized_path:
                 raise ValueError("`path` must be a non-empty string.")
+            if local_env and os.path.isdir(normalized_path):
+                return (
+                    f"Error: '{normalized_path}' is a directory, not a file. "
+                    "Use a file path instead, or use 'astrbot_execute_shell' to list directory contents."
+                )
             offset, limit = self._validate_read_window(offset, limit)
             sb = await get_booter(
                 context.context.context,
@@ -240,7 +385,10 @@ class FileReadTool(FunctionTool):
                 offset=offset,
                 limit=limit,
                 workspace_dir=(
-                    str(_workspace_root(context.context.event.unified_msg_origin))
+                    str(
+                        current_workspace_root
+                        or _workspace_root(context.context.event.unified_msg_origin)
+                    )
                     if local_env
                     else None
                 ),
@@ -282,6 +430,9 @@ class FileWriteTool(FunctionTool):
     ) -> ToolExecResult:
         local_env = is_local_runtime(context)
         restricted = _is_restricted_env(context)
+        current_workspace_root = (
+            await workspace_root_for_context(context) if local_env else None
+        )
         try:
             normalized_path = (
                 _normalize_rw_path(
@@ -289,6 +440,8 @@ class FileWriteTool(FunctionTool):
                     restricted=restricted,
                     local_env=local_env,
                     umo=context.context.event.unified_msg_origin,
+                    write=True,
+                    current_workspace_root=current_workspace_root,
                 )
                 if local_env
                 else path.strip()
@@ -360,6 +513,9 @@ class FileEditTool(FunctionTool):
         umo = str(context.context.event.unified_msg_origin)
         local_env = is_local_runtime(context)
         restricted = _is_restricted_env(context)
+        current_workspace_root = (
+            await workspace_root_for_context(context) if local_env else None
+        )
         try:
             normalized_path = (
                 _normalize_rw_path(
@@ -367,6 +523,8 @@ class FileEditTool(FunctionTool):
                     restricted=restricted,
                     local_env=local_env,
                     umo=umo,
+                    write=True,
+                    current_workspace_root=current_workspace_root,
                 )
                 if local_env
                 else path.strip()
@@ -516,30 +674,56 @@ class GrepTool(FunctionTool):
         restricted: bool,
         local_env: bool,
         umo: str,
+        current_workspace_root: Path | None = None,
     ) -> list[str]:
         normalized = (
-            [_resolve_tool_path(path, local_env=local_env, umo=umo)] if path else []
+            [
+                _resolve_tool_path(
+                    path,
+                    local_env=local_env,
+                    umo=umo,
+                    current_workspace_root=current_workspace_root,
+                )
+            ]
+            if path
+            else []
         )
         if not normalized:
             if restricted:
-                return [str(root) for root in _read_allowed_roots(umo)]
+                return [
+                    str(root)
+                    for root in _read_allowed_roots(umo, current_workspace_root)
+                ]
             if local_env:
-                return [str(_workspace_root(umo))]
+                return [str(current_workspace_root or _workspace_root(umo))]
             return ["."]
 
         if restricted:
             disallowed = [
                 path
                 for path in normalized
-                if not _is_path_within_allowed_roots(path, umo)
+                if not _is_path_within_allowed_roots(
+                    path,
+                    umo=umo,
+                    allowed_roots=_read_allowed_roots(umo, current_workspace_root),
+                    current_workspace_root=current_workspace_root,
+                )
             ]
             if disallowed:
-                allowed = ", ".join(_restricted_env_path_labels(umo))
+                allowed = ", ".join(
+                    _restricted_env_path_labels(
+                        umo,
+                        include_global_skills=True,
+                        current_workspace_root=current_workspace_root,
+                    )
+                )
                 blocked = ", ".join(disallowed)
                 raise PermissionError(
                     "Read access is restricted for this user. "
                     f"Allowed directories: {allowed}. Blocked paths: {blocked}."
                 )
+            for path in normalized:
+                _reject_multi_link_file(path)
 
         return normalized
 
@@ -558,6 +742,9 @@ class GrepTool(FunctionTool):
 
         local_env = is_local_runtime(context)
         restricted = _is_restricted_env(context)
+        current_workspace_root = (
+            await workspace_root_for_context(context) if local_env else None
+        )
         try:
             search_paths = (
                 self._normalize_search_paths(
@@ -565,6 +752,7 @@ class GrepTool(FunctionTool):
                     restricted=restricted,
                     local_env=local_env,
                     umo=context.context.event.unified_msg_origin,
+                    current_workspace_root=current_workspace_root,
                 )
                 if local_env
                 else ([path.strip()] if path and path.strip() else ["."])
@@ -716,7 +904,7 @@ class FileDownloadTool(FunctionTool):
             context.context.event.unified_msg_origin,
         )
         try:
-            name = os.path.basename(remote_path)
+            name = _remote_basename(remote_path) or os.path.basename(remote_path)
 
             local_path = os.path.join(
                 get_astrbot_temp_path(), f"sandbox_{uuid.uuid4().hex[:4]}_{name}"
@@ -728,12 +916,22 @@ class FileDownloadTool(FunctionTool):
 
             if also_send_to_user:
                 try:
-                    name = os.path.basename(local_path)
+                    name = _remote_basename(remote_path) or os.path.basename(local_path)
+                    if Path(local_path).suffix.lower() in _IMAGE_FILE_SUFFIXES:
+                        message_component = Image.fromFileSystem(local_path)
+                        sent_as = "image"
+                    else:
+                        message_component = File(name=name, file=local_path)
+                        sent_as = "file"
                     await context.context.event.send(
-                        MessageChain(chain=[File(name=name, file=local_path)])
+                        MessageChain(chain=[message_component])
                     )
                 except Exception as e:
                     logger.error(f"Error sending file message: {e}")
+                    return (
+                        f"File downloaded successfully to {local_path} "
+                        f"but sending to user failed: {e}"
+                    )
 
                 # remove
                 # try:
@@ -741,7 +939,10 @@ class FileDownloadTool(FunctionTool):
                 # except Exception as e:
                 #     logger.error(f"Error removing temp file {local_path}: {e}")
 
-                return f"File downloaded successfully to {local_path} and sent to user."
+                return (
+                    f"File downloaded successfully to {local_path} "
+                    f"and sent to user as {sent_as}."
+                )
 
             return f"File downloaded successfully to {local_path}"
         except Exception as e:

@@ -5,6 +5,8 @@ import traceback
 from collections.abc import Callable
 from typing import Protocol, runtime_checkable
 
+from deprecated import deprecated
+
 from astrbot.core import astrbot_config, logger, sp
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.db import BaseDatabase
@@ -12,6 +14,7 @@ from astrbot.core.utils.error_redaction import safe_error
 
 from ..persona_mgr import PersonaManager
 from .entities import ProviderType
+from .oauth.openai_oauth_shared_state import OpenAIOAuthSharedState
 from .provider import (
     EmbeddingProvider,
     Provider,
@@ -42,7 +45,15 @@ class ProviderManager:
         config = acm.confs["default"]
         self.providers_config: list = config["provider"]
         self.provider_sources_config: list = config.get("provider_sources", [])
+        self._openai_oauth_shared_states: dict[str, OpenAIOAuthSharedState] = {}
         self.provider_settings: dict = config["provider_settings"]
+        agent_runner = config.get("agent_runner", {})
+        agent_runner_config = agent_runner.get("config", {})
+        self.default_chat_provider_id = (
+            agent_runner_config.get("model", {}).get("provider_id", "")
+            if agent_runner.get("runner_type") == "local"
+            else ""
+        )
         self.provider_stt_settings: dict = config.get("provider_stt_settings", {})
         self.provider_tts_settings: dict = config.get("provider_tts_settings", {})
 
@@ -50,28 +61,28 @@ class ProviderManager:
         self.default_persona_name = persona_mgr.default_persona
 
         self.provider_insts: list[Provider] = []
-        """加载的 Provider 的实例"""
+        """Loaded Provider instances."""
         self.stt_provider_insts: list[STTProvider] = []
-        """加载的 Speech To Text Provider 的实例"""
+        """Loaded speech-to-text Provider instances."""
         self.tts_provider_insts: list[TTSProvider] = []
-        """加载的 Text To Speech Provider 的实例"""
+        """Loaded text-to-speech Provider instances."""
         self.embedding_provider_insts: list[EmbeddingProvider] = []
-        """加载的 Embedding Provider 的实例"""
+        """Loaded Embedding Provider instances."""
         self.rerank_provider_insts: list[RerankProvider] = []
-        """加载的 Rerank Provider 的实例"""
+        """Loaded Rerank Provider instances."""
         self.inst_map: dict[
             str,
             Providers,
         ] = {}
-        """Provider 实例映射. key: provider_id, value: Provider 实例"""
+        """Provider instance map. Key: provider_id; value: Provider instance."""
         self.llm_tools = llm_tools
 
         self.curr_provider_inst: Provider | None = None
-        """默认的 Provider 实例。已弃用，请使用 get_using_provider() 方法获取当前使用的 Provider 实例。"""
+        """Default Provider instance. Deprecated; use get_using_provider()."""
         self.curr_stt_provider_inst: STTProvider | None = None
-        """默认的 Speech To Text Provider 实例。已弃用，请使用 get_using_provider() 方法获取当前使用的 Provider 实例。"""
+        """Default speech-to-text Provider. Deprecated; use get_using_provider()."""
         self.curr_tts_provider_inst: TTSProvider | None = None
-        """默认的 Text To Speech Provider 实例。已弃用，请使用 get_using_provider() 方法获取当前使用的 Provider 实例。"""
+        """Default text-to-speech Provider. Deprecated; use get_using_provider()."""
         self.db_helper = db_helper
         self._provider_change_callback: (
             Callable[[str, ProviderType, str | None], None] | None
@@ -107,7 +118,7 @@ class ProviderManager:
                 self._provider_change_callback(provider_id, provider_type, umo)
             except Exception as e:
                 logger.warning(
-                    "调用 provider 变更回调失败: provider_id=%s, type=%s, err=%s",
+                    "Provider change callback failed: provider_id=%s, type=%s, err=%s",
                     provider_id,
                     provider_type,
                     safe_error("", e),
@@ -119,7 +130,7 @@ class ProviderManager:
                 hook(provider_id, provider_type, umo)
             except Exception as e:
                 logger.warning(
-                    "调用 provider 变更钩子失败: provider_id=%s, type=%s, err=%s",
+                    "Provider change hook failed: provider_id=%s, type=%s, err=%s",
                     provider_id,
                     provider_type,
                     safe_error("", e),
@@ -136,6 +147,7 @@ class ProviderManager:
         return self.persona_mgr.personas_v3
 
     @property
+    @deprecated(reason="Use persona_mgr.get_default_persona_v3() instead.")
     def selected_default_persona(self):
         """动态获取最新的默认选中 persona。已弃用，请使用 context.persona_mgr.get_default_persona_v3()"""
         return self.persona_mgr.selected_default_persona_v3
@@ -157,7 +169,9 @@ class ProviderManager:
 
         """
         if provider_id not in self.inst_map:
-            raise ValueError(f"提供商 {provider_id} 不存在，无法设置。")
+            raise ValueError(
+                f"Provider {provider_id} does not exist and cannot be set."
+            )
         if umo:
             await sp.session_put(
                 umo,
@@ -210,35 +224,37 @@ class ProviderManager:
         """根据提供商 ID 获取提供商实例"""
         return self.inst_map.get(provider_id)
 
-    def get_using_provider(
-        self, provider_type: ProviderType, umo=None
+    def _resolve_using_provider(
+        self,
+        provider_type: ProviderType,
+        umo: str | None,
+        provider_id: str | None,
     ) -> Providers | None:
-        """获取正在使用的提供商实例。
+        """Resolve a provider preference with configuration fallbacks.
 
         Args:
-            provider_type (ProviderType): 提供商类型。
-            umo (str, optional): 用户会话 ID，用于提供商会话隔离。
+            provider_type: Provider type to resolve.
+            umo: User message origin used to load session configuration.
+            provider_id: Preferred provider ID, if one is configured.
 
         Returns:
-            Provider: 正在使用的提供商实例。
+            Resolved provider instance, or None when the provider type is disabled
+            or no provider is available.
 
+        Raises:
+            ValueError: If provider_type is unsupported.
         """
-        provider = None
-        provider_id = None
-        if umo:
-            provider_id = sp.get(
-                f"provider_perf_{provider_type.value}",
-                None,
-                scope="umo",
-                scope_id=umo,
-            )
-            if provider_id:
-                provider = self.inst_map.get(provider_id)
+        provider = self.inst_map.get(provider_id) if provider_id else None
         if not provider:
             # default setting
             config = self.acm.get_conf(umo)
             if provider_type == ProviderType.CHAT_COMPLETION:
-                provider_id = config["provider_settings"].get("default_provider_id")
+                agent_runner = config.get("agent_runner", {})
+                provider_id = (
+                    agent_runner.get("config", {}).get("model", {}).get("provider_id")
+                    if agent_runner.get("runner_type") == "local"
+                    else None
+                )
                 provider = self.inst_map.get(provider_id)
                 if not provider:
                     provider = self.provider_insts[0] if self.provider_insts else None
@@ -269,10 +285,60 @@ class ProviderManager:
 
         if not provider and provider_id:
             logger.warning(
-                f"没有找到 ID 为 {provider_id} 的提供商，这可能是由于您修改了提供商（模型）ID 导致的。"
+                f"Provider {provider_id} was not found. Its provider or model ID "
+                "may have been changed."
             )
 
         return provider
+
+    @deprecated(reason="Use get_using_provider_async() instead.")
+    def get_using_provider(
+        self,
+        provider_type: ProviderType,
+        umo: str | None = None,
+    ) -> Providers | None:
+        """获取正在使用的提供商实例。
+
+        Args:
+            provider_type: 提供商类型。
+            umo: 用户会话 ID，用于提供商会话隔离。
+
+        Returns:
+            正在使用的提供商实例。
+        """
+        provider_id = None
+        if umo:
+            provider_id = sp.get(
+                f"provider_perf_{provider_type.value}",
+                None,
+                scope="umo",
+                scope_id=umo,
+            )
+        return self._resolve_using_provider(provider_type, umo, provider_id)
+
+    async def get_using_provider_async(
+        self,
+        provider_type: ProviderType,
+        umo: str | None = None,
+    ) -> Providers | None:
+        """Asynchronously get the provider currently in use.
+
+        Args:
+            provider_type: Provider type to resolve.
+            umo: User message origin used for session-specific preferences.
+
+        Returns:
+            Provider instance currently in use, or None if unavailable.
+        """
+        provider_id = None
+        if umo:
+            provider_id = await sp.get_async(
+                "umo",
+                umo,
+                f"provider_perf_{provider_type.value}",
+                None,
+            )
+        return self._resolve_using_provider(provider_type, umo, provider_id)
 
     async def initialize(self) -> None:
         # 逐个初始化提供商
@@ -285,7 +351,7 @@ class ProviderManager:
 
         selected_provider_id = await sp.get_async(
             key="curr_provider",
-            default=self.provider_settings.get("default_provider_id"),
+            default=self.default_chat_provider_id,
             scope="global",
             scope_id="global",
         )
@@ -361,15 +427,27 @@ class ProviderManager:
                 from .sources.openai_source import (
                     ProviderOpenAIOfficial as ProviderOpenAIOfficial,
                 )
-            case "longcat_chat_completion":
-                from .sources.longcat_source import ProviderLongCat as ProviderLongCat
+            case "openai_responses":
+                from .sources.openai_responses_source import (
+                    ProviderOpenAIResponses as ProviderOpenAIResponses,
+                )
             case "openai_oauth_chat_completion":
                 from .sources.openai_oauth_source import (
                     ProviderOpenAIOAuth as ProviderOpenAIOAuth,
                 )
+            case "openai_oauth_stt":
+                from .sources import openai_oauth_stt_source as openai_oauth_stt_source
+            case "longcat_chat_completion":
+                from .sources.longcat_source import ProviderLongCat as ProviderLongCat
             case "minimax_token_plan":
                 from .sources.minimax_token_plan_source import (
                     ProviderMiniMaxTokenPlan as ProviderMiniMaxTokenPlan,
+                )
+            case "xiaomi_chat_completion":
+                from .sources.xiaomi_source import ProviderXiaomi as ProviderXiaomi
+            case "xiaomi_token_plan":
+                from .sources.xiaomi_token_plan_source import (
+                    ProviderXiaomiTokenPlan as ProviderXiaomiTokenPlan,
                 )
             case "zhipu_chat_completion":
                 from .sources.zhipu_source import ProviderZhipu as ProviderZhipu
@@ -381,9 +459,17 @@ class ProviderManager:
                 from .sources.oai_aihubmix_source import (
                     ProviderAIHubMix as ProviderAIHubMix,
                 )
+            case "mirarouter_chat_completion":
+                from .sources.mirarouter_source import (
+                    ProviderMiraRouter as ProviderMiraRouter,
+                )
             case "openrouter_chat_completion":
                 from .sources.openrouter_source import (
                     ProviderOpenRouter as ProviderOpenRouter,
+                )
+            case "ssycloud_chat_completion":
+                from .sources.ssycloud_source import (
+                    ProviderSSYCloud as ProviderSSYCloud,
                 )
             case "anthropic_chat_completion":
                 from .sources.anthropic_source import (
@@ -465,6 +551,10 @@ class ProviderManager:
                 from .sources.gemini_tts_source import (
                     ProviderGeminiTTSAPI as ProviderGeminiTTSAPI,
                 )
+            case "elevenlabs_tts_api":
+                from .sources.elevenlabs_tts_source import (
+                    ProviderElevenLabsTTSAPI as ProviderElevenLabsTTSAPI,
+                )
             case "openai_embedding":
                 from .sources.openai_embedding_source import (
                     OpenAIEmbeddingProvider as OpenAIEmbeddingProvider,
@@ -472,6 +562,18 @@ class ProviderManager:
             case "gemini_embedding":
                 from .sources.gemini_embedding_source import (
                     GeminiEmbeddingProvider as GeminiEmbeddingProvider,
+                )
+            case "nvidia_embedding":
+                from .sources.nvidia_embedding_source import (
+                    NvidiaEmbeddingProvider as NvidiaEmbeddingProvider,
+                )
+            case "ollama_embedding":
+                from .sources.ollama_embedding_source import (
+                    OllamaEmbeddingProvider as OllamaEmbeddingProvider,
+                )
+            case "dashscope_embedding":
+                from .sources.dashscope_embedding_source import (
+                    DashScopeEmbeddingProvider as DashScopeEmbeddingProvider,
                 )
             case "vllm_rerank":
                 from .sources.vllm_rerank_source import (
@@ -489,8 +591,89 @@ class ProviderManager:
                 from .sources.nvidia_rerank_source import (
                     NvidiaRerankProvider as NvidiaRerankProvider,
                 )
+            case "tei_rerank":
+                from .sources.tei_rerank_source import (
+                    TEIRerankProvider as TEIRerankProvider,
+                )
 
-    def get_merged_provider_config(self, provider_config: dict) -> dict:
+    async def _persist_openai_oauth_provider_source_patch(
+        self,
+        provider_source_id: str,
+        patch: dict,
+    ) -> None:
+        async with self.resource_lock:
+            config = self.acm.default_conf
+            provider_sources = config.get("provider_sources", [])
+            updated_source = None
+            for source in provider_sources:
+                if source.get("id") != provider_source_id:
+                    continue
+                source.update(copy.deepcopy(patch))
+                updated_source = source
+                break
+            if updated_source is None:
+                raise ValueError(f"Provider source {provider_source_id} not found")
+
+            self.sync_openai_oauth_shared_state(provider_source_id, patch)
+            self.provider_sources_config = provider_sources
+            astrbot_config["provider_sources"] = provider_sources
+            config.save_config()
+
+    def get_openai_oauth_shared_state(
+        self,
+        provider_source_id: str,
+        source_config: dict | None = None,
+    ) -> OpenAIOAuthSharedState:
+        state = self._openai_oauth_shared_states.get(provider_source_id)
+        if state is not None:
+            return state
+        if source_config is None:
+            source_config = next(
+                (
+                    source
+                    for source in self.provider_sources_config
+                    if source.get("id") == provider_source_id
+                ),
+                None,
+            )
+        if source_config is None:
+            raise ValueError(f"Provider source {provider_source_id} not found")
+        state = OpenAIOAuthSharedState(provider_source_id, source_config)
+        self._openai_oauth_shared_states[provider_source_id] = state
+        return state
+
+    def sync_openai_oauth_shared_state(
+        self,
+        provider_source_id: str,
+        patch: dict,
+    ) -> OpenAIOAuthSharedState:
+        state = self.get_openai_oauth_shared_state(provider_source_id, patch)
+        state.apply(patch)
+        return state
+
+    def replace_openai_oauth_shared_state(
+        self,
+        provider_source_id: str,
+        source_config: dict,
+    ) -> OpenAIOAuthSharedState:
+        state = self.get_openai_oauth_shared_state(
+            provider_source_id,
+            source_config,
+        )
+        state.replace(source_config)
+        return state
+
+    def drop_openai_oauth_shared_state(self, provider_source_id: str) -> None:
+        state = self._openai_oauth_shared_states.pop(provider_source_id, None)
+        if state is not None:
+            state.replace({})
+
+    def get_merged_provider_config(
+        self,
+        provider_config: dict,
+        *,
+        runtime: bool = False,
+    ) -> dict:
         """获取 provider 配置和 provider_source 配置合并后的结果
 
         Returns:
@@ -506,7 +689,7 @@ class ProviderManager:
                     break
 
             if provider_source:
-                # 合并配置，provider 的业务字段优先，但 provider 类型应跟随 source。
+                # 合并配置，provider 的配置优先级更高
                 merged_config = {**provider_source, **pc}
                 # 保持 id 为 provider 的 id，而不是 source 的 id
                 merged_config["id"] = pc["id"]
@@ -520,16 +703,80 @@ class ProviderManager:
                     "provider_type", merged_config.get("provider_type")
                 )
                 if (
-                    merged_config.get("provider") == "openai"
-                    and merged_config.get("type") == "openai_oauth_chat_completion"
-                    and merged_config.get("auth_mode") == "openai_oauth"
+                    provider_source.get("provider") == "openai"
+                    and provider_source.get("type") == "openai_oauth_chat_completion"
                 ):
-                    access_token = (
-                        merged_config.get("oauth_access_token") or ""
-                    ).strip()
-                    if access_token:
-                        merged_config["key"] = [access_token]
+                    model_authoritative_fields = {
+                        "id",
+                        "provider_source_id",
+                        "model",
+                        "modalities",
+                        "custom_extra_body",
+                        "enable",
+                    }
+                    merged_config = {**pc, **provider_source}
+                    for field_name in model_authoritative_fields:
+                        if field_name in pc:
+                            merged_config[field_name] = pc[field_name]
+                    if provider_source.get("auth_mode") == "openai_oauth":
+                        merged_config["key"] = ["__openai_oauth__"]
+                    if runtime and provider_source.get("auth_mode") == "openai_oauth":
+                        merged_config["oauth_shared_state"] = (
+                            self.get_openai_oauth_shared_state(
+                                provider_source_id,
+                                provider_source,
+                            )
+                        )
+
+                        async def persist_callback(
+                            patch: dict,
+                            source_id: str = provider_source_id,
+                        ) -> None:
+                            await self._persist_openai_oauth_provider_source_patch(
+                                source_id,
+                                patch,
+                            )
+
+                        merged_config["oauth_persist_callback"] = persist_callback
                 pc = merged_config
+        if (
+            pc.get("type") == "openai_oauth_stt"
+            and runtime
+            and pc.get("enable") is not False
+        ):
+            source_id = pc.get("oauth_source_id", "")
+            source = next(
+                (s for s in self.provider_sources_config if s.get("id") == source_id),
+                None,
+            )
+            if (
+                not source_id
+                or source is None
+                or source.get("type") != "openai_oauth_chat_completion"
+                or source.get("auth_mode") != "openai_oauth"
+            ):
+                raise ValueError("STT requires an existing ChatGPT OAuth source")
+            for field in (
+                "oauth_access_token",
+                "oauth_refresh_token",
+                "oauth_expires_at",
+                "oauth_account_id",
+                "oauth_account_email",
+            ):
+                pc.pop(field, None)
+            for field in ("proxy", "http_proxy"):
+                pc.pop(field, None)
+                if field in source:
+                    pc[field] = source[field]
+            pc["auth_mode"] = "openai_oauth"
+            pc["oauth_shared_state"] = self.get_openai_oauth_shared_state(
+                source_id, source
+            )
+
+            async def persist_stt_patch(patch: dict) -> None:
+                await self._persist_openai_oauth_provider_source_patch(source_id, patch)
+
+            pc["oauth_persist_callback"] = persist_stt_patch
         return pc
 
     def get_provider_config_by_id(
@@ -567,7 +814,9 @@ class ProviderManager:
                     if env_val is None:
                         provider_id = provider_config.get("id")
                         logger.warning(
-                            f"Provider {provider_id} 配置项 key[{idx}] 使用的环境变量未设置。",
+                            f"Provider {provider_id} configuration key[{idx}] "
+                            f"references environment variable {env_key}, but it is "
+                            "not set.",
                         )
                         resolved_keys.append("")
                     else:
@@ -581,7 +830,10 @@ class ProviderManager:
 
     async def load_provider(self, provider_config: dict) -> None:
         # 如果 provider_source_id 存在且不为空，则从 provider_sources 中找到对应的配置并合并
-        provider_config = self.get_merged_provider_config(provider_config)
+        provider_config = self.get_merged_provider_config(
+            provider_config,
+            runtime=True,
+        )
 
         if provider_config.get("provider_type", "") == "chat_completion":
             provider_config = self._resolve_env_key_list(provider_config)
@@ -593,7 +845,9 @@ class ProviderManager:
             return
 
         logger.info(
-            f"载入 {provider_config['type']}({provider_config['id']}) 服务提供商 ...",
+            "Loading model %s(%s) ...",
+            provider_config["type"],
+            provider_config["id"],
         )
 
         # 动态导入
@@ -601,20 +855,22 @@ class ProviderManager:
             self.dynamic_import_provider(provider_config["type"])
         except (ImportError, ModuleNotFoundError) as e:
             logger.critical(
-                f"加载 {provider_config['type']}({provider_config['id']}) 提供商适配器失败：{e}。可能是因为有未安装的依赖。",
+                f"Failed to load provider adapter {provider_config['type']}"
+                f"({provider_config['id']}): {e}. A dependency may be missing.",
                 exc_info=True,
             )
             return
         except Exception as e:
             logger.critical(
-                f"加载 {provider_config['type']}({provider_config['id']}) 提供商适配器失败：{e}。未知原因",
+                f"Failed to load provider adapter {provider_config['type']}"
+                f"({provider_config['id']}): {e}. Unknown cause.",
                 exc_info=True,
             )
             return
 
         if provider_config["type"] not in provider_cls_map:
             logger.error(
-                f"未找到适用于 {provider_config['type']}({provider_config['id']}) 的提供商适配器，请检查是否已经安装或者名称填写错误。已跳过。",
+                f"Provider adapter not found: {provider_config['type']}({provider_config['id']}). Skipped.",
                 exc_info=True,
             )
             return
@@ -624,7 +880,7 @@ class ProviderManager:
             # 按任务实例化提供商
             cls_type = provider_metadata.cls_type
             if not cls_type:
-                logger.error(f"无法找到 {provider_metadata.type} 的类")
+                logger.error(f"Could not find a class for {provider_metadata.type}")
                 return
 
             provider_metadata.id = provider_config["id"]
@@ -648,7 +904,7 @@ class ProviderManager:
                     ):
                         self.curr_stt_provider_inst = inst
                         logger.info(
-                            f"已选择 {provider_config['type']}({provider_config['id']}) 作为当前语音转文本提供商适配器。",
+                            f"Selected {provider_config['type']}({provider_config['id']}) as default STT provider",
                         )
                     if not self.curr_stt_provider_inst:
                         self.curr_stt_provider_inst = inst
@@ -671,7 +927,7 @@ class ProviderManager:
                     ):
                         self.curr_tts_provider_inst = inst
                         logger.info(
-                            f"已选择 {provider_config['type']}({provider_config['id']}) 作为当前文本转语音提供商适配器。",
+                            f"Selected {provider_config['type']}({provider_config['id']}) as default TTS provider",
                         )
                     if not self.curr_tts_provider_inst:
                         self.curr_tts_provider_inst = inst
@@ -691,13 +947,10 @@ class ProviderManager:
                         await inst.initialize()
 
                     self.provider_insts.append(inst)
-                    if (
-                        self.provider_settings.get("default_provider_id")
-                        == provider_config["id"]
-                    ):
+                    if self.default_chat_provider_id == provider_config["id"]:
                         self.curr_provider_inst = inst
                         logger.info(
-                            f"已选择 {provider_config['type']}({provider_config['id']}) 作为当前提供商适配器。",
+                            f"Selected {provider_config['type']}({provider_config['id']}) as default chat model provider",
                         )
                     if not self.curr_provider_inst:
                         self.curr_provider_inst = inst
@@ -724,16 +977,18 @@ class ProviderManager:
                     # 未知供应商抛出异常，确保inst初始化
                     # Should be unreachable
                     raise Exception(
-                        f"未知的提供商类型：{provider_metadata.provider_type}"
+                        f"Unknown provider type: {provider_metadata.provider_type}"
                     )
 
             self.inst_map[provider_config["id"]] = inst
         except Exception as e:
             logger.error(
-                f"实例化 {provider_config['type']}({provider_config['id']}) 提供商适配器失败：{e}",
+                f"Failed to instantiate provider adapter {provider_config['type']}"
+                f"({provider_config['id']}): {e}",
             )
             raise Exception(
-                f"实例化 {provider_config['type']}({provider_config['id']}) 提供商适配器失败：{e}",
+                f"Failed to instantiate provider adapter {provider_config['type']}"
+                f"({provider_config['id']}): {e}",
             )
 
     async def reload(self, provider_config: dict) -> None:
@@ -756,7 +1011,8 @@ class ProviderManager:
             elif self.curr_provider_inst is None and len(self.provider_insts) > 0:
                 self.curr_provider_inst = self.provider_insts[0]
                 logger.info(
-                    f"自动选择 {self.curr_provider_inst.meta().id} 作为当前提供商适配器。",
+                    f"Automatically selected {self.curr_provider_inst.meta().id} "
+                    "as the current provider adapter.",
                 )
 
             if len(self.stt_provider_insts) == 0:
@@ -766,7 +1022,8 @@ class ProviderManager:
             ):
                 self.curr_stt_provider_inst = self.stt_provider_insts[0]
                 logger.info(
-                    f"自动选择 {self.curr_stt_provider_inst.meta().id} 作为当前语音转文本提供商适配器。",
+                    f"Automatically selected {self.curr_stt_provider_inst.meta().id} "
+                    "as the current speech-to-text provider adapter.",
                 )
 
             if len(self.tts_provider_insts) == 0:
@@ -776,7 +1033,8 @@ class ProviderManager:
             ):
                 self.curr_tts_provider_inst = self.tts_provider_insts[0]
                 logger.info(
-                    f"自动选择 {self.curr_tts_provider_inst.meta().id} 作为当前文本转语音提供商适配器。",
+                    f"Automatically selected {self.curr_tts_provider_inst.meta().id} "
+                    "as the current text-to-speech provider adapter.",
                 )
 
     def get_insts(self):
@@ -785,7 +1043,9 @@ class ProviderManager:
     async def terminate_provider(self, provider_id: str) -> None:
         if provider_id in self.inst_map:
             logger.info(
-                f"终止 {provider_id} 提供商适配器({len(self.provider_insts)}, {len(self.stt_provider_insts)}, {len(self.tts_provider_insts)}) ...",
+                f"Terminating provider adapter {provider_id} "
+                f"({len(self.provider_insts)}, {len(self.stt_provider_insts)}, "
+                f"{len(self.tts_provider_insts)}) ...",
             )
 
             if self.inst_map[provider_id] in self.provider_insts:
@@ -812,7 +1072,9 @@ class ProviderManager:
                 await self.inst_map[provider_id].terminate()  # type: ignore
 
             logger.info(
-                f"{provider_id} 提供商适配器已终止({len(self.provider_insts)}, {len(self.stt_provider_insts)}, {len(self.tts_provider_insts)})",
+                f"Provider adapter {provider_id} terminated "
+                f"({len(self.provider_insts)}, {len(self.stt_provider_insts)}, "
+                f"{len(self.tts_provider_insts)})",
             )
             del self.inst_map[provider_id]
 
@@ -827,7 +1089,11 @@ class ProviderManager:
                 target_prov_ids.append(provider_id)
             else:
                 for prov in self.providers_config:
-                    if prov.get("provider_source_id") == provider_source_id:
+                    if prov.get("provider_source_id") == provider_source_id or (
+                        provider_source_id
+                        and prov.get("type") == "openai_oauth_stt"
+                        and prov.get("oauth_source_id") == provider_source_id
+                    ):
                         target_prov_ids.append(prov.get("id"))
             config = self.acm.default_conf
             for tpid in target_prov_ids:
@@ -836,7 +1102,9 @@ class ProviderManager:
                     prov for prov in config["provider"] if prov.get("id") != tpid
                 ]
             config.save_config()
-            logger.info(f"Provider {target_prov_ids} 已从配置中删除。")
+            # sync in-memory config for API queries (e.g., provider list)
+            self.providers_config = config["provider"]
+            logger.info(f"Providers {target_prov_ids} were removed from configuration.")
 
     async def update_provider(self, origin_provider_id: str, new_config: dict) -> None:
         """Update provider config and reload the instance. Config will be saved after update."""

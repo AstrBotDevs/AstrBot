@@ -76,7 +76,7 @@
         <!-- 创建知识库对话框 -->
         <v-dialog v-model="showCreateDialog" max-width="500px">
             <v-card>
-                <v-card-title class="text-h4">{{ tm('createDialog.title') }}</v-card-title>
+                <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{ tm('createDialog.title') }}</v-card-title>
                 <v-card-text>
 
                     <div style="width: 100%; display: flex; align-items: center; justify-content: center;">
@@ -111,7 +111,7 @@
                     <v-spacer></v-spacer>
                     <v-btn color="error" variant="text" @click="showCreateDialog = false">{{ tm('createDialog.cancel')
                         }}</v-btn>
-                    <v-btn color="primary" variant="text" @click="submitCreateForm">{{ tm('createDialog.create')
+                    <v-btn color="primary" variant="tonal" @click="submitCreateForm">{{ tm('createDialog.create')
                         }}</v-btn>
                 </v-card-actions>
             </v-card>
@@ -120,7 +120,7 @@
         <!-- 表情选择器对话框 -->
         <v-dialog v-model="showEmojiPicker" max-width="400px">
             <v-card>
-                <v-card-title class="text-h6">{{ tm('emojiPicker.title') }}</v-card-title>
+                <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{ tm('emojiPicker.title') }}</v-card-title>
                 <v-card-text>
                     <div class="emoji-picker">
                         <div v-for="(category, catIndex) in emojiCategories" :key="catIndex" class="mb-4">
@@ -145,11 +145,11 @@
         <!-- 知识库内容管理对话框 -->
         <v-dialog v-model="showContentDialog" max-width="1000px">
             <v-card>
-                <v-card-title class="d-flex align-center">
+                <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex align-center">
                     <div class="me-2 emoji-sm">{{ currentKB.emoji || '🙂' }}</div>
                     <span>{{ currentKB.collection_name }} - {{ tm('contentDialog.title') }}</span>
                     <v-spacer></v-spacer>
-                    <v-btn variant="plain" icon @click="showContentDialog = false">
+                    <v-btn variant="text" icon @click="showContentDialog = false">
                         <v-icon>mdi-close</v-icon>
                     </v-btn>
                 </v-card-title>
@@ -249,7 +249,7 @@
                                         </div>
 
                                         <div class="text-center mt-4">
-                                            <v-btn color="primary" variant="elevated" :loading="uploading"
+                                            <v-btn color="primary" variant="tonal" :loading="uploading"
                                                 :disabled="!selectedFile" @click="uploadFile">
                                                 {{ tm('upload.upload') }}
                                             </v-btn>
@@ -340,7 +340,7 @@
                                     </v-card>
 
                                     <div class="text-center">
-                                        <v-btn color="primary" variant="elevated" :loading="importing"
+                                        <v-btn color="primary" variant="tonal" :loading="importing"
                                             :disabled="!importUrl" @click="startImportFromUrl">
                                             {{ tm('importFromUrl.startImport') }}
                                         </v-btn>
@@ -408,7 +408,7 @@
         <!-- 删除知识库确认对话框 -->
         <v-dialog v-model="showDeleteDialog" max-width="400px">
             <v-card>
-                <v-card-title class="text-h5">{{ tm('deleteDialog.title') }}</v-card-title>
+                <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{ tm('deleteDialog.title') }}</v-card-title>
                 <v-card-text>
                     <p>{{ tm('deleteDialog.confirmText', { name: deleteTarget.collection_name }) }}</p>
                     <p class="text-red">{{ tm('deleteDialog.warning') }}</p>
@@ -418,7 +418,7 @@
                     <v-btn color="grey-darken-1" variant="text" @click="showDeleteDialog = false">{{
                         tm('deleteDialog.cancel')
                         }}</v-btn>
-                    <v-btn color="error" variant="text" @click="deleteKnowledgeBase" :loading="deleting">{{
+                    <v-btn color="error" variant="tonal" @click="deleteKnowledgeBase" :loading="deleting">{{
                         tm('deleteDialog.delete') }}</v-btn>
                 </v-card-actions>
             </v-card>
@@ -432,7 +432,7 @@
 </template>
 
 <script>
-import axios from 'axios';
+import { pluginApi, pluginExtensionApi, providerApi } from '@/api/v1';
 import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
 import { useModuleI18n } from '@/i18n/composables';
 import { normalizeTextInput } from '@/utils/inputValue';
@@ -615,20 +615,23 @@ export default {
             }
         },
         checkPlugin() {
-            axios.get('/api/plugin/get?name=astrbot_plugin_knowledge_base')
+            pluginApi.list()
                 .then(response => {
-                    if (response.data.status !== 'ok' || response.data.data.length === 0) {
+                    const plugins = (response.data.data || []).filter(
+                        plugin => plugin.name === 'astrbot_plugin_knowledge_base'
+                    );
+                    if (response.data.status !== 'ok' || plugins.length === 0) {
                         this.showSnackbar(this.tm('messages.pluginNotAvailable'), 'error');
                         this.installed = false;
                         return
                     }
-                    if (!response.data.data[0].activated) {
+                    if (!plugins[0].activated) {
                         this.showSnackbar(this.tm('messages.pluginNotActivated'), 'error');
                         return
                     }
-                    if (response.data.data.length > 0) {
+                    if (plugins.length > 0) {
                         this.installed = true;
-                        this.pluginCurrentVersion = response.data.data[0].version || '未知';
+                        this.pluginCurrentVersion = plugins[0].version || '未知';
                         this.getKBCollections();
                         // 自动检查更新
                         this.checkPluginUpdate();
@@ -647,7 +650,7 @@ export default {
             this.pluginHasUpdate = false;
             try {
                 // 获取在线插件数据
-                const onlineResponse = await axios.get('/api/plugin/market_list');
+                const onlineResponse = await pluginApi.market();
                 if (onlineResponse.data.status === 'ok') {
                     const knowledgeBasePlugin = onlineResponse.data.data['astrbot_plugin_knowledge_base'];
                     if (knowledgeBasePlugin) {
@@ -684,8 +687,7 @@ export default {
         async updatePlugin() {
             this.updatingPlugin = true;
             try {
-                const response = await axios.post('/api/plugin/update', {
-                    name: 'astrbot_plugin_knowledge_base',
+                const response = await pluginApi.update('astrbot_plugin_knowledge_base', {
                     proxy: this.getSelectedGitHubProxy()
                 });
 
@@ -708,8 +710,8 @@ export default {
 
         installPlugin() {
             this.installing = true;
-            axios.post('/api/plugin/install', {
-                url: "https://github.com/lxfight/astrbot_plugin_knowledge_base",
+            pluginApi.installGithub({
+                repository: "https://github.com/lxfight/astrbot_plugin_knowledge_base",
                 proxy: this.getSelectedGitHubProxy()
             })
                 .then(response => {
@@ -728,7 +730,7 @@ export default {
         },
 
         getKBCollections() {
-            axios.get('/api/plug/alkaid/kb/collections')
+            pluginExtensionApi.get('alkaid/kb/collections')
                 .then(response => {
                     if (response.data.status !== 'ok') {
                         this.showSnackbar(response.data.message || this.tm('messages.getKnowledgeBaseListFailed'), 'error');
@@ -750,7 +752,7 @@ export default {
             if (this.newKB.rerank_provider_id && typeof this.newKB.rerank_provider_id === 'object') {
                 this.newKB.rerank_provider_id = this.newKB.rerank_provider_id.id || '';
             }
-            axios.post('/api/plug/alkaid/kb/create_collection', {
+            pluginExtensionApi.post('alkaid/kb/create_collection', {
                 collection_name: name,
                 emoji: emoji,
                 description: description,
@@ -885,7 +887,7 @@ export default {
                 formData.append('chunk_overlap', this.overlap);
             }
 
-            axios.post('/api/plug/alkaid/kb/collection/add_file', formData)
+            pluginExtensionApi.post('alkaid/kb/collection/add_file', formData)
                 .then(response => {
                     if (response.data.status === 'ok') {
                         this.showSnackbar(this.tm('messages.operationSuccess', { message: response.data.message }));
@@ -916,7 +918,7 @@ export default {
             this.searching = true;
             this.searchPerformed = true;
 
-            axios.get(`/api/plug/alkaid/kb/collection/search`, {
+            pluginExtensionApi.get('alkaid/kb/collection/search', {
                 params: {
                     collection_name: this.currentKB.collection_name,
                     query,
@@ -969,7 +971,7 @@ export default {
 
             this.deleting = true;
 
-            axios.get('/api/plug/alkaid/kb/collection/delete', {
+            pluginExtensionApi.get('alkaid/kb/collection/delete', {
                 params: {
                     collection_name: this.deleteTarget.collection_name
                 }
@@ -993,11 +995,7 @@ export default {
         },
 
         getProviderList() {
-            axios.get('/api/config/provider/list', {
-                params: {
-                    provider_type: 'embedding,rerank,chat_completion'
-                }
-            })
+            providerApi.listByProviderType('embedding,rerank,chat_completion')
                 .then(response => {
                     if (response.data.status === 'ok') {
                         this.embeddingProviderConfigs = response.data.data.filter(provider => provider.provider_type === 'embedding');
@@ -1035,7 +1033,7 @@ export default {
                 };
 
                 console.log('Starting URL import with payload:', JSON.stringify(payload, null, 2));
-                const addTaskResponse = await axios.post('/api/plug/url_2_kb/add', payload);
+                const addTaskResponse = await pluginExtensionApi.post('url_2_kb/add', payload);
 
                 if (!addTaskResponse.data.task_id) {
                     throw new Error(addTaskResponse.data.message || 'Failed to start import task: No task_id received.');
@@ -1054,7 +1052,7 @@ export default {
         pollTaskStatus(taskId) {
             this.pollingInterval = setInterval(async () => {
                 try {
-                    const statusResponse = await axios.post(`/api/plug/url_2_kb/status`, { task_id: taskId });
+                    const statusResponse = await pluginExtensionApi.post('url_2_kb/status', { task_id: taskId });
 
                     const taskData = statusResponse.data;
                     const taskStatus = taskData.status;
@@ -1153,7 +1151,7 @@ export default {
                 formData.append('chunk_overlap', this.importOptions.chunk_overlap);
             }
 
-            const response = await axios.post('/api/plug/alkaid/kb/collection/add_file', formData, {
+            const response = await pluginExtensionApi.post('alkaid/kb/collection/add_file', formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data'
                 }

@@ -1,6 +1,13 @@
 {
   "title": "Knowledge Base Details",
   "backToList": "Back to List",
+  "breadcrumb": {
+    "list": "Knowledge Bases"
+  },
+  "states": {
+    "loadError": "Failed to load knowledge base details",
+    "retry": "Retry"
+  },
   "tabs": {
     "overview": "Overview",
     "documents": "Documents",
@@ -46,7 +53,7 @@
     "title": "Upload Document",
     "selectFile": "Select File",
     "dropzone": "Drop files here or click to select",
-    "supportedFormats": "Supported formats: .txt, .md, .pdf, .docx, .epub, .xls, .xlsx",
+    "supportedFormats": "Supported formats: .txt, .md, .markdown, .rst, .adoc, .pdf, .docx, .epub, .xls, .xlsx",
     "maxSize": "Max file size: 128MB",
     "chunkSettings": "Chunk Settings",
     "batchSettings": "Batch Settings",

@@ -1,12 +1,15 @@
+from sqlalchemy import case, func, select
+from sqlmodel import col
+
 from astrbot.api import sp, star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
 from astrbot.core import logger
 from astrbot.core.agent.runners.deerflow.constants import (
-    DEERFLOW_AGENT_RUNNER_PROVIDER_ID_KEY,
     DEERFLOW_PROVIDER_TYPE,
     DEERFLOW_THREAD_ID_KEY,
 )
 from astrbot.core.agent.runners.deerflow.deerflow_api_client import DeerFlowAPIClient
+from astrbot.core.db.po import ProviderStat
 from astrbot.core.utils.active_event_registry import active_event_registry
 
 from .utils.rst_scene import RstScene
@@ -35,32 +38,21 @@ async def _cleanup_deerflow_thread_if_present(
             return
 
         cfg = context.get_config(umo=umo)
-        provider_id = cfg["provider_settings"].get(
-            DEERFLOW_AGENT_RUNNER_PROVIDER_ID_KEY,
-            "",
-        )
-        if not provider_id:
+        agent_runner = cfg.get("agent_runner", {})
+        if agent_runner.get("runner_type") != DEERFLOW_PROVIDER_TYPE:
             return
-
-        merged_provider_config = context.provider_manager.get_provider_config_by_id(
-            provider_id,
-            merged=True,
-        )
-        if not merged_provider_config:
-            logger.warning(
-                "Failed to resolve DeerFlow provider config for remote thread cleanup: provider_id=%s",
-                provider_id,
-            )
+        runner_config = agent_runner.get("config", {})
+        if not isinstance(runner_config, dict):
             return
 
         client = DeerFlowAPIClient(
-            api_base=merged_provider_config.get(
+            api_base=runner_config.get(
                 "deerflow_api_base",
                 "http://127.0.0.1:2026",
             ),
-            api_key=merged_provider_config.get("deerflow_api_key", ""),
-            auth_header=merged_provider_config.get("deerflow_auth_header", ""),
-            proxy=merged_provider_config.get("proxy", ""),
+            api_key=runner_config.get("deerflow_api_key", ""),
+            auth_header=runner_config.get("deerflow_auth_header", ""),
+            proxy=runner_config.get("proxy", ""),
         )
         try:
             await client.delete_thread(thread_id)
@@ -144,7 +136,7 @@ class ConversationCommands:
             )
             return
 
-        agent_runner_type = cfg["provider_settings"]["agent_runner_type"]
+        agent_runner_type = cfg["agent_runner"]["runner_type"]
         if agent_runner_type in THIRD_PARTY_AGENT_RUNNER_KEY:
             active_event_registry.stop_all(umo, exclude=message)
             await _clear_third_party_agent_runner_state(
@@ -157,7 +149,7 @@ class ConversationCommands:
             )
             return
 
-        if not self.context.get_using_provider(umo):
+        if not await self.context.get_using_provider_async(umo):
             message.set_result(
                 MessageEventResult().message(
                     "😕 Cannot find any LLM provider. Configure one first."
@@ -185,14 +177,14 @@ class ConversationCommands:
 
         ret = "✅ Conversation reset successfully."
 
-        message.set_extra("_clean_ltm_session", True)
+        message.set_extra("_clean_group_context_session", True)
 
         message.set_result(MessageEventResult().message(ret))
 
     async def stop(self, message: AstrMessageEvent) -> None:
         """停止当前会话正在运行的 Agent"""
         cfg = self.context.get_config(umo=message.unified_msg_origin)
-        agent_runner_type = cfg["provider_settings"]["agent_runner_type"]
+        agent_runner_type = cfg["agent_runner"]["runner_type"]
         umo = message.unified_msg_origin
 
         if agent_runner_type in THIRD_PARTY_AGENT_RUNNER_KEY:
@@ -218,7 +210,7 @@ class ConversationCommands:
     async def new_conv(self, message: AstrMessageEvent) -> None:
         """创建新对话"""
         cfg = self.context.get_config(umo=message.unified_msg_origin)
-        agent_runner_type = cfg["provider_settings"]["agent_runner_type"]
+        agent_runner_type = cfg["agent_runner"]["runner_type"]
         if agent_runner_type in THIRD_PARTY_AGENT_RUNNER_KEY:
             active_event_registry.stop_all(message.unified_msg_origin, exclude=message)
             await _clear_third_party_agent_runner_state(
@@ -239,10 +231,69 @@ class ConversationCommands:
             persona_id=cpersona,
         )
 
-        message.set_extra("_clean_ltm_session", True)
+        message.set_extra("_clean_group_context_session", True)
 
         message.set_result(
             MessageEventResult().message(
                 f"✅ Switched to new conversation: {cid[:4]}。"
             ),
         )
+
+    async def stats(self, message: AstrMessageEvent) -> None:
+        """Show token usage statistics for the current conversation."""
+        umo = message.unified_msg_origin
+        cid = await self.context.conversation_manager.get_curr_conversation_id(umo)
+
+        if not cid:
+            message.set_result(
+                MessageEventResult().message(
+                    "❌ You are not in a conversation. Use /new to create one."
+                ),
+            )
+            return
+
+        db = self.context.get_db()
+        async with db.get_db() as session:
+            result = await session.execute(
+                select(
+                    func.count(case((col(ProviderStat.id).is_not(None), 1))).label(
+                        "record_count",
+                    ),
+                    func.coalesce(func.sum(ProviderStat.token_input_other), 0).label(
+                        "total_input_other",
+                    ),
+                    func.coalesce(func.sum(ProviderStat.token_input_cached), 0).label(
+                        "total_input_cached",
+                    ),
+                    func.coalesce(func.sum(ProviderStat.token_output), 0).label(
+                        "total_output",
+                    ),
+                ).where(
+                    col(ProviderStat.agent_type) == "internal",
+                    col(ProviderStat.conversation_id) == cid,
+                )
+            )
+            stats = result.one()
+
+        if stats.record_count == 0:
+            message.set_result(
+                MessageEventResult().message(
+                    "📊 No stats available for this conversation yet."
+                ),
+            )
+            return
+
+        total_input_other = stats.total_input_other
+        total_input_cached = stats.total_input_cached
+        total_output = stats.total_output
+        total_tokens = total_input_other + total_input_cached + total_output
+
+        ret = (
+            f"📊 Conversation Token usage (ID: {cid[:8]}...)\n"
+            f"Total:          {total_tokens:,}\n"
+            f"Input (cached): {total_input_cached:,}\n"
+            f"Input (other):  {total_input_other:,}\n"
+            f"Output:         {total_output:,}\n"
+        )
+
+        message.set_result(MessageEventResult().message(ret))

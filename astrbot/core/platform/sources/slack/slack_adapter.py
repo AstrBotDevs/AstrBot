@@ -14,6 +14,7 @@ from astrbot.api.event import MessageChain
 from astrbot.api.message_components import *
 from astrbot.api.platform import (
     AstrBotMessage,
+    Group,
     MessageMember,
     MessageType,
     Platform,
@@ -133,13 +134,17 @@ class SlackAdapter(Platform):
         channel_id = event.get("channel", "")
         try:
             channel_info = await self.web_client.conversations_info(channel=channel_id)
-            is_im = cast(dict, channel_info["channel"])["is_im"]
+            channel_data = cast(dict, channel_info["channel"])
+            is_im = channel_data["is_im"]
 
             if is_im:
                 abm.type = MessageType.FRIEND_MESSAGE
             else:
                 abm.type = MessageType.GROUP_MESSAGE
-                abm.group_id = channel_id
+                abm.group = Group(
+                    group_id=channel_id,
+                    group_name=channel_data.get("name") or None,
+                )
         except Exception:
             # 默认作为群组消息处理
             abm.type = MessageType.GROUP_MESSAGE
@@ -411,8 +416,16 @@ class SlackAdapter(Platform):
     def meta(self) -> PlatformMetadata:
         return self.metadata
 
-    async def handle_msg(self, message: AstrBotMessage) -> None:
-        message_event = SlackMessageEvent(
+    def create_event(self, message: AstrBotMessage) -> SlackMessageEvent:
+        """Creates a Slack message event.
+
+        Args:
+            message: AstrBot message object to wrap.
+
+        Returns:
+            Created Slack message event.
+        """
+        return SlackMessageEvent(
             message_str=message.message_str,
             message_obj=message,
             platform_meta=self.meta(),
@@ -420,7 +433,8 @@ class SlackAdapter(Platform):
             web_client=self.web_client,
         )
 
-        self.commit_event(message_event)
+    async def handle_msg(self, message: AstrBotMessage) -> None:
+        self.commit_event(self.create_event(message))
 
     def get_client(self):
         return self.web_client

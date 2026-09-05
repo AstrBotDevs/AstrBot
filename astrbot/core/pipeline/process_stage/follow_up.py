@@ -7,6 +7,7 @@ from astrbot import logger
 from astrbot.core.agent.runners.tool_loop_agent_runner import FollowUpTicket
 from astrbot.core.astr_agent_run_util import AgentRunner
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.utils.active_event_registry import active_event_registry
 
 _ACTIVE_AGENT_RUNNERS: dict[str, AgentRunner] = {}
 _FOLLOW_UP_ORDER_STATE: dict[str, dict[str, object]] = {}
@@ -25,6 +26,7 @@ class FollowUpCapture:
     ticket: FollowUpTicket
     order_seq: int
     monitor_task: asyncio.Task[None]
+    target_run_id: str | None = None
 
 
 def _event_follow_up_text(event: AstrMessageEvent) -> str:
@@ -36,11 +38,24 @@ def _event_follow_up_text(event: AstrMessageEvent) -> str:
 
 def register_active_runner(umo: str, runner: AgentRunner) -> None:
     _ACTIVE_AGENT_RUNNERS[umo] = runner
+    runner_event = getattr(getattr(runner.run_context, "context", None), "event", None)
+    if runner_event is not None:
+        active_event_registry.register_agent_stop_callback(
+            runner_event,
+            runner.request_stop,
+        )
 
 
 def unregister_active_runner(umo: str, runner: AgentRunner) -> None:
     if _ACTIVE_AGENT_RUNNERS.get(umo) is runner:
         _ACTIVE_AGENT_RUNNERS.pop(umo, None)
+        runner_event = getattr(
+            getattr(runner.run_context, "context", None),
+            "event",
+            None,
+        )
+        if runner_event is not None:
+            active_event_registry.unregister_agent_stop_callback(runner_event)
 
 
 def _get_follow_up_order_state(umo: str) -> dict[str, object]:
@@ -197,6 +212,9 @@ def try_capture_follow_up(event: AstrMessageEvent) -> FollowUpCapture | None:
         ticket=ticket,
         order_seq=order_seq,
         monitor_task=monitor_task,
+        target_run_id=str(runner_event.message_obj.message_id)
+        if getattr(runner_event.message_obj, "message_id", None) is not None
+        else None,
     )
 
 

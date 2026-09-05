@@ -9,7 +9,7 @@ from discord.channel import DMChannel
 
 from astrbot import logger
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import File, Image, Plain
+from astrbot.api.message_components import File, Image, Plain, Record
 from astrbot.api.platform import (
     AstrBotMessage,
     MessageMember,
@@ -23,6 +23,7 @@ from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import StarHandlerMetadata, star_handlers_registry
+from astrbot.core.utils.media_utils import MediaResolver
 
 from .client import DiscordBotClient
 from .discord_platform_event import DiscordPlatformEvent
@@ -82,7 +83,11 @@ class DiscordPlatformAdapter(Platform):
 
         if channel:
             message_obj.type = self._get_message_type(channel)
-            message_obj.group_id = self._get_channel_id(channel)
+            if message_obj.type == MessageType.GROUP_MESSAGE:
+                message_obj.group_id = self._get_channel_id(channel)
+                group_name = self._get_group_name(channel)
+                if message_obj.group and group_name:
+                    message_obj.group.group_name = group_name
         else:
             logger.warning(
                 f"[Discord] Can't get channel info for {channel_id_str}, will guess message type.",
@@ -99,14 +104,7 @@ class DiscordPlatformAdapter(Platform):
         message_obj.session_id = session.session_id
         message_obj.message = message_chain.chain
 
-        # 创建临时事件对象来发送消息
-        temp_event = DiscordPlatformEvent(
-            message_str=message_chain.get_plain_text(),
-            message_obj=message_obj,
-            platform_meta=self.meta(),
-            session_id=session.session_id,
-            client=self.client,
-        )
+        temp_event = self.create_event(message_obj)
         await temp_event.send(message_chain)
         await super().send_by_session(session, message_chain)
 
@@ -195,6 +193,27 @@ class DiscordPlatformAdapter(Platform):
         """根据 channel 对象获取ID"""
         return str(getattr(channel, "id", None))
 
+    @staticmethod
+    def _get_group_name(
+        channel: Messageable | GuildChannel | PrivateChannel,
+    ) -> str | None:
+        """Build the AstrBot group name for a Discord guild channel.
+
+        Args:
+            channel: Discord channel or thread associated with the message.
+
+        Returns:
+            ``<guild name>-<channel name>`` when both are available, otherwise the
+            available name, or ``None`` when neither has a name.
+        """
+        channel_name = getattr(channel, "name", None)
+        guild_name = getattr(getattr(channel, "guild", None), "name", None)
+        if isinstance(guild_name, str) and isinstance(channel_name, str):
+            return f"{guild_name}-{channel_name}"
+        if isinstance(channel_name, str):
+            return channel_name
+        return guild_name if isinstance(guild_name, str) else None
+
     def _convert_message_to_abm(self, data: dict) -> AstrBotMessage:
         """将普通消息转换为 AstrBotMessage"""
         message = data["message"]
@@ -231,7 +250,11 @@ class DiscordPlatformAdapter(Platform):
 
         abm = AstrBotMessage()
         abm.type = self._get_message_type(message.channel)
-        abm.group_id = self._get_channel_id(message.channel)
+        if abm.type == MessageType.GROUP_MESSAGE:
+            abm.group_id = self._get_channel_id(message.channel)
+            group_name = self._get_group_name(message.channel)
+            if abm.group and group_name:
+                abm.group.group_name = group_name
         abm.message_str = content
         abm.sender = MessageMember(
             user_id=str(message.author.id),
@@ -248,6 +271,12 @@ class DiscordPlatformAdapter(Platform):
                     message_chain.append(
                         Image(file=attachment.url, filename=attachment.filename),
                     )
+                elif attachment.content_type and attachment.content_type.startswith(
+                    "audio/",
+                ):
+                    message_chain.append(
+                        Record(file=attachment.url, url=attachment.url),
+                    )
                 else:
                     message_chain.append(
                         File(name=attachment.filename, url=attachment.url),
@@ -262,11 +291,34 @@ class DiscordPlatformAdapter(Platform):
     async def convert_message(self, data: dict) -> AstrBotMessage:
         """将平台消息转换成 AstrBotMessage"""
         # 由于 on_interaction 已被禁用，我们只处理普通消息
-        return self._convert_message_to_abm(data)
+        abm = self._convert_message_to_abm(data)
+        for component in abm.message:
+            if isinstance(component, Record):
+                audio_ref = component.url or component.file
+                if audio_ref:
+                    path_wav = await MediaResolver(
+                        audio_ref,
+                        media_type="audio",
+                        default_suffix=".wav",
+                    ).to_path(target_format="wav")
+                    component.file = path_wav
+                    component.url = path_wav
+                    component.path = path_wav
+        return abm
 
-    async def handle_msg(self, message: AstrBotMessage, followup_webhook=None) -> None:
-        """处理消息"""
-        message_event = DiscordPlatformEvent(
+    def create_event(
+        self, message: AstrBotMessage, followup_webhook=None
+    ) -> DiscordPlatformEvent:
+        """Creates a Discord message event.
+
+        Args:
+            message: AstrBot message object to wrap.
+            followup_webhook: Optional slash-command follow-up webhook.
+
+        Returns:
+            Created Discord message event.
+        """
+        return DiscordPlatformEvent(
             message_str=message.message_str,
             message_obj=message,
             platform_meta=self.meta(),
@@ -274,6 +326,10 @@ class DiscordPlatformAdapter(Platform):
             client=self.client,
             interaction_followup_webhook=followup_webhook,
         )
+
+    async def handle_msg(self, message: AstrBotMessage, followup_webhook=None) -> None:
+        """处理消息"""
+        message_event = self.create_event(message, followup_webhook)
 
         if self.client.user is None:
             logger.error(
@@ -427,8 +483,22 @@ class DiscordPlatformAdapter(Platform):
 
         # 使用 Pycord 的方法同步指令
         # 注意：这可能需要一些时间，并且有频率限制
-        await self.client.sync_commands()
-        logger.info("[Discord] Command synchronization completed.")
+        try:
+            await self.client.sync_commands()
+            logger.info("[Discord] Command synchronization completed.")
+        except discord.HTTPException as e:
+            if self._is_daily_command_quota_error(e):
+                logger.warning(
+                    "[Discord] Daily application command create quota reached "
+                    "(30034); command sync skipped. Existing commands should "
+                    "continue to work until the quota resets.",
+                )
+                return
+            logger.warning(f"[Discord] Sync commands failed: {e}")
+
+    @staticmethod
+    def _is_daily_command_quota_error(error: discord.HTTPException) -> bool:
+        return getattr(error, "code", None) == 30034
 
     def _create_dynamic_callback(self, cmd_name: str):
         """为每个指令动态创建一个异步回调函数"""
@@ -470,7 +540,11 @@ class DiscordPlatformAdapter(Platform):
             abm = AstrBotMessage()
             if channel is not None:
                 abm.type = self._get_message_type(channel, ctx.guild_id)
-                abm.group_id = self._get_channel_id(channel)
+                if abm.type == MessageType.GROUP_MESSAGE:
+                    abm.group_id = self._get_channel_id(channel)
+                    group_name = self._get_group_name(channel)
+                    if abm.group and group_name:
+                        abm.group.group_name = group_name
             else:
                 # 防守式兜底：channel 取不到时，仍能根据 guild_id/channel_id 推断会话信息
                 abm.type = (
@@ -478,7 +552,8 @@ class DiscordPlatformAdapter(Platform):
                     if ctx.guild_id is not None
                     else MessageType.FRIEND_MESSAGE
                 )
-                abm.group_id = str(ctx.channel_id)
+                if abm.type == MessageType.GROUP_MESSAGE:
+                    abm.group_id = str(ctx.channel_id)
 
             abm.message_str = message_str_for_filter
             abm.sender = MessageMember(
@@ -524,7 +599,7 @@ class DiscordPlatformAdapter(Platform):
             return None
 
         # Discord 斜杠指令名称规范
-        if not re.match(r"^[a-z0-9_-]{1,32}$", cmd_name):
+        if cmd_name != cmd_name.lower() or not re.match(r"^[-_'\w]{1,32}$", cmd_name):
             logger.debug(f"[Discord] Skipping invalid slash command format: {cmd_name}")
             return None
 

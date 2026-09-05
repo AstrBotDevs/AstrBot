@@ -1,6 +1,6 @@
 import { ref, computed } from 'vue';
-import axios from 'axios';
 import { useRouter } from 'vue-router';
+import { chatApi, configRouteApi } from '@/api/v1';
 import { buildWebchatUmoDetails, getStoredSelectedChatConfigId } from '@/utils/chatConfigBinding';
 
 export interface Session {
@@ -33,7 +33,7 @@ export function useSessions(chatboxMode: boolean = false) {
 
     async function getSessions() {
         try {
-            const response = await axios.get('/api/chat/sessions');
+            const response = await chatApi.listSessions();
             sessions.value = response.data.data;
 
 
@@ -50,7 +50,7 @@ export function useSessions(chatboxMode: boolean = false) {
     async function newSession() {
         try {
             const selectedConfigId = getStoredSelectedChatConfigId();
-            const response = await axios.get('/api/chat/new_session');
+            const response = await chatApi.createSession();
             const sessionId = response.data.data.session_id;
             const platformId = response.data.data.platform_id;
 
@@ -59,10 +59,7 @@ export function useSessions(chatboxMode: boolean = false) {
             if (selectedConfigId && selectedConfigId !== 'default' && platformId === 'webchat') {
                 try {
                     const umoDetails = buildWebchatUmoDetails(sessionId, false);
-                    await axios.post('/api/config/umo_abconf_route/update', {
-                        umo: umoDetails.umo,
-                        conf_id: selectedConfigId
-                    });
+                    await configRouteApi.upsert(umoDetails.umo, { config_id: selectedConfigId });
                 } catch (err) {
                     console.error('Failed to bind config to session', err);
                 }
@@ -71,9 +68,7 @@ export function useSessions(chatboxMode: boolean = false) {
             // 更新 URL
             const basePath = chatboxMode ? '/chatbox' : '/chat';
             router.push(`${basePath}/${sessionId}`);
-            
-            await getSessions();
-            
+
             // 确保新创建的会话被选中高亮
             selectedSessions.value = [sessionId];
             
@@ -86,7 +81,7 @@ export function useSessions(chatboxMode: boolean = false) {
 
     async function deleteSession(sessionId: string) {
         try {
-            await axios.get('/api/chat/delete_session?session_id=' + sessionId);
+            await chatApi.deleteSession(sessionId);
             await getSessions();
             currSessionId.value = '';
             selectedSessions.value = [];
@@ -126,7 +121,7 @@ export function useSessions(chatboxMode: boolean = false) {
     async function batchDeleteSessions(sessionIds: string[]): Promise<BatchDeleteResult> {
         try {
             const currentSessionId = currSessionId.value;
-            const response = await axios.post('/api/chat/batch_delete_sessions', { session_ids: sessionIds });
+            const response = await chatApi.batchDeleteSessions({ session_ids: sessionIds });
             if (response.data?.status !== 'ok') {
                 throw new Error(response.data?.message || 'Failed to batch delete sessions');
             }
@@ -173,9 +168,8 @@ export function useSessions(chatboxMode: boolean = false) {
 
         const trimmedTitle = editingTitle.value.trim();
         try {
-            await axios.post('/api/chat/update_session_display_name', {
-                session_id: editingSessionId.value,
-                display_name: trimmedTitle
+            await chatApi.updateSession(editingSessionId.value, {
+                display_name: trimmedTitle,
             });
 
             // 更新本地会话标题

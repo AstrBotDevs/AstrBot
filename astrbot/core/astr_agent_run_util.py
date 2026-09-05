@@ -182,6 +182,11 @@ async def run_agent(
                 if _should_stop_agent(astr_event):
                     continue
 
+                if resp.type == "agent_stats":
+                    if astr_event.get_platform_name() == "webchat":
+                        await astr_event.send(resp.data["chain"])
+                    continue
+
                 if resp.type == "tool_call_result":
                     msg_chain = resp.data["chain"]
 
@@ -245,6 +250,24 @@ async def run_agent(
                 if stream_to_general and resp.type == "streaming_delta":
                     continue
 
+                if (
+                    resp.type == "err"
+                    and agent_runner.streaming
+                    and not stream_to_general
+                ):
+                    chain = (
+                        resp.data.get("chain") if isinstance(resp.data, dict) else None
+                    )
+                    if not isinstance(chain, MessageChain):
+                        logger.error(
+                            "Agent runner returned an error response without a message chain."
+                        )
+                        chain = MessageChain().message(
+                            "Error occurred during AI execution."
+                        )
+                    yield chain
+                    continue
+
                 if stream_to_general or not agent_runner.streaming:
                     if can_buffer_llm_result and resp.type == "llm_result":
                         buffered_llm_chains.append(resp.data["chain"])
@@ -289,15 +312,6 @@ async def run_agent(
                 except asyncio.CancelledError:
                     pass
             if agent_runner.done():
-                # send agent stats to webchat
-                if astr_event.get_platform_name() == "webchat":
-                    await astr_event.send(
-                        MessageChain(
-                            type="agent_stats",
-                            chain=[Json(data=agent_runner.stats.to_dict())],
-                        )
-                    )
-
                 break
 
         except Exception as e:
@@ -422,7 +436,11 @@ async def run_live_agent(
         )
     else:
         tts_task = asyncio.create_task(
-            _simulated_stream_tts(tts_provider, text_queue, audio_queue)
+            _simulated_stream_tts(
+                tts_provider,
+                text_queue,
+                audio_queue,
+            )
         )
 
     # 3. 主循环：从 audio_queue 读取音频并 yield
@@ -574,7 +592,14 @@ async def _simulated_stream_tts(
     text_queue: asyncio.Queue[str | None],
     audio_queue: "asyncio.Queue[bytes | tuple[str, bytes] | None]",
 ) -> None:
-    """模拟流式 TTS 分句生成音频"""
+    """模拟流式 TTS 分句生成音频.
+
+    Args:
+        tts_provider: Provider used to synthesize audio files.
+        text_queue: Text chunks to synthesize. ``None`` ends the worker.
+        audio_queue: Synthesized audio bytes output queue.
+    """
+
     try:
         while True:
             text = await text_queue.get()

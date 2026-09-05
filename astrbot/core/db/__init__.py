@@ -24,8 +24,10 @@ from astrbot.core.db.po import (
     ProviderStat,
     SessionProjectRelation,
     Stats,
+    UmoAlias,
     WebChatThread,
 )
+from astrbot.core.sentinels import NOT_GIVEN
 
 
 @dataclass
@@ -155,9 +157,28 @@ class BaseDatabase(abc.ABC):
         page_size: int = 20,
         platform_ids: list[str] | None = None,
         search_query: str = "",
+        include_history: bool = True,
         **kwargs,
     ) -> tuple[list[ConversationV2], int]:
-        """Get conversations filtered by platform IDs and search query."""
+        """Filter conversations by platform IDs and search text.
+
+        Args:
+            page: Page number.
+            page_size: Number of items per page.
+            platform_ids: Platform IDs to include, if any.
+            search_query: Search text, if any.
+            include_history: Whether to load the full history for returned rows.
+            **kwargs: Additional filters supported by the database backend.
+        """
+        ...
+
+    @abc.abstractmethod
+    async def get_conversation_platform_ids(self) -> list[str]:
+        """Return distinct platform IDs referenced by conversation history.
+
+        Returns:
+            Sorted platform IDs that have at least one conversation.
+        """
         ...
 
     @abc.abstractmethod
@@ -206,6 +227,7 @@ class BaseDatabase(abc.ABC):
         sender_id: str | None = None,
         sender_name: str | None = None,
         llm_checkpoint_id: str | None = None,
+        max_messages: int | None = None,
     ) -> PlatformMessageHistory:
         """Insert a new platform message history record."""
         ...
@@ -443,11 +465,23 @@ class BaseDatabase(abc.ABC):
         persona_id: str,
         system_prompt: str | None = None,
         begin_dialogs: list[str] | None = None,
-        tools: list[str] | None = None,
-        skills: list[str] | None = None,
-        custom_error_message: str | None = None,
+        tools: list[str] | None | object = NOT_GIVEN,
+        skills: list[str] | None | object = NOT_GIVEN,
+        custom_error_message: str | None | object = NOT_GIVEN,
     ) -> Persona | None:
-        """Update a persona's system prompt or begin dialogs."""
+        """Update a persona record.
+
+        Args:
+            persona_id: Persona ID to update.
+            system_prompt: Optional replacement system prompt.
+            begin_dialogs: Optional replacement begin dialogs.
+            tools: Tool names, None for all tools, or NOT_GIVEN to leave unchanged.
+            skills: Skill names, None for all skills, or NOT_GIVEN to leave unchanged.
+            custom_error_message: Custom fallback message, None to clear, or NOT_GIVEN to leave unchanged.
+
+        Returns:
+            Updated persona, or None when no fields were updated.
+        """
         ...
 
     @abc.abstractmethod
@@ -552,11 +586,11 @@ class BaseDatabase(abc.ABC):
     @abc.abstractmethod
     async def get_preferences(
         self,
-        scope: str,
+        scope: str | None = None,
         scope_id: str | None = None,
         key: str | None = None,
     ) -> list[Preference]:
-        """Get all preferences for a specific scope ID or key."""
+        """Get preferences, optionally filtered by scope, scope ID, or key."""
         ...
 
     @abc.abstractmethod
@@ -802,6 +836,47 @@ class BaseDatabase(abc.ABC):
         ...
 
     # ====
+    # UMO Alias Management
+    # ====
+
+    @abc.abstractmethod
+    async def upsert_umo_alias(
+        self,
+        umo: str,
+        creator_sender_id: str,
+        auto_name: str | None,
+        user_alias: str | None,
+    ) -> UmoAlias:
+        """Create or update the display alias metadata for a UMO."""
+        ...
+
+    @abc.abstractmethod
+    async def upsert_umo_auto_name(
+        self,
+        umo: str,
+        creator_sender_id: str,
+        auto_name: str,
+    ) -> None:
+        """Create or update only the automatically discovered UMO name.
+
+        Args:
+            umo: Unified message origin to name.
+            creator_sender_id: Sender that first caused the UMO to be recorded.
+            auto_name: Name discovered from the inbound platform message.
+        """
+        ...
+
+    @abc.abstractmethod
+    async def get_umo_alias(self, umo: str) -> UmoAlias | None:
+        """Get alias metadata for one UMO."""
+        ...
+
+    @abc.abstractmethod
+    async def get_umo_aliases(self, umos: list[str] | None = None) -> list[UmoAlias]:
+        """Get alias metadata, optionally restricted to the given UMO list."""
+        ...
+
+    # ====
     # ChatUI Project Management
     # ====
 
@@ -812,6 +887,8 @@ class BaseDatabase(abc.ABC):
         title: str,
         emoji: str | None = "📁",
         description: str | None = None,
+        workspace_type: str = "session",
+        workspace_path: str | None = None,
     ) -> ChatUIProject:
         """Create a new ChatUI project."""
         ...
@@ -838,6 +915,8 @@ class BaseDatabase(abc.ABC):
         title: str | None = None,
         emoji: str | None = None,
         description: str | None = None,
+        workspace_type: str | None = None,
+        workspace_path: str | None = None,
     ) -> None:
         """Update a ChatUI project."""
         ...

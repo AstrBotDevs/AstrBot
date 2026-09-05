@@ -34,20 +34,58 @@ export function getProviderIcon(type) {
     'fishaudio': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/fishaudio.svg',
     'minimax': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/minimax.svg',
     'minimax-token-plan': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/minimax.svg',
-    'mimo': 'https://platform.xiaomimimo.com/favicon.874c9507.png',
+    'mimo': 'https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/xiaomi.svg',
+    'xiaomi': 'https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/xiaomi.svg',
+    'xiaomi-token-plan': 'https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/xiaomi.svg',
     '302ai': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@1.53.0/icons/ai302-color.svg',
     'microsoft': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/microsoft.svg',
     'vllm': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/vllm.svg',
     'groq': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/groq.svg',
     'aihubmix': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/aihubmix-color.svg',
     'openrouter': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/openrouter.svg',
+    'ssycloud': 'https://admin.shengsuanyun.com/assets/logo-BoujJhP-.png',
     "tokenpony": "https://tokenpony.cn/tokenpony-web/logo.png",
     "compshare": "https://compshare.cn/favicon.ico",
     "xinference": "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/xinference-color.svg",
     "bailian": "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/bailian-color.svg",
     "volcengine": 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/volcengine-color.svg',
+    'huggingface': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/huggingface.svg',
   };
   return icons[type] || '';
+}
+
+/**
+ * Determine whether a provider icon is a monochrome SVG.
+ *
+ * These icons need to be inverted in the dark theme because they are loaded as
+ * external images and cannot inherit the page text color.
+ *
+ * @param {string} type - Provider type
+ * @returns {boolean} Whether the icon should be theme-inverted
+ */
+export function isMonochromeProviderIcon(type) {
+  return [
+    'openai',
+    'azure',
+    'xai',
+    'anthropic',
+    'ollama',
+    'deepseek',
+    'modelscope',
+    'zhipu',
+    'siliconflow',
+    'moonshot',
+    'kimi',
+    'kimi-code',
+    'ppio',
+    'lm_studio',
+    'minimax',
+    'minimax-token-plan',
+    'mimo',
+    'xiaomi',
+    'xiaomi-token-plan',
+    'openrouter'
+  ].includes(type);
 }
 
 /**

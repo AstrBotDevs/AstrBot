@@ -18,14 +18,6 @@
         :multiple="true"
       />
     </template>
-    <template v-else-if="getSpecialName(itemMeta?._special) === 'select_agent_runner_provider'">
-      <ProviderSelector
-        :model-value="modelValue"
-        @update:model-value="emitUpdate"
-        :provider-type="'agent_runner'"
-        :provider-subtype="getSpecialSubtype(itemMeta?._special)"
-      />
-    </template>
     <template v-else-if="itemMeta?._special === 'provider_pool'">
       <ProviderSelector :model-value="modelValue" @update:model-value="emitUpdate" :provider-type="'chat_completion'"
         :button-text="t('core.shared.providerSelector.selectProviderPool')" />
@@ -44,6 +36,13 @@
     </template>
     <template v-else-if="itemMeta?._special === 't2i_template'">
       <T2ITemplateEditor />
+    </template>
+    <template v-else-if="itemMeta?._special === 'dashboard_totp_manager'">
+      <DashboardTotpManager
+        :model-value="Boolean(modelValue)"
+        :config-root="configRoot"
+        @update:model-value="emitUpdate"
+      />
     </template>
     <template v-else-if="itemMeta?._special === 'get_embedding_dim'">
       <div class="d-flex align-center gap-2">
@@ -87,11 +86,12 @@
       ></v-checkbox>
     </div>
 
-    <v-select
+    <v-autocomplete
       v-else-if="itemMeta?.type === 'list' && itemMeta?.options"
       :model-value="modelValue"
-      @update:model-value="emitUpdate"
-      :items="getSelectItems(itemMeta)"
+      @update:model-value="val => { emitUpdate(val); listSearchText = '' }"
+      v-model:search="listSearchText"
+      :items="listSelectItems"
       item-title="title"
       item-value="value"
       :disabled="itemMeta?.readonly"
@@ -101,7 +101,7 @@
       hide-details
       chips
       multiple
-    ></v-select>
+    ></v-autocomplete>
 
     <v-select
       v-else-if="itemMeta?.options"
@@ -135,6 +135,10 @@
       v-else-if="itemMeta?.type === 'string'"
       :model-value="modelValue"
       @update:model-value="emitUpdate"
+      :type="stringInputType"
+      :append-inner-icon="secretToggleIcon"
+      :autocomplete="itemMeta?.secret ? 'new-password' : undefined"
+      @click:append-inner="secretVisible = !secretVisible"
       density="compact"
       variant="outlined"
       class="config-field"
@@ -205,6 +209,7 @@
       v-else-if="itemMeta?.type === 'list'"
       :model-value="modelValue"
       @update:model-value="emitUpdate"
+      :secret="Boolean(itemMeta?.secret)"
       class="config-field"
     />
 
@@ -212,6 +217,9 @@
       v-else-if="itemMeta?.type === 'dict'"
       :model-value="modelValue"
       :item-meta="itemMeta"
+      :plugin-name="pluginName"
+      :plugin-i18n="pluginI18n"
+      :config-key="configKey"
       @update:model-value="emitUpdate"
       class="config-field"
     />
@@ -220,6 +228,10 @@
       v-else
       :model-value="modelValue"
       @update:model-value="emitUpdate"
+      :type="stringInputType"
+      :append-inner-icon="secretToggleIcon"
+      :autocomplete="itemMeta?.secret ? 'new-password' : undefined"
+      @click:append-inner="secretVisible = !secretVisible"
       density="compact"
       variant="outlined"
       class="config-field"
@@ -238,10 +250,14 @@ import PersonaSelector from './PersonaSelector.vue'
 import KnowledgeBaseSelector from './KnowledgeBaseSelector.vue'
 import PluginSetSelector from './PluginSetSelector.vue'
 import T2ITemplateEditor from './T2ITemplateEditor.vue'
-import { ref } from 'vue'
+import DashboardTotpManager from './DashboardTotpManager.vue'
+import { computed, ref } from 'vue'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
+import { usePluginI18n } from '@/utils/pluginI18n'
 
 const numericTemp = ref(null)
+const listSearchText = ref('')
+const secretVisible = ref(false)
 
 const props = defineProps({
   modelValue: {
@@ -256,6 +272,10 @@ const props = defineProps({
     type: String,
     default: ''
   },
+  pluginI18n: {
+    type: Object,
+    default: () => ({})
+  },
   configKey: {
     type: String,
     default: ''
@@ -267,16 +287,44 @@ const props = defineProps({
   showFullscreenBtn: {
     type: Boolean,
     default: false
+  },
+  configRoot: {
+    type: Object,
+    default: null
   }
 })
 
 const emit = defineEmits(['update:modelValue', 'get-embedding-dim', 'open-fullscreen'])
 const { t } = useI18n()
 const { getRaw } = useModuleI18n('features/config-metadata')
+const { configText } = usePluginI18n()
 
 function emitUpdate(val) {
+  if (
+    props.itemMeta?._special === 'agent_runner_type'
+    && props.configRoot?.agent_runner
+    && props.itemMeta?.runner_defaults?.[val]
+  ) {
+    props.configRoot.agent_runner.config = JSON.parse(
+      JSON.stringify(props.itemMeta.runner_defaults[val])
+    )
+  }
   emit('update:modelValue', val)
 }
+
+const listSelectItems = computed(() =>
+  props.itemMeta?.type === 'list' && props.itemMeta?.options
+    ? getSelectItems(props.itemMeta)
+    : []
+)
+
+const stringInputType = computed(() =>
+  props.itemMeta?.secret && !secretVisible.value ? 'password' : 'text'
+)
+const secretToggleIcon = computed(() => {
+  if (!props.itemMeta?.secret) return undefined
+  return secretVisible.value ? 'mdi-eye-off-outline' : 'mdi-eye-outline'
+})
 
 function toNumber(val) {
   const n = parseFloat(val)
@@ -289,6 +337,17 @@ function getLabel(itemMeta, index, option) {
 }
 
 function getTranslatedLabels(itemMeta) {
+  if (
+    props.pluginName
+    && props.configKey
+    && props.pluginI18n
+    && Object.keys(props.pluginI18n).length > 0
+  ) {
+    const translatedLabels = configText(props.pluginI18n, props.configKey, 'labels', null)
+    if (Array.isArray(translatedLabels)) {
+      return translatedLabels
+    }
+  }
   if (!itemMeta?.labels) return null
   if (typeof itemMeta.labels === 'string') {
     const translatedLabels = getRaw(itemMeta.labels)
@@ -313,24 +372,6 @@ function getSelectItems(itemMeta) {
   return itemMeta.options || []
 }
 
-function parseSpecialValue(value) {
-  if (!value || typeof value !== 'string') {
-    return { name: '', subtype: '' }
-  }
-  const [name, ...rest] = value.split(':')
-  return {
-    name,
-    subtype: rest.join(':') || ''
-  }
-}
-
-function getSpecialName(value) {
-  return parseSpecialValue(value).name
-}
-
-function getSpecialSubtype(value) {
-  return parseSpecialValue(value).subtype
-}
 </script>
 
 <style scoped>

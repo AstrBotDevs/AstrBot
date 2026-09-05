@@ -106,6 +106,7 @@ class Provider(AbstractProvider):
         model: str | None = None,
         extra_user_content_parts: list[ContentPart] | None = None,
         tool_choice: Literal["auto", "required"] = "auto",
+        request_max_retries: int | None = None,
         **kwargs,
     ) -> LLMResponse:
         """获得 LLM 的文本对话结果。会使用当前的模型进行对话。
@@ -120,6 +121,7 @@ class Provider(AbstractProvider):
             contexts: 上下文，和 prompt 二选一使用
             tool_calls_result: 回传给 LLM 的工具调用结果。参考: https://platform.openai.com/docs/guides/function-calling
             extra_user_content_parts: 额外的内容块列表，用于在用户消息后添加额外的文本块（如系统提醒、指令等）
+            request_max_retries: 可重试请求错误的最大尝试次数，包含首次请求。
             kwargs: 其他参数
 
         Notes:
@@ -142,6 +144,7 @@ class Provider(AbstractProvider):
         tool_calls_result: ToolCallsResult | list[ToolCallsResult] | None = None,
         model: str | None = None,
         tool_choice: Literal["auto", "required"] = "auto",
+        request_max_retries: int | None = None,
         **kwargs,
     ) -> AsyncGenerator[LLMResponse, None]:
         """获得 LLM 的流式文本对话结果。会使用当前的模型进行对话。在生成的最后会返回一次完整的结果。
@@ -155,6 +158,7 @@ class Provider(AbstractProvider):
             tool_choice: 工具调用策略，`auto` 表示由模型自行决定，`required` 表示要求模型必须调用工具
             contexts: 上下文，和 prompt 二选一使用
             tool_calls_result: 回传给 LLM 的工具调用结果。参考: https://platform.openai.com/docs/guides/function-calling
+            request_max_retries: 可重试请求错误的最大尝试次数，包含首次请求。
             kwargs: 其他参数
 
         Notes:
@@ -359,7 +363,7 @@ class EmbeddingProvider(AbstractProvider):
 
         """
         semaphore = asyncio.Semaphore(tasks_limit)
-        all_embeddings: list[list[float]] = []
+        batch_results: dict[int, list[list[float]]] = {}
         failed_batches: list[tuple[int, list[str]]] = []
         completed_count = 0
         total_count = len(texts)
@@ -370,7 +374,7 @@ class EmbeddingProvider(AbstractProvider):
                 for attempt in range(max_retries):
                     try:
                         batch_embeddings = await self.get_embeddings(batch_texts)
-                        all_embeddings.extend(batch_embeddings)
+                        batch_results[batch_idx] = batch_embeddings
                         completed_count += len(batch_texts)
                         if progress_callback:
                             await progress_callback(completed_count, total_count)
@@ -402,6 +406,9 @@ class EmbeddingProvider(AbstractProvider):
             )
             raise Exception(error_msg)
 
+        all_embeddings: list[list[float]] = []
+        for batch_idx in range(len(tasks)):
+            all_embeddings.extend(batch_results[batch_idx])
         return all_embeddings
 
 

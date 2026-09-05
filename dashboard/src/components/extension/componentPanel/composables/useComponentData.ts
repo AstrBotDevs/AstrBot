@@ -2,7 +2,7 @@
  * 指令数据管理 Composable
  */
 import { ref, reactive } from 'vue';
-import axios from 'axios';
+import { commandApi, toolApi } from '@/api/v1';
 import type { CommandItem, CommandSummary, SnackbarState, ToolItem } from '../types';
 
 export function useComponentData() {
@@ -36,7 +36,7 @@ export function useComponentData() {
   const fetchCommands = async (errorMessage: string) => {
     loading.value = true;
     try {
-      const res = await axios.get('/api/commands');
+      const res = await commandApi.list();
       if (res.data.status === 'ok') {
         commands.value = res.data.data.items || [];
         const s = res.data.data.summary || {};
@@ -55,7 +55,7 @@ export function useComponentData() {
   const fetchTools = async (errorMessage: string) => {
     toolsLoading.value = true;
     try {
-      const res = await axios.get('/api/tools/list');
+      const res = await toolApi.list();
       if (res.data.status === 'ok') {
         tools.value = res.data.data || [];
       } else {

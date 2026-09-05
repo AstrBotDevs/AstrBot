@@ -8,6 +8,8 @@ from collections.abc import AsyncGenerator
 from time import time
 from typing import Any
 
+from deprecated import deprecated
+
 from astrbot import logger
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.db.po import Conversation
@@ -53,6 +55,8 @@ class AstrMessageEvent(abc.ABC):
         self.is_at_or_wake_command = False
         """是否是 At 机器人或者带有唤醒词或者是私聊(插件注册的事件监听器会让 is_wake 设为 True, 但是不会让这个属性置为 True)"""
         self._extras: dict[str, Any] = {}
+        self._force_stopped: bool = False
+        """独立的停止标志，不依赖 _result，不会被 clear_result() 重置"""
         message_type = getattr(message_obj, "type", None)
         if not isinstance(message_type, MessageType):
             try:
@@ -164,8 +168,7 @@ class AstrMessageEvent(abc.ABC):
                     parts.append("[引用消息]")
             else:
                 parts.append(f"[{i.type}]")
-            parts.append(" ")
-        return "".join(parts)
+        return " ".join(parts)
 
     def get_message_outline(self) -> str:
         """获取消息概要。
@@ -267,10 +270,11 @@ class AstrMessageEvent(abc.ABC):
             match = re.search(pattern, buffer)
             if not match:
                 break
-            matched_text = match.group()
-            await self.send(MessageChain([Plain(matched_text)]))
+            matched_text = match.group().strip()
+            if matched_text:
+                await self.send(MessageChain([Plain(matched_text)]))
+                await asyncio.sleep(1.5)  # 限速
             buffer = buffer[match.end() :]
-            await asyncio.sleep(1.5)  # 限速
         return buffer
 
     async def send_streaming(
@@ -299,9 +303,11 @@ class AstrMessageEvent(abc.ABC):
         默认实现为空，由具体平台按需重写。
         """
 
+    @deprecated(version="3.5.18", reason="No longer invoked by the message scheduler.")
     async def _pre_send(self) -> None:
         """调度器会在执行 send() 前调用该方法 deprecated in v3.5.18"""
 
+    @deprecated(version="3.5.18", reason="No longer invoked by the message scheduler.")
     async def _post_send(self) -> None:
         """调度器会在执行 send() 后调用该方法 deprecated in v3.5.18"""
 
@@ -336,6 +342,7 @@ class AstrMessageEvent(abc.ABC):
 
     def stop_event(self) -> None:
         """终止事件传播。"""
+        self._force_stopped = True
         if self._result is None:
             self.set_result(MessageEventResult().stop_event())
         else:
@@ -343,6 +350,7 @@ class AstrMessageEvent(abc.ABC):
 
     def continue_event(self) -> None:
         """继续事件传播。"""
+        self._force_stopped = False
         if self._result is None:
             self.set_result(MessageEventResult().continue_event())
         else:
@@ -350,6 +358,8 @@ class AstrMessageEvent(abc.ABC):
 
     def is_stopped(self) -> bool:
         """是否终止事件传播。"""
+        if self._force_stopped:
+            return True
         if self._result is None:
             return False  # 默认是继续传播
         return self._result.is_stopped()
@@ -494,9 +504,27 @@ class AstrMessageEvent(abc.ABC):
         await self.send(MessageChain([Plain(emoji)]))
 
     async def get_group(self, group_id: str | None = None, **kwargs) -> Group | None:
-        """获取一个群聊的数据, 如果不填写 group_id: 如果是私聊消息，返回 None。如果是群聊消息，返回当前群聊的数据。
+        """Get group information.
 
-        适配情况:
+        Platform event subclasses can enrich the result through their APIs. The
+        default implementation returns inbound group data, or an ID-only object
+        when an explicit group is queried.
 
-        - aiocqhttp(OneBotv11)
+        Args:
+            group_id: Group ID to query. Defaults to the current message group.
+            **kwargs: Extra platform-specific query options.
+
+        Returns:
+            Group information, or ``None`` for a private message without an
+            explicit group ID.
         """
+        resolved_group_id = group_id or self.get_group_id()
+        if not resolved_group_id:
+            return None
+        resolved_group_id = str(resolved_group_id)
+        if (
+            self.message_obj.group
+            and self.message_obj.group.group_id == resolved_group_id
+        ):
+            return self.message_obj.group
+        return Group(group_id=resolved_group_id)

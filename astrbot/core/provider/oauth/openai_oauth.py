@@ -80,17 +80,33 @@ def parse_oauth_credential_json(raw: str) -> dict[str, Any] | None:
         raise ValueError(f"OAuth JSON 凭据解析失败: {exc}") from exc
     if not isinstance(data, dict):
         raise ValueError("OAuth JSON 凭据必须是对象")
-    access_token = str(data.get("access_token") or "").strip()
+    tokens = data.get("tokens") if isinstance(data.get("tokens"), dict) else data
+    access_token = str(
+        tokens.get("access_token") or data.get("access_token") or ""
+    ).strip()
     if not access_token:
         raise ValueError("OAuth JSON 凭据缺少 access_token")
-    refresh_token = str(data.get("refresh_token") or "").strip()
+    refresh_token = str(
+        tokens.get("refresh_token") or data.get("refresh_token") or ""
+    ).strip()
+    id_token = str(tokens.get("id_token") or data.get("id_token") or "").strip()
     expires_at = _normalize_expires_at(
-        data.get("expired") or data.get("expires_at") or data.get("expires"),
+        data.get("expired")
+        or data.get("expires_at")
+        or data.get("expires")
+        or tokens.get("expires_at")
+        or tokens.get("expires"),
     )
-    account_id = str(
-        data.get("account_id") or ""
-    ).strip() or extract_account_id_from_jwt(access_token)
-    email = str(data.get("email") or "").strip() or extract_email_from_jwt(access_token)
+    account_id = (
+        str(data.get("account_id") or "").strip()
+        or extract_account_id_from_jwt(access_token)
+        or extract_account_id_from_jwt(id_token)
+    )
+    email = (
+        str(data.get("email") or "").strip()
+        or extract_email_from_jwt(access_token)
+        or extract_email_from_jwt(id_token)
+    )
     return {
         "access_token": access_token,
         "refresh_token": refresh_token,

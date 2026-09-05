@@ -11,7 +11,10 @@ from astrbot.core.computer.computer_client import get_booter, get_local_booter
 from astrbot.core.message.message_event_result import MessageChain
 
 from ..registry import builtin_tool
-from .util import check_admin_permission
+from .util import (
+    check_admin_permission,
+    workspace_root_for_context,
+)
 
 _OS_NAME = platform.system()
 _SANDBOX_PYTHON_TOOL_CONFIG = {
@@ -32,6 +35,11 @@ param_schema = {
             "type": "boolean",
             "description": "Whether to suppress the output of the code execution.",
             "default": False,
+        },
+        "timeout": {
+            "type": "integer",
+            "description": "Optional timeout in seconds for code execution.",
+            "default": 30,
         },
     },
     "required": ["code"],
@@ -77,7 +85,11 @@ class PythonTool(FunctionTool):
     parameters: dict = field(default_factory=lambda: param_schema)
 
     async def call(
-        self, context: ContextWrapper[AstrAgentContext], code: str, silent: bool = False
+        self,
+        context: ContextWrapper[AstrAgentContext],
+        code: str,
+        silent: bool = False,
+        timeout: int = 30,
     ) -> ToolExecResult:
         if permission_error := check_admin_permission(context, "Python execution"):
             return permission_error
@@ -85,8 +97,17 @@ class PythonTool(FunctionTool):
             context.context.context,
             context.context.event.unified_msg_origin,
         )
+        effective_timeout = (
+            min(timeout, context.tool_call_timeout)
+            if timeout > 0
+            else context.tool_call_timeout
+        )
         try:
-            result = await sb.python.exec(code, silent=silent)
+            result = await sb.python.exec(
+                code,
+                timeout=effective_timeout,
+                silent=silent,
+            )
             return await handle_result(result, context.context.event)
         except Exception as e:
             return f"Error executing code: {str(e)}"
@@ -104,13 +125,29 @@ class LocalPythonTool(FunctionTool):
     parameters: dict = field(default_factory=lambda: param_schema)
 
     async def call(
-        self, context: ContextWrapper[AstrAgentContext], code: str, silent: bool = False
+        self,
+        context: ContextWrapper[AstrAgentContext],
+        code: str,
+        silent: bool = False,
+        timeout: int = 30,
     ) -> ToolExecResult:
         if permission_error := check_admin_permission(context, "Python execution"):
             return permission_error
         sb = get_local_booter()
+        effective_timeout = (
+            min(timeout, context.tool_call_timeout)
+            if timeout > 0
+            else context.tool_call_timeout
+        )
         try:
-            result = await sb.python.exec(code, silent=silent)
+            current_workspace_root = await workspace_root_for_context(context)
+            current_workspace_root.mkdir(parents=True, exist_ok=True)
+            result = await sb.python.exec(
+                code,
+                timeout=effective_timeout,
+                silent=silent,
+                cwd=str(current_workspace_root),
+            )
             return await handle_result(result, context.context.event)
         except Exception as e:
             return f"Error executing code: {str(e)}"

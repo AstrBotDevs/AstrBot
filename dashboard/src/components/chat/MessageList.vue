@@ -80,6 +80,7 @@
                       :refs="resolvedMessageRefs(msg)"
                       :is-dark="isDark"
                       :custom-html-tags="customMarkdownTags"
+                      :is-streaming="isMessageStreaming(msgIndex)"
                     />
 
                     <button
@@ -105,16 +106,37 @@
                       :src="partUrl(part)"
                     />
 
-                    <div v-else-if="part.type === 'file'" class="file-part">
-                      <v-icon size="20">mdi-file-document-outline</v-icon>
-                      <span>{{ part.filename || "file" }}</span>
+                    <div
+                      v-else-if="part.type === 'file'"
+                      class="file-part"
+                      :style="{
+                        '--attachment-color': attachmentPresentation(part).color,
+                      }"
+                    >
+                      <v-icon
+                        class="file-part-icon"
+                        :icon="attachmentPresentation(part).icon"
+                        size="24"
+                      />
+                      <div class="file-part-meta">
+                        <span class="file-part-name">
+                          {{ attachmentName(part) }}
+                        </span>
+                        <span class="file-part-kind">
+                          {{ attachmentPresentation(part).label }}
+                        </span>
+                      </div>
                       <v-btn
+                        class="file-part-action"
                         icon="mdi-download"
                         size="x-small"
                         variant="text"
                         :loading="
                           downloadingFiles.has(
-                            part.attachment_id || part.filename || '',
+                            part.attachment_id ||
+                              part.stored_filename ||
+                              part.filename ||
+                              '',
                           )
                         "
                         @click="downloadPart(part)"
@@ -185,6 +207,15 @@
                 />
               </template>
               <v-card class="stats-card" elevation="4">
+                <div
+                  v-if="cachedInputTokens(messageContent(msg).agentStats) > 0"
+                  class="stats-row"
+                >
+                  <span>{{ tm("stats.cachedTokens") }}</span>
+                  <strong>{{
+                    cachedInputTokens(messageContent(msg).agentStats)
+                  }}</strong>
+                </div>
                 <div class="stats-row">
                   <span>{{ tm("stats.inputTokens") }}</span>
                   <strong>{{
@@ -246,17 +277,22 @@
 <script setup lang="ts">
 import { computed, nextTick, reactive, ref } from "vue";
 import axios from "axios";
-import { setCustomComponents } from "markstream-vue";
-import "markstream-vue/index.css";
+import {
+  CHAT_MARKDOWN_CUSTOM_TAGS,
+  registerChatMarkdownComponents,
+} from "@/components/chat/chatMarkdownComponents";
+import { fileApi } from "@/api/v1";
 import IPythonToolBlock from "@/components/chat/message_list_comps/IPythonToolBlock.vue";
 import MarkdownMessagePart from "@/components/chat/message_list_comps/MarkdownMessagePart.vue";
 import ReasoningBlock from "@/components/chat/message_list_comps/ReasoningBlock.vue";
-import RefNode from "@/components/chat/message_list_comps/RefNode.vue";
 import RefsSidebar from "@/components/chat/message_list_comps/RefsSidebar.vue";
 import ToolCallCard from "@/components/chat/message_list_comps/ToolCallCard.vue";
 import ToolCallItem from "@/components/chat/message_list_comps/ToolCallItem.vue";
 import ActionRef from "@/components/chat/message_list_comps/ActionRef.vue";
-import ThemeAwareMarkdownCodeBlock from "@/components/shared/ThemeAwareMarkdownCodeBlock.vue";
+import {
+  attachmentName,
+  attachmentPresentation,
+} from "@/components/chat/attachmentPresentation";
 import {
   displayParts as displayMessageParts,
   messageBlocks as buildMessageBlocks,
@@ -268,6 +304,7 @@ import type {
   MessagePart,
 } from "@/composables/useMessages";
 import { useModuleI18n } from "@/i18n/composables";
+import { copyToClipboard } from "@/utils/clipboard";
 
 const props = withDefaults(
   defineProps<{
@@ -283,13 +320,10 @@ const props = withDefaults(
   },
 );
 
-setCustomComponents("chat-message", {
-  ref: RefNode,
-  code_block: ThemeAwareMarkdownCodeBlock,
-});
+registerChatMarkdownComponents();
 
 const { tm } = useModuleI18n("features/chat");
-const customMarkdownTags = ["ref"];
+const customMarkdownTags = CHAT_MARKDOWN_CUSTOM_TAGS;
 const downloadingFiles = ref(new Set<string>());
 const messageListRoot = ref<HTMLElement | null>(null);
 const imagePreview = reactive({ visible: false, url: "" });
@@ -336,12 +370,11 @@ function partUrl(part: MessagePart) {
   if (part.embedded_url) return part.embedded_url;
   if (part.embedded_file?.url) return part.embedded_file.url;
   if (part.attachment_id) {
-    return `/api/chat/get_attachment?attachment_id=${encodeURIComponent(
-      part.attachment_id,
-    )}`;
+    return fileApi.contentUrl(part.attachment_id);
   }
-  if (part.filename) {
-    return `/api/chat/get_file?filename=${encodeURIComponent(part.filename)}`;
+  const lookupFilename = part.stored_filename || part.filename;
+  if (lookupFilename) {
+    return fileApi.byNameUrl(lookupFilename);
   }
   return "";
 }
@@ -470,11 +503,11 @@ function parseJsonSafe(value: unknown) {
 async function copyMessage(message: ChatRecord) {
   const text = plainTextFromMessage(message);
   if (!text) return;
-  await navigator.clipboard?.writeText(text);
+  await copyToClipboard(text, { container: messageListRoot.value });
 }
 
 async function downloadPart(part: MessagePart) {
-  const key = part.attachment_id || part.filename || "";
+  const key = part.attachment_id || part.stored_filename || part.filename || "";
   if (!key) return;
   downloadingFiles.value = new Set(downloadingFiles.value).add(key);
   try {
@@ -511,11 +544,15 @@ function formatTime(value: string) {
 
 function inputTokens(stats: any) {
   const usage = stats?.token_usage || {};
-  return (usage.input_other || 0) + (usage.input_cached || 0);
+  return usage.input_other || 0;
 }
 
 function outputTokens(stats: any) {
   return stats?.token_usage?.output || 0;
+}
+
+function cachedInputTokens(stats: any) {
+  return stats?.token_usage?.input_cached || 0;
 }
 
 function agentDuration(stats: any) {
@@ -598,6 +635,12 @@ function formatDuration(seconds: number) {
   max-width: min(760px, 82%);
 }
 
+.from-bot .message-stack {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 760px;
+}
+
 .from-user .message-stack {
   align-items: flex-end;
   max-width: 60%;
@@ -671,11 +714,14 @@ function formatDuration(seconds: number) {
 
 .image-part {
   display: block;
+  width: fit-content;
+  max-width: 100%;
   border: 0;
   padding: 0;
   margin-top: 8px;
   background: transparent;
   cursor: zoom-in;
+  text-align: left;
 }
 
 .image-part img {
@@ -698,21 +744,61 @@ function formatDuration(seconds: number) {
 }
 
 .file-part {
-  display: flex;
+  --attachment-color: #607d8b;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  width: min(420px, 100%);
   margin-top: 8px;
-  padding: 8px 10px;
-  border: 1px solid var(--chat-border);
+  padding: 9px 8px 9px 10px;
+  border: 0;
   border-radius: 8px;
+  background: rgba(var(--v-theme-on-surface), 0.055);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--attachment-color) 13%, transparent),
+    rgba(var(--v-theme-on-surface), 0.055) 58%
+  );
 }
 
-.file-part span {
+.file-part-icon {
+  color: var(--attachment-color);
+}
+
+.file-part-meta {
   min-width: 0;
-  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.file-part-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.file-part-kind {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--attachment-color);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 14px;
+}
+
+.file-part-action {
+  color: rgb(var(--v-theme-on-surface));
+  opacity: 0.72;
+}
+
+.file-part:hover .file-part-action {
+  opacity: 1;
 }
 
 .tool-call-block {

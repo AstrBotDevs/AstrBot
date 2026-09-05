@@ -22,8 +22,12 @@
           v-if="entry.kind === 'think'"
           :content="entry.think || ''"
           class="reasoning-text markdown-content"
+          :final="!isStreaming"
+          :smooth-streaming="isStreaming ? 'auto' : false"
+          :fade="false"
           :typewriter="false"
           :is-dark="isDark"
+          :max-live-nodes="MARKDOWN_RENDER_MAX_LIVE_NODES"
         />
 
         <div v-else-if="entry.tool" class="reasoning-tool-call-block">
@@ -58,6 +62,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { MarkdownRender } from "markstream-vue";
+import { MARKDOWN_RENDER_MAX_LIVE_NODES } from "@/components/chat/markdownRenderConfig";
 import IPythonToolBlock from "@/components/chat/message_list_comps/IPythonToolBlock.vue";
 import ToolCallCard from "@/components/chat/message_list_comps/ToolCallCard.vue";
 import ToolCallItem from "@/components/chat/message_list_comps/ToolCallItem.vue";
@@ -68,6 +73,7 @@ const props = defineProps<{
   parts?: MessagePart[];
   reasoning?: string;
   isDark?: boolean;
+  isStreaming?: boolean;
 }>();
 
 const { tm } = useModuleI18n("features/chat");

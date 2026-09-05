@@ -1,19 +1,17 @@
 import asyncio
-import base64
-import os
 import random
 import time
 import traceback
 import zlib
-from pathlib import Path
+from typing import Any
 
-import aiofiles
 import aiohttp
 import pydantic
 import websockets
 
 from astrbot import logger
 from astrbot.core.platform.message_type import MessageType
+from astrbot.core.utils.media_utils import MediaResolver
 
 from .kook_config import KookConfig
 from .kook_types import (
@@ -71,6 +69,119 @@ class KookClient:
     @property
     def http_client(self):
         return self._http_client
+
+    async def _get_api_data(
+        self,
+        url: str,
+        params: dict[str, str | int],
+    ) -> dict[str, Any]:
+        """Gets and validates an object payload from a KOOK API endpoint.
+
+        Args:
+            url: Absolute KOOK API endpoint URL.
+            params: Query parameters for the request.
+
+        Returns:
+            The response's data object.
+
+        Raises:
+            RuntimeError: If the HTTP or KOOK API response is unsuccessful.
+        """
+        async with self._http_client.get(url, params=params) as resp:
+            if resp.status != 200:
+                raise RuntimeError(
+                    f"KOOK GET {url} failed: {resp.status} {await resp.text()}"
+                )
+            payload = await resp.json()
+            if not isinstance(payload, dict) or payload.get("code") != 0:
+                raise RuntimeError(f"KOOK GET {url} returned an error: {payload}")
+            data = payload.get("data")
+            if not isinstance(data, dict):
+                raise RuntimeError(f"KOOK GET {url} returned invalid data: {payload}")
+            return data
+
+    async def get_channel(self, channel_id: str) -> dict[str, Any]:
+        """Gets a KOOK channel.
+
+        Args:
+            channel_id: KOOK channel identifier.
+
+        Returns:
+            KOOK channel data.
+        """
+        return await self._get_api_data(
+            KookApiPaths.CHANNEL_VIEW,
+            {"target_id": channel_id},
+        )
+
+    async def get_guild(self, guild_id: str) -> dict[str, Any]:
+        """Gets a KOOK guild.
+
+        Args:
+            guild_id: KOOK guild identifier.
+
+        Returns:
+            KOOK guild data.
+        """
+        return await self._get_api_data(
+            KookApiPaths.GUILD_VIEW,
+            {"guild_id": guild_id},
+        )
+
+    async def get_guild_users(
+        self,
+        guild_id: str,
+        *,
+        channel_id: str,
+        page: int,
+        page_size: int,
+    ) -> dict[str, Any]:
+        """Gets one page of KOOK guild members.
+
+        Args:
+            guild_id: KOOK guild identifier.
+            channel_id: KOOK channel used to filter visible members.
+            page: One-based page index.
+            page_size: Maximum members requested per page.
+
+        Returns:
+            Guild member items and pagination metadata.
+        """
+        return await self._get_api_data(
+            KookApiPaths.GUILD_USER_LIST,
+            {
+                "guild_id": guild_id,
+                "channel_id": channel_id,
+                "page": page,
+                "page_size": page_size,
+            },
+        )
+
+    async def get_guild_roles(
+        self,
+        guild_id: str,
+        *,
+        page: int,
+        page_size: int,
+    ) -> dict[str, Any]:
+        """Gets one page of KOOK guild roles.
+
+        Args:
+            guild_id: KOOK guild identifier.
+            page: One-based page index.
+            page_size: Maximum roles requested per page.
+
+        Returns:
+            Guild role items and pagination metadata.
+        """
+        return await self._get_api_data(
+            KookApiPaths.GUILD_ROLE_LIST,
+            {
+                "guild_id": guild_id,
+                "page": page,
+                "page_size": page_size,
+            },
+        )
 
     async def get_bot_info(self) -> None:
         """获取机器人账号信息"""
@@ -408,38 +519,12 @@ class KookClient:
         if not file_url:
             return ""
 
-        bytes_data: bytes | None = None
-        filename = "unknown"
         if file_url.startswith(("http://", "https://")):
-            filename = file_url.split("/")[-1]
             return file_url
 
-        if file_url.startswith("base64:///"):
-            # b64decode的时候得开头留一个'/'的, 不然会报错
-            b64_str = file_url.removeprefix("base64://")
-            bytes_data = base64.b64decode(b64_str)
-
-        elif file_url.startswith("file://") or os.path.exists(file_url):
-            file_url = file_url.removeprefix("file:///")
-            file_url = file_url.removeprefix("file://")
-
-            try:
-                target_path = Path(file_url).resolve()
-            except Exception as exp:
-                logger.error(f'[KOOK] 获取文件 "{file_url}" 绝对路径失败: "{exp}"')
-                raise FileNotFoundError(
-                    f'获取文件 "{file_url}" 绝对路径失败: "{exp}"'
-                ) from exp
-
-            if not target_path.is_file():
-                raise FileNotFoundError(f"文件不存在: {target_path.name}")
-
-            filename = target_path.name
-            async with aiofiles.open(target_path, "rb") as f:
-                bytes_data = await f.read()
-
-        else:
-            raise ValueError(f'[KOOK] 不支持的文件资源类型: "{file_url}"')
+        async with MediaResolver(file_url).as_path() as media_file:
+            bytes_data = media_file.read_bytes()
+            filename = media_file.path.name
 
         data = aiohttp.FormData()
         data.add_field("file", bytes_data, filename=filename)

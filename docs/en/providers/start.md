@@ -38,4 +38,4 @@ Using DeepSeek as an example, assuming you have registered and logged in to a De
 
 > Introduced in v4.13.0.
 
-You can use environment variables to load provider API keys. In the provider configuration page, set the API Key field to `$ENV_VARIABLE_NAME`, for example: `$DEESEEK_API_KEY`.
+You can use environment variables to load provider API keys. In the provider configuration page, set the API Key field to `$ENV_VARIABLE_NAME`, for example: `$DEEPSEEK_API_KEY`.

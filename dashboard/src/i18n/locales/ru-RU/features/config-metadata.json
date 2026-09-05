@@ -31,32 +31,201 @@
                 "deerflow_agent_runner_provider_id": {
                     "description": "ID провайдера DeerFlow Agent Runner"
                 }
+            },
+            "agent_runner": {
+                "runner_type": {
+                    "description": "Исполнитель",
+                    "labels": [
+                        "Встроенный Agent",
+                        "Dify",
+                        "Coze",
+                        "Приложение Alibaba Cloud Bailian",
+                        "DeerFlow"
+                    ]
+                }
+            }
+        },
+        "dify_runner": {
+            "description": "Настройки Dify",
+            "agent_runner": {
+                "config": {
+                    "dify_api_type": {
+                        "description": "Тип приложения"
+                    },
+                    "dify_api_key": {
+                        "description": "API-ключ"
+                    },
+                    "dify_api_base": {
+                        "description": "Базовый URL API"
+                    },
+                    "dify_workflow_output_key": {
+                        "description": "Имя выходной переменной Workflow"
+                    },
+                    "dify_query_input_key": {
+                        "description": "Имя входной переменной Prompt"
+                    },
+                    "variables": {
+                        "description": "Переменные"
+                    },
+                    "timeout": {
+                        "description": "Тайм-аут (сек)"
+                    },
+                    "proxy": {
+                        "description": "Адрес прокси"
+                    }
+                }
+            }
+        },
+        "coze_runner": {
+            "description": "Настройки Coze",
+            "agent_runner": {
+                "config": {
+                    "coze_api_key": {
+                        "description": "API-ключ"
+                    },
+                    "bot_id": {
+                        "description": "Bot ID"
+                    },
+                    "coze_api_base": {
+                        "description": "Базовый URL API"
+                    },
+                    "auto_save_history": {
+                        "description": "История диалогов управляется Coze"
+                    },
+                    "timeout": {
+                        "description": "Тайм-аут (сек)"
+                    },
+                    "proxy": {
+                        "description": "Адрес прокси"
+                    }
+                }
+            }
+        },
+        "dashscope_runner": {
+            "description": "Настройки приложения Alibaba Cloud Bailian",
+            "agent_runner": {
+                "config": {
+                    "dashscope_app_type": {
+                        "description": "Тип приложения"
+                    },
+                    "dashscope_api_key": {
+                        "description": "API-ключ"
+                    },
+                    "dashscope_app_id": {
+                        "description": "ID приложения"
+                    },
+                    "rag_options": {
+                        "pipeline_ids": {
+                            "description": "ID пайплайнов базы знаний"
+                        },
+                        "file_ids": {
+                            "description": "ID файлов"
+                        },
+                        "output_reference": {
+                            "description": "Ссылка на результат"
+                        }
+                    },
+                    "variables": {
+                        "description": "Переменные"
+                    },
+                    "timeout": {
+                        "description": "Тайм-аут (сек)"
+                    },
+                    "proxy": {
+                        "description": "Адрес прокси"
+                    }
+                }
+            }
+        },
+        "deerflow_runner": {
+            "description": "Настройки DeerFlow",
+            "agent_runner": {
+                "config": {
+                    "deerflow_api_base": {
+                        "description": "Базовый URL API"
+                    },
+                    "deerflow_api_key": {
+                        "description": "API-ключ"
+                    },
+                    "deerflow_auth_header": {
+                        "description": "Заголовок Authorization"
+                    },
+                    "deerflow_assistant_id": {
+                        "description": "ID ассистента"
+                    },
+                    "deerflow_model_name": {
+                        "description": "Переопределение имени модели"
+                    },
+                    "deerflow_thinking_enabled": {
+                        "description": "Включить режим размышления"
+                    },
+                    "deerflow_plan_mode": {
+                        "description": "Включить режим планирования"
+                    },
+                    "deerflow_subagent_enabled": {
+                        "description": "Включить субагентов"
+                    },
+                    "deerflow_max_concurrent_subagents": {
+                        "description": "Макс. число параллельных субагентов"
+                    },
+                    "deerflow_recursion_limit": {
+                        "description": "Предел глубины рекурсии"
+                    },
+                    "timeout": {
+                        "description": "Тайм-аут (сек)"
+                    },
+                    "proxy": {
+                        "description": "Адрес прокси"
+                    }
+                }
             }
         },
         "ai": {
             "description": "Модель",
             "hint": "При использовании сторонних сред запуска модель чата и модель описания изображений могут не работать напрямую, но некоторые плагины всё равно зависят от этих настроек.",
+            "agent_runner": {
+                "config": {
+                    "model": {
+                        "provider_id": {
+                            "description": "Модель чата",
+                            "hint": "Если поле пустое, используется первая доступная модель"
+                        },
+                        "fallback_provider_ids": {
+                            "description": "Резервные модели чата",
+                            "hint": "Если запрос к основной модели завершится ошибкой, эти модели будут использоваться по порядку."
+                        },
+                        "request_max_retries": {
+                            "description": "Повторы при ошибках",
+                            "hint": "Максимальное число попыток одного запроса модели при повторяемых ошибках."
+                        }
+                    }
+                }
+            },
             "provider_settings": {
-                "default_provider_id": {
-                    "description": "Модель чата по умолчанию",
-                    "hint": "Если пусто, используется первая доступная модель"
-                },
-                "fallback_chat_models": {
-                    "description": "Резервные модели чата (ID)",
-                    "hint": "Если текущая модель недоступна, запрос будет перенаправлен на эти модели по порядку."
-                },
                 "default_image_caption_provider_id": {
                     "description": "Модель описания изображений",
                     "hint": "Оставьте пустым для отключения; полезно для моделей без поддержки мультимодальности"
                 },
                 "image_caption_prompt": {
                     "description": "Промпт для описания изображений"
+                },
+                "default_provider_id": {
+                    "description": "Модель чата",
+                    "hint": "Если пусто, используется первая доступная модель"
+                },
+                "fallback_chat_models": {
+                    "description": "Резервные модели чата",
+                    "hint": "Если текущая модель недоступна, запрос будет перенаправлен на эти модели по порядку."
+                },
+                "request_max_retries": {
+                    "description": "Максимум повторов запроса",
+                    "hint": "Максимальное число попыток для одного запроса модели при повторяемых ошибках."
                 }
             },
             "provider_stt_settings": {
                 "enable": {
-                    "description": "Включить преобразование речи в текст (STT)",
-                    "hint": "Главный переключатель для STT"
+                    "description": "Распознавание речи",
+                    "hint": "Преобразует голосовые сообщения пользователей в текст с помощью модели распознавания речи, чтобы модель могла их понять."
                 },
                 "provider_id": {
                     "description": "Модель STT по умолчанию",
@@ -65,8 +234,8 @@
             },
             "provider_tts_settings": {
                 "enable": {
-                    "description": "Включить преобразование текста в речь (TTS)",
-                    "hint": "Главный переключатель для TTS"
+                    "description": "Голосовые ответы",
+                    "hint": "Преобразует текст в голосовые ответы с помощью модели синтеза речи."
                 },
                 "provider_id": {
                     "description": "Модель TTS по умолчанию"
@@ -79,6 +248,23 @@
         "persona": {
             "description": "Персонаж",
             "hint": "Установите персонажа по умолчанию для AI-диалогов. Управлять персонажами можно на вкладке «Персонажи».",
+            "agent_runner": {
+                "config": {
+                    "persona": {
+                        "persona_id": {
+                            "description": "Личность по умолчанию"
+                        },
+                        "safety_mode": {
+                            "description": "Безопасный режим",
+                            "hint": "Направляйте модель на выдачу здорового и безопасного контента, избегая вредных или чувствительных тем."
+                        },
+                        "safety_mode_strategy": {
+                            "description": "Стратегия безопасного режима",
+                            "hint": "Выберите стратегию реализации безопасного режима."
+                        }
+                    }
+                }
+            },
             "provider_settings": {
                 "default_personality": {
                     "description": "Персонаж по умолчанию"
@@ -87,6 +273,7 @@
         },
         "knowledgebase": {
             "description": "База знаний",
+            "hint": "«Внешний мозг» AstrBot.",
             "kb_names": {
                 "description": "Список баз знаний",
                 "hint": "Поддерживается выбор нескольких баз"
@@ -106,6 +293,7 @@
         },
         "websearch": {
             "description": "Поиск в сети",
+            "hint": "Даёт AstrBot доступ к интернету и актуальным новостям.",
             "provider_settings": {
                 "web_search": {
                     "description": "Включить поиск в сети"
@@ -125,12 +313,24 @@
                     "description": "API-ключ Brave Search",
                     "hint": "Можно добавить несколько ключей для ротации."
                 },
+                "websearch_firecrawl_key": {
+                    "description": "API-ключ Firecrawl",
+                    "hint": "Можно добавить несколько ключей для ротации."
+                },
                 "websearch_baidu_app_builder_key": {
                     "description": "API-ключ Baidu Qianfan APP Builder",
                     "hint": "Ссылка: [https://console.bce.baidu.com/iam/#/iam/apikey/list](https://console.bce.baidu.com/iam/#/iam/apikey/list)"
                 },
                 "web_search_link": {
                     "description": "Показывать ссылки на источники"
+                },
+                "websearch_exa_key": {
+                    "description": "API-ключ Exa",
+                    "hint": "Можно добавить несколько ключей для ротации. Получить ключ: https://dashboard.exa.ai"
+                },
+                "websearch_anysearch_key": {
+                    "description": "AnySearch API-ключ",
+                    "hint": "Можно добавить несколько ключей для ротации. Оставьте пустым для анонимного режима с ежедневной бесплатной квотой."
                 }
             }
         },
@@ -176,11 +376,35 @@
                     },
                     "shipyard_neo_profile": {
                         "description": "Профиль Shipyard Neo",
-                        "hint": "Профиль песочницы, например, python-default."
+                        "hint": "Профиль песочницы, например, python-default. Оставьте пустым для автоматического выбора самого функционального профиля."
                     },
                     "shipyard_neo_ttl": {
                         "description": "TTL песочницы Shipyard Neo",
                         "hint": "Время жизни песочницы в секундах."
+                    },
+                    "cua_image": {
+                        "description": "Образ CUA",
+                        "hint": "Образ или тип ОС песочницы CUA. По умолчанию linux. Поддерживаемые значения зависят от установленного CUA SDK."
+                    },
+                    "cua_os_type": {
+                        "description": "Тип ОС CUA",
+                        "hint": "Тип операционной системы песочницы CUA. По умолчанию linux."
+                    },
+                    "cua_idle_timeout": {
+                        "description": "Таймаут простоя CUA",
+                        "hint": "Таймаут простоя сессии песочницы CUA в секундах. Если значение больше 0, AstrBot автоматически завершит неактивную песочницу CUA после указанного времени бездействия; 0 отключает автоочистку."
+                    },
+                    "cua_telemetry_enabled": {
+                        "description": "Телеметрия CUA",
+                        "hint": "Разрешить CUA SDK отправлять телеметрию. По умолчанию выключено."
+                    },
+                    "cua_local": {
+                        "description": "Локальная песочница CUA",
+                        "hint": "Предпочитать локальную песочницу CUA. Включено по умолчанию, чтобы не требовать CUA_API_KEY для облачных песочниц. Отключите для использования облачных песочниц CUA."
+                    },
+                    "cua_api_key": {
+                        "description": "CUA API Key",
+                        "hint": "API key для облачной песочницы CUA. Требуется только если локальная песочница отключена. Также можно передать через переменную окружения CUA_API_KEY."
                     },
                     "shipyard_endpoint": {
                         "description": "Эндпоинт Shipyard API",
@@ -216,50 +440,74 @@
         "truncate_and_compress": {
             "hint": "[Управление контекстом](https://docs.astrbot.app/en/use/context-compress.html)",
             "description": "Стратегия управления контекстом",
-            "provider_settings": {
-                "max_context_length": {
-                    "description": "Макс. количество раундов диалога",
-                    "hint": "При превышении удаляются старые сообщения. 1 раунд = 1 пара запрос-ответ. -1 означает без ограничений."
-                },
-                "dequeue_context_length": {
-                    "description": "Кол-во удаляемых раундов",
-                    "hint": "Сколько раундов удалять за один раз при достижении лимита."
-                },
-                "context_limit_reached_strategy": {
-                    "description": "Действие при переполнении окна контекста",
-                    "labels": [
-                        "Обрезать по раундам",
-                        "Сжать с помощью LLM"
-                    ],
-                    "hint": "При выборе 'Обрезать' удаляются старые сообщения. При выборе 'Сжать' используется модель для суммаризации контекста."
-                },
-                "llm_compress_instruction": {
-                    "description": "Инструкция для сжатия контекста",
-                    "hint": "Если пусто, используется промпт по умолчанию."
-                },
-                "llm_compress_keep_recent": {
-                    "description": "Сохранять последние раунды при сжатии",
-                    "hint": "Всегда оставлять последние N раундов диалога без изменений при сжатии."
-                },
-                "llm_compress_provider_id": {
-                    "description": "Модель для сжатия контекста",
-                    "hint": "Если не выбрано, произойдет откат к стратегии удаления сообщений."
+            "agent_runner": {
+                "config": {
+                    "compression": {
+                        "max_turns": {
+                            "description": "Макс. раундов перед сжатием",
+                            "hint": "Постоянная история диалога обрезается или сжимается LLM по стратегии ниже только после превышения этого числа раундов. Контекст перед запросом также ограничивается этим значением. -1 означает без ограничений по раундам."
+                        },
+                        "trim_turns": {
+                            "description": "Раундов для удаления при превышении лимита",
+                            "hint": "Когда история превышает лимит раундов и LLM-сжатие недоступно, за один раз удаляется это число самых старых раундов. Обрезка перед запросом также использует это значение."
+                        },
+                        "overflow_strategy": {
+                            "description": "Действие при лимите истории или давлении окна контекста",
+                            "labels": [
+                                "Обрезать по раундам",
+                                "Сжать с помощью LLM"
+                            ],
+                            "hint": "Постоянная история диалога использует эту стратегию только после превышения лимита раундов. Перед каждым запросом та же стратегия может защищать текущий контекст, когда токены приближаются к окну модели."
+                        },
+                        "instruction": {
+                            "description": "Инструкция для сжатия контекста",
+                            "hint": "Если пусто, используется промпт по умолчанию."
+                        },
+                        "keep_recent_ratio": {
+                            "description": "Доля последних токенов контекста при сжатии",
+                            "hint": "Сохраняет последние сообщения по доле текущих токенов контекста, от 0 до 0.3. 0.15 означает 15%; значение выше 0 сохраняет как минимум последний раунд."
+                        },
+                        "provider_id": {
+                            "description": "Модель для сжатия контекста",
+                            "hint": "Если не выбрано, для сжатия используется текущая модель чата. Если модель недоступна или сжатие завершается ошибкой, AstrBot откатывается к обрезке по раундам."
+                        },
+                        "fallback_max_tokens": {
+                            "description": "Запасной размер окна контекста",
+                            "hint": "Если max_context_tokens равен 0 и модель отсутствует во встроенных метаданных, используется это значение. По умолчанию: 128000."
+                        }
+                    }
                 }
             }
         },
         "others": {
             "description": "Прочие настройки",
+            "agent_runner": {
+                "config": {
+                    "misc": {
+                        "max_steps": {
+                            "description": "Макс. количество раундов вызова инструментов"
+                        },
+                        "tool_schema_mode": {
+                            "description": "Режим схемы инструментов",
+                            "hint": "Skills-like сначала отправляет имя/описание и дозапрашивает параметры; Full отправляет полную схему сразу.",
+                            "labels": [
+                                "Skills-like (двухэтапный)",
+                                "Полная схема (Full)"
+                            ]
+                        },
+                        "tool_call_timeout": {
+                            "description": "Таймаут вызова инструмента (сек)"
+                        },
+                        "sanitize_context_by_modalities": {
+                            "description": "Очистка истории по модальностям",
+                            "hint": "Если включено, очищает контекст перед запросом, удаляя блоки (например, изображения), которые не поддерживаются выбранным провайдером."
+                        }
+                    }
+                }
+            },
             "provider_settings": {
                 "display_reasoning_text": {
                     "description": "Отображать процесс рассуждения (Reasoning)"
-                },
-                "llm_safety_mode": {
-                    "description": "Безопасный режим",
-                    "hint": "Добавляет защитные фильтры к ответам модели."
-                },
-                "safety_mode_strategy": {
-                    "description": "Стратегия безопасного режима",
-                    "hint": "Как применять защитные фильтры."
                 },
                 "identifier": {
                     "description": "Идентификация пользователя",
@@ -274,19 +522,15 @@
                     "hint": "Если включено, информация о текущем времени будет добавлена в системный промпт."
                 },
                 "show_tool_use_status": {
-                    "description": "Выводить статус вызова функций"
+                    "description": "Показывать информацию о вызовах инструментов"
                 },
                 "show_tool_call_result": {
                     "description": "Выводить результаты работы инструментов",
-                    "hint": "Работает только при включенном статусе вызова функций. Показывает макс. 70 символов."
+                    "hint": "Работает только при включенном выводе информации о вызовах инструментов. Показывает макс. 70 символов."
                 },
                 "buffer_intermediate_messages": {
                     "description": "Объединять промежуточные сообщения Agent",
                     "hint": "Если включено, промежуточный текст, созданный во время многошаговых вызовов инструментов в непотоковом режиме, будет буферизован и отправлен одним объединенным ответом после завершения Agent."
-                },
-                "sanitize_context_by_modalities": {
-                    "description": "Очистка истории по модальностям",
-                    "hint": "Если включено, очищает контекст перед запросом, удаляя блоки (например, изображения), которые не поддерживаются выбранным провайдером."
                 },
                 "max_quoted_fallback_images": {
                     "description": "Лимит загрузки изображений из пересланных сообщений",
@@ -310,20 +554,6 @@
                         "hint": "Если включено, логирует предупреждения при неудачных попытках получения сообщений."
                     }
                 },
-                "max_agent_step": {
-                    "description": "Макс. количество раундов вызова инструментов"
-                },
-                "tool_call_timeout": {
-                    "description": "Таймаут вызова инструмента (сек)"
-                },
-                "tool_schema_mode": {
-                    "description": "Режим схемы инструментов",
-                    "hint": "Skills-like сначала отправляет имя/описание и дозапрашивает параметры; Full отправляет полную схему сразу.",
-                    "labels": [
-                        "Skills-like (двухэтапный)",
-                        "Полная схема (Full)"
-                    ]
-                },
                 "streaming_response": {
                     "description": "Потоковый вывод (Streaming)"
                 },
@@ -336,7 +566,7 @@
                     ]
                 },
                 "wake_prefix": {
-                    "description": "Дополнительный префикс пробуждения LLM",
+                    "description": "Дополнительный префикс пробуждения",
                     "hint": "Если префикс пробуждения '/', а дополнительные — 'chat', то потребуется '/chat' для активации LLM."
                 },
                 "prompt_prefix": {
@@ -362,6 +592,14 @@
                 "reachability_check": {
                     "description": "Проверка доступности провайдеров",
                     "hint": "При выполнении команды /provider проверяет связь со всеми моделями. Это может расходовать токены."
+                },
+                "llm_safety_mode": {
+                    "description": "Безопасный режим",
+                    "hint": "Добавляет защитные фильтры к ответам модели."
+                },
+                "safety_mode_strategy": {
+                    "description": "Стратегия безопасного режима",
+                    "hint": "Как применять защитные фильтры."
                 }
             },
             "provider_tts_settings": {
@@ -375,6 +613,74 @@
         "name": "Платформы",
         "platform": {
             "description": "Адаптеры сообщений",
+            "app_id": {
+                "description": "ID приложения",
+                "hint": "ID приложения из консоли разработчика платформы сообщений."
+            },
+            "app_secret": {
+                "description": "Секрет приложения",
+                "hint": "Секрет приложения из консоли разработчика платформы сообщений. Храните его в безопасности."
+            },
+            "domain": {
+                "description": "Адрес API платформы",
+                "hint": "Базовый адрес API открытой платформы. Обычно значение по умолчанию менять не нужно."
+            },
+            "corpid": {
+                "description": "ID организации",
+                "hint": "ID организации (CorpID) из консоли администрирования WeCom."
+            },
+            "token": {
+                "description": "Токен обратного вызова",
+                "hint": "Токен для проверки запросов из настроек обратного вызова платформы сообщений."
+            },
+            "encoding_aes_key": {
+                "description": "Ключ шифрования сообщений",
+                "hint": "EncodingAESKey из настроек обратного вызова, используемый для шифрования и расшифровки сообщений."
+            },
+            "api_base_url": {
+                "description": "Базовый адрес API",
+                "hint": "Базовый адрес API платформы сообщений. Обычно значение по умолчанию менять не нужно."
+            },
+            "client_id": {
+                "description": "ID клиента",
+                "hint": "ID клиента из консоли разработчика платформы сообщений."
+            },
+            "client_secret": {
+                "description": "Секрет клиента",
+                "hint": "Секрет клиента из консоли разработчика платформы сообщений. Храните его в безопасности."
+            },
+            "start_message": {
+                "description": "Ответ на команду /start",
+                "hint": "Сообщение, отправляемое пользователю в ответ на команду /start для Telegram-бота."
+            },
+            "telegram_api_base_url": {
+                "description": "Адрес API",
+                "hint": "Базовый адрес Telegram Bot API. Обычно официальный адрес менять не нужно."
+            },
+            "telegram_file_base_url": {
+                "description": "Адрес файлового API",
+                "hint": "Базовый адрес для загрузки файлов из Telegram Bot API. Обычно официальный адрес менять не нужно."
+            },
+            "bot_token": {
+                "description": "Slack Bot Token",
+                "hint": "Bot User OAuth Token приложения Slack, обычно начинается с xoxb-."
+            },
+            "app_token": {
+                "description": "Slack App Token",
+                "hint": "App-Level Token для Slack Socket Mode, обычно начинается с xapp-."
+            },
+            "signing_secret": {
+                "description": "Slack Signing Secret",
+                "hint": "Signing Secret приложения Slack для проверки запросов Webhook."
+            },
+            "channel_access_token": {
+                "description": "Токен доступа канала LINE",
+                "hint": "Channel Access Token канала LINE Messaging API."
+            },
+            "channel_secret": {
+                "description": "Секрет канала LINE",
+                "hint": "Channel Secret канала LINE Messaging API."
+            },
             "active_send_mode": {
                 "description": "Использовать API активной отправки"
             },
@@ -432,10 +738,6 @@
             "kf_name": {
                 "description": "Имя аккаунта службы поддержки WeChat",
                 "hint": "Необязательно. См. https://kf.weixin.qq.com/kf/frame#/accounts"
-            },
-            "lark_bot_name": {
-                "description": "Имя бота Lark",
-                "hint": "Должно быть точным для работы через @ упоминания."
             },
             "lark_connection_mode": {
                 "description": "Режим подписки",
@@ -549,16 +851,20 @@
                 "hint": "Действительно только если режим подключения Slack установлен как `webhook`."
             },
             "telegram_command_auto_refresh": {
-                "description": "Автообновление команд Telegram",
+                "description": "Автообновление команд",
                 "hint": "Если включено, AstrBot автоматически обновляет команды Telegram во время выполнения. (Одна эта настройка не имеет эффекта)"
             },
             "telegram_command_register": {
-                "description": "Регистрация команд Telegram",
+                "description": "Регистрация команд",
                 "hint": "Если включено, AstrBot автоматически регистрирует команды Telegram."
             },
             "telegram_command_register_interval": {
-                "description": "Интервал автообновления команд Telegram",
+                "description": "Интервал автообновления команд",
                 "hint": "Интервал автоматического обновления команд Telegram в секундах."
+            },
+            "telegram_polling_restart_delay": {
+                "description": "Задержка перезапуска опроса",
+                "hint": "Задержка перед автоматическим перезапуском после неожиданного завершения опроса, в секундах. По умолчанию 5 секунд."
             },
             "telegram_token": {
                 "description": "Токен бота",
@@ -581,7 +887,7 @@
             },
             "unified_webhook_mode": {
                 "description": "Единый режим Webhook",
-                "hint": "Использовать общий вход вебхуков AstrBot без открытия новых портов. URL: /api/platform/webhook/{uuid}."
+                "hint": "Использовать общий вход вебхуков AstrBot без открытия новых портов. URL: /api/v1/webhooks/platforms/{uuid}."
             },
             "webhook_uuid": {
                 "description": "UUID вебхука",
@@ -683,11 +989,6 @@
                 "type": "string",
                 "hint": "Обязательно. Токен бота, полученный на платформе разработчиков KOOK."
             },
-            "kook_bot_nickname": {
-                "description": "Никнейм бота",
-                "type": "string",
-                "hint": "Сообщения от пользователя с таким никнеймом будут игнорироваться."
-            },
             "kook_reconnect_delay": {
                 "description": "Задержка переподключения",
                 "type": "int",
@@ -722,6 +1023,11 @@
                 "description": "Макс. количество последовательных сбоев",
                 "type": "int",
                 "hint": "Максимально допустимое количество последовательных сбоев; если лимит превышен, повторные попытки будут остановлены."
+            },
+            "kook_bot_nickname": {
+                "description": "Никнейм бота",
+                "type": "string",
+                "hint": "Сообщения от пользователя с таким никнеймом будут игнорироваться."
             }
         },
         "general": {
@@ -758,7 +1064,7 @@
             },
             "disable_builtin_commands": {
                 "description": "Отключить встроенные команды",
-                "hint": "Отключает help, provider, model и другие базовые команды."
+                "hint": "Отключает help, sid, new и другие базовые команды."
             }
         },
         "whitelist": {
@@ -953,13 +1259,13 @@
             }
         },
         "ltm": {
-            "description": "Контекстная осведомленность в группах (ранее — Улучшение памяти чата)",
+            "description": "Контекстная осведомленность в группах",
             "provider_ltm_settings": {
                 "group_icl_enable": {
-                    "description": "Включить осведомленность о контексте группы"
+                    "description": "Добавлять историю группы в контекст"
                 },
                 "group_message_max_cnt": {
-                    "description": "Максимальное количество сообщений"
+                    "description": "Максимум сообщений, добавляемых в контекст"
                 },
                 "image_caption": {
                     "description": "Автоматическое понимание изображений",
@@ -967,7 +1273,14 @@
                 },
                 "image_caption_provider_id": {
                     "description": "Модель описания изображений для групп",
-                    "hint": "Используется для понимания изображений в контексте группового чата, настраивается отдельно от основной модели."
+                    "hint": "Используется для понимания изображений из истории группы, добавляемой в контекст, и настраивается отдельно от основной модели."
+                },
+                "group_message_history_enable": {
+                    "description": "Сохранять сообщения группового чата",
+                    "hint": "Сохраняет сообщения группы и предоставляет модели инструмент поиска по истории текущей группы. Медиаконтент пока не сохраняется; сообщения с медиа записываются как заполнители, например [Image]."
+                },
+                "group_message_history_max_cnt": {
+                    "description": "Максимум сохранённых сообщений"
                 },
                 "active_reply": {
                     "enable": {
@@ -1052,7 +1365,29 @@
                 "description": "Внешний адрес для Callback API",
                 "hint": "Используется для сервисов, требующих обратных выливов (например, в песочнице)."
             },
+            "disable_metrics": {
+                "description": "Отключить анонимную статистику",
+                "hint": "После отключения AstrBot не будет отправлять анонимные данные об использовании."
+            },
             "dashboard": {
+                "trust_proxy_headers": {
+                    "description": "Доверять прокси-заголовкам для IP клиента",
+                    "hint": "Если выключено, X-Forwarded-For/X-Real-IP игнорируются и используется только адрес соединения."
+                },
+                "auth_rate_limit": {
+                    "enable": {
+                        "description": "Включить ограничение скорости входа",
+                        "hint": "Если выключено, конечные точки аутентификации (вход, TOTP и т.д.) не будут ограничены по скорости."
+                    },
+                    "average_interval": {
+                        "description": "Средний интервал ограничения скорости конечных точек (сек)",
+                        "hint": "Минимальный средний интервал между запросами аутентификации. Например, 1.0 означает не более 1 запроса в секунду."
+                    },
+                    "max_burst": {
+                        "description": "Максимальный всплеск ограничения скорости конечных точек",
+                        "hint": "Максимальное количество последовательных всплесков запросов. Например, 3 допускает до 3 запросов за короткий всплеск."
+                    }
+                },
                 "ssl": {
                     "enable": {
                         "description": "Включить HTTPS для WebUI",
@@ -1070,6 +1405,52 @@
                         "description": "Путь к сертификату CA SSL",
                         "hint": "Опционально. Путь к сертификату CA."
                     }
+                },
+                "totp": {
+                    "enable": {
+                        "description": "Включить TOTP для WebUI",
+                        "hint": "Когда включено, TOTP-код требуется для входа в панель управления."
+                    },
+                    "manage": "Управление",
+                    "configuration": "TOTP",
+                    "statusPending": "Требуется настройка",
+                    "statusEnabled": "Включено",
+                    "setupRequiredHint": "TOTP включен, но ещё не настроен. Откройте «Управление», чтобы завершить настройку.",
+                    "setupTitle": "Настройка TOTP",
+                    "setupSubtitle": "Отсканируйте QR-код в приложении-аутентификаторе и введите код подтверждения.",
+                    "setupConfirm": "Подтвердить и продолжить",
+                    "activeSubtitle": "Используйте этот QR-код или секрет для добавления нового устройства-аутентификатора.",
+                    "rotateTitle": "Смена секрета TOTP",
+                    "rotateSubtitle": "Сгенерируйте новый секрет и подтвердите его перед заменой текущего.",
+                    "rotate": "Сменить",
+                    "rotateRecovery": "Сменить код восстановления",
+                    "rotateConfirm": "Подтвердить смену",
+                    "rotateCancel": "Отмена",
+                    "rotateCode": "Код подтверждения",
+                    "rotateCodeHint": "Введите код из приложения-аутентификатора для подтверждения нового ключа.",
+                    "rotateError": "Неверный код, попробуйте снова.",
+                    "recoveryTitle": "Коды восстановления",
+                    "recoverySubtitle": "Этот код показывается один раз. Сохраните его перед продолжением.",
+                    "recoveryWarning": "При утере этого кода восстановить доступ к учётной записи обычными средствами будет невозможно.",
+                    "recoveryAcknowledge": "Я сохранил(а) коды восстановления",
+                    "recoveryClose": "Готово",
+                    "disableTitle": "Отключить TOTP",
+                    "disableSubtitle": "Введите код подтверждения для отключения двухфакторной аутентификации.",
+                    "disableRecoverySubtitle": "Введите код восстановления для отключения двухфакторной аутентификации.",
+                    "disableCode": "Код подтверждения",
+                    "disableRecoveryCode": "Код восстановления",
+                    "disableConfirm": "Отключить",
+                    "disableCancel": "Отмена",
+                    "disableError": "Ошибка проверки. Попробуйте снова.",
+                    "disableUseRecovery": "Не можете использовать TOTP?",
+                    "disableUseCode": "Использовать код подтверждения",
+                    "configSaveTitle": "Двухфакторная проверка",
+                    "configSaveSubtitle": "Введите код подтверждения для изменения защищённой конфигурации.",
+                    "configSaveRotationHint": "При смене TOTP-ключа принимаются как старый, так и новый коды подтверждения (только однократно при смене).",
+                    "configSaveCode": "Код подтверждения",
+                    "configSaveConfirm": "Продолжить",
+                    "configSaveCancel": "Отмена",
+                    "configSaveError": "Ошибка проверки. Попробуйте снова."
                 }
             },
             "timezone": {
@@ -1087,6 +1468,15 @@
     },
     "provider_group": {
         "provider": {
+            "api_key": {
+                "description": "API Key"
+            },
+            "dashscope_api_key": {
+                "description": "DashScope API Key"
+            },
+            "gemini_tts_api_key": {
+                "description": "Gemini API Key"
+            },
             "genie_onnx_model_dir": {
                 "description": "Директория моделей ONNX",
                 "hint": "Путь к директории с файлами моделей ONNX"
@@ -1139,6 +1529,22 @@
                 "description": "Стратегия усечения текста",
                 "hint": "Определяет, следует ли усекать входной текст, если он слишком длинный и не помещается в максимальную длину контекста модели."
             },
+            "tei_rerank_truncate": {
+                "description": "Усечение длинного текста",
+                "hint": "Автоматически усекать ввод, если он превышает максимальную длину контекста модели. При включении требует настройки Направление усечения."
+            },
+            "tei_rerank_truncation_direction": {
+                "description": "Направление усечения",
+                "hint": "Выберите, с какой стороны текста выполнять усечение — слева (left) или справа (right). Действует только при включённом Усечение длинного текста."
+            },
+            "tei_rerank_raw_scores": {
+                "description": "Возвращать исходные оценки",
+                "hint": "Если True, возвращает исходные логит-оценки модели (могут быть отрицательными) без сигмоидной нормализации. По умолчанию False."
+            },
+            "tei_rerank_return_text": {
+                "description": "Возвращать текст документа в результатах",
+                "hint": "Если True, каждый результат будет содержать исходный текст документа. По умолчанию False для снижения сетевой нагрузки."
+            },
             "launch_model_if_not_running": {
                 "description": "Автозапуск модели",
                 "hint": "Если модель не запущена в Xinference, попытаться запустить её автоматически. Рекомендуется отключать в продакшене."
@@ -1156,6 +1562,10 @@
             "custom_headers": {
                 "description": "Заголовки запроса",
                 "hint": "Пары ключ/значение будут добавлены в заголовки запроса (default_headers). Значения должны быть строками."
+            },
+            "ollama_disable_thinking": {
+                "description": "Отключить режим размышления",
+                "hint": "Отключает режим размышления Ollama."
             },
             "custom_extra_body": {
                 "description": "Параметры тела запроса",
@@ -1175,6 +1585,11 @@
                         "description": "Макс. токенов",
                         "hint": "Максимальное количество генерируемых токенов.",
                         "name": "Макс. токены"
+                    },
+                    "reasoning_effort": {
+                        "description": "Уровень рассуждений",
+                        "hint": "Управляет глубиной рассуждений модели. Поддерживаемые значения зависят от модели.",
+                        "name": "Уровень рассуждений"
                     }
                 }
             },
@@ -1270,6 +1685,10 @@
                 "description": "Размерность эмбеддингов",
                 "hint": "Размерность векторов эмбеддингов. Зависит от модели. Должно быть указано верно для работы векторной базы данных."
             },
+            "embedding_dimensions_mode": {
+                "description": "Режим параметра dimensions",
+                "hint": "Управляет отправкой параметра dimensions в OpenAI-совместимых запросах Embedding. auto отправляет его только для официальных моделей OpenAI embedding-3; используйте always, если совместимый API поддерживает параметр, или never, если он отклоняет параметр."
+            },
             "embedding_model": {
                 "description": "Модель эмбеддингов",
                 "hint": "Имя модели эмбеддингов."
@@ -1285,6 +1704,9 @@
             },
             "gemini_embedding": {
                 "hint": "Gemini Embedding не требует ручного добавления /v1beta."
+            },
+            "dashscope_embedding": {
+                "hint": "Embedding Aliyun DashScope. URL по умолчанию: https://dashscope.aliyuncs.com/api/v1."
             },
             "volcengine_cluster": {
                 "description": "Кластер Volcengine",
@@ -1479,17 +1901,33 @@
                 "description": "Таймаут (сек)",
                 "hint": "Максимальное время ожидания ответа."
             },
-            "mimo-stt-system-prompt": {
-                "description": "Системный промпт",
-                "hint": "System prompt, который управляет поведением MiMo STT при распознавании."
-            },
-            "mimo-stt-user-prompt": {
-                "description": "Пользовательский промпт",
-                "hint": "Дополнительный user prompt для MiMo STT, который помогает задать формат результата."
-            },
             "openai-tts-voice": {
                 "description": "API Base URL",
                 "hint": "Голоса OpenAI TTS: alloy, echo и др."
+            },
+            "elevenlabs-tts-voice-id": {
+                "description": "ID голоса",
+                "hint": "ID голоса ElevenLabs. Просмотрите и скопируйте ID на https://elevenlabs.io/app/voice-library. По умолчанию 'JBFqnCBsd6RMkjVDRZzb' (George)."
+            },
+            "elevenlabs-tts-output-format": {
+                "description": "Формат вывода",
+                "hint": "Формат аудио, например 'mp3_44100_128', 'mp3_22050_32', 'wav_44100' или 'opus_48000_128'. Raw PCM/u-law/a-law форматы не поддерживаются. По умолчанию 'mp3_44100_128'."
+            },
+            "elevenlabs-tts-stability": {
+                "description": "Стабильность",
+                "hint": "Стабильность голоса, диапазон [0, 1]. Оставьте пустым для значения по умолчанию."
+            },
+            "elevenlabs-tts-similarity-boost": {
+                "description": "Усиление сходства",
+                "hint": "Насколько вывод соответствует исходному голосу, диапазон [0, 1]. Оставьте пустым для значения по умолчанию."
+            },
+            "elevenlabs-tts-style": {
+                "description": "Выразительность стиля",
+                "hint": "Выразительность стиля голоса, диапазон [0, 1]. Высокие значения увеличивают задержку. Оставьте пустым для значения по умолчанию."
+            },
+            "elevenlabs-tts-use-speaker-boost": {
+                "description": "Усиление диктора",
+                "hint": "Усиливает сходство с исходным диктором. Может немного увеличить задержку."
             },
             "mimo-tts-voice": {
                 "description": "Голос",

@@ -8,6 +8,7 @@ from astrbot.api import logger
 from astrbot.api.event import MessageChain
 from astrbot.api.platform import (
     AstrBotMessage,
+    Group,
     Platform,
     PlatformMetadata,
     register_platform_adapter,
@@ -119,6 +120,23 @@ class MisskeyPlatformAdapter(Platform):
             id=self.config.get("id", "misskey"),
             default_config_tmpl=default_config,
             support_streaming_message=False,
+        )
+
+    def create_event(self, message: AstrBotMessage) -> MisskeyPlatformEvent:
+        """Creates a Misskey message event.
+
+        Args:
+            message: AstrBot message object to wrap.
+
+        Returns:
+            Created Misskey message event.
+        """
+        return MisskeyPlatformEvent(
+            message_str=message.message_str,
+            message_obj=message,
+            platform_meta=self.meta(),
+            session_id=message.session_id,
+            client=self,
         )
 
     async def run(self) -> None:
@@ -294,14 +312,7 @@ class MisskeyPlatformAdapter(Platform):
                         f"[Misskey] 处理贴文提及: {note.get('text', '')[:50]}...",
                     )
                     message = await self.convert_message(note)
-                    event = MisskeyPlatformEvent(
-                        message_str=message.message_str,
-                        message_obj=message,
-                        platform_meta=self.meta(),
-                        session_id=message.session_id,
-                        client=self,
-                    )
-                    self.commit_event(event)
+                    self.commit_event(self.create_event(message))
         except Exception as e:
             logger.error(f"[Misskey] 处理通知失败: {e}")
 
@@ -329,14 +340,7 @@ class MisskeyPlatformAdapter(Platform):
                 message = await self.convert_chat_message(data)
                 logger.info(f"[Misskey] 处理私聊消息: {message.message_str[:50]}...")
 
-            event = MisskeyPlatformEvent(
-                message_str=message.message_str,
-                message_obj=message,
-                platform_meta=self.meta(),
-                session_id=message.session_id,
-                client=self,
-            )
-            self.commit_event(event)
+            self.commit_event(self.create_event(message))
         except Exception as e:
             logger.error(f"[Misskey] 处理聊天消息失败: {e}")
 
@@ -661,7 +665,7 @@ class MisskeyPlatformAdapter(Platform):
             message_parts.extend(text_parts)
 
         files = raw_data.get("files", [])
-        file_parts = process_files(message, files)
+        file_parts = await process_files(message, files)
         message_parts.extend(file_parts)
 
         poll = raw_data.get("poll") or (
@@ -701,7 +705,7 @@ class MisskeyPlatformAdapter(Platform):
             message.message.append(Comp.Plain(raw_text))
 
         files = raw_data.get("files", [])
-        process_files(message, files, include_text_parts=False)
+        await process_files(message, files, include_text_parts=False)
 
         message.message_str = raw_text if raw_text else ""
         return message
@@ -717,6 +721,13 @@ class MisskeyPlatformAdapter(Platform):
             is_chat=False,
             room_id=room_id,
         )
+        room_data = raw_data.get("toRoom")
+        if message.group and isinstance(room_data, dict):
+            message.group = Group(
+                group_id=message.group.group_id,
+                group_name=room_data.get("name") or None,
+                group_owner=str(room_data.get("ownerId") or "") or None,
+            )
 
         cache_user_info(
             self._user_cache,
@@ -744,7 +755,7 @@ class MisskeyPlatformAdapter(Platform):
                 message_parts.append(raw_text)
 
         files = raw_data.get("files", [])
-        file_parts = process_files(message, files)
+        file_parts = await process_files(message, files)
         message_parts.extend(file_parts)
 
         message.message_str = (

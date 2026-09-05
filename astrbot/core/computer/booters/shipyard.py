@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shlex
 from typing import Any
 
 from shipyard import FileSystemComponent as ShipyardFileSystemComponent
@@ -9,7 +10,91 @@ from astrbot.api import logger
 
 from ..olayer import FileSystemComponent, PythonComponent, ShellComponent
 from .base import ComputerBooter
+from .shell_background import build_detached_shell_command
 from .shipyard_search_file_util import search_files_via_shell
+
+
+def _maybe_model_dump(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    if hasattr(value, "model_dump"):
+        dumped = value.model_dump()
+        if isinstance(dumped, dict):
+            return dumped
+    return {}
+
+
+class ShipyardShellWrapper:
+    def __init__(self, _shipyard_shell: ShellComponent):
+        self._shell = _shipyard_shell
+
+    async def exec(
+        self,
+        command: str,
+        cwd: str | None = None,
+        env: dict[str, str] | None = None,
+        timeout: int | None = 300,
+        shell: bool = True,
+        background: bool = False,
+    ) -> dict[str, Any]:
+        if not shell:
+            return {
+                "stdout": "",
+                "stderr": "error: only shell mode is supported in shipyard booter.",
+                "exit_code": 2,
+                "success": False,
+            }
+
+        run_command = command
+        if env:
+            env_prefix = " ".join(
+                f"{k}={shlex.quote(str(v))}" for k, v in sorted(env.items())
+            )
+            run_command = f"{env_prefix} {run_command}"
+
+        if background:
+            run_command = build_detached_shell_command(run_command)
+
+        result = await self._shell.exec(
+            run_command,
+            timeout=timeout or 300,
+            cwd=cwd,
+        )
+        payload = _maybe_model_dump(result)
+
+        stdout = payload.get("output", payload.get("stdout", "")) or ""
+        stderr = payload.get("error", payload.get("stderr", "")) or ""
+        exit_code = payload.get("exit_code")
+        if background:
+            pid: int | None = None
+            try:
+                pid = int(str(stdout).strip().splitlines()[-1])
+            except Exception:
+                pid = None
+            return {
+                "pid": pid,
+                "stdout": (
+                    f"Command is running in the background. pid={pid}"
+                    if pid is not None
+                    else "Command was submitted in the background."
+                ),
+                "stderr": stderr,
+                "exit_code": exit_code,
+                "success": bool(payload.get("success", not stderr)),
+                "execution_id": payload.get("execution_id"),
+                "execution_time_ms": payload.get("execution_time_ms"),
+                "command": payload.get("command"),
+            }
+
+        return {
+            "stdout": stdout,
+            "stderr": stderr,
+            "exit_code": exit_code,
+            "success": bool(payload.get("success", not stderr)),
+            "execution_id": payload.get("execution_id"),
+            "execution_time_ms": payload.get("execution_time_ms"),
+            "command": payload.get("command"),
+        }
 
 
 class ShipyardFileSystemWrapper:
@@ -107,7 +192,8 @@ class ShipyardBooter(ComputerBooter):
         )
         logger.info(f"Got sandbox ship: {ship.id} for session: {session_id}")
         self._ship = ship
-        self._fs = ShipyardFileSystemWrapper(self._ship.fs, self._ship.shell)
+        self._shell = ShipyardShellWrapper(self._ship.shell)
+        self._fs = ShipyardFileSystemWrapper(self._ship.fs, self._shell)
 
     async def shutdown(self) -> None:
         logger.info("[Computer] Shipyard booter shutdown.")
@@ -122,7 +208,7 @@ class ShipyardBooter(ComputerBooter):
 
     @property
     def shell(self) -> ShellComponent:
-        return self._ship.shell
+        return self._shell
 
     async def upload_file(self, path: str, file_name: str) -> dict:
         """Upload file to sandbox"""

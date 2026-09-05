@@ -184,6 +184,7 @@ import { enableKatex, enableMermaid, MarkdownCodeBlockNode, setCustomComponents 
 import 'markstream-vue/index.css'
 import 'katex/dist/katex.min.css'
 import axios from 'axios';
+import { fileApi } from '@/api/v1';
 import { useToast } from '@/utils/toast'
 import ReasoningBlock from './message_list_comps/ReasoningBlock.vue';
 import MessagePartsRenderer from './message_list_comps/MessagePartsRenderer.vue';
@@ -303,7 +304,7 @@ export default {
                     part.tool_calls.forEach(toolCall => {
                         // 检查是否是支持引用解析的 web_search 工具调用
                         if (
-                            !['web_search_baidu', 'web_search_tavily', 'web_search_bocha', 'web_search_brave'].includes(toolCall.name) ||
+                            !['web_search_baidu', 'web_search_tavily', 'web_search_bocha', 'web_search_brave', 'web_search_firecrawl'].includes(toolCall.name) ||
                             !toolCall.result
                         ) {
                             return;
@@ -484,7 +485,7 @@ export default {
             this.downloadingFiles = new Set(this.downloadingFiles);
 
             try {
-                const response = await axios.get(`/api/chat/get_attachment?attachment_id=${file.attachment_id}`, {
+                const response = await axios.get(fileApi.contentUrl(file.attachment_id), {
                     responseType: 'blob'
                 });
 

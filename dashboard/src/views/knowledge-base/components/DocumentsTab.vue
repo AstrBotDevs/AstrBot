@@ -2,7 +2,7 @@
   <div class="documents-tab">
     <!-- 操作栏 -->
     <div class="action-bar mb-4">
-      <v-btn prepend-icon="mdi-upload" color="primary" variant="elevated" @click="showUploadDialog = true">
+      <v-btn prepend-icon="mdi-upload" color="primary" variant="outlined" @click="showUploadDialog = true">
         {{ t('documents.upload') }}
       </v-btn>
       <v-text-field v-model="searchQuery" prepend-inner-icon="mdi-magnify" :placeholder="'搜索文档...'" variant="outlined"
@@ -10,8 +10,10 @@
     </div>
 
     <!-- 文档列表 -->
-    <v-card elevation="2">
-      <v-data-table :headers="headers" :items="documents" :loading="loading" :search="searchQuery" :items-per-page="10">
+    <v-card variant="outlined">
+      <v-data-table-server :headers="headers" :items="documents" :loading="loading"
+        :items-per-page="pageSize" :page="page" :items-length="total"
+        @update:page="onPageChange" @update:items-per-page="onItemsPerPageChange">
         <template #item.doc_name="{ item }">
           <div class="d-flex align-center gap-2">
             <v-icon :color="getFileColor(item.file_type)" class="mr-2">
@@ -53,19 +55,17 @@
             <p class="mt-4 text-medium-emphasis">{{ t('documents.empty') }}</p>
           </div>
         </template>
-      </v-data-table>
+      </v-data-table-server>
     </v-card>
 
     <!-- 上传对话框 -->
     <v-dialog v-model="showUploadDialog" max-width="650px" persistent @after-enter="initUploadSettings">
       <v-card>
-        <v-card-title class="pa-4 d-flex align-center">
-          <span class="text-h5">{{ t('upload.title') }}</span>
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex align-center">
+          <span>{{ t('upload.title') }}</span>
           <v-spacer />
           <v-btn icon="mdi-close" variant="text" @click="closeUploadDialog" />
         </v-card-title>
-
-        <v-divider />
 
         <v-tabs v-model="uploadMode" grow class="mb-4">
           <v-tab value="file">{{ t('upload.fileUpload') }}</v-tab>
@@ -86,8 +86,7 @@
                 <p class="mt-4 text-h6">{{ t('upload.dropzone') }}</p>
                 <p class="text-caption text-medium-emphasis mt-2">{{ t('upload.supportedFormats') }}</p>
                 <p class="text-caption text-medium-emphasis">{{ t('upload.maxSize') }}</p>
-                <p class="text-caption text-medium-emphasis">最多可上传 10 个文件</p>
-                <input ref="fileInput" type="file" multiple hidden accept=".txt,.md,.pdf,.docx,.epub,.xls,.xlsx"
+                <input ref="fileInput" type="file" multiple hidden accept=".txt,.md,.markdown,.rst,.adoc,.pdf,.docx,.epub,.xls,.xlsx"
                   @change="handleFileSelect" />
               </div>
 
@@ -123,7 +122,7 @@
                     <span>
                       {{ tavilyConfigStatus === 'error' ? '检查网页搜索配置失败' : '使用此功能需要配置 Tavily Key' }}
                     </span>
-                    <v-btn size="small" variant="flat" @click="showTavilyDialog = true">
+                    <v-btn size="small" variant="tonal" @click="showTavilyDialog = true">
                       配置
                     </v-btn>
                   </div>
@@ -193,14 +192,12 @@
 
         </v-card-text>
 
-        <v-divider />
-
         <v-card-actions class="pa-4">
           <v-spacer />
           <v-btn variant="text" @click="closeUploadDialog" :disabled="uploading">
             {{ t('upload.cancel') }}
           </v-btn>
-          <v-btn color="primary" variant="elevated" @click="startUpload" :loading="uploading"
+          <v-btn color="primary" variant="tonal" @click="startUpload" :loading="uploading"
             :disabled="isUploadDisabled">
             {{ t('upload.submit') }}
           </v-btn>
@@ -211,19 +208,17 @@
     <!-- 删除确认对话框 -->
     <v-dialog v-model="showDeleteDialog" max-width="450px">
       <v-card>
-        <v-card-title class="pa-4 text-h6">{{ t('documents.delete') }}</v-card-title>
-        <v-divider />
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{ t('documents.delete') }}</v-card-title>
         <v-card-text class="pa-6">
           <p>{{ t('documents.deleteConfirm', { name: deleteTarget?.doc_name || '' }) }}</p>
           <v-alert type="error" variant="tonal" density="compact" class="mt-4">
             {{ t('documents.deleteWarning') }}
           </v-alert>
         </v-card-text>
-        <v-divider />
         <v-card-actions class="pa-4">
           <v-spacer />
           <v-btn variant="text" @click="showDeleteDialog = false">取消</v-btn>
-          <v-btn color="error" variant="elevated" @click="deleteDocument" :loading="deleting">
+          <v-btn color="error" variant="tonal" @click="deleteDocument" :loading="deleting">
             删除
           </v-btn>
         </v-card-actions>
@@ -242,9 +237,9 @@
 
 <script setup lang="ts">
 import TavilyKeyDialog from './TavilyKeyDialog.vue'
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, watch, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import axios from 'axios'
+import { configProfileApi, knowledgeApi, providerApi } from '@/api/v1'
 import { useModuleI18n } from '@/i18n/composables'
 
 const { tm: t } = useModuleI18n('features/knowledge-base/detail')
@@ -262,6 +257,9 @@ const loading = ref(false)
 const uploading = ref(false)
 const deleting = ref(false)
 const documents = ref<any[]>([])
+const page = ref(1)
+const pageSize = ref(10)
+const total = ref(0)
 const searchQuery = ref('')
 const showUploadDialog = ref(false)
 const showDeleteDialog = ref(false)
@@ -276,6 +274,7 @@ const uploadingTasks = ref<Map<string, any>>(new Map())
 const progressPollingInterval = ref<number | null>(null)
 const tavilyConfigStatus = ref('loading') // 'loading', 'configured', 'not_configured', 'error'
 const showTavilyDialog = ref(false)
+let documentsRequestId = 0
 
 const snackbar = ref({
   show: false,
@@ -334,30 +333,51 @@ const isUploadDisabled = computed(() => {
 
 // 表格列
 const headers = [
-  { title: t('documents.name'), key: 'doc_name', sortable: true },
-  { title: t('documents.type'), key: 'file_type', sortable: true },
-  { title: t('documents.size'), key: 'file_size', sortable: true },
-  { title: t('documents.chunks'), key: 'chunk_count', sortable: true },
-  { title: t('documents.createdAt'), key: 'created_at', sortable: true },
+  { title: t('documents.name'), key: 'doc_name', sortable: false },
+  { title: t('documents.type'), key: 'file_type', sortable: false },
+  { title: t('documents.size'), key: 'file_size', sortable: false },
+  { title: t('documents.chunks'), key: 'chunk_count', sortable: false },
+  { title: t('documents.createdAt'), key: 'created_at', sortable: false },
   { title: t('documents.actions'), key: 'actions', sortable: false, align: 'end' as const }
 ]
 
 // 加载文档列表
 const loadDocuments = async () => {
+  const requestId = ++documentsRequestId
   loading.value = true
   try {
-    const response = await axios.get('/api/kb/document/list', {
-      params: { kb_id: props.kbId }
+    const response = await knowledgeApi.documents(props.kbId, {
+      page: page.value,
+      page_size: pageSize.value,
+      search: searchQuery.value.trim() || undefined,
     })
+    if (requestId !== documentsRequestId) return
     if (response.data.status === 'ok') {
-      documents.value = response.data.data.items || []
+      const data = response.data.data
+      documents.value = data.items || []
+      total.value = data.total || 0
     }
   } catch (error) {
+    if (requestId !== documentsRequestId) return
     console.error('Failed to load documents:', error)
     showSnackbar('加载文档列表失败', 'error')
   } finally {
-    loading.value = false
+    if (requestId === documentsRequestId) {
+      loading.value = false
+    }
   }
+}
+
+// Handle pagination
+const onPageChange = (newPage: number) => {
+  page.value = newPage
+  loadDocuments()
+}
+
+const onItemsPerPageChange = (newSize: number) => {
+  pageSize.value = newSize
+  page.value = 1
+  loadDocuments()
 }
 
 // 文件选择
@@ -370,13 +390,8 @@ const handleFileSelect = (event: Event) => {
   target.value = ''
 }
 
-// 添加文件（检查数量限制）
+// Add files
 const addFiles = (files: File[]) => {
-  const totalFiles = selectedFiles.value.length + files.length
-  if (totalFiles > 10) {
-    showSnackbar('最多只能选择 10 个文件', 'warning')
-    return
-  }
   selectedFiles.value.push(...files)
 }
 
@@ -431,7 +446,7 @@ const uploadFiles = async () => {
     formData.append('tasks_limit', uploadSettings.value.tasks_limit.toString())
     formData.append('max_retries', uploadSettings.value.max_retries.toString())
 
-    const response = await axios.post('/api/kb/document/upload', formData)
+    const response = await knowledgeApi.uploadDocument(props.kbId, formData)
 
     if (response.data.status === 'ok') {
       const result = response.data.data
@@ -508,7 +523,7 @@ const uploadFromUrl = async () => {
     }
 
 
-    const response = await axios.post('/api/kb/document/upload/url', payload)
+    const response = await knowledgeApi.importDocumentFromUrl(props.kbId, payload)
 
     if (response.data.status === 'ok') {
       const result = response.data.data
@@ -560,9 +575,7 @@ const startProgressPolling = (taskId: string) => {
 
   progressPollingInterval.value = window.setInterval(async () => {
     try {
-      const response = await axios.get('/api/kb/document/upload/progress', {
-        params: { task_id: taskId }
-      })
+      const response = await knowledgeApi.task(taskId)
 
       if (response.data.status === 'ok') {
         const data = response.data.data
@@ -601,7 +614,7 @@ const startProgressPolling = (taskId: string) => {
           // 移除上传中的占位文档
           documents.value = documents.value.filter(doc => doc.taskId !== taskId)
 
-          // 重新加载文档列表
+          // Reload current page
           await loadDocuments()
           emit('refresh')
 
@@ -689,14 +702,15 @@ const deleteDocument = async () => {
 
   deleting.value = true
   try {
-    const response = await axios.post('/api/kb/document/delete', {
-      doc_id: deleteTarget.value.doc_id,
-      kb_id: props.kbId
-    })
+    const response = await knowledgeApi.deleteDocument(props.kbId, deleteTarget.value.doc_id)
 
     if (response.data.status === 'ok') {
       showSnackbar(t('documents.deleteSuccess'))
       showDeleteDialog.value = false
+      // If current page becomes empty after delete and is not the first page, go back one page
+      if (documents.value.length === 1 && page.value > 1) {
+        page.value -= 1
+      }
       await loadDocuments()
       emit('refresh')
     } else {
@@ -715,6 +729,7 @@ const getFileIcon = (fileType: string) => {
   const type = fileType?.toLowerCase() || ''
   if (type.includes('pdf')) return 'mdi-file-pdf-box'
   if (type.includes('epub')) return 'mdi-book-open-page-variant'
+  if (type.includes('rst') || type.includes('adoc')) return 'mdi-file-document-outline'
   if (type.includes('md') || type.includes('markdown')) return 'mdi-language-markdown'
   if (type.includes('txt')) return 'mdi-file-document-outline'
   if (type.includes('url')) return 'mdi-link-variant'
@@ -725,6 +740,7 @@ const getFileColor = (fileType: string) => {
   const type = fileType?.toLowerCase() || ''
   if (type.includes('pdf')) return 'error'
   if (type.includes('epub')) return 'warning'
+  if (type.includes('rst') || type.includes('adoc')) return 'success'
   if (type.includes('md')) return 'info'
   if (type.includes('txt')) return 'success'
   if (type.includes('url')) return 'primary'
@@ -757,9 +773,7 @@ const formatDate = (dateStr: string) => {
 // 加载LLM providers
 const loadLlmProviders = async () => {
   try {
-    const response = await axios.get('/api/config/provider/list', {
-      params: { provider_type: 'chat_completion' }
-    })
+    const response = await providerApi.listByProviderType('chat_completion')
     if (response.data.status === 'ok') {
       llmProviders.value = response.data.data
     }
@@ -772,11 +786,9 @@ const loadLlmProviders = async () => {
 const checkTavilyConfig = async () => {
   tavilyConfigStatus.value = 'loading'
   try {
-    const response = await axios.get('/api/config/abconf', {
-      params: { id: 'default' }
-    })
+    const response = await configProfileApi.get('default')
     if (response.data.status === 'ok') {
-      const config = response.data.data.config
+      const config = ((response.data.data as any).config || {}) as any
       const tavilyKeys = config?.provider_settings?.websearch_tavily_key
       if (Array.isArray(tavilyKeys) && tavilyKeys.length > 0 && tavilyKeys.some(key => key.trim() !== '')) {
         tavilyConfigStatus.value = 'configured'
@@ -797,6 +809,14 @@ const onTavilyKeySet = () => {
   checkTavilyConfig()
 }
 
+// Reset to page 1 and reload when search text changes
+watch(searchQuery, (_value, _oldValue, onCleanup) => {
+  page.value = 1
+  documentsRequestId += 1
+  const timeoutId = window.setTimeout(loadDocuments, 300)
+  onCleanup(() => window.clearTimeout(timeoutId))
+})
+
 onMounted(() => {
   loadDocuments()
   loadLlmProviders()
@@ -804,6 +824,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  documentsRequestId += 1
   stopProgressPolling()
 })
 </script>

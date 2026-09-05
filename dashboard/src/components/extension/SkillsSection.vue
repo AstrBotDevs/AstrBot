@@ -1,37 +1,17 @@
 <template>
   <div class="skills-page">
     <v-container fluid class="pa-0" elevation="0">
-      <v-row class="d-flex justify-space-between align-center px-4 py-3 pb-4">
-        <div>
-          <v-btn
-            v-if="mode === 'local'"
-            color="primary"
-            prepend-icon="mdi-upload"
-            class="me-2"
-            variant="tonal"
-            @click="openUploadDialog"
-          >
-            {{ tm("skills.upload") }}
-          </v-btn>
-          <v-btn
-            color="primary"
-            prepend-icon="mdi-refresh"
-            variant="tonal"
-            @click="refreshCurrentMode"
-          >
-            {{ tm("skills.refresh") }}
-          </v-btn>
-        </div>
+      <v-row
+        v-if="neoEnabled"
+        class="d-flex justify-end align-center px-4 py-3 pb-4"
+      >
         <v-btn-toggle v-model="mode" mandatory divided density="comfortable">
           <v-btn value="local">{{ tm("skills.modeLocal") }}</v-btn>
-          <v-btn value="neo" :disabled="!neoEnabled">{{
-            tm("skills.modeNeo")
-          }}</v-btn>
+          <v-btn value="neo">{{ tm("skills.modeNeo") }}</v-btn>
         </v-btn-toggle>
       </v-row>
 
       <div v-if="mode === 'local'" class="px-2 pb-2 d-flex flex-column ga-2">
-        <small style="color: grey">{{ tm("skills.runtimeHint") }}</small>
         <v-alert
           v-if="runtime === 'sandbox' && !sandboxCache.ready"
           type="info"
@@ -67,67 +47,202 @@
           <small class="text-grey">{{ tm("skills.emptyHint") }}</small>
         </div>
 
-        <v-row v-else align="stretch">
-          <v-col
-            v-for="skill in skills"
-            :key="skill.name"
-            cols="12"
-            md="6"
-            lg="4"
-            xl="3"
-            class="d-flex"
-          >
-            <item-card
-              :item="skill"
-              title-field="name"
-              enabled-field="active"
-              :loading="itemLoading[skill.name] || false"
-              :show-edit-button="false"
-              :disable-toggle="isSandboxPresetSkill(skill)"
-              :disable-delete="isSandboxPresetSkill(skill)"
-              @toggle-enabled="toggleSkill"
-              @delete="confirmDelete"
-            >
-              <template #item-details="{ item }">
-                <div class="d-flex align-center mb-2 ga-2 flex-wrap">
-                  <v-chip
-                    size="x-small"
-                    variant="tonal"
-                    :color="sourceTypeColor(item.source_type)"
-                  >
-                    {{ sourceTypeLabel(item.source_type) }}
-                  </v-chip>
-                  <div
-                    class="text-caption text-medium-emphasis skill-description"
-                  >
-                    <v-icon size="small" class="me-1">mdi-text</v-icon>
-                    {{ item.description || tm("skills.noDescription") }}
-                  </div>
-                </div>
-                <div class="text-caption text-medium-emphasis skill-path">
-                  <v-icon size="small" class="me-1">mdi-file-document</v-icon>
-                  {{ tm("skills.path") }}: {{ item.path }}
-                </div>
-              </template>
-              <template #actions="{ item }">
+        <div v-else class="pb-3">
+          <div class="skills-list-header">
+            <h3 class="skills-list-title text-h3">
+              {{ tm("status.installed") }}
+            </h3>
+            <div class="skills-list-actions">
+              <template v-if="batchSelectionEnabled">
                 <v-btn
-                  variant="tonal"
-                  color="primary"
+                  variant="text"
                   size="small"
-                  rounded="xl"
-                  :disabled="
-                    itemLoading[item.name] ||
-                    false ||
-                    isSandboxPresetSkill(item)
-                  "
-                  @click="downloadSkill(item)"
+                  :disabled="batchDeleting"
+                  @click="toggleSelectAll"
                 >
-                  {{ tm("skills.download") }}
+                  {{
+                    allDeletableSelected
+                      ? tm("skills.clearSelection")
+                      : tm("skills.selectAll")
+                  }}
+                </v-btn>
+                <v-btn
+                  color="error"
+                  variant="tonal"
+                  size="small"
+                  prepend-icon="mdi-delete-outline"
+                  :disabled="selectedSkillNames.length === 0 || batchDeleting"
+                  @click="confirmBatchDelete"
+                >
+                  {{
+                    tm("skills.deleteSelected", {
+                      count: selectedSkillNames.length,
+                    })
+                  }}
+                </v-btn>
+                <v-btn
+                  variant="text"
+                  size="small"
+                  :disabled="batchDeleting"
+                  @click="cancelBatchSelection"
+                >
+                  {{ tm("skills.cancel") }}
                 </v-btn>
               </template>
-            </item-card>
-          </v-col>
-        </v-row>
+              <v-btn
+                v-else
+                variant="tonal"
+                size="small"
+                prepend-icon="mdi-select-multiple"
+                :disabled="deletableSkills.length === 0"
+                @click="startBatchSelection"
+              >
+                {{ tm("skills.select") }}
+              </v-btn>
+            </div>
+          </div>
+
+          <div class="skills-list">
+            <OutlinedActionListItem
+              v-for="skill in skills"
+              :key="skill.name"
+              :title="skill.name"
+              class="skill-list-item"
+              :class="{
+                'skill-list-item--inactive':
+                  skill.active === false || isInactivePluginSkill(skill),
+                'skill-list-item--selected':
+                  batchSelectionEnabled &&
+                  selectedSkillNames.includes(skill.name),
+              }"
+              :clickable="!batchSelectionEnabled"
+              @click="openSkillEditor(skill)"
+            >
+              <template #title-prepend>
+                <v-checkbox-btn
+                  v-if="batchSelectionEnabled && !isReadOnlySourceSkill(skill)"
+                  v-model="selectedSkillNames"
+                  :value="skill.name"
+                  density="compact"
+                  hide-details
+                  :disabled="batchDeleting"
+                  :aria-label="
+                    tm('skills.selectSkill', {
+                      name: skill.name,
+                    })
+                  "
+                  @click.stop
+                />
+              </template>
+
+              <template #title-extra>
+                <div class="d-flex align-center ga-1">
+                  <v-chip
+                    v-if="skill.preset || skill.source_type === 'sandbox_only'"
+                    size="x-small"
+                    variant="tonal"
+                    color="secondary"
+                  >
+                    {{ tm("status.preset") }}
+                  </v-chip>
+                  <v-chip
+                    v-if="isInactivePluginSkill(skill)"
+                    size="x-small"
+                    variant="tonal"
+                    color="warning"
+                  >
+                    {{ tm("skills.pluginDisabled") }}
+                  </v-chip>
+                </div>
+              </template>
+
+              <div class="skill-description text-body-2 text-medium-emphasis">
+                {{ skill.description || tm("skills.noDescription") }}
+              </div>
+
+              <div class="skill-path text-caption text-medium-emphasis">
+                <v-icon size="small" class="me-1">mdi-file-document</v-icon>
+                {{ tm("skills.path") }}: {{ skill.path }}
+              </div>
+
+              <template v-if="!batchSelectionEnabled" #actions>
+                <v-tooltip :text="tm('skills.download')" location="top">
+                  <template #activator="{ props }">
+                    <v-btn
+                      v-bind="props"
+                      icon="mdi-download-outline"
+                      variant="text"
+                      size="small"
+                      class="list-action-icon-btn"
+                      :disabled="
+                        itemLoading[skill.name] || isReadOnlySourceSkill(skill)
+                      "
+                      @click.stop="downloadSkill(skill)"
+                    />
+                  </template>
+                </v-tooltip>
+
+                <v-tooltip
+                  :text="t('core.common.itemCard.delete')"
+                  location="top"
+                >
+                  <template #activator="{ props }">
+                    <v-btn
+                      v-bind="props"
+                      icon="mdi-delete-outline"
+                      variant="text"
+                      size="small"
+                      class="list-action-icon-btn"
+                      :disabled="
+                        itemLoading[skill.name] || isReadOnlySourceSkill(skill)
+                      "
+                      @click.stop="confirmDelete(skill)"
+                    />
+                  </template>
+                </v-tooltip>
+              </template>
+
+              <template v-if="!batchSelectionEnabled" #control>
+                <v-tooltip location="top">
+                  <template #activator="{ props }">
+                    <v-switch
+                      v-bind="props"
+                      color="primary"
+                      density="compact"
+                      hide-details
+                      inset
+                      :model-value="
+                        skill.active && !isInactivePluginSkill(skill)
+                      "
+                      :aria-label="
+                        isInactivePluginSkill(skill)
+                          ? tm('skills.pluginDisabled')
+                          : skill.active
+                          ? tm('skills.disable')
+                          : tm('skills.enable')
+                      "
+                      :loading="itemLoading[skill.name] || false"
+                      :disabled="
+                        itemLoading[skill.name] ||
+                        isSandboxPresetSkill(skill) ||
+                        isInactivePluginSkill(skill)
+                      "
+                      @click.stop
+                      @update:model-value="toggleSkill(skill)"
+                    />
+                  </template>
+                  <span>{{
+                    isInactivePluginSkill(skill)
+                      ? tm("skills.pluginDisabled")
+                      : skill.active
+                      ? tm("skills.disable")
+                      : tm("skills.enable")
+                  }}</span>
+                </v-tooltip>
+              </template>
+            </OutlinedActionListItem>
+          </div>
+        </div>
       </template>
 
       <template v-else-if="mode === 'neo' && neoEnabled">
@@ -141,14 +256,6 @@
                 {{ tm("skills.neoFilterHint") }}
               </div>
             </div>
-            <v-btn
-              color="primary"
-              prepend-icon="mdi-refresh"
-              variant="flat"
-              @click="fetchNeoData"
-            >
-              {{ tm("skills.refresh") }}
-            </v-btn>
           </div>
 
           <v-row class="ga-md-0 ga-2">
@@ -339,11 +446,46 @@
       </template>
     </v-container>
 
+    <div class="skills-fab-stack">
+      <v-tooltip :text="tm('skills.refresh')" location="left">
+        <template #activator="{ props }">
+          <v-btn
+            v-bind="props"
+            color="darkprimary"
+            icon="mdi-refresh"
+            size="x-large"
+            variant="elevated"
+            class="skills-fab"
+            @click="refreshCurrentMode"
+          />
+        </template>
+      </v-tooltip>
+      <v-tooltip
+        v-if="mode === 'local'"
+        :text="tm('skills.upload')"
+        location="left"
+      >
+        <template #activator="{ props }">
+          <v-btn
+            v-bind="props"
+            color="darkprimary"
+            icon="mdi-upload"
+            size="x-large"
+            variant="elevated"
+            class="skills-fab"
+            @click="openUploadDialog"
+          />
+        </template>
+      </v-tooltip>
+    </div>
+
     <v-dialog v-model="uploadDialog" max-width="880px" :persistent="uploading">
       <v-card class="skills-upload-dialog">
-        <v-card-title class="skills-upload-dialog__header px-6 pt-6 pb-2">
+        <v-card-title
+          class="text-h3 pa-4 pb-0 pl-6 skills-upload-dialog__header"
+        >
           <div class="skills-upload-dialog__heading">
-            <div class="text-h4 font-weight-medium">
+            <div>
               {{ tm("skills.uploadDialogTitle") }}
             </div>
           </div>
@@ -534,7 +676,7 @@
           </v-btn>
           <v-btn
             class="skills-upload-dialog__action-btn"
-            variant="flat"
+            variant="tonal"
             color="primary"
             :loading="uploading"
             :disabled="!hasUploadableItems"
@@ -548,14 +690,214 @@
 
     <v-dialog v-model="deleteDialog" max-width="400px">
       <v-card>
-        <v-card-title>{{ tm("skills.deleteTitle") }}</v-card-title>
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{
+          tm("skills.deleteTitle")
+        }}</v-card-title>
         <v-card-text>{{ tm("skills.deleteMessage") }}</v-card-text>
         <v-card-actions class="d-flex justify-end">
           <v-btn variant="text" @click="deleteDialog = false">{{
             tm("skills.cancel")
           }}</v-btn>
-          <v-btn color="error" :loading="deleting" @click="deleteSkill">
+          <v-btn
+            color="error"
+            variant="tonal"
+            :loading="deleting"
+            @click="deleteSkill"
+          >
             {{ t("core.common.itemCard.delete") }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <v-dialog
+      v-model="batchDeleteDialog"
+      max-width="520px"
+      :persistent="batchDeleting"
+    >
+      <v-card>
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">
+          {{ tm("skills.batchDeleteTitle") }}
+        </v-card-title>
+        <v-card-text>
+          <p>
+            {{
+              tm("skills.batchDeleteMessage", {
+                count: batchDeleteTargets.length,
+              })
+            }}
+          </p>
+          <v-list class="batch-delete-targets mt-3" density="compact">
+            <v-list-item
+              v-for="name in batchDeleteTargets"
+              :key="name"
+              class="batch-delete-target"
+              :title="name"
+              prepend-icon="mdi-puzzle-outline"
+            />
+          </v-list>
+        </v-card-text>
+        <v-card-actions class="d-flex justify-end">
+          <v-btn
+            variant="text"
+            :disabled="batchDeleting"
+            @click="batchDeleteDialog = false"
+          >
+            {{ tm("skills.cancel") }}
+          </v-btn>
+          <v-btn
+            color="error"
+            variant="tonal"
+            :loading="batchDeleting"
+            :disabled="batchDeleteTargets.length === 0"
+            @click="deleteSelectedSkills"
+          >
+            {{
+              tm("skills.batchDeleteConfirm", {
+                count: batchDeleteTargets.length,
+              })
+            }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <v-dialog
+      v-model="editorDialog.show"
+      max-width="1180px"
+      :fullscreen="$vuetify.display.mdAndDown"
+      :persistent="editorDialog.saving"
+    >
+      <v-card class="skill-editor-dialog">
+        <v-card-title
+          class="text-h3 pa-4 pb-0 pl-6 skill-editor-dialog__header"
+        >
+          <div>
+            <div>
+              {{ editorDialog.skillName }}
+            </div>
+          </div>
+          <v-btn
+            icon="mdi-close"
+            variant="text"
+            :disabled="editorDialog.saving"
+            @click="closeSkillEditor"
+          />
+        </v-card-title>
+
+        <v-card-text class="skill-editor-dialog__body">
+          <div class="skill-editor">
+            <div class="skill-editor__files">
+              <div class="skill-editor__files-header">
+                <v-btn
+                  icon="mdi-arrow-up"
+                  size="small"
+                  variant="text"
+                  :disabled="
+                    !editorDialog.currentDir || editorDialog.loadingFiles
+                  "
+                  @click="openParentSkillDir"
+                />
+                <span>{{ editorDialog.currentDir || "/" }}</span>
+              </div>
+
+              <v-progress-linear
+                v-if="editorDialog.loadingFiles"
+                indeterminate
+                color="primary"
+              />
+
+              <div v-else class="skill-editor__file-list">
+                <button
+                  v-for="entry in editorDialog.entries"
+                  :key="`${entry.type}:${entry.path}`"
+                  class="skill-editor__file-row"
+                  :class="{
+                    'skill-editor__file-row--active':
+                      editorDialog.filePath === entry.path,
+                  }"
+                  type="button"
+                  @click="openSkillEntry(entry)"
+                >
+                  <v-icon size="18">
+                    {{
+                      entry.type === "directory"
+                        ? "mdi-folder-outline"
+                        : "mdi-file-document-outline"
+                    }}
+                  </v-icon>
+                  <span>{{ entry.name }}</span>
+                  <v-chip
+                    v-if="entry.type === 'file' && !entry.editable"
+                    size="x-small"
+                    variant="tonal"
+                  >
+                    {{ tm("skills.readonly") }}
+                  </v-chip>
+                </button>
+              </div>
+            </div>
+
+            <div class="skill-editor__content">
+              <div class="skill-editor__content-header">
+                <div class="skill-editor__path">
+                  {{ editorDialog.filePath || tm("skills.noFileSelected") }}
+                </div>
+                <v-chip
+                  v-if="editorDialog.fileDirty"
+                  size="small"
+                  color="warning"
+                  variant="tonal"
+                >
+                  {{ tm("skills.unsaved") }}
+                </v-chip>
+              </div>
+
+              <v-alert
+                v-if="editorDialog.error"
+                type="error"
+                variant="tonal"
+                density="compact"
+                class="mb-3"
+              >
+                {{ editorDialog.error }}
+              </v-alert>
+
+              <div class="skill-editor__monaco">
+                <VueMonacoEditor
+                  v-model:value="editorDialog.content"
+                  :theme="editorTheme"
+                  :language="editorLanguage"
+                  :options="editorOptions"
+                  style="height: 100%; width: 100%"
+                  @change="editorDialog.fileDirty = true"
+                />
+              </div>
+            </div>
+          </div>
+        </v-card-text>
+
+        <v-card-actions class="skill-editor-dialog__actions">
+          <v-spacer />
+          <v-btn
+            variant="text"
+            :disabled="editorDialog.saving"
+            @click="closeSkillEditor"
+          >
+            {{ tm("skills.cancel") }}
+          </v-btn>
+          <v-btn
+            color="primary"
+            variant="tonal"
+            :loading="editorDialog.saving"
+            :disabled="
+              !editorDialog.filePath ||
+              !editorDialog.fileEditable ||
+              !editorDialog.fileDirty
+            "
+            @click="saveSkillFile"
+          >
+            {{ tm("skills.saveFile") }}
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -563,7 +905,9 @@
 
     <v-dialog v-model="payloadDialog.show" max-width="820px">
       <v-card>
-        <v-card-title>{{ tm("skills.neoPayloadTitle") }}</v-card-title>
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{
+          tm("skills.neoPayloadTitle")
+        }}</v-card-title>
         <v-card-text>
           <pre class="payload-preview">{{ payloadDialog.content }}</pre>
         </v-card-text>
@@ -579,7 +923,7 @@
       v-model="snackbar.show"
       :timeout="3500"
       :color="snackbar.color"
-      elevation="24"
+      elevation="6"
     >
       {{ snackbar.message }}
     </v-snackbar>
@@ -587,10 +931,12 @@
 </template>
 
 <script>
-import axios from "axios";
-import { computed, onMounted, reactive, ref, watch } from "vue";
-import ItemCard from "@/components/shared/ItemCard.vue";
+import { computed, nextTick, onMounted, reactive, ref, watch } from "vue";
+import { VueMonacoEditor } from "@guolao/vue-monaco-editor";
+import { skillApi, systemConfigApi } from "@/api/v1";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
+import OutlinedActionListItem from "@/components/shared/OutlinedActionListItem.vue";
+import { useCustomizerStore } from "@/stores/customizer";
 
 const STATUS_WAITING = "waiting";
 const STATUS_UPLOADING = "uploading";
@@ -600,10 +946,14 @@ const STATUS_SKIPPED = "skipped";
 
 export default {
   name: "SkillsSection",
-  components: { ItemCard },
+  components: {
+    OutlinedActionListItem,
+    VueMonacoEditor,
+  },
   setup() {
     const { t } = useI18n();
     const { tm } = useModuleI18n("features/extension");
+    const customizer = useCustomizerStore();
 
     const mode = ref("local");
     const skills = ref([]);
@@ -619,6 +969,11 @@ export default {
     const deleteDialog = ref(false);
     const deleting = ref(false);
     const skillToDelete = ref(null);
+    const batchSelectionEnabled = ref(false);
+    const selectedSkillNames = ref([]);
+    const batchDeleteTargets = ref([]);
+    const batchDeleteDialog = ref(false);
+    const batchDeleting = ref(false);
     const snackbar = reactive({ show: false, message: "", color: "success" });
 
     const neoLoading = ref(false);
@@ -633,6 +988,20 @@ export default {
     const payloadDialog = reactive({
       show: false,
       content: "",
+    });
+    const editorDialog = reactive({
+      show: false,
+      skillName: "",
+      currentDir: "",
+      entries: [],
+      filePath: "",
+      content: "",
+      fileEditable: false,
+      fileDirty: false,
+      loadingFiles: false,
+      loadingFile: false,
+      saving: false,
+      error: "",
     });
 
     const neoEnabled = ref(false);
@@ -659,6 +1028,33 @@ export default {
     const activeReleaseCount = computed(
       () => neoReleases.value.filter((item) => item?.is_active).length,
     );
+    const editorLanguage = computed(() => {
+      const path = String(editorDialog.filePath || "").toLowerCase();
+      if (path.endsWith(".json")) return "json";
+      if (path.endsWith(".yaml") || path.endsWith(".yml")) return "yaml";
+      if (path.endsWith(".toml") || path.endsWith(".ini")) return "ini";
+      if (path.endsWith(".py")) return "python";
+      if (path.endsWith(".js")) return "javascript";
+      if (path.endsWith(".ts")) return "typescript";
+      if (path.endsWith(".html")) return "html";
+      if (path.endsWith(".css")) return "css";
+      if (path.endsWith(".sh")) return "shell";
+      if (path.endsWith(".md") || path.endsWith(".txt")) return "markdown";
+      return "plaintext";
+    });
+    const editorTheme = computed(() =>
+      customizer.uiTheme === "PurpleThemeDark" ? "vs-dark" : "vs-light",
+    );
+    const editorOptions = computed(() => ({
+      automaticLayout: true,
+      fontSize: 13,
+      lineNumbers: "on",
+      minimap: { enabled: false },
+      readOnly: !editorDialog.fileEditable || editorDialog.loadingFile,
+      scrollBeyondLastLine: false,
+      tabSize: 2,
+      wordWrap: "on",
+    }));
     const uploadStateCounts = computed(() =>
       uploadItems.value.reduce(
         (counts, item) => {
@@ -733,20 +1129,23 @@ export default {
       return payload.skills || [];
     };
 
-    const sourceTypeLabel = (sourceType) => {
-      if (sourceType === "sandbox_only") return tm("skills.sourceSandboxOnly");
-      if (sourceType === "both") return tm("skills.sourceBoth");
-      return tm("skills.sourceLocalOnly");
-    };
-
-    const sourceTypeColor = (sourceType) => {
-      if (sourceType === "sandbox_only") return "indigo";
-      if (sourceType === "both") return "success";
-      return "primary";
-    };
-
     const isSandboxPresetSkill = (skill) =>
       skill?.source_type === "sandbox_only";
+    const isPluginProvidedSkill = (skill) => skill?.source_type === "plugin";
+    const isInactivePluginSkill = (skill) =>
+      isPluginProvidedSkill(skill) && skill?.plugin_active === false;
+    const isReadOnlySourceSkill = (skill) =>
+      isSandboxPresetSkill(skill) || isPluginProvidedSkill(skill);
+    const deletableSkills = computed(() =>
+      skills.value.filter((skill) => !isReadOnlySourceSkill(skill)),
+    );
+    const allDeletableSelected = computed(
+      () =>
+        deletableSkills.value.length > 0 &&
+        deletableSkills.value.every((skill) =>
+          selectedSkillNames.value.includes(skill.name),
+        ),
+    );
 
     const normalizeNeoItemsPayload = (res) => {
       const payload = res?.data?.data || [];
@@ -936,10 +1335,23 @@ export default {
     const fetchSkills = async () => {
       loading.value = true;
       try {
-        const res = await axios.get("/api/skills");
+        const res = await skillApi.list();
         skills.value = normalizeSkillsPayload(res);
+        const deletableNames = new Set(
+          skills.value
+            .filter((skill) => !isReadOnlySourceSkill(skill))
+            .map((skill) => skill.name),
+        );
+        selectedSkillNames.value = selectedSkillNames.value.filter((name) =>
+          deletableNames.has(name),
+        );
+        if (batchSelectionEnabled.value && deletableNames.size === 0) {
+          batchSelectionEnabled.value = false;
+        }
+        return true;
       } catch (_err) {
         showMessage(tm("skills.loadFailed"), "error");
+        return false;
       } finally {
         loading.value = false;
       }
@@ -975,14 +1387,9 @@ export default {
       }
 
       try {
-        const formData = new FormData();
-        for (const item of attemptedItems) {
-          formData.append("files", item.file);
-        }
-
-        const res = await axios.post("/api/skills/batch-upload", formData, {
-          headers: { "Content-Type": "multipart/form-data" },
-        });
+        const res = await skillApi.uploadBatch(
+          attemptedItems.map((item) => item.file),
+        );
 
         const payload = res?.data?.data || {};
         applyUploadResults(attemptedItems, payload);
@@ -1018,7 +1425,109 @@ export default {
       }
     };
 
+    const startBatchSelection = () => {
+      selectedSkillNames.value = [];
+      batchDeleteTargets.value = [];
+      batchSelectionEnabled.value = true;
+    };
+
+    const cancelBatchSelection = () => {
+      if (batchDeleting.value) return;
+      batchSelectionEnabled.value = false;
+      selectedSkillNames.value = [];
+      batchDeleteTargets.value = [];
+      batchDeleteDialog.value = false;
+    };
+
+    const toggleSelectAll = () => {
+      if (allDeletableSelected.value) {
+        selectedSkillNames.value = [];
+        return;
+      }
+      selectedSkillNames.value = deletableSkills.value.map(
+        (skill) => skill.name,
+      );
+    };
+
+    const confirmBatchDelete = () => {
+      const selectedNames = new Set(selectedSkillNames.value);
+      batchDeleteTargets.value = [
+        ...new Set(
+          deletableSkills.value
+            .filter((skill) => selectedNames.has(skill.name))
+            .map((skill) => skill.name),
+        ),
+      ];
+      if (batchDeleteTargets.value.length === 0) return;
+      batchDeleteDialog.value = true;
+    };
+
+    const deleteSelectedSkills = async () => {
+      if (batchDeleting.value || batchDeleteTargets.value.length === 0) return;
+
+      const targets = [...batchDeleteTargets.value];
+      const failed = [];
+      let succeeded = 0;
+      batchDeleting.value = true;
+
+      try {
+        for (const name of targets) {
+          try {
+            const res = await skillApi.delete(name);
+            if (res?.data?.status === "ok") {
+              succeeded += 1;
+            } else {
+              failed.push(name);
+            }
+          } catch (_err) {
+            failed.push(name);
+          }
+        }
+
+        const refreshed = await fetchSkills();
+        if (refreshed) {
+          const currentDeletableNames = new Set(
+            skills.value
+              .filter((skill) => !isReadOnlySourceSkill(skill))
+              .map((skill) => skill.name),
+          );
+          selectedSkillNames.value = failed.filter((name) =>
+            currentDeletableNames.has(name),
+          );
+        } else {
+          selectedSkillNames.value = failed;
+          batchSelectionEnabled.value = failed.length > 0;
+        }
+        batchDeleteDialog.value = false;
+        batchDeleteTargets.value = [];
+
+        if (!refreshed) return;
+
+        if (failed.length === 0) {
+          batchSelectionEnabled.value = false;
+          showMessage(
+            tm("skills.batchDeleteSuccess", { count: succeeded }),
+            "success",
+          );
+        } else {
+          showMessage(
+            tm("skills.batchDeletePartial", {
+              succeeded,
+              failed: failed.length,
+            }),
+            "warning",
+          );
+        }
+      } finally {
+        batchDeleting.value = false;
+      }
+    };
+
     const toggleSkill = async (skill) => {
+      if (isInactivePluginSkill(skill)) {
+        showMessage(tm("skills.pluginDisabled"), "warning");
+        return;
+      }
       if (isSandboxPresetSkill(skill)) {
         showMessage(tm("skills.sandboxPresetReadonly"), "warning");
         return;
@@ -1026,10 +1535,7 @@ export default {
       const nextActive = !skill.active;
       itemLoading[skill.name] = true;
       try {
-        const res = await axios.post("/api/skills/update", {
-          name: skill.name,
-          active: nextActive,
-        });
+        const res = await skillApi.setEnabled(skill.name, nextActive);
         handleApiResponse(
           res,
           tm("skills.updateSuccess"),
@@ -1050,6 +1556,10 @@ export default {
         showMessage(tm("skills.sandboxPresetReadonly"), "warning");
         return;
       }
+      if (isPluginProvidedSkill(skill)) {
+        showMessage(tm("skills.pluginReadonly"), "warning");
+        return;
+      }
       skillToDelete.value = skill;
       deleteDialog.value = true;
     };
@@ -1058,9 +1568,7 @@ export default {
       if (!skillToDelete.value) return;
       deleting.value = true;
       try {
-        const res = await axios.post("/api/skills/delete", {
-          name: skillToDelete.value.name,
-        });
+        const res = await skillApi.delete(skillToDelete.value.name);
         handleApiResponse(
           res,
           tm("skills.deleteSuccess"),
@@ -1082,12 +1590,13 @@ export default {
         showMessage(tm("skills.sandboxPresetReadonly"), "warning");
         return;
       }
+      if (isPluginProvidedSkill(skill)) {
+        showMessage(tm("skills.pluginReadonly"), "warning");
+        return;
+      }
       itemLoading[skill.name] = true;
       try {
-        const res = await axios.get("/api/skills/download", {
-          params: { name: skill.name },
-          responseType: "blob",
-        });
+        const res = await skillApi.download(skill.name);
         const blob = new Blob([res.data], { type: "application/zip" });
         const url = window.URL.createObjectURL(blob);
         const link = document.createElement("a");
@@ -1105,12 +1614,169 @@ export default {
       }
     };
 
+    const resetEditorDialog = () => {
+      editorDialog.skillName = "";
+      editorDialog.currentDir = "";
+      editorDialog.entries = [];
+      editorDialog.filePath = "";
+      editorDialog.content = "";
+      editorDialog.fileEditable = false;
+      editorDialog.fileDirty = false;
+      editorDialog.loadingFiles = false;
+      editorDialog.loadingFile = false;
+      editorDialog.saving = false;
+      editorDialog.error = "";
+    };
+
+    const loadSkillDir = async (path = "") => {
+      if (!editorDialog.skillName) return [];
+      editorDialog.loadingFiles = true;
+      editorDialog.error = "";
+      try {
+        const res = await skillApi.listFiles(editorDialog.skillName, path);
+        if (res?.data?.status !== "ok") {
+          editorDialog.error =
+            res?.data?.message || tm("skills.editorLoadFailed");
+          return [];
+        }
+        const payload = res.data.data || {};
+        editorDialog.currentDir = payload.path || "";
+        editorDialog.entries = Array.isArray(payload.entries)
+          ? payload.entries
+          : [];
+        return editorDialog.entries;
+      } catch (_err) {
+        editorDialog.error = tm("skills.editorLoadFailed");
+        return [];
+      } finally {
+        editorDialog.loadingFiles = false;
+      }
+    };
+
+    const loadSkillFile = async (path) => {
+      if (!editorDialog.skillName || !path) return;
+      if (
+        editorDialog.fileDirty &&
+        !window.confirm(tm("skills.discardChanges"))
+      ) {
+        return;
+      }
+      editorDialog.loadingFile = true;
+      editorDialog.error = "";
+      try {
+        const res = await skillApi.getFile(editorDialog.skillName, path);
+        if (res?.data?.status !== "ok") {
+          editorDialog.error =
+            res?.data?.message || tm("skills.editorLoadFailed");
+          return;
+        }
+        const payload = res.data.data || {};
+        editorDialog.filePath = payload.path || path;
+        editorDialog.content = payload.content || "";
+        editorDialog.fileEditable = payload.editable !== false;
+        await nextTick();
+        editorDialog.fileDirty = false;
+      } catch (_err) {
+        editorDialog.error = tm("skills.editorLoadFailed");
+      } finally {
+        editorDialog.loadingFile = false;
+      }
+    };
+
+    const openSkillEditor = async (skill) => {
+      if (isSandboxPresetSkill(skill)) {
+        showMessage(tm("skills.sandboxPresetReadonly"), "warning");
+        return;
+      }
+      resetEditorDialog();
+      editorDialog.skillName = skill.name;
+      editorDialog.show = true;
+      const entries = await loadSkillDir("");
+      const skillMd = entries.find((entry) => entry.path === "SKILL.md");
+      if (skillMd?.editable) {
+        await loadSkillFile(skillMd.path);
+      }
+    };
+
+    const closeSkillEditor = () => {
+      if (editorDialog.saving) return;
+      if (
+        editorDialog.fileDirty &&
+        !window.confirm(tm("skills.discardChanges"))
+      ) {
+        return;
+      }
+      editorDialog.show = false;
+      resetEditorDialog();
+    };
+
+    const openSkillEntry = async (entry) => {
+      if (!entry) return;
+      if (entry.type === "directory") {
+        if (
+          editorDialog.fileDirty &&
+          !window.confirm(tm("skills.discardChanges"))
+        ) {
+          return;
+        }
+        await loadSkillDir(entry.path);
+        return;
+      }
+      await loadSkillFile(entry.path);
+    };
+
+    const openParentSkillDir = async () => {
+      if (!editorDialog.currentDir) return;
+      if (
+        editorDialog.fileDirty &&
+        !window.confirm(tm("skills.discardChanges"))
+      ) {
+        return;
+      }
+      const parts = editorDialog.currentDir.split("/").filter(Boolean);
+      parts.pop();
+      await loadSkillDir(parts.join("/"));
+    };
+
+    const saveSkillFile = async () => {
+      if (
+        !editorDialog.skillName ||
+        !editorDialog.filePath ||
+        !editorDialog.fileEditable
+      ) {
+        return;
+      }
+      editorDialog.saving = true;
+      editorDialog.error = "";
+      try {
+        const res = await skillApi.updateFile(
+          editorDialog.skillName,
+          editorDialog.filePath,
+          editorDialog.content,
+        );
+        if (res?.data?.status !== "ok") {
+          editorDialog.error =
+            res?.data?.message || tm("skills.editorSaveFailed");
+          showMessage(editorDialog.error, "error");
+          return;
+        }
+        editorDialog.fileDirty = false;
+        showMessage(tm("skills.editorSaveSuccess"), "success");
+        await fetchSkills();
+      } catch (_err) {
+        editorDialog.error = tm("skills.editorSaveFailed");
+        showMessage(tm("skills.editorSaveFailed"), "error");
+      } finally {
+        editorDialog.saving = false;
+      }
+    };
+
     const fetchNeoCandidates = async () => {
       const params = {
         skill_key: neoFilters.skill_key || undefined,
         status: neoFilters.status || undefined,
       };
-      const res = await axios.get("/api/skills/neo/candidates", { params });
+      const res = await skillApi.neoCandidates(params);
       neoCandidates.value = normalizeNeoItemsPayload(res);
     };
 
@@ -1119,7 +1785,7 @@ export default {
         skill_key: neoFilters.skill_key || undefined,
         stage: neoFilters.stage || undefined,
       };
-      const res = await axios.get("/api/skills/neo/releases", { params });
+      const res = await skillApi.neoReleases(params);
       neoReleases.value = normalizeNeoItemsPayload(res).map((item) => {
         if (!item || typeof item !== "object") {
           return item;
@@ -1133,7 +1799,7 @@ export default {
 
     const loadNeoAvailability = async () => {
       try {
-        const res = await axios.get("/api/config/get");
+        const res = await systemConfigApi.get();
         const config = res?.data?.data?.config || {};
         const providerSettings = config?.provider_settings || {};
         const currentRuntime =
@@ -1164,7 +1830,7 @@ export default {
 
     const evaluateCandidate = async (candidate, passed) => {
       try {
-        const res = await axios.post("/api/skills/neo/evaluate", {
+        const res = await skillApi.evaluateNeoCandidate({
           candidate_id: candidate.id,
           passed,
           score: passed ? 1.0 : 0.0,
@@ -1198,7 +1864,7 @@ export default {
       if (candidatePromoteLoading[loadingKey]) return;
       candidatePromoteLoading[loadingKey] = true;
       try {
-        const res = await axios.post("/api/skills/neo/promote", {
+        const res = await skillApi.promoteNeoCandidate({
           candidate_id: candidateId,
           stage,
           sync_to_local: true,
@@ -1225,7 +1891,7 @@ export default {
 
     const rollbackRelease = async (release) => {
       try {
-        const res = await axios.post("/api/skills/neo/rollback", {
+        const res = await skillApi.rollbackNeoRelease({
           release_id: release.id,
         });
         handleApiResponse(
@@ -1243,7 +1909,7 @@ export default {
 
     const deactivateRelease = async (release) => {
       try {
-        const res = await axios.post("/api/skills/neo/rollback", {
+        const res = await skillApi.rollbackNeoRelease({
           release_id: release.id,
         });
         handleApiResponse(
@@ -1269,7 +1935,7 @@ export default {
 
     const syncRelease = async (release) => {
       try {
-        const res = await axios.post("/api/skills/neo/sync", {
+        const res = await skillApi.syncNeoRelease({
           release_id: release.id,
         });
         handleApiResponse(
@@ -1288,9 +1954,7 @@ export default {
     const viewPayload = async (payloadRef) => {
       if (!payloadRef) return;
       try {
-        const res = await axios.get("/api/skills/neo/payload", {
-          params: { payload_ref: payloadRef },
-        });
+        const res = await skillApi.neoPayload(payloadRef);
         if (res?.data?.status !== "ok") {
           showMessage(
             res?.data?.message || tm("skills.neoPayloadFailed"),
@@ -1308,7 +1972,7 @@ export default {
 
     const deleteCandidate = async (candidate) => {
       try {
-        const res = await axios.post("/api/skills/neo/delete-candidate", {
+        const res = await skillApi.deleteNeoCandidate({
           candidate_id: candidate.id,
           reason: "deleted_from_webui",
         });
@@ -1327,7 +1991,7 @@ export default {
 
     const deleteRelease = async (release) => {
       try {
-        const res = await axios.post("/api/skills/neo/delete-release", {
+        const res = await skillApi.deleteNeoRelease({
           release_id: release.id,
           reason: "deleted_from_webui",
         });
@@ -1359,6 +2023,7 @@ export default {
 
     watch(mode, async (nextMode) => {
       if (nextMode === "neo") {
+        cancelBatchSelection();
         await loadNeoAvailability();
         if (neoEnabled.value) {
           await fetchNeoData();
@@ -1399,6 +2064,11 @@ export default {
       itemLoading,
       deleteDialog,
       deleting,
+      batchSelectionEnabled,
+      selectedSkillNames,
+      batchDeleteTargets,
+      batchDeleteDialog,
+      batchDeleting,
       snackbar,
       neoEnabled,
       neoUnavailableMessage,
@@ -1409,9 +2079,15 @@ export default {
       candidateStatusItems,
       releaseStageItems,
       activeReleaseCount,
+      deletableSkills,
+      allDeletableSelected,
       candidateHeaders,
       releaseHeaders,
       payloadDialog,
+      editorDialog,
+      editorLanguage,
+      editorTheme,
+      editorOptions,
       formatFileSize,
       uploadStatusLabel,
       statusChipClass,
@@ -1425,9 +2101,19 @@ export default {
       fetchNeoData,
       uploadSkillBatch,
       downloadSkill,
+      openSkillEditor,
+      closeSkillEditor,
+      openSkillEntry,
+      openParentSkillDir,
+      saveSkillFile,
       toggleSkill,
       confirmDelete,
       deleteSkill,
+      startBatchSelection,
+      cancelBatchSelection,
+      toggleSelectAll,
+      confirmBatchDelete,
+      deleteSelectedSkills,
       evaluateCandidate,
       promoteCandidate,
       isCandidatePromoteLoading,
@@ -1439,30 +2125,266 @@ export default {
       viewPayload,
       deleteCandidate,
       deleteRelease,
-      sourceTypeLabel,
-      sourceTypeColor,
       isSandboxPresetSkill,
+      isPluginProvidedSkill,
+      isInactivePluginSkill,
+      isReadOnlySourceSkill,
     };
   },
 };
 </script>
 
 <style scoped>
+.skills-list {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.skills-list-header {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.skills-list-title {
+  margin: 0;
+}
+
+.skills-list-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.skill-list-item :deep(.outlined-action-list-item__main) {
+  gap: 0;
+}
+
+.skill-list-item--inactive {
+  opacity: 0.58;
+}
+
+.skill-list-item--selected {
+  background: rgba(var(--v-theme-primary), 0.06);
+  border-color: rgba(var(--v-theme-primary), 0.5);
+}
+
+.skill-list-item :deep(.outlined-action-list-item__content) {
+  flex: 1 1 auto;
+}
+
+.skill-list-item :deep(.outlined-action-list-item__actions) {
+  gap: 0;
+  margin-left: 0;
+  max-width: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+  transition: opacity 0.16s ease;
+  visibility: hidden;
+}
+
+.skill-list-item:hover :deep(.outlined-action-list-item__actions),
+.skill-list-item:focus-within :deep(.outlined-action-list-item__actions) {
+  gap: 8px;
+  margin-left: auto;
+  max-width: 180px;
+  opacity: 1;
+  overflow: visible;
+  pointer-events: auto;
+  visibility: visible;
+}
+
+.skill-list-item:hover :deep(.outlined-action-list-item__main),
+.skill-list-item:focus-within :deep(.outlined-action-list-item__main) {
+  gap: 16px;
+}
+
+.list-action-icon-btn {
+  color: rgba(var(--v-theme-on-surface), 0.78);
+}
+
+.list-action-icon-btn:hover {
+  background: rgba(var(--v-theme-on-surface), 0.08);
+  color: rgb(var(--v-theme-on-surface));
+}
+
+.batch-delete-targets {
+  background: transparent;
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 0;
+}
+
+.batch-delete-target {
+  background: rgba(var(--v-theme-on-surface), 0.05);
+  border-radius: 8px;
+}
+
+.batch-delete-target + .batch-delete-target {
+  margin-top: 6px;
+}
+
+.skills-fab-stack {
+  align-items: center;
+  bottom: 52px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  position: fixed;
+  right: 52px;
+  z-index: 10000;
+}
+
+.skills-fab {
+  border-radius: 16px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+.skills-fab:hover {
+  box-shadow: 0 12px 20px rgba(var(--v-theme-primary), 0.4);
+  transform: translateY(-4px) scale(1.05);
+}
+
 .skill-description {
   display: -webkit-box;
   -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  min-height: 20px;
 }
 
 .skill-path {
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
+  margin-top: 6px;
   overflow: hidden;
-  min-height: 40px;
   word-break: break-all;
+}
+
+.skill-editor-dialog {
+  max-height: min(88vh, 980px);
+  overflow: hidden;
+}
+
+.skill-editor-dialog__header {
+  align-items: flex-start;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.skill-editor-dialog__body {
+  min-height: 0;
+  padding: 16px 22px;
+}
+
+.skill-editor-dialog__actions {
+  border-top: 1px solid var(--v-theme-border);
+  padding: 12px 22px;
+}
+
+.skill-editor {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  gap: 16px;
+  min-height: 560px;
+}
+
+.skill-editor__files {
+  border: 1px solid rgba(128, 128, 128, 0.28);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.skill-editor__files-header {
+  align-items: center;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.28);
+  display: flex;
+  gap: 8px;
+  min-height: 44px;
+  padding: 6px 10px;
+}
+
+.skill-editor__files-header span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-editor__file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  padding: 6px;
+}
+
+.skill-editor__file-row {
+  align-items: center;
+  border-radius: 8px;
+  color: rgb(var(--v-theme-on-surface));
+  display: grid;
+  gap: 8px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  min-height: 34px;
+  padding: 6px 8px;
+  text-align: left;
+}
+
+.skill-editor__file-row:hover,
+.skill-editor__file-row--active {
+  background: rgba(var(--v-theme-on-surface), 0.06);
+}
+
+.skill-editor__file-row--active {
+  background: rgba(var(--v-theme-on-surface), 0.1);
+}
+
+.skill-editor__file-row span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-editor__content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.skill-editor__content-header {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  min-height: 34px;
+}
+
+.skill-editor__path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-editor__monaco {
+  border: 1px solid rgba(128, 128, 128, 0.28);
+  border-radius: 10px;
+  flex: 1 1 auto;
+  margin-top: 12px;
+  min-height: 520px;
+  overflow: hidden;
+  position: relative;
 }
 
 .skills-upload-dialog {
@@ -1780,12 +2702,79 @@ export default {
 }
 
 @media (max-width: 860px) {
+  .skill-editor-dialog {
+    max-height: none;
+    overflow-y: auto;
+  }
+
+  .skills-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .skill-editor {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    min-height: 0;
+  }
+
+  .skill-editor__files {
+    max-height: 20vh;
+  }
+
+  .skill-editor__monaco {
+    min-height: 40vh;
+  }
+
+  .skill-list-item :deep(.outlined-action-list-item__actions) {
+    gap: 8px;
+    margin-left: auto;
+    max-width: none;
+    opacity: 1;
+    overflow: visible;
+    pointer-events: auto;
+    visibility: visible;
+  }
+
+  .skill-list-item :deep(.outlined-action-list-item__main) {
+    gap: 16px;
+  }
+
   .skills-upload-capabilities {
     grid-template-columns: 1fr;
   }
 }
 
+@media (hover: none) {
+  .skill-list-item :deep(.outlined-action-list-item__actions) {
+    gap: 8px;
+    margin-left: auto;
+    max-width: none;
+    opacity: 1;
+    overflow: visible;
+    pointer-events: auto;
+    visibility: visible;
+  }
+
+  .skill-list-item :deep(.outlined-action-list-item__main) {
+    gap: 16px;
+  }
+
+  .skill-list-item :deep(.outlined-action-list-item__hover-actions) {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
 @media (max-width: 640px) {
+  .skills-list-header {
+    align-items: stretch;
+  }
+
+  .skills-list-actions {
+    margin-left: 0;
+    width: 100%;
+  }
+
   .skills-upload-dialog {
     max-height: 92vh;
   }

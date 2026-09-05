@@ -21,6 +21,7 @@ from astrbot.core.astr_agent_hooks import MAIN_AGENT_HOOKS
 from astrbot.core.astr_agent_run_util import AgentRunner
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.astr_main_agent_resources import (
+    CHATUI_INLINE_GENUI_SYSTEM_PROMPT,
     CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT,
     LIVE_MODE_SYSTEM_PROMPT,
     LLM_SAFETY_MODE_SYSTEM_PROMPT,
@@ -28,18 +29,26 @@ from astrbot.core.astr_main_agent_resources import (
     TOOL_CALL_PROMPT,
     TOOL_CALL_PROMPT_SKILLS_LIKE_MODE,
 )
+from astrbot.core.computer.booters.local import resolve_windows_shell
 from astrbot.core.conversation_mgr import Conversation
+from astrbot.core.db import BaseDatabase
 from astrbot.core.message.components import File, Image, Record, Reply, Video
 from astrbot.core.persona_error_reply import (
     extract_persona_custom_error_message_from_persona,
     set_persona_custom_error_message_on_event,
 )
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.message_type import MessageType
 from astrbot.core.provider import Provider
 from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.provider.register import llm_tools
-from astrbot.core.skills.skill_manager import SkillManager, build_skills_prompt
+from astrbot.core.skills.skill_manager import (
+    SkillInfo,
+    SkillManager,
+    build_skills_prompt,
+)
 from astrbot.core.star.context import Context
+from astrbot.core.star.star import star_registry
 from astrbot.core.star.star_handler import star_map
 from astrbot.core.tools.computer_tools import (
     AnnotateExecutionTool,
@@ -47,6 +56,9 @@ from astrbot.core.tools.computer_tools import (
     BrowserExecTool,
     CreateSkillCandidateTool,
     CreateSkillPayloadTool,
+    CuaKeyboardTypeTool,
+    CuaMouseClickTool,
+    CuaScreenshotTool,
     EvaluateSkillCandidateTool,
     ExecuteShellTool,
     FileDownloadTool,
@@ -59,24 +71,33 @@ from astrbot.core.tools.computer_tools import (
     GrepTool,
     ListSkillCandidatesTool,
     ListSkillReleasesTool,
+    LocalExecuteShellTool,
     LocalPythonTool,
     PromoteSkillCandidateTool,
     PythonTool,
     RollbackSkillReleaseTool,
     RunBrowserSkillTool,
+    ShellSessionTool,
     SyncSkillReleaseTool,
-    normalize_umo_for_workspace,
 )
 from astrbot.core.tools.cron_tools import FutureTaskTool
 from astrbot.core.tools.knowledge_base_tools import (
     KnowledgeBaseQueryTool,
     retrieve_knowledge_base,
 )
-from astrbot.core.tools.message_tools import SendMessageToUserTool
+from astrbot.core.tools.message_tools import (
+    GetGroupMessageHistoryTool,
+    SendMessageToUserTool,
+)
 from astrbot.core.tools.web_search_tools import (
+    AnySearchWebSearchTool,
     BaiduWebSearchTool,
     BochaWebSearchTool,
     BraveWebSearchTool,
+    ExaGetContentsTool,
+    ExaWebSearchTool,
+    FirecrawlExtractWebPageTool,
+    FirecrawlWebSearchTool,
     TavilyExtractWebPageTool,
     TavilyWebSearchTool,
     normalize_legacy_web_search_config,
@@ -103,6 +124,37 @@ from astrbot.core.utils.quoted_message_parser import (
     extract_quoted_message_text,
 )
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
+from astrbot.core.workspace import (
+    normalize_umo_for_workspace,
+    resolve_workspace_root_for_umo,
+)
+
+LLM_ERROR_MESSAGE_EXTRA_KEY = "_llm_error_message"
+WEEKDAY_NAMES = (
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+)
+WEB_SEARCH_CITATION_TOOL_NAMES = frozenset(
+    {
+        "web_search_baidu",
+        "web_search_tavily",
+        "web_search_bocha",
+        "web_search_brave",
+        "web_search_exa",
+        "web_search_anysearch",
+    }
+)
+WEB_SEARCH_CITATION_PROMPT = (
+    "Always cite web search results you rely on. "
+    "Index is a unique identifier for each search result. "
+    "Use the exact citation format <ref>index</ref> (e.g. <ref>abcd.3</ref>) "
+    "after the sentence that uses the information. Do not invent citations."
+)
 
 
 @dataclass(slots=True)
@@ -138,15 +190,17 @@ class MainAgentBuildConfig:
     """The strategy to handle context length limit reached."""
     llm_compress_instruction: str = ""
     """The instruction for compression in llm_compress strategy."""
-    llm_compress_keep_recent: int = 6
-    """The number of most recent turns to keep during llm_compress strategy."""
+    llm_compress_keep_recent_ratio: float = 0.15
+    """Percent of current context tokens to keep as exact recent context during llm_compress strategy."""
     llm_compress_provider_id: str = ""
     """The provider ID for the LLM used in context compression."""
-    max_context_length: int = -1
+    max_context_length: int = 50
     """The maximum number of turns to keep in context. -1 means no limit.
     This enforce max turns before compression"""
-    dequeue_context_length: int = 1
+    dequeue_context_length: int = 10
     """The number of oldest turns to remove when context length limit is reached."""
+    fallback_max_context_tokens: int = 128000
+    """Fallback max context tokens. When max_context_tokens is 0 and the model is not in LLM_METADATAS, use this value."""
     llm_safety_mode: bool = True
     """This will inject healthy and safe system prompt into the main agent,
     to prevent LLM output harmful information"""
@@ -157,6 +211,8 @@ class MainAgentBuildConfig:
     add_cron_tools: bool = True
     """This will add cron job management tools to the main agent for proactive cron job execution."""
     provider_settings: dict = field(default_factory=dict)
+    fallback_provider_ids: list[str] = field(default_factory=list)
+    request_max_retries: int = 5
     subagent_orchestrator: dict = field(default_factory=dict)
     timezone: str | None = None
     max_quoted_fallback_images: int = 20
@@ -171,25 +227,49 @@ class MainAgentBuildResult:
     reset_coro: Coroutine | None = None
 
 
-def _select_provider(
+def _set_llm_error_message(event: AstrMessageEvent, message: str) -> None:
+    event.set_extra(LLM_ERROR_MESSAGE_EXTRA_KEY, message)
+
+
+async def _select_provider(
     event: AstrMessageEvent, plugin_context: Context
 ) -> Provider | None:
-    """Select chat provider for the event."""
+    """Select the chat provider for an event.
+
+    Args:
+        event: Message event that may contain an explicit provider selection.
+        plugin_context: Plugin context used to resolve configured providers.
+
+    Returns:
+        Selected chat provider, or None if selection fails.
+    """
     sel_provider = event.get_extra("selected_provider")
     if sel_provider and isinstance(sel_provider, str):
         provider = plugin_context.get_provider_by_id(sel_provider)
-        if not provider:
+        if provider is None:
             logger.error("未找到指定的提供商: %s。", sel_provider)
+            _set_llm_error_message(
+                event,
+                f"LLM 请求失败：未找到指定的提供商 `{sel_provider}`。请检查提供商配置或重新选择可用模型。",
+            )
+            return None
         if not isinstance(provider, Provider):
             logger.error(
                 "选择的提供商类型无效(%s)，跳过 LLM 请求处理。", type(provider)
             )
+            _set_llm_error_message(
+                event,
+                f"LLM 请求失败：选择的提供商类型无效（{type(provider).__name__}），已跳过本次请求。",
+            )
             return None
         return provider
     try:
-        return plugin_context.get_using_provider(umo=event.unified_msg_origin)
+        return await plugin_context.get_using_provider_async(
+            umo=event.unified_msg_origin
+        )
     except ValueError as exc:
         logger.error("Error occurred while selecting provider: %s", exc)
+        _set_llm_error_message(event, f"LLM 请求失败：{exc}")
         return None
 
 
@@ -217,7 +297,7 @@ async def _apply_kb(
     config: MainAgentBuildConfig,
 ) -> None:
     if not config.kb_agentic_mode:
-        if req.prompt is None:
+        if req.prompt is None or not req.prompt.strip():
             return
         try:
             kb_result = await retrieve_knowledge_base(
@@ -227,10 +307,11 @@ async def _apply_kb(
             )
             if not kb_result:
                 return
-            if req.system_prompt is not None:
-                req.system_prompt += (
-                    f"\n\n[Related Knowledge Base Results]:\n{kb_result}"
-                )
+            req.extra_user_content_parts.append(
+                TextPart(
+                    text=f"[Related Knowledge Base Results]:\n{kb_result}",
+                ).mark_as_temp()
+            )
         except Exception as exc:  # noqa: BLE001
             logger.error("Error occurred while retrieving knowledge base: %s", exc)
     else:
@@ -302,49 +383,75 @@ def _apply_prompt_prefix(req: ProviderRequest, cfg: dict) -> None:
         req.prompt = f"{prefix}{req.prompt}"
 
 
-def _get_workspace_path_for_umo(umo: str) -> Path:
-    normalized_umo = normalize_umo_for_workspace(umo)
-    return Path(get_astrbot_workspaces_path()) / normalized_umo
+async def _get_workspace_path_for_umo(umo: str, plugin_context: Context) -> Path:
+    """Resolve the workspace path for the current request.
+
+    Args:
+        umo: Unified message origin.
+        plugin_context: Star context containing the database instance.
+
+    Returns:
+        Workspace path used as cwd.
+    """
+    fallback_root = (
+        Path(get_astrbot_workspaces_path()) / normalize_umo_for_workspace(umo)
+    ).resolve(strict=False)
+    db = getattr(plugin_context, "_db", None)
+    if not isinstance(db, BaseDatabase):
+        return fallback_root
+    try:
+        return await resolve_workspace_root_for_umo(umo, db)
+    except Exception:
+        return fallback_root
 
 
-def _apply_workspace_extra_prompt(
+async def _apply_workspace_extra_prompt(
     event: AstrMessageEvent,
     req: ProviderRequest,
+    plugin_context: Context,
 ) -> None:
-    extra_prompt_path = _get_workspace_path_for_umo(event.unified_msg_origin) / (
-        "EXTRA_PROMPT.md"
+    workspace_root = await _get_workspace_path_for_umo(
+        event.unified_msg_origin,
+        plugin_context,
     )
-    if not extra_prompt_path.is_file():
+    extra_prompts: list[str] = []
+    extra_prompt_path = workspace_root / "EXTRA_PROMPT.md"
+    if extra_prompt_path.is_file():
+        try:
+            extra_prompt = extra_prompt_path.read_text(encoding="utf-8").strip()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Failed to read workspace extra prompt for umo=%s from %s: %s",
+                event.unified_msg_origin,
+                extra_prompt_path,
+                exc,
+            )
+        else:
+            if extra_prompt:
+                extra_prompts.append(f"From `{extra_prompt_path}`:\n{extra_prompt}")
+
+    if not extra_prompts:
         return
 
-    try:
-        extra_prompt = extra_prompt_path.read_text(encoding="utf-8").strip()
-    except Exception as exc:  # noqa: BLE001
-        logger.warning(
-            "Failed to read workspace extra prompt for umo=%s from %s: %s",
-            event.unified_msg_origin,
-            extra_prompt_path,
-            exc,
-        )
-        return
-
-    if not extra_prompt:
-        return
-
+    extra_prompt_text = "\n\n".join(extra_prompts)
     req.system_prompt = (
         f"{req.system_prompt or ''}\n"
         "[Workspace Extra Prompt]\n"
         "The following instructions are loaded from the current workspace "
         "`EXTRA_PROMPT.md` file.\n"
-        f"{extra_prompt}\n"
+        f"{extra_prompt_text}\n"
     )
 
 
-def _apply_local_env_tools(req: ProviderRequest, plugin_context: Context) -> None:
+def _apply_local_env_tools(
+    req: ProviderRequest,
+    plugin_context: Context,
+) -> None:
     if req.func_tool is None:
         req.func_tool = ToolSet()
     tool_mgr = plugin_context.get_llm_tool_manager()
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(ExecuteShellTool))
+    req.func_tool.add_tool(LocalExecuteShellTool())
+    req.func_tool.add_tool(tool_mgr.get_builtin_tool(ShellSessionTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(LocalPythonTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileReadTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileWriteTool))
@@ -355,17 +462,65 @@ def _apply_local_env_tools(req: ProviderRequest, plugin_context: Context) -> Non
 
 def _build_local_mode_prompt() -> str:
     system_name = platform.system() or "Unknown"
-    shell_hint = (
-        "The runtime shell is Windows Command Prompt (cmd.exe). "
-        "Use cmd-compatible commands and do not assume Unix commands like cat/ls/grep are available."
-        if system_name.lower() == "windows"
-        else "The runtime shell is Unix-like. Use POSIX-compatible shell commands."
-    )
+    if system_name.lower() != "windows":
+        shell_hint = (
+            "The runtime shell is Unix-like. Use POSIX-compatible shell commands."
+        )
+    elif resolve_windows_shell() == "pwsh.exe":
+        shell_hint = (
+            "The runtime shell is PowerShell 7 (pwsh.exe). "
+            "Use PowerShell 7-compatible syntax and cmdlets, and do not "
+            "assume a full Unix userland or GNU utilities are available."
+        )
+    else:
+        shell_hint = (
+            "The runtime shell is Windows PowerShell 5.1 (powershell.exe). "
+            "Use Windows PowerShell 5.1-compatible syntax and cmdlets; do not use "
+            "PowerShell 7-only syntax or assume Unix commands like cat/ls/grep are available."
+        )
     return (
         "You have access to the host local environment and can execute shell commands and Python code. "
         f"Current operating system: {system_name}. "
-        f"{shell_hint}"
+        f"{shell_hint} "
+        "Local shell commands automatically return a managed session when they "
+        "outlive the initial wait. Use `astrbot_shell_session` to list, poll, "
+        "write raw text or complete lines to, interrupt, or terminate those sessions. "
+        "Use its `write_line` action for line-oriented programs so the session receives "
+        "a real line feed. Do not add `&`, `nohup`, or another detachment wrapper for "
+        "ordinary long-running commands."
     )
+
+
+def _filter_skills_for_current_config(
+    skills: list[SkillInfo],
+    cfg: dict,
+) -> list[SkillInfo]:
+    plugin_set = cfg.get("plugin_set", ["*"])
+    allowed_plugins = (
+        None
+        if not isinstance(plugin_set, list) or "*" in plugin_set
+        else {str(name) for name in plugin_set}
+    )
+    plugin_by_root_dir = {
+        metadata.root_dir_name: metadata
+        for metadata in star_registry
+        if metadata.root_dir_name
+    }
+    filtered: list[SkillInfo] = []
+    for skill in skills:
+        if skill.source_type != "plugin":
+            filtered.append(skill)
+            continue
+
+        plugin = plugin_by_root_dir.get(skill.plugin_name)
+        if not plugin or not plugin.activated:
+            continue
+        if plugin.reserved or allowed_plugins is None:
+            filtered.append(skill)
+            continue
+        if plugin.name is not None and plugin.name in allowed_plugins:
+            filtered.append(skill)
+    return filtered
 
 
 async def _ensure_persona_and_skills(
@@ -375,6 +530,12 @@ async def _ensure_persona_and_skills(
     event: AstrMessageEvent,
 ) -> None:
     """Ensure persona and skills are applied to the request's system prompt or user prompt."""
+    if req.system_prompt is None:
+        req.system_prompt = ""
+
+    if event.get_extra("enable_inline_genui"):
+        req.system_prompt += CHATUI_INLINE_GENUI_SYSTEM_PROMPT
+
     if not req.conversation:
         return
 
@@ -400,21 +561,37 @@ async def _ensure_persona_and_skills(
             req.system_prompt += f"\n# Persona Instructions\n\n{prompt}\n"
         if begin_dialogs := copy.deepcopy(persona.get("_begin_dialogs_processed")):
             req.contexts[:0] = begin_dialogs
-    elif use_webchat_special_default:
+    elif (
+        use_webchat_special_default
+        and event.get_extra("enable_default_system_prompt") is not False
+    ):
         req.system_prompt += CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT
 
     # Inject skills prompt
     runtime = cfg.get("computer_use_runtime", "local")
     skill_manager = SkillManager()
     skills = skill_manager.list_skills(active_only=True, runtime=runtime)
+    skills = _filter_skills_for_current_config(skills, cfg)
+    workspace_skills: list[SkillInfo] = []
+    if runtime == "local":
+        workspace_root = await _get_workspace_path_for_umo(
+            event.unified_msg_origin,
+            plugin_context,
+        )
+        workspace_skills.extend(skill_manager.list_workspace_skills(workspace_root))
 
-    if skills:
+    if skills or workspace_skills:
         if persona and persona.get("skills") is not None:
             if not persona["skills"]:
                 skills = []
             else:
                 allowed = set(persona["skills"])
                 skills = [skill for skill in skills if skill.name in allowed]
+        if workspace_skills and (not persona or persona.get("skills") != []):
+            skills_by_name = {skill.name: skill for skill in skills}
+            for skill in workspace_skills:
+                skills_by_name[skill.name] = skill
+            skills = [skills_by_name[name] for name in sorted(skills_by_name)]
         if skills:
             req.system_prompt += f"\n{build_skills_prompt(skills)}\n"
             if runtime == "none":
@@ -602,7 +779,20 @@ async def _append_video_attachment(
         video_path = await video.convert_to_file_path()
     except Exception as exc:  # noqa: BLE001
         if quoted:
-            logger.error("Error processing quoted video attachment: %s", exc)
+            logger.debug(
+                "Quoted video attachment is not locally resolvable, preserving ref: %s",
+                exc,
+            )
+            video_ref = video.path or video.url or video.file or ""
+            ref_name = os.path.basename(video_ref.split("?", 1)[0].rstrip("/"))
+            req.extra_user_content_parts.append(
+                TextPart(
+                    text=(
+                        "[Video Attachment in quoted message: "
+                        f"name {ref_name or 'video'}, ref {video_ref}]"
+                    )
+                )
+            )
         else:
             logger.error("Error processing video attachment: %s", exc)
         return
@@ -688,6 +878,8 @@ async def _process_quote_message(
     plugin_context: Context,
     quoted_message_settings: QuotedMessageParserSettings = DEFAULT_QUOTED_MESSAGE_SETTINGS,
     config: MainAgentBuildConfig | None = None,
+    main_provider_supports_image: bool = False,
+    skip_quote_image_caption: bool = False,
 ) -> None:
     quote = None
     for comp in event.message_obj.message:
@@ -718,45 +910,64 @@ async def _process_quote_message(
                 break
 
     if image_seg:
-        try:
-            prov = None
-            path = None
-            compress_path = None
-            if img_cap_prov_id:
+        if skip_quote_image_caption:
+            logger.debug(
+                "Skipping quote image captioning because image captioning already handled this request."
+            )
+        elif main_provider_supports_image:
+            logger.debug(
+                "Skipping quote image captioning because the main provider supports image input."
+            )
+        elif not img_cap_prov_id:
+            logger.debug(
+                "No dedicated image caption provider configured. "
+                "Skipping quote image captioning."
+            )
+        else:
+            try:
+                prov = None
+                path = None
+                compress_path = None
                 prov = plugin_context.get_provider_by_id(img_cap_prov_id)
-            if prov is None:
-                prov = plugin_context.get_using_provider(event.unified_msg_origin)
-
-            if prov and isinstance(prov, Provider):
-                path = await image_seg.convert_to_file_path()
-                compress_path = await _compress_image_for_provider(
-                    path,
-                    config.provider_settings if config else None,
-                )
-                if path and _is_generated_compressed_image_path(path, compress_path):
-                    event.track_temporary_local_file(compress_path)
-                llm_resp = await prov.text_chat(
-                    prompt="Please describe the image content.",
-                    image_urls=[compress_path],
-                )
-                if llm_resp.completion_text:
-                    content_parts.append(
-                        f"[Image Caption in quoted message]: {llm_resp.completion_text}"
+                if prov is None:
+                    prov = await plugin_context.get_using_provider_async(
+                        event.unified_msg_origin
                     )
-            else:
-                logger.warning("No provider found for image captioning in quote.")
-        except BaseException as exc:
-            logger.error("处理引用图片失败: %s", exc)
-        finally:
-            if (
-                compress_path
-                and compress_path != path
-                and os.path.exists(compress_path)
-            ):
-                try:
-                    os.remove(compress_path)
-                except Exception as exc:  # noqa: BLE001
-                    logger.warning("Fail to remove temporary compressed image: %s", exc)
+
+                if prov and isinstance(prov, Provider):
+                    path = await image_seg.convert_to_file_path()
+                    compress_path = await _compress_image_for_provider(
+                        path,
+                        config.provider_settings if config else None,
+                    )
+                    if path and _is_generated_compressed_image_path(
+                        path, compress_path
+                    ):
+                        event.track_temporary_local_file(compress_path)
+                    llm_resp = await prov.text_chat(
+                        prompt="Please describe the image content.",
+                        image_urls=[compress_path],
+                    )
+                    if llm_resp.completion_text:
+                        content_parts.append(
+                            f"[Image Caption in quoted message]: {llm_resp.completion_text}"
+                        )
+                else:
+                    logger.warning("No provider found for image captioning in quote.")
+            except BaseException as exc:
+                logger.error("处理引用图片失败: %s", exc)
+            finally:
+                if (
+                    compress_path
+                    and compress_path != path
+                    and os.path.exists(compress_path)
+                ):
+                    try:
+                        os.remove(compress_path)
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning(
+                            "Fail to remove temporary compressed image: %s", exc
+                        )
 
     quoted_content = "\n".join(content_parts)
     quoted_text = f"<Quoted Message>\n{quoted_content}\n</Quoted Message>"
@@ -787,18 +998,17 @@ def _append_system_reminders(
                 system_parts.append(f"Group name: {group_name}")
 
     if cfg.get("datetime_system_prompt"):
-        current_time = None
+        now = None
         if timezone:
             try:
                 now = datetime.datetime.now(zoneinfo.ZoneInfo(timezone))
-                current_time = now.strftime("%Y-%m-%d %H:%M (%Z)")
             except Exception as exc:  # noqa: BLE001
                 logger.error("时区设置错误: %s, 使用本地时区", exc)
-        if not current_time:
-            current_time = (
-                datetime.datetime.now().astimezone().strftime("%Y-%m-%d %H:%M (%Z)")
-            )
-        system_parts.append(f"Current datetime: {current_time}")
+        if now is None:
+            now = datetime.datetime.now().astimezone()
+        current_time = now.strftime("%Y-%m-%d %H:%M (%Z)")
+        weekday = WEEKDAY_NAMES[now.weekday()]
+        system_parts.append(f"Current datetime: {current_time}, Weekday: {weekday}")
 
     if system_parts:
         system_content = (
@@ -812,6 +1022,7 @@ async def _decorate_llm_request(
     req: ProviderRequest,
     plugin_context: Context,
     config: MainAgentBuildConfig,
+    provider: Provider | None = None,
 ) -> None:
     cfg = config.provider_settings or plugin_context.get_config(
         umo=event.unified_msg_origin
@@ -819,11 +1030,16 @@ async def _decorate_llm_request(
 
     _apply_prompt_prefix(req, cfg)
 
-    if req.conversation:
-        await _ensure_persona_and_skills(req, cfg, plugin_context, event)
+    main_provider_supports_image = provider is not None and _provider_supports_modality(
+        provider, "image"
+    )
+    img_cap_prov_id: str = cfg.get("default_image_caption_provider_id") or ""
+    quote_images_already_captioned = False
 
-        img_cap_prov_id: str = cfg.get("default_image_caption_provider_id") or ""
-        if img_cap_prov_id and req.image_urls:
+    await _ensure_persona_and_skills(req, cfg, plugin_context, event)
+
+    if req.conversation:
+        if img_cap_prov_id and req.image_urls and not main_provider_supports_image:
             await _ensure_img_caption(
                 event,
                 req,
@@ -831,8 +1047,8 @@ async def _decorate_llm_request(
                 plugin_context,
                 img_cap_prov_id,
             )
+            quote_images_already_captioned = True
 
-    img_cap_prov_id = cfg.get("default_image_caption_provider_id") or ""
     quoted_message_settings = _get_quoted_message_parser_settings(cfg)
     await _process_quote_message(
         event,
@@ -841,13 +1057,15 @@ async def _decorate_llm_request(
         plugin_context,
         quoted_message_settings,
         config,
+        main_provider_supports_image=main_provider_supports_image,
+        skip_quote_image_caption=quote_images_already_captioned,
     )
 
     tz = config.timezone
     if tz is None:
         tz = plugin_context.get_config().get("timezone")
     _append_system_reminders(event, req, cfg, tz)
-    _apply_workspace_extra_prompt(event, req)
+    await _apply_workspace_extra_prompt(event, req, plugin_context)
 
 
 def _plugin_tool_fix(event: AstrMessageEvent, req: ProviderRequest) -> None:
@@ -1013,6 +1231,22 @@ def _apply_sandbox_tools(
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(RollbackSkillReleaseTool))
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(SyncSkillReleaseTool))
 
+    if booter == "cua":
+        req.system_prompt += (
+            "\n[CUA Desktop Control]\n"
+            "Use `astrbot_execute_shell` with `background=true` to launch GUI apps. "
+            'Use Firefox for browser tasks, for example `firefox "https://example.com"`. '
+            "After each visible step, call `astrbot_cua_screenshot` with "
+            "`send_to_user=true` and `return_image_to_llm=true` so the user can "
+            "monitor progress. When typing, inspect the screenshot first and confirm "
+            "the target field is focused and empty or safe to append to. Use "
+            "`astrbot_cua_mouse_click` for coordinates and `astrbot_cua_keyboard_type` "
+            "for text input; use text=`\\n` for Enter.\n"
+        )
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaScreenshotTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaMouseClickTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaKeyboardTypeTool))
+
     req.system_prompt = f"{req.system_prompt or ''}\n{SANDBOX_MODE_PROMPT}\n"
 
 
@@ -1047,40 +1281,77 @@ async def _apply_web_search_tools(
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(BochaWebSearchTool))
     elif provider == "brave":
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(BraveWebSearchTool))
+    elif provider == "firecrawl":
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(FirecrawlWebSearchTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(FirecrawlExtractWebPageTool))
     elif provider == "baidu_ai_search":
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(BaiduWebSearchTool))
+    elif provider == "exa":
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(ExaWebSearchTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(ExaGetContentsTool))
+    elif provider == "anysearch":
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(AnySearchWebSearchTool))
 
 
-def _get_compress_provider(
-    config: MainAgentBuildConfig, plugin_context: Context
+def _apply_web_search_citation_prompt(
+    event: AstrMessageEvent,
+    req: ProviderRequest,
+) -> None:
+    if event.get_platform_name() != "webchat" or not req.func_tool:
+        return
+
+    if not any(req.func_tool.get_tool(name) for name in WEB_SEARCH_CITATION_TOOL_NAMES):
+        return
+
+    system_prompt = req.system_prompt or ""
+    if WEB_SEARCH_CITATION_PROMPT in system_prompt:
+        return
+
+    req.system_prompt = f"{system_prompt}\n{WEB_SEARCH_CITATION_PROMPT}\n"
+
+
+async def _get_compress_provider(
+    config: MainAgentBuildConfig,
+    plugin_context: Context,
+    event: AstrMessageEvent | None = None,
 ) -> Provider | None:
-    if not config.llm_compress_provider_id:
-        return None
+    """Resolve the provider used for context compression.
+
+    Args:
+        config: Main agent build configuration.
+        plugin_context: Plugin context used to resolve providers.
+        event: Optional event used for session-specific fallback selection.
+
+    Returns:
+        Compression provider, or None if compression is disabled or unavailable.
+    """
     if config.context_limit_reached_strategy != "llm_compress":
         return None
-    provider = plugin_context.get_provider_by_id(config.llm_compress_provider_id)
-    if provider is None:
+    if config.llm_compress_provider_id:
+        provider = plugin_context.get_provider_by_id(config.llm_compress_provider_id)
+        if provider and isinstance(provider, Provider):
+            return provider
         logger.warning(
-            "未找到指定的上下文压缩模型 %s，将跳过压缩。",
+            "指定的上下文压缩模型 %s 不可用",
             config.llm_compress_provider_id,
         )
-        return None
-    if not isinstance(provider, Provider):
-        logger.warning(
-            "指定的上下文压缩模型 %s 不是对话模型，将跳过压缩。",
-            config.llm_compress_provider_id,
-        )
-        return None
-    return provider
+    # fallback: use current chat provider for this session
+    if event:
+        try:
+            return await plugin_context.get_using_provider_async(
+                umo=event.unified_msg_origin
+            )
+        except ValueError:
+            pass
+    return None
 
 
 def _get_fallback_chat_providers(
-    provider: Provider, plugin_context: Context, provider_settings: dict
+    provider: Provider, plugin_context: Context, fallback_ids: list[str]
 ) -> list[Provider]:
-    fallback_ids = provider_settings.get("fallback_chat_models", [])
     if not isinstance(fallback_ids, list):
         logger.warning(
-            "fallback_chat_models setting is not a list, skip fallback providers."
+            "Agent Runner fallback_provider_ids is not a list, skip fallback providers."
         )
         return []
 
@@ -1109,6 +1380,40 @@ def _get_fallback_chat_providers(
     return fallbacks
 
 
+def _provider_supports_modality(provider: Provider, modality: str) -> bool:
+    modalities = provider.provider_config.get("modalities", None)
+    if modalities == []:
+        return True  # Empty list from migration is treated as unconfigured for backward compatibility
+    return isinstance(modalities, list) and modality in modalities
+
+
+def _select_image_chat_provider(
+    provider: Provider,
+    req: ProviderRequest,
+    fallback_providers: list[Provider],
+) -> Provider:
+    if not req.image_urls or _provider_supports_modality(provider, "image"):
+        return provider
+
+    provider_id = provider.provider_config.get("id", "<unknown>")
+    for fallback_provider in fallback_providers:
+        if not _provider_supports_modality(fallback_provider, "image"):
+            continue
+        fallback_id = fallback_provider.provider_config.get("id", "<unknown>")
+        logger.warning(
+            "Chat provider %s does not support image input, switching this request to fallback provider %s.",
+            provider_id,
+            fallback_id,
+        )
+        return fallback_provider
+
+    logger.warning(
+        "Chat provider %s does not support image input and no image-capable fallback provider is available.",
+        provider_id,
+    )
+    return provider
+
+
 async def build_main_agent(
     *,
     event: AstrMessageEvent,
@@ -1122,9 +1427,14 @@ async def build_main_agent(
 
     If apply_reset is False, will not call reset on the agent runner.
     """
-    provider = provider or _select_provider(event, plugin_context)
+    provider = provider or await _select_provider(event, plugin_context)
     if provider is None:
         logger.info("未找到任何对话模型（提供商），跳过 LLM 请求处理。")
+        if not event.get_extra(LLM_ERROR_MESSAGE_EXTRA_KEY):
+            _set_llm_error_message(
+                event,
+                "LLM 请求失败：未找到任何可用的对话模型（提供商）。请先在 WebUI 中配置并启用可用模型。",
+            )
         return None
 
     if req is None:
@@ -1292,13 +1602,15 @@ async def build_main_agent(
         except Exception as exc:  # noqa: BLE001
             logger.error("Error occurred while applying file extract: %s", exc)
 
+    has_reply = any(isinstance(comp, Reply) for comp in event.message_obj.message)
+
     if not req.prompt and not req.image_urls and not req.audio_urls:
-        if not event.get_group_id() and req.extra_user_content_parts:
+        if has_reply or req.extra_user_content_parts:
             req.prompt = "<attachment>"
         else:
             return None
 
-    await _decorate_llm_request(event, req, plugin_context, config)
+    await _decorate_llm_request(event, req, plugin_context, config, provider=provider)
 
     await _apply_kb(event, req, plugin_context, config)
 
@@ -1334,12 +1646,42 @@ async def build_main_agent(
             )
         )
 
+    ltm_settings = plugin_context.get_config(umo=event.unified_msg_origin).get(
+        "provider_ltm_settings",
+        {},
+    )
+    if event.get_message_type() == MessageType.GROUP_MESSAGE and ltm_settings.get(
+        "group_message_history_enable", False
+    ):
+        if req.func_tool is None:
+            req.func_tool = ToolSet()
+        req.func_tool.add_tool(
+            plugin_context.get_llm_tool_manager().get_builtin_tool(
+                GetGroupMessageHistoryTool
+            )
+        )
+
+    fallback_providers = _get_fallback_chat_providers(
+        provider, plugin_context, config.fallback_provider_ids
+    )
+    selected_provider = _select_image_chat_provider(provider, req, fallback_providers)
+    if selected_provider is not provider:
+        provider = selected_provider
+        if req.model:
+            req.model = None
+        fallback_providers = [p for p in fallback_providers if p is not provider]
+
     if provider.provider_config.get("max_context_tokens", 0) <= 0:
         model = provider.get_model()
         if model_info := LLM_METADATAS.get(model):
             provider.provider_config["max_context_tokens"] = model_info["limit"][
                 "context"
             ]
+        else:
+            # fallback: default to configured fallback value
+            provider.provider_config["max_context_tokens"] = (
+                config.fallback_max_context_tokens
+            )
 
     if event.get_platform_name() == "webchat":
         asyncio.create_task(_handle_webchat(event, req, provider))
@@ -1352,11 +1694,18 @@ async def build_main_agent(
         )
 
         if config.computer_use_runtime == "local":
+            workspace_root = await _get_workspace_path_for_umo(
+                event.unified_msg_origin,
+                plugin_context,
+            )
             tool_prompt += (
-                f"\nCurrent workspace you can use: "
-                f"`{_get_workspace_path_for_umo(event.unified_msg_origin)}`\n"
-                "Unless the user explicitly specifies a different directory, "
-                "perform all file-related operations in this workspace.\n"
+                f"\nCurrent workspace: `{workspace_root}`. "
+                "`astrbot_execute_shell` and `astrbot_execute_python` use it as "
+                "their working directory. `astrbot_file_read_tool`, "
+                "`astrbot_file_write_tool`, `astrbot_file_edit_tool`, and "
+                "`astrbot_grep_tool` resolve relative paths from it. Prefer relative "
+                "paths within the workspace; do not assume this behavior for other "
+                "tools.\n"
             )
 
         req.system_prompt += f"\n{tool_prompt}\n"
@@ -1364,6 +1713,8 @@ async def build_main_agent(
     action_type = event.get_extra("action_type")
     if action_type == "live":
         req.system_prompt += f"\n{LIVE_MODE_SYSTEM_PROMPT}\n"
+
+    _apply_web_search_citation_prompt(event, req)
 
     reset_coro = agent_runner.reset(
         provider=provider,
@@ -1376,14 +1727,17 @@ async def build_main_agent(
         agent_hooks=MAIN_AGENT_HOOKS,
         streaming=config.streaming_response,
         llm_compress_instruction=config.llm_compress_instruction,
-        llm_compress_keep_recent=config.llm_compress_keep_recent,
-        llm_compress_provider=_get_compress_provider(config, plugin_context),
+        llm_compress_keep_recent_ratio=config.llm_compress_keep_recent_ratio,
+        llm_compress_provider=await _get_compress_provider(
+            config,
+            plugin_context,
+            event,
+        ),
         truncate_turns=config.dequeue_context_length,
         enforce_max_turns=config.max_context_length,
         tool_schema_mode=config.tool_schema_mode,
-        fallback_providers=_get_fallback_chat_providers(
-            provider, plugin_context, config.provider_settings
-        ),
+        fallback_providers=fallback_providers,
+        request_max_retries=config.request_max_retries,
         tool_result_overflow_dir=(
             get_astrbot_system_tmp_path()
             if req.func_tool and req.func_tool.get_tool("astrbot_file_read_tool")

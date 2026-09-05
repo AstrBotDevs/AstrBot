@@ -31,6 +31,9 @@ from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.provider.entites import ProviderRequest
 from astrbot.core.provider.register import llm_tools
 from astrbot.core.tools.computer_tools import (
+    CuaKeyboardTypeTool,
+    CuaMouseClickTool,
+    CuaScreenshotTool,
     ExecuteShellTool,
     FileDownloadTool,
     FileEditTool,
@@ -38,11 +41,14 @@ from astrbot.core.tools.computer_tools import (
     FileUploadTool,
     FileWriteTool,
     GrepTool,
+    LocalExecuteShellTool,
     LocalPythonTool,
     PythonTool,
+    ShellSessionTool,
 )
 from astrbot.core.tools.message_tools import SendMessageToUserTool
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.config_number import coerce_int_config
 from astrbot.core.utils.history_saver import persist_agent_history
 from astrbot.core.utils.image_ref_utils import is_supported_image_ref
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
@@ -186,7 +192,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         cls,
         runtime: str,
         tool_mgr,
+        booter: str | None = None,
     ) -> dict[str, FunctionTool]:
+        booter = "" if booter is None else str(booter).lower()
         if runtime == "sandbox":
             shell_tool = tool_mgr.get_builtin_tool(ExecuteShellTool)
             python_tool = tool_mgr.get_builtin_tool(PythonTool)
@@ -196,7 +204,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             write_tool = tool_mgr.get_builtin_tool(FileWriteTool)
             edit_tool = tool_mgr.get_builtin_tool(FileEditTool)
             grep_tool = tool_mgr.get_builtin_tool(GrepTool)
-            return {
+            tools = {
                 shell_tool.name: shell_tool,
                 python_tool.name: python_tool,
                 upload_tool.name: upload_tool,
@@ -206,8 +214,21 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 edit_tool.name: edit_tool,
                 grep_tool.name: grep_tool,
             }
+            if booter == "cua":
+                screenshot_tool = tool_mgr.get_builtin_tool(CuaScreenshotTool)
+                mouse_click_tool = tool_mgr.get_builtin_tool(CuaMouseClickTool)
+                keyboard_type_tool = tool_mgr.get_builtin_tool(CuaKeyboardTypeTool)
+                tools.update(
+                    {
+                        screenshot_tool.name: screenshot_tool,
+                        mouse_click_tool.name: mouse_click_tool,
+                        keyboard_type_tool.name: keyboard_type_tool,
+                    }
+                )
+            return tools
         if runtime == "local":
-            shell_tool = tool_mgr.get_builtin_tool(ExecuteShellTool)
+            shell_tool = LocalExecuteShellTool()
+            shell_session_tool = tool_mgr.get_builtin_tool(ShellSessionTool)
             python_tool = tool_mgr.get_builtin_tool(LocalPythonTool)
             read_tool = tool_mgr.get_builtin_tool(FileReadTool)
             write_tool = tool_mgr.get_builtin_tool(FileWriteTool)
@@ -215,6 +236,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             grep_tool = tool_mgr.get_builtin_tool(GrepTool)
             return {
                 shell_tool.name: shell_tool,
+                shell_session_tool.name: shell_session_tool,
                 python_tool.name: python_tool,
                 read_tool.name: read_tool,
                 write_tool.name: write_tool,
@@ -242,14 +264,20 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         runtime_computer_tools = cls._get_runtime_computer_tools(
             runtime,
             tool_mgr,
+            provider_settings.get("sandbox", {}).get("booter"),
         )
 
         # Keep persona semantics aligned with the main agent: tools=None means
         # "all tools", including runtime computer-use tools.
         if tools is None:
             toolset = ToolSet()
-            for registered_tool in llm_tools.func_list:
-                if isinstance(registered_tool, HandoffTool):
+            handoff_names = {
+                tool.name
+                for tool in tool_mgr.func_list
+                if isinstance(tool, HandoffTool)
+            }
+            for registered_tool in tool_mgr.get_full_tool_set():
+                if registered_tool.name in handoff_names:
                     continue
                 if registered_tool.active:
                     toolset.add_tool(registered_tool)
@@ -330,8 +358,14 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 except Exception:
                     continue
 
-        prov_settings: dict = ctx.get_config(umo=umo).get("provider_settings", {})
-        agent_max_step = int(prov_settings.get("max_agent_step", 30))
+        config = ctx.get_config(umo=umo)
+        prov_settings: dict = config.get("provider_settings", {})
+        agent_max_step = int(
+            config.get("agent_runner", {})
+            .get("config", {})
+            .get("misc", {})
+            .get("max_steps", 30)
+        )
         stream = prov_settings.get("streaming_response", False)
         llm_resp = await ctx.tool_loop_agent(
             event=event,
@@ -520,25 +554,27 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             message_type=session.message_type,
         )
         cron_event.role = event.role
+        cfg = ctx.get_config(umo=event.unified_msg_origin) or {}
+        provider_settings = cfg.get("provider_settings") or {}
+        agent_max_step = coerce_int_config(
+            cfg.get("agent_runner", {})
+            .get("config", {})
+            .get("misc", {})
+            .get("max_steps", 30),
+            default=30,
+            min_value=1,
+            field_name="agent_runner.config.misc.max_steps",
+        )
         config = MainAgentBuildConfig(
             tool_call_timeout=run_context.tool_call_timeout,
-            streaming_response=ctx.get_config()
-            .get("provider_settings", {})
-            .get("stream", False),
+            streaming_response=provider_settings.get("stream", False),
+            provider_settings=provider_settings,
         )
 
         req = ProviderRequest()
         conv = await _get_session_conv(event=cron_event, plugin_context=ctx)
         req.conversation = conv
-        context = json.loads(conv.history)
-        if context:
-            req.contexts = context
-            context_dump = req._print_friendly_context()
-            req.contexts = []
-            req.system_prompt += (
-                "\n\nBellow is you and user previous conversation history:\n"
-                f"{context_dump}"
-            )
+        req.contexts = json.loads(conv.history)
 
         bg = json.dumps(extras["background_task_result"], ensure_ascii=False)
         req.system_prompt += BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT.format(
@@ -566,7 +602,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             return
 
         runner = result.agent_runner
-        async for _ in runner.step_until_done(30):
+        async for _ in runner.step_until_done(agent_max_step):
             # agent will send message to user via using tools
             pass
         llm_resp = runner.get_final_llm_resp()

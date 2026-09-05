@@ -34,7 +34,7 @@ Both services started in the background.
 
 ![WebUI 界面](https://www-s.ucloud.cn/2025/07/7e9fc6edc1dfa916abc069f4cecc24cf_1753940381771.png)
 
-使用用户名：astrbot 和密码 astrbot 进行登录。
+首次登录时请使用启动日志内的随机初始密码（用户名通常是 astrbot），登录后请立即修改密码。
 
 
 登录成功后，可以重新设置密码，并进入 AstrBot 的页面。
