@@ -445,15 +445,21 @@ class ProviderAnthropic(Provider):
         if usage is None:
             return TokenUsage()
         # https://docs.claude.com/en/docs/build-with-claude/prompt-caching#tracking-cache-performance
+        # Anthropic's input_tokens excludes cache served reads AND writes, so
+        # cache_creation_input_tokens must be added back into input_other to
+        # keep total input (and context-occupancy stats) accurate.
         return TokenUsage(
-            input_other=usage.input_tokens or 0,
+            input_other=(usage.input_tokens or 0)
+            + (usage.cache_creation_input_tokens or 0),
             input_cached=usage.cache_read_input_tokens or 0,
             output=usage.output_tokens or 0,
         )
 
     def _update_usage(self, token_usage: TokenUsage, usage: MessageDeltaUsage) -> None:
         if usage.input_tokens is not None:
-            token_usage.input_other = usage.input_tokens
+            token_usage.input_other = usage.input_tokens + (
+                usage.cache_creation_input_tokens or 0
+            )
         if usage.cache_read_input_tokens is not None:
             token_usage.input_cached = usage.cache_read_input_tokens
         if usage.output_tokens is not None:
