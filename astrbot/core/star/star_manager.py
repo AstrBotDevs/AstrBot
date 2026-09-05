@@ -1022,11 +1022,14 @@ class PluginManager:
         """
         async with self._pm_lock:
             specified_module_path = None
-            if specified_plugin_name:
+            if specified_plugin_name is not None:
                 for smd in star_registry:
                     if smd.name == specified_plugin_name:
                         specified_module_path = smd.module_path
                         break
+
+                if not specified_module_path:
+                    return False, f"Plugin '{specified_plugin_name}' not found."
 
             # 终止插件
             if not specified_module_path:
