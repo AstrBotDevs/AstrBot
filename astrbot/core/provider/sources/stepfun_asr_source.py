@@ -135,7 +135,7 @@ async def prepare_audio_input(
     cleanup_paths: list[Path] = []
     try:
         return await _prepare_audio_input(audio_source, cleanup_paths)
-    except Exception:
+    except BaseException:
         cleanup_files(cleanup_paths)
         raise
 
@@ -152,9 +152,9 @@ async def _prepare_audio_input(
         parsed_url = urlparse(audio_source)
         suffix = Path(parsed_url.path).suffix or ".input"
         download_path = get_temp_dir() / f"stepfun_asr_{uuid.uuid4().hex[:8]}{suffix}"
+        cleanup_paths.append(download_path)
         await download_file(audio_source, str(download_path))
         source_path = download_path
-        cleanup_paths.append(download_path)
 
     if not source_path.exists():
         raise FileNotFoundError(f"File does not exist: {source_path}")

@@ -1,3 +1,4 @@
+import asyncio
 import base64
 
 import httpx
@@ -31,6 +32,52 @@ async def test_prepare_audio_input_reads_local_wav_without_cleanup(tmp_path):
     assert audio_format == {"type": "wav"}
     assert cleanup_paths == []
     assert audio_path.exists()
+
+
+@pytest.mark.asyncio
+async def test_prepare_audio_input_cleans_partial_download_after_failure(
+    monkeypatch,
+    tmp_path,
+):
+    monkeypatch.setattr(stepfun_asr_source, "get_temp_dir", lambda: tmp_path)
+
+    async def failing_download(url, destination):
+        assert url == "https://example.test/audio.wav"
+        with open(destination, "wb") as file:
+            file.write(b"partial")
+        raise RuntimeError("download failed")
+
+    monkeypatch.setattr(stepfun_asr_source, "download_file", failing_download)
+
+    with pytest.raises(RuntimeError, match="download failed"):
+        await stepfun_asr_source.prepare_audio_input(
+            "https://example.test/audio.wav"
+        )
+
+    assert list(tmp_path.glob("stepfun_asr_*")) == []
+
+
+@pytest.mark.asyncio
+async def test_prepare_audio_input_cleans_partial_download_after_cancellation(
+    monkeypatch,
+    tmp_path,
+):
+    monkeypatch.setattr(stepfun_asr_source, "get_temp_dir", lambda: tmp_path)
+
+    async def cancelled_download(url, destination):
+        assert url == "https://example.test/audio.wav"
+        with open(destination, "wb") as file:
+            file.write(b"partial")
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(stepfun_asr_source, "download_file", cancelled_download)
+
+    with pytest.raises(asyncio.CancelledError):
+        await stepfun_asr_source.prepare_audio_input(
+            "https://example.test/audio.wav"
+        )
+
+    assert list(tmp_path.glob("stepfun_asr_*")) == []
 
 
 @pytest.mark.asyncio
