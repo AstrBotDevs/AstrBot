@@ -2020,6 +2020,7 @@ CONFIG_METADATA_2 = {
                         "rerank_api_suffix": "/v1/rerank",
                         "rerank_model": "BAAI/bge-reranker-base",
                         "timeout": 20,
+                        "proxy": "",
                     },
                     "Xinference Rerank": {
                         "id": "xinference_rerank",
@@ -2045,6 +2046,7 @@ CONFIG_METADATA_2 = {
                         "timeout": 30,
                         "return_documents": False,
                         "instruct": "",
+                        "proxy": "",
                     },
                     "NVIDIA Rerank": {
                         "id": "nvidia_rerank",
@@ -2058,6 +2060,7 @@ CONFIG_METADATA_2 = {
                         "nvidia_rerank_model_endpoint": "/reranking",
                         "timeout": 20,
                         "nvidia_rerank_truncate": "",
+                        "proxy": "",
                     },
                     "TEI Rerank": {
                         "id": "tei_rerank",
@@ -2072,6 +2075,7 @@ CONFIG_METADATA_2 = {
                         "tei_rerank_truncation_direction": "Right",
                         "tei_rerank_raw_scores": False,
                         "tei_rerank_return_text": False,
+                        "proxy": "",
                     },
                     "Xinference STT": {
                         "id": "xinference_stt",
