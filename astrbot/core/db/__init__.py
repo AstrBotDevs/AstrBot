@@ -173,6 +173,15 @@ class BaseDatabase(abc.ABC):
         ...
 
     @abc.abstractmethod
+    async def get_conversation_platform_ids(self) -> list[str]:
+        """Return distinct platform IDs referenced by conversation history.
+
+        Returns:
+            Sorted platform IDs that have at least one conversation.
+        """
+        ...
+
+    @abc.abstractmethod
     async def create_conversation(
         self,
         user_id: str,
@@ -839,6 +848,22 @@ class BaseDatabase(abc.ABC):
         user_alias: str | None,
     ) -> UmoAlias:
         """Create or update the display alias metadata for a UMO."""
+        ...
+
+    @abc.abstractmethod
+    async def upsert_umo_auto_name(
+        self,
+        umo: str,
+        creator_sender_id: str,
+        auto_name: str,
+    ) -> None:
+        """Create or update only the automatically discovered UMO name.
+
+        Args:
+            umo: Unified message origin to name.
+            creator_sender_id: Sender that first caused the UMO to be recorded.
+            auto_name: Name discovered from the inbound platform message.
+        """
         ...
 
     @abc.abstractmethod

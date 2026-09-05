@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 import astrbot.api.message_components as Comp
+from astrbot.api.platform import Group
 from astrbot.core.platform.sources.mattermost.client import MattermostClient
 from astrbot.core.platform.sources.mattermost.mattermost_adapter import (
     MattermostPlatformAdapter,
@@ -45,11 +46,13 @@ async def test_mattermost_convert_message_strips_leading_self_mention():
         },
         data={
             "channel_type": "O",
+            "channel_display_name": "Town Square",
             "sender_name": "alice",
         },
     )
 
     assert result is not None
+    assert result.group == Group(group_id="channel-1", group_name="Town Square")
     assert result.message_str == "/help now"
     assert isinstance(result.message[0], Comp.At)
     assert result.message[0].qq == "bot-id"
@@ -111,3 +114,73 @@ async def test_mattermost_parse_post_attachments_maps_media_types(tmp_path):
         path = Path(temp_path)
         assert path.exists()
         assert path.name.endswith(Path(expected_name).suffix)
+
+
+@pytest.mark.asyncio
+async def test_mattermost_get_group_returns_members_and_channel_admins():
+    adapter = _build_adapter()
+    adapter.client.get_channel = AsyncMock(
+        return_value={"id": "channel-1", "display_name": "Town Square"},
+    )
+    adapter.client.get_channel_stats = AsyncMock(return_value={"member_count": 2})
+    adapter.client.get_channel_members = AsyncMock(
+        return_value=[
+            {"user_id": "user-1", "roles": "channel_user channel_admin"},
+            {"user_id": "user-2", "roles": "channel_user", "scheme_admin": True},
+        ],
+    )
+    adapter.client.get_users_by_ids = AsyncMock(
+        return_value=[
+            {"id": "user-1", "username": "alice", "nickname": "Alice"},
+            {"id": "user-2", "username": "bob"},
+        ],
+    )
+    message = await adapter.convert_message(
+        post={
+            "id": "post-1",
+            "channel_id": "channel-1",
+            "user_id": "user-1",
+            "message": "hello",
+            "create_at": 1_700_000_000_000,
+            "file_ids": [],
+        },
+        data={
+            "channel_type": "O",
+            "channel_display_name": "Cached Name",
+            "sender_name": "alice",
+        },
+    )
+    event = adapter.create_event(message)
+
+    group = await event.get_group()
+
+    assert group.group_name == "Town Square"
+    assert group.group_owner is None
+    assert group.member_count == 2
+    assert [member.nickname for member in group.members] == ["Alice", "bob"]
+    assert group.group_admins == ["user-1", "user-2"]
+
+
+@pytest.mark.asyncio
+async def test_mattermost_get_group_returns_cached_name_when_lookup_fails():
+    adapter = _build_adapter()
+    adapter.client.get_channel = AsyncMock(side_effect=RuntimeError("forbidden"))
+    message = await adapter.convert_message(
+        post={
+            "id": "post-1",
+            "channel_id": "channel-1",
+            "user_id": "user-1",
+            "message": "hello",
+            "create_at": 1_700_000_000_000,
+            "file_ids": [],
+        },
+        data={
+            "channel_type": "O",
+            "channel_display_name": "Cached Name",
+            "sender_name": "alice",
+        },
+    )
+
+    group = await adapter.create_event(message).get_group()
+
+    assert group == Group(group_id="channel-1", group_name="Cached Name")

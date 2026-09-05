@@ -443,11 +443,13 @@ export const useExtensionPage = (initialTab = "installed") => {
     const allPlugins = pluginMarketData.value;
     if (allPlugins.length === 0) return [];
 
-    const pluginsByName = new Map(
-      allPlugins.map((plugin) => [plugin.name, plugin]),
+    // Key by the unique market plugin key: metadata `name` is not unique and
+    // would collapse same-named plugins into one entry.
+    const pluginsByKey = new Map(
+      allPlugins.map((plugin) => [getMarketPluginKey(plugin), plugin]),
     );
     const selected = randomPluginNames.value
-      .map((name) => pluginsByName.get(name))
+      .map((key) => pluginsByKey.get(key))
       .filter(Boolean);
 
     if (selected.length > 0) {
@@ -473,7 +475,7 @@ export const useExtensionPage = (initialTab = "installed") => {
     const shuffled = shufflePlugins(pluginMarketData.value);
     randomPluginNames.value = shuffled
       .slice(0, Math.min(RANDOM_PLUGINS_COUNT, shuffled.length))
-      .map((plugin) => plugin.name);
+      .map((plugin) => getMarketPluginKey(plugin));
   };
 
   // 分页计算属性
@@ -697,6 +699,17 @@ export const useExtensionPage = (initialTab = "installed") => {
     return String(plugin?.market_plugin_id || "").trim();
   };
 
+  // Unique identity for a market entry. Metadata `name` alone is not unique —
+  // different authors can publish plugins with the same name — so fall back to
+  // repo and finally name for legacy registry entries without an explicit id.
+  const getMarketPluginKey = (plugin) => {
+    return (
+      getMarketPluginId(plugin) ||
+      String(plugin?.repo || "").trim() ||
+      String(plugin?.name || "").trim()
+    );
+  };
+
   const getMarketInstallSourcePayload = () => {
     const plugin = selectedMarketInstallPlugin.value;
     if (
@@ -722,7 +735,10 @@ export const useExtensionPage = (initialTab = "installed") => {
   const findMarketPluginForExtension = (extension) => {
     if (!extension) return null;
     const source = extension.install_source || {};
-    if (source.implicit === true || source.install_method !== "market") {
+    // Implicit records (legacy plugins installed before source persistence)
+    // still carry the plugin repo, so resolve them against the default market
+    // instead of treating them as unmatchable.
+    if (source.install_method !== "market") {
       return null;
     }
     if (extension.update_market_plugin) {
@@ -776,10 +792,12 @@ export const useExtensionPage = (initialTab = "installed") => {
       extension.update_market_plugin = null;
 
       const source = extension.install_source;
+      // Implicit records (legacy plugins with no persisted install source)
+      // resolve to the default registry, so keep them in the update check
+      // instead of skipping them entirely.
       if (
         !extension.updates_enabled ||
         !source ||
-        source.implicit === true ||
         source.install_method !== "market"
       ) {
         return;
@@ -2587,6 +2605,8 @@ export const useExtensionPage = (initialTab = "installed") => {
     randomPluginNames,
     normalizeStr,
     toPinyinText,
+    getMarketPluginId,
+    getMarketPluginKey,
     toInitials,
     filteredExtensions,
     filteredPlugins,

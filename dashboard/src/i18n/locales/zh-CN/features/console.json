@@ -1,10 +1,12 @@
 {
   "title": "平台日志",
   "autoScroll": {
+    "label": "自动滚动",
     "enabled": "自动滚动已开启",
     "disabled": "自动滚动已关闭"
   },
   "hideUserChat": {
+    "label": "排除用户对话",
     "enabled": "已排除用户对话",
     "disabled": "排除用户对话"
   },
@@ -14,6 +16,7 @@
     "packageLabel": "*库名，如 llmtuner",
     "mirrorLabel": "强制 PyPI 软件仓库链接（可选）",
     "mirrorHint": "强制 PyPI 软件仓库链接 > 配置项 `PyPI 软件仓库地址`",
+    "cancelButton": "取消",
     "installButton": "安装",
     "installSuccess": "安装成功。",
     "installFailed": "安装失败。",

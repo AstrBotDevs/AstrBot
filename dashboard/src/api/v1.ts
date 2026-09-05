@@ -151,7 +151,7 @@ export interface BotListParams {
 }
 
 export interface ProviderListParams {
-  capability?: 'chat' | 'agent' | 'stt' | 'tts' | 'embedding' | 'rerank';
+  capability?: 'chat' | 'stt' | 'tts' | 'embedding' | 'rerank';
   source_id?: string;
   enabled?: boolean;
 }
@@ -199,7 +199,6 @@ type ProviderCapability = NonNullable<ProviderListParams['capability']>;
 
 const PROVIDER_TYPE_TO_CAPABILITY: Record<string, ProviderCapability> = {
   chat_completion: 'chat',
-  agent_runner: 'agent',
   speech_to_text: 'stt',
   text_to_speech: 'tts',
   embedding: 'embedding',
@@ -1705,6 +1704,11 @@ export const personaApi = {
 };
 
 export const conversationApi = {
+  filterOptions() {
+    return typed<{ bots: Array<{ id: string; type: string }> }>(
+      openApiV1.getConversationFilterOptions(),
+    );
+  },
   list(params?: ListConversationsQuery, requestConfig?: AxiosRequestConfig) {
     return typed<any>(
       openApiV1.listConversations(
