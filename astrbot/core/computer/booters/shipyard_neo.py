@@ -21,6 +21,7 @@ from .shipyard_search_file_util import search_files_via_shell
 
 try:
     from shipyard_neo import BayClient
+    from shipyard_neo.errors import NotFoundError
     from shipyard_neo.sandbox import Sandbox
 except ImportError:
     logger.warning(
@@ -757,19 +758,41 @@ class ShipyardNeoBooter(ComputerBooter):
         )
 
     async def available(self) -> bool:
-        if self._sandbox is None:
+        sandbox = self._sandbox
+        if sandbox is None:
             return False
         try:
-            await self._sandbox.refresh()
-            status = getattr(self._sandbox.status, "value", str(self._sandbox.status))
+            await sandbox.refresh()
+            if self._sandbox is not sandbox:
+                return self._sandbox is not None
+            status = getattr(sandbox.status, "value", str(sandbox.status))
             healthy = status not in {"failed", "expired"}
             logger.info(
                 "[Computer] Neo sandbox health check: id=%s, status=%s, healthy=%s",
-                getattr(self._sandbox, "id", "unknown"),
+                getattr(sandbox, "id", "unknown"),
                 status,
                 healthy,
             )
             return healthy
+        except NotFoundError:
+            if self._sandbox is not sandbox:
+                # A concurrent boot replaced the expired sandbox while its
+                # refresh request was in flight. Leave the replacement intact;
+                # the next health check will validate its current state.
+                return self._sandbox is not None
+
+            sandbox_id = getattr(sandbox, "id", "unknown")
+            self._sandbox = None
+            self._fs = None
+            self._python = None
+            self._shell = None
+            self._browser = None
+            logger.info(
+                "[Computer] Neo sandbox no longer exists on Bay: id=%s; "
+                "the session will be rebuilt",
+                sandbox_id,
+            )
+            return False
         except Exception as e:
             logger.error(f"Error checking Shipyard Neo sandbox availability: {e}")
             return False
