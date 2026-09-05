@@ -232,6 +232,7 @@ async def test_gemini_get_models_retries_transient_request_error(monkeypatch):
 
     models = FakeModels()
     provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    provider.provider_config = {"id": "test-gemini-provider"}
     provider.client = SimpleNamespace(models=models)
 
     assert await provider.get_models() == ["gemini-a"]

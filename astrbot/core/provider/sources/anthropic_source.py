@@ -535,6 +535,8 @@ class ProviderAnthropic(Provider):
                     **payloads, stream=False, extra_body=extra_body
                 ),
                 max_attempts=request_max_retries,
+                provider_id=self.provider_config.get("id"),
+                model=payloads.get("model", self.get_model()),
             )
         except httpx.RequestError as e:
             proxy = self.provider_config.get("proxy", "")
@@ -634,6 +636,8 @@ class ProviderAnthropic(Provider):
             "Anthropic",
             lambda: self.client.messages.stream(**payloads, extra_body=extra_body),
             max_attempts=request_max_retries,
+            provider_id=self.provider_config.get("id"),
+            model=payloads.get("model", self.get_model()),
         ) as stream:
             assert isinstance(stream, anthropic.AsyncMessageStream)
             async for event in stream:
@@ -1011,6 +1015,7 @@ class ProviderAnthropic(Provider):
         models = await retry_provider_request(
             "Anthropic",
             lambda: self.client.models.list(),
+            provider_id=self.provider_config.get("id"),
         )
         models = sorted(models.data, key=lambda x: x.id)
         for model in models:
