@@ -77,6 +77,18 @@ def test_provider_preserves_explicit_global_coding_plan_endpoint():
     assert str(provider.client.base_url).rstrip("/") == global_api_base
 
 
+@pytest.mark.parametrize("blank_value", ["", "   "])
+def test_provider_replaces_blank_coding_plan_defaults(blank_value):
+    provider = _make_provider({"api_base": blank_value, "model": blank_value})
+
+    assert str(provider.client.base_url).rstrip("/") == (
+        zhipu_coding_plan_source.ZHIPU_CODING_PLAN_API_BASE
+    )
+    assert (
+        provider.get_model() == zhipu_coding_plan_source.ZHIPU_CODING_PLAN_DEFAULT_MODEL
+    )
+
+
 @pytest.mark.parametrize(
     ("requested", "expected"),
     [

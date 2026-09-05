@@ -78,8 +78,10 @@ class ProviderZhipuCodingPlan(ProviderOpenAIOfficial):
         provider_settings: dict,
     ) -> None:
         merged_provider_config = dict(provider_config)
-        merged_provider_config.setdefault("api_base", ZHIPU_CODING_PLAN_API_BASE)
-        merged_provider_config.setdefault("model", ZHIPU_CODING_PLAN_DEFAULT_MODEL)
+        if not str(merged_provider_config.get("api_base") or "").strip():
+            merged_provider_config["api_base"] = ZHIPU_CODING_PLAN_API_BASE
+        if not str(merged_provider_config.get("model") or "").strip():
+            merged_provider_config["model"] = ZHIPU_CODING_PLAN_DEFAULT_MODEL
 
         configured_extra_body = merged_provider_config.get("custom_extra_body")
         merged_provider_config["custom_extra_body"] = (
