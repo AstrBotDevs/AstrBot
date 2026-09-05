@@ -1717,6 +1717,22 @@
         "description": "单一音色",
         "hint": "单一音色编号, 详见官网文档"
       },
+      "minimax-voice-clone-audio": {
+        "description": "Voice clone audio path",
+        "hint": "Local .mp3, .m4a, or .wav reference audio. Leave empty to disable automatic voice cloning."
+      },
+      "minimax-voice-clone-id": {
+        "description": "Voice clone ID",
+        "hint": "Custom voice ID to create before synthesis. Required when voice clone audio is configured."
+      },
+      "minimax-voice-clone-model": {
+        "description": "Voice clone model",
+        "hint": "HD speech model used to create the custom voice."
+      },
+      "minimax-voice-clone-api-base": {
+        "description": "Voice clone API base",
+        "hint": "Regional MiniMax API base for file upload and voice cloning."
+      },
       "minimax-voice-emotion": {
         "description": "情绪",
         "hint": "控制合成语音的情绪。当为 auto 时，将根据文本内容自动选择情绪。"
