@@ -13,9 +13,24 @@ on:
 
 jobs:
   unit-tests:
-    name: Run pytest suite
-    runs-on: ubuntu-latest
+    name: Run pytest suite (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    # The Windows lane stays best-effort for now: the suite still has
+    # pre-existing Windows-specific failures there. Promote to blocking
+    # once those tests are fixed.
+    continue-on-error: ${{ matrix.os == 'windows-latest' }}
+
+    defaults:
+      run:
+        # Windows runners default to pwsh; use bash so the same steps and
+        # test script work on all three platforms.
+        shell: bash
 
     steps:
       - name: Checkout
