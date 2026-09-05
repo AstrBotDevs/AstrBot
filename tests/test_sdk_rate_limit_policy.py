@@ -15,7 +15,16 @@ from astrbot.core.provider.sources.openai_responses_source import (
 from astrbot.core.provider.sources.openai_source import ProviderOpenAIOfficial
 
 
+def _sdk_httpx(kind: str):
+    if kind == "anthropic":
+        from anthropic import _base_client
+
+        return getattr(_base_client, "httpx", getattr(_base_client, "httpx2", httpx))
+    return httpx
+
+
 def _make_provider(kind: str, transport: httpx.AsyncBaseTransport):
+    httpx = _sdk_httpx(kind)
     http_client = httpx.AsyncClient(transport=transport)
     if kind == "anthropic":
         client = AsyncAnthropic(
@@ -69,6 +78,7 @@ async def _query(provider, kind: str, *, attempts: int):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("kind", ["openai", "responses", "anthropic"])
 async def test_disabled_rate_limit_retries_send_one_sdk_request(kind, monkeypatch):
+    httpx = _sdk_httpx(kind)
     monkeypatch.setattr(request_retry, "REQUEST_RETRY_WAIT_MIN_S", 0)
     monkeypatch.setattr(request_retry, "REQUEST_RETRY_WAIT_MAX_S", 0)
     calls = 0
@@ -104,6 +114,7 @@ async def test_disabled_rate_limit_retries_send_one_sdk_request(kind, monkeypatc
 async def test_disabled_rate_limit_retries_send_one_stream_sdk_request(
     kind, monkeypatch
 ):
+    httpx = _sdk_httpx(kind)
     monkeypatch.setattr(request_retry, "REQUEST_RETRY_WAIT_MIN_S", 0)
     monkeypatch.setattr(request_retry, "REQUEST_RETRY_WAIT_MAX_S", 0)
     calls = 0
@@ -153,6 +164,7 @@ async def test_disabled_rate_limit_retries_send_one_stream_sdk_request(
 async def test_disabled_rate_limit_retries_keep_outer_transient_retries(
     kind, failure, monkeypatch
 ):
+    httpx = _sdk_httpx(kind)
     monkeypatch.setattr(request_retry, "REQUEST_RETRY_WAIT_MIN_S", 0)
     monkeypatch.setattr(request_retry, "REQUEST_RETRY_WAIT_MAX_S", 0)
     calls = 0
@@ -183,6 +195,7 @@ async def test_disabled_rate_limit_retries_keep_outer_transient_retries(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("kind", ["openai", "responses", "anthropic"])
 async def test_default_rate_limit_policy_preserves_sdk_retries(kind, monkeypatch):
+    httpx = _sdk_httpx(kind)
     monkeypatch.setattr(request_retry, "REQUEST_RETRY_WAIT_MIN_S", 0)
     monkeypatch.setattr(request_retry, "REQUEST_RETRY_WAIT_MAX_S", 0)
     calls = 0

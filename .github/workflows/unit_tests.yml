@@ -31,6 +31,9 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install uv
 
+      - name: Install audio test dependencies
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
       - name: Run tests
         run: |
           chmod +x scripts/run_pytests_ci.sh
