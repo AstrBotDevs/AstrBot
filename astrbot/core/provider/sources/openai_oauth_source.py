@@ -1,13 +1,10 @@
-import asyncio
 import base64
 import inspect
 import json
 import mimetypes
-import time
 import uuid
 from collections.abc import AsyncGenerator
 from contextlib import aclosing, asynccontextmanager
-from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -17,7 +14,6 @@ from urllib.parse import quote, urlsplit
 import httpx
 
 from astrbot import logger
-from astrbot.core import db_helper
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, TokenUsage
 from astrbot.core.provider.oauth.openai_oauth import (
@@ -29,7 +25,6 @@ from astrbot.core.provider.oauth.openai_oauth_shared_state import (
     OpenAIOAuthSharedState,
 )
 from astrbot.core.provider.oauth.openai_oauth_sse import iter_json_sse_events
-from astrbot.core.provider.provider import provider_stats_managed_by_agent
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 from ..register import register_provider_adapter
@@ -38,10 +33,6 @@ from .request_retry import retry_provider_request
 
 OAUTH_PLACEHOLDER_KEY = "__openai_oauth__"
 CODEX_CLIENT_VERSION = "0.153.4"
-oauth_provider_stat_kind: ContextVar[str] = ContextVar(
-    "oauth_provider_stat_kind",
-    default="text",
-)
 
 
 @dataclass
@@ -782,53 +773,6 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
             output=output_tokens,
         )
 
-    async def _record_provider_stat(
-        self,
-        *,
-        request_kind: str,
-        status: str,
-        usage: TokenUsage | None,
-        start_time: float,
-        end_time: float,
-        model: str | None = None,
-        session_id: str | None = None,
-    ) -> None:
-        """Persist one OAuth provider call without affecting its caller.
-
-        Args:
-            request_kind: Logical call type used by the synthetic UMO.
-            status: Provider call status stored in the database.
-            usage: Parsed token usage, or None when the backend omitted it.
-            start_time: Epoch time immediately before the public call.
-            end_time: Epoch time immediately after the public call.
-            model: Explicit request model when supplied.
-            session_id: Session identifier when supplied by the caller.
-        """
-        try:
-            provider_id = str(self.provider_config.get("id") or self.meta().id)
-            await db_helper.insert_provider_stat(
-                umo=session_id or f"provider:{provider_id}:{request_kind}",
-                provider_id=provider_id,
-                provider_model=model or self.get_model(),
-                status=status,
-                stats={
-                    "token_usage": {
-                        "input_other": usage.input_other if usage else 0,
-                        "input_cached": usage.input_cached if usage else 0,
-                        "output": usage.output if usage else 0,
-                    },
-                    "start_time": start_time,
-                    "end_time": end_time,
-                    "time_to_first_token": 0.0,
-                },
-                agent_type="test" if request_kind == "test" else "provider",
-            )
-        except Exception:
-            logger.warning(
-                "Failed to record OpenAI OAuth provider statistics.",
-                exc_info=True,
-            )
-
     def _convert_tools_to_backend_format(
         self, tool_list: list[dict[str, Any]]
     ) -> list[dict[str, Any]]:
@@ -1225,69 +1169,22 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
         Raises:
             Exception: Re-raises the original provider exception unchanged.
         """
-        managed_by_agent = provider_stats_managed_by_agent.get()
-        request_kind = oauth_provider_stat_kind.get()
-        start_time = time.time()
         kwargs["_oauth_tool_choice"] = tool_choice
-        try:
-            response = await super().text_chat(
-                prompt=prompt,
-                session_id=session_id,
-                image_urls=image_urls,
-                audio_urls=audio_urls,
-                func_tool=func_tool,
-                contexts=contexts,
-                system_prompt=system_prompt,
-                tool_calls_result=tool_calls_result,
-                model=model,
-                extra_user_content_parts=extra_user_content_parts,
-                tool_choice=tool_choice,
-                request_max_retries=request_max_retries,
-                **kwargs,
-            )
-        except asyncio.CancelledError:
-            if not managed_by_agent:
-                await self._record_provider_stat(
-                    request_kind=request_kind,
-                    status="error",
-                    usage=None,
-                    start_time=start_time,
-                    end_time=time.time(),
-                    model=model,
-                    session_id=session_id,
-                )
-            raise
-        except Exception as exc:
-            if not managed_by_agent:
-                await self._record_provider_stat(
-                    request_kind=request_kind,
-                    status="error",
-                    usage=getattr(exc, "_astrbot_token_usage", None),
-                    start_time=start_time,
-                    end_time=time.time(),
-                    model=model,
-                    session_id=session_id,
-                )
-            raise
-
-        if not managed_by_agent:
-            await self._record_provider_stat(
-                request_kind=request_kind,
-                status="error" if response.role == "err" else "completed",
-                usage=response.usage,
-                start_time=start_time,
-                end_time=time.time(),
-                model=model,
-                session_id=session_id,
-            )
-        return response
-
-    async def test(self, timeout: float = 45.0) -> None:
-        token = oauth_provider_stat_kind.set("test")
-        try:
-            await super().test(timeout)
-        finally:
-            oauth_provider_stat_kind.reset(token)
+        return await super().text_chat(
+            prompt=prompt,
+            session_id=session_id,
+            image_urls=image_urls,
+            audio_urls=audio_urls,
+            func_tool=func_tool,
+            contexts=contexts,
+            system_prompt=system_prompt,
+            tool_calls_result=tool_calls_result,
+            model=model,
+            extra_user_content_parts=extra_user_content_parts,
+            tool_choice=tool_choice,
+            request_max_retries=request_max_retries,
+            **kwargs,
+        )
 
     async def _query(
         self,
@@ -1499,63 +1396,36 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
         Raises:
             Exception: Re-raises validation, backend, or extraction failures.
         """
-        start_time = time.time()
-        total_usage = TokenUsage()
-        try:
-            references = [
-                str(image).strip()
-                for image in reference_images or []
-                if str(image).strip()
-            ]
-            instructions = str(prompt or "").strip()
-            if not instructions:
-                raise ValueError("图片生成提示词不能为空。")
-            image_input = self._build_image_generation_input(instructions, references)
-            image_action = (action or ("edit" if references else "generate")).strip()
-            if not image_action:
-                image_action = "edit" if references else "generate"
-            results: list[OpenAIOAuthImageResult] = []
-            count = max(1, int(n or 1))
-            for _ in range(count):
-                tool: dict[str, Any] = {
-                    "type": "image_generation",
-                    "action": image_action,
-                }
-                if size:
-                    tool["size"] = size
-                payload = {
-                    "model": model or self.get_model(),
-                    "input": image_input,
-                    "instructions": instructions,
-                    "tools": [tool],
-                    "tool_choice": {"type": "image_generation"},
-                    "stream": True,
-                    "store": False,
-                }
-                response = await self._request_image_backend(payload)
-                response_usage = self._extract_response_usage(response.get("usage"))
-                if response_usage is not None:
-                    total_usage = total_usage + response_usage
-                results.extend(await self._extract_generated_images(response))
-        except (Exception, asyncio.CancelledError):
-            await self._record_provider_stat(
-                request_kind="image",
-                status="error",
-                usage=total_usage,
-                start_time=start_time,
-                end_time=time.time(),
-                model=model,
-            )
-            raise
-
-        await self._record_provider_stat(
-            request_kind="image",
-            status="completed",
-            usage=total_usage,
-            start_time=start_time,
-            end_time=time.time(),
-            model=model,
-        )
+        references = [
+            str(image).strip() for image in reference_images or [] if str(image).strip()
+        ]
+        instructions = str(prompt or "").strip()
+        if not instructions:
+            raise ValueError("图片生成提示词不能为空。")
+        image_input = self._build_image_generation_input(instructions, references)
+        image_action = (action or ("edit" if references else "generate")).strip()
+        if not image_action:
+            image_action = "edit" if references else "generate"
+        results: list[OpenAIOAuthImageResult] = []
+        count = max(1, int(n or 1))
+        for _ in range(count):
+            tool: dict[str, Any] = {
+                "type": "image_generation",
+                "action": image_action,
+            }
+            if size:
+                tool["size"] = size
+            payload = {
+                "model": model or self.get_model(),
+                "input": image_input,
+                "instructions": instructions,
+                "tools": [tool],
+                "tool_choice": {"type": "image_generation"},
+                "stream": True,
+                "store": False,
+            }
+            response = await self._request_image_backend(payload)
+            results.extend(await self._extract_generated_images(response))
         return results
 
     def _build_image_generation_input(
@@ -1704,56 +1574,15 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
         if (func_tool and not func_tool.empty()) or tool_choice != "auto":
             payloads["tool_choice"] = tool_choice
 
-        managed_by_agent = provider_stats_managed_by_agent.get()
-        request_kind = oauth_provider_stat_kind.get()
-        start_time = time.time()
         final_response: LLMResponse | None = None
-        try:
-            async with aclosing(
-                self._query_stream(
-                    payloads,
-                    func_tool,
-                    request_max_retries=request_max_retries,
-                )
-            ) as response_stream:
-                async for response in response_stream:
-                    if not response.is_chunk:
-                        final_response = response
-                    yield response
-        except (asyncio.CancelledError, GeneratorExit):
-            if not managed_by_agent:
-                await self._record_provider_stat(
-                    request_kind=request_kind,
-                    status="error",
-                    usage=None,
-                    start_time=start_time,
-                    end_time=time.time(),
-                    model=model,
-                    session_id=session_id,
-                )
-            raise
-        except Exception as exc:
-            if not managed_by_agent:
-                await self._record_provider_stat(
-                    request_kind=request_kind,
-                    status="error",
-                    usage=getattr(exc, "_astrbot_token_usage", None),
-                    start_time=start_time,
-                    end_time=time.time(),
-                    model=model,
-                    session_id=session_id,
-                )
-            raise
-
+        async with aclosing(
+            self._query_stream(
+                payloads, func_tool, request_max_retries=request_max_retries
+            )
+        ) as response_stream:
+            async for response in response_stream:
+                if not response.is_chunk:
+                    final_response = response
+                yield response
         if final_response is None:
             raise Exception("Codex backend stream did not produce a final response")
-        if not managed_by_agent:
-            await self._record_provider_stat(
-                request_kind=request_kind,
-                status="error" if final_response.role == "err" else "completed",
-                usage=final_response.usage,
-                start_time=start_time,
-                end_time=time.time(),
-                model=model,
-                session_id=session_id,
-            )

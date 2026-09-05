@@ -140,7 +140,6 @@ async def test_terminate_closes_active_stream_connections():
 @pytest.mark.asyncio
 async def test_nonstream_tool_choice_without_function_tools_reaches_backend():
     provider = _make_provider({"oauth_web_search": "live"})
-    provider._record_provider_stat = AsyncMock()
     provider._request_backend = AsyncMock(
         return_value={"output_text": "answer", "output": []}
     )
@@ -218,7 +217,6 @@ async def _lines(*values):
 @pytest.mark.asyncio
 async def test_stream_emits_incremental_text_reasoning_tool_args_and_complete_final():
     provider = _make_provider()
-    provider._record_provider_stat = AsyncMock()
     events = [
         {"type": "response.reasoning_summary_text.delta", "delta": "checking"},
         {"type": "response.output_text.delta", "delta": "hel"},
@@ -326,14 +324,11 @@ async def test_stream_emits_incremental_text_reasoning_tool_args_and_complete_fi
     assert final.usage.input_other == 5
     assert final.usage.input_cached == 2
     assert final.usage.output == 3
-    provider._record_provider_stat.assert_awaited_once()
-    assert provider._record_provider_stat.await_args.kwargs["status"] == "completed"
 
 
 @pytest.mark.asyncio
 async def test_stream_closes_backend_iterator_when_consumer_cancels():
     provider = _make_provider()
-    provider._record_provider_stat = AsyncMock()
     closed = asyncio.Event()
 
     async def fake_events(_payload):
