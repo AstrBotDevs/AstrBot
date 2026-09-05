@@ -7,6 +7,7 @@ import httpx
 from astrbot.core.provider.oauth.openai_oauth_audio_input import (
     BoundedOAuthAudioResolver,
 )
+from astrbot.core.provider.sources.request_retry import ProviderRequestError
 
 OPENAI_TRANSCRIPTIONS_URL = "https://api.openai.com/v1/audio/transcriptions"
 DEFAULT_MAX_AUDIO_BYTES = 25 * 1024 * 1024
@@ -154,9 +155,15 @@ class OpenAIOAuthTranscriptionClient:
         if status_code == 403:
             raise PermissionError("当前 OAuth 账户无权使用 OpenAI 音频转录。")
         if status_code == 429:
-            raise RuntimeError("OpenAI OAuth 音频转录配额不足或请求过于频繁。")
+            raise ProviderRequestError(
+                "OpenAI OAuth 音频转录配额不足或请求过于频繁。",
+                status_code=429,
+            )
         if not 200 <= status_code < 300:
-            raise RuntimeError(f"OpenAI OAuth 音频转录失败：HTTP {status_code}。")
+            raise ProviderRequestError(
+                f"OpenAI OAuth 音频转录失败：HTTP {status_code}。",
+                status_code=status_code,
+            )
         if not isinstance(payload, dict):
             raise ValueError("OpenAI OAuth 音频转录响应格式无效。")
         text = str(payload.get("text") or "").strip()

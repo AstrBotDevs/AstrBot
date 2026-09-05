@@ -632,6 +632,123 @@ async def test_disabled_web_search_does_not_add_tool():
     assert "tools" not in captured[0]
 
 
+def test_request_disabled_search_removes_configured_and_custom_search_tools():
+    provider = _make_provider(
+        {
+            "oauth_web_search": "live",
+            "custom_extra_body": {
+                "tools": [
+                    {"type": "web_search", "external_web_access": True},
+                    {
+                        "type": "function",
+                        "name": "keep_me",
+                        "description": "ordinary function",
+                        "parameters": {"type": "object", "properties": {}},
+                    },
+                ]
+            },
+        }
+    )
+
+    params = provider._build_responses_params(
+        {
+            "model": "gpt-6-astra",
+            "messages": [],
+            "tool_choice": {"type": "function", "name": "keep_me"},
+        },
+        None,
+        oauth_web_search="disabled",
+    )
+
+    assert params["tools"] == [
+        {
+            "type": "function",
+            "name": "keep_me",
+            "description": "ordinary function",
+            "parameters": {"type": "object", "properties": {}},
+        }
+    ]
+    assert provider.provider_config["oauth_web_search"] == "live"
+    assert provider.provider_config["custom_extra_body"]["tools"][0]["type"] == (
+        "web_search"
+    )
+    assert params["tool_choice"] == {"type": "function", "name": "keep_me"}
+
+
+def test_request_disabled_search_rejects_search_tool_choice():
+    provider = _make_provider({"oauth_web_search": "live"})
+
+    with pytest.raises(ValueError, match="不能选择托管搜索工具"):
+        provider._build_responses_params(
+            {
+                "model": "gpt-6-astra",
+                "messages": [],
+                "tool_choice": {"type": "web_search"},
+            },
+            None,
+            oauth_web_search="disabled",
+        )
+
+
+def test_stream_rate_limit_event_preserves_status_code():
+    provider = _make_provider()
+
+    with pytest.raises(RuntimeError) as exc_info:
+        provider._apply_stream_event(
+            {
+                "type": "response.failed",
+                "response": {
+                    "error": {"code": "rate_limit_exceeded"},
+                    "usage": {"input_tokens": 2, "output_tokens": 0},
+                },
+            },
+            [],
+            [],
+            {},
+        )
+
+    assert exc_info.value.status_code == 429
+    assert exc_info.value._astrbot_token_usage.input == 2
+
+
+@pytest.mark.asyncio
+async def test_concurrent_request_search_modes_are_isolated():
+    provider = _make_provider({"oauth_web_search": "cached"})
+    requested: dict[str, dict] = {}
+
+    async def fake_request_backend(payload):
+        assert provider.provider_config["oauth_web_search"] == "cached"
+        mode = "disabled" if "tools" not in payload else "live"
+        requested[mode] = payload
+        await asyncio.sleep(0)
+        assert provider.provider_config["oauth_web_search"] == "cached"
+        return {
+            "id": f"resp_{mode}",
+            "output_text": mode,
+            "output": [],
+            "usage": {"input_tokens": 1, "output_tokens": 1},
+        }
+
+    provider._request_backend = fake_request_backend
+    try:
+        await asyncio.gather(
+            provider.text_chat(prompt="one", oauth_web_search="disabled"),
+            provider.text_chat(prompt="two", oauth_web_search="live"),
+        )
+    finally:
+        await provider.terminate()
+
+    assert "tools" not in requested["disabled"]
+    assert requested["live"]["tools"] == [
+        {"type": "web_search", "external_web_access": True}
+    ]
+    assert provider.provider_config["oauth_web_search"] == "cached"
+    assert all(
+        "_oauth_web_search" not in payload and "_oauth_retry_rate_limits" not in payload
+        for payload in requested.values()
+    )
+
+
 @pytest.mark.asyncio
 async def test_real_url_annotations_are_rendered_and_raw_is_preserved():
     provider = _make_provider()

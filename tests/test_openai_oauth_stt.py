@@ -204,6 +204,7 @@ async def test_transcribe_audio_reports_quota_without_leaking_body(
         await OpenAIOAuthTranscriptionClient(provider).transcribe_audio(str(audio))
 
     assert "配额" in str(exc_info.value)
+    assert exc_info.value.status_code == 429
     assert secret not in str(exc_info.value)
 
 

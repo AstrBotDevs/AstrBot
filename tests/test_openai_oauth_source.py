@@ -227,6 +227,150 @@ async def test_oauth_provider_keeps_access_token_out_of_key_pool():
         await provider.terminate()
 
 
+@pytest.mark.asyncio
+async def test_terminated_provider_rejects_chat_before_network():
+    provider = _make_provider()
+    request_once = AsyncMock()
+    provider._request_backend_once = request_once
+
+    await provider.terminate()
+
+    with pytest.raises(RuntimeError, match="closed"):
+        await provider._request_backend({"model": "gpt-6-astra", "input": []})
+    request_once.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_terminate_closes_inflight_non_stream_http_client(monkeypatch):
+    provider = _make_provider()
+    started = asyncio.Event()
+    closed = asyncio.Event()
+
+    class BlockingClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            await self.aclose()
+
+        async def post(self, *_args, **_kwargs):
+            started.set()
+            await closed.wait()
+            raise RuntimeError("client closed")
+
+        async def aclose(self):
+            closed.set()
+
+    monkeypatch.setattr(
+        "astrbot.core.provider.sources.openai_oauth_source.httpx.AsyncClient",
+        lambda **_kwargs: BlockingClient(),
+    )
+    task = asyncio.create_task(
+        provider._request_backend({"model": "gpt-6-astra", "input": []})
+    )
+    await started.wait()
+
+    await provider.terminate()
+
+    with pytest.raises(RuntimeError, match="client closed"):
+        await task
+    assert closed.is_set()
+    assert provider._oauth_stream_clients == set()
+
+
+def test_astra_request_removes_unsupported_sampling_and_logprobs_fields():
+    provider = _make_provider(
+        {
+            "custom_extra_body": {
+                "temperature": 0.2,
+                "top_p": 0.8,
+                "top_logprobs": 5,
+                "include": [
+                    "message.output_text.logprobs",
+                    "reasoning.encrypted_content",
+                ],
+            }
+        }
+    )
+
+    params = provider._build_responses_params(
+        {
+            "model": "gpt-6-astra",
+            "messages": [],
+            "temperature": 0.4,
+            "top_p": 0.9,
+            "top_logprobs": 3,
+        },
+        None,
+    )
+
+    assert "temperature" not in params
+    assert "top_p" not in params
+    assert "top_logprobs" not in params
+    assert params["include"] == ["reasoning.encrypted_content"]
+
+
+@pytest.mark.parametrize(
+    "event_type",
+    ["error", "response.error", "response.failed", "response.incomplete"],
+)
+def test_non_stream_error_event_preserves_rate_limit_status(event_type):
+    provider = _make_provider()
+
+    with pytest.raises(RuntimeError) as exc_info:
+        provider._parse_backend_response(
+            f'data: {{"type":"{event_type}","response":'
+            '{"error":{"code":"rate_limit_exceeded"}}}\n\n'
+        )
+
+    assert exc_info.value.status_code == 429
+
+
+def test_direct_json_error_preserves_rate_limit_status():
+    provider = _make_provider()
+
+    with pytest.raises(RuntimeError) as exc_info:
+        provider._parse_backend_response(
+            '{"type":"error","error":{"code":"rate_limit_exceeded"}}'
+        )
+
+    assert exc_info.value.status_code == 429
+
+
+def test_astra_removes_include_when_only_logprobs_was_requested():
+    provider = _make_provider(
+        {"custom_extra_body": {"include": ["message.output_text.logprobs"]}}
+    )
+
+    params = provider._build_responses_params(
+        {"model": "gpt-6-astra", "messages": []},
+        None,
+    )
+
+    assert "include" not in params
+
+
+def test_non_astra_preserves_supported_sampling_and_logprobs_fields():
+    provider = _make_provider(
+        {
+            "custom_extra_body": {
+                "top_p": 0.8,
+                "top_logprobs": 5,
+                "include": ["message.output_text.logprobs"],
+            }
+        }
+    )
+
+    params = provider._build_responses_params(
+        {"model": "gpt-5.4", "messages": []},
+        None,
+    )
+
+    assert params["top_p"] == 0.8
+    assert params["top_logprobs"] == 5
+    assert params["include"] == ["message.output_text.logprobs"]
+
+
 def test_parse_codex_auth_json_tokens_object():
     access_token = _jwt_with_claims(
         {
@@ -1332,8 +1476,23 @@ async def test_text_chat_stream_preserves_provider_positional_arguments():
     )
     captured = []
 
-    async def fake_query_stream(payloads, tools, *, request_max_retries=None):
-        captured.append((payloads, tools, request_max_retries))
+    async def fake_query_stream(
+        payloads,
+        tools,
+        *,
+        request_max_retries=None,
+        retry_rate_limits=None,
+        oauth_web_search=None,
+    ):
+        captured.append(
+            (
+                payloads,
+                tools,
+                request_max_retries,
+                retry_rate_limits,
+                oauth_web_search,
+            )
+        )
         yield LLMResponse(role="assistant", completion_text="ok")
 
     provider._query_stream = fake_query_stream
@@ -1380,6 +1539,8 @@ async def test_text_chat_stream_preserves_provider_positional_arguments():
                 },
                 tool,
                 2,
+                None,
+                None,
             )
         ]
     finally:

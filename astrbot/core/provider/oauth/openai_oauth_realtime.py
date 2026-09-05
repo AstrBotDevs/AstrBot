@@ -11,6 +11,8 @@ from urllib.parse import urlsplit
 import httpx
 from websockets.asyncio.client import connect
 
+from astrbot.core.provider.sources.request_retry import ProviderRequestError
+
 REALTIME_CALL_URL = (
     "https://chatgpt.com/backend-api/codex/realtime/calls"
     "?intent=quicksilver&architecture=avas"
@@ -570,7 +572,10 @@ class OpenAIOAuthRealtimeClient:
         if response.status_code == 403:
             raise PermissionError("当前 OAuth 账户或会话参数无权创建 Realtime call。")
         if not 200 <= response.status_code < 300:
-            raise RuntimeError(f"Realtime call 创建失败：HTTP {response.status_code}。")
+            raise ProviderRequestError(
+                f"Realtime call 创建失败：HTTP {response.status_code}。",
+                status_code=response.status_code,
+            )
         answer = response.text
         if (
             not answer

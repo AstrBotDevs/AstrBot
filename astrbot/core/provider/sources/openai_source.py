@@ -41,7 +41,11 @@ from astrbot.core.utils.network_utils import (
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
 from ..register import register_provider_adapter
-from .request_retry import retry_provider_request
+from .request_retry import (
+    get_provider_request_status_code,
+    provider_retry_rate_limits,
+    retry_provider_request,
+)
 
 
 @register_provider_adapter(
@@ -434,6 +438,26 @@ class ProviderOpenAIOfficial(Provider):
         extra_body.pop("think", None)
         extra_body["reasoning_effort"] = "none"
 
+    def _client_for_request_retry_policy(self) -> Any:
+        """Return a request-local client honoring the rate-limit retry policy.
+
+        Returns:
+            The shared SDK client, or a clone that does not retry HTTP 429.
+        """
+        if provider_retry_rate_limits.get():
+            return self.client
+
+        request_client = self.client.with_options()
+        sdk_should_retry = request_client._should_retry
+
+        def should_retry(response: httpx.Response) -> bool:
+            if response.status_code == 429:
+                return False
+            return sdk_should_retry(response)
+
+        request_client._should_retry = should_retry
+        return request_client
+
     async def get_models(self):
         try:
             models_str = []
@@ -565,9 +589,11 @@ class ProviderOpenAIOfficial(Provider):
 
         self._sanitize_assistant_messages(payloads)
 
+        request_client = self._client_for_request_retry_policy()
+
         completion = await retry_provider_request(
             "OpenAI",
-            lambda: self.client.chat.completions.create(
+            lambda: request_client.chat.completions.create(
                 **payloads,
                 stream=False,
                 extra_body=extra_body,
@@ -623,9 +649,11 @@ class ProviderOpenAIOfficial(Provider):
 
         self._sanitize_assistant_messages(payloads)
 
+        request_client = self._client_for_request_retry_policy()
+
         stream = await retry_provider_request(
             "OpenAI",
-            lambda: self.client.chat.completions.create(
+            lambda: request_client.chat.completions.create(
                 **payloads,
                 stream=True,
                 extra_body=extra_body,
@@ -1081,7 +1109,9 @@ class ProviderOpenAIOfficial(Provider):
         image_fallback_used: bool = False,
     ) -> tuple:
         """处理API错误并尝试恢复"""
-        if "429" in str(e):
+        if get_provider_request_status_code(e) == 429:
+            if not provider_retry_rate_limits.get():
+                raise e
             logger.warning(
                 f"API 调用过于频繁，尝试使用其他 Key 重试。当前 Key: {chosen_key[:12]}",
             )

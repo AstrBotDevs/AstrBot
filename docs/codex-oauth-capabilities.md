@@ -16,6 +16,56 @@ tools are merged; conflicting definitions fail before sending. Request-level
 `tool_choice` is honored. Citations come from actual backend URL annotations;
 raw hosted-tool output is preserved in `raw_completion`.
 
+Plugins can override search and rate-limit behavior for one request without
+changing shared provider configuration. The defaults preserve the provider and
+agent behavior used before these fields were added:
+
+- `oauth_web_search="inherit"` uses the provider configuration. `disabled`
+  removes hosted search from both provider configuration and
+  `custom_extra_body.tools`, while ordinary function tools remain available.
+  `cached` and `live` select the corresponding hosted-search mode.
+- `retry_rate_limits=False` disables only HTTP 429 retries. Connection failures
+  and other retryable statuses keep the configured retry behavior.
+- `fallback_on_rate_limit=False` stops the agent after a structured HTTP 429
+  instead of trying a fallback provider.
+
+Set the fields directly when returning a request from an event:
+
+```python
+yield event.request_llm(
+    prompt="Answer with current information.",
+    tool_set=tools,
+    oauth_web_search="live",
+    retry_rate_limits=False,
+    fallback_on_rate_limit=False,
+)
+```
+
+The same names are accepted by the two plugin SDK helpers:
+
+```python
+response = await context.llm_generate(
+    chat_provider_id=provider_id,
+    prompt="One model call",
+    oauth_web_search="disabled",
+    retry_rate_limits=False,
+)
+
+response = await context.tool_loop_agent(
+    event=event,
+    chat_provider_id=provider_id,
+    prompt="Run tools if needed",
+    tools=tools,
+    oauth_web_search="disabled",
+    retry_rate_limits=False,
+    fallback_on_rate_limit=False,
+)
+```
+
+These controls stay attached to every model call in the agent run, including
+function-result rounds, schema repair calls and fallback providers. A 429 error
+retains `status_code=429` on the final `LLMResponse` when fallback is disabled.
+
 ## Ordinary voice messages
 
 Existing AstrBot STT and TTS providers remain usable with the Codex text model.
@@ -74,6 +124,9 @@ OAuth tokens to the peer. Close the session and peer together when either fails.
 `session.send_text()` and delegation results use `speakable` or `commentary`
 channels; `session.touch()` can report active media when sideband transcripts are
 temporarily absent. Ping traffic does not reset the idle timer.
+
+Transcription and realtime remain explicit opt-ins. Search and rate-limit fields
+do not activate either feature, and neither feature falls back to an API key.
 
 Protocol references:
 

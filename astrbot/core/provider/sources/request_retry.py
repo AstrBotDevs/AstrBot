@@ -1,5 +1,6 @@
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from contextvars import ContextVar
 from typing import TypeVar
 
 from tenacity import (
@@ -20,9 +21,25 @@ REQUEST_RETRY_ATTEMPTS = 5  # default value
 REQUEST_RETRY_WAIT_MIN_S = 0.2
 REQUEST_RETRY_WAIT_MAX_S = 30
 REQUEST_RETRY_STATUS_CODES = {408, 409, 429, 500, 502, 503, 504, 529}
+provider_retry_rate_limits: ContextVar[bool] = ContextVar(
+    "provider_retry_rate_limits",
+    default=True,
+)
+provider_oauth_web_search: ContextVar[str] = ContextVar(
+    "provider_oauth_web_search",
+    default="inherit",
+)
 
 
-def _get_status_code(error: BaseException) -> int | None:
+class ProviderRequestError(RuntimeError):
+    """Provider failure with a machine-readable HTTP status code."""
+
+    def __init__(self, message: str, *, status_code: int) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+
+
+def get_provider_request_status_code(error: BaseException) -> int | None:
     for attr in ("status_code", "status", "code"):
         value = getattr(error, attr, None)
         if isinstance(value, int):
@@ -42,6 +59,10 @@ def _is_retryable_provider_request_error(
     *,
     retry_rate_limits: bool,
 ) -> bool:
+    status_code = get_provider_request_status_code(error)
+    if status_code == 429 and not retry_rate_limits:
+        return False
+
     if is_connection_error(error):
         return True
 
@@ -49,11 +70,7 @@ def _is_retryable_provider_request_error(
     if error_type_name in {"APIConnectionError", "APITimeoutError"}:
         return True
 
-    status_code = _get_status_code(error)
     if status_code is None:
-        return False
-
-    if status_code == 429 and not retry_rate_limits:
         return False
 
     return status_code in REQUEST_RETRY_STATUS_CODES or 500 <= status_code <= 599
@@ -112,12 +129,17 @@ async def retry_provider_request(
     provider_label: str,
     request_factory: Callable[[], Awaitable[T]],
     *,
-    retry_rate_limits: bool = True,
+    retry_rate_limits: bool | None = None,
     max_attempts: int | None = None,
 ) -> T:
+    effective_retry_rate_limits = (
+        provider_retry_rate_limits.get()
+        if retry_rate_limits is None
+        else retry_rate_limits
+    )
     retrying = _build_retrying(
         provider_label,
-        retry_rate_limits=retry_rate_limits,
+        retry_rate_limits=effective_retry_rate_limits,
         max_attempts=max_attempts,
     )
 
@@ -133,7 +155,7 @@ async def retry_provider_request_context(
     provider_label: str,
     context_manager_factory: Callable[[], AbstractAsyncContextManager[T]],
     *,
-    retry_rate_limits: bool = True,
+    retry_rate_limits: bool | None = None,
     max_attempts: int | None = None,
 ) -> AsyncIterator[T]:
     manager: AbstractAsyncContextManager[T] | None = None

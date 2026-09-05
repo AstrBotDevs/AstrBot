@@ -5,7 +5,7 @@ import time
 import traceback
 import typing as T
 import uuid
-from contextlib import suppress
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
@@ -46,6 +46,11 @@ from astrbot.core.provider.modalities import (
     sanitize_contexts_by_modalities,
 )
 from astrbot.core.provider.provider import Provider
+from astrbot.core.provider.sources.request_retry import (
+    get_provider_request_status_code,
+    provider_oauth_web_search,
+    provider_retry_rate_limits,
+)
 
 from ..context.compressor import ContextCompressor
 from ..context.config import ContextConfig
@@ -458,6 +463,16 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             preview = preview[:next_len]
         return preview
 
+    @contextmanager
+    def _request_policy_scope(self) -> T.Iterator[None]:
+        retry_token = provider_retry_rate_limits.set(self.req.retry_rate_limits)
+        search_token = provider_oauth_web_search.set(self.req.oauth_web_search)
+        try:
+            yield
+        finally:
+            provider_oauth_web_search.reset(search_token)
+            provider_retry_rate_limits.reset(retry_token)
+
     async def _await_or_stop(
         self,
         awaitable: T.Awaitable[AwaitableResultT],
@@ -517,7 +532,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             try:
                 while True:
                     try:
-                        resp = await self._await_or_stop(anext(stream))  # type: ignore
+                        with self._request_policy_scope():
+                            resp = await self._await_or_stop(anext(stream))  # type: ignore
                     except StopAsyncIteration:
                         return
                     if resp is None:
@@ -526,7 +542,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             finally:
                 await self._close_executor(stream)
         else:
-            resp = await self._await_or_stop(self.provider.text_chat(**payload))
+            with self._request_policy_scope():
+                resp = await self._await_or_stop(self.provider.text_chat(**payload))
             if resp is not None:
                 yield resp
 
@@ -600,6 +617,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                     and not has_stream_output
                                     and (not is_last_candidate)
                                 ):
+                                    if (
+                                        resp.status_code == 429
+                                        and not self.req.fallback_on_rate_limit
+                                    ):
+                                        yield resp
+                                        return
                                     last_err_response = resp
                                     logger.warning(
                                         "Chat Model %s returns error response, trying fallback to next provider.",
@@ -639,6 +662,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 )
                 if candidate_has_stream_output:
                     break
+                if (
+                    get_provider_request_status_code(exc) == 429
+                    and not self.req.fallback_on_rate_limit
+                ):
+                    break
                 continue
 
         if last_err_response:
@@ -651,6 +679,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     "All chat models failed: "
                     f"{type(last_exception).__name__}: {last_exception}"
                 ),
+                status_code=get_provider_request_status_code(last_exception),
             )
             return
         yield LLMResponse(
@@ -1434,18 +1463,19 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             )
             if param_subset.tools and tool_names:
                 contexts = self._build_tool_requery_context(tool_names)
-                requery_resp = await self._await_or_stop(
-                    self.provider.text_chat(
-                        contexts=self._sanitize_contexts_for_provider(contexts),
-                        func_tool=param_subset,
-                        model=self.req.model,
-                        session_id=self.req.session_id,
-                        extra_user_content_parts=self.req.extra_user_content_parts,
-                        # tool_choice="required",
-                        abort_signal=self._abort_signal,
-                        request_max_retries=self.request_max_retries,
+                with self._request_policy_scope():
+                    requery_resp = await self._await_or_stop(
+                        self.provider.text_chat(
+                            contexts=self._sanitize_contexts_for_provider(contexts),
+                            func_tool=param_subset,
+                            model=self.req.model,
+                            session_id=self.req.session_id,
+                            extra_user_content_parts=self.req.extra_user_content_parts,
+                            # tool_choice="required",
+                            abort_signal=self._abort_signal,
+                            request_max_retries=self.request_max_retries,
+                        )
                     )
-                )
                 if requery_resp:
                     llm_resp = requery_resp
                     self._sanitize_malformed_tool_calls(llm_resp)
@@ -1464,20 +1494,21 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         tool_names,
                         extra_instruction=self.SKILLS_LIKE_REQUERY_REPAIR_INSTRUCTION,
                     )
-                    repair_resp = await self._await_or_stop(
-                        self.provider.text_chat(
-                            contexts=self._sanitize_contexts_for_provider(
-                                repair_contexts
-                            ),
-                            func_tool=param_subset,
-                            model=self.req.model,
-                            session_id=self.req.session_id,
-                            extra_user_content_parts=self.req.extra_user_content_parts,
-                            # tool_choice="required",
-                            abort_signal=self._abort_signal,
-                            request_max_retries=self.request_max_retries,
+                    with self._request_policy_scope():
+                        repair_resp = await self._await_or_stop(
+                            self.provider.text_chat(
+                                contexts=self._sanitize_contexts_for_provider(
+                                    repair_contexts
+                                ),
+                                func_tool=param_subset,
+                                model=self.req.model,
+                                session_id=self.req.session_id,
+                                extra_user_content_parts=self.req.extra_user_content_parts,
+                                # tool_choice="required",
+                                abort_signal=self._abort_signal,
+                                request_max_retries=self.request_max_retries,
+                            )
                         )
-                    )
                     if repair_resp:
                         llm_resp = repair_resp
                         self._sanitize_malformed_tool_calls(llm_resp)

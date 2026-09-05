@@ -29,7 +29,11 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 from ..register import register_provider_adapter
 from .openai_source import ProviderOpenAIOfficial
-from .request_retry import retry_provider_request
+from .request_retry import (
+    ProviderRequestError,
+    provider_oauth_web_search,
+    retry_provider_request,
+)
 
 OAUTH_PLACEHOLDER_KEY = "__openai_oauth__"
 CODEX_CLIENT_VERSION = "0.153.4"
@@ -207,6 +211,10 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
         for key in ("reasoning_effort", "reasoning"):
             if kwargs.get(key) is not None:
                 payloads[key] = kwargs[key]
+        if kwargs.get("oauth_web_search") is not None:
+            payloads["_oauth_web_search"] = kwargs["oauth_web_search"]
+        if kwargs.get("retry_rate_limits") is not None:
+            payloads["_oauth_retry_rate_limits"] = kwargs["retry_rate_limits"]
         return payloads, context_query
 
     def _parse_oauth_expires_at(self) -> datetime | None:
@@ -371,11 +379,7 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
     ) -> tuple[int, str, int]:
         headers, attempted_version = self._build_backend_headers_with_version()
 
-        async with httpx.AsyncClient(
-            proxy=self.provider_config.get("proxy") or None,
-            timeout=self.timeout,
-            follow_redirects=True,
-        ) as client:
+        async with self._open_oauth_http_client(follow_redirects=True) as client:
             response = await client.post(
                 f"{self.base_url}/responses",
                 headers=headers,
@@ -386,6 +390,8 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
         return response.status_code, text, attempted_version
 
     async def _request_backend(self, payload: dict[str, Any]) -> dict[str, Any]:
+        if getattr(self, "_oauth_media_closed", False):
+            raise RuntimeError("OAuth provider is closed")
         await self._ensure_fresh_oauth_token()
         status_code, text, attempted_version = await self._request_backend_once(payload)
 
@@ -399,11 +405,14 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
                 ) = await self._request_backend_once(payload)
 
         if status_code < 200 or status_code >= 300:
-            raise Exception(self._format_backend_error(status_code, text))
+            raise ProviderRequestError(
+                self._format_backend_error(status_code, text),
+                status_code=status_code,
+            )
         return self._parse_backend_response(text)
 
     @asynccontextmanager
-    async def _open_oauth_stream_client(self):
+    async def _open_oauth_http_client(self, *, follow_redirects: bool):
         if getattr(self, "_oauth_media_closed", False):
             raise RuntimeError("OAuth provider is closed")
         if not hasattr(self, "_oauth_stream_clients"):
@@ -411,7 +420,7 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
         client = httpx.AsyncClient(
             proxy=self.provider_config.get("proxy") or None,
             timeout=self.timeout,
-            follow_redirects=False,
+            follow_redirects=follow_redirects,
         )
         self._oauth_stream_clients.add(client)
         try:
@@ -419,6 +428,11 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
                 yield client
         finally:
             self._oauth_stream_clients.discard(client)
+
+    @asynccontextmanager
+    async def _open_oauth_stream_client(self):
+        async with self._open_oauth_http_client(follow_redirects=False) as client:
+            yield client
 
     async def _stream_backend_events(
         self,
@@ -449,14 +463,16 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
                             retry_after_auth = True
                         else:
                             text = raw_body.decode("utf-8", errors="replace")
-                            raise Exception(
-                                self._format_backend_error(response.status_code, text)
+                            raise ProviderRequestError(
+                                self._format_backend_error(response.status_code, text),
+                                status_code=response.status_code,
                             )
                     elif response.status_code < 200 or response.status_code >= 300:
                         raw_body = await response.aread()
                         text = raw_body.decode("utf-8", errors="replace")
-                        raise Exception(
-                            self._format_backend_error(response.status_code, text)
+                        raise ProviderRequestError(
+                            self._format_backend_error(response.status_code, text),
+                            status_code=response.status_code,
                         )
                     else:
                         async for event in iter_json_sse_events(response.aiter_lines()):
@@ -480,11 +496,7 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
         headers, attempted_version = self._build_backend_headers_with_version()
 
         text_parts: list[str] = []
-        async with httpx.AsyncClient(
-            proxy=self.provider_config.get("proxy") or None,
-            timeout=self.timeout,
-            follow_redirects=True,
-        ) as client:
+        async with self._open_oauth_http_client(follow_redirects=True) as client:
             async with client.stream(
                 "POST",
                 f"{self.base_url}/responses",
@@ -518,6 +530,8 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
         return response.status_code, "\n".join(text_parts), attempted_version
 
     async def _request_image_backend(self, payload: dict[str, Any]) -> dict[str, Any]:
+        if getattr(self, "_oauth_media_closed", False):
+            raise RuntimeError("OAuth provider is closed")
         await self._ensure_fresh_oauth_token()
         status_code, text, attempted_version = await self._request_image_backend_once(
             payload
@@ -533,7 +547,10 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
                 ) = await self._request_image_backend_once(payload)
 
         if status_code < 200 or status_code >= 300:
-            raise Exception(self._format_backend_error(status_code, text))
+            raise ProviderRequestError(
+                self._format_backend_error(status_code, text),
+                status_code=status_code,
+            )
         return self._parse_backend_response(text)
 
     def _format_backend_error(self, status_code: int, text: str) -> str:
@@ -569,7 +586,12 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
             if not isinstance(event, dict):
                 continue
             event_type = event.get("type")
-            if event_type in {"response.error", "response.failed"}:
+            if event_type in {
+                "error",
+                "response.error",
+                "response.failed",
+                "response.incomplete",
+            }:
                 error_payload = event
             elif event_type == "response.output_text.delta":
                 delta = event.get("delta")
@@ -605,11 +627,29 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
                 completed_response["output_text"] = merged_output_text
             return completed_response
         if error_payload:
-            raise Exception(f"Codex backend returned error event: {error_payload}")
+            status_code = self._extract_stream_error_status_code(error_payload)
+            message = f"Codex backend returned error event: {error_payload}"
+            if status_code is not None:
+                raise ProviderRequestError(message, status_code=status_code)
+            raise RuntimeError(message)
         stripped = text.strip()
         if stripped.startswith("{"):
             data = json.loads(stripped)
             if isinstance(data, dict):
+                if data.get("type") in {
+                    "error",
+                    "response.error",
+                    "response.failed",
+                    "response.incomplete",
+                }:
+                    status_code = self._extract_stream_error_status_code(data)
+                    message = f"Codex backend returned error event: {data}"
+                    if status_code is not None:
+                        raise ProviderRequestError(
+                            message,
+                            status_code=status_code,
+                        )
+                    raise RuntimeError(message)
                 if data.get("type") == "response.completed" and isinstance(
                     data.get("response"), dict
                 ):
@@ -837,12 +877,16 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
                     raise ValueError(f"工具 {identity} 存在冲突定义。")
         return merged
 
-    def _configured_web_search_tool(self) -> list[dict[str, Any]]:
-        mode = (
-            str(self.provider_config.get("oauth_web_search") or "disabled")
-            .strip()
-            .lower()
-        )
+    def _configured_web_search_tool(
+        self, request_mode: str = "inherit"
+    ) -> list[dict[str, Any]]:
+        mode = str(request_mode or "inherit").strip().lower()
+        if mode == "inherit":
+            mode = (
+                str(self.provider_config.get("oauth_web_search") or "disabled")
+                .strip()
+                .lower()
+            )
         if mode == "disabled":
             return []
         if mode not in {"cached", "live"}:
@@ -869,7 +913,27 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
             tool["filters"] = {"allowed_domains": normalized_domains}
         return [tool]
 
-    def _build_responses_params(self, payloads: dict, tools) -> dict[str, Any]:
+    @staticmethod
+    def _is_managed_web_search_tool(tool: dict[str, Any]) -> bool:
+        return str(tool.get("type") or "").strip().lower() in {
+            "web_search",
+            "web_search_preview",
+        }
+
+    def _build_responses_params(
+        self,
+        payloads: dict,
+        tools,
+        *,
+        oauth_web_search: str | None = None,
+    ) -> dict[str, Any]:
+        payloads = dict(payloads)
+        payload_search_mode = payloads.pop("_oauth_web_search", None)
+        payloads.pop("_oauth_retry_rate_limits", None)
+        if oauth_web_search in {None, "inherit"}:
+            oauth_web_search = str(
+                payload_search_mode or provider_oauth_web_search.get()
+            )
         instructions, backend_input = self._convert_messages_to_backend_input(
             payloads.get("messages", []) or []
         )
@@ -897,19 +961,42 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
                 if key == "tools":
                     if not isinstance(value, list):
                         raise ValueError("custom_extra_body.tools 必须是列表。")
-                    custom_tools = value
+                    custom_tools = list(value)
                     continue
                 params[key] = value
+
+        request_search_mode = str(oauth_web_search or "inherit").strip().lower()
+        if request_search_mode not in {"inherit", "disabled", "cached", "live"}:
+            raise ValueError(
+                "oauth_web_search 必须是 inherit、disabled、cached 或 live。"
+            )
+        if request_search_mode != "inherit":
+            custom_tools = [
+                tool
+                for tool in custom_tools
+                if not self._is_managed_web_search_tool(tool)
+            ]
 
         merged_tools = self._merge_backend_tools(
             function_tools,
             custom_tools,
-            self._configured_web_search_tool(),
+            self._configured_web_search_tool(request_search_mode),
         )
         if merged_tools:
             params["tools"] = merged_tools
         if payloads.get("tool_choice") is not None:
             params["tool_choice"] = payloads["tool_choice"]
+        tool_choice = params.get("tool_choice")
+        tool_choice_type = (
+            str(tool_choice.get("type") or "").strip().lower()
+            if isinstance(tool_choice, dict)
+            else str(tool_choice or "").strip().lower()
+        )
+        if request_search_mode == "disabled" and tool_choice_type in {
+            "web_search",
+            "web_search_preview",
+        }:
+            raise ValueError("oauth_web_search=disabled 时不能选择托管搜索工具。")
 
         reasoning_value = params.get("reasoning")
         if reasoning_value is not None and not isinstance(reasoning_value, dict):
@@ -957,6 +1044,21 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
             params.pop("reasoning", None)
         params.pop("max_output_tokens", None)
         params.pop("temperature", None)
+        model_name = str(params.get("model") or "").strip().lower()
+        if model_name.startswith("gpt-6-astra"):
+            params.pop("top_p", None)
+            params.pop("top_logprobs", None)
+            include = params.get("include")
+            if isinstance(include, list):
+                filtered_include = [
+                    item for item in include if item != "message.output_text.logprobs"
+                ]
+                if filtered_include:
+                    params["include"] = filtered_include
+                else:
+                    params.pop("include", None)
+            elif include == "message.output_text.logprobs":
+                params.pop("include", None)
         return params
 
     @staticmethod
@@ -1144,6 +1246,8 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
         extra_user_content_parts=None,
         tool_choice="auto",
         request_max_retries=None,
+        retry_rate_limits=None,
+        oauth_web_search=None,
         **kwargs,
     ) -> LLMResponse:
         """Run an OAuth chat request and account for direct provider usage.
@@ -1161,6 +1265,8 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
             extra_user_content_parts: Additional user message content parts.
             tool_choice: Tool selection policy.
             request_max_retries: Maximum attempts for retryable backend requests.
+            retry_rate_limits: Whether HTTP 429 responses may be retried.
+            oauth_web_search: Request-level managed web search mode.
             **kwargs: Additional provider request options.
 
         Returns:
@@ -1183,6 +1289,8 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
             extra_user_content_parts=extra_user_content_parts,
             tool_choice=tool_choice,
             request_max_retries=request_max_retries,
+            retry_rate_limits=retry_rate_limits,
+            oauth_web_search=oauth_web_search,
             **kwargs,
         )
 
@@ -1192,11 +1300,20 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
         tools,
         *,
         request_max_retries: int | None = None,
+        retry_rate_limits: bool | None = None,
+        oauth_web_search: str | None = None,
     ) -> LLMResponse:
-        params = self._build_responses_params(payloads, tools)
+        if retry_rate_limits is None:
+            retry_rate_limits = payloads.get("_oauth_retry_rate_limits")
+        params = self._build_responses_params(
+            payloads,
+            tools,
+            oauth_web_search=oauth_web_search,
+        )
         response = await retry_provider_request(
             "OpenAI OAuth",
             lambda: self._request_backend(params),
+            retry_rate_limits=retry_rate_limits,
             max_attempts=request_max_retries,
         )
         try:
@@ -1217,9 +1334,15 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
         tools,
         *,
         request_max_retries: int | None = None,
+        retry_rate_limits: bool | None = None,
+        oauth_web_search: str | None = None,
     ) -> AsyncGenerator[LLMResponse, None]:
-        del request_max_retries
-        params = self._build_responses_params(payloads, tools)
+        del request_max_retries, retry_rate_limits
+        params = self._build_responses_params(
+            payloads,
+            tools,
+            oauth_web_search=oauth_web_search,
+        )
         output_text_parts: list[str] = []
         reasoning_parts: list[str] = []
         output_items: dict[str, dict[str, Any]] = {}
@@ -1297,7 +1420,14 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
             "response.failed",
             "response.incomplete",
         }:
-            error = RuntimeError(f"Codex backend stream ended with {event_type}")
+            status_code = self._extract_stream_error_status_code(event)
+            if status_code is None:
+                error = RuntimeError(f"Codex backend stream ended with {event_type}")
+            else:
+                error = ProviderRequestError(
+                    f"Codex backend stream ended with {event_type}",
+                    status_code=status_code,
+                )
             response = event.get("response")
             if isinstance(response, dict):
                 usage = self._extract_response_usage(response.get("usage"))
@@ -1370,6 +1500,32 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
             response = event.get("response")
             return None, dict(response) if isinstance(response, dict) else {}
         return None, None
+
+    @staticmethod
+    def _extract_stream_error_status_code(event: dict[str, Any]) -> int | None:
+        candidates = [event]
+        for key in ("error", "response"):
+            value = event.get(key)
+            if isinstance(value, dict):
+                candidates.append(value)
+                nested_error = value.get("error")
+                if isinstance(nested_error, dict):
+                    candidates.append(nested_error)
+        for candidate in candidates:
+            for key in ("status_code", "status"):
+                value = candidate.get(key)
+                if isinstance(value, int):
+                    return value
+            code = str(candidate.get("code") or "").strip().lower()
+            if code in {
+                "rate_limit_exceeded",
+                "rate_limit_error",
+                "insufficient_quota",
+                "credit_balance_exhausted",
+                "429",
+            }:
+                return 429
+        return None
 
     async def generate_image(
         self,
@@ -1557,6 +1713,8 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
         model=None,
         tool_choice="auto",
         request_max_retries=None,
+        retry_rate_limits=None,
+        oauth_web_search=None,
         **kwargs,
     ) -> AsyncGenerator[LLMResponse, None]:
         extra_user_content_parts = kwargs.pop("extra_user_content_parts", None)
@@ -1577,7 +1735,11 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
         final_response: LLMResponse | None = None
         async with aclosing(
             self._query_stream(
-                payloads, func_tool, request_max_retries=request_max_retries
+                payloads,
+                func_tool,
+                request_max_retries=request_max_retries,
+                retry_rate_limits=retry_rate_limits,
+                oauth_web_search=oauth_web_search,
             )
         ) as response_stream:
             async for response in response_stream:
