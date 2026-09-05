@@ -1,6 +1,7 @@
 <script setup>
 import MarketPluginCard from "@/components/extension/MarketPluginCard.vue";
 import PluginSortControl from "@/components/extension/PluginSortControl.vue";
+import PluginPlatformChip from "@/components/shared/PluginPlatformChip.vue";
 import defaultPluginIcon from "/favicon.svg";
 import { computed } from "vue";
 import { normalizeTextInput } from "@/utils/inputValue";
@@ -72,6 +73,10 @@ const {
   upload_file,
   uploadTab,
   showPluginFullName,
+  marketIsListView,
+  marketPluginHeaders,
+  marketItemsPerPage,
+  marketItemsPerPageOptions,
   marketSearch,
   debouncedMarketSearch,
   refreshingMarket,
@@ -174,6 +179,13 @@ const marketCategorySelectItems = computed(() =>
     value: item.value,
   })),
 );
+
+const formatMarketUpdatedAt = (value) => {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? String(value || "")
+    : new Intl.DateTimeFormat().format(date);
+};
 
 // Navigate with the unique market plugin key instead of the metadata name —
 // two market entries can share the same `name`.
@@ -337,10 +349,202 @@ const openMarketPluginDetail = (plugin) => {
             :show-order="sortBy !== 'default'"
             @update:order="sortOrder = $event"
           />
+
+          <v-btn-toggle
+            v-model="marketIsListView"
+            mandatory
+            density="compact"
+            color="primary"
+          >
+            <v-btn
+              :value="false"
+              icon="mdi-view-grid"
+              :title="tm('views.card')"
+            ></v-btn>
+            <v-btn
+              :value="true"
+              icon="mdi-view-list"
+              :title="tm('views.list')"
+            ></v-btn>
+          </v-btn-toggle>
         </div>
       </div>
 
-      <v-row style="min-height: 26rem" dense>
+      <div v-if="marketIsListView" style="min-height: 26rem">
+        <v-card class="rounded-lg overflow-hidden elevation-0">
+          <v-data-table
+            class="plugin-list-table"
+            :headers="marketPluginHeaders"
+            :items="paginatedPlugins"
+            :items-per-page="-1"
+            :item-value="getMarketPluginKey"
+            hover
+            hide-default-footer
+          >
+            <template v-slot:item.name="{ item }">
+              <div
+                class="d-flex align-center py-2 market-list-name"
+                @click="openMarketPluginDetail(item)"
+              >
+                <div class="mr-3" style="flex-shrink: 0">
+                  <img
+                    :src="item.logo || defaultPluginIcon"
+                    :alt="item.name"
+                    style="
+                      height: 40px;
+                      width: 40px;
+                      border-radius: 8px;
+                      object-fit: cover;
+                    "
+                  />
+                </div>
+                <div style="min-width: 0">
+                  <div class="d-flex align-center flex-wrap" style="gap: 6px">
+                    <div class="text-h5" style="font-family: inherit">
+                      {{
+                        item.display_name && item.display_name.length
+                          ? item.display_name
+                          : showPluginFullName
+                          ? item.name
+                          : item.trimmedName
+                      }}
+                    </div>
+                    <v-chip
+                      v-if="item.pinned"
+                      color="warning"
+                      size="x-small"
+                      label
+                    >
+                      {{ tm("market.recommended") }}
+                    </v-chip>
+                    <v-chip
+                      v-if="item.installed"
+                      color="success"
+                      size="x-small"
+                      label
+                    >
+                      {{ tm("status.installed") }}
+                    </v-chip>
+                  </div>
+                  <div
+                    v-if="item.display_name && item.display_name.length"
+                    class="text-caption text-medium-emphasis mt-1"
+                  >
+                    {{ item.name }}
+                  </div>
+                </div>
+              </div>
+            </template>
+
+            <template v-slot:item.desc="{ item }">
+              <div class="py-2">
+                <div
+                  class="text-body-2 text-medium-emphasis"
+                  style="
+                    display: -webkit-box;
+                    -webkit-line-clamp: 2;
+                    line-clamp: 2;
+                    -webkit-box-orient: vertical;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                  "
+                >
+                  {{ item.desc }}
+                </div>
+                <div
+                  class="d-flex align-center flex-wrap mt-2"
+                  style="gap: 6px"
+                >
+                  <PluginPlatformChip
+                    v-if="item.support_platforms?.length"
+                    :platforms="item.support_platforms"
+                    size="x-small"
+                    :chip-style="{ height: '20px' }"
+                  />
+                  <v-chip
+                    v-if="item.astrbot_version"
+                    size="x-small"
+                    color="secondary"
+                    variant="outlined"
+                    style="height: 20px"
+                  >
+                    {{ tm("card.status.astrbotVersion") }}:
+                    {{ item.astrbot_version }}
+                  </v-chip>
+                  <v-chip
+                    v-if="item.stars !== undefined"
+                    size="x-small"
+                    color="warning"
+                    variant="outlined"
+                    style="height: 20px"
+                  >
+                    {{ tm("table.headers.stars") }}: {{ item.stars }}
+                  </v-chip>
+                  <v-chip
+                    v-if="item.updated_at"
+                    size="x-small"
+                    variant="outlined"
+                    style="height: 20px"
+                  >
+                    {{ tm("table.headers.lastUpdate") }}:
+                    {{ formatMarketUpdatedAt(item.updated_at) }}
+                  </v-chip>
+                </div>
+              </div>
+            </template>
+
+            <template v-slot:item.version="{ item }">
+              <div class="text-body-2">{{ item.version }}</div>
+            </template>
+
+            <template v-slot:item.author="{ item }">
+              <div class="text-body-2">{{ item.author }}</div>
+            </template>
+
+            <template v-slot:item.actions="{ item }">
+              <div class="market-list-actions py-1">
+                <v-btn
+                  v-if="item.repo"
+                  size="small"
+                  variant="tonal"
+                  color="secondary"
+                  prepend-icon="mdi-github"
+                  :href="item.repo"
+                  target="_blank"
+                >
+                  {{ tm("buttons.viewRepo") }}
+                </v-btn>
+                <v-btn
+                  v-if="!item.installed"
+                  size="small"
+                  color="primary"
+                  variant="flat"
+                  @click="handleInstallPlugin(item)"
+                >
+                  {{ tm("buttons.install") }}
+                </v-btn>
+                <v-chip v-else color="success" size="x-small" label>
+                  ✓ {{ tm("status.installed") }}
+                </v-chip>
+              </div>
+            </template>
+
+            <template v-slot:no-data>
+              <div class="text-center pa-8">
+                <v-icon size="64" color="info" class="mb-4"
+                  >mdi-puzzle-outline</v-icon
+                >
+                <div class="text-h5 mb-2">{{ tm("empty.noPlugins") }}</div>
+                <div class="text-body-1 mb-4">
+                  {{ tm("empty.noPluginsDesc") }}
+                </div>
+              </div>
+            </template>
+          </v-data-table>
+        </v-card>
+      </div>
+
+      <v-row v-else style="min-height: 26rem" dense>
         <v-col
           v-for="plugin in paginatedPlugins"
           :key="getMarketPluginKey(plugin)"
@@ -359,13 +563,30 @@ const openMarketPluginDetail = (plugin) => {
         </v-col>
       </v-row>
 
-      <div class="d-flex justify-center mt-4" v-if="totalPages > 1">
-        <v-pagination
-          v-model="currentPage"
-          :length="totalPages"
-          :total-visible="7"
-          size="small"
-        ></v-pagination>
+      <div v-if="sortedPlugins.length > 0" class="market-pagination-footer">
+        <div class="market-pagination-footer__spacer"></div>
+        <div class="market-pagination-footer__pagination">
+          <v-pagination
+            v-if="totalPages > 1"
+            v-model="currentPage"
+            :length="totalPages"
+            :total-visible="7"
+            size="small"
+          ></v-pagination>
+        </div>
+        <div class="market-pagination-footer__page-size">
+          <span class="text-caption text-medium-emphasis">
+            {{ tm("market.itemsPerPage") }}
+          </span>
+          <v-select
+            v-model="marketItemsPerPage"
+            :items="marketItemsPerPageOptions"
+            density="compact"
+            variant="outlined"
+            hide-details
+            class="market-pagination-footer__select"
+          ></v-select>
+        </div>
       </div>
 
       <v-expand-transition>
@@ -473,6 +694,56 @@ const openMarketPluginDetail = (plugin) => {
 .market-filter-control :deep(.v-select__selection-text),
 .market-filter-control :deep(.v-field__prepend-inner) {
   font-size: 0.875rem;
+}
+.market-pagination-footer {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.market-pagination-footer__pagination {
+  display: flex;
+  justify-content: center;
+}
+
+.market-list-name {
+  cursor: pointer;
+}
+
+.market-list-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+}
+
+.market-pagination-footer__page-size {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+}
+
+.market-pagination-footer__select {
+  width: 110px;
+}
+
+@media (max-width: 960px) {
+  .market-pagination-footer {
+    grid-template-columns: 1fr;
+  }
+
+  .market-pagination-footer__spacer {
+    display: none;
+  }
+
+  .market-pagination-footer__pagination,
+  .market-pagination-footer__page-size {
+    justify-content: center;
+  }
 }
 
 @media (max-width: 700px) {
