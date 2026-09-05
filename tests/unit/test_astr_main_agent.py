@@ -1528,6 +1528,10 @@ class TestBuildMainAgent:
         assert result is not None
         mock_runner.reset.assert_awaited_once()
         assert mock_runner.reset.await_args.kwargs["enforce_max_turns"] == 7
+        assert (
+            mock_runner.reset.await_args.kwargs["provider_stats_managed_by_agent"]
+            is True
+        )
 
     @pytest.mark.asyncio
     async def test_build_main_agent_no_provider(self, mock_event, mock_context):

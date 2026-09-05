@@ -11,6 +11,7 @@ import pytest
 # 将项目根目录添加到 sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+import astrbot.core.provider.provider as provider_module
 from astrbot.core.agent.agent import Agent
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.hooks import BaseAgentRunHooks
@@ -22,6 +23,7 @@ from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest, TokenUsage
 from astrbot.core.provider.provider import Provider
+from astrbot.core.provider.stats import record_agent_runner_stats
 
 
 class MockProvider(Provider):
@@ -181,6 +183,28 @@ class MockFailingProvider(MockProvider):
     async def text_chat(self, **kwargs) -> LLMResponse:
         self.call_count += 1
         raise RuntimeError("primary provider failed")
+
+
+class MockUsageFailingProvider(MockProvider):
+    async def text_chat(self, **kwargs) -> LLMResponse:
+        self.call_count += 1
+        error = RuntimeError("primary response parsing failed")
+        error._astrbot_token_usage = TokenUsage(  # type: ignore[attr-defined]
+            input_other=8,
+            input_cached=4,
+            output=6,
+        )
+        raise error
+
+
+class MockUsageErrProvider(MockProvider):
+    async def text_chat(self, **kwargs) -> LLMResponse:
+        self.call_count += 1
+        return LLMResponse(
+            role="err",
+            completion_text="provider returned error",
+            usage=TokenUsage(input_other=3, input_cached=2, output=1),
+        )
 
 
 class MockErrProvider(MockProvider):
@@ -504,6 +528,40 @@ def provider_request(tool_set):
 def runner():
     """创建ToolLoopAgentRunner实例"""
     return ToolLoopAgentRunner()
+
+
+@pytest.mark.asyncio
+async def test_runner_marks_provider_stats_as_agent_managed_during_provider_call(
+    runner, provider_request, mock_tool_executor, mock_hooks
+):
+    class ProviderStatsProbe(MockProvider):
+        def __init__(self):
+            super().__init__()
+            self.observed_values: list[bool] = []
+
+        async def text_chat(self, **kwargs) -> LLMResponse:
+            del kwargs
+            self.observed_values.append(
+                provider_module.provider_stats_managed_by_agent.get()
+            )
+            return LLMResponse(role="assistant", completion_text="final")
+
+    provider = ProviderStatsProbe()
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+        provider_stats_managed_by_agent=True,
+    )
+
+    responses = [response async for response in runner._iter_llm_responses()]
+
+    assert len(responses) == 1
+    assert provider.observed_values == [True]
+    assert provider_module.provider_stats_managed_by_agent.get() is False
 
 
 def _make_large_tool_result_text() -> str:
@@ -1277,6 +1335,212 @@ async def test_fallback_provider_used_when_primary_raises(
     assert final_resp.completion_text == "这是我的最终回答"
     assert primary_provider.call_count == 1
     assert fallback_provider.call_count == 1
+    assert len(runner.provider_stat_segments) == 1
+    segment = runner.provider_stat_segments[0]
+    assert segment.provider is primary_provider
+    assert segment.usage == TokenUsage()
+
+
+@pytest.mark.asyncio
+async def test_fallback_tracks_failed_primary_usage_by_provider(
+    runner,
+    provider_request,
+    mock_tool_executor,
+    mock_hooks,
+):
+    primary_provider = MockUsageFailingProvider()
+    primary_provider.provider_config["id"] = "primary"
+    fallback_provider = MockProvider()
+    fallback_provider.provider_config["id"] = "fallback"
+    fallback_provider.should_call_tools = False
+
+    await runner.reset(
+        provider=primary_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+        fallback_providers=[fallback_provider],
+    )
+
+    async for _ in runner.step_until_done(5):
+        pass
+
+    assert runner.stats.token_usage == TokenUsage(
+        input_other=18,
+        input_cached=4,
+        output=11,
+    )
+    assert len(runner.provider_stat_segments) == 1
+    segment = runner.provider_stat_segments[0]
+    assert segment.provider is primary_provider
+    assert segment.usage == TokenUsage(input_other=8, input_cached=4, output=6)
+
+
+@pytest.mark.asyncio
+async def test_fallback_attributes_prior_tool_round_usage_to_primary_provider(
+    mock_tool_executor,
+    mock_hooks,
+):
+    class ToolThenFailureProvider(MockProvider):
+        async def text_chat(self, **kwargs) -> LLMResponse:
+            self.call_count += 1
+            if self.call_count == 1:
+                return LLMResponse(
+                    role="assistant",
+                    tools_call_name=["test_tool"],
+                    tools_call_args=[{"query": "test"}],
+                    tools_call_ids=["call_primary"],
+                    usage=TokenUsage(input_other=10),
+                )
+            error = RuntimeError("primary failed after tool round")
+            error._astrbot_token_usage = TokenUsage(input_other=3)  # type: ignore[attr-defined]
+            raise error
+
+    class FinalFallbackProvider(MockProvider):
+        async def text_chat(self, **kwargs) -> LLMResponse:
+            self.call_count += 1
+            return LLMResponse(
+                role="assistant",
+                completion_text="fallback final",
+                usage=TokenUsage(input_other=20),
+            )
+
+    primary = ToolThenFailureProvider()
+    primary.provider_config.update({"id": "primary", "model": "primary-model"})
+    fallback = FinalFallbackProvider()
+    fallback.provider_config.update({"id": "fallback", "model": "fallback-model"})
+    tool = FunctionTool(
+        name="test_tool",
+        description="test",
+        parameters={"type": "object", "properties": {}},
+        handler=AsyncMock(),
+    )
+    request = ProviderRequest(
+        prompt="run tool",
+        func_tool=ToolSet(tools=[tool]),
+    )
+    runner = ToolLoopAgentRunner()
+    await runner.reset(
+        provider=primary,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        fallback_providers=[fallback],
+    )
+
+    async for _ in runner.step_until_done(3):
+        pass
+
+    assert runner.stats.token_usage == TokenUsage(input_other=33)
+    assert len(runner.provider_stat_segments) == 1
+    assert runner.provider_stat_segments[0].provider is primary
+    assert runner.provider_stat_segments[0].usage == TokenUsage(input_other=13)
+    assert runner.stats.token_usage - runner.provider_stat_segments[0].usage == (
+        TokenUsage(input_other=20)
+    )
+
+    db = SimpleNamespace(insert_provider_stat=AsyncMock())
+    await record_agent_runner_stats(
+        db,
+        umo="test:provider-attribution",
+        request=request,
+        agent_runner=runner,
+        final_response=runner.get_final_llm_resp(),
+    )
+    calls = db.insert_provider_stat.await_args_list
+    assert [call.kwargs["provider_id"] for call in calls] == ["primary", "fallback"]
+    assert [call.kwargs["stats"]["token_usage"]["input_other"] for call in calls] == [
+        13,
+        20,
+    ]
+
+
+@pytest.mark.asyncio
+async def test_fallback_attributes_skills_like_requery_and_repair_to_primary(
+    mock_tool_executor,
+    mock_hooks,
+):
+    class SkillsLikeThenFailureProvider(MockProvider):
+        async def text_chat(self, **kwargs) -> LLMResponse:
+            self.call_count += 1
+            if self.call_count == 1:
+                return LLMResponse(
+                    role="assistant",
+                    tools_call_name=["test_tool"],
+                    tools_call_args=[{"query": "select"}],
+                    tools_call_ids=["call_select"],
+                    usage=TokenUsage(input_other=10),
+                )
+            if self.call_count == 2:
+                return LLMResponse(
+                    role="assistant",
+                    completion_text="",
+                    usage=TokenUsage(input_other=5),
+                )
+            if self.call_count == 3:
+                return LLMResponse(
+                    role="assistant",
+                    tools_call_name=["test_tool"],
+                    tools_call_args=[{"query": "repair"}],
+                    tools_call_ids=["call_repair"],
+                    usage=TokenUsage(input_other=7),
+                )
+            error = RuntimeError("primary failed after schema requery")
+            error._astrbot_token_usage = TokenUsage(input_other=3)  # type: ignore[attr-defined]
+            raise error
+
+    class FinalFallbackProvider(MockProvider):
+        async def text_chat(self, **kwargs) -> LLMResponse:
+            self.call_count += 1
+            return LLMResponse(
+                role="assistant",
+                completion_text="fallback final",
+                usage=TokenUsage(input_other=20),
+            )
+
+    primary = SkillsLikeThenFailureProvider()
+    primary.provider_config.update({"id": "primary", "model": "primary-model"})
+    fallback = FinalFallbackProvider()
+    fallback.provider_config.update({"id": "fallback", "model": "fallback-model"})
+    tool = FunctionTool(
+        name="test_tool",
+        description="test",
+        parameters={
+            "type": "object",
+            "properties": {"query": {"type": "string"}},
+        },
+        handler=AsyncMock(),
+    )
+    request = ProviderRequest(
+        prompt="run tool",
+        func_tool=ToolSet(tools=[tool]),
+    )
+    runner = ToolLoopAgentRunner()
+    await runner.reset(
+        provider=primary,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        fallback_providers=[fallback],
+        tool_schema_mode="skills_like",
+    )
+
+    async for _ in runner.step_until_done(3):
+        pass
+
+    assert primary.call_count == 4
+    assert fallback.call_count == 1
+    assert runner.stats.token_usage == TokenUsage(input_other=45)
+    assert len(runner.provider_stat_segments) == 1
+    assert runner.provider_stat_segments[0].provider is primary
+    assert runner.provider_stat_segments[0].usage == TokenUsage(input_other=25)
+    assert runner.stats.token_usage - runner.provider_stat_segments[0].usage == (
+        TokenUsage(input_other=20)
+    )
 
 
 @pytest.mark.asyncio
@@ -1306,6 +1570,48 @@ async def test_fallback_provider_used_when_primary_returns_err(
     assert final_resp.completion_text == "这是我的最终回答"
     assert primary_provider.call_count == 1
     assert fallback_provider.call_count == 1
+    assert len(runner.provider_stat_segments) == 1
+    segment = runner.provider_stat_segments[0]
+    assert segment.provider is primary_provider
+    assert segment.usage == TokenUsage()
+
+
+@pytest.mark.asyncio
+async def test_fallback_consecutive_failures_do_not_duplicate_prior_usage(
+    runner,
+    provider_request,
+    mock_tool_executor,
+    mock_hooks,
+):
+    primary_provider = MockUsageErrProvider()
+    fallback_provider = MockUsageFailingProvider()
+
+    await runner.reset(
+        provider=primary_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+        fallback_providers=[fallback_provider],
+    )
+
+    async for _ in runner.step_until_done(5):
+        pass
+
+    final_resp = runner.get_final_llm_resp()
+    assert final_resp is not None
+    assert final_resp.role == "err"
+    assert "RuntimeError" in final_resp.completion_text
+    assert runner.stats.token_usage == TokenUsage(
+        input_other=11,
+        input_cached=6,
+        output=7,
+    )
+    assert len(runner.provider_stat_segments) == 1
+    segment = runner.provider_stat_segments[0]
+    assert segment.provider is primary_provider
+    assert segment.usage == TokenUsage(input_other=3, input_cached=2, output=1)
 
 
 @pytest.mark.asyncio
@@ -1658,10 +1964,14 @@ async def test_skills_like_requery_passes_extra_user_content_parts():
     from astrbot.core.agent.message import TextPart
 
     captured_kwargs = {}
+    stats_scope_values = []
 
     class SkillsLikeProvider(MockProvider):
         async def text_chat(self, **kwargs) -> LLMResponse:
             self.call_count += 1
+            stats_scope_values.append(
+                provider_module.provider_stats_managed_by_agent.get()
+            )
             if self.call_count == 1:
                 # 第一次调用：返回工具选择（light schema）
                 return LLMResponse(
@@ -1677,11 +1987,16 @@ async def test_skills_like_requery_passes_extra_user_content_parts():
                 captured_kwargs.update(kwargs)
                 return LLMResponse(
                     role="assistant",
+                    usage=TokenUsage(input_other=20, output=2),
+                )
+            if self.call_count == 3:
+                return LLMResponse(
+                    role="assistant",
                     completion_text="调用工具",
                     tools_call_name=["test_tool"],
                     tools_call_args=[{"query": "actual"}],
                     tools_call_ids=["call_2"],
-                    usage=TokenUsage(input_other=10, output=5),
+                    usage=TokenUsage(input_other=30, output=3),
                 )
             # 后续调用：正常回复
             return LLMResponse(
@@ -1719,6 +2034,7 @@ async def test_skills_like_requery_passes_extra_user_content_parts():
         tool_executor=cast(Any, MockToolExecutor()),
         agent_hooks=MockHooks(),
         tool_schema_mode="skills_like",
+        provider_stats_managed_by_agent=True,
     )
 
     async for _ in runner.step():
@@ -1731,6 +2047,8 @@ async def test_skills_like_requery_passes_extra_user_content_parts():
     parts = captured_kwargs["extra_user_content_parts"]
     assert len(parts) == 1
     assert parts[0].text == "<image_caption>一张猫的照片</image_caption>"
+    assert stats_scope_values == [True, True, True]
+    assert runner.stats.token_usage == TokenUsage(input_other=60, output=10)
 
 
 @pytest.mark.asyncio
