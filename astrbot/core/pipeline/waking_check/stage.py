@@ -1,7 +1,7 @@
 from collections.abc import AsyncGenerator, Callable
 
 from astrbot import logger
-from astrbot.core.message.components import At, AtAll, Reply
+from astrbot.core.message.components import At, AtAll, Face, Reply
 from astrbot.core.message.message_event_result import MessageChain, MessageEventResult
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.message_type import MessageType
@@ -121,6 +121,15 @@ class WakingCheckStage(Stage):
                     and str(messages[0].qq) != "all"
                 ):
                     # 如果是群聊，且第一个消息段是 At 消息，但不是 At 机器人或 At 全体成员，则不唤醒
+                    break
+                first_content_seg = next(
+                    (seg for seg in messages if not isinstance(seg, (At, Reply))),
+                    None,
+                )
+                if isinstance(first_content_seg, Face):
+                    # 部分 OneBot 实现会把手机端发送的 QQ 表情序列化为 face 段 + "/表情名"
+                    # 文本段，message_str 因此以表情名开头。若前导 At/引用之后的第一个消息段
+                    # 是表情，说明该前缀来自表情附带文本而非用户输入的指令，不唤醒 (#9341)
                     break
                 is_wake = True
                 event.is_at_or_wake_command = True
