@@ -414,6 +414,10 @@ CONFIG_METADATA_2 = {
                         "client_id": "",
                         "client_secret": "",
                         "card_template_id": "",
+                        "card_content_key": "content",
+                        "card_update_interval": 0.35,
+                        "send_plain_text_as_card": False,
+                        "animate_proactive_card": True,
                     },
                     "微信公众平台": {
                         "id": "weixin_official_account",
@@ -863,6 +867,26 @@ CONFIG_METADATA_2 = {
                         "description": "卡片模板 ID",
                         "type": "string",
                         "hint": "可选。钉钉互动卡片模板 ID。启用后将使用互动卡片进行流式回复。",
+                    },
+                    "card_content_key": {
+                        "description": "卡片内容变量名",
+                        "type": "string",
+                        "hint": "可选。钉钉互动卡片模板中用于接收流式文本内容的变量名，默认 content。",
+                    },
+                    "card_update_interval": {
+                        "description": "卡片更新间隔",
+                        "type": "float",
+                        "hint": "可选。钉钉互动卡片流式更新的最小间隔，单位秒，默认 0.35。",
+                    },
+                    "send_plain_text_as_card": {
+                        "description": "普通文本使用互动卡片",
+                        "type": "bool",
+                        "hint": "启用后，非流式纯文本回复也会优先使用钉钉互动卡片，适用于未来任务、定时任务、插件主动发送等场景。",
+                    },
+                    "animate_proactive_card": {
+                        "description": "主动卡片模拟流式输出",
+                        "type": "bool",
+                        "hint": "启用后，未来任务、定时任务及插件主动发送的完整文本会分段更新到同一张互动卡片，模拟打字机效果。",
                     },
                     "telegram_command_register": {
                         "description": "命令注册",
