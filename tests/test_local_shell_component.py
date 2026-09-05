@@ -306,10 +306,30 @@ def test_local_shell_component_prefers_utf8_before_windows_locale(
     assert result["exit_code"] == 0
 
 
-def test_local_shell_component_falls_back_to_gbk_on_windows(monkeypatch):
+def test_local_shell_component_uses_windows_locale_for_gbk(monkeypatch):
     def fake_run(*args, **kwargs):
         _ = args, kwargs
         return _FakePopen(stdout="微博热搜".encode("gbk"))
+
+    monkeypatch.setattr(subprocess, "Popen", fake_run)
+    monkeypatch.setattr(local_booter.os, "name", "nt", raising=False)
+    monkeypatch.setattr(
+        local_booter.locale,
+        "getpreferredencoding",
+        lambda _do_setlocale=False: "cp936",
+    )
+
+    result = asyncio.run(LocalShellComponent().exec("dummy"))
+
+    assert result["stdout"] == "微博热搜"
+    assert result["stderr"] == ""
+    assert result["exit_code"] == 0
+
+
+def test_local_shell_component_preserves_western_windows_output(monkeypatch):
+    def fake_run(*args, **kwargs):
+        _ = args, kwargs
+        return _FakePopen(stdout="caféA".encode("cp1252"))
 
     monkeypatch.setattr(subprocess, "Popen", fake_run)
     monkeypatch.setattr(local_booter.os, "name", "nt", raising=False)
@@ -321,7 +341,7 @@ def test_local_shell_component_falls_back_to_gbk_on_windows(monkeypatch):
 
     result = asyncio.run(LocalShellComponent().exec("dummy"))
 
-    assert result["stdout"] == "微博热搜"
+    assert result["stdout"] == "caféA"
     assert result["stderr"] == ""
     assert result["exit_code"] == 0
 

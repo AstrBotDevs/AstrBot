@@ -84,10 +84,10 @@ def _decode_bytes_with_fallback(
             return decoded
 
     if os.name == "nt":
-        # Try the known Chinese code pages before "mbcs": on non-Chinese
-        # Windows "mbcs" (e.g. cp1252) decodes GBK bytes into silent mojibake
-        # instead of raising, which would hide the correct fallback.
-        for encoding in ("cp936", "gbk", "gb18030", "mbcs", preferred):
+        # Native commands use the Windows system code page. Python children
+        # are forced to UTF-8 by the callers above, so prefer the system code
+        # page here instead of guessing GBK for every non-UTF-8 byte sequence.
+        for encoding in (preferred, "mbcs", "cp936", "gbk", "gb18030"):
             if decoded := _try_decode(encoding):
                 return decoded
     elif decoded := _try_decode(preferred):
