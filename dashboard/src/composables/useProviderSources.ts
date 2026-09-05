@@ -24,10 +24,6 @@ interface ProviderIconSource {
 export function resolveDefaultTab(value?: string) {
   const normalized = (value || '').toLowerCase()
 
-  if (normalized.startsWith('select_agent_runner_provider') || normalized === 'agent_runner') {
-    return 'agent_runner'
-  }
-
   if (normalized === 'select_provider_stt' || normalized === 'speech_to_text' || normalized.includes('stt')) {
     return 'speech_to_text'
   }
@@ -83,7 +79,6 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
 
   const providerTypes = computed(() => [
     { value: 'chat_completion', label: tm('providers.tabs.chatCompletion'), icon: 'mdi-message-text' },
-    { value: 'agent_runner', label: tm('providers.tabs.agentRunner'), icon: 'mdi-robot' },
     { value: 'speech_to_text', label: tm('providers.tabs.speechToText'), icon: 'mdi-microphone-message' },
     { value: 'text_to_speech', label: tm('providers.tabs.textToSpeech'), icon: 'mdi-volume-high' },
     { value: 'embedding', label: tm('providers.tabs.embedding'), icon: 'mdi-code-json' },
@@ -361,8 +356,6 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       anthropic_chat_completion: 'chat_completion',
       googlegenai_chat_completion: 'chat_completion',
       zhipu_chat_completion: 'chat_completion',
-      dify: 'agent_runner',
-      coze: 'agent_runner',
       dashscope: 'chat_completion',
       openai_whisper_api: 'speech_to_text',
       mimo_stt_api: 'speech_to_text',

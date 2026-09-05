@@ -14,6 +14,7 @@ from astrbot.api.event import MessageChain
 from astrbot.api.message_components import *
 from astrbot.api.platform import (
     AstrBotMessage,
+    Group,
     MessageMember,
     MessageType,
     Platform,
@@ -133,13 +134,17 @@ class SlackAdapter(Platform):
         channel_id = event.get("channel", "")
         try:
             channel_info = await self.web_client.conversations_info(channel=channel_id)
-            is_im = cast(dict, channel_info["channel"])["is_im"]
+            channel_data = cast(dict, channel_info["channel"])
+            is_im = channel_data["is_im"]
 
             if is_im:
                 abm.type = MessageType.FRIEND_MESSAGE
             else:
                 abm.type = MessageType.GROUP_MESSAGE
-                abm.group_id = channel_id
+                abm.group = Group(
+                    group_id=channel_id,
+                    group_name=channel_data.get("name") or None,
+                )
         except Exception:
             # 默认作为群组消息处理
             abm.type = MessageType.GROUP_MESSAGE
