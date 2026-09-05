@@ -49,6 +49,31 @@ async def test_record_llm_response_stats_only_passes_public_token_fields():
 
 
 @pytest.mark.asyncio
+async def test_record_llm_response_stats_uses_explicit_failure_usage():
+    usage = TokenUsage(input_other=5, input_cached=2, output=3)
+    usage.internal_note = "must not reach the database"
+    db = SimpleNamespace(insert_provider_stat=AsyncMock())
+    provider = SimpleNamespace(
+        provider_config={"id": "provider-1"},
+        meta=lambda: SimpleNamespace(id="provider-1"),
+        get_model=lambda: "test-model",
+    )
+
+    await record_llm_response_stats(
+        db,
+        umo="provider:provider-1:failed",
+        provider=provider,
+        response=None,
+        usage=usage,
+        start_time=100.0,
+        end_time=101.0,
+    )
+
+    stats = db.insert_provider_stat.await_args.kwargs["stats"]
+    assert_public_token_usage(stats["token_usage"])
+
+
+@pytest.mark.asyncio
 async def test_record_agent_runner_stats_only_passes_public_segment_token_fields():
     usage = TokenUsage(input_other=5, input_cached=2, output=3)
     usage.internal_note = "must not reach the database"

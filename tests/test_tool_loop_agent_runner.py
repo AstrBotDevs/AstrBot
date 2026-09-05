@@ -11,6 +11,7 @@ import pytest
 # 将项目根目录添加到 sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+import astrbot.core.provider.provider as provider_module
 from astrbot.core.agent.agent import Agent
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.hooks import BaseAgentRunHooks
@@ -526,6 +527,40 @@ def provider_request(tool_set):
 def runner():
     """创建ToolLoopAgentRunner实例"""
     return ToolLoopAgentRunner()
+
+
+@pytest.mark.asyncio
+async def test_runner_marks_provider_stats_as_agent_managed_during_provider_call(
+    runner, provider_request, mock_tool_executor, mock_hooks
+):
+    class ProviderStatsProbe(MockProvider):
+        def __init__(self):
+            super().__init__()
+            self.observed_values: list[bool] = []
+
+        async def text_chat(self, **kwargs) -> LLMResponse:
+            del kwargs
+            self.observed_values.append(
+                provider_module.provider_stats_managed_by_agent.get()
+            )
+            return LLMResponse(role="assistant", completion_text="final")
+
+    provider = ProviderStatsProbe()
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+        provider_stats_managed_by_agent=True,
+    )
+
+    responses = [response async for response in runner._iter_llm_responses()]
+
+    assert len(responses) == 1
+    assert provider.observed_values == [True]
+    assert provider_module.provider_stats_managed_by_agent.get() is False
 
 
 def _make_large_tool_result_text() -> str:
@@ -1763,10 +1798,14 @@ async def test_skills_like_requery_passes_extra_user_content_parts():
     from astrbot.core.agent.message import TextPart
 
     captured_kwargs = {}
+    stats_scope_values = []
 
     class SkillsLikeProvider(MockProvider):
         async def text_chat(self, **kwargs) -> LLMResponse:
             self.call_count += 1
+            stats_scope_values.append(
+                provider_module.provider_stats_managed_by_agent.get()
+            )
             if self.call_count == 1:
                 # 第一次调用：返回工具选择（light schema）
                 return LLMResponse(
@@ -1782,11 +1821,16 @@ async def test_skills_like_requery_passes_extra_user_content_parts():
                 captured_kwargs.update(kwargs)
                 return LLMResponse(
                     role="assistant",
+                    usage=TokenUsage(input_other=20, output=2),
+                )
+            if self.call_count == 3:
+                return LLMResponse(
+                    role="assistant",
                     completion_text="调用工具",
                     tools_call_name=["test_tool"],
                     tools_call_args=[{"query": "actual"}],
                     tools_call_ids=["call_2"],
-                    usage=TokenUsage(input_other=10, output=5),
+                    usage=TokenUsage(input_other=30, output=3),
                 )
             # 后续调用：正常回复
             return LLMResponse(
@@ -1824,6 +1868,7 @@ async def test_skills_like_requery_passes_extra_user_content_parts():
         tool_executor=cast(Any, MockToolExecutor()),
         agent_hooks=MockHooks(),
         tool_schema_mode="skills_like",
+        provider_stats_managed_by_agent=True,
     )
 
     async for _ in runner.step():
@@ -1836,6 +1881,8 @@ async def test_skills_like_requery_passes_extra_user_content_parts():
     parts = captured_kwargs["extra_user_content_parts"]
     assert len(parts) == 1
     assert parts[0].text == "<image_caption>一张猫的照片</image_caption>"
+    assert stats_scope_values == [True, True, True]
+    assert runner.stats.token_usage == TokenUsage(input_other=60, output=10)
 
 
 @pytest.mark.asyncio

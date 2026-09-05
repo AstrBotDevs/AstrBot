@@ -32,6 +32,7 @@ from astrbot.core.provider.provider import (
     RerankProvider,
     STTProvider,
     TTSProvider,
+    provider_stats_managed_by_agent,
 )
 from astrbot.core.provider.stats import (
     record_agent_runner_stats,
@@ -208,16 +209,24 @@ class Context:
             raise ProviderNotFoundError(f"Provider {chat_provider_id} not found")
         start_time = time.time()
         llm_resp = None
+        failed_usage = None
+        stats_token = provider_stats_managed_by_agent.set(True)
         try:
-            llm_resp = await prov.text_chat(
-                prompt=prompt,
-                image_urls=image_urls,
-                audio_urls=audio_urls,
-                func_tool=tools,
-                contexts=contexts,
-                system_prompt=system_prompt,
-                **kwargs,
-            )
+            try:
+                llm_resp = await prov.text_chat(
+                    prompt=prompt,
+                    image_urls=image_urls,
+                    audio_urls=audio_urls,
+                    func_tool=tools,
+                    contexts=contexts,
+                    system_prompt=system_prompt,
+                    **kwargs,
+                )
+            except Exception as exc:
+                failed_usage = getattr(exc, "_astrbot_token_usage", None)
+                raise
+            finally:
+                provider_stats_managed_by_agent.reset(stats_token)
         finally:
             session_id = kwargs.get("session_id") or "sdk"
             await record_llm_response_stats(
@@ -228,6 +237,7 @@ class Context:
                 start_time=start_time,
                 end_time=time.time(),
                 conversation_id=kwargs.get("conversation_id"),
+                usage=failed_usage,
                 agent_type="provider",
             )
         return llm_resp
@@ -319,6 +329,7 @@ class Context:
             for k, v in kwargs.items()
             if k not in ["stream", "agent_hooks", "agent_context"]
         }
+        other_kwargs["provider_stats_managed_by_agent"] = True
         if request.func_tool and request.func_tool.get_tool("astrbot_file_read_tool"):
             other_kwargs.setdefault(
                 "tool_result_overflow_dir", get_astrbot_system_tmp_path()

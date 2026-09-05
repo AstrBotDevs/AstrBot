@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock
 import pytest
 from sqlmodel import select
 
+import astrbot.core.provider.provider as provider_module
 from astrbot.core.agent.response import AgentStats
 from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.db.po import ProviderStat
@@ -180,7 +181,22 @@ async def test_llm_generate_persists_one_provider_stat(temp_db):
 @pytest.mark.asyncio
 async def test_llm_generate_persists_error_stat_when_provider_raises(temp_db):
     provider = StatsProvider()
-    provider.text_chat = AsyncMock(side_effect=RuntimeError("provider failed"))
+    observed_stats_ownership = []
+
+    async def raise_provider_error(**kwargs):
+        del kwargs
+        observed_stats_ownership.append(
+            provider_module.provider_stats_managed_by_agent.get()
+        )
+        exc = RuntimeError("provider failed")
+        exc._astrbot_token_usage = TokenUsage(  # type: ignore[attr-defined]
+            input_other=7,
+            input_cached=2,
+            output=1,
+        )
+        raise exc
+
+    provider.text_chat = raise_provider_error
     context = Context.__new__(Context)
     context._db = temp_db
     context.provider_manager = SimpleNamespace(
@@ -198,9 +214,11 @@ async def test_llm_generate_persists_error_stat_when_provider_raises(temp_db):
     assert len(records) == 1
     record = records[0]
     assert record.status == "error"
-    assert record.token_input_other == 0
-    assert record.token_input_cached == 0
-    assert record.token_output == 0
+    assert record.token_input_other == 7
+    assert record.token_input_cached == 2
+    assert record.token_output == 1
+    assert observed_stats_ownership == [True]
+    assert provider_module.provider_stats_managed_by_agent.get() is False
 
 
 @pytest.mark.asyncio

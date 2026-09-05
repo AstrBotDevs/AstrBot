@@ -2,6 +2,7 @@ import abc
 import asyncio
 import os
 from collections.abc import AsyncGenerator
+from contextvars import ContextVar
 from typing import Literal, TypeAlias, Union
 
 from astrbot.core.agent.message import ContentPart, Message, is_checkpoint_message
@@ -14,6 +15,11 @@ from astrbot.core.provider.entities import (
 )
 from astrbot.core.provider.register import provider_cls_map
 from astrbot.core.utils.astrbot_path import get_astrbot_path
+
+provider_stats_managed_by_agent: ContextVar[bool] = ContextVar(
+    "provider_stats_managed_by_agent",
+    default=False,
+)
 
 Providers: TypeAlias = Union[
     "Provider",

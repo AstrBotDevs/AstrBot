@@ -135,10 +135,15 @@ async def record_llm_response_stats(
     end_time: float,
     conversation_id: str | None = None,
     agent_type: str = "internal",
+    usage: TokenUsage | None = None,
 ) -> None:
     """Persist stats for one direct provider request."""
     try:
-        usage = response.usage if response and response.usage else TokenUsage()
+        effective_usage = usage
+        if effective_usage is None and response is not None:
+            effective_usage = response.usage
+        if effective_usage is None:
+            effective_usage = TokenUsage()
         await db.insert_provider_stat(
             umo=umo,
             conversation_id=conversation_id,
@@ -146,7 +151,7 @@ async def record_llm_response_stats(
             provider_model=provider.get_model(),
             status=_response_status(response),
             stats={
-                "token_usage": _token_usage_dict(usage),
+                "token_usage": _token_usage_dict(effective_usage),
                 "start_time": start_time,
                 "end_time": end_time,
                 "time_to_first_token": 0.0,
