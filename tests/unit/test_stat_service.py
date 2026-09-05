@@ -1,6 +1,5 @@
 import time
 from datetime import datetime, timedelta
-from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -102,9 +101,53 @@ async def test_provider_token_stats_include_detached_provider_calls(temp_db):
             agent_type=agent_type,
         )
 
-    service = StatService(temp_db, SimpleNamespace(), {})
+    service = _make_service(temp_db)
     stats = await service.get_provider_token_stats(1)
 
     assert stats["range_total_calls"] == 3
     assert stats["range_total_tokens"] == 15
     assert stats["range_success_rate"] == pytest.approx(2 / 3)
+
+
+@pytest.mark.asyncio
+async def test_provider_token_ranking_includes_umo_display_names(temp_db):
+    """UMO token rankings should prefer aliases and fall back to raw identifiers."""
+    aliased_umo = "qq:GroupMessage:group-1"
+    raw_umo = "webchat:FriendMessage:session-2"
+    await temp_db.insert_provider_stat(
+        umo=aliased_umo,
+        provider_id="provider-1",
+        stats={"token_usage": {"input_other": 3, "input_cached": 4, "output": 5}},
+    )
+    await temp_db.insert_provider_stat(
+        umo=raw_umo,
+        provider_id="provider-1",
+        stats={"token_usage": {"input_other": 1, "input_cached": 1, "output": 1}},
+    )
+    await temp_db.upsert_umo_alias(
+        umo=aliased_umo,
+        creator_sender_id="creator-1",
+        auto_name="研发群",
+        user_alias="产品讨论群",
+    )
+
+    service = _make_service(temp_db)
+    service.config = {
+        "platform": [{"id": "qq", "type": "qq_official"}],
+    }
+    result = await service.get_provider_token_stats(1)
+
+    assert result["range_by_umo"] == [
+        {
+            "umo": aliased_umo,
+            "display_name": "产品讨论群",
+            "platform_type": "qq_official",
+            "tokens": 12,
+        },
+        {
+            "umo": raw_umo,
+            "display_name": raw_umo,
+            "platform_type": "webchat",
+            "tokens": 3,
+        },
+    ]

@@ -7,6 +7,7 @@
   "buttons": {
     "update": "更新",
     "account": "账户",
+    "logout": "退出登录",
     "theme": {
       "title": "主题",
       "light": "浅色模式",

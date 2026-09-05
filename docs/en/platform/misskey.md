@@ -88,7 +88,7 @@ Enabled by default. When enabled, the bot will respond to private chat messages 
 
 ## History Records
 
-Conversation history for individual users in chat and posts will be recorded in the AstrBot WebUI console "Conversation History" with the ID `chat:UserID`, while traditional posts will be recorded with the ID `note:UserID`.
+Conversation history for individual users in chats and posts appears under `Data` -> `Conversations` in the AstrBot WebUI. Chat conversations use `chat:UserID` as the session ID, while traditional posts use `note:UserID`.
 
 ::: tip Where is the Misskey user's UserID?
 It can be found on the user's personal page in the `Raw` section. UserID is the unique key identifier for Misskey users within a single instance.
