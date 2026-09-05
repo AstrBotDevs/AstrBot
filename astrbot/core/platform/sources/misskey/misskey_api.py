@@ -706,24 +706,11 @@ class MisskeyAPI:
             import os
             import tempfile
 
-            # SSL 验证下载，失败则重试不验证 SSL
-            tmp_bytes = None
-            try:
-                tmp_bytes = await self._download_with_existing_session(
-                    url,
-                    ssl_verify=True,
-                ) or await self._download_with_temp_session(url, ssl_verify=True)
-            except Exception as ssl_error:
-                logger.debug(
-                    f"[Misskey API] SSL 验证下载失败: {ssl_error}，重试不验证 SSL",
-                )
-                try:
-                    tmp_bytes = await self._download_with_existing_session(
-                        url,
-                        ssl_verify=False,
-                    ) or await self._download_with_temp_session(url, ssl_verify=False)
-                except Exception:
-                    pass
+            # 下载文件时强制进行 TLS 校验，避免 MITM 攻击注入恶意内容。
+            tmp_bytes = await self._download_with_existing_session(
+                url,
+                ssl_verify=True,
+            ) or await self._download_with_temp_session(url, ssl_verify=True)
 
             if tmp_bytes:
                 with tempfile.NamedTemporaryFile(delete=False) as tmpf:
