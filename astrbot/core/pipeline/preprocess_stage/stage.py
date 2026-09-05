@@ -83,18 +83,26 @@ class PreProcessStage(Stage):
             for idx, component in enumerate(message_chain):
                 if isinstance(component, Record | Image) and component.url:
                     for mapping in mappings:
-                        # ":" is ambiguous for Windows absolute paths
-                        # ("C:\from:C:\to"); parse drive-lettered mappings by
-                        # regex and fall back to a plain colon split.
-                        drive_mapping = re.fullmatch(
-                            r"([A-Za-z]:.+):([A-Za-z]:.+)", mapping
+                        # ":" is ambiguous for Windows absolute paths. Parse
+                        # the separator after a drive-lettered source first,
+                        # then handle a drive-lettered target.
+                        drive_source_mapping = re.fullmatch(
+                            r"([A-Za-z]:[^:]+):(.+)", mapping
                         )
-                        if drive_mapping:
-                            from_, to_ = drive_mapping.groups()
+                        drive_target_mapping = re.fullmatch(
+                            r"(.+):([A-Za-z]:.+)", mapping
+                        )
+                        if drive_source_mapping:
+                            from_, to_ = drive_source_mapping.groups()
+                        elif drive_target_mapping:
+                            from_, to_ = drive_target_mapping.groups()
                         else:
-                            from_, to_ = mapping.split(":")
-                        from_ = from_.removesuffix("/")
-                        to_ = to_.removesuffix("/")
+                            from_, separator, to_ = mapping.partition(":")
+                            if not separator:
+                                logger.warning(f"Invalid path mapping: {mapping}")
+                                continue
+                        from_ = from_.removesuffix("/").removesuffix("\\")
+                        to_ = to_.removesuffix("/").removesuffix("\\")
 
                         url = (
                             file_uri_to_path(component.url)

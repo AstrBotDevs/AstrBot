@@ -124,3 +124,28 @@ async def test_preprocess_path_mapping_accepts_file_uri(tmp_path):
     image = event.get_messages()[0]
     assert isinstance(image, Image)
     assert image.file == image.path == image.url == str(target_image)
+
+
+@pytest.mark.asyncio
+async def test_preprocess_path_mapping_accepts_windows_source_to_posix_target(
+    tmp_path,
+):
+    from PIL import Image as PILImage
+
+    target_root = tmp_path / "target"
+    target_root.mkdir()
+    target_image = target_root / "photo.jpg"
+    PILImage.new("RGB", (2, 2), (255, 0, 0)).save(target_image)
+
+    source_prefix = r"C:\remote\media"
+    event = FakeEvent([Image(file="", url=f"{source_prefix}/photo.jpg")])
+    stage = PreProcessStage()
+    stage.config = {}
+    stage.platform_settings = {"path_mapping": [f"{source_prefix}:{target_root}"]}
+    stage.stt_settings = {"enable": False}
+
+    await stage.process(event)
+
+    image = event.get_messages()[0]
+    assert isinstance(image, Image)
+    assert image.file == image.path == image.url == str(target_image)
