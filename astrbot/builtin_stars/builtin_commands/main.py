@@ -105,6 +105,12 @@ class Main(star.Star):
         """授权管理员｡op <admin_id>"""
         await self.admin_c.op(event, admin_id)
 
+    @filter.command("reset")
+    @filter.permission_type(filter.PermissionType.SHARED_GROUP_ADMIN)
+    async def reset(self, message: AstrMessageEvent) -> None:
+        """Clear the context of the current conversation."""
+        await self.conversation_c.reset(message)
+
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("deop")
     async def deop(self, event: AstrMessageEvent, admin_id: str) -> None:
@@ -123,6 +129,12 @@ class Main(star.Star):
         """删除白名单｡dwl <sid>"""
         await self.admin_c.dwl(event, sid)
 
+    @filter.command("new")
+    @filter.permission_type(filter.PermissionType.SHARED_GROUP_ADMIN)
+    async def new_conv(self, message: AstrMessageEvent) -> None:
+        """Create a new conversation."""
+        await self.conversation_c.new_conv(message)
+
     @filter.command("stats")
     async def stats(self, message: AstrMessageEvent) -> None:
         """Show token usage statistics for the current conversation"""
@@ -138,11 +150,6 @@ class Main(star.Star):
     ) -> None:
         """查看或者切换 LLM Provider"""
         await self.provider_c.provider(event, idx, idx2)
-
-    @filter.command("reset")
-    async def reset(self, message: AstrMessageEvent) -> None:
-        """重置 LLM 会话"""
-        await self.conversation_c.reset(message)
 
     @filter.command("stop")
     async def stop(self, message: AstrMessageEvent) -> None:
@@ -168,11 +175,6 @@ class Main(star.Star):
     async def convs(self, message: AstrMessageEvent, page: int = 1) -> None:
         """查看对话列表"""
         await self.conversation_c.convs(message, page)
-
-    @filter.command("new")
-    async def new_conv(self, message: AstrMessageEvent) -> None:
-        """创建新对话"""
-        await self.conversation_c.new_conv(message)
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("dashboard_update")

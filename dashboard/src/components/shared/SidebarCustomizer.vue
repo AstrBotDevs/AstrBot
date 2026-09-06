@@ -12,7 +12,9 @@
 
     <v-dialog v-model="dialog" max-width="700px">
       <v-card>
-        <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex justify-space-between align-center">
+        <v-card-title
+          class="text-h3 pa-4 pb-0 pl-6 d-flex justify-space-between align-center"
+        >
           <span>{{ t("features.settings.sidebar.customize.title") }}</span>
           <v-btn icon="mdi-close" variant="text" @click="dialog = false" />
         </v-card-title>
@@ -42,8 +44,19 @@
                   @dragover.prevent
                   @drop.stop="handleDrop($event, 'main', index)"
                 >
-                  <template #prepend>
-                    <v-icon :icon="item.icon" size="small" class="mr-2" />
+                  <template v-slot:prepend>
+                    <v-icon
+                      v-if="typeof item.icon === 'string'"
+                      :icon="item.icon"
+                      size="small"
+                      class="mr-2"
+                    />
+                    <component
+                      :is="item.icon"
+                      v-else-if="item.icon"
+                      :size="18"
+                      class="mr-2"
+                    />
                   </template>
                   <v-list-item-title>{{ t(item.title) }}</v-list-item-title>
                   <template #append>
@@ -77,8 +90,19 @@
                   @dragover.prevent
                   @drop.stop="handleDrop($event, 'more', index)"
                 >
-                  <template #prepend>
-                    <v-icon :icon="item.icon" size="small" class="mr-2" />
+                  <template v-slot:prepend>
+                    <v-icon
+                      v-if="typeof item.icon === 'string'"
+                      :icon="item.icon"
+                      size="small"
+                      class="mr-2"
+                    />
+                    <component
+                      :is="item.icon"
+                      v-else-if="item.icon"
+                      :size="18"
+                      class="mr-2"
+                    />
                   </template>
                   <v-list-item-title>{{ t(item.title) }}</v-list-item-title>
                   <template #append>
@@ -129,7 +153,8 @@ const draggedItem = ref(null);
 
 function initializeItems() {
   const customization = getSidebarCustomization();
-  const { mainItems: resolvedMain, moreItems: resolvedMore } = resolveSidebarItems(sidebarItems, customization);
+  const { mainItems: resolvedMain, moreItems: resolvedMore } =
+    resolveSidebarItems(sidebarItems, customization);
   mainItems.value = resolvedMain;
   moreItems.value = resolvedMore;
 }

@@ -5,7 +5,7 @@
         <div class="logo-glow-ring" />
         <img
           width="110"
-          src="@/assets/images/astrbot_logo_mini.webp"
+          src="/favicon.svg"
           alt="AstrBot Logo"
           class="logo-img"
         />

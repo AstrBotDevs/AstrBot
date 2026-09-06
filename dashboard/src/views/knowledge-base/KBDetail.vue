@@ -211,13 +211,14 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
-import { useModuleI18n } from "@/i18n/composables";
+import { useI18n, useModuleI18n } from "@/i18n/composables";
 import axios from "@/utils/request";
 import DocumentsTab from "./components/DocumentsTab.vue";
 import RetrievalTab from "./components/RetrievalTab.vue";
 import SettingsTab from "./components/SettingsTab.vue";
 
 const { tm: t } = useModuleI18n("features/knowledge-base/detail");
+const { locale } = useI18n();
 const route = useRoute();
 
 const emit = defineEmits<(event: "title-change", title: string) => void>();
@@ -266,16 +267,16 @@ const loadKB = async () => {
 
 // 格式化日期
 const formatDate = (dateStr: string) => {
-  if (!dateStr) return "-";
-  const date = new Date(dateStr);
-  return date.toLocaleString("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-};
+  if (!dateStr) return '-'
+  const date = new Date(dateStr)
+  return date.toLocaleString(locale.value, {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
 
 onMounted(() => {
   loadKB();

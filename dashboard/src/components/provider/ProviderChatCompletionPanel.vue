@@ -11,6 +11,7 @@
           :available-source-types="availableSourceTypes"
           :tm="tm"
           :resolve-source-icon="resolveSourceIcon"
+          :is-monochrome-source-icon="isMonochromeSourceIcon"
           :get-source-display-name="getSourceDisplayName"
           @add-provider-source="addProviderSource"
           @select-provider-source="selectProviderSource"
@@ -24,10 +25,15 @@
         <div v-if="selectedProviderSource" class="provider-config-shell">
           <div class="provider-config-header">
             <div class="provider-config-headline">
-              <div class="provider-config-title">{{ getSourceDisplayName(selectedProviderSource) }}</div>
-              <div class="provider-config-subtitle">
-                {{ selectedProviderSource.api_base || 'N/A' }}
+              <div class="provider-config-title">
+                {{ getSourceDisplayName(selectedProviderSource) }}
               </div>
+              <ProviderSourceSubtitle
+                class="provider-config-subtitle"
+                :api-base="selectedProviderSource.api_base"
+                :sponsor="selectedSponsor"
+                :tm="tm"
+              />
             </div>
 
             <div class="provider-config-actions">
@@ -40,7 +46,7 @@
                 rounded="xl"
                 @click="saveProviderSource"
               >
-                {{ tm('providerSources.save') }}
+                {{ tm("providerSources.save") }}
               </v-btn>
             </div>
           </div>
@@ -50,7 +56,9 @@
           <div class="provider-config-body">
             <section class="provider-section">
               <div class="provider-section-head">
-                <div class="provider-section-title">{{ tm('providers.settings') }}</div>
+                <div class="provider-section-title">
+                  {{ tm("providers.settings") }}
+                </div>
               </div>
               <AstrBotConfig
                 v-if="basicSourceConfig"
@@ -66,7 +74,9 @@
 
             <section v-if="advancedSourceConfig" class="provider-section">
               <div class="provider-section-head">
-                <div class="provider-section-title">{{ tm('providerSources.advancedConfig') }}</div>
+                <div class="provider-section-title">
+                  {{ tm("providerSources.advancedConfig") }}
+                </div>
               </div>
               <AstrBotConfig
                 :iterable="advancedSourceConfig"
@@ -106,8 +116,10 @@
         </div>
 
         <div v-else class="provider-empty-state">
-          <v-icon size="48" color="grey-lighten-1">mdi-cursor-default-click</v-icon>
-          <p class="mt-2">{{ tm('providerSources.selectHint') }}</p>
+          <v-icon size="48" color="grey-lighten-1"
+            >mdi-cursor-default-click</v-icon
+          >
+          <p class="mt-2">{{ tm("providerSources.selectHint") }}</p>
         </div>
       </div>
     </div>
@@ -115,7 +127,7 @@
     <v-dialog v-model="showManualModelDialog" max-width="400">
       <v-card>
         <v-card-title class="text-h3 pa-4 pb-0 pl-6">
-          {{ tm('models.manualDialogTitle') }}
+          {{ tm("models.manualDialogTitle") }}
         </v-card-title>
         <v-card-text class="py-4">
           <v-text-field
@@ -137,8 +149,12 @@
         </v-card-text>
         <v-card-actions class="pa-4">
           <v-spacer></v-spacer>
-          <v-btn variant="text" @click="showManualModelDialog = false">取消</v-btn>
-          <v-btn color="primary" variant="tonal" @click="confirmManualModel">添加</v-btn>
+          <v-btn variant="text" @click="showManualModelDialog = false"
+            >取消</v-btn
+          >
+          <v-btn color="primary" variant="tonal" @click="confirmManualModel"
+            >添加</v-btn
+          >
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -164,7 +180,7 @@
             :disabled="savingProviders.includes(providerEditData?.id)"
             @click="showProviderEditDialog = false"
           >
-            {{ tm('dialogs.config.cancel') }}
+            {{ tm("dialogs.config.cancel") }}
           </v-btn>
           <v-btn
             color="primary"
@@ -172,13 +188,18 @@
             :loading="savingProviders.includes(providerEditData?.id)"
             @click="saveEditedProvider"
           >
-            {{ tm('dialogs.config.save') }}
+            {{ tm("dialogs.config.save") }}
           </v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
 
-    <v-snackbar v-model="snackbar.show" :color="snackbar.color" :timeout="3000" location="top">
+    <v-snackbar
+      v-model="snackbar.show"
+      :color="snackbar.color"
+      :timeout="3000"
+      location="top"
+    >
       {{ snackbar.message }}
     </v-snackbar>
   </div>
@@ -187,6 +208,7 @@
 <script setup>
 import { computed, ref } from "vue";
 import ProviderModelsPanel from "@/components/provider/ProviderModelsPanel.vue";
+import ProviderSourceSubtitle from "@/components/provider/ProviderSourceSubtitle.vue";
 import ProviderSourcesPanel from "@/components/provider/ProviderSourcesPanel.vue";
 import AstrBotConfig from "@/components/shared/AstrBotConfig.vue";
 import { useProviderModelConfigDialog } from "@/composables/useProviderModelConfigDialog";
@@ -214,6 +236,7 @@ function showMessage(message, color = "success") {
 
 const {
   selectedProviderSource,
+  selectedSponsor,
   availableModels,
   loadingModels,
   savingSource,
@@ -231,6 +254,7 @@ const {
   advancedSourceConfig,
   manualProviderId,
   resolveSourceIcon,
+  isMonochromeSourceIcon,
   getSourceDisplayName,
   supportsImageInput,
   supportsAudioInput,

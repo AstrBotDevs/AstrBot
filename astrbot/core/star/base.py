@@ -4,7 +4,6 @@ import logging
 from asyncio import Queue
 from typing import TYPE_CHECKING, Any, Protocol
 
-from astrbot.core import html_renderer
 from astrbot.core.log import LogManager
 from astrbot.core.utils.command_parser import CommandParserMixin
 from astrbot.core.utils.plugin_kv_store import PluginKVStoreMixin
@@ -15,6 +14,7 @@ if TYPE_CHECKING:
     from astrbot.core.provider.func_tool_manager import FunctionToolManager
     from astrbot.core.provider.manager import ProviderManager
     from astrbot.core.provider.provider import Provider
+    from astrbot.core.utils.t2i.renderer import HtmlRenderer
 
 logger = logging.getLogger("astrbot")
 
@@ -29,6 +29,8 @@ class Star(CommandParserMixin, PluginKVStoreMixin):
     """The plugin's dedicated logger, isolated from the global ``astrbot`` logger."""
 
     class _ContextLike(Protocol):
+        html_renderer: HtmlRenderer
+
         def get_config(self, umo: str | None = None) -> Any: ...
 
         def get_using_provider(self, umo: str | None = None) -> Provider | None: ...
@@ -69,16 +71,6 @@ class Star(CommandParserMixin, PluginKVStoreMixin):
             # The plugin defines ``logger`` as a read-only property; keep its own.
             pass
 
-    def _get_context_config(self) -> Any:
-        get_config = getattr(self.context, "get_config", None)
-        if callable(get_config):
-            try:
-                return get_config()
-            except Exception as e:
-                logger.debug(f"get_config() failed: {e}")
-                return None
-        return getattr(self.context, "_config", None)
-
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
         if not star_map.get(cls.__module__):
@@ -92,34 +84,79 @@ class Star(CommandParserMixin, PluginKVStoreMixin):
             star_map[cls.__module__].star_cls_type = cls
             star_map[cls.__module__].module_path = cls.__module__
 
-    async def text_to_image(self, text: str, return_url=True) -> str:
-        """将文本转换为图片"""
-        config_obj = self._get_context_config()
-        template_name = None
-        if hasattr(config_obj, "get"):
-            try:
-                template_name = config_obj.get("t2i_active_template")
-            except Exception:
-                template_name = None
-        return await html_renderer.render_t2i(
+    async def text_to_image(
+        self,
+        text: str,
+        return_url: bool = True,
+        template_name: str | None = None,
+        umo: str | None = None,
+    ) -> str:
+        """Convert text to an image using the t2i render service.
+
+        The renderer is held on the context: plugins can also call
+        `self.context.html_renderer` directly for lower-level control.
+
+        Args:
+            text: The text to render.
+            return_url: Whether to return an image URL instead of a file path.
+            template_name: Explicit t2i template name. Takes precedence over
+                the `t2i_active_template` value from any configuration file.
+            umo: The unified_message_origin used to resolve the bound
+                configuration file. Template and render endpoint are read from
+                that configuration; falls back to the default configuration
+                file when the session has no bound configuration.
+
+        Returns:
+            The image URL or file path, depending on `return_url`.
+        """
+        config = self.context.get_config(umo)
+        endpoint = None
+        if config is not None:
+            if template_name is None:
+                template_name = config.get("t2i_active_template")
+            endpoint = config.get("t2i_endpoint") or None
+        return await self.context.html_renderer.render_t2i(
             text,
             return_url=return_url,
             template_name=template_name,
+            endpoint=endpoint,
         )
 
     async def html_render(
         self,
         tmpl: str,
         data: dict,
-        return_url=True,
+        return_url: bool = True,
         options: dict | None = None,
+        umo: str | None = None,
     ) -> str:
-        """渲染 HTML"""
-        return await html_renderer.render_custom_template(
+        """Render a custom Jinja2 HTML template to an image.
+
+        The renderer is held on the context: plugins can also call
+        `self.context.html_renderer` directly for lower-level control.
+
+        Args:
+            tmpl: The HTML Jinja2 template string.
+            data: The template data.
+            return_url: Whether to return an image URL instead of a file path.
+            options: Render options passed to the render service.
+            umo: The unified_message_origin used to resolve the render
+                endpoint from the bound configuration file. Falls back to the
+                default configuration file when omitted or unbound.
+
+        Returns:
+            The image URL or file path, depending on `return_url`.
+        """
+        config = self.context.get_config(umo)
+        endpoint = None
+        if config is not None:
+            endpoint = config.get("t2i_endpoint") or None
+        return await self.context.html_renderer.render_custom_template(
             tmpl,
             data,
             return_url=return_url,
             options=options,
+            endpoint=endpoint,
         )
 
     async def initialize(self) -> None:

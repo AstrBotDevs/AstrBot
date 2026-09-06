@@ -4,11 +4,12 @@ import asyncio
 import json
 import os
 import threading
+from pathlib import Path
 
 import pytest
 
 from astrbot.core.config.astrbot_config import AstrBotConfig, RateLimitStrategy
-from astrbot.core.config.default import DEFAULT_VALUE_MAP
+from astrbot.core.config.default import DEFAULT_VALUE_MAP, get_local_permission_defaults
 from astrbot.core.config.i18n_utils import ConfigMetadataI18n
 from astrbot.core.utils.auth_password import (
     DEFAULT_DASHBOARD_PASSWORD,
@@ -90,6 +91,86 @@ class TestAstrBotConfigLoad:
 
         assert config.platform_settings["unique_session"] is True
         assert config.provider_settings["enable"] is False
+
+    @pytest.mark.parametrize("require_admin", [True, False])
+    @pytest.mark.parametrize("system", ["Windows", "Linux", "Darwin"])
+    def test_migrates_legacy_local_computer_permissions(
+        self,
+        temp_config_path,
+        require_admin,
+        system,
+    ):
+        """Legacy admin switches should become explicit Local role policies."""
+        default_config = {
+            "provider_settings": {
+                "computer_use_require_admin": True,
+                "computer_use_local_permissions": get_local_permission_defaults(system),
+            }
+        }
+        with open(temp_config_path, "w", encoding="utf-8-sig") as file:
+            json.dump(
+                {
+                    "provider_settings": {
+                        "computer_use_require_admin": require_admin,
+                    }
+                },
+                file,
+            )
+
+        config = AstrBotConfig(
+            config_path=temp_config_path,
+            default_config=default_config,
+        )
+
+        permissions = config["provider_settings"]["computer_use_local_permissions"]
+        assert permissions["member"] == {
+            "allow_execution": system != "Windows" and not require_admin,
+            "allow_network": False,
+            "filesystem_scope": "none" if system == "Windows" else "workspace",
+        }
+        assert permissions["admin"] == {
+            "allow_execution": True,
+            "allow_network": True,
+            "filesystem_scope": "host",
+        }
+        assert (
+            json.loads(Path(temp_config_path).read_text(encoding="utf-8-sig"))[
+                "provider_settings"
+            ]["computer_use_local_permissions"]
+            == permissions
+        )
+
+    @pytest.mark.parametrize("system", ["Windows", "Linux", "Darwin"])
+    @pytest.mark.parametrize("scope", [None, "none", "workspace", "host"])
+    def test_local_defaults_preserve_existing_policies(
+        self, temp_config_path, system, scope
+    ):
+        defaults = get_local_permission_defaults(system)
+        existing = {"member": {"filesystem_scope": scope}} if scope else {}
+        if scope:
+            Path(temp_config_path).write_text(
+                json.dumps(
+                    {"provider_settings": {"computer_use_local_permissions": existing}}
+                )
+            )
+        config = AstrBotConfig(
+            temp_config_path,
+            default_config={
+                "provider_settings": {"computer_use_local_permissions": defaults}
+            },
+        )
+        expected = {
+            role: {**policy, **existing.get(role, {})}
+            for role, policy in defaults.items()
+        }
+        assert config["provider_settings"]["computer_use_local_permissions"] == expected
+        assert (
+            json.loads(Path(temp_config_path).read_text(encoding="utf-8-sig"))[
+                "provider_settings"
+            ]["computer_use_local_permissions"]
+            == expected
+        )
+        assert defaults == get_local_permission_defaults(system)
 
     def test_first_deploy_flag(self, temp_config_path, minimal_default_config):
         """Test first_deploy flag is set for new config."""
@@ -1101,3 +1182,113 @@ class TestConfigMetadataI18n:
             result["group"]["metadata"]["section"]["items"]["field"]["name"]
             == "group.section.field.name"
         )
+
+
+class TestDictTypeConfigIntegrity:
+    """Tests for preserving user content in dict-type ("type": "dict") config items.
+
+    See https://github.com/AstrBotDevs/AstrBot/issues/9512.
+    """
+
+    def test_dict_type_config_preserved_on_reload(self, temp_config_path):
+        """Test that user key-value pairs survive a plugin reload."""
+        schema = {
+            "user_map": {
+                "type": "dict",
+                "default": {},
+                "description": "free-form key-value pairs",
+            },
+        }
+
+        config = AstrBotConfig(config_path=temp_config_path, schema=schema)
+        config["user_map"] = {"group_a": "123", "group_b": "456"}
+        config.save_config()
+
+        reloaded = AstrBotConfig(config_path=temp_config_path, schema=schema)
+
+        assert reloaded["user_map"] == {"group_a": "123", "group_b": "456"}
+
+        with open(temp_config_path, encoding="utf-8-sig") as f:
+            assert json.load(f)["user_map"] == {
+                "group_a": "123",
+                "group_b": "456",
+            }
+
+    def test_nested_dict_type_config_preserved_on_reload(self, temp_config_path):
+        """Test that dict items nested inside objects are preserved."""
+        schema = {
+            "section": {
+                "type": "object",
+                "items": {
+                    "enabled": {"type": "bool"},
+                    "mapping": {"type": "dict"},
+                },
+            },
+        }
+
+        config = AstrBotConfig(config_path=temp_config_path, schema=schema)
+        config["section"]["mapping"] = {"key1": "value1"}
+        config.save_config()
+
+        reloaded = AstrBotConfig(config_path=temp_config_path, schema=schema)
+
+        assert reloaded["section"]["enabled"] is False
+        assert reloaded["section"]["mapping"] == {"key1": "value1"}
+
+    def test_dict_type_config_with_non_empty_default_preserved_on_reload(
+        self, temp_config_path
+    ):
+        """Test that user keys survive reload when the dict default is non-empty."""
+        schema = {
+            "user_map": {
+                "type": "dict",
+                "default": {"preset_a": "1"},
+            },
+        }
+
+        config = AstrBotConfig(config_path=temp_config_path, schema=schema)
+        config["user_map"] = {"preset_a": "2", "user_added": "3"}
+        config.save_config()
+
+        reloaded = AstrBotConfig(config_path=temp_config_path, schema=schema)
+
+        assert reloaded["user_map"] == {"preset_a": "2", "user_added": "3"}
+
+    def test_object_with_empty_items_still_removes_stale_keys(self, temp_config_path):
+        """Test that object entries with empty items still drop unknown keys."""
+        schema = {
+            "section": {"type": "object", "items": {}},
+        }
+
+        config = AstrBotConfig(config_path=temp_config_path, schema=schema)
+        config["section"] = {"user_key": "value"}
+        config.save_config()
+
+        reloaded = AstrBotConfig(config_path=temp_config_path, schema=schema)
+
+        assert reloaded["section"] == {}
+
+    def test_stale_keys_in_structured_dict_still_removed(self):
+        """Test that non-empty reference dicts still drop unknown keys."""
+        refer_conf = {"structured": {"keep": 1}}
+        conf = {"structured": {"keep": 2, "stale": 3}}
+
+        config = AstrBotConfig.__new__(AstrBotConfig)
+        has_new = config.check_config_integrity(refer_conf, conf)
+
+        assert has_new is True
+        assert conf["structured"] == {"keep": 2}
+
+    def test_dict_type_config_non_dict_value_reset_to_default(self, temp_config_path):
+        """Test that a non-dict value stored in a dict item is reset to default."""
+        schema = {
+            "user_map": {"type": "dict"},
+        }
+
+        existing_config = {"user_map": "corrupted"}
+        with open(temp_config_path, "w", encoding="utf-8-sig") as f:
+            json.dump(existing_config, f)
+
+        config = AstrBotConfig(config_path=temp_config_path, schema=schema)
+
+        assert config["user_map"] == {}

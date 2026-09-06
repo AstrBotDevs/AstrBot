@@ -1,19 +1,9 @@
 <template>
-  <div
-    class="input-area fade-in"
-    :class="{ 'is-dark': isDark }"
-  >
+  <div class="input-area fade-in" :class="{ 'is-dark': isDark }">
     <div
       class="input-container"
-      :style="{
-        width: 'var(--chat-content-width, 76%)',
-        maxWidth: 'var(--chat-content-max-width, 760px)',
-        margin: '0 auto',
-        border: isDark ? 'none' : '1px solid #e0e0e0',
-        borderRadius: '24px',
-        boxShadow: isDark ? 'none' : '0px 2px 2px rgba(0, 0, 0, 0.1)',
-        backgroundColor: isDark ? '#2d2d2d' : 'transparent',
-        position: 'relative',
+      :class="{
+        'has-attachments': hasStagedAttachments,
       }"
     >
       <!-- 引用预览区 -->
@@ -34,56 +24,162 @@
           />
         </div>
       </transition>
-      <textarea
-        ref="inputField"
-        v-model="localPrompt"
-        @keydown="handleKeyDown"
-        @compositionstart="handleCompositionStart"
-        @compositionend="handleCompositionEnd"
-        @compositioncancel="handleCompositionEnd"
-        @blur="clearCompositionState()"
-        :disabled="disabled"
-        :placeholder="props.placeholder || tm('input.placeholder')"
-        class="chat-textarea"
-        autocomplete="off"
-        autocorrect="off"
-        autocapitalize="sentences"
-        spellcheck="false"
-        style="
-          width: 100%;
-          resize: none;
-          outline: none;
-          border: 1px solid var(--v-theme-border);
-          border-radius: 12px;
-          padding: 12px 18px;
-          min-height: 34px;
-          max-height: 200px;
-          overflow-y: auto;
-          font-family: inherit;
-          font-size: 16px;
-          background-color: var(--v-theme-surface);
-        "
-      ></textarea>
-      <div
-        style="
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 6px 14px;
-        "
-      >
-        <div
-          style="
-            display: flex;
-            justify-content: flex-start;
-            margin-top: 4px;
-            align-items: center;
-            gap: 8px;
-            min-width: 0;
-            flex: 1;
-            overflow: hidden;
-          "
-        >
+
+      <transition name="attachments">
+        <div class="attachments-preview" v-if="hasStagedAttachments">
+          <div
+            v-for="(img, index) in stagedImagesUrl"
+            :key="'img-' + index"
+            class="attachment-card image-preview"
+          >
+            <img :src="img" class="preview-image" alt="attachment preview" />
+            <v-btn
+              @click="$emit('removeImage', index)"
+              class="remove-attachment-btn"
+              icon="mdi-close"
+              size="x-small"
+              color="error"
+              variant="tonal"
+            />
+          </div>
+
+          <div v-if="stagedAudioUrl" class="attachment-card audio-preview">
+            <div class="attachment-icon attachment-icon--audio">
+              <v-icon icon="mdi-microphone" size="24"></v-icon>
+            </div>
+            <span class="attachment-name">{{ tm("voice.recording") }}</span>
+            <v-btn
+              @click="$emit('removeAudio')"
+              class="remove-attachment-btn"
+              icon="mdi-close"
+              size="x-small"
+              color="error"
+              variant="tonal"
+            />
+          </div>
+
+          <div
+            v-for="(file, index) in stagedFiles"
+            :key="'file-' + index"
+            class="attachment-card file-preview"
+          >
+            <div
+              class="attachment-icon"
+              :style="{ '--attachment-color': filePresentation(file).color }"
+            >
+              <v-icon :icon="filePresentation(file).icon" size="24"></v-icon>
+              <span class="attachment-ext">{{
+                filePresentation(file).label
+              }}</span>
+            </div>
+            <span class="attachment-name">{{ file.original_name }}</span>
+            <v-btn
+              @click="$emit('removeFile', index)"
+              class="remove-attachment-btn"
+              icon="mdi-close"
+              size="x-small"
+              color="error"
+              variant="tonal"
+            />
+          </div>
+
+          <div
+            v-for="(active, index) in activeUploads"
+            :key="'active-' + index"
+            class="attachment-card file-preview attachment-card--active"
+          >
+            <div
+              class="attachment-icon"
+              :style="{ '--attachment-color': activePresentation(active).color }"
+            >
+              <v-icon :icon="activePresentation(active).icon" size="24"></v-icon>
+              <span class="attachment-ext">{{
+                activePresentation(active).label
+              }}</span>
+            </div>
+            <span class="attachment-name">{{ active.name }}</span>
+            <span class="attachment-progress-text">{{ active.percent }}%</span>
+            <v-btn
+              @click="$emit('cancelActiveUpload', index)"
+              class="cancel-active-btn"
+              icon="mdi-close"
+              size="x-small"
+              color="grey-darken-1"
+              variant="text"
+            />
+            <div class="attachment-progress-track">
+              <v-progress-linear
+                :model-value="active.percent"
+                color="primary"
+                height="3"
+                rounded
+              />
+            </div>
+          </div>
+
+          <div
+            v-for="(failed, index) in failedUploads"
+            :key="'failed-' + index"
+            class="attachment-card file-preview attachment-card--failed"
+          >
+            <div class="attachment-icon attachment-icon--failed">
+              <v-icon icon="mdi-alert-circle-outline" size="24"></v-icon>
+            </div>
+            <span class="attachment-name" :title="failed.error">{{
+              failed.name
+            }}</span>
+            <v-btn
+              @click="$emit('retryFailedUpload', index)"
+              class="remove-attachment-btn retry-attachment-btn"
+              icon="mdi-refresh"
+              size="x-small"
+              color="primary"
+              variant="tonal"
+            />
+            <v-btn
+              @click="$emit('discardFailedUpload', index)"
+              class="remove-attachment-btn"
+              icon="mdi-close"
+              size="x-small"
+              color="error"
+              variant="tonal"
+            />
+          </div>
+        </div>
+      </transition>
+
+      <CommandSuggestion
+        :visible="showCommandSuggestion"
+        :commands="filteredCommands"
+        :selected-index="selectedCommandIndex"
+        :is-dark="isDark"
+        @select="handleCommandSelect"
+        @update-selected-index="selectedCommandIndex = $event"
+      />
+
+      <div class="composer-row">
+        <div class="input-field-shell">
+          <textarea
+            rows="1"
+            ref="inputField"
+            v-model="localPrompt"
+            @keydown="handleKeyDown"
+            @input="handleInput"
+            @compositionstart="handleCompositionStart"
+            @compositionend="handleCompositionEnd"
+            @compositioncancel="handleCompositionEnd"
+            @blur="handleBlur"
+            @paste="handlePaste"
+            :disabled="disabled"
+            :placeholder="props.placeholder || tm('input.placeholder')"
+            class="chat-textarea"
+            autocomplete="off"
+            autocorrect="off"
+            autocapitalize="sentences"
+            spellcheck="false"
+          ></textarea>
+        </div>
+        <div class="input-left-actions">
           <!-- Settings Menu -->
           <StyledMenu
             offset="8"
@@ -93,10 +189,13 @@
             <template v-slot:activator="{ props: activatorProps }">
               <v-btn
                 v-bind="activatorProps"
-                icon="mdi-plus"
-                variant="outlined"
+                icon
+                variant="text"
                 class="input-neutral-btn input-outline-control"
-              />
+                :aria-label="tm('input.upload')"
+              >
+                <Plus :size="18" :stroke-width="1.75" />
+              </v-btn>
             </template>
 
             <!-- Upload Files -->
@@ -122,46 +221,33 @@
               @config-changed="handleConfigChange"
             />
 
-            <!-- Streaming Toggle in Menu -->
             <v-list-item
+              v-if="showSettings"
               class="styled-menu-item"
               rounded="md"
-              @click="$emit('toggleStreaming')"
+              @click="$emit('openSettings')"
             >
-              <template v-slot:prepend>
-                <v-icon icon="mdi-lightning-bolt" size="small"></v-icon>
+              <template #prepend>
+                <v-icon icon="mdi-cog-outline" size="small" />
               </template>
-              <v-list-item-title>
-                {{
-                  enableStreaming
-                    ? tm("streaming.enabled")
-                    : tm("streaming.disabled")
-                }}
-              </v-list-item-title>
+              <v-list-item-title>{{
+                t("core.common.settings")
+              }}</v-list-item-title>
             </v-list-item>
           </StyledMenu>
-
-          <!-- Provider/Model Selector Menu -->
-          <ProviderModelMenu
-            v-if="providerSelectorVisible"
-            ref="providerModelMenuRef"
-          />
         </div>
-        <div
-          style="
-            display: flex;
-            justify-content: flex-end;
-            margin-top: 8px;
-            align-items: center;
-            flex-shrink: 0;
-          "
-        >
+        <div class="input-right-actions">
           <input
             type="file"
             ref="imageInputRef"
             @change="handleFileSelect"
             style="display: none"
             multiple
+          />
+          <!-- Provider/Model Selector Menu -->
+          <ProviderModelMenu
+            v-if="props.showProviderSelector && providerSelectorAvailable"
+            ref="providerModelMenuRef"
           />
           <v-progress-circular
             v-if="disabled && !mobile"
@@ -170,11 +256,7 @@
             class="mr-1"
             width="1.5"
           />
-          <v-tooltip
-            v-if="tokenUsageVisible"
-            location="top"
-            max-width="320"
-          >
+          <v-tooltip v-if="tokenUsageVisible" location="top" max-width="320">
             <template #activator="{ props: tokenTooltipProps }">
               <span
                 v-bind="tokenTooltipProps"
@@ -183,36 +265,22 @@
               >
                 <v-progress-circular
                   :model-value="tokenUsagePercent"
-                  size="24"
-                  width="2.5"
+                  size="20"
+                  width="2"
                   class="token-usage-progress"
                 />
               </span>
             </template>
             <span>{{ props.tokenUsage?.tooltip }}</span>
           </v-tooltip>
-          <!-- <v-btn @click="$emit('openLiveMode')"
-                        icon
-                        variant="text"
-                        color="purple" 
-                        size="small"
-                    >
-                        <v-icon icon="mdi-phone-in-talk" variant="text" plain></v-icon>
-                        <v-tooltip activator="parent" location="top">
-                            {{ tm('voice.liveMode') }}
-                        </v-tooltip>
-                    </v-btn> -->
           <v-btn
             @click="handleRecordClick"
             icon
             variant="text"
             class="record-btn input-icon-btn"
           >
-            <v-icon
-              :icon="isRecording ? 'mdi-stop-circle' : 'mdi-microphone'"
-              variant="text"
-              plain
-            ></v-icon>
+            <CircleStop v-if="isRecording" :size="18" :stroke-width="1.75" />
+            <Mic v-else :size="18" :stroke-width="1.75" />
             <v-tooltip activator="parent" location="top">
               {{
                 isRecording ? tm("voice.speaking") : tm("voice.startRecording")
@@ -223,10 +291,11 @@
             icon
             v-if="isRunning && !canSend"
             @click="$emit('stop')"
-            variant="tonal"
+            variant="flat"
+            color="primary"
             class="send-btn input-action-btn"
           >
-            <v-icon icon="mdi-stop" variant="text" plain></v-icon>
+            <Square :size="14" :stroke-width="1.75" />
             <v-tooltip activator="parent" location="top">
               {{ tm("input.stopGenerating") }}
             </v-tooltip>
@@ -234,89 +303,45 @@
           <v-btn
             v-else
             @click="$emit('send')"
-            icon="mdi-arrow-up"
-            variant="tonal"
+            icon
+            variant="flat"
+            color="primary"
             :disabled="!canSend"
+            :aria-label="tm('input.send')"
             class="send-btn input-action-btn"
-          />
+          >
+            <ArrowUp :size="18" :stroke-width="1.75" />
+          </v-btn>
         </div>
-      </div>
-    </div>
-
-    <!-- 附件预览区 -->
-    <div
-      class="attachments-preview"
-      v-if="
-        stagedImagesUrl.length > 0 ||
-        stagedAudioUrl ||
-        (stagedFiles && stagedFiles.length > 0)
-      "
-    >
-      <div
-        v-for="(img, index) in stagedImagesUrl"
-        :key="'img-' + index"
-        class="image-preview"
-      >
-        <img :src="img" class="preview-image" />
-        <v-btn
-          @click="$emit('removeImage', index)"
-          class="remove-attachment-btn"
-          icon="mdi-close"
-          size="small"
-          color="error"
-          variant="text"
-        />
-      </div>
-
-      <div v-if="stagedAudioUrl" class="attachment-card audio-preview">
-        <v-icon icon="mdi-microphone" size="24" />
-        <span class="attachment-name">{{ tm("voice.recording") }}</span>
-        <v-btn
-          @click="$emit('removeAudio')"
-          class="remove-attachment-btn"
-          icon="mdi-close"
-          size="small"
-          color="error"
-          variant="text"
-        />
-      </div>
-
-      <div
-        v-for="(file, index) in stagedFiles"
-        :key="'file-' + index"
-        class="attachment-card file-preview"
-        :style="{ '--attachment-color': filePresentation(file).color }"
-      >
-        <span class="attachment-icon">
-          <v-icon :icon="filePresentation(file).icon" size="24" />
-          <span class="attachment-ext">{{ filePresentation(file).label }}</span>
-        </span>
-        <span class="attachment-name">{{ file.original_name }}</span>
-        <v-btn
-          @click="$emit('removeFile', index)"
-          class="remove-attachment-btn"
-          icon="mdi-close"
-          size="small"
-          color="error"
-          variant="text"
-        />
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import {
+  ref,
+  computed,
+  watch,
+  nextTick,
+  onMounted,
+  onBeforeUnmount,
+} from "vue";
 import { useDisplay } from "vuetify";
-import StyledMenu from "@/components/shared/StyledMenu.vue";
-import type { Session } from "@/composables/useSessions";
-import { useModuleI18n } from "@/i18n/composables";
+import { ArrowUp, CircleStop, Mic, Plus, Square } from "@lucide/vue";
+import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { useCustomizerStore } from "@/stores/customizer";
 import { isComposingEnter } from "@/utils/imeInput.mjs";
-import { attachmentPresentation } from "./attachmentPresentation";
+import { commandApi } from "@/api/v1";
+import type { CommandItem } from "@/components/extension/componentPanel/types";
 import ConfigSelector from "./ConfigSelector.vue";
-// biome-ignore lint/style/useImportType: Vue template components require runtime imports.
 import ProviderModelMenu from "./ProviderModelMenu.vue";
+import StyledMenu from "@/components/shared/StyledMenu.vue";
+import CommandSuggestion from "./CommandSuggestion.vue";
+import { attachmentPresentation } from "./attachmentPresentation";
+import type { Session } from "@/composables/useSessions";
+import type { FailedUploadView, ActiveUploadView } from "@/composables/useMediaHandling";
+import type { SuggestionCommand } from "./CommandSuggestion.vue";
 
 interface StagedFileInfo {
   attachment_id: string;
@@ -343,8 +368,10 @@ interface Props {
   stagedImagesUrl: string[];
   stagedAudioUrl: string;
   stagedFiles?: StagedFileInfo[];
+  failedUploads?: FailedUploadView[];
+  activeUploads?: ActiveUploadView[];
   disabled: boolean;
-  enableStreaming: boolean;
+  showSettings?: boolean;
   isRecording: boolean;
   isRunning: boolean;
   sessionId?: string | null;
@@ -362,9 +389,12 @@ const props = withDefaults(defineProps<Props>(), {
   currentSession: null,
   configId: null,
   stagedFiles: () => [],
+  failedUploads: () => [],
+  activeUploads: () => [],
   replyTo: null,
   sendShortcut: "shift_enter",
   showProviderSelector: true,
+  showSettings: false,
   tokenUsage: null,
 });
 
@@ -372,10 +402,13 @@ const emit = defineEmits<{
   "update:prompt": [value: string];
   send: [];
   stop: [];
-  toggleStreaming: [];
+  openSettings: [];
   removeImage: [index: number];
   removeAudio: [];
   removeFile: [index: number];
+  retryFailedUpload: [index: number];
+  discardFailedUpload: [index: number];
+  cancelActiveUpload: [index: number];
   startRecording: [];
   stopRecording: [];
   pasteImage: [event: ClipboardEvent];
@@ -385,23 +418,159 @@ const emit = defineEmits<{
 }>();
 
 const { tm } = useModuleI18n("features/chat");
-const isDark = computed(() => useCustomizerStore().uiTheme === "PurpleThemeDark");
+const { t } = useI18n();
+const isDark = computed(
+  () => useCustomizerStore().uiTheme === "PurpleThemeDark",
+);
 
 const inputField = ref<HTMLTextAreaElement | null>(null);
 const imageInputRef = ref<HTMLInputElement | null>(null);
-const providerModelMenuRef = ref<InstanceType<typeof ProviderModelMenu> | null>(null);
+const providerModelMenuRef = ref<InstanceType<typeof ProviderModelMenu> | null>(
+  null,
+);
 const providerSelectorAvailable = ref(true);
 const isReplyClosing = ref(false);
 const isComposing = ref(false);
 const lastCompositionEndAt = ref<number | null>(null);
 const longPasteThreshold = 10_000;
 
-const localPrompt = computed({
-  get: () => props.prompt,
-  set: (value) => emit("update:prompt", value),
+// 命令提示相关状态
+const allCommands = ref<CommandItem[]>([]);
+const showCommandSuggestion = ref(false);
+const selectedCommandIndex = ref(0);
+const commandSuggestionLoading = ref(false);
+const wakePrefixes = ref<string[]>(["/"]);
+const currentConfigId = ref((props.configId as string) || "default");
+
+/** 检查文本是否以任意一个唤醒词前缀开头 */
+function hasWakePrefix(text: string): boolean {
+  return wakePrefixes.value.some((p) => text.startsWith(p));
+}
+
+/** 去掉文本开头匹配的任意唤醒词前缀，返回剥离后的文本 */
+function stripWakePrefix(text: string): string {
+  let result = text;
+  for (const p of wakePrefixes.value) {
+    if (result.startsWith(p)) {
+      result = result.slice(p.length);
+      break; // 只剥离第一个匹配的前缀
+    }
+  }
+  return result;
+}
+
+function normalizeCommandSearchText(value: string) {
+  return stripWakePrefix(value.trim()).toLowerCase();
+}
+
+/** 从所有指令中展平获取启用的普通指令和子指令 */
+const enabledCommands = computed(() => {
+  const result: SuggestionCommand[] = [];
+  const seen = new Set<string>();
+  // 使用第一个唤醒词前缀作为指令的展示前缀
+  const displayPrefix = wakePrefixes.value[0] || "/";
+
+  function addCommand(cmd: CommandItem) {
+    if (!cmd.enabled) return;
+    if (cmd.type === "group") {
+      // 指令组本身不加入，但其子指令加入
+      cmd.sub_commands?.forEach(addCommand);
+      return;
+    }
+    // 统一添加唤醒词前缀（子命令的 effective_command 如 "music play" 需要变成 "/music play"）
+    const displayCmd = hasWakePrefix(cmd.effective_command)
+      ? cmd.effective_command
+      : `${displayPrefix}${cmd.effective_command}`;
+    if (!seen.has(displayCmd)) {
+      seen.add(displayCmd);
+      result.push({
+        handler_full_name: cmd.handler_full_name,
+        effective_command: displayCmd,
+        description: cmd.description,
+        plugin_display_name: cmd.plugin_display_name,
+        enabled: cmd.enabled,
+        reserved: cmd.reserved,
+      });
+    }
+    // 同时加入别名（别名也需要加上唤醒词前缀）
+    cmd.aliases?.forEach((alias) => {
+      const aliasBase = cmd.parent_signature
+        ? `${cmd.parent_signature} ${alias}`
+        : alias;
+      const aliasKey = hasWakePrefix(aliasBase)
+        ? aliasBase
+        : `${displayPrefix}${aliasBase}`;
+      if (!seen.has(aliasKey)) {
+        seen.add(aliasKey);
+        result.push({
+          handler_full_name: cmd.handler_full_name,
+          effective_command: aliasKey,
+          description: cmd.description,
+          plugin_display_name: cmd.plugin_display_name,
+          enabled: cmd.enabled,
+          reserved: cmd.reserved,
+        });
+      }
+    });
+  }
+
+  allCommands.value.forEach(addCommand);
+  return result;
 });
 
-const sessionPlatformId = computed(() => props.currentSession?.platform_id || "webchat");
+function sortSystemPluginCommandsFirst(commands: SuggestionCommand[]) {
+  return [...commands].sort((a, b) => Number(b.reserved) - Number(a.reserved));
+}
+
+/** 根据当前输入过滤候选指令 */
+const filteredCommands = computed(() => {
+  const text = props.prompt;
+  if (!text || !hasWakePrefix(text)) return [];
+
+  const query = normalizeCommandSearchText(text);
+  if (!query) return sortSystemPluginCommandsFirst(enabledCommands.value);
+
+  const startsWithMatches: SuggestionCommand[] = [];
+  const containsMatches: SuggestionCommand[] = [];
+
+  for (const cmd of enabledCommands.value) {
+    const commandText = normalizeCommandSearchText(cmd.effective_command);
+    const pluginText = normalizeCommandSearchText(
+      cmd.plugin_display_name || "",
+    );
+    const descriptionText = normalizeCommandSearchText(cmd.description || "");
+    const matchesCommand = commandText.includes(query);
+    const matchesMetadata =
+      pluginText.includes(query) || descriptionText.includes(query);
+
+    if (commandText.startsWith(query)) {
+      startsWithMatches.push(cmd);
+    } else if (matchesCommand || matchesMetadata) {
+      containsMatches.push(cmd);
+    }
+  }
+
+  return [
+    ...sortSystemPluginCommandsFirst(startsWithMatches),
+    ...sortSystemPluginCommandsFirst(containsMatches),
+  ];
+});
+
+const localPrompt = computed({
+  get: () => props.prompt,
+  set: (value) => {
+    // Suppress v-model sync during IME composition to avoid a reactive
+    // feedback loop. Vue's :value binding overwrites the native textarea
+    // DOM state mid-composition, which interferes with IME insertion at
+    // non-terminal cursor positions (alternating character loss).
+    // The final value is synced manually in handleCompositionEnd.
+    if (!isComposing.value) emit("update:prompt", value);
+  },
+});
+
+const sessionPlatformId = computed(
+  () => props.currentSession?.platform_id || "webchat",
+);
 const sessionIsGroup = computed(() => Boolean(props.currentSession?.is_group));
 
 const canSend = computed(() => {
@@ -413,28 +582,25 @@ const canSend = computed(() => {
   );
 });
 
+const hasStagedAttachments = computed(() => {
+  return (
+    props.stagedImagesUrl.length > 0 ||
+    props.stagedAudioUrl ||
+    (props.stagedFiles && props.stagedFiles.length > 0) ||
+    (props.failedUploads && props.failedUploads.length > 0) ||
+    (props.activeUploads && props.activeUploads.length > 0)
+  );
+});
+
 function filePresentation(file: StagedFileInfo) {
   return attachmentPresentation(file);
 }
 
-const providerSelectorVisible = computed(() => props.showProviderSelector && providerSelectorAvailable.value);
-
-const tokenUsageVisible = computed(() => {
-  const usage = props.tokenUsage;
-  return Boolean(
-    usage && Number.isFinite(usage.used) && Number.isFinite(usage.limit) && usage.used > 0 && usage.limit > 0,
-  );
-});
-
-const tokenUsagePercent = computed(() => {
-  const percent = props.tokenUsage?.percent || 0;
-  if (!Number.isFinite(percent)) return 0;
-  return Math.min(100, Math.max(0, percent));
-});
-
-const tokenUsageColor = computed(() =>
-  isDark.value ? "rgba(var(--v-theme-on-surface), 0.82)" : "rgba(var(--v-theme-on-surface), 0.72)",
-);
+// In-flight uploads are typed by their local filename already; no need to
+// wait for the server-side classification.
+function activePresentation(active: ActiveUploadView) {
+  return attachmentPresentation({ original_name: active.name });
+}
 
 // Ctrl+B 长按录音相关
 const ctrlKeyDown = ref(false);
@@ -454,19 +620,83 @@ function handleReplyAfterLeave() {
 
 const { mobile } = useDisplay();
 
+const tokenUsageVisible = computed(() => {
+  const usage = props.tokenUsage;
+  return Boolean(
+    usage &&
+      Number.isFinite(usage.used) &&
+      Number.isFinite(usage.limit) &&
+      usage.used > 0 &&
+      usage.limit > 0,
+  );
+});
+
+const tokenUsagePercent = computed(() => {
+  const percent = props.tokenUsage?.percent || 0;
+  if (!Number.isFinite(percent)) return 0;
+  return Math.min(100, Math.max(0, percent));
+});
+
+const tokenUsageColor = computed(() =>
+  isDark.value
+    ? "rgba(var(--v-theme-on-surface), 0.82)"
+    : "rgba(var(--v-theme-on-surface), 0.72)",
+);
+
 // Auto-resize textarea
 function autoResize() {
   const el = inputField.value;
   if (!el) return;
+  const isMobileViewport =
+    typeof window !== "undefined" &&
+    window.matchMedia("(max-width: 768px)").matches;
+  const viewportHeight =
+    typeof window !== "undefined" ? window.innerHeight : 900;
+  const minHeight = 48;
+  const maxHeight = isMobileViewport
+    ? Math.min(220, Math.round(viewportHeight * 0.42))
+    : Math.min(420, Math.round(viewportHeight * 0.48));
   el.style.height = "auto";
-  el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+  el.style.height =
+    Math.min(Math.max(el.scrollHeight, minHeight), maxHeight) + "px";
 }
 
-watch(localPrompt, () => {
-  nextTick(autoResize);
-});
+watch(
+  () => props.prompt,
+  () => nextTick(autoResize),
+);
 
 function handleKeyDown(e: KeyboardEvent) {
+  // 命令提示激活时，拦截方向键和 Enter/Esc
+  if (showCommandSuggestion.value && filteredCommands.value.length > 0) {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      selectedCommandIndex.value =
+        (selectedCommandIndex.value + 1) % filteredCommands.value.length;
+      return;
+    }
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      selectedCommandIndex.value =
+        (selectedCommandIndex.value - 1 + filteredCommands.value.length) %
+        filteredCommands.value.length;
+      return;
+    }
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const cmd = filteredCommands.value[selectedCommandIndex.value];
+      if (cmd) {
+        handleCommandSelect(cmd);
+      }
+      return;
+    }
+    if (e.key === "Escape") {
+      e.preventDefault();
+      showCommandSuggestion.value = false;
+      return;
+    }
+  }
+
   const isEnter = e.key === "Enter";
   if (!isEnter) {
     // Ctrl+B 录音
@@ -488,7 +718,10 @@ function handleKeyDown(e: KeyboardEvent) {
     return;
   }
 
-  const isSendHotkey = e.ctrlKey || e.metaKey || (props.sendShortcut === "enter" ? !e.shiftKey : e.shiftKey);
+  const isSendHotkey =
+    e.ctrlKey ||
+    e.metaKey ||
+    (props.sendShortcut === "enter" ? !e.shiftKey : e.shiftKey);
 
   if (isSendHotkey) {
     e.preventDefault();
@@ -500,7 +733,61 @@ function handleKeyDown(e: KeyboardEvent) {
     if (canSend.value) {
       emit("send");
     }
-    return;
+  }
+}
+
+/** 处理输入变化，控制命令提示显示 */
+function handleInput() {
+  const text = props.prompt;
+  if (text && hasWakePrefix(text) && !isComposing.value) {
+    showCommandSuggestion.value = filteredCommands.value.length > 0;
+    selectedCommandIndex.value = 0;
+  } else {
+    showCommandSuggestion.value = false;
+  }
+}
+
+/** 处理 blur 事件，延迟关闭命令提示以允许点击 */
+function handleBlur() {
+  clearCompositionState();
+  // 延迟关闭，避免点击候选项时面板已消失
+  setTimeout(() => {
+    showCommandSuggestion.value = false;
+  }, 200);
+}
+
+/** 选择命令，填入输入框 */
+function handleCommandSelect(cmd: SuggestionCommand) {
+  localPrompt.value = cmd.effective_command + " ";
+  showCommandSuggestion.value = false;
+  nextTick(() => {
+    inputField.value?.focus();
+    autoResize();
+  });
+}
+
+/** 获取指令列表 */
+async function fetchCommands() {
+  if (commandSuggestionLoading.value) return;
+  commandSuggestionLoading.value = true;
+  try {
+    const cid = currentConfigId.value;
+    const res = await commandApi.list(
+      cid && cid !== "default" ? cid : undefined,
+    );
+    if (res.data.status === "ok") {
+      allCommands.value = res.data.data.items || [];
+      // 读取当前配置的唤醒词列表，用于指令候选的触发前缀
+      const prefixes: string[] = res.data.data.wake_prefix || [];
+      if (prefixes && prefixes.length > 0) {
+        wakePrefixes.value = prefixes;
+      }
+    }
+  } catch (err) {
+    // 静默失败，不影响聊天功能
+    console.warn("Failed to fetch commands for suggestion:", err);
+  } finally {
+    commandSuggestionLoading.value = false;
   }
 }
 
@@ -512,6 +799,30 @@ function handleCompositionStart() {
 function handleCompositionEnd(e: CompositionEvent) {
   lastCompositionEndAt.value = e.timeStamp;
   clearCompositionState({ keepLastEndAt: true });
+
+  // Manually sync the final composited text to the parent component
+  // after the IME commits. The v-model setter is suppressed during
+  // composition (see localPrompt computed), so we must explicitly
+  // propagate the DOM value once composition ends.
+  //
+  // Capture the DOM value at compositionend to guard against a race
+  // where props.prompt is externally updated between now and nextTick.
+  const endValue = inputField.value?.value;
+
+  nextTick(() => {
+    const el = inputField.value;
+    // Only sync if the DOM hasn't been changed externally in the meantime.
+    if (el && el.value === endValue && el.value !== props.prompt) {
+      emit("update:prompt", el.value);
+      // Re-evaluate command suggestions that were suppressed during IME
+      // composition (handleInput checks isComposing). Only needed when
+      // the value actually changed. Runs in a nested nextTick so
+      // props.prompt reflects the emit above.
+      nextTick(() => {
+        handleInput();
+      });
+    }
+  });
 }
 
 function clearCompositionState({ keepLastEndAt = false } = {}) {
@@ -547,6 +858,7 @@ function handlePaste(e: ClipboardEvent) {
     ]);
     return;
   }
+
   emit("pasteImage", e);
 }
 
@@ -571,14 +883,22 @@ function handleRecordClick() {
   }
 }
 
-function handleConfigChange(payload: { configId: string; agentRunnerType: string }) {
+function handleConfigChange(payload: {
+  configId: string;
+  agentRunnerType: string;
+}) {
   const runnerType = (payload.agentRunnerType || "").toLowerCase();
   const isInternal = runnerType === "internal" || runnerType === "local";
   providerSelectorAvailable.value = isInternal;
+  // 配置切换后重新获取指令列表和唤醒词
+  if (payload.configId && payload.configId !== currentConfigId.value) {
+    currentConfigId.value = payload.configId;
+    fetchCommands();
+  }
 }
 
 function getCurrentSelection() {
-  if (!providerSelectorVisible.value) {
+  if (!props.showProviderSelector || !providerSelectorAvailable.value) {
     return null;
   }
   return providerModelMenuRef.value?.getCurrentSelection();
@@ -590,17 +910,14 @@ function focusInput() {
 }
 
 onMounted(() => {
-  if (inputField.value) {
-    inputField.value.addEventListener("paste", handlePaste);
-  }
   document.addEventListener("keyup", handleKeyUp);
+  // 预加载指令列表
+  fetchCommands();
+  nextTick(autoResize);
 });
 
 onBeforeUnmount(() => {
   clearCompositionState();
-  if (inputField.value) {
-    inputField.value.removeEventListener("paste", handlePaste);
-  }
   document.removeEventListener("keyup", handleKeyUp);
 });
 
@@ -620,7 +937,7 @@ defineExpose({
 }
 
 .input-neutral-btn {
-  color: #6f6f6f !important;
+  color: #000 !important;
 }
 
 .input-neutral-btn:hover {
@@ -636,40 +953,68 @@ defineExpose({
   background: #e7e7e7;
 }
 
-.input-action-btn {
-  background: #5594c6 !important;
-  color: #fff !important;
+.input-action-btn,
+.input-outline-control,
+.input-icon-btn {
+  width: 28px !important;
+  height: 28px !important;
+  min-width: 28px !important;
 }
 
-.input-action-btn:hover {
-  background: #4c86b3 !important;
-}
-
-.input-action-btn:disabled {
-  background: rgba(85, 148, 198, 0.24) !important;
-  color: rgba(255, 255, 255, 0.72) !important;
+.input-area.is-dark .input-action-btn:not(.v-btn--disabled) {
+  background-color: color-mix(
+    in srgb,
+    rgb(var(--v-theme-primary)) 85%,
+    #000
+  ) !important;
 }
 
 .input-icon-btn {
   background: transparent !important;
   color: rgb(var(--v-theme-on-surface)) !important;
-  margin-right: 8px;
+  margin-right: 0;
 }
 
 .input-icon-btn:hover {
   background: rgba(var(--v-theme-on-surface), 0.04) !important;
 }
 
-.input-outline-control {
-  width: 36px !important;
-  height: 36px !important;
-  min-width: 36px !important;
-  border-color: rgba(var(--v-theme-on-surface), 0.18) !important;
-  background: transparent !important;
+.token-usage-indicator {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 20px;
+  border-radius: 50%;
+  color: var(--token-usage-color);
 }
 
-.input-outline-control:hover {
-  border-color: rgba(var(--v-theme-on-surface), 0.34) !important;
+.token-usage-progress {
+  color: currentColor;
+}
+
+.token-usage-progress :deep(.v-progress-circular__underlay) {
+  color: rgba(var(--v-theme-on-surface), 0.18);
+  stroke: currentColor;
+  opacity: 0.24;
+}
+
+.token-usage-progress :deep(.v-progress-circular__overlay) {
+  stroke: currentColor;
+}
+
+.input-outline-control {
+  border-radius: 50% !important;
+  border: 0 !important;
+  border-color: transparent !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.input-outline-control:hover,
+.input-outline-control:focus-visible {
+  border-color: transparent !important;
   background: rgba(var(--v-theme-on-surface), 0.04) !important;
 }
 
@@ -683,27 +1028,116 @@ defineExpose({
 }
 
 .input-area.is-dark .input-outline-control {
-  border-color: rgba(255, 255, 255, 0.22) !important;
+  border-color: transparent !important;
   background: transparent !important;
 }
 
-.input-area.is-dark .input-outline-control:hover {
-  border-color: rgba(255, 255, 255, 0.42) !important;
+.input-area.is-dark .input-outline-control:hover,
+.input-area.is-dark .input-outline-control:focus-visible {
+  border-color: transparent !important;
   background: rgba(255, 255, 255, 0.06) !important;
 }
 
-.input-area.is-dark .input-action-btn {
-  background: rgb(var(--v-theme-on-surface)) !important;
-  color: rgb(var(--v-theme-surface)) !important;
+.input-container {
+  position: relative;
+  width: var(--chat-content-width, 76%);
+  max-width: var(--chat-content-max-width, 760px);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  padding: 8px 14px !important;
+  border: 1px solid #d9d9d9;
+  border-radius: 20px !important;
+  background: #fff !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08) !important;
 }
 
-.input-area.is-dark .input-action-btn:hover {
-  background: rgba(var(--v-theme-on-surface), 0.86) !important;
+.input-area.is-dark .input-container {
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+  background: #242424 !important;
+  box-shadow: none !important;
 }
 
-.input-area.is-dark .input-action-btn:disabled {
-  background: rgba(var(--v-theme-on-surface), 0.14) !important;
-  color: rgba(var(--v-theme-on-surface), 0.4) !important;
+.reply-preview,
+.attachments-preview {
+  width: 100%;
+  flex: 0 0 auto;
+}
+
+.composer-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "field field field"
+    "left . right";
+  align-items: center;
+  gap: 4px 8px;
+}
+
+.input-field-shell {
+  grid-area: field;
+  min-width: 0;
+}
+
+.chat-textarea {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 48px;
+  max-height: min(48vh, 420px);
+  margin: 0;
+  padding: 4px 2px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  resize: none;
+  outline: none;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 22px;
+  overflow-y: auto;
+  overflow-wrap: break-word;
+}
+
+.chat-textarea::placeholder {
+  color: rgba(var(--v-theme-on-surface), 0.56);
+  opacity: 1;
+}
+
+.input-area.is-dark .chat-textarea::placeholder {
+  color: rgba(var(--v-theme-on-surface), 0.4);
+}
+
+.input-left-actions {
+  grid-area: left;
+  margin-inline-start: -8px;
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto !important;
+  justify-content: center !important;
+  gap: 0 !important;
+  min-width: auto !important;
+  margin-top: 0 !important;
+  overflow: visible !important;
+}
+
+.input-right-actions {
+  grid-area: right;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-shrink: 0;
+  gap: 8px;
+  margin-top: 0 !important;
+}
+
+.input-right-actions :deep(.provider-chip) {
+  height: 28px !important;
+  min-height: 28px !important;
+  border-radius: 999px !important;
 }
 
 .reply-preview {
@@ -795,31 +1229,62 @@ defineExpose({
 
 .attachments-preview {
   display: flex;
-  gap: 8px;
-  margin-top: 8px;
-  max-width: 900px;
-  margin: 8px auto 0;
-  flex-wrap: wrap;
+  gap: 10px;
+  margin: 10px 12px 0;
+  padding: 2px 2px 4px;
+  flex-wrap: nowrap;
+  align-items: center;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  max-height: 72px;
 }
 
-.image-preview,
-.audio-preview,
-.file-preview {
-  position: relative;
-  display: inline-flex;
+.input-container.has-attachments .attachments-preview {
+  margin: 0 0 8px;
+  padding: 0;
 }
 
 .attachment-card {
   --attachment-color: #607d8b;
-  min-width: 150px;
-  max-width: 240px;
-  height: 60px;
+  position: relative;
+  display: inline-flex;
   align-items: center;
-  gap: 9px;
-  padding: 8px 12px;
-  border-radius: 10px;
+  justify-content: flex-start;
+  gap: 8px;
+  width: 210px;
+  height: 54px;
+  flex: 0 0 auto;
+  min-width: 0;
+  padding: 7px 32px 7px 10px;
+  overflow: hidden;
+  color: rgb(var(--v-theme-on-surface));
   background: rgba(var(--v-theme-on-surface), 0.055);
-  color: var(--attachment-color);
+  border: 0;
+  border-radius: 8px;
+}
+
+.file-preview {
+  background: rgba(var(--v-theme-on-surface), 0.055);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--attachment-color) 14%, transparent),
+    rgba(var(--v-theme-on-surface), 0.055) 62%
+  );
+}
+
+.image-preview {
+  width: 54px;
+  flex-basis: 54px;
+  padding: 0;
+  background: rgba(var(--v-theme-on-surface), 0.06);
+}
+
+.preview-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 8px;
 }
 
 .attachment-icon {
@@ -827,47 +1292,43 @@ defineExpose({
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  flex: 0 0 auto;
+  gap: 1px;
+  flex-shrink: 0;
+  min-width: 34px;
+  color: var(--attachment-color);
+}
+
+.attachment-icon--audio {
+  color: #00897b;
 }
 
 .attachment-ext {
-  max-width: 42px;
+  max-width: 58px;
   overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 10px;
   font-weight: 700;
   line-height: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  color: var(--attachment-color);
 }
 
 .attachment-name {
   min-width: 0;
   overflow: hidden;
-  color: rgb(var(--v-theme-on-surface));
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 13px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.preview-image {
-  width: 60px;
-  height: 60px;
-  object-fit: cover;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.file-name-preview {
-  max-width: 120px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 17px;
 }
 
 .remove-attachment-btn {
   position: absolute;
-  top: -8px;
-  right: -8px;
+  top: 4px;
+  right: 4px;
+  width: 22px !important;
+  height: 22px !important;
+  min-width: 22px !important;
   opacity: 0.8;
   transition: opacity 0.2s;
 }
@@ -876,22 +1337,73 @@ defineExpose({
   opacity: 1;
 }
 
-.token-usage-indicator {
-  width: 28px;
-  height: 28px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  color: var(--token-usage-color);
+.attachment-card--failed {
+  --attachment-color: rgb(var(--v-theme-error));
+  padding-right: 56px;
 }
 
-.token-usage-progress {
-  color: inherit;
+.attachment-icon--failed {
+  color: rgb(var(--v-theme-error));
+}
+
+.retry-attachment-btn {
+  right: 30px;
+}
+
+.attachment-card--active {
+  padding-right: 10px;
+}
+
+.attachment-progress-text {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgb(var(--v-theme-primary));
+}
+
+.cancel-active-btn {
+  flex-shrink: 0;
+  width: 22px !important;
+  height: 22px !important;
+  min-width: 22px !important;
+  opacity: 0.7;
+}
+
+.cancel-active-btn:hover {
+  opacity: 1;
+}
+
+.attachment-progress-track {
+  position: absolute;
+  /* Align with the filename text: card padding + icon width + gap. */
+  left: 52px;
+  right: 10px;
+  bottom: 3px;
 }
 
 .fade-in {
   animation: fadeIn 0.3s ease-in-out;
+}
+
+.attachments-enter-active,
+.attachments-leave-active {
+  overflow: hidden;
+  transition:
+    max-height 0.2s ease,
+    margin 0.2s ease,
+    padding 0.2s ease,
+    opacity 0.16s ease,
+    transform 0.2s ease;
+}
+
+.attachments-enter-from,
+.attachments-leave-to {
+  max-height: 0;
+  margin-top: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  opacity: 0;
+  transform: translateY(6px);
 }
 
 @keyframes fadeIn {
@@ -908,29 +1420,64 @@ defineExpose({
 
 @media (max-width: 768px) {
   .input-area {
-    padding: 0 !important;
+    padding: 8px 0 0 !important;
+    border-top: 0;
   }
 
   .input-container {
-    width: 100% !important;
+    width: calc(100% - 20px) !important;
     max-width: 100% !important;
-    border-bottom-left-radius: 0 !important;
-    border-bottom-right-radius: 0 !important;
+    margin: 0 10px calc(8px + env(safe-area-inset-bottom)) !important;
+    padding: 8px 10px !important;
   }
 
-  .input-outline-control {
-    width: 32px !important;
-    height: 32px !important;
-    min-width: 32px !important;
+  .composer-row {
+    row-gap: 4px;
+    column-gap: 8px;
   }
 
-  .input-area textarea,
+  .input-left-actions,
+  .input-right-actions {
+    margin-top: 0 !important;
+    align-items: center !important;
+  }
+
+  .input-right-actions {
+    gap: 6px;
+  }
+
   .chat-textarea {
+    font-size: 16px;
+    max-height: min(42vh, 220px);
+  }
+
+  :deep(.provider-chip) {
+    height: 28px !important;
     min-height: 28px !important;
-    max-height: 140px !important;
-    font-size: 16px !important;
-    line-height: 20px !important;
-    padding: 8px 14px 7px !important;
+    border-radius: 999px !important;
+    padding: 0 12px !important;
+    font-size: 14px !important;
+    border-color: rgba(var(--v-theme-on-surface), 0.18) !important;
+    background: transparent !important;
+  }
+
+  .attachments-preview {
+    margin: 8px 16px 0;
+    gap: 8px;
+  }
+
+  .input-container.has-attachments .attachments-preview {
+    margin: 0 0 8px;
+  }
+
+  .attachment-card {
+    width: min(220px, calc(100vw - 28px));
+    height: 54px;
+  }
+
+  .image-preview {
+    width: 54px;
+    flex-basis: 54px;
   }
 }
 </style>

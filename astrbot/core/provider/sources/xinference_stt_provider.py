@@ -48,6 +48,7 @@ class ProviderXinferenceSTT(STTProvider):
             logger.info("Xinference STT: No API key provided.")
             client = Client(self.base_url)
         self.client = client
+        client._headers.update(self.request_headers)
 
         try:
             running_models = await client.list_models()

@@ -69,23 +69,112 @@
         </div>
 
         <div v-else class="pb-3">
-          <h3 class="skills-list-title text-h3">
-            {{ tm("status.installed") }}
-          </h3>
+          <div class="skills-list-header">
+            <h3 class="skills-list-title text-h3">
+              {{ tm("status.installed") }}
+            </h3>
+            <div class="skills-search-wrap">
+              <v-text-field
+                v-model="skillSearch"
+                :label="tm('skills.searchPlaceholder')"
+                prepend-inner-icon="mdi-magnify"
+                density="compact"
+                variant="solo-filled"
+                flat
+                clearable
+                hide-details
+                single-line
+                class="skills-search-field"
+              />
+            </div>
+            <div class="skills-list-actions">
+              <template v-if="batchSelectionEnabled">
+                <v-btn
+                  variant="text"
+                  size="small"
+                  :disabled="batchDeleting"
+                  @click="toggleSelectAll"
+                >
+                  {{
+                    allDeletableSelected
+                      ? tm("skills.clearSelection")
+                      : tm("skills.selectAll")
+                  }}
+                </v-btn>
+                <v-btn
+                  color="error"
+                  variant="tonal"
+                  size="small"
+                  prepend-icon="mdi-delete-outline"
+                  :disabled="selectedSkillNames.length === 0 || batchDeleting"
+                  @click="confirmBatchDelete"
+                >
+                  {{
+                    tm("skills.deleteSelected", {
+                      count: selectedSkillNames.length,
+                    })
+                  }}
+                </v-btn>
+                <v-btn
+                  variant="text"
+                  size="small"
+                  :disabled="batchDeleting"
+                  @click="cancelBatchSelection"
+                >
+                  {{ tm("skills.cancel") }}
+                </v-btn>
+              </template>
+              <v-btn
+                v-else
+                variant="tonal"
+                size="small"
+                prepend-icon="mdi-select-multiple"
+                :disabled="deletableSkills.length === 0"
+                @click="startBatchSelection"
+              >
+                {{ tm("skills.select") }}
+              </v-btn>
+            </div>
+          </div>
 
-          <div class="skills-list">
+          <div v-if="filteredSkills.length === 0" class="text-center pa-8">
+            <v-icon size="64" color="grey-lighten-1">mdi-magnify</v-icon>
+            <p class="text-grey mt-4">{{ tm("skills.noSearchResult") }}</p>
+          </div>
+
+          <div v-else class="skills-list">
             <OutlinedActionListItem
-              v-for="skill in skills"
+              v-for="skill in filteredSkills"
               :key="skill.name"
               :title="skill.name"
               class="skill-list-item"
               :class="{
                 'skill-list-item--inactive':
                   skill.active === false || isInactivePluginSkill(skill),
+                'skill-list-item--selected':
+                  batchSelectionEnabled &&
+                  selectedSkillNames.includes(skill.name),
               }"
-              clickable
+              :clickable="!batchSelectionEnabled"
               @click="openSkillEditor(skill)"
             >
+              <template #title-prepend>
+                <v-checkbox-btn
+                  v-if="batchSelectionEnabled && !isReadOnlySourceSkill(skill)"
+                  v-model="selectedSkillNames"
+                  :value="skill.name"
+                  density="compact"
+                  hide-details
+                  :disabled="batchDeleting"
+                  :aria-label="
+                    tm('skills.selectSkill', {
+                      name: skill.name,
+                    })
+                  "
+                  @click.stop
+                />
+              </template>
+
               <template #title-extra>
                 <div class="d-flex align-center ga-1">
                   <v-chip
@@ -116,7 +205,7 @@
                 {{ tm("skills.path") }}: {{ skill.path }}
               </div>
 
-              <template #actions>
+              <template v-if="!batchSelectionEnabled" #actions>
                 <v-tooltip :text="tm('skills.download')" location="top">
                   <template #activator="{ props }">
                     <v-btn
@@ -153,7 +242,7 @@
                 </v-tooltip>
               </template>
 
-              <template #control>
+              <template v-if="!batchSelectionEnabled" #control>
                 <v-tooltip location="top">
                   <template #activator="{ props }">
                     <v-switch
@@ -169,8 +258,8 @@
                         isInactivePluginSkill(skill)
                           ? tm('skills.pluginDisabled')
                           : skill.active
-                          ? tm('skills.disable')
-                          : tm('skills.enable')
+                            ? tm('skills.disable')
+                            : tm('skills.enable')
                       "
                       :loading="itemLoading[skill.name] || false"
                       :disabled="
@@ -186,8 +275,8 @@
                     isInactivePluginSkill(skill)
                       ? tm("skills.pluginDisabled")
                       : skill.active
-                      ? tm("skills.disable")
-                      : tm("skills.enable")
+                        ? tm("skills.disable")
+                        : tm("skills.enable")
                   }}</span>
                 </v-tooltip>
               </template>
@@ -319,7 +408,7 @@
                   size="x-small"
                   variant="tonal"
                   :disabled="!item.payload_ref"
-                  @click="viewPayload(item.payload_ref)"
+                  @click="item.payload_ref && viewPayload(item.payload_ref)"
                 >
                   Payload
                 </v-btn>
@@ -644,11 +733,68 @@
         }}</v-card-title>
         <v-card-text>{{ tm("skills.deleteMessage") }}</v-card-text>
         <v-card-actions class="d-flex justify-end">
-        <v-btn variant="text" @click="deleteDialog = false">
-          {{ tm("skills.cancel") }}
-        </v-btn>
-        <v-btn color="error" variant="tonal" :loading="deleting" @click="deleteSkill">
+          <v-btn variant="text" @click="deleteDialog = false">
+            {{ tm("skills.cancel") }}
+          </v-btn>
+          <v-btn
+            color="error"
+            variant="tonal"
+            :loading="deleting"
+            @click="deleteSkill"
+          >
             {{ t("core.common.itemCard.delete") }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <v-dialog
+      v-model="batchDeleteDialog"
+      max-width="520px"
+      :persistent="batchDeleting"
+    >
+      <v-card>
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">
+          {{ tm("skills.batchDeleteTitle") }}
+        </v-card-title>
+        <v-card-text>
+          <p>
+            {{
+              tm("skills.batchDeleteMessage", {
+                count: batchDeleteTargets.length,
+              })
+            }}
+          </p>
+          <v-list class="batch-delete-targets mt-3" density="compact">
+            <v-list-item
+              v-for="name in batchDeleteTargets"
+              :key="name"
+              class="batch-delete-target"
+              :title="name"
+              prepend-icon="mdi-puzzle-outline"
+            />
+          </v-list>
+        </v-card-text>
+        <v-card-actions class="d-flex justify-end">
+          <v-btn
+            variant="text"
+            :disabled="batchDeleting"
+            @click="batchDeleteDialog = false"
+          >
+            {{ tm("skills.cancel") }}
+          </v-btn>
+          <v-btn
+            color="error"
+            variant="tonal"
+            :loading="batchDeleting"
+            :disabled="batchDeleteTargets.length === 0"
+            @click="deleteSelectedSkills"
+          >
+            {{
+              tm("skills.batchDeleteConfirm", {
+                count: batchDeleteTargets.length,
+              })
+            }}
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -657,6 +803,7 @@
     <v-dialog
       v-model="editorDialog.show"
       max-width="1180px"
+      :fullscreen="$vuetify.display.mdAndDown"
       :persistent="editorDialog.saving"
     >
       <v-card class="skill-editor-dialog">
@@ -824,6 +971,7 @@
 <script lang="ts">
 import { VueMonacoEditor } from "@guolao/vue-monaco-editor";
 import { computed, nextTick, onMounted, reactive, ref, watch } from "vue";
+import type { editor } from "monaco-editor";
 import OutlinedActionListItem from "@/components/shared/OutlinedActionListItem.vue";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { useCustomizerStore } from "@/stores/customizer";
@@ -835,6 +983,15 @@ interface Skill {
   description: string | null;
   path: string;
   source_type: string;
+  preset?: boolean;
+  plugin_active?: boolean;
+}
+
+interface SkillEntry {
+  name: string;
+  path: string;
+  type: "directory" | "file";
+  editable?: boolean;
 }
 
 interface UploadResultEntry {
@@ -896,6 +1053,7 @@ interface SkillsListPayload {
   };
   skills?: Skill[];
 }
+import { buildSearchQuery, matchesText } from "@/utils/pluginSearch";
 
 const STATUS_WAITING = "waiting";
 const STATUS_UPLOADING = "uploading";
@@ -916,9 +1074,14 @@ export default {
 
     const mode = ref("local");
     const skills = ref<Skill[]>([]);
+    const skillSearch = ref("");
     const loading = ref(false);
     const runtime = ref("local");
-    const sandboxCache = reactive<SandboxCache>({ ready: false, count: 0, updated_at: null });
+    const sandboxCache = reactive<SandboxCache>({
+      ready: false,
+      count: 0,
+      updated_at: null,
+    });
     const uploading = ref(false);
     const uploadDialog = ref(false);
     const uploadInput = ref<HTMLInputElement | null>(null);
@@ -928,16 +1091,21 @@ export default {
     const deleteDialog = ref(false);
     const deleting = ref(false);
     const skillToDelete = ref<Skill | null>(null);
-    const snackbar = reactive<{ show: boolean; message: string; color: string }>({
-      show: false,
-      message: "",
-      color: "success",
-    });
+    const batchSelectionEnabled = ref(false);
+    const selectedSkillNames = ref<string[]>([]);
+    const batchDeleteTargets = ref<string[]>([]);
+    const batchDeleteDialog = ref(false);
+    const batchDeleting = ref(false);
+    const snackbar = reactive({ show: false, message: "", color: "success" });
 
     const neoLoading = ref(false);
     const neoCandidates = ref<NeoCandidate[]>([]);
     const neoReleases = ref<NeoRelease[]>([]);
-    const neoFilters = reactive<{ skill_key: string; status: string; stage: string }>({
+    const neoFilters = reactive<{
+      skill_key: string;
+      status: string;
+      stage: string;
+    }>({
       skill_key: "",
       status: "",
       stage: "",
@@ -951,7 +1119,7 @@ export default {
       show: false,
       skillName: "",
       currentDir: "",
-      entries: [],
+      entries: [] as SkillEntry[],
       filePath: "",
       content: "",
       fileEditable: false,
@@ -983,7 +1151,10 @@ export default {
       { title: "stable", value: "stable" },
     ]);
 
-    const activeReleaseCount = computed(() => neoReleases.value.filter((item: NeoRelease) => item?.is_active).length);
+    const activeReleaseCount = computed(
+      () =>
+        neoReleases.value.filter((item: NeoRelease) => item?.is_active).length,
+    );
     const editorLanguage = computed(() => {
       const path = String(editorDialog.filePath || "").toLowerCase();
       if (path.endsWith(".json")) return "json";
@@ -998,17 +1169,21 @@ export default {
       if (path.endsWith(".md") || path.endsWith(".txt")) return "markdown";
       return "plaintext";
     });
-    const editorTheme = computed(() => (customizer.uiTheme === "PurpleThemeDark" ? "vs-dark" : "vs-light"));
-    const editorOptions = computed(() => ({
-      automaticLayout: true,
-      fontSize: 13,
-      lineNumbers: "on",
-      minimap: { enabled: false },
-      readOnly: !editorDialog.fileEditable || editorDialog.loadingFile,
-      scrollBeyondLastLine: false,
-      tabSize: 2,
-      wordWrap: "on",
-    }));
+    const editorTheme = computed(() =>
+      customizer.isDark ? "vs-dark" : "vs-light",
+    );
+    const editorOptions = computed<editor.IStandaloneEditorConstructionOptions>(
+      () => ({
+        automaticLayout: true,
+        fontSize: 13,
+        lineNumbers: "on",
+        minimap: { enabled: false },
+        readOnly: !editorDialog.fileEditable || editorDialog.loadingFile,
+        scrollBeyondLastLine: false,
+        tabSize: 2,
+        wordWrap: "on",
+      }),
+    );
     const uploadStateCounts = computed(() =>
       uploadItems.value.reduce<UploadStateCounts>(
         (counts, item) => {
@@ -1027,7 +1202,10 @@ export default {
       ),
     );
     const hasUploadableItems = computed(() =>
-      uploadItems.value.some((item: UploadItem) => item.status === STATUS_WAITING || item.status === STATUS_ERROR),
+      uploadItems.value.some(
+        (item: UploadItem) =>
+          item.status === STATUS_WAITING || item.status === STATUS_ERROR,
+      ),
     );
 
     const candidateHeaders = computed(() => [
@@ -1063,7 +1241,9 @@ export default {
       snackbar.show = true;
     };
 
-    const normalizeSkillsPayload = (res: { data?: { data?: Skill[] | SkillsListPayload } }): Skill[] => {
+    const normalizeSkillsPayload = (res: {
+      data?: { data?: Skill[] | SkillsListPayload };
+    }): Skill[] => {
       const payload = res?.data?.data || [];
       if (Array.isArray(payload)) {
         runtime.value = "local";
@@ -1080,30 +1260,43 @@ export default {
       return payload.skills || [];
     };
 
-    const sourceTypeLabel = (sourceType, skill = null) => {
-      if (sourceType === "plugin") {
-        return tm("skills.sourcePlugin", {
-          plugin: skill?.source_label || skill?.plugin_name || "",
-        });
-      }
-      if (sourceType === "sandbox_only") return tm("skills.sourceSandboxOnly");
-      if (sourceType === "both") return tm("skills.sourceBoth");
-      return tm("skills.sourceLocalOnly");
-    };
+    const isSandboxPresetSkill = (skill: Skill): boolean =>
+      skill.source_type === "sandbox_only";
+    const isPluginProvidedSkill = (skill: Skill): boolean =>
+      skill.source_type === "plugin";
+    const isInactivePluginSkill = (skill: Skill): boolean =>
+      isPluginProvidedSkill(skill) && skill.plugin_active === false;
+    const isReadOnlySourceSkill = (skill: Skill): boolean =>
+      isSandboxPresetSkill(skill) || isPluginProvidedSkill(skill);
+    const deletableSkills = computed(() =>
+      skills.value.filter((skill) => !isReadOnlySourceSkill(skill)),
+    );
 
-    const sourceTypeColor = (sourceType: string): string => {
-      if (sourceType === "sandbox_only") return "indigo";
-      if (sourceType === "plugin") return "secondary";
-      if (sourceType === "both") return "success";
-      return "primary";
-    };
+    const filteredSkills = computed(() => {
+      const query = buildSearchQuery(skillSearch.value);
+      if (!query) return skills.value;
+      return skills.value.filter((skill) =>
+        [skill.name, skill.description, skill.path].some((field) =>
+          matchesText(field, query),
+        ),
+      );
+    });
 
-    const isSandboxPresetSkill = (skill: Skill): boolean => skill?.source_type === "sandbox_only";
-    const isPluginProvidedSkill = (skill) => skill?.source_type === "plugin";
-    const isInactivePluginSkill = (skill) => isPluginProvidedSkill(skill) && skill?.plugin_active === false;
-    const isReadOnlySourceSkill = (skill) => isSandboxPresetSkill(skill) || isPluginProvidedSkill(skill);
+    // Select-all only applies to the currently visible (filtered) deletable skills.
+    const visibleDeletableSkills = computed(() =>
+      filteredSkills.value.filter((skill) => !isReadOnlySourceSkill(skill)),
+    );
+    const allDeletableSelected = computed(
+      () =>
+        visibleDeletableSkills.value.length > 0 &&
+        visibleDeletableSkills.value.every((skill) =>
+          selectedSkillNames.value.includes(skill.name),
+        ),
+    );
 
-    const normalizeNeoItemsPayload = <T>(res: { data?: { data?: T[] | { items?: T[] } } }): T[] => {
+    const normalizeNeoItemsPayload = <T,>(res: {
+      data?: { data?: T[] | { items?: T[] } };
+    }): T[] => {
       const payload = res?.data?.data || [];
       if (Array.isArray(payload)) return payload;
       if (Array.isArray(payload.items)) return payload.items;
@@ -1122,7 +1315,11 @@ export default {
         .trim()
         .toLowerCase();
 
-    const buildUploadItem = (file: File, status: UploadStatus, validationMessage: string): UploadItem => ({
+    const buildUploadItem = (
+      file: File,
+      status: UploadStatus,
+      validationMessage: string,
+    ): UploadItem => ({
       id: `upload-${nextUploadItemId++}`,
       file,
       name: file.name,
@@ -1140,7 +1337,8 @@ export default {
       return tm("skills.statusWaiting");
     };
 
-    const statusChipClass = (status: string): string => `skills-status-chip skills-status-chip--${status}`;
+    const statusChipClass = (status: string): string =>
+      `skills-status-chip skills-status-chip--${status}`;
 
     const resetUploadState = (): void => {
       uploadItems.value = [];
@@ -1165,7 +1363,9 @@ export default {
     };
 
     const addUploadFiles = (filesToAdd: File[]): void => {
-      const existingNames = new Set(uploadItems.value.map((item: UploadItem) => item.filenameKey));
+      const existingNames = new Set(
+        uploadItems.value.map((item: UploadItem) => item.filenameKey),
+      );
       const nextItems: UploadItem[] = [];
 
       for (const file of filesToAdd) {
@@ -1173,17 +1373,31 @@ export default {
         const filenameKey = normalizeUploadName(file.name);
 
         if (existingNames.has(filenameKey)) {
-          nextItems.push(buildUploadItem(file, STATUS_SKIPPED, tm("skills.validationDuplicate")));
+          nextItems.push(
+            buildUploadItem(
+              file,
+              STATUS_SKIPPED,
+              tm("skills.validationDuplicate"),
+            ),
+          );
           continue;
         }
 
         existingNames.add(filenameKey);
         if (!/\.zip$/i.test(file.name)) {
-          nextItems.push(buildUploadItem(file, STATUS_SKIPPED, tm("skills.validationZipOnly")));
+          nextItems.push(
+            buildUploadItem(
+              file,
+              STATUS_SKIPPED,
+              tm("skills.validationZipOnly"),
+            ),
+          );
           continue;
         }
 
-        nextItems.push(buildUploadItem(file, STATUS_WAITING, tm("skills.validationReady")));
+        nextItems.push(
+          buildUploadItem(file, STATUS_WAITING, tm("skills.validationReady")),
+        );
       }
 
       if (nextItems.length > 0) {
@@ -1209,7 +1423,9 @@ export default {
     };
 
     const removeUploadItem = (itemId: string): void => {
-      uploadItems.value = uploadItems.value.filter((item: UploadItem) => item.id !== itemId);
+      uploadItems.value = uploadItems.value.filter(
+        (item: UploadItem) => item.id !== itemId,
+      );
     };
 
     const takeFirstMatch = (
@@ -1224,7 +1440,9 @@ export default {
       return entry;
     };
 
-    const buildResultMap = (items: UploadResultEntry[] = []): Map<string, UploadResultEntry[]> => {
+    const buildResultMap = (
+      items: UploadResultEntry[] = [],
+    ): Map<string, UploadResultEntry[]> => {
       const resultMap = new Map<string, UploadResultEntry[]>();
       for (const item of items) {
         const filenameKey = normalizeUploadName(item?.filename || "");
@@ -1262,14 +1480,16 @@ export default {
         const skippedEntry = takeFirstMatch(skippedMap, item.filenameKey);
         if (skippedEntry) {
           item.status = STATUS_SKIPPED;
-          item.validationMessage = skippedEntry.error || tm("skills.validationDuplicate");
+          item.validationMessage =
+            skippedEntry.error || tm("skills.validationDuplicate");
           continue;
         }
 
         const failedEntry = takeFirstMatch(failedMap, item.filenameKey);
         if (failedEntry) {
           item.status = STATUS_ERROR;
-          item.validationMessage = failedEntry.error || tm("skills.validationUploadFailed");
+          item.validationMessage =
+            failedEntry.error || tm("skills.validationUploadFailed");
           continue;
         }
 
@@ -1278,13 +1498,26 @@ export default {
       }
     };
 
-    const fetchSkills = async (): Promise<void> => {
+    const fetchSkills = async (): Promise<boolean> => {
       loading.value = true;
       try {
         const res = await axios.get("/api/skills");
         skills.value = normalizeSkillsPayload(res);
+        const deletableNames = new Set(
+          skills.value
+            .filter((skill) => !isReadOnlySourceSkill(skill))
+            .map((skill) => skill.name),
+        );
+        selectedSkillNames.value = selectedSkillNames.value.filter((name) =>
+          deletableNames.has(name),
+        );
+        if (batchSelectionEnabled.value && deletableNames.size === 0) {
+          batchSelectionEnabled.value = false;
+        }
+        return true;
       } catch (_err: unknown) {
         showMessage(tm("skills.loadFailed"), "error");
+        return false;
       } finally {
         loading.value = false;
       }
@@ -1300,14 +1533,16 @@ export default {
         showMessage(successMessage, "success");
         if (onSuccess) onSuccess();
       } else {
-        const msg = (res && res.data && res.data.message) || failureMessageDefault;
+        const msg =
+          (res && res.data && res.data.message) || failureMessageDefault;
         showMessage(msg, "error");
       }
     };
 
     const uploadSkillBatch = async (): Promise<void> => {
       const attemptedItems = uploadItems.value.filter(
-        (item: UploadItem) => item.status === STATUS_WAITING || item.status === STATUS_ERROR,
+        (item: UploadItem) =>
+          item.status === STATUS_WAITING || item.status === STATUS_ERROR,
       );
       if (attemptedItems.length === 0) return;
 
@@ -1330,10 +1565,22 @@ export default {
         const payload = res?.data?.data || {};
         applyUploadResults(attemptedItems, payload);
 
-        const succeededCount = Array.isArray(payload.succeeded) ? payload.succeeded.length : 0;
-        const failedCount = Array.isArray(payload.failed) ? payload.failed.length : 0;
-        const responseColor = res?.data?.status === "error" ? "error" : failedCount > 0 ? "warning" : "success";
-        showMessage(res?.data?.message || tm("skills.uploadSuccess"), responseColor);
+        const succeededCount = Array.isArray(payload.succeeded)
+          ? payload.succeeded.length
+          : 0;
+        const failedCount = Array.isArray(payload.failed)
+          ? payload.failed.length
+          : 0;
+        const responseColor =
+          res?.data?.status === "error"
+            ? "error"
+            : failedCount > 0
+              ? "warning"
+              : "success";
+        showMessage(
+          res?.data?.message || tm("skills.uploadSuccess"),
+          responseColor,
+        );
 
         if (succeededCount > 0) {
           await fetchSkills();
@@ -1346,6 +1593,104 @@ export default {
         showMessage(tm("skills.uploadFailed"), "error");
       } finally {
         uploading.value = false;
+      }
+    };
+
+    const startBatchSelection = () => {
+      selectedSkillNames.value = [];
+      batchDeleteTargets.value = [];
+      batchSelectionEnabled.value = true;
+    };
+
+    const cancelBatchSelection = () => {
+      if (batchDeleting.value) return;
+      batchSelectionEnabled.value = false;
+      selectedSkillNames.value = [];
+      batchDeleteTargets.value = [];
+      batchDeleteDialog.value = false;
+    };
+
+    const toggleSelectAll = () => {
+      if (allDeletableSelected.value) {
+        selectedSkillNames.value = [];
+        return;
+      }
+      selectedSkillNames.value = visibleDeletableSkills.value.map(
+        (skill) => skill.name,
+      );
+    };
+
+    const confirmBatchDelete = () => {
+      const selectedNames = new Set(selectedSkillNames.value);
+      batchDeleteTargets.value = [
+        ...new Set(
+          visibleDeletableSkills.value
+            .filter((skill) => selectedNames.has(skill.name))
+            .map((skill) => skill.name),
+        ),
+      ];
+      if (batchDeleteTargets.value.length === 0) return;
+      batchDeleteDialog.value = true;
+    };
+
+    const deleteSelectedSkills = async () => {
+      if (batchDeleting.value || batchDeleteTargets.value.length === 0) return;
+
+      const targets = [...batchDeleteTargets.value];
+      const failed: string[] = [];
+      let succeeded = 0;
+      batchDeleting.value = true;
+
+      try {
+        for (const name of targets) {
+          try {
+            const res = await axios.post("/api/skills/delete", { name });
+            if (res?.data?.status === "ok") {
+              succeeded += 1;
+            } else {
+              failed.push(name);
+            }
+          } catch (_err) {
+            failed.push(name);
+          }
+        }
+
+        const refreshed = await fetchSkills();
+        if (refreshed) {
+          const currentDeletableNames = new Set(
+            skills.value
+              .filter((skill) => !isReadOnlySourceSkill(skill))
+              .map((skill) => skill.name),
+          );
+          selectedSkillNames.value = failed.filter((name) =>
+            currentDeletableNames.has(name),
+          );
+        } else {
+          selectedSkillNames.value = failed;
+          batchSelectionEnabled.value = failed.length > 0;
+        }
+        batchDeleteDialog.value = false;
+        batchDeleteTargets.value = [];
+
+        if (!refreshed) return;
+
+        if (failed.length === 0) {
+          batchSelectionEnabled.value = false;
+          showMessage(
+            tm("skills.batchDeleteSuccess", { count: succeeded }),
+            "success",
+          );
+        } else {
+          showMessage(
+            tm("skills.batchDeletePartial", {
+              succeeded,
+              failed: failed.length,
+            }),
+            "warning",
+          );
+        }
+      } finally {
+        batchDeleting.value = false;
       }
     };
 
@@ -1365,9 +1710,14 @@ export default {
           name: skill.name,
           active: nextActive,
         });
-        handleApiResponse(res, tm("skills.updateSuccess"), tm("skills.updateFailed"), () => {
-          skill.active = nextActive;
-        });
+        handleApiResponse(
+          res,
+          tm("skills.updateSuccess"),
+          tm("skills.updateFailed"),
+          () => {
+            skill.active = nextActive;
+          },
+        );
       } catch (_err: unknown) {
         showMessage(tm("skills.updateFailed"), "error");
       } finally {
@@ -1395,10 +1745,15 @@ export default {
         const res = await axios.post("/api/skills/delete", {
           name: skillToDelete.value.name,
         });
-        handleApiResponse(res, tm("skills.deleteSuccess"), tm("skills.deleteFailed"), async () => {
-          deleteDialog.value = false;
-          await fetchSkills();
-        });
+        handleApiResponse(
+          res,
+          tm("skills.deleteSuccess"),
+          tm("skills.deleteFailed"),
+          async () => {
+            deleteDialog.value = false;
+            await fetchSkills();
+          },
+        );
       } catch (_err: unknown) {
         showMessage(tm("skills.deleteFailed"), "error");
       } finally {
@@ -1452,7 +1807,7 @@ export default {
       editorDialog.error = "";
     };
 
-    const loadSkillDir = async (path = "") => {
+    const loadSkillDir = async (path = ""): Promise<SkillEntry[]> => {
       if (!editorDialog.skillName) return [];
       editorDialog.loadingFiles = true;
       editorDialog.error = "";
@@ -1461,12 +1816,15 @@ export default {
           params: { name: editorDialog.skillName, path },
         });
         if (res?.data?.status !== "ok") {
-          editorDialog.error = res?.data?.message || tm("skills.editorLoadFailed");
+          editorDialog.error =
+            res?.data?.message || tm("skills.editorLoadFailed");
           return [];
         }
         const payload = res.data.data || {};
         editorDialog.currentDir = payload.path || "";
-        editorDialog.entries = Array.isArray(payload.entries) ? payload.entries : [];
+        editorDialog.entries = Array.isArray(payload.entries)
+          ? payload.entries
+          : [];
         return editorDialog.entries;
       } catch (_err) {
         editorDialog.error = tm("skills.editorLoadFailed");
@@ -1476,9 +1834,12 @@ export default {
       }
     };
 
-    const loadSkillFile = async (path) => {
+    const loadSkillFile = async (path: string): Promise<void> => {
       if (!editorDialog.skillName || !path) return;
-      if (editorDialog.fileDirty && !window.confirm(tm("skills.discardChanges"))) {
+      if (
+        editorDialog.fileDirty &&
+        !window.confirm(tm("skills.discardChanges"))
+      ) {
         return;
       }
       editorDialog.loadingFile = true;
@@ -1488,7 +1849,8 @@ export default {
           params: { name: editorDialog.skillName, path },
         });
         if (res?.data?.status !== "ok") {
-          editorDialog.error = res?.data?.message || tm("skills.editorLoadFailed");
+          editorDialog.error =
+            res?.data?.message || tm("skills.editorLoadFailed");
           return;
         }
         const payload = res.data.data || {};
@@ -1504,7 +1866,7 @@ export default {
       }
     };
 
-    const openSkillEditor = async (skill) => {
+    const openSkillEditor = async (skill: Skill): Promise<void> => {
       if (isSandboxPresetSkill(skill)) {
         showMessage(tm("skills.sandboxPresetReadonly"), "warning");
         return;
@@ -1521,17 +1883,23 @@ export default {
 
     const closeSkillEditor = () => {
       if (editorDialog.saving) return;
-      if (editorDialog.fileDirty && !window.confirm(tm("skills.discardChanges"))) {
+      if (
+        editorDialog.fileDirty &&
+        !window.confirm(tm("skills.discardChanges"))
+      ) {
         return;
       }
       editorDialog.show = false;
       resetEditorDialog();
     };
 
-    const openSkillEntry = async (entry) => {
+    const openSkillEntry = async (entry: SkillEntry): Promise<void> => {
       if (!entry) return;
       if (entry.type === "directory") {
-        if (editorDialog.fileDirty && !window.confirm(tm("skills.discardChanges"))) {
+        if (
+          editorDialog.fileDirty &&
+          !window.confirm(tm("skills.discardChanges"))
+        ) {
           return;
         }
         await loadSkillDir(entry.path);
@@ -1542,7 +1910,10 @@ export default {
 
     const openParentSkillDir = async () => {
       if (!editorDialog.currentDir) return;
-      if (editorDialog.fileDirty && !window.confirm(tm("skills.discardChanges"))) {
+      if (
+        editorDialog.fileDirty &&
+        !window.confirm(tm("skills.discardChanges"))
+      ) {
         return;
       }
       const parts = editorDialog.currentDir.split("/").filter(Boolean);
@@ -1551,7 +1922,11 @@ export default {
     };
 
     const saveSkillFile = async () => {
-      if (!editorDialog.skillName || !editorDialog.filePath || !editorDialog.fileEditable) {
+      if (
+        !editorDialog.skillName ||
+        !editorDialog.filePath ||
+        !editorDialog.fileEditable
+      ) {
         return;
       }
       editorDialog.saving = true;
@@ -1563,7 +1938,8 @@ export default {
           content: editorDialog.content,
         });
         if (res?.data?.status !== "ok") {
-          editorDialog.error = res?.data?.message || tm("skills.editorSaveFailed");
+          editorDialog.error =
+            res?.data?.message || tm("skills.editorSaveFailed");
           showMessage(editorDialog.error, "error");
           return;
         }
@@ -1593,15 +1969,17 @@ export default {
         stage: neoFilters.stage || undefined,
       };
       const res = await axios.get("/api/skills/neo/releases", { params });
-      neoReleases.value = normalizeNeoItemsPayload<NeoRelease>(res).map((item: NeoRelease) => {
-        if (!item || typeof item !== "object") {
-          return item;
-        }
-        return {
-          ...item,
-          is_active: item.is_active ?? item.active ?? false,
-        };
-      });
+      neoReleases.value = normalizeNeoItemsPayload<NeoRelease>(res).map(
+        (item: NeoRelease) => {
+          if (!item || typeof item !== "object") {
+            return item;
+          }
+          return {
+            ...item,
+            is_active: item.is_active ?? item.active ?? false,
+          };
+        },
+      );
     };
 
     const loadNeoAvailability = async (): Promise<void> => {
@@ -1609,9 +1987,10 @@ export default {
         const res = await axios.get("/api/config/get");
         const config = res?.data?.data?.config || {};
         const providerSettings = config?.provider_settings || {};
-        const currentRuntime = providerSettings?.computer_use_runtime || "local";
+        const currentRuntime = providerSettings?.computer_use_runtime || "none";
         const booter = providerSettings?.sandbox?.booter || "";
-        neoEnabled.value = currentRuntime === "sandbox" && booter === "shipyard_neo";
+        neoEnabled.value =
+          currentRuntime === "sandbox" && booter === "shipyard_neo";
       } catch (_err: unknown) {
         neoEnabled.value = false;
       }
@@ -1633,7 +2012,10 @@ export default {
       }
     };
 
-    const evaluateCandidate = async (candidate: NeoCandidate, passed: boolean): Promise<void> => {
+    const evaluateCandidate = async (
+      candidate: NeoCandidate,
+      passed: boolean,
+    ): Promise<void> => {
       try {
         const res = await axios.post("/api/skills/neo/evaluate", {
           candidate_id: candidate.id,
@@ -1641,21 +2023,36 @@ export default {
           score: passed ? 1.0 : 0.0,
           report: passed ? "approved_from_webui" : "rejected_from_webui",
         });
-        handleApiResponse(res, tm("skills.neoEvaluateSuccess"), tm("skills.neoEvaluateFailed"), async () => {
-          await fetchNeoCandidates();
-        });
+        handleApiResponse(
+          res,
+          tm("skills.neoEvaluateSuccess"),
+          tm("skills.neoEvaluateFailed"),
+          async () => {
+            await fetchNeoCandidates();
+          },
+        );
       } catch (_err: unknown) {
         showMessage(tm("skills.neoEvaluateFailed"), "error");
       }
     };
 
-    const candidatePromoteLoadingKey = (candidateId: string, stage: string): string => `${candidateId}:${stage}`;
-    const isCandidatePromoteLoading = (candidateId: string, stage: string): boolean =>
+    const candidatePromoteLoadingKey = (
+      candidateId: string,
+      stage: string,
+    ): string => `${candidateId}:${stage}`;
+    const isCandidatePromoteLoading = (
+      candidateId: string,
+      stage: string,
+    ): boolean =>
       !!candidatePromoteLoading[candidatePromoteLoadingKey(candidateId, stage)];
     const isCandidatePromoting = (candidateId: string): boolean =>
-      isCandidatePromoteLoading(candidateId, "canary") || isCandidatePromoteLoading(candidateId, "stable");
+      isCandidatePromoteLoading(candidateId, "canary") ||
+      isCandidatePromoteLoading(candidateId, "stable");
 
-    const promoteCandidate = async (candidate: NeoCandidate, stage: "canary" | "stable"): Promise<void> => {
+    const promoteCandidate = async (
+      candidate: NeoCandidate,
+      stage: "canary" | "stable",
+    ): Promise<void> => {
       const candidateId = candidate?.id;
       if (!candidateId) return;
       const loadingKey = candidatePromoteLoadingKey(candidateId, stage);
@@ -1669,7 +2066,10 @@ export default {
         });
         const ok = res?.data?.status === "ok";
         if (!ok) {
-          showMessage(res?.data?.message || tm("skills.neoPromoteFailed"), "error");
+          showMessage(
+            res?.data?.message || tm("skills.neoPromoteFailed"),
+            "error",
+          );
         } else {
           showMessage(tm("skills.neoPromoteSuccess"), "success");
         }
@@ -1689,9 +2089,14 @@ export default {
         const res = await axios.post("/api/skills/neo/rollback", {
           release_id: release.id,
         });
-        handleApiResponse(res, tm("skills.neoRollbackSuccess"), tm("skills.neoRollbackFailed"), async () => {
-          await fetchNeoData();
-        });
+        handleApiResponse(
+          res,
+          tm("skills.neoRollbackSuccess"),
+          tm("skills.neoRollbackFailed"),
+          async () => {
+            await fetchNeoData();
+          },
+        );
       } catch (_err: unknown) {
         showMessage(tm("skills.neoRollbackFailed"), "error");
       }
@@ -1702,15 +2107,22 @@ export default {
         const res = await axios.post("/api/skills/neo/rollback", {
           release_id: release.id,
         });
-        handleApiResponse(res, tm("skills.neoDeactivateSuccess"), tm("skills.neoDeactivateFailed"), async () => {
-          await fetchNeoData();
-        });
+        handleApiResponse(
+          res,
+          tm("skills.neoDeactivateSuccess"),
+          tm("skills.neoDeactivateFailed"),
+          async () => {
+            await fetchNeoData();
+          },
+        );
       } catch (_err: unknown) {
         showMessage(tm("skills.neoDeactivateFailed"), "error");
       }
     };
 
-    const handleReleaseLifecycleAction = async (release: NeoRelease): Promise<void> => {
+    const handleReleaseLifecycleAction = async (
+      release: NeoRelease,
+    ): Promise<void> => {
       if (release?.is_active) {
         await deactivateRelease(release);
         return;
@@ -1723,9 +2135,14 @@ export default {
         const res = await axios.post("/api/skills/neo/sync", {
           release_id: release.id,
         });
-        handleApiResponse(res, tm("skills.neoSyncSuccess"), tm("skills.neoSyncFailed"), async () => {
-          await fetchSkills();
-        });
+        handleApiResponse(
+          res,
+          tm("skills.neoSyncSuccess"),
+          tm("skills.neoSyncFailed"),
+          async () => {
+            await fetchSkills();
+          },
+        );
       } catch (_err: unknown) {
         showMessage(tm("skills.neoSyncFailed"), "error");
       }
@@ -1738,7 +2155,10 @@ export default {
           params: { payload_ref: payloadRef },
         });
         if (res?.data?.status !== "ok") {
-          showMessage(res?.data?.message || tm("skills.neoPayloadFailed"), "error");
+          showMessage(
+            res?.data?.message || tm("skills.neoPayloadFailed"),
+            "error",
+          );
           return;
         }
         const payload = res?.data?.data || {};
@@ -1755,9 +2175,14 @@ export default {
           candidate_id: candidate.id,
           reason: "deleted_from_webui",
         });
-        handleApiResponse(res, tm("skills.neoDeleteSuccess"), tm("skills.neoDeleteFailed"), async () => {
-          await fetchNeoData();
-        });
+        handleApiResponse(
+          res,
+          tm("skills.neoDeleteSuccess"),
+          tm("skills.neoDeleteFailed"),
+          async () => {
+            await fetchNeoData();
+          },
+        );
       } catch (_err: unknown) {
         showMessage(tm("skills.neoDeleteFailed"), "error");
       }
@@ -1769,9 +2194,14 @@ export default {
           release_id: release.id,
           reason: "deleted_from_webui",
         });
-        handleApiResponse(res, tm("skills.neoDeleteSuccess"), tm("skills.neoDeleteFailed"), async () => {
-          await fetchNeoData();
-        });
+        handleApiResponse(
+          res,
+          tm("skills.neoDeleteSuccess"),
+          tm("skills.neoDeleteFailed"),
+          async () => {
+            await fetchNeoData();
+          },
+        );
       } catch (_err: unknown) {
         showMessage(tm("skills.neoDeleteFailed"), "error");
       }
@@ -1792,6 +2222,7 @@ export default {
 
     watch(mode, async (nextMode: string) => {
       if (nextMode === "neo") {
+        cancelBatchSelection();
         await loadNeoAvailability();
         if (neoEnabled.value) {
           await fetchNeoData();
@@ -1799,6 +2230,16 @@ export default {
       } else {
         await fetchSkills();
       }
+    });
+
+    // Keep the batch selection in sync with the active filter so skills hidden
+    // by the search can never be included in a batch delete.
+    watch(visibleDeletableSkills, (visibleSkills) => {
+      if (!batchSelectionEnabled.value) return;
+      const visibleNames = new Set(visibleSkills.map((skill) => skill.name));
+      selectedSkillNames.value = selectedSkillNames.value.filter((name) =>
+        visibleNames.has(name),
+      );
     });
 
     watch(uploadDialog, (isOpen: boolean) => {
@@ -1819,6 +2260,7 @@ export default {
       tm,
       mode,
       skills,
+      skillSearch,
       loading,
       runtime,
       sandboxCache,
@@ -1832,6 +2274,11 @@ export default {
       itemLoading,
       deleteDialog,
       deleting,
+      batchSelectionEnabled,
+      selectedSkillNames,
+      batchDeleteTargets,
+      batchDeleteDialog,
+      batchDeleting,
       snackbar,
       neoEnabled,
       neoUnavailableMessage,
@@ -1842,6 +2289,9 @@ export default {
       candidateStatusItems,
       releaseStageItems,
       activeReleaseCount,
+      deletableSkills,
+      filteredSkills,
+      allDeletableSelected,
       candidateHeaders,
       releaseHeaders,
       payloadDialog,
@@ -1870,6 +2320,11 @@ export default {
       toggleSkill,
       confirmDelete,
       deleteSkill,
+      startBatchSelection,
+      cancelBatchSelection,
+      toggleSelectAll,
+      confirmBatchDelete,
+      deleteSelectedSkills,
       evaluateCandidate,
       promoteCandidate,
       isCandidatePromoteLoading,
@@ -1897,8 +2352,32 @@ export default {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.skills-list-title {
+.skills-list-header {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
   margin-bottom: 16px;
+}
+
+.skills-list-title {
+  margin: 0 auto 0 0;
+}
+
+.skills-list-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.skills-search-wrap {
+  flex: 0 1 300px;
+  min-width: 200px;
+}
+
+.skills-search-field {
+  width: 100%;
 }
 
 .skill-list-item :deep(.outlined-action-list-item__main) {
@@ -1907,6 +2386,11 @@ export default {
 
 .skill-list-item--inactive {
   opacity: 0.58;
+}
+
+.skill-list-item--selected {
+  background: rgba(var(--v-theme-primary), 0.06);
+  border-color: rgba(var(--v-theme-primary), 0.5);
 }
 
 .skill-list-item :deep(.outlined-action-list-item__content) {
@@ -1947,6 +2431,22 @@ export default {
 .list-action-icon-btn:hover {
   background: rgba(var(--v-theme-on-surface), 0.08);
   color: rgb(var(--v-theme-on-surface));
+}
+
+.batch-delete-targets {
+  background: transparent;
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 0;
+}
+
+.batch-delete-target {
+  background: rgba(var(--v-theme-on-surface), 0.05);
+  border-radius: 8px;
+}
+
+.batch-delete-target + .batch-delete-target {
+  margin-top: 6px;
 }
 
 .skills-fab-stack {
@@ -2420,8 +2920,27 @@ export default {
 }
 
 @media (max-width: 860px) {
+  .skill-editor-dialog {
+    max-height: none;
+    overflow-y: auto;
+  }
+
   .skills-list {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .skill-editor {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    min-height: 0;
+  }
+
+  .skill-editor__files {
+    max-height: 20vh;
+  }
+
+  .skill-editor__monaco {
+    min-height: 40vh;
   }
 
   .skill-list-item :deep(.outlined-action-list-item__actions) {
@@ -2465,6 +2984,19 @@ export default {
 }
 
 @media (max-width: 640px) {
+  .skills-list-header {
+    align-items: stretch;
+  }
+
+  .skills-search-wrap {
+    flex: 1 1 100%;
+  }
+
+  .skills-list-actions {
+    margin-left: 0;
+    width: 100%;
+  }
+
   .skills-upload-dialog {
     max-height: 92vh;
   }

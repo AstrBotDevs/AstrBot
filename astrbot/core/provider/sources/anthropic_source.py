@@ -28,14 +28,19 @@ from astrbot.core.agent.message import AudioURLPart, ContentPart, ImageURLPart, 
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse, TokenUsage
 from astrbot.core.provider.func_tool_manager import ToolSet
+from astrbot.core.provider.headers import (
+    build_conversation_headers,
+    build_provider_headers,
+)
 from astrbot.core.provider.register import register_provider_adapter
-from astrbot.core.provider.sources.request_retry import retry_provider_request
 from astrbot.core.utils.io import download_image_by_url
 from astrbot.core.utils.network_utils import (
     create_proxy_client,
     is_connection_error,
     log_connection_failure,
 )
+
+from .request_retry import retry_provider_request, retry_provider_request_context
 
 
 @register_provider_adapter(
@@ -79,12 +84,14 @@ class ProviderAnthropic(Provider):
         *,
         required_headers: dict[str, str] | None = None,
     ) -> dict[str, str] | None:
-        merged_headers = cls._normalize_custom_headers(provider_config) or {}
+        merged_headers = build_provider_headers(
+            cls._normalize_custom_headers(provider_config)
+        )
         if required_headers:
             for header_name, header_value in required_headers.items():
                 if not merged_headers.get(header_name, "").strip():
                     merged_headers[header_name] = header_value
-        return merged_headers or None
+        return merged_headers
 
     def __init__(
         self,
@@ -98,7 +105,9 @@ class ProviderAnthropic(Provider):
             provider_settings,
         )
 
-        self.base_url = provider_config.get("api_base", "https://api.anthropic.com")
+        api_base = str(provider_config.get("api_base", "") or "").strip()
+        self.base_url = (api_base or "https://api.anthropic.com").rstrip("/")
+        self.base_url = self.base_url.removesuffix("/v1")
         self.timeout = provider_config.get("timeout", 120)
         if isinstance(self.timeout, str):
             self.timeout = int(self.timeout)
@@ -139,7 +148,14 @@ class ProviderAnthropic(Provider):
         try:
             from anthropic import _base_client as anthropic_base_client
 
-            httpx_module = getattr(anthropic_base_client, "httpx", httpx)
+            # anthropic <1.0.0 exposes the bundled httpx as ``_base_client.httpx``;
+            # 1.0.0+ renamed it to ``_base_client.httpx2``. Prefer the SDK's own
+            # module in either case and fall back to the global httpx import.
+            httpx_module = getattr(
+                anthropic_base_client,
+                "httpx",
+                getattr(anthropic_base_client, "httpx2", httpx),
+            )
         except ImportError:
             pass
         return create_proxy_client(
@@ -445,15 +461,21 @@ class ProviderAnthropic(Provider):
         if usage is None:
             return TokenUsage()
         # https://docs.claude.com/en/docs/build-with-claude/prompt-caching#tracking-cache-performance
+        # Anthropic's input_tokens excludes cache served reads AND writes, so
+        # cache_creation_input_tokens must be added back into input_other to
+        # keep total input (and context-occupancy stats) accurate.
         return TokenUsage(
-            input_other=usage.input_tokens or 0,
+            input_other=(usage.input_tokens or 0)
+            + (usage.cache_creation_input_tokens or 0),
             input_cached=usage.cache_read_input_tokens or 0,
             output=usage.output_tokens or 0,
         )
 
     def _update_usage(self, token_usage: TokenUsage, usage: MessageDeltaUsage) -> None:
         if usage.input_tokens is not None:
-            token_usage.input_other = usage.input_tokens
+            token_usage.input_other = usage.input_tokens + (
+                usage.cache_creation_input_tokens or 0
+            )
         if usage.cache_read_input_tokens is not None:
             token_usage.input_cached = usage.cache_read_input_tokens
         if usage.output_tokens is not None:
@@ -501,7 +523,14 @@ class ProviderAnthropic(Provider):
         if isinstance(last_block, dict) and "cache_control" not in last_block:
             last_block["cache_control"] = dict(cls._PROMPT_CACHE_CONTROL)
 
-    async def _query(self, payloads: dict, tools: ToolSet | None) -> LLMResponse:
+    async def _query(
+        self,
+        payloads: dict,
+        tools: ToolSet | None,
+        *,
+        request_max_retries: int | None = None,
+        conversation_id: str | None = None,
+    ) -> LLMResponse:
         if tools:
             if tool_list := tools.get_func_desc_anthropic_style():
                 payloads["tools"] = tool_list
@@ -518,10 +547,15 @@ class ProviderAnthropic(Provider):
         self._sanitize_assistant_messages(payloads)
 
         try:
-            completion = await self.client.messages.create(
-                **payloads,
-                stream=False,
-                extra_body=extra_body,
+            completion = await retry_provider_request(
+                "Anthropic",
+                lambda: self.client.messages.create(
+                    **payloads,
+                    stream=False,
+                    extra_body=extra_body,
+                    extra_headers=build_conversation_headers(conversation_id),
+                ),
+                max_attempts=request_max_retries,
             )
         except httpx.RequestError as e:
             proxy = self.provider_config.get("proxy", "")
@@ -590,6 +624,9 @@ class ProviderAnthropic(Provider):
         self,
         payloads: dict,
         tools: ToolSet | None,
+        *,
+        request_max_retries: int | None = None,
+        conversation_id: str | None = None,
     ) -> AsyncGenerator[LLMResponse, None]:
         if tools:
             if tool_list := tools.get_func_desc_anthropic_style():
@@ -615,9 +652,14 @@ class ProviderAnthropic(Provider):
         self._apply_thinking_config(payloads)
         self._sanitize_assistant_messages(payloads)
 
-        async with self.client.messages.stream(
-            **payloads,
-            extra_body=extra_body,
+        async with retry_provider_request_context(
+            "Anthropic",
+            lambda: self.client.messages.stream(
+                **payloads,
+                extra_body=extra_body,
+                extra_headers=build_conversation_headers(conversation_id),
+            ),
+            max_attempts=request_max_retries,
         ) as stream:
             async for event in stream:
                 if isinstance(event, RawMessageStartEvent):
@@ -748,8 +790,10 @@ class ProviderAnthropic(Provider):
         model=None,
         extra_user_content_parts=None,
         tool_choice: Literal["auto", "any", "tool", "none"] | dict[str, str] = "auto",
+        request_max_retries: int | None = None,
         **kwargs,
     ) -> LLMResponse:
+        conversation_id = kwargs.pop("conversation_id", None)
         if contexts is None:
             contexts = []
         new_record = None
@@ -797,7 +841,15 @@ class ProviderAnthropic(Provider):
 
         llm_response = None
         try:
-            llm_response = await self._query(payloads, func_tool)
+            query_kwargs = {}
+            if conversation_id:
+                query_kwargs["conversation_id"] = conversation_id
+            llm_response = await self._query(
+                payloads,
+                func_tool,
+                request_max_retries=request_max_retries,
+                **query_kwargs,
+            )
         except Exception as e:
             raise e
 
@@ -816,8 +868,10 @@ class ProviderAnthropic(Provider):
         model=None,
         extra_user_content_parts=None,
         tool_choice: Literal["auto", "any", "tool", "none"] | dict[str, str] = "auto",
+        request_max_retries: int | None = None,
         **kwargs,
     ):
+        conversation_id = kwargs.pop("conversation_id", None)
         if contexts is None:
             contexts = []
         new_record = None
@@ -862,7 +916,15 @@ class ProviderAnthropic(Provider):
                 else system_prompt
             )
 
-        async for llm_response in self._query_stream(payloads, func_tool):
+        query_kwargs = {}
+        if conversation_id:
+            query_kwargs["conversation_id"] = conversation_id
+        async for llm_response in self._query_stream(
+            payloads,
+            func_tool,
+            request_max_retries=request_max_retries,
+            **query_kwargs,
+        ):
             yield llm_response
 
     def _detect_image_mime_type(self, data: bytes) -> str:

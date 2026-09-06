@@ -1,6 +1,6 @@
 <template>
-  <transition name="slide-left">
-    <aside v-if="modelValue && thread" class="thread-panel">
+  <transition name="chat-panel">
+    <aside v-if="modelValue && thread" class="thread-panel chat-side-panel">
       <div class="thread-panel-header">
         <div class="thread-panel-title">{{ tm("thread.title") }}</div>
         <div class="thread-panel-actions">
@@ -55,6 +55,7 @@
 </template>
 
 <script setup lang="ts">
+import "@/components/chat/chatPanelTransition.css";
 import { nextTick, ref, watch } from "vue";
 import { fetchWithAuth } from "@/api/http";
 import { chatApi } from "@/api/v1";
@@ -82,6 +83,7 @@ const props = defineProps<{
   thread: ChatThread | null;
   isDark: boolean;
   deleting?: boolean;
+  getProviderSelection: () => { providerId: string; modelName: string };
 }>();
 
 const emit = defineEmits<{
@@ -154,17 +156,23 @@ async function send() {
   const abort = new AbortController();
   sending.value = true;
   try {
-    const response = await fetchWithAuth(chatApi.sendThreadMessageUrl(props.thread.thread_id), {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
+    const selection = props.getProviderSelection();
+    const response = await fetchWithAuth(
+      chatApi.sendThreadMessageUrl(props.thread.thread_id),
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          message: [{ type: "plain", text }],
+          flags: buildChatRequestFlags(),
+          selected_provider: selection.providerId,
+          selected_model: selection.modelName,
+        }),
+        signal: abort.signal,
       },
-      body: JSON.stringify({
-        message: [{ type: "plain", text }],
-        flags: buildChatRequestFlags(),
-      }),
-      signal: abort.signal,
-    });
+    );
     if (!response.ok || !response.body) {
       throw new Error(`Thread request failed: ${response.status}`);
     }
@@ -188,7 +196,10 @@ function normalizeRecord(record: any): ChatRecord {
     content: {
       type: content.type || (record.sender_id === "bot" ? "bot" : "user"),
       message: normalizedMessage,
-      reasoning: extractReasoningText(normalizedMessage, content.reasoning || ""),
+      reasoning: extractReasoningText(
+        normalizedMessage,
+        content.reasoning || "",
+      ),
       agentStats: content.agentStats || content.agent_stats,
       refs: content.refs,
     },
@@ -221,8 +232,15 @@ async function readSseStream(stream: ReadableStream<Uint8Array>, onPayload: (pay
   }
 }
 
-function processPayload(botRecord: ChatRecord, userRecord: ChatRecord, payload: any) {
-  const normalized = payload?.ct === "chat" ? { ...payload, type: payload.type || payload.t } : payload;
+function processPayload(
+  botRecord: ChatRecord,
+  userRecord: ChatRecord,
+  payload: any,
+) {
+  const normalized =
+    payload?.ct === "chat"
+      ? { ...payload, type: payload.type || payload.t }
+      : payload;
   const type = normalized?.type || normalized?.t;
   const chainType = normalized?.chain_type;
   const data = normalized?.data ?? "";
@@ -306,8 +324,12 @@ function processPayload(botRecord: ChatRecord, userRecord: ChatRecord, payload: 
       .replace("[FILE]", "")
       .replace("[VIDEO]", "");
     const separatorIndex = rawFilename.indexOf("|");
-    const storedFilename = separatorIndex >= 0 ? rawFilename.slice(0, separatorIndex) : rawFilename;
-    const displayFilename = separatorIndex >= 0 ? rawFilename.slice(separatorIndex + 1) : storedFilename;
+    const storedFilename =
+      separatorIndex >= 0 ? rawFilename.slice(0, separatorIndex) : rawFilename;
+    const displayFilename =
+      separatorIndex >= 0
+        ? rawFilename.slice(separatorIndex + 1)
+        : storedFilename;
     const filename = displayFilename || storedFilename;
     const mediaPart: MessagePart = { type, filename };
     if (storedFilename && storedFilename !== filename) {
@@ -328,26 +350,17 @@ function scrollToBottom() {
 
 <style scoped>
 .thread-panel {
-  width: 380px;
+  --chat-side-panel-width: 380px;
+  width: var(--chat-side-panel-width);
   height: calc(100% - var(--chat-panel-top-offset, 0px));
   margin-top: var(--chat-panel-top-offset, 0px);
-  border-left: 1px solid var(--chat-border, rgba(var(--v-theme-on-surface), 0.1));
+  border-left: 1px solid
+    var(--chat-border, rgba(var(--v-theme-on-surface), 0.1));
   background: var(--chat-page-bg, rgb(var(--v-theme-surface)));
   color: rgb(var(--v-theme-on-surface));
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-}
-
-.slide-left-enter-active,
-.slide-left-leave-active {
-  transition: all 0.2s ease;
-}
-
-.slide-left-enter-from,
-.slide-left-leave-to {
-  transform: translateX(100%);
-  opacity: 0;
 }
 
 .thread-panel-header {
@@ -450,7 +463,8 @@ function scrollToBottom() {
   .thread-panel-header {
     min-height: 52px;
     padding: calc(10px + env(safe-area-inset-top)) 12px 8px;
-    border-bottom: 1px solid var(--chat-border, rgba(var(--v-border-color), 0.12));
+    border-bottom: 1px solid
+      var(--chat-border, rgba(var(--v-border-color), 0.12));
   }
 
   .thread-selected-text {
@@ -481,5 +495,4 @@ function scrollToBottom() {
     flex-shrink: 0;
   }
 }
-
 </style>

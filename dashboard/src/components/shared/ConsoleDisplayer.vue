@@ -1,7 +1,16 @@
 <template>
-  <div class="console-displayer-wrapper" id="console-wrapper">
+  <div
+    id="console-wrapper"
+    class="console-displayer-wrapper"
+    :class="{ 'console-displayer-wrapper--workspace': workspaceMode }"
+  >
     <div class="filter-controls mb-2" v-if="showLevelBtns">
-      <v-chip-group v-model="selectedLevels" column multiple>
+      <v-chip-group
+        v-model="selectedLevels"
+        class="log-level-filters"
+        column
+        multiple
+      >
         <v-chip
           v-for="level in logLevels"
           :key="level"
@@ -12,12 +21,13 @@
           :text-color="
             level === 'DEBUG' || level === 'INFO' ? 'black' : 'white'
           "
-          class="font-weight-medium"
+          class="font-weight-medium log-level-chip"
         >
           {{ level }}
         </v-chip>
       </v-chip-group>
       <v-spacer></v-spacer>
+      <slot name="header-actions"></slot>
       <v-btn
         :icon="isFullscreen ? 'mdi-fullscreen-exit' : 'mdi-fullscreen'"
         variant="text"
@@ -32,19 +42,13 @@
 </template>
 
 <script lang="ts">
-import { EventSourcePolyfill } from "event-source-polyfill";
+import {
+  EventSourcePolyfill,
+  type MessageEvent as SseMessageEvent,
+  type Event as SseEvent,
+} from "event-source-polyfill";
 import { useCommonStore } from "@/stores/common";
 import axios, { resolveApiUrl } from "@/utils/request";
-
-declare module "event-source-polyfill" {
-  export class EventSourcePolyfill {
-    constructor(url: string, options?: Record<string, unknown>);
-    onopen: (() => void) | null;
-    onmessage: ((event: MessageEvent) => void) | null;
-    onerror: ((event: { status?: number }) => void) | null;
-    close(): void;
-  }
-}
 
 interface LogObject {
   time: number;
@@ -57,7 +61,6 @@ export default {
   name: "ConsoleDisplayer",
   data() {
     return {
-      autoScroll: true,
       isFullscreen: false,
       logColorAnsiMap: {
         "\u001b[1;34m": "color: #39C5BB; font-weight: bold;",
@@ -105,6 +108,14 @@ export default {
       type: Boolean,
       default: false,
     },
+    autoScroll: {
+      type: Boolean,
+      default: true,
+    },
+    workspaceMode: {
+      type: Boolean,
+      default: false,
+    },
   },
   watch: {
     selectedLevels: {
@@ -123,7 +134,10 @@ export default {
     document.addEventListener("fullscreenchange", this.handleFullscreenChange);
   },
   beforeUnmount() {
-    document.removeEventListener("fullscreenchange", this.handleFullscreenChange);
+    document.removeEventListener(
+      "fullscreenchange",
+      this.handleFullscreenChange,
+    );
     if (this.eventSource) {
       this.eventSource.close();
       this.eventSource = null;
@@ -141,20 +155,25 @@ export default {
         this.eventSource = null;
       }
 
-      console.info(`正在连接日志流... (尝试次数: ${this.retryAttempts})`);
+      console.info(
+        `Connecting to the log stream (attempt: ${this.retryAttempts})`,
+      );
 
       const token = localStorage.getItem("token");
 
-      this.eventSource = new EventSourcePolyfill(resolveApiUrl("/api/live-log"), {
-        headers: {
-          Authorization: token ? `Bearer ${token}` : "",
+      this.eventSource = new EventSourcePolyfill(
+        resolveApiUrl("/api/live-log"),
+        {
+          headers: {
+            Authorization: token ? `Bearer ${token}` : "",
+          },
+          heartbeatTimeout: 300000,
+          withCredentials: true,
         },
-        heartbeatTimeout: 300000,
-        withCredentials: true,
-      });
+      );
 
       this.eventSource.onopen = () => {
-        console.info("日志流连接成功！");
+        console.info("Log stream connected successfully.");
         this.retryAttempts = 0;
 
         if (!this.lastEventId) {
@@ -162,7 +181,7 @@ export default {
         }
       };
 
-      this.eventSource.onmessage = (event) => {
+      this.eventSource.onmessage = (event: SseMessageEvent) => {
         try {
           if (event.lastEventId) {
             this.lastEventId = event.lastEventId;
@@ -175,8 +194,8 @@ export default {
         }
       };
 
-      this.eventSource.onerror = (err) => {
-        if (err.status === 401) {
+      this.eventSource.onerror = (err: SseEvent) => {
+        if ("status" in err && err.status === 401) {
           console.error("鉴权失败 (401)，可能是 Token 过期了。");
         } else {
           console.warn("日志流连接错误:", err);
@@ -192,9 +211,13 @@ export default {
           return;
         }
 
-        const delay = Math.min(this.baseRetryDelay * 2 ** this.retryAttempts, 30000);
-
-        console.info(`⏳ ${delay}ms 后尝试第 ${this.retryAttempts + 1} 次重连...`);
+        const delay = Math.min(
+          this.baseRetryDelay * 2 ** this.retryAttempts,
+          30000,
+        );
+        console.info(
+          `Retrying log stream in ${delay}ms (attempt: ${this.retryAttempts + 1})`,
+        );
 
         if (this.retryTimer) {
           clearTimeout(this.retryTimer);
@@ -217,18 +240,30 @@ export default {
       if (!newLogs || newLogs.length === 0) return;
 
       let hasUpdate = false;
+      const termElement = document.getElementById("term");
+      // Batch the rendered log elements into a single fragment so that a large
+      // history payload only triggers one reflow instead of one per log line.
+      const fragment = termElement ? document.createDocumentFragment() : null;
 
       newLogs.forEach((log) => {
         const exists = this.localLogCache.some(
-          (existing) => existing.time === log.time && existing.data === log.data && existing.level === log.level,
+          (existing) =>
+            existing.time === log.time &&
+            existing.data === log.data &&
+            existing.level === log.level,
         );
 
         if (!exists) {
           this.localLogCache.push(log);
           hasUpdate = true;
 
-          if (this.isLevelSelected(log.level) && !this.isHiddenByCategory(log)) {
-            this.printLog(log.data);
+          if (
+            this.isLevelSelected(log.level) &&
+            !this.isHiddenByCategory(log)
+          ) {
+            if (fragment) {
+              fragment.appendChild(this.buildLogElement(log.data));
+            }
           }
         }
       });
@@ -239,6 +274,13 @@ export default {
         const maxSize = this.commonStore.log_cache_max_len || 200;
         if (this.localLogCache.length > maxSize) {
           this.localLogCache.splice(0, this.localLogCache.length - maxSize);
+        }
+      }
+
+      if (termElement && fragment && fragment.childNodes.length > 0) {
+        termElement.appendChild(fragment);
+        if (this.autoScroll) {
+          termElement.scrollTop = termElement.scrollHeight;
         }
       }
     },
@@ -274,28 +316,33 @@ export default {
 
     refreshDisplay() {
       const termElement = document.getElementById("term");
-      if (termElement) {
-        termElement.innerHTML = "";
+      if (!termElement) return;
 
-        if (this.localLogCache && this.localLogCache.length > 0) {
-          this.localLogCache.forEach((logItem) => {
-            if (this.isLevelSelected(logItem.level) && !this.isHiddenByCategory(logItem)) {
-              this.printLog(logItem.data);
-            }
-          });
+      termElement.innerHTML = "";
+      if (!this.localLogCache || this.localLogCache.length === 0) return;
+
+      const fragment = document.createDocumentFragment();
+      this.localLogCache.forEach((logItem) => {
+        if (
+          this.isLevelSelected(logItem.level) &&
+          !this.isHiddenByCategory(logItem)
+        ) {
+          fragment.appendChild(this.buildLogElement(logItem.data));
         }
+      });
+      termElement.appendChild(fragment);
+      if (this.autoScroll) {
+        termElement.scrollTop = termElement.scrollHeight;
       }
-    },
-
-    toggleAutoScroll() {
-      this.autoScroll = !this.autoScroll;
     },
 
     toggleFullscreen() {
       const container = document.getElementById("console-wrapper");
       if (!document.fullscreenElement) {
-        container.requestFullscreen().catch((err: Error) => {
-          console.error(`Error attempting to enable full-screen mode: ${err.message}`);
+        container?.requestFullscreen().catch((err: Error) => {
+          console.error(
+            `Error attempting to enable full-screen mode: ${err.message}`,
+          );
         });
       } else {
         document.exitFullscreen();
@@ -307,9 +354,11 @@ export default {
     },
 
     appendLogContent(element: HTMLElement, log: string) {
-      const levelMatch = log.match(/\[(DEBG|INFO|WARN|ERRO|CRIT|DEBUG|WARNING|ERROR|CRITICAL)\]/);
+      const levelMatch = log.match(
+        /\[(DEBG|INFO|WARN|ERRO|CRIT|DEBUG|WARNING|ERROR|CRITICAL)\]/,
+      );
       if (!levelMatch) {
-        element.innerText = `${log}`;
+        element.textContent = `${log}`;
         return;
       }
 
@@ -320,15 +369,15 @@ export default {
 
       const prefixSpan = document.createElement("span");
       prefixSpan.className = "console-log-prefix";
-      prefixSpan.innerText = prefix;
+      prefixSpan.textContent = prefix;
 
       const levelSpan = document.createElement("span");
       levelSpan.className = "console-log-level";
-      levelSpan.innerText = levelMatch[0];
+      levelSpan.textContent = levelMatch[0];
 
       const messageSpan = document.createElement("span");
       messageSpan.className = "console-log-message";
-      messageSpan.innerText = message;
+      messageSpan.textContent = message;
 
       element.classList.add("console-log-line--structured");
       element.appendChild(prefixSpan);
@@ -336,14 +385,9 @@ export default {
       element.appendChild(messageSpan);
     },
 
-    printLog(log: string) {
-      const ele = document.getElementById("term");
-      if (!ele) {
-        return;
-      }
-
+    buildLogElement(log: string): HTMLPreElement {
       const span = document.createElement("pre");
-      let style = this.logColorAnsiMap.default;
+      let style = this.logColorAnsiMap["default"];
       for (const key in this.logColorAnsiMap) {
         if (log.startsWith(key)) {
           style = this.logColorAnsiMap[key];
@@ -352,13 +396,10 @@ export default {
         }
       }
 
-      span.style = style;
+      span.style.cssText = style;
       span.classList.add("console-log-line", "fade-in");
       this.appendLogContent(span, log);
-      ele.appendChild(span);
-      if (this.autoScroll) {
-        ele.scrollTop = ele.scrollHeight;
-      }
+      return span;
     },
   },
 };
@@ -369,11 +410,25 @@ export default {
   height: 100%;
   display: flex;
   flex-direction: column;
+  min-height: 0;
+}
+
+.console-displayer-wrapper--workspace {
+  background: var(--console-workspace-card, #f5f6f7);
+  border-radius: 16px;
+  overflow: hidden;
+  padding: 12px;
 }
 
 #console-wrapper:fullscreen {
+  --v-theme-on-surface: 255, 255, 255;
   background-color: #1e1e1e;
+  color: #fff;
   padding: 20px;
+}
+
+#console-wrapper:fullscreen :deep(.v-switch__track) {
+  --v-theme-surface-variant: 163, 163, 163;
 }
 
 .filter-controls {
@@ -393,8 +448,57 @@ export default {
   padding: 16px;
 }
 
+.console-displayer-wrapper--workspace .filter-controls {
+  flex: 0 0 auto;
+  gap: 8px 12px;
+  margin-bottom: 10px !important;
+  min-height: 42px;
+  padding: 0 2px;
+}
+
+.console-displayer-wrapper--workspace .log-level-filters {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.console-displayer-wrapper--workspace .console-term {
+  background: #17191c;
+  border-radius: 12px;
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+  padding: 14px;
+}
+
+.console-displayer-wrapper--workspace .fullscreen-btn {
+  margin-inline-end: 0 !important;
+}
+
+.console-displayer-wrapper--workspace :deep(.console-log-line) {
+  border-radius: 4px;
+  line-height: 1.55;
+  margin: 0;
+  padding: 2px 5px;
+}
+
+.console-displayer-wrapper--workspace :deep(.console-log-line:hover) {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.console-displayer-wrapper--workspace :deep(.console-log-prefix) {
+  opacity: 0.64;
+}
+
+.console-displayer-wrapper--workspace :deep(.console-log-level) {
+  font-weight: 700;
+}
+
 .fullscreen-btn {
   color: rgba(var(--v-theme-on-surface), 0.7) !important;
+}
+
+#console-wrapper:fullscreen .fullscreen-btn {
+  color: rgba(255, 255, 255, 0.7) !important;
 }
 
 :deep(.console-log-line) {
@@ -431,6 +535,39 @@ export default {
 }
 
 @media (max-width: 768px) {
+  .console-displayer-wrapper--workspace {
+    border-radius: 14px;
+    padding: 10px;
+  }
+
+  .console-displayer-wrapper--workspace .filter-controls {
+    align-items: flex-start;
+    gap: 6px;
+    padding: 0;
+  }
+
+  .console-displayer-wrapper--workspace .filter-controls > .v-spacer {
+    display: none;
+  }
+
+  .console-displayer-wrapper--workspace .log-level-filters {
+    flex: 1 1 calc(100% - 38px);
+    order: 1;
+  }
+
+  .console-displayer-wrapper--workspace :deep(.console-header-actions) {
+    flex: 1 1 100%;
+    order: 3;
+  }
+
+  .console-displayer-wrapper--workspace .fullscreen-btn {
+    order: 2;
+  }
+
+  .console-displayer-wrapper--workspace .console-term {
+    padding: 10px;
+  }
+
   :deep(.console-log-line--structured) {
     grid-template-columns: 1fr;
   }

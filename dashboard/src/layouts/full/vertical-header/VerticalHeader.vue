@@ -1,64 +1,89 @@
 <script setup lang="ts">
-import { enableKatex, enableMermaid, MarkdownRender } from "markstream-vue";
-import { computed, onBeforeUnmount, onMounted, onUnmounted, ref, watch } from "vue";
-import ProviderModelMenu from "@/components/chat/ProviderModelMenu.vue";
-import Logo from "@/components/shared/Logo.vue";
-import { useAuthStore } from "@/stores/auth";
+import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import { useChatHeaderStore } from "@/stores/chatHeader";
-import { useCommonStore } from "@/stores/common";
+import { useHeaderContextStore } from "@/stores/headerContext";
+import { useMobileDrawerStore } from "@/stores/mobileDrawer";
 import { useCustomizerStore } from "@/stores/customizer";
 import axios from "@/utils/request";
+import Logo from "@/components/shared/Logo.vue";
+import { useAuthStore } from "@/stores/auth";
+import { useCommonStore } from "@/stores/common";
+import { MarkdownRender, enableKatex, enableMermaid } from "markstream-vue";
 import "markstream-vue/index.css";
 import "katex/dist/katex.min.css";
 import "highlight.js/styles/github.css";
+import { useI18n, useModuleI18n } from "@/i18n/composables";
+import { router } from "@/router";
 import { useRoute } from "vue-router";
 import { useDisplay, useTheme } from "vuetify";
+import { DARK_THEME_NAME, LIGHT_THEME_NAME } from "@/theme/constants";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
-import { useI18n, useLanguageSwitcher, useModuleI18n } from "@/i18n/composables";
+import { Menu } from "@lucide/vue";
+import { Minus, Square, X } from "@lucide/vue";
+import DesktopUpdateProgress from "@/components/shared/DesktopUpdateProgress.vue";
+import { useLanguageSwitcher } from "@/i18n/composables";
 import type { Locale } from "@/i18n/types";
-import { router } from "@/router";
-import { getDesktopRuntimeInfo } from "@/utils/desktopRuntime";
 import AboutPage from "@/views/AboutPage.vue";
+import { authApi, isLegacyFallbackError, statsApi, updatesApi } from "@/api/v1";
+import { getDesktopRuntimeInfo } from "@/utils/desktopRuntime";
 
 enableKatex();
 enableMermaid();
 
 const customizer = useCustomizerStore();
 const commonStore = useCommonStore();
+const authStore = useAuthStore();
 const chatHeader = useChatHeaderStore();
+const headerContext = useHeaderContextStore();
+const mobileDrawer = useMobileDrawerStore();
+
+/** Windows hides the native title bar, so the header draws its own caption buttons. */
+const isWindowsDesktop = ref(false);
+const astrbotDesktop = computed(() => window.astrbotDesktop);
 const theme = useTheme();
-const { lgAndUp } = useDisplay();
+const { smAndDown } = useDisplay();
 const { t } = useI18n();
 const { tm } = useModuleI18n("features/chat");
 const route = useRoute();
 const LAST_BOT_ROUTE_KEY = "astrbot:last_bot_route";
 const LAST_CHAT_ROUTE_KEY = "astrbot:last_chat_route";
-const dialog = ref(false);
-const accountWarning = ref(false);
-const accountWarningLegacy = ref(false);
-const accountWarningUpgrade = ref(false);
-const updateStatusDialog = ref(false);
-const aboutDialog = ref(false);
+const SHOW_PRE_RELEASES_KEY = "astrbot:updateDialog:showPreReleases";
+let dialog = ref(false);
+let accountWarning = ref(false);
+let accountWarningMd5 = ref(false);
+let accountWarningUpgrade = ref(false);
+let updateStatusDialog = ref(false);
+let aboutDialog = ref(false);
 const username = localStorage.getItem("user");
-const password = ref("");
-const newPassword = ref("");
-const confirmPassword = ref("");
-const newUsername = ref("");
-const status = ref("");
-const updateStatus = ref("");
-const releaseMessage = ref("");
-const hasNewVersion = ref(false);
-const botCurrVersion = ref("");
-const dashboardHasNewVersion = ref(false);
-const dashboardCurrentVersion = ref("");
-const releases = ref([]);
-const releasesLoading = ref(false);
-const updatingDashboardLoading = ref(false);
-const installLoading = ref(false);
-const showAdvancedUpdateSettings = ref(false);
-const restartWaiting = ref(false);
-const restartStartTime = ref<number | string | null>(null);
+let password = ref("");
+let newPassword = ref("");
+let confirmPassword = ref("");
+let newUsername = ref("");
+let status = ref("");
+let updateStatus = ref("");
+let releaseMessage = ref("");
+let hasNewVersion = ref(false);
+let botCurrVersion = ref("");
+let dashboardHasNewVersion = ref(false);
+let dashboardCurrentVersion = ref("");
+let releases = ref<any[]>([]);
+let releasesLoading = ref(false);
+const showPreReleases = ref(
+  typeof window === "undefined"
+    ? false
+    : localStorage.getItem(SHOW_PRE_RELEASES_KEY) === "true",
+);
+let updatingDashboardLoading = ref(false);
+let installLoading = ref(false);
+let showAdvancedUpdateSettings = ref(false);
+let restartWaiting = ref(false);
+let restartStartTime = ref<number | string | null>(null);
 let restartPollTimer: ReturnType<typeof setInterval> | null = null;
+let restartCompleted = ref(false);
+let restartReloadCountdown = ref(3);
+let restartReloadTimer: ReturnType<typeof setInterval> | null = null;
+const RESTART_FEEDBACK_DELAY_SECONDS = 3;
+const RESTART_START_TIME_POLL_INTERVAL_MS = 2000;
 type DownloadStageStatus = "pending" | "running" | "done" | "error";
 type DownloadStage = {
   status: DownloadStageStatus;
@@ -76,7 +101,9 @@ type UpdateProgress = {
   overall_percent: number;
   stages: Record<string, DownloadStage>;
 };
-const createEmptyDownloadStage = (status: DownloadStageStatus = "pending"): DownloadStage => ({
+const createEmptyDownloadStage = (
+  status: DownloadStageStatus = "pending",
+): DownloadStage => ({
   status,
   downloaded: 0,
   total: 0,
@@ -95,9 +122,11 @@ const createEmptyUpdateProgress = (): UpdateProgress => ({
     core: createEmptyDownloadStage(),
   },
 });
-const updateProgress = ref<UpdateProgress>(createEmptyUpdateProgress());
+let updateProgress = ref<UpdateProgress>(createEmptyUpdateProgress());
 let updateProgressTimer: ReturnType<typeof setInterval> | null = null;
-const isDesktopReleaseMode = ref(typeof window !== "undefined" && !!window.astrbotDesktop?.isDesktop);
+const isDesktopReleaseMode = ref(
+  typeof window !== "undefined" && !!window.astrbotDesktop?.isDesktop,
+);
 const desktopUpdateDialog = ref(false);
 const desktopUpdateChecking = ref(false);
 const desktopUpdateInstalling = ref(false);
@@ -105,32 +134,40 @@ const desktopUpdateHasNewVersion = ref(false);
 const desktopUpdateCurrentVersion = ref("-");
 const desktopUpdateLatestVersion = ref("-");
 const desktopUpdateStatus = ref("");
-const isChatPath = computed(() => route.path === "/chat" || route.path.startsWith("/chat/"));
-const isDarkTheme = computed(() => theme.global.current.value.dark || customizer.isDarkTheme);
+const desktopDownloadProgress = ref<AstrBotDesktopAppUpdateProgress | null>(null);
+const isChatPath = computed(
+  () => route.path === "/chat" || route.path.startsWith("/chat/"),
+);
+const isDarkTheme = computed(
+  () => theme.global.current.value.dark || customizer.isDarkTheme,
+);
 const chatHeaderStyle = computed(() => {
   if (!isChatPath.value) return undefined;
-  const sidebarWidth = lgAndUp.value ? (customizer.chatSidebarCollapsed ? 56 : 280) : 0;
+  const sidebarWidth = smAndDown.value
+    ? 0
+    : customizer.chatSidebarCollapsed
+      ? 56
+      : 245;
   return {
-    left: `${sidebarWidth}px`,
-    width: `calc(100% - ${sidebarWidth}px)`,
+    // The chat toolbar is window chrome, so it must paint the full window. The
+    // sidebar width remains available to contextual content through this CSS
+    // variable, but must not offset the toolbar itself and expose the native
+    // window material in the top-left corner.
+    left: "0px",
+    width: "100%",
+    "--astrbot-chat-sidebar-width": `${sidebarWidth}px`,
   };
 });
-const chatHeaderSubtitleText = computed(() => {
-  const title = chatHeader.title.trim();
-  const subtitle = chatHeader.subtitle.trim();
-  if (title && subtitle) return `${subtitle}/${title}`;
-  return title || subtitle;
-});
-
-function toggleChatSidebarFromHeader() {
-  customizer.TOGGLE_CHAT_SIDEBAR();
-}
 const getAppUpdaterBridge = (): AstrBotAppUpdaterBridge | null => {
   if (typeof window === "undefined") {
     return null;
   }
   const bridge = window.astrbotAppUpdater;
-  if (bridge && typeof bridge.checkForAppUpdate === "function" && typeof bridge.installAppUpdate === "function") {
+  if (
+    bridge &&
+    typeof bridge.checkForAppUpdate === "function" &&
+    typeof bridge.installAppUpdate === "function"
+  ) {
     return bridge;
   }
   return null;
@@ -138,13 +175,15 @@ const getAppUpdaterBridge = (): AstrBotAppUpdaterBridge | null => {
 
 const getSelectedGitHubProxy = () => {
   if (typeof window === "undefined" || !window.localStorage) return "";
-  return localStorage.getItem("githubProxyRadioValue") === "1" ? localStorage.getItem("selectedGitHubProxy") || "" : "";
+  return localStorage.getItem("githubProxyRadioValue") === "1"
+    ? localStorage.getItem("selectedGitHubProxy") || ""
+    : "";
 };
 
 // Release Notes Modal
-const releaseNotesDialog = ref(false);
-const selectedReleaseNotes = ref("");
-const selectedReleaseTag = ref("");
+let releaseNotesDialog = ref(false);
+let selectedReleaseNotes = ref("");
+let selectedReleaseTag = ref("");
 
 const releasesHeader = computed(() => [
   { title: t("core.header.updateDialog.table.tag"), key: "tag_name" },
@@ -155,7 +194,12 @@ const releasesHeader = computed(() => [
   { title: t("core.header.updateDialog.table.content"), key: "body" },
   { title: t("core.header.updateDialog.table.actions"), key: "switch" },
 ]);
-const firstReleasePageItems = computed(() => releases.value.slice(0, 6));
+const visibleReleases = computed(() =>
+  showPreReleases.value
+    ? releases.value
+    : releases.value.filter((item: any) => !isPreRelease(item.tag_name)),
+);
+const firstReleasePageItems = computed(() => visibleReleases.value.slice(0, 6));
 const firstReleasePageHasPreRelease = computed(() =>
   firstReleasePageItems.value.some((item: any) => isPreRelease(item.tag_name)),
 );
@@ -163,7 +207,8 @@ const updateStageItems = computed(() => [
   {
     key: "dashboard",
     title: t("core.header.updateDialog.progress.dashboard"),
-    progress: updateProgress.value.stages.dashboard || createEmptyDownloadStage(),
+    progress:
+      updateProgress.value.stages.dashboard || createEmptyDownloadStage(),
   },
   {
     key: "core",
@@ -173,10 +218,16 @@ const updateStageItems = computed(() => [
 ]);
 const updateProgressMessage = computed(() => {
   if (updateProgress.value.status === "error") {
-    return updateProgress.value.message || t("core.header.updateDialog.progress.failed");
+    return (
+      updateProgress.value.message ||
+      t("core.header.updateDialog.progress.failed")
+    );
   }
   if (updateProgress.value.status === "success") {
-    return updateProgress.value.message || t("core.header.updateDialog.progress.completed");
+    return (
+      updateProgress.value.message ||
+      t("core.header.updateDialog.progress.completed")
+    );
   }
   if (updateProgress.value.stage === "dependencies") {
     return t("core.header.updateDialog.progress.dependencies");
@@ -184,24 +235,43 @@ const updateProgressMessage = computed(() => {
   if (updateProgress.value.stage === "restart") {
     return t("core.header.updateDialog.progress.restart");
   }
-  return updateProgress.value.message || t("core.header.updateDialog.progress.preparing");
+  return (
+    updateProgress.value.message ||
+    t("core.header.updateDialog.progress.preparing")
+  );
 });
 // Form validation
 const formValid = ref(true);
 const passwordRules = computed(() => [
-  (v: string) => !!v || t("core.header.accountDialog.validation.passwordRequired"),
-  (v: string) => v.length >= 8 || t("core.header.accountDialog.validation.passwordMinLength"),
-  (v: string) => /[A-Z]/.test(v) || t("core.header.accountDialog.validation.passwordUppercase"),
-  (v: string) => /[a-z]/.test(v) || t("core.header.accountDialog.validation.passwordLowercase"),
-  (v: string) => /\d/.test(v) || t("core.header.accountDialog.validation.passwordDigit"),
+  (v: string) =>
+    !!v || t("core.header.accountDialog.validation.passwordRequired"),
+  (v: string) =>
+    v.length >= 8 ||
+    t("core.header.accountDialog.validation.passwordMinLength"),
+  (v: string) =>
+    /[A-Z]/.test(v) ||
+    t("core.header.accountDialog.validation.passwordUppercase"),
+  (v: string) =>
+    /[a-z]/.test(v) ||
+    t("core.header.accountDialog.validation.passwordLowercase"),
+  (v: string) =>
+    /\d/.test(v) || t("core.header.accountDialog.validation.passwordDigit"),
 ]);
 const confirmPasswordRules = computed(() => [
-  (v: string) => !newPassword.value || !!v || t("core.header.accountDialog.validation.passwordRequired"),
   (v: string) =>
-    !newPassword.value || v === newPassword.value || t("core.header.accountDialog.validation.passwordMatch"),
+    !newPassword.value ||
+    !!v ||
+    t("core.header.accountDialog.validation.passwordRequired"),
+  (v: string) =>
+    !newPassword.value ||
+    v === newPassword.value ||
+    t("core.header.accountDialog.validation.passwordMatch"),
 ]);
 const usernameRules = computed(() => [
-  (v: string) => !v || v.length >= 3 || t("core.header.accountDialog.validation.usernameMinLength"),
+  (v: string) =>
+    !v ||
+    v.length >= 3 ||
+    t("core.header.accountDialog.validation.usernameMinLength"),
 ]);
 
 // 显示密码相关
@@ -229,6 +299,8 @@ function cancelDesktopUpdate() {
 }
 
 async function openDesktopUpdateDialog() {
+  if (desktopUpdateInstalling.value) return;
+  desktopDownloadProgress.value = null;
   desktopUpdateDialog.value = true;
   desktopUpdateChecking.value = true;
   desktopUpdateInstalling.value = false;
@@ -240,7 +312,9 @@ async function openDesktopUpdateDialog() {
   const bridge = getAppUpdaterBridge();
   if (!bridge) {
     desktopUpdateChecking.value = false;
-    desktopUpdateStatus.value = t("core.header.updateDialog.desktopApp.checkFailed");
+    desktopUpdateStatus.value = t(
+      "core.header.updateDialog.desktopApp.checkFailed",
+    );
     return;
   }
 
@@ -248,20 +322,25 @@ async function openDesktopUpdateDialog() {
     const result = await bridge.checkForAppUpdate();
     if (!result?.ok) {
       desktopUpdateCurrentVersion.value = result?.currentVersion || "-";
-      desktopUpdateLatestVersion.value = result?.latestVersion || result?.currentVersion || "-";
-      desktopUpdateStatus.value = result?.reason || t("core.header.updateDialog.desktopApp.checkFailed");
+      desktopUpdateLatestVersion.value =
+        result?.latestVersion || result?.currentVersion || "-";
+      desktopUpdateStatus.value =
+        result?.reason || t("core.header.updateDialog.desktopApp.checkFailed");
       return;
     }
 
     desktopUpdateCurrentVersion.value = result.currentVersion || "-";
-    desktopUpdateLatestVersion.value = result.latestVersion || result.currentVersion || "-";
+    desktopUpdateLatestVersion.value =
+      result.latestVersion || result.currentVersion || "-";
     desktopUpdateHasNewVersion.value = !!result.hasUpdate;
     desktopUpdateStatus.value = result.hasUpdate
       ? t("core.header.updateDialog.desktopApp.hasNewVersion")
       : t("core.header.updateDialog.desktopApp.isLatest");
   } catch (error) {
     console.error(error);
-    desktopUpdateStatus.value = t("core.header.updateDialog.desktopApp.checkFailed");
+    desktopUpdateStatus.value = t(
+      "core.header.updateDialog.desktopApp.checkFailed",
+    );
   } finally {
     desktopUpdateChecking.value = false;
   }
@@ -274,23 +353,38 @@ async function confirmDesktopUpdate() {
 
   const bridge = getAppUpdaterBridge();
   if (!bridge) {
-    desktopUpdateStatus.value = t("core.header.updateDialog.desktopApp.installFailed");
+    desktopUpdateStatus.value = t(
+      "core.header.updateDialog.desktopApp.installFailed",
+    );
     return;
   }
 
   desktopUpdateInstalling.value = true;
-  desktopUpdateStatus.value = t("core.header.updateDialog.desktopApp.installing");
+  desktopDownloadProgress.value = null;
+  desktopUpdateStatus.value = t(
+    "core.header.updateDialog.desktopApp.installing",
+  );
 
   try {
-    const result = await bridge.installAppUpdate();
+    const result = await bridge.installAppUpdate((progress) => {
+      if (
+        desktopUpdateInstalling.value &&
+        ["downloading", "verifying", "installing"].includes(progress?.phase)
+      ) {
+        desktopDownloadProgress.value = progress;
+      }
+    });
     if (result?.ok) {
       desktopUpdateDialog.value = false;
       return;
     }
-    desktopUpdateStatus.value = result?.reason || t("core.header.updateDialog.desktopApp.installFailed");
+    desktopUpdateStatus.value =
+      result?.reason || t("core.header.updateDialog.desktopApp.installFailed");
   } catch (error) {
     console.error(error);
-    desktopUpdateStatus.value = t("core.header.updateDialog.desktopApp.installFailed");
+    desktopUpdateStatus.value = t(
+      "core.header.updateDialog.desktopApp.installFailed",
+    );
   } finally {
     desktopUpdateInstalling.value = false;
   }
@@ -321,29 +415,30 @@ function accountEdit() {
 
   const currentPasswordValue = password.value ? password.value : "";
   const newPasswordValue = newPassword.value ? newPassword.value : "";
-  const confirmPasswordValue = confirmPassword.value ? confirmPassword.value : "";
+  const confirmPasswordValue = confirmPassword.value
+    ? confirmPassword.value
+    : "";
 
-  axios
-    .post("/api/auth/account/edit", {
+  authApi
+    .updateAccount({
       password: currentPasswordValue,
       new_password: newPasswordValue,
       confirm_password: confirmPasswordValue,
-      new_username: newUsername.value ? newUsername.value : username,
+      new_username: newUsername.value || username || undefined,
     })
     .then((res) => {
-      if (res.data.status === "error") {
+      if (res.data.status == "error") {
         accountEditStatus.value.error = true;
-        accountEditStatus.value.message = res.data.message;
+        accountEditStatus.value.message = res.data.message || "";
         password.value = "";
         newPassword.value = "";
         confirmPassword.value = "";
         return;
       }
       accountEditStatus.value.success = true;
-      accountEditStatus.value.message = res.data.message;
+      accountEditStatus.value.message = res.data.message || "";
       setTimeout(() => {
         dialog.value = !dialog.value;
-        const authStore = useAuthStore();
         authStore.logout();
       }, 2000);
     })
@@ -351,7 +446,9 @@ function accountEdit() {
       console.log(err);
       accountEditStatus.value.error = true;
       accountEditStatus.value.message =
-        typeof err === "string" ? err : t("core.header.accountDialog.messages.updateFailed");
+        typeof err === "string"
+          ? err
+          : t("core.header.accountDialog.messages.updateFailed");
       password.value = "";
       newPassword.value = "";
       confirmPassword.value = "";
@@ -362,29 +459,37 @@ function accountEdit() {
 }
 
 function getVersion() {
-  axios
-    .get("/api/stat/version")
+  statsApi
+    .version()
     .then((res) => {
-      botCurrVersion.value = `v${res.data.data.version}`;
-      dashboardCurrentVersion.value = res.data.data?.dashboard_version;
-      commonStore.setAstrBotVersion(res.data.data.version, res.data.data?.dashboard_version);
+      botCurrVersion.value = "v" + (res.data.data.version || "");
+      dashboardCurrentVersion.value = res.data.data?.dashboard_version || "";
+      commonStore.setAstrBotVersion(
+        res.data.data.version || "",
+        res.data.data?.dashboard_version || undefined,
+      );
       const change_pwd_hint = res.data.data?.change_pwd_hint;
-      const legacy_pwd_hint = res.data.data?.legacy_pwd_hint;
-      const password_upgrade_required = res.data.data?.password_upgrade_required;
-      if (change_pwd_hint || legacy_pwd_hint || password_upgrade_required) {
+      const md5_pwd_hint = res.data.data?.md5_pwd_hint;
+      const password_upgrade_required =
+        res.data.data?.password_upgrade_required;
+      if (change_pwd_hint || md5_pwd_hint || password_upgrade_required) {
         dialog.value = true;
         accountWarning.value = true;
         accountWarningUpgrade.value = !!password_upgrade_required;
-        accountWarningLegacy.value = !!legacy_pwd_hint && !password_upgrade_required;
-        if (change_pwd_hint || (legacy_pwd_hint && !password_upgrade_required)) {
+        accountWarningMd5.value =
+          !!md5_pwd_hint && !password_upgrade_required;
+        if (
+          change_pwd_hint ||
+          (md5_pwd_hint && !password_upgrade_required)
+        ) {
           localStorage.setItem("change_pwd_hint", "true");
         } else {
           localStorage.removeItem("change_pwd_hint");
         }
-        if (legacy_pwd_hint && !password_upgrade_required) {
-          localStorage.setItem("legacy_pwd_hint", "true");
+        if (md5_pwd_hint && !password_upgrade_required) {
+          localStorage.setItem("md5_pwd_hint", "true");
         } else {
-          localStorage.removeItem("legacy_pwd_hint");
+          localStorage.removeItem("md5_pwd_hint");
         }
         if (password_upgrade_required) {
           localStorage.setItem("password_upgrade_required", "true");
@@ -392,10 +497,10 @@ function getVersion() {
           localStorage.removeItem("password_upgrade_required");
         }
       } else {
-        accountWarningLegacy.value = false;
+        accountWarningMd5.value = false;
         accountWarningUpgrade.value = false;
         localStorage.removeItem("change_pwd_hint");
-        localStorage.removeItem("legacy_pwd_hint");
+        localStorage.removeItem("md5_pwd_hint");
         localStorage.removeItem("password_upgrade_required");
       }
     })
@@ -406,35 +511,44 @@ function getVersion() {
 
 function initPasswordWarningFromStorage() {
   const hasChangePwdHint = localStorage.getItem("change_pwd_hint") === "true";
-  const hasLegacyPwdHint = localStorage.getItem("legacy_pwd_hint") === "true";
-  const hasPasswordUpgradeRequired = localStorage.getItem("password_upgrade_required") === "true";
-  if (hasChangePwdHint || hasLegacyPwdHint || hasPasswordUpgradeRequired) {
+  const hasMd5PwdHint =
+    localStorage.getItem("md5_pwd_hint") === "true";
+  const hasPasswordUpgradeRequired =
+    localStorage.getItem("password_upgrade_required") === "true";
+  if (hasChangePwdHint || hasMd5PwdHint || hasPasswordUpgradeRequired) {
     dialog.value = true;
     accountWarning.value = true;
     accountWarningUpgrade.value = hasPasswordUpgradeRequired;
-    accountWarningLegacy.value = hasLegacyPwdHint && !hasPasswordUpgradeRequired;
+    accountWarningMd5.value =
+      hasMd5PwdHint && !hasPasswordUpgradeRequired;
   }
 }
 
 function checkUpdate() {
   updateStatus.value = t("core.header.updateDialog.status.checking");
-  axios
-    .get("/api/update/check")
+  updatesApi
+    .check()
     .then((res) => {
-      hasNewVersion.value = res.data.data.has_new_version;
+      const backendHasNewVersion = !isDesktopReleaseMode.value && res.data.data.has_new_version;
+      hasNewVersion.value = backendHasNewVersion;
 
-      if (res.data.data.has_new_version) {
-        releaseMessage.value = res.data.message;
+      if (backendHasNewVersion) {
+        releaseMessage.value = res.data.message || "";
         updateStatus.value = t("core.header.version.hasNewVersion");
       } else {
-        updateStatus.value = res.data.message;
+        updateStatus.value = res.data.message || "";
       }
-      dashboardHasNewVersion.value = isDesktopReleaseMode.value ? false : res.data.data.dashboard_has_new_version;
+      dashboardHasNewVersion.value = isDesktopReleaseMode.value
+        ? false
+        : res.data.data.dashboard_has_new_version;
     })
     .catch((err) => {
-      if (err.response && err.response.status === 401) {
+      if (isLegacyFallbackError(err)) {
+        console.log(err);
+        return;
+      }
+      if (err.response && err.response.status == 401) {
         console.log("401");
-        const authStore = useAuthStore();
         authStore.logout();
         return;
       }
@@ -445,8 +559,8 @@ function checkUpdate() {
 
 function getReleases() {
   releasesLoading.value = true;
-  return axios
-    .get("/api/update/releases")
+  return updatesApi
+    .releases()
     .then((res) => {
       releases.value = res.data.data.map((item: any) => {
         item.published_at = new Date(item.published_at).toLocaleString();
@@ -521,47 +635,121 @@ function stopRestartPolling() {
   }
 }
 
+function stopRestartReloadTimer() {
+  if (restartReloadTimer) {
+    clearInterval(restartReloadTimer);
+    restartReloadTimer = null;
+  }
+}
+
+function resetRestartFeedbackState() {
+  stopRestartReloadTimer();
+  stopRestartPolling();
+  restartCompleted.value = false;
+  restartReloadCountdown.value = RESTART_FEEDBACK_DELAY_SECONDS;
+  restartWaiting.value = false;
+}
+
 async function fetchAstrBotStartTime() {
-  const res = await axios.get("/api/stat/start-time", { timeout: 3000 });
-  const startTime = res.data?.data?.start_time ?? null;
+  const res = await statsApi.startTime();
+  const rawStartTime = res.data?.data?.start_time;
+  const parsedStartTime =
+    typeof rawStartTime === "number" ? rawStartTime : Number(rawStartTime || 0);
+  const startTime = Number.isFinite(parsedStartTime) ? parsedStartTime : 0;
   commonStore.startTime = startTime;
   return startTime;
 }
 
-function waitForAstrBotRestart(initialStartTime: number | string | null) {
-  if (restartWaiting.value) {
+function reloadAfterUpdate() {
+  stopRestartReloadTimer();
+  reloadWithCacheBuster();
+}
+
+function reloadWithCacheBuster() {
+  const url = new URL(window.location.href);
+  url.searchParams.set("_r", Date.now().toString());
+  window.location.replace(url.toString());
+}
+
+function showRestartCompleted() {
+  if (restartCompleted.value) {
     return;
   }
-  stopRestartPolling();
-  restartWaiting.value = true;
-  restartStartTime.value = initialStartTime;
+  stopUpdateProgressPolling();
+  stopRestartReloadTimer();
+  restartWaiting.value = false;
+  restartCompleted.value = true;
+  restartReloadCountdown.value = RESTART_FEEDBACK_DELAY_SECONDS;
   updateProgress.value = {
     ...updateProgress.value,
-    stage: "restart",
     status: "success",
-    message: t("core.header.updateDialog.progress.restarting"),
+    stage: "done",
+    message: t("core.header.updateDialog.progress.successReady"),
     overall_percent: 100,
   };
+  restartReloadTimer = setInterval(() => {
+    if (restartReloadCountdown.value <= 1) {
+      reloadAfterUpdate();
+      return;
+    }
+    restartReloadCountdown.value -= 1;
+  }, 1000);
+}
+
+function waitForAstrBotRestart(
+  initialStartTime: number | string | null,
+  showWaiting = true,
+) {
+  if (restartCompleted.value) {
+    return;
+  }
+  if (showWaiting && !restartWaiting.value) {
+    restartWaiting.value = true;
+    restartStartTime.value = initialStartTime;
+    updateProgress.value = {
+      ...updateProgress.value,
+      stage: "restart",
+      status: "success",
+      message: t("core.header.updateDialog.progress.restarting"),
+      overall_percent: 100,
+    };
+  }
+  if (restartPollTimer) {
+    return;
+  }
+
+  restartStartTime.value = initialStartTime;
 
   const poll = async () => {
     try {
       const currentStartTime = await fetchAstrBotStartTime();
-      if (initialStartTime !== null && currentStartTime !== null && currentStartTime !== initialStartTime) {
+      if (
+        initialStartTime !== null &&
+        currentStartTime !== null &&
+        currentStartTime !== initialStartTime
+      ) {
         stopRestartPolling();
-        restartWaiting.value = false;
-        window.location.reload();
+        showRestartCompleted();
       }
     } catch (_error) {
       // Backend may be unavailable while the process is restarting.
     }
   };
 
+  void poll();
   restartPollTimer = setInterval(() => {
     void poll();
-  }, 1000);
+  }, RESTART_START_TIME_POLL_INTERVAL_MS);
 }
 
 function applyUpdateProgress(payload: UpdateProgress) {
+  if (
+    payload.status === "idle" &&
+    payload.id === updateProgress.value.id &&
+    updateProgress.value.status !== "idle"
+  ) {
+    return;
+  }
   updateProgress.value = {
     ...createEmptyUpdateProgress(),
     ...payload,
@@ -570,8 +758,16 @@ function applyUpdateProgress(payload: UpdateProgress) {
       ...(payload.stages || {}),
     },
   };
+  if (payload.stage === "restart") {
+    stopUpdateProgressPolling();
+    waitForAstrBotRestart(restartStartTime.value);
+    return;
+  }
   if (payload.status === "success" || payload.status === "error") {
     stopUpdateProgressPolling();
+  }
+  if (payload.status === "error") {
+    stopRestartPolling();
   }
   if (payload.status === "success") {
     waitForAstrBotRestart(restartStartTime.value);
@@ -581,8 +777,8 @@ function applyUpdateProgress(payload: UpdateProgress) {
 function startUpdateProgressPolling(progressId: string) {
   stopUpdateProgressPolling();
   const poll = () => {
-    axios
-      .get("/api/update/progress", { params: { id: progressId } })
+    updatesApi
+      .progress(progressId)
       .then((res) => {
         if (res.data?.data) {
           applyUpdateProgress(res.data.data);
@@ -601,7 +797,10 @@ async function switchVersion(targetVersion: string) {
     typeof crypto !== "undefined" && "randomUUID" in crypto
       ? crypto.randomUUID()
       : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  let initialStartTime: number | string | null = null;
+  let initialStartTime: number | string | null = commonStore.getStartTime();
+  if (initialStartTime === -1) {
+    initialStartTime = null;
+  }
   updateProgress.value = {
     ...createEmptyUpdateProgress(),
     id: progressId,
@@ -609,60 +808,75 @@ async function switchVersion(targetVersion: string) {
     version: targetVersion,
     message: t("core.header.updateDialog.progress.preparing"),
   } as UpdateProgress;
+  resetRestartFeedbackState();
   updateStatus.value = t("core.header.updateDialog.status.switching");
   installLoading.value = true;
 
-  try {
-    initialStartTime = await fetchAstrBotStartTime();
-  } catch (_error) {
-    initialStartTime = commonStore.getStartTime();
+  if (initialStartTime === null) {
+    try {
+      initialStartTime = await fetchAstrBotStartTime();
+    } catch (_error) {
+      initialStartTime = null;
+    }
   }
   restartStartTime.value = initialStartTime;
+  waitForAstrBotRestart(initialStartTime, false);
   startUpdateProgressPolling(progressId);
 
-  axios
-    .post("/api/update/do", {
+  updatesApi
+    .core({
       version: targetVersion,
       proxy: getSelectedGitHubProxy(),
       progress_id: progressId,
     })
     .then((res) => {
-      updateStatus.value = res.data.message;
-      updateProgress.value = {
-        ...updateProgress.value,
-        status: res.data.status === "ok" ? "success" : updateProgress.value.status,
-        message: res.data.message,
-        overall_percent: res.data.status === "ok" ? 100 : updateProgress.value.overall_percent,
-      };
-      if (res.data.status === "ok") {
-        waitForAstrBotRestart(initialStartTime);
+      updateStatus.value = res.data.message || "";
+      if (res.data.status === "error") {
+        stopUpdateProgressPolling();
+        stopRestartPolling();
+        updateProgress.value = {
+          ...updateProgress.value,
+          status: "error",
+          message:
+            res.data.message ||
+            t("core.header.updateDialog.progress.failed"),
+        };
       }
     })
     .catch((err) => {
       console.log(err);
+      stopUpdateProgressPolling();
+      if (!err?.response && restartPollTimer) {
+        waitForAstrBotRestart(restartStartTime.value);
+        updateStatus.value = t("core.header.updateDialog.progress.restarting");
+        return;
+      }
+      stopRestartPolling();
       updateStatus.value = err;
       updateProgress.value = {
         ...updateProgress.value,
         status: "error",
-        message: err?.response?.data?.message || err?.message || t("core.header.updateDialog.progress.failed"),
+        message:
+          err?.response?.data?.message ||
+          err?.message ||
+          t("core.header.updateDialog.progress.failed"),
       };
     })
     .finally(() => {
       installLoading.value = false;
-      stopUpdateProgressPolling();
     });
 }
 
 function updateDashboard() {
   updatingDashboardLoading.value = true;
   updateStatus.value = t("core.header.updateDialog.status.updating");
-  axios
-    .post("/api/update/dashboard")
+  updatesApi
+    .dashboard()
     .then((res) => {
-      updateStatus.value = res.data.message;
-      if (res.data.status === "ok") {
+      updateStatus.value = res.data.message || "";
+      if (res.data.status == "ok") {
         setTimeout(() => {
-          window.location.reload();
+          reloadWithCacheBuster();
         }, 1000);
       }
     })
@@ -675,28 +889,28 @@ function updateDashboard() {
     });
 }
 
-function toggleTheme() {
-  customizer.TOGGLE_DARK_MODE();
-  theme.global.name.value = customizer.uiTheme;
+// 主题选项配置
+const themeOptions = [
+  { mode: 'light' as const,  icon: 'mdi-white-balance-sunny', labelKey: 'core.header.buttons.theme.light'  },
+  { mode: 'dark'  as const,  icon: 'mdi-weather-night',       labelKey: 'core.header.buttons.theme.dark'   },
+  { mode: 'system' as const, icon: 'mdi-sync',                labelKey: 'core.header.buttons.theme.system' },
+] as const;
+
+const themeMode = computed(() => customizer.autoSwitchTheme ? 'system' : customizer.isDarkTheme ? 'dark' : 'light');
+
+function setThemeMode(mode: 'light' | 'dark' | 'system') {
+  customizer.SET_AUTO_SYNC(mode === 'system');
+  if (mode === 'system') {
+    customizer.APPLY_SYSTEM_THEME();
+  } else {
+    customizer.SET_UI_THEME(mode === 'dark' ? DARK_THEME_NAME : LIGHT_THEME_NAME);
+  }
 }
 
 function openReleaseNotesDialog(body: string, tag: string) {
   selectedReleaseNotes.value = body;
   selectedReleaseTag.value = tag;
   releaseNotesDialog.value = true;
-}
-
-function handleLogoClick() {
-  if (isChatPath.value) {
-    aboutDialog.value = true;
-  } else {
-    router.push("/about");
-  }
-}
-
-function handleLogout() {
-  mainMenuOpen.value = false;
-  useAuthStore().logout();
 }
 
 getVersion();
@@ -706,17 +920,16 @@ initPasswordWarningFromStorage();
 commonStore.createEventSource(); // log
 commonStore.getStartTime();
 
-onBeforeUnmount(() => {
-  commonStore.closeEventSourcet();
-});
-
 onUnmounted(() => {
   stopUpdateProgressPolling();
   stopRestartPolling();
+  stopRestartReloadTimer();
 });
 
 // 视图模式切换
 onMounted(() => {
+  isWindowsDesktop.value =
+    document.documentElement.dataset.astrbotDesktopPlatform === "windows";
   // 初次加載時保存當前路由
   if (typeof window !== "undefined") {
     if (isChatPath.value) {
@@ -738,6 +951,11 @@ onMounted(() => {
 // 监听 viewMode 变化，切换到 bot 模式时跳转到首页
 // 保存 bot 模式的最後路由
 // 監聽 route 變化，保存最後一次 bot 路由
+watch(showPreReleases, (value) => {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(SHOW_PRE_RELEASES_KEY, value ? "true" : "false");
+});
+
 watch(
   () => route.fullPath,
   (newPath) => {
@@ -776,7 +994,10 @@ const currentMode = computed({
   set: (val: "chat" | "bot") => {
     try {
       // 檢查 window 和 sessionStorage 是否存在
-      if (typeof window === "undefined" || typeof sessionStorage === "undefined") {
+      if (
+        typeof window === "undefined" ||
+        typeof sessionStorage === "undefined"
+      ) {
         // 如果在非瀏覽器環境中，不做任何 sessionStorage 操作
         console.warn("sessionStorage is not available in this environment");
         return;
@@ -799,17 +1020,19 @@ const currentMode = computed({
   },
 });
 
-// Merry Christmas! 🎄
-const isChristmas = computed(() => {
-  const today = new Date();
-  const month = today.getMonth() + 1; // getMonth() 返回 0-11
-  const day = today.getDate();
-  return month === 12 && day === 25;
-});
+const mainMenuOpen = ref(false);
+const nextMode = computed<"chat" | "bot">(() =>
+  isChatPath.value ? "bot" : "chat",
+);
+
+function switchMode() {
+  currentMode.value = nextMode.value;
+  mainMenuOpen.value = false;
+}
 
 // 语言切换相关
-const mainMenuOpen = ref(false);
-const { languageOptions, currentLanguage, switchLanguage, locale } = useLanguageSwitcher();
+const { languageOptions, currentLanguage, switchLanguage, locale } =
+  useLanguageSwitcher();
 const languages = computed(() =>
   languageOptions.value.map((lang) => ({
     code: lang.value,
@@ -829,114 +1052,65 @@ onMounted(async () => {
   if (isDesktopReleaseMode.value) {
     dashboardHasNewVersion.value = false;
   }
+
+  // The toolbar band doubles as the window drag region on desktop (no native title bar).
+  // Interactive children stay clickable because the handler only fires when the hit
+  // target itself carries the attribute.
+  document
+    .querySelector(".top-header .v-toolbar__content")
+    ?.setAttribute("data-tauri-drag-region", "");
 });
 </script>
-
 
 <template>
   <v-app-bar
     elevation="0"
-    :priority="0"
-    :height="isChatPath ? 50 : 70"
-    class="px-0 top-header"
+    height="40"
+    data-tauri-drag-region
+    class="top-header"
     :class="{
       'chat-mode-header': isChatPath,
       'chat-mode-header--dark': isChatPath && isDarkTheme,
     }"
     :absolute="isChatPath"
     :style="chatHeaderStyle"
-    app
   >
-    <div class="fill-height d-flex align-center w-100 px-4">
-      <!-- 桌面端标题栏拖拽区域 -->
-      <div
-        v-if="isDesktopReleaseMode"
-        style="
-          -webkit-app-region: drag;
-          position: absolute;
-          top: 0;
-          left: 0;
-          right: 0;
-          height: 30px;
-          z-index: 9999;
-        "
-      />
+    <!-- Mobile: open the navigation drawer (sidebars become temporary overlays). -->
+    <v-btn
+      v-if="$vuetify.display.smAndDown"
+      class="header-menu-btn"
+      icon
+      rounded="lg"
+      variant="text"
+      :ripple="false"
+      :aria-label="t('core.navigation.options')"
+      @click="mobileDrawer.TOGGLE"
+    >
+      <Menu :size="20" />
+    </v-btn>
 
-      <div class="d-flex align-center">
-        <!-- 桌面端 menu 按钮 - 仅在 bot 模式下显示 -->
-        <v-btn
-          v-if="!isChatPath"
-          class="hidden-md-and-down mr-3"
-          icon
-          rounded="sm"
-          variant="flat"
-          @click.stop="customizer.SET_MINI_SIDEBAR(!customizer.mini_sidebar)"
-        >
-          <v-icon>mdi-menu</v-icon>
-        </v-btn>
-        <!-- 移动端 menu 按钮 - 仅在 bot 模式下显示 -->
-        <v-btn
-          v-if="!isChatPath"
-          class="hidden-lg-and-up mr-3"
-          icon
-          rounded="sm"
-          variant="flat"
-          @click.stop="customizer.SET_SIDEBAR_DRAWER"
-        >
-          <v-icon>mdi-menu</v-icon>
-        </v-btn>
-      </div>
+    <!-- Pages register their contextual toolbar content through the
+         headerContext store (e.g. the chat page's model selector and title). -->
+    <div class="app-header-context">
+      <component :is="headerContext.component" v-if="headerContext.component" />
+    </div>
 
-      <div
-        v-if="!isChatPath"
-        class="logo-container"
-        :class="{ 'mobile-logo': $vuetify.display.xs }"
-        @click="handleLogoClick"
-      >
-        <span class="logo-text Outfit"
-          >Astr<span class="logo-text bot-text-wrapper"
-            >Bot
-            <img
-              v-if="isChristmas"
-              src="@/assets/images/xmas-hat.png"
-              alt="Christmas hat"
-              class="xmas-hat"
-            /> </span
-        ></span>
-        <span class="version-text hidden-xs">{{ botCurrVersion }}</span>
-      </div>
+    <v-spacer />
 
-      <!-- Keep the chat drawer accessible whenever it is not permanent. -->
-      <v-btn
-        v-if="isChatPath && !lgAndUp"
-        class="chat-mobile-sidebar-toggle"
-        icon
-        size="small"
-        rounded="lg"
-        variant="text"
-        @click.stop="toggleChatSidebarFromHeader"
-      >
-        <v-icon size="20">
-          {{
-            customizer.chatSidebarOpen
-              ? "mdi-chevron-left"
-              : "mdi-chevron-right"
-          }}
-        </v-icon>
-      </v-btn>
+    <!-- 版本提示信息 - 在手机上隐藏 -->
+    <div v-if="!isChatPath" class="mr-4 hidden-xs">
+      <small v-if="hasNewVersion">
+        {{ t("core.header.version.hasNewVersion") }}
+      </small>
+      <small v-else-if="dashboardHasNewVersion && !isDesktopReleaseMode">
+        {{ t("core.header.version.dashboardHasNewVersion") }}
+      </small>
+    </div>
 
-      <div v-if="isChatPath" class="chat-header-context">
-        <ProviderModelMenu variant="header" />
-        <div v-if="chatHeaderSubtitleText" class="chat-header-subtitle">
-          {{ chatHeaderSubtitleText }}
-        </div>
-      </div>
-
-      <v-spacer />
-
+    <div class="header-actions" :class="{ 'chat-header-actions': isChatPath }">
       <v-btn
         v-if="isChatPath && chatHeader.projectId"
-        class="workspace-files-trigger mr-2"
+        class="chat-action-btn workspace-files-trigger"
         :class="{
           'workspace-files-trigger--active': chatHeader.workspaceFilesOpen,
         }"
@@ -956,101 +1130,100 @@ onMounted(async () => {
         </v-icon>
       </v-btn>
 
-      <!-- Bot/Chat 模式切换按钮 - 手机端隐藏，移入 ... 菜单 -->
-      <div class="hidden-sm-and-down mr-4">
-        <v-btn-toggle
-          v-model="currentMode"
-          color="primary"
-          rounded="xl"
-          group
-          density="compact"
-        >
-          <v-btn value="chat" prepend-icon="mdi-chat-processing"> Chat </v-btn>
-          <v-btn value="bot" prepend-icon="mdi-robot"> Bot </v-btn>
-        </v-btn-toggle>
-      </div>
-
-      <div class="mr-3">
-        <v-chip
-          v-if="hasNewVersion && !isChatPath"
-          color="error"
-          variant="flat"
-          size="small"
-          class="cursor-pointer"
-          @click="updateStatusDialog = true"
-        >
-          {{ t("core.header.updateAvailable") }}
-        </v-chip>
-      </div>
+      <!-- Bot/Chat mode switch - single button, hidden in chat mobile menu -->
+      <v-btn
+        v-if="!isChatPath || !$vuetify.display.smAndDown"
+        class="mode-switch-btn"
+        :class="{ 'mr-4 hidden-xs': !isChatPath }"
+        variant="text"
+        size="small"
+        rounded="sm"
+        :ripple="false"
+        @click="switchMode"
+      >
+        <v-icon start>{{ nextMode === "bot" ? "mdi-robot" : "mdi-chat" }}</v-icon>
+        <span class="mode-switch-label">{{
+          nextMode === "bot" ? t("core.navigation.botMode") : t("core.navigation.chat")
+        }}</span>
+      </v-btn>
 
       <!-- 功能菜单 -->
       <StyledMenu v-model="mainMenuOpen" offset="12" location="bottom end">
-        <template #activator="{ props: activatorProps }">
+        <template v-slot:activator="{ props: activatorProps }">
           <v-btn
             v-bind="activatorProps"
             size="small"
-            class="action-btn mr-4"
-            color="var(--v-theme-surface)"
-            variant="flat"
+            :class="[
+              'action-btn',
+              isChatPath ? 'chat-action-btn' : 'mr-4',
+            ]"
+            :color="isChatPath ? undefined : 'var(--v-theme-surface)'"
+            :variant="isChatPath ? 'text' : 'flat'"
             rounded="sm"
             icon
+            :ripple="false"
           >
             <v-icon>mdi-dots-vertical</v-icon>
+            <span class="header-toolbar-label">{{ t("core.navigation.options") }}</span>
           </v-btn>
         </template>
 
         <!-- Bot/Chat 模式切换 - 仅在手机端显示 -->
-        <template v-if="$vuetify.display.xs">
-          <div class="mobile-mode-toggle-wrapper">
-            <v-btn-toggle
-              v-model="currentMode"
-              mandatory
-              variant="outlined"
-              density="compact"
-              color="primary"
-              class="mobile-mode-toggle"
+        <template
+          v-if="
+            (isChatPath && $vuetify.display.smAndDown) ||
+            (!isChatPath && $vuetify.display.xs)
+          "
+        >
+          <div class="mobile-mode-switch-wrapper">
+            <v-btn
+              class="mobile-mode-switch-btn"
+              variant="text"
+              block
+              @click="switchMode"
             >
-              <v-btn value="bot" size="small">
-                <v-icon start> mdi-robot </v-icon>
-                Bot
-              </v-btn>
-              <v-btn value="chat" size="small">
-                <v-icon start> mdi-chat </v-icon>
-                Chat
-              </v-btn>
-            </v-btn-toggle>
+              <v-icon start>{{
+                nextMode === "bot" ? "mdi-robot" : "mdi-chat"
+              }}</v-icon>
+              {{
+                nextMode === "bot"
+                  ? t("core.navigation.botMode")
+                  : t("core.navigation.chat")
+              }}
+            </v-btn>
           </div>
           <v-divider class="my-1" />
         </template>
 
         <!-- 语言切换分组 -->
         <v-menu
+          open-on-click
           :open-on-hover="!$vuetify.display.xs"
-          :open-on-click="$vuetify.display.xs"
           :open-delay="!$vuetify.display.xs ? 60 : 0"
           :close-delay="!$vuetify.display.xs ? 120 : 0"
           :location="$vuetify.display.xs ? 'bottom' : 'start center'"
           offset="8"
         >
-          <template #activator="{ props: languageMenuProps }">
+          <template v-slot:activator="{ props: languageMenuProps }">
             <v-list-item
               v-bind="languageMenuProps"
+              @click.stop
               class="styled-menu-item language-group-trigger"
               rounded="md"
             >
-              <template #prepend>
+              <template v-slot:prepend>
                 <v-icon>mdi-translate</v-icon>
               </template>
-              <v-list-item-title>
-                {{ t("core.common.language") }}
-              </v-list-item-title>
-              <template #append>
+              <v-list-item-title>{{
+                t("core.common.language")
+              }}</v-list-item-title>
+              <template v-slot:append>
                 <span class="language-group-current">{{
                   currentLanguage?.flag
                 }}</span>
-                <v-icon size="18" class="language-group-arrow">
-                  mdi-chevron-right
-                </v-icon>
+                <v-icon size="18" class="language-group-arrow"
+                  >mdi-chevron-right</v-icon
+                >
               </template>
             </v-list-item>
           </template>
@@ -1066,14 +1239,14 @@ onMounted(async () => {
                 v-for="lang in languages"
                 :key="lang.code"
                 :value="lang.code"
+                @click="changeLanguage(lang.code)"
                 :class="{
                   'styled-menu-item-active': currentLocale === lang.code,
                 }"
                 class="styled-menu-item"
                 rounded="md"
-                @click="changeLanguage(lang.code)"
               >
-                <template #prepend>
+                <template v-slot:prepend>
                   <span class="language-flag">{{ lang.flag }}</span>
                 </template>
                 <v-list-item-title>{{ lang.name }}</v-list-item-title>
@@ -1082,84 +1255,148 @@ onMounted(async () => {
           </v-card>
         </v-menu>
 
-        <!-- 主题切换 -->
-        <v-list-item
-          class="styled-menu-item"
-          rounded="md"
-          @click="toggleTheme()"
-        >
-          <template #prepend>
-            <v-icon>
-              {{
-                useCustomizerStore().isDarkTheme
-                  ? "mdi-weather-night"
-                  : "mdi-white-balance-sunny"
-              }}
-            </v-icon>
-          </template>
-          <v-list-item-title>
-            {{
-              useCustomizerStore().isDarkTheme
-                ? t("core.header.buttons.theme.light")
-                : t("core.header.buttons.theme.dark")
-            }}
-          </v-list-item-title>
-        </v-list-item>
-
-        <!-- 更新按钮 -->
-        <v-list-item
-          class="styled-menu-item"
-          rounded="md"
-          @click="handleUpdateClick"
-        >
-          <template #prepend>
-            <v-icon>mdi-arrow-up-circle</v-icon>
-          </template>
-          <v-list-item-title>
-            {{ t("core.header.updateDialog.title") }}
-          </v-list-item-title>
-          <template
-            v-if="
-              hasNewVersion || (dashboardHasNewVersion && !isDesktopReleaseMode)
-            "
-            #append
+      <!-- 主题切换分组 -->
+      <v-menu
+        open-on-click
+        :open-on-hover="!$vuetify.display.xs"
+        :open-delay="!$vuetify.display.xs ? 60 : 0"
+        :close-delay="!$vuetify.display.xs ? 120 : 0"
+        :location="$vuetify.display.xs ? 'bottom' : 'start center'"
+        offset="8"
+      >
+        <template v-slot:activator="{ props: themeMenuProps }">
+          <v-list-item
+            v-bind="themeMenuProps"
+            @click.stop
+            class="styled-menu-item theme-group-trigger"
+            rounded="md"
           >
-            <v-chip size="x-small" color="primary" variant="tonal" class="ml-2">
-              !
-            </v-chip>
-          </template>
-        </v-list-item>
+            <template v-slot:prepend>
+              <v-icon>mdi-brightness-6</v-icon>
+            </template>
+            <v-list-item-title>{{
+              t("core.header.buttons.theme.title")
+            }}</v-list-item-title>
+            <template v-slot:append>
+              <span class="theme-group-current">
+                <v-icon size="16">{{
+                  themeMode === 'dark'
+                    ? 'mdi-weather-night'
+                    : themeMode === 'system'
+                      ? 'mdi-theme-light-dark'
+                      : 'mdi-white-balance-sunny'
+                }}</v-icon>
+              </span>
+              <v-icon size="18" class="language-group-arrow">mdi-chevron-right</v-icon>
+            </template>
+          </v-list-item>
+        </template>
 
-        <!-- 账户按钮 -->
-        <v-list-item
-          class="styled-menu-item"
-          rounded="md"
-          @click="dialog = true"
+        <v-card
+          class="styled-menu-card"
+          style="min-width: 170px"
+          elevation="8"
+          rounded="lg"
         >
-          <template #prepend>
-            <v-icon>mdi-account</v-icon>
-          </template>
-          <v-list-item-title>
-            {{ t("core.header.accountDialog.title") }}
-          </v-list-item-title>
-        </v-list-item>
+          <v-list density="compact" class="styled-menu-list pa-1">
+            <v-list-item
+              v-for="option in themeOptions"
+              :key="option.mode"
+              @click="setThemeMode(option.mode)"
+              :class="{
+                'styled-menu-item-active': themeMode === option.mode,
+              }"
+              class="styled-menu-item"
+              rounded="md"
+            >
+              <template v-slot:prepend>
+                <v-icon size="18" class="theme-option-icon">{{ option.icon }}</v-icon>
+              </template>
+              <v-list-item-title>{{ t(option.labelKey) }}</v-list-item-title>
+            </v-list-item>
+          </v-list>
+        </v-card>
+      </v-menu>
 
-        <!-- 退出登录 -->
-        <v-list-item
-          class="styled-menu-item"
-          rounded="md"
-          @click="handleLogout"
+      <!-- 更新按钮 -->
+      <v-list-item
+        @click="handleUpdateClick"
+        class="styled-menu-item"
+        rounded="md"
+      >
+        <template v-slot:prepend>
+          <v-icon>mdi-arrow-up-circle</v-icon>
+        </template>
+        <v-list-item-title>{{
+          t("core.header.updateDialog.title")
+        }}</v-list-item-title>
+        <template
+          v-slot:append
+          v-if="
+            hasNewVersion || (dashboardHasNewVersion && !isDesktopReleaseMode)
+          "
         >
-          <template #prepend>
-            <v-icon>mdi-export</v-icon>
-          </template>
-          <v-list-item-title>
-            {{ t("core.header.buttons.logout") }}
-          </v-list-item-title>
-        </v-list-item>
+          <v-chip size="x-small" color="primary" variant="tonal" class="ml-2"
+            >!</v-chip
+          >
+        </template>
+      </v-list-item>
+
+      <!-- 账户按钮 -->
+      <v-list-item @click="dialog = true" class="styled-menu-item" rounded="md">
+        <template v-slot:prepend>
+          <v-icon>mdi-account</v-icon>
+        </template>
+        <v-list-item-title>{{
+          t("core.header.accountDialog.title")
+        }}</v-list-item-title>
+      </v-list-item>
+
+      <v-divider class="my-1" />
+
+      <v-list-item
+        @click="authStore.logout()"
+        class="styled-menu-item text-error"
+        prepend-icon="mdi-logout"
+        rounded="md"
+      >
+        <v-list-item-title>
+          {{ t("core.header.buttons.logout") }}
+        </v-list-item-title>
+      </v-list-item>
       </StyledMenu>
+      <!-- Custom caption buttons on Windows, where the native title bar is disabled. -->
+      <div v-if="isWindowsDesktop" class="header-caption-btns">
+        <v-btn
+          class="caption-btn"
+          variant="text"
+          :ripple="false"
+          aria-label="Minimize"
+          @click="astrbotDesktop?.minimizeWindow?.()"
+        >
+          <Minus :size="16" />
+        </v-btn>
+        <v-btn
+          class="caption-btn"
+          variant="text"
+          :ripple="false"
+          aria-label="Maximize"
+          @click="astrbotDesktop?.toggleMaximizeWindow?.()"
+        >
+          <Square :size="14" />
+        </v-btn>
+        <v-btn
+          class="caption-btn caption-btn--close"
+          variant="text"
+          :ripple="false"
+          aria-label="Close"
+          @click="astrbotDesktop?.closeWindow?.()"
+        >
+          <X :size="16" />
+        </v-btn>
+      </div>
     </div>
-  </v-app-bar>
+
     <!-- 更新对话框 -->
     <v-dialog
       v-model="updateStatusDialog"
@@ -1205,8 +1442,39 @@ onMounted(async () => {
             <div
               v-if="installLoading || updateProgress.status !== 'idle'"
               class="update-progress-panel mt-5"
+              :class="{ 'update-progress-panel--success': restartCompleted }"
             >
-              <div v-if="restartWaiting" class="restart-waiting-panel">
+              <div
+                v-if="restartCompleted"
+                class="update-feedback-panel update-feedback-panel--success"
+              >
+                <v-icon
+                  icon="mdi-check-circle"
+                  color="success"
+                  size="46"
+                ></v-icon>
+                <div class="text-subtitle-1 font-weight-medium">
+                  {{ t("core.header.updateDialog.progress.successReady") }}
+                </div>
+                <div class="text-caption text-medium-emphasis">
+                  {{
+                    t("core.header.updateDialog.progress.autoReloadIn", {
+                      seconds: restartReloadCountdown,
+                    })
+                  }}
+                </div>
+                <v-btn
+                  color="success"
+                  variant="tonal"
+                  size="small"
+                  @click="reloadAfterUpdate"
+                >
+                  <v-icon class="mr-1" size="18">mdi-refresh</v-icon>
+                  {{ t("core.header.updateDialog.progress.reloadNow") }}
+                </v-btn>
+              </div>
+
+              <div v-else-if="restartWaiting" class="update-feedback-panel">
                 <v-progress-circular
                   indeterminate
                   color="primary"
@@ -1311,6 +1579,21 @@ onMounted(async () => {
 
             <!-- 发行版 -->
             <div class="mt-5">
+              <div class="release-table-toolbar mb-3">
+                <div class="text-subtitle-1 font-weight-medium">
+                  {{ t("core.header.updateDialog.releases") }}
+                </div>
+                <v-switch
+                  v-model="showPreReleases"
+                  class="release-prerelease-switch"
+                  color="warning"
+                  density="compact"
+                  hide-details
+                  inset
+                  :label="t('core.header.updateDialog.showPreReleases')"
+                ></v-switch>
+              </div>
+
               <v-alert
                 v-if="!installLoading && firstReleasePageHasPreRelease"
                 type="warning"
@@ -1319,7 +1602,7 @@ onMounted(async () => {
                 density="compact"
                 class="mb-4"
               >
-                <template #prepend>
+                <template v-slot:prepend>
                   <v-icon>mdi-alert-circle-outline</v-icon>
                 </template>
                 <div class="text-body-2">
@@ -1344,7 +1627,7 @@ onMounted(async () => {
 
               <v-data-table
                 :headers="releasesHeader"
-                :items="releases"
+                :items="visibleReleases"
                 item-key="name"
                 :items-per-page="6"
                 density="comfortable"
@@ -1501,7 +1784,11 @@ onMounted(async () => {
       </v-card>
     </v-dialog>
 
-    <v-dialog v-model="desktopUpdateDialog" max-width="460">
+    <v-dialog
+      v-model="desktopUpdateDialog"
+      :persistent="desktopUpdateInstalling"
+      max-width="460"
+    >
       <v-card>
         <v-card-title class="text-h3 pa-4 pb-0 pl-6">
           {{ t("core.header.updateDialog.desktopApp.title") }}
@@ -1529,7 +1816,11 @@ onMounted(async () => {
               />
             </div>
           </v-alert>
-          <div class="text-caption mt-3">
+          <DesktopUpdateProgress
+            v-if="desktopUpdateInstalling"
+            :progress="desktopDownloadProgress"
+          />
+          <div v-else class="text-caption mt-3" role="status">
             {{ desktopUpdateStatus }}
           </div>
         </v-card-text>
@@ -1569,10 +1860,10 @@ onMounted(async () => {
       <v-card class="account-dialog">
         <v-card-text class="py-6">
           <div class="d-flex flex-column align-start mb-6">
-            <Logo
+            <logo
               :title="t('core.header.logoTitle')"
               :subtitle="t('core.header.accountDialog.title')"
-            ></Logo>
+            ></logo>
           </div>
           <v-alert
             v-if="accountWarning"
@@ -1585,8 +1876,8 @@ onMounted(async () => {
               t(
                 accountWarningUpgrade
                   ? "core.header.accountDialog.securityWarningUpgrade"
-                  : accountWarningLegacy
-                  ? "core.header.accountDialog.securityWarningLegacy"
+                  : accountWarningMd5
+                  ? "core.header.accountDialog.securityWarningMd5"
                   : "core.header.accountDialog.securityWarning",
               )
             }}</strong>
@@ -1720,7 +2011,9 @@ onMounted(async () => {
         </v-card-text>
       </v-card>
     </v-dialog>
+  </v-app-bar>
 </template>
+
 <style>
 .markdown-content h1 {
   font-size: 1.3em;
@@ -1777,6 +2070,104 @@ onMounted(async () => {
   margin-left: 0;
 }
 
+.release-table-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.release-prerelease-switch {
+  flex: 0 1 auto;
+}
+
+.top-header.chat-mode-header {
+  background: var(--astrbot-chrome-bg, #fdfcfc) !important;
+  border-bottom: 0;
+  box-shadow: none !important;
+}
+
+.top-header.chat-mode-header .v-toolbar__content {
+  padding: 0 16px 0 20px;
+  background: transparent !important;
+}
+
+.chat-mobile-sidebar-toggle {
+  width: 32px !important;
+  height: 32px !important;
+  min-width: 32px !important;
+  flex: 0 0 32px;
+  margin-right: 10px;
+  padding: 0 !important;
+  color: rgb(var(--v-theme-on-surface));
+  border-radius: 8px !important;
+  background: transparent !important;
+}
+
+.chat-mobile-sidebar-toggle .v-btn__content {
+  height: 32px;
+  align-items: center;
+}
+
+.chat-mobile-sidebar-toggle .v-btn__overlay {
+  opacity: 0;
+}
+
+.chat-header-context {
+  min-width: 0;
+  max-width: clamp(180px, calc(100vw - 600px), 460px);
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 5px 18px 5px 0;
+  overflow: hidden;
+}
+
+.chat-header-context .provider-trigger--header {
+  max-width: 100%;
+}
+
+.chat-header-context .provider-trigger-copy {
+  max-width: 100%;
+}
+
+.chat-header-context .provider-trigger-title {
+  min-width: 0;
+  max-width: min(300px, 52vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-header-context .provider-trigger-meta {
+  max-width: 150px;
+}
+
+.chat-header-subtitle {
+  min-width: 0;
+  margin-top: 2px;
+  overflow: hidden;
+  color: rgba(var(--v-theme-on-surface), 0.5);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.chat-header-actions {
+  gap: 10px;
+  margin-right: 0;
+}
+
 .workspace-files-trigger {
   color: rgb(var(--v-theme-on-surface));
 }
@@ -1785,55 +2176,34 @@ onMounted(async () => {
   background: rgba(var(--v-theme-on-surface), 0.08) !important;
 }
 
-/* 响应式布局样式 */
-.logo-container {
-  margin-left: 10px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
+.mode-switch-btn {
+  margin: 0;
+  border: 0;
+  color: rgb(var(--v-theme-on-surface));
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  box-shadow: none;
 }
 
-.mobile-logo {
-  margin-left: 8px;
-  gap: 4px;
+.mode-switch-btn {
+  min-width: 62px;
+  background: transparent !important;
+  padding: 0 6px;
 }
 
-.chat-mode-logo {
-  margin-left: 22px;
+.mode-switch-btn .v-btn__overlay {
+  opacity: 0 !important;
 }
 
-.mobile-logo.chat-mode-logo {
-  margin-left: 4px;
+.mode-switch-btn .v-icon {
+  font-size: 19px;
 }
 
-.logo-text {
-  font-size: 24px;
-  font-weight: 1000;
-}
-
-.logo-text-light {
-  font-weight: normal;
-}
-
-.bot-text-wrapper {
-  position: relative;
-  display: inline-block;
-}
-
-.xmas-hat {
-  position: absolute;
-  top: -3px;
-  right: -14px;
-  width: 24px;
-  height: 24px;
-  z-index: 1;
-}
-
-.version-text {
-  font-size: 12px;
-  color: gray;
-  margin-left: 4px;
+.chat-action-btn {
+  margin-right: 0;
+  color: rgb(var(--v-theme-on-surface));
 }
 
 .action-btn {
@@ -1864,18 +2234,45 @@ onMounted(async () => {
   min-width: 180px;
 }
 
-.mobile-mode-toggle-wrapper {
+.theme-group-trigger :deep(.v-list-item__append) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.theme-group-current {
+  display: flex;
+  align-items: center;
+  opacity: 0.75;
+}
+
+.theme-option-icon {
+  margin-right: 8px;
+  opacity: 0.85;
+}
+
+.mobile-mode-switch-wrapper {
   display: flex;
   justify-content: center;
   padding: 8px 12px 4px;
 }
 
-.mobile-mode-toggle {
+.mobile-mode-switch-btn {
   width: 100%;
+  justify-content: flex-start;
+  color: rgb(var(--v-theme-on-surface));
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
-.mobile-mode-toggle .v-btn {
-  flex: 1;
+.mobile-mode-switch-btn .v-icon {
+  font-size: 19px;
+}
+
+.mobile-mode-switch-btn .v-btn__overlay {
+  opacity: 0 !important;
 }
 
 /* 移动端对话框标题样式 */
@@ -1898,6 +2295,33 @@ onMounted(async () => {
   border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 8px;
   padding: 16px;
+}
+
+.update-progress-panel {
+  overflow: hidden;
+  position: relative;
+  transition:
+    border-color 0.9s ease,
+    box-shadow 0.9s ease;
+}
+
+.update-progress-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    135deg,
+    rgba(var(--v-theme-success), 0.16),
+    rgba(var(--v-theme-success), 0.07)
+  );
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 1.1s ease;
+}
+
+.update-progress-panel > * {
+  position: relative;
+  z-index: 1;
 }
 
 .release-message-preview {
@@ -1928,6 +2352,53 @@ onMounted(async () => {
   gap: 16px;
 }
 
+.update-progress-panel--success {
+  border-color: rgba(var(--v-theme-success), 0.48);
+  box-shadow: inset 0 0 0 1px rgba(var(--v-theme-success), 0.08);
+}
+
+.update-progress-panel--success::before {
+  animation: update-success-green-in 1.2s ease-out;
+  opacity: 1;
+}
+
+.update-feedback-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 150px;
+  padding: 18px 0 22px;
+  text-align: center;
+}
+
+.update-feedback-panel--success {
+  animation: update-success-content-in 0.45s ease-out both;
+}
+
+@keyframes update-success-green-in {
+  from {
+    opacity: 0;
+    transform: scale(1.04);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes update-success-content-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .advanced-settings-toggle {
   display: inline-flex;
   align-items: center;
@@ -1945,14 +2416,6 @@ onMounted(async () => {
 
 .advanced-settings-toggle:hover {
   color: rgb(var(--v-theme-primary));
-}
-
-.restart-waiting-panel {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 18px 0 22px;
 }
 
 .update-stage-list {
@@ -1983,10 +2446,6 @@ onMounted(async () => {
 
 /* 移动端样式优化 */
 @media (max-width: 600px) {
-  .logo-text {
-    font-size: 20px;
-  }
-
   .action-btn {
     margin-right: 4px;
     min-width: 32px !important;
@@ -2020,10 +2479,206 @@ onMounted(async () => {
     font-size: 16px;
   }
 
+  .chat-header-actions .chat-action-btn,
+  .chat-header-actions .mode-switch-btn {
+    margin-right: 0;
+  }
+
+  .top-header.chat-mode-header .v-toolbar__content {
+    padding: 0 12px 0 14px;
+  }
+
+  .chat-header-context {
+    max-width: calc(100vw - 92px);
+    padding-right: 8px;
+  }
+
   .update-summary,
   .dashboard-update-banner {
     align-items: stretch;
     flex-direction: column;
   }
 }
+
+/* The header doubles as a slim toolbar, so its actions follow the provider tab
+   styling. On macOS desktop it also becomes the draggable window chrome.
+   This style block is NOT scoped, so plain selectors are already global here. */
+.top-header {
+  user-select: none;
+}
+
+/* Mount point for page-contextual toolbar content (see the template note). */
+.app-header-context {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 100%;
+  min-width: 0;
+}
+
+/* The toolbar background spans the window, while page-specific context starts
+   where the permanent chat sidebar ends. Keeping this offset on the content
+   mount point avoids moving the toolbar itself and keeps the sidebar brand
+   unobstructed. */
+.top-header.chat-mode-header .app-header-context {
+  margin-left: var(--astrbot-chat-sidebar-width, 0px);
+}
+
+html {
+  /* Keep in sync with the app bar height above. */
+  --astrbot-toolbar-height: 40px;
+}
+
+.top-header,
+.top-header.chat-mode-header,
+.top-header.chat-mode-header.chat-mode-header--dark {
+  border-bottom: 0 !important;
+  box-shadow: none !important;
+}
+
+html[data-astrbot-desktop-platform='macos'] .top-header,
+html[data-astrbot-desktop-platform='macos'] .top-header.chat-mode-header,
+html[data-astrbot-desktop-platform='macos'] .top-header.chat-mode-header.chat-mode-header--dark {
+  background: var(--astrbot-vibrancy-tint, transparent) !important;
+}
+
+/* Keep the toolbar in the normal flow so the content area sits below it instead of
+   scrolling underneath a floating bar. */
+.top-header {
+  position: relative !important;
+  top: 0 !important;
+  /* Vuetify's app-bar layout writes the drawer offset as inline left/width
+     values. The toolbar is shared window chrome, so it must cover that area
+     too; otherwise a transparent macOS window exposes its native material as
+     a visible block above the sidebar. */
+  left: 0 !important;
+  right: auto !important;
+  width: 100% !important;
+}
+
+
+.top-header .v-toolbar__content {
+  padding-inline-end: 24px !important;
+}
+
+/* On macOS the traffic lights sit over the toolbar's left zone once the sidebar
+   is no longer permanent, so the menu button must clear them. */
+@media (max-width: 959.98px) {
+  html[data-astrbot-desktop-platform='macos'] .top-header .v-toolbar__content {
+    padding-inline-start: 74px !important;
+  }
+}
+
+.top-header .header-menu-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px !important;
+  color: rgba(var(--v-theme-on-surface), 0.58);
+}
+
+.top-header .header-menu-btn:hover {
+  color: rgba(var(--v-theme-on-surface), 0.9);
+}
+
+.header-toolbar-label {
+  display: inline;
+  margin-inline-start: 6px;
+}
+
+.top-header .header-actions .v-btn {
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 8px;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: rgba(var(--v-theme-on-surface), 0.58);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.top-header .header-actions .v-btn .v-btn__overlay {
+  opacity: 0 !important;
+}
+
+/* Hover keeps a text-only affordance: no background, just a stronger label color. */
+.top-header .header-actions .v-btn:hover {
+  color: rgba(var(--v-theme-on-surface), 0.9);
+}
+
+/* Normalize header action contents: identical font size and unit line-height so
+   icon+label stay mutually centered across platform font metrics (Windows
+   otherwise shows a 1-2px optical offset between the buttons). */
+.top-header .header-actions .v-btn {
+  font-size: 0.8125rem;
+}
+
+.top-header .header-actions .v-btn .v-btn__content {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+}
+
+.top-header .header-actions .v-btn .v-icon {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+}
+
+.top-header .header-actions .v-btn .mode-switch-label,
+.top-header .header-actions .v-btn .header-toolbar-label {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+}
+
+/* Keep the two header variants on the same right edge. The bot view used a
+   Vuetify mr-4 utility while chat used the action button's 6px margin, which
+   made the same controls shift by a few pixels between panels. */
+.top-header .header-actions .mode-switch-btn,
+.top-header .header-actions .action-btn {
+  margin-right: 0 !important;
+}
+
+.top-header .header-actions .mode-switch-btn {
+  width: 66px;
+  min-width: 66px;
+}
+
+.top-header .header-actions .action-btn {
+  width: 74px !important;
+  min-width: 74px !important;
+  justify-content: center;
+}
+
+.header-caption-btns {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-inline-start: 8px;
+}
+
+.top-header .header-caption-btns .caption-btn {
+  width: 40px;
+  min-width: 40px;
+  height: 34px;
+  padding: 0;
+  border-radius: 8px;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: rgba(var(--v-theme-on-surface), 0.58);
+}
+
+.top-header .header-caption-btns .caption-btn:hover {
+  background: rgba(var(--v-theme-on-surface), 0.08) !important;
+  color: rgba(var(--v-theme-on-surface), 0.9);
+}
+
+/* Windows convention: the close button turns red on hover. */
+.top-header .header-caption-btns .caption-btn--close:hover {
+  background: rgba(232, 17, 35, 0.9) !important;
+  color: #fff;
+}
+
 </style>

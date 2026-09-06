@@ -235,6 +235,8 @@ chore: maintenance tasks
 10. For WebUI dialogs, use `text-h3 pa-4 pb-0 pl-6` as the base title class and use `variant="text"` or `variant="tonal"` for dialog buttons
 11. Consider Windows, macOS, and Linux behavior on both Arm64 and x86 architectures, and preserve compatibility with Python 3.12+
 
+12. When changing WebUI navigation, page structure, or terminology, update the affected instructions and screenshots in `docs/zh` and `docs/en` in the same PR. Include an old-to-new mapping for renamed, moved, or merged entry points in the relevant docs and changelog. See `CONTRIBUTING.md` for the review checklist.
+
 ## Common Tasks
 
 ### Adding a new platform adapter

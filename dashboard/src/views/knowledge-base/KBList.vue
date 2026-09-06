@@ -39,7 +39,7 @@
         </template>
 
         <div v-if="!kb.init_error" class="kb-description text-body-2 text-medium-emphasis">
-          {{ kb.description || '暂无描述' }}
+          {{ kb.description || t('list.noDescription') }}
         </div>
 
         <div v-if="kb.init_error" class="kb-error-panel">
@@ -162,58 +162,25 @@
         <v-divider />
 
         <v-card-text class="pa-6">
-          <!-- Emoji 选择器 -->
-          <div class="text-center mb-6">
-            <div class="emoji-display" @click="showEmojiPicker = true">
-              {{ formData.emoji }}
-            </div>
-            <p class="text-caption text-medium-emphasis mt-2">
-              {{ t("create.emojiLabel") }}
-            </p>
-          </div>
-
           <!-- 表单 -->
           <v-form ref="formRef" @submit.prevent="submitForm">
-            <v-text-field
-              v-model="formData.kb_name"
-              :label="t('create.nameLabel')"
-              :placeholder="t('create.namePlaceholder')"
-              variant="outlined"
-              :rules="[(v) => !!v || t('create.nameRequired')]"
-              required
-              class="mb-4"
-              hint="后续如修改知识库名称，需重新在配置文件更新。"
-              persistent-hint
-            />
+            <v-text-field v-model="formData.kb_name" :label="t('create.nameLabel')"
+              :placeholder="t('create.namePlaceholder')" variant="outlined"
+              :rules="[v => !!v || t('create.nameRequired')]" required
+              class="mb-4 kb-name-field" :hint="t('create.nameChangeHint')" persistent-hint>
+              <template #prepend-inner>
+                <EmojiPicker v-model="formData.emoji" />
+              </template>
+            </v-text-field>
 
-            <v-textarea
-              v-model="formData.description"
-              :label="t('create.descriptionLabel')"
-              :placeholder="t('create.descriptionPlaceholder')"
-              variant="outlined"
-              rows="3"
-              class="mb-4"
-            />
+            <v-textarea v-model="formData.description" :label="t('create.descriptionLabel')"
+              :placeholder="t('create.descriptionPlaceholder')" variant="outlined" rows="3" class="mb-4" />
 
-            <v-select
-              v-model="formData.embedding_provider_id"
-              :items="embeddingProviders"
-              :item-title="(item) => item.embedding_model || item.id"
-              :item-value="'id'"
-              :label="t('create.embeddingModelLabel')"
-              variant="outlined"
-              class="mb-4"
-              :disabled="editingKB !== null"
-              :rules="[
-                (v) =>
-                  editingKB !== null ||
-                  !!v ||
-                  t('create.embeddingModelRequired'),
-              ]"
-              required
-              hint="嵌入模型选择后无法修改，如需更换请创建新的知识库。"
-              persistent-hint
-            >
+            <v-select v-model="formData.embedding_provider_id" :items="embeddingProviders"
+              :item-title="item => item.embedding_model || item.id" :item-value="'id'"
+              :label="t('create.embeddingModelLabel')" variant="outlined" class="mb-4" :disabled="editingKB !== null"
+              :rules="[v => editingKB !== null || !!v || t('create.embeddingModelRequired')]" required
+              :hint="t('create.embeddingLockedHint')" persistent-hint>
               <template #item="{ props, item }">
                 <v-list-item v-bind="props">
                   <template #subtitle>
@@ -268,42 +235,6 @@
       </v-card>
     </v-dialog>
 
-    <!-- Emoji 选择器对话框 -->
-    <v-dialog v-model="showEmojiPicker" max-width="500px">
-      <v-card>
-        <v-card-title class="pa-4">{{ t("emoji.title") }}</v-card-title>
-        <v-divider />
-        <v-card-text class="pa-4">
-          <div
-            v-for="category in emojiCategories"
-            :key="category.key"
-            class="mb-4"
-          >
-            <p class="text-subtitle-2 mb-2">
-              {{ t(`emoji.categories.${category.key}`) }}
-            </p>
-            <div class="emoji-grid">
-              <div
-                v-for="emoji in category.emojis"
-                :key="emoji"
-                class="emoji-item"
-                @click="selectEmoji(emoji)"
-              >
-                {{ emoji }}
-              </div>
-            </div>
-          </div>
-        </v-card-text>
-        <v-divider />
-        <v-card-actions class="pa-4">
-          <v-spacer />
-          <v-btn variant="text" @click="showEmojiPicker = false">
-            {{ t("emoji.close") }}
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-
     <!-- 删除确认对话框 -->
     <v-dialog v-model="showDeleteDialog" max-width="450px" persistent>
       <v-card>
@@ -342,12 +273,8 @@
       {{ snackbar.text }}
     </v-snackbar>
 
-    <div class="position-absolute" style="bottom: 0px; right: 16px">
-      <small @click="router.push('/alkaid/knowledge-base')"
-        ><a style="text-decoration: underline; cursor: pointer"
-          >切换到旧版知识库</a
-        ></small
-      >
+    <div class="position-absolute" style="bottom: 0px; right: 16px;">
+      <small @click="router.push('/alkaid/knowledge-base')"><a style="text-decoration: underline; cursor: pointer;">{{ t('list.switchLegacy') }}</a></small>
     </div>
   </div>
 </template>
@@ -357,6 +284,7 @@ import { onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import OutlinedActionListItem from "@/components/shared/OutlinedActionListItem.vue";
 import { useModuleI18n } from "@/i18n/composables";
+import EmojiPicker from "@/components/shared/EmojiPicker.vue";
 import axios from "@/utils/request";
 
 interface KnowledgeBaseItem {
@@ -401,9 +329,8 @@ const embeddingProviders = ref<ProviderInfo[]>([]);
 const rerankProviders = ref<ProviderInfo[]>([]);
 
 // 对话框
-const showCreateDialog = ref(false);
-const showEmojiPicker = ref(false);
-const showDeleteDialog = ref(false);
+const showCreateDialog = ref(false)
+const showDeleteDialog = ref(false)
 
 // Snackbar 通知
 const snackbar = ref({
@@ -429,26 +356,6 @@ const formData = ref<{
   embedding_provider_id: null,
   rerank_provider_id: null,
 });
-
-// Emoji 分类
-const emojiCategories = [
-  {
-    key: "books",
-    emojis: ["📚", "📖", "📕", "📗", "📘", "📙", "📓", "📔", "📒", "📑", "🗂️", "📂", "📁", "🗃️", "🗄️"],
-  },
-  {
-    key: "emotions",
-    emojis: ["😀", "😃", "😄", "😁", "😆", "😅", "🤣", "😂", "🙂", "🙃", "😉", "😊", "😇", "🥰", "😍"],
-  },
-  {
-    key: "objects",
-    emojis: ["💡", "🔬", "🔭", "🗿", "🏆", "🎯", "🎓", "🔑", "🔒", "🔓", "🔔", "🔕", "🔨", "🛠️", "⚙️"],
-  },
-  {
-    key: "symbols",
-    emojis: ["❤️", "🧡", "💛", "💚", "💙", "💜", "🖤", "🤍", "🤎", "⭐", "🌟", "✨", "💫", "⚡", "🔥"],
-  },
-];
 
 // 加载知识库列表
 const loadKnowledgeBases = async (refreshStats = false) => {
@@ -616,12 +523,6 @@ const closeCreateDialog = () => {
   formRef.value?.reset?.();
 };
 
-// 选择 emoji
-const selectEmoji = (emoji: string) => {
-  formData.value.emoji = emoji;
-  showEmojiPicker.value = false;
-};
-
 // 显示通知
 const showSnackbar = (text: string, color: "success" | "error" = "success") => {
   snackbar.value.text = text;
@@ -649,6 +550,18 @@ onMounted(() => {
 .kb-list-emoji {
   font-size: 1.25rem;
   line-height: 1;
+}
+
+.kb-name-field :deep(.v-field__prepend-inner) {
+  padding-inline-end: 0;
+}
+
+.kb-name-field :deep(.emoji-picker-trigger) {
+  min-width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 8px;
+  font-size: 20px;
 }
 
 .kb-description {
@@ -752,48 +665,4 @@ onMounted(() => {
   min-height: 400px;
 }
 
-/* Emoji 显示和选择器 */
-.emoji-display {
-  font-size: 72px;
-  cursor: pointer;
-  transition: transform 0.2s ease;
-  display: inline-block;
-  padding: 0px 16px;
-  border-radius: 12px;
-  background: rgba(var(--v-theme-primary), 0.05);
-}
-
-.emoji-display:hover {
-  transform: scale(1.1);
-  background: rgba(var(--v-theme-primary), 0.1);
-}
-
-.emoji-grid {
-  display: grid;
-  grid-template-columns: repeat(8, 1fr);
-  gap: 8px;
-}
-
-.emoji-item {
-  font-size: 32px;
-  padding: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  border-radius: 8px;
-  transition: all 0.2s ease;
-}
-
-.emoji-item:hover {
-  background: rgba(var(--v-theme-primary), 0.1);
-  transform: scale(1.2);
-}
-
-/* 响应式设计 */
-@media (max-width: 768px) {
-  .emoji-grid {
-    grid-template-columns: repeat(6, 1fr);
-  }
-}
 </style>

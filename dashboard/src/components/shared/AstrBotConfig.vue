@@ -73,7 +73,13 @@ const providerHint = computed(() => {
   return hint;
 });
 
-const getItemHint = (itemKey, itemMeta) => {
+interface ConfigItemMeta {
+  hint?: string;
+  condition?: Record<string, unknown>;
+  invisible?: boolean;
+}
+
+const getItemHint = (itemKey: string, itemMeta: ConfigItemMeta | undefined) => {
   if (itemMeta?.hint) return itemMeta.hint;
 
   if (itemKey !== "embedding_api_base") return "";
@@ -97,14 +103,32 @@ const dialog = ref(false);
 const currentEditingKey = ref("");
 const currentEditingLanguage = ref("json");
 const currentEditingTheme = ref("vs-light");
-let currentEditingKeyIterable = null;
+const currentEditingKeyIterable = ref<Record<string, unknown>>({});
+const currentEditingValue = computed({
+  get: (): string => {
+    const value = currentEditingKeyIterable.value[currentEditingKey.value];
+    return typeof value === "string"
+      ? value
+      : value == null
+        ? ""
+        : JSON.stringify(value);
+  },
+  set: (value: string) => {
+    currentEditingKeyIterable.value[currentEditingKey.value] = value;
+  },
+});
 const loadingEmbeddingDim = ref(false);
 
-function openEditorDialog(key, value, theme, language) {
+function openEditorDialog(
+  key: string,
+  value: Record<string, unknown>,
+  theme?: string,
+  language?: string,
+) {
   currentEditingKey.value = key;
   currentEditingLanguage.value = language || "json";
   currentEditingTheme.value = theme || "vs-light";
-  currentEditingKeyIterable = value;
+  currentEditingKeyIterable.value = value;
   dialog.value = true;
 }
 
@@ -112,7 +136,7 @@ function saveEditedContent() {
   dialog.value = false;
 }
 
-async function getEmbeddingDimensions(providerConfig) {
+async function getEmbeddingDimensions(providerConfig: Record<string, unknown>) {
   if (loadingEmbeddingDim.value) return;
 
   loadingEmbeddingDim.value = true;
@@ -122,12 +146,21 @@ async function getEmbeddingDimensions(providerConfig) {
       useToast().error("缺少提供商 ID");
       return;
     }
-    const response = await providerApi.embeddingDimension(providerId, providerConfig);
+    const response = await providerApi.embeddingDimension(
+      providerId,
+      providerConfig,
+    );
 
-    if (response.data.status !== "error" && response.data.data?.embedding_dimensions) {
+    if (
+      response.data.status !== "error" &&
+      response.data.data?.embedding_dimensions
+    ) {
       console.info(response.data.data.embedding_dimensions);
-      providerConfig.embedding_dimensions = response.data.data.embedding_dimensions;
-      useToast().success(`获取成功: ${response.data.data.embedding_dimensions}`);
+      providerConfig.embedding_dimensions =
+        response.data.data.embedding_dimensions;
+      useToast().success(
+        `获取成功: ${response.data.data.embedding_dimensions}`,
+      );
     } else {
       useToast().error(response.data.message);
     }
@@ -138,12 +171,12 @@ async function getEmbeddingDimensions(providerConfig) {
   }
 }
 
-function getValueBySelector(obj, selector) {
+function getValueBySelector(obj: unknown, selector: string): unknown {
   const keys = selector.split(".");
   let current = obj;
   for (const key of keys) {
     if (current && typeof current === "object" && key in current) {
-      current = current[key];
+      current = Reflect.get(current, key);
     } else {
       return undefined;
     }
@@ -151,11 +184,16 @@ function getValueBySelector(obj, selector) {
   return current;
 }
 
-function shouldShowItem(itemMeta, itemKey) {
+function shouldShowItem(
+  itemMeta: ConfigItemMeta | undefined,
+  _itemKey: string,
+): boolean {
   if (!itemMeta?.condition) {
     return true;
   }
-  for (const [conditionKey, expectedValue] of Object.entries(itemMeta.condition)) {
+  for (const [conditionKey, expectedValue] of Object.entries(
+    itemMeta.condition,
+  )) {
     const actualValue = getValueBySelector(props.iterable, conditionKey);
     if (actualValue !== expectedValue) {
       return false;
@@ -164,20 +202,23 @@ function shouldShowItem(itemMeta, itemKey) {
   return true;
 }
 
-function getItemPath(key) {
+function getItemPath(key: string): string {
   return props.pathPrefix ? `${props.pathPrefix}.${key}` : key;
 }
 
-function setIterableValue(key, value) {
+function setIterableValue(key: string, value: unknown) {
   Reflect.set(props.iterable, key, value);
 }
 
-function hasVisibleItemsAfter(items, currentIndex) {
+function hasVisibleItemsAfter(
+  items: Record<string, unknown>,
+  currentIndex: number,
+): boolean {
   const itemEntries = Object.entries(items);
 
   // 检查当前索引之后是否还有可见的配置项
   for (let i = currentIndex + 1; i < itemEntries.length; i++) {
-    const [itemKey, itemValue] = itemEntries[i];
+    const [itemKey] = itemEntries[i];
     const itemMeta = props.metadata[props.metadataKey].items[itemKey];
     if (!itemMeta?.invisible && shouldShowItem(itemMeta, itemKey)) {
       return true;
@@ -194,8 +235,16 @@ function hasVisibleItemsAfter(items, currentIndex) {
     class="config-section"
   >
     <v-list-item-title class="config-title">
-      {{ resolveConfigText(currentConfigPath, 'description', metadata[metadataKey]?.description) }}
-      <span class="metadata-key">({{ metadataKey }})</span>
+      {{
+        resolveConfigText(
+          currentConfigPath,
+          "description",
+          metadata[metadataKey]?.description,
+        )
+      }}
+      <span v-if="metadata[metadataKey]?.show_key" class="metadata-key"
+        >({{ metadataKey }})</span
+      >
     </v-list-item-title>
     <v-list-item-subtitle class="config-hint">
       <span
@@ -205,7 +254,13 @@ function hasVisibleItemsAfter(items, currentIndex) {
         class="important-hint"
         >‼️</span
       >
-      {{ resolveConfigText(currentConfigPath, 'hint', metadata[metadataKey]?.hint) }}
+      {{
+        resolveConfigText(
+          currentConfigPath,
+          "hint",
+          metadata[metadataKey]?.hint,
+        )
+      }}
     </v-list-item-subtitle>
   </div>
 
@@ -277,8 +332,18 @@ function hasVisibleItemsAfter(items, currentIndex) {
             <div class="config-section mb-2">
               <v-list-item-title class="config-title">
                 <span v-if="metadata[metadataKey].items[key]?.description">
-                  {{ resolveConfigText(getItemPath(key), 'description', metadata[metadataKey].items[key]?.description) }}
-                  <span class="property-key">({{ key }})</span>
+                  {{
+                    resolveConfigText(
+                      getItemPath(key),
+                      "description",
+                      metadata[metadataKey].items[key]?.description,
+                    )
+                  }}
+                  <span
+                    v-if="metadata[metadataKey].items[key]?.show_key"
+                    class="property-key"
+                    >({{ key }})</span
+                  >
                 </span>
                 <span v-else>{{ key }}</span>
               </v-list-item-title>
@@ -291,7 +356,13 @@ function hasVisibleItemsAfter(items, currentIndex) {
                   class="important-hint"
                   >‼️</span
                 >
-                {{ resolveConfigText(getItemPath(key), 'hint', metadata[metadataKey].items[key]?.hint) }}
+                {{
+                  resolveConfigText(
+                    getItemPath(key),
+                    "hint",
+                    metadata[metadataKey].items[key]?.hint,
+                  )
+                }}
               </v-list-item-subtitle>
             </div>
             <ConfigDefaultReset
@@ -327,14 +398,28 @@ function hasVisibleItemsAfter(items, currentIndex) {
               <v-list-item density="compact">
                 <v-list-item-title class="property-name">
                   <span v-if="metadata[metadataKey].items[key]?.description">
-                    {{ resolveConfigText(getItemPath(key), 'description', metadata[metadataKey].items[key]?.description) }}
-                    <span class="property-key">({{ key }})</span>
+                    {{
+                      resolveConfigText(
+                        getItemPath(key),
+                        "description",
+                        metadata[metadataKey].items[key]?.description,
+                      )
+                    }}
+                    <span
+                      v-if="metadata[metadataKey].items[key]?.show_key"
+                      class="property-key"
+                      >({{ key }})</span
+                    >
                   </span>
                   <span v-else>{{ key }}</span>
                 </v-list-item-title>
 
                 <v-list-item-subtitle class="property-hint">
-                  <span :class="{ 'property-hint__content--linked': fieldLinks[key] }">
+                  <span
+                    :class="{
+                      'property-hint__content--linked': fieldLinks[key],
+                    }"
+                  >
                     <span
                       v-if="
                         metadata[metadataKey].items[key]?.obvious_hint &&
@@ -343,7 +428,13 @@ function hasVisibleItemsAfter(items, currentIndex) {
                       class="important-hint"
                       >‼️</span
                     >
-                    <span>{{ resolveConfigText(getItemPath(key), 'hint', getItemHint(key, metadata[metadataKey].items[key])) }}</span>
+                    <span>{{
+                      resolveConfigText(
+                        getItemPath(key),
+                        "hint",
+                        getItemHint(key, metadata[metadataKey].items[key]),
+                      )
+                    }}</span>
                     <a
                       v-if="fieldLinks[key]"
                       class="property-link"
@@ -351,7 +442,8 @@ function hasVisibleItemsAfter(items, currentIndex) {
                       target="_blank"
                       rel="noopener noreferrer"
                       @click.stop
-                    >{{ fieldLinks[key].label }}</a>
+                      >{{ fieldLinks[key].label }}</a
+                    >
                   </span>
                 </v-list-item-subtitle>
               </v-list-item>
@@ -408,8 +500,16 @@ function hasVisibleItemsAfter(items, currentIndex) {
         <v-col cols="12" sm="7" class="property-info">
           <v-list-item density="compact">
             <v-list-item-title class="property-name">
-              {{ resolveConfigText(getItemPath(metadataKey), 'description', metadata[metadataKey]?.description) }}
-              <span class="property-key">({{ metadataKey }})</span>
+              {{
+                resolveConfigText(
+                  getItemPath(metadataKey),
+                  "description",
+                  metadata[metadataKey]?.description,
+                )
+              }}
+              <span v-if="metadata[metadataKey]?.show_key" class="property-key"
+                >({{ metadataKey }})</span
+              >
             </v-list-item-title>
 
             <v-list-item-subtitle class="property-hint">
@@ -421,7 +521,13 @@ function hasVisibleItemsAfter(items, currentIndex) {
                 class="important-hint"
                 >‼️</span
               >
-              {{ resolveConfigText(getItemPath(metadataKey), 'hint', metadata[metadataKey]?.hint) }}
+              {{
+                resolveConfigText(
+                  getItemPath(metadataKey),
+                  "hint",
+                  metadata[metadataKey]?.hint,
+                )
+              }}
             </v-list-item-subtitle>
           </v-list-item>
         </v-col>
@@ -435,7 +541,10 @@ function hasVisibleItemsAfter(items, currentIndex) {
           >
             <!-- eslint-disable-next-line vue/no-mutating-props -->
             <TemplateListEditor
-              v-if="metadata[metadataKey]?.type === 'template_list' && !metadata[metadataKey]?.invisible"
+              v-if="
+                metadata[metadataKey]?.type === 'template_list' &&
+                !metadata[metadataKey]?.invisible
+              "
               :model-value="iterable[metadataKey]"
               :templates="metadata[metadataKey]?.templates || {}"
               :plugin-name="pluginName"
@@ -487,7 +596,7 @@ function hasVisibleItemsAfter(items, currentIndex) {
       </v-toolbar>
       <v-card-text class="pa-0">
         <VueMonacoEditor
-          v-model:value="currentEditingKeyIterable[currentEditingKey]"
+          v-model:value="currentEditingValue"
           :theme="currentEditingTheme"
           :language="currentEditingLanguage"
           style="height: calc(100vh - 64px)"
@@ -516,10 +625,10 @@ function hasVisibleItemsAfter(items, currentIndex) {
 
 .metadata-key,
 .property-key {
-  font-size: 0.85em;
-  opacity: 0.7;
+  color: rgba(var(--v-theme-on-surface), 0.45);
+  font-size: 0.82em;
   font-weight: normal;
-  display: none;
+  margin-left: 4px;
 }
 
 .important-hint {

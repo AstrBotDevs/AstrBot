@@ -3,7 +3,7 @@ import base64
 import re
 import time
 import uuid
-from typing import Any
+from typing import Any, TypedDict
 
 import aiohttp
 from slack_sdk.socket_mode.request import SocketModeRequest
@@ -14,6 +14,7 @@ from astrbot.api.event import MessageChain
 from astrbot.api.message_components import At, File, Image, Plain
 from astrbot.api.platform import (
     AstrBotMessage,
+    Group,
     MessageMember,
     MessageType,
     Platform,
@@ -25,6 +26,11 @@ from astrbot.core.utils.webhook_utils import log_webhook_info
 
 from .client import SlackSocketClient, SlackWebhookClient
 from .slack_event import SlackMessageEvent
+
+
+class SlackChannelInfo(TypedDict, total=False):
+    is_im: bool
+    name: str
 
 
 @register_platform_adapter(
@@ -115,12 +121,17 @@ class SlackAdapter(Platform):
         channel_id = event.get("channel", "")
         try:
             channel_info = await self.web_client.conversations_info(channel=channel_id)
-            is_im = channel_info["channel"]["is_im"]
+            channel_data: SlackChannelInfo = channel_info["channel"]
+            is_im = channel_data["is_im"]
+
             if is_im:
                 abm.type = MessageType.FRIEND_MESSAGE
             else:
                 abm.type = MessageType.GROUP_MESSAGE
-                abm.group_id = channel_id
+                abm.group = Group(
+                    group_id=channel_id,
+                    group_name=channel_data.get("name") or None,
+                )
         except Exception:
             abm.type = MessageType.GROUP_MESSAGE
             abm.group_id = channel_id
@@ -335,15 +346,25 @@ class SlackAdapter(Platform):
     def meta(self) -> PlatformMetadata:
         return self.metadata
 
-    async def handle_msg(self, message: AstrBotMessage) -> None:
-        message_event = SlackMessageEvent(
+    def create_event(self, message: AstrBotMessage) -> SlackMessageEvent:
+        """Creates a Slack message event.
+
+        Args:
+            message: AstrBot message object to wrap.
+
+        Returns:
+            Created Slack message event.
+        """
+        return SlackMessageEvent(
             message_str=message.message_str,
             message_obj=message,
             platform_meta=self.meta(),
             session_id=message.session_id,
             web_client=self.web_client,
         )
-        self.commit_event(message_event)
+
+    async def handle_msg(self, message: AstrBotMessage) -> None:
+        self.commit_event(self.create_event(message))
 
     def get_client(self):
         return self.web_client
@@ -352,5 +373,5 @@ class SlackAdapter(Platform):
         return bool(
             self.config.get("unified_webhook_mode", False)
             and self.config.get("slack_connection_mode", "") == "webhook"
-            and self.config.get("webhook_uuid"),
+            and self.config.get("webhook_uuid")
         )

@@ -61,10 +61,6 @@
       "tempStorage": {
         "title": "Кэш",
         "subtitle": "Порог автоматической очистки временной папки."
-      },
-      "t2iRendering": {
-        "title": "Текст в изображение",
-        "subtitle": "Стратегия, endpoint и пользовательские шаблоны для рендеринга."
       }
     },
     "timePreview": {
@@ -221,6 +217,7 @@
       "restartNow": "Перезапустить сейчас",
       "failed": "Ошибка импорта",
       "retry": "Повторить",
+      "resumeUpload": "Продолжить загрузку",
       "version": {
         "backupVersion": "Версия бэкапа",
         "currentVersion": "Текущая версия",

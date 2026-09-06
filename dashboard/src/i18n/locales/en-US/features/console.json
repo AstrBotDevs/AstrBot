@@ -1,10 +1,12 @@
 {
   "title": "Console",
   "autoScroll": {
+    "label": "Auto-scroll",
     "enabled": "Auto-scroll enabled",
     "disabled": "Auto-scroll disabled"
   },
   "hideUserChat": {
+    "label": "Hide user chat",
     "enabled": "User chat hidden",
     "disabled": "Hide user chat"
   },
@@ -14,6 +16,7 @@
     "packageLabel": "*Package name, e.g. llmtuner",
     "mirrorLabel": "Force PyPI repository URL (optional)",
     "mirrorHint": "Force PyPI repository URL > Config item `PyPI Repository Address`",
+    "cancelButton": "Cancel",
     "installButton": "Install",
     "installSuccess": "Installation successful.",
     "installFailed": "Installation failed.",

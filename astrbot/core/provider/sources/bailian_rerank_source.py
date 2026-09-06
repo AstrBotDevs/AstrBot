@@ -65,7 +65,7 @@ class BailianRerankProvider(RerankProvider):
         }
 
         self.client: aiohttp.ClientSession | None = aiohttp.ClientSession(
-            headers=headers,
+            headers={**self.request_headers, **headers},
             timeout=aiohttp.ClientTimeout(total=self.timeout),
         )
 

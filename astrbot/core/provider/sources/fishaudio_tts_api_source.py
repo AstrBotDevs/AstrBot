@@ -65,6 +65,7 @@ class ProviderFishAudioTTSAPI(TTSProvider):
         if self.proxy:
             logger.info(f"[FishAudio TTS] 使用代理: {self.proxy}")
         self.headers = {
+            **self.request_headers,
             "Authorization": f"Bearer {self.chosen_api_key}",
         }
         # FishAudio API 要求 model 作为 HTTP header 发送，而非请求体字段

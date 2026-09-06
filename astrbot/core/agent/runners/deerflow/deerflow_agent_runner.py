@@ -316,7 +316,9 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
             yield await self._finish_with_error(err_msg)
 
     @override
-    async def step_until_done(self, max_step: int):
+    async def step_until_done(
+        self, max_step: int = 128
+    ) -> T.AsyncGenerator[AgentResponse, None]:
         if max_step <= 0:
             raise ValueError("max_step must be greater than 0")
 

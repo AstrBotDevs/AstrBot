@@ -10,16 +10,14 @@
         :key="msg.id || `${msgIndex}-${msg.created_at || ''}`"
         class="message-row"
         :class="isUserMessage(msg) ? 'from-user' : 'from-bot'"
+        :data-message-id="msg.id == null ? undefined : String(msg.id)"
       >
-        <v-avatar v-if="!isUserMessage(msg)" class="bot-avatar" :size="avatarSize">
-          <v-progress-circular
-            v-if="isMessageStreaming(msg, msgIndex)"
-            class="bot-streaming-spinner"
-            indeterminate
-            size="22"
-            width="2"
-          />
-          <span v-else class="bot-avatar-symbol" aria-hidden="true">✦</span>
+        <v-avatar
+          v-if="!isUserMessage(msg)"
+          class="bot-avatar"
+          :size="avatarSize"
+        >
+          <span class="bot-avatar-symbol" aria-hidden="true">✦</span>
         </v-avatar>
 
         <div class="message-stack">
@@ -85,183 +83,236 @@
             :class="{ user: isUserMessage(msg), bot: !isUserMessage(msg) }"
             @mouseup="handleMouseUp($event, msg)"
           >
-            <div v-if="messageContent(msg).isLoading" class="loading-message">
-              <span>{{ tm("message.loading") }}</span>
-            </div>
-
-            <template v-else-if="isEditingMessage(msg)">
-              <div class="inline-message-editor">
-                <textarea
-                  :value="editDraft"
-                  class="inline-message-editor-input"
-                  rows="2"
-                  autofocus
-                  @input="
-                    emit(
-                      'update:editDraft',
-                      ($event.target as HTMLTextAreaElement).value,
-                    )
-                  "
-                  @keydown.esc="emit('cancelEdit')"
-                ></textarea>
-                <div class="inline-message-editor-actions">
-                  <v-btn
-                    class="inline-message-editor-action"
-                    size="small"
-                    variant="text"
-                    @click="emit('cancelEdit')"
-                  >
-                    {{ t("core.common.cancel") }}
-                  </v-btn>
-                  <v-btn
-                    class="inline-message-editor-action"
-                    size="small"
-                    color="primary"
-                    variant="tonal"
-                    :loading="savingEdit"
-                    @click="emit('saveEdit')"
-                  >
-                    {{ t("core.common.save") }}
-                  </v-btn>
-                </div>
-              </div>
-            </template>
-
-            <template v-else>
-              <ReasoningBlock
-                v-if="messageContent(msg).reasoning"
-                :reasoning="messageContent(msg).reasoning || ''"
-                :is-dark="isDark"
-                :initial-expanded="false"
-                :is-streaming="isMessageStreaming(msg, msgIndex)"
-                :has-non-reasoning-content="hasNonReasoningContent(msg)"
-              />
-
-              <template
-                v-for="(part, partIndex) in displayedMessageParts(msg)"
-                :key="`${msgIndex}-${partIndex}-${part.type}`"
-              >
-                <button
-                  v-if="part.type === 'reply'"
-                  class="reply-quote"
-                  type="button"
-                  @click="scrollToMessage(part.message_id)"
-                >
-                  <v-icon size="15">mdi-reply</v-icon>
-                  <span>{{ replyPreview(part.message_id, part.selected_text) }}</span>
-                </button>
-
-                <div
-                  v-else-if="part.type === 'plain' && isUserMessage(msg)"
-                  class="plain-content"
-                >
-                  {{ part.text || "" }}
-                </div>
-
-                <div
-                  v-else-if="part.type === 'plain' && messageThreads(msg).length"
-                  class="threaded-message-content"
-                >
-                  <ThreadedMarkdownMessagePart
-                    :text="part.text || ''"
-                    :threads="messageThreads(msg)"
-                    :refs="resolvedMessageRefs(msg)"
-                    :is-dark="isDark"
-                    :custom-html-tags="customMarkdownTags"
-                    @open-thread="emit('openThread', $event)"
-                  />
-                </div>
-
-                <MarkdownMessagePart
-                  v-else-if="part.type === 'plain'"
-                  :content="part.text || ''"
-                  :refs="resolvedMessageRefs(msg)"
-                  :is-dark="isDark"
-                  :custom-html-tags="customMarkdownTags"
-                />
-
-                <button
-                  v-else-if="part.type === 'image'"
-                  class="image-part"
-                  type="button"
-                  @click="openImage(partUrl(part))"
-                >
-                  <img :src="partUrl(part)" :alt="part.filename || 'image'" />
-                </button>
-
-                <audio
-                  v-else-if="part.type === 'record'"
-                  class="audio-part"
-                  controls
-                  :src="partUrl(part)"
-                />
-
-                <video
-                  v-else-if="part.type === 'video'"
-                  class="video-part"
-                  controls
-                  :src="partUrl(part)"
-                />
-
-                <div v-else-if="part.type === 'file'" class="file-part">
-                  <v-icon size="20">mdi-file-document-outline</v-icon>
-                  <span>{{ part.filename || "file" }}</span>
-                  <v-btn
-                    icon="mdi-download"
-                    size="x-small"
-                    variant="text"
-                    :loading="
-                      downloadingFiles.has(
-                        part.attachment_id || part.filename || '',
+            <MessageContentTransition :loading="messageContent(msg).isLoading">
+              <template v-if="isEditingMessage(msg)">
+                <div class="inline-message-editor">
+                  <textarea
+                    :value="editDraft"
+                    class="inline-message-editor-input"
+                    rows="2"
+                    autofocus
+                    @input="
+                      emit(
+                        'update:editDraft',
+                        ($event.target as HTMLTextAreaElement).value,
                       )
                     "
-                    @click="downloadPart(part)"
-                  />
-                </div>
-
-                <div v-else-if="part.type === 'tool_call'" class="tool-call-block">
-                  <template v-for="tool in part.tool_calls || []" :key="tool.id || tool.name">
-                    <ToolCallItem v-if="isIPythonToolCall(tool)" :is-dark="isDark">
-                      <template #label>
-                        <v-icon size="16">mdi-code-json</v-icon>
-                        <span>{{ tool.name || "python" }}</span>
-                        <span class="tool-call-inline-status">
-                          {{ toolCallStatusText(tool) }}
-                        </span>
-                      </template>
-                      <template #details>
-                        <IPythonToolBlock
-                          :tool-call="normalizeToolCall(tool)"
-                          :is-dark="isDark"
-                          :show-header="false"
-                          :force-expanded="true"
-                        />
-                      </template>
-                    </ToolCallItem>
-                    <ToolCallCard
-                      v-else
-                      :tool-call="normalizeToolCall(tool)"
-                      :is-dark="isDark"
-                    />
-                  </template>
-                </div>
-
-                <div v-else class="unknown-part">
-                  {{ formatJson(part) }}
+                    @keydown.esc="emit('cancelEdit')"
+                  ></textarea>
+                  <div class="inline-message-editor-actions">
+                    <v-btn
+                      class="inline-message-editor-action"
+                      size="small"
+                      variant="text"
+                      @click="emit('cancelEdit')"
+                    >
+                      {{ t("core.common.cancel") }}
+                    </v-btn>
+                    <v-btn
+                      class="inline-message-editor-action"
+                      size="small"
+                      color="primary"
+                      variant="tonal"
+                      :loading="savingEdit"
+                      @click="emit('saveEdit')"
+                    >
+                      {{ t("core.common.save") }}
+                    </v-btn>
+                  </div>
                 </div>
               </template>
-            </template>
+
+              <template v-else>
+                <template
+                  v-for="(block, blockIndex) in renderBlocks(msg)"
+                  :key="`${msgIndex}-block-${blockIndex}-${block.kind}`"
+                >
+                  <ReasoningBlock
+                    v-if="block.kind === 'thinking'"
+                    :parts="block.parts"
+                    :is-dark="isDark"
+                    :initial-expanded="false"
+                    :is-streaming="isMessageStreaming(msg, msgIndex)"
+                    :has-non-reasoning-content="
+                      hasFollowingContentBlock(msg, blockIndex)
+                    "
+                    :open-in-sidebar="variant === 'main'"
+                    @open="emit('openReasoning', { message: msg, blockIndex })"
+                  />
+
+                  <template v-else>
+                    <template
+                      v-for="(part, partIndex) in block.parts"
+                      :key="`${msgIndex}-${blockIndex}-${partIndex}-${part.type}`"
+                    >
+                      <button
+                        v-if="part.type === 'reply'"
+                        class="reply-quote"
+                        type="button"
+                        @click="scrollToMessage(part.message_id)"
+                      >
+                        <v-icon size="15">mdi-reply</v-icon>
+                        <span>{{
+                          replyPreview(part.message_id, part.selected_text)
+                        }}</span>
+                      </button>
+
+                      <div
+                        v-else-if="part.type === 'plain' && isUserMessage(msg)"
+                        class="plain-content"
+                      >
+                        {{ part.text || "" }}
+                      </div>
+
+                      <div
+                        v-else-if="
+                          part.type === 'plain' && messageThreads(msg).length
+                        "
+                        class="threaded-message-content"
+                      >
+                        <ThreadedMarkdownMessagePart
+                          :text="part.text || ''"
+                          :threads="messageThreads(msg)"
+                          :refs="resolvedMessageRefs(msg)"
+                          :is-dark="isDark"
+                          :custom-html-tags="customMarkdownTags"
+                          :is-streaming="isMessageStreaming(msg, msgIndex)"
+                          @open-thread="emit('openThread', $event)"
+                        />
+                      </div>
+
+                      <MarkdownMessagePart
+                        v-else-if="part.type === 'plain'"
+                        :content="part.text || ''"
+                        :refs="resolvedMessageRefs(msg)"
+                        :is-dark="isDark"
+                        :custom-html-tags="customMarkdownTags"
+                        :is-streaming="isMessageStreaming(msg, msgIndex)"
+                      />
+
+                      <button
+                        v-else-if="part.type === 'image'"
+                        class="image-part"
+                        type="button"
+                        @click="openImage(partUrl(part))"
+                      >
+                        <img
+                          :src="partUrl(part)"
+                          :alt="part.filename || 'image'"
+                        />
+                      </button>
+
+                      <audio
+                        v-else-if="part.type === 'record'"
+                        class="audio-part"
+                        controls
+                        :src="partUrl(part)"
+                      />
+
+                      <video
+                        v-else-if="part.type === 'video'"
+                        class="video-part"
+                        controls
+                        :src="partUrl(part)"
+                      />
+
+                      <div
+                        v-else-if="part.type === 'file'"
+                        class="file-part"
+                        :style="{
+                          '--attachment-color':
+                            attachmentPresentation(part).color,
+                        }"
+                      >
+                        <v-icon
+                          class="file-part-icon"
+                          :icon="attachmentPresentation(part).icon"
+                          size="24"
+                        />
+                        <div class="file-part-meta">
+                          <span class="file-part-name">
+                            {{ attachmentName(part) }}
+                          </span>
+                          <span class="file-part-kind">
+                            {{ attachmentPresentation(part).label }}
+                          </span>
+                        </div>
+                        <v-btn
+                          class="file-part-action"
+                          icon="mdi-download"
+                          size="x-small"
+                          variant="text"
+                          :loading="
+                            downloadingFiles.has(
+                              part.attachment_id ||
+                                part.stored_filename ||
+                                part.filename ||
+                                '',
+                            )
+                          "
+                          @click="downloadPart(part)"
+                        />
+                      </div>
+
+                      <div
+                        v-else-if="part.type === 'tool_call'"
+                        class="tool-call-block"
+                      >
+                        <template
+                          v-for="tool in part.tool_calls || []"
+                          :key="tool.id || tool.name"
+                        >
+                          <ToolCallItem
+                            v-if="isIPythonToolCall(tool)"
+                            :is-dark="isDark"
+                          >
+                            <template #label>
+                              <v-icon size="16">mdi-code-json</v-icon>
+                              <span>{{ tool.name || "python" }}</span>
+                              <span class="tool-call-inline-status">
+                                {{ toolCallStatusText(tool) }}
+                              </span>
+                            </template>
+                            <template #details>
+                              <IPythonToolBlock
+                                :tool-call="normalizeToolCall(tool)"
+                                :is-dark="isDark"
+                                :show-header="false"
+                                :force-expanded="true"
+                              />
+                            </template>
+                          </ToolCallItem>
+                          <ToolCallCard
+                            v-else
+                            :tool-call="normalizeToolCall(tool)"
+                            :is-dark="isDark"
+                          />
+                        </template>
+                      </div>
+
+                      <div v-else class="unknown-part">
+                        {{ formatJson(part) }}
+                      </div>
+                    </template>
+                  </template>
+                </template>
+              </template>
+            </MessageContentTransition>
           </div>
 
           <div v-if="showMessageMeta(msg, msgIndex)" class="message-meta">
-            <span v-if="msg.created_at">{{ formatTime(msg.created_at) }}</span>
+            <span v-if="isUserMessage(msg) && msg.created_at">{{
+              formatTime(msg.created_at)
+            }}</span>
             <v-btn
               v-if="canEditMessage(msg, msgIndex)"
-              icon="mdi-pencil-outline"
+              icon
               size="x-small"
               variant="text"
               @click="emit('openEdit', msg)"
-            />
+            >
+              <SquarePen :size="14" :stroke-width="2" />
+            </v-btn>
             <RegenerateMenu
               v-if="canRegenerateMessage(msg, msgIndex)"
               @retry="emit('regenerate', msg)"
@@ -269,40 +320,59 @@
             />
             <v-btn
               v-if="enableCopy && !isUserMessage(msg)"
-              icon="mdi-content-copy"
+              icon
               size="x-small"
               variant="text"
               @click="copyMessage(msg)"
-            />
+            >
+              <Copy :size="14" :stroke-width="2" />
+            </v-btn>
             <v-menu
               v-if="messageContent(msg).agentStats"
               location="bottom"
               transition="none"
             >
               <template #activator="{ props: statsProps }">
-                <v-btn
-                  v-bind="statsProps"
-                  icon="mdi-information-outline"
-                  size="x-small"
-                  variant="text"
-                />
+                <v-btn v-bind="statsProps" icon size="x-small" variant="text">
+                  <Info :size="14" :stroke-width="2" />
+                </v-btn>
               </template>
               <v-card class="stats-card" elevation="4">
+                <div
+                  v-if="cachedInputTokens(messageContent(msg).agentStats) > 0"
+                  class="stats-row"
+                >
+                  <span>{{ tm("stats.cachedTokens") }}</span>
+                  <strong>{{
+                    cachedInputTokens(messageContent(msg).agentStats)
+                  }}</strong>
+                </div>
                 <div class="stats-row">
                   <span>{{ tm("stats.inputTokens") }}</span>
-                  <strong>{{ inputTokens(messageContent(msg).agentStats) }}</strong>
+                  <strong>{{
+                    inputTokens(messageContent(msg).agentStats)
+                  }}</strong>
                 </div>
                 <div class="stats-row">
                   <span>{{ tm("stats.outputTokens") }}</span>
-                  <strong>{{ outputTokens(messageContent(msg).agentStats) }}</strong>
+                  <strong>{{
+                    outputTokens(messageContent(msg).agentStats)
+                  }}</strong>
                 </div>
-                <div v-if="agentTtft(messageContent(msg).agentStats)" class="stats-row">
+                <div
+                  v-if="agentTtft(messageContent(msg).agentStats)"
+                  class="stats-row"
+                >
                   <span>{{ tm("stats.ttft") }}</span>
-                  <strong>{{ agentTtft(messageContent(msg).agentStats) }}</strong>
+                  <strong>{{
+                    agentTtft(messageContent(msg).agentStats)
+                  }}</strong>
                 </div>
                 <div class="stats-row">
                   <span>{{ tm("stats.duration") }}</span>
-                  <strong>{{ agentDuration(messageContent(msg).agentStats) }}</strong>
+                  <strong>{{
+                    agentDuration(messageContent(msg).agentStats)
+                  }}</strong>
                 </div>
               </v-card>
             </v-menu>
@@ -319,7 +389,9 @@
                   type="button"
                 >
                   <v-icon size="14">mdi-source-branch</v-icon>
-                  <span>{{ threadCountLabel(messageThreads(msg).length) }}</span>
+                  <span>{{
+                    threadCountLabel(messageThreads(msg).length)
+                  }}</span>
                 </button>
               </template>
               <v-list-item
@@ -343,6 +415,11 @@
                 @open-refs="handleOpenRefs"
               />
             </div>
+            <span
+              v-if="!isUserMessage(msg) && msg.created_at"
+              class="message-time"
+              >{{ formatTime(msg.created_at) }}</span
+            >
           </div>
         </div>
       </div>
@@ -371,20 +448,23 @@
 </template>
 
 <script setup lang="ts">
+import MessageContentTransition from "@/components/chat/MessageContentTransition.vue";
 import { computed, nextTick, reactive, ref } from "vue";
-import ActionRef from "@/components/chat/message_list_comps/ActionRef.vue";
-import IPythonToolBlock from "@/components/chat/message_list_comps/IPythonToolBlock.vue";
-import MarkdownMessagePart from "@/components/chat/message_list_comps/MarkdownMessagePart.vue";
+import { Copy, Info, SquarePen } from "@lucide/vue";
+import axios from "@/utils/request";
+import { fileApi } from "@/api/v1";
+import RegenerateMenu, {
+  type RegenerateModelSelection,
+} from "@/components/chat/RegenerateMenu.vue";
+import ThreadedMarkdownMessagePart from "@/components/chat/ThreadedMarkdownMessagePart.vue";
 import ReasoningBlock from "@/components/chat/message_list_comps/ReasoningBlock.vue";
-import RefNode from "@/components/chat/message_list_comps/RefNode.vue";
-import RefsSidebar from "@/components/chat/message_list_comps/RefsSidebar.vue";
-import ThreadNode from "@/components/chat/message_list_comps/ThreadNode.vue";
 import ToolCallCard from "@/components/chat/message_list_comps/ToolCallCard.vue";
 import ToolCallItem from "@/components/chat/message_list_comps/ToolCallItem.vue";
-import RegenerateMenu, { type RegenerateModelSelection } from "@/components/chat/RegenerateMenu.vue";
-import ThreadedMarkdownMessagePart from "@/components/chat/ThreadedMarkdownMessagePart.vue";
+import IPythonToolBlock from "@/components/chat/message_list_comps/IPythonToolBlock.vue";
+import RefsSidebar from "@/components/chat/message_list_comps/RefsSidebar.vue";
+import ActionRef from "@/components/chat/message_list_comps/ActionRef.vue";
+import MarkdownMessagePart from "@/components/chat/message_list_comps/MarkdownMessagePart.vue";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
-import ThemeAwareMarkdownCodeBlock from "@/components/shared/ThemeAwareMarkdownCodeBlock.vue";
 import {
   CHAT_MARKDOWN_CUSTOM_TAGS,
   registerChatMarkdownComponents,
@@ -393,6 +473,11 @@ import {
   attachmentName,
   attachmentPresentation,
 } from "@/components/chat/attachmentPresentation";
+import {
+  displayParts as displayMessageParts,
+  messageBlocks as buildMessageBlocks,
+  type MessageDisplayBlock,
+} from "@/composables/useMessages";
 import type {
   ChatContent,
   ChatRecord,
@@ -400,7 +485,7 @@ import type {
   MessagePart,
 } from "@/composables/useMessages";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
-import axios from "@/utils/request";
+import { copyToClipboard } from "@/utils/clipboard";
 
 const props = withDefaults(
   defineProps<{
@@ -438,9 +523,13 @@ const emit = defineEmits<{
   cancelEdit: [];
   saveEdit: [];
   regenerate: [message: ChatRecord];
-  regenerateWithModel: [message: ChatRecord, selection: RegenerateModelSelection];
+  regenerateWithModel: [
+    message: ChatRecord,
+    selection: RegenerateModelSelection,
+  ];
   selectBotText: [event: MouseEvent, message: ChatRecord];
   openThread: [thread: ChatThread];
+  openReasoning: [payload: { message: ChatRecord; blockIndex: number }];
   openRefs: [refs: unknown];
 }>();
 
@@ -452,7 +541,7 @@ const customMarkdownTags = CHAT_MARKDOWN_CUSTOM_TAGS;
 const downloadingFiles = ref(new Set<string>());
 const imagePreview = reactive({ visible: false, url: "" });
 const refsSidebarOpen = ref(false);
-const selectedRefs = ref<Record<string, unknown> | undefined>(undefined);
+const selectedRefs = ref<Record<string, unknown> | null>(null);
 const listRoot = ref<HTMLElement | null>(null);
 const avatarSize = computed(() => (props.variant === "thread" ? 36 : 56));
 
@@ -471,38 +560,51 @@ function messageParts(message: ChatRecord): MessagePart[] {
   return [];
 }
 
+function isAttachmentPart(part: MessagePart) {
+  return ["image", "record", "video", "file"].includes(part.type);
+}
+
 function userAttachmentParts(message: ChatRecord) {
-  return messageParts(message).filter((part) =>
-    ["image", "record", "video", "file"].includes(part.type),
+  if (!isUserMessage(message)) return [];
+  return messageParts(message).filter(isAttachmentPart);
+}
+
+function hasImageOnlyAttachments(message: ChatRecord) {
+  const attachments = userAttachmentParts(message);
+  return (
+    attachments.length > 0 && attachments.every((part) => part.type === "image")
   );
 }
 
 function bubbleParts(message: ChatRecord) {
-  if (!isUserMessage(message)) return messageParts(message);
-  return messageParts(message).filter(
-    (part) => !["image", "record", "video", "file"].includes(part.type),
-  );
-}
-
-function displayedMessageParts(message: ChatRecord) {
-  return isUserMessage(message) ? bubbleParts(message) : messageParts(message);
-}
-
-function hasImageOnlyAttachments(message: ChatRecord) {
-  const parts = userAttachmentParts(message);
-  return parts.length > 0 && parts.every((part) => part.type === "image");
+  if (!isUserMessage(message))
+    return displayMessageParts(messageContent(message));
+  return messageParts(message).filter((part) => !isAttachmentPart(part));
 }
 
 function shouldShowMessageBubble(message: ChatRecord) {
-  return !isUserMessage(message) || bubbleParts(message).length > 0;
+  return (
+    !isUserMessage(message) ||
+    isEditingMessage(message) ||
+    messageContent(message).isLoading ||
+    bubbleParts(message).length > 0
+  );
 }
 
 function isMessageStreaming(message: ChatRecord, messageIndex: number) {
-  return props.isStreaming && !isUserMessage(message) && messageIndex === props.messages.length - 1;
+  return (
+    props.isStreaming &&
+    !isUserMessage(message) &&
+    messageIndex === props.messages.length - 1
+  );
 }
 
 function isEditingMessage(message: ChatRecord) {
-  return props.editingMessageId != null && message.id != null && String(props.editingMessageId) === String(message.id);
+  return (
+    props.editingMessageId != null &&
+    message.id != null &&
+    String(props.editingMessageId) === String(message.id)
+  );
 }
 
 function canEditMessage(message: ChatRecord, messageIndex: number) {
@@ -518,7 +620,11 @@ function canEditMessage(message: ChatRecord, messageIndex: number) {
 function latestEditableUserIndex() {
   for (let index = props.messages.length - 1; index >= 0; index -= 1) {
     const message = props.messages[index];
-    if (isUserMessage(message) && message.id != null && !String(message.id).startsWith("local-")) {
+    if (
+      isUserMessage(message) &&
+      message.id != null &&
+      !String(message.id).startsWith("local-")
+    ) {
       return index;
     }
   }
@@ -536,15 +642,28 @@ function canRegenerateMessage(message: ChatRecord, messageIndex: number) {
 }
 
 function showMessageMeta(message: ChatRecord, messageIndex: number) {
-  return !messageContent(message).isLoading && !isMessageStreaming(message, messageIndex);
+  return (
+    !messageContent(message).isLoading &&
+    !isMessageStreaming(message, messageIndex)
+  );
 }
 
 function hasNonReasoningContent(message: ChatRecord) {
-  return messageParts(message).some((part) => {
-    if (part.type === "reply") return false;
-    if (part.type === "plain") return Boolean(String(part.text || "").trim());
-    return true;
-  });
+  return renderBlocks(message).some((block) => block.kind === "content");
+}
+
+function renderBlocks(message: ChatRecord): MessageDisplayBlock[] {
+  if (isUserMessage(message)) {
+    const parts = bubbleParts(message);
+    return parts.length ? [{ kind: "content", parts }] : [];
+  }
+  return buildMessageBlocks(messageContent(message));
+}
+
+function hasFollowingContentBlock(message: ChatRecord, blockIndex: number) {
+  return renderBlocks(message)
+    .slice(blockIndex + 1)
+    .some((block) => block.kind === "content");
 }
 
 function handleMouseUp(event: MouseEvent, message: ChatRecord) {
@@ -569,11 +688,11 @@ function partUrl(part: MessagePart) {
   if (part.embedded_url) return part.embedded_url;
   if (part.embedded_file?.url) return part.embedded_file.url;
   if (part.attachment_id) {
-    return `/api/chat/get_attachment?attachment_id=${encodeURIComponent(part.attachment_id)}`;
+    return fileApi.contentUrl(part.attachment_id);
   }
   const lookupFilename = part.stored_filename || part.filename;
   if (lookupFilename) {
-    return `/api/chat/get_file?filename=${encodeURIComponent(lookupFilename)}`;
+    return fileApi.byNameUrl(lookupFilename);
   }
   return "";
 }
@@ -587,7 +706,9 @@ function plainTextFromMessage(message: ChatRecord) {
 
 function replyPreview(messageId?: string | number, fallback?: string) {
   if (fallback) return truncate(fallback, 80);
-  const found = props.messages.find((message) => String(message.id) === String(messageId));
+  const found = props.messages.find(
+    (message) => String(message.id) === String(messageId),
+  );
   const text = found ? plainTextFromMessage(found) : "";
   return text ? truncate(text, 80) : tm("reply.replyTo");
 }
@@ -598,10 +719,14 @@ function truncate(value: string, max: number) {
 
 function scrollToMessage(messageId?: string | number) {
   if (!messageId) return;
-  const index = props.messages.findIndex((message) => String(message.id) === String(messageId));
+  const index = props.messages.findIndex(
+    (message) => String(message.id) === String(messageId),
+  );
   if (index < 0) return;
   nextTick(() => {
-    listRoot.value?.querySelectorAll(".message-row")[index]?.scrollIntoView({ behavior: "smooth", block: "center" });
+    listRoot.value
+      ?.querySelectorAll(".message-row")
+      [index]?.scrollIntoView({ behavior: "smooth", block: "center" });
   });
 }
 
@@ -637,7 +762,11 @@ function resolvedMessageRefs(message: ChatRecord) {
 
 function normalizeRefs(refs: unknown) {
   if (!refs) return { used: [] as Array<Record<string, unknown>> };
-  const used = Array.isArray((refs as any)?.used) ? (refs as any).used : Array.isArray(refs) ? refs : [];
+  const used = Array.isArray((refs as any)?.used)
+    ? (refs as any).used
+    : Array.isArray(refs)
+    ? refs
+    : [];
   return { used: normalizeRefItems(used) };
 }
 
@@ -658,7 +787,8 @@ function handleOpenRefs(refs: unknown) {
     emit("openRefs", refs);
     return;
   }
-  selectedRefs.value = refs && typeof refs === "object" ? (refs as Record<string, unknown>) : undefined;
+  selectedRefs.value =
+    refs && typeof refs === "object" ? (refs as Record<string, unknown>) : null;
   refsSidebarOpen.value = true;
 }
 
@@ -685,7 +815,7 @@ function toolCallStatusText(tool: Record<string, unknown>) {
 async function copyMessage(message: ChatRecord) {
   const text = plainTextFromMessage(message);
   if (!text) return;
-  await navigator.clipboard?.writeText(text);
+  await copyToClipboard(text);
 }
 
 async function downloadPart(part: MessagePart) {
@@ -725,15 +855,22 @@ function formatTime(value: string) {
 
 function inputTokens(stats: any) {
   const usage = stats?.token_usage || {};
-  return (usage.input_other || 0) + (usage.input_cached || 0);
+  return usage.input_other || 0;
 }
 
 function outputTokens(stats: any) {
   return stats?.token_usage?.output || 0;
 }
 
+function cachedInputTokens(stats: any) {
+  return stats?.token_usage?.input_cached || 0;
+}
+
 function agentDuration(stats: any) {
-  const directDuration = readPositiveNumber(stats, ["duration", "total_duration"]);
+  const directDuration = readPositiveNumber(stats, [
+    "duration",
+    "total_duration",
+  ]);
   if (directDuration !== null) return formatDuration(directDuration);
 
   const startTime = readPositiveNumber(stats, ["start_time"]);
@@ -743,7 +880,11 @@ function agentDuration(stats: any) {
 }
 
 function agentTtft(stats: any) {
-  const ttft = readPositiveNumber(stats, ["time_to_first_token", "ttft", "first_token_latency"]);
+  const ttft = readPositiveNumber(stats, [
+    "time_to_first_token",
+    "ttft",
+    "first_token_latency",
+  ]);
   if (ttft === null) return "";
   return formatDuration(ttft);
 }
@@ -767,6 +908,7 @@ function formatDuration(seconds: number) {
 
 <style scoped>
 .chat-message-list {
+  container: chat-messages / inline-size;
   --chat-border: rgba(var(--v-border-color), 0.16);
   --chat-muted: rgba(var(--v-theme-on-surface), 0.62);
   width: 100%;
@@ -794,6 +936,8 @@ function formatDuration(seconds: number) {
 }
 
 .message-stack {
+  display: flex;
+  flex-direction: column;
   max-width: min(760px, 82%);
 }
 
@@ -909,14 +1053,11 @@ function formatDuration(seconds: number) {
   font-size: 13px;
   line-height: 18px;
 }
+
 .bot-avatar {
   margin-top: 2px;
   color: rgb(var(--v-theme-primary));
   user-select: none;
-}
-
-.bot-streaming-spinner {
-  margin-top: -4px;
 }
 
 .bot-avatar-symbol {
@@ -942,8 +1083,8 @@ function formatDuration(seconds: number) {
   padding: 12px 18px;
   font-size: 15px;
   max-width: 100%;
-  border-radius: 1.5rem;
-  background: rgba(var(--v-theme-primary), 0.12);
+  border-radius: 16px;
+  background: rgba(var(--v-theme-primary), 0.16);
 }
 
 .message-bubble.bot {
@@ -988,14 +1129,6 @@ function formatDuration(seconds: number) {
   min-height: 34px;
   padding: 0 14px;
   border-radius: 14px;
-}
-
-.loading-message {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 4px;
-  color: var(--chat-muted);
 }
 
 .chat-message-list :deep(.markdown-content p) {
@@ -1149,6 +1282,14 @@ function formatDuration(seconds: number) {
   align-items: center;
 }
 
+.from-bot .message-meta :deep(> .v-btn:first-child) {
+  margin-inline-start: -6px;
+}
+
+.from-bot .message-time:not(:first-child) {
+  margin-inline-start: 6px;
+}
+
 .message-thread-meta {
   min-height: 24px;
   display: inline-flex;
@@ -1183,6 +1324,19 @@ function formatDuration(seconds: number) {
 
 .from-user .message-meta {
   justify-content: flex-end;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .from-user .message-meta {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .from-user:hover .message-meta,
+  .from-user:focus-within .message-meta {
+    opacity: 1;
+    pointer-events: auto;
+  }
 }
 
 .stats-card {
@@ -1267,6 +1421,16 @@ function formatDuration(seconds: number) {
   padding-left: 12px;
 }
 
+@container chat-messages (max-width: 600px) {
+  .message-row.from-bot .bot-avatar {
+    display: none;
+  }
+
+  .message-bubble.bot {
+    padding-inline: 0;
+  }
+}
+
 @media (max-width: 760px) {
   .messages-list {
     gap: 18px;
@@ -1291,6 +1455,21 @@ function formatDuration(seconds: number) {
 
   .from-user .message-stack {
     max-width: 82%;
+  }
+
+  .sent-file-card {
+    width: min(220px, calc(100vw - 28px));
+    height: 58px;
+  }
+
+  .sent-image-card {
+    width: 58px;
+    height: 58px;
+  }
+
+  .sent-attachments.images-only .sent-image-card {
+    width: min(180px, calc(100vw - 52px));
+    height: min(180px, calc(100vw - 52px));
   }
 
   .message-bubble {

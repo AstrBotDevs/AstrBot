@@ -40,6 +40,7 @@ class XinferenceRerankProvider(RerankProvider):
             logger.info("Xinference Rerank: No API key provided.")
             client = Client(self.base_url)
         self.client = client
+        client._headers.update(self.request_headers)
         try:
             running_models = await client.list_models()
             for uid, model_spec in running_models.items():
@@ -81,8 +82,7 @@ class XinferenceRerankProvider(RerankProvider):
         top_n: int | None = None,
     ) -> list[RerankResult]:
         if not self.model:
-            logger.error("Xinference rerank model is not initialized.")
-            return []
+            raise RuntimeError("Xinference rerank model is not initialized")
         try:
             response = await self.model.rerank(documents, query, top_n)
             results = response.get("results", [])
@@ -99,9 +99,12 @@ class XinferenceRerankProvider(RerankProvider):
                 for result in results
             ]
         except Exception as e:
+            # An empty list reads as a legitimate empty rerank to the caller,
+            # which would overwrite the fused candidates with nothing (#10000).
+            # Propagate so the retrieval manager keeps the unreranked results.
             logger.error(f"Xinference rerank failed: {e}")
             logger.debug(f"Xinference rerank failed with exception: {e}", exc_info=True)
-            return []
+            raise
 
     async def terminate(self) -> None:
         """关闭客户端会话"""

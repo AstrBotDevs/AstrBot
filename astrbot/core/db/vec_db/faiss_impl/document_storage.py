@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 
-from sqlalchemy import Column, Text, bindparam
+from sqlalchemy import Column, DateTime, Text, bindparam
 from sqlalchemy.dialects import sqlite
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -44,8 +44,9 @@ class Document(BaseDocModel, table=True):
     doc_id: str = Field(nullable=False, unique=True)
     text: str = Field(nullable=False)
     metadata_: str | None = Field(default=None, sa_column=Column("metadata", Text))
-    created_at: datetime | None = Field(default=None)
-    updated_at: datetime | None = Field(default=None)
+    # Retain the legacy local timestamps without reinterpreting them as UTC.
+    created_at: datetime | None = Field(default=None, sa_type=DateTime(timezone=False))
+    updated_at: datetime | None = Field(default=None, sa_type=DateTime(timezone=False))
 
 
 class DocumentStorage:

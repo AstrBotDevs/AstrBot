@@ -1,5 +1,6 @@
 import base64
 import json
+from collections.abc import AsyncGenerator
 from typing import Any, override
 
 import astrbot.core.message.components as Comp
@@ -116,7 +117,9 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
             await self.api_client.close()
 
     @override
-    async def step_until_done(self, max_step: int):
+    async def step_until_done(
+        self, max_step: int = 128
+    ) -> AsyncGenerator[AgentResponse, None]:
         while not self.done():
             async for resp in self.step():
                 yield resp

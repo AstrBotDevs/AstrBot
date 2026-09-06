@@ -603,17 +603,16 @@ async function syncDefaultConfigProviderIfNeeded() {
   const targetProviderId = pickDefaultProviderId(providers);
   if (!targetProviderId) return;
 
-  const configRes = await axios.get("/api/config/abconf", {
-    params: { id: "default" },
-  });
-  const configData = configRes.data?.data?.config || {};
-  if (!configData.provider_settings) {
-    configData.provider_settings = {};
+  const configData = await fetchDefaultConfig();
+  if (configData?.agent_runner?.runner_type !== "local") {
+    return;
   }
+  const modelConfig = configData.agent_runner.config?.model;
+  if (!modelConfig) return;
 
-  if (configData.provider_settings.default_provider_id === targetProviderId) return;
+  if (modelConfig.provider_id === targetProviderId) return;
 
-  configData.provider_settings.default_provider_id = targetProviderId;
+  modelConfig.provider_id = targetProviderId;
 
   const updateRes = await axios.post("/api/config/astrbot/update", {
     conf_id: "default",

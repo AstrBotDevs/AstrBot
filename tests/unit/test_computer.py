@@ -14,20 +14,18 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from astrbot.core.computer.booters.base import ComputerBooter
+from astrbot.core.computer.booters.bwrap import (
+    BwrapBooter,
+    BwrapConfig,
+    HostBackedFileSystemComponent,
+    build_bwrap_cmd,
+)
 from astrbot.core.computer.booters.local import (
     LocalBooter,
     LocalFileSystemComponent,
     LocalPythonComponent,
     LocalShellComponent,
     _is_safe_command,
-)
-from astrbot.core.computer.booters.bwrap import (
-    BwrapBooter,
-    BwrapConfig,
-    build_bwrap_cmd,
-    HostBackedFileSystemComponent,
-    BwrapPythonComponent,
-    BwrapShellComponent,
 )
 
 
@@ -175,6 +173,7 @@ class TestLocalShellComponent:
             owner_id="owner-a",
             creator_id="sender-a",
             creator_is_admin=False,
+            permission_check=lambda: True,
             sandboxed=False,
             timeout=1,
             yield_time_ms=0,
@@ -228,6 +227,7 @@ class TestLocalShellComponent:
                 owner_id="owner-a",
                 creator_id="sender-a",
                 creator_is_admin=False,
+                permission_check=lambda: True,
                 sandboxed=False,
                 cwd=str(tmp_path),
                 yield_time_ms=5_000,
@@ -251,6 +251,7 @@ class TestLocalShellComponent:
                 owner_id="owner-a",
                 creator_id="sender-a",
                 creator_is_admin=False,
+                permission_check=lambda: True,
                 sandboxed=False,
                 env={"TEST_VAR": "test_value"},
                 yield_time_ms=5_000,
@@ -558,8 +559,6 @@ class TestBoxliteBooter:
         mock_boxlite.SimpleBox = MagicMock()
 
         with patch.dict(sys.modules, {"boxlite": mock_boxlite}):
-            from astrbot.core.computer.booters.boxlite import BoxliteBooter
-
             # BoxliteBooter is abstract now, cannot instantiate
             # This test is skipped
             pass
@@ -567,6 +566,28 @@ class TestBoxliteBooter:
 
 class TestComputerClient:
     """Tests for computer_client module functions."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("runtime", [None, "none", "local"])
+    async def test_get_booter_requires_explicit_runtime(self, runtime):
+        """An omitted runtime must not start or reuse a computer environment."""
+        from astrbot.core.computer import computer_client
+
+        provider_settings = {} if runtime is None else {"computer_use_runtime": runtime}
+        context = MagicMock()
+        context.get_config.return_value = {"provider_settings": provider_settings}
+        with (
+            patch.object(computer_client, "get_local_booter") as get_local_booter,
+            patch.object(computer_client, "session_booter", {"session": MagicMock()}),
+        ):
+            if runtime == "local":
+                result = await computer_client.get_booter(context, "session")
+                assert result is get_local_booter.return_value
+                get_local_booter.assert_called_once_with()
+            else:
+                with pytest.raises(RuntimeError, match="disabled by configuration"):
+                    await computer_client.get_booter(context, "session")
+                get_local_booter.assert_not_called()
 
     def test_get_local_booter(self):
         """Test get_local_booter returns singleton LocalBooter."""
@@ -963,7 +984,7 @@ class TestBwrapShellComponent:
         assert "success" in res["stdout"]
 
         # Will it fail to write to ro /tmp?
-        res2 = await booter.shell.exec("echo yyy > /tmp/test_write.txt", shell=True)
+        await booter.shell.exec("echo yyy > /tmp/test_write.txt", shell=True)
         # /tmp in bwrap is tmpfs by default from our flags, so this might actually succeed.
         # Let's try writing to /usr instead
         res3 = await booter.shell.exec("echo yyy > /usr/test_write.txt", shell=True)

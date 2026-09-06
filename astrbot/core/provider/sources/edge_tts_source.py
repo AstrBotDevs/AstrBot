@@ -4,13 +4,18 @@ import subprocess
 
 import anyio
 import edge_tts
+from edge_tts.constants import WSS_HEADERS
 
 from astrbot.core import logger
 from astrbot.core.provider.entities import ProviderType
+from astrbot.core.provider.headers import DEFAULT_USER_AGENT
 from astrbot.core.provider.provider import TTSProvider
 from astrbot.core.provider.register import register_provider_adapter
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.datetime_utils import generate_timestamp_id
+
+# The SDK uses a shared WebSocket header default.
+WSS_HEADERS["User-Agent"] = DEFAULT_USER_AGENT
 
 """
 edge_tts 方式,能够免费､快速生成语音,使用需要先安装edge-tts库

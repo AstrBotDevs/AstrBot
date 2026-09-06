@@ -1,8 +1,8 @@
 import axios, {
   type AxiosError,
-  type AxiosInstance,
   type InternalAxiosRequestConfig,
-} from 'axios';
+} from '@/utils/request';
+import { resolveApiUrl } from '@/utils/request';
 
 const AUTH_HEADER = 'Authorization';
 const LOCALE_HEADER = 'Accept-Language';
@@ -11,7 +11,16 @@ let configured = false;
 let originalFetch: typeof window.fetch | null = null;
 
 export const httpClient = axios;
-export const apiV1Client = axios.create({ baseURL: '/api/v1' });
+export const apiV1Client = axios.create({ timeout: 10000 });
+apiV1Client.interceptors.request.use((config) => {
+  config.baseURL = resolveApiUrl('/api/v1');
+  return attachAxiosHeaders(config);
+});
+apiV1Client.interceptors.response.use((response) => response, normalizeAxiosError);
+
+function getBackendOrigin(): string {
+  return new URL(resolveApiUrl('/api/'), window.location.href).origin;
+}
 
 function getToken(): string | null {
   return localStorage.getItem('token');
@@ -34,6 +43,14 @@ function setAxiosHeader(
 }
 
 function attachAxiosHeaders(config: InternalAxiosRequestConfig) {
+  // Dashboard credentials must not be attached to third-party requests.
+  try {
+    const requestUrl = new URL(axios.getUri(config), window.location.href);
+    if (requestUrl.origin !== getBackendOrigin()) return config;
+  } catch {
+    return config;
+  }
+
   const token = getToken();
   if (token) {
     setAxiosHeader(config.headers, AUTH_HEADER, `Bearer ${token}`);
@@ -58,8 +75,8 @@ function normalizeAxiosError(error: AxiosError) {
           ? `${baseURL.replace(/\/+$/, '')}/${url.replace(/^\/+/, '')}`
           : url;
       const requestUrl = new URL(resolvedUrl || '/', window.location.origin);
-      if (requestUrl.origin === window.location.origin) {
-        requestPath = requestUrl.pathname;
+      if (requestUrl.origin === getBackendOrigin()) {
+        requestPath = requestUrl.pathname.match(/\/api\/.*/)?.[0] || requestUrl.pathname;
       }
     } catch {
       requestPath = '';
@@ -106,18 +123,30 @@ function normalizeAxiosError(error: AxiosError) {
   return Promise.reject(error);
 }
 
-function installAxiosInterceptors(instance: AxiosInstance) {
-  instance.interceptors.request.use(attachAxiosHeaders);
-  instance.interceptors.response.use((response) => response, normalizeAxiosError);
-}
-
 export function fetchWithAuth(input: RequestInfo | URL, init?: RequestInit) {
   const fetchImpl = originalFetch ?? window.fetch.bind(window);
+  let resolvedInput = input;
+  if (typeof input === 'string' && input.startsWith('/api/')) {
+    resolvedInput = resolveApiUrl(input);
+  }
+  // The global fetch wrapper also handles public, cross-origin resources.
+  try {
+    const requestUrl = new URL(
+      resolvedInput instanceof Request ? resolvedInput.url : resolvedInput,
+      window.location.href,
+    );
+    if (requestUrl.origin !== getBackendOrigin()) {
+      return fetchImpl(resolvedInput, init);
+    }
+  } catch {
+    return fetchImpl(resolvedInput, init);
+  }
+
   const token = getToken();
   const locale = getLocale();
 
   if (!token && !locale) {
-    return fetchImpl(input, init);
+    return fetchImpl(resolvedInput, init);
   }
 
   const requestHeaders =
@@ -133,7 +162,7 @@ export function fetchWithAuth(input: RequestInfo | URL, init?: RequestInit) {
     headers.set(LOCALE_HEADER, locale);
   }
 
-  return fetchImpl(input, { ...init, headers });
+  return fetchImpl(resolvedInput, { ...init, headers });
 }
 
 export function setupHttpClient() {
@@ -141,8 +170,7 @@ export function setupHttpClient() {
     return;
   }
 
-  installAxiosInterceptors(axios);
-  installAxiosInterceptors(apiV1Client);
+  httpClient.interceptors.response.use((response) => response, normalizeAxiosError);
 
   originalFetch = window.fetch.bind(window);
   window.fetch = fetchWithAuth;

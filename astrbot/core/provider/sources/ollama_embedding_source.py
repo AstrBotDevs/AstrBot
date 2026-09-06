@@ -41,7 +41,7 @@ class OllamaEmbeddingProvider(EmbeddingProvider):
             }
             timeout = aiohttp.ClientTimeout(total=self.timeout)
             self.client = aiohttp.ClientSession(
-                headers=headers,
+                headers={**self.request_headers, **headers},
                 timeout=timeout,
             )
         return self.client

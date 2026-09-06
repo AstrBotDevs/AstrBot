@@ -1,5 +1,10 @@
 <template>
-  <v-card class="item-card hover-elevation" style="padding: 4px;" :variant="variant" elevation="0">
+  <v-card
+    class="item-card hover-elevation"
+    style="padding: 4px"
+    :variant="variant"
+    elevation="0"
+  >
     <v-card-title class="d-flex justify-space-between align-center pb-1 pt-3">
       <span class="text-h2 text-truncate" :title="getItemTitle()">{{
         getItemTitle()
@@ -71,12 +76,19 @@
       class="d-flex justify-end align-center"
       style="position: absolute; bottom: 16px; right: 16px; opacity: 0.2"
     >
-      <v-img :src="bglogo" contain width="120" height="120" />
+      <v-img
+        :src="bglogo"
+        :class="{ 'provider-icon--monochrome': bglogoMonochrome }"
+        contain
+        width="120"
+        height="120"
+      />
     </div>
   </v-card>
 </template>
 
 <script lang="ts">
+import type { PropType } from "vue";
 import { useI18n } from "@/i18n/composables";
 
 export default {
@@ -97,6 +109,10 @@ export default {
     bglogo: {
       type: String,
       default: null,
+    },
+    bglogoMonochrome: {
+      type: Boolean,
+      default: false,
     },
     loading: {
       type: Boolean,
@@ -119,7 +135,9 @@ export default {
       default: false,
     },
     variant: {
-      type: String,
+      type: String as PropType<
+        "text" | "plain" | "flat" | "elevated" | "outlined" | "tonal"
+      >,
       default: undefined,
     },
   },
@@ -147,7 +165,9 @@ export default {
   background: rgb(var(--v-theme-surface));
   position: relative;
   border-radius: 18px;
-  transition: background-color 0.16s ease, transform 0.3s ease;
+  transition:
+    background-color 0.16s ease,
+    transform 0.3s ease;
   overflow: hidden;
   min-height: 220px;
   height: 100%;

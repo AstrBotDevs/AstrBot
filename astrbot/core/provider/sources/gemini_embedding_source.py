@@ -21,7 +21,10 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
         api_key: str = provider_config["embedding_api_key"]
         api_base: str = provider_config["embedding_api_base"]
         timeout: int = int(provider_config.get("timeout", 20))
-        http_options = types.HttpOptions(timeout=timeout * 1000)
+
+        http_options = types.HttpOptions(
+            timeout=timeout * 1000, headers=self.request_headers
+        )
         if api_base:
             api_base = api_base.removesuffix("/")
             http_options.base_url = api_base
@@ -30,6 +33,9 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
             http_options.async_client_args = {"proxy": proxy}
             logger.info(f"[Gemini Embedding] 使用代理: {proxy}")
         self.client = genai.Client(api_key=api_key, http_options=http_options).aio
+        # The SDK adds its own lower-case UA alongside our explicit header.
+        self.client._api_client._http_options.headers.pop("user-agent", None)
+
         self.model = provider_config.get(
             "embedding_model",
             "gemini-embedding-exp-03-07",

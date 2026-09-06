@@ -290,9 +290,13 @@ class ResultDecorateStage(Stage):
                 )
             should_tts = tts_requested and tts_provider is not None
 
+            show_reasoning = self.show_reasoning
+            if (enable_reasoning := event.get_extra("enable_reasoning")) is not None:
+                show_reasoning = bool(enable_reasoning)
+
             if (
                 not should_tts
-                and self.show_reasoning
+                and show_reasoning
                 and event.get_extra("_llm_reasoning_content")
             ):
                 # inject reasoning content to chain
@@ -385,6 +389,8 @@ class ResultDecorateStage(Stage):
                             return_url=True,
                             use_network=self.t2i_use_network,
                             template_name=self.t2i_active_template,
+                            endpoint=self.ctx.astrbot_config.get("t2i_endpoint")
+                            or None,
                         )
                     except BaseException:
                         logger.error(

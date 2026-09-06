@@ -239,7 +239,8 @@ class ToolSet:
     def openai_schema(self, omit_empty_parameter_field: bool = False) -> list[dict]:
         """Convert tools to OpenAI API function calling schema format."""
         result = []
-        for tool in self.tools:
+        # Stable ordering preserves prompt-cache prefixes for compatible providers.
+        for tool in sorted(self.tools, key=lambda tool: tool.name):
             function_dict: dict[str, Any] = {"name": tool.name}
             if tool.description:
                 function_dict["description"] = tool.description

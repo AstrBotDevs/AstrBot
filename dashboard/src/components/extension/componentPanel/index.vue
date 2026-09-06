@@ -28,7 +28,7 @@ import { useCommandFilters } from "./composables/useCommandFilters";
 import { useComponentData } from "./composables/useComponentData";
 
 // Types
-import type { CommandItem, ToolItem } from "./types";
+import type { CommandPermission, CommandItem, ToolItem } from "./types";
 
 defineOptions({ name: "ComponentPanel" });
 const props = withDefaults(defineProps<{ active?: boolean }>(), {
@@ -42,8 +42,17 @@ const viewMode = ref<"commands" | "tools">("commands");
 const toolSearch = ref("");
 
 // 数据管理
-const { loading, commands, tools, toolsLoading, summary, snackbar, toast, fetchCommands, fetchTools } =
-  useComponentData();
+const {
+  loading,
+  commands,
+  tools,
+  toolsLoading,
+  summary,
+  snackbar,
+  toast,
+  fetchCommands,
+  fetchTools,
+} = useComponentData();
 
 // 过滤逻辑
 const {
@@ -76,17 +85,31 @@ const filteredTools = computed(() => {
   const query = normalizeTextInput(toolSearch.value).trim().toLowerCase();
   if (!query) return tools.value;
   return tools.value.filter(
-    (tool) => tool.name?.toLowerCase().includes(query) || tool.description?.toLowerCase().includes(query),
+    (tool) =>
+      tool.name?.toLowerCase().includes(query) ||
+      tool.description?.toLowerCase().includes(query),
   );
 });
 
 // 处理切换指令状态
 const handleToggleCommand = async (cmd: CommandItem) => {
-  await toggleCommand(cmd, tm("messages.toggleSuccess"), tm("messages.toggleFailed"));
+  await toggleCommand(
+    cmd,
+    tm("messages.toggleSuccess"),
+    tm("messages.toggleFailed"),
+  );
 };
 
-const handleUpdatePermission = async (cmd: CommandItem, permission: "admin" | "member") => {
-  await updatePermission(cmd, permission, tm("messages.updateSuccess"), tm("messages.updateFailed"));
+const handleUpdatePermission = async (
+  cmd: CommandItem,
+  permission: CommandPermission,
+) => {
+  await updatePermission(
+    cmd,
+    permission,
+    tm("messages.updateSuccess"),
+    tm("messages.updateFailed"),
+  );
 };
 
 const handleToggleTool = async (tool: ToolItem) => {
@@ -104,12 +127,17 @@ const handleToggleTool = async (tool: ToolItem) => {
       toast(res.data.message || tmTool("messages.toggleToolSuccess"));
     } else {
       tool.active = previous;
-      toast(res.data.message || tmTool("messages.toggleToolError", { error: "" }), "error");
+      toast(
+        res.data.message || tmTool("messages.toggleToolError", { error: "" }),
+        "error",
+      );
     }
   } catch (error: any) {
     tool.active = previous;
     toast(
-      error?.response?.data?.message || error?.message || tmTool("messages.toggleToolError", { error: "" }),
+      error?.response?.data?.message ||
+        error?.message ||
+        tmTool("messages.toggleToolError", { error: "" }),
       "error",
     );
   }
@@ -117,7 +145,10 @@ const handleToggleTool = async (tool: ToolItem) => {
 
 // 处理确认重命名
 const handleConfirmRename = async () => {
-  await confirmRename(tm("messages.renameSuccess"), tm("messages.renameFailed"));
+  await confirmRename(
+    tm("messages.renameSuccess"),
+    tm("messages.renameFailed"),
+  );
 };
 
 // 生命周期

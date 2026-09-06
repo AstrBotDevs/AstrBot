@@ -225,18 +225,17 @@ function resolveConfigId(umo: string | null): string {
 }
 
 async function getAgentRunnerType(confId: string): Promise<string> {
-  if (configCache.value[confId]) {
-    return configCache.value[confId];
-  }
+  if (configCache.value[confId]) return configCache.value[confId];
   try {
-    const res = await axios.get("/api/config/abconf", {
-      params: { id: confId },
-    });
-    const type = res.data.data?.config?.provider_settings?.agent_runner_type || "local";
+    const res = await configProfileApi.get(confId);
+    if (res.data.status !== "ok") throw new Error(res.data.message || "Failed to load profile");
+    const config = res.data.data.config;
+    const runner = config && typeof config === "object" && "agent_runner" in config ? config.agent_runner : null;
+    const type = runner && typeof runner === "object" && "runner_type" in runner && typeof runner.runner_type === "string" ? runner.runner_type : "local";
     configCache.value[confId] = type;
     return type;
   } catch (error) {
-    console.error("获取配置文件详情失败", error);
+    console.error("Failed to load profile details", error);
     return "local";
   }
 }

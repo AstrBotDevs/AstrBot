@@ -42,25 +42,20 @@
     }
   },
   "messageOverview": {
-    "title": "Message Overview",
-    "subtitle": "Robot message statistics"
+    "title": "Messages"
   },
   "messageTrend": {
     "title": "Message Trend",
-    "subtitle": "{range}, aggregated by hour",
     "totalMessages": "Total Messages"
   },
   "platformRanking": {
-    "title": "Platform Message Ranking",
-    "subtitle": "{range}, sorted by aggregated message volume"
+    "title": "Platform Message Ranking"
   },
   "modelCalls": {
-    "title": "Model Calls",
-    "subtitle": "Model call statistics"
+    "title": "AI Models"
   },
   "modelTrend": {
-    "title": "Model Call Trend",
-    "subtitle": "Token trend for model calls"
+    "title": "Model Call Trend"
   },
   "modelTotal": {
     "title": "{range} total model calls",
@@ -71,12 +66,11 @@
     "successRate": "Success Rate"
   },
   "modelRanking": {
-    "title": "{range} model call ranking",
-    "subtitle": "Ranked by model call tokens"
+    "title": "Model Usage Ranking"
   },
   "sessionRanking": {
-    "title": "{range} session token top 10",
-    "subtitle": "Sessions ranked by token usage"
+    "title": "{range} Session Model Usage Top 10",
+    "openConversation": "View conversation"
   },
   "empty": {
     "platformStats": "No platform message statistics available.",

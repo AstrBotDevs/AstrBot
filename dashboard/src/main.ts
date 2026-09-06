@@ -1,5 +1,5 @@
 import { createPinia } from "pinia";
-import { createApp } from "vue";
+import { createApp, watch } from "vue";
 import App from "./App.vue";
 import { setupI18n } from "./i18n/composables";
 import confirmPlugin from "./plugins/confirmPlugin";
@@ -30,7 +30,8 @@ import cssWorker from "monaco-editor/esm/vs/language/css/css.worker?worker";
 import htmlWorker from "monaco-editor/esm/vs/language/html/html.worker?worker";
 import jsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker";
 import { DARK_THEME_NAME, LIGHT_THEME_NAME } from "@/theme/constants";
-import { getApiBaseUrl, resolveApiUrl, resolvePublicUrl, setApiBaseUrl } from "@/utils/request";
+import { resolvePublicUrl, setApiBaseUrl } from "@/utils/request";
+import { setupHttpClient } from "@/api/http";
 import { waitForRouterReadyInBackground } from "./utils/routerReadiness.mjs";
 
 // Monaco worker configuration
@@ -90,6 +91,18 @@ async function mountApp(app: any, pinia: any, waitForRouter = true) {
       if (storedSecondary && theme.colors.darksecondary) theme.colors.darksecondary = storedSecondary;
     });
   }
+  if (customizer.autoSwitchTheme) customizer.APPLY_SYSTEM_THEME();
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    if (customizer.autoSwitchTheme) customizer.APPLY_SYSTEM_THEME();
+  });
+  const syncDesktopWindowTheme = () => {
+    const setWindowTheme = window.astrbotDesktop?.setWindowTheme;
+    if (typeof setWindowTheme === "function") {
+      setWindowTheme(customizer.isDarkTheme ? "dark" : "light");
+    }
+  };
+  syncDesktopWindowTheme();
+  watch(() => customizer.uiTheme, syncDesktopWindowTheme);
 }
 
 async function initApp() {
@@ -109,33 +122,7 @@ async function initApp() {
 
   setApiBaseUrl(apiBaseUrl);
 
-  // Keep fetch() calls consistent with axios by automatically attaching the JWT.
-  // Some parts of the UI use fetch directly; without this, those requests will 401.
-  // Also handle apiBaseUrl for fetch
-  const _origFetch = window.fetch.bind(window);
-  window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
-    let url = input;
-
-    // 如果是字符串路径且以 /api 开头，并且配置了 Base URL，则拼接
-    if (typeof input === "string" && input.startsWith("/api")) {
-      url = resolveApiUrl(input, getApiBaseUrl());
-    }
-
-    const token = localStorage.getItem("token");
-
-    const inputHeaders = typeof input !== "string" && "headers" in input ? (input as Request).headers : undefined;
-    const headers = new Headers(init?.headers ?? inputHeaders);
-    if (token && !headers.has("Authorization")) {
-      headers.set("Authorization", `Bearer ${token}`);
-    }
-
-    const locale = localStorage.getItem("astrbot-locale");
-    if (locale && !headers.has("Accept-Language")) {
-      headers.set("Accept-Language", locale);
-    }
-
-    return _origFetch(url, { ...init, headers });
-  };
+  setupHttpClient();
 
   loader.config({
     paths: {

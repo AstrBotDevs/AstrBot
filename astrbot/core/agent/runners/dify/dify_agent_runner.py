@@ -1,4 +1,5 @@
 import os
+from collections.abc import AsyncGenerator
 from typing import Any, override
 
 import astrbot.core.message.components as Comp
@@ -106,7 +107,9 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
             await self.api_client.close()
 
     @override
-    async def step_until_done(self, max_step: int):
+    async def step_until_done(
+        self, max_step: int = 128
+    ) -> AsyncGenerator[AgentResponse, None]:
         while not self.done():
             async for resp in self.step():
                 yield resp
@@ -136,7 +139,9 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
         )
         logger.debug(f"Dify 上传图片响应:{file_response}")
         if "id" not in file_response:
-            logger.warning(f"上传图片后得到未知的 Dify 响应:{file_response},图片将忽略｡")
+            logger.warning(
+                f"上传图片后得到未知的 Dify 响应:{file_response},图片将忽略｡"
+            )
             return None
 
         return {

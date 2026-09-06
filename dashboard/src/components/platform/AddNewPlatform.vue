@@ -9,10 +9,10 @@
       <v-card-title class="text-h3 pa-4 pb-0 pl-6">
         {{
           updatingMode
-            ? `${tm('dialog.edit')} ${updatingPlatformConfig.id} ${tm(
-                'dialog.adapter',
+            ? `${tm("dialog.edit")} ${updatingPlatformConfig.id} ${tm(
+                "dialog.adapter",
               )}`
-            : tm('dialog.addPlatform')
+            : tm("dialog.addPlatform")
         }}
       </v-card-title>
       <v-card-text
@@ -45,7 +45,7 @@
                   hide-details
                   class="mt-6 platform-type-field"
                 >
-                  <template #item="{ props: itemProps, item }">
+                  <template #item="{ props: itemProps, internalItem: item }">
                     <v-list-item v-bind="itemProps">
                       <template #prepend>
                         <img
@@ -102,8 +102,14 @@
                       class="creation-mode-group"
                       hide-details
                     >
-                      <v-radio value="scan" :label="tm('registrationAction.mode.scan')"></v-radio>
-                      <v-radio value="manual" :label="tm('registrationAction.mode.larkManual')"></v-radio>
+                      <v-radio
+                        value="scan"
+                        :label="tm('registrationAction.mode.scan')"
+                      ></v-radio>
+                      <v-radio
+                        value="manual"
+                        :label="tm('registrationAction.mode.larkManual')"
+                      ></v-radio>
                     </v-radio-group>
 
                     <div
@@ -132,7 +138,12 @@
 
                     <div v-else-if="larkCreationMode === 'manual'" class="mt-2">
                       <div class="platform-action-row">
-                        <v-btn color="info" variant="tonal" @click="openTutorial" class="mt-2">
+                        <v-btn
+                          color="info"
+                          variant="tonal"
+                          @click="openTutorial"
+                          class="mt-2"
+                        >
                           <v-icon start>mdi-book-open-variant</v-icon>
                           {{ tm("dialog.viewTutorial") }}
                         </v-btn>
@@ -154,8 +165,14 @@
                       class="creation-mode-group"
                       hide-details
                     >
-                      <v-radio value="scan" :label="tm('registrationAction.mode.scan')"></v-radio>
-                      <v-radio value="manual" :label="tm('registrationAction.mode.manual')"></v-radio>
+                      <v-radio
+                        value="scan"
+                        :label="tm('registrationAction.mode.scan')"
+                      ></v-radio>
+                      <v-radio
+                        value="manual"
+                        :label="tm('registrationAction.mode.manual')"
+                      ></v-radio>
                     </v-radio-group>
 
                     <div
@@ -181,9 +198,17 @@
                       />
                     </div>
 
-                    <div v-else-if="dingtalkCreationMode === 'manual'" class="mt-2">
+                    <div
+                      v-else-if="dingtalkCreationMode === 'manual'"
+                      class="mt-2"
+                    >
                       <div class="platform-action-row">
-                        <v-btn color="info" variant="tonal" @click="openTutorial" class="mt-2">
+                        <v-btn
+                          color="info"
+                          variant="tonal"
+                          @click="openTutorial"
+                          class="mt-2"
+                        >
                           <v-icon start>mdi-book-open-variant</v-icon>
                           {{ tm("dialog.viewTutorial") }}
                         </v-btn>
@@ -288,7 +313,12 @@
 
                   <div v-else class="mt-2">
                     <div class="platform-action-row">
-                      <v-btn color="info" variant="tonal" @click="openTutorial" class="mt-2">
+                      <v-btn
+                        color="info"
+                        variant="tonal"
+                        @click="openTutorial"
+                        class="mt-2"
+                      >
                         <v-icon start>mdi-book-open-variant</v-icon>
                         {{ tm("dialog.viewTutorial") }}
                       </v-btn>
@@ -571,9 +601,7 @@
                               color="primary"
                               class="umo-selection-chip"
                             >
-                              {{
-                                getKnownRouteUmoSelectionText(sourceItem)
-                              }}
+                              {{ getKnownRouteUmoSelectionText(sourceItem) }}
                             </v-chip>
                           </template>
                         </v-autocomplete>
@@ -789,41 +817,14 @@
     </v-card>
   </v-dialog>
 
-  <v-overlay
+  <ConfigProfileDrawer
     v-model="showConfigDrawer"
-    class="config-drawer-overlay"
-    location="right"
-    transition="slide-x-reverse-transition"
-    :scrim="true"
-    @click:outside="closeConfigDrawer"
-  >
-    <v-card class="config-drawer-card" elevation="12">
-      <div class="config-drawer-header">
-        <div>
-          <span class="text-h6">{{
-            tm("createDialog.configDrawerTitle")
-          }}</span>
-          <div v-if="configDrawerTargetId" class="text-caption text-grey">
-            {{ tm("createDialog.configDrawerIdLabel") }}:
-            {{ configDrawerTargetId }}
-          </div>
-        </div>
-        <v-btn icon variant="text" @click="closeConfigDrawer">
-          <v-icon>mdi-close</v-icon>
-        </v-btn>
-      </div>
-      <v-divider />
-      <div class="config-drawer-content">
-        <ConfigPage
-          v-if="showConfigDrawer"
-          :initial-config-id="configDrawerTargetId ?? undefined"
-        />
-      </div>
-    </v-card>
-  </v-overlay>
+    :config-id="configDrawerTargetId || ''"
+  />
 </template>
 
 <script lang="ts">
+import { botApi } from "@/api/v1";
 import AstrBotCoreConfigWrapper from "@/components/config/AstrBotCoreConfigWrapper.vue";
 import PlatformRegistrationAction from "@/components/platform/PlatformRegistrationAction.vue";
 import AstrBotConfig from "@/components/shared/AstrBotConfig.vue";
@@ -835,7 +836,7 @@ import {
   getTutorialLink,
 } from "@/utils/platformUtils";
 import axios, { resolveApiUrl } from "@/utils/request";
-import ConfigPage from "@/views/ConfigPage.vue";
+import ConfigProfileDrawer from "@/components/config/ConfigProfileDrawer.vue";
 
 interface RouteEntry {
   umop: string | null;
@@ -863,6 +864,12 @@ interface ConfigInfo {
   name: string;
 }
 
+interface PlatformTemplate {
+  type: string;
+  id?: string;
+  [key: string]: unknown;
+}
+
 interface ToastPayload {
   message: string;
   type: "success" | "error";
@@ -873,7 +880,7 @@ export default {
   components: {
     AstrBotConfig,
     AstrBotCoreConfigWrapper,
-    ConfigPage,
+    ConfigProfileDrawer,
     PlatformRegistrationAction,
     UmoDisplay,
   },
@@ -914,7 +921,7 @@ export default {
       scanPlatformIdCustomized: false,
 
       aBConfigRadioVal: "0",
-      selectedAbConfId: null as string | null,
+      selectedAbConfId: "default" as string | null,
       configInfoList: [] as ConfigInfo[],
 
       // 选中的配置文件预览数据
@@ -967,11 +974,12 @@ export default {
         this.$emit("update:show", value);
       },
     },
-    platformTemplates(): Record<string, unknown> {
-      const pg = this.metadata.platform_group as Record<string, unknown> | undefined;
+    platformTemplates(): Record<string, PlatformTemplate> {
+      const pg = this.metadata.platform_group as
+        Record<string, unknown> | undefined;
       const meta = pg?.metadata as Record<string, unknown> | undefined;
       const plat = meta?.platform as Record<string, unknown> | undefined;
-      return (plat?.config_template as Record<string, unknown>) || {};
+      return (plat?.config_template as Record<string, PlatformTemplate>) || {};
     },
     canSave(): boolean {
       if (!this.selectedPlatformType) {
@@ -987,7 +995,10 @@ export default {
       }
 
       if (this.isLarkPlatform && this.larkCreationMode === "scan") {
-        const cfg = this.selectedPlatformConfig as Record<string, unknown> | null;
+        const cfg = this.selectedPlatformConfig as Record<
+          string,
+          unknown
+        > | null;
         const appId = cfg?.app_id as string | undefined;
         const appSecret = cfg?.app_secret as string | undefined;
         if (!appId || !appSecret) {
@@ -1000,7 +1011,10 @@ export default {
       }
 
       if (this.isDingtalkPlatform && this.dingtalkCreationMode === "scan") {
-        const cfg = this.selectedPlatformConfig as Record<string, unknown> | null;
+        const cfg = this.selectedPlatformConfig as Record<
+          string,
+          unknown
+        > | null;
         const clientId = cfg?.client_id as string | undefined;
         const clientSecret = cfg?.client_secret as string | undefined;
         if (!clientId || !clientSecret) {
@@ -1008,7 +1022,8 @@ export default {
         }
       }
 
-      const weixinOcToken = this.selectedPlatformConfig?.weixin_oc_token as string | undefined;
+      const weixinOcToken = this.selectedPlatformConfig?.weixin_oc_token as
+        string | undefined;
       if (this.isWeixinOcPlatform && !weixinOcToken) {
         return false;
       }
@@ -1074,7 +1089,11 @@ export default {
     },
     routePlatformId(): string {
       if (this.updatingMode) {
-        return String(this.updatingPlatformConfig?.id || this.originalUpdatingPlatformId || "");
+        return String(
+          this.updatingPlatformConfig?.id ||
+            this.originalUpdatingPlatformId ||
+            "",
+        );
       }
       return String(this.selectedPlatformConfig?.id || "");
     },
@@ -1095,7 +1114,9 @@ export default {
       return this.selectedPlatformConfig?.type === "dingtalk";
     },
     isQqOfficialPlatform(): boolean {
-      return ["qq_official", "qq_official_webhook"].includes(String(this.selectedPlatformConfig?.type || ""));
+      return ["qq_official", "qq_official_webhook"].includes(
+        String(this.selectedPlatformConfig?.type || ""),
+      );
     },
     scanPlatformIdError(): string {
       const platformId = String(this.selectedPlatformConfig?.id || "");
@@ -1111,10 +1132,9 @@ export default {
   watch: {
     selectedPlatformType(newType: string | null) {
       if (newType && this.platformTemplates[newType]) {
-        this.selectedPlatformConfig = JSON.parse(JSON.stringify(this.platformTemplates[newType])) as Record<
-          string,
-          unknown
-        >;
+        this.selectedPlatformConfig = JSON.parse(
+          JSON.stringify(this.platformTemplates[newType]),
+        ) as Record<string, unknown>;
         this.larkCreationMode = "";
         this.dingtalkCreationMode = "";
         this.qqOfficialCreationMode = "";
@@ -1191,7 +1211,9 @@ export default {
     },
   },
   methods: {
-    getPlatformTemplateByName(platformName: string | null | undefined): Record<string, unknown> | null {
+    getPlatformTemplateByName(
+      platformName: string | null | undefined,
+    ): Record<string, unknown> | null {
       if (!platformName) {
         return null;
       }
@@ -1215,12 +1237,16 @@ export default {
       return "";
     },
     getPlatformIcon(platformNameOrType: string): string {
-      const template = this.getPlatformTemplateByName(platformNameOrType) as Record<string, unknown> | null;
+      const template = this.getPlatformTemplateByName(
+        platformNameOrType,
+      ) as Record<string, unknown> | null;
       if (template && template.logo_token) {
         return resolveApiUrl(`/api/file/${String(template.logo_token)}`);
       }
       return (
-        (template ? getPlatformBuiltInIcon(String(template.type)) : getPlatformBuiltInIcon(platformNameOrType)) ?? ""
+        (template
+          ? getPlatformBuiltInIcon(String(template.type))
+          : getPlatformBuiltInIcon(platformNameOrType)) ?? ""
       );
     },
     getPlatformOptionIcon(item: unknown): string {
@@ -1304,14 +1330,21 @@ export default {
       }
     },
     openTutorial(): void {
-      const config = this.selectedPlatformConfig as Record<string, unknown> | null;
+      const config = this.selectedPlatformConfig as Record<
+        string,
+        unknown
+      > | null;
       const tutorialUrl = getTutorialLink(config?.type as string);
       window.open(tutorialUrl, "_blank");
     },
     openConfigDrawer(configId: string | null | undefined): void {
       const targetId = configId || "default";
 
-      if (configId && this.configInfoList.findIndex((c: ConfigInfo) => c.id === configId) === -1) {
+      if (
+        configId &&
+        this.configInfoList.findIndex((c: ConfigInfo) => c.id === configId) ===
+          -1
+      ) {
         this.showError(this.tm("messages.configNotFoundOpenConfig"));
       }
 
@@ -1324,7 +1357,10 @@ export default {
     newPlatform(): void {
       this.loading = true;
       if (this.updatingMode) {
-        const config = this.updatingPlatformConfig as Record<string, unknown> | null;
+        const config = this.updatingPlatformConfig as Record<
+          string,
+          unknown
+        > | null;
         if (config?.type === "aiocqhttp") {
           const token = config?.ws_reverse_token as string | undefined;
           if (!token || token.trim() === "") {
@@ -1344,7 +1380,10 @@ export default {
       }
     },
     async updatePlatform(): Promise<void> {
-      const config = this.updatingPlatformConfig as Record<string, unknown> | null;
+      const config = this.updatingPlatformConfig as Record<
+        string,
+        unknown
+      > | null;
       const id = this.originalUpdatingPlatformId || (config?.id as string);
       if (!id) {
         this.loading = false;
@@ -1365,7 +1404,9 @@ export default {
         });
 
         if (resp.data.status === "error") {
-          throw new Error(resp.data.message || this.tm("messages.platformUpdateFailed"));
+          throw new Error(
+            resp.data.message || this.tm("messages.platformUpdateFailed"),
+          );
         }
 
         await this.saveRoutesInternal();
@@ -1381,7 +1422,10 @@ export default {
       }
     },
     async savePlatform(): Promise<void> {
-      const config = this.selectedPlatformConfig as Record<string, unknown> | null;
+      const config = this.selectedPlatformConfig as Record<
+        string,
+        unknown
+      > | null;
 
       if (!this.isPlatformIdValid(config?.id as string | undefined)) {
         this.loading = false;
@@ -1389,10 +1433,11 @@ export default {
         return;
       }
 
-      const platformList = (this.config_data as Record<string, unknown>)?.platform as
-        | Array<Record<string, unknown>>
-        | undefined;
-      const existingPlatform = platformList?.find((p: Record<string, unknown>) => p.id === config?.id);
+      const platformList = (this.config_data as Record<string, unknown>)
+        ?.platform as Array<Record<string, unknown>> | undefined;
+      const existingPlatform = platformList?.find(
+        (p: Record<string, unknown>) => p.id === config?.id,
+      );
       if (existingPlatform || config?.id === "webchat") {
         const confirmed = await this.confirmIdConflict(config?.id as string);
         if (!confirmed) {
@@ -1412,15 +1457,24 @@ export default {
       }
 
       try {
-        const res = await axios.post("/api/config/platform/new", config);
+        if (!config) throw new Error(this.tm("dialog.invalidPlatformId"));
+        const createdPlatformId = String(config.id);
+        const res = await botApi.create(config);
+        if (res.data.status !== "ok") {
+          throw new Error(
+            res.data.message || this.tm("messages.platformUpdateFailed"),
+          );
+        }
 
         await this.handleConfigFile();
 
         this.loading = false;
         this.showDialog = false;
         this.resetForm();
-        this.$emit("refresh-config");
-        this.showSuccess(res.data.message || this.tm("messages.addSuccessWithConfig"));
+        this.$emit("refresh-config", createdPlatformId);
+        this.showSuccess(
+          res.data.message || this.tm("messages.addSuccessWithConfig"),
+        );
       } catch (_err) {
         this.loading = false;
         this.showError(this.getErrorMessage(_err));
@@ -1432,7 +1486,10 @@ export default {
         return;
       }
 
-      const config = this.selectedPlatformConfig as Record<string, unknown> | null;
+      const config = this.selectedPlatformConfig as Record<
+        string,
+        unknown
+      > | null;
       const platformId = config?.id as string;
       const newUmop = `${platformId}:*:*`;
 
@@ -1461,13 +1518,20 @@ export default {
         console.info(`成功更新路由表: ${umop} -> ${configId}`);
       } catch (_err) {
         console.error("更新路由表失败:", _err);
-        throw new Error(this.tm("messages.routingUpdateFailed", { message: this.getErrorMessage(_err) }));
+        throw new Error(
+          this.tm("messages.routingUpdateFailed", {
+            message: this.getErrorMessage(_err),
+          }),
+        );
       }
     },
 
     async createNewConfigFile(configName: string): Promise<string> {
       try {
-        const configData = this.aBConfigRadioVal === "1" && this.newConfigData ? this.newConfigData : undefined;
+        const configData =
+          this.aBConfigRadioVal === "1" && this.newConfigData
+            ? this.newConfigData
+            : undefined;
 
         const createRes = await axios.post("/api/config/abconf/new", {
           name: configName,
@@ -1480,7 +1544,11 @@ export default {
         return newConfigId;
       } catch (_err) {
         console.error("创建新配置文件失败:", _err);
-        throw new Error(this.tm("messages.createConfigFailed", { message: this.getErrorMessage(_err) }));
+        throw new Error(
+          this.tm("messages.createConfigFailed", {
+            message: this.getErrorMessage(_err),
+          }),
+        );
       }
     },
 
@@ -1564,7 +1632,9 @@ export default {
       const botName = data.bot_name as string | undefined;
       if (explicitSuffix) {
         suffix =
-          explicitSuffix.startsWith("_") || explicitSuffix.startsWith("-") ? explicitSuffix : `_${explicitSuffix}`;
+          explicitSuffix.startsWith("_") || explicitSuffix.startsWith("-")
+            ? explicitSuffix
+            : `_${explicitSuffix}`;
       } else if (botName) {
         const safeBotName = String(botName || "")
           .trim()
@@ -1580,11 +1650,16 @@ export default {
         return;
       }
 
-      if ((platformType === "weixin_oc" || platformType === "dingtalk") && /_[a-z]{4}$/.test(currentId)) {
+      if (
+        (platformType === "weixin_oc" || platformType === "dingtalk") &&
+        /_[a-z]{4}$/.test(currentId)
+      ) {
         return;
       }
 
-      this.selectedPlatformConfig.id = currentId.endsWith(suffix) ? currentId : `${currentId}${suffix}`;
+      this.selectedPlatformConfig.id = currentId.endsWith(suffix)
+        ? currentId
+        : `${currentId}${suffix}`;
     },
 
     isPlatformIdValid(id: string | null | undefined): boolean {
@@ -1602,7 +1677,10 @@ export default {
 
       try {
         const routesRes = await axios.get("/api/config/umo_abconf_routes");
-        const routingTable = routesRes.data.data.routing as Record<string, string>;
+        const routingTable = routesRes.data.data.routing as Record<
+          string,
+          string
+        >;
 
         const routes: RouteEntry[] = [];
         for (const [umop, confId] of Object.entries(routingTable)) {
@@ -1612,7 +1690,8 @@ export default {
               routes.push({
                 umop: umop,
                 originalUmop: umop,
-                messageType: parts[1] === "" || parts[1] === "*" ? "*" : parts[1],
+                messageType:
+                  parts[1] === "" || parts[1] === "*" ? "*" : parts[1],
                 sessionId: parts[2] === "" || parts[2] === "*" ? "*" : parts[2],
                 configId: confId,
                 sourceUmo: umop,
@@ -1676,8 +1755,12 @@ export default {
     },
 
     async saveRoutesInternal(): Promise<void> {
-      const config = this.updatingPlatformConfig as Record<string, unknown> | null;
-      const originalPlatformId = this.originalUpdatingPlatformId || (config?.id as string);
+      const config = this.updatingPlatformConfig as Record<
+        string,
+        unknown
+      > | null;
+      const originalPlatformId =
+        this.originalUpdatingPlatformId || (config?.id as string);
       const newPlatformId = (config?.id as string) || originalPlatformId;
 
       if (!originalPlatformId && !newPlatformId) {
@@ -1686,11 +1769,15 @@ export default {
 
       try {
         const routesRes = await axios.get("/api/config/umo_abconf_routes");
-        const fullRoutingTable = routesRes.data.data.routing as Record<string, string>;
+        const fullRoutingTable = routesRes.data.data.routing as Record<
+          string,
+          string
+        >;
 
         for (const umop in fullRoutingTable) {
           if (
-            (originalPlatformId && this.isUmopMatchPlatform(umop, originalPlatformId)) ||
+            (originalPlatformId &&
+              this.isUmopMatchPlatform(umop, originalPlatformId)) ||
             (newPlatformId && this.isUmopMatchPlatform(umop, newPlatformId))
           ) {
             delete fullRoutingTable[umop];
@@ -1698,7 +1785,8 @@ export default {
         }
 
         for (const route of this.platformRoutes) {
-          const messageType = route.messageType === "*" ? "*" : route.messageType;
+          const messageType =
+            route.messageType === "*" ? "*" : route.messageType;
           const sessionId = route.sessionId === "*" ? "*" : route.sessionId;
           const platformIdForRoute = newPlatformId || originalPlatformId;
           const newUmop = `${platformIdForRoute}:${messageType}:${sessionId}`;
@@ -1713,7 +1801,11 @@ export default {
         });
       } catch (_err) {
         console.error("保存路由表失败:", _err);
-        throw new Error(this.tm("messages.routingSaveFailed", { message: this.getErrorMessage(_err) }));
+        throw new Error(
+          this.tm("messages.routingSaveFailed", {
+            message: this.getErrorMessage(_err),
+          }),
+        );
       }
     },
 
@@ -1728,7 +1820,9 @@ export default {
     },
 
     getConfigName(configId: string): string {
-      const config = this.configInfoList.find((c: ConfigInfo) => c.id === configId);
+      const config = this.configInfoList.find(
+        (c: ConfigInfo) => c.id === configId,
+      );
       return config ? config.name : configId;
     },
 
@@ -1828,7 +1922,8 @@ export default {
     },
 
     toggleRouteSourceMode(route: RouteEntry): void {
-      route.sourceMode = this.getRouteSourceMode(route) === "known" ? "manual" : "known";
+      route.sourceMode =
+        this.getRouteSourceMode(route) === "known" ? "manual" : "known";
       if (route.sourceMode === "known") {
         this.loadKnownRouteUmos();
       }
@@ -1858,7 +1953,10 @@ export default {
     prepareData(): void {
       this.getConfigInfoList();
       this.getConfigForPreview(this.selectedAbConfId);
-      const config = this.updatingPlatformConfig as Record<string, unknown> | null;
+      const config = this.updatingPlatformConfig as Record<
+        string,
+        unknown
+      > | null;
       if (this.updatingMode && config && config.id) {
         this.getPlatformConfigs(config.id as string);
       }
@@ -1867,7 +1965,10 @@ export default {
       const ref = this.$refs.dialogScrollContainer;
       if (!ref) return;
       const el = ((ref as { $el?: HTMLElement }).$el || ref) as HTMLElement;
-      const scrollOptions: ScrollToOptions = { top: el.scrollHeight, behavior: "smooth" };
+      const scrollOptions: ScrollToOptions = {
+        top: el.scrollHeight,
+        behavior: "smooth",
+      };
       if (typeof el.scrollTo === "function") {
         el.scrollTo(scrollOptions);
       } else {
@@ -1875,7 +1976,10 @@ export default {
       }
     },
     getErrorMessage(err: unknown): string {
-      const ae = err as { response?: { data?: { message?: string } }; message?: string };
+      const ae = err as {
+        response?: { data?: { message?: string } };
+        message?: string;
+      };
       return ae.response?.data?.message || ae.message || String(err);
     },
   },

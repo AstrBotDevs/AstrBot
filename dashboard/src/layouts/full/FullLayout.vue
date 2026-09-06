@@ -9,6 +9,7 @@ import { useI18n } from "@/i18n/composables";
 import { useCommonStore } from "@/stores/common";
 import { useCustomizerStore } from "@/stores/customizer";
 import { useRouterLoadingStore } from "@/stores/routerLoading";
+import { useMobileDrawerStore } from "@/stores/mobileDrawer";
 import axios from "@/utils/request";
 import VerticalHeaderVue from "./vertical-header/VerticalHeader.vue";
 import VerticalSidebarVue from "./vertical-sidebar/VerticalSidebar.vue";
@@ -17,12 +18,27 @@ const FIRST_NOTICE_SEEN_KEY = "astrbot:first_notice_seen:v1";
 
 const customizer = useCustomizerStore();
 const commonStore = useCommonStore();
+const mobileDrawer = useMobileDrawerStore();
 const { locale } = useI18n();
 const route = useRoute();
 const routerLoadingStore = useRouterLoadingStore();
-const isCurrentChatRoute = computed(() => route.path === "/chat" || route.path.startsWith("/chat/"));
-const isPluginPageRoute = computed(() => route.path.startsWith("/plugin-page/"));
-const isFullScreenRoute = computed(() => isCurrentChatRoute.value || isPluginPageRoute.value);
+const isCurrentChatRoute = computed(
+  () => route.path === "/chat" || route.path.startsWith("/chat/"),
+);
+const isPluginPageRoute = computed(
+  () => route.path.startsWith("/plugin-view/") || route.path.startsWith("/plugin-page/"),
+);
+const isProviderPageRoute = computed(() => route.path === "/providers");
+const isPlatformPageRoute = computed(() => route.path === "/platforms");
+const isViewportLockedRoute = computed(
+  () =>
+    isCurrentChatRoute.value ||
+    isProviderPageRoute.value ||
+    isPlatformPageRoute.value,
+);
+const isFullScreenRoute = computed(
+  () => isCurrentChatRoute.value || isPluginPageRoute.value,
+);
 const shouldMountChat = ref(isCurrentChatRoute.value);
 
 const showSidebar = computed(() => !isCurrentChatRoute.value);
@@ -35,6 +51,15 @@ watch(isCurrentChatRoute, (isChatRoute) => {
     shouldMountChat.value = true;
   }
 });
+
+// Temporary mobile drawers must never survive a route transition. Chat stays
+// mounted with v-show, so resetting the shared store here also covers Chat/Bot
+// switches and navigation initiated from inside ChatUI.
+watch(
+  () => route.fullPath,
+  () => mobileDrawer.SET(false),
+  { immediate: true },
+);
 
 const checkMigration = async (): Promise<boolean> => {
   try {
@@ -119,30 +144,41 @@ onMounted(() => {
         top
         style="z-index: 9999; position: absolute; opacity: 0.3"
       />
-      <VerticalHeaderVue />
       <VerticalSidebarVue v-if="showSidebar" />
+      <VerticalHeaderVue />
       <v-main
         :class="{ 'chat-main': isCurrentChatRoute }"
         :style="{
-          height: isCurrentChatRoute ? '100vh' : undefined,
-          overflow: isCurrentChatRoute ? 'hidden' : undefined,
+          height: isViewportLockedRoute ? '100vh' : undefined,
+          overflow: isViewportLockedRoute ? 'hidden' : undefined,
         }"
       >
         <v-container
           fluid
           class="page-wrapper"
-          :class="{ 'chat-mode-container': isCurrentChatRoute }"
+          :class="{
+            'chat-mode-container': isCurrentChatRoute,
+            'viewport-locked-container':
+              isProviderPageRoute || isPlatformPageRoute,
+            'fullscreen-container': isFullScreenRoute,
+          }"
           :style="{
-            height: isFullScreenRoute ? '100%' : 'calc(100% - 8px)',
+            height:
+              isFullScreenRoute || isProviderPageRoute || isPlatformPageRoute
+                ? '100%'
+                : 'calc(100% - 8px)',
             padding: isFullScreenRoute ? '0' : undefined,
-            minHeight: isFullScreenRoute ? 'unset' : undefined,
+            minHeight:
+              isFullScreenRoute || isProviderPageRoute || isPlatformPageRoute
+                ? 'unset'
+                : undefined,
           }"
         >
           <div
             :style="{
               height: '100%',
               width: '100%',
-              overflow: isCurrentChatRoute ? 'hidden' : undefined,
+              overflow: isViewportLockedRoute ? 'hidden' : undefined,
               position: isPluginPageRoute ? 'relative' : undefined,
             }"
           >
@@ -175,7 +211,136 @@ onMounted(() => {
   overflow: hidden !important;
 }
 
+.viewport-locked-container {
+  min-height: unset !important;
+  height: 100% !important;
+  overflow: hidden !important;
+}
+
 .chat-main {
   padding-top: 0 !important;
+}
+
+/* The header takes its own row in the flow, so the content area owns the remaining
+   height and scrolls on its own instead of sliding under the header. */
+:global(html),
+:global(body) {
+  height: 100%;
+  overflow: hidden;
+}
+
+:global(.v-application),
+:global(.v-application__wrap) {
+  height: 100vh;
+  min-height: 0;
+  overflow: hidden;
+}
+
+:global(.v-main) {
+  height: calc(100vh - var(--astrbot-toolbar-height, 40px)) !important;
+  padding-top: 0 !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  scrollbar-width: none;
+  /* The document no longer scrolls; the content area does. Sticky offsets that were
+     written for the document layout must be measured from the content area's own top. */
+  --v-layout-top: 0px !important;
+}
+
+:global(.v-main::-webkit-scrollbar) {
+  width: 0;
+  background: transparent;
+}
+
+/* The content area is the opaque card next to the sidebar. */
+:global(.page-wrapper) {
+  border-left: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+  border-top-left-radius: 12px;
+}
+
+/* On small screens there is no permanent sidebar to separate from, so the
+   card's left edge treatments would only read as stray lines. */
+@media (max-width: 959.98px) {
+  :global(.page-wrapper) {
+    border-left: 0;
+    border-top-left-radius: 0;
+  }
+}
+
+/* Off macOS the card also carries the hairline under the toolbar, so the line
+   follows the rounded corner instead of cutting across the notch. */
+:global(html:not([data-astrbot-desktop-platform='macos']) .page-wrapper) {
+  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+}
+
+/* Normal pages grow with their content so the main area has something to scroll. */
+:global(.page-wrapper:not(.viewport-locked-container):not(.chat-mode-container):not(.fullscreen-container)) {
+  height: auto !important;
+  min-height: calc(100vh - var(--astrbot-toolbar-height, 40px));
+}
+
+/* Viewport-locked and full-screen pages keep a fixed height and scroll internally.
+   Clipping them keeps full-bleed children from painting outside the rounded corner. */
+:global(.viewport-locked-container),
+:global(.chat-mode-container),
+:global(.fullscreen-container) {
+  height: calc(100vh - var(--astrbot-toolbar-height, 40px)) !important;
+  overflow: hidden !important;
+}
+
+/* macOS desktop vibrancy: the window material shows through wherever the UI stays
+   transparent. Only the content area keeps an opaque background. */
+:global(html) {
+  /* Shared chrome background for the top toolbar and the sidebars, so the
+     header and sidebar always read as one surface in both themes. */
+  --astrbot-chrome-bg: #fdfcfc;
+}
+
+:global(html .v-application.v-theme--BlueBusinessDarkTheme) {
+  --astrbot-chrome-bg: rgb(var(--v-theme-background));
+}
+
+:global(html[data-astrbot-desktop-platform='macos']) {
+  /* Bias the native window material toward white in light mode, black in dark mode.
+     Mostly opaque so the chrome reads as light even when the material behind is dark. */
+  --astrbot-vibrancy-tint: rgba(253, 252, 252, 0.92);
+}
+
+:global(html[data-astrbot-desktop-platform='macos'] .v-application.v-theme--BlueBusinessDarkTheme) {
+  --astrbot-vibrancy-tint: rgba(26, 26, 26, 0.92);
+}
+
+/* Off macOS the sidebar column is opaque; extend its color behind the content
+   card's rounded corner so the notch does not contrast with the sidebar. */
+:global(html:not([data-astrbot-desktop-platform='macos']) .v-main) {
+  background-image: linear-gradient(
+    to right,
+    rgb(var(--v-theme-surface)) 0 calc(var(--v-layout-left) + 12px),
+    transparent calc(var(--v-layout-left) + 12px) 100%
+  ) !important;
+}
+
+:global(html[data-astrbot-desktop-platform='macos']),
+:global(html[data-astrbot-desktop-platform='macos'] body),
+:global(html[data-astrbot-desktop-platform='macos'] .v-application),
+:global(html[data-astrbot-desktop-platform='macos'] .v-application__wrap) {
+  background: transparent !important;
+}
+
+/* The sidebar tint lives on the main area's own background (behind everything), covering
+   the sidebar column plus a small overhang that reaches the content corner. */
+:global(html[data-astrbot-desktop-platform='macos'] .v-main) {
+  background: linear-gradient(
+    to right,
+    var(--astrbot-vibrancy-tint, transparent) 0 calc(var(--v-layout-left) + 12px),
+    transparent calc(var(--v-layout-left) + 12px) 100%
+  ) !important;
+}
+
+/* Vuetify paints its own surface behind every list, which would sit on top of the
+   translucent sidebar, so keep the navigation lists transparent on macOS. */
+:global(html[data-astrbot-desktop-platform='macos'] .leftSidebar .v-list),
+:global(html[data-astrbot-desktop-platform='macos'] .chat-sidebar .v-list) {
+  background: transparent !important;
 }
 </style>
