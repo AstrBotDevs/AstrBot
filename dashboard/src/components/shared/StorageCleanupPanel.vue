@@ -119,15 +119,43 @@ import { computed, onMounted, ref } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
 import { useToastStore } from "@/stores/toast";
 import { askForConfirmation, useConfirmDialog } from "@/utils/confirmDialog";
+import { resolveErrorMessage } from "@/utils/errorUtils.js";
 import axios from "@/utils/request";
 
 const { tm } = useModuleI18n("features/settings");
 const toastStore = useToastStore();
 const confirmDialog = useConfirmDialog();
 
+type CleanupTarget = "all" | "logs" | "cache";
+
+interface StorageEntry {
+  size_bytes: number;
+  file_count: number;
+  path: string;
+  exists: boolean;
+}
+
+interface StorageStatus {
+  logs: StorageEntry;
+  cache: StorageEntry;
+  total_bytes: number;
+}
+
+interface CleanupResult {
+  status: StorageStatus;
+  removed_bytes: number;
+  processed_files: number;
+}
+
+interface StorageResponse<T> {
+  status: "ok" | "error";
+  message?: string;
+  data?: T | null;
+}
+
 const statusLoading = ref(false);
-const cleaningTarget = ref("");
-const storageStatus = ref({
+const cleaningTarget = ref<CleanupTarget | "">("");
+const storageStatus = ref<StorageStatus>({
   logs: {
     size_bytes: 0,
     file_count: 0,
@@ -143,7 +171,7 @@ const storageStatus = ref({
   total_bytes: 0,
 });
 
-const showToast = (message, color = "success") => {
+const showToast = (message: string, color = "success") => {
   toastStore.add({
     message,
     color,
@@ -151,7 +179,7 @@ const showToast = (message, color = "success") => {
   });
 };
 
-const formatBytes = (bytes) => {
+const formatBytes = (bytes: number) => {
   const value = Number(bytes || 0);
   if (value <= 0) return "0 B";
 
@@ -170,7 +198,7 @@ const formatBytes = (bytes) => {
 
 const storageCards = computed(() => [
   {
-    key: "cache",
+    key: "cache" as const,
     title: tm("system.cleanup.targets.cache.title"),
     subtitle: tm("system.cleanup.targets.cache.subtitle"),
     buttonText: tm("system.cleanup.targets.cache.button"),
@@ -181,7 +209,7 @@ const storageCards = computed(() => [
     path: storageStatus.value.cache?.path || "-",
   },
   {
-    key: "logs",
+    key: "logs" as const,
     title: tm("system.cleanup.targets.logs.title"),
     subtitle: tm("system.cleanup.targets.logs.subtitle"),
     buttonText: tm("system.cleanup.targets.logs.button"),
@@ -196,20 +224,20 @@ const storageCards = computed(() => [
 const loadStorageStatus = async () => {
   statusLoading.value = true;
   try {
-    const res = await axios.get("/api/stat/storage");
+    const res = await axios.get<StorageResponse<StorageStatus>>("/api/stat/storage");
     if (res.data.status !== "ok") {
       showToast(res.data.message || tm("system.cleanup.messages.statusFailed"), "error");
       return;
     }
     storageStatus.value = res.data.data || storageStatus.value;
   } catch (error) {
-    showToast(error?.response?.data?.message || tm("system.cleanup.messages.statusFailed"), "error");
+    showToast(resolveErrorMessage(error, tm("system.cleanup.messages.statusFailed")), "error");
   } finally {
     statusLoading.value = false;
   }
 };
 
-const cleanupStorage = async (target) => {
+const cleanupStorage = async (target: CleanupTarget) => {
   const confirmed = await askForConfirmation(
     tm("system.cleanup.confirm", {
       target: tm(`system.cleanup.targetNames.${target}`),
@@ -220,22 +248,22 @@ const cleanupStorage = async (target) => {
 
   cleaningTarget.value = target;
   try {
-    const res = await axios.post("/api/stat/storage/cleanup", { target });
+    const res = await axios.post<StorageResponse<CleanupResult>>("/api/stat/storage/cleanup", { target });
     if (res.data.status !== "ok") {
       showToast(res.data.message || tm("system.cleanup.messages.cleanupFailed"), "error");
       return;
     }
 
-    const cleanupData = res.data.data || {};
-    storageStatus.value = cleanupData.status || storageStatus.value;
+    const cleanupData = res.data.data;
+    storageStatus.value = cleanupData?.status || storageStatus.value;
     showToast(
       tm("system.cleanup.messages.cleanupSuccess", {
-        size: formatBytes(cleanupData.removed_bytes || 0),
-        count: cleanupData.processed_files || 0,
+        size: formatBytes(cleanupData?.removed_bytes || 0),
+        count: cleanupData?.processed_files || 0,
       }),
     );
   } catch (error) {
-    showToast(error?.response?.data?.message || tm("system.cleanup.messages.cleanupFailed"), "error");
+    showToast(resolveErrorMessage(error, tm("system.cleanup.messages.cleanupFailed")), "error");
   } finally {
     cleaningTarget.value = "";
   }

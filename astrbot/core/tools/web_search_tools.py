@@ -9,7 +9,7 @@ from pydantic import Field
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from astrbot.core import logger, sp
-from astrbot.core.agent.tool import FunctionTool, ToolExecResult
+from astrbot.core.agent.tool import FunctionTool, ParametersType, ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.tools.registry import builtin_tool
 
@@ -602,7 +602,7 @@ class TavilyWebSearchTool(FunctionTool[AstrAgentContext]):
         "A web search tool that uses Tavily to search the web for relevant content. "
         "Ideal for gathering current information, news, and detailed web content analysis."
     )
-    parameters: dict = Field(
+    parameters: ParametersType | None = Field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -686,7 +686,7 @@ class TavilyWebSearchTool(FunctionTool[AstrAgentContext]):
 class TavilyExtractWebPageTool(FunctionTool[AstrAgentContext]):
     name: str = "tavily_extract_web_page"
     description: str = "Extract the content of a web page using Tavily."
-    parameters: dict = Field(
+    parameters: ParametersType | None = Field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -736,7 +736,7 @@ class BochaWebSearchTool(FunctionTool[AstrAgentContext]):
         "A web search tool based on Bocha Search API, used to retrieve web pages "
         "related to the user's query."
     )
-    parameters: dict = Field(
+    parameters: ParametersType | None = Field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -797,7 +797,7 @@ class BochaWebSearchTool(FunctionTool[AstrAgentContext]):
 class BraveWebSearchTool(FunctionTool[AstrAgentContext]):
     name: str = "web_search_brave"
     description: str = "A web search tool based on Brave Search API."
-    parameters: dict = Field(
+    parameters: ParametersType | None = Field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -856,7 +856,7 @@ class FirecrawlWebSearchTool(FunctionTool[AstrAgentContext]):
         "A web search tool based on Firecrawl Search API, used to retrieve web "
         "pages related to the user's query."
     )
-    parameters: dict = Field(
+    parameters: ParametersType | None = Field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -907,7 +907,7 @@ class FirecrawlWebSearchTool(FunctionTool[AstrAgentContext]):
 class FirecrawlExtractWebPageTool(FunctionTool[AstrAgentContext]):
     name: str = "firecrawl_extract_web_page"
     description: str = "Extract the content of a web page using Firecrawl."
-    parameters: dict = Field(
+    parameters: ParametersType | None = Field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -974,7 +974,7 @@ class BaiduWebSearchTool(FunctionTool[AstrAgentContext]):
         "A web search tool based on Baidu AI Search. "
         "Use this for real-time web retrieval when Baidu AI Search is configured."
     )
-    parameters: dict = Field(
+    parameters: ParametersType | None = Field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -1099,7 +1099,7 @@ class ExaWebSearchTool(FunctionTool[AstrAgentContext]):
         "A web search tool powered by Exa, an AI-native search engine. "
         "Supports keyword and semantic search with domain, date, and category filters."
     )
-    parameters: dict = Field(
+    parameters: ParametersType | None = Field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -1201,7 +1201,7 @@ class ExaGetContentsTool(FunctionTool[AstrAgentContext]):
 
     name: str = "exa_get_contents"
     description: str = "Extract the content of a web page using Exa."
-    parameters: dict = Field(
+    parameters: ParametersType | None = Field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -1322,7 +1322,7 @@ class AnySearchWebSearchTool(FunctionTool[AstrAgentContext]):
         "A web search tool powered by AnySearch. Supports general web search and "
         "domain-specific search over academic, code, finance, legal and security sources."
     )
-    parameters: dict = Field(
+    parameters: ParametersType | None = Field(
         default_factory=lambda: {
             "type": "object",
             "properties": {

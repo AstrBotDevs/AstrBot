@@ -6,7 +6,7 @@ import logging
 import traceback
 from collections.abc import Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeGuard
 
 from astrbot.core.config.agent_runner import (
     AGENT_RUNNER_TYPES,
@@ -65,7 +65,12 @@ _LEGACY_PROVIDER_IDENTITY_FIELDS = {
 }
 
 
-def _get_effective_provider_map(config: object) -> dict[str, dict[str, Any]]:
+def _is_string_mapping(value: object) -> TypeGuard[dict[str, object]]:
+    """Validate the key type of a legacy JSON configuration object."""
+    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+
+
+def _get_effective_provider_map(config: object) -> dict[str, dict[str, object]]:
     """Build providers with their Provider Source fields merged in.
 
     Args:
@@ -74,23 +79,32 @@ def _get_effective_provider_map(config: object) -> dict[str, dict[str, Any]]:
     Returns:
         Effective providers indexed by provider ID.
     """
-    if not isinstance(config, dict):
+    if not _is_string_mapping(config):
         return {}
     provider_sources = config.get("provider_sources", [])
-    source_map = {
-        source.get("id"): source
-        for source in provider_sources
-        if isinstance(source, dict) and source.get("id")
-    }
-    provider_map: dict[str, dict[str, Any]] = {}
-    for provider in config.get("provider", []):
-        if not isinstance(provider, dict) or not provider.get("id"):
+    source_map: dict[str, dict[str, object]] = {}
+    if isinstance(provider_sources, list):
+        for source in provider_sources:
+            if not _is_string_mapping(source):
+                continue
+            source_id = source.get("id")
+            if isinstance(source_id, str) and source_id:
+                source_map[source_id] = source
+    providers = config.get("provider", [])
+    provider_map: dict[str, dict[str, object]] = {}
+    if not isinstance(providers, list):
+        return provider_map
+    for provider in providers:
+        if not _is_string_mapping(provider):
             continue
-        effective_provider = copy.deepcopy(
-            source_map.get(provider.get("provider_source_id"), {})
-        )
+        provider_id = provider.get("id")
+        if not isinstance(provider_id, str) or not provider_id:
+            continue
+        source_id = provider.get("provider_source_id")
+        source = source_map.get(source_id, {}) if isinstance(source_id, str) else {}
+        effective_provider = copy.deepcopy(source)
         effective_provider.update(copy.deepcopy(provider))
-        provider_map[provider["id"]] = effective_provider
+        provider_map[provider_id] = effective_provider
     return provider_map
 
 
@@ -103,10 +117,12 @@ def _get_provider_runner_type(provider: object) -> str | None:
     Returns:
         Runner type when the provider is a known Agent Runner, otherwise None.
     """
-    if not isinstance(provider, dict):
+    if not _is_string_mapping(provider):
         return None
     provider_type = provider.get("provider_type")
     runner_type = provider.get("type") or provider.get("provider")
+    if not isinstance(runner_type, str):
+        return None
     if (
         provider_type == "agent_runner"
         and runner_type in THIRD_PARTY_AGENT_RUNNER_TYPES

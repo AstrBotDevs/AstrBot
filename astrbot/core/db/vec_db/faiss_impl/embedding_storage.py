@@ -171,9 +171,13 @@ class EmbeddingStorage:
         删除不存在的 ID 时 Faiss 会抛 RuntimeError。
         由于 remove_ids 为幂等操作，此处忽略该错误。
         """
+        import faiss
+
         assert self.index is not None, "FAISS index is not initialized."
         try:
-            self.index.remove_ids(np.array(ids, dtype=np.int64))
+            id_array = np.asarray(ids, dtype=np.int64)
+            selector = faiss.IDSelectorBatch(id_array.size, faiss.swig_ptr(id_array))
+            self.index.remove_ids(selector)
         except RuntimeError:
             # 幂等：删除已不存在的 ID，安全忽略
             pass

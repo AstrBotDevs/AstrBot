@@ -8,11 +8,11 @@ imported without errors.
 # backup_service.py — BackupService, helpers and constants
 # ---------------------------------------------------------------------------
 from astrbot.dashboard.services.backup_service import (
-    BackupService,             # noqa: F401
-    CHUNK_SIZE,                # noqa: F401
-    UPLOAD_EXPIRE_SECONDS,     # noqa: F401
+    CHUNK_SIZE,  # noqa: F401
+    UPLOAD_EXPIRE_SECONDS,  # noqa: F401
+    BackupService,  # noqa: F401
     generate_unique_filename,  # noqa: F401
-    secure_filename,           # noqa: F401
+    secure_filename,  # noqa: F401
 )
 
 

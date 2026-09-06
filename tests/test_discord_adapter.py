@@ -1,7 +1,7 @@
 import base64
 from io import BytesIO
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -183,12 +183,11 @@ async def test_discord_get_group_enriches_guild_metadata_from_complete_cache():
         members=members,
         chunked=True,
     )
-    channel = SimpleNamespace(
-        id=123,
-        name="general",
-        guild=guild,
-        permissions_for=lambda member: SimpleNamespace(view_channel=True),
-    )
+    channel = MagicMock(spec=discord_platform_event.discord.TextChannel)
+    channel.id = 123
+    channel.name = "general"
+    channel.guild = guild
+    channel.permissions_for.return_value = SimpleNamespace(view_channel=True)
     client = SimpleNamespace(
         get_channel=lambda channel_id: channel,
         fetch_channel=AsyncMock(),

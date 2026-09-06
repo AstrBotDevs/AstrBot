@@ -16,6 +16,7 @@ from astrbot.core.desktop_runtime import (
     is_desktop_managed_backend,
 )
 from astrbot.core.updater import AstrBotUpdater, UpdateProgress
+from astrbot.dashboard.validation import is_json_object, string_field
 
 
 async def call_get_dashboard_version(*args, **kwargs):
@@ -124,14 +125,14 @@ class UpdateService:
                 code="desktop_managed",
             )
 
-        payload = data if isinstance(data, dict) else {}
-        version = payload.get("version", "")
-        reboot = payload.get("reboot", True)
-        progress_id = payload.get("progress_id") or uuid.uuid4().hex
+        payload = data if is_json_object(data) else {}
+        version = string_field(payload, "version", "")
+        reboot = bool(payload.get("reboot", True))
+        progress_id = string_field(payload, "progress_id") or uuid.uuid4().hex
         if version == "" or version == "latest":
             version = None
 
-        proxy: str | None = payload.get("proxy", None)
+        proxy = string_field(payload, "proxy")
         if proxy:
             proxy = proxy.removesuffix("/")
 
@@ -288,10 +289,10 @@ class UpdateService:
                 "You are not permitted to do this operation in demo mode"
             )
 
-        payload = data if isinstance(data, dict) else {}
+        payload = data if is_json_object(data) else {}
         package = payload.get("package", "")
-        mirror = payload.get("mirror", None)
-        if not package:
+        mirror = string_field(payload, "mirror")
+        if not isinstance(package, str) or not package:
             raise UpdateServiceError("缺少参数 package 或不合法。")
         try:
             await self.pip_install(package, mirror=mirror)

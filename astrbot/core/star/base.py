@@ -12,6 +12,9 @@ from astrbot.core.utils.plugin_kv_store import PluginKVStoreMixin
 from .star import StarMetadata, star_map, star_registry
 
 if TYPE_CHECKING:
+    from astrbot.core.config.astrbot_config import AstrBotConfig
+    from astrbot.core.conversation_mgr import ConversationManager
+    from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
     from astrbot.core.provider.func_tool_manager import FunctionToolManager
     from astrbot.core.provider.manager import ProviderManager
     from astrbot.core.provider.provider import Provider
@@ -29,16 +32,23 @@ class Star(CommandParserMixin, PluginKVStoreMixin):
     """The plugin's dedicated logger, isolated from the global ``astrbot`` logger."""
 
     class _ContextLike(Protocol):
-        def get_config(self, umo: str | None = None) -> Any: ...
+        def get_config(self, umo: str | None = None) -> AstrBotConfig: ...
 
         def get_using_provider(self, umo: str | None = None) -> Provider | None: ...
+
+        async def get_using_provider_async(
+            self, umo: str | None = None
+        ) -> Provider | None: ...
 
         def get_llm_tool_manager(self) -> FunctionToolManager: ...
 
         def get_event_queue(self) -> Queue[Any]: ...
 
         @property
-        def conversation_manager(self) -> Any: ...
+        def conversation_manager(self) -> ConversationManager: ...
+
+        @property
+        def message_history_manager(self) -> PlatformMessageHistoryManager: ...
 
         @property
         def provider_manager(self) -> ProviderManager: ...

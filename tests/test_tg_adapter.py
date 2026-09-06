@@ -3,6 +3,8 @@
 
 def test_import_and_class_exists() -> None:
     """Verify the module imports and the main class is accessible."""
-    from astrbot.core.platform.sources.telegram.tg_adapter import TelegramPlatformAdapter
+    from astrbot.core.platform.sources.telegram.tg_adapter import (
+        TelegramPlatformAdapter,
+    )
 
     assert TelegramPlatformAdapter is not None

@@ -36,6 +36,11 @@ from astrbot.core.utils.totp import (
 from astrbot.core.utils.webhook_utils import ensure_platform_webhook_config
 from astrbot.dashboard.async_utils import run_maybe_async
 from astrbot.dashboard.responses import ApiError
+from astrbot.dashboard.validation import (
+    is_json_object,
+    object_path,
+    string_field,
+)
 
 PROTECTED_2FA_CONFIG_PATHS = (
     ("dashboard", "totp", "enable"),
@@ -552,10 +557,13 @@ class ConfigProfileService:
         self,
         payload: object,
     ) -> dict:
-        data = payload if isinstance(payload, dict) else {}
+        data = payload if is_json_object(payload) else {}
         if not data:
             raise ValueError("缺少配置数据")
-        return await self.create_profile(data.get("name"), data.get("config"))
+        config = data.get("config")
+        if config is not None and not is_json_object(config):
+            raise ValueError("Invalid config payload")
+        return await self.create_profile(string_field(data, "name"), config)
 
     def get_profile(self, config_id: str) -> dict:
         if config_id not in self.acm.confs:
@@ -659,12 +667,12 @@ class ConfigProfileService:
         *,
         two_factor_code: str | None = None,
     ) -> str | None:
-        data = payload if isinstance(payload, dict) else {}
-        if not isinstance(payload, dict):
+        data = payload if is_json_object(payload) else {}
+        if not is_json_object(payload):
             raise ValueError("Invalid request payload")
         config = data.get("config")
         conf_id = data.get("conf_id")
-        if not isinstance(config, dict):
+        if not is_json_object(config):
             raise ValueError("Invalid config payload")
         return await self.update_profile(
             str(conf_id),
@@ -694,13 +702,13 @@ class ConfigProfileService:
             raise ValueError("Failed to update config profile")
 
     async def rename_profile_from_dashboard_payload(self, payload: object) -> str:
-        data = payload if isinstance(payload, dict) else {}
+        data = payload if is_json_object(payload) else {}
         if not data:
             raise ValueError("缺少配置数据")
         conf_id = data.get("id")
         if not conf_id:
             raise ValueError("缺少配置文件 ID")
-        await self.rename_profile(str(conf_id), name=data.get("name"))
+        await self.rename_profile(str(conf_id), name=string_field(data, "name"))
         return "更新成功"
 
     async def delete_profile(self, config_id: str) -> None:
@@ -709,7 +717,7 @@ class ConfigProfileService:
         self.core_lifecycle.pipeline_scheduler_mapping.pop(config_id, None)
 
     async def delete_profile_from_dashboard_payload(self, payload: object) -> str:
-        data = payload if isinstance(payload, dict) else {}
+        data = payload if is_json_object(payload) else {}
         if not data:
             raise ValueError("缺少配置数据")
         conf_id = data.get("id")
@@ -730,20 +738,25 @@ class ConfigRoutingService:
         await self.ucr.update_routing_data(routing)
 
     async def replace_routes(self, data: object) -> None:
-        payload = data if isinstance(data, dict) else {}
+        payload = data if is_json_object(data) else {}
         new_routing = payload.get("routing")
-        if not isinstance(new_routing, dict):
+        if not is_json_object(new_routing):
             raise ValueError("缺少或错误的路由表数据")
-        await self.replace_route_mapping(new_routing)
+        routing: dict[str, str] = {}
+        for umo, config_id in new_routing.items():
+            if not isinstance(config_id, str):
+                raise ValueError("缺少或错误的路由表数据")
+            routing[umo] = config_id
+        await self.replace_route_mapping(routing)
 
     async def replace_routes_from_dashboard_payload(self, payload: object) -> str:
-        if not isinstance(payload, dict) or not payload:
+        if not is_json_object(payload) or not payload:
             raise ValueError("缺少配置数据")
         await self.replace_routes(payload)
         return "更新成功"
 
     async def upsert_route(self, data: object) -> None:
-        payload = data if isinstance(data, dict) else {}
+        payload = data if is_json_object(data) else {}
         umo = payload.get("umo")
         conf_id = payload.get("conf_id")
         if not umo or not conf_id:
@@ -757,13 +770,13 @@ class ConfigRoutingService:
         await self.ucr.update_route(umo, config_id)
 
     async def upsert_route_from_dashboard_payload(self, payload: object) -> str:
-        if not isinstance(payload, dict) or not payload:
+        if not is_json_object(payload) or not payload:
             raise ValueError("缺少配置数据")
         await self.upsert_route(payload)
         return "更新成功"
 
     async def delete_route(self, data: object) -> None:
-        payload = data if isinstance(data, dict) else {}
+        payload = data if is_json_object(data) else {}
         umo = payload.get("umo")
         if not umo:
             raise ValueError("缺少 UMO")
@@ -775,7 +788,7 @@ class ConfigRoutingService:
             await self.ucr.update_routing_data(self.ucr.umop_to_conf_id)
 
     async def delete_route_from_dashboard_payload(self, payload: object) -> str:
-        if not isinstance(payload, dict) or not payload:
+        if not is_json_object(payload) or not payload:
             raise ValueError("缺少配置数据")
         await self.delete_route(payload)
         return "删除成功"
@@ -797,22 +810,21 @@ class ConfigDisplayService:
 
     async def get_astrbot_config(self) -> dict:
         metadata = copy.deepcopy(CONFIG_METADATA_2)
+        platform_metadata = object_path(metadata, "platform_group", "metadata")
         platform_i18n = ConfigMetadataI18n.convert_to_i18n_keys(
             {
                 "platform_group": {
-                    "metadata": {
-                        "platform": metadata["platform_group"]["metadata"]["platform"]
-                    }
+                    "metadata": {"platform": platform_metadata["platform"]}
                 }
             }
         )
-        metadata["platform_group"]["metadata"]["platform"] = platform_i18n[
-            "platform_group"
-        ]["metadata"]["platform"]
-
-        platform_default_tmpl = metadata["platform_group"]["metadata"]["platform"][
-            "config_template"
+        platform_metadata["platform"] = platform_i18n["platform_group"]["metadata"][
+            "platform"
         ]
+
+        platform_default_tmpl = object_path(
+            platform_metadata, "platform", "config_template"
+        )
         platform_i18n_translations = {}
         logo_registration_tasks = []
 
@@ -837,9 +849,9 @@ class ConfigDisplayService:
         if logo_registration_tasks:
             await asyncio.gather(*logo_registration_tasks, return_exceptions=True)
 
-        provider_default_tmpl = metadata["provider_group"]["metadata"]["provider"][
-            "config_template"
-        ]
+        provider_default_tmpl = object_path(
+            metadata, "provider_group", "metadata", "provider", "config_template"
+        )
         for provider in provider_registry:
             if provider.default_config_tmpl:
                 provider_default_tmpl[provider.type] = provider.default_config_tmpl
@@ -1022,7 +1034,7 @@ class ConfigFileService:
         *,
         plugin_name: str,
     ) -> str:
-        post_configs = payload if isinstance(payload, dict) else {}
+        post_configs = payload if is_json_object(payload) else {}
         await self.save_plugin_configs(post_configs, plugin_name)
         return f"保存插件 {plugin_name} 成功~ 机器人正在热重载插件。"
 
@@ -1132,11 +1144,11 @@ class ConfigFileService:
         name: str | None,
         payload: object,
     ) -> str:
-        data = payload if isinstance(payload, dict) else {}
+        data = payload if is_json_object(payload) else {}
         self.delete_config_file(
             scope=scope,
             name=name,
-            rel_path=data.get("path"),
+            rel_path=string_field(data, "path"),
         )
         return "Deleted"
 
@@ -1310,16 +1322,20 @@ class BotConfigService:
         return {"platforms": self.list_bots()["bots"]}
 
     async def create_bot_from_dashboard_payload(self, payload: object) -> str:
-        if not isinstance(payload, dict):
+        if not is_json_object(payload):
             raise ValueError("参数错误")
         await self.create_bot(payload)
         return "新增平台配置成功~"
 
     async def update_bot_from_dashboard_payload(self, payload: object) -> str:
-        data = payload if isinstance(payload, dict) else {}
+        data = payload if is_json_object(payload) else {}
         origin_platform_id = data.get("id")
         new_config = data.get("config")
-        if not origin_platform_id or not isinstance(new_config, dict):
+        if (
+            not isinstance(origin_platform_id, str)
+            or not origin_platform_id
+            or not is_json_object(new_config)
+        ):
             raise ValueError("参数错误")
         if origin_platform_id != new_config.get("id"):
             raise ValueError("机器人名称不允许修改")
@@ -1333,7 +1349,7 @@ class BotConfigService:
         return "更新平台配置成功~"
 
     async def delete_bot_from_dashboard_payload(self, payload: object) -> str:
-        data = payload if isinstance(payload, dict) else {}
+        data = payload if is_json_object(payload) else {}
         platform_id = data.get("id")
         if not platform_id:
             raise ValueError("缺少平台 ID")
@@ -1385,9 +1401,9 @@ class ProviderConfigService:
             {
                 "provider_group": {
                     "metadata": {
-                        "provider": CONFIG_METADATA_2["provider_group"]["metadata"][
-                            "provider"
-                        ]
+                        "provider": object_path(
+                            CONFIG_METADATA_2, "provider_group", "metadata", "provider"
+                        )
                     }
                 }
             }
@@ -1474,14 +1490,14 @@ class ProviderConfigService:
     async def upsert_provider_source_from_dashboard_payload(
         self, payload: object
     ) -> str:
-        if not isinstance(payload, dict) or not payload:
+        if not is_json_object(payload) or not payload:
             raise ValueError("缺少配置数据")
 
         new_source_config = payload.get("config") or payload
         original_id = payload.get("original_id")
         if not original_id:
             raise ValueError("缺少 original_id")
-        if not isinstance(new_source_config, dict):
+        if not is_json_object(new_source_config):
             raise ValueError("缺少或错误的配置数据")
         if not new_source_config.get("id"):
             new_source_config["id"] = original_id
@@ -1492,7 +1508,7 @@ class ProviderConfigService:
     async def delete_provider_source_from_dashboard_payload(
         self, payload: object
     ) -> str:
-        if not isinstance(payload, dict) or not payload:
+        if not is_json_object(payload) or not payload:
             raise ValueError("缺少配置数据")
 
         provider_source_id = payload.get("id")
@@ -1649,8 +1665,11 @@ class ProviderConfigService:
         self,
         payload: object,
     ) -> dict:
-        data = payload if isinstance(payload, dict) else {}
-        return await self.get_embedding_dimension(data.get("provider_config"))
+        data = payload if is_json_object(payload) else {}
+        provider_config = data.get("provider_config")
+        if provider_config is not None and not is_json_object(provider_config):
+            raise ValueError("缺少参数 provider_config")
+        return await self.get_embedding_dimension(provider_config)
 
     def list_providers(
         self,
@@ -1758,25 +1777,29 @@ class ProviderConfigService:
         await self.provider_manager.delete_provider(provider_id=provider_id)
 
     async def create_provider_from_dashboard_payload(self, payload: object) -> str:
-        if not isinstance(payload, dict):
+        if not is_json_object(payload):
             raise ValueError("参数错误")
         await self.create_provider(payload)
         return "新增服务提供商配置成功"
 
     async def update_provider_from_dashboard_payload(self, payload: object) -> str:
-        data = payload if isinstance(payload, dict) else {}
+        data = payload if is_json_object(payload) else {}
         origin_provider_id = data.get("id")
         new_config = data.get("config")
-        if not origin_provider_id or not isinstance(new_config, dict):
+        if (
+            not isinstance(origin_provider_id, str)
+            or not origin_provider_id
+            or not is_json_object(new_config)
+        ):
             raise ValueError("参数错误")
 
         await self.update_provider(origin_provider_id, new_config)
         return "更新成功，已经实时生效~"
 
     async def delete_provider_from_dashboard_payload(self, payload: object) -> str:
-        data = payload if isinstance(payload, dict) else {}
+        data = payload if is_json_object(payload) else {}
         provider_id = data.get("id", "")
-        if not provider_id:
+        if not isinstance(provider_id, str) or not provider_id:
             raise ValueError("缺少参数 id")
 
         await self.delete_provider(provider_id)

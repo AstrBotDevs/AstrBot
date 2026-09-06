@@ -2,10 +2,8 @@
 
 from unittest.mock import MagicMock
 
-import pytest
-
-from astrbot.core.pipeline.scheduler import PipelineScheduler
 from astrbot.core.pipeline.context import PipelineContext
+from astrbot.core.pipeline.scheduler import PipelineScheduler
 
 
 class TestPipelineScheduler:
@@ -14,6 +12,7 @@ class TestPipelineScheduler:
     def test_module_import(self):
         """Verify the scheduler module can be imported."""
         import astrbot.core.pipeline.scheduler  # noqa: F811
+
         assert hasattr(
             astrbot.core.pipeline.scheduler,
             "PipelineScheduler",

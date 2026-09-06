@@ -14,8 +14,7 @@ CUSTOM_TEMPLATE = "<html>\n<body>customized by user</body>\n</html>\n"
 def test_default_template_preserves_soft_breaks_and_fits_display_math() -> None:
     """Verify the default template keeps Markdown and wide-math layout safe."""
     template_path = (
-        Path(__file__).parents[1]
-        / "astrbot/core/utils/t2i/template/base.html"
+        Path(__file__).parents[1] / "astrbot/core/utils/t2i/template/base.html"
     )
     template = template_path.read_text(encoding="utf-8")
 

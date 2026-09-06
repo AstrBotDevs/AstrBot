@@ -152,7 +152,7 @@ async def update_command_permission(
 
     handler = descriptor.handler
     found_plugin = star_map.get(handler.handler_module_path)
-    if not found_plugin:
+    if not found_plugin or found_plugin.name is None:
         raise ValueError("未找到指令所属插件")
 
     # 1. Update Persistent Config (alter_cmd)

@@ -1,7 +1,5 @@
 """Import smoke tests for Agent dataclass."""
 
-import pytest
-
 from astrbot.core.agent.agent import Agent
 
 
@@ -34,7 +32,6 @@ class TestAgentImport:
 
     def test_is_dataclass(self):
         """Agent should be a dataclass."""
-        from dataclasses import dataclass
 
         # Check it has the dataclass decorator by inspecting __dataclass_fields__
         assert hasattr(Agent, "__dataclass_fields__")

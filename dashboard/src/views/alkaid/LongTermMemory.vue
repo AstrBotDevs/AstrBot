@@ -517,8 +517,8 @@ export default defineComponent({
       svg: null as d3.Selection<SVGSVGElement, unknown, null, undefined> | null,
       zoom: null as d3.ZoomBehavior<SVGSVGElement, unknown> | null,
       g: null as d3.Selection<SVGGElement, unknown, null, undefined> | null,
-      node_data: [] as RawNodeData[],
-      edge_data: [] as RawEdgeData[],
+      node_data: [] as [string, RawNodeData][],
+      edge_data: [] as [string, string, RawEdgeData][],
       nodes: [] as GraphNode[],
       links: [] as GraphLink[],
       searchUserId: null as string | null,
@@ -886,18 +886,18 @@ export default defineComponent({
       const width = container.clientWidth || 800;
       const height = container.clientHeight || 600;
       const svg = d3
-        .select("#graph-container")
+        .select<HTMLElement, unknown>(container)
         .append("svg")
         .attr("width", "100%")
         .attr("height", "100%")
         .attr("viewBox", [0, 0, width, height])
-        .classed("d3-graph", true) as d3.Selection<SVGSVGElement, unknown, null, undefined>;
+        .classed("d3-graph", true);
       const g = svg.append("g");
       const zoom = d3
         .zoom<SVGSVGElement, unknown>()
         .scaleExtent([0.1, 10])
         .on("zoom", (event: d3.D3ZoomEvent<SVGSVGElement, unknown>) => {
-          g.attr("transform", event.transform);
+          g.attr("transform", event.transform.toString());
         });
 
       svg.call(zoom);
@@ -993,7 +993,7 @@ export default defineComponent({
       // 节点绘制部分保持不变
       const node = g
         .append("g")
-        .selectAll("circle")
+        .selectAll<SVGCircleElement, GraphNode>("circle")
         .data(this.nodes)
         .join("circle")
         .attr("r", 8)
@@ -1213,7 +1213,8 @@ export default defineComponent({
 
     dragBehavior(): d3.DragBehavior<SVGCircleElement, GraphNode, GraphNode> {
       return d3
-        .drag<SVGCircleElement, GraphNode>()
+        .drag<SVGCircleElement, GraphNode, GraphNode>()
+        .subject((_event, node) => node)
         .on("start", (event: d3.D3DragEvent<SVGCircleElement, GraphNode, GraphNode>, d: GraphNode) => {
           if (!event.active) this.simulation!.alphaTarget(0.3).restart();
           d.fx = d.x;

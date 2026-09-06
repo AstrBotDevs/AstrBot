@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import uuid
-from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
@@ -12,6 +11,12 @@ from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import ConversationV2, Preference
 from astrbot.core.provider.entities import ProviderType
 from astrbot.core.umo_alias import build_umo_alias_map, parse_umo, serialize_umo_alias
+from astrbot.dashboard.validation import (
+    is_json_object,
+    is_string_list,
+    string_field,
+    string_list_field,
+)
 
 AVAILABLE_SESSION_RULE_KEYS = [
     "session_service_config",
@@ -37,8 +42,23 @@ class SessionManagementService:
         self.db_helper = db_helper
 
     @staticmethod
-    def _payload(data: object) -> dict[str, Any]:
-        return data if isinstance(data, dict) else {}
+    def _payload(data: object) -> dict[str, object]:
+        return data if is_json_object(data) else {}
+
+    async def _target_umos(self, payload: dict[str, object]) -> list[str]:
+        umos = payload.get("umos", [])
+        scope = string_field(payload, "scope", error_type=SessionManagementServiceError)
+        group_id = (
+            string_field(payload, "group_id", error_type=SessionManagementServiceError)
+            or ""
+        )
+        if scope and not umos:
+            umos = await self.get_umos_by_scope(scope, group_id)
+        if not umos:
+            return []
+        if not is_string_list(umos):
+            raise SessionManagementServiceError("参数 umos 必须是字符串数组")
+        return umos
 
     @staticmethod
     def _is_group_umo(umo: str) -> bool:
@@ -245,10 +265,12 @@ class SessionManagementService:
     async def update_session_rule(self, data: object) -> dict:
         payload = self._payload(data)
         umo = payload.get("umo")
-        rule_key = payload.get("rule_key")
+        rule_key = string_field(
+            payload, "rule_key", error_type=SessionManagementServiceError
+        )
         rule_value = payload.get("rule_value")
 
-        if not umo:
+        if not isinstance(umo, str) or not umo:
             raise SessionManagementServiceError("缺少必要参数: umo")
         if not rule_key:
             raise SessionManagementServiceError("缺少必要参数: rule_key")
@@ -264,9 +286,11 @@ class SessionManagementService:
     async def delete_session_rule(self, data: object) -> dict:
         payload = self._payload(data)
         umo = payload.get("umo")
-        rule_key = payload.get("rule_key")
+        rule_key = string_field(
+            payload, "rule_key", error_type=SessionManagementServiceError
+        )
 
-        if not umo:
+        if not isinstance(umo, str) or not umo:
             raise SessionManagementServiceError("缺少必要参数: umo")
 
         if rule_key:
@@ -286,13 +310,10 @@ class SessionManagementService:
 
     async def batch_delete_session_rule(self, data: object) -> dict:
         payload = self._payload(data)
-        umos = payload.get("umos", [])
-        scope = payload.get("scope", "")
-        group_id = payload.get("group_id", "")
-        rule_key = payload.get("rule_key")
-
-        if scope and not umos:
-            umos = await self.get_umos_by_scope(scope, group_id)
+        umos = await self._target_umos(payload)
+        rule_key = string_field(
+            payload, "rule_key", error_type=SessionManagementServiceError
+        )
 
         if not umos:
             raise SessionManagementServiceError("缺少必要参数: umos 或有效的 scope")
@@ -318,7 +339,7 @@ class SessionManagementService:
         if rule_key:
             message = f"已删除 {success_count} 条 {rule_key} 规则"
 
-        result = {
+        result: dict[str, object] = {
             "message": message,
             "success_count": success_count,
         }
@@ -437,9 +458,6 @@ class SessionManagementService:
 
     async def batch_update_service(self, data: object) -> dict:
         payload = self._payload(data)
-        umos = payload.get("umos", [])
-        scope = payload.get("scope", "")
-        group_id = payload.get("group_id", "")
         llm_enabled = payload.get("llm_enabled")
         tts_enabled = payload.get("tts_enabled")
         session_enabled = payload.get("session_enabled")
@@ -447,9 +465,7 @@ class SessionManagementService:
         if llm_enabled is None and tts_enabled is None and session_enabled is None:
             raise SessionManagementServiceError("至少需要指定一个要修改的状态")
 
-        if scope and not umos:
-            umos = await self.get_umos_by_scope(scope, group_id)
-
+        umos = await self._target_umos(payload)
         if not umos:
             raise SessionManagementServiceError("没有找到符合条件的会话")
 
@@ -496,10 +512,12 @@ class SessionManagementService:
 
     async def batch_update_provider(self, data: object) -> dict:
         payload = self._payload(data)
-        umos = payload.get("umos", [])
-        scope = payload.get("scope", "")
-        provider_type = payload.get("provider_type")
-        provider_id = payload.get("provider_id")
+        provider_type = string_field(
+            payload, "provider_type", error_type=SessionManagementServiceError
+        )
+        provider_id = string_field(
+            payload, "provider_id", error_type=SessionManagementServiceError
+        )
 
         if not provider_type or not provider_id:
             raise SessionManagementServiceError(
@@ -516,9 +534,7 @@ class SessionManagementService:
                 f"不支持的 provider_type: {provider_type}"
             )
 
-        group_id = payload.get("group_id", "")
-        if scope and not umos:
-            umos = await self.get_umos_by_scope(scope, group_id)
+        umos = await self._target_umos(payload)
 
         if not umos:
             raise SessionManagementServiceError("没有找到符合条件的会话")
@@ -575,7 +591,10 @@ class SessionManagementService:
     async def create_group(self, data: object) -> dict:
         payload = self._payload(data)
         name = str(payload.get("name", "")).strip()
-        umos = payload.get("umos", [])
+        umos = (
+            string_list_field(payload, "umos", error_type=SessionManagementServiceError)
+            or []
+        )
 
         if not name:
             raise SessionManagementServiceError("分组名称不能为空")
@@ -601,10 +620,22 @@ class SessionManagementService:
     async def update_group(self, data: object) -> dict:
         payload = self._payload(data)
         group_id = payload.get("id") or payload.get("group_id")
-        name = payload.get("name")
-        umos = payload.get("umos")
-        add_umos = payload.get("add_umos", [])
-        remove_umos = payload.get("remove_umos", [])
+        name = string_field(payload, "name", error_type=SessionManagementServiceError)
+        umos = string_list_field(
+            payload, "umos", error_type=SessionManagementServiceError
+        )
+        add_umos = (
+            string_list_field(
+                payload, "add_umos", error_type=SessionManagementServiceError
+            )
+            or []
+        )
+        remove_umos = (
+            string_list_field(
+                payload, "remove_umos", error_type=SessionManagementServiceError
+            )
+            or []
+        )
 
         if not group_id:
             raise SessionManagementServiceError("分组 ID 不能为空")

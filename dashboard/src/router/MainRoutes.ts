@@ -4,7 +4,7 @@ import { EXTENSION_DETAILS_ROUTE_NAME, EXTENSION_ROUTE_NAME } from "./routeConst
 const redirectToDataTab = (name: string) => (to: RouteLocationGeneric) => ({
   name,
   query: to.query,
-  hash: to.hash
+  hash: to.hash,
 });
 
 const MainRoutes = {
@@ -160,67 +160,67 @@ const MainRoutes = {
       component: () => import("@/views/PersonaPage.vue"),
     },
     {
-      name: 'Data',
-      path: '/data',
-      component: () => import('@/views/DataPage.vue'),
-      redirect: redirectToDataTab('Stats'),
+      name: "Data",
+      path: "/data",
+      component: () => import("@/views/DataPage.vue"),
+      redirect: redirectToDataTab("Stats"),
       children: [
         {
-          name: 'Stats',
-          path: 'statistics',
-          component: () => import('@/views/stats/StatsPage.vue'),
-          meta: { dataTab: 'statistics' }
+          name: "Stats",
+          path: "statistics",
+          component: () => import("@/views/stats/StatsPage.vue"),
+          meta: { dataTab: "statistics" },
         },
         {
-          name: 'Conversation',
-          path: 'conversations',
-          component: () => import('@/views/conversation/ConversationWorkspacePage.vue'),
-          meta: { dataTab: 'conversations' }
+          name: "Conversation",
+          path: "conversations",
+          component: () => import("@/views/conversation/ConversationWorkspacePage.vue"),
+          meta: { dataTab: "conversations" },
         },
         {
-          name: 'ConversationLegacy',
-          path: 'conversations/legacy',
-          component: () => import('@/views/conversation/LegacyConversationPage.vue'),
-          meta: { dataTab: 'conversations' }
+          name: "ConversationLegacy",
+          path: "conversations/legacy",
+          component: () => import("@/views/conversation/LegacyConversationPage.vue"),
+          meta: { dataTab: "conversations" },
         },
         {
-          name: 'Console',
-          path: 'logs',
-          component: () => import('@/views/ConsolePage.vue'),
-          meta: { dataTab: 'logs' }
+          name: "Console",
+          path: "logs",
+          component: () => import("@/views/ConsolePage.vue"),
+          meta: { dataTab: "logs" },
         },
         {
-          name: 'Trace',
-          path: 'trace',
-          component: () => import('@/views/TracePage.vue'),
-          meta: { dataTab: 'trace' }
-        }
-      ]
+          name: "Trace",
+          path: "trace",
+          component: () => import("@/views/TracePage.vue"),
+          meta: { dataTab: "trace" },
+        },
+      ],
     },
     {
-      path: '/dashboard/default',
-      redirect: redirectToDataTab('Stats')
+      path: "/dashboard/default",
+      redirect: redirectToDataTab("Stats"),
     },
     {
-      path: '/conversation',
-      redirect: redirectToDataTab('Conversation')
+      path: "/conversation",
+      redirect: redirectToDataTab("Conversation"),
     },
     {
-      path: '/console',
-      redirect: redirectToDataTab('Console')
+      path: "/console",
+      redirect: redirectToDataTab("Console"),
     },
     {
-      path: '/trace',
-      redirect: redirectToDataTab('Trace')
+      path: "/trace",
+      redirect: redirectToDataTab("Trace"),
     },
     {
-      path: '/observability',
-      redirect: redirectToDataTab('Stats')
+      path: "/observability",
+      redirect: redirectToDataTab("Stats"),
     },
     {
-      name: 'SubAgent',
-      path: '/subagent',
-      component: () => import('@/views/SubAgentPage.vue')
+      name: "SubAgent",
+      path: "/subagent",
+      component: () => import("@/views/SubAgentPage.vue"),
     },
     {
       name: "CronJobs",

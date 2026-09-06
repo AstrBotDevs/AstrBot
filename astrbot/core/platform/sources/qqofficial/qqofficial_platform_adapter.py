@@ -16,13 +16,16 @@ import os
 import random
 import time
 import uuid
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import botpy
 import botpy.message
 from botpy import Client
+from botpy.api import BotAPI
 from botpy.connection import ConnectionState
+from botpy.types.gateway import DirectMessagePayload, MessagePayload
 
 from astrbot import logger
 from astrbot.api.event import MessageChain
@@ -38,15 +41,21 @@ from astrbot.api.platform import (
 from astrbot.core.message.components import BaseMessageComponent
 from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.platform.register import register_platform_adapter
+from astrbot.core.platform.sources.qqofficial.qqofficial_message_event import (
+    QQOfficialMessageEvent,
+)
 
-from .qqofficial_message_event import QQOfficialMessageEvent
+if TYPE_CHECKING:
+    from astrbot.core.platform.sources.qqofficial_webhook.qo_webhook_adapter import (
+        QQOfficialWebhookPlatformAdapter,
+    )
 
 # Remove root handlers to avoid duplicate logs from botpy
 for handler in logging.root.handlers[:]:
     logging.root.removeHandler(handler)
 
 
-def _set_raw_message_fields(message: Any, data: dict[str, Any]) -> None:
+def _set_raw_message_fields(message: Any, data: Mapping[str, object]) -> None:
     """Preserve QQ message fields that qq-botpy does not expose.
 
     Args:
@@ -69,9 +78,9 @@ class PatchedMessage(botpy.message.Message):
 
     def __init__(
         self,
-        api: Any,
+        api: BotAPI,
         event_id: str | None,
-        data: dict[str, Any],
+        data: MessagePayload,
     ) -> None:
         super().__init__(api, event_id, data)
         _set_raw_message_fields(self, data)
@@ -82,9 +91,9 @@ class PatchedDirectMessage(botpy.message.DirectMessage):
 
     def __init__(
         self,
-        api: Any,
+        api: BotAPI,
         event_id: str | None,
-        data: dict[str, Any],
+        data: DirectMessagePayload,
     ) -> None:
         super().__init__(api, event_id, data)
         _set_raw_message_fields(self, data)
@@ -95,9 +104,9 @@ class PatchedC2CMessage(botpy.message.C2CMessage):
 
     def __init__(
         self,
-        api: Any,
+        api: BotAPI,
         event_id: str | None,
-        data: dict[str, Any],
+        data: MessagePayload,
     ) -> None:
         super().__init__(api, event_id, data)
         _set_raw_message_fields(self, data)
@@ -108,9 +117,9 @@ class PatchedGroupMessage(botpy.message.GroupMessage):
 
     def __init__(
         self,
-        api: Any,
+        api: BotAPI,
         event_id: str | None,
-        data: dict[str, Any],
+        data: MessagePayload,
     ) -> None:
         super().__init__(api, event_id, data)
         _set_raw_message_fields(self, data)
@@ -290,7 +299,7 @@ class QQOfficialPlatformAdapter(Platform):
         await self._send_by_session_common(session, message_chain)
 
     async def _send_by_session_common(
-        self,
+        self: QQOfficialPlatformAdapter | QQOfficialWebhookPlatformAdapter,
         session: MessageSesion,
         message_chain: MessageChain,
     ) -> None:
@@ -315,7 +324,9 @@ class QQOfficialPlatformAdapter(Platform):
         )
         if len(message_chains) > 1:
             for split_message_chain in message_chains:
-                await self._send_by_session_common(session, split_message_chain)
+                await QQOfficialPlatformAdapter._send_by_session_common(
+                    self, session, split_message_chain
+                )
             return
 
         (

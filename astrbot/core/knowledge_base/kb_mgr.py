@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from sqlalchemy.exc import IntegrityError  # type: ignore
+from sqlalchemy.exc import IntegrityError
 
 from astrbot.core import logger
 from astrbot.core.provider.manager import ProviderManager

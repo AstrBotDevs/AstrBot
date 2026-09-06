@@ -12,7 +12,6 @@ import pytest
 
 from astrbot.core.event_bus import EventBus
 
-
 # ---- Fixtures ----
 
 

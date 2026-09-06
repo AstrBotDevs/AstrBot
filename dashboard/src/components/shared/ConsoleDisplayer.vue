@@ -207,7 +207,7 @@ export default {
           this.retryTimer = null;
         }
 
-        this.retryTimer = setTimeout(async () => {
+        this.retryTimer = window.setTimeout(async () => {
           this.retryAttempts++;
 
           if (!this.lastEventId) {

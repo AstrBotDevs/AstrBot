@@ -5,7 +5,6 @@ Covers CommandTokens data-holder and CommandParserMixin parse/regex helpers.
 
 from astrbot.core.utils.command_parser import CommandParserMixin, CommandTokens
 
-
 # ---------------------------------------------------------------------------
 # CommandTokens
 # ---------------------------------------------------------------------------

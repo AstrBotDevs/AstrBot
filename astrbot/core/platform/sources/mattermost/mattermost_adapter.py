@@ -20,9 +20,12 @@ from astrbot.api.platform import (
 )
 from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.platform.register import register_platform_adapter
+from astrbot.core.platform.sources.mattermost.mattermost_event import (
+    MattermostMessage,
+    MattermostMessageEvent,
+)
 
 from .client import MattermostClient
-from .mattermost_event import MattermostMessageEvent
 
 
 @register_platform_adapter(
@@ -209,7 +212,7 @@ class MattermostPlatformAdapter(Platform):
             if str(file_id).strip()
         ]
 
-        abm = AstrBotMessage()
+        abm = MattermostMessage()
         abm.self_id = self.bot_self_id
         abm.sender = MessageMember(user_id=sender_id, nickname=sender_name)
         abm.session_id = channel_id

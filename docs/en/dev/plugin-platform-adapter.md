@@ -152,7 +152,6 @@ class FakePlatformAdapter(Platform):
         )  # Submit the event to the event queue. Don't forget this!
 ```
 
-
 `fake_platform_event.py`:
 
 ```py
@@ -269,6 +268,5 @@ The `fake` adapter we created now appears here.
 After starting, you can see it working correctly:
 
 ![image](https://files.astrbot.app/docs/source/images/plugin-platform-adapter/QQ_1738156166893.png)
-
 
 If you have any questions, feel free to join the community group and ask~

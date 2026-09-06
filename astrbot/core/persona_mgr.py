@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypedDict
 
 from astrbot import logger
 from astrbot.api import sp
@@ -12,6 +12,18 @@ from astrbot.core.sentinels import NOT_GIVEN
 
 if TYPE_CHECKING:
     from astrbot.core.config.astrbot_config import AstrBotConfig
+
+
+class LegacyPersonaConfig(TypedDict):
+    """Compatibility payload for pre-v4 persona consumers."""
+
+    prompt: str
+    name: str
+    begin_dialogs: list[str]
+    mood_imitation_dialogs: list[str]
+    tools: list[str] | None
+    skills: list[str] | None
+    custom_error_message: str | None
 
 
 def _get_configured_persona_id(config: AstrBotConfig) -> str:
@@ -48,7 +60,7 @@ class PersonaManager:
         self.selected_default_persona: Persona | None = None
         self.personas_v3: list[Personality] = []
         self.selected_default_persona_v3: Personality | None = None
-        self.persona_v3_config: list[dict] = []
+        self.persona_v3_config: list[LegacyPersonaConfig] = []
 
     async def initialize(self) -> None:
         self.personas = await self.get_all_personas()
@@ -393,7 +405,9 @@ class PersonaManager:
         self.get_v3_persona_data()
         return new_persona
 
-    def get_v3_persona_data(self) -> tuple[list[dict], list[Personality], Personality]:
+    def get_v3_persona_data(
+        self,
+    ) -> tuple[list[LegacyPersonaConfig], list[Personality], Personality]:
         """获取 AstrBot <4.0.0 版本的 persona 数据｡
 
         Returns:
@@ -402,7 +416,7 @@ class PersonaManager:
             - Personality: 默认选择的 Personality 对象｡
 
         """
-        v3_persona_config = [
+        v3_persona_config: list[LegacyPersonaConfig] = [
             {
                 "prompt": persona.system_prompt,
                 "name": persona.persona_id,

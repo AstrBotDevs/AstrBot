@@ -2,7 +2,7 @@ import asyncio
 import os
 import re
 from collections.abc import Callable
-from typing import Any, ClassVar
+from typing import Any, ClassVar, NotRequired, TypedDict
 
 import telegramify_markdown
 from telegram import ReactionTypeCustomEmoji, ReactionTypeEmoji
@@ -15,6 +15,14 @@ from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import At, File, Image, Plain, Record, Reply, Video
 from astrbot.api.platform import AstrBotMessage, Group, MessageType, PlatformMetadata
 from astrbot.core.utils.metrics import Metric
+
+
+class TelegramSendPayload(TypedDict):
+    """Routing parameters shared by Telegram text and media sends."""
+
+    chat_id: str
+    message_thread_id: NotRequired[int]
+    reply_to_message_id: NotRequired[int]
 
 
 def _is_gif(path: str) -> bool:
@@ -92,7 +100,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
         cls,
         client: ExtBot,
         text: str,
-        payload: dict[str, Any],
+        payload: TelegramSendPayload,
     ) -> None:
         """Split text at Telegram's limit and send every chunk."""
         for chunk in cls._split_message(text):
@@ -113,14 +121,15 @@ class TelegramPlatformEvent(AstrMessageEvent):
         client: ExtBot,
         chat_id: str,
         action: ChatAction | str,
-        message_thread_id: str | None = None,
+        message_thread_id: str | int | None = None,
     ) -> None:
         """发送聊天状态动作"""
         try:
-            payload: dict[str, Any] = {"chat_id": chat_id, "action": action}
-            if message_thread_id:
-                payload["message_thread_id"] = message_thread_id
-            await client.send_chat_action(**payload)
+            await client.send_chat_action(
+                chat_id=chat_id,
+                action=action,
+                message_thread_id=int(message_thread_id) if message_thread_id else None,
+            )
         except Exception as e:
             logger.warning(f"[Telegram] 发送 chat action 失败: {e}")
 
@@ -140,7 +149,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
         send_coro,
         *,
         user_name: str,
-        message_thread_id: str | None = None,
+        message_thread_id: str | int | None = None,
         **payload: Any,
     ) -> None:
         """发送媒体时显示 upload action,发送完成后恢复 typing"""
@@ -153,7 +162,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
         )
         send_payload = dict(payload)
         if effective_thread_id and "message_thread_id" not in send_payload:
-            send_payload["message_thread_id"] = effective_thread_id
+            send_payload["message_thread_id"] = int(effective_thread_id)
         await send_coro(**send_payload)
         await cls._send_chat_action(
             client,
@@ -167,7 +176,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
         cls,
         client: ExtBot,
         path: str,
-        payload: dict[str, Any],
+        payload: TelegramSendPayload,
         *,
         caption: str | None = None,
         user_name: str = "",
@@ -181,11 +190,11 @@ class TelegramPlatformEvent(AstrMessageEvent):
         When *use_media_action* is ``True`` the helper wraps the send calls
         with ``_send_media_with_action`` (used by the streaming path).
         """
+        media_payload = payload.copy()
+        if message_thread_id and "message_thread_id" not in media_payload:
+            media_payload["message_thread_id"] = int(message_thread_id)
         try:
             if use_media_action:
-                media_payload = dict(payload)
-                if message_thread_id and "message_thread_id" not in media_payload:
-                    media_payload["message_thread_id"] = message_thread_id
                 await cls._send_media_with_action(
                     client,
                     ChatAction.UPLOAD_VOICE,
@@ -197,15 +206,12 @@ class TelegramPlatformEvent(AstrMessageEvent):
             else:
                 await client.send_voice(voice=path, **payload)
         except BadRequest as e:
-            if "Voice_messages_forbidden" not in e.message:
+            if "Voice_messages_forbidden" not in str(e):
                 raise
             logger.warning(
                 "User privacy settings prevent receiving voice messages, falling back to sending an audio file. To enable voice messages, go to Telegram Settings ￫ Privacy and Security ￫ Voice Messages ￫ set to 'Everyone'.",
             )
             if use_media_action:
-                media_payload = dict(payload)
-                if message_thread_id and "message_thread_id" not in media_payload:
-                    media_payload["message_thread_id"] = message_thread_id
                 await cls._send_media_with_action(
                     client,
                     ChatAction.UPLOAD_DOCUMENT,
@@ -265,11 +271,11 @@ class TelegramPlatformEvent(AstrMessageEvent):
         action = cls._get_chat_action_for_chain(message.chain)
         await cls._send_chat_action(client, user_name, action, message_thread_id)
         for i in message.chain:
-            payload = {"chat_id": user_name}
-            if has_reply:
-                payload["reply_to_message_id"] = str(reply_message_id)
+            payload: TelegramSendPayload = {"chat_id": user_name}
+            if has_reply and reply_message_id is not None:
+                payload["reply_to_message_id"] = int(reply_message_id)
             if message_thread_id:
-                payload["message_thread_id"] = message_thread_id
+                payload["message_thread_id"] = int(message_thread_id)
             if isinstance(i, Plain):
                 if at_user_id and (not at_flag):
                     i.text = f"@{at_user_id} {i.text}"
@@ -291,12 +297,9 @@ class TelegramPlatformEvent(AstrMessageEvent):
             elif isinstance(i, Image):
                 image_path = await i.convert_to_file_path()
                 if _is_gif(image_path):
-                    send_coro = client.send_animation
-                    media_kwarg = {"animation": image_path}
+                    await client.send_animation(animation=image_path, **payload)
                 else:
-                    send_coro = client.send_photo
-                    media_kwarg = {"photo": image_path}
-                await send_coro(**media_kwarg, **payload)
+                    await client.send_photo(photo=image_path, **payload)
             elif isinstance(i, File):
                 path = await i.get_file()
                 name = i.name or os.path.basename(path)
@@ -492,7 +495,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
     async def _process_chain_items(
         self,
         chain: MessageChain,
-        payload: dict[str, Any],
+        payload: TelegramSendPayload,
         user_name: str,
         message_thread_id: str | None,
         on_text: Callable[[str], None],
@@ -504,21 +507,23 @@ class TelegramPlatformEvent(AstrMessageEvent):
             elif isinstance(i, Image):
                 image_path = await i.convert_to_file_path()
                 if _is_gif(image_path):
-                    action = ChatAction.UPLOAD_VIDEO
-                    send_coro = self.client.send_animation
-                    media_kwarg = {"animation": image_path}
+                    await self._send_media_with_action(
+                        self.client,
+                        ChatAction.UPLOAD_VIDEO,
+                        self.client.send_animation,
+                        user_name=user_name,
+                        animation=image_path,
+                        **payload,
+                    )
                 else:
-                    action = ChatAction.UPLOAD_PHOTO
-                    send_coro = self.client.send_photo
-                    media_kwarg = {"photo": image_path}
-                await self._send_media_with_action(
-                    self.client,
-                    action,
-                    send_coro,
-                    user_name=user_name,
-                    **media_kwarg,
-                    **payload,
-                )
+                    await self._send_media_with_action(
+                        self.client,
+                        ChatAction.UPLOAD_PHOTO,
+                        self.client.send_photo,
+                        user_name=user_name,
+                        photo=image_path,
+                        **payload,
+                    )
             elif isinstance(i, File):
                 path = await i.get_file()
                 name = i.name or os.path.basename(path)
@@ -555,7 +560,9 @@ class TelegramPlatformEvent(AstrMessageEvent):
             else:
                 logger.warning(f"不支持的消息类型: {type(i)}")
 
-    async def _send_final_segment(self, delta: str, payload: dict[str, Any]) -> None:
+    async def _send_final_segment(
+        self, delta: str, payload: TelegramSendPayload
+    ) -> None:
         """将累积文本作为 MarkdownV2 真实消息发送,失败时回退到纯文本｡"""
         await self._send_text_chunks(self.client, delta, payload)
 
@@ -567,9 +574,9 @@ class TelegramPlatformEvent(AstrMessageEvent):
             user_name = self.get_sender_id()
         if "#" in user_name:
             user_name, message_thread_id = user_name.split("#")
-        payload = {"chat_id": user_name}
+        payload: TelegramSendPayload = {"chat_id": user_name}
         if message_thread_id:
-            payload["message_thread_id"] = message_thread_id
+            payload["message_thread_id"] = int(message_thread_id)
         is_private = self.get_message_type() == MessageType.FRIEND_MESSAGE
         if is_private:
             logger.info("[Telegram] 流式输出: 使用 sendMessageDraft (私聊)")
@@ -596,7 +603,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
         self,
         user_name: str,
         message_thread_id: str | None,
-        payload: dict[str, Any],
+        payload: TelegramSendPayload,
         generator,
     ) -> None:
         """使用 sendMessageDraft API 进行流式推送(私聊专用)｡
@@ -688,7 +695,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
         self,
         user_name: str,
         message_thread_id: str | None,
-        payload: dict[str, Any],
+        payload: TelegramSendPayload,
         generator,
     ) -> None:
         """使用 send_message + edit_message_text 进行流式推送(群聊 fallback)｡"""
@@ -755,9 +762,9 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 try:
                     msg = await self.client.send_message(text=delta, **payload)
                     current_content = delta
+                    message_id = msg.message_id
                 except Exception as e:
                     logger.warning(f"发送消息失败(streaming): {e!s}")
-                message_id = msg.message_id
                 last_edit_time = asyncio.get_running_loop().time()
         try:
             if delta and current_content != delta:

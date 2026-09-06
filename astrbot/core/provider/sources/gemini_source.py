@@ -127,6 +127,11 @@ class ProviderGoogleGenAI(Provider):
             and threshold_str in self.THRESHOLD_MAPPING
         ]
 
+    def _require_client(self) -> genai.client.AsyncClient:
+        if self.client is None:
+            raise RuntimeError("Gemini client is unavailable after termination.")
+        return self.client
+
     async def _handle_api_error(self, e: APIError, keys: list[str]) -> bool:
         """处理API错误,返回是否需要重试"""
         if e.message is None:
@@ -286,7 +291,7 @@ class ProviderGoogleGenAI(Provider):
             logprobs=payloads.get("logprobs"),
             seed=payloads.get("seed"),
             response_modalities=modalities,
-            tools=tool_list,  # type: ignore[arg-type]
+            tools=[*tool_list],
             tool_config=tool_config,
             safety_settings=self.safety_settings or None,
             thinking_config=thinking_config,
@@ -587,9 +592,10 @@ class ProviderGoogleGenAI(Provider):
                     temperature,
                     streaming=False,
                 )
-                result = await self.client.models.generate_content(
+                client = self._require_client()
+                result = await client.models.generate_content(
                     model=model,
-                    contents=conversation,  # type: ignore[arg-type]
+                    contents=[*conversation],
                     config=config,
                 )
                 logger.debug(f"genai result: {result}")
@@ -661,9 +667,10 @@ class ProviderGoogleGenAI(Provider):
                     system_instruction,
                     streaming=True,
                 )
-                result = await self.client.models.generate_content_stream(
+                client = self._require_client()
+                result = await client.models.generate_content_stream(
                     model=model,
-                    contents=conversation,  # type: ignore[arg-type]
+                    contents=[*conversation],
                     config=config,
                 )
                 break
@@ -862,7 +869,7 @@ class ProviderGoogleGenAI(Provider):
         try:
             models = await retry_provider_request(
                 "Gemini",
-                lambda: self.client.models.list(),
+                lambda: self._require_client().models.list(),
             )
             return [
                 m.name.replace("models/", "")

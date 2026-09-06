@@ -42,9 +42,18 @@ const message = ref("");
 const confirmHint = ref("");
 const cancelHint = ref("");
 const closeHint = ref("");
-let resolvePromise = null;
+interface UnsavedChangesOptions {
+  title?: string;
+  message?: string;
+  confirmHint?: string;
+  cancelHint?: string;
+  closeHint?: string;
+}
 
-const open = (options) => {
+type UnsavedChangesResult = boolean | "close";
+let resolvePromise: ((result: UnsavedChangesResult) => void) | null = null;
+
+const open = (options: UnsavedChangesOptions = {}): Promise<UnsavedChangesResult> => {
   title.value = options.title || t("core.common.dialog.confirmTitle");
   message.value = options.message || t("core.common.dialog.confirmMessage");
   confirmHint.value = options.confirmHint || "";
@@ -52,25 +61,21 @@ const open = (options) => {
   closeHint.value = options.closeHint || "";
   isOpen.value = true;
 
-  return new Promise((resolve) => {
+  return new Promise<UnsavedChangesResult>((resolve) => {
     resolvePromise = resolve;
   });
 };
 
-const handleConfirm = () => {
+const settle = (result: UnsavedChangesResult) => {
   isOpen.value = false;
-  if (resolvePromise) resolvePromise(true);
+  const resolve = resolvePromise;
+  resolvePromise = null;
+  resolve?.(result);
 };
 
-const handleCancel = () => {
-  isOpen.value = false;
-  if (resolvePromise) resolvePromise(false);
-};
-
-const handleClose = () => {
-  isOpen.value = false;
-  if (resolvePromise) resolvePromise("close");
-};
+const handleConfirm = () => settle(true);
+const handleCancel = () => settle(false);
+const handleClose = () => settle("close");
 
 defineExpose({ open });
 </script>

@@ -180,9 +180,10 @@ class ExecuteShellTool(FunctionTool):
 
 
 @dataclass
-class LocalExecuteShellTool(ExecuteShellTool):
+class LocalExecuteShellTool(FunctionTool):
     """Local shell tool that automatically yields long-running commands."""
 
+    name: str = "astrbot_execute_shell"
     description: str = (
         "Execute a command in the shell. If it is still running after "
         "yield_time_ms, the tool returns a managed shell session ID."
@@ -238,7 +239,7 @@ class LocalExecuteShellTool(ExecuteShellTool):
         Returns:
             JSON command result or a user-facing error.
         """
-        return await super().call(
+        return await ExecuteShellTool().call(
             context,
             command,
             background=False,

@@ -234,9 +234,9 @@ class BotMessageAccumulator:
         if not tool_call_id:
             return
 
-        tool_call = self.pending_tool_calls.pop(tool_call_id, None) or {
-            "id": tool_call_id
-        }
+        tool_call: dict[str, object] = self.pending_tool_calls.pop(
+            tool_call_id, None
+        ) or {"id": tool_call_id}
         tool_call["result"] = tool_result.get("result")
         tool_call["finished_ts"] = tool_result.get("ts")
         self.parts.append({"type": "tool_call", "tool_calls": [tool_call]})
@@ -364,11 +364,13 @@ def serialize_history_entry(history) -> dict:
         history: A PlatformMessageHistory instance. Must not be None.
 
     Returns:
-        Dict with all model fields plus created_at/updated_at serialized as
-        UTC-aware ISO strings (e.g. ``2026-07-06T04:00:00+00:00``).
+        Public history fields with UTC-aware ISO timestamps. Internal
+        idempotency keys are not part of the dashboard response contract.
     """
+    data = history.model_dump()
+    data.pop("idempotency_key", None)
     return {
-        **history.model_dump(),
+        **data,
         "created_at": to_utc_isoformat(history.created_at),
         "updated_at": to_utc_isoformat(history.updated_at),
     }
@@ -1457,7 +1459,7 @@ class ChatService:
             creator=username,
         )
 
-        response_data = {
+        response_data: dict[str, object] = {
             "history": [serialize_history_entry(history) for history in history_ls],
             "threads": [serialize_thread(thread) for thread in threads],
             "is_running": self.running_convs.get(session_id, False),

@@ -253,8 +253,7 @@ export const usePersonaStore = defineStore("persona", {
     async deleteFolder(folderId: string): Promise<void> {
       const deletedFolder = this.findFolderInTree(folderId);
       const isCurrentFolderDeleted =
-        this.currentFolderId === folderId ||
-        this.breadcrumbPath.some((folder) => folder.folder_id === folderId);
+        this.currentFolderId === folderId || this.breadcrumbPath.some((folder) => folder.folder_id === folderId);
       const response = await axios.post("/api/persona/folder/delete", {
         folder_id: folderId,
       });
@@ -264,9 +263,7 @@ export const usePersonaStore = defineStore("persona", {
       }
 
       // Return to the deleted ancestor's parent rather than retain a stale ID.
-      const targetFolderId = isCurrentFolderDeleted
-        ? deletedFolder?.parent_id ?? null
-        : this.currentFolderId;
+      const targetFolderId = isCurrentFolderDeleted ? (deletedFolder?.parent_id ?? null) : this.currentFolderId;
       await this.loadFolderTree();
       await this.navigateToFolder(targetFolderId);
     },

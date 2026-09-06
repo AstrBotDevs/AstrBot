@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, call, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from astrbot.core.pipeline.scheduler import PipelineScheduler
-
-
 
 
 @pytest.fixture
@@ -64,7 +62,11 @@ class TestPipelineSchedulerInit:
     @patch("astrbot.core.pipeline.scheduler.STAGES_ORDER", ["MockStage"])
     @patch("astrbot.core.pipeline.scheduler.ensure_builtin_stages_registered")
     def test_init_calls_ensure_and_sets_context(
-        self, mock_ensure, mock_stages_order, mock_registered, mock_context,
+        self,
+        mock_ensure,
+        mock_stages_order,
+        mock_registered,
+        mock_context,
     ):
         """Verify __init__ calls ensure_builtin_stages_registered and sets context."""
         mock_stage = MagicMock()
@@ -90,7 +92,11 @@ class TestPipelineSchedulerInitialize:
     @pytest.mark.asyncio
     @pytest.mark.xfail(reason="PipelineScheduler onion model changed post-merge")
     async def test_initialize_creates_stage_instances(
-        self, mock_ensure, mock_registered, mock_context, mock_stage_cls,
+        self,
+        mock_ensure,
+        mock_registered,
+        mock_context,
+        mock_stage_cls,
     ):
         """Verify initialize creates and initializes all registered stage instances."""
         mock_registered.append(mock_stage_cls)
@@ -106,7 +112,10 @@ class TestPipelineSchedulerInitialize:
     @pytest.mark.asyncio
     @pytest.mark.xfail(reason="PipelineScheduler onion model changed post-merge")
     async def test_initialize_multiple_stages(
-        self, mock_ensure, mock_registered, mock_context,
+        self,
+        mock_ensure,
+        mock_registered,
+        mock_context,
     ):
         """Verify multiple stages are initialized in order."""
         stage1_cls = MagicMock()
@@ -143,7 +152,11 @@ class TestPipelineSchedulerProcessStages:
     @pytest.mark.asyncio
     @pytest.mark.xfail(reason="PipelineScheduler onion model changed post-merge")
     async def test_non_generator_stage_executed(
-        self, mock_ensure, mock_registered, mock_context, mock_stage_cls,
+        self,
+        mock_ensure,
+        mock_registered,
+        mock_context,
+        mock_stage_cls,
     ):
         """Verify a non-generator stage is awaited."""
         mock_registered.append(mock_stage_cls)
@@ -160,9 +173,13 @@ class TestPipelineSchedulerProcessStages:
     @pytest.mark.asyncio
     @pytest.mark.xfail(reason="PipelineScheduler onion model changed post-merge")
     async def test_generator_stage_yields_and_next_stage_runs(
-        self, mock_ensure, mock_registered, mock_context,
+        self,
+        mock_ensure,
+        mock_registered,
+        mock_context,
     ):
         """Verify a generator stage yields and the next stage runs."""
+
         async def gen_process(_event):
             yield None
 
@@ -186,7 +203,10 @@ class TestPipelineSchedulerProcessStages:
     @patch("astrbot.core.pipeline.scheduler.ensure_builtin_stages_registered")
     @pytest.mark.asyncio
     async def test_generator_stage_stops_propagation(
-        self, mock_ensure, mock_registered, mock_context,
+        self,
+        mock_ensure,
+        mock_registered,
+        mock_context,
     ):
         """Verify event.stop_event() breaks the pipeline in generator stage."""
         stage1_pass = [False]
@@ -215,7 +235,10 @@ class TestPipelineSchedulerProcessStages:
     @patch("astrbot.core.pipeline.scheduler.ensure_builtin_stages_registered")
     @pytest.mark.asyncio
     async def test_non_generator_stage_stops_propagation(
-        self, mock_ensure, mock_registered, mock_context,
+        self,
+        mock_ensure,
+        mock_registered,
+        mock_context,
     ):
         """Verify event.stop_event() breaks non-generator stage chain."""
         stage1 = MagicMock()
@@ -240,7 +263,10 @@ class TestPipelineSchedulerProcessStages:
     @pytest.mark.asyncio
     @pytest.mark.xfail(reason="PipelineScheduler onion model changed post-merge")
     async def test_generator_with_onion_recursion(
-        self, mock_ensure, mock_registered, mock_context,
+        self,
+        mock_ensure,
+        mock_registered,
+        mock_context,
     ):
         """Verify generator stages recursively process subsequent stages (onion model)."""
         call_order = []
@@ -282,7 +308,11 @@ class TestPipelineSchedulerExecute:
     @pytest.mark.asyncio
     @pytest.mark.xfail(reason="PipelineScheduler onion model changed post-merge")
     async def test_execute_calls_process_stages(
-        self, mock_ensure, mock_registered, mock_registry, mock_context,
+        self,
+        mock_ensure,
+        mock_registered,
+        mock_registry,
+        mock_context,
     ):
         """Verify execute calls _process_stages and cleans up."""
         scheduler = PipelineScheduler(mock_context)
@@ -301,7 +331,11 @@ class TestPipelineSchedulerExecute:
     @pytest.mark.asyncio
     @pytest.mark.xfail(reason="PipelineScheduler onion model changed post-merge")
     async def test_execute_webchat_event_sends_none(
-        self, mock_ensure, mock_registered, mock_registry, mock_context,
+        self,
+        mock_ensure,
+        mock_registered,
+        mock_registry,
+        mock_context,
     ):
         """Verify WebChatMessageEvent gets an extra None send."""
         scheduler = PipelineScheduler(mock_context)
@@ -325,7 +359,11 @@ class TestPipelineSchedulerExecute:
     @pytest.mark.asyncio
     @pytest.mark.xfail(reason="PipelineScheduler onion model changed post-merge")
     async def test_execute_wecom_event_sends_none(
-        self, mock_ensure, mock_registered, mock_registry, mock_context,
+        self,
+        mock_ensure,
+        mock_registered,
+        mock_registry,
+        mock_context,
     ):
         """Verify WecomAIBotMessageEvent gets an extra None send."""
         scheduler = PipelineScheduler(mock_context)
@@ -347,7 +385,11 @@ class TestPipelineSchedulerExecute:
     @patch("astrbot.core.pipeline.scheduler.ensure_builtin_stages_registered")
     @pytest.mark.asyncio
     async def test_execute_normal_event_no_extra_send(
-        self, mock_ensure, mock_registered, mock_registry, mock_context,
+        self,
+        mock_ensure,
+        mock_registered,
+        mock_registry,
+        mock_context,
     ):
         """Verify regular events do not get extra None send."""
         scheduler = PipelineScheduler(mock_context)
@@ -366,7 +408,11 @@ class TestPipelineSchedulerExecute:
     @pytest.mark.asyncio
     @pytest.mark.xfail(reason="PipelineScheduler onion model changed post-merge")
     async def test_execute_with_sdk_plugin_bridge(
-        self, mock_ensure, mock_registered, mock_registry, mock_context,
+        self,
+        mock_ensure,
+        mock_registered,
+        mock_registry,
+        mock_context,
     ):
         """Verify sdk_plugin_bridge.close_request_overlay_for_event is called."""
         mock_bridge = MagicMock()
@@ -386,7 +432,11 @@ class TestPipelineSchedulerExecute:
     @patch("astrbot.core.pipeline.scheduler.ensure_builtin_stages_registered")
     @pytest.mark.asyncio
     async def test_execute_without_sdk_plugin_bridge(
-        self, mock_ensure, mock_registered, mock_registry, mock_context,
+        self,
+        mock_ensure,
+        mock_registered,
+        mock_registry,
+        mock_context,
     ):
         """Verify no error when sdk_plugin_bridge is absent."""
         scheduler = PipelineScheduler(mock_context)
@@ -403,7 +453,11 @@ class TestPipelineSchedulerExecute:
     @pytest.mark.asyncio
     @pytest.mark.xfail(reason="PipelineScheduler onion model changed post-merge")
     async def test_execute_unregisters_on_error(
-        self, mock_ensure, mock_registered, mock_registry, mock_context,
+        self,
+        mock_ensure,
+        mock_registered,
+        mock_registry,
+        mock_context,
     ):
         """Verify event is still unregistered when _process_stages raises."""
         scheduler = PipelineScheduler(mock_context)

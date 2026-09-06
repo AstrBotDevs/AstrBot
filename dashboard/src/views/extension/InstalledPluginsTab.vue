@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, ref, unref, watch } from "vue";
 import { useRouter } from "vue-router";
 import defaultPluginIcon from "@/assets/images/plugin_icon.png";
 import PinnedPluginItem from "@/components/extension/PinnedPluginItem.vue";
@@ -27,7 +27,7 @@ const {
   installedSortBy,
   installedSortOrder,
   loading_,
-  filteredPlugins,
+  filteredPlugins: rawFilteredPlugins,
   failedPluginItems,
   reloadFailedPlugin,
   requestUninstallFailedPlugin,
@@ -57,18 +57,59 @@ const {
 
 const router = useRouter();
 
+interface PluginEntry {
+  name: string;
+  display_name?: string | null;
+  logo?: string | null;
+  desc?: string | null;
+  version?: string | null;
+  online_version?: string | null;
+  astrbot_version?: string | null;
+  repo?: string | null;
+  author?: unknown;
+  reserved?: boolean;
+  activated?: boolean;
+  has_update?: boolean;
+  support_platforms?: string[] | null;
+  pages?: string[] | null;
+  install_source?: { repo?: string | null } | null;
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === "object" && !Array.isArray(value);
+
+const isPluginEntry = (value: unknown): value is PluginEntry => {
+  if (!isRecord(value) || typeof value.name !== "string") return false;
+  const textFields = ["display_name", "logo", "desc", "version", "online_version", "astrbot_version", "repo"];
+  const flagFields = ["reserved", "activated", "has_update"];
+  return (
+    textFields.every((key) => value[key] == null || typeof value[key] === "string") &&
+    flagFields.every((key) => value[key] === undefined || typeof value[key] === "boolean") &&
+    [value.support_platforms, value.pages].every(
+      (items) => items == null || (Array.isArray(items) && items.every((item) => typeof item === "string")),
+    ) &&
+    (value.install_source == null ||
+      (isRecord(value.install_source) &&
+        (value.install_source.repo == null || typeof value.install_source.repo === "string")))
+  );
+};
+
+const toPluginEntries = (value: unknown): PluginEntry[] =>
+  Array.isArray(value) ? value.filter(isPluginEntry) : [];
+
+const filteredPlugins = computed(() => toPluginEntries(unref(rawFilteredPlugins)));
+
 interface PluginPageEntry {
   name: string;
   pages: string[];
 }
 
 const isPluginPageEntry = (extension: unknown): extension is PluginPageEntry => {
-  if (!extension || typeof extension !== "object") return false;
-  const candidate = extension as Record<string, unknown>;
   return (
-    typeof candidate.name === "string" &&
-    Array.isArray(candidate.pages) &&
-    candidate.pages.every((page) => typeof page === "string")
+    isRecord(extension) &&
+    typeof extension.name === "string" &&
+    Array.isArray(extension.pages) &&
+    extension.pages.every((page) => typeof page === "string")
   );
 };
 
@@ -92,7 +133,8 @@ const pinnedNames = ref<string[]>([]);
 const loadPinned = () => {
   try {
     const raw = localStorage.getItem(PINNED_KEY);
-    pinnedNames.value = raw ? JSON.parse(raw) : [];
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    pinnedNames.value = Array.isArray(parsed) ? parsed.filter((name): name is string => typeof name === "string") : [];
   } catch (e) {
     pinnedNames.value = [];
   }
@@ -123,8 +165,9 @@ const togglePin = (extension: { name: string }) => {
 };
 
 const handlePinnedImgError = (e: Event) => {
-  const img = e.target as HTMLImageElement;
-  img.src = defaultPluginIcon;
+  if (e.target instanceof HTMLImageElement) {
+    e.target.src = defaultPluginIcon;
+  }
 };
 
 // --- 拖拽功能实现 ---
@@ -171,12 +214,12 @@ const onDragEnd = (e: DragEvent) => {
 const pinnedPlugins = computed(() => {
   if (!Array.isArray(pinnedNames.value)) return [];
 
-  const installedAll = Array.isArray(extension_data?.data) ? extension_data.data : [];
-  const all = Array.isArray(sortedPlugins?.value) ? sortedPlugins.value : [];
-  const filtered = Array.isArray(filteredPlugins?.value) ? filteredPlugins.value : [];
-  const market = Array.isArray(pluginMarketData?.value) ? pluginMarketData.value : [];
+  const installedAll = toPluginEntries(extension_data?.data);
+  const all = toPluginEntries(sortedPlugins?.value);
+  const filtered = filteredPlugins.value;
+  const market = toPluginEntries(pluginMarketData?.value);
 
-  const findByName = (name) => {
+  const findByName = (name: string) => {
     return (
       installedAll.find((p) => p.name === name) ||
       all.find((p) => p.name === name) ||
@@ -185,7 +228,7 @@ const pinnedPlugins = computed(() => {
     );
   };
 
-  return pinnedNames.value.map((name) => findByName(name)).filter(Boolean);
+  return pinnedNames.value.map((name) => findByName(name)).filter((plugin): plugin is PluginEntry => plugin !== undefined);
 });
 </script>
 

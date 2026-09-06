@@ -3,6 +3,7 @@ import os
 from http import HTTPStatus
 
 from dashscope import MultiModalEmbedding, TextEmbedding
+from dashscope.embeddings.multimodal_embedding import MultiModalEmbeddingItemText
 
 from astrbot import logger
 
@@ -12,6 +13,13 @@ from ..register import register_provider_adapter
 
 _DEFAULT_API_BASE = "https://dashscope.aliyuncs.com/api/v1"
 _DEFAULT_MODEL = "text-embedding-v4"
+
+
+def _make_multimodal_text_item(text: str) -> MultiModalEmbeddingItemText:
+    item = MultiModalEmbeddingItemText(text=text, factor=1.0)
+    # Keep the existing text-only wire payload; weighting is optional in the API.
+    item.pop("factor", None)
+    return item
 
 
 @register_provider_adapter(
@@ -88,7 +96,7 @@ class DashScopeEmbeddingProvider(EmbeddingProvider):
             if is_multimodal:
                 return MultiModalEmbedding.call(
                     model=self.model,
-                    input=[{"text": t} for t in text],
+                    input=[_make_multimodal_text_item(t) for t in text],
                     api_key=self.api_key,
                     **kwargs,
                 )

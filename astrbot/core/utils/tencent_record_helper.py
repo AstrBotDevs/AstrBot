@@ -5,12 +5,29 @@ import os
 import subprocess
 import tempfile
 import wave
+from importlib import import_module
 from io import BytesIO
+from typing import Protocol, cast
 
 import anyio
 
 from astrbot.core import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+
+
+class _FFmpegConverter(Protocol):
+    def convert(self, *, input_file: str, output_file: str) -> object: ...
+
+
+class _PyFFmpegModule(Protocol):
+    def FFmpeg(self) -> _FFmpegConverter: ...
+
+
+class _PilkModule(Protocol):
+    def encode(
+        self, input: str, output: str, *, pcm_rate: int, tencent: bool
+    ) -> float: ...
+
 
 # The SILK SDK only supports these rates
 _PYSILK_SUPPORTED_RATES = frozenset({8000, 12000, 16000, 24000, 32000, 48000})
@@ -76,9 +93,8 @@ async def convert_to_pcm_wav(input_path: str, output_path: str) -> str:
     若转换失败则抛出异常｡
     """
     try:
-        from pyffmpeg import FFmpeg
-
-        ff = FFmpeg()
+        pyffmpeg = cast(_PyFFmpegModule, import_module("pyffmpeg"))
+        ff = pyffmpeg.FFmpeg()
         ff.convert(input_file=input_path, output_file=output_path)
     except Exception as e:
         logger.debug(f"pyffmpeg 转换失败: {e}, 尝试使用 ffmpeg 命令行进行转换")
@@ -127,7 +143,7 @@ async def audio_to_tencent_silk_base64(audio_path: str) -> tuple[str, float]:
     - duration: 音频时长(秒)
     """
     try:
-        import pilk
+        pilk = cast(_PilkModule, import_module("pilk"))
     except ImportError as e:
         raise Exception("未安装 pilk: pip install pilk") from e  # noqa
 

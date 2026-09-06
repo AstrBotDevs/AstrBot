@@ -10,6 +10,7 @@ from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.umo_alias import build_umo_alias_map, parse_umo, serialize_umo_alias
+from astrbot.dashboard.validation import is_json_object
 
 
 class ConversationServiceError(Exception):
@@ -282,13 +283,18 @@ class ConversationService:
         failed_items = []
 
         for conv in conversations:
-            if not isinstance(conv, dict):
+            if not is_json_object(conv):
                 failed_items.append(f"{conv!r} - 格式错误")
                 continue
             user_id = conv.get("user_id")
             cid = conv.get("cid")
 
-            if not user_id or not cid:
+            if (
+                not isinstance(user_id, str)
+                or not user_id
+                or not isinstance(cid, str)
+                or not cid
+            ):
                 failed_items.append(f"user_id:{user_id}, cid:{cid} - 缺少必要参数")
                 continue
 

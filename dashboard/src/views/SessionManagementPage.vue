@@ -1011,6 +1011,7 @@ import { defineComponent } from "vue";
 import UmoDisplay from "@/components/shared/UmoDisplay.vue";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { askForConfirmation as askForConfirmationDialog, useConfirmDialog } from "@/utils/confirmDialog";
+import { resolveErrorMessage } from "@/utils/errorUtils.js";
 import axios from "@/utils/request";
 
 // ---- Type definitions ----
@@ -1041,6 +1042,9 @@ interface SessionRules {
   session_service_config?: SessionServiceConfig;
   session_plugin_config?: SessionPluginConfig;
   kb_config?: KbConfig;
+  provider_perf_chat_completion?: string;
+  provider_perf_speech_to_text?: string;
+  provider_perf_text_to_speech?: string;
   [key: string]: unknown;
 }
 
@@ -1052,7 +1056,7 @@ interface SessionRuleItem {
   auto_name?: string;
   user_alias?: string;
   display_name?: string;
-  rules?: SessionRules;
+  rules: SessionRules;
   [key: string]: unknown;
 }
 
@@ -1068,15 +1072,15 @@ interface ActiveUmoInfo {
 }
 
 interface PersonaOption {
-  name?: string;
+  name: string;
   id?: string;
   [key: string]: unknown;
 }
 
 interface ProviderOption {
-  id?: string;
-  name?: string;
-  model?: string;
+  id: string;
+  name: string;
+  model: string;
   [key: string]: unknown;
 }
 
@@ -1087,8 +1091,8 @@ interface PluginOption {
 }
 
 interface KbOption {
-  kb_id?: string;
-  kb_name?: string;
+  kb_id: string;
+  kb_name: string;
   emoji?: string;
   [key: string]: unknown;
 }
@@ -1096,8 +1100,8 @@ interface KbOption {
 interface SessionGroup {
   id: string;
   name: string;
-  umos?: string[];
-  umo_count?: number;
+  umos: string[];
+  umo_count: number;
   [key: string]: unknown;
 }
 
@@ -1115,6 +1119,7 @@ interface ListRuleData {
 
 interface ActiveUmosData {
   umos: Array<string | ActiveUmoInfo>;
+  umo_infos?: ActiveUmoInfo[];
   [key: string]: unknown;
 }
 
@@ -1142,16 +1147,6 @@ interface ApiResponse<T> {
   status: "ok" | "error";
   data: T;
   message?: string;
-}
-
-interface AxiosCatchShape {
-  response?: { data?: { message?: string } };
-}
-
-// Helper to narrow catch variable from unknown
-function asCatchError(error: unknown): AxiosCatchShape {
-  const e = error as AxiosCatchShape;
-  return e;
 }
 
 const FOLLOW_CONFIG_VALUE = "__astrbot_follow_config__";
@@ -1204,7 +1199,7 @@ export default defineComponent({
       // 规则编辑
       ruleDialog: false,
       selectedUmo: null as SessionRuleItem | null,
-      editingRules: {} as Record<string, unknown>,
+      editingRules: {} as SessionRules,
 
       // 服务配置
       serviceConfig: {
@@ -1233,7 +1228,7 @@ export default defineComponent({
         kb_ids: [] as string[],
         top_k: 5,
         enable_rerank: true,
-      } as KbConfig,
+      } as Required<KbConfig>,
 
       // 删除确认
       deleteDialog: false,
@@ -1381,7 +1376,7 @@ export default defineComponent({
       }));
     },
     batchScopeOptions() {
-      const options = [
+      const options: { label: string; value: string; disabled?: boolean }[] = [
         { label: this.tm("batchOperations.scopeSelected"), value: "selected" },
         { label: this.tm("batchOperations.scopeAll"), value: "all" },
         { label: this.tm("batchOperations.scopeGroup"), value: "group" },
@@ -1486,7 +1481,7 @@ export default defineComponent({
     async loadData(): Promise<void> {
       this.loading = true;
       try {
-        const response = await axios.get("/api/session/list-rule", {
+        const response = await axios.get<ApiResponse<ListRuleData>>("/api/session/list-rule", {
           params: {
             page: this.currentPage,
             page_size: this.itemsPerPage,
@@ -1508,8 +1503,7 @@ export default defineComponent({
           this.showError(resp.message || this.tm("messages.loadError"));
         }
       } catch (error: unknown) {
-        const e = asCatchError(error);
-        this.showError(e.response?.data?.message || this.tm("messages.loadError"));
+        this.showError(resolveErrorMessage(error, this.tm("messages.loadError")));
       }
       this.loading = false;
     },
@@ -1533,14 +1527,13 @@ export default defineComponent({
         const response = await axios.get("/api/session/active-umos");
         const resp = response.data as ApiResponse<ActiveUmosData>;
         if (resp.status === "ok") {
-          const activeUmos = this.normalizeActiveUmos(resp.data.umos || []);
+          const activeUmos = this.normalizeActiveUmos(resp.data.umo_infos ?? resp.data.umos ?? []);
           // 过滤掉已有规则的 umo
           const existingUmos = new Set(this.rulesList.map((r: SessionRuleItem) => r.umo));
           this.availableUmos = activeUmos.filter((umo: string) => !existingUmos.has(umo));
         }
       } catch (error: unknown) {
-        const e = asCatchError(error);
-        this.showError(e.response?.data?.message || this.tm("messages.loadError"));
+        this.showError(resolveErrorMessage(error, this.tm("messages.loadError")));
       }
       this.loadingUmos = false;
     },
@@ -1551,11 +1544,10 @@ export default defineComponent({
     },
 
     hasProviderConfig(rules: SessionRules | undefined | null): boolean {
-      return (
-        rules != null &&
-        (rules.provider_perf_chat_completion ||
-          rules.provider_perf_speech_to_text ||
-          rules.provider_perf_text_to_speech)
+      return Boolean(
+        rules?.provider_perf_chat_completion ||
+          rules?.provider_perf_speech_to_text ||
+          rules?.provider_perf_text_to_speech,
       );
     },
 
@@ -1580,10 +1572,10 @@ export default defineComponent({
 
     openRuleEditor(item: SessionRuleItem): void {
       this.selectedUmo = item;
-      this.editingRules = (item.rules || {}) as Record<string, unknown>;
+      this.editingRules = item.rules;
 
       // 初始化服务配置
-      const svcConfig: SessionServiceConfig = (this.editingRules.session_service_config as SessionServiceConfig) || {};
+      const svcConfig = this.editingRules.session_service_config || {};
       this.serviceConfig = {
         session_enabled: svcConfig.session_enabled !== false,
         llm_enabled: svcConfig.llm_enabled !== false,
@@ -1594,20 +1586,20 @@ export default defineComponent({
 
       // 初始化 Provider 配置
       this.providerConfig = {
-        chat_completion: (this.editingRules.provider_perf_chat_completion as string) || FOLLOW_CONFIG_VALUE,
-        speech_to_text: (this.editingRules.provider_perf_speech_to_text as string) || FOLLOW_CONFIG_VALUE,
-        text_to_speech: (this.editingRules.provider_perf_text_to_speech as string) || FOLLOW_CONFIG_VALUE,
+        chat_completion: this.editingRules.provider_perf_chat_completion || FOLLOW_CONFIG_VALUE,
+        speech_to_text: this.editingRules.provider_perf_speech_to_text || FOLLOW_CONFIG_VALUE,
+        text_to_speech: this.editingRules.provider_perf_text_to_speech || FOLLOW_CONFIG_VALUE,
       };
 
       // 初始化插件配置
-      const pluginCfg = (this.editingRules.session_plugin_config as SessionPluginConfig) || {};
+      const pluginCfg = this.editingRules.session_plugin_config || {};
       this.pluginConfig = {
         enabled_plugins: pluginCfg.enabled_plugins || [],
         disabled_plugins: pluginCfg.disabled_plugins || [],
       };
 
       // 初始化知识库配置
-      const kbCfg = (this.editingRules.kb_config as KbConfig) || {};
+      const kbCfg = this.editingRules.kb_config || {};
       this.kbConfig = {
         kb_ids: kbCfg.kb_ids || [],
         top_k: kbCfg.top_k ?? 5,
@@ -1623,18 +1615,35 @@ export default defineComponent({
       this.editingRules = {};
     },
 
+    updateLocalRule(target: SessionRuleItem, key: string, value: unknown): void {
+      let item = this.rulesList.find((entry) => entry.umo === target.umo);
+      if (!item) {
+        item = { ...target, rules: { ...target.rules } };
+        this.rulesList.push(item);
+      }
+      if (value === undefined) {
+        delete item.rules[key];
+      } else {
+        item.rules[key] = value;
+      }
+      if (this.selectedUmo?.umo === target.umo) {
+        this.editingRules = item.rules;
+      }
+    },
+
     async saveServiceConfig(): Promise<void> {
-      if (!this.selectedUmo) return;
+      const target = this.selectedUmo;
+      if (!target) return;
 
       this.saving = true;
       try {
-        const config: Record<string, unknown> = { ...this.serviceConfig };
+        const config: SessionServiceConfig = { ...this.serviceConfig };
         // 清理空值
         if (!config.custom_name) delete config.custom_name;
         if (config.persona_id === null) delete config.persona_id;
 
         const response = await axios.post("/api/session/update-rule", {
-          umo: this.selectedUmo.umo,
+          umo: target.umo,
           rule_key: "session_service_config",
           rule_value: config,
         });
@@ -1642,34 +1651,20 @@ export default defineComponent({
         const resp = response.data as ApiResponse<SimpleMessageData>;
         if (resp.status === "ok") {
           this.showSuccess(this.tm("messages.saveSuccess"));
-          this.editingRules.session_service_config = config;
-
-          // 更新或添加到列表
-          const item = this.rulesList.find((u: SessionRuleItem) => u.umo === this.selectedUmo!.umo);
-          if (item) {
-            item.rules = { ...item.rules, session_service_config: config as unknown as SessionServiceConfig };
-          } else {
-            // 新规则，添加到列表
-            this.rulesList.push({
-              umo: this.selectedUmo.umo,
-              platform: this.selectedUmo.platform,
-              message_type: this.selectedUmo.message_type,
-              session_id: this.selectedUmo.session_id,
-              rules: { session_service_config: config as unknown as SessionServiceConfig },
-            });
-          }
+          this.updateLocalRule(target, "session_service_config", config);
         } else {
           this.showError(resp.message || this.tm("messages.saveError"));
         }
       } catch (error: unknown) {
-        const e = asCatchError(error);
-        this.showError(e.response?.data?.message || this.tm("messages.saveError"));
+        this.showError(resolveErrorMessage(error, this.tm("messages.saveError")));
       }
       this.saving = false;
     },
 
     async saveProviderConfig(): Promise<void> {
-      if (!this.selectedUmo) return;
+      const target = this.selectedUmo;
+      if (!target) return;
+      const providerConfig = { ...this.providerConfig };
 
       this.saving = true;
       try {
@@ -1678,12 +1673,12 @@ export default defineComponent({
         const providerTypes = ["chat_completion", "speech_to_text", "text_to_speech"] as const;
 
         for (const type of providerTypes) {
-          const value = this.providerConfig[type] as string;
+          const value = providerConfig[type];
           if (value && value !== FOLLOW_CONFIG_VALUE) {
             // 有值时更新
             updateTasks.push(
               axios.post("/api/session/update-rule", {
-                umo: this.selectedUmo.umo,
+                umo: target.umo,
                 rule_key: `provider_perf_${type}`,
                 rule_value: value,
               }),
@@ -1692,7 +1687,7 @@ export default defineComponent({
             // 选择了"跟随配置文件" (__astrbot_follow_config__) 且之前有配置，则删除
             deleteTasks.push(
               axios.post("/api/session/delete-rule", {
-                umo: this.selectedUmo.umo,
+                umo: target.umo,
                 rule_key: `provider_perf_${type}`,
               }),
             );
@@ -1704,45 +1699,26 @@ export default defineComponent({
           await Promise.all(allTasks);
           this.showSuccess(this.tm("messages.saveSuccess"));
 
-          // 更新或添加到列表
-          let item = this.rulesList.find((u: SessionRuleItem) => u.umo === this.selectedUmo.umo);
-          if (!item) {
-            item = {
-              umo: this.selectedUmo.umo,
-              platform: this.selectedUmo.platform,
-              message_type: this.selectedUmo.message_type,
-              session_id: this.selectedUmo.session_id,
-              rules: {},
-            };
-            this.rulesList.push(item);
-          }
           for (const type of providerTypes) {
-            const val = this.providerConfig[type] as string;
-            if (val && val !== FOLLOW_CONFIG_VALUE) {
-              item.rules![`provider_perf_${type}`] = val;
-              this.editingRules[`provider_perf_${type}`] = val;
-            } else {
-              // 删除本地数据
-              delete item.rules![`provider_perf_${type}`];
-              delete this.editingRules[`provider_perf_${type}`];
-            }
+            const value = providerConfig[type];
+            this.updateLocalRule(target, `provider_perf_${type}`, value && value !== FOLLOW_CONFIG_VALUE ? value : undefined);
           }
         } else {
           this.showSuccess(this.tm("messages.noChanges"));
         }
       } catch (error: unknown) {
-        const e = asCatchError(error);
-        this.showError(e.response?.data?.message || this.tm("messages.saveError"));
+        this.showError(resolveErrorMessage(error, this.tm("messages.saveError")));
       }
       this.saving = false;
     },
 
     async savePluginConfig(): Promise<void> {
-      if (!this.selectedUmo) return;
+      const target = this.selectedUmo;
+      if (!target) return;
 
       this.saving = true;
       try {
-        const config: SessionPluginConfig = {
+        const config = {
           enabled_plugins: this.pluginConfig.enabled_plugins,
           disabled_plugins: this.pluginConfig.disabled_plugins,
         };
@@ -1751,17 +1727,15 @@ export default defineComponent({
         if (config.enabled_plugins.length === 0 && config.disabled_plugins.length === 0) {
           if (this.editingRules.session_plugin_config) {
             await axios.post("/api/session/delete-rule", {
-              umo: this.selectedUmo.umo,
+              umo: target.umo,
               rule_key: "session_plugin_config",
             });
-            delete this.editingRules.session_plugin_config;
-            const item = this.rulesList.find((u: SessionRuleItem) => u.umo === this.selectedUmo.umo);
-            if (item) delete item.rules!.session_plugin_config;
+            this.updateLocalRule(target, "session_plugin_config", undefined);
           }
           this.showSuccess(this.tm("messages.saveSuccess"));
         } else {
           const response = await axios.post("/api/session/update-rule", {
-            umo: this.selectedUmo.umo,
+            umo: target.umo,
             rule_key: "session_plugin_config",
             rule_value: config,
           });
@@ -1769,37 +1743,24 @@ export default defineComponent({
           const resp = response.data as ApiResponse<SimpleMessageData>;
           if (resp.status === "ok") {
             this.showSuccess(this.tm("messages.saveSuccess"));
-            this.editingRules.session_plugin_config = config;
-
-            const item = this.rulesList.find((u: SessionRuleItem) => u.umo === this.selectedUmo.umo);
-            if (item) {
-              item.rules!.session_plugin_config = config;
-            } else {
-              this.rulesList.push({
-                umo: this.selectedUmo.umo,
-                platform: this.selectedUmo.platform,
-                message_type: this.selectedUmo.message_type,
-                session_id: this.selectedUmo.session_id,
-                rules: { session_plugin_config: config },
-              });
-            }
+            this.updateLocalRule(target, "session_plugin_config", config);
           } else {
             this.showError(resp.message || this.tm("messages.saveError"));
           }
         }
       } catch (error: unknown) {
-        const e = asCatchError(error);
-        this.showError(e.response?.data?.message || this.tm("messages.saveError"));
+        this.showError(resolveErrorMessage(error, this.tm("messages.saveError")));
       }
       this.saving = false;
     },
 
     async saveKbConfig(): Promise<void> {
-      if (!this.selectedUmo) return;
+      const target = this.selectedUmo;
+      if (!target) return;
 
       this.saving = true;
       try {
-        const config: KbConfig = {
+        const config = {
           kb_ids: this.kbConfig.kb_ids,
           top_k: this.kbConfig.top_k,
           enable_rerank: this.kbConfig.enable_rerank,
@@ -1809,17 +1770,15 @@ export default defineComponent({
         if (config.kb_ids.length === 0) {
           if (this.editingRules.kb_config) {
             await axios.post("/api/session/delete-rule", {
-              umo: this.selectedUmo.umo,
+              umo: target.umo,
               rule_key: "kb_config",
             });
-            delete this.editingRules.kb_config;
-            const item = this.rulesList.find((u: SessionRuleItem) => u.umo === this.selectedUmo.umo);
-            if (item) delete item.rules!.kb_config;
+            this.updateLocalRule(target, "kb_config", undefined);
           }
           this.showSuccess(this.tm("messages.saveSuccess"));
         } else {
           const response = await axios.post("/api/session/update-rule", {
-            umo: this.selectedUmo.umo,
+            umo: target.umo,
             rule_key: "kb_config",
             rule_value: config,
           });
@@ -1827,27 +1786,13 @@ export default defineComponent({
           const resp = response.data as ApiResponse<SimpleMessageData>;
           if (resp.status === "ok") {
             this.showSuccess(this.tm("messages.saveSuccess"));
-            this.editingRules.kb_config = config;
-
-            const item = this.rulesList.find((u: SessionRuleItem) => u.umo === this.selectedUmo.umo);
-            if (item) {
-              item.rules!.kb_config = config;
-            } else {
-              this.rulesList.push({
-                umo: this.selectedUmo.umo,
-                platform: this.selectedUmo.platform,
-                message_type: this.selectedUmo.message_type,
-                session_id: this.selectedUmo.session_id,
-                rules: { kb_config: config },
-              });
-            }
+            this.updateLocalRule(target, "kb_config", config);
           } else {
             this.showError(resp.message || this.tm("messages.saveError"));
           }
         }
       } catch (error: unknown) {
-        const e = asCatchError(error);
-        this.showError(e.response?.data?.message || this.tm("messages.saveError"));
+        this.showError(resolveErrorMessage(error, this.tm("messages.saveError")));
       }
       this.saving = false;
     },
@@ -1882,8 +1827,7 @@ export default defineComponent({
           this.showError(resp.message || this.tm("messages.deleteError"));
         }
       } catch (error: unknown) {
-        const e = asCatchError(error);
-        this.showError(e.response?.data?.message || this.tm("messages.deleteError"));
+        this.showError(resolveErrorMessage(error, this.tm("messages.deleteError")));
       }
       this.deleting = false;
     },
@@ -1915,13 +1859,12 @@ export default defineComponent({
           this.showError(resp.message || this.tm("messages.batchDeleteError"));
         }
       } catch (error: unknown) {
-        const e = asCatchError(error);
-        this.showError(e.response?.data?.message || this.tm("messages.batchDeleteError"));
+        this.showError(resolveErrorMessage(error, this.tm("messages.batchDeleteError")));
       }
       this.deleting = false;
     },
 
-    getPlatformColor(platform: string): string {
+    getPlatformColor(platform?: string): string {
       const colors: Record<string, string> = {
         aiocqhttp: "blue",
         qq_official: "purple",
@@ -1930,7 +1873,7 @@ export default defineComponent({
         webchat: "orange",
         default: "grey",
       };
-      return colors[platform] || colors.default;
+      return colors[platform || "default"] || colors.default;
     },
 
     showSuccess(message: string): void {
@@ -1952,13 +1895,14 @@ export default defineComponent({
     },
 
     async saveQuickEditName(): Promise<void> {
-      if (!this.quickEditNameTarget) return;
+      const target = this.quickEditNameTarget;
+      if (!target) return;
 
       this.saving = true;
       try {
         // 获取现有的 session_service_config 或创建新的
-        const existingConfig = this.quickEditNameTarget.rules?.session_service_config || ({} as SessionServiceConfig);
-        const config: Record<string, unknown> = {
+        const existingConfig = target.rules.session_service_config || {};
+        const config: SessionServiceConfig = {
           session_enabled: existingConfig.session_enabled !== false,
           llm_enabled: existingConfig.llm_enabled !== false,
           tts_enabled: existingConfig.tts_enabled !== false,
@@ -1973,7 +1917,7 @@ export default defineComponent({
         }
 
         const response = await axios.post("/api/session/update-rule", {
-          umo: this.quickEditNameTarget.umo,
+          umo: target.umo,
           rule_key: "session_service_config",
           rule_value: config,
         });
@@ -1982,22 +1926,7 @@ export default defineComponent({
         if (resp.status === "ok") {
           this.showSuccess(this.tm("messages.saveSuccess"));
 
-          // 更新或添加到列表
-          const item = this.rulesList.find((u: SessionRuleItem) => u.umo === this.quickEditNameTarget!.umo);
-          if (item) {
-            if (!item.rules) item.rules = {};
-            item.rules.session_service_config = config as unknown as SessionServiceConfig;
-          } else {
-            // 新规则，添加到列表
-            const parts = this.quickEditNameTarget.umo.split(":");
-            this.rulesList.push({
-              umo: this.quickEditNameTarget.umo,
-              platform: parts[0] || "",
-              message_type: parts[1] || "",
-              session_id: parts[2] || "",
-              rules: { session_service_config: config as unknown as SessionServiceConfig },
-            });
-          }
+          this.updateLocalRule(target, "session_service_config", config);
 
           this.quickEditNameDialog = false;
           this.quickEditNameTarget = null;
@@ -2006,8 +1935,7 @@ export default defineComponent({
           this.showError(resp.message || this.tm("messages.saveError"));
         }
       } catch (error: unknown) {
-        const e = asCatchError(error);
-        this.showError(e.response?.data?.message || this.tm("messages.saveError"));
+        this.showError(resolveErrorMessage(error, this.tm("messages.saveError")));
       }
       this.saving = false;
     },
@@ -2034,7 +1962,7 @@ export default defineComponent({
           }
         }
 
-        const tasks: Promise<unknown>[] = [];
+        const tasks: Promise<{ data: ApiResponse<SimpleMessageData> }>[] = [];
 
         if (this.batchLlmStatus !== null || this.batchTtsStatus !== null) {
           const serviceData: Record<string, unknown> = { scope, umos, group_id: groupId };
@@ -2100,7 +2028,7 @@ export default defineComponent({
         }
 
         const results = await Promise.all(tasks);
-        const allOk = results.every((r: { data: { status: string } }) => r.data.status === "ok");
+        const allOk = results.every((r) => r.data.status === "ok");
 
         if (allOk) {
           this.showSuccess(this.tm("messages.batchUpdateSuccess"));
@@ -2113,8 +2041,7 @@ export default defineComponent({
           this.showError(this.tm("messages.partialUpdateFailed"));
         }
       } catch (error: unknown) {
-        const e = asCatchError(error);
-        this.showError(e.response?.data?.message || this.tm("messages.batchUpdateError"));
+        this.showError(resolveErrorMessage(error, this.tm("messages.batchUpdateError")));
       }
       this.batchUpdating = false;
     },
@@ -2142,7 +2069,7 @@ export default defineComponent({
         const response = await axios.get("/api/session/active-umos");
         const resp = response.data as ApiResponse<ActiveUmosData>;
         if (resp.status === "ok") {
-          this.availableUmos = this.normalizeActiveUmos(resp.data.umos || []);
+          this.availableUmos = this.normalizeActiveUmos(resp.data.umo_infos ?? resp.data.umos ?? []);
         }
       } catch (error: unknown) {
         console.error("加载会话列表失败:", error);
@@ -2213,6 +2140,7 @@ export default defineComponent({
         platform: item.platform || parsed.platform,
         message_type: item.message_type || parsed.message_type,
         session_id: item.session_id || parsed.session_id,
+        rules: item.rules || {},
       };
     },
 
@@ -2221,7 +2149,7 @@ export default defineComponent({
       const infoMap: Record<string, ActiveUmoInfo> = {};
       for (const entry of umos) {
         const info =
-          typeof entry === "string" ? this.parseUmo(entry) : this.normalizeRuleItem(entry as SessionRuleItem);
+          typeof entry === "string" ? this.parseUmo(entry) : { ...this.parseUmo(entry.umo), ...entry };
         if (!info.umo) continue;
         result.push(info.umo);
         infoMap[info.umo] = info;
@@ -2295,8 +2223,7 @@ export default defineComponent({
           this.showError(resp.message || "");
         }
       } catch (error: unknown) {
-        const e = asCatchError(error);
-        this.showError(e.response?.data?.message || this.tm("messages.saveGroupError"));
+        this.showError(resolveErrorMessage(error, this.tm("messages.saveGroupError")));
       }
     },
 
@@ -2316,8 +2243,7 @@ export default defineComponent({
           this.showError(resp.message || "");
         }
       } catch (error: unknown) {
-        const e = asCatchError(error);
-        this.showError(e.response?.data?.message || this.tm("messages.deleteGroupError"));
+        this.showError(resolveErrorMessage(error, this.tm("messages.deleteGroupError")));
       }
     },
 
@@ -2349,8 +2275,7 @@ export default defineComponent({
           this.showError(resp.message || "");
         }
       } catch (error: unknown) {
-        const e = asCatchError(error);
-        this.showError(e.response?.data?.message || this.tm("messages.addToGroupError"));
+        this.showError(resolveErrorMessage(error, this.tm("messages.addToGroupError")));
       }
     },
   },

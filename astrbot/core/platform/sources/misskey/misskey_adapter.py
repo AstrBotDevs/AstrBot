@@ -1,6 +1,7 @@
 import asyncio
 import random
-from typing import Any
+from importlib import import_module
+from typing import Any, TypedDict
 
 import anyio
 
@@ -19,7 +20,7 @@ from astrbot.core.platform.astr_message_event import MessageSesion as MessageSes
 from .misskey_api import MisskeyAPI
 
 try:
-    import magic
+    magic = import_module("magic")
 except Exception:
     magic = None
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
@@ -42,6 +43,12 @@ from .misskey_utils import (
 
 MAX_FILE_UPLOAD_COUNT = 16
 DEFAULT_UPLOAD_CONCURRENCY = 3
+
+
+class UploadFallback(TypedDict):
+    """Public file URL to append when a drive upload cannot be completed."""
+
+    fallback_url: str
 
 
 @register_platform_adapter(
@@ -391,7 +398,7 @@ class MisskeyPlatformAdapter(Platform):
             upload_concurrency = min(upload_concurrency, MAX_UPLOAD_CONCURRENCY)
             sem = asyncio.Semaphore(upload_concurrency)
 
-            async def _upload_comp(comp) -> object | None:
+            async def _upload_comp(comp) -> str | UploadFallback | None:
                 """组件上传函数:处理 URL(下载后上传)或本地文件(直接上传)"""
                 from .misskey_utils import (
                     resolve_component_url_or_path,

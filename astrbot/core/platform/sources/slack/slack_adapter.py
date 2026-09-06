@@ -9,7 +9,6 @@ import aiohttp
 from slack_sdk.socket_mode.request import SocketModeRequest
 from slack_sdk.web.async_client import AsyncWebClient
 
-from astrbot.api import logger
 from astrbot.api.event import MessageChain
 from astrbot.api.message_components import At, File, Image, Plain
 from astrbot.api.platform import (
@@ -20,6 +19,7 @@ from astrbot.api.platform import (
     Platform,
     PlatformMetadata,
 )
+from astrbot.core import logger
 from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.platform.register import register_platform_adapter
 from astrbot.core.platform.sources.slack.slack_event import (
@@ -65,7 +65,7 @@ class SlackAdapter(Platform):
         self.metadata = PlatformMetadata(
             name="slack",
             description="适用于 Slack 的消息平台适配器,支持 Socket Mode 和 Webhook Mode｡",
-            id=self.config.get("id"),
+            id=str(self.config.get("id") or "slack"),
             support_streaming_message=False,
         )
         self.web_client = AsyncWebClient(token=self.bot_token, logger=logger)

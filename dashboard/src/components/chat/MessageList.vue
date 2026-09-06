@@ -935,7 +935,7 @@ export default defineComponent({
     throttledHandleScroll(): void {
       if (this.scrollTimer) return;
 
-      this.scrollTimer = setTimeout(() => {
+      this.scrollTimer = window.setTimeout(() => {
         this.handleScroll();
         this.scrollTimer = null;
       }, 50);
@@ -1027,12 +1027,12 @@ export default defineComponent({
 
           if (hasSubSecondToolCall) {
             _fastUpdateCount++;
-            this.elapsedTimeTimer = setTimeout(updateTime, fastUpdateInterval);
+            this.elapsedTimeTimer = window.setTimeout(updateTime, fastUpdateInterval);
           } else {
-            this.elapsedTimeTimer = setTimeout(updateTime, slowUpdateInterval);
+            this.elapsedTimeTimer = window.setTimeout(updateTime, slowUpdateInterval);
           }
         } else {
-          this.elapsedTimeTimer = setTimeout(updateTime, slowUpdateInterval);
+          this.elapsedTimeTimer = window.setTimeout(updateTime, slowUpdateInterval);
         }
       };
 

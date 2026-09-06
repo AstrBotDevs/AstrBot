@@ -122,13 +122,13 @@ class RespondStage(Stage):
         if isinstance(comp, Plain):
             return bool(comp.text and comp.text.strip())
         if isinstance(comp, Image):
-            return bool(comp.url or comp.file_id)
+            return bool(comp.url or comp.file)
         if isinstance(comp, Face):
             return comp.id is not None
         if isinstance(comp, Record):
-            return bool(comp.url or comp.file_id)
+            return bool(comp.url or comp.file)
         if isinstance(comp, Video):
-            return bool(comp.url or comp.file_id)
+            return bool(comp.url or comp.file or comp.path)
         if isinstance(comp, At):
             return comp.qq is not None
         if isinstance(comp, Reply):

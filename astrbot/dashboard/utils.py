@@ -1,8 +1,9 @@
 import base64
 import traceback
+from importlib import import_module
 from io import BytesIO
 
-from astrbot.api import logger
+from astrbot.core import logger
 from astrbot.core.knowledge_base.kb_helper import KBHelper
 from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 
@@ -25,12 +26,12 @@ async def generate_tsne_visualization(
     """
     try:
         import faiss
-        import matplotlib
         import numpy as np
 
+        matplotlib = import_module("matplotlib")
         matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
-        from sklearn.manifold import TSNE
+        plt = import_module("matplotlib.pyplot")
+        TSNE = import_module("sklearn.manifold").TSNE
     except ImportError as e:
         raise Exception(
             "缺少必要的库以生成 t-SNE 可视化｡请安装 matplotlib 和 scikit-learn: {e}",
@@ -81,7 +82,7 @@ async def generate_tsne_visualization(
         logger.info("开始 t-SNE 降维...")
         perplexity = min(30, all_vectors.shape[0] - 1)
         tsne = TSNE(n_components=2, random_state=42, perplexity=perplexity)
-        vectors_2d = tsne.fit_transform(all_vectors)
+        vectors_2d = np.asarray(tsne.fit_transform(all_vectors))
         kb_vectors_2d = vectors_2d[:-1]
         query_vector_2d = vectors_2d[-1]
         logger.info("生成可视化图表...")

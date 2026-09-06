@@ -9,32 +9,27 @@ All tests use mocks to isolate SkillManager from the filesystem and I/O.
 """
 
 import json
-import os
-import sys
-import types
 from pathlib import Path
 from unittest.mock import MagicMock, mock_open, patch
 
 import pytest
 
 from astrbot.core.skills.skill_manager import (
-    DEFAULT_SKILLS_CONFIG,
     SANDBOX_SKILLS_CACHE_FILENAME,
-    SKILLS_CONFIG_FILENAME,
     SANDBOX_SKILLS_ROOT,
     SANDBOX_WORKSPACE_ROOT,
+    SKILLS_CONFIG_FILENAME,
     SkillInfo,
     SkillManager,
-    _normalize_skill_name,
-    _normalize_cached_sandbox_skill_path,
     _is_ignored_zip_entry,
-    _sanitize_prompt_path_for_prompt,
+    _normalize_cached_sandbox_skill_path,
+    _normalize_skill_name,
+    _parse_frontmatter,
     _sanitize_prompt_description,
+    _sanitize_prompt_path_for_prompt,
     _sanitize_skill_display_name,
     build_skills_prompt,
-    _parse_frontmatter,
 )
-
 
 # ---------------------------------------------------------------
 # Fixtures
@@ -56,7 +51,7 @@ def mock_astrbot_paths():
 def skill_manager(mock_astrbot_paths):
     """Create a SkillManager with mocked paths and no real FS side effects."""
     with (
-        patch("os.makedirs") as mock_makedirs,
+        patch("os.makedirs"),
         patch.object(Path, "iterdir", return_value=[]),
     ):
         mgr = SkillManager(
@@ -260,7 +255,9 @@ class TestSkillManagerActiveOnly:
         )
 
         active_md = MagicMock(spec=Path)
-        active_md.read_text.return_value = "---\nname: active-skill\ndescription: Active\n---"
+        active_md.read_text.return_value = (
+            "---\nname: active-skill\ndescription: Active\n---"
+        )
         inactive_md = MagicMock(spec=Path)
         inactive_md.read_text.return_value = (
             "---\nname: inactive-skill\ndescription: Inactive\n---"
@@ -324,7 +321,9 @@ class TestSkillManagerActiveOnly:
 
         def normalize_skill_markdown_path(skill_dir, rename_legacy=True):
             md = MagicMock(spec=Path)
-            md.read_text.return_value = f"---\nname: {skill_dir.name}\ndescription: desc\n---"
+            md.read_text.return_value = (
+                f"---\nname: {skill_dir.name}\ndescription: desc\n---"
+            )
             return md
 
         with (
@@ -476,6 +475,7 @@ class TestSkillManagerSandbox:
                 return_value=skill_md,
             ),
         ):
+
             def open_side_effect(path, *args, **kwargs):
                 if SANDBOX_SKILLS_CACHE_FILENAME in str(path):
                     return mock_open(read_data=cache_data).return_value
@@ -507,7 +507,11 @@ class TestSkillManagerSandboxCache:
         skills = [
             {"name": "skill-a", "description": "A", "path": "/workspace/.../SKILL.md"},
             {"name": "skill-b", "description": "B", "path": "/workspace/.../SKILL.md"},
-            {"name": "skill-a", "description": "A dup", "path": "/workspace/.../SKILL.md"},
+            {
+                "name": "skill-a",
+                "description": "A dup",
+                "path": "/workspace/.../SKILL.md",
+            },
         ]
 
         with patch.object(skill_manager, "_save_sandbox_skills_cache") as mock_save:
@@ -697,8 +701,11 @@ class TestSkillManagerMutations:
             patch.object(Path, "exists", return_value=True),
             patch("shutil.rmtree") as mock_rmtree,
             patch.object(skill_manager, "_remove_skill_from_sandbox_cache"),
-            patch.object(skill_manager, "_load_config",
-                         return_value={"skills": {"my-skill": {"active": True}}}),
+            patch.object(
+                skill_manager,
+                "_load_config",
+                return_value={"skills": {"my-skill": {"active": True}}},
+            ),
             patch.object(skill_manager, "_save_config") as mock_save,
         ):
             skill_manager.delete_skill("my-skill")
@@ -740,19 +747,25 @@ class TestSkillManagerUtilities:
 
     def test_normalize_cached_sandbox_skill_path_rejects_relative_escape(self):
         """Test that path with '..' is rejected and falls back to default."""
-        result = _normalize_cached_sandbox_skill_path("my-skill", "/workspace/../../etc/SKILL.md")
+        result = _normalize_cached_sandbox_skill_path(
+            "my-skill", "/workspace/../../etc/SKILL.md"
+        )
         expected = f"{SANDBOX_WORKSPACE_ROOT}/{SANDBOX_SKILLS_ROOT}/my-skill/SKILL.md"
         assert result == expected
 
     def test_normalize_cached_sandbox_skill_path_rejects_wrong_filename(self):
         """Test that a path not ending in SKILL.md falls back to default."""
-        result = _normalize_cached_sandbox_skill_path("my-skill", "/workspace/skills/my-skill/README.md")
+        result = _normalize_cached_sandbox_skill_path(
+            "my-skill", "/workspace/skills/my-skill/README.md"
+        )
         expected = f"{SANDBOX_WORKSPACE_ROOT}/{SANDBOX_SKILLS_ROOT}/my-skill/SKILL.md"
         assert result == expected
 
     def test_normalize_cached_sandbox_skill_path_rejects_wrong_dir_name(self):
         """Test that a path with mismatched directory name falls back to default."""
-        result = _normalize_cached_sandbox_skill_path("my-skill", "/workspace/skills/other-skill/SKILL.md")
+        result = _normalize_cached_sandbox_skill_path(
+            "my-skill", "/workspace/skills/other-skill/SKILL.md"
+        )
         expected = f"{SANDBOX_WORKSPACE_ROOT}/{SANDBOX_SKILLS_ROOT}/my-skill/SKILL.md"
         assert result == expected
 

@@ -1,14 +1,12 @@
 """Mock providers for testing LLM interactions."""
 
-from typing import Any
 from collections.abc import AsyncGenerator
-from dataclasses import dataclass, field
 
 from astrbot.core.provider.entities import (
-    ProviderRequest,
-    ProviderMeta,
-    ProviderType,
     LLMResponse,
+    ProviderMeta,
+    ProviderRequest,
+    ProviderType,
 )
 
 
@@ -51,14 +49,18 @@ class MockChatCompletionProvider:
             completion_text="This is a mock response from the test provider.",
         )
 
-    async def stream_chat(self, request: ProviderRequest) -> AsyncGenerator[LLMResponse, None]:
+    async def stream_chat(
+        self, request: ProviderRequest
+    ) -> AsyncGenerator[LLMResponse, None]:
         """Return mock streaming chat completion."""
         self.call_count += 1
         self.last_request = request
 
         text = "This is a mock streaming response."
         if self.streaming_responses:
-            text = self.streaming_responses[self.response_index % len(self.streaming_responses)]
+            text = self.streaming_responses[
+                self.response_index % len(self.streaming_responses)
+            ]
             self.response_index += 1
 
         # Stream word by word
@@ -129,7 +131,9 @@ class MockErrorProvider(MockChatCompletionProvider):
         """Raise mock error."""
         raise RuntimeError(self.error_message)
 
-    async def stream_chat(self, request: ProviderRequest) -> AsyncGenerator[LLMResponse, None]:  # type: ignore[method-assign]
+    async def stream_chat(
+        self, request: ProviderRequest
+    ) -> AsyncGenerator[LLMResponse, None]:  # type: ignore[method-assign]
         """Raise mock error."""
         raise RuntimeError(self.error_message)
 

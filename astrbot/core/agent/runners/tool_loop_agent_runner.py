@@ -25,7 +25,7 @@ from tenacity import (
 )
 
 from astrbot import logger
-from astrbot.core.agent.message import ImageURLPart, TextPart, ThinkPart
+from astrbot.core.agent.message import ContentPart, ImageURLPart, TextPart, ThinkPart
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.agent.tool_image_cache import tool_image_cache
 from astrbot.core.exceptions import EmptyModelOutputError
@@ -92,6 +92,16 @@ class FollowUpTicket:
     text: str
     consumed: bool = False
     resolved: asyncio.Event = field(default_factory=asyncio.Event)
+
+
+class _ProviderCallPayload(T.TypedDict):
+    contexts: list[Message] | list[dict[str, T.Any]]
+    func_tool: ToolSet | None
+    session_id: str | None
+    extra_user_content_parts: list[ContentPart]
+    abort_signal: asyncio.Event
+    request_max_retries: int | None
+    model: T.NotRequired[str | None]
 
 
 class _ToolExecutionInterrupted(Exception):
@@ -178,7 +188,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._transition_state(AgentState.DONE)
         self.stats.end_time = time.time()
 
-        parts = []
+        parts: list[ContentPart] = []
         if llm_resp.reasoning_content is not None or llm_resp.reasoning_signature:
             parts.append(
                 ThinkPart(
@@ -471,7 +481,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             asyncio.CancelledError: If the outer Agent task is cancelled.
             Exception: Any exception raised by the awaited operation.
         """
-        operation_task = asyncio.create_task(awaitable)
+        operation_task = asyncio.ensure_future(awaitable)
         abort_task = asyncio.create_task(self._abort_signal.wait())
         try:
             done, _ = await asyncio.wait(
@@ -498,7 +508,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self, *, include_model: bool = True
     ) -> T.AsyncGenerator[LLMResponse, None]:
         """Yields chunks *and* a final LLMResponse."""
-        payload = {
+        payload: _ProviderCallPayload = {
             "contexts": self._sanitize_contexts_for_provider(self.run_context.messages),
             "func_tool": self._func_tool_for_provider(),
             "session_id": self.req.session_id,
@@ -514,7 +524,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             try:
                 while True:
                     try:
-                        resp = await self._await_or_stop(anext(stream))  # type: ignore
+                        resp = await self._await_or_stop(anext(stream))
                     except StopAsyncIteration:
                         return
                     if resp is None:
@@ -1002,7 +1012,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 return
 
             # 将结果添加到上下文中
-            parts = []
+            parts: list[ContentPart] = []
             if llm_resp.reasoning_content is not None or llm_resp.reasoning_signature:
                 parts.append(
                     ThinkPart(
@@ -1012,12 +1022,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 )
             if llm_resp.completion_text:
                 parts.append(TextPart(text=llm_resp.completion_text))
-            if len(parts) == 0:
-                parts = None
             tool_calls_result = ToolCallsResult(
                 tool_calls_info=AssistantMessageSegment(
                     tool_calls=llm_resp.to_openai_tool_calls_model(),
-                    content=parts,
+                    content=parts or None,
                 ),
                 tool_calls_result=tool_call_result_blocks,
             )
@@ -1035,7 +1043,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 )  # Empty list is treated as unconfigured for backward compatibility
                 if supports_image:
                     # Build user message with images for LLM to review
-                    image_parts = []
+                    image_parts: list[ContentPart] = []
                     for cached_img in cached_images:
                         img_data = tool_image_cache.get_image_base64_by_path(
                             cached_img.file_path, cached_img.mime_type

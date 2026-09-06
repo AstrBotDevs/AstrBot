@@ -6,6 +6,7 @@
 import io
 
 from pypdf import PdfReader
+from pypdf.generic import DictionaryObject, StreamObject
 
 from astrbot.core.knowledge_base.parsers.base import (
     BaseParser,
@@ -52,7 +53,7 @@ class PDFParser(BaseParser):
                     continue
 
                 resources = page["/Resources"]
-                if not resources:
+                if not isinstance(resources, DictionaryObject):
                     continue
 
                 xobject_ref = resources.get("/XObject")
@@ -60,14 +61,17 @@ class PDFParser(BaseParser):
                     continue
 
                 xobjects = xobject_ref.get_object()
-                if not xobjects:
+                if not isinstance(xobjects, DictionaryObject):
                     continue
 
                 for obj_name in xobjects:
                     try:
-                        obj = xobjects[obj_name]
+                        obj = xobjects[obj_name].get_object()
 
-                        if obj.get("/Subtype") != "/Image":
+                        if (
+                            not isinstance(obj, StreamObject)
+                            or obj.get("/Subtype") != "/Image"
+                        ):
                             continue
 
                         # 提取图片数据

@@ -160,7 +160,7 @@ class QQOfficialWebhook:
         """内部服务器的回调入口"""
         return await self.handle_callback(quart.request)
 
-    async def handle_callback(self, request) -> dict:
+    async def handle_callback(self, request) -> dict | tuple[dict, int]:
         """处理 webhook 回调,可被统一 webhook 入口复用
 
         Args:
@@ -231,8 +231,12 @@ class QQOfficialWebhook:
                         extra["message_scene"] = message_scene
                     if extra:
                         self._extra_data_cache[msg_id] = extra
+            connection = self._connection
+            if connection is None:
+                logger.error("QQ webhook parser connection is unavailable")
+                return {"error": "Parser connection unavailable"}, 503
             try:
-                func = self._connection.parser[event]
+                func = connection.parser[event]
             except KeyError:
                 logger.error("_parser unknown event %s.", event)
             else:

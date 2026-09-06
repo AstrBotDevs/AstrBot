@@ -488,7 +488,7 @@ class LarkPlatformAdapter(Platform):
         return PlatformMetadata(
             name="lark",
             description="飞书机器人官方 API 适配器",
-            id=self.config.get("id"),
+            id=str(self.config.get("id") or "lark"),
             support_streaming_message=True,
         )
 
@@ -515,14 +515,14 @@ class LarkPlatformAdapter(Platform):
             abm.group_id = message.chat_id
         abm.self_id = self.bot_open_id or self.bot_name
         abm.message_str = ""
-        at_list = {}
+        at_list: dict[str, Comp.At] = {}
         if message.parent_id:
             reply_seg = await self._build_reply_from_parent_id(message.parent_id)
             if reply_seg:
                 abm.message.append(reply_seg)
         if message.mentions:
             for m in message.mentions:
-                if m.id is None:
+                if m.id is None or m.key is None:
                     continue
                 open_id = m.id.open_id or ""
                 at_list[m.key] = Comp.At(qq=open_id, name=m.name)
@@ -588,8 +588,11 @@ class LarkPlatformAdapter(Platform):
                         .user_id_type("open_id")
                         .build()
                     )
+                    contact = self.lark_api.contact
+                    if contact is None:
+                        raise RuntimeError("Lark contact service is unavailable")
                     response = await asyncio.wait_for(
-                        self.lark_api.contact.v3.user.aget(request),
+                        contact.v3.user.aget(request),
                         timeout=USER_NAME_LOOKUP_TIMEOUT_SECONDS,
                     )
                     if response.success() and response.data and response.data.user:

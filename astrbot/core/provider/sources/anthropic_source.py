@@ -15,7 +15,9 @@ from anthropic.types import (
     RawMessageDeltaEvent,
     RawMessageStartEvent,
     SignatureDelta,
+    TextBlock,
     TextDelta,
+    ThinkingBlock,
     ThinkingDelta,
     ToolUseBlock,
 )
@@ -559,16 +561,18 @@ class ProviderAnthropic(Provider):
         llm_response = LLMResponse(role="assistant")
 
         for content_block in completion.content:
-            if content_block.type == "text":
+            if isinstance(content_block, TextBlock):
                 completion_text = str(content_block.text).strip()
                 llm_response.completion_text = completion_text
 
-            if content_block.type == "thinking":
+            if isinstance(content_block, ThinkingBlock):
                 reasoning_content = str(content_block.thinking).strip()
                 llm_response.reasoning_content = reasoning_content
                 llm_response.reasoning_signature = content_block.signature
 
-            if content_block.type == "tool_use":
+            if isinstance(content_block, ToolUseBlock):
+                if not isinstance(content_block.input, dict):
+                    raise ValueError("Anthropic tool arguments must be a JSON object.")
                 llm_response.tools_call_args.append(content_block.input)
                 llm_response.tools_call_name.append(content_block.name)
                 llm_response.tools_call_ids.append(content_block.id)
@@ -762,7 +766,8 @@ class ProviderAnthropic(Provider):
         tool_calls_result=None,
         model=None,
         extra_user_content_parts=None,
-        tool_choice: Literal["auto", "any", "tool", "none"] | dict[str, str] = "auto",
+        tool_choice: Literal["auto", "required", "any", "tool", "none"]
+        | dict[str, str] = "auto",
         **kwargs,
     ) -> LLMResponse:
         if contexts is None:
@@ -830,7 +835,8 @@ class ProviderAnthropic(Provider):
         tool_calls_result=None,
         model=None,
         extra_user_content_parts=None,
-        tool_choice: Literal["auto", "any", "tool", "none"] | dict[str, str] = "auto",
+        tool_choice: Literal["auto", "required", "any", "tool", "none"]
+        | dict[str, str] = "auto",
         **kwargs,
     ):
         if contexts is None:

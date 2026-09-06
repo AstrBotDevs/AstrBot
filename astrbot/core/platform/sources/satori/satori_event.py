@@ -39,8 +39,8 @@ class SatoriPlatformEvent(AstrMessageEvent):
                 platform_meta.id = f"{platform_name}({user_id})"
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.adapter = adapter
-        self.platform = None
-        self.user_id = None
+        self.satori_platform: str | None = None
+        self.user_id: str | None = None
         if (
             hasattr(message_obj, "raw_message")
             and message_obj.raw_message
@@ -48,9 +48,11 @@ class SatoriPlatformEvent(AstrMessageEvent):
         ):
             raw_message = message_obj.raw_message
             login = raw_message.get("login", {})
-            self.platform = login.get("platform")
-            user = login.get("user", {})
-            self.user_id = user.get("id") if user else None
+            self.satori_platform = (
+                str(login["platform"]) if login.get("platform") else None
+            )
+            user = login.get("user") or {}
+            self.user_id = str(user["id"]) if user.get("id") else None
 
     async def get_group(
         self,
@@ -90,7 +92,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
         for login in getattr(self.adapter, "logins", []):
             login_user = login.get("user") or {}
             if (
-                login.get("platform") == self.platform
+                login.get("platform") == self.satori_platform
                 and login_user.get("id") == self.user_id
             ):
                 features = login.get("features")
@@ -102,7 +104,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
                     "POST",
                     "/guild.get",
                     {"guild_id": target_id},
-                    self.platform,
+                    self.satori_platform,
                     self.user_id,
                 )
             except Exception as exc:
@@ -132,7 +134,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
                     "POST",
                     "/guild.member.list",
                     data,
-                    self.platform,
+                    self.satori_platform,
                     self.user_id,
                 )
             except Exception as exc:

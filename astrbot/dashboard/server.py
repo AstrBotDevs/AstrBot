@@ -208,6 +208,12 @@ class _ProxyAwareHypercornLogger(HypercornLogger):
         return atoms
 
 
+class _ProxyAwareHyperConfig(HyperConfig):
+    """Keep Hypercorn's lazy logger creation with a proxy-aware factory."""
+
+    logger_class: type[HypercornLogger] = _ProxyAwareHypercornLogger
+
+
 class AstrBotDashboard:
     """AstrBot Web Dashboard"""
 
@@ -659,10 +665,12 @@ class AstrBotDashboard:
             )
         logger.info("".join(parts))
 
-        config = HyperConfig()
+        config = (
+            _ProxyAwareHyperConfig()
+            if bool(self.config.get("dashboard", {}).get("trust_proxy_headers", False))
+            else HyperConfig()
+        )
         config.bind = binds
-        if bool(self.config.get("dashboard", {}).get("trust_proxy_headers", False)):
-            config.logger_class = _ProxyAwareHypercornLogger
         if ssl_enable:
             config.certfile = resolved_ssl_config["certfile"]
             config.keyfile = resolved_ssl_config["keyfile"]

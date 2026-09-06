@@ -110,18 +110,32 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, type PropType, ref, watch } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
 import axios from "@/utils/request";
 import { useToast } from "@/utils/toast";
 
+interface FileConfigResponse {
+  status: "ok" | "error";
+  message?: string;
+  data?: { files?: unknown[]; uploaded?: unknown[]; errors?: unknown[] };
+}
+
+interface FileItem {
+  path: string;
+  status: "ok" | "missing" | "unconfigured";
+}
+
+const stringItems = (value: unknown): string[] =>
+  Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+
 const props = defineProps({
   modelValue: {
-    type: Array,
+    type: Array as PropType<unknown[]>,
     default: () => [],
   },
   itemMeta: {
-    type: Object,
+    type: Object as PropType<object>,
     default: null,
   },
   pluginName: {
@@ -147,15 +161,15 @@ const MAX_FILE_BYTES = 500 * 1024 * 1024;
 const MAX_FILE_MB = 500;
 const directoryFiles = ref<string[]>([]);
 
-const fileList = computed({
-  get: () => (Array.isArray(props.modelValue) ? props.modelValue : []),
+const fileList = computed<string[]>({
+  get: () => stringItems(props.modelValue),
   set: (val) => emit("update:modelValue", val),
 });
 
 const mergedFileItems = computed(() => {
   const configured = new Set(fileList.value);
   const existing = new Set(directoryFiles.value);
-  const items = [];
+  const items: FileItem[] = [];
 
   for (const path of fileList.value) {
     items.push({
@@ -176,20 +190,20 @@ const mergedFileItems = computed(() => {
   return items;
 });
 
+const fileTypes = computed<unknown[]>(() => {
+  const metadata = props.itemMeta;
+  const types = metadata && "file_types" in metadata ? metadata.file_types : undefined;
+  return Array.isArray(types) ? types : [];
+});
+
 const acceptAttr = computed(() => {
-  const types = props.itemMeta?.file_types;
-  if (!Array.isArray(types) || types.length === 0) {
-    return undefined;
-  }
+  const types = fileTypes.value;
+  if (types.length === 0) return undefined;
   return types.map((ext) => `.${String(ext).replace(/^\\./, "")}`).join(",");
 });
 
 const allowedTypesText = computed(() => {
-  const types = props.itemMeta?.file_types;
-  if (!Array.isArray(types) || types.length === 0) {
-    return "";
-  }
-  return types.map((ext) => String(ext).replace(/^\\./, "")).join(", ");
+  return fileTypes.value.map((ext) => String(ext).replace(/^\\./, "")).join(", ");
 });
 
 const fileCountText = computed(() => {
@@ -227,13 +241,13 @@ const loadDirectoryFiles = async () => {
 
   loadingFiles.value = true;
   try {
-    const response = await axios.get(
+    const response = await axios.get<FileConfigResponse>(
       `/api/config/file/get?scope=plugin&name=${encodeURIComponent(
         props.pluginName,
       )}&key=${encodeURIComponent(props.configKey)}`,
     );
     if (response.data.status === "ok") {
-      const files = response.data.data?.files || [];
+      const files = stringItems(response.data.data?.files);
       directoryFiles.value = Array.from(new Set(files));
     } else {
       toast.warning(response.data.message || tm("fileUpload.loadFailed"));
@@ -248,12 +262,11 @@ const loadDirectoryFiles = async () => {
 
 const handleFileSelect = (event: Event): void => {
   const target = event.target;
-  if (target?.files && target.files.length > 0) {
+  if (!(target instanceof HTMLInputElement)) return;
+  if (target.files && target.files.length > 0) {
     uploadFiles(Array.from(target.files));
   }
-  if (target) {
-    target.value = "";
-  }
+  target.value = "";
 };
 
 const handleDrop = (event: DragEvent): void => {
@@ -290,7 +303,7 @@ const uploadFiles = async (files: File[]): Promise<void> => {
       formData.append(`file${index}`, file);
     });
 
-    const response = await axios.post(
+    const response = await axios.post<FileConfigResponse>(
       `/api/config/file/upload?scope=plugin&name=${encodeURIComponent(
         props.pluginName,
       )}&key=${encodeURIComponent(props.configKey)}`,
@@ -299,8 +312,8 @@ const uploadFiles = async (files: File[]): Promise<void> => {
     );
 
     if (response.data.status === "ok") {
-      const uploaded = response.data.data?.uploaded || [];
-      const errors = response.data.data?.errors || [];
+      const uploaded = stringItems(response.data.data?.uploaded);
+      const errors = stringItems(response.data.data?.errors);
 
       if (uploaded.length > 0) {
         const merged = [...fileList.value];

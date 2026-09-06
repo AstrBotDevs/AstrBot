@@ -46,7 +46,6 @@
                 color="primary"
                 variant="tonal"
                 size="large"
-                :loading="exportStatus === 'processing'"
                 @click="startExport"
               >
                 <v-icon class="mr-2"> mdi-export </v-icon>
@@ -150,7 +149,6 @@
                   variant="tonal"
                   size="large"
                   :disabled="!importFile"
-                  :loading="importStatus === 'uploading'"
                   @click="uploadAndCheck"
                 >
                   <v-icon class="mr-2"> mdi-upload </v-icon>
@@ -574,7 +572,8 @@
 import { computed, ref, watch } from "vue";
 import { useI18n } from "@/i18n/composables";
 import { askForConfirmation, useConfirmDialog } from "@/utils/confirmDialog";
-import axios, { isAxiosError, resolveApiUrl } from "@/utils/request";
+import { resolveErrorMessage } from "@/utils/errorUtils.js";
+import axios, { resolveApiUrl } from "@/utils/request";
 import { restartAstrBot as restartAstrBotRuntime } from "@/utils/restartAstrBot";
 import WaitingForRestart from "./WaitingForRestart.vue";
 
@@ -582,19 +581,57 @@ interface WfrExposed {
   check: (initialStartTime?: number | null) => void | Promise<void>;
   stop?: () => void;
 }
-interface BackupExportResult {
+type ExportStatus = "idle" | "processing" | "completed" | "failed";
+type ImportStatus = ExportStatus | "uploading" | "confirm";
+type BackupResponse<T> =
+  | { status: "ok"; data: T; message?: string }
+  | { status: "error"; data?: null; message?: string };
+
+interface BackupProgress {
+  current: number;
+  total: number;
+  message: string;
+}
+
+type BackupTaskProgress<T> = { task_id: string; type: "export" | "import" } & (
+  | { status: "pending" }
+  | { status: "processing"; progress?: BackupProgress }
+  | { status: "completed"; result: T }
+  | { status: "failed"; error: string | null }
+);
+
+interface BackupUploadInit {
+  upload_id: string;
+  chunk_size: number;
+  total_chunks: number;
   filename: string;
 }
+
+interface BackupExportResult {
+  filename: string;
+  path: string;
+  size: number;
+}
+
+interface BackupImportResult {
+  success: boolean;
+  imported_tables: Record<string, number>;
+  imported_files: Record<string, number>;
+  imported_directories: Record<string, number>;
+  warnings: string[];
+  errors: string[];
+}
+
 interface BackupCheckResult {
   valid: boolean;
-  error?: string;
-  can_import?: boolean;
-  backup_version?: string;
-  current_version?: string;
-  backup_time?: string;
-  version_status?: "major_diff" | "minor_diff" | "match";
-  warnings?: string[];
-  backup_summary?: {
+  error: string;
+  can_import: boolean;
+  backup_version: string;
+  current_version: string;
+  backup_time: string;
+  version_status: "" | "major_diff" | "minor_diff" | "match";
+  warnings: string[];
+  backup_summary: {
     tables?: string[];
     has_knowledge_bases?: boolean;
     has_config?: boolean;
@@ -618,14 +655,14 @@ const activeTab = ref("export");
 const wfr = ref<WfrExposed | null>(null);
 
 // 导出状态
-const exportStatus = ref("idle"); // idle, processing, completed, failed
+const exportStatus = ref<ExportStatus>("idle");
 const exportTaskId = ref<string | null>(null);
 const exportProgress = ref({ current: 0, total: 100, message: "" });
 const exportResult = ref<BackupExportResult | null>(null);
 const exportError = ref("");
 
 // 导入状态
-const importStatus = ref("idle"); // idle, uploading, confirm, processing, completed, failed
+const importStatus = ref<ImportStatus>("idle");
 const importFile = ref<File | null>(null);
 const importTaskId = ref<string | null>(null);
 const importProgress = ref({ current: 0, total: 100, message: "" });
@@ -711,7 +748,7 @@ watch(activeTab, (newVal) => {
 const loadBackupList = async () => {
   loadingList.value = true;
   try {
-    const response = await axios.get("/api/backup/list");
+    const response = await axios.get<BackupResponse<{ items: BackupListItem[] }>>("/api/backup/list");
     if (response.data.status === "ok") {
       backupList.value = response.data.data.items || [];
     }
@@ -728,7 +765,7 @@ const startExport = async () => {
   exportProgress.value = { current: 0, total: 100, message: "" };
 
   try {
-    const response = await axios.post("/api/backup/export");
+    const response = await axios.post<BackupResponse<{ task_id: string }>>("/api/backup/export");
     if (response.data.status === "ok") {
       exportTaskId.value = response.data.data.task_id;
       pollExportProgress();
@@ -737,18 +774,20 @@ const startExport = async () => {
     }
   } catch (error: unknown) {
     exportStatus.value = "failed";
-    exportError.value = error instanceof Error ? error.message : "Export failed";
+    exportError.value = resolveErrorMessage(error, "Export failed");
   }
 };
 
 // 轮询导出进度
 const pollExportProgress = async () => {
-  if (!exportTaskId.value) return;
+  const taskId = exportTaskId.value;
+  if (!taskId) return;
 
   try {
-    const response = await axios.get("/api/backup/progress", {
-      params: { task_id: exportTaskId.value },
+    const response = await axios.get<BackupResponse<BackupTaskProgress<BackupExportResult>>>("/api/backup/progress", {
+      params: { task_id: taskId },
     });
+    if (exportTaskId.value !== taskId) return;
 
     if (response.data.status === "ok") {
       const data = response.data.data;
@@ -772,8 +811,9 @@ const pollExportProgress = async () => {
       }
     }
   } catch (error: unknown) {
+    if (exportTaskId.value !== taskId) return;
     exportStatus.value = "failed";
-    exportError.value = error instanceof Error ? error.message : "Failed to get export progress";
+    exportError.value = resolveErrorMessage(error, "Failed to get export progress");
   }
 };
 
@@ -801,15 +841,6 @@ const uploadChunksInParallel = async (
 ) => {
   // 跟踪已完成的字节数（使用原子操作避免并发问题）
   let completedBytes = 0;
-  const chunkSizes: number[] = [];
-
-  // 预计算每个分片的大小（使用后端返回的 chunk_size）
-  for (let i = 0; i < totalChunks; i++) {
-    const start = i * currentChunkSize;
-    const end = Math.min(start + currentChunkSize, file.size);
-    chunkSizes[i] = end - start;
-  }
-
   // 上传单个分片的函数
   const uploadSingleChunk = async (chunkIndex: number) => {
     const start = chunkIndex * currentChunkSize;
@@ -821,7 +852,7 @@ const uploadChunksInParallel = async (
     formData.append("chunk_index", chunkIndex.toString());
     formData.append("chunk", chunk);
 
-    const response = await axios.post("/api/backup/upload/chunk", formData, {
+    const response = await axios.post<BackupResponse<unknown>>("/api/backup/upload/chunk", formData, {
       headers: { "Content-Type": "multipart/form-data" },
     });
 
@@ -830,7 +861,7 @@ const uploadChunksInParallel = async (
     }
 
     // 更新进度（累加已完成字节）
-    completedBytes += chunkSizes[chunkIndex];
+    completedBytes += chunk.size;
     uploadProgress.value.uploaded = completedBytes;
     uploadProgress.value.percent = Math.round((completedBytes / file.size) * 100);
 
@@ -839,34 +870,37 @@ const uploadChunksInParallel = async (
 
   // 创建分片索引队列
   const pendingChunks = Array.from({ length: totalChunks }, (_, i) => i);
-  const activePromises = [];
+  const activePromises: Promise<void>[] = [];
 
-  // 处理队列中的分片
-  while (pendingChunks.length > 0 || activePromises.length > 0) {
-    // 填充并发槽位
-    while (pendingChunks.length > 0 && activePromises.length < CONCURRENT_UPLOADS) {
-      const chunkIndex = pendingChunks.shift();
-      const promise = uploadSingleChunk(chunkIndex).then(() => {
-        // 完成后从活动列表移除
-        const idx = activePromises.indexOf(promise);
-        if (idx > -1) activePromises.splice(idx, 1);
-      });
-      activePromises.push(promise);
-    }
+  try {
+    while (pendingChunks.length > 0 || activePromises.length > 0) {
+      while (pendingChunks.length > 0 && activePromises.length < CONCURRENT_UPLOADS) {
+        const chunkIndex = pendingChunks.shift();
+        if (chunkIndex === undefined) break;
+        const promise: Promise<void> = uploadSingleChunk(chunkIndex).then(() => {
+          const idx = activePromises.indexOf(promise);
+          if (idx > -1) activePromises.splice(idx, 1);
+        });
+        activePromises.push(promise);
+      }
 
-    // 等待至少一个完成
-    if (activePromises.length > 0) {
-      await Promise.race(activePromises);
+      if (activePromises.length > 0) {
+        await Promise.race(activePromises);
+      }
     }
+  } finally {
+    // Let in-flight requests settle before the caller aborts the upload session.
+    await Promise.allSettled(activePromises);
   }
 };
 
 // 上传并检查
 const uploadAndCheck = async () => {
-  if (!importFile.value) return;
+  const file = importFile.value;
+  if (!file) return;
 
   importStatus.value = "uploading";
-  const file = importFile.value;
+  let currentUploadId = "";
 
   try {
     // 初始化上传进度
@@ -878,7 +912,7 @@ const uploadAndCheck = async () => {
     };
 
     // 步骤1: 初始化分片上传（后端计算并返回 chunk_size 和 total_chunks）
-    const initResponse = await axios.post("/api/backup/upload/init", {
+    const initResponse = await axios.post<BackupResponse<BackupUploadInit>>("/api/backup/upload/init", {
       filename: file.name,
       total_size: file.size,
     });
@@ -887,45 +921,59 @@ const uploadAndCheck = async () => {
       throw new Error(initResponse.data.message);
     }
 
-    uploadId.value = initResponse.data.data.upload_id;
-    chunkSize.value = initResponse.data.data.chunk_size;
-    const totalChunks = initResponse.data.data.total_chunks;
+    const session = initResponse.data.data;
+    currentUploadId = session.upload_id;
+    const currentChunkSize = session.chunk_size;
+    const totalChunks = session.total_chunks;
+    if (
+      !currentUploadId ||
+      !Number.isSafeInteger(currentChunkSize) || currentChunkSize <= 0 ||
+      !Number.isSafeInteger(totalChunks) || totalChunks <= 0 ||
+      totalChunks !== Math.ceil(file.size / currentChunkSize)
+    ) {
+      throw new Error("Invalid backup upload session");
+    }
+    uploadId.value = currentUploadId;
+    chunkSize.value = currentChunkSize;
 
     // 步骤2: 并行分片上传（5个并发连接）
     uploadProgress.value.message = t("features.settings.backup.import.uploadingChunks");
 
-    await uploadChunksInParallel(file, totalChunks, uploadId.value, chunkSize.value);
+    await uploadChunksInParallel(file, totalChunks, currentUploadId, currentChunkSize);
 
     // 步骤3: 完成上传
     uploadProgress.value.message = t("features.settings.backup.import.uploadComplete");
 
-    const completeResponse = await axios.post("/api/backup/upload/complete", {
-      upload_id: uploadId.value,
+    const completeResponse = await axios.post<BackupResponse<{ filename: string; size: number }>>("/api/backup/upload/complete", {
+      upload_id: currentUploadId,
     });
 
     if (completeResponse.data.status !== "ok") {
       throw new Error(completeResponse.data.message);
     }
 
-    uploadedFilename.value = completeResponse.data.data.filename;
+    const filename = completeResponse.data.data.filename;
+    uploadedFilename.value = filename;
 
     // 步骤4: 预检查
     uploadProgress.value.message = t("features.settings.backup.import.checking");
 
-    const checkResponse = await axios.post("/api/backup/check", {
-      filename: uploadedFilename.value,
+    const checkResponse = await axios.post<BackupResponse<BackupCheckResult | null>>("/api/backup/check", {
+      filename,
     });
+    if (uploadId.value !== currentUploadId || uploadedFilename.value !== filename) return;
 
     if (checkResponse.data.status !== "ok") {
       throw new Error(checkResponse.data.message);
     }
 
-    checkResult.value = checkResponse.data.data;
+    const result = checkResponse.data.data;
+    checkResult.value = result;
 
-    // 检查是否有效
-    if (!checkResult.value.valid) {
+    // Validate the response snapshot before entering the confirmation state.
+    if (!result?.valid) {
       importStatus.value = "failed";
-      importError.value = checkResult.value.error || t("features.settings.backup.import.invalidBackup");
+      importError.value = result?.error || t("features.settings.backup.import.invalidBackup");
       return;
     }
 
@@ -933,10 +981,10 @@ const uploadAndCheck = async () => {
     importStatus.value = "confirm";
   } catch (error: unknown) {
     // 上传失败时尝试清理已上传的分片
-    if (uploadId.value) {
+    if (currentUploadId) {
       try {
         await axios.post("/api/backup/upload/abort", {
-          upload_id: uploadId.value,
+          upload_id: currentUploadId,
         });
       } catch (abortError: unknown) {
         console.error("Failed to abort upload:", abortError);
@@ -944,26 +992,21 @@ const uploadAndCheck = async () => {
     }
 
     importStatus.value = "failed";
-    if (isAxiosError(error)) {
-      importError.value = error.response?.data?.message || "Upload failed";
-    } else if (error instanceof Error) {
-      importError.value = error.message;
-    } else {
-      importError.value = "Upload failed";
-    }
+    importError.value = resolveErrorMessage(error, "Upload failed");
   }
 };
 
 // 确认导入
 const confirmImport = async () => {
-  if (!uploadedFilename.value) return;
+  const filename = uploadedFilename.value;
+  if (!filename) return;
 
   importStatus.value = "processing";
   importProgress.value = { current: 0, total: 100, message: "" };
 
   try {
-    const response = await axios.post("/api/backup/import", {
-      filename: uploadedFilename.value,
+    const response = await axios.post<BackupResponse<{ task_id: string }>>("/api/backup/import", {
+      filename,
       confirmed: true,
     });
 
@@ -975,24 +1018,20 @@ const confirmImport = async () => {
     }
   } catch (error: unknown) {
     importStatus.value = "failed";
-    if (isAxiosError(error)) {
-      importError.value = error.response?.data?.message || "Import failed";
-    } else if (error instanceof Error) {
-      importError.value = error.message;
-    } else {
-      importError.value = "Import failed";
-    }
+    importError.value = resolveErrorMessage(error, "Import failed");
   }
 };
 
 // 轮询导入进度
 const pollImportProgress = async () => {
-  if (!importTaskId.value) return;
+  const taskId = importTaskId.value;
+  if (!taskId) return;
 
   try {
-    const response = await axios.get("/api/backup/progress", {
-      params: { task_id: importTaskId.value },
+    const response = await axios.get<BackupResponse<BackupTaskProgress<BackupImportResult>>>("/api/backup/progress", {
+      params: { task_id: taskId },
     });
+    if (importTaskId.value !== taskId) return;
 
     if (response.data.status === "ok") {
       const data = response.data.data;
@@ -1014,8 +1053,9 @@ const pollImportProgress = async () => {
       }
     }
   } catch (error: unknown) {
+    if (importTaskId.value !== taskId) return;
     importStatus.value = "failed";
-    importError.value = error instanceof Error ? error.message : "Failed to get import progress";
+    importError.value = resolveErrorMessage(error, "Failed to get import progress");
   }
 };
 
@@ -1045,7 +1085,8 @@ const resetImport = async () => {
 };
 
 // 下载备份（使用浏览器原生下载，可显示下载进度）
-const downloadBackup = (filename: string) => {
+const downloadBackup = (filename?: string) => {
+  if (!filename) return;
   // 获取 token 用于鉴权（因为浏览器原生下载无法携带 Authorization header）
   const token = localStorage.getItem("token");
   if (!token) {
@@ -1075,18 +1116,20 @@ const restoreFromList = async (filename: string) => {
 
   // 预检查
   try {
-    const checkResponse = await axios.post("/api/backup/check", {
-      filename: filename,
+    const checkResponse = await axios.post<BackupResponse<BackupCheckResult | null>>("/api/backup/check", {
+      filename,
     });
+    if (!isOpen.value || uploadedFilename.value !== filename) return;
 
     if (checkResponse.data.status !== "ok") {
       throw new Error(checkResponse.data.message);
     }
 
-    checkResult.value = checkResponse.data.data;
+    const result = checkResponse.data.data;
+    checkResult.value = result;
 
-    if (!checkResult.value.valid) {
-      alert(checkResult.value.error || t("features.settings.backup.import.invalidBackup"));
+    if (!result?.valid) {
+      alert(result?.error || t("features.settings.backup.import.invalidBackup"));
       return;
     }
 
@@ -1094,13 +1137,7 @@ const restoreFromList = async (filename: string) => {
     activeTab.value = "import";
     importStatus.value = "confirm";
   } catch (error: unknown) {
-    let msg = "Check failed";
-    if (isAxiosError(error)) {
-      msg = error.response?.data?.message || "Check failed";
-    } else if (error instanceof Error) {
-      msg = error.message;
-    }
-    alert(msg);
+    alert(resolveErrorMessage(error, "Check failed"));
   }
 };
 
@@ -1116,7 +1153,7 @@ const deleteBackup = async (filename: string) => {
       alert(response.data.message || "Delete failed");
     }
   } catch (error: unknown) {
-    alert(error instanceof Error ? error.message : "Delete failed");
+    alert(resolveErrorMessage(error, "Delete failed"));
   }
 };
 
@@ -1176,13 +1213,7 @@ const confirmRename = async () => {
       renameError.value = response.data.message || t("features.settings.backup.list.renameFailed");
     }
   } catch (error: unknown) {
-    if (isAxiosError(error)) {
-      renameError.value = error.response?.data?.message || t("features.settings.backup.list.renameFailed");
-    } else if (error instanceof Error) {
-      renameError.value = error.message;
-    } else {
-      renameError.value = t("features.settings.backup.list.renameFailed");
-    }
+    renameError.value = resolveErrorMessage(error, t("features.settings.backup.list.renameFailed"));
   } finally {
     renameLoading.value = false;
   }

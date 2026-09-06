@@ -112,7 +112,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import { useI18n } from "@/i18n/composables";
-import sidebarItems from "@/layouts/full/vertical-sidebar/sidebarItem";
+import sidebarItems, { type menu } from "@/layouts/full/vertical-sidebar/sidebarItem";
 import {
   clearSidebarCustomization,
   getSidebarCustomization,
@@ -123,15 +123,24 @@ import {
 const { t } = useI18n();
 
 const dialog = ref(false);
-const mainItems = ref([]);
-const moreItems = ref([]);
-const draggedItem = ref(null);
+type SidebarItem = menu & { title: string };
+type SidebarList = "main" | "more";
+type DraggedItem = {
+  type: SidebarList;
+  index: number;
+  item: SidebarItem;
+};
+
+const mainItems = ref<SidebarItem[]>([]);
+const moreItems = ref<SidebarItem[]>([]);
+const draggedItem = ref<DraggedItem | null>(null);
 
 function initializeItems() {
   const customization = getSidebarCustomization();
   const { mainItems: resolvedMain, moreItems: resolvedMore } = resolveSidebarItems(sidebarItems, customization);
-  mainItems.value = resolvedMain;
-  moreItems.value = resolvedMore;
+  const hasTitle = (item: menu): item is SidebarItem => typeof item.title === "string";
+  mainItems.value = resolvedMain.filter(hasTitle);
+  moreItems.value = resolvedMore.filter(hasTitle);
 }
 
 function openDialog() {
@@ -139,75 +148,40 @@ function openDialog() {
   dialog.value = true;
 }
 
-function handleDragStart(event, listType, index) {
-  draggedItem.value = {
-    type: listType,
-    index: index,
-    item: listType === "main" ? mainItems.value[index] : moreItems.value[index],
-  };
-  event.dataTransfer.effectAllowed = "move";
+function getList(listType: SidebarList) {
+  return listType === "main" ? mainItems.value : moreItems.value;
 }
 
-function handleDrop(event, targetListType, targetIndex) {
-  event.preventDefault();
+function handleDragStart(event: DragEvent, listType: SidebarList, index: number) {
+  const item = getList(listType)[index];
+  if (!item) return;
+  draggedItem.value = { type: listType, index, item };
+  if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+}
 
+function handleDrop(event: DragEvent, targetListType: SidebarList, targetIndex?: number) {
+  event.preventDefault();
   if (!draggedItem.value) return;
 
-  const sourceListType = draggedItem.value.type;
-  const sourceIndex = draggedItem.value.index;
-  const item = draggedItem.value.item;
-
-  // Remove from source
-  if (sourceListType === "main") {
-    mainItems.value.splice(sourceIndex, 1);
-  } else {
-    moreItems.value.splice(sourceIndex, 1);
-  }
-
-  // Add to target
-  if (targetListType === "main") {
-    mainItems.value.splice(targetIndex, 0, item);
-  } else {
-    moreItems.value.splice(targetIndex, 0, item);
-  }
-
+  const { type, index, item } = draggedItem.value;
+  getList(type).splice(index, 1);
+  const targetList = getList(targetListType);
+  targetList.splice(targetIndex ?? targetList.length, 0, item);
   draggedItem.value = null;
 }
 
-function handleDropToList(event, targetListType) {
-  event.preventDefault();
-
-  if (!draggedItem.value) return;
-
-  const sourceListType = draggedItem.value.type;
-  const sourceIndex = draggedItem.value.index;
-  const item = draggedItem.value.item;
-
-  // Remove from source
-  if (sourceListType === "main") {
-    mainItems.value.splice(sourceIndex, 1);
-  } else {
-    moreItems.value.splice(sourceIndex, 1);
-  }
-
-  // Add to target list at the end
-  if (targetListType === "main") {
-    mainItems.value.push(item);
-  } else {
-    moreItems.value.push(item);
-  }
-
-  draggedItem.value = null;
+function handleDropToList(event: DragEvent, targetListType: SidebarList) {
+  handleDrop(event, targetListType);
 }
 
-function moveToMore(index) {
+function moveToMore(index: number) {
   const item = mainItems.value.splice(index, 1)[0];
-  moreItems.value.push(item);
+  if (item) moreItems.value.push(item);
 }
 
-function moveToMain(index) {
+function moveToMain(index: number) {
   const item = moreItems.value.splice(index, 1)[0];
-  mainItems.value.push(item);
+  if (item) mainItems.value.push(item);
 }
 
 function saveCustomization() {

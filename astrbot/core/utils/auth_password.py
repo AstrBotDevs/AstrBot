@@ -5,13 +5,21 @@ import hmac
 import re
 import secrets
 import string
-from typing import Any
+from importlib import import_module
+from typing import Any, Protocol, cast
+
+
+class _PasswordHasher(Protocol):
+    def verify(self, hash: str, password: str) -> bool: ...
+
+
+class _Argon2Module(Protocol):
+    def PasswordHasher(self) -> _PasswordHasher: ...
+
 
 try:
-    import argon2.exceptions as argon2_exceptions
-    from argon2 import PasswordHasher
-
-    _PASSWORD_HASHER = PasswordHasher()
+    # Legacy Argon2 verification is available only when the optional SDK is installed.
+    _PASSWORD_HASHER = cast(_Argon2Module, import_module("argon2")).PasswordHasher()
 except ImportError:
     _PASSWORD_HASHER = None
 
@@ -176,8 +184,6 @@ def verify_dashboard_password(stored_hash: str, candidate_password: str) -> bool
             return False
         try:
             return _PASSWORD_HASHER.verify(stored_hash, candidate_password)
-        except argon2_exceptions.VerifyMismatchError:
-            return False
         except Exception:
             return False
 

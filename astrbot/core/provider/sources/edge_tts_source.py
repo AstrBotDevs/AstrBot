@@ -1,9 +1,10 @@
 import asyncio
 import os
 import subprocess
+from importlib import import_module
+from typing import NotRequired, Protocol, TypedDict, runtime_checkable
 
 import anyio
-import edge_tts
 
 from astrbot.core import logger
 from astrbot.core.provider.entities import ProviderType
@@ -11,6 +12,27 @@ from astrbot.core.provider.provider import TTSProvider
 from astrbot.core.provider.register import register_provider_adapter
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.datetime_utils import generate_timestamp_id
+
+edge_tts = import_module("edge_tts")
+
+
+class EdgeSpeechOptions(TypedDict):
+    text: str
+    voice: str
+    rate: NotRequired[str]
+    volume: NotRequired[str]
+    pitch: NotRequired[str]
+
+
+@runtime_checkable
+class EdgeCommunicator(Protocol):
+    async def save(self, audio_fname: str) -> None: ...
+
+
+@runtime_checkable
+class FFmpegConverter(Protocol):
+    def convert(self, *, input_file: str, output_file: str) -> object: ...
+
 
 """
 edge_tts 方式,能够免费､快速生成语音,使用需要先安装edge-tts库
@@ -57,7 +79,7 @@ class ProviderEdgeTTS(TTSProvider):
         )
 
         # 构建 Edge TTS 参数
-        kwargs = {"text": text, "voice": self.voice}
+        kwargs: EdgeSpeechOptions = {"text": text, "voice": self.voice}
         if self.rate:
             kwargs["rate"] = self.rate
         if self.volume:
@@ -67,12 +89,14 @@ class ProviderEdgeTTS(TTSProvider):
 
         try:
             communicate = edge_tts.Communicate(proxy=self.proxy, **kwargs)
+            if not isinstance(communicate, EdgeCommunicator):
+                raise TypeError("The installed Edge TTS SDK has no async save method.")
             await communicate.save(mp3_path)
 
             try:
-                from pyffmpeg import FFmpeg
-
-                ff = FFmpeg()
+                ff = import_module("pyffmpeg").FFmpeg()
+                if not isinstance(ff, FFmpegConverter):
+                    raise TypeError("The installed pyffmpeg has no conversion method.")
                 ff.convert(input_file=mp3_path, output_file=wav_path)
             except Exception as e:
                 logger.debug(f"pyffmpeg 转换失败: {e}, 尝试使用 ffmpeg 命令行进行转换")

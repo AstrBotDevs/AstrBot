@@ -26,6 +26,7 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_backups_path,
     get_astrbot_data_path,
 )
+from astrbot.dashboard.validation import is_json_object
 
 CHUNK_SIZE = 1024 * 1024
 UPLOAD_EXPIRE_SECONDS = 3600
@@ -76,8 +77,8 @@ class BackupService:
         self._cleanup_task: asyncio.Task | None = None
 
     @staticmethod
-    def _payload(data: object) -> dict[str, Any]:
-        return data if isinstance(data, dict) else {}
+    def _payload(data: object) -> dict[str, object]:
+        return data if is_json_object(data) else {}
 
     @staticmethod
     async def _save_upload(file: Any, target_path: str) -> None:
@@ -97,8 +98,8 @@ class BackupService:
         raise BackupServiceError("无效的上传文件")
 
     @staticmethod
-    def _validate_backup_filename(filename: str | None, *, missing: str) -> str:
-        if not filename:
+    def _validate_backup_filename(filename: object, *, missing: str) -> str:
+        if not isinstance(filename, str) or not filename:
             raise BackupServiceError(missing)
         if ".." in filename or "/" in filename or "\\" in filename:
             raise BackupServiceError("无效的文件名")
@@ -331,11 +332,11 @@ class BackupService:
         filename = payload.get("filename")
         total_size = payload.get("total_size", 0)
 
-        if not filename:
+        if not isinstance(filename, str) or not filename:
             raise BackupServiceError("缺少 filename 参数")
         if not filename.endswith(".zip"):
             raise BackupServiceError("请上传 ZIP 格式的备份文件")
-        if total_size <= 0:
+        if not isinstance(total_size, (int, float)) or total_size <= 0:
             raise BackupServiceError("无效的文件大小")
 
         total_chunks = math.ceil(total_size / CHUNK_SIZE)
@@ -432,7 +433,7 @@ class BackupService:
         payload = self._payload(data)
         upload_id = payload.get("upload_id")
 
-        if not upload_id:
+        if not isinstance(upload_id, str) or not upload_id:
             raise BackupServiceError("缺少 upload_id 参数")
         if upload_id not in self.upload_sessions:
             raise BackupServiceError("上传会话不存在或已过期")
@@ -480,7 +481,7 @@ class BackupService:
     async def upload_abort(self, data: object) -> tuple[dict | None, str | None]:
         payload = self._payload(data)
         upload_id = payload.get("upload_id")
-        if not upload_id:
+        if not isinstance(upload_id, str) or not upload_id:
             raise BackupServiceError("缺少 upload_id 参数")
 
         if upload_id in self.upload_sessions:
@@ -639,7 +640,7 @@ class BackupService:
             missing="缺少参数 filename",
         )
         new_name = payload.get("new_name")
-        if not new_name:
+        if not isinstance(new_name, str) or not new_name:
             raise BackupServiceError("缺少参数 new_name")
 
         new_name = secure_filename(new_name)

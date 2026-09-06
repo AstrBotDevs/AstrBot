@@ -1,34 +1,50 @@
 """使用此功能应该先 pip install baidu-aip"""
 
-from typing import TypedDict, TypeGuard
+from importlib import import_module
+from typing import Protocol, TypedDict, TypeGuard, runtime_checkable
 
 from . import ContentSafetyStrategy
 
 
 class BaiduAipViolation(TypedDict, total=False):
-    msg: str
+    msg: str | None
 
 
 def _is_violation_list(value: object) -> TypeGuard[list[BaiduAipViolation]]:
     if not isinstance(value, list):
         return False
     for item in value:
-        if not isinstance(item, dict):
-            return False
-        message = item.get("msg")
-        if message is not None and (not isinstance(message, str)):
+        if isinstance(item, dict):
+            for key, message in item.items():
+                if (
+                    key == "msg"
+                    and message is not None
+                    and not isinstance(message, str)
+                ):
+                    return False
+        else:
             return False
     return True
 
 
+@runtime_checkable
+class BaiduContentCensor(Protocol):
+    def textCensorUserDefined(self, content: str) -> dict[str, object]: ...
+
+
 class BaiduAipStrategy(ContentSafetyStrategy):
     def __init__(self, appid: str, ak: str, sk: str) -> None:
-        from aip import AipContentCensor
+        censor_factory = import_module("aip").AipContentCensor
 
         self.app_id = appid
         self.api_key = ak
         self.secret_key = sk
-        self.client = AipContentCensor(self.app_id, self.api_key, self.secret_key)
+        client = censor_factory(self.app_id, self.api_key, self.secret_key)
+        if not isinstance(client, BaiduContentCensor):
+            raise TypeError(
+                "The installed Baidu SDK does not expose content censorship."
+            )
+        self.client: BaiduContentCensor = client
 
     def check(self, content: str) -> tuple[bool, str]:
         res = self.client.textCensorUserDefined(content)

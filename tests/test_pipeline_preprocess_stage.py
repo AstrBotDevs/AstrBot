@@ -1,11 +1,7 @@
 """Tests for astrbot.core.pipeline.preprocess_stage.stage module."""
 
-from unittest.mock import MagicMock
-
-import pytest
-
 from astrbot.core.pipeline.preprocess_stage.stage import PreProcessStage
-from astrbot.core.pipeline.stage import registered_stages, Stage
+from astrbot.core.pipeline.stage import Stage, registered_stages
 
 
 class TestPreProcessStage:
@@ -14,6 +10,7 @@ class TestPreProcessStage:
     def test_module_import(self):
         """Verify the preprocess_stage module can be imported."""
         import astrbot.core.pipeline.preprocess_stage.stage  # noqa: F811
+
         assert hasattr(
             astrbot.core.pipeline.preprocess_stage.stage,
             "PreProcessStage",

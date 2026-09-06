@@ -5,6 +5,7 @@ import traceback
 from astrbot.core import logger
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
+from astrbot.dashboard.validation import is_json_object
 
 
 class SubAgentServiceError(Exception):
@@ -27,7 +28,7 @@ class SubAgentService:
 
     async def update_config(self, data: object) -> None:
         try:
-            if not isinstance(data, dict):
+            if not is_json_object(data):
                 raise SubAgentServiceError("配置必须为 JSON 对象")
 
             config = self.core_lifecycle.astrbot_config
@@ -66,7 +67,7 @@ class SubAgentService:
 
     @staticmethod
     def _normalize_config(data: object) -> dict:
-        if not isinstance(data, dict):
+        if not is_json_object(data):
             data = {
                 "main_enable": False,
                 "remove_main_duplicate_tools": False,
@@ -83,7 +84,7 @@ class SubAgentService:
         agents = data.get("agents")
         if isinstance(agents, list):
             for agent in agents:
-                if isinstance(agent, dict):
+                if is_json_object(agent):
                     agent.setdefault("provider_id", None)
                     agent.setdefault("persona_id", None)
 

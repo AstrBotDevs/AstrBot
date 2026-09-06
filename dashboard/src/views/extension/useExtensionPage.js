@@ -374,9 +374,7 @@ export const useExtensionPage = (initialTab = "installed") => {
       plugins.sort((a, b) => {
         const downloadsA = a.download_count ?? 0;
         const downloadsB = b.download_count ?? 0;
-        return sortOrder.value === "desc"
-          ? downloadsB - downloadsA
-          : downloadsA - downloadsB;
+        return sortOrder.value === "desc" ? downloadsB - downloadsA : downloadsA - downloadsB;
       });
     } else if (sortBy.value === "author") {
       // 按作者名字典序排序
@@ -411,12 +409,8 @@ export const useExtensionPage = (initialTab = "installed") => {
 
     // Key by the unique market plugin key: metadata `name` is not unique and
     // would collapse same-named plugins into one entry.
-    const pluginsByKey = new Map(
-      allPlugins.map((plugin) => [getMarketPluginKey(plugin), plugin]),
-    );
-    const selected = randomPluginNames.value
-      .map((key) => pluginsByKey.get(key))
-      .filter(Boolean);
+    const pluginsByKey = new Map(allPlugins.map((plugin) => [getMarketPluginKey(plugin), plugin]));
+    const selected = randomPluginNames.value.map((key) => pluginsByKey.get(key)).filter(Boolean);
 
     if (selected.length > 0) {
       return selected;
@@ -631,11 +625,7 @@ export const useExtensionPage = (initialTab = "installed") => {
   // different authors can publish plugins with the same name — so fall back to
   // repo and finally name for legacy registry entries without an explicit id.
   const getMarketPluginKey = (plugin) => {
-    return (
-      getMarketPluginId(plugin) ||
-      String(plugin?.repo || "").trim() ||
-      String(plugin?.name || "").trim()
-    );
+    return getMarketPluginId(plugin) || String(plugin?.repo || "").trim() || String(plugin?.name || "").trim();
   };
 
   const getMarketInstallSourcePayload = () => {
@@ -711,11 +701,7 @@ export const useExtensionPage = (initialTab = "installed") => {
       // Implicit records (legacy plugins with no persisted install source)
       // resolve to the default registry, so keep them in the update check
       // instead of skipping them entirely.
-      if (
-        !extension.updates_enabled ||
-        !source ||
-        source.install_method !== "market"
-      ) {
+      if (!extension.updates_enabled || !source || source.install_method !== "market") {
         return;
       }
 

@@ -1,8 +1,9 @@
 """Comprehensive tests for CLI utilities."""
 
-import pytest
-from unittest.mock import MagicMock, patch, AsyncMock
 from pathlib import Path
+from unittest.mock import patch
+
+import pytest
 
 from astrbot.cli.utils.version_comparator import VersionComparator
 
@@ -75,7 +76,7 @@ class TestDashboardManager:
         """Test dashboard installation when bundled."""
         from astrbot.cli.utils.dashboard import DashboardManager
 
-        with patch.object(DashboardManager, '_bundled_dist', Path(__file__).parent):
+        with patch.object(DashboardManager, "_bundled_dist", Path(__file__).parent):
             manager = DashboardManager()
             # Should not raise and should return early
             await manager.ensure_installed(Path("/tmp"))
@@ -85,7 +86,7 @@ class TestDashboardManager:
         """Test dashboard installation when not bundled."""
         from astrbot.cli.utils.dashboard import DashboardManager
 
-        with patch.object(DashboardManager, '_bundled_dist', Path("/nonexistent")):
+        with patch.object(DashboardManager, "_bundled_dist", Path("/nonexistent")):
             with patch("os.environ.get", return_value="1"):  # systemd mode
                 manager = DashboardManager()
                 await manager.ensure_installed(Path("/tmp"))

@@ -8,6 +8,7 @@ from astrbot.core.agent.mcp_client import MCPTool, validate_mcp_stdio_config
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.star import star_map
 from astrbot.core.tools.registry import get_builtin_tool_config_statuses
+from astrbot.dashboard.validation import is_json_object, object_path
 
 
 class ToolsServiceError(Exception):
@@ -19,13 +20,13 @@ class EmptyMcpServersError(ValueError):
 
 
 def extract_mcp_server_config(mcp_servers_value: object) -> dict:
-    if not isinstance(mcp_servers_value, dict):
+    if not is_json_object(mcp_servers_value):
         raise ValueError("mcpServers must be a JSON object")
     if not mcp_servers_value:
         raise EmptyMcpServersError("mcpServers configuration cannot be empty")
     key_0 = next(iter(mcp_servers_value))
     extracted = mcp_servers_value[key_0]
-    if not isinstance(extracted, dict):
+    if not is_json_object(extracted):
         raise ValueError(
             "Invalid mcpServers format. Ensure each key in mcpServers is a server name, "
             "and each value is an object containing fields like command/url."
@@ -410,7 +411,7 @@ class ToolsService:
         old_config: object,
         active: bool,
     ) -> tuple[bool, dict]:
-        server_config = {"active": active}
+        server_config: dict[str, object] = {"active": active}
         only_update_active = True
 
         for key, value in server_data.items():
@@ -432,7 +433,7 @@ class ToolsService:
                 server_config[key] = value
             only_update_active = False
 
-        if only_update_active and isinstance(old_config, dict):
+        if only_update_active and is_json_object(old_config):
             for key, value in old_config.items():
                 if key != "active":
                     server_config[key] = value
@@ -529,7 +530,11 @@ class ToolsService:
 
     def _get_config_entries(self) -> list[dict]:
         conf_list = self.core_lifecycle.astrbot_config_mgr.get_conf_list()
-        conf_name_map = {conf["id"]: conf["name"] for conf in conf_list}
+        conf_name_map = {
+            conf["id"]: conf["name"]
+            for conf in conf_list
+            if "id" in conf and "name" in conf
+        }
         config_entries = []
         for conf_id, conf in self.core_lifecycle.astrbot_config_mgr.confs.items():
             config_entries.append(
@@ -590,7 +595,10 @@ class ToolsService:
         }
         if not readonly:
             defaults = (
-                perms_store.get("_default", {}) if isinstance(perms_store, dict) else {}
+                object_path(perms_store, "_default")
+                if is_json_object(perms_store)
+                and is_json_object(perms_store.get("_default"))
+                else {}
             )
             configured = tool.name in defaults
             permission = defaults[tool.name] if configured else "member"

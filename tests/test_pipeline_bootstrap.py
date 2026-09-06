@@ -1,7 +1,5 @@
 """Tests for astrbot.core.pipeline.bootstrap module."""
 
-import pytest
-
 from astrbot.core.pipeline.bootstrap import ensure_builtin_stages_registered
 
 
@@ -11,7 +9,10 @@ class TestPipelineBootstrap:
     def test_module_import(self):
         """Verify the bootstrap module can be imported."""
         import astrbot.core.pipeline.bootstrap  # noqa: F811
-        assert hasattr(astrbot.core.pipeline.bootstrap, "ensure_builtin_stages_registered")
+
+        assert hasattr(
+            astrbot.core.pipeline.bootstrap, "ensure_builtin_stages_registered"
+        )
 
     def test_ensure_builtin_stages_registered_is_callable(self):
         """Verify ensure_builtin_stages_registered is a function."""

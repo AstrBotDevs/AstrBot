@@ -20,6 +20,9 @@ from openai._exceptions import NotFoundError
 from openai.lib.streaming.chat._completions import ChatCompletionStreamState
 from openai.types.chat.chat_completion import ChatCompletion
 from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
+from openai.types.chat.chat_completion_message_function_tool_call import (
+    ChatCompletionMessageFunctionToolCall,
+)
 from openai.types.completion_usage import CompletionUsage
 from PIL import Image as PILImage
 from PIL import UnidentifiedImageError
@@ -1019,15 +1022,19 @@ class ProviderOpenAIOfficial(Provider):
             for tool_call in choice.message.tool_calls:
                 if isinstance(tool_call, str):
                     # workaround for #1359
-                    tool_call = json.loads(tool_call)
+                    tool_call = (
+                        ChatCompletionMessageFunctionToolCall.model_validate_json(
+                            tool_call
+                        )
+                    )
                 if tools is None:
                     # 工具集未提供
                     # Should be unreachable
                     raise Exception("工具集未提供")
 
-                if tool_call.type == "function":
-                    # workaround for #1454
-                    func = tool_call.function  # type: ignore[union-attr]
+                if isinstance(tool_call, ChatCompletionMessageFunctionToolCall):
+                    # Work around providers returning non-string arguments.
+                    func = tool_call.function
                     if isinstance(func.arguments, str):
                         try:
                             args = json.loads(func.arguments)

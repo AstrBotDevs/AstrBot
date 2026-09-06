@@ -7,7 +7,10 @@ from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.response import AgentResponseData
 from astrbot.core.agent.run_context import ContextWrapper, TContext
 from astrbot.core.agent.runners.base import AgentResponse, AgentState, BaseAgentRunner
-from astrbot.core.agent.runners.dify.dify_api_client import DifyAPIClient
+from astrbot.core.agent.runners.dify.dify_api_client import (
+    DifyAPIClient,
+    DifyFilePayload,
+)
 from astrbot.core.agent.tool_executor import BaseFunctionToolExecutor
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import (
@@ -115,7 +118,7 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
         self,
         image_url: str,
         session_id: str,
-    ) -> dict[str, str] | None:
+    ) -> DifyFilePayload | None:
         image_data = await MediaResolver(
             image_url,
             media_type="image",
@@ -135,7 +138,8 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
             file_name=f"image.{image_extension}",
         )
         logger.debug(f"Dify 上传图片响应:{file_response}")
-        if "id" not in file_response:
+        upload_file_id = file_response.get("id")
+        if not isinstance(upload_file_id, str):
             logger.warning(
                 f"上传图片后得到未知的 Dify 响应:{file_response},图片将忽略｡"
             )
@@ -144,7 +148,7 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
         return {
             "type": "image",
             "transfer_method": "local_file",
-            "upload_file_id": file_response["id"],
+            "upload_file_id": upload_file_id,
         }
 
     async def _execute_dify_request(self):
@@ -163,7 +167,7 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
         result = ""
 
         # 处理图片上传
-        files_payload = []
+        files_payload: list[DifyFilePayload] = []
         for image_url in image_urls:
             try:
                 image_payload = await self._upload_image_for_dify(

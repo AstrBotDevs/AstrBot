@@ -265,13 +265,23 @@ class SharedPreferences:
         if self._scheduler.running:
             self._scheduler.shutdown(wait=False)
 
+    @overload
+    async def get_async(
+        self, scope: str, scope_id: str, key: str, default: _VT
+    ) -> _VT: ...
+
+    @overload
+    async def get_async(
+        self, scope: str, scope_id: str, key: str, default: None = None
+    ) -> Any: ...
+
     async def get_async(
         self,
         scope: str,
         scope_id: str,
         key: str,
-        default: _VT = None,
-    ) -> _VT:
+        default: _VT | None = None,
+    ) -> _VT | None:
         """获取指定范围和键的偏好设置"""
         await self.initialize()
         if scope_id is None or key is None:
@@ -304,8 +314,11 @@ class SharedPreferences:
         self,
         umo: str,
         key: str,
-        default: _VT = None,
+        default: _VT,
     ) -> _VT: ...
+
+    @overload
+    async def session_get(self, umo: str, key: str, default: None = None) -> Any: ...
 
     @overload
     async def session_get(
@@ -335,8 +348,8 @@ class SharedPreferences:
         self,
         umo: str | None,
         key: str | None = None,
-        default: _VT = None,
-    ) -> _VT | list[Preference]:
+        default: _VT | None = None,
+    ) -> _VT | list[Preference] | None:
         """获取会话范围的偏好设置
 
         Note: 当 umo 或者 key 为 None，时，返回 Preference 列表，其中的 value 属性是一个 dict，value["val"] 为值。
@@ -349,13 +362,16 @@ class SharedPreferences:
     async def global_get(self, key: None, default: Any = None) -> list[Preference]: ...
 
     @overload
-    async def global_get(self, key: str, default: _VT = None) -> _VT: ...
+    async def global_get(self, key: str, default: _VT) -> _VT: ...
+
+    @overload
+    async def global_get(self, key: str, default: None = None) -> Any: ...
 
     async def global_get(
         self,
         key: str | None,
-        default: _VT = None,
-    ) -> _VT | list[Preference]:
+        default: _VT | None = None,
+    ) -> _VT | list[Preference] | None:
         """获取全局范围的偏好设置
 
         Note: 当 scope_id 或者 key 为 None，时，返回 Preference 列表，其中的 value 属性是一个 dict，value["val"] 为值。
@@ -426,6 +442,24 @@ class SharedPreferences:
     # DEPRECATED METHODS
     # ====
 
+    @overload
+    def get(
+        self,
+        key: str,
+        default: _VT,
+        scope: str | None = None,
+        scope_id: str | None = "",
+    ) -> _VT: ...
+
+    @overload
+    def get(
+        self,
+        key: str,
+        default: None = None,
+        scope: str | None = None,
+        scope_id: str | None = "",
+    ) -> Any: ...
+
     @deprecated(
         version="4.0.0",
         reason="Use get_async() instead. Plugins: use PluginKVStoreMixin.get_kv_data().",
@@ -433,10 +467,10 @@ class SharedPreferences:
     def get(
         self,
         key: str,
-        default: _VT = None,
+        default: _VT | None = None,
         scope: str | None = None,
         scope_id: str | None = "",
-    ) -> _VT:
+    ) -> _VT | None:
         """获取偏好设置（已弃用）"""
         if scope_id == "":
             scope_id = "unknown"

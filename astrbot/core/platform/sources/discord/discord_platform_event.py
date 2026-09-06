@@ -2,6 +2,7 @@ import asyncio
 from collections.abc import AsyncGenerator
 from io import BytesIO
 from pathlib import Path
+from typing import TypedDict
 
 import discord
 
@@ -9,6 +10,7 @@ from astrbot import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import (
     BaseMessageComponent,
+    ComponentType,
     File,
     Image,
     Plain,
@@ -33,10 +35,19 @@ from astrbot.core.utils.media_utils import (
 
 
 class DiscordViewComponent(BaseMessageComponent):
-    type: str = "discord_view"
+    type: ComponentType = ComponentType.DiscordRawView
 
     def __init__(self, view: discord.ui.View) -> None:
         self.view = view
+
+
+class DiscordSendPayload(TypedDict, total=False):
+    """Shared send fields accepted by both channels and followup webhooks."""
+
+    content: str
+    files: list[discord.File]
+    view: discord.ui.View
+    embeds: list[discord.Embed]
 
 
 class DiscordPlatformEvent(AstrMessageEvent):
@@ -72,7 +83,7 @@ class DiscordPlatformEvent(AstrMessageEvent):
         except Exception as e:
             logger.error(f"[Discord] 解析消息链时失败: {e}", exc_info=True)
             return
-        kwargs = {}
+        kwargs: DiscordSendPayload = {}
         if content:
             kwargs["content"] = content
         if files:
@@ -81,8 +92,6 @@ class DiscordPlatformEvent(AstrMessageEvent):
             kwargs["view"] = view
         if embeds:
             kwargs["embeds"] = embeds
-        if reference_message_id and (not self.interaction_followup_webhook):
-            kwargs["reference"] = self.client.get_message(int(reference_message_id))
         if not kwargs:
             logger.debug("[Discord] 尝试发送空消息,已忽略｡")
             return
@@ -96,7 +105,13 @@ class DiscordPlatformEvent(AstrMessageEvent):
                 if not isinstance(channel, discord.abc.Messageable):
                     logger.error(f"[Discord] 频道 {channel.id} 不是可发送消息的类型")
                     return
-                await channel.send(**kwargs)
+                if reference_message_id:
+                    reference = discord.MessageReference(
+                        message_id=int(reference_message_id), channel_id=channel.id
+                    )
+                    await channel.send(reference=reference, **kwargs)
+                else:
+                    await channel.send(**kwargs)
         except Exception as e:
             logger.error(f"[Discord] 发送消息时发生未知错误: {e}", exc_info=True)
         await super().send(message)
@@ -245,7 +260,7 @@ class DiscordPlatformEvent(AstrMessageEvent):
                 )
             )
         )
-        if not cache_complete:
+        if not cache_complete or cached_members is None:
             return group
 
         group.group_admins = []
@@ -261,7 +276,7 @@ class DiscordPlatformEvent(AstrMessageEvent):
                 and str(member_id) != group.group_owner
             ):
                 group.group_admins.append(str(member_id))
-            if isinstance(channel, discord.Thread):
+            if not isinstance(channel, discord.abc.GuildChannel):
                 continue
             try:
                 if not channel.permissions_for(member).view_channel:

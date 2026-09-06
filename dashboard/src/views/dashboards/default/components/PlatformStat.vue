@@ -106,51 +106,51 @@
 </template>
 
 <script lang="ts">
+import { defineComponent, type PropType } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
 
-export default {
+export interface PlatformMessageStat {
+  name: string;
+  count: number;
+  timestamp: number;
+}
+
+export default defineComponent({
   name: "PlatformStat",
-  props: ["stat"],
+  props: {
+    stat: {
+      type: Object as PropType<{ platform?: PlatformMessageStat[] }>,
+      default: () => ({}),
+    },
+  },
   setup() {
     const { tm: t } = useModuleI18n("features/dashboard");
     return { t };
   },
-  data() {
-    return {
-      platforms: [],
-    };
-  },
   computed: {
-    sortedPlatforms() {
+    platforms(): PlatformMessageStat[] {
+      return this.stat.platform ?? [];
+    },
+    sortedPlatforms(): PlatformMessageStat[] {
       return [...this.platforms].sort((a, b) => b.count - a.count);
     },
-    totalCount() {
+    totalCount(): number {
       return this.platforms.reduce((sum, platform) => sum + platform.count, 0);
     },
-    mostActivePlatform() {
+    mostActivePlatform(): string {
       return this.sortedPlatforms.length > 0 ? this.sortedPlatforms[0].name : "-";
     },
-    topPlatformPercentage() {
+    topPlatformPercentage(): number {
       if (this.totalCount === 0 || this.sortedPlatforms.length === 0) return 0;
       return Math.round((this.sortedPlatforms[0].count / this.totalCount) * 100);
     },
   },
-  watch: {
-    stat: {
-      handler: function (val) {
-        if (val && val.platform) {
-          this.platforms = val.platform;
-        }
-      },
-      deep: true,
-    },
-  },
   methods: {
-    getPercentage(count) {
+    getPercentage(count: number): number {
       return this.totalCount ? (count / this.totalCount) * 100 : 0;
     },
   },
-};
+});
 </script>
 
 <style scoped>

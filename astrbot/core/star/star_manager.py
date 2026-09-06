@@ -11,12 +11,12 @@ import os
 import sys
 import tempfile
 import traceback
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from enum import Enum, auto
 from pathlib import Path
 from types import ModuleType
-from typing import Any
+from typing import Any, TypeGuard, TypeVar
 
 import aiofiles
 import yaml
@@ -209,12 +209,21 @@ async def _get_global_dict_preference(key: str) -> dict[Any, Any]:
     return value
 
 
+_HandlerResultT = TypeVar("_HandlerResultT")
+
+
+def _is_partial_handler(
+    handler: Callable[..., _HandlerResultT],
+) -> TypeGuard[functools.partial[_HandlerResultT]]:
+    return isinstance(handler, functools.partial)
+
+
 class PluginManager:
     def __init__(self, context: Context, config: AstrBotConfig) -> None:
         self._updater = _PluginUpdater()
 
         self.context = context
-        self.context._star_manager = self  # type: ignore
+        self.context._star_manager = self
         StarTools.initialize(context)
 
         self.config = config
@@ -361,7 +370,8 @@ class PluginManager:
             to_update.append(target_plugin)
         else:
             for p in self.context.get_all_stars():
-                to_update.append(p.root_dir_name)
+                if p.root_dir_name is not None:
+                    to_update.append(p.root_dir_name)
         for p in to_update:
             plugin_path = os.path.join(plugin_dir, p)
             await self._ensure_plugin_requirements(plugin_path, p)
@@ -1308,7 +1318,7 @@ class PluginManager:
                             ):
                                 raw_handler = (
                                     ft.handler.func
-                                    if isinstance(ft.handler, functools.partial)
+                                    if _is_partial_handler(ft.handler)
                                     else ft.handler
                                 )
                                 ft.handler_module_path = metadata.module_path

@@ -15,7 +15,7 @@ from astrbot.core import logger
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.message import TextPart
-from astrbot.core.agent.tool import ToolSet
+from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.astr_agent_context import AgentContextWrapper, AstrAgentContext
 from astrbot.core.astr_agent_hooks import MAIN_AGENT_HOOKS
 from astrbot.core.astr_agent_run_util import AgentRunner
@@ -815,9 +815,11 @@ def _get_quoted_message_parser_settings(
     if not isinstance(provider_settings, dict):
         return DEFAULT_QUOTED_MESSAGE_SETTINGS
     overrides = provider_settings.get("quoted_message_parser")
-    if not isinstance(overrides, dict):
-        return DEFAULT_QUOTED_MESSAGE_SETTINGS
-    return DEFAULT_QUOTED_MESSAGE_SETTINGS.with_overrides(overrides)
+    if isinstance(overrides, dict):
+        return DEFAULT_QUOTED_MESSAGE_SETTINGS.with_overrides(
+            {key: value for key, value in overrides.items() if isinstance(key, str)}
+        )
+    return DEFAULT_QUOTED_MESSAGE_SETTINGS
 
 
 def _get_image_compress_args(
@@ -831,7 +833,11 @@ def _get_image_compress_args(
         enabled = True
 
     raw_options = provider_settings.get("image_compress_options", {})
-    options = raw_options if isinstance(raw_options, dict) else {}
+    options: dict[str, object] = (
+        {key: value for key, value in raw_options.items() if isinstance(key, str)}
+        if isinstance(raw_options, dict)
+        else {}
+    )
 
     max_size = options.get("max_size", IMAGE_COMPRESS_DEFAULT_MAX_SIZE)
     if not isinstance(max_size, int):
@@ -1081,7 +1087,7 @@ def _plugin_tool_fix(event: AstrMessageEvent, req: ProviderRequest) -> None:
                 # 保留 MCP 工具
                 new_tool_set.add_tool(tool)
                 continue
-            mp = tool.handler_module_path
+            mp = tool.handler_module_path if isinstance(tool, FunctionTool) else None
             if not mp:
                 # 没有 plugin 归属信息的工具（如 subagent transfer_to_*）
                 # 不应受到会话插件过滤影响。

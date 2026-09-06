@@ -9,7 +9,6 @@ from astrbot.core.agent.message import (
     AssistantMessageSegment,
     CheckpointData,
     CheckpointMessageSegment,
-    ContentPart,
     ImageURLPart,
     Message,
     SystemMessageSegment,
@@ -45,7 +44,9 @@ class TestMessageConstruction:
 
     def test_assistant_message_with_tool_calls_no_content(self):
         """Assistant messages with tool_calls may have content=None."""
-        tc = ToolCall(id="call_1", function=ToolCall.FunctionBody(name="f", arguments="{}"))
+        tc = ToolCall(
+            id="call_1", function=ToolCall.FunctionBody(name="f", arguments="{}")
+        )
         msg = Message(role="assistant", content=None, tool_calls=[tc])
         assert msg.role == "assistant"
         assert msg.content is None
@@ -230,14 +231,18 @@ class TestContentParts:
 
     def test_image_url_part(self):
         """ImageURLPart holds an image URL."""
-        part = ImageURLPart(image_url=ImageURLPart.ImageURL(url="http://example.com/img.jpg"))
+        part = ImageURLPart(
+            image_url=ImageURLPart.ImageURL(url="http://example.com/img.jpg")
+        )
         assert part.type == "image_url"
         assert part.image_url.url == "http://example.com/img.jpg"
 
     def test_image_url_with_id(self):
         """ImageURLPart can include an id."""
         part = ImageURLPart(
-            image_url=ImageURLPart.ImageURL(url="http://example.com/img.jpg", id="img_1")
+            image_url=ImageURLPart.ImageURL(
+                url="http://example.com/img.jpg", id="img_1"
+            )
         )
         assert part.image_url.id == "img_1"
 
@@ -247,7 +252,9 @@ class TestToolCall:
 
     def test_tool_call_minimal(self):
         """ToolCall with id and function body."""
-        tc = ToolCall(id="call_1", function=ToolCall.FunctionBody(name="f", arguments="{}"))
+        tc = ToolCall(
+            id="call_1", function=ToolCall.FunctionBody(name="f", arguments="{}")
+        )
         assert tc.id == "call_1"
         assert tc.function.name == "f"
         assert tc.function.arguments == "{}"
@@ -264,7 +271,9 @@ class TestToolCall:
 
     def test_tool_call_extra_content_none_omitted(self):
         """ToolCall with extra_content=None omits the field in serialization."""
-        tc = ToolCall(id="call_3", function=ToolCall.FunctionBody(name="h", arguments="{}"))
+        tc = ToolCall(
+            id="call_3", function=ToolCall.FunctionBody(name="h", arguments="{}")
+        )
         dumped = tc.model_dump()
         assert "extra_content" not in dumped
 

@@ -1,16 +1,24 @@
 """Tests for resolve_dashboard_dist() when an explicit WebUI directory is used."""
 
 import logging
+from pathlib import Path
 
 import pytest
 
+from astrbot.core import logger
 from astrbot.core.config.default import VERSION
 from astrbot.core.dashboard_assets import resolve_dashboard_dist
 
 WARNING_FRAGMENT = "does not declare a version matching core"
 
 
-def _make_dist(root, version: str | None) -> str:
+@pytest.fixture(autouse=True)
+def _capture_core_logger(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Capture records without depending on the application's handler setup."""
+    monkeypatch.setattr(logger, "propagate", True)
+
+
+def _make_dist(root: Path, version: str | None) -> str:
     assets = root / "assets"
     assets.mkdir(parents=True)
     (root / "index.html").write_text("<html></html>", encoding="utf-8")

@@ -54,7 +54,10 @@ class NeoPythonComponent(PythonComponent):
         kernel_id: str | None = None,
         timeout: int = 30,  # noqa: ASYNC109
         silent: bool = False,
+        cwd: str | None = None,
     ) -> dict[str, Any]:
+        if cwd is not None:
+            raise NotImplementedError("Shipyard Neo Python does not support cwd.")
         _ = kernel_id
         with anyio.fail_after(timeout):
             result = await self._sandbox.python.exec(code)

@@ -1,4 +1,4 @@
-from astrbot.api import star
+from astrbot.api import logger, star
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.core.star.filter.command import GreedyStr
 
@@ -95,7 +95,7 @@ class Main(star.Star):
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("name")
-    async def name(self, event: AstrMessageEvent, alias: GreedyStr) -> None:
+    async def set_name(self, event: AstrMessageEvent, alias: GreedyStr) -> None:
         """Set display name for current UMO"""
         await self.name_c.name(event, alias)
 
@@ -159,15 +159,28 @@ class Main(star.Star):
         """查看或者切换模型"""
         await self.provider_c.model_ls(message, idx_or_name)
 
+    async def _notify_retired_conversation_command(
+        self, message: AstrMessageEvent, command: str
+    ) -> None:
+        logger.warning(
+            "The /%s command is deprecated; use the Dashboard conversation workspace.",
+            command,
+        )
+        await message.send(
+            message.plain_result(
+                f"/{command} 指令已弃用，请在 WebUI 的数据管理页面查看对话和历史记录。"
+            )
+        )
+
     @filter.command("history")
     async def his(self, message: AstrMessageEvent, page: int = 1) -> None:
         """查看对话记录"""
-        await self.conversation_c.his(message, page)
+        await self._notify_retired_conversation_command(message, "history")
 
     @filter.command("ls")
     async def convs(self, message: AstrMessageEvent, page: int = 1) -> None:
         """查看对话列表"""
-        await self.conversation_c.convs(message, page)
+        await self._notify_retired_conversation_command(message, "ls")
 
     @filter.command("new")
     async def new_conv(self, message: AstrMessageEvent) -> None:

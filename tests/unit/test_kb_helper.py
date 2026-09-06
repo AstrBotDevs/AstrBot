@@ -13,7 +13,7 @@ import json
 import sys
 import types
 from pathlib import Path
-from unittest.mock import ANY, AsyncMock, MagicMock, PropertyMock, call, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -24,8 +24,7 @@ def stub_provider_manager_module():
     original_module = sys.modules.get("astrbot.core.provider.manager")
     stub_module = types.ModuleType("astrbot.core.provider.manager")
 
-    class ProviderManager:
-        ...
+    class ProviderManager: ...
 
     setattr(stub_module, "ProviderManager", ProviderManager)
     sys.modules["astrbot.core.provider.manager"] = stub_module
@@ -113,8 +112,13 @@ def mock_rerank_provider():
         def __init__(self) -> None:
             pass
 
-        async def rerank(self, query: str, documents: list[str], top_k: int = 10) -> list[dict]:
-            return [{"index": i, "score": 1.0, "document": doc} for i, doc in enumerate(documents[:top_k])]
+        async def rerank(
+            self, query: str, documents: list[str], top_k: int = 10
+        ) -> list[dict]:
+            return [
+                {"index": i, "score": 1.0, "document": doc}
+                for i, doc in enumerate(documents[:top_k])
+            ]
 
         async def rerank_score(self, query: str, documents: list[str]) -> list[float]:
             return [1.0] * len(documents)
@@ -889,7 +893,9 @@ async def test_clean_and_rechunk_skips_when_not_enabled(
     )
 
     assert result == ["chunk a", "chunk b"]
-    mock_chunker.chunk.assert_awaited_once_with("some text", chunk_size=512, chunk_overlap=50)
+    mock_chunker.chunk.assert_awaited_once_with(
+        "some text", chunk_size=512, chunk_overlap=50
+    )
 
 
 @pytest.mark.asyncio

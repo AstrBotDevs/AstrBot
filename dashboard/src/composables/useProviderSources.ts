@@ -1,10 +1,7 @@
 import { computed, nextTick, onMounted, ref, watch } from "vue";
 import { askForConfirmation as askForConfirmationDialog, useConfirmDialog } from "@/utils/confirmDialog";
 import { normalizeTextInput } from "@/utils/inputValue";
-import type {
-  ProviderMetadataSource,
-  ProviderModelMetadata,
-} from "@/utils/providerMetadata";
+import type { ProviderMetadataSource, ProviderModelMetadata } from "@/utils/providerMetadata";
 import { getProviderIcon } from "@/utils/providerUtils";
 import { providerApi } from "@/api/v1";
 import { isMonochromeProviderIcon } from "@/utils/providerUtils";
@@ -16,21 +13,21 @@ export interface UseProviderSourcesOptions {
 }
 
 interface ProviderSourceType {
-  value: string
-  label: string
-  icon: string
-  isMonochrome: boolean
+  value: string;
+  label: string;
+  icon: string;
+  isMonochrome: boolean;
 }
 
 interface ProviderIconSource {
-  provider?: string
+  provider?: string;
 }
 
 export function resolveDefaultTab(value?: string) {
   const normalized = (value || "").toLowerCase();
 
-  if (normalized === 'select_provider_stt' || normalized === 'speech_to_text' || normalized.includes('stt')) {
-    return 'speech_to_text'
+  if (normalized === "select_provider_stt" || normalized === "speech_to_text" || normalized.includes("stt")) {
+    return "speech_to_text";
   }
 
   if (normalized === "select_provider_tts" || normalized === "text_to_speech" || normalized.includes("tts")) {
@@ -58,37 +55,37 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   }
 
   // ===== State =====
-  const config = ref<Record<string, any>>({})
-  const metadata = ref<Record<string, any>>({})
-  const providerSources = ref<any[]>([])
-  const providers = ref<any[]>([])
-  const selectedProviderType = ref<string>(resolveDefaultTab(options.defaultTab))
-  const selectedProviderSource = ref<any | null>(null)
-  const selectedProviderSourceOriginalId = ref<string | null>(null)
-  const editableProviderSource = ref<any | null>(null)
-  const availableModels = ref<any[]>([])
-  const modelMetadata = ref<Record<string, any>>({})
-  const loadingSources = ref(true)
-  const loadingModels = ref(false)
-  const savingSource = ref(false)
-  const savingProviderToggles = ref<string[]>([])
-  const testingProviders = ref<string[]>([])
-  const isSourceModified = ref(false)
-  const configSchema = ref<Record<string, any>>({})
-  const providerTemplates = ref<Record<string, any>>({})
-  const manualModelId = ref('')
-  const modelSearch = ref('')
+  const config = ref<Record<string, any>>({});
+  const metadata = ref<Record<string, any>>({});
+  const providerSources = ref<any[]>([]);
+  const providers = ref<any[]>([]);
+  const selectedProviderType = ref<string>(resolveDefaultTab(options.defaultTab));
+  const selectedProviderSource = ref<any | null>(null);
+  const selectedProviderSourceOriginalId = ref<string | null>(null);
+  const editableProviderSource = ref<any | null>(null);
+  const availableModels = ref<any[]>([]);
+  const modelMetadata = ref<Record<string, any>>({});
+  const loadingSources = ref(true);
+  const loadingModels = ref(false);
+  const savingSource = ref(false);
+  const savingProviderToggles = ref<string[]>([]);
+  const testingProviders = ref<string[]>([]);
+  const isSourceModified = ref(false);
+  const configSchema = ref<Record<string, any>>({});
+  const providerTemplates = ref<Record<string, any>>({});
+  const manualModelId = ref("");
+  const modelSearch = ref("");
 
   let suppressSourceWatch = false;
   const unsavedProviderSourceMarker = Symbol("unsavedProviderSource");
 
   const providerTypes = computed(() => [
-    { value: 'chat_completion', label: tm('providers.tabs.chatCompletion'), icon: 'mdi-message-text' },
-    { value: 'speech_to_text', label: tm('providers.tabs.speechToText'), icon: 'mdi-microphone-message' },
-    { value: 'text_to_speech', label: tm('providers.tabs.textToSpeech'), icon: 'mdi-volume-high' },
-    { value: 'embedding', label: tm('providers.tabs.embedding'), icon: 'mdi-code-json' },
-    { value: 'rerank', label: tm('providers.tabs.rerank'), icon: 'mdi-compare-vertical' }
-  ])
+    { value: "chat_completion", label: tm("providers.tabs.chatCompletion"), icon: "mdi-message-text" },
+    { value: "speech_to_text", label: tm("providers.tabs.speechToText"), icon: "mdi-microphone-message" },
+    { value: "text_to_speech", label: tm("providers.tabs.textToSpeech"), icon: "mdi-volume-high" },
+    { value: "embedding", label: tm("providers.tabs.embedding"), icon: "mdi-code-json" },
+    { value: "rerank", label: tm("providers.tabs.rerank"), icon: "mdi-compare-vertical" },
+  ]);
 
   // ===== Computed =====
   const availableSourceTypes = computed(() => {
@@ -96,15 +93,15 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       return [];
     }
 
-    const types: ProviderSourceType[] = []
+    const types: ProviderSourceType[] = [];
     for (const [templateName, template] of Object.entries(providerTemplates.value)) {
       if (template.provider_type === selectedProviderType.value) {
         types.push({
           value: templateName,
           label: templateName,
           icon: getProviderIcon(template.provider),
-          isMonochrome: isMonochromeProviderIcon(template.provider)
-        })
+          isMonochrome: isMonochromeProviderIcon(template.provider),
+        });
       }
     }
 
@@ -171,9 +168,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
           type: "available",
           model: name,
           metadata: typeof item === "object" ? item?.metadata : getModelMetadata(name),
-          hasModelMetadata: Boolean(
-            typeof item === "object" ? item?.metadata : getModelMetadata(name),
-          ),
+          hasModelMetadata: Boolean(typeof item === "object" ? item?.metadata : getModelMetadata(name)),
         };
       });
 
@@ -297,12 +292,12 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   }
 
   function resolveSourceIcon(source: ProviderIconSource | null | undefined) {
-    if (!source) return ''
-    return getProviderIcon(source.provider || '') || ''
+    if (!source) return "";
+    return getProviderIcon(source.provider || "") || "";
   }
 
   function isMonochromeSourceIcon(source: ProviderIconSource | null | undefined) {
-    return Boolean(source && isMonochromeProviderIcon(source.provider || ''))
+    return Boolean(source && isMonochromeProviderIcon(source.provider || ""));
   }
 
   function getSourceDisplayName(source: any) {
@@ -317,22 +312,16 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     return modelMetadata.value?.[modelName] || null;
   }
 
-  function buildMetadataFromProvider(
-    provider: ProviderMetadataSource,
-  ): ProviderModelMetadata {
+  function buildMetadataFromProvider(provider: ProviderMetadataSource): ProviderModelMetadata {
     const inputs = Array.isArray(provider.modalities)
-      ? provider.modalities.filter(
-          (modality): modality is string => typeof modality === "string",
-        )
+      ? provider.modalities.filter((modality): modality is string => typeof modality === "string")
       : [];
     const context = Number(provider.max_context_tokens || 0);
 
     return {
       modalities: { input: inputs },
       tool_call: inputs.includes("tool_use"),
-      ...(Number.isFinite(context) && context > 0
-        ? { limit: { context } }
-        : {}),
+      ...(Number.isFinite(context) && context > 0 ? { limit: { context } } : {}),
     };
   }
 
@@ -369,26 +358,26 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     }
 
     const oldVersionProviderTypeMapping: Record<string, string> = {
-      openai_chat_completion: 'chat_completion',
-      anthropic_chat_completion: 'chat_completion',
-      googlegenai_chat_completion: 'chat_completion',
-      zhipu_chat_completion: 'chat_completion',
-      dashscope: 'chat_completion',
-      openai_whisper_api: 'speech_to_text',
-      mimo_stt_api: 'speech_to_text',
-      openai_whisper_selfhost: 'speech_to_text',
-      sensevoice_stt_selfhost: 'speech_to_text',
-      openai_tts_api: 'text_to_speech',
-      mimo_tts_api: 'text_to_speech',
-      edge_tts: 'text_to_speech',
-      gsvi_tts_api: 'text_to_speech',
-      fishaudio_tts_api: 'text_to_speech',
-      dashscope_tts: 'text_to_speech',
-      azure_tts: 'text_to_speech',
-      minimax_tts_api: 'text_to_speech',
-      volcengine_tts: 'text_to_speech'
-    }
-    return oldVersionProviderTypeMapping[provider.type]
+      openai_chat_completion: "chat_completion",
+      anthropic_chat_completion: "chat_completion",
+      googlegenai_chat_completion: "chat_completion",
+      zhipu_chat_completion: "chat_completion",
+      dashscope: "chat_completion",
+      openai_whisper_api: "speech_to_text",
+      mimo_stt_api: "speech_to_text",
+      openai_whisper_selfhost: "speech_to_text",
+      sensevoice_stt_selfhost: "speech_to_text",
+      openai_tts_api: "text_to_speech",
+      mimo_tts_api: "text_to_speech",
+      edge_tts: "text_to_speech",
+      gsvi_tts_api: "text_to_speech",
+      fishaudio_tts_api: "text_to_speech",
+      dashscope_tts: "text_to_speech",
+      azure_tts: "text_to_speech",
+      minimax_tts_api: "text_to_speech",
+      volcengine_tts: "text_to_speech",
+    };
+    return oldVersionProviderTypeMapping[provider.type];
   }
 
   function selectProviderSource(source: any) {
@@ -450,18 +439,13 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
 
   function removeProviderSourceFromLocalState(sourceId: string) {
     providers.value = providers.value.filter(
-      (provider) =>
-        provider.provider_source_id == null ||
-        String(provider.provider_source_id) !== sourceId,
+      (provider) => provider.provider_source_id == null || String(provider.provider_source_id) !== sourceId,
     );
     providerSources.value = providerSources.value.filter(
       (source) => source.id == null || String(source.id) !== sourceId,
     );
 
-    if (
-      selectedProviderSource.value?.id != null &&
-      String(selectedProviderSource.value.id) === sourceId
-    ) {
+    if (selectedProviderSource.value?.id != null && String(selectedProviderSource.value.id) === sourceId) {
       selectedProviderSource.value = null;
       selectedProviderSourceOriginalId.value = null;
       editableProviderSource.value = null;
@@ -664,18 +648,18 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   }
 
   async function deleteProvider(provider: any) {
-    const confirmed = await askForConfirmation(tm('models.deleteConfirm', { id: provider.id }))
-    if (!confirmed) return false
+    const confirmed = await askForConfirmation(tm("models.deleteConfirm", { id: provider.id }));
+    if (!confirmed) return false;
 
     try {
       const response = await providerApi.delete(String(provider.id));
       if (response.data.status !== "ok") throw new Error(response.data.message || tm("models.deleteError"));
-      providers.value = providers.value.filter((p) => p.id !== provider.id)
-      showMessage(tm('models.deleteSuccess'))
-      return true
+      providers.value = providers.value.filter((p) => p.id !== provider.id);
+      showMessage(tm("models.deleteSuccess"));
+      return true;
     } catch (error: any) {
-      showMessage(error.message || tm('models.deleteError'), 'error')
-      return false
+      showMessage(error.message || tm("models.deleteError"), "error");
+      return false;
     } finally {
       await loadConfig();
     }
@@ -722,7 +706,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   }
 
   async function loadProviderTemplate() {
-    loadingSources.value = true
+    loadingSources.value = true;
     try {
       const response = await providerApi.schema();
       if (response.data.status !== "ok") throw new Error(response.data.message || tm("providerSources.loadError"));
@@ -739,7 +723,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       console.error("Failed to load provider template:", error);
       showMessage(error instanceof Error ? error.message : tm("providerSources.loadError"), "error");
     } finally {
-      loadingSources.value = false
+      loadingSources.value = false;
     }
   }
 

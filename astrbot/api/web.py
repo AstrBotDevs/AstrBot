@@ -83,10 +83,10 @@ class PluginMultiDict(Generic[ValueT]):
         return any(item_key == key for item_key, _ in self._pairs)
 
     def __getitem__(self, key: str) -> ValueT:
-        value = self.get(key)
-        if value is None and key not in self:
-            raise KeyError(key)
-        return value
+        for item_key, item_value in reversed(self._pairs):
+            if item_key == key:
+                return item_value
+        raise KeyError(key)
 
     def __bool__(self) -> bool:
         return bool(self._pairs)

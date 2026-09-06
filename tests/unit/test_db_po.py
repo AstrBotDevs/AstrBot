@@ -6,8 +6,6 @@ for all model classes defined in ``astrbot.core.db.po``.
 
 from datetime import datetime, timezone
 
-import pytest
-
 from astrbot.core.db.po import (
     ApiKey,
     Attachment,
@@ -197,7 +195,9 @@ class TestPersonaFolder:
 
     def test_nested_folder(self):
         """PersonaFolder can have a parent_id."""
-        child = PersonaFolder(name="Child", parent_id="parent-uuid", description="Nested")
+        child = PersonaFolder(
+            name="Child", parent_id="parent-uuid", description="Nested"
+        )
         assert child.parent_id == "parent-uuid"
         assert child.description == "Nested"
 
@@ -426,7 +426,6 @@ class TestOtherModels:
 
     def test_timestamp_mixin_fields(self):
         """TimestampMixin provides created_at and updated_at."""
-        ts = datetime.now(timezone.utc)
         mixin = TimestampMixin()
         # created_at and updated_at have default factories
         assert isinstance(mixin.created_at, datetime)

@@ -1,6 +1,6 @@
 import json
 import os
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
@@ -686,7 +686,7 @@ class DocumentStorage:
     async def _insert_fts_rows_batch(
         self,
         session: AsyncSession,
-        documents: list[Document],
+        documents: Sequence[Document],
         contents: list[str],
     ) -> None:
         if not self.fts5_available:
@@ -746,7 +746,7 @@ class DocumentStorage:
     async def _delete_fts_rows_batch(
         self,
         session: AsyncSession,
-        documents: list[Document],
+        documents: Sequence[Document],
     ) -> None:
         if not self.fts5_available:
             return

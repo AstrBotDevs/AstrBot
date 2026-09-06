@@ -111,10 +111,13 @@ async def initialize_astrbot(
         raise click.ClickException(
             "--admin-password is no longer supported during init. Run 'astrbot conf admin' after initialization.",
         )
+    dashboard_defaults = DEFAULT_CONFIG["dashboard"]
+    if not isinstance(dashboard_defaults, dict):
+        raise click.ClickException("Invalid default Dashboard configuration")
     effective_admin_username = (
         admin_username.strip()
         if admin_username
-        else str(DEFAULT_CONFIG["dashboard"]["username"])
+        else str(dashboard_defaults["username"])
     )
     if admin_username:
         config = ensure_config_file()

@@ -194,6 +194,7 @@
             <v-select
               v-model="newKB.embedding_provider_id"
               :items="embeddingProviderConfigs"
+              item-value="id"
               :item-props="embeddingModelProps"
               :label="tm('createDialog.embeddingModelLabel')"
               variant="outlined"
@@ -203,6 +204,7 @@
             <v-select
               v-model="newKB.rerank_provider_id"
               :items="rerankProviderConfigs"
+              item-value="id"
               :item-props="rerankModelProps"
               :label="tm('createDialog.rerankModelLabel')"
               variant="outlined"
@@ -681,7 +683,7 @@
                             mdi-file-document-outline
                           </v-icon>
                           <span class="text-caption text-medium-emphasis">{{
-                            result.metadata.source
+                            result.metadata?.source
                           }}</span>
                           <v-spacer />
                           <v-chip
@@ -761,8 +763,11 @@
 </template>
 
 <script lang="ts">
+import { defineComponent } from "vue";
+import type { ApiEnvelope } from "@/api/v1";
 import ConsoleDisplayer from "@/components/shared/ConsoleDisplayer.vue";
 import { useModuleI18n } from "@/i18n/composables";
+import { resolveErrorMessage } from "@/utils/errorUtils.js";
 import { normalizeTextInput } from "@/utils/inputValue";
 import axios from "@/utils/request";
 
@@ -798,7 +803,7 @@ interface NewKBData {
 interface ImportTaskData {
   status: string;
   task_id?: string;
-  result?: ImportTaskResult;
+  result?: ImportTaskResult | string | null;
   message?: string;
 }
 
@@ -813,7 +818,13 @@ interface ImportTaskTopic {
   topic_summary?: string;
 }
 
-export default {
+interface KnowledgeSearchResult {
+  content: string;
+  metadata?: { source?: string };
+  score?: number;
+}
+
+export default defineComponent({
   name: "KnowledgeBase",
   components: {
     ConsoleDisplayer,
@@ -826,7 +837,7 @@ export default {
     return {
       installed: true,
       installing: false,
-      kbCollections: [],
+      kbCollections: [] as KBCollection[],
       showCreateDialog: false,
       showEmojiPicker: false,
       newKB: {
@@ -901,7 +912,7 @@ export default {
       overlap: null as number | null,
       uploading: false,
       searchQuery: "",
-      searchResults: [],
+      searchResults: [] as KnowledgeSearchResult[],
       searching: false,
       searchPerformed: false,
       topK: 5,
@@ -910,22 +921,22 @@ export default {
         collection_name: "",
       },
       deleting: false,
-      embeddingProviderConfigs: [],
-      rerankProviderConfigs: [],
-      llmProviderConfigs: [],
+      embeddingProviderConfigs: [] as ProviderConfig[],
+      rerankProviderConfigs: [] as ProviderConfig[],
+      llmProviderConfigs: [] as ProviderConfig[],
       // URL导入相关数据
       importUrl: "",
       importOptions: {
         use_llm_repair: true,
         use_clustering_summary: false,
-        repair_llm_provider_id: null,
-        summarize_llm_provider_id: null,
-        embedding_provider_id: null,
+        repair_llm_provider_id: null as string | null,
+        summarize_llm_provider_id: null as string | null,
+        embedding_provider_id: null as string | null,
         chunk_size: 300,
         chunk_overlap: 50,
       },
       importing: false,
-      pollingInterval: null as number | null,
+      pollingInterval: null as ReturnType<typeof setInterval> | null,
       // 插件更新相关
       checkingUpdate: false,
       updatingPlugin: false,
@@ -946,7 +957,7 @@ export default {
   },
   watch: {
     llmProviderConfigs: {
-      handler(newVal) {
+      handler(newVal: ProviderConfig[]) {
         if (newVal && newVal.length > 0) {
           if (!this.importOptions.repair_llm_provider_id) {
             this.importOptions.repair_llm_provider_id = newVal[0].id;
@@ -960,7 +971,7 @@ export default {
       deep: true,
     },
     embeddingProviderConfigs: {
-      handler(newVal) {
+      handler(newVal: ProviderConfig[]) {
         if (newVal && newVal.length > 0) {
           if (!this.importOptions.embedding_provider_id) {
             this.importOptions.embedding_provider_id = newVal[0].id;
@@ -976,9 +987,7 @@ export default {
     this.getProviderList();
   },
   beforeUnmount() {
-    if (this.pollingInterval) {
-      clearInterval(this.pollingInterval);
-    }
+    this.stopPolling();
   },
   methods: {
     onSearchQueryInput(value: string) {
@@ -1001,7 +1010,7 @@ export default {
         title: providerConfig.embedding_model,
         subtitle: this.tm("createDialog.providerInfo", {
           id: providerConfig.id,
-          dimensions: providerConfig.embedding_dimensions,
+          dimensions: providerConfig.embedding_dimensions ?? "N/A",
         }),
       };
     },
@@ -1138,7 +1147,7 @@ export default {
 
     getKBCollections() {
       axios
-        .get("/api/plug/alkaid/kb/collections")
+        .get<ApiEnvelope<KBCollection[]>>("/api/plug/alkaid/kb/collections")
         .then((response) => {
           if (response.data.status !== "ok") {
             this.showSnackbar(response.data.message || this.tm("messages.getKnowledgeBaseListFailed"), "error");
@@ -1153,13 +1162,6 @@ export default {
     },
 
     createCollection(name: string, emoji: string, description: string) {
-      // 如果 this.newKB.embedding_provider_id 是 Object
-      if (this.newKB.embedding_provider_id && typeof this.newKB.embedding_provider_id === "object") {
-        this.newKB.embedding_provider_id = this.newKB.embedding_provider_id.id || "";
-      }
-      if (this.newKB.rerank_provider_id && typeof this.newKB.rerank_provider_id === "object") {
-        this.newKB.rerank_provider_id = this.newKB.rerank_provider_id.id || "";
-      }
       axios
         .post("/api/plug/alkaid/kb/create_collection", {
           collection_name: name,
@@ -1193,7 +1195,6 @@ export default {
         this.newKB.name,
         this.newKB.emoji || "🙂",
         this.newKB.description,
-        this.newKB.embedding_provider_id || "",
       );
     },
 
@@ -1227,19 +1228,17 @@ export default {
       // 重置URL导入相关数据
       this.importUrl = "";
       this.importing = false;
-      if (this.pollingInterval) {
-        clearInterval(this.pollingInterval);
-        this.pollingInterval = null;
-      }
+      this.stopPolling();
     },
 
     triggerFileInput() {
-      this.$refs.fileInput.click();
+      const input = this.$refs.fileInput;
+      if (input instanceof HTMLInputElement) input.click();
     },
 
     onFileSelected(event: Event) {
-      const target = event.target as HTMLInputElement;
-      const files = target.files;
+      const target = event.target;
+      const files = target instanceof HTMLInputElement ? target.files : null;
       if (files && files.length > 0) {
         this.selectedFile = files[0];
       }
@@ -1336,7 +1335,7 @@ export default {
       this.searchPerformed = true;
 
       axios
-        .get(`/api/plug/alkaid/kb/collection/search`, {
+        .get<ApiEnvelope<KnowledgeSearchResult[]>>(`/api/plug/alkaid/kb/collection/search`, {
           params: {
             collection_name: this.currentKB.collection_name,
             query,
@@ -1415,7 +1414,7 @@ export default {
 
     getProviderList() {
       axios
-        .get("/api/config/provider/list", {
+        .get<ApiEnvelope<ProviderConfig[]>>("/api/config/provider/list", {
           params: {
             provider_type: "embedding,rerank,chat_completion",
           },
@@ -1463,7 +1462,7 @@ export default {
         };
 
         console.info("Starting URL import with payload:", JSON.stringify(payload, null, 2));
-        const addTaskResponse = await axios.post("/api/plug/url_2_kb/add", payload);
+        const addTaskResponse = await axios.post<ImportTaskData>("/api/plug/url_2_kb/add", payload);
 
         if (!addTaskResponse.data.task_id) {
           throw new Error(addTaskResponse.data.message || "Failed to start import task: No task_id received.");
@@ -1472,57 +1471,55 @@ export default {
         const taskId = addTaskResponse.data.task_id;
         this.pollTaskStatus(taskId);
       } catch (error: unknown) {
-        let errorMessage = "An unknown error occurred.";
-        if (axios.isAxiosError(error)) {
-          errorMessage = error.response?.data?.message || error.message || errorMessage;
-        } else if (error instanceof Error) {
-          errorMessage = error.message;
-        }
+        const errorMessage = resolveErrorMessage(error, "An unknown error occurred.");
         this.showSnackbar(`Error: ${errorMessage}`, "error");
         this.importing = false;
       }
     },
 
+    stopPolling() {
+      if (this.pollingInterval !== null) {
+        clearInterval(this.pollingInterval);
+        this.pollingInterval = null;
+      }
+    },
+
     pollTaskStatus(taskId: string) {
-      this.pollingInterval = setInterval(async () => {
+      this.stopPolling();
+      const interval = setInterval(async () => {
         try {
-          const statusResponse = await axios.post(`/api/plug/url_2_kb/status`, {
+          const statusResponse = await axios.post<ImportTaskData>(`/api/plug/url_2_kb/status`, {
             task_id: taskId,
           });
 
+          if (this.pollingInterval !== interval) return;
           const taskData = statusResponse.data;
           const taskStatus = taskData.status;
 
           if (taskStatus === "completed") {
-            clearInterval(this.pollingInterval);
-            this.pollingInterval = null;
+            this.stopPolling();
             this.showSnackbar(this.tm("importFromUrl.uploadingChunks"), "info");
-            this.handleImportResult(taskData);
+            await this.handleImportResult(taskData);
           } else if (taskStatus === "failed") {
-            clearInterval(this.pollingInterval);
-            this.pollingInterval = null;
-            const failureReason = taskData.result || "Unknown reason.";
+            this.stopPolling();
+            const failureReason = typeof taskData.result === "string" ? taskData.result : taskData.message || "Unknown reason.";
             this.showSnackbar(`${this.tm("importFromUrl.importFailed")}: ${failureReason}`, "error");
             this.importing = false;
           }
         } catch (error: unknown) {
-          clearInterval(this.pollingInterval);
-          this.pollingInterval = null;
-          let errorMessage = "An unknown error occurred during polling.";
-          if (axios.isAxiosError(error)) {
-            errorMessage = error.response?.data?.message || error.message || errorMessage;
-          } else if (error instanceof Error) {
-            errorMessage = error.message;
-          }
+          if (this.pollingInterval !== interval) return;
+          this.stopPolling();
+          const errorMessage = resolveErrorMessage(error, "An unknown error occurred during polling.");
           this.showSnackbar(`Polling Error: ${errorMessage}`, "error");
           this.importing = false;
         }
       }, 3000);
+      this.pollingInterval = interval;
     },
 
     async handleImportResult(data: ImportTaskData) {
       const chunks: Array<{ content: string; filename: string }> = [];
-      const result = data.result;
+      const result = typeof data.result === "object" && data.result !== null ? data.result : {};
 
       // 1. Handle overall summary
       if (result.overall_summary) {
@@ -1547,7 +1544,7 @@ export default {
       // 3. Handle noise points
       if (result.noise_points && result.noise_points.length > 0) {
         result.noise_points.forEach((point, index) => {
-          const content = typeof point === "object" && point.text ? point.text : point;
+          const content = typeof point === "string" ? point : point.text;
           chunks.push({ content: content, filename: `noise_${index + 1}.txt` });
         });
       }
@@ -1610,7 +1607,7 @@ export default {
       return response.data;
     },
   },
-};
+});
 </script>
 
 <style scoped>

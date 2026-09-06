@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import pytest
-
-from astrbot.core.agent.run_context import ContextWrapper, NoContext
 from astrbot.core.agent.message import Message
+from astrbot.core.agent.run_context import ContextWrapper, NoContext
 
 
 class TestContextWrapper:
@@ -52,7 +50,10 @@ class TestContextWrapper:
 
     def test_messages_can_be_replaced(self):
         """messages field can be replaced with a new list."""
-        msgs = [Message(role="user", content="a"), Message(role="assistant", content="b")]
+        msgs = [
+            Message(role="user", content="a"),
+            Message(role="assistant", content="b"),
+        ]
         ctx = ContextWrapper(context="test", messages=msgs)
         assert len(ctx.messages) == 2
 

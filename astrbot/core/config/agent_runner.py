@@ -146,12 +146,16 @@ def normalize_agent_runner(agent_runner: object) -> dict[str, Any]:
     Raises:
         ValueError: If the root value or runner type is invalid.
     """
-    if not isinstance(agent_runner, dict):
+    if isinstance(agent_runner, dict):
+        runner_data = {
+            key: value for key, value in agent_runner.items() if isinstance(key, str)
+        }
+        runner_type = runner_data.get("runner_type")
+        config = runner_data.get("config", {})
+    else:
         raise ValueError("agent_runner must be an object")
-    runner_type = agent_runner.get("runner_type")
-    if runner_type not in AGENT_RUNNER_TYPES:
+    if not isinstance(runner_type, str) or runner_type not in AGENT_RUNNER_TYPES:
         raise ValueError(f"Unsupported Agent Runner type: {runner_type}")
-    config = agent_runner.get("config", {})
     default = AGENT_RUNNER_CONFIG_DEFAULTS[runner_type]
     normalized = _normalize_value(config, default)
     if runner_type == "local":

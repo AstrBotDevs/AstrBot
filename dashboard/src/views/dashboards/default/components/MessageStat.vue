@@ -28,7 +28,7 @@
           <template #selection="{ item }">
             <div class="d-flex align-center">
               <v-icon start size="small"> mdi-calendar-range </v-icon>
-              {{ item.raw?.label }}
+              {{ item.label }}
             </div>
           </template>
         </v-select>
@@ -91,6 +91,9 @@
 </template>
 
 <script lang="ts">
+import type { ApexOptions } from "apexcharts";
+import { defineComponent } from "vue";
+import type { ApiEnvelope } from "@/api/v1";
 import { useModuleI18n } from "@/i18n/composables";
 import { useCustomizerStore } from "@/stores/customizer";
 import axios from "@/utils/request";
@@ -100,7 +103,7 @@ interface TimeRangeOption {
   value: number;
 }
 
-export default {
+export default defineComponent({
   name: "MessageStat",
   props: ["stat"],
   setup() {
@@ -135,7 +138,6 @@ export default {
           },
           animations: {
             enabled: true,
-            easing: "easeinout",
             speed: 800,
           },
         },
@@ -175,8 +177,8 @@ export default {
             text: "",
           },
           labels: {
-            formatter: (value: number) =>
-              new Date(value).toLocaleString("zh-CN", {
+            formatter: (value: string, timestamp?: number) =>
+              new Date(timestamp ?? Number(value)).toLocaleString("zh-CN", {
                 month: "short",
                 day: "numeric",
                 hour: "2-digit",
@@ -207,12 +209,12 @@ export default {
             right: 0,
           },
         },
-      },
+      } satisfies ApexOptions,
 
       chartSeries: [
         {
           name: "",
-          data: [] as number[][],
+          data: [] as [number, number][],
         },
       ],
 
@@ -253,7 +255,7 @@ export default {
 
       try {
         const offsetSec = this.selectedTimeRange?.value ?? 86400;
-        const response = await axios.get(`/api/stat/get?offset_sec=${offsetSec}`);
+        const response = await axios.get<ApiEnvelope<{ message_time_series: [number, number][] }>>(`/api/stat/get?offset_sec=${offsetSec}`);
         const data = response.data.data;
 
         if (data && data.message_time_series) {
@@ -282,10 +284,8 @@ export default {
       this.totalMessages = this.formatNumber(total);
 
       // 计算日平均
-      if (this.messageTimeSeries.length > 0) {
-        const daysSpan = (this.selectedTimeRange?.value ?? 86400) / 86400; // 将秒转换为天数
-        this.dailyAverage = this.formatNumber(Math.round(total / daysSpan));
-      }
+      const daysSpan = (this.selectedTimeRange?.value ?? 86400) / 86400;
+      this.dailyAverage = this.formatNumber(Math.round(total / daysSpan));
 
       // 计算增长率
       this.calculateGrowthRate();
@@ -312,7 +312,7 @@ export default {
       }
     },
   },
-};
+});
 </script>
 
 <style scoped>

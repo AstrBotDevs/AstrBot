@@ -147,7 +147,6 @@ class FakePlatformAdapter(Platform):
         self.commit_event(message_event)  # 提交事件到事件队列。不要忘记！
 ```
 
-
 `fake_platform_event.py`：
 
 ```py
@@ -206,6 +205,5 @@ class MyPlugin(Star):
 启动后，可以看到正常工作：
 
 ![image](https://files.astrbot.app/docs/source/images/plugin-platform-adapter/QQ_1738156166893.png)
-
 
 有任何疑问欢迎加群询问~

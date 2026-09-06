@@ -1,5 +1,4 @@
 """Smoke tests for ProviderVolcengineTTS."""
-import pytest
 
 from astrbot.core.provider.sources.volcengine_tts import ProviderVolcengineTTS
 

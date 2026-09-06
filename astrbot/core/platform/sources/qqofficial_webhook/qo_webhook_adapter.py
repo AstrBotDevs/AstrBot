@@ -133,7 +133,7 @@ class QQOfficialWebhookPlatformAdapter(Platform):
         return PlatformMetadata(
             name="qq_official_webhook",
             description="QQ 机器人官方 API 适配器",
-            id=self.config.get("id"),
+            id=str(self.config.get("id") or "qq_official_webhook"),
             support_proactive_message=True,
         )
 

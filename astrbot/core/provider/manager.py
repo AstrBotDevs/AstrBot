@@ -252,7 +252,7 @@ class ProviderManager:
                     if agent_runner.get("runner_type") == "local"
                     else None
                 )
-                provider = self.inst_map.get(provider_id)
+                provider = self.inst_map.get(provider_id) if provider_id else None
                 if not provider:
                     provider = self.provider_insts[0] if self.provider_insts else None
             elif provider_type == ProviderType.SPEECH_TO_TEXT:

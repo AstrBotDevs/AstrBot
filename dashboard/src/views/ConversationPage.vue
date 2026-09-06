@@ -42,7 +42,7 @@
                 flat
               >
                 <template v-slot:selection="{ item }">
-                  <v-chip size="small" variant="solo-filled" label>
+                  <v-chip size="small" variant="tonal" label>
                     {{ item.title }}
                   </v-chip>
                 </template>
@@ -616,15 +616,18 @@
 
 <script lang="ts">
 import { VueMonacoEditor } from "@guolao/vue-monaco-editor";
-import { debounce } from "lodash";
-import { defineComponent, markRaw } from "vue";
+import type { editor } from "monaco-editor";
+import { defineComponent, markRaw, useTemplateRef } from "vue";
+import type { VForm } from "vuetify/components";
+import { conversationApi, type ApiEnvelope } from "@/api/v1";
+import type { ChatRecord, MessagePart, ToolCall } from "@/composables/useMessages";
 import MessageList from "@/components/chat/MessageList.vue";
 import UmoDisplay from "@/components/shared/UmoDisplay.vue";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
-import { useCommonStore } from "@/stores/common";
 import { useCustomizerStore } from "@/stores/customizer";
 import { askForConfirmation as askForConfirmationDialog, useConfirmDialog } from "@/utils/confirmDialog";
-import axios, { AxiosError, isCancel } from "@/utils/request";
+import { resolveErrorMessage } from "@/utils/errorUtils.js";
+import axios, { isCancel } from "@/utils/request";
 
 interface UmoInfo {
   umo?: string;
@@ -646,21 +649,26 @@ interface ConversationItem {
   sessionInfo?: { platform: string; messageType: string; sessionId: string };
 }
 
-interface MessageContentPart {
-  type: "plain" | "image";
-  text?: string;
-  embedded_url?: string;
-}
-
-interface HistoryMessage {
+interface HistoryMessage extends Record<string, unknown> {
   role: string;
-  content: string | unknown[] | Record<string, unknown> | null;
+  content?: unknown;
 }
 
-interface VFormRef {
-  validate: () => Promise<{ valid: boolean }>;
-  reset?: () => void;
-  resetValidation?: () => void;
+interface ConversationListData {
+  conversations: ConversationItem[];
+  pagination?: { page: number; page_size: number; total: number; total_pages: number };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function parseHistory(value: unknown): HistoryMessage[] {
+  const history: unknown = typeof value === "string" ? JSON.parse(value) : value;
+  if (!Array.isArray(history) || !history.every((entry): entry is HistoryMessage => isRecord(entry) && typeof entry.role === "string")) {
+    throw new Error("Conversation history must be an array of messages with roles.");
+  }
+  return history;
 }
 
 export default defineComponent({
@@ -676,8 +684,10 @@ export default defineComponent({
     const { tm } = useModuleI18n("features/conversation");
     const customizerStore = useCustomizerStore();
     const confirmDialog = useConfirmDialog();
+    const form = useTemplateRef<InstanceType<typeof VForm>>("form");
 
     return {
+      form,
       locale,
       tm,
       customizerStore,
@@ -740,40 +750,29 @@ export default defineComponent({
       isEditingHistory: false,
       editedHistory: "",
       savingHistory: false,
-      monacoEditor: null,
+      monacoEditor: null as editor.IStandaloneCodeEditor | null,
       umoDisplayMode: "parsed",
 
-      commonStore: useCommonStore(),
-      debouncedApplyFilters: undefined as ReturnType<typeof debounce> | undefined,
+      availablePlatforms: [] as { title: string; value: string }[],
+      filterTimeout: null as ReturnType<typeof setTimeout> | null,
     };
   },
 
   watch: {
     // 监听筛选条件变化，使用防抖处理
     platformFilter() {
-      this.invalidateConversationListRequest();
-      this.debouncedApplyFilters?.();
+      this.scheduleFilterRefresh();
     },
     messageTypeFilter() {
-      this.invalidateConversationListRequest();
-      this.debouncedApplyFilters?.();
+      this.scheduleFilterRefresh();
     },
     search() {
-      this.invalidateConversationListRequest();
-      this.debouncedApplyFilters?.();
+      this.scheduleFilterRefresh();
     },
-  },
-
-  created() {
-    (this as { debouncedApplyFilters?: (() => void) | undefined }).debouncedApplyFilters = debounce(() => {
-      // 重置到第一页
-      this.pagination.page = 1;
-      this.fetchConversations();
-    }, 300);
   },
 
   beforeUnmount() {
-    this.debouncedApplyFilters?.cancel();
+    this.cancelFilterRefresh();
     this.listRequestId += 1;
     this.listAbortController?.abort();
   },
@@ -815,25 +814,9 @@ export default defineComponent({
           title: this.tm("table.headers.actions"),
           key: "actions",
           sortable: false,
-          align: "center",
+          align: "center" as const,
         },
       ];
-    },
-
-    // 可用平台列表
-    availablePlatforms() {
-      const platforms = [];
-      // 解析 tutorial_map
-      const tutorialMap = this.commonStore.tutorial_map;
-      for (const platform in tutorialMap) {
-        if (Object.hasOwn(tutorialMap, platform)) {
-          platforms.push({
-            title: platform,
-            value: platform,
-          });
-        }
-      }
-      return platforms;
     },
 
     // 可用消息类型列表
@@ -859,12 +842,12 @@ export default defineComponent({
     },
 
     // 将对话历史转换为 MessageList 组件期望的格式
-    formattedMessages() {
+    formattedMessages(): ChatRecord[] {
       // 按 tool_call_id 索引 tool 角色消息的执行结果
       const toolResultsById: Record<string, unknown> = {};
       for (const msg of this.conversationHistory) {
-        if (msg.role === "tool" && (msg as Record<string, unknown>).tool_call_id) {
-          toolResultsById[(msg as Record<string, unknown>).tool_call_id as string] = msg.content;
+        if (msg.role === "tool" && typeof msg.tool_call_id === "string") {
+          toolResultsById[msg.tool_call_id] = msg.content;
         }
       }
 
@@ -880,30 +863,22 @@ export default defineComponent({
               .filter((part) => part.type !== "plain" || (part.text && part.text.trim()));
 
             // 把 OpenAI 风格的 assistant.tool_calls 转成 MessageList 已支持的 tool_call part
-            if (
-              msg.role === "assistant" &&
-              Array.isArray((msg as Record<string, unknown>).tool_calls) &&
-              ((msg as Record<string, unknown>).tool_calls as unknown[]).length
-            ) {
-              const toolCalls = ((msg as Record<string, unknown>).tool_calls as unknown[]).map((tc: unknown) => {
-                const tcObj = tc as Record<string, unknown>;
-                const fn = (tcObj.function || {}) as Record<string, unknown>;
+            if (msg.role === "assistant" && Array.isArray(msg.tool_calls) && msg.tool_calls.length) {
+              const toolCalls: ToolCall[] = msg.tool_calls.filter(isRecord).map((call) => {
+                const fn = isRecord(call.function) ? call.function : {};
+                const id = typeof call.id === "string" ? call.id : undefined;
+                const name = fn.name || call.name;
                 return {
-                  id: tcObj.id,
-                  name: (fn.name || tcObj.name) as string,
-                  args: (fn.arguments ?? tcObj.arguments) as string,
-                  result: toolResultsById[tcObj.id as string],
-                  // 历史回放无真实耗时数据：
-                  // ts: 0  → ToolCallCard.toolCallDuration 在 startTime<=0 时早退，跳过时长显示
-                  // finished_ts: 1 → MessageList.toolCallStatusText 视为已完成（避免误显示"运行中"）
+                  id,
+                  name: typeof name === "string" ? name : undefined,
+                  args: fn.arguments ?? call.arguments,
+                  result: id ? toolResultsById[id] : undefined,
+                  // Replayed tool calls are complete, but have no measured duration.
                   ts: 0,
                   finished_ts: 1,
                 };
               });
-              messageParts.push({
-                type: "tool_call",
-                tool_calls: toolCalls,
-              } as unknown as MessageContentPart);
+              messageParts.push({ type: "tool_call", tool_calls: toolCalls });
             }
 
             const finalParts = messageParts.length ? messageParts : [{ type: "plain", text: "" }];
@@ -920,19 +895,49 @@ export default defineComponent({
   },
 
   mounted() {
+    this.fetchFilterOptions();
     this.fetchConversations();
   },
 
   methods: {
+    async fetchFilterOptions() {
+      try {
+        const response = await conversationApi.filterOptions();
+        if (response.data.status === "ok") {
+          this.availablePlatforms = response.data.data.bots.map((bot) => ({
+            title: bot.type ? `${bot.id} (${bot.type})` : bot.id,
+            value: bot.id,
+          }));
+        }
+      } catch (error: unknown) {
+        console.warn("Failed to load conversation filter options:", error);
+      }
+    },
+
+    cancelFilterRefresh() {
+      if (this.filterTimeout !== null) {
+        clearTimeout(this.filterTimeout);
+        this.filterTimeout = null;
+      }
+    },
+
+    scheduleFilterRefresh() {
+      this.invalidateConversationListRequest();
+      this.cancelFilterRefresh();
+      this.filterTimeout = setTimeout(() => {
+        this.pagination.page = 1;
+        this.fetchConversations();
+      }, 300);
+    },
     // Monaco编辑器挂载后的回调
-    onMonacoMounted(editor: unknown) {
-      this.monacoEditor = editor;
+    onMonacoMounted(editor: editor.IStandaloneCodeEditor) {
+      this.monacoEditor = markRaw(editor);
       // 添加JSON格式校验
       editor.onDidChangeModelContent(() => {
         try {
           JSON.parse(this.editedHistory);
           // 有效的JSON格式
-          editor.getAction("editor.action.formatDocument").run();
+          void editor.getAction("editor.action.formatDocument")?.run();
         } catch (e) {
           // 无效的JSON格式，不做处理，Monaco编辑器会自动提示
         }
@@ -942,7 +947,7 @@ export default defineComponent({
     // 处理表格选项变更（页面大小等）
     handleTableOptions(options: { itemsPerPage?: number }) {
       // 处理页面大小变更
-      if (options.itemsPerPage !== this.pagination.page_size) {
+      if (options.itemsPerPage !== undefined && options.itemsPerPage !== this.pagination.page_size) {
         this.pagination.page_size = options.itemsPerPage;
         this.pagination.page = 1; // 重置到第一页
         this.fetchConversations();
@@ -969,16 +974,12 @@ export default defineComponent({
 
     // Extract error message from unknown
     getErrorMessage(error: unknown, fallback: string): string {
-      const err = error as {
-        response?: { data?: { message?: string } };
-        message?: string;
-      };
-      return err.response?.data?.message || err.message || fallback;
+      return resolveErrorMessage(error, fallback);
     },
 
     // 获取消息类型的显示文本
     getMessageTypeDisplay(messageType: string) {
-      const typeMap = {
+      const typeMap: Record<string, string> = {
         GroupMessage: this.tm("messageTypes.group"),
         group: this.tm("messageTypes.group"),
         FriendMessage: this.tm("messageTypes.friend"),
@@ -1052,7 +1053,7 @@ export default defineComponent({
 
     // 获取对话列表
     async fetchConversations() {
-      this.debouncedApplyFilters?.cancel();
+      this.cancelFilterRefresh();
       this.listAbortController?.abort();
       const controller = new AbortController();
       const requestId = ++this.listRequestId;
@@ -1085,7 +1086,7 @@ export default defineComponent({
           params.search = search;
         }
 
-        const response = await axios.get("/api/conversation/list", {
+        const response = await axios.get<ApiEnvelope<ConversationListData>>("/api/conversation/list", {
           signal: controller.signal,
           params,
         });
@@ -1145,7 +1146,7 @@ export default defineComponent({
 
       try {
         console.info(`正在请求对话详情，user_id=${item.user_id}, cid=${item.cid}`);
-        const response = await axios.post("/api/conversation/detail", {
+        const response = await axios.post<ApiEnvelope<ConversationItem & { history?: unknown }>>("/api/conversation/detail", {
           user_id: item.user_id,
           cid: item.cid,
         });
@@ -1154,7 +1155,7 @@ export default defineComponent({
           try {
             const detailData = response.data.data || {};
             const mergedConversation = {
-              ...this.selectedConversation,
+              ...item,
               ...detailData,
             };
             const umoInfo = this.getConversationUmoInfo(mergedConversation);
@@ -1165,8 +1166,7 @@ export default defineComponent({
             };
             this.selectedConversation = mergedConversation;
 
-            const historyData = detailData.history || "[]";
-            this.conversationHistory = JSON.parse(historyData);
+            this.conversationHistory = parseHistory(detailData.history ?? []);
             this.editedHistory = JSON.stringify(this.conversationHistory, null, 2);
           } catch (e) {
             this.conversationHistory = [];
@@ -1193,9 +1193,9 @@ export default defineComponent({
 
       try {
         // 验证JSON格式
-        let historyJson;
+        let historyJson: HistoryMessage[];
         try {
-          historyJson = JSON.parse(this.editedHistory);
+          historyJson = parseHistory(this.editedHistory);
         } catch (e) {
           this.showErrorMessage(this.tm("messages.invalidJson"));
           return;
@@ -1242,7 +1242,8 @@ export default defineComponent({
 
     // 保存编辑后的对话
     async saveConversation() {
-      if (!(this.$refs.form as unknown as VFormRef).validate()) return;
+      const validation = await this.form?.validate();
+      if (!validation?.valid) return;
 
       this.actionLoading = true;
       try {
@@ -1480,8 +1481,8 @@ export default defineComponent({
     },
 
     // 将消息内容转换为 MessagePart[] 格式
-    convertContentToMessageParts(content: unknown): MessageContentPart[] {
-      const parts: MessageContentPart[] = [];
+    convertContentToMessageParts(content: unknown): MessagePart[] {
+      const parts: MessagePart[] = [];
 
       if (typeof content === "string") {
         // 纯文本内容
@@ -1493,13 +1494,13 @@ export default defineComponent({
         }
       } else if (Array.isArray(content)) {
         // 数组格式（OpenAI 格式）
-        content.forEach((item) => {
-          if (item.type === "text" && item.text) {
+        content.filter(isRecord).forEach((item) => {
+          if (item.type === "text" && typeof item.text === "string" && item.text) {
             parts.push({
               type: "plain",
               text: item.text,
             });
-          } else if (item.type === "image_url" && item.image_url?.url) {
+          } else if (item.type === "image_url" && isRecord(item.image_url) && typeof item.image_url.url === "string") {
             parts.push({
               type: "image",
               embedded_url: item.image_url.url,
@@ -1549,7 +1550,7 @@ export default defineComponent({
           .filter((item) => item.type === "text")
           .map((item) => item.text)
           .join("\n");
-      } else if (typeof content === "object") {
+      } else if (isRecord(content)) {
         return Object.values(content)
           .filter((val) => typeof val === "string")
           .join("");

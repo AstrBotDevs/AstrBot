@@ -383,7 +383,12 @@ class CuaPythonComponent(PythonComponent):
         kernel_id: str | None = None,
         timeout: int = 30,
         silent: bool = False,
+        cwd: str | None = None,
     ) -> dict[str, Any]:
+        if cwd is not None:
+            raise NotImplementedError(
+                "Cua Python does not support a working directory."
+            )
         _ = kernel_id
         if self._python_exec is not None:
             result = await _maybe_await(self._python_exec(code, timeout=timeout))

@@ -5,9 +5,17 @@ from collections.abc import AsyncGenerator
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import Plain
-from astrbot.api.platform import Group, MessageMember
+from astrbot.api.platform import AstrBotMessage, Group, MessageMember, PlatformMetadata
 
 from .client import MattermostClient
+
+
+class MattermostMessage(AstrBotMessage):
+    """Incoming post with downloaded attachments owned by its event."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.temporary_file_paths: list[str] = []
 
 
 class MattermostMessageEvent(AstrMessageEvent):
@@ -15,16 +23,17 @@ class MattermostMessageEvent(AstrMessageEvent):
 
     def __init__(
         self,
-        message_str,
-        message_obj,
-        platform_meta,
-        session_id,
+        message_str: str,
+        message_obj: AstrBotMessage,
+        platform_meta: PlatformMetadata,
+        session_id: str,
         client: MattermostClient,
     ) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.client = client
-        for path in getattr(message_obj, "temporary_file_paths", []):
-            self.track_temporary_local_file(path)
+        if isinstance(message_obj, MattermostMessage):
+            for path in message_obj.temporary_file_paths:
+                self.track_temporary_local_file(path)
 
     async def send(self, message: MessageChain) -> None:
         await self.client.send_message_chain(self.get_session_id(), message)

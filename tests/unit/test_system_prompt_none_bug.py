@@ -8,15 +8,16 @@ The bug was that ``req.system_prompt += ...`` was called when
 system_prompt was None instead of initializing it to "" first.
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 
 @pytest.mark.asyncio
 async def test_ensure_persona_and_skills_handles_none_system_prompt():
     from astrbot.core.astr_main_agent import _ensure_persona_and_skills
-    from astrbot.core.provider.entities import ProviderRequest
     from astrbot.core.db.po import ConversationV2
+    from astrbot.core.provider.entities import ProviderRequest
 
     # ProviderRequest.system_prompt defaults to None
     req = ProviderRequest()

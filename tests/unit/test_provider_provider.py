@@ -24,7 +24,6 @@ from astrbot.core.provider.provider import (
     TTSProvider,
 )
 
-
 # =========================================================================
 # AbstractProvider
 # =========================================================================
@@ -64,7 +63,9 @@ class TestAbstractProvider:
             "astrbot.core.provider.provider.provider_cls_map",
             {"test_type": pmd},
         ):
-            ap = _ConcreteAbstractProvider(provider_config={"type": "test_type", "id": "myid"})
+            ap = _ConcreteAbstractProvider(
+                provider_config={"type": "test_type", "id": "myid"}
+            )
             meta = ap.meta()
             assert isinstance(meta, ProviderMeta)
             assert meta.id == "myid"
@@ -78,7 +79,10 @@ class TestAbstractProvider:
 
     def test_meta_no_provider_config_id_falls_back_to_default(self):
         pmd = ProviderMetaData(
-            id="default", model=None, type="test_type", provider_type=ProviderType.EMBEDDING
+            id="default",
+            model=None,
+            type="test_type",
+            provider_type=ProviderType.EMBEDDING,
         )
         with patch(
             "astrbot.core.provider.provider.provider_cls_map",
@@ -174,6 +178,7 @@ class TestProvider:
 
     def test_text_chat_abstract_prevents_instantiation(self):
         """Provider subclasses must override text_chat; can't instantiate without it."""
+
         class IncompleteProvider(Provider):
             def get_current_key(self) -> str:
                 return ""
@@ -248,7 +253,9 @@ class TestProvider:
     @pytest.mark.asyncio
     async def test_test(self):
         p = _ConcreteProvider(provider_config={}, provider_settings={})
-        with patch.object(p, "text_chat", AsyncMock(return_value=LLMResponse(role="assistant"))):
+        with patch.object(
+            p, "text_chat", AsyncMock(return_value=LLMResponse(role="assistant"))
+        ):
             await p.test(test_timeout=5.0)
 
     def test_ensure_message_to_dicts_none(self):
@@ -333,7 +340,9 @@ class _ConcreteTTSProvider(TTSProvider):
 
 class TestTTSProvider:
     def test_construction(self):
-        p = _ConcreteTTSProvider(provider_config={"type": "tts_test"}, provider_settings={})
+        p = _ConcreteTTSProvider(
+            provider_config={"type": "tts_test"}, provider_settings={}
+        )
         assert p.provider_config["type"] == "tts_test"
 
     def test_get_audio(self):
@@ -441,7 +450,9 @@ class TestEmbeddingProvider:
         progress = AsyncMock()
         texts = [f"t{i}" for i in range(3)]
         embs = asyncio.run(
-            p.get_embeddings_batch(texts, batch_size=2, tasks_limit=5, progress_callback=progress)
+            p.get_embeddings_batch(
+                texts, batch_size=2, tasks_limit=5, progress_callback=progress
+            )
         )
         assert len(embs) == 3
         assert progress.await_count >= 1

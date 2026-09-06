@@ -122,7 +122,7 @@ def validate_docx(path: Path) -> dict:
         )
 
     try:
-        document = Document(path)
+        document = Document(str(path))
         if not document.sections:
             errors.append("Document contains no section.")
         for index, section in enumerate(document.sections):

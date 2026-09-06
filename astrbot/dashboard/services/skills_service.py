@@ -17,6 +17,7 @@ from astrbot.core.computer.computer_client import (
 from astrbot.core.skills.neo_skill_sync import NeoSkillSyncManager
 from astrbot.core.skills.skill_manager import SkillManager
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.dashboard.validation import is_json_object, string_field
 
 _SKILL_NAME_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 _SKILL_FILE_MAX_BYTES = 512 * 1024
@@ -93,8 +94,8 @@ class SkillsService:
         self.core_lifecycle = core_lifecycle
 
     @staticmethod
-    def _payload(data: object) -> dict[str, Any]:
-        return data if isinstance(data, dict) else {}
+    def _payload(data: object) -> dict[str, object]:
+        return data if is_json_object(data) else {}
 
     @staticmethod
     def _ensure_mutation_allowed() -> None:
@@ -581,7 +582,9 @@ class SkillsService:
         self._ensure_mutation_allowed()
         payload = self._payload(data)
         skill_name = str(payload.get("name") or "").strip()
-        relative_path = payload.get("path", "SKILL.md")
+        relative_path = string_field(
+            payload, "path", "SKILL.md", error_type=SkillsServiceError
+        )
         content = payload.get("content")
         if not isinstance(content, str):
             raise SkillsServiceError("Missing file content")
@@ -619,7 +622,7 @@ class SkillsService:
         payload = self._payload(data)
         name = payload.get("name")
         active = payload.get("active", True)
-        if not name:
+        if not isinstance(name, str) or not name:
             raise SkillsServiceError("Missing skill name")
         SkillManager().set_skill_active(name, bool(active))
         return {"name": name, "active": bool(active)}
@@ -628,7 +631,7 @@ class SkillsService:
         self._ensure_mutation_allowed()
         payload = self._payload(data)
         name = payload.get("name")
-        if not name:
+        if not isinstance(name, str) or not name:
             raise SkillsServiceError("Missing skill name")
         SkillManager().delete_skill(name)
         try:
@@ -776,9 +779,9 @@ class SkillsService:
         candidate_id = payload.get("candidate_id")
         stage = payload.get("stage", "canary")
         sync_to_local = _to_bool(payload.get("sync_to_local"), True)
-        if not candidate_id:
+        if not isinstance(candidate_id, str) or not candidate_id:
             return SkillsOperationResult(ok=False, message="Missing candidate_id")
-        if stage not in {"canary", "stable"}:
+        if not isinstance(stage, str) or stage not in {"canary", "stable"}:
             return SkillsOperationResult(
                 ok=False,
                 message="Invalid stage, must be canary/stable",
@@ -845,8 +848,8 @@ class SkillsService:
         self._ensure_mutation_allowed()
         logger.info("[Neo] POST /skills/neo/sync requested.")
         payload = self._payload(data)
-        release_id = payload.get("release_id")
-        skill_key = payload.get("skill_key")
+        release_id = string_field(payload, "release_id", error_type=SkillsServiceError)
+        skill_key = string_field(payload, "skill_key", error_type=SkillsServiceError)
         require_stable = _to_bool(payload.get("require_stable"), True)
         if not release_id and not skill_key:
             return SkillsOperationResult(

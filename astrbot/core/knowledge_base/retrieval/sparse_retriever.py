@@ -6,7 +6,7 @@
 import json
 import os
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypedDict
 
 from astrbot.core.knowledge_base.kb_db_sqlite import KBSQLiteDatabase
 from astrbot.core.knowledge_base.retrieval.tokenizer import (
@@ -16,6 +16,14 @@ from astrbot.core.knowledge_base.retrieval.tokenizer import (
 
 if TYPE_CHECKING:
     from astrbot.core.db.vec_db.faiss_impl import FaissVecDB
+
+
+class _SparseChunk(TypedDict):
+    chunk_id: str
+    chunk_index: int
+    doc_id: str
+    kb_id: str
+    text: str
 
 
 @dataclass
@@ -123,7 +131,7 @@ class SparseRetriever:
         kb_options: dict,
     ) -> list[SparseResult]:
         top_k_sparse = 0
-        chunks = []
+        chunks: list[_SparseChunk] = []
         for kb_id in kb_ids:
             kb_config = kb_options.get(kb_id)
             if not isinstance(kb_config, dict):
@@ -137,7 +145,7 @@ class SparseRetriever:
                 offset=None,
             )
             chunk_mds = [json.loads(doc["metadata"]) for doc in result]
-            mapped_chunks = [
+            mapped_chunks: list[_SparseChunk] = [
                 {
                     "chunk_id": doc["doc_id"],
                     "chunk_index": chunk_md["chunk_index"],

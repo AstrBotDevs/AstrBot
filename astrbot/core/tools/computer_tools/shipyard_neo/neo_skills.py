@@ -5,7 +5,7 @@ from typing import Any
 
 from astrbot.api import FunctionTool
 from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.agent.tool import ToolExecResult
+from astrbot.core.agent.tool import ParametersType, ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.computer.computer_client import get_booter
 from astrbot.core.skills.neo_skill_sync import NeoSkillSyncManager
@@ -69,7 +69,7 @@ class NeoSkillToolBase(FunctionTool):
 class GetExecutionHistoryTool(NeoSkillToolBase):
     name: str = "astrbot_get_execution_history"
     description: str = "Get execution history from current sandbox."
-    parameters: dict = field(
+    parameters: ParametersType | None = field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -85,7 +85,7 @@ class GetExecutionHistoryTool(NeoSkillToolBase):
         },
     )
 
-    async def call(  # type: ignore
+    async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
         exec_type: str | None = None,
@@ -116,7 +116,7 @@ class GetExecutionHistoryTool(NeoSkillToolBase):
 class AnnotateExecutionTool(NeoSkillToolBase):
     name: str = "astrbot_annotate_execution"
     description: str = "Annotate one execution history record."
-    parameters: dict = field(
+    parameters: ParametersType | None = field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -129,7 +129,7 @@ class AnnotateExecutionTool(NeoSkillToolBase):
         },
     )
 
-    async def call(  # type: ignore
+    async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
         execution_id: str,
@@ -157,7 +157,7 @@ class CreateSkillPayloadTool(NeoSkillToolBase):
         "Step 1/3 for Neo skill authoring: create immutable payload content and return payload_ref. "
         "Use this to store skill_markdown and structured metadata; do NOT write local skill folders directly."
     )
-    parameters: dict = field(
+    parameters: ParametersType | None = field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -181,7 +181,7 @@ class CreateSkillPayloadTool(NeoSkillToolBase):
         },
     )
 
-    async def call(  # type: ignore
+    async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
         payload: dict[str, Any] | list[Any],
@@ -202,7 +202,7 @@ class CreateSkillPayloadTool(NeoSkillToolBase):
 class GetSkillPayloadTool(NeoSkillToolBase):
     name: str = "astrbot_get_skill_payload"
     description: str = "Get one skill payload by payload_ref."
-    parameters: dict = field(
+    parameters: ParametersType | None = field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -212,7 +212,7 @@ class GetSkillPayloadTool(NeoSkillToolBase):
         },
     )
 
-    async def call(  # type: ignore
+    async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
         payload_ref: str,
@@ -232,7 +232,7 @@ class CreateSkillCandidateTool(NeoSkillToolBase):
         "Step 2/3 for Neo skill authoring: create a candidate by binding execution evidence "
         "(source_execution_ids) with skill identity (skill_key) and optional payload_ref."
     )
-    parameters: dict = field(
+    parameters: ParametersType | None = field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -258,7 +258,7 @@ class CreateSkillCandidateTool(NeoSkillToolBase):
         },
     )
 
-    async def call(  # type: ignore
+    async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
         skill_key: str,
@@ -283,7 +283,7 @@ class CreateSkillCandidateTool(NeoSkillToolBase):
 class ListSkillCandidatesTool(NeoSkillToolBase):
     name: str = "astrbot_list_skill_candidates"
     description: str = "List skill candidates."
-    parameters: dict = field(
+    parameters: ParametersType | None = field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -296,7 +296,7 @@ class ListSkillCandidatesTool(NeoSkillToolBase):
         },
     )
 
-    async def call(  # type: ignore
+    async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
         status: str | None = None,
@@ -321,7 +321,7 @@ class ListSkillCandidatesTool(NeoSkillToolBase):
 class EvaluateSkillCandidateTool(NeoSkillToolBase):
     name: str = "astrbot_evaluate_skill_candidate"
     description: str = "Evaluate a skill candidate."
-    parameters: dict = field(
+    parameters: ParametersType | None = field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -335,7 +335,7 @@ class EvaluateSkillCandidateTool(NeoSkillToolBase):
         },
     )
 
-    async def call(  # type: ignore
+    async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
         candidate_id: str,
@@ -365,7 +365,7 @@ class PromoteSkillCandidateTool(NeoSkillToolBase):
         "Step 3/3 for Neo skill authoring: promote candidate to canary/stable release. "
         "If stage=stable and sync_to_local=true, payload.skill_markdown is synced to local SKILL.md automatically."
     )
-    parameters: dict = field(
+    parameters: ParametersType | None = field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -388,7 +388,7 @@ class PromoteSkillCandidateTool(NeoSkillToolBase):
         },
     )
 
-    async def call(  # type: ignore
+    async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
         candidate_id: str,
@@ -433,7 +433,7 @@ class PromoteSkillCandidateTool(NeoSkillToolBase):
 class ListSkillReleasesTool(NeoSkillToolBase):
     name: str = "astrbot_list_skill_releases"
     description: str = "List skill releases."
-    parameters: dict = field(
+    parameters: ParametersType | None = field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -447,7 +447,7 @@ class ListSkillReleasesTool(NeoSkillToolBase):
         },
     )
 
-    async def call(  # type: ignore
+    async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
         skill_key: str | None = None,
@@ -474,7 +474,7 @@ class ListSkillReleasesTool(NeoSkillToolBase):
 class RollbackSkillReleaseTool(NeoSkillToolBase):
     name: str = "astrbot_rollback_skill_release"
     description: str = "Rollback one skill release."
-    parameters: dict = field(
+    parameters: ParametersType | None = field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -484,7 +484,7 @@ class RollbackSkillReleaseTool(NeoSkillToolBase):
         },
     )
 
-    async def call(  # type: ignore
+    async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
         release_id: str,
@@ -503,7 +503,7 @@ class SyncSkillReleaseTool(NeoSkillToolBase):
     description: str = (
         "Sync stable Neo release payload to local SKILL.md and update mapping metadata."
     )
-    parameters: dict = field(
+    parameters: ParametersType | None = field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -515,7 +515,7 @@ class SyncSkillReleaseTool(NeoSkillToolBase):
         },
     )
 
-    async def call(  # type: ignore
+    async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
         release_id: str | None = None,

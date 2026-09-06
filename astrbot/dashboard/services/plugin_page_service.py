@@ -8,7 +8,6 @@ import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import cast
 from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 
 import aiofiles
@@ -916,7 +915,7 @@ class PluginPageService:
             "iat": now,
             "exp": now + timedelta(seconds=PLUGIN_PAGE_ASSET_TOKEN_TTL_SECONDS),
         }
-        return cast(str, jwt.encode(payload, jwt_secret, algorithm="HS256"))
+        return jwt.encode(payload, jwt_secret, algorithm="HS256")
 
 
 __all__ = [

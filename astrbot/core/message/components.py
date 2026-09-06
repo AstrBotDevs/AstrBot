@@ -74,6 +74,7 @@ class ComponentType(str, Enum):
     DiscordButton = "DiscordButton"
     DiscordReference = "DiscordReference"
     DiscordView = "DiscordView"
+    DiscordRawView = "discord_view"  # Preserve the legacy native-view wire value.
     Unknown = "Unknown"
 
 

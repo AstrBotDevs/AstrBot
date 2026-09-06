@@ -53,7 +53,7 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
     async def get_embeddings(self, text: list[str]) -> list[list[float]]:
         """批量获取文本的嵌入"""
         try:
-            contents = [
+            contents: list[types.ContentUnion] = [
                 types.Content(parts=[types.Part.from_text(text=s)]) for s in text
             ]
             result = await self.client.models.embed_content(

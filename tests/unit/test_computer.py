@@ -14,20 +14,18 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from astrbot.core.computer.booters.base import ComputerBooter
+from astrbot.core.computer.booters.bwrap import (
+    BwrapBooter,
+    BwrapConfig,
+    HostBackedFileSystemComponent,
+    build_bwrap_cmd,
+)
 from astrbot.core.computer.booters.local import (
     LocalBooter,
     LocalFileSystemComponent,
     LocalPythonComponent,
     LocalShellComponent,
     _is_safe_command,
-)
-from astrbot.core.computer.booters.bwrap import (
-    BwrapBooter,
-    BwrapConfig,
-    build_bwrap_cmd,
-    HostBackedFileSystemComponent,
-    BwrapPythonComponent,
-    BwrapShellComponent,
 )
 
 
@@ -560,9 +558,8 @@ class TestBoxliteBooter:
         with patch.dict(sys.modules, {"boxlite": mock_boxlite}):
             from astrbot.core.computer.booters.boxlite import BoxliteBooter
 
-            # BoxliteBooter is abstract now, cannot instantiate
-            # This test is skipped
-            pass
+            # Importing the abstract class must still expose the booter contract.
+            assert issubclass(BoxliteBooter, ComputerBooter)
 
 
 class TestComputerClient:
@@ -963,7 +960,7 @@ class TestBwrapShellComponent:
         assert "success" in res["stdout"]
 
         # Will it fail to write to ro /tmp?
-        res2 = await booter.shell.exec("echo yyy > /tmp/test_write.txt", shell=True)
+        await booter.shell.exec("echo yyy > /tmp/test_write.txt", shell=True)
         # /tmp in bwrap is tmpfs by default from our flags, so this might actually succeed.
         # Let's try writing to /usr instead
         res3 = await booter.shell.exec("echo yyy > /usr/test_write.txt", shell=True)

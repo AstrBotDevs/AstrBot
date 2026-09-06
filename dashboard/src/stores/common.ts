@@ -36,6 +36,8 @@ export const useCommonStore = defineStore("common", () => {
   const sse_connected = ref(false);
   const log_cache_max_len = ref(1000);
   const startTime = ref(-1);
+  const astrbotVersion = ref("");
+  const dashboardVersion = ref("");
   const pluginMarketData = ref<PluginItem[]>([]);
   const isUnmounted = ref(false);
 
@@ -165,6 +167,23 @@ export const useCommonStore = defineStore("common", () => {
     return startTime.value;
   }
 
+  function setAstrBotVersion(version: unknown, frontendVersion: unknown = "") {
+    astrbotVersion.value = String(version || "").replace(/^v/i, "");
+    dashboardVersion.value = String(frontendVersion || "");
+  }
+
+  async function fetchAstrBotVersion(force = false): Promise<string> {
+    if (!force && astrbotVersion.value) {
+      return astrbotVersion.value;
+    }
+    const response = await axios.get<{
+      data?: { version?: string; dashboard_version?: string };
+    }>("/api/stat/version");
+    const data = response.data?.data;
+    setAstrBotVersion(data?.version, data?.dashboard_version);
+    return astrbotVersion.value;
+  }
+
   function getStartTime() {
     if (startTime.value !== -1) {
       return startTime.value;
@@ -232,11 +251,15 @@ export const useCommonStore = defineStore("common", () => {
     sse_connected,
     log_cache_max_len,
     startTime,
+    astrbotVersion,
+    dashboardVersion,
     pluginMarketData,
     createEventSource,
     closeEventSourcet,
     getLogCache,
     fetchStartTime,
+    setAstrBotVersion,
+    fetchAstrBotVersion,
     getStartTime,
     getPluginCollections,
   };

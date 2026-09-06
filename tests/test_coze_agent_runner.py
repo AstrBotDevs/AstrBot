@@ -1,7 +1,5 @@
 """Import smoke tests for CozeAgentRunner."""
 
-import pytest
-
 from astrbot.core.agent.runners.coze.coze_agent_runner import CozeAgentRunner
 
 

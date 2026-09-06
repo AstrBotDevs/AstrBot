@@ -652,9 +652,12 @@ class FastAPIAppAdapter:
     def get_quart_compat_app(self):
         if self._quart_compat_app is None:
             from quart import Quart
+            from quart.json.provider import DefaultJSONProvider
 
             self._quart_compat_app = Quart("astrbot_dashboard_plugin_compat")
-            self._quart_compat_app.json.sort_keys = False
+            provider = self._quart_compat_app.json
+            if isinstance(provider, DefaultJSONProvider):
+                provider.sort_keys = False
         return self._quart_compat_app
 
     def add_url_rule(

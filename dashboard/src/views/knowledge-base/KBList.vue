@@ -219,8 +219,8 @@
                   <template #subtitle>
                     {{
                       t("create.providerInfo", {
-                        id: item.raw.id,
-                        dimensions: item.raw.embedding_dimensions || "N/A",
+                        id: item.id,
+                        dimensions: item.embedding_dimensions || "N/A",
                       })
                     }}
                   </template>
@@ -241,7 +241,7 @@
               <template #item="{ props, item }">
                 <v-list-item v-bind="props">
                   <template #subtitle>
-                    {{ t("create.rerankProviderInfo", { id: item.raw.id }) }}
+                    {{ t("create.rerankProviderInfo", { id: item.id }) }}
                   </template>
                 </v-list-item>
               </template>

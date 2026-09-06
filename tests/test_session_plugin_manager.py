@@ -1,7 +1,8 @@
 """Import smoke tests for astrbot.core.star.session_plugin_manager."""
+
 from astrbot.core.star.session_plugin_manager import (
-    SessionPluginSettings,
     SessionPluginManager,
+    SessionPluginSettings,
 )
 
 

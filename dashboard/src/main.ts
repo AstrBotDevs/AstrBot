@@ -1,5 +1,5 @@
-import { createPinia } from "pinia";
-import { createApp } from "vue";
+import { createPinia, type Pinia } from "pinia";
+import { createApp, type App as VueApp } from "vue";
 import App from "./App.vue";
 import { setupI18n } from "./i18n/composables";
 import confirmPlugin from "./plugins/confirmPlugin";
@@ -7,34 +7,34 @@ import vuetify from "./plugins/vuetify";
 import { router } from "./router";
 import "@/scss/style.scss";
 import { loader } from "@guolao/vue-monaco-editor";
-import * as monaco from "monaco-editor/esm/vs/editor/editor.api";
+import type { Environment } from "monaco-editor/esm/vs/editor/editor.api.js";
 import VueApexCharts from "vue3-apexcharts";
 import print from "vue3-print-nb";
 import { useCustomizerStore } from "./stores/customizer";
-import "monaco-editor/esm/vs/basic-languages/dockerfile/dockerfile.contribution";
-import "monaco-editor/esm/vs/basic-languages/ini/ini.contribution";
-import "monaco-editor/esm/vs/basic-languages/javascript/javascript.contribution";
-import "monaco-editor/esm/vs/basic-languages/markdown/markdown.contribution";
-import "monaco-editor/esm/vs/basic-languages/powershell/powershell.contribution";
-import "monaco-editor/esm/vs/basic-languages/python/python.contribution";
-import "monaco-editor/esm/vs/basic-languages/shell/shell.contribution";
-import "monaco-editor/esm/vs/basic-languages/sql/sql.contribution";
-import "monaco-editor/esm/vs/basic-languages/typescript/typescript.contribution";
-import "monaco-editor/esm/vs/basic-languages/xml/xml.contribution";
-import "monaco-editor/esm/vs/basic-languages/yaml/yaml.contribution";
-import "monaco-editor/esm/vs/language/css/monaco.contribution";
-import "monaco-editor/esm/vs/language/html/monaco.contribution";
-import "monaco-editor/esm/vs/language/json/monaco.contribution";
-import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
-import cssWorker from "monaco-editor/esm/vs/language/css/css.worker?worker";
-import htmlWorker from "monaco-editor/esm/vs/language/html/html.worker?worker";
-import jsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker";
+import "monaco-editor/esm/vs/basic-languages/dockerfile/dockerfile.contribution.js";
+import "monaco-editor/esm/vs/basic-languages/ini/ini.contribution.js";
+import "monaco-editor/esm/vs/basic-languages/javascript/javascript.contribution.js";
+import "monaco-editor/esm/vs/basic-languages/markdown/markdown.contribution.js";
+import "monaco-editor/esm/vs/basic-languages/powershell/powershell.contribution.js";
+import "monaco-editor/esm/vs/basic-languages/python/python.contribution.js";
+import "monaco-editor/esm/vs/basic-languages/shell/shell.contribution.js";
+import "monaco-editor/esm/vs/basic-languages/sql/sql.contribution.js";
+import "monaco-editor/esm/vs/basic-languages/typescript/typescript.contribution.js";
+import "monaco-editor/esm/vs/basic-languages/xml/xml.contribution.js";
+import "monaco-editor/esm/vs/basic-languages/yaml/yaml.contribution.js";
+import "monaco-editor/esm/vs/language/css/monaco.contribution.js";
+import "monaco-editor/esm/vs/language/html/monaco.contribution.js";
+import "monaco-editor/esm/vs/language/json/monaco.contribution.js";
+import editorWorker from "monaco-editor/esm/vs/editor/editor.worker.js?worker";
+import cssWorker from "monaco-editor/esm/vs/language/css/css.worker.js?worker";
+import htmlWorker from "monaco-editor/esm/vs/language/html/html.worker.js?worker";
+import jsonWorker from "monaco-editor/esm/vs/language/json/json.worker.js?worker";
 import { DARK_THEME_NAME, LIGHT_THEME_NAME } from "@/theme/constants";
 import { getApiBaseUrl, resolveApiUrl, resolvePublicUrl, setApiBaseUrl } from "@/utils/request";
 import { waitForRouterReadyInBackground } from "./utils/routerReadiness.mjs";
 
 // Monaco worker configuration
-(window as any).MonacoEnvironment = {
+window.MonacoEnvironment = {
   getWorker(_moduleId: string, label: string) {
     if (label === "css" || label === "scss" || label === "less") {
       return new cssWorker();
@@ -47,7 +47,7 @@ import { waitForRouterReadyInBackground } from "./utils/routerReadiness.mjs";
     }
     return new editorWorker();
   },
-};
+} satisfies Environment;
 
 // 1. 定义加载配置的函数
 async function loadAppConfig() {
@@ -66,7 +66,7 @@ async function loadAppConfig() {
   }
 }
 
-async function mountApp(app: any, pinia: any, waitForRouter = true) {
+async function mountApp(app: VueApp, pinia: Pinia, waitForRouter = true) {
   if (waitForRouter) {
     await router.isReady();
   } else {

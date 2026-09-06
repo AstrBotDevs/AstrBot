@@ -14,7 +14,9 @@ from astrbot.core.provider.entities import ProviderRequest
 def _reload_stage_module():
     """Reload the stage module to avoid stale imports from test_pipeline_bootstrap."""
     import importlib
+
     import astrbot.core.pipeline.process_stage.stage as stage_mod
+
     importlib.reload(stage_mod)
     globals()["ProcessStage"] = stage_mod.ProcessStage
 
@@ -24,7 +26,11 @@ def mock_context():
     """Create a mock PipelineContext."""
     ctx = MagicMock()
     ctx.astrbot_config = {
-        "provider_settings": {"enable": True, "wake_prefix": "", "agent_runner_type": "local"},
+        "provider_settings": {
+            "enable": True,
+            "wake_prefix": "",
+            "agent_runner_type": "local",
+        },
         "wake_prefix": ["bot"],
     }
     ctx.plugin_manager = MagicMock()
@@ -140,7 +146,10 @@ class TestProcessStageInitialize:
             mock_star_cls.return_value = mock_star
             await stage.initialize(mock_context)
 
-        assert stage.sdk_plugin_bridge is mock_context.plugin_manager.context.sdk_plugin_bridge
+        assert (
+            stage.sdk_plugin_bridge
+            is mock_context.plugin_manager.context.sdk_plugin_bridge
+        )
 
     @pytest.mark.asyncio
     async def test_initialize_sdk_plugin_bridge_absent(self, mock_context):
@@ -178,7 +187,9 @@ class TestProcessStageProcess:
 
     @pytest.mark.asyncio
     async def test_process_no_activated_handlers_and_no_sdk_bridge(
-        self, stage, mock_event,
+        self,
+        stage,
+        mock_event,
     ):
         """When activated_handlers is None and no sdk bridge, LLM path is reached."""
         mock_event.get_extra.return_value = None
@@ -200,7 +211,9 @@ class TestProcessStageProcess:
 
     @pytest.mark.asyncio
     async def test_process_activated_handlers_with_provider_request(
-        self, stage, mock_event,
+        self,
+        stage,
+        mock_event,
     ):
         """When star_request yields a ProviderRequest, agent_sub_stage is called."""
         mock_event.get_extra.return_value = [MagicMock()]
@@ -227,7 +240,9 @@ class TestProcessStageProcess:
 
     @pytest.mark.asyncio
     async def test_process_activated_handlers_with_non_provider_request(
-        self, stage, mock_event,
+        self,
+        stage,
+        mock_event,
     ):
         """When star_request yields a non-ProviderRequest, yield directly."""
         mock_event.get_extra.return_value = [MagicMock()]
@@ -244,7 +259,9 @@ class TestProcessStageProcess:
 
     @pytest.mark.asyncio
     async def test_process_activated_handlers_provider_request_empty_agent(
-        self, stage, mock_event,
+        self,
+        stage,
+        mock_event,
     ):
         """When agent_sub_stage yields nothing, should still yield once."""
         mock_event.get_extra.return_value = [MagicMock()]
@@ -297,7 +314,9 @@ class TestProcessStageProcess:
 
     @pytest.mark.asyncio
     async def test_process_sdk_plugin_bridge_none_and_event_has_send_oper(
-        self, stage, mock_event,
+        self,
+        stage,
+        mock_event,
     ):
         """When sdk bridge is None and _has_send_oper is True, skip LLM call."""
         stage.sdk_plugin_bridge = None
@@ -350,7 +369,9 @@ class TestProcessStageProcess:
 
     @pytest.mark.asyncio
     async def test_process_llm_skipped_event_stopped_with_result(
-        self, stage, mock_event,
+        self,
+        stage,
+        mock_event,
     ):
         """When event is stopped and effective_result exists, skip LLM call."""
         stage.sdk_plugin_bridge = None
@@ -368,7 +389,9 @@ class TestProcessStageProcess:
 
     @pytest.mark.asyncio
     async def test_process_sdk_bridge_with_effective_methods(
-        self, stage, mock_event,
+        self,
+        stage,
+        mock_event,
     ):
         """When sdk_plugin_bridge has get_effective_* methods, they are used."""
         mock_bridge = MagicMock()
@@ -386,7 +409,9 @@ class TestProcessStageProcess:
 
     @pytest.mark.asyncio
     async def test_process_with_activated_handlers_and_stopped(
-        self, stage, mock_event,
+        self,
+        stage,
+        mock_event,
     ):
         """When event is stopped after star_request processing, stop propagation."""
         mock_event.get_extra.return_value = [MagicMock()]

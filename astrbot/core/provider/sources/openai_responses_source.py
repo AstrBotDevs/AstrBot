@@ -618,7 +618,7 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
 
     async def _handle_api_error(
         self,
-        error: Exception,
+        e: Exception,
         payloads: dict,
         context_query: list,
         func_tool: ToolSet | None,
@@ -631,7 +631,7 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         """Reuse common recovery behavior with chat-format source history.
 
         Args:
-            error: Provider request error.
+            e: Provider request error.
             payloads: Current Responses payload.
             context_query: Chat-format source history used to build ``input``.
             func_tool: Functions currently available to the model.
@@ -647,7 +647,7 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         compatibility_payloads = dict(payloads)
         compatibility_payloads["messages"] = context_query
         result = await super()._handle_api_error(
-            error,
+            e,
             compatibility_payloads,
             context_query,
             func_tool,

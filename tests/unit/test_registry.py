@@ -2,22 +2,19 @@
 
 from __future__ import annotations
 
-from typing import Any
-from unittest.mock import MagicMock, patch
-
 import pytest
 from pydantic.dataclasses import dataclass
 
 from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.tools.registry import (
+    _BUILTIN_TOOL_CONFIG_RULES,
+    _MISSING,
     BuiltinToolConfigCondition,
     BuiltinToolConfigRule,
-    _BUILTIN_TOOL_CONFIG_RULES,
     _builtin_tool_classes_by_name,
     _builtin_tool_names_by_class,
     _get_config_value,
     _json_safe,
-    _MISSING,
     _resolve_builtin_tool_name,
     builtin_tool,
     ensure_builtin_tools_loaded,
@@ -139,9 +136,11 @@ class TestGetAndIter:
 
     def test_get_nonexistent_name_returns_none(self):
         """get_builtin_tool_name returns None for unknown classes."""
+
         class Random(FunctionTool):
             name: str = "random"
             description: str = "r"
+
         assert get_builtin_tool_name(Random) is None
 
     def test_iter_builtin_tool_classes_empty(self):
@@ -168,25 +167,33 @@ class TestConfigCondition:
 
     def test_equals_condition_match(self):
         """'equals' operator returns matched=True when values match."""
-        cond = BuiltinToolConfigCondition(key="enabled", operator="equals", expected=True)
+        cond = BuiltinToolConfigCondition(
+            key="enabled", operator="equals", expected=True
+        )
         result = cond.evaluate({"enabled": True})
         assert result["matched"] is True
 
     def test_equals_condition_mismatch(self):
         """'equals' operator returns matched=False when values differ."""
-        cond = BuiltinToolConfigCondition(key="enabled", operator="equals", expected=True)
+        cond = BuiltinToolConfigCondition(
+            key="enabled", operator="equals", expected=True
+        )
         result = cond.evaluate({"enabled": False})
         assert result["matched"] is False
 
     def test_in_condition_match(self):
         """'in' operator returns matched=True when value is in expected."""
-        cond = BuiltinToolConfigCondition(key="mode", operator="in", expected=("a", "b", "c"))
+        cond = BuiltinToolConfigCondition(
+            key="mode", operator="in", expected=("a", "b", "c")
+        )
         result = cond.evaluate({"mode": "b"})
         assert result["matched"] is True
 
     def test_in_condition_mismatch(self):
         """'in' operator returns matched=False when value is not in expected."""
-        cond = BuiltinToolConfigCondition(key="mode", operator="in", expected=("a", "b"))
+        cond = BuiltinToolConfigCondition(
+            key="mode", operator="in", expected=("a", "b")
+        )
         result = cond.evaluate({"mode": "c"})
         assert result["matched"] is False
 
@@ -204,14 +211,18 @@ class TestConfigCondition:
 
     def test_custom_condition(self):
         """'custom' operator delegates to the expected field."""
-        cond = BuiltinToolConfigCondition(key="custom_key", operator="custom", expected=True)
+        cond = BuiltinToolConfigCondition(
+            key="custom_key", operator="custom", expected=True
+        )
         result = cond.evaluate({})
         assert result["matched"] is True
 
     def test_unsupported_operator_raises(self):
         """An unknown operator raises ValueError."""
         cond = BuiltinToolConfigCondition(key="k", operator="bad_op")
-        with pytest.raises(ValueError, match="Unsupported builtin tool config operator"):
+        with pytest.raises(
+            ValueError, match="Unsupported builtin tool config operator"
+        ):
             cond.evaluate({})
 
     def test_missing_key_returns_missing(self):
@@ -252,8 +263,10 @@ class TestBuiltinToolConfigRule:
 
     def test_rule_with_evaluator(self):
         """A rule with an evaluator callable uses it instead of conditions."""
+
         def my_evaluator(config):
             return [{"key": "custom", "matched": True}]
+
         rule = BuiltinToolConfigRule(evaluator=my_evaluator)
         results = rule.evaluate({"anything": 1})
         assert results == [{"key": "custom", "matched": True}]

@@ -52,6 +52,7 @@ logger = logging.getLogger("astrbot")
 
 if TYPE_CHECKING:
     from astrbot.core.cron.manager import CronJobManager
+    from astrbot.core.star.star_manager import PluginManager
 
 WebApiHandler = Callable[..., Awaitable[Any]]
 RegisteredWebApi = tuple[str, WebApiHandler, list[str], str]
@@ -120,17 +121,18 @@ def _resolve_tool_handler_module_path(tool: FunctionTool) -> str:
 
 class PlatformManagerProtocol(Protocol):
     platform_insts: list[Platform]
-    get_insts: Callable[[], list[Platform]]
+
+    def get_insts(self) -> list[Platform]: ...
 
 
 class Context:
     """暴露给插件的接口上下文。"""
 
-    _registered_web_apis: list[RegisteredWebApi] = []
+    _registered_web_apis: list[RegisteredWebApi]
 
-    # 向后兼容的变量
-    _register_tasks: list[Awaitable] = []
-    _star_manager = None
+    # Backward-compatible task registration stays local to this context.
+    _register_tasks: list[Awaitable]
+    _star_manager: PluginManager | None = None
 
     @property
     def registered_web_apis(self) -> list[RegisteredWebApi]:
@@ -155,6 +157,8 @@ class Context:
         cron_manager: CronJobManager,
         subagent_orchestrator: SubAgentOrchestrator | None = None,
     ) -> None:
+        self._registered_web_apis = []
+        self._register_tasks = []
         self._event_queue = event_queue
         """事件队列。消息平台通过事件队列传递消息事件。"""
         self._config = config
@@ -544,7 +548,7 @@ class Context:
             provider_type=ProviderType.TEXT_TO_SPEECH,
             umo=umo,
         )
-        if prov and not isinstance(prov, TTSProvider):
+        if prov is not None and not isinstance(prov, TTSProvider):
             raise ValueError("返回的 Provider 不是 TTSProvider 类型")
         return prov
 
@@ -567,7 +571,7 @@ class Context:
             provider_type=ProviderType.TEXT_TO_SPEECH,
             umo=umo,
         )
-        if prov and not isinstance(prov, TTSProvider):
+        if prov is not None and not isinstance(prov, TTSProvider):
             raise ValueError("返回的 Provider 不是 TTSProvider 类型")
         return prov
 
@@ -589,7 +593,7 @@ class Context:
             provider_type=ProviderType.SPEECH_TO_TEXT,
             umo=umo,
         )
-        if prov and not isinstance(prov, STTProvider):
+        if prov is not None and not isinstance(prov, STTProvider):
             raise ValueError("返回的 Provider 不是 STTProvider 类型")
         return prov
 
@@ -612,7 +616,7 @@ class Context:
             provider_type=ProviderType.SPEECH_TO_TEXT,
             umo=umo,
         )
-        if prov and not isinstance(prov, STTProvider):
+        if prov is not None and not isinstance(prov, STTProvider):
             raise ValueError("返回的 Provider 不是 STTProvider 类型")
         return prov
 
@@ -842,10 +846,11 @@ class Context:
             该方法已弃用，请使用新的注册方式。
 
         """
+        handler_name = getattr(func_obj, "__name__", type(func_obj).__name__)
         md = StarHandlerMetadata(
             event_type=EventType.OnLLMRequestEvent,
-            handler_full_name=func_obj.__module__ + "_" + func_obj.__name__,
-            handler_name=func_obj.__name__,
+            handler_full_name=func_obj.__module__ + "_" + handler_name,
+            handler_name=handler_name,
             handler_module_path=func_obj.__module__,
             handler=func_obj,
             event_filters=[],
@@ -894,10 +899,11 @@ class Context:
             推荐使用装饰器注册指令。该方法将在未来的版本中被移除。
 
         """
+        handler_name = getattr(awaitable, "__name__", type(awaitable).__name__)
         md = StarHandlerMetadata(
             event_type=EventType.AdapterMessageEvent,
-            handler_full_name=awaitable.__module__ + "_" + awaitable.__name__,
-            handler_name=awaitable.__name__,
+            handler_full_name=awaitable.__module__ + "_" + handler_name,
+            handler_name=handler_name,
             handler_module_path=awaitable.__module__,
             handler=awaitable,
             event_filters=[],

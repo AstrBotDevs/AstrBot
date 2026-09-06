@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import inspect
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response
 from hypercorn.asyncio import serve
 from hypercorn.config import Config as HyperConfig
+from hypercorn.typing import ASGIFramework
 
 
 class WebhookRequest:
@@ -114,7 +115,10 @@ class FastAPIWebhookServer:
     ) -> None:
         config = HyperConfig()
         config.bind = [f"{host}:{port}"]
-        await serve(self.app, config, shutdown_trigger=shutdown_trigger)
+        # Starlette uses mutable mappings where Hypercorn annotates ASGI TypedDicts.
+        await serve(
+            cast(ASGIFramework, self.app), config, shutdown_trigger=shutdown_trigger
+        )
 
     async def shutdown(self) -> None:
         return None
