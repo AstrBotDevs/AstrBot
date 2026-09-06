@@ -152,6 +152,10 @@ class QQOfficialWebhook:
         }
         return response
 
+    def pop_extra_data(self, message_id: str) -> dict:
+        """Return cached webhook fields once for the matching message."""
+        return self._extra_data_cache.pop(message_id, {})
+
     async def callback(self):
         """内部服务器的回调入口"""
         return await self.handle_callback(quart.request)

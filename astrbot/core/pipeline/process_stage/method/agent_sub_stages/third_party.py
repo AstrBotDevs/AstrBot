@@ -3,12 +3,10 @@ import inspect
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import TYPE_CHECKING
 
-from astrbot.core import astrbot_config, logger
-from astrbot.core.agent.runners.deerflow.constants import (
-    DEERFLOW_AGENT_RUNNER_PROVIDER_ID_KEY,
-    DEERFLOW_PROVIDER_TYPE,
-)
+from astrbot.core import logger
+from astrbot.core.agent.runners.deerflow.constants import DEERFLOW_PROVIDER_TYPE
 from astrbot.core.astr_agent_hooks import MAIN_AGENT_HOOKS
+from astrbot.core.config.agent_runner import normalize_agent_runner
 from astrbot.core.message.components import Image, Record
 from astrbot.core.message.message_event_result import (
     MessageChain,
@@ -35,12 +33,6 @@ from astrbot.core.star.star_handler import EventType
 from astrbot.core.utils.config_number import coerce_int_config
 from astrbot.core.utils.metrics import Metric
 
-AGENT_RUNNER_TYPE_KEY = {
-    "dify": "dify_agent_runner_provider_id",
-    "coze": "coze_agent_runner_provider_id",
-    "dashscope": "dashscope_agent_runner_provider_id",
-    DEERFLOW_PROVIDER_TYPE: DEERFLOW_AGENT_RUNNER_PROVIDER_ID_KEY,
-}
 THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY = "_third_party_runner_error"
 STREAM_CONSUMPTION_CLOSE_TIMEOUT_SEC = 30
 RUNNER_NO_RESULT_FALLBACK_MESSAGE = "Agent Runner did not return any result."
@@ -158,11 +150,9 @@ class ThirdPartyAgentSubStage(Stage):
             "wake_prefix"
         ]
         self.conf = ctx.astrbot_config
-        self.runner_type = self.conf["provider_settings"]["agent_runner_type"]
-        self.prov_id = self.conf["provider_settings"].get(
-            AGENT_RUNNER_TYPE_KEY.get(self.runner_type, ""),
-            "",
-        )
+        agent_runner = normalize_agent_runner(self.conf.get("agent_runner"))
+        self.runner_type = agent_runner["runner_type"]
+        self.runner_config = agent_runner["config"]
         settings = ctx.astrbot_config["provider_settings"]
         self.streaming_response: bool = settings["streaming_response"]
         self.unsupported_streaming_strategy: str = settings[
@@ -191,7 +181,7 @@ class ThirdPartyAgentSubStage(Stage):
             return await resolve_persona_custom_error_message(
                 event=event,
                 persona_manager=self.ctx.plugin_manager.context.persona_manager,
-                provider_settings=self.conf["provider_settings"],
+                provider_settings={"default_personality": "default"},
                 conversation_persona_id=conversation_persona_id,
             )
         except Exception as e:
@@ -291,23 +281,6 @@ class ThirdPartyAgentSubStage(Stage):
         ):
             return
 
-        self.prov_cfg: dict = next(
-            (p for p in astrbot_config["provider"] if p["id"] == self.prov_id),
-            {},
-        )
-        if not self.prov_id:
-            logger.error(
-                "No Agent Runner provider ID is configured. Configure one on the "
-                "settings page."
-            )
-            return
-        if not self.prov_cfg:
-            logger.error(
-                f"Configuration for Agent Runner provider {self.prov_id} does not "
-                "exist. Update it on the settings page."
-            )
-            return
-
         # make provider request
         req = ProviderRequest()
         req.session_id = event.unified_msg_origin
@@ -341,7 +314,7 @@ class ThirdPartyAgentSubStage(Stage):
                     event,
                     {
                         "prompt": req.prompt,
-                        "provider_id": self.prov_id,
+                        "provider_id": self.runner_type,
                     },
                     provider_request=req,
                 )
@@ -414,16 +387,8 @@ class ThirdPartyAgentSubStage(Stage):
         try:
             from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 
-            provider = self.ctx.plugin_manager.context.get_using_provider(
-                umo=event.unified_msg_origin,
-            )
-            if provider is None:
-                raise ValueError(
-                    "No active provider is available for third-party runner",
-                )
-
             await runner.reset(
-                provider=provider,
+                provider=None,
                 request=req,
                 run_context=AgentContextWrapper(
                     context=astr_agent_ctx,
@@ -431,7 +396,7 @@ class ThirdPartyAgentSubStage(Stage):
                 ),
                 tool_executor=FunctionToolExecutor(),
                 agent_hooks=MAIN_AGENT_HOOKS,
-                provider_config=self.prov_cfg,
+                provider_config=self.runner_config,
                 streaming=streaming_response,
             )
 

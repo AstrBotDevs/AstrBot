@@ -45,7 +45,7 @@
                   hide-details
                   class="mt-6 platform-type-field"
                 >
-                  <template #item="{ props: itemProps, item }">
+                  <template #item="{ props: itemProps, internalItem: item }">
                     <v-list-item v-bind="itemProps">
                       <template #prepend>
                         <img
@@ -824,6 +824,7 @@
 </template>
 
 <script lang="ts">
+import { botApi } from "@/api/v1";
 import AstrBotCoreConfigWrapper from "@/components/config/AstrBotCoreConfigWrapper.vue";
 import PlatformRegistrationAction from "@/components/platform/PlatformRegistrationAction.vue";
 import AstrBotConfig from "@/components/shared/AstrBotConfig.vue";
@@ -861,6 +862,12 @@ interface KnownRouteUmoInfo {
 interface ConfigInfo {
   id: string;
   name: string;
+}
+
+interface PlatformTemplate {
+  type: string;
+  id?: string;
+  [key: string]: unknown;
 }
 
 interface ToastPayload {
@@ -914,7 +921,7 @@ export default {
       scanPlatformIdCustomized: false,
 
       aBConfigRadioVal: "0",
-      selectedAbConfId: null as string | null,
+      selectedAbConfId: "default" as string | null,
       configInfoList: [] as ConfigInfo[],
 
       // 选中的配置文件预览数据
@@ -967,11 +974,11 @@ export default {
         this.$emit("update:show", value);
       },
     },
-    platformTemplates(): Record<string, unknown> {
+    platformTemplates(): Record<string, PlatformTemplate> {
       const pg = this.metadata.platform_group as Record<string, unknown> | undefined;
       const meta = pg?.metadata as Record<string, unknown> | undefined;
       const plat = meta?.platform as Record<string, unknown> | undefined;
-      return (plat?.config_template as Record<string, unknown>) || {};
+      return (plat?.config_template as Record<string, PlatformTemplate>) || {};
     },
     canSave(): boolean {
       if (!this.selectedPlatformType) {
@@ -1412,14 +1419,19 @@ export default {
       }
 
       try {
-        const res = await axios.post("/api/config/platform/new", config);
+        if (!config) throw new Error(this.tm("dialog.invalidPlatformId"));
+        const createdPlatformId = String(config.id);
+        const res = await botApi.create(config);
+        if (res.data.status !== "ok") {
+          throw new Error(res.data.message || this.tm("messages.platformUpdateFailed"));
+        }
 
         await this.handleConfigFile();
 
         this.loading = false;
         this.showDialog = false;
         this.resetForm();
-        this.$emit("refresh-config");
+        this.$emit("refresh-config", createdPlatformId);
         this.showSuccess(res.data.message || this.tm("messages.addSuccessWithConfig"));
       } catch (_err) {
         this.loading = false;

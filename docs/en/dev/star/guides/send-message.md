@@ -10,8 +10,10 @@ async def helloworld(self, event: AstrMessageEvent):
     yield event.plain_result("Hello!")
     yield event.plain_result("你好！")
 
-    yield event.image_result("path/to/image.jpg") # Send an image
-    yield event.image_result("https://example.com/image.jpg") # Send an image from URL, must start with http or https
+    yield event.image_result("path/to/image.jpg")  # Send an image
+    yield event.image_result(
+        "https://example.com/image.jpg"
+    )  # Send an image from URL, must start with http or https
 ```
 
 ## Active Messages
@@ -22,6 +24,7 @@ For scheduled tasks or when you don't want to send messages immediately, you can
 
 ```python
 from astrbot.api.event import MessageChain
+
 
 @filter.command("helloworld")
 async def helloworld(self, event: AstrMessageEvent):
@@ -43,14 +46,17 @@ AstrBot supports sending rich media messages such as images, audio, videos, etc.
 ```python
 import astrbot.api.message_components as Comp
 
+
 @filter.command("helloworld")
 async def helloworld(self, event: AstrMessageEvent):
     chain = [
-        Comp.At(qq=event.get_sender_id()), # Mention the message sender
+        Comp.At(qq=event.get_sender_id()),  # Mention the message sender
         Comp.Plain("Check out this image:"),
-        Comp.Image.fromURL("https://example.com/image.jpg"), # Send image from URL
-        Comp.Image.fromFileSystem("path/to/image.jpg"), # Send image from local file system
-        Comp.Plain("This is an image.")
+        Comp.Image.fromURL("https://example.com/image.jpg"),  # Send image from URL
+        Comp.Image.fromFileSystem(
+            "path/to/image.jpg"
+        ),  # Send image from local file system
+        Comp.Plain("This is an image."),
     ]
     yield event.chain_result(chain)
 ```
@@ -65,13 +71,13 @@ Similarly,
 **File**
 
 ```py
-Comp.File(file="path/to/file.txt", name="file.txt") # Not supported by some platforms
+Comp.File(file="path/to/file.txt", name="file.txt")  # Not supported by some platforms
 ```
 
 **Audio Record**
 
 ```py
-path = "path/to/record.wav" # Currently only accepts wav format, please convert other formats yourself
+path = "path/to/record.wav"  # Currently only accepts wav format, please convert other formats yourself
 Comp.Record(file=path, url=path)
 ```
 
@@ -88,17 +94,15 @@ Comp.Video.fromURL(url="https://example.com/video.mp4")
 ```python
 from astrbot.api.event import filter, AstrMessageEvent
 
+
 @filter.command("test")
 async def test(self, event: AstrMessageEvent):
     from astrbot.api.message_components import Video
+
     # fromFileSystem requires the user's protocol client and bot to be on the same system.
-    video = Video.fromFileSystem(
-        path="test.mp4"
-    )
+    video = Video.fromFileSystem(path="test.mp4")
     # More universal approach
-    video = Video.fromURL(
-        url="https://example.com/video.mp4"
-    )
+    video = Video.fromURL(url="https://example.com/video.mp4")
     yield event.chain_result([video])
 ```
 
@@ -113,16 +117,15 @@ You can send group forward messages as follows.
 ```py
 from astrbot.api.event import filter, AstrMessageEvent
 
+
 @filter.command("test")
 async def test(self, event: AstrMessageEvent):
     from astrbot.api.message_components import Node, Plain, Image
+
     node = Node(
         uin=905617992,
         name="Soulter",
-        content=[
-            Plain("hi"),
-            Image.fromFileSystem("test.jpg")
-        ]
+        content=[Plain("hi"), Image.fromFileSystem("test.jpg")],
     )
     yield event.chain_result([node])
 ```

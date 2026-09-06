@@ -6,7 +6,7 @@ and related helper methods.
 """
 
 import os
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -19,7 +19,6 @@ from astrbot.core.provider.provider import (
     STTProvider,
     TTSProvider,
 )
-
 
 # =========================================================================
 # Fixtures
@@ -61,7 +60,7 @@ def mock_persona_mgr():
 
 @pytest.fixture
 def manager(mock_acm, mock_db, mock_persona_mgr):
-    with patch("astrbot.core.provider.manager.llm_tools") as mock_llm_tools:
+    with patch("astrbot.core.provider.manager.llm_tools"):
         mgr = ProviderManager(
             acm=mock_acm,
             db_helper=mock_db,
@@ -210,7 +209,10 @@ class TestProviderManagerLookups:
         fake_provider = MagicMock(spec=Provider)
         manager.inst_map["default_prov"] = fake_provider
         mock_acm.get_conf.return_value = {
-            "provider_settings": {"default_provider_id": "default_prov"}
+            "agent_runner": {
+                "runner_type": "local",
+                "config": {"model": {"provider_id": "default_prov"}},
+            },
         }
         result = manager.get_using_provider(ProviderType.CHAT_COMPLETION)
         assert result is fake_provider
@@ -223,16 +225,12 @@ class TestProviderManagerLookups:
         assert result is None
 
     def test_get_using_provider_stt_disabled_returns_none(self, manager, mock_acm):
-        mock_acm.get_conf.return_value = {
-            "provider_stt_settings": {"enable": False}
-        }
+        mock_acm.get_conf.return_value = {"provider_stt_settings": {"enable": False}}
         result = manager.get_using_provider(ProviderType.SPEECH_TO_TEXT)
         assert result is None
 
     def test_get_using_provider_tts_disabled_returns_none(self, manager, mock_acm):
-        mock_acm.get_conf.return_value = {
-            "provider_tts_settings": {"enable": False}
-        }
+        mock_acm.get_conf.return_value = {"provider_tts_settings": {"enable": False}}
         result = manager.get_using_provider(ProviderType.TEXT_TO_SPEECH)
         assert result is None
 
@@ -348,7 +346,11 @@ class TestGetProviderConfigById:
         with patch.object(
             manager,
             "get_merged_provider_config",
-            return_value={"id": "p1", "type": "openai", "base_url": "https://api.openai.com"},
+            return_value={
+                "id": "p1",
+                "type": "openai",
+                "base_url": "https://api.openai.com",
+            },
         ):
             result = manager.get_provider_config_by_id("p1", merged=True)
             assert result["base_url"] == "https://api.openai.com"

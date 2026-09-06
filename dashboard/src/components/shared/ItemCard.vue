@@ -71,12 +71,19 @@
       class="d-flex justify-end align-center"
       style="position: absolute; bottom: 16px; right: 16px; opacity: 0.2"
     >
-      <v-img :src="bglogo" contain width="120" height="120" />
+      <v-img
+        :src="bglogo"
+        :class="{ 'provider-icon--monochrome': bglogoMonochrome }"
+        contain
+        width="120"
+        height="120"
+      />
     </div>
   </v-card>
 </template>
 
 <script lang="ts">
+import type { PropType } from "vue";
 import { useI18n } from "@/i18n/composables";
 
 export default {
@@ -97,6 +104,10 @@ export default {
     bglogo: {
       type: String,
       default: null,
+    },
+    bglogoMonochrome: {
+      type: Boolean,
+      default: false,
     },
     loading: {
       type: Boolean,
@@ -119,7 +130,7 @@ export default {
       default: false,
     },
     variant: {
-      type: String,
+      type: String as PropType<"text" | "plain" | "flat" | "elevated" | "outlined" | "tonal">,
       default: undefined,
     },
   },
@@ -175,4 +186,5 @@ export default {
 .item-status-indicator.active {
   background-color: #4caf50;
 }
+
 </style>

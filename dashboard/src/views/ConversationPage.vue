@@ -152,7 +152,7 @@
                     :ripple="false"
                     class="conversation-inline-edit"
                     @click.stop="editConversation(item)"
-                    :disabled="loading"
+                    :disabled="actionLoading"
                   >
                     <v-icon size="14">mdi-pencil</v-icon>
                   </v-btn>
@@ -232,7 +232,7 @@
                   size="x-small"
                   class="action-button"
                   @click="viewConversation(item)"
-                  :disabled="loading"
+                  :disabled="actionLoading"
                 >
                   <v-icon>mdi-eye</v-icon>
                 </v-btn>
@@ -243,7 +243,7 @@
                   size="x-small"
                   class="action-button"
                   @click="confirmDeleteConversation(item)"
-                  :disabled="loading"
+                  :disabled="actionLoading"
                 >
                   <v-icon>mdi-delete</v-icon>
                 </v-btn>
@@ -252,12 +252,18 @@
 
             <template v-slot:no-data>
               <div class="d-flex flex-column align-center py-6">
-                <v-icon size="64" color="grey lighten-1"
-                  >mdi-chat-remove</v-icon
-                >
-                <span class="text-subtitle-1 text-disabled mt-3">{{
-                  tm("status.noData")
-                }}</span>
+                <template v-if="listLoading">
+                  <v-progress-circular indeterminate color="primary" />
+                </template>
+                <template v-else-if="listError">
+                  <v-icon size="64" color="error">mdi-alert-circle-outline</v-icon>
+                  <span class="text-subtitle-1 text-disabled mt-3">{{ tm("messages.fetchError") }}</span>
+                  <v-btn class="mt-3" size="small" variant="tonal" @click="fetchConversations">{{ tm("history.refresh") }}</v-btn>
+                </template>
+                <template v-else>
+                  <v-icon size="64" color="grey lighten-1">mdi-chat-remove</v-icon>
+                  <span class="text-subtitle-1 text-disabled mt-3">{{ tm("status.noData") }}</span>
+                </template>
               </div>
             </template>
           </v-data-table>
@@ -314,7 +320,7 @@
 
     <!-- 对话详情对话框 -->
     <v-dialog v-model="dialogView" max-width="900px" scrollable>
-      <v-card class="conversation-detail-card">
+      <v-card class="conversation-detail-card" :class="{ 'conversation-detail-card--edit': isEditingHistory }">
         <v-card-title
           class="text-h3 pa-4 pb-0 pl-6 conversation-detail-title"
         >
@@ -396,7 +402,7 @@
           <div v-if="isEditingHistory" class="monaco-editor-container">
             <VueMonacoEditor
               v-model:value="editedHistory"
-              theme="vs-dark"
+              :theme="isDark ? 'vs-dark' : 'vs-light'"
               language="json"
               :options="{
                 automaticLayout: true,
@@ -414,7 +420,7 @@
           <div
             v-else
             class="conversation-messages-container"
-            style="background-color: var(--v-theme-surface)"
+            style="background-color: rgb(var(--v-theme-surface))"
             ref="messagesContainer"
             @wheel.prevent="onContainerWheel"
           >
@@ -721,7 +727,8 @@ export default defineComponent({
       valid: true,
 
       // 状态控制
-      listLoading: false,
+      listLoading: true,
+      listError: false,
       listAbortController: null as AbortController | null,
       listRequestId: 0,
       actionLoading: false,
@@ -847,10 +854,8 @@ export default defineComponent({
       };
     },
 
-    // 检测是否为暗色模式
     isDark() {
-      console.info("isDark", this.customizerStore.uiTheme);
-      return this.customizerStore.uiTheme === "PurpleThemeDark";
+      return this.customizerStore.isDark;
     },
 
     // 将对话历史转换为 MessageList 组件期望的格式
@@ -1058,6 +1063,7 @@ export default defineComponent({
       };
       this.listAbortController = markRaw(controller);
       this.listLoading = true;
+      this.listError = false;
 
       try {
         const params: Record<string, string | number | boolean> = {
@@ -1118,7 +1124,8 @@ export default defineComponent({
           return;
         }
 
-        console.error("获取对话列表出错:", error);
+        this.listError = true;
+        console.error("Failed to fetch conversations:", error);
         this.showErrorMessage(this.getErrorMessage(error, this.tm("messages.fetchError")));
       } finally {
         if (requestId === this.listRequestId) {
@@ -1576,8 +1583,17 @@ export default defineComponent({
   font-weight: 500;
 }
 
+/* 编辑模式：编辑器填满剩余高度，避免与外层滚动条叠加 */
+.conversation-detail-card--edit > .v-card-text {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
 .monaco-editor-container {
-  height: 500px;
+  flex: 1;
+  min-height: 0;
   border-radius: 8px;
   overflow: hidden;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
@@ -1604,16 +1620,15 @@ export default defineComponent({
     display: none;
 }
 
-/* 暗色模式下的聊天消息容器 */
-.v-theme--dark .conversation-messages-container {
-  background-color: #1e1e1e;
-}
-
-/* 对话详情卡片 */
 .conversation-detail-card {
   max-height: 90vh;
   display: flex;
   flex-direction: column;
+}
+
+/* Give Monaco a fixed-height flex ancestor in edit mode. */
+.v-dialog > .v-overlay__content > .conversation-detail-card--edit {
+  flex: 0 0 90vh;
 }
 
 .text-truncate {
@@ -1707,6 +1722,7 @@ export default defineComponent({
 }
 
 .conversation-detail-title {
+  display: flex;
   align-items: flex-start;
 }
 
@@ -1715,6 +1731,7 @@ export default defineComponent({
   flex-direction: column;
   gap: 6px;
   min-width: 0;
+  width: 100%;
 }
 
 .conversation-detail-umo-parsed {

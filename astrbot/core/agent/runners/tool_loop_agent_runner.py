@@ -201,7 +201,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     @override
     async def reset(
         self,
-        provider: Provider,
+        provider: Provider | None,
         request: ProviderRequest,
         run_context: ContextWrapper[TContext],
         tool_executor: BaseFunctionToolExecutor[TContext],
@@ -226,6 +226,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         read_tool: FunctionTool | None = None,
         **kwargs: T.Any,
     ) -> None:
+        if provider is None:
+            raise ValueError("The local agent runner requires a provider.")
         self.req = request
         self.streaming = streaming
         self.enforce_max_turns = enforce_max_turns
@@ -529,6 +531,17 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self,
     ) -> T.AsyncGenerator[LLMResponse, None]:
         """Wrap _iter_llm_responses with provider fallback handling."""
+        if not self.run_context.messages:
+            logger.warning(
+                "Skipping LLM request because no messages remain after agent/request "
+                "hooks and context processing."
+            )
+            yield LLMResponse(
+                role="err",
+                completion_text="No messages remain for the LLM request.",
+            )
+            return
+
         candidates = [self.provider, *self.fallback_providers]
         total_candidates = len(candidates)
         last_exception: Exception | None = None

@@ -251,6 +251,10 @@ export const usePersonaStore = defineStore("persona", {
      * 删除文件夹
      */
     async deleteFolder(folderId: string): Promise<void> {
+      const deletedFolder = this.findFolderInTree(folderId);
+      const isCurrentFolderDeleted =
+        this.currentFolderId === folderId ||
+        this.breadcrumbPath.some((folder) => folder.folder_id === folderId);
       const response = await axios.post("/api/persona/folder/delete", {
         folder_id: folderId,
       });
@@ -259,8 +263,12 @@ export const usePersonaStore = defineStore("persona", {
         throw new Error(response.data.message || "删除文件夹失败");
       }
 
-      // 刷新当前文件夹内容和文件夹树
-      await Promise.all([this.refreshCurrentFolder(), this.loadFolderTree()]);
+      // Return to the deleted ancestor's parent rather than retain a stale ID.
+      const targetFolderId = isCurrentFolderDeleted
+        ? deletedFolder?.parent_id ?? null
+        : this.currentFolderId;
+      await this.loadFolderTree();
+      await this.navigateToFolder(targetFolderId);
     },
 
     /**

@@ -1,8 +1,8 @@
 import asyncio
-import os
 import re
 import uuid
 from contextlib import suppress
+from pathlib import Path
 from typing import override
 
 from apscheduler.events import EVENT_JOB_ERROR
@@ -18,6 +18,7 @@ from astrbot.api import logger
 from astrbot.api.event import MessageChain
 from astrbot.api.platform import (
     AstrBotMessage,
+    Group,
     MessageMember,
     MessageType,
     Platform,
@@ -38,6 +39,8 @@ from .tg_event import TelegramPlatformEvent
 
 @register_platform_adapter("telegram", "telegram 适配器")
 class TelegramPlatformAdapter(Platform):
+    _FORUM_TOPIC_NAME_CACHE_MAX_SIZE = 1000
+
     def __init__(
         self,
         platform_config: dict,
@@ -105,6 +108,7 @@ class TelegramPlatformAdapter(Platform):
         self._polling_recovery_threshold = 3
         self._polling_failure_window = 60.0
         self._application_started = False
+        self._forum_topic_names: dict[tuple[str, int | None], str] = {}
         self._build_application()
         self.media_group_cache: dict[str, dict] = {}
         self.media_group_timeout = self.config.get("telegram_media_group_timeout", 2.5)
@@ -214,7 +218,9 @@ class TelegramPlatformAdapter(Platform):
                 self._polling_recovery_requested.clear()
                 updater = self.application.updater
                 if updater is None:
-                    logger.error("Telegram Updater is not initialized. Cannot start polling.")
+                    logger.error(
+                        "Telegram Updater is not initialized. Cannot start polling."
+                    )
                     self._application_started = False
                     await asyncio.sleep(self._polling_restart_delay)
                     continue
@@ -407,7 +413,7 @@ class TelegramPlatformAdapter(Platform):
         self,
         update: Update,
         context: ContextTypes.DEFAULT_TYPE,
-        get_reply=True,
+        get_reply: bool = True,
     ) -> AstrBotMessage | None:
         """转换 Telegram 的消息对象为 AstrBotMessage 对象｡
 
@@ -438,10 +444,65 @@ class TelegramPlatformAdapter(Platform):
             message.type = MessageType.FRIEND_MESSAGE
         else:
             message.type = MessageType.GROUP_MESSAGE
-            message.group_id = str(msg.chat.id)
-            if msg.is_topic_message and msg.message_thread_id:
-                message.group_id += "#" + str(msg.message_thread_id)
-                message.session_id = message.group_id
+            chat_id = str(msg.chat.id)
+            group_id = chat_id
+            is_forum = getattr(msg.chat, "is_forum", False) is True
+            raw_thread_id = msg.message_thread_id if msg.is_topic_message else None
+            thread_id = (
+                raw_thread_id
+                if raw_thread_id and not (is_forum and raw_thread_id == 1)
+                else None
+            )
+            if thread_id is not None:
+                # Telegram Topic Group: include thread id to isolate per-topic sessions.
+                group_id += "#" + str(thread_id)
+                message.session_id = group_id
+
+            chat_title = getattr(msg.chat, "title", None)
+            group_name = chat_title if isinstance(chat_title, str) else None
+            topic_name = None
+            topic_created = getattr(msg, "forum_topic_created", None)
+            topic_edited = getattr(msg, "forum_topic_edited", None)
+            discovered_topic_name = getattr(topic_created, "name", None)
+            if not isinstance(discovered_topic_name, str):
+                discovered_topic_name = getattr(topic_edited, "name", None)
+            if not isinstance(discovered_topic_name, str):
+                reply_message = msg.reply_to_message
+                reply_topic_created = getattr(
+                    reply_message, "forum_topic_created", None
+                )
+                discovered_topic_name = getattr(reply_topic_created, "name", None)
+
+            topic_key = None
+            if thread_id is not None:
+                topic_key = (chat_id, thread_id)
+            elif is_forum:
+                topic_key = (chat_id, None)
+
+            if topic_key is not None:
+                cached_topic_name = self._forum_topic_names.pop(topic_key, None)
+                if (
+                    isinstance(discovered_topic_name, str)
+                    and discovered_topic_name.strip()
+                ):
+                    cached_topic_name = discovered_topic_name.strip()
+                if cached_topic_name:
+                    self._forum_topic_names[topic_key] = cached_topic_name
+                    if (
+                        len(self._forum_topic_names)
+                        > self._FORUM_TOPIC_NAME_CACHE_MAX_SIZE
+                    ):
+                        oldest_topic_key = next(iter(self._forum_topic_names))
+                        del self._forum_topic_names[oldest_topic_key]
+                topic_name = cached_topic_name
+
+            if group_name and topic_name:
+                group_name = f"{group_name}-{topic_name}"
+            message.group = Group(
+                group_id=group_id,
+                group_name=group_name,
+            )
+            setattr(message, "_telegram_topic_name", topic_name)
         message.message_id = str(msg.message_id)
         _from_user = msg.from_user
         if not _from_user:
@@ -455,17 +516,18 @@ class TelegramPlatformAdapter(Platform):
         message.raw_message = update
         message.message_str = ""
         message.message = []
-        if update.message.reply_to_message and (
-            not (
-                update.message.is_topic_message
-                and update.message.message_thread_id
-                == update.message.reply_to_message.message_id
+        if (
+            get_reply
+            and msg.reply_to_message
+            and not (
+                msg.is_topic_message
+                and msg.message_thread_id == msg.reply_to_message.message_id
             )
         ):
-            reply_update = Update(update_id=1, message=update.message.reply_to_message)
+            reply_update = Update(update_id=1, message=msg.reply_to_message)
             reply_abm = await self.convert_message(reply_update, context, False)
             if reply_abm:
-                quote_text = update.message.quote.text if update.message.quote else None
+                quote_text = msg.quote.text if msg.quote else None
                 reply_chain = reply_abm.message
                 reply_message_str = reply_abm.message_str
                 if quote_text:
@@ -484,14 +546,13 @@ class TelegramPlatformAdapter(Platform):
                         qq=reply_abm.sender.user_id,
                     ),
                 )
-        if update.message.text:
-            plain_text = update.message.text
+        if msg.text:
+            plain_text = msg.text
             if (
                 message.type == MessageType.GROUP_MESSAGE
-                and update.message
-                and update.message.reply_to_message
-                and update.message.reply_to_message.from_user
-                and (update.message.reply_to_message.from_user.id == context.bot.id)
+                and msg.reply_to_message
+                and msg.reply_to_message.from_user
+                and msg.reply_to_message.from_user.id == context.bot.id
             ):
                 plain_text2 = f"/@{context.bot.username} " + plain_text
                 plain_text = plain_text2
@@ -503,8 +564,8 @@ class TelegramPlatformAdapter(Platform):
                         plain_text = command + (
                             f" {command_parts[1]}" if len(command_parts) > 1 else ""
                         )
-            if update.message.entities:
-                for entity in update.message.entities:
+            if msg.entities:
+                for entity in msg.entities:
                     if entity.type == "mention":
                         name = plain_text[
                             entity.offset + 1 : entity.offset + entity.length
@@ -521,28 +582,34 @@ class TelegramPlatformAdapter(Platform):
             if message.message_str.strip() == "/start":
                 await self.start(update, context)
                 return None
-        elif update.message.voice:
-            file = await update.message.voice.get_file()
-            file_basename = os.path.basename(file.file_path)
-            temp_dir = get_astrbot_temp_path()
-            temp_path = os.path.join(temp_dir, file_basename)
-            await download_file(file.file_path, path=temp_path)
-            path_wav = await MediaResolver(
-                temp_path,
-                media_type="audio",
-                default_suffix=".wav",
-            ).to_path(target_format="wav")
-            record = Comp.Record(file=path_wav, url=path_wav)
-            record.path = path_wav
-            message.message = [record]
-        elif update.message.photo:
-            photo = update.message.photo[-1]
+        elif (audio := msg.voice or msg.audio) is not None:
+            # Both voice notes and audio files are represented as Record components.
+            file = await audio.get_file()
+            file_path = file.file_path
+            if file_path is None:
+                logger.warning(
+                    "Telegram audio file_path is None, cannot save the file."
+                )
+            else:
+                temp_path = Path(get_astrbot_temp_path()) / Path(file_path).name
+                await download_file(file_path, path=str(temp_path))
+                path_wav = await MediaResolver(
+                    str(temp_path),
+                    media_type="audio",
+                    default_suffix=".wav",
+                ).to_path(target_format="wav")
+                record = Comp.Record(file=path_wav, url=path_wav)
+                record.path = path_wav
+                message.message.append(record)
+            _apply_caption()
+        elif msg.photo:
+            photo = msg.photo[-1]
             file = await photo.get_file()
             message.message.append(Comp.Image(file=file.file_path, url=file.file_path))
             _apply_caption()
-        elif update.message.sticker:
-            # 将sticker当作图片处理
-            sticker = update.message.sticker
+        elif msg.sticker:
+            # Treat supported stickers as images.
+            sticker = msg.sticker
             if sticker.is_animated or sticker.is_video:
                 # .tgs/.webm stickers are not bitmaps; use the static thumbnail.
                 file = await sticker.thumbnail.get_file() if sticker.thumbnail else None
@@ -556,9 +623,9 @@ class TelegramPlatformAdapter(Platform):
                 sticker_text = f"Sticker: {sticker.emoji}"
                 message.message_str = sticker_text
                 message.message.append(Comp.Plain(sticker_text))
-        elif update.message.document:
-            file = await update.message.document.get_file()
-            file_name = update.message.document.file_name or uuid.uuid4().hex
+        elif msg.document:
+            file = await msg.document.get_file()
+            file_name = msg.document.file_name or uuid.uuid4().hex
             file_path = file.file_path
             if file_path is None:
                 logger.warning(
@@ -569,9 +636,9 @@ class TelegramPlatformAdapter(Platform):
                     Comp.File(file=file_path, name=file_name, url=file_path),
                 )
                 _apply_caption()
-        elif update.message.video:
-            file = await update.message.video.get_file()
-            file_name = update.message.video.file_name or uuid.uuid4().hex
+        elif msg.video:
+            file = await msg.video.get_file()
+            file_name = msg.video.file_name or uuid.uuid4().hex
             file_path = file.file_path
             if file_path is None:
                 logger.warning(
@@ -581,9 +648,9 @@ class TelegramPlatformAdapter(Platform):
                 message.message.append(Comp.Video(file=file_path, path=file.file_path))
                 _apply_caption()
 
-        elif update.message.video_note:
+        elif msg.video_note:
             # Video notes carry no file_name and cannot have a caption.
-            file = await update.message.video_note.get_file()
+            file = await msg.video_note.get_file()
             file_path = file.file_path
             if file_path is None:
                 logger.warning(

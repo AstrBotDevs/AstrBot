@@ -1,13 +1,17 @@
 from collections.abc import AsyncGenerator
 
 from astrbot.core import logger
+from astrbot.core.config.agent_runner import normalize_agent_runner
 from astrbot.core.pipeline.context import PipelineContext
+from astrbot.core.pipeline.process_stage.method.agent_sub_stages.internal import (
+    InternalAgentSubStage,
+)
+from astrbot.core.pipeline.process_stage.method.agent_sub_stages.third_party import (
+    ThirdPartyAgentSubStage,
+)
 from astrbot.core.pipeline.stage import Stage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.session_llm_manager import SessionServiceManager
-
-from .agent_sub_stages.internal import InternalAgentSubStage
-from .agent_sub_stages.third_party import ThirdPartyAgentSubStage
 
 
 class AgentRequestSubStage(Stage):
@@ -26,7 +30,9 @@ class AgentRequestSubStage(Stage):
                 )
                 self.prov_wake_prefix = self.prov_wake_prefix[len(bwp) :]
 
-        agent_runner_type = self.config["provider_settings"]["agent_runner_type"]
+        agent_runner = normalize_agent_runner(self.config.get("agent_runner"))
+        self.config["agent_runner"] = agent_runner
+        agent_runner_type = agent_runner["runner_type"]
         self.agent_sub_stage: InternalAgentSubStage | ThirdPartyAgentSubStage
         if agent_runner_type == "local":
             self.agent_sub_stage = InternalAgentSubStage()

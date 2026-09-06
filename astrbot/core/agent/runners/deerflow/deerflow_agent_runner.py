@@ -262,7 +262,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
     @override
     async def reset(
         self,
-        provider: Provider,
+        provider: Provider | None,
         request: ProviderRequest,
         run_context: ContextWrapper[TContext],
         tool_executor: BaseFunctionToolExecutor[TContext],

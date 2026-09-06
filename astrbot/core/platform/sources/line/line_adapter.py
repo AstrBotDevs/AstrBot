@@ -28,12 +28,16 @@ LINE_CONFIG_METADATA = {
     "channel_access_token": {
         "description": "LINE Channel Access Token",
         "type": "string",
-        "hint": "LINE Messaging API 的 channel access token｡",
+        "hint": "LINE Messaging API 的 channel access token。",
+        "secret": True,
+        "show_key": True,
     },
     "channel_secret": {
         "description": "LINE Channel Secret",
         "type": "string",
-        "hint": "用于校验 LINE Webhook 签名｡",
+        "hint": "用于校验 LINE Webhook 签名。",
+        "secret": True,
+        "show_key": True,
     },
 }
 LINE_I18N_RESOURCES = {
@@ -191,7 +195,21 @@ class LinePlatformAdapter(Platform):
         if source_type in {"group", "room"}:
             abm.type = MessageType.GROUP_MESSAGE
             container_id = group_id or room_id
-            abm.group = Group(group_id=container_id, group_name=container_id)
+            group_name = str(
+                source.get("groupName")
+                or source.get("roomName")
+                or event.get("groupName")
+                or event.get("roomName")
+                or ""
+            ).strip()
+            group_avatar = str(
+                source.get("pictureUrl") or event.get("pictureUrl") or ""
+            ).strip()
+            abm.group = Group(
+                group_id=container_id,
+                group_name=group_name or None,
+                group_avatar=group_avatar or None,
+            )
             abm.session_id = container_id
             sender_id = user_id or container_id
         elif source_type == "user":
@@ -417,12 +435,15 @@ class LinePlatformAdapter(Platform):
         self._event_id_timestamps[event_id] = time.time()
         return False
 
-    async def handle_msg(self, abm: AstrBotMessage) -> None:
-        event = LineMessageEvent(
-            message_str=abm.message_str,
-            message_obj=abm,
+    def create_event(self, message: AstrBotMessage) -> LineMessageEvent:
+        """Wrap a message with the authenticated LINE API client."""
+        return LineMessageEvent(
+            message_str=message.message_str,
+            message_obj=message,
             platform_meta=self.meta(),
-            session_id=abm.session_id,
+            session_id=message.session_id,
             line_api=self.line_api,
         )
-        self._event_queue.put_nowait(event)
+
+    async def handle_msg(self, abm: AstrBotMessage) -> None:
+        self.commit_event(self.create_event(abm))

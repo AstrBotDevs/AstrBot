@@ -16,6 +16,12 @@ class KookApiPaths:
     USER_VIEW = f"{BASE_URL}{API_VERSION_PATH}/user/view"
     GATEWAY_INDEX = f"{BASE_URL}{API_VERSION_PATH}/gateway/index"
 
+    # Channel and guild information
+    CHANNEL_VIEW = f"{BASE_URL}{API_VERSION_PATH}/channel/view"
+    GUILD_VIEW = f"{BASE_URL}{API_VERSION_PATH}/guild/view"
+    GUILD_USER_LIST = f"{BASE_URL}{API_VERSION_PATH}/guild/user-list"
+    GUILD_ROLE_LIST = f"{BASE_URL}{API_VERSION_PATH}/guild-role/list"
+
     # 消息相关
     ASSET_CREATE = f"{BASE_URL}{API_VERSION_PATH}/asset/create"
     ## 频道消息

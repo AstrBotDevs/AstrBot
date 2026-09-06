@@ -29,6 +29,7 @@ from astrbot.api.event import MessageChain
 from astrbot.api.message_components import At, File, Image, Plain, Record, Reply, Video
 from astrbot.api.platform import (
     AstrBotMessage,
+    Group,
     MessageMember,
     MessageType,
     Platform,
@@ -293,7 +294,30 @@ class QQOfficialPlatformAdapter(Platform):
         session: MessageSesion,
         message_chain: MessageChain,
     ) -> None:
-        # parse outgoing message chain to qq-official compatible payload parts
+        """Send a message after resolving the QQ Official delivery session.
+
+        Args:
+            session: Persisted session used to route the message.
+            message_chain: Message content to send.
+
+        Returns:
+            None.
+        """
+        if session.message_type == MessageType.GROUP_MESSAGE:
+            session = MessageSesion(
+                session.platform_id,
+                session.message_type,
+                session.session_id.rsplit("_", 1)[-1],
+            )
+
+        message_chains = QQOfficialMessageEvent._split_message_chain_by_media(
+            message_chain
+        )
+        if len(message_chains) > 1:
+            for split_message_chain in message_chains:
+                await self._send_by_session_common(session, split_message_chain)
+            return
+
         (
             plain_text,
             image_base64,
@@ -684,7 +708,14 @@ class QQOfficialPlatformAdapter(Platform):
                     str(getattr(message.author, "member_openid", "") or ""),
                     str(getattr(message.author, "username", "") or ""),
                 )
-                abm.group_id = str(getattr(message, "group_openid", "") or "")
+                raw_data = getattr(message, "raw_data", {})
+                group_name = getattr(message, "group_name", None)
+                if not group_name and isinstance(raw_data, dict):
+                    group_name = raw_data.get("group_name")
+                abm.group = Group(
+                    group_id=str(getattr(message, "group_openid", "") or ""),
+                    group_name=str(group_name) if group_name else None,
+                )
                 bot_mentions = [
                     mention
                     for mention in (getattr(message, "mentions", None) or [])
@@ -764,7 +795,14 @@ class QQOfficialPlatformAdapter(Platform):
             msg.append(At(qq="qq_official"))
             msg.append(Plain(plain_content))
             if isinstance(message, botpy.message.Message):
-                abm.group_id = str(getattr(message, "channel_id", "") or "")
+                raw_data = getattr(message, "raw_data", {})
+                channel_name = getattr(message, "channel_name", None)
+                if not channel_name and isinstance(raw_data, dict):
+                    channel_name = raw_data.get("channel_name")
+                abm.group = Group(
+                    group_id=str(getattr(message, "channel_id", "") or ""),
+                    group_name=str(channel_name) if channel_name else None,
+                )
         else:
             raise ValueError(f"Unknown message type: {message_type}")
 

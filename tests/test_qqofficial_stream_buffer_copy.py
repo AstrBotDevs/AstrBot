@@ -140,7 +140,7 @@ def test_append_stream_delta_old_reference_style_loses_first_char() -> None:
 
 
 @pytest.mark.asyncio
-async def test_event_contract_uses_only_current_group_metadata() -> None:
+async def test_event_contract_supports_explicit_group_lookup() -> None:
     group_event = _make_group_event()
     current_group = group_event.message_obj.group
 
@@ -148,7 +148,10 @@ async def test_event_contract_uses_only_current_group_metadata() -> None:
     await group_event.stop_typing()
     assert await group_event.get_group() is current_group
     assert await group_event.get_group("group-1") is current_group
-    assert await group_event.get_group("different-group") is None
+    requested_group = await group_event.get_group("different-group")
+    assert requested_group is not None
+    assert requested_group.group_id == "different-group"
+    assert group_event.message_obj.group is current_group
 
     private_event = _make_c2c_event()
     assert await private_event.get_group() is None

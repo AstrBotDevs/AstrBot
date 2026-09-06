@@ -20,9 +20,23 @@ const commonStore = useCommonStore();
 const { locale } = useI18n();
 const route = useRoute();
 const routerLoadingStore = useRouterLoadingStore();
-const isCurrentChatRoute = computed(() => route.path === "/chat" || route.path.startsWith("/chat/"));
-const isPluginPageRoute = computed(() => route.path.startsWith("/plugin-page/"));
-const isFullScreenRoute = computed(() => isCurrentChatRoute.value || isPluginPageRoute.value);
+const isCurrentChatRoute = computed(
+  () => route.path === "/chat" || route.path.startsWith("/chat/"),
+);
+const isPluginPageRoute = computed(
+  () => route.path.startsWith("/plugin-page/"),
+);
+const isProviderPageRoute = computed(() => route.path === "/providers");
+const isPlatformPageRoute = computed(() => route.path === "/platforms");
+const isViewportLockedRoute = computed(
+  () =>
+    isCurrentChatRoute.value ||
+    isProviderPageRoute.value ||
+    isPlatformPageRoute.value,
+);
+const isFullScreenRoute = computed(
+  () => isCurrentChatRoute.value || isPluginPageRoute.value,
+);
 const shouldMountChat = ref(isCurrentChatRoute.value);
 
 const showSidebar = computed(() => !isCurrentChatRoute.value);
@@ -45,8 +59,8 @@ const checkMigration = async (): Promise<boolean> => {
     if (response.data.status === "ok" && response.data.data.need_migration) {
       if (migrationDialog.value && typeof migrationDialog.value.open === "function") {
         const result = await migrationDialog.value.open();
-        if (result.success) {
-          console.log("Migration completed successfully:", result.message);
+        if (result && typeof result === "object" && "success" in result && result.success) {
+          console.info("Migration completed successfully.");
           window.location.reload();
         }
       }
@@ -124,25 +138,35 @@ onMounted(() => {
       <v-main
         :class="{ 'chat-main': isCurrentChatRoute }"
         :style="{
-          height: isCurrentChatRoute ? '100vh' : undefined,
-          overflow: isCurrentChatRoute ? 'hidden' : undefined,
+          height: isViewportLockedRoute ? '100vh' : undefined,
+          overflow: isViewportLockedRoute ? 'hidden' : undefined,
         }"
       >
         <v-container
           fluid
           class="page-wrapper"
-          :class="{ 'chat-mode-container': isCurrentChatRoute }"
+          :class="{
+            'chat-mode-container': isCurrentChatRoute,
+            'viewport-locked-container':
+              isProviderPageRoute || isPlatformPageRoute,
+          }"
           :style="{
-            height: isFullScreenRoute ? '100%' : 'calc(100% - 8px)',
+            height:
+              isFullScreenRoute || isProviderPageRoute || isPlatformPageRoute
+                ? '100%'
+                : 'calc(100% - 8px)',
             padding: isFullScreenRoute ? '0' : undefined,
-            minHeight: isFullScreenRoute ? 'unset' : undefined,
+            minHeight:
+              isFullScreenRoute || isProviderPageRoute || isPlatformPageRoute
+                ? 'unset'
+                : undefined,
           }"
         >
           <div
             :style="{
               height: '100%',
               width: '100%',
-              overflow: isCurrentChatRoute ? 'hidden' : undefined,
+              overflow: isViewportLockedRoute ? 'hidden' : undefined,
               position: isPluginPageRoute ? 'relative' : undefined,
             }"
           >
@@ -170,6 +194,12 @@ onMounted(() => {
 
 <style scoped>
 .chat-mode-container {
+  min-height: unset !important;
+  height: 100% !important;
+  overflow: hidden !important;
+}
+
+.viewport-locked-container {
   min-height: unset !important;
   height: 100% !important;
   overflow: hidden !important;

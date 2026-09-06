@@ -29,6 +29,7 @@
   "status": {
     "enabled": "Активна",
     "disabled": "Отключена",
+    "pluginDisabled": "Плагин отключён",
     "conflict": "Конфликт"
   },
   "permission": {
@@ -40,6 +41,7 @@
     "disable": "Выключить",
     "rename": "Переименовать",
     "viewDetails": "Подробности",
+    "pluginInactive": "Сначала включите плагин",
     "sdkReadonly": "SDK-команды пока доступны только для просмотра в этой панели"
   },
   "dialogs": {

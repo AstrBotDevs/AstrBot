@@ -1,6 +1,7 @@
 import asyncio
 import errno
 import ipaddress
+import mimetypes
 import os
 import platform
 import socket
@@ -32,6 +33,10 @@ from astrbot.dashboard.services.auth_service import DASHBOARD_JWT_COOKIE_NAME
 
 from .api.app import create_dashboard_asgi_app
 from .plugin_page_auth import PluginPageAuth
+
+if os.name == "nt":
+    # Windows 的 mimetypes 会把 .svg 映射成非标准的 image/svg,这里强制覆盖为标准类型
+    mimetypes.add_type("image/svg+xml", ".svg", strict=True)
 
 _RATE_LIMITED_ENDPOINTS: frozenset = frozenset(
     {

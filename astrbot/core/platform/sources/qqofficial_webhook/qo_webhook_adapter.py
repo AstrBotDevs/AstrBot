@@ -73,20 +73,7 @@ class botClient(Client):
 
     def _commit(self, abm: AstrBotMessage) -> None:
         self.platform.remember_session_message_id(abm.session_id, abm.message_id)
-        event = QQOfficialWebhookMessageEvent(
-            abm.message_str,
-            abm,
-            self.platform.meta(),
-            abm.session_id,
-            self,
-        )
-        # Populate extra fields cached from the raw webhook payload
-        webhook_helper = getattr(self.platform, "webhook_helper", None)
-        if webhook_helper and abm.message_id:
-            extra_data = webhook_helper.pop_extra_data(abm.message_id)
-            for key, val in extra_data.items():
-                event.set_extra(key, val)
-        self.platform.commit_event(event)
+        self.platform.commit_event(self.platform.create_event(abm))
 
 
 @register_platform_adapter("qq_official_webhook", "QQ 机器人官方 API 适配器(Webhook)")
@@ -149,6 +136,21 @@ class QQOfficialWebhookPlatformAdapter(Platform):
             id=self.config.get("id"),
             support_proactive_message=True,
         )
+
+    def create_event(self, message: AstrBotMessage) -> QQOfficialWebhookMessageEvent:
+        """Wrap a webhook message and restore its cached extra fields."""
+        event = QQOfficialWebhookMessageEvent(
+            message.message_str,
+            message,
+            self.meta(),
+            message.session_id,
+            self.client,
+        )
+        if self.webhook_helper and message.message_id:
+            extra_data = self.webhook_helper.pop_extra_data(message.message_id)
+            for key, val in extra_data.items():
+                event.set_extra(key, val)
+        return event
 
     async def run(self) -> None:
         self.webhook_helper = QQOfficialWebhook(

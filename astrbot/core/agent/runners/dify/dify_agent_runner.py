@@ -26,7 +26,7 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
     @override
     async def reset(
         self,
-        provider: Provider,
+        provider: Provider | None,
         request: ProviderRequest,
         run_context: ContextWrapper[TContext],
         tool_executor: BaseFunctionToolExecutor[TContext],
@@ -136,7 +136,9 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
         )
         logger.debug(f"Dify 上传图片响应:{file_response}")
         if "id" not in file_response:
-            logger.warning(f"上传图片后得到未知的 Dify 响应:{file_response},图片将忽略｡")
+            logger.warning(
+                f"上传图片后得到未知的 Dify 响应:{file_response},图片将忽略｡"
+            )
             return None
 
         return {

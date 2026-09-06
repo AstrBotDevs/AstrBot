@@ -17,9 +17,7 @@ export interface menu {
 
 export const MORE_GROUP_KEY = "core.navigation.groups.more";
 
-// 注意：这个文件现在包含i18n键值而不是直接的文本
-// 在组件中使用时需要通过t()函数进行翻译
-// 所有键名都使用 core.navigation.* 格式
+// Navigation labels are translated by the sidebar using these i18n keys.
 const sidebarItem: menu[] = [
   {
     title: "core.navigation.welcome",
@@ -69,14 +67,14 @@ const sidebarItem: menu[] = [
     to: "/persona",
   },
   {
-    title: "core.navigation.groups.more",
+    title: "core.navigation.data",
+    icon: "mdi-database",
+    to: "/data",
+  },
+  {
+    title: MORE_GROUP_KEY,
     icon: "mdi-dots-horizontal",
     children: [
-      {
-        title: "core.navigation.conversation",
-        icon: "mdi-database",
-        to: "/conversation",
-      },
       {
         title: "core.navigation.sessionManagement",
         icon: "mdi-pencil-ruler",
@@ -92,28 +90,8 @@ const sidebarItem: menu[] = [
         icon: "mdi-vector-link",
         to: "/subagent",
       },
-      {
-        title: "core.navigation.dashboard",
-        icon: "mdi-view-dashboard",
-        to: "/dashboard/default",
-      },
-      {
-        title: "core.navigation.console",
-        icon: "mdi-console",
-        to: "/console",
-      },
-      {
-        title: "core.navigation.trace",
-        icon: "mdi-timeline-text-outline",
-        to: "/trace",
-      },
     ],
   },
-  // {
-  //   title: 'Project ATRI',
-  //   icon: 'mdi-grain',
-  //   to: '/project-atri'
-  // },
 ];
 
 export default sidebarItem;

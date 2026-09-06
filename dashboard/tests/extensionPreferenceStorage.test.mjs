@@ -4,11 +4,42 @@ import test from "node:test";
 import {
   PIN_UPDATES_ON_TOP_STORAGE_KEY,
   PINNED_EXTENSIONS_STORAGE_KEY,
+  PLUGIN_LIST_VIEW_MODE_STORAGE_KEY,
+  SHOW_RESERVED_PLUGINS_STORAGE_KEY,
   readBooleanPreference,
   readPinnedExtensions,
   writeBooleanPreference,
   writePinnedExtensions,
 } from "../src/views/extension/extensionPreferenceStorage.mjs";
+
+test("pre-workspace preference keys remain compatible", () => {
+  assert.equal(PIN_UPDATES_ON_TOP_STORAGE_KEY, "pinUpdatesOnTop");
+  assert.equal(SHOW_RESERVED_PLUGINS_STORAGE_KEY, "showReservedPlugins");
+  assert.equal(PLUGIN_LIST_VIEW_MODE_STORAGE_KEY, "pluginListViewMode");
+});
+
+test("readBooleanPreference preserves fallback for absent or invalid values", () => {
+  for (const saved of [null, "", "1", "invalid", "TRUE"]) {
+    const storage = { getItem: () => saved };
+    for (const fallback of [true, false]) {
+      assert.equal(readBooleanPreference(PIN_UPDATES_ON_TOP_STORAGE_KEY, fallback, storage), fallback);
+    }
+  }
+});
+
+test("boolean preferences round-trip independently of pinned extension names", () => {
+  const values = new Map();
+  const storage = {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, value),
+  };
+  writePinnedExtensions(["alpha"], storage);
+  for (const value of [true, false]) {
+    writeBooleanPreference(PIN_UPDATES_ON_TOP_STORAGE_KEY, value, storage);
+    assert.equal(readBooleanPreference(PIN_UPDATES_ON_TOP_STORAGE_KEY, !value, storage), value);
+    assert.deepEqual(readPinnedExtensions(storage), ["alpha"]);
+  }
+});
 
 test("readBooleanPreference returns fallback when storage access throws", () => {
   const storage = {

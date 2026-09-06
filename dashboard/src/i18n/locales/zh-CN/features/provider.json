@@ -5,15 +5,16 @@
     "title": "模型提供商",
     "settings": "设置",
     "addProvider": "新增模型提供商",
+    "deleteProvider": "删除模型提供商",
+    "selectHint": "请选择一个模型提供商",
     "providerType": "提供商类型",
     "tabs": {
       "all": "全部",
       "chatCompletion": "对话",
-      "agentRunner": "Agent 执行器",
       "speechToText": "语音转文字",
       "textToSpeech": "文字转语音",
-      "embedding": "嵌入(Embedding)",
-      "rerank": "重排序(Rerank)"
+      "embedding": "嵌入",
+      "rerank": "重排序"
     },
     "empty": {
       "all": "暂无模型提供商，点击 新增模型提供商 添加",
@@ -47,11 +48,10 @@
       "title": "模型提供商",
       "tabs": {
         "basic": "对话",
-        "agentRunner": "Agent 执行器",
         "speechToText": "语音转文字",
         "textToSpeech": "文字转语音",
-        "embedding": "嵌入(Embedding)",
-        "rerank": "重排序(Rerank)"
+        "embedding": "嵌入",
+        "rerank": "重排序"
       },
       "noTemplates": "暂无该类型的提供商模板"
     },

@@ -104,5 +104,56 @@
     "noItemSelectedForExport": "Сначала выберите диалоги для экспорта",
     "copySuccess": "Скопировано",
     "copyError": "Не удалось скопировать"
+  },
+  "workspace": {
+    "legacy": "Старая версия",
+    "newVersion": "Новая версия",
+    "filters": {
+      "title": "Фильтры",
+      "keyword": "Поиск",
+      "keywordPlaceholder": "Поиск по заголовку или сообщениям",
+      "robots": "ID бота",
+      "robotEmpty": "Нет ботов с историей диалогов",
+      "types": "Тип диалога",
+      "umo": "UMO",
+      "umoPlaceholder": "Введите UMO полностью или частично",
+      "sort": "Сортировка",
+      "reset": "Сбросить фильтры",
+      "close": "Закрыть фильтры",
+      "done": "Готово",
+      "updatedDesc": "Недавно обновленные",
+      "createdDesc": "Недавно созданные",
+      "updatedAsc": "Давно обновленные",
+      "createdAsc": "Давно созданные"
+    },
+    "list": {
+      "title": "Диалоги",
+      "total": "Всего: {count}",
+      "sessionTotal": "Сеансов: {count}",
+      "selected": "Выбрано: {count}",
+      "groupBySession": "Группировать по сеансам",
+      "conversationCount": "Диалогов: {count}",
+      "selectPage": "Выбрать страницу",
+      "empty": "Диалогов пока нет",
+      "filteredEmpty": "Нет диалогов с такими фильтрами",
+      "previous": "Назад",
+      "next": "Вперед",
+      "page": "Страница {page} из {total}"
+    },
+    "preview": {
+      "title": "Просмотр диалога",
+      "close": "Закрыть просмотр",
+      "loading": "Загрузка диалога",
+      "empty": "В этом диалоге нет сообщений",
+      "copyUmo": "Копировать UMO",
+      "rawData": "Исходные данные",
+      "copyRawData": "Копировать исходные данные"
+    },
+    "actions": {
+      "editTitle": "Изменить заголовок",
+      "export": "Экспорт",
+      "delete": "Удалить",
+      "refresh": "Обновить"
+    }
   }
 }

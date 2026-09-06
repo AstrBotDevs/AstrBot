@@ -3,7 +3,7 @@ import base64
 import re
 import time
 import uuid
-from typing import Any
+from typing import Any, cast
 
 import aiohttp
 from slack_sdk.socket_mode.request import SocketModeRequest
@@ -14,6 +14,7 @@ from astrbot.api.event import MessageChain
 from astrbot.api.message_components import At, File, Image, Plain
 from astrbot.api.platform import (
     AstrBotMessage,
+    Group,
     MessageMember,
     MessageType,
     Platform,
@@ -21,10 +22,13 @@ from astrbot.api.platform import (
 )
 from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.platform.register import register_platform_adapter
+from astrbot.core.platform.sources.slack.slack_event import (
+    SlackChannelData,
+    SlackMessageEvent,
+)
 from astrbot.core.utils.webhook_utils import log_webhook_info
 
 from .client import SlackSocketClient, SlackWebhookClient
-from .slack_event import SlackMessageEvent
 
 
 @register_platform_adapter(
@@ -115,12 +119,16 @@ class SlackAdapter(Platform):
         channel_id = event.get("channel", "")
         try:
             channel_info = await self.web_client.conversations_info(channel=channel_id)
-            is_im = channel_info["channel"]["is_im"]
+            channel_data = cast(SlackChannelData, channel_info["channel"])
+            is_im = channel_data.get("is_im", False)
             if is_im:
                 abm.type = MessageType.FRIEND_MESSAGE
             else:
                 abm.type = MessageType.GROUP_MESSAGE
-                abm.group_id = channel_id
+                abm.group = Group(
+                    group_id=channel_id,
+                    group_name=channel_data.get("name") or None,
+                )
         except Exception:
             abm.type = MessageType.GROUP_MESSAGE
             abm.group_id = channel_id

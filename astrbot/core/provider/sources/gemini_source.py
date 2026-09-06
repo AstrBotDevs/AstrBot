@@ -27,7 +27,11 @@ from astrbot.core.provider.func_tool_manager import ToolSet
 from astrbot.core.provider.register import register_provider_adapter
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_file, download_image_by_url
-from astrbot.core.utils.media_utils import ensure_wav
+from astrbot.core.utils.media_utils import (
+    describe_media_ref,
+    ensure_wav,
+    resolve_media_ref_to_base64_data,
+)
 from astrbot.core.utils.network_utils import is_connection_error, log_connection_failure
 
 from .request_retry import retry_provider_request
@@ -248,17 +252,23 @@ class ProviderGoogleGenAI(Provider):
             )
             if thinking_level and isinstance(thinking_level, str):
                 thinking_level = thinking_level.upper()
-                if thinking_level not in ["MINIMAL", "LOW", "MEDIUM", "HIGH"]:
+                allowed_levels = {"MINIMAL", "LOW", "MEDIUM", "HIGH"}
+                fallback_level = "HIGH"
+                if model_name.startswith("gemini-3.7"):
+                    allowed_levels = {"LOW", "MEDIUM", "HIGH"}
+                    fallback_level = "MEDIUM"
+                if thinking_level not in allowed_levels:
                     logger.warning(
-                        f"Invalid thinking level: {thinking_level}, using HIGH",
+                        "Invalid thinking level %s for %s, using %s",
+                        thinking_level,
+                        model_name,
+                        fallback_level,
                     )
-                    thinking_level = "HIGH"
-                level = types.ThinkingLevel(thinking_level)
-                thinking_config = types.ThinkingConfig()
-                if not hasattr(types.ThinkingConfig, "thinking_level"):
-                    types.ThinkingConfig.thinking_level = level
-                else:
-                    thinking_config.thinking_level = level
+                    thinking_level = fallback_level
+                thinking_config = types.ThinkingConfig(
+                    thinking_level=types.ThinkingLevel(thinking_level)
+                )
+
         return types.GenerateContentConfig(
             system_instruction=system_instruction,
             temperature=temperature,
@@ -285,7 +295,7 @@ class ProviderGoogleGenAI(Provider):
             ),
         )
 
-    def _prepare_conversation(self, payloads: dict) -> list[types.Content]:
+    async def _prepare_conversation(self, payloads: dict) -> list[types.Content]:
         """准备 Gemini SDK 的 Content 列表"""
 
         def create_text_part(text: str) -> types.Part:
@@ -294,11 +304,21 @@ class ProviderGoogleGenAI(Provider):
                 logger.warning("文本内容为空,已添加空格占位")
             return types.Part.from_text(text=content_a)
 
-        def process_image_url(image_url_dict: dict) -> types.Part:
+        async def process_image_url(image_url_dict: dict) -> types.Part:
             url = image_url_dict["url"]
-            mime_type = url.split(":")[1].split(";")[0]
-            image_bytes = base64.b64decode(url.split(",", 1)[1])
-            return types.Part.from_bytes(data=image_bytes, mime_type=mime_type)
+            image_data = await resolve_media_ref_to_base64_data(
+                url,
+                media_type="image",
+                strict=True,
+            )
+            if image_data is None:
+                raise ValueError(
+                    f"Failed to resolve Gemini history image: {describe_media_ref(url)}"
+                )
+            return types.Part.from_bytes(
+                data=base64.b64decode(image_data.base64_data),
+                mime_type=image_data.mime_type,
+            )
 
         def process_audio_url(audio_url_dict: dict) -> types.Part:
             url = audio_url_dict["url"]
@@ -328,18 +348,14 @@ class ProviderGoogleGenAI(Provider):
             role, content = (message["role"], message.get("content"))
             if role == "user":
                 if isinstance(content, list):
-                    parts = [
-                        (
-                            types.Part.from_text(text=item["text"] or " ")
-                            if item["type"] == "text"
-                            else (
-                                process_image_url(item["image_url"])
-                                if item["type"] == "image_url"
-                                else process_audio_url(item["audio_url"])
-                            )
-                        )
-                        for item in content
-                    ]
+                    parts = []
+                    for item in content:
+                        if item["type"] == "text":
+                            parts.append(types.Part.from_text(text=item["text"] or " "))
+                        elif item["type"] == "image_url":
+                            parts.append(await process_image_url(item["image_url"]))
+                        else:
+                            parts.append(process_audio_url(item["audio_url"]))
                 else:
                     parts = [create_text_part(content)]
                 append_or_extend(gemini_contents, parts, types.UserContent)
@@ -405,7 +421,8 @@ class ProviderGoogleGenAI(Provider):
                 parts = [part]
                 append_or_extend(gemini_contents, parts, types.UserContent)
         if gemini_contents and isinstance(gemini_contents[0], types.ModelContent):
-            gemini_contents.pop()
+            gemini_contents.pop(0)
+
         return gemini_contents
 
     def _extract_reasoning_content(self, candidate: types.Candidate) -> str:
@@ -421,10 +438,17 @@ class ProviderGoogleGenAI(Provider):
         self,
         usage_metadata: types.GenerateContentResponseUsageMetadata,
     ) -> TokenUsage:
-        """Extract usage from candidate"""
+        """Extract usage from response metadata.
+
+        `prompt_token_count` includes tokens served from cache, so subtract
+        `cached_content_token_count` to avoid double-counting cached input
+        (matching the OpenAI provider's TokenUsage accounting).
+        """
+        prompt_tokens = usage_metadata.prompt_token_count or 0
+        cached = usage_metadata.cached_content_token_count or 0
         return TokenUsage(
-            input_other=usage_metadata.prompt_token_count or 0,
-            input_cached=usage_metadata.cached_content_token_count or 0,
+            input_other=prompt_tokens - cached,
+            input_cached=cached,
             output=usage_metadata.candidates_token_count or 0,
         )
 
@@ -549,7 +573,7 @@ class ProviderGoogleGenAI(Provider):
         modalities = ["TEXT"]
         if self.provider_config.get("gm_resp_image_modal", False):
             modalities.append("IMAGE")
-        conversation = self._prepare_conversation(payloads)
+        conversation = await self._prepare_conversation(payloads)
         temperature = payloads.get("temperature", 0.7)
         result: types.GenerateContentResponse | None = None
         while True:
@@ -625,7 +649,8 @@ class ProviderGoogleGenAI(Provider):
             None,
         )
         model = payloads.get("model", self.get_model())
-        conversation = self._prepare_conversation(payloads)
+        conversation = await self._prepare_conversation(payloads)
+
         result = None
         while True:
             try:

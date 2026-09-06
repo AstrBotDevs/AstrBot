@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-import pytest
+from packaging.version import Version
 
+from astrbot import __version__
 from astrbot.core.config.default import (
     DB_PATH,
     DEFAULT_CONFIG,
@@ -21,11 +22,9 @@ class TestVersionConstant:
     def test_version_is_string(self):
         assert isinstance(VERSION, str)
 
-    def test_version_format(self):
-        parts = VERSION.split(".")
-        assert len(parts) == 3
-        for p in parts:
-            assert p.isdigit()
+    def test_version_format(self) -> None:
+        assert len(Version(VERSION).release) == 3
+        assert VERSION == __version__
 
 
 class TestDBPath:
@@ -50,7 +49,18 @@ class TestDEFAULT_VALUE_MAP:
     """Tests for DEFAULT_VALUE_MAP structure."""
 
     def test_contains_expected_types(self):
-        expected = {"int", "float", "bool", "string", "text", "list", "file", "object", "dict", "template_list"}
+        expected = {
+            "int",
+            "float",
+            "bool",
+            "string",
+            "text",
+            "list",
+            "file",
+            "object",
+            "dict",
+            "template_list",
+        }
         assert set(DEFAULT_VALUE_MAP.keys()) == expected
 
     def test_default_values_are_correct_types(self):
@@ -101,6 +111,7 @@ class TestDEFAULT_CONFIGStructure:
             "provider_sources",
             "provider",
             "provider_settings",
+            "agent_runner",
             "subagent_orchestrator",
             "provider_stt_settings",
             "provider_tts_settings",
@@ -144,8 +155,8 @@ class TestDEFAULT_CONFIGStructure:
         for key in expected_keys:
             assert key in DEFAULT_CONFIG, f"Missing top-level key: {key}"
 
-    def test_config_version_is_two(self):
-        assert DEFAULT_CONFIG["config_version"] == 2
+    def test_config_version_is_three(self) -> None:
+        assert DEFAULT_CONFIG["config_version"] == 3
 
     def test_platform_settings_structure(self):
         ps = DEFAULT_CONFIG["platform_settings"]
@@ -171,12 +182,12 @@ class TestDEFAULT_CONFIGStructure:
         assert dash["port"] == 6185
         assert "ssl" in dash
 
-    def test_provider_settings_defaults(self):
-        ps = DEFAULT_CONFIG["provider_settings"]
-        assert ps["enable"] is True
-        assert ps["default_provider_id"] == ""
-        assert ps["agent_runner_type"] == "local"
-        assert ps["llm_safety_mode"] is True
+    def test_provider_settings_defaults(self) -> None:
+        assert DEFAULT_CONFIG["provider_settings"]["enable"] is True
+        runner = DEFAULT_CONFIG["agent_runner"]
+        assert runner["runner_type"] == "local"
+        assert runner["config"]["model"]["provider_id"] == ""
+        assert runner["config"]["persona"]["safety_mode"] is True
 
     def test_admins_id_default(self):
         assert DEFAULT_CONFIG["admins_id"] == ["astrbot"]

@@ -32,7 +32,7 @@ class BaseAgentRunner(Generic[TContext]):
     @abc.abstractmethod
     async def reset(
         self,
-        provider: Provider,
+        provider: Provider | None,
         request: ProviderRequest,
         run_context: ContextWrapper[TContext],
         tool_executor: BaseFunctionToolExecutor[TContext],
@@ -52,6 +52,7 @@ class BaseAgentRunner(Generic[TContext]):
     ) -> None:
         """Reset the agent to its initial state.
         This method should be called before starting a new run.
+        Third-party runners may use inline configuration without a local provider.
         """
         ...
 

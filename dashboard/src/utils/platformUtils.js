@@ -8,38 +8,42 @@
  * @returns {string|undefined} 图标URL
  */
 export function getPlatformIcon(name) {
-  if (name === "aiocqhttp") {
-    return new URL("@/assets/images/platform_logos/onebot.png", import.meta.url).href;
-  } else if (name === "qq_official" || name === "qq_official_webhook") {
-    return new URL("@/assets/images/platform_logos/qq.png", import.meta.url).href;
-  } else if (name === "weixin_oc" || name === "weixin_oc") {
-    return new URL("@/assets/images/platform_logos/wechat.png", import.meta.url).href;
-  } else if (name === "wecom" || name === "wecom_ai_bot") {
-    return new URL("@/assets/images/platform_logos/wecom.png", import.meta.url).href;
-  } else if (name === "weixin_official_account") {
-    return new URL("@/assets/images/platform_logos/wechat.png", import.meta.url).href;
-  } else if (name === "lark") {
-    return new URL("@/assets/images/platform_logos/lark.png", import.meta.url).href;
-  } else if (name === "dingtalk") {
-    return new URL("@/assets/images/platform_logos/dingtalk.svg", import.meta.url).href;
-  } else if (name === "telegram") {
-    return new URL("@/assets/images/platform_logos/telegram.svg", import.meta.url).href;
-  } else if (name === "discord") {
-    return new URL("@/assets/images/platform_logos/discord.svg", import.meta.url).href;
-  } else if (name === "slack") {
-    return new URL("@/assets/images/platform_logos/slack.svg", import.meta.url).href;
-  } else if (name === "kook") {
-    return new URL("@/assets/images/platform_logos/kook.png", import.meta.url).href;
-  } else if (name === "vocechat") {
-    return new URL("@/assets/images/platform_logos/qq.png", import.meta.url).href;
-  } else if (name === "satori" || name === "Satori") {
-    return new URL("@/assets/images/platform_logos/satori.png", import.meta.url).href;
-  } else if (name === "misskey") {
-    return new URL("@/assets/images/platform_logos/misskey.png", import.meta.url).href;
-  } else if (name === "line") {
-    return new URL("@/assets/images/platform_logos/line.png", import.meta.url).href;
-  } else if (name === "matrix") {
-    return new URL("@/assets/images/platform_logos/matrix.svg", import.meta.url).href;
+  if (name === 'webchat') {
+    return '/favicon.svg'
+  } else if (name === 'aiocqhttp') {
+    return new URL('@/assets/images/platform_logos/onebot.png', import.meta.url).href
+  } else if (name === 'qq_official' || name === 'qq_official_webhook') {
+    return new URL('@/assets/images/platform_logos/qq.png', import.meta.url).href
+  } else if (name === 'weixin_oc' || name === 'weixin_oc') {
+    return new URL('@/assets/images/platform_logos/wechat.png', import.meta.url).href
+  } else if (name === 'wecom' || name === 'wecom_ai_bot') {
+    return new URL('@/assets/images/platform_logos/wecom.png', import.meta.url).href
+  } else if (name === 'weixin_official_account') {
+    return new URL('@/assets/images/platform_logos/wechat.png', import.meta.url).href
+  } else if (name === 'lark') {
+    return new URL('@/assets/images/platform_logos/lark.png', import.meta.url).href
+  } else if (name === 'dingtalk') {
+    return new URL('@/assets/images/platform_logos/dingtalk.svg', import.meta.url).href
+  } else if (name === 'telegram') {
+    return new URL('@/assets/images/platform_logos/telegram.svg', import.meta.url).href
+  } else if (name === 'discord') {
+    return new URL('@/assets/images/platform_logos/discord.svg', import.meta.url).href
+  } else if (name === 'slack') {
+    return new URL('@/assets/images/platform_logos/slack.svg', import.meta.url).href
+  } else if (name === 'kook') {
+    return new URL('@/assets/images/platform_logos/kook.png', import.meta.url).href
+  } else if (name === 'vocechat') {
+    return new URL('@/assets/images/platform_logos/vocechat.png', import.meta.url).href
+  } else if (name === 'satori' || name === 'Satori') {
+    return new URL('@/assets/images/platform_logos/satori.png', import.meta.url).href
+  } else if (name === 'misskey') {
+    return new URL('@/assets/images/platform_logos/misskey.png', import.meta.url).href
+  } else if (name === 'line') {
+    return new URL('@/assets/images/platform_logos/line.png', import.meta.url).href
+  } else if (name === 'matrix') {
+    return new URL('@/assets/images/platform_logos/matrix.svg', import.meta.url).href
+  } else if (name === 'mattermost') {
+    return new URL('@/assets/images/platform_logos/mattermost.svg', import.meta.url).href
   }
 }
 

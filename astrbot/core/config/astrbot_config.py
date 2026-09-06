@@ -6,8 +6,10 @@ import logging
 import os
 import tempfile
 import threading
+from pathlib import Path
 from typing import Any
 
+from astrbot.core.config.default import DEFAULT_CONFIG, DEFAULT_VALUE_MAP
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.auth_password import (
     generate_dashboard_password,
@@ -15,8 +17,7 @@ from astrbot.core.utils.auth_password import (
     hash_legacy_dashboard_password,
     validate_dashboard_password,
 )
-
-from .default import DEFAULT_CONFIG, DEFAULT_VALUE_MAP
+from astrbot.core.utils.migra_helper import migrate_config_on_load
 
 ASTRBOT_CONFIG_PATH = os.path.join(get_astrbot_data_path(), "cmd_config.json")
 DASHBOARD_INITIAL_PASSWORD_ENV = "ASTRBOT_DASHBOARD_INITIAL_PASSWORD"
@@ -84,8 +85,12 @@ class AstrBotConfig(dict):
                 "_dashboard_password_change_required_from_config",
                 True,
             )
-        # 检查配置完整性,并插入
+        config_migrated = False
+        if default_config is DEFAULT_CONFIG:
+            config_migrated = migrate_config_on_load(conf, Path(config_path))
+        # Migrate legacy fields before integrity checking removes unknown keys.
         has_new = self.check_config_integrity(default_config, conf)
+        has_new |= config_migrated
         reset_dashboard_password = self._consume_reset_dashboard_password_flag()
         if reset_dashboard_password and isinstance(conf.get("dashboard"), dict):
             self._reset_generated_dashboard_password(conf)
@@ -188,6 +193,9 @@ class AstrBotConfig(dict):
                     # 类型不匹配,使用默认值
                     new_conf[key] = value
                     has_new = True
+                elif (path + "." + key if path else key) == "agent_runner.config":
+                    # Runner config is normalized according to runner_type when saved.
+                    new_conf[key] = conf[key]
                 else:
                     # 递归检查并同步顺序
                     child_has_new = self.check_config_integrity(
@@ -287,6 +295,10 @@ class AstrBotConfig(dict):
             Whether the snapshot replaced the current configuration file.
         """
         directory = os.path.dirname(os.path.abspath(self.config_path)) or "."
+        # The directory may not exist yet when a config profile is created for
+        # the first time (e.g. `create_conf` instantiates AstrBotConfig with a
+        # brand-new path). mkstemp would raise FileNotFoundError otherwise.
+        os.makedirs(directory, exist_ok=True)
         fd, temp_path = tempfile.mkstemp(
             dir=directory,
             prefix=f".{os.path.basename(self.config_path)}.",

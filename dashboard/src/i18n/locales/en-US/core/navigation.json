@@ -5,6 +5,13 @@
   "providers": "Providers",
   "commands": "Commands",
   "persona": "Persona",
+  "data": "Data & Logs",
+  "dataTabs": {
+    "statistics": "Statistics",
+    "conversations": "Conversations",
+    "logs": "Logs",
+    "trace": "Trace"
+  },
   "subagent": "SubAgents",
   "toolUse": "MCP Tools",
   "config": "Config",

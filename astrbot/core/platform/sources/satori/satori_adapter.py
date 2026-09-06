@@ -1,7 +1,7 @@
 import asyncio
 import json
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from xml.etree import ElementTree as ET
 
 import websockets
@@ -20,6 +20,7 @@ from astrbot.api.message_components import (
 )
 from astrbot.api.platform import (
     AstrBotMessage,
+    Group,
     MessageMember,
     MessageType,
     Platform,
@@ -27,6 +28,9 @@ from astrbot.api.platform import (
     register_platform_adapter,
 )
 from astrbot.core.platform.astr_message_event import MessageSession
+
+if TYPE_CHECKING:
+    from astrbot.core.platform.sources.satori.satori_event import SatoriPlatformEvent
 
 
 @register_platform_adapter(
@@ -334,7 +338,11 @@ class SatoriPlatformAdapter(Platform):
 
             if guild and guild.get("id"):
                 abm.type = MessageType.GROUP_MESSAGE
-                abm.group_id = guild.get("id", "")
+                abm.group = Group(
+                    group_id=str(guild["id"]),
+                    group_name=guild.get("name"),
+                    group_avatar=guild.get("avatar"),
+                )
                 abm.session_id = channel.get("id", "")
             else:
                 abm.type = MessageType.FRIEND_MESSAGE
@@ -725,17 +733,22 @@ class SatoriPlatformAdapter(Platform):
             if child.tail and child.tail.strip():
                 elements.append(Plain(text=child.tail))
 
-    async def handle_msg(self, message: AstrBotMessage) -> None:
-        from .satori_event import SatoriPlatformEvent
+    def create_event(self, message: AstrBotMessage) -> "SatoriPlatformEvent":
+        """Wrap a message while keeping the event import lazy."""
+        from astrbot.core.platform.sources.satori.satori_event import (
+            SatoriPlatformEvent,
+        )
 
-        message_event = SatoriPlatformEvent(
+        return SatoriPlatformEvent(
             message_str=message.message_str,
             message_obj=message,
             platform_meta=self.meta(),
             session_id=message.session_id,
             adapter=self,
         )
-        self.commit_event(message_event)
+
+    async def handle_msg(self, message: AstrBotMessage) -> None:
+        self.commit_event(self.create_event(message))
 
     async def send_http_request(
         self,

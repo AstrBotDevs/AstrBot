@@ -3,6 +3,10 @@
     <div v-if="isSingleItemMode" class="flex-grow-1 d-flex align-center ga-2">
       <v-text-field
         v-model="singleItemValue"
+        :type="secretInputType"
+        :append-inner-icon="secretToggleIcon"
+        :autocomplete="secret ? 'new-password' : undefined"
+        @click:append-inner="secretVisible = !secretVisible"
         hide-details
         variant="outlined"
         density="compact"
@@ -24,7 +28,7 @@
           label
           color="primary"
         >
-          {{ item.length > 20 ? item.slice(0, 20) + "..." : item }}
+          {{ secret && !secretVisible ? '••••••••' : (item.length > 20 ? item.slice(0, 20) + '...' : item) }}
         </v-chip>
         <v-chip
           v-if="modelValue.length > maxDisplayItems"
@@ -57,6 +61,10 @@
         <div class="d-flex align-center ga-2">
           <v-text-field
             v-model="newItem"
+            :type="secretInputType"
+            :append-inner-icon="secretToggleIcon"
+            :autocomplete="secret ? 'new-password' : undefined"
+            @click:append-inner="secretVisible = !secretVisible"
             :label="t('core.common.list.addItemPlaceholder')"
             clearable
             hide-details
@@ -70,7 +78,7 @@
             variant="tonal"
             color="primary"
             size="small"
-            :disabled="!newItem.trim()"
+            :disabled="!normalizeTextInput(newItem).trim()"
             @click="addItem"
           >
             {{ t("core.common.list.addButton") }}
@@ -97,11 +105,15 @@
             @click="startEdit(index, item)"
           >
             <v-list-item-title v-if="editIndex !== index" class="item-text">
-              {{ item }}
+              {{ secret && !secretVisible ? '••••••••' : item }}
             </v-list-item-title>
             <v-text-field
               v-else
               v-model="editItem"
+              :type="secretInputType"
+              :append-inner-icon="secretToggleIcon"
+              :autocomplete="secret ? 'new-password' : undefined"
+              @click:append-inner="secretVisible = !secretVisible"
               hide-details
               variant="outlined"
               density="compact"
@@ -171,6 +183,10 @@
       <v-card-text>
         <v-textarea
           v-model="batchImportText"
+          :class="{ 'secret-textarea': secret && !secretVisible }"
+          :append-inner-icon="secretToggleIcon"
+          :autocomplete="secret ? 'new-password' : undefined"
+          @click:append-inner="secretVisible = !secretVisible"
           :label="t('core.common.list.batchImportLabel')"
           :placeholder="t('core.common.list.batchImportPlaceholder')"
           rows="10"
@@ -198,14 +214,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from "vue";
+import { computed, nextTick, ref, watch, type PropType } from "vue";
 import { useI18n } from "@/i18n/composables";
+import { normalizeTextInput } from "@/utils/inputValue";
 
 const { t } = useI18n();
 
 const props = defineProps({
   modelValue: {
-    type: Array,
+    type: Array as PropType<string[]>,
     default: () => [],
   },
   label: {
@@ -226,12 +243,19 @@ const props = defineProps({
   },
   preferSingleItem: {
     type: Boolean,
-    default: true,
+    default: true
   },
-});
+  secret: {
+    type: Boolean,
+    default: false
+  }
+})
 
-const emit = defineEmits(["update:modelValue"]);
+const emit = defineEmits<{ "update:modelValue": [value: string[]] }>();
 
+const secretVisible = ref(false);
+const secretInputType = computed(() => props.secret && !secretVisible.value ? "password" : "text");
+const secretToggleIcon = computed(() => props.secret ? (secretVisible.value ? "mdi-eye-off" : "mdi-eye") : undefined);
 const dialog = ref(false);
 const localItems = ref<string[]>([]);
 const originalItems = ref<string[]>([]);
@@ -242,9 +266,10 @@ const showBatchImport = ref(false);
 const batchImportText = ref("");
 const isSingleItemMode = computed(() => (props.modelValue?.length ?? 0) <= 1 && props.preferSingleItem);
 const singleItemValue = computed({
-  get: (): string => (props.modelValue?.[0] as string | undefined) ?? "",
-  set: (value: string) => {
-    // 如果值为空或只有空白字符，emit 空数组
+  get: (): string => props.modelValue[0] ?? "",
+  set: (input: string | null) => {
+    const value = normalizeTextInput(input);
+    // Emit an empty list when the input is blank.
     if (value.trim() === "") {
       emit("update:modelValue", []);
       return;
@@ -278,8 +303,8 @@ const batchImportPreviewCount = computed(() => {
 // 监听 modelValue 变化，同步到 localItems，并清理空字符串
 watch(
   () => props.modelValue,
-  (newValue: unknown[]) => {
-    localItems.value = [...(newValue || [])] as string[];
+  (newValue: string[]) => {
+    localItems.value = [...(newValue || [])];
 
     // 自动清理只包含空字符串的数组
     if (newValue && newValue.length > 0) {
@@ -296,8 +321,8 @@ watch(
 );
 
 function openDialog() {
-  localItems.value = [...(props.modelValue || [])] as string[];
-  originalItems.value = [...(props.modelValue || [])] as string[];
+  localItems.value = [...props.modelValue];
+  originalItems.value = [...props.modelValue];
   dialog.value = true;
   editIndex.value = -1;
   editItem.value = "";
@@ -305,8 +330,9 @@ function openDialog() {
 }
 
 function addItem() {
-  if (newItem.value.trim() !== "") {
-    localItems.value.push(newItem.value.trim());
+  const item = normalizeTextInput(newItem.value).trim();
+  if (item) {
+    localItems.value.push(item);
     newItem.value = "";
   }
 }
@@ -321,8 +347,9 @@ function startEdit(index: number, item: string) {
 }
 
 function saveEdit() {
-  if (editItem.value.trim() !== "") {
-    localItems.value[editIndex.value] = editItem.value.trim();
+  const item = normalizeTextInput(editItem.value).trim();
+  if (item && editIndex.value >= 0) {
+    localItems.value[editIndex.value] = item;
     cancelEdit();
   }
 }
@@ -385,5 +412,9 @@ function cancelBatchImport() {
 
 .v-chip {
   margin: 2px;
+}
+
+.secret-textarea :deep(textarea) {
+  -webkit-text-security: disc;
 }
 </style>

@@ -1,84 +1,78 @@
 <template>
-  <div style="display: flex; flex-direction: column; align-items: center">
-    <div
-      v-if="selectedConfigID || isSystemConfig"
-      class="mt-4 config-panel"
-      style="display: flex; flex-direction: column; align-items: start"
-    >
-      <div
-        class="config-toolbar d-flex flex-row pr-4"
-        style="
-          margin-bottom: 16px;
-          align-items: center;
-          gap: 12px;
-          width: 100%;
-          justify-content: space-between;
-        "
-      >
+
+  <div class="config-page-shell">
+    <div v-if="selectedConfigID || isSystemConfig" class="config-panel">
+
+      <div class="config-toolbar-sticky">
         <div
-          class="config-toolbar-controls d-flex flex-row align-center"
-          style="gap: 12px"
+          class="config-toolbar"
+          :class="{ 'config-toolbar--searching': configSearchExpanded }"
         >
-          <v-select
-            v-if="!isSystemConfig"
-            class="config-select"
-            style="min-width: 130px"
-            :model-value="selectedConfigID"
-            :items="configSelectItems"
-            item-title="name"
-            :disabled="initialConfigId !== null"
-            item-value="id"
-            :label="tm('configSelection.selectConfig')"
-            hide-details
-            density="compact"
-            rounded="md"
-            variant="outlined"
-            @update:model-value="onConfigSelect"
-          />
-          <v-text-field
-            class="config-search-input"
-            :model-value="configSearchKeyword"
-            prepend-inner-icon="mdi-magnify"
-            :label="tm('search.placeholder')"
-            clearable
-            hide-details
-            density="compact"
-            rounded="md"
-            variant="outlined"
-            style="min-width: 280px"
-            @update:model-value="onConfigSearchInput"
-          />
-          <v-tooltip :text="tm('actions.refresh')" location="bottom">
-            <template #activator="{ props }">
-              <v-btn
-                v-bind="props"
-                icon="mdi-refresh"
-                variant="text"
-                color="primary"
-                :loading="refreshingConfig"
-                :disabled="!fetched && !selectedConfigID && !isSystemConfig"
-                @click="refreshConfigFromFile"
+          <div class="config-toolbar-controls">
+            <ConfigProfileMenu
+              v-if="!isSystemConfig"
+              :model-value="selectedConfigID || ''"
+              :items="configInfoList"
+              :disabled="initialConfigId !== null"
+              @select="onConfigSelect"
+              @manage="configManageDialog = true"
+            />
+          </div>
+
+          <div class="config-toolbar-actions">
+            <v-btn
+              icon="mdi-refresh"
+              size="small"
+              variant="text"
+              :loading="refreshingConfig"
+              :disabled="!fetched || refreshingConfig"
+              :aria-label="tm('actions.refresh')"
+              :title="tm('actions.refresh')"
+              @click="refreshConfigFromFile"
+            />
+            <div
+              class="config-search-control"
+              :class="{ 'config-search-control--expanded': configSearchExpanded }"
+            >
+              <v-text-field
+                v-show="configSearchExpanded"
+                ref="configSearchInput"
+                class="config-search-input"
+                :model-value="configSearchKeyword"
+                @update:model-value="onConfigSearchInput"
+                @keydown.esc.prevent="closeConfigSearch"
+                prepend-inner-icon="mdi-magnify"
+                append-inner-icon="mdi-close"
+                :placeholder="tm('search.placeholder')"
+                :aria-label="tm('search.placeholder')"
+                hide-details
+                density="compact"
+                rounded="md"
+                variant="outlined"
+                @click:append-inner="closeConfigSearch"
               />
-            </template>
-          </v-tooltip>
-          <!-- <a style="color: inherit;" href="https://blog.astrbot.app/posts/what-is-changed-in-4.0.0/#%E5%A4%9A%E9%85%8D%E7%BD%AE%E6%96%87%E4%BB%B6" target="_blank"><v-btn icon="mdi-help-circle" size="small" variant="plain"></v-btn></a> -->
+              <v-btn
+                v-show="!configSearchExpanded"
+                icon="mdi-magnify"
+                size="small"
+                variant="text"
+                :aria-label="tm('search.placeholder')"
+                :title="tm('search.placeholder')"
+                @click="openConfigSearch"
+              />
+            </div>
+          </div>
+        </div>
+        <div class="config-toolbar-separator">
+          <v-divider />
+          <v-progress-linear
+            v-if="!fetched"
+            indeterminate
+            color="primary"
+            class="config-loading"
+          />
         </div>
       </div>
-      <v-slide-y-transition>
-        <div
-          v-if="fetched && hasUnsavedChanges"
-          class="unsaved-changes-banner-wrap"
-        >
-          <v-banner
-            icon="$warning"
-            lines="one"
-            class="unsaved-changes-banner my-4"
-          >
-            {{ tm("messages.unsavedChangesNotice") }}
-          </v-banner>
-        </div>
-      </v-slide-y-transition>
-      <!-- <v-progress-linear v-if="!fetched" indeterminate color="primary"></v-progress-linear> -->
 
       <v-slide-y-transition mode="out-in">
         <div
@@ -139,6 +133,19 @@
       </v-slide-y-transition>
     </div>
   </div>
+
+  <v-slide-y-reverse-transition>
+    <div
+      v-if="fetched && hasUnsavedChanges"
+      class="unsaved-changes-pill"
+      role="status"
+      aria-live="polite"
+    >
+      <v-icon size="18">mdi-alert-circle-outline</v-icon>
+      <span>{{ tm('messages.unsavedChangesNotice') }}</span>
+    </div>
+  </v-slide-y-reverse-transition>
+
 
   <!-- Full Screen Editor Dialog -->
   <v-dialog
@@ -222,7 +229,7 @@
           <v-list-item
             v-for="config in configInfoList"
             :key="config.id"
-            :title="config.name"
+            :title="configDisplayName(config)"
           >
             <template #append>
               <div class="d-flex align-center" style="gap: 8px">
@@ -325,7 +332,7 @@
         <div>
           <span class="text-h6">测试配置</span>
           <div v-if="selectedConfigInfo.name" class="text-caption text-grey">
-            {{ selectedConfigInfo.name }} ({{ testConfigId }})
+            {{ configDisplayName(selectedConfigInfo) }} ({{ testConfigId }})
           </div>
         </div>
         <v-btn icon variant="text" @click="closeTestChat">
@@ -346,7 +353,8 @@
 <script lang="ts">
 import { VueMonacoEditor } from "@guolao/vue-monaco-editor";
 import type { RouteLocationNormalized } from "vue-router";
-import { systemConfigApi } from "@/api/v1";
+import { configProfileApi, systemConfigApi } from "@/api/v1";
+import ConfigProfileMenu from "@/components/config/ConfigProfileMenu.vue";
 import StandaloneChat from "@/components/chat/StandaloneChat.vue";
 import AstrBotCoreConfigWrapper from "@/components/config/AstrBotCoreConfigWrapper.vue";
 import UnsavedChangesConfirmDialog from "@/components/config/UnsavedChangesConfirmDialog.vue";
@@ -450,6 +458,7 @@ export default {
   name: "ConfigPage",
   components: {
     AstrBotCoreConfigWrapper,
+    ConfigProfileMenu,
     VueMonacoEditor,
     WaitingForRestart,
     StandaloneChat,
@@ -487,7 +496,6 @@ export default {
           }
         }
       } else {
-        this.hasUnsavedChanges = false;
         return true;
       }
     } else {
@@ -542,8 +550,9 @@ export default {
       configSavePendingPostData: null as ConfigUpdatePayload | null,
 
       // 配置类型切换
-      configType: "normal", // 'normal' 或 'system'
-      configSearchKeyword: "",
+      configType: 'normal', // 'normal' 或 'system'
+      configSearchKeyword: '',
+      configSearchExpanded: false,
 
       // 系统配置开关
       isSystemConfig: false,
@@ -569,12 +578,14 @@ export default {
 
       // 未保存的更改状态
       // 存储原始配置
-      originalConfigData: null,
-      hasUnsavedChanges: false,
+      originalConfigData: null as ConfigData | null,
     };
   },
 
   computed: {
+    hasUnsavedChanges(): boolean {
+      return this.fetched && this.getConfigSnapshot(this.config_data) !== this.lastSavedConfigSnapshot;
+    },
     messages() {
       return {
         loadError: this.tm("messages.loadError"),
@@ -664,7 +675,11 @@ export default {
     config_data_str(val) {
       this.config_data_has_changed = true;
     },
-    async "$route.fullPath"(newVal) {
+    async "$route.fullPath"(newVal: string) {
+      if (this.extractConfigTypeFromHash(newVal) === "system") {
+        await this.$router.replace("/settings#system-config");
+        return;
+      }
       await this.syncConfigTypeFromHash(newVal);
     },
     initialConfigId(newVal) {
@@ -681,6 +696,10 @@ export default {
   },
   mounted() {
     const hashConfigType = this.extractConfigTypeFromHash(this.$route?.fullPath || "");
+    if (hashConfigType === "system") {
+      void this.$router.replace("/settings#system-config");
+      return;
+    }
     this.configType = hashConfigType || "normal";
     this.isSystemConfig = this.configType === "system";
 
@@ -765,9 +784,19 @@ export default {
     onConfigSearchInput(value: string) {
       this.configSearchKeyword = normalizeTextInput(value);
     },
-    extractConfigTypeFromHash(hash: string): string | null {
-      const rawHash = String(hash || "");
-      const lastHashIndex = rawHash.lastIndexOf("#");
+    openConfigSearch() {
+      this.configSearchExpanded = true;
+      this.$nextTick(() => {
+        (this.$refs.configSearchInput as { focus?: () => void } | undefined)?.focus?.();
+      });
+    },
+    closeConfigSearch() {
+      this.configSearchKeyword = '';
+      this.configSearchExpanded = false;
+    },
+    extractConfigTypeFromHash(hash: string) {
+      const rawHash = String(hash || '');
+      const lastHashIndex = rawHash.lastIndexOf('#');
       if (lastHashIndex === -1) {
         return null;
       }
@@ -786,10 +815,14 @@ export default {
     },
     getConfigInfoList(abconf_id?: string) {
       // 获取配置列表
-      axios
-        .get("/api/config/abconfs")
+      configProfileApi.list()
         .then((res) => {
-          this.configInfoList = res.data.data.info_list;
+          if (res.data.status !== "ok") throw new Error(res.data.message || this.messages.loadError);
+          this.configInfoList = res.data.data.info_list.flatMap((info) =>
+            typeof info.id === "string" && typeof info.name === "string"
+              ? [{ id: info.id, name: info.name }]
+              : [],
+          );
 
           if (abconf_id) {
             let matched = false;
@@ -833,11 +866,15 @@ export default {
         params.reload_from_file = "1";
       }
 
-      return axios
-        .get("/api/config/abconf", {
-          params: params,
-        })
-        .then((res) => {
+      const request = reloadFromFile
+        ? axios.get("/api/config/abconf", { params })
+        : this.isSystemConfig
+          ? systemConfigApi.get()
+          : configProfileApi.get(abconf_id || this.selectedConfigID || "default");
+      return request.then((res) => {
+          if (res.data.status !== "ok" || !isConfigData(res.data.data.config)) {
+            throw new Error(res.data.message || this.messages.loadError);
+          }
           this.config_data = res.data.data.config;
           this.lastSavedConfigSnapshot = this.getConfigSnapshot(this.config_data);
           this.config_data_str = "";
@@ -914,10 +951,13 @@ export default {
       allow2faPrompt = true,
     ): Promise<SaveResult> {
       try {
-        const res = await axios.post("/api/config/astrbot/update", postData, {
+        const requestConfig = {
           headers,
-          validateStatus: (status) => (status >= 200 && status < 300) || status === 401,
-        });
+          validateStatus: (status: number) => (status >= 200 && status < 300) || status === 401,
+        };
+        const res = this.isSystemConfig
+          ? await systemConfigApi.update(postData.config, requestConfig)
+          : await configProfileApi.update(postData.conf_id || "default", postData.config, requestConfig);
 
         if (res.status === 401 && res.data?.data?.totp_required) {
           if (allow2faPrompt && !headers["X-2FA-Code"]) {
@@ -1041,19 +1081,16 @@ export default {
       }
     },
     createNewConfig(configName: string) {
-      axios
-        .post("/api/config/abconf/new", {
-          name: configName,
-        })
+      configProfileApi.create({ name: configName })
         .then((res) => {
           if (res.data.status === "ok") {
-            this.save_message = res.data.message;
+            this.save_message = res.data.message || this.messages.saveSuccess;
             this.save_message_snack = true;
             this.save_message_success = "success";
             this.getConfigInfoList(res.data.data.conf_id);
             this.cancelConfigForm();
           } else {
-            this.save_message = res.data.message;
+            this.save_message = res.data.message || this.messages.saveError;
             this.save_message_snack = true;
             this.save_message_success = "error";
           }
@@ -1068,7 +1105,13 @@ export default {
     normalizeConfigName(name: string | null | undefined): string {
       return typeof name === "string" ? name.trim() : "";
     },
-    hasDuplicateConfigName(name: string, excludeId: string | null = null) {
+    configDisplayName(config: Partial<ConfigInfoItem> | null | undefined): string {
+      if (config?.id === 'default') {
+        return this.tm('configSelection.defaultConfig');
+      }
+      return config?.name || config?.id || '';
+    },
+    hasDuplicateConfigName(name: string, excludeId: string | null = null): boolean {
       const normalizedName = this.normalizeConfigName(name);
       if (!normalizedName) {
         return false;
@@ -1086,11 +1129,7 @@ export default {
     async onConfigSelect(value: string) {
       if (value === "_%manage%_") {
         this.configManageDialog = true;
-        // 重置选择到之前的值
-        this.$nextTick(() => {
-          this.selectedConfigID = this.selectedConfigInfo.id || "default";
-          this.getConfig(this.selectedConfigID);
-        });
+        return;
       } else {
         // 检查是否有未保存的更改
         if (this.hasUnsavedChanges) {
@@ -1200,33 +1239,27 @@ export default {
       }
     },
     copyConfig(configName: string) {
-      axios
-        .get("/api/config/abconf", {
-          params: { id: this.copySourceConfigId },
-        })
+      configProfileApi.get(this.copySourceConfigId)
         .then((res) => {
           const sourceConfig = res.data?.data?.config;
-          if (!sourceConfig) {
+          if (res.data.status !== "ok" || !isConfigData(sourceConfig)) {
             this.save_message = this.tm("configManagement.copyFailed");
             this.save_message_snack = true;
             this.save_message_success = "error";
             return null;
           }
-          return axios.post("/api/config/abconf/new", {
-            name: configName,
-            config: sourceConfig,
-          });
+          return configProfileApi.create({ name: configName, config: sourceConfig });
         })
         .then((res) => {
           if (!res) return;
           if (res.data.status === "ok") {
-            this.save_message = res.data.message;
+            this.save_message = res.data.message || this.messages.saveSuccess;
             this.save_message_snack = true;
             this.save_message_success = "success";
             this.getConfigInfoList(res.data.data.conf_id);
             this.cancelConfigForm();
           } else {
-            this.save_message = res.data.message;
+            this.save_message = res.data.message || this.messages.saveError;
             this.save_message_snack = true;
             this.save_message_success = "error";
           }
@@ -1245,20 +1278,17 @@ export default {
       }
     },
     deleteConfig(configId: string) {
-      axios
-        .post("/api/config/abconf/delete", {
-          id: configId,
-        })
+      configProfileApi.delete(configId)
         .then((res) => {
           if (res.data.status === "ok") {
-            this.save_message = res.data.message;
+            this.save_message = res.data.message || this.messages.saveSuccess;
             this.save_message_snack = true;
             this.save_message_success = "success";
             this.cancelConfigForm();
             // 删除成功后，更新配置列表
             this.getConfigInfoList("default");
           } else {
-            this.save_message = res.data.message;
+            this.save_message = res.data.message || this.messages.saveError;
             this.save_message_snack = true;
             this.save_message_success = "error";
           }
@@ -1271,20 +1301,17 @@ export default {
         });
     },
     updateConfigInfo(configName: string) {
-      axios
-        .post("/api/config/abconf/update", {
-          id: this.editingConfigId,
-          name: configName,
-        })
+      if (!this.editingConfigId) return;
+      configProfileApi.rename(this.editingConfigId, configName)
         .then((res) => {
           if (res.data.status === "ok") {
-            this.save_message = res.data.message;
+            this.save_message = res.data.message || this.messages.saveSuccess;
             this.save_message_snack = true;
             this.save_message_success = "success";
             this.getConfigInfoList(this.editingConfigId ?? undefined);
             this.cancelConfigForm();
           } else {
-            this.save_message = res.data.message;
+            this.save_message = res.data.message || this.messages.saveError;
             this.save_message_snack = true;
             this.save_message_success = "error";
           }
@@ -1371,22 +1398,130 @@ export default {
 </script>
 
 <style>
-.v-tab {
-  text-transform: none !important;
+.config-page-shell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  margin-top: -8px;
 }
 
-.unsaved-changes-banner {
-  border-radius: 8px;
-  background-color: rgba(var(--v-theme-warning), 0.1) !important;
-  border: 1px solid rgba(var(--v-theme-warning), 0.16) !important;
+.config-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: min(100%, 940px);
+  padding: 0 18px 48px;
 }
 
-.unsaved-changes-banner-wrap {
+.config-toolbar-sticky {
   position: sticky;
   top: calc(var(--v-layout-top, 64px));
   z-index: 20;
+  isolation: isolate;
+  margin-bottom: 28px;
+}
+
+.config-toolbar-sticky::before {
+  position: absolute;
+  z-index: -1;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: calc(100vw - var(--v-layout-left, 0px));
+  max-width: 100vw;
+  transform: translateX(-50%);
+  background: rgb(var(--v-theme-containerBg));
+  content: '';
+}
+
+.config-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   width: 100%;
-  margin-bottom: 6px;
+  max-width: 840px;
+  padding: 4px 0;
+}
+
+.config-toolbar-controls {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.config-toolbar-actions {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  margin-left: auto;
+}
+
+.config-search-input {
+  width: 100%;
+  min-width: 0;
+}
+
+.config-search-control {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  width: 36px;
+  min-width: 36px;
+  overflow: hidden;
+  transition: width 180ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.config-search-control--expanded {
+  width: min(320px, 42vw);
+}
+
+.config-toolbar :is(.v-field) {
+  border-radius: 10px;
+}
+
+.config-toolbar-separator {
+  position: relative;
+  width: calc(100vw - var(--v-layout-left, 0px));
+  max-width: 100vw;
+  height: 1px;
+  margin-left: 50%;
+  transform: translateX(-50%);
+}
+
+.config-toolbar-separator :is(.v-divider) {
+  border-color: rgba(var(--v-theme-on-surface), 0.1);
+  opacity: 1;
+}
+
+.config-loading {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+}
+
+.unsaved-changes-pill {
+  position: fixed;
+  left: calc(var(--v-layout-left, 0px) + 32px);
+  bottom: 52px;
+  z-index: 1005;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(440px, calc(100vw - var(--v-layout-left, 0px) - 160px));
+  padding: 9px 14px 9px 12px;
+  border-radius: 999px;
+  background: rgba(var(--v-theme-surface), 0.94);
+  color: rgba(var(--v-theme-on-surface), 0.82);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+  backdrop-filter: blur(16px);
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+  white-space: nowrap;
+  pointer-events: none;
 }
 
 /* 按钮切换样式优化 */
@@ -1422,12 +1557,6 @@ export default {
   font-style: italic;
 }
 
-@media (min-width: 768px) {
-  .config-panel {
-    width: 750px;
-  }
-}
-
 @media (max-width: 767px) {
   .v-container {
     padding: 4px;
@@ -1435,21 +1564,40 @@ export default {
 
   .config-panel {
     width: 100%;
+    padding: 0 14px 40px;
   }
 
   .config-toolbar {
+    flex-wrap: nowrap;
+    padding: 4px 0;
     padding-right: 0 !important;
   }
 
   .config-toolbar-controls {
-    width: 100%;
-    flex-wrap: wrap;
+    flex: 1;
+    width: auto;
   }
 
-  .config-select,
-  .config-search-input {
+  .config-toolbar--searching .config-toolbar-controls {
+    display: none;
+  }
+
+  .config-toolbar--searching .config-toolbar-actions,
+  .config-toolbar--searching .config-search-control,
+  .config-toolbar--searching .config-search-input {
     width: 100%;
+  }
+
+  .config-search-input {
     min-width: 0 !important;
+  }
+
+  .unsaved-changes-pill {
+    right: 16px;
+    bottom: 16px;
+    left: 16px;
+    max-width: none;
+    white-space: normal;
   }
 }
 

@@ -25,6 +25,7 @@ enableMermaid();
 
 const customizer = useCustomizerStore();
 const commonStore = useCommonStore();
+const authStore = useAuthStore();
 const chatHeader = useChatHeaderStore();
 const theme = useTheme();
 const { lgAndUp } = useDisplay();
@@ -343,7 +344,6 @@ function accountEdit() {
       accountEditStatus.value.message = res.data.message;
       setTimeout(() => {
         dialog.value = !dialog.value;
-        const authStore = useAuthStore();
         authStore.logout();
       }, 2000);
     })
@@ -434,7 +434,6 @@ function checkUpdate() {
     .catch((err) => {
       if (err.response && err.response.status === 401) {
         console.log("401");
-        const authStore = useAuthStore();
         authStore.logout();
         return;
       }
@@ -1130,7 +1129,7 @@ onMounted(async () => {
           </template>
         </v-list-item>
 
-        <!-- 账户按钮 -->
+        <!-- Account settings -->
         <v-list-item
           class="styled-menu-item"
           rounded="md"
@@ -1144,14 +1143,16 @@ onMounted(async () => {
           </v-list-item-title>
         </v-list-item>
 
-        <!-- 退出登录 -->
+        <v-divider class="my-1" />
+
+        <!-- Sign out through the centralized auth store. -->
         <v-list-item
-          class="styled-menu-item"
+          class="styled-menu-item text-error"
           rounded="md"
           @click="handleLogout"
         >
           <template #prepend>
-            <v-icon>mdi-export</v-icon>
+            <v-icon>mdi-logout</v-icon>
           </template>
           <v-list-item-title>
             {{ t("core.header.buttons.logout") }}

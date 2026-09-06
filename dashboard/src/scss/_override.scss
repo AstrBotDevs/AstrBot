@@ -1231,3 +1231,6 @@ pre, code, .markdown pre, .markdown code, .release-notes pre, .release-notes cod
 }
 
 
+.v-theme--bluebusinessdarktheme .provider-icon--monochrome {
+  filter: brightness(0) invert(1);
+}

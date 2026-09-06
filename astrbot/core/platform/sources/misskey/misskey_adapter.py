@@ -9,6 +9,7 @@ from astrbot.api import logger
 from astrbot.api.event import MessageChain
 from astrbot.api.platform import (
     AstrBotMessage,
+    Group,
     Platform,
     PlatformMetadata,
     register_platform_adapter,
@@ -272,14 +273,7 @@ class MisskeyPlatformAdapter(Platform):
                         f"[Misskey] 处理贴文提及: {note.get('text', '')[:50]}...",
                     )
                     message = await self.convert_message(note)
-                    event = MisskeyPlatformEvent(
-                        message_str=message.message_str,
-                        message_obj=message,
-                        platform_meta=self.meta(),
-                        session_id=message.session_id,
-                        client=self,
-                    )
-                    self.commit_event(event)
+                    self.commit_event(self.create_event(message))
         except Exception as e:
             logger.error(f"[Misskey] 处理通知失败: {e}")
 
@@ -304,16 +298,19 @@ class MisskeyPlatformAdapter(Platform):
             else:
                 message = await self.convert_chat_message(data)
                 logger.info(f"[Misskey] 处理私聊消息: {message.message_str[:50]}...")
-            event = MisskeyPlatformEvent(
-                message_str=message.message_str,
-                message_obj=message,
-                platform_meta=self.meta(),
-                session_id=message.session_id,
-                client=self,
-            )
-            self.commit_event(event)
+            self.commit_event(self.create_event(message))
         except Exception as e:
             logger.error(f"[Misskey] 处理聊天消息失败: {e}")
+
+    def create_event(self, message: AstrBotMessage) -> MisskeyPlatformEvent:
+        """Wrap an incoming message with the authenticated Misskey adapter."""
+        return MisskeyPlatformEvent(
+            message_str=message.message_str,
+            message_obj=message,
+            platform_meta=self.meta(),
+            session_id=message.session_id,
+            client=self,
+        )
 
     async def _debug_handler(self, data: dict[str, Any]) -> None:
         event_type = data.get("type", "unknown")
@@ -587,7 +584,7 @@ class MisskeyPlatformAdapter(Platform):
             )
             message_parts.extend(text_parts)
         files = raw_data.get("files", [])
-        file_parts = process_files(message, files)
+        file_parts = await process_files(message, files)
         message_parts.extend(file_parts)
         poll = raw_data.get("poll") or (
             raw_data.get("note", {}).get("poll")
@@ -623,7 +620,7 @@ class MisskeyPlatformAdapter(Platform):
         if raw_text:
             message.message.append(Comp.Plain(raw_text))
         files = raw_data.get("files", [])
-        process_files(message, files, include_text_parts=False)
+        await process_files(message, files, include_text_parts=False)
         message.message_str = raw_text or ""
         return message
 
@@ -638,6 +635,14 @@ class MisskeyPlatformAdapter(Platform):
             is_chat=False,
             room_id=room_id,
         )
+        room_data = raw_data.get("toRoom")
+        if message.group and isinstance(room_data, dict):
+            message.group = Group(
+                group_id=message.group.group_id,
+                group_name=room_data.get("name") or None,
+                group_owner=str(room_data.get("ownerId") or "") or None,
+            )
+
         cache_user_info(
             self._user_cache,
             sender_info,
@@ -662,7 +667,7 @@ class MisskeyPlatformAdapter(Platform):
                 message.message.append(Comp.Plain(raw_text))
                 message_parts.append(raw_text)
         files = raw_data.get("files", [])
-        file_parts = process_files(message, files)
+        file_parts = await process_files(message, files)
         message_parts.extend(file_parts)
         message.message_str = (
             " ".join(part for part in message_parts if part.strip())

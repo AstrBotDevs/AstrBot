@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from astrbot import logger
 from astrbot.api import sp
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
@@ -5,6 +9,22 @@ from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import Persona, PersonaFolder, Personality
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.sentinels import NOT_GIVEN
+
+if TYPE_CHECKING:
+    from astrbot.core.config.astrbot_config import AstrBotConfig
+
+
+def _get_configured_persona_id(config: AstrBotConfig) -> str:
+    """Resolve the configured persona without depending on legacy provider fields."""
+    agent_runner = config.get("agent_runner", {})
+    runner_config = agent_runner.get("config", {})
+    persona_id = (
+        runner_config.get("persona", {}).get("persona_id", "default")
+        if agent_runner.get("runner_type", "local") == "local"
+        else runner_config.get("persona_id", "default")
+    )
+    return persona_id if isinstance(persona_id, str) else "default"
+
 
 DEFAULT_PERSONALITY = Personality(
     prompt="You are a helpful and friendly assistant.",
@@ -23,8 +43,7 @@ class PersonaManager:
     def __init__(self, db_helper: BaseDatabase, acm: AstrBotConfigManager) -> None:
         self.db = db_helper
         self.acm = acm
-        default_ps = acm.default_conf.get("provider_settings", {})
-        self.default_persona: str = default_ps.get("default_personality", "default")
+        self.default_persona: str = _get_configured_persona_id(acm.default_conf)
         self.personas: list[Persona] = []
         self.selected_default_persona: Persona | None = None
         self.personas_v3: list[Personality] = []
@@ -64,11 +83,7 @@ class PersonaManager:
         umo: str | MessageSession | None = None,
     ) -> Personality:
         """获取默认 persona"""
-        cfg = self.acm.get_conf(umo)
-        default_persona_id = cfg.get("provider_settings", {}).get(
-            "default_personality",
-            "default",
-        )
+        default_persona_id = _get_configured_persona_id(self.acm.get_conf(umo))
         return self.get_persona_v3_by_id(default_persona_id) or DEFAULT_PERSONALITY
 
     async def resolve_selected_persona(
@@ -105,7 +120,8 @@ class PersonaManager:
             if persona_id == "[%None]":
                 pass
             elif persona_id is None:
-                persona_id = (provider_settings or {}).get("default_personality")
+                persona_id = _get_configured_persona_id(self.acm.get_conf(umo))
+
         persona = next(
             (item for item in self.personas_v3 if item["name"] == persona_id),
             None,
@@ -420,11 +436,17 @@ class PersonaManager:
                     )
                     user_turn = not user_turn
             try:
-                persona = {
-                    **persona_cfg,
-                    "_begin_dialogs_processed": bd_processed,
-                    "_mood_imitation_dialogs_processed": "",
-                }
+                persona = Personality(
+                    prompt=persona_cfg["prompt"],
+                    name=persona_cfg["name"],
+                    begin_dialogs=persona_cfg["begin_dialogs"],
+                    mood_imitation_dialogs=persona_cfg["mood_imitation_dialogs"],
+                    tools=persona_cfg["tools"],
+                    skills=persona_cfg["skills"],
+                    custom_error_message=persona_cfg["custom_error_message"],
+                    _begin_dialogs_processed=bd_processed,
+                    _mood_imitation_dialogs_processed="",
+                )
                 if persona["name"] == self.default_persona:
                     selected_default_persona = persona
                 personas_v3.append(persona)

@@ -58,6 +58,7 @@
     "@biomejs/biome": "2.4.13",
     "@mdi/font": "7.4.47",
     "@types/chance": "1.1.7",
+    "@types/event-source-polyfill": "^1.0.5",
     "@types/markdown-it": "^14.1.2",
     "@types/node": "^25.5.2",
     "@vitejs/plugin-vue": "6.0.5",

@@ -6,12 +6,16 @@ import pytest
 
 from astrbot.api.message_components import At, Plain
 from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.platform.sources.dingtalk import dingtalk_adapter
 from astrbot.core.platform.sources.dingtalk.dingtalk_adapter import (
     DINGTALK_RECONNECT_INITIAL_DELAY,
     DINGTALK_RECONNECT_MAX_DELAY,
     DingtalkPlatformAdapter,
     _dingtalk_reconnect_delay,
+)
+from astrbot.core.platform.sources.dingtalk.dingtalk_event import (
+    DingtalkMessageEvent,
 )
 
 
@@ -165,6 +169,32 @@ async def test_dingtalk_self_mention_produces_consistent_command_text(payload):
     assert result.message[0].qq == "bot"
     assert isinstance(result.message[1], Plain)
     assert result.message[1].text == "/server"
+
+
+@pytest.mark.asyncio
+async def test_dingtalk_group_message_includes_available_group_details():
+    adapter = DingtalkPlatformAdapter.__new__(DingtalkPlatformAdapter)
+    message = _dingtalk_group_message(
+        conversationTitle="AstrBot Group",
+        isAdmin=True,
+        msgtype="text",
+        text={"content": "hello"},
+    )
+
+    result = await adapter.convert_msg(message)
+
+    assert result.group is not None
+    assert result.group.group_id == "conversation"
+    assert result.group.group_name == "AstrBot Group"
+    assert result.group.group_admins is None
+
+    event = DingtalkMessageEvent(
+        result.message_str,
+        result,
+        PlatformMetadata(name="dingtalk", description="DingTalk", id="dingtalk"),
+        result.session_id,
+    )
+    assert await event.get_group() is result.group
 
 
 @pytest.mark.asyncio

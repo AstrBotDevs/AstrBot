@@ -3,28 +3,28 @@
     <!-- Special handling for specific metadata types -->
     <template v-if="itemMeta?._special === 'select_provider'">
       <ProviderSelector
-        :model-value="modelValue"
+        :model-value="providerModelValue"
         :provider-type="'chat_completion'"
         @update:model-value="emitUpdate"
       />
     </template>
     <template v-else-if="itemMeta?._special === 'select_provider_stt'">
       <ProviderSelector
-        :model-value="modelValue"
+        :model-value="providerModelValue"
         :provider-type="'speech_to_text'"
         @update:model-value="emitUpdate"
       />
     </template>
     <template v-else-if="itemMeta?._special === 'select_provider_tts'">
       <ProviderSelector
-        :model-value="modelValue"
+        :model-value="providerModelValue"
         :provider-type="'text_to_speech'"
         @update:model-value="emitUpdate"
       />
     </template>
     <template v-else-if="itemMeta?._special === 'select_providers'">
       <ProviderSelector
-        :model-value="modelValue"
+        :model-value="providerModelValue"
         :provider-type="'chat_completion'"
         :multiple="true"
         @update:model-value="emitUpdate"
@@ -36,7 +36,7 @@
       "
     >
       <ProviderSelector
-        :model-value="modelValue"
+        :model-value="providerModelValue"
         :provider-type="'agent_runner'"
         :provider-subtype="getSpecialSubtype(itemMeta?._special)"
         @update:model-value="emitUpdate"
@@ -44,7 +44,7 @@
     </template>
     <template v-else-if="itemMeta?._special === 'provider_pool'">
       <ProviderSelector
-        :model-value="modelValue"
+        :model-value="providerModelValue"
         :provider-type="'chat_completion'"
         :button-text="t('core.shared.providerSelector.selectProviderPool')"
         @update:model-value="emitUpdate"
@@ -52,26 +52,26 @@
     </template>
     <template v-else-if="itemMeta?._special === 'select_persona'">
       <PersonaSelector
-        :model-value="modelValue"
+        :model-value="modelString"
         @update:model-value="emitUpdate"
       />
     </template>
     <template v-else-if="itemMeta?._special === 'persona_pool'">
       <PersonaSelector
-        :model-value="modelValue"
+        :model-value="modelString"
         :button-text="t('core.shared.personaSelector.selectPersonaPool')"
         @update:model-value="emitUpdate"
       />
     </template>
     <template v-else-if="itemMeta?._special === 'select_knowledgebase'">
       <KnowledgeBaseSelector
-        :model-value="modelValue"
+        :model-value="modelArray"
         @update:model-value="emitUpdate"
       />
     </template>
     <template v-else-if="itemMeta?._special === 'select_plugin_set'">
       <PluginSetSelector
-        :model-value="modelValue"
+        :model-value="modelStrings"
         @update:model-value="emitUpdate"
       />
     </template>
@@ -133,7 +133,7 @@
 
     <v-autocomplete
       v-else-if="itemMeta?.type === 'list' && itemMeta?.options"
-      :model-value="modelValue"
+      :model-value="modelArray"
       @update:model-value="val => { emitUpdate(val); listSearchText = '' }"
       v-model:search="listSearchText"
       :items="listSelectItems"
@@ -169,7 +169,7 @@
           flex-grow: 1;
           border: 1px solid rgba(0, 0, 0, 0.1);
         "
-        :value="modelValue"
+        :value="modelString"
         @update:value="emitUpdate"
       />
       <v-btn
@@ -189,6 +189,10 @@
     <v-text-field
       v-else-if="itemMeta?.type === 'string'"
       :model-value="modelValue"
+      :type="stringInputType"
+      :append-inner-icon="secretToggleIcon"
+      :autocomplete="secretField ? 'new-password' : undefined"
+      @click:append-inner="secretVisible = !secretVisible"
       density="compact"
       variant="outlined"
       class="config-field"
@@ -255,7 +259,7 @@
 
     <FileConfigItem
       v-else-if="itemMeta?.type === 'file'"
-      :model-value="modelValue"
+      :model-value="modelArray"
       :item-meta="itemMeta"
       :plugin-name="pluginName"
       :config-key="configKey"
@@ -265,14 +269,15 @@
 
     <div v-else-if="itemMeta?.type === 'list'" class="config-field">
       <ListConfigItem
-        :model-value="modelValue"
+        :model-value="modelStrings"
+        :secret="secretField"
         @update:model-value="emitUpdate"
       />
     </div>
 
     <ObjectEditor
       v-else-if="itemMeta?.type === 'dict'"
-      :model-value="modelValue"
+      :model-value="modelObject"
       :item-meta="itemMeta"
       :plugin-name="pluginName"
       :plugin-i18n="pluginI18n"
@@ -284,6 +289,10 @@
     <v-text-field
       v-else
       :model-value="modelValue"
+      :type="stringInputType"
+      :append-inner-icon="secretToggleIcon"
+      :autocomplete="secretField ? 'new-password' : undefined"
+      @click:append-inner="secretVisible = !secretVisible"
       density="compact"
       variant="outlined"
       class="config-field"
@@ -315,12 +324,13 @@ interface SliderConfig {
 }
 
 interface ItemMeta {
-  template_schema?: Record<string, unknown>;
+  template_schema?: NonNullable<InstanceType<typeof ObjectEditor>["$props"]["itemMeta"]>["template_schema"];
   _special?: string;
   type?: string;
   options?: unknown[];
   render_type?: string;
   readonly?: boolean;
+  secret?: boolean;
   editor_mode?: boolean;
   editor_theme?: string;
   editor_language?: string;
@@ -331,12 +341,16 @@ interface ItemMeta {
   [key: string]: unknown;
 }
 
-const numericTemp = ref<number | null>(null);
+const numericTemp = ref<number | string | null>(null);
+const secretVisible = ref(false);
+const secretField = computed(() => props.itemMeta?.secret === true);
+const secretToggleIcon = computed(() => secretField.value ? (secretVisible.value ? "mdi-eye-off" : "mdi-eye") : undefined);
+const stringInputType = computed(() => secretField.value && !secretVisible.value ? "password" : "text");
 const listSearchText = ref("");
 
 const props = defineProps({
   modelValue: {
-    type: [String, Number, Boolean, Array, Object],
+    type: [String, Number, Boolean, Array, Object] as PropType<string | number | boolean | unknown[] | Record<string, unknown> | null>,
     default: null,
   },
   itemMeta: {
@@ -369,7 +383,17 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(["update:modelValue", "get-embedding-dim", "open-fullscreen"]);
+const modelString = computed(() => typeof props.modelValue === "string" ? props.modelValue : "");
+const modelArray = computed<unknown[]>(() => Array.isArray(props.modelValue) ? props.modelValue : []);
+const modelStrings = computed(() => modelArray.value.filter((value): value is string => typeof value === "string"));
+const modelObject = computed<Record<string, unknown>>(() => props.modelValue !== null && typeof props.modelValue === "object" && !Array.isArray(props.modelValue) ? props.modelValue : {});
+const providerModelValue = computed(() => props.itemMeta?._special === "select_providers" ? modelStrings.value : modelString.value);
+
+const emit = defineEmits<{
+  "update:modelValue": [value: unknown];
+  "get-embedding-dim": [];
+  "open-fullscreen": [];
+}>();
 const { t } = useI18n();
 const { getRaw } = useModuleI18n("features/config-metadata");
 const { configText } = usePluginI18n();
@@ -394,7 +418,7 @@ function getLabel(itemMeta: ItemMeta, index: number, option: unknown): string {
 
 function getTranslatedLabels(itemMeta: ItemMeta): string[] | null {
   if (props.pluginName && props.configKey && props.pluginI18n && Object.keys(props.pluginI18n).length > 0) {
-    const translatedLabels = configText(props.pluginI18n, props.configKey, "labels", null);
+    const translatedLabels = configText(props.pluginI18n, props.configKey, "labels");
     if (Array.isArray(translatedLabels)) {
       return translatedLabels as string[];
     }
