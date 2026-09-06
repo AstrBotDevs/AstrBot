@@ -2119,10 +2119,9 @@ CONFIG_METADATA_2 = {
                     "xai_native_search": {
                         "description": "启用原生搜索功能",
                         "type": "bool",
-                        "hint": "启用后，将通过 xAI 的 Chat Completions 原生 Live Search 进行联网检索（按需计费）。仅对 xAI 提供商生效。",
+                        "hint": "启用后，将通过 xAI 原生搜索进行联网检索（按需计费）。对使用 Chat Completions 或 Responses API 的 xAI 提供商生效。",
                         "condition": {
                             "provider": "xai",
-                            "type": "xai_chat_completion",
                         },
                     },
                     "rerank_api_base": {
