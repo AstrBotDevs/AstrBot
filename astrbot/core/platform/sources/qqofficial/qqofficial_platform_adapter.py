@@ -295,6 +295,8 @@ class QQOfficialPlatformAdapter(Platform):
         self.secret = platform_config["secret"]
         qq_group = platform_config["enable_group_c2c"]
         guild_dm = platform_config["enable_guild_direct_message"]
+        # 旧存档配置没有该键，缺省视为启用 Markdown，与历史行为一致
+        self.use_markdown_default = platform_config.get("use_markdown", True)
 
         if qq_group:
             self.intents = botpy.Intents(
@@ -398,7 +400,7 @@ class QQOfficialPlatformAdapter(Platform):
             return
 
         use_md = getattr(message_chain, "use_markdown_", None)
-        if use_md is False:
+        if use_md is False or (use_md is None and not self.use_markdown_default):
             payload: dict[str, Any] = {"content": plain_text}
         else:
             payload = {

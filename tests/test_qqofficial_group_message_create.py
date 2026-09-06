@@ -812,3 +812,101 @@ async def test_group_send_by_session_falls_back_to_content_when_markdown_rejecte
     assert "markdown" not in second
     assert second["content"] == "**bold** text"
     assert second["msg_type"] == 0
+
+
+@pytest.mark.asyncio
+async def test_ws_group_send_by_session_use_markdown_config_false_sends_content():
+    # With the adapter-level use_markdown config disabled, a chain without an
+    # explicit use_markdown_ flag must be sent in content mode directly, so bots
+    # without native markdown permission never hit the failed markdown request.
+    adapter = QQOfficialPlatformAdapter(
+        {
+            "id": "qq-official-test",
+            "appid": "123",
+            "secret": "secret",
+            "enable_group_c2c": True,
+            "enable_guild_direct_message": False,
+            "use_markdown": False,
+        },
+        {},
+        asyncio.Queue(),
+    )
+    adapter.client.api = SimpleNamespace(
+        post_group_message=AsyncMock(return_value={"id": "sent-1"}),
+        post_message=AsyncMock(),
+    )
+    adapter._session_scene["group-1"] = "group"
+
+    await adapter.send_by_session(
+        MessageSession("qq_official", MessageType.GROUP_MESSAGE, "group-1"),
+        MessageChain(chain=[Plain("plain content")]),
+    )
+
+    kwargs = adapter.client.api.post_group_message.await_args.kwargs
+    assert kwargs["content"] == "plain content"
+    assert "markdown" not in kwargs
+    assert "msg_type" not in kwargs
+
+
+@pytest.mark.asyncio
+async def test_ws_group_send_by_session_explicit_use_markdown_overrides_config():
+    # A chain that explicitly sets use_markdown_(True) must win over the
+    # adapter-level use_markdown config: plugin choice > adapter config > default.
+    adapter = QQOfficialPlatformAdapter(
+        {
+            "id": "qq-official-test",
+            "appid": "123",
+            "secret": "secret",
+            "enable_group_c2c": True,
+            "enable_guild_direct_message": False,
+            "use_markdown": False,
+        },
+        {},
+        asyncio.Queue(),
+    )
+    adapter.client.api = SimpleNamespace(
+        post_group_message=AsyncMock(return_value={"id": "sent-1"}),
+        post_message=AsyncMock(),
+    )
+    adapter._session_scene["group-1"] = "group"
+
+    await adapter.send_by_session(
+        MessageSession("qq_official", MessageType.GROUP_MESSAGE, "group-1"),
+        MessageChain(chain=[Plain("forced markdown")], use_markdown_=True),
+    )
+
+    kwargs = adapter.client.api.post_group_message.await_args.kwargs
+    assert kwargs["markdown"]["content"] == "forced markdown"
+    assert kwargs["msg_type"] == 2
+    assert "content" not in kwargs
+
+
+@pytest.mark.asyncio
+async def test_webhook_send_by_session_use_markdown_config_false_sends_content():
+    # The webhook adapter shares _send_by_session_common with the WebSocket
+    # adapter, so the adapter-level use_markdown config must apply there too.
+    adapter = QQOfficialWebhookPlatformAdapter(
+        {
+            "id": "qq-official-webhook-test",
+            "appid": "123",
+            "secret": "secret",
+            "use_markdown": False,
+        },
+        {},
+        asyncio.Queue(),
+    )
+    adapter.client.api = SimpleNamespace(
+        post_group_message=AsyncMock(return_value={"id": "sent-1"}),
+        post_message=AsyncMock(),
+    )
+    adapter._session_scene["group-1"] = "group"
+
+    await adapter.send_by_session(
+        MessageSession("qq_official_webhook", MessageType.GROUP_MESSAGE, "group-1"),
+        MessageChain(chain=[Plain("webhook plain content")]),
+    )
+
+    kwargs = adapter.client.api.post_group_message.await_args.kwargs
+    assert kwargs["content"] == "webhook plain content"
+    assert "markdown" not in kwargs
+    assert "msg_type" not in kwargs
