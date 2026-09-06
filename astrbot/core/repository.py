@@ -87,7 +87,14 @@ class GitHubRepository:
                 raise ValueError("Invalid GitHub repository URL")
             branch = "/".join(parts[3:])
 
-        if not owner or not name or owner in {".", ".."} or name in {".", ".."}:
+        if (
+            not owner
+            or not name
+            or any(
+                part in {".", ".."} or "/" in part or "\\" in part
+                for part in (owner, name)
+            )
+        ):
             raise ValueError("Invalid GitHub repository URL")
         return cls(owner, name, branch)
 
@@ -225,7 +232,11 @@ def parse_repository_url(url: str) -> RepositoryReference:
         raise ValueError("Invalid Git repository URL")
     owner = "/".join(parts[:-1])
     name = parts[-1].removesuffix(".git")
-    if not owner or not name or any(part in {".", ".."} for part in parts):
+    if (
+        not owner
+        or not name
+        or any(part in {".", ".."} or "/" in part or "\\" in part for part in parts)
+    ):
         raise ValueError("Invalid Git repository URL")
     return RepositoryReference(
         provider=host.removeprefix("www."),
