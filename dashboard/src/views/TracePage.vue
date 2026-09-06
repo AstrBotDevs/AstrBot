@@ -76,7 +76,23 @@ onMounted(fetchTraceSettings);
 
 <style scoped>
 .trace-page {
-  --trace-card: #f5f6f7;
+  --trace-card: rgba(var(--v-theme-surface), 0.78);
+  --trace-card-bg: rgba(var(--v-theme-surface), 0.94);
+  --trace-record-bg: rgba(var(--v-theme-primary), 0.035);
+  --trace-empty-surface: rgba(var(--v-theme-surface), 0.9);
+  --trace-empty-icon-bg: rgba(var(--v-theme-primary), 0.12);
+  --trace-text: rgba(var(--v-theme-on-surface), 0.92);
+  --trace-title: rgb(var(--v-theme-on-surface));
+  --trace-muted: rgba(var(--v-theme-on-surface), 0.72);
+  --trace-subtle: rgba(var(--v-theme-on-surface), 0.56);
+  --trace-primary: rgb(var(--v-theme-primary));
+  --trace-primary-soft: rgba(var(--v-theme-primary), 0.1);
+  --trace-border: rgba(var(--v-theme-borderLight), 0.46);
+  --trace-border-strong: rgba(var(--v-theme-primary), 0.22);
+  --trace-border-active: rgba(var(--v-theme-primary), 0.38);
+  --trace-track: rgba(var(--v-theme-borderLight), 0.5);
+  --trace-track-active: rgba(var(--v-theme-primary), 0.3);
+  --trace-shadow: 0 10px 24px rgba(var(--v-theme-primary), 0.08);
 
   height: calc(100dvh - 112px);
   margin: 0 auto;

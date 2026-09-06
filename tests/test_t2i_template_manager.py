@@ -64,7 +64,8 @@ def test_initialize_user_templates_migrates_only_unmodified_defaults(
     builtin_root = tmp_path / "astrbot-root"
     builtin_dir = builtin_root / "astrbot/core/utils/t2i/template"
     builtin_dir.mkdir(parents=True)
-    (builtin_dir / "base.html").write_text(CURRENT_TEMPLATE, encoding="utf-8")
+    for filename in ("base.html", "astrbot_powershell.html", "astrbot_vitepress.html"):
+        (builtin_dir / filename).write_text(CURRENT_TEMPLATE, encoding="utf-8")
 
     data_root = tmp_path / "data"
     user_dir = data_root / "t2i_templates"
@@ -92,3 +93,5 @@ def test_initialize_user_templates_migrates_only_unmodified_defaults(
     template_manager.TemplateManager()
 
     assert (user_dir / "base.html").read_text(encoding="utf-8") == expected_content
+    for filename in ("astrbot_powershell.html", "astrbot_vitepress.html"):
+        assert (user_dir / filename).read_text(encoding="utf-8") == CURRENT_TEMPLATE

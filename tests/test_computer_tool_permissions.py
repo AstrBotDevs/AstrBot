@@ -60,7 +60,7 @@ async def test_browser_tool_allows_non_admin_when_admin_requirement_disabled(
         cmd="open https://example.com",
     )
 
-    assert json.loads(result)["ok"] is True
+    assert json.loads(result)["ok"] is True  # type: ignore[arg-type]
 
 
 @pytest.mark.asyncio
@@ -83,7 +83,7 @@ async def test_neo_skill_tool_allows_non_admin_when_admin_requirement_disabled(
         limit=5,
     )
 
-    payload = json.loads(result)
+    payload = json.loads(result)  # type: ignore[arg-type]
     assert payload["items"] == []
     assert payload["limit"] == 5
 

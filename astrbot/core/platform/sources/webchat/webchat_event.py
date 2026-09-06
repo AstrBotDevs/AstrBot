@@ -44,7 +44,7 @@ class WebChatMessageEvent(AstrMessageEvent):
                     "message_id": message_id,
                 },  # end means this request is finished
             )
-            return
+            return None
 
         data = ""
         for comp in message.chain:
@@ -199,9 +199,9 @@ class WebChatMessageEvent(AstrMessageEvent):
         message_id = self.message_obj.message_id
         request_id = str(message_id)
         async for chain in generator:
-            # 处理音频流（Live Mode）
+            # 处理音频流(Live Mode)
             if chain.type == "audio_chunk":
-                # 音频流数据，直接发送
+                # 音频流数据,直接发送
                 audio_b64 = ""
                 text = None
 

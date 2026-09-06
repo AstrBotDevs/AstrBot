@@ -14,7 +14,7 @@ from astrbot.core.utils.shared_preferences import SharedPreferences
 _VT = TypeVar("_VT")
 
 
-class ConfInfo(TypedDict):
+class ConfInfo(TypedDict, total=False):
     """Configuration information for a specific session or platform."""
 
     id: str  # UUID of the configuration or "default"
@@ -43,7 +43,7 @@ class AstrBotConfigManager:
         self.confs: dict[str, AstrBotConfig] = {}
         """uuid / "default" -> AstrBotConfig"""
         self.confs["default"] = default_config
-        self.abconf_data: dict | None = None
+        self.abconf_data: dict[str, dict[str, str]] | None = None
         self._abconf_lock = asyncio.Lock()
 
     async def initialize(self) -> None:
@@ -51,16 +51,19 @@ class AstrBotConfigManager:
         self.abconf_data = await self._load_abconf_mapping()
         self._load_all_configs()
 
-    async def _load_abconf_mapping(self) -> dict:
+    async def _load_abconf_mapping(self) -> dict[str, dict[str, str]]:
         """Load configuration profile metadata from persistent storage.
 
         Returns:
             The persisted mapping, or an empty mapping when no value exists.
         """
         abconf_data = await self.sp.global_get("abconf_mapping", {})
-        return abconf_data if abconf_data is not None else {}
+        return abconf_data if isinstance(abconf_data, dict) else {}
 
-    async def _persist_abconf_mapping(self, abconf_data: dict) -> None:
+    async def _persist_abconf_mapping(
+        self,
+        abconf_data: dict[str, dict[str, str]],
+    ) -> None:
         """Persist configuration profile metadata and refresh memory.
 
         Args:
@@ -69,7 +72,7 @@ class AstrBotConfigManager:
         await self.sp.global_put("abconf_mapping", abconf_data)
         self.abconf_data = abconf_data
 
-    def _get_abconf_data(self) -> dict:
+    def _get_abconf_data(self) -> dict[str, dict[str, str]]:
         """Return configuration profile metadata loaded during initialization.
 
         Returns:
@@ -150,7 +153,7 @@ class AstrBotConfigManager:
         await self._persist_abconf_mapping(abconf_data)
 
     def get_conf(self, umo: str | MessageSession | None) -> AstrBotConfig:
-        """获取指定 umo 的配置文件。如果不存在，则 fallback 到默认配置文件。"""
+        """获取指定 umo 的配置文件｡如果不存在,则 fallback 到默认配置文件｡"""
         if not umo:
             return self.confs["default"]
         if isinstance(umo, MessageSession):
@@ -300,9 +303,9 @@ class AstrBotConfigManager:
         self,
         umo: str | None = None,
         key: str | None = None,
-        default: _VT = None,
-    ) -> _VT:
-        """获取配置项。umo 为 None 时使用默认配置"""
+        default: _VT | None = None,
+    ) -> _VT | None:
+        """获取配置项｡umo 为 None 时使用默认配置"""
         if umo is None:
             return self.confs["default"].get(key, default)
         conf = self.get_conf(umo)

@@ -48,7 +48,6 @@
 </template>
 
 <script setup lang="ts">
-import axios, { type AxiosRequestConfig } from 'axios';
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 
@@ -58,6 +57,7 @@ import {
   type ApiEnvelope,
   type VersionData,
 } from '@/api/v1';
+import request, { resolveApiUrl } from '@/utils/request';
 import { useI18n } from '@/i18n/composables';
 
 type StartTimeData = {
@@ -81,7 +81,7 @@ const initialStartTime = ref<number | string | null>(null);
 
 let restartTimer: ReturnType<typeof setInterval> | null = null;
 let detecting = false;
-const recoveryClient = axios.create();
+const recoveryClient = request;
 
 function normalizeVersion(version?: string | null) {
   return (version || '').trim().replace(/^v/i, '');
@@ -116,7 +116,7 @@ function getDismissKey() {
   return `astrbot-upgrade-recovery-dismissed:${coreVersion.value}:${dashboardVersion.value}`;
 }
 
-function recoveryRequestConfig(validateStatus = false): AxiosRequestConfig {
+function recoveryRequestConfig(validateStatus = false) {
   const headers: Record<string, string> = {};
   const token =
     localStorage.getItem('token') ||
@@ -136,7 +136,7 @@ function recoveryRequestConfig(validateStatus = false): AxiosRequestConfig {
 
 async function fetchLegacyStartTime() {
   const response = await recoveryClient.get<ApiEnvelope<StartTimeData>>(
-    '/api/stat/start-time',
+    resolveApiUrl('/api/stat/start-time'),
     recoveryRequestConfig(),
   );
   return response.data?.data?.start_time ?? null;
@@ -196,7 +196,7 @@ async function restartCore() {
     initialStartTime.value =
       initialStartTime.value ?? (await fetchLegacyStartTime());
     await recoveryClient.post<ApiEnvelope<unknown>>(
-      '/api/stat/restart-core',
+      resolveApiUrl('/api/stat/restart-core'),
       undefined,
       recoveryRequestConfig(),
     );
@@ -239,7 +239,7 @@ async function detectUpgradeMismatch() {
   detecting = true;
   try {
     const v1Response = await recoveryClient.get<ApiEnvelope<unknown>>(
-      '/api/v1/auth/setup-status',
+      resolveApiUrl('/api/v1/auth/setup-status'),
       recoveryRequestConfig(true),
     );
     if (!isMissingApiKeyResponse(v1Response)) {
@@ -247,7 +247,7 @@ async function detectUpgradeMismatch() {
     }
 
     const legacyResponse = await recoveryClient.get<ApiEnvelope<VersionData>>(
-      '/api/stat/version',
+      resolveApiUrl('/api/stat/version'),
       recoveryRequestConfig(true),
     );
     if (legacyResponse.status === 401 || legacyResponse.status >= 400) {

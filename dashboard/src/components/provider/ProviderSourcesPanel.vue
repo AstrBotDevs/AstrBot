@@ -19,7 +19,7 @@
             :placeholder="selectHint || tm('providerSources.selectHint')"
             @update:model-value="selectSourceByValue"
         >
-            <template #selection="{ item }">
+            <template #selection="{ internalItem: item }">
               <div class="provider-source-select-value">
                 <v-avatar size="22" rounded="lg" class="provider-source-avatar">
                   <v-img
@@ -35,7 +35,7 @@
               </div>
             </template>
 
-            <template #item="{ props: itemProps, item }">
+            <template #item="{ props: itemProps, internalItem: item }">
               <v-list-item
                 v-bind="itemProps"
                 :subtitle="item.raw.subtitle"
@@ -174,6 +174,7 @@
 <script setup>
 import { computed } from 'vue'
 import StyledMenu from '@/components/shared/StyledMenu.vue'
+import { isMonochromeProviderIcon } from '@/utils/providerUtils'
 
 const props = defineProps({
   displayedProviderSources: {
@@ -218,7 +219,7 @@ const props = defineProps({
   },
   isMonochromeSourceIcon: {
     type: Function,
-    required: true
+    default: (source) => isMonochromeProviderIcon(typeof source?.provider === 'string' ? source.provider : '')
   },
   getSourceDisplayName: {
     type: Function,

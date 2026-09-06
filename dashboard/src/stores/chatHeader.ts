@@ -9,11 +9,7 @@ export const useChatHeaderStore = defineStore("chatHeader", {
   }),
 
   actions: {
-    SET_CONTEXT(payload: {
-      title?: string;
-      subtitle?: string;
-      projectId?: string;
-    }) {
+    SET_CONTEXT(payload: { title?: string; subtitle?: string; projectId?: string }) {
       const nextProjectId = payload.projectId || "";
       if (this.projectId !== nextProjectId) {
         this.workspaceFilesOpen = false;

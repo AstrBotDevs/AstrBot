@@ -22,6 +22,7 @@ def is_connection_error(exc: BaseException) -> bool:
 
     Returns:
         True if the exception is a connection/network error
+
     """
     # Check for httpx network errors
     if isinstance(
@@ -65,6 +66,7 @@ def log_connection_failure(
         provider_label: The provider name for log prefix (e.g., "OpenAI", "Gemini")
         error: The exception that occurred
         proxy: The proxy address if configured, or None/empty string
+
     """
     import os
 
@@ -73,8 +75,9 @@ def log_connection_failure(
     # Fallback to environment proxy if not configured
     effective_proxy = proxy
     if not effective_proxy:
-        effective_proxy = os.environ.get(
-            "http_proxy", os.environ.get("https_proxy", "")
+        effective_proxy = os.environ.get("http_proxy") or os.environ.get(
+            "https_proxy",
+            "",
         )
 
     if effective_proxy:
@@ -116,11 +119,14 @@ def create_proxy_client(
 
     Returns:
         An httpx.AsyncClient created with the hybrid SSL context (system store + certifi); the proxy is applied only if one is provided.
+
     """
     resolved_verify = _SYSTEM_SSL_CTX if verify is None else verify
     if proxy:
         logger.info(f"[{provider_label}] Using proxy: {proxy}")
         return httpx_module.AsyncClient(
-            proxy=proxy, verify=resolved_verify, headers=headers
+            proxy=proxy,
+            verify=resolved_verify,
+            headers=headers,
         )
     return httpx_module.AsyncClient(verify=resolved_verify, headers=headers)

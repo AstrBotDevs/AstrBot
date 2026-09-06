@@ -1,16 +1,20 @@
 import json
 from types import SimpleNamespace
-import pytest
-from astrbot.core.tools import web_search_tools as tools
+from typing import Any
 
+import pytest
+
+from astrbot.core.tools import web_search_tools as tools
 from astrbot.core.tools.web_search_tools import (
-    _anysearch_search,
     AnySearchWebSearchTool,
+    _anysearch_search,
     normalize_legacy_web_search_config,
 )
 
+
 class _FakeAnysearchResponse:
     """Fake HTTP response for AnySearch API tests."""
+
     def __init__(self, status=200, json_data=None, text_data=""):
         self.status = status
         self.json_data = json_data or {}
@@ -31,6 +35,7 @@ class _FakeAnysearchResponse:
 
 class _FakeAnysearchSession:
     """Fake ClientSession for AnySearch API tests."""
+
     def __init__(self, response):
         self.response = response
         self.trust_env = None
@@ -53,6 +58,7 @@ class _FakeAnysearchSession:
 
 class _FakeAnysearchCycleSession:
     """Return the next response for each post() call in key rotation tests."""
+
     def __init__(self, responses: list):
         self.responses = responses
         self.cursor = 0
@@ -74,6 +80,7 @@ class _FakeAnysearchCycleSession:
         self.cursor = (self.cursor + 1) % len(self.responses)
         self.calls.append({"url": url, "json": json, "headers": headers})
         return resp
+
 
 class _FakeConfig(dict):
     def __init__(self, *args, **kwargs):
@@ -121,6 +128,7 @@ async def test_firecrawl_search_maps_web_results(monkeypatch):
 
     result = await tool.call(context, query="AstrBot", limit=3, country="US")
 
+    assert isinstance(result, str)
     assert json.loads(result)["results"] == [
         {
             "title": "AstrBot",
@@ -243,6 +251,7 @@ async def test_firecrawl_search_payload_omits_tbs_and_uses_default_limit(monkeyp
         country="US",
     )
 
+    assert isinstance(result, str)
     assert json.loads(result)["results"][0]["url"] == "https://example.com"
     assert "tbs" not in tool.parameters["properties"]
 
@@ -531,7 +540,11 @@ async def test_tavily_search_key_failover_on_quota_exceeded_432(
                 status=200,
                 jsonData={
                     "results": [
-                        {"title": "AstrBot", "url": "https://example.com", "content": "OK"}
+                        {
+                            "title": "AstrBot",
+                            "url": "https://example.com",
+                            "content": "OK",
+                        }
                     ]
                 },
             ),
@@ -569,7 +582,11 @@ async def test_tavily_search_key_failover_on_rate_limited_429(
                 status=200,
                 jsonData={
                     "results": [
-                        {"title": "RateLimitOK", "url": "https://example2.com", "content": "OK"}
+                        {
+                            "title": "RateLimitOK",
+                            "url": "https://example2.com",
+                            "content": "OK",
+                        }
                     ]
                 },
             ),
@@ -667,7 +684,7 @@ async def test_tavily_search_does_not_failover_on_server_error_500(
     assert len(session.calls) == 1
 
 
-def _context_with_provider_settings(provider_settings):
+def _context_with_provider_settings(provider_settings) -> Any:
     config = {"provider_settings": provider_settings}
     agent_context = SimpleNamespace(
         context=SimpleNamespace(get_config=lambda umo: config),
@@ -876,10 +893,10 @@ async def test_exa_get_contents_raises_on_http_error(monkeypatch):
         )
 
 
-
 # ============================================================================
 # AnySearch provider tests
 # ============================================================================
+
 
 @pytest.mark.asyncio
 async def test_anysearch_search_maps_results(monkeypatch):
@@ -897,21 +914,18 @@ async def test_anysearch_search_maps_results(monkeypatch):
                             "title": "AstrBot - AI Chatbot Framework",
                             "url": "https://github.com/AstrBotDevs/AstrBot",
                             "snippet": "A powerful AI chatbot framework for Python",
-                            "content": "AstrBot is a flexible AI chatbot framework..."
+                            "content": "AstrBot is a flexible AI chatbot framework...",
                         },
                         {
                             "title": "AstrBot Documentation",
                             "url": "https://astrbot.dev/docs",
                             "snippet": "Official documentation for AstrBot",
-                            "content": "Getting started with AstrBot..."
-                        }
+                            "content": "Getting started with AstrBot...",
+                        },
                     ],
-                    "metadata": {
-                        "total_results": 100,
-                        "search_time_ms": 150
-                    }
-                }
-            }
+                    "metadata": {"total_results": 100, "search_time_ms": 150},
+                },
+            },
         )
     )
 
@@ -961,10 +975,12 @@ async def test_anysearch_search_supports_anonymous_mode(monkeypatch):
 @pytest.mark.asyncio
 async def test_anysearch_search_key_failover_on_quota_exhausted_402(monkeypatch):
     """A 402 response retries with the next configured key."""
-    session = _FakeAnysearchCycleSession([
-        _FakeAnysearchResponse(status=402, text_data="quota exhausted"),
-        _FakeAnysearchResponse(status=200, json_data={"data": {"results": []}}),
-    ])
+    session = _FakeAnysearchCycleSession(
+        [
+            _FakeAnysearchResponse(status=402, text_data="quota exhausted"),
+            _FakeAnysearchResponse(status=200, json_data={"data": {"results": []}}),
+        ]
+    )
 
     def fake_client_session(*, trust_env):
         session.trust_env = trust_env
@@ -981,10 +997,12 @@ async def test_anysearch_search_key_failover_on_quota_exhausted_402(monkeypatch)
 @pytest.mark.asyncio
 async def test_anysearch_search_does_not_failover_on_server_error_500(monkeypatch):
     """A 500 response fails fast instead of burning through keys."""
-    session = _FakeAnysearchCycleSession([
-        _FakeAnysearchResponse(status=500, text_data="internal server error"),
-        _FakeAnysearchResponse(status=200, json_data={"data": {"results": []}}),
-    ])
+    session = _FakeAnysearchCycleSession(
+        [
+            _FakeAnysearchResponse(status=500, text_data="internal server error"),
+            _FakeAnysearchResponse(status=200, json_data={"data": {"results": []}}),
+        ]
+    )
 
     def fake_client_session(*, trust_env):
         session.trust_env = trust_env
@@ -1030,7 +1048,9 @@ async def test_anysearch_search_tool_clamps_max_results(monkeypatch):
 
 def test_normalize_legacy_config_converts_anysearch_string_key():
     """A legacy string key is migrated to a single-element list."""
-    config = _FakeConfig({"provider_settings": {"websearch_anysearch_key": "old-string-key"}})
+    config = _FakeConfig(
+        {"provider_settings": {"websearch_anysearch_key": "old-string-key"}}
+    )
     normalize_legacy_web_search_config(config)  # ֱ�ӵ��ã������շ���ֵ
     assert config["provider_settings"]["websearch_anysearch_key"] == ["old-string-key"]
 
@@ -1047,12 +1067,12 @@ async def test_anysearch_search_falls_back_to_content_for_snippet(monkeypatch):
                         {
                             "title": "Test Title",
                             "url": "https://example.com",
-                            "content": "Full content text here"
+                            "content": "Full content text here",
                             # ע�⣺û�� snippet �ֶ�
                         }
                     ]
                 }
-            }
+            },
         )
     )
 
@@ -1069,4 +1089,3 @@ async def test_anysearch_search_falls_back_to_content_for_snippet(monkeypatch):
     assert results[0].snippet == "Full content text here"
     assert results[0].title == "Test Title"
     assert results[0].url == "https://example.com"
-

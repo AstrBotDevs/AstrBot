@@ -26,7 +26,7 @@ class LogService:
         }
         return f"id: {ts}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
-    async def replay_cached_logs(self, last_event_id: str) -> AsyncGenerator[str, None]:
+    async def replay_cached_logs(self, last_event_id: str) -> AsyncGenerator[str]:
         try:
             last_ts = float(last_event_id)
             cached_logs = list(self.log_broker.log_cache)
@@ -40,9 +40,7 @@ class LogService:
         except Exception as exc:
             logger.error(f"Log SSE 补发历史错误: {exc}")
 
-    async def stream_log_events(
-        self, last_event_id: str | None
-    ) -> AsyncGenerator[str, None]:
+    async def stream_log_events(self, last_event_id: str | None) -> AsyncGenerator[str]:
         queue = None
         try:
             if last_event_id:

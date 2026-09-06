@@ -70,18 +70,26 @@
     <!-- 顶部操作区域 -->
     <div class="d-flex align-center justify-space-between mb-2">
       <div class="flex-grow-1">
-        <span v-if="!modelValue || modelValue.length === 0" style="color: rgb(var(--v-theme-primaryText));">
-          {{ tm('pluginSetSelector.notSelected') }}
+        <span
+          v-if="!modelValue || modelValue.length === 0"
+          style="color: rgb(var(--v-theme-primaryText))"
+        >
+          {{ tm("pluginSetSelector.notSelected") }}
         </span>
-        <span v-else-if="isAllPlugins" style="color: rgb(var(--v-theme-primaryText));">
-          {{ tm('pluginSetSelector.allPlugins') }}
+        <span
+          v-else-if="isAllPlugins"
+          style="color: rgb(var(--v-theme-primaryText))"
+        >
+          {{ tm("pluginSetSelector.allPlugins") }}
         </span>
-        <span v-else style="color: rgb(var(--v-theme-primaryText));">
-          {{ tm('pluginSetSelector.selectedCount', { count: modelValue.length }) }}
+        <span v-else style="color: rgb(var(--v-theme-primaryText))">
+          {{
+            tm("pluginSetSelector.selectedCount", { count: modelValue.length })
+          }}
         </span>
       </div>
       <v-btn size="small" color="primary" variant="tonal" @click="openDialog">
-        {{ buttonText || tm('pluginSetSelector.buttonText') }}
+        {{ buttonText || tm("pluginSetSelector.buttonText") }}
       </v-btn>
     </div>
   </div>
@@ -89,100 +97,106 @@
   <!-- Plugin Set Selection Dialog -->
   <v-dialog v-model="dialog" max-width="700px">
     <v-card>
-      <v-card-title class="text-h3 pa-4 pb-0 pl-6">
-        {{ tm('pluginSetSelector.dialogTitle') }}
+      <v-card-title class="text-h3 pa-4 pb-0 pl-6" style="font-weight: normal">
+        {{ tm("pluginSetSelector.dialogTitle") }}
       </v-card-title>
-      
+
       <v-card-text class="pa-4">
-        <v-progress-linear v-if="loading" indeterminate color="primary"></v-progress-linear>
-        
+        <v-progress-linear v-if="loading" indeterminate color="primary" />
+
         <div v-if="!loading">
           <!-- 预设选项 -->
           <v-radio-group v-model="selectionMode" class="mb-4" hide-details>
-            <v-radio 
-              value="all" 
-              :label="tm('pluginSetSelector.enableAll')" 
+            <v-radio
+              value="all"
+              :label="tm('pluginSetSelector.enableAll')"
               color="primary"
-            ></v-radio>
-            <v-radio 
-              value="none" 
-              :label="tm('pluginSetSelector.enableNone')" 
+            />
+            <v-radio
+              value="none"
+              :label="tm('pluginSetSelector.enableNone')"
               color="primary"
-            ></v-radio>
-            <v-radio 
-              value="custom" 
-              :label="tm('pluginSetSelector.customSelect')" 
+            />
+            <v-radio
+              value="custom"
+              :label="tm('pluginSetSelector.customSelect')"
               color="primary"
-            ></v-radio>
+            />
           </v-radio-group>
 
           <!-- 自定义选择时显示插件列表 -->
-          <div v-if="selectionMode === 'custom'" style="max-height: 300px; overflow-y: auto;">
+          <div
+            v-if="selectionMode === 'custom'"
+            style="max-height: 300px; overflow-y: auto"
+          >
             <v-list v-if="pluginList.length > 0" density="compact">
               <v-list-item
                 v-for="plugin in pluginList"
                 :key="plugin.name"
                 rounded="md"
-                class="ma-1">
-                <template v-slot:prepend>
+                class="ma-1"
+              >
+                <template #prepend>
                   <v-checkbox
                     v-model="selectedPlugins"
                     :value="plugin.name"
                     color="primary"
                     hide-details
-                  ></v-checkbox>
+                  />
                 </template>
-                
                 <v-list-item-title>{{ pluginDisplayName(plugin) }}</v-list-item-title>
                 <v-list-item-subtitle>
-                  {{ pluginDescription(plugin) || tm('pluginSetSelector.noDescription') }}
+                  {{ pluginDescription(plugin) || tm("pluginSetSelector.noDescription") }}
                   <v-chip v-if="!plugin.activated" size="x-small" color="grey" class="ml-1">
-                    {{ tm('pluginSetSelector.notActivated') }}
+                    {{ tm("pluginSetSelector.notActivated") }}
                   </v-chip>
                 </v-list-item-subtitle>
               </v-list-item>
 
               <div class="pl-8 pt-2">
-                <small>{{ tm('pluginSetSelector.note') }}</small>
+                <small>{{ tm("pluginSetSelector.note") }}</small>
               </div>
             </v-list>
 
             <div v-else class="text-center py-8">
-              <v-icon size="64" color="grey-lighten-1">mdi-puzzle-outline</v-icon>
-              <p class="text-grey mt-4">{{ tm('pluginSetSelector.noPlugins') }}</p>
+              <v-icon size="64" color="grey-lighten-1">
+                mdi-puzzle-outline
+              </v-icon>
+              <p class="text-grey mt-4">
+                {{ tm("pluginSetSelector.noPlugins") }}
+              </p>
             </div>
           </div>
         </div>
       </v-card-text>
-            
+
       <v-card-actions class="pa-4">
-        <v-spacer></v-spacer>
-        <v-btn variant="text" @click="cancelSelection">{{ tm('pluginSetSelector.cancelSelection') }}</v-btn>
-        <v-btn 
-          color="primary" 
-          variant="tonal"
-          @click="confirmSelection">
-          {{ tm('pluginSetSelector.confirmSelection') }}
+        <v-spacer />
+        <v-btn variant="text" @click="cancelSelection">
+          {{ tm("pluginSetSelector.cancelSelection") }}
+        </v-btn>
+        <v-btn color="primary" variant="tonal" @click="confirmSelection">
+          {{ tm("pluginSetSelector.confirmSelection") }}
         </v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
 </template>
 
-<script setup>
-import { ref, computed, onMounted, watch } from 'vue'
-import { pluginApi } from '@/api/v1'
-import { useModuleI18n } from '@/i18n/composables'
-import { usePluginI18n } from '@/utils/pluginI18n'
+<script setup lang="ts">
+import { computed, onMounted, ref, watch, type PropType } from "vue";
+import { pluginApi } from "@/api/v1";
+import { useModuleI18n } from "@/i18n/composables";
+import { usePluginI18n } from "@/utils/pluginI18n";
 
 const props = defineProps({
   modelValue: {
-    type: Array,
-    default: () => []
+    type: Array as PropType<string[]>,
+    default: () => [],
   },
   buttonText: {
     type: String,
-    default: ''
+    default: "",
   },
   maxDisplayItems: {
     type: Number,
@@ -198,19 +212,26 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['update:modelValue'])
-const { tm } = useModuleI18n('core.shared')
-const { pluginName, pluginDesc } = usePluginI18n()
+const emit = defineEmits<{ "update:modelValue": [value: string[]] }>();
+const { tm } = useModuleI18n("core.shared");
+const { pluginName, pluginDesc } = usePluginI18n();
 
-const dialog = ref(false)
-const pluginList = ref([])
-const loading = ref(false)
-const selectionMode = ref('custom') // 'all', 'none', 'custom'
-const selectedPlugins = ref([])
-const pluginSearchKeyword = ref('')
+interface PluginEntry {
+  name: string;
+  desc?: string;
+  activated?: boolean;
+  reserved?: boolean;
+}
 
-const pluginDisplayName = (plugin) => pluginName(plugin) || plugin.name
-const pluginDescription = (plugin) => pluginDesc(plugin)
+const dialog = ref(false);
+const pluginList = ref<PluginEntry[]>([]);
+const loading = ref(false);
+const selectionMode = ref("custom"); // 'all', 'none', 'custom'
+const selectedPlugins = ref<string[]>([]);
+const pluginSearchKeyword = ref("");
+
+const pluginDisplayName = (plugin: PluginEntry) => pluginName(plugin) || plugin.name;
+const pluginDescription = (plugin: PluginEntry) => pluginDesc(plugin);
 
 // 判断是否为"所有插件"模式
 const isAllPlugins = computed(() => {
@@ -247,7 +268,7 @@ const somePluginsSelected = computed(() => (
 ))
 
 // 移除插件
-function removePlugin(pluginName) {
+function removePlugin(pluginName: string) {
   if (props.modelValue && props.modelValue.length > 0) {
     const newValue = props.modelValue.filter(name => name !== pluginName)
     emit('update:modelValue', newValue)
@@ -255,26 +276,30 @@ function removePlugin(pluginName) {
 }
 
 // 监听 modelValue 变化，同步内部状态
-watch(() => props.modelValue, (newValue) => {
-  if (!newValue || newValue.length === 0) {
-    selectionMode.value = 'none'
-    selectedPlugins.value = []
-  } else if (newValue.length === 1 && newValue[0] === '*') {
-    selectionMode.value = 'all'
-    selectedPlugins.value = []
-  } else {
-    selectionMode.value = 'custom'
-    selectedPlugins.value = [...newValue]
-  }
-}, { immediate: true })
+watch(
+  () => props.modelValue,
+  (newValue: string[]) => {
+    if (!newValue || newValue.length === 0) {
+      selectionMode.value = "none";
+      selectedPlugins.value = [];
+    } else if (newValue.length === 1 && newValue[0] === "*") {
+      selectionMode.value = "all";
+      selectedPlugins.value = [];
+    } else {
+      selectionMode.value = "custom";
+      selectedPlugins.value = [...newValue];
+    }
+  },
+  { immediate: true },
+);
 
 async function openDialog() {
-  dialog.value = true
-  await loadPlugins()
+  dialog.value = true;
+  await loadPlugins();
 }
 
 async function loadPlugins() {
-  loading.value = true
+  loading.value = true;
   try {
     const response = await pluginApi.list()
     if (response.data.status === 'ok') {
@@ -293,18 +318,18 @@ async function loadPlugins() {
         : activatedPlugins.filter(plugin => !plugin.reserved)
     }
   } catch (error) {
-    console.error('加载插件列表失败:', error)
-    pluginList.value = []
+    console.error("加载插件列表失败:", error);
+    pluginList.value = [];
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 
-function inlinePluginEnabled(plugin) {
+function inlinePluginEnabled(plugin: PluginEntry) {
   return isAllPlugins.value || (props.modelValue || []).includes(plugin.name)
 }
 
-function toggleInlinePlugin(plugin) {
+function toggleInlinePlugin(plugin: PluginEntry) {
   const selected = new Set(
     isAllPlugins.value
       ? pluginList.value.map(item => item.name)
@@ -337,39 +362,39 @@ onMounted(() => {
 })
 
 function confirmSelection() {
-  let newValue = []
-  
+  let newValue: string[] = [];
+
   switch (selectionMode.value) {
-    case 'all':
-      newValue = ['*']
-      break
-    case 'none':
-      newValue = []
-      break
-    case 'custom':
-      newValue = [...selectedPlugins.value]
-      break
+    case "all":
+      newValue = ["*"];
+      break;
+    case "none":
+      newValue = [];
+      break;
+    case "custom":
+      newValue = [...selectedPlugins.value];
+      break;
   }
-  
-  emit('update:modelValue', newValue)
-  dialog.value = false
+
+  emit("update:modelValue", newValue);
+  dialog.value = false;
 }
 
 function cancelSelection() {
   // 恢复到原始状态
-  const currentValue = props.modelValue || []
+  const currentValue = props.modelValue || [];
   if (currentValue.length === 0) {
-    selectionMode.value = 'none'
-    selectedPlugins.value = []
-  } else if (currentValue.length === 1 && currentValue[0] === '*') {
-    selectionMode.value = 'all'
-    selectedPlugins.value = []
+    selectionMode.value = "none";
+    selectedPlugins.value = [];
+  } else if (currentValue.length === 1 && currentValue[0] === "*") {
+    selectionMode.value = "all";
+    selectedPlugins.value = [];
   } else {
-    selectionMode.value = 'custom'
-    selectedPlugins.value = [...currentValue]
+    selectionMode.value = "custom";
+    selectedPlugins.value = [...currentValue];
   }
-  
-  dialog.value = false
+
+  dialog.value = false;
 }
 </script>
 

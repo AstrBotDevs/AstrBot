@@ -2,20 +2,15 @@ interface CopyToClipboardOptions {
   container?: HTMLElement | null;
 }
 
-export async function copyToClipboard(
-  text: string,
-  options: CopyToClipboardOptions = {},
-): Promise<boolean> {
+export async function copyToClipboard(text: string, options: CopyToClipboardOptions = {}): Promise<boolean> {
   const container = options.container;
   const debugInfo = {
     length: text?.length ?? 0,
     trimmedLength: text?.trim().length ?? 0,
     isSecureContext: typeof window !== "undefined" ? window.isSecureContext : false,
-    hasClipboardApi:
-      typeof navigator !== "undefined" && !!navigator.clipboard?.writeText,
+    hasClipboardApi: typeof navigator !== "undefined" && !!navigator.clipboard?.writeText,
     containerTag: container?.tagName ?? null,
-    containerInBody:
-      typeof document !== "undefined" && !!container && document.body.contains(container),
+    containerInBody: typeof document !== "undefined" && !!container && document.body.contains(container),
   };
 
   if (!text) {
@@ -47,16 +42,12 @@ export async function copyToClipboard(
 function fallbackCopy(text: string, container?: HTMLElement | null): boolean {
   if (typeof document === "undefined" || !document.body) return false;
 
-  const mountTarget =
-    container && document.body.contains(container) ? container : document.body;
+  const mountTarget = container && document.body.contains(container) ? container : document.body;
   const textArea = document.createElement("textarea");
-  const activeElement =
-    document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  const activeElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   const selection = document.getSelection();
   const selectedRanges = selection
-    ? Array.from({ length: selection.rangeCount }, (_, index) =>
-        selection.getRangeAt(index).cloneRange(),
-      )
+    ? Array.from({ length: selection.rangeCount }, (_, index) => selection.getRangeAt(index).cloneRange())
     : [];
 
   textArea.value = text;

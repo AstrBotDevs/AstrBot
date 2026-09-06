@@ -22,7 +22,7 @@ class ContextSanitizeStats:
             self.fixed_image_blocks
             or self.fixed_audio_blocks
             or self.fixed_tool_messages
-            or self.removed_tool_calls
+            or self.removed_tool_calls,
         )
 
 

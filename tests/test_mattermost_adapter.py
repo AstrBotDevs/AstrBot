@@ -1,5 +1,6 @@
 import asyncio
 from pathlib import Path
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -74,8 +75,15 @@ async def test_mattermost_parse_post_attachments_maps_media_types(tmp_path):
         "doc": {"name": "report.pdf", "mime_type": "application/pdf"},
     }
 
-    client.get_file_info = AsyncMock(side_effect=lambda file_id: file_infos[file_id])
-    client.download_file = AsyncMock(return_value=b"payload")
+    async def fake_get_file_info(file_id: str) -> dict[str, Any]:
+        return file_infos[file_id]
+
+    client.get_file_info = fake_get_file_info
+
+    async def fake_download_file(file_id: str) -> bytes:
+        return b"payload"
+
+    client.download_file = fake_download_file
 
     class FakeMediaResolver:
         def __init__(self, media_ref: str, **kwargs) -> None:
@@ -150,10 +158,13 @@ async def test_mattermost_get_group_returns_members_and_channel_admins():
             "sender_name": "alice",
         },
     )
+    assert message is not None
     event = adapter.create_event(message)
 
     group = await event.get_group()
 
+    assert group is not None
+    assert group.members is not None
     assert group.group_name == "Town Square"
     assert group.group_owner is None
     assert group.member_count == 2
@@ -181,6 +192,7 @@ async def test_mattermost_get_group_returns_cached_name_when_lookup_fails():
         },
     )
 
+    assert message is not None
     group = await adapter.create_event(message).get_group()
 
     assert group == Group(group_id="channel-1", group_name="Cached Name")

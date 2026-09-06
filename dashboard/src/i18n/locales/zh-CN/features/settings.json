@@ -100,7 +100,14 @@
       "title": "主题颜色",
       "primary": "主色",
       "secondary": "辅助色",
-      "reset": "恢复默认"
+      "reset": "恢复默认",
+      "auto": "系统",
+      "autoSwitchDesc": "应用系统主题后，主题将根据您的浏览器外观设置自动切换",
+      "colors": "自定义颜色",
+      "dark": "深色",
+      "light": "浅色",
+      "preset": "配色方案",
+      "presetApplied": "主题已应用"
     }
   },
   "system": {
@@ -150,6 +157,11 @@
         "cleanupSuccess": "已清理 {count} 个文件，释放 {size}",
         "cleanupFailed": "清理失败"
       }
+    },
+    "migration": {
+      "button": "启动迁移助手",
+      "subtitle": "如果您遇到数据兼容性问题，可以手动启动数据库迁移助手",
+      "title": "数据迁移到 v4.0.0 格式"
     }
   },
   "sidebar": {

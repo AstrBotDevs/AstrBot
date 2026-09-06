@@ -1,5 +1,5 @@
-import { createRequire } from "node:module";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -108,9 +108,7 @@ function resolveShikiModule(specifier) {
 }
 
 function buildVirtualSource() {
-  const shikiImport = JSON.stringify(
-    pathToFileURL(require.resolve("shiki")).href,
-  );
+  const shikiImport = JSON.stringify(pathToFileURL(require.resolve("shiki")).href);
   const languageImports = languageSpecs
     .map(
       ([, packageName], index) =>
@@ -125,10 +123,7 @@ function buildVirtualSource() {
     )
     .join("\n");
 
-  const supportedLanguages = [
-    ...builtInLanguageSpecs,
-    ...languageSpecs.map(([runtimeName]) => runtimeName),
-  ];
+  const supportedLanguages = [...builtInLanguageSpecs, ...languageSpecs.map(([runtimeName]) => runtimeName)];
 
   return `import { createHighlighterCoreSync, createJavaScriptRegexEngine } from ${shikiImport};
 ${languageImports}
@@ -247,8 +242,6 @@ async function main() {
   } finally {
     rmSync(tempDir, { force: true, recursive: true });
   }
-
-  console.log(`Built ${runtimeOutputFile}`);
 }
 
 main().catch((error) => {

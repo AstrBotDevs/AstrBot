@@ -1,6 +1,6 @@
 """PDF 文件解析器
 
-支持解析 PDF 文件中的文本和图片资源。
+支持解析 PDF 文件中的文本和图片资源｡
 """
 
 import io
@@ -17,7 +17,7 @@ from astrbot.core.knowledge_base.parsers.base import (
 class PDFParser(BaseParser):
     """PDF 文档解析器
 
-    提取 PDF 中的文本内容和嵌入的图片资源。
+    提取 PDF 中的文本内容和嵌入的图片资源｡
     """
 
     async def parse(self, file_content: bytes, file_name: str) -> ParseResult:
@@ -52,10 +52,14 @@ class PDFParser(BaseParser):
                     continue
 
                 resources = page["/Resources"]
-                if not resources or "/XObject" not in resources:  # type: ignore
+                if not resources:
                     continue
 
-                xobjects = resources["/XObject"].get_object()  # type: ignore
+                xobject_ref = resources.get("/XObject")
+                if not xobject_ref:
+                    continue
+
+                xobjects = xobject_ref.get_object()
                 if not xobjects:
                     continue
 

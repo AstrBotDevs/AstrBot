@@ -1,6 +1,5 @@
 <template>
   <div
-    v-if="props.active"
     class="chat-ui"
     :class="{ 'is-dark': isDark, 'sidebar-collapsed': isSidebarCollapsed }"
   >
@@ -58,44 +57,18 @@
           </v-btn>
         </div>
 
-        <button
-          v-if="isSidebarCollapsed"
-          class="new-chat-btn sidebar-provider-btn icon-only chat-sidebar-rail-btn"
-          :class="{ 'sidebar-workspace-btn--active': isProviderWorkspace }"
-          type="button"
-          :title="tm('actions.providerConfig')"
-          @click="openProviderWorkspace"
-        >
-          <Box :size="18" class="sidebar-action-icon" />
-        </button>
         <v-btn
-          v-else
-          class="new-chat-btn sidebar-provider-btn"
-          :class="{ 'sidebar-workspace-btn--active': isProviderWorkspace }"
-          variant="text"
-          @click="openProviderWorkspace"
-        >
-          <Box :size="18" class="sidebar-action-icon mr-2" />
-          <span>{{ tm("actions.providerConfig") }}</span>
-        </v-btn>
-
-        <button
-          v-if="isSidebarCollapsed"
-          class="new-chat-btn icon-only chat-sidebar-rail-btn"
-          type="button"
-          :title="tm('actions.newChat')"
-          @click="startNewChat"
-        >
-          <SquarePen :size="18" class="sidebar-action-icon" />
-        </button>
-        <v-btn
-          v-else
           class="new-chat-btn"
+          :class="{ 'icon-only': isSidebarCollapsed }"
           variant="text"
+          :icon="isSidebarCollapsed"
           @click="startNewChat"
         >
-          <SquarePen :size="18" class="sidebar-action-icon mr-2" />
-          <span>{{ tm("actions.newChat") }}</span>
+          <SquarePen
+            :size="18"
+            :class="['sidebar-action-icon', { 'mr-2': !isSidebarCollapsed }]"
+          />
+          <span v-if="!isSidebarCollapsed">{{ tm("actions.newChat") }}</span>
         </v-btn>
 
       </div>
@@ -126,9 +99,7 @@
             v-for="session in sessions"
             :key="session.session_id"
             class="session-item"
-            :class="{
-              active: !isProviderWorkspace && currSessionId === session.session_id,
-            }"
+            :class="{ active: currSessionId === session.session_id }"
             role="button"
             tabindex="0"
             @click="selectSession(session.session_id)"
@@ -308,6 +279,19 @@
             <v-list-item
               class="styled-menu-item settings-menu-item"
               rounded="md"
+              @click="providerDialog = true"
+            >
+              <template #prepend>
+                <v-icon size="18">mdi-robot-outline</v-icon>
+              </template>
+              <v-list-item-title>{{
+                tm("actions.providerConfig")
+              }}</v-list-item-title>
+            </v-list-item>
+
+            <v-list-item
+              class="styled-menu-item"
+              rounded="md"
               @click="toggleTheme"
             >
               <template #prepend>
@@ -333,22 +317,15 @@
       v-on="dragEvents"
     >
       <transition name="drop-fade">
-        <div v-if="isDragging && !isProviderWorkspace" class="chat-drop-overlay">
+        <div v-if="isDragging" class="chat-drop-overlay">
           <div class="chat-drop-overlay-content">
             <v-icon size="48" color="primary">mdi-cloud-upload</v-icon>
             <span class="chat-drop-text">{{ tm("input.dropToUpload") }}</span>
           </div>
         </div>
       </transition>
-      <section v-if="isProviderWorkspace" class="provider-workspace-shell">
-        <ProviderChatCompletionPanel
-          class="provider-workspace-page"
-          :show-border="false"
-        />
-      </section>
-
       <ProjectView
-        v-else-if="selectedProject"
+        v-if="selectedProject"
         :project="selectedProject"
         :sessions="projectSessions"
         @select-session="selectProjectSession"
@@ -434,7 +411,6 @@
               @regenerate-with-model="handleRegenerateMessage"
               @select-bot-text="handleBotTextSelection"
               @open-thread="openThreadPanel"
-              @open-reasoning="openReasoningPanel"
               @open-refs="openRefsSidebar"
             />
           </div>
@@ -495,6 +471,7 @@
       </button>
     </div>
 
+    <ProviderConfigDialog v-model="providerDialog" />
     <ProjectDialog
       v-model="projectDialogOpen"
       :project="editingProject"
@@ -541,11 +518,6 @@
       :deleting="deletingThread"
       @delete="deleteThread"
     />
-    <ReasoningSidebar
-      v-model="reasoningPanelOpen"
-      :parts="activeReasoningParts"
-      :is-dark="isDark"
-    />
     <RefsSidebar v-model="refsSidebarOpen" :refs="selectedRefs" />
     <WorkspaceFilesPanel
       :model-value="chatHeader.workspaceFilesOpen"
@@ -558,20 +530,6 @@
 
 <script setup lang="ts">
 import {
-  computed,
-  nextTick,
-  onBeforeUnmount,
-  onMounted,
-  provide,
-  reactive,
-  ref,
-  watch,
-} from "vue";
-import { useRoute, useRouter } from "vue-router";
-import { useDisplay } from "vuetify";
-import { isAxiosError } from "axios";
-import {
-  Box,
   Cable,
   Check,
   ChevronRight,
@@ -584,55 +542,51 @@ import {
   Sun,
   Trash2,
 } from "@lucide/vue";
-import { chatApi, providerApi } from "@/api/v1";
-import StyledMenu from "@/components/shared/StyledMenu.vue";
-import ProjectDialog, {
-  type ProjectFormData,
-} from "@/components/chat/ProjectDialog.vue";
-import ProjectList, { type Project } from "@/components/chat/ProjectList.vue";
-import ProjectView from "@/components/chat/ProjectView.vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, provide, reactive, ref, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import { useDisplay } from "vuetify";
+import { providerApi } from "@/api/v1";
+// biome-ignore lint/style/useImportType: Vue template components require runtime imports.
 import ChatInput from "@/components/chat/ChatInput.vue";
 import ChatMessageList from "@/components/chat/ChatMessageList.vue";
 import ChatUILogo from "@/components/chat/ChatUILogo.vue";
+import RefsSidebar from "@/components/chat/message_list_comps/RefsSidebar.vue";
+import ProjectDialog, { type ProjectFormData } from "@/components/chat/ProjectDialog.vue";
+import ProjectList, { type Project } from "@/components/chat/ProjectList.vue";
+import ProjectView from "@/components/chat/ProjectView.vue";
+import ProviderConfigDialog from "@/components/chat/ProviderConfigDialog.vue";
 import type { RegenerateModelSelection } from "@/components/chat/RegenerateMenu.vue";
-import ReasoningSidebar from "@/components/chat/ReasoningSidebar.vue";
 import ThreadPanel from "@/components/chat/ThreadPanel.vue";
 import WorkspaceFilesPanel from "@/components/chat/WorkspaceFilesPanel.vue";
-import RefsSidebar from "@/components/chat/message_list_comps/RefsSidebar.vue";
-import { useSessions, type Session } from "@/composables/useSessions";
+import StyledMenu from "@/components/shared/StyledMenu.vue";
+import { useDragUpload } from "@/composables/useDragUpload";
+import { useMediaHandling } from "@/composables/useMediaHandling";
 import {
-  messageBlocks as buildMessageBlocks,
-  useMessages,
   type ChatRecord,
   type ChatThread,
   type MessagePart,
   type TransportMode,
+  useMessages,
 } from "@/composables/useMessages";
-import { useMediaHandling } from "@/composables/useMediaHandling";
-import { useRecording } from "@/composables/useRecording";
 import { useProjects } from "@/composables/useProjects";
-import { useDragUpload } from "@/composables/useDragUpload";
+import { useRecording } from "@/composables/useRecording";
+import { type Session, useSessions } from "@/composables/useSessions";
+import { useI18n, useLanguageSwitcher, useModuleI18n } from "@/i18n/composables";
+import type { Locale } from "@/i18n/types";
 import { useChatHeaderStore } from "@/stores/chatHeader";
 import { useCustomizerStore } from "@/stores/customizer";
-import ProviderChatCompletionPanel from "@/components/provider/ProviderChatCompletionPanel.vue";
-import {
-  useI18n,
-  useLanguageSwitcher,
-  useModuleI18n,
-} from "@/i18n/composables";
-import type { Locale } from "@/i18n/types";
 import { askForConfirmation, useConfirmDialog } from "@/utils/confirmDialog";
 import {
   contextLimit,
   formatTokenCount,
-  type ProviderModelMetadata,
   type ProviderMetadataSource,
+  type ProviderModelMetadata,
 } from "@/utils/providerMetadata";
+import axios from "@/utils/request";
 import { useToast } from "@/utils/toast";
 
-const props = withDefaults(defineProps<{ chatboxMode?: boolean; active?: boolean }>(), {
+const props = withDefaults(defineProps<{ chatboxMode?: boolean }>(), {
   chatboxMode: false,
-  active: true,
 });
 
 const route = useRoute();
@@ -644,17 +598,27 @@ const { t } = useI18n();
 const { tm } = useModuleI18n("features/chat");
 const confirmDialog = useConfirmDialog();
 const toast = useToast();
-const { languageOptions, currentLanguage, switchLanguage, locale } =
-  useLanguageSwitcher();
-const {
-  sessions,
-  currSessionId,
-  getSessions,
-  newSession,
-  newChat,
-  deleteSession,
-  updateSessionTitle,
-} = useSessions(props.chatboxMode);
+
+interface ChatRequestError {
+  response?: {
+    data?: {
+      message?: unknown;
+    };
+  };
+}
+
+function chatRequestErrorMessage(error: unknown, fallback: string) {
+  const responseMessage = (error as ChatRequestError).response?.data?.message;
+  if (typeof responseMessage === "string" && responseMessage.trim()) {
+    return responseMessage;
+  }
+  return error instanceof Error && error.message ? error.message : fallback;
+}
+
+const { languageOptions, currentLanguage, switchLanguage, locale } = useLanguageSwitcher();
+const { sessions, currSessionId, getSessions, newSession, newChat, deleteSession, updateSessionTitle } = useSessions(
+  props.chatboxMode,
+);
 const {
   projects,
   selectedProjectId,
@@ -681,19 +645,14 @@ const {
   cleanupMediaCache,
 } = useMediaHandling();
 
-const { isDragging, dragEvents } = useDragUpload((files) => {
-  if (isProviderWorkspace.value) return;
-  handleFilesSelected(files);
-});
+const { isDragging, dragEvents } = useDragUpload(handleFilesSelected);
 
-type WorkspaceView = "chat" | "providers";
+const providerDialog = ref(false);
 
 interface TokenProviderConfig extends ProviderMetadataSource {
   id: string;
   enable?: boolean;
 }
-
-const activeWorkspace = ref<WorkspaceView>("chat");
 const projectDialogOpen = ref(false);
 const editingProject = ref<Project | null>(null);
 const projectDialogError = ref("");
@@ -716,19 +675,15 @@ const tokenModelMetadata = ref<Record<string, ProviderModelMetadata>>({});
 const selectedTokenProviderId = ref("");
 const messagesContainer = ref<HTMLElement | null>(null);
 const composerShell = ref<HTMLElement | null>(null);
+let composerResizeObserver: ResizeObserver | null = null;
 const inputRef = ref<InstanceType<typeof ChatInput> | null>(null);
 const shouldStickToBottom = ref(true);
 const replyTarget = ref<ChatRecord | null>(null);
 const threadPanelOpen = ref(false);
 const activeThread = ref<ChatThread | null>(null);
-const reasoningPanelOpen = ref(false);
-const activeReasoningTarget = ref<{
-  message: ChatRecord;
-  blockIndex: number;
-} | null>(null);
 const deletingThread = ref(false);
 const refsSidebarOpen = ref(false);
-const selectedRefs = ref<Record<string, unknown> | null>(null);
+const selectedRefs = ref<Record<string, unknown> | undefined>(undefined);
 const threadSelection = reactive<{
   visible: boolean;
   left: number;
@@ -744,12 +699,7 @@ const threadSelection = reactive<{
 });
 const enableStreaming = ref(true);
 const sendShortcut = ref<"enter" | "shift_enter">("enter");
-let composerResizeObserver: ResizeObserver | null = null;
-const {
-  isRecording,
-  startRecording: startRecorder,
-  stopRecording: stopRecorder,
-} = useRecording();
+const { isRecording, startRecording: startRecorder, stopRecording: stopRecorder } = useRecording();
 const chatSidebarDrawer = computed({
   get: () => lgAndUp.value || customizer.chatSidebarOpen,
   set: (value: boolean) => {
@@ -761,9 +711,6 @@ const chatSidebarDrawer = computed({
 const isSidebarCollapsed = computed(() =>
   lgAndUp.value ? customizer.chatSidebarCollapsed : !customizer.chatSidebarOpen,
 );
-const isProviderWorkspace = computed(
-  () => activeWorkspace.value === "providers",
-);
 
 function toggleChatSidebar() {
   if (lgAndUp.value) {
@@ -772,21 +719,6 @@ function toggleChatSidebar() {
   }
   customizer.TOGGLE_CHAT_SIDEBAR();
 }
-
-const activeReasoningParts = computed<MessagePart[]>(() => {
-  if (!activeReasoningTarget.value) return [];
-  const blocks = buildMessageBlocks(
-    activeReasoningTarget.value.message.content || { type: "bot", message: [] },
-  );
-  const block = blocks[activeReasoningTarget.value.blockIndex];
-  return block?.kind === "thinking" ? block.parts : [];
-});
-
-watch(reasoningPanelOpen, (open) => {
-  if (!open) {
-    activeReasoningTarget.value = null;
-  }
-});
 
 const {
   loadingMessages,
@@ -815,9 +747,7 @@ const {
 });
 
 const transportMode = ref<TransportMode>(
-  (localStorage.getItem("chat.transportMode") as TransportMode) === "websocket"
-    ? "websocket"
-    : "sse",
+  (localStorage.getItem("chat.transportMode") as TransportMode) === "websocket" ? "websocket" : "sse",
 );
 
 const pointerMediaQuery = window.matchMedia('(pointer: coarse)');
@@ -835,10 +765,7 @@ const transportOptions: Array<{ value: TransportMode; labelKey: string }> = [
   { value: "websocket", labelKey: "transport.websocket" },
 ];
 const currentTransportLabel = computed(() =>
-  tm(
-    transportOptions.find((item) => item.value === transportMode.value)
-      ?.labelKey || "transport.sse",
-  ),
+  tm(transportOptions.find((item) => item.value === transportMode.value)?.labelKey || "transport.sse"),
 );
 
 watch(transportMode, (mode) => {
@@ -846,57 +773,30 @@ watch(transportMode, (mode) => {
 });
 
 const isDark = computed(() => customizer.uiTheme === "PurpleThemeDark");
-const canSend = computed(
-  () =>
-    Boolean(draft.value.trim() || stagedFiles.value.length) && !sending.value,
-);
+const canSend = computed(() => Boolean(draft.value.trim() || stagedFiles.value.length) && !sending.value);
 const currentSession = computed(
   () =>
-    sessions.value.find(
-      (session) => session.session_id === currSessionId.value,
-    ) ||
-    projectSessions.value.find(
-      (session) => session.session_id === currSessionId.value,
-    ) ||
+    sessions.value.find((session) => session.session_id === currSessionId.value) ||
+    projectSessions.value.find((session) => session.session_id === currSessionId.value) ||
     Object.values(projectSessionsById.value)
       .flat()
       .find((session) => session.session_id === currSessionId.value) ||
     null,
 );
-const sessionProject = computed(() =>
-  currSessionId.value ? sessionProjects[currSessionId.value] : null,
-);
-const currentSessionTitle = computed(() =>
-  currentSession.value ? sessionTitle(currentSession.value) : "",
-);
+const sessionProject = computed(() => (currSessionId.value ? sessionProjects[currSessionId.value] : null));
+const currentSessionTitle = computed(() => (currentSession.value ? sessionTitle(currentSession.value) : ""));
 const selectedProject = computed(
-  () =>
-    projects.value.find(
-      (project) => project.project_id === selectedProjectId.value,
-    ) || null,
+  () => projects.value.find((project) => project.project_id === selectedProjectId.value) || null,
 );
 const activeProject = computed(() => {
-  if (isProviderWorkspace.value) return null;
   if (selectedProject.value) return selectedProject.value;
   const projectId = sessionProject.value?.project_id;
-  return (
-    projects.value.find((project) => project.project_id === projectId) || null
-  );
+  return projects.value.find((project) => project.project_id === projectId) || null;
 });
-const isEmptyChat = computed(
-  () =>
-    !isProviderWorkspace.value &&
-    !selectedProject.value &&
-    !loadingMessages.value &&
-    !activeMessages.value.length,
-);
-const chatHeaderTitle = computed(
-  () => currentSessionTitle.value || selectedProject.value?.title || "",
-);
+const isEmptyChat = computed(() => !selectedProject.value && !loadingMessages.value && !activeMessages.value.length);
+const chatHeaderTitle = computed(() => currentSessionTitle.value || selectedProject.value?.title || "");
 const chatHeaderSubtitle = computed(() =>
-  currentSessionTitle.value
-    ? sessionProject.value?.title || selectedProject.value?.title || ""
-    : "",
+  currentSessionTitle.value ? sessionProject.value?.title || selectedProject.value?.title || "" : "",
 );
 const chatInputReplyTarget = computed(() =>
   replyTarget.value?.id == null
@@ -907,9 +807,7 @@ const chatInputReplyTarget = computed(() =>
       },
 );
 const currentTokenProvider = computed(() => {
-  const selectedProvider = tokenProviderConfigs.value.find(
-    (provider) => provider.id === selectedTokenProviderId.value,
-  );
+  const selectedProvider = tokenProviderConfigs.value.find((provider) => provider.id === selectedTokenProviderId.value);
   return selectedProvider || tokenProviderConfigs.value[0] || null;
 });
 const currentTokenMetadata = computed(() => {
@@ -927,11 +825,7 @@ const latestContextTokens = computed(() => {
     }
     const usage = stats.token_usage;
     if (!usage) continue;
-    return (
-      readTokenCount(usage.input_other) +
-      readTokenCount(usage.input_cached) +
-      readTokenCount(usage.output)
-    );
+    return readTokenCount(usage.input_other) + readTokenCount(usage.input_cached) + readTokenCount(usage.output);
   }
   return 0;
 });
@@ -990,10 +884,8 @@ watch(
     threadSelection.visible = false;
     threadPanelOpen.value = false;
     activeThread.value = null;
-    reasoningPanelOpen.value = false;
-    activeReasoningTarget.value = null;
     refsSidebarOpen.value = false;
-    selectedRefs.value = null;
+    selectedRefs.value = undefined;
   },
 );
 
@@ -1015,9 +907,7 @@ onMounted(async () => {
   try {
     await Promise.all([getSessions(), getProjects(), loadTokenProviders()]);
     const routeSessionId = getRouteSessionId();
-    if (routeSessionId === "models") {
-      activeWorkspace.value = "providers";
-    } else if (routeSessionId) {
+    if (routeSessionId) {
       await selectSession(routeSessionId, false);
     }
   } finally {
@@ -1041,16 +931,10 @@ watch(
   () => route.params.conversationId,
   async () => {
     const routeSessionId = getRouteSessionId();
-    if (routeSessionId === "models") {
-      activeWorkspace.value = "providers";
-      return;
-    }
     if (routeSessionId && routeSessionId !== currSessionId.value) {
-      showChatWorkspace();
       selectedProjectId.value = null;
       await selectSession(routeSessionId, false);
     } else if (!routeSessionId && currSessionId.value) {
-      showChatWorkspace();
       currSessionId.value = "";
     }
   },
@@ -1077,31 +961,6 @@ function closeMobileSidebar() {
   }
 }
 
-function closeSecondaryPanels() {
-  threadSelection.visible = false;
-  threadPanelOpen.value = false;
-  activeThread.value = null;
-  reasoningPanelOpen.value = false;
-  activeReasoningTarget.value = null;
-  refsSidebarOpen.value = false;
-  selectedRefs.value = null;
-  chatHeader.SET_WORKSPACE_FILES_OPEN(false);
-}
-
-function showChatWorkspace() {
-  activeWorkspace.value = "chat";
-}
-
-async function openProviderWorkspace() {
-  closeSecondaryPanels();
-  activeWorkspace.value = "providers";
-  const targetPath = `${basePath()}/models`;
-  if (route.path !== targetPath) {
-    await router.push(targetPath);
-  }
-  closeMobileSidebar();
-}
-
 function sessionTitle(session: Session) {
   return session.display_name?.trim() || tm("conversation.newConversation");
 }
@@ -1116,12 +975,10 @@ async function loadTokenProviders() {
   try {
     const response = await providerApi.listByProviderType("chat_completion");
     if (response.data.status === "ok") {
-      tokenModelMetadata.value = (
-        (response.data as any).model_metadata || {}
-      ) as Record<string, ProviderModelMetadata>;
-      tokenProviderConfigs.value = (
-        (response.data.data || []) as unknown as TokenProviderConfig[]
-      ).filter((provider) => provider.enable !== false);
+      tokenModelMetadata.value = ((response.data as any).model_metadata || {}) as Record<string, ProviderModelMetadata>;
+      tokenProviderConfigs.value = ((response.data.data || []) as unknown as TokenProviderConfig[]).filter(
+        (provider) => provider.enable !== false,
+      );
     }
   } catch (error) {
     console.error("Failed to load provider context metadata:", error);
@@ -1141,7 +998,6 @@ function formatUsagePercent(value: number) {
 }
 
 async function startNewChat() {
-  showChatWorkspace();
   selectedProjectId.value = null;
   replyTarget.value = null;
   newChat();
@@ -1162,7 +1018,6 @@ function openEditProjectDialog(project: Project) {
 }
 
 async function selectProject(projectId: string) {
-  showChatWorkspace();
   selectedProjectId.value = projectId;
   currSessionId.value = "";
   replyTarget.value = null;
@@ -1194,9 +1049,7 @@ async function handleProjectToggle(projectId: string, expanded: boolean) {
   try {
     await loadProjectSessions(projectId);
   } finally {
-    loadingProjectSessionIds.value = loadingProjectSessionIds.value.filter(
-      (item) => item !== projectId,
-    );
+    loadingProjectSessionIds.value = loadingProjectSessionIds.value.filter((item) => item !== projectId);
   }
 }
 
@@ -1205,20 +1058,14 @@ async function handleDeleteProject(projectId: string) {
   const nextSessionsById = { ...projectSessionsById.value };
   delete nextSessionsById[projectId];
   projectSessionsById.value = nextSessionsById;
-  loadingProjectSessionIds.value = loadingProjectSessionIds.value.filter(
-    (item) => item !== projectId,
-  );
+  loadingProjectSessionIds.value = loadingProjectSessionIds.value.filter((item) => item !== projectId);
   if (selectedProjectId.value === projectId) {
     selectedProjectId.value = null;
     projectSessions.value = [];
   }
 }
 
-function openSessionTitleDialog(
-  sessionId: string,
-  title: string,
-  refreshProjectSessions = false,
-) {
+function openSessionTitleDialog(sessionId: string, title: string, refreshProjectSessions = false) {
   editingSessionTitleId.value = sessionId;
   sessionTitleDraft.value = title;
   refreshProjectSessionsAfterTitleSave.value = refreshProjectSessions;
@@ -1232,20 +1079,17 @@ async function saveSessionTitleDialog() {
   try {
     const sessionId = editingSessionTitleId.value;
     const displayName = sessionTitleDraft.value.trim();
-    await chatApi.updateSession(sessionId, {
+    await axios.post("/api/chat/update_session_display_name", {
+      session_id: sessionId,
       display_name: displayName,
     });
     updateSessionTitle(sessionId, displayName);
-    const projectSession = projectSessions.value.find(
-      (session) => session.session_id === sessionId,
-    );
+    const projectSession = projectSessions.value.find((session) => session.session_id === sessionId);
     if (projectSession) {
       projectSession.display_name = displayName;
     }
     Object.values(projectSessionsById.value).forEach((projectSessionList) => {
-      const cachedProjectSession = projectSessionList.find(
-        (session) => session.session_id === sessionId,
-      );
+      const cachedProjectSession = projectSessionList.find((session) => session.session_id === sessionId);
       if (cachedProjectSession) {
         cachedProjectSession.display_name = displayName;
       }
@@ -1285,10 +1129,7 @@ async function editProjectSessionTitle(sessionId: string, title: string) {
   openSessionTitleDialog(sessionId, title, true);
 }
 
-async function deleteProjectSession(
-  sessionId: string,
-  projectId = selectedProjectId.value,
-) {
+async function deleteProjectSession(sessionId: string, projectId = selectedProjectId.value) {
   await deleteSession(sessionId);
   if (projectId) {
     await loadProjectSessions(projectId);
@@ -1322,8 +1163,7 @@ async function saveProject(formData: ProjectFormData, projectId?: string) {
     projectDialogOpen.value = false;
     editingProject.value = null;
   } catch (error) {
-    projectDialogError.value =
-      error instanceof Error ? error.message : "Failed to save project";
+    projectDialogError.value = error instanceof Error ? error.message : "Failed to save project";
   } finally {
     savingProject.value = false;
   }
@@ -1337,7 +1177,6 @@ watch(projectDialogOpen, (open) => {
 });
 
 async function selectSession(sessionId: string, pushRoute = true) {
-  showChatWorkspace();
   selectedProjectId.value = null;
   currSessionId.value = sessionId;
   replyTarget.value = null;
@@ -1438,9 +1277,7 @@ function buildOutgoingParts(text: string): MessagePart[] {
 
 function updateTitleFromText(sessionId: string, text: string) {
   const session = sessions.value.find((item) => item.session_id === sessionId);
-  const projectSession = projectSessions.value.find(
-    (item) => item.session_id === sessionId,
-  );
+  const projectSession = projectSessions.value.find((item) => item.session_id === sessionId);
   const cachedProjectSessions = Object.values(projectSessionsById.value)
     .flat()
     .filter((item) => item.session_id === sessionId);
@@ -1464,9 +1301,7 @@ function updateTitleFromText(sessionId: string, text: string) {
 
 function replyPreview(messageId?: string | number, fallback?: string) {
   if (fallback) return truncate(fallback, 80);
-  const found = activeMessages.value.find(
-    (message) => String(message.id) === String(messageId),
-  );
+  const found = activeMessages.value.find((message) => String(message.id) === String(messageId));
   const text = found ? plainTextFromMessage(found) : "";
   return text ? truncate(text, 80) : tm("reply.replyTo");
 }
@@ -1484,9 +1319,7 @@ function truncate(value: string, max: number) {
 
 function scrollToMessage(messageId?: string | number) {
   if (!messageId) return;
-  const index = activeMessages.value.findIndex(
-    (message) => String(message.id) === String(messageId),
-  );
+  const index = activeMessages.value.findIndex((message) => String(message.id) === String(messageId));
   if (index < 0) return;
   const rows = messagesContainer.value?.querySelectorAll(".message-row");
   rows?.[index]?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -1508,11 +1341,7 @@ async function saveMessageEdit() {
   savingMessageEdit.value = true;
   try {
     const target = editingMessage.value;
-    const result = await editMessage(
-      currSessionId.value,
-      target,
-      messageEditDraft.value,
-    );
+    const result = await editMessage(currSessionId.value, target, messageEditDraft.value);
     cancelMessageEdit();
 
     if (result.needsRegenerate && result.truncatedAfterMessage) {
@@ -1526,12 +1355,8 @@ async function saveMessageEdit() {
       });
       scrollToBottom();
     } else if (result.needsRegenerate) {
-      const index = activeMessages.value.findIndex(
-        (message) => String(message.id) === String(target.id),
-      );
-      const nextBot = activeMessages.value
-        .slice(index + 1)
-        .find((message) => !isUserMessage(message));
+      const index = activeMessages.value.findIndex((message) => String(message.id) === String(target.id));
+      const nextBot = activeMessages.value.slice(index + 1).find((message) => !isUserMessage(message));
       if (nextBot) {
         await handleRegenerateMessage(nextBot);
       }
@@ -1543,10 +1368,7 @@ async function saveMessageEdit() {
   }
 }
 
-async function handleRegenerateMessage(
-  message: ChatRecord,
-  selection?: RegenerateModelSelection,
-) {
+async function handleRegenerateMessage(message: ChatRecord, selection?: RegenerateModelSelection) {
   if (!currSessionId.value || isUserMessage(message)) return;
   message.threads = [];
   const effectiveSelection = selection ?? getSelectedProviderSelection();
@@ -1569,11 +1391,7 @@ function handleBotTextSelection(event: MouseEvent, message: ChatRecord) {
       threadSelection.visible = false;
       return;
     }
-    if (
-      !container ||
-      !container.contains(selection.anchorNode) ||
-      !container.contains(selection.focusNode)
-    ) {
+    if (!container || !container.contains(selection.anchorNode) || !container.contains(selection.focusNode)) {
       threadSelection.visible = false;
       return;
     }
@@ -1581,10 +1399,7 @@ function handleBotTextSelection(event: MouseEvent, message: ChatRecord) {
     const rect = range.getBoundingClientRect();
     threadSelection.message = message;
     threadSelection.selectedText = selectedText;
-    threadSelection.left = Math.min(
-      window.innerWidth - 180,
-      Math.max(12, rect.left + rect.width / 2 - 70),
-    );
+    threadSelection.left = Math.min(window.innerWidth - 180, Math.max(12, rect.left + rect.width / 2 - 70));
     threadSelection.top = Math.max(12, rect.top - 42);
     threadSelection.visible = true;
   }, 0);
@@ -1594,7 +1409,7 @@ async function createThreadFromSelection() {
   const message = threadSelection.message;
   if (!currSessionId.value || !message?.id || !threadSelection.selectedText) return;
   try {
-    const response = await chatApi.createThread({
+    const response = await axios.post("/api/chat/thread/create", {
       session_id: currSessionId.value,
       parent_message_id: message.id,
       selected_text: threadSelection.selectedText,
@@ -1615,11 +1430,7 @@ async function createThreadFromSelection() {
     openThreadPanel(thread);
     window.getSelection()?.removeAllRanges();
   } catch (error) {
-    toast.error(
-      isAxiosError(error)
-        ? error.response?.data?.message || error.message
-        : tm("thread.createFailed"),
-    );
+    toast.error(chatRequestErrorMessage(error, tm("thread.createFailed")));
     console.error("Failed to create thread:", error);
   } finally {
     threadSelection.visible = false;
@@ -1627,36 +1438,13 @@ async function createThreadFromSelection() {
 }
 
 function openThreadPanel(thread: ChatThread) {
-  chatHeader.SET_WORKSPACE_FILES_OPEN(false);
-  reasoningPanelOpen.value = false;
-  activeReasoningTarget.value = null;
-  refsSidebarOpen.value = false;
   activeThread.value = thread;
   threadPanelOpen.value = true;
 }
 
 function openRefsSidebar(refs: unknown) {
-  chatHeader.SET_WORKSPACE_FILES_OPEN(false);
-  threadPanelOpen.value = false;
-  activeThread.value = null;
-  reasoningPanelOpen.value = false;
-  activeReasoningTarget.value = null;
-  selectedRefs.value =
-    refs && typeof refs === "object" ? (refs as Record<string, unknown>) : null;
+  selectedRefs.value = refs && typeof refs === "object" ? (refs as Record<string, unknown>) : undefined;
   refsSidebarOpen.value = true;
-}
-
-function openReasoningPanel(payload: {
-  message: ChatRecord;
-  blockIndex: number;
-}) {
-  chatHeader.SET_WORKSPACE_FILES_OPEN(false);
-  threadPanelOpen.value = false;
-  activeThread.value = null;
-  refsSidebarOpen.value = false;
-  selectedRefs.value = null;
-  activeReasoningTarget.value = payload;
-  reasoningPanelOpen.value = true;
 }
 
 async function deleteThread(thread: ChatThread) {
@@ -1664,7 +1452,9 @@ async function deleteThread(thread: ChatThread) {
   if (!(await askForConfirmation(tm("thread.confirmDelete"), confirmDialog))) return;
   deletingThread.value = true;
   try {
-    await chatApi.deleteThread(thread.thread_id);
+    await axios.post("/api/chat/thread/delete", {
+      thread_id: thread.thread_id,
+    });
     removeThreadFromMessages(thread.thread_id);
     if (activeThread.value?.thread_id === thread.thread_id) {
       threadPanelOpen.value = false;
@@ -1680,9 +1470,7 @@ async function deleteThread(thread: ChatThread) {
 function removeThreadFromMessages(threadId: string) {
   for (const message of activeMessages.value) {
     if (!message.threads?.length) continue;
-    message.threads = message.threads.filter(
-      (thread) => thread.thread_id !== threadId,
-    );
+    message.threads = message.threads.filter((thread) => thread.thread_id !== threadId);
   }
 }
 
@@ -1727,8 +1515,7 @@ function handleMessagesScroll() {
   threadSelection.visible = false;
   const container = messagesContainer.value;
   if (!container) return;
-  const distance =
-    container.scrollHeight - container.scrollTop - container.clientHeight;
+  const distance = container.scrollHeight - container.scrollTop - container.clientHeight;
   shouldStickToBottom.value = distance < 80;
 }
 
@@ -1982,10 +1769,6 @@ function toggleTheme() {
   font-weight: 500;
 }
 
-.sidebar-provider-btn {
-  margin-bottom: 2px;
-}
-
 .new-chat-btn:not(.icon-only),
 .settings-btn:not(.icon-only) {
   padding-inline: 10px;
@@ -2023,11 +1806,6 @@ function toggleTheme() {
 .new-chat-btn:hover,
 .settings-btn:hover {
   background: var(--chat-session-active-bg);
-}
-
-.sidebar-workspace-btn--active {
-  background: var(--chat-session-active-bg);
-  color: rgb(var(--v-theme-on-surface));
 }
 
 .sidebar-content {
@@ -2215,17 +1993,6 @@ function toggleTheme() {
   padding-top: 50px;
 }
 
-.provider-workspace-shell {
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.provider-workspace-page {
-  height: 100%;
-  min-height: 0;
-}
-
 .conversation-stack {
   flex: 1;
   min-height: 0;
@@ -2280,7 +2047,6 @@ function toggleTheme() {
   justify-content: center;
   gap: 28px;
 }
-
 .messages-panel {
   flex: 1;
   min-height: 0;
@@ -2402,23 +2168,6 @@ kbd {
   border-radius: 4px;
   background: rgba(var(--v-theme-on-surface), 0.08);
   font: inherit;
-}
-
-:deep(.hr-node) {
-    margin-top: 1.25rem;
-    margin-bottom: 1.25rem;
-    opacity: 0.5;
-    border-top-width: .3px;
-}
-
-:deep(.paragraph-node) {
-    margin: .5rem 0;
-    line-height: 1.7;
-}
-
-:deep(.list-node) {
-    margin-top: .5rem;
-    margin-bottom: .5rem;
 }
 
 @media (max-width: 760px) {

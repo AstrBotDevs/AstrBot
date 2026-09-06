@@ -1,17 +1,12 @@
-from typing import cast
-
-from xinference_client.client.restful.async_restful_client import (
-    AsyncClient as Client,
-)
+from xinference_client.client.restful.async_restful_client import AsyncClient as Client
 from xinference_client.client.restful.async_restful_client import (
     AsyncRESTfulRerankModelHandle,
 )
 
 from astrbot import logger
-
-from ..entities import ProviderType, RerankResult
-from ..provider import RerankProvider
-from ..register import register_provider_adapter
+from astrbot.core.provider import RerankProvider
+from astrbot.core.provider.entities import ProviderType, RerankResult
+from astrbot.core.provider.register import register_provider_adapter
 
 
 @register_provider_adapter(
@@ -33,20 +28,20 @@ class XinferenceRerankProvider(RerankProvider):
             "launch_model_if_not_running",
             False,
         )
-        self.client = None
+        self.client: Client | None = None
         self.model: AsyncRESTfulRerankModelHandle | None = None
-        self.model_uid = None
+        self.model_uid: str | None = None
 
     async def initialize(self) -> None:
         if self.api_key:
             logger.info("Xinference Rerank: Using API key for authentication.")
-            self.client = Client(self.base_url, api_key=self.api_key)
+            client = Client(self.base_url, api_key=self.api_key)
         else:
             logger.info("Xinference Rerank: No API key provided.")
-            self.client = Client(self.base_url)
-
+            client = Client(self.base_url)
+        self.client = client
         try:
-            running_models = await self.client.list_models()
+            running_models = await client.list_models()
             for uid, model_spec in running_models.items():
                 if model_spec.get("model_name") == self.model_name:
                     logger.info(
@@ -54,11 +49,10 @@ class XinferenceRerankProvider(RerankProvider):
                     )
                     self.model_uid = uid
                     break
-
             if self.model_uid is None:
                 if self.launch_model_if_not_running:
                     logger.info(f"Launching {self.model_name} model...")
-                    self.model_uid = await self.client.launch_model(
+                    self.model_uid = await client.launch_model(
                         model_name=self.model_name,
                         model_type="rerank",
                     )
@@ -68,13 +62,10 @@ class XinferenceRerankProvider(RerankProvider):
                         f"Model '{self.model_name}' is not running and auto-launch is disabled. Provider will not be available.",
                     )
                     return
-
             if self.model_uid:
-                self.model = cast(
-                    AsyncRESTfulRerankModelHandle,
-                    await self.client.get_model(self.model_uid),
-                )
-
+                model_handle = await client.get_model(self.model_uid)
+                if isinstance(model_handle, AsyncRESTfulRerankModelHandle):
+                    self.model = model_handle
         except Exception as e:
             logger.error(f"Failed to initialize Xinference model: {e}")
             logger.debug(
@@ -96,12 +87,10 @@ class XinferenceRerankProvider(RerankProvider):
             response = await self.model.rerank(documents, query, top_n)
             results = response.get("results", [])
             logger.debug(f"Rerank API response: {response}")
-
             if not results:
                 logger.warning(
                     f"Rerank API returned an empty list. Original response: {response}",
                 )
-
             return [
                 RerankResult(
                     index=result["index"],

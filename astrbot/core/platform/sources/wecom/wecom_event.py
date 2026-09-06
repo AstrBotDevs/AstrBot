@@ -1,6 +1,7 @@
 import asyncio
-import os
 
+import aiofiles
+import anyio
 from wechatpy.enterprise import WeChatClient
 from wechatpy.exceptions import WeChatClientException
 
@@ -57,15 +58,15 @@ class WecomPlatformEvent(AstrMessageEvent):
             cut_position = end
             for i in range(end, start, -1):
                 if i < len(plain) and plain[i - 1] in [
-                    "。",
-                    "！",
-                    "？",
+                    "｡",
+                    "!",
+                    "?",
                     ".",
                     "!",
                     "?",
                     "\n",
                     ";",
-                    "；",
+                    ";",
                 ]:
                     cut_position = i
                     break
@@ -87,7 +88,7 @@ class WecomPlatformEvent(AstrMessageEvent):
             # 微信客服
             kf_message_api = getattr(self.client, "kf_message", None)
             if not isinstance(kf_message_api, WeChatKFMessage):
-                logger.warning("未找到微信客服发送消息方法。")
+                logger.warning("未找到微信客服发送消息方法｡")
                 return
 
             user_id = self.get_sender_id()
@@ -102,10 +103,12 @@ class WecomPlatformEvent(AstrMessageEvent):
                             if getattr(e, "errcode", None) == 40096:
                                 # 40096: invalid external userid, fallback to regular message API
                                 logger.warning(
-                                    f"kf API error 40096 for user {user_id}, falling back to regular message API"
+                                    f"kf API error 40096 for user {user_id}, falling back to regular message API",
                                 )
                                 self.client.message.send_text(
-                                    self.get_self_id(), user_id, chunk
+                                    self.get_self_id(),
+                                    user_id,
+                                    chunk,
                                 )
                             else:
                                 raise
@@ -113,7 +116,7 @@ class WecomPlatformEvent(AstrMessageEvent):
                 elif isinstance(comp, Image):
                     img_path = await comp.convert_to_file_path()
 
-                    with open(img_path, "rb") as f:
+                    async with aiofiles.open(img_path, "rb") as f:
                         try:
                             response = self.client.media.upload("image", f)
                         except Exception as e:
@@ -133,14 +136,14 @@ class WecomPlatformEvent(AstrMessageEvent):
                     record_path_amr = await convert_audio_to_amr(record_path)
 
                     try:
-                        with open(record_path_amr, "rb") as f:
+                        async with aiofiles.open(record_path_amr, "rb") as f:
                             try:
                                 response = self.client.media.upload("voice", f)
                             except Exception as e:
                                 logger.error(f"微信客服上传语音失败: {e}")
                                 await self.send(
                                     MessageChain().message(
-                                        f"微信客服上传语音失败: {e}"
+                                        f"微信客服上传语音失败: {e}",
                                     ),
                                 )
                                 return
@@ -151,17 +154,18 @@ class WecomPlatformEvent(AstrMessageEvent):
                                 response["media_id"],
                             )
                     finally:
-                        if record_path_amr != record_path and os.path.exists(
-                            record_path_amr,
+                        if (
+                            record_path_amr != record_path
+                            and await anyio.Path(record_path_amr).exists()
                         ):
                             try:
-                                os.remove(record_path_amr)
+                                await anyio.Path(record_path_amr).unlink()
                             except OSError as e:
                                 logger.warning(f"删除临时音频文件失败: {e}")
                 elif isinstance(comp, File):
                     file_path = await comp.get_file()
 
-                    with open(file_path, "rb") as f:
+                    async with aiofiles.open(file_path, "rb") as f:
                         try:
                             response = self.client.media.upload("file", f)
                         except Exception as e:
@@ -179,7 +183,7 @@ class WecomPlatformEvent(AstrMessageEvent):
                 elif isinstance(comp, Video):
                     video_path = await comp.convert_to_file_path()
 
-                    with open(video_path, "rb") as f:
+                    async with aiofiles.open(video_path, "rb") as f:
                         try:
                             response = self.client.media.upload("video", f)
                         except Exception as e:
@@ -195,7 +199,7 @@ class WecomPlatformEvent(AstrMessageEvent):
                             response["media_id"],
                         )
                 else:
-                    logger.warning(f"还没实现这个消息类型的发送逻辑: {comp.type}。")
+                    logger.warning(f"还没实现这个消息类型的发送逻辑: {comp.type}｡")
         else:
             # 企业微信应用
             for comp in message.chain:
@@ -212,7 +216,7 @@ class WecomPlatformEvent(AstrMessageEvent):
                 elif isinstance(comp, Image):
                     img_path = await comp.convert_to_file_path()
 
-                    with open(img_path, "rb") as f:
+                    async with aiofiles.open(img_path, "rb") as f:
                         try:
                             response = self.client.media.upload("image", f)
                         except Exception as e:
@@ -232,14 +236,14 @@ class WecomPlatformEvent(AstrMessageEvent):
                     record_path_amr = await convert_audio_to_amr(record_path)
 
                     try:
-                        with open(record_path_amr, "rb") as f:
+                        async with aiofiles.open(record_path_amr, "rb") as f:
                             try:
                                 response = self.client.media.upload("voice", f)
                             except Exception as e:
                                 logger.error(f"企业微信上传语音失败: {e}")
                                 await self.send(
                                     MessageChain().message(
-                                        f"企业微信上传语音失败: {e}"
+                                        f"企业微信上传语音失败: {e}",
                                     ),
                                 )
                                 return
@@ -250,17 +254,18 @@ class WecomPlatformEvent(AstrMessageEvent):
                                 response["media_id"],
                             )
                     finally:
-                        if record_path_amr != record_path and os.path.exists(
-                            record_path_amr,
+                        if (
+                            record_path_amr != record_path
+                            and await anyio.Path(record_path_amr).exists()
                         ):
                             try:
-                                os.remove(record_path_amr)
+                                await anyio.Path(record_path_amr).unlink()
                             except OSError as e:
                                 logger.warning(f"删除临时音频文件失败: {e}")
                 elif isinstance(comp, File):
                     file_path = await comp.get_file()
 
-                    with open(file_path, "rb") as f:
+                    async with aiofiles.open(file_path, "rb") as f:
                         try:
                             response = self.client.media.upload("file", f)
                         except Exception as e:
@@ -278,7 +283,7 @@ class WecomPlatformEvent(AstrMessageEvent):
                 elif isinstance(comp, Video):
                     video_path = await comp.convert_to_file_path()
 
-                    with open(video_path, "rb") as f:
+                    async with aiofiles.open(video_path, "rb") as f:
                         try:
                             response = self.client.media.upload("video", f)
                         except Exception as e:
@@ -294,7 +299,7 @@ class WecomPlatformEvent(AstrMessageEvent):
                             response["media_id"],
                         )
                 else:
-                    logger.warning(f"还没实现这个消息类型的发送逻辑: {comp.type}。")
+                    logger.warning(f"还没实现这个消息类型的发送逻辑: {comp.type}｡")
 
         await super().send(message)
 

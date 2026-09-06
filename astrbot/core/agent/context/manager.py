@@ -1,6 +1,6 @@
 from astrbot import logger
+from astrbot.core.agent.message import Message
 
-from ..message import Message
 from .compressor import LLMSummaryCompressor, TruncateByTurnsCompressor
 from .config import ContextConfig
 from .token_counter import EstimateTokenCounter
@@ -22,6 +22,7 @@ class ContextManager:
 
         Args:
             config: The context configuration.
+
         """
         self.config = config
 
@@ -39,11 +40,13 @@ class ContextManager:
             )
         else:
             self.compressor = TruncateByTurnsCompressor(
-                truncate_turns=config.truncate_turns
+                truncate_turns=config.truncate_turns,
             )
 
     async def process(
-        self, messages: list[Message], trusted_token_usage: int = 0
+        self,
+        messages: list[Message],
+        trusted_token_usage: int = 0,
     ) -> list[Message]:
         """Process the messages.
 
@@ -52,6 +55,7 @@ class ContextManager:
 
         Returns:
             The processed message list.
+
         """
         try:
             result = messages
@@ -67,11 +71,14 @@ class ContextManager:
             # 2. 基于 token 的压缩
             if self.config.max_context_tokens > 0:
                 total_tokens = self.token_counter.count_tokens(
-                    result, trusted_token_usage
+                    result,
+                    trusted_token_usage,
                 )
 
                 if self.compressor.should_compress(
-                    result, total_tokens, self.config.max_context_tokens
+                    result,
+                    total_tokens,
+                    self.config.max_context_tokens,
                 ):
                     result = await self._run_compression(result, total_tokens)
 
@@ -81,10 +88,11 @@ class ContextManager:
             return messages
 
     async def _run_compression(
-        self, messages: list[Message], prev_tokens: int
+        self,
+        messages: list[Message],
+        prev_tokens: int,
     ) -> list[Message]:
-        """
-        Compress/truncate the messages.
+        """Compress/truncate the messages.
 
         Args:
             messages: The original message list.
@@ -92,6 +100,7 @@ class ContextManager:
 
         Returns:
             The compressed/truncated message list.
+
         """
         logger.debug("Compress triggered, starting compression...")
 
@@ -110,10 +119,12 @@ class ContextManager:
 
         # last check
         if self.compressor.should_compress(
-            messages, tokens_after_summary, self.config.max_context_tokens
+            messages,
+            tokens_after_summary,
+            self.config.max_context_tokens,
         ):
             logger.info(
-                "Context still exceeds max tokens after compression, applying halving truncation..."
+                "Context still exceeds max tokens after compression, applying halving truncation...",
             )
             # still need compress, truncate by half
             messages = self.truncator.truncate_by_halving(messages)

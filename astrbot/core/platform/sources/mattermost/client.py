@@ -46,7 +46,7 @@ class MattermostClient:
             if resp.status >= 400:
                 body = await resp.text()
                 raise RuntimeError(
-                    f"Mattermost GET {path} failed: {resp.status} {body}"
+                    f"Mattermost GET {path} failed: {resp.status} {body}",
                 )
             data = await resp.json()
             if not isinstance(data, dict):
@@ -60,7 +60,7 @@ class MattermostClient:
             if resp.status >= 400:
                 body = await resp.text()
                 raise RuntimeError(
-                    f"Mattermost POST {path} failed: {resp.status} {body}"
+                    f"Mattermost POST {path} failed: {resp.status} {body}",
                 )
             data = await resp.json()
             if not isinstance(data, dict):
@@ -161,7 +161,7 @@ class MattermostClient:
             if resp.status >= 400:
                 body = await resp.text()
                 raise RuntimeError(
-                    f"Mattermost download file {file_id} failed: {resp.status} {body}"
+                    f"Mattermost download file {file_id} failed: {resp.status} {body}",
                 )
             return await resp.read()
 
@@ -186,7 +186,7 @@ class MattermostClient:
             if resp.status >= 400:
                 body = await resp.text()
                 raise RuntimeError(
-                    f"Mattermost upload file failed: {resp.status} {body}"
+                    f"Mattermost upload file failed: {resp.status} {body}",
                 )
             data = await resp.json()
             file_infos = data.get("file_infos", [])
@@ -218,7 +218,9 @@ class MattermostClient:
     async def ws_connect(self) -> aiohttp.ClientWebSocketResponse:
         session = await self.ensure_session()
         ws_url = self.base_url.replace("https://", "wss://", 1).replace(
-            "http://", "ws://", 1
+            "http://",
+            "ws://",
+            1,
         )
         ws_url = f"{ws_url}/api/v4/websocket"
         return await session.ws_connect(ws_url, heartbeat=30.0)
@@ -276,7 +278,7 @@ class MattermostClient:
                         file_bytes,
                         filename,
                         mimetypes.guess_type(filename)[0] or "application/octet-stream",
-                    )
+                    ),
                 )
             else:
                 logger.debug(
@@ -304,7 +306,9 @@ class MattermostClient:
                 file_bytes = await self.download_file(file_id)
             except Exception as exc:
                 logger.warning(
-                    "Mattermost fetch attachment failed %s: %s", file_id, exc
+                    "Mattermost fetch attachment failed %s: %s",
+                    file_id,
+                    exc,
                 )
                 continue
 

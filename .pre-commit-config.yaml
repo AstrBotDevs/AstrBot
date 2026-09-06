@@ -12,14 +12,14 @@ repos:
   hooks:
     # Run the linter.
     - id: ruff-check
-      types_or: [ python, pyi ]
-      args: [ --fix ]
+      types_or: [python, pyi]
+      args: [--fix]
     # Run the formatter.
     - id: ruff-format
-      types_or: [ python, pyi ]
-      
+      types_or: [python, pyi]
+
 - repo: https://github.com/asottile/pyupgrade
-  rev: v3.21.0
+  rev: v3.21.2
   hooks:
     - id: pyupgrade
-      args: [--py310-plus]
+      args: [--py312-plus]

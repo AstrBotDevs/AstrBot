@@ -1,40 +1,42 @@
 <template>
   <div class="base-folder-tree-node">
-    <div
+    <v-list-item
+      :active="currentFolderId === folder.folder_id"
+      rounded="lg"
+      :style="{ paddingLeft: `${(depth + 1) * 16}px` }"
+      :class="['folder-item', { 'drag-over': isDragOver }]"
       @click.stop="$emit('folder-click', folder.folder_id)"
       @contextmenu.prevent="handleContextMenu"
-      :style="{ paddingLeft: `${depth * 14 + 4}px` }"
-      :class="[
-        'folder-item',
-        {
-          'folder-item--active': currentFolderId === folder.folder_id,
-          'drag-over': isDragOver,
-        },
-      ]"
       @dragover.prevent="handleDragOver"
       @dragleave="handleDragLeave"
       @drop.prevent="handleDrop"
     >
-      <button
-        v-if="hasChildren"
-        type="button"
-        class="expand-btn"
-        @click.stop="toggleExpand"
-      >
-        <v-icon size="14">{{
-          isExpanded ? "mdi-chevron-down" : "mdi-chevron-right"
-        }}</v-icon>
-      </button>
-      <span v-else class="expand-placeholder"></span>
-      <v-icon size="17" class="folder-icon">
-        {{ isExpanded ? "mdi-folder-open-outline" : "mdi-folder-outline" }}
-      </v-icon>
-      <span class="folder-name text-truncate">{{ folder.name }}</span>
-    </div>
+      <template #prepend>
+        <v-btn
+          v-if="hasChildren"
+          icon
+          variant="text"
+          size="x-small"
+          class="expand-btn"
+          @click.stop="toggleExpand"
+        >
+          <v-icon size="16">
+            {{ isExpanded ? "mdi-chevron-down" : "mdi-chevron-right" }}
+          </v-icon>
+        </v-btn>
+        <div v-else class="expand-placeholder" />
+        <v-icon :color="currentFolderId === folder.folder_id ? 'primary' : ''">
+          {{ isExpanded ? "mdi-folder-open" : "mdi-folder" }}
+        </v-icon>
+      </template>
+      <v-list-item-title class="text-truncate">
+        {{ folder.name }}
+      </v-list-item-title>
+    </v-list-item>
 
     <!-- 子文件夹 -->
     <v-expand-transition>
-      <div v-show="isExpanded && hasChildren" class="child-nodes">
+      <div v-show="isExpanded && hasChildren">
         <BaseFolderTreeNode
           v-for="child in folder.children"
           :key="child.folder_id"
@@ -87,13 +89,7 @@ export default defineComponent({
       default: () => [],
     },
   },
-  emits: [
-    "folder-click",
-    "folder-context-menu",
-    "item-dropped",
-    "toggle-expansion",
-    "set-expansion",
-  ],
+  emits: ["folder-click", "folder-context-menu", "item-dropped", "toggle-expansion", "set-expansion"],
   data() {
     return {
       isDragOver: false,
@@ -142,10 +138,7 @@ export default defineComponent({
 
       try {
         const data = JSON.parse(event.dataTransfer.getData("application/json"));
-        if (
-          this.acceptDropTypes.length === 0 ||
-          this.acceptDropTypes.includes(data.type)
-        ) {
+        if (this.acceptDropTypes.length === 0 || this.acceptDropTypes.includes(data.type)) {
           this.$emit("item-dropped", {
             item_id: data.id || data.persona_id || data.item_id,
             item_type: data.type,
@@ -166,60 +159,23 @@ export default defineComponent({
   width: 100%;
 }
 
-.child-nodes {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding-top: 4px;
-}
-
 .folder-item {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  min-height: 32px;
-  padding-right: 8px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 13px;
-  transition: none;
-}
-
-.folder-item:hover,
-.folder-item--active {
-  background: rgba(var(--v-theme-on-surface), 0.045);
+  min-height: 36px;
+  transition: all 0.2s ease;
 }
 
 .folder-item.drag-over {
-  background-color: rgba(var(--v-theme-on-surface), 0.09);
-  outline: 1px dashed rgba(var(--v-theme-on-surface), 0.4);
+  background-color: rgba(var(--v-theme-primary), 0.15);
+  border: 2px dashed rgb(var(--v-theme-primary));
+  border-radius: 8px;
 }
 
 .expand-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
+  margin-right: 4px;
 }
 
 .expand-placeholder {
-  width: 22px;
+  width: 28px;
   flex-shrink: 0;
-}
-
-.folder-icon {
-  margin-right: 8px;
-  color: rgba(var(--v-theme-on-surface), 0.55);
-}
-
-.folder-name {
-  min-width: 0;
-  flex: 1;
 }
 </style>

@@ -41,7 +41,8 @@
     "disable": "Disable command",
     "rename": "Rename command",
     "viewDetails": "View details",
-    "pluginInactive": "Enable the plugin first"
+    "pluginInactive": "Enable the plugin first",
+    "sdkReadonly": "SDK commands are currently view-only in this panel"
   },
   "dialogs": {
     "rename": {

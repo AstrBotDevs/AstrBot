@@ -54,7 +54,7 @@ python3 -m venv ./venv
 ```
 
 > It might be `python` instead of `python3`
- 
+
 The above steps will create and activate a virtual environment (to avoid disrupting your local Python environment).
 
 Next, install the dependencies with the following command, which may take some time:

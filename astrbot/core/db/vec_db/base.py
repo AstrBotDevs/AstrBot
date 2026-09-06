@@ -19,7 +19,7 @@ class BaseVecDB:
         metadata: dict | None = None,
         id: str | None = None,
     ) -> int:
-        """插入一条文本和其对应向量，自动生成 ID 并保持一致性。"""
+        """插入一条文本和其对应向量,自动生成 ID 并保持一致性｡"""
         ...
 
     @abc.abstractmethod
@@ -33,7 +33,7 @@ class BaseVecDB:
         max_retries: int = 3,
         progress_callback=None,
         embedding_contents: list[str] | None = None,
-    ) -> int:
+    ) -> list[int]:
         """批量插入文本和其对应向量，自动生成 ID 并保持一致性。
 
         Args:
@@ -52,7 +52,7 @@ class BaseVecDB:
         rerank: bool = False,
         metadata_filters: dict | None = None,
     ) -> list[Result]:
-        """搜索最相似的文档。
+        """搜索最相似的文档｡
         Args:
             query (str): 查询文本
             top_k (int): 返回的最相似文档的数量
@@ -63,7 +63,7 @@ class BaseVecDB:
 
     @abc.abstractmethod
     async def delete(self, doc_id: str) -> bool:
-        """删除指定文档。
+        """删除指定文档｡
         Args:
             doc_id (str): 要删除的文档 ID
         Returns:

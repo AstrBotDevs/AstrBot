@@ -1,3 +1,4 @@
+from pathlib import Path
 from types import SimpleNamespace
 
 import httpx
@@ -49,9 +50,17 @@ async def test_gemini_37_minimal_thinking_level_falls_back_to_medium():
     }
 
 
+@pytest.fixture
+def provider() -> ProviderGoogleGenAI:
+    instance = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    instance.provider_config = {}
+    return instance
+
+
 @pytest.mark.asyncio
-async def test_gemini_prepare_conversation_removes_leading_model_content():
-    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+async def test_gemini_prepare_conversation_removes_leading_model_content(
+    provider: ProviderGoogleGenAI,
+) -> None:
 
     contents = await provider._prepare_conversation(
         {
@@ -69,8 +78,9 @@ async def test_gemini_prepare_conversation_removes_leading_model_content():
 
 
 @pytest.mark.asyncio
-async def test_gemini_prepare_conversation_keeps_normal_user_first_history():
-    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+async def test_gemini_prepare_conversation_keeps_normal_user_first_history(
+    provider: ProviderGoogleGenAI,
+) -> None:
 
     contents = await provider._prepare_conversation(
         {
@@ -92,8 +102,9 @@ async def test_gemini_prepare_conversation_keeps_normal_user_first_history():
 
 
 @pytest.mark.asyncio
-async def test_gemini_prepare_conversation_preserves_user_model_history():
-    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+async def test_gemini_prepare_conversation_preserves_user_model_history(
+    provider: ProviderGoogleGenAI,
+) -> None:
 
     contents = await provider._prepare_conversation(
         {
@@ -113,14 +124,15 @@ async def test_gemini_prepare_conversation_preserves_user_model_history():
 
 
 @pytest.mark.asyncio
-async def test_gemini_prepare_conversation_resolves_local_history_image(tmp_path):
+async def test_gemini_prepare_conversation_resolves_local_history_image(
+    provider: ProviderGoogleGenAI, tmp_path: Path
+) -> None:
     image_path = tmp_path / "history.webp"
     image_bytes = (
         b"RIFF\x16\x00\x00\x00WEBPVP8L\x0a\x00\x00\x00"
         b"/\x00\x00\x00\x10\x07\x10\x11\x11\x88\x88\xfe\x07"
     )
     image_path.write_bytes(image_bytes)
-    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
 
     contents = await provider._prepare_conversation(
         {

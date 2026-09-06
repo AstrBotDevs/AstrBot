@@ -12,6 +12,24 @@ from .platform import Platform, PlatformStatus
 from .register import platform_cls_map
 from .sources.webchat.webchat_adapter import WebChatAdapter
 
+PLATFORM_ADAPTER_MODULES: dict[str, str] = {
+    "aiocqhttp": ".sources.aiocqhttp.aiocqhttp_platform_adapter",
+    "qq_official": ".sources.qqofficial.qqofficial_platform_adapter",
+    "qq_official_webhook": ".sources.qqofficial_webhook.qo_webhook_adapter",
+    "lark": ".sources.lark.lark_adapter",
+    "dingtalk": ".sources.dingtalk.dingtalk_adapter",
+    "telegram": ".sources.telegram.tg_adapter",
+    "wecom": ".sources.wecom.wecom_adapter",
+    "wecom_ai_bot": ".sources.wecom_ai_bot.wecomai_adapter",
+    "weixin_official_account": ".sources.weixin_official_account.weixin_offacc_adapter",
+    "discord": ".sources.discord.discord_platform_adapter",
+    "misskey": ".sources.misskey.misskey_adapter",
+    "slack": ".sources.slack.slack_adapter",
+    "satori": ".sources.satori.satori_adapter",
+    "line": ".sources.line.line_adapter",
+    "kook": ".sources.kook.kook_adapter",
+}
+
 
 @dataclass
 class PlatformTasks:
@@ -133,66 +151,66 @@ class PlatformManager:
             )
             match platform_config["type"]:
                 case "aiocqhttp":
-                    from .sources.aiocqhttp.aiocqhttp_platform_adapter import (
-                        AiocqhttpAdapter,  # noqa: F401
+                    from .sources.aiocqhttp.aiocqhttp_platform_adapter import (  # noqa: F401
+                        AiocqhttpAdapter,
                     )
                 case "qq_official":
-                    from .sources.qqofficial.qqofficial_platform_adapter import (
-                        QQOfficialPlatformAdapter,  # noqa: F401
+                    from .sources.qqofficial.qqofficial_platform_adapter import (  # noqa: F401
+                        QQOfficialPlatformAdapter,
                     )
                 case "qq_official_webhook":
-                    from .sources.qqofficial_webhook.qo_webhook_adapter import (
-                        QQOfficialWebhookPlatformAdapter,  # noqa: F401
+                    from .sources.qqofficial_webhook.qo_webhook_adapter import (  # noqa: F401
+                        QQOfficialWebhookPlatformAdapter,
                     )
                 case "lark":
-                    from .sources.lark.lark_adapter import (
-                        LarkPlatformAdapter,  # noqa: F401
+                    from .sources.lark.lark_adapter import (  # noqa: F401
+                        LarkPlatformAdapter,
                     )
                 case "dingtalk":
-                    from .sources.dingtalk.dingtalk_adapter import (
-                        DingtalkPlatformAdapter,  # noqa: F401
+                    from .sources.dingtalk.dingtalk_adapter import (  # noqa: F401
+                        DingtalkPlatformAdapter,
                     )
                 case "telegram":
-                    from .sources.telegram.tg_adapter import (
-                        TelegramPlatformAdapter,  # noqa: F401
+                    from .sources.telegram.tg_adapter import (  # noqa: F401
+                        TelegramPlatformAdapter,
                     )
                 case "wecom":
-                    from .sources.wecom.wecom_adapter import (
-                        WecomPlatformAdapter,  # noqa: F401
+                    from .sources.wecom.wecom_adapter import (  # noqa: F401
+                        WecomPlatformAdapter,
                     )
                 case "wecom_ai_bot":
-                    from .sources.wecom_ai_bot.wecomai_adapter import (
-                        WecomAIBotAdapter,  # noqa: F401
+                    from .sources.wecom_ai_bot.wecomai_adapter import (  # noqa: F401
+                        WecomAIBotAdapter,
                     )
                 case "weixin_official_account":
-                    from .sources.weixin_official_account.weixin_offacc_adapter import (
-                        WeixinOfficialAccountPlatformAdapter,  # noqa: F401
+                    from .sources.weixin_official_account.weixin_offacc_adapter import (  # noqa: F401
+                        WeixinOfficialAccountPlatformAdapter,
                     )
                 case "discord":
-                    from .sources.discord.discord_platform_adapter import (
-                        DiscordPlatformAdapter,  # noqa: F401
+                    from .sources.discord.discord_platform_adapter import (  # noqa: F401
+                        DiscordPlatformAdapter,
                     )
                 case "misskey":
-                    from .sources.misskey.misskey_adapter import (
-                        MisskeyPlatformAdapter,  # noqa: F401
+                    from .sources.misskey.misskey_adapter import (  # noqa: F401
+                        MisskeyPlatformAdapter,
                     )
                 case "weixin_oc":
-                    from .sources.weixin_oc.weixin_oc_adapter import (
-                        WeixinOCAdapter,  # noqa: F401
+                    from .sources.weixin_oc.weixin_oc_adapter import (  # noqa: F401
+                        WeixinOCAdapter,
                     )
                 case "slack":
                     from .sources.slack.slack_adapter import SlackAdapter  # noqa: F401
                 case "satori":
-                    from .sources.satori.satori_adapter import (
-                        SatoriPlatformAdapter,  # noqa: F401
+                    from .sources.satori.satori_adapter import (  # noqa: F401
+                        SatoriPlatformAdapter,
                     )
                 case "line":
-                    from .sources.line.line_adapter import (
-                        LinePlatformAdapter,  # noqa: F401
+                    from .sources.line.line_adapter import (  # noqa: F401
+                        LinePlatformAdapter,
                     )
                 case "kook":
-                    from .sources.kook.kook_adapter import (
-                        KookPlatformAdapter,  # noqa: F401
+                    from .sources.kook.kook_adapter import (  # noqa: F401
+                        KookPlatformAdapter,
                     )
                 case "mattermost":
                     from .sources.mattermost.mattermost_adapter import (
@@ -238,7 +256,9 @@ class PlatformManager:
                 logger.error(traceback.format_exc())
 
     async def _task_wrapper(
-        self, task: asyncio.Task, platform: Platform | None = None
+        self,
+        task: asyncio.Task,
+        platform: Platform | None = None,
     ) -> None:
         # 设置平台状态为运行中
         if platform:
@@ -321,6 +341,7 @@ class PlatformManager:
 
         Returns:
             包含所有平台统计信息的字典
+
         """
         stats_list = []
         total_errors = 0
@@ -346,7 +367,7 @@ class PlatformManager:
                         "status": "unknown",
                         "error_count": 0,
                         "last_error": None,
-                    }
+                    },
                 )
 
         return {

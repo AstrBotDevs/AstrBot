@@ -65,7 +65,7 @@ from astrbot.api.message_components import (
     Image,
     Record,
 )  # Message chain components, import as needed
-from astrbot.core.platform.message_session import MessageSesion
+from astrbot.core.platform.message_session import MessageSession
 from astrbot.api.platform import register_platform_adapter
 from astrbot import logger
 from .client import FakeClient
@@ -87,7 +87,7 @@ class FakePlatformAdapter(Platform):
         self.settings = platform_settings  # platform_settings: platform settings
 
     async def send_by_session(
-        self, session: MessageSesion, message_chain: MessageChain
+        self, session: MessageSession, message_chain: MessageChain
     ):
         # Must be implemented
         await super().send_by_session(session, message_chain)

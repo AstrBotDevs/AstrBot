@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { useModuleI18n } from '@/i18n/composables';
+import { useModuleI18n } from "@/i18n/composables";
 
-const { tm: t } = useModuleI18n('features/auth');
+const { tm: t } = useModuleI18n("features/auth");
 
 const props = defineProps<{
   code: string;
@@ -9,23 +9,26 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: 'update:code', value: string): void;
-  (e: 'submit'): void;
-  (e: 'back'): void;
+  (e: "update:code", value: string): void;
+  (e: "submit"): void;
+  (e: "back"): void;
 }>();
 
 function normalizeRecoveryCode(code: string): string {
-  return code.toUpperCase().replace(/[^A-Z2-7]/g, '').slice(0, 32);
+  return code
+    .toUpperCase()
+    .replace(/[^A-Z2-7]/g, "")
+    .slice(0, 32);
 }
 
 function formatRecoveryCode(code: string): string {
   const normalized = normalizeRecoveryCode(code);
   const groups = normalized.match(/.{1,8}/g);
-  return groups ? groups.join('-') : '';
+  return groups ? groups.join("-") : "";
 }
 
 function onCodeInput(raw: string) {
-  emit('update:code', formatRecoveryCode(raw));
+  emit("update:code", formatRecoveryCode(raw));
 }
 
 function isRecoveryCodeComplete(code: string): boolean {
@@ -33,7 +36,7 @@ function isRecoveryCodeComplete(code: string): boolean {
 }
 
 function onSubmit() {
-  emit('submit');
+  emit("submit");
 }
 </script>
 

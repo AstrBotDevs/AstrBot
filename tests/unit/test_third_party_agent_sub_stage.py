@@ -1,11 +1,12 @@
-from types import SimpleNamespace
+import sys
+from types import ModuleType, SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from astrbot.core.message.message_event_result import MessageChain
-from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.pipeline.process_stage.method.agent_sub_stages import third_party
+from astrbot.core.provider.entities import LLMResponse
 
 
 @pytest.mark.asyncio
@@ -51,7 +52,10 @@ async def test_third_party_runner_receives_inline_profile_config(
             runner_factory_calls.append(True)
             return runner
 
-    monkeypatch.setattr(third_party, runner_class_name, RunnerFactory)
+    module_name = f"astrbot.core.agent.runners.{runner_type}.{runner_type}_agent_runner"
+    runner_module = ModuleType(module_name)
+    setattr(runner_module, runner_class_name, RunnerFactory)
+    monkeypatch.setitem(sys.modules, module_name, runner_module)
     monkeypatch.setattr(
         third_party, "AstrAgentContext", MagicMock(return_value=object())
     )
@@ -64,6 +68,7 @@ async def test_third_party_runner_receives_inline_profile_config(
     config = {
         "agent_runner": {"runner_type": runner_type, "config": inline_config},
         "provider_settings": {
+            "wake_prefix": "",
             "streaming_response": False,
             "unsupported_streaming_strategy": "turn_off",
             "third_party_stream_consumption_close_timeout_sec": 30,
@@ -89,8 +94,10 @@ async def test_third_party_runner_receives_inline_profile_config(
     event.platform_meta.support_streaming_message = True
     event.get_extra.return_value = None
 
-    results = [item async for item in stage.process(event, "")]
+    results = [item async for item in stage.process(event)]
 
     assert results == [None]
-    assert runner.reset.await_args.kwargs["provider_config"] is inline_config
+    assert runner.reset.await_args.kwargs["provider"] is None
+    assert runner.reset.await_args.kwargs["provider_config"] is stage.runner_config
+    assert stage.runner_config[config_key] == inline_config[config_key]
     assert runner_factory_calls == [True]

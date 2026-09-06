@@ -1,0 +1,24 @@
+from typing import Any
+
+class Document:
+    def __init__(
+        self,
+        input: str | Any,
+        positive_keywords: str | list[str] | None = None,
+        negative_keywords: str | list[str] | None = None,
+        url: str | None = None,
+        min_text_length: int = 25,
+        retry_length: int = 250,
+        xpath: bool = False,
+        handle_failures: str = "discard",
+    ) -> None: ...
+    def content(self) -> str: ...
+    def title(self) -> str: ...
+    def author(self) -> str: ...
+    def short_title(self) -> str: ...
+    def summary(
+        self,
+        html_partial: bool = False,
+        keep_all_images: bool = False,
+    ) -> str: ...
+    def get_clean_html(self) -> str: ...

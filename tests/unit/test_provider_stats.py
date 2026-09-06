@@ -1,12 +1,14 @@
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 from sqlmodel import select
 
+from astrbot.core import db_helper
 from astrbot.core.agent.response import AgentStats
-from astrbot.core.db.po import ProviderStat
+from astrbot.core.db.po import Conversation, ProviderStat
 from astrbot.core.pipeline.process_stage.method.agent_sub_stages import internal
-from astrbot.core.provider.entities import ProviderRequest, TokenUsage
+from astrbot.core.provider.entities import LLMResponse, ProviderRequest, TokenUsage
 
 
 @pytest.mark.asyncio
@@ -14,11 +16,11 @@ async def test_record_internal_agent_stats_persists_provider_stat(
     temp_db,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    monkeypatch.setattr(internal, "db_helper", temp_db)
+    monkeypatch.setattr(db_helper, "insert_provider_stat", temp_db.insert_provider_stat)
 
-    event = SimpleNamespace(unified_msg_origin="webchat:FriendMessage:session-42")
+    event = MagicMock(unified_msg_origin="webchat:FriendMessage:session-42")
     req = ProviderRequest(
-        conversation=SimpleNamespace(cid="conv-123"),
+        conversation=Conversation(cid="conv-123", platform_id="test", user_id="test"),
     )
     stats = AgentStats(
         token_usage=TokenUsage(input_other=11, input_cached=3, output=7),
@@ -31,12 +33,11 @@ async def test_record_internal_agent_stats_persists_provider_stat(
         meta=lambda: SimpleNamespace(id="provider-1", type="openai"),
         get_model=lambda: "gpt-4.1",
     )
-    agent_runner = SimpleNamespace(
-        provider=provider,
-        stats=stats,
-        was_aborted=lambda: False,
-    )
-    final_resp = SimpleNamespace(role="assistant")
+    agent_runner = MagicMock()
+    agent_runner.provider = provider
+    agent_runner.stats = stats
+    agent_runner.was_aborted.return_value = False
+    final_resp = LLMResponse(role="assistant")
 
     await internal._record_internal_agent_stats(
         event,

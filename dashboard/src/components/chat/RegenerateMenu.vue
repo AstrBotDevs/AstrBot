@@ -133,8 +133,8 @@
 </template>
 
 <script setup lang="ts">
+import axios from "axios";
 import { ref } from "vue";
-import { providerApi } from "@/api/v1";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
 import { useModuleI18n } from "@/i18n/composables";
 import {
@@ -171,7 +171,9 @@ async function loadProviderConfigs(force = false) {
   if (loadingProviders.value || (providersLoaded.value && !force)) return;
   loadingProviders.value = true;
   try {
-    const response = await providerApi.listByProviderType("chat_completion");
+    const response = await axios.get("/api/config/provider/list", {
+      params: { provider_type: "chat_completion" },
+    });
     if (response.data.status === "ok") {
       modelMetadata.value = (
         response.data.model_metadata || {}

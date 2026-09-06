@@ -36,11 +36,20 @@ def _has_usable_pbkdf2_password(config: AstrBotConfig) -> bool:
     return True
 
 
+def _has_usable_upgraded_password(config: AstrBotConfig) -> bool:
+    password = config["dashboard"].get("pbkdf2_password", "")
+    if not isinstance(password, str):
+        return False
+    if password.startswith("$argon2"):
+        return True
+    return _has_usable_pbkdf2_password(config)
+
+
 async def is_password_storage_upgraded(
     db: BaseDatabase,
     config: AstrBotConfig,
 ) -> bool:
-    config_upgraded = _has_usable_pbkdf2_password(config)
+    config_upgraded = _has_usable_upgraded_password(config)
     if config["dashboard"].get(PASSWORD_STORAGE_UPGRADED_KEY) != config_upgraded:
         _set_dashboard_flag(config, PASSWORD_STORAGE_UPGRADED_KEY, config_upgraded)
     return config_upgraded
@@ -64,7 +73,7 @@ async def is_password_change_required(
 
     required = bool(
         getattr(config, "_generated_dashboard_password_change_required", False)
-        or getattr(config, "_dashboard_password_change_required_from_config", False)
+        or getattr(config, "_dashboard_password_change_required_from_config", False),
     )
     if required:
         _set_dashboard_flag(config, PASSWORD_CHANGE_REQUIRED_KEY, True)

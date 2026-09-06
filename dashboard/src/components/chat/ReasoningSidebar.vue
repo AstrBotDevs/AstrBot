@@ -23,13 +23,9 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
-import {
-  reasoningActivityCounts,
-  reasoningActivityTitle,
-  type MessagePart,
-} from "@/composables/useMessages";
-import { useModuleI18n } from "@/i18n/composables";
 import ReasoningTimeline from "@/components/chat/message_list_comps/ReasoningTimeline.vue";
+import { type MessagePart, reasoningActivityCounts, reasoningActivityTitle } from "@/composables/useMessages";
+import { useModuleI18n } from "@/i18n/composables";
 
 const props = defineProps<{
   modelValue: boolean;
@@ -44,13 +40,9 @@ const emit = defineEmits<{
 
 const { tm } = useModuleI18n("features/chat");
 
-const activityCounts = computed(() =>
-  reasoningActivityCounts(props.parts, props.reasoning || ""),
-);
+const activityCounts = computed(() => reasoningActivityCounts(props.parts, props.reasoning || ""));
 
-const reasoningTitle = computed(() =>
-  reasoningActivityTitle(activityCounts.value, tm),
-);
+const reasoningTitle = computed(() => reasoningActivityTitle(activityCounts.value, tm));
 
 function close() {
   emit("update:modelValue", false);

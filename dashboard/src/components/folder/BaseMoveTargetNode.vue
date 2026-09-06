@@ -1,42 +1,59 @@
 <template>
   <div class="base-move-target-node">
-    <button
-      type="button"
-      class="folder-tree-row"
-      :class="{
-        'folder-tree-row--active': selectedFolderId === folder.folder_id,
-      }"
+    <v-list-item
+      :active="selectedFolderId === folder.folder_id"
       :disabled="isDisabled"
-      :style="{ paddingLeft: `${8 + depth * 18}px` }"
+      rounded="lg"
+      :style="{ paddingLeft: `${(depth + 1) * 16}px` }"
+      class="folder-item"
       @click.stop="!isDisabled && $emit('select', folder.folder_id)"
     >
-      <span class="folder-tree-chevron" @click="handleChevronClick">
-        <v-icon v-if="hasChildren" size="16">
-          {{ isExpanded ? "mdi-chevron-down" : "mdi-chevron-right" }}
+      <template #prepend>
+        <v-btn
+          v-if="hasChildren"
+          icon
+          variant="text"
+          size="x-small"
+          class="expand-btn"
+          :disabled="isDisabled"
+          @click.stop="toggleExpand"
+        >
+          <v-icon size="16">
+            {{ isExpanded ? "mdi-chevron-down" : "mdi-chevron-right" }}
+          </v-icon>
+        </v-btn>
+        <div v-else class="expand-placeholder" />
+        <v-icon
+          :color="
+            isDisabled
+              ? 'grey'
+              : selectedFolderId === folder.folder_id
+                ? 'primary'
+                : ''
+          "
+        >
+          {{ isExpanded ? "mdi-folder-open" : "mdi-folder" }}
         </v-icon>
-      </span>
-      <v-icon size="17" class="folder-tree-icon">
-        {{
-          isExpanded && hasChildren
-            ? "mdi-folder-open-outline"
-            : "mdi-folder-outline"
-        }}
-      </v-icon>
-      <span class="folder-tree-name">{{ folder.name }}</span>
-    </button>
+      </template>
+      <v-list-item-title class="text-truncate">
+        {{ folder.name }}
+      </v-list-item-title>
+    </v-list-item>
 
     <!-- 子文件夹 -->
-    <div v-show="isExpanded && hasChildren">
-      <BaseMoveTargetNode
-        v-for="child in folder.children"
-        :key="child.folder_id"
-        :folder="child"
-        :depth="depth + 1"
-        :selected-folder-id="selectedFolderId"
-        :disabled-folder-ids="disabledFolderIds"
-        @select="$emit('select', $event)"
-      />
-    </div>
+    <v-expand-transition>
+      <div v-show="isExpanded && hasChildren">
+        <BaseMoveTargetNode
+          v-for="child in folder.children"
+          :key="child.folder_id"
+          :folder="child"
+          :depth="depth + 1"
+          :selected-folder-id="selectedFolderId"
+          :disabled-folder-ids="disabledFolderIds"
+          @select="$emit('select', $event)"
+        />
+      </div>
+    </v-expand-transition>
   </div>
 </template>
 
@@ -79,11 +96,6 @@ export default defineComponent({
     },
   },
   methods: {
-    handleChevronClick(event: MouseEvent) {
-      if (!this.hasChildren) return;
-      event.stopPropagation();
-      this.toggleExpand();
-    },
     toggleExpand() {
       this.isExpanded = !this.isExpanded;
     },
@@ -96,52 +108,16 @@ export default defineComponent({
   width: 100%;
 }
 
-.folder-tree-row {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  height: 30px;
-  padding-right: 8px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: inherit;
-  gap: 6px;
-  cursor: pointer;
-  font: inherit;
-  text-align: left;
+.folder-item {
+  min-height: 36px;
 }
 
-.folder-tree-row:hover,
-.folder-tree-row--active {
-  background: rgba(var(--v-theme-on-surface), 0.07);
+.expand-btn {
+  margin-right: 4px;
 }
 
-.folder-tree-row:disabled {
-  cursor: default;
-  opacity: 0.4;
-}
-
-.folder-tree-chevron {
-  display: grid;
-  place-items: center;
-  width: 16px;
-  height: 18px;
-  flex: 0 0 16px;
-  color: rgba(var(--v-theme-on-surface), 0.58);
-}
-
-.folder-tree-icon {
-  flex: 0 0 auto;
-  color: rgba(var(--v-theme-on-surface), 0.58);
-}
-
-.folder-tree-name {
-  min-width: 0;
-  flex: 1;
-  overflow: hidden;
-  font-size: 13px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.expand-placeholder {
+  width: 28px;
+  flex-shrink: 0;
 }
 </style>

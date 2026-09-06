@@ -4,8 +4,9 @@ import copy
 import json
 import logging
 import traceback
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from astrbot.core.config.agent_runner import (
     AGENT_RUNNER_TYPES,
@@ -17,6 +18,12 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_config_path,
     get_astrbot_data_path,
 )
+
+if TYPE_CHECKING:
+    from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
+    from astrbot.core.config.astrbot_config import AstrBotConfig
+    from astrbot.core.db import BaseDatabase
+    from astrbot.core.umop_config_router import UmopConfigRouter
 
 logger = logging.getLogger("astrbot")
 
@@ -321,7 +328,7 @@ def migrate_config_on_load(config: dict[str, Any], config_path: Path) -> bool:
     return _migrate_agent_runner_config(config, fallback_config)
 
 
-def finalize_config_migrations(configs: list[dict[str, Any]]) -> bool:
+def finalize_config_migrations(configs: Sequence[dict[str, Any]]) -> bool:
     """Clean legacy shared data after every profile has been migrated.
 
     Args:
@@ -344,12 +351,12 @@ def finalize_config_migrations(configs: list[dict[str, Any]]) -> bool:
             isinstance(provider, dict)
             and (
                 provider.get("provider_type") == "agent_runner"
-                or effective_provider_map.get(provider.get("id"), {}).get(
+                or effective_provider_map.get(str(provider.get("id", "")), {}).get(
                     "provider_type"
                 )
                 == "agent_runner"
                 or _get_provider_runner_type(
-                    effective_provider_map.get(provider.get("id"), provider)
+                    effective_provider_map.get(str(provider.get("id", "")), provider)
                 )
                 is not None
             )
@@ -361,7 +368,7 @@ def finalize_config_migrations(configs: list[dict[str, Any]]) -> bool:
     return True
 
 
-def _migra_provider_to_source_structure(conf: Any) -> None:
+def _migra_provider_to_source_structure(conf: AstrBotConfig) -> None:
     """Migrate old providers to the provider-source structure.
 
     Args:
@@ -425,7 +432,10 @@ def _migra_provider_to_source_structure(conf: Any) -> None:
 
 
 async def migra(
-    db: Any, astrbot_config_mgr: Any, umop_config_router: Any, acm: Any
+    db: BaseDatabase,
+    astrbot_config_mgr: AstrBotConfigManager,
+    umop_config_router: UmopConfigRouter,
+    acm: AstrBotConfigManager,
 ) -> None:
     """Run migrations that require initialized configuration or database state.
 

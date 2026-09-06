@@ -23,10 +23,9 @@ def _build_adapter(monkeypatch: pytest.MonkeyPatch):
 
     monkeypatch.setattr(discord_platform_adapter, "star_handlers_registry", [])
     monkeypatch.setattr(
-        discord_platform_adapter.discord,
+        discord_platform_adapter,
         "HTTPException",
         DiscordSyncError,
-        raising=False,
     )
 
     adapter = DiscordPlatformAdapter(

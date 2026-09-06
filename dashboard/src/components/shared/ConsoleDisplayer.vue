@@ -1,9 +1,3 @@
-<script setup>
-import { useCommonStore } from "@/stores/common";
-import { logApi } from "@/api/v1";
-import { EventSourcePolyfill } from "event-source-polyfill";
-</script>
-
 <template>
   <div
     id="console-wrapper"
@@ -47,38 +41,49 @@ import { EventSourcePolyfill } from "event-source-polyfill";
   </div>
 </template>
 
-<script>
+<script lang="ts">
+import { EventSourcePolyfill, type MessageEvent as SseMessageEvent, type Event as SseEvent } from "event-source-polyfill";
+import { useCommonStore } from "@/stores/common";
+import axios, { resolveApiUrl } from "@/utils/request";
+
+interface LogObject {
+  time: number;
+  data: string;
+  level: string;
+  category?: string;
+}
+
 export default {
   name: "ConsoleDisplayer",
   data() {
     return {
       isFullscreen: false,
       logColorAnsiMap: {
-        "\u001b[1;34m": "color: #6cb6d9; font-weight: bold;",
-        "\u001b[1;36m": "color: #72c4cc; font-weight: bold;",
-        "\u001b[1;33m": "color: #d4b95e; font-weight: bold;",
-        "\u001b[31m": "color: #d46a6a;",
-        "\u001b[1;31m": "color: #e06060; font-weight: bold;",
+        "\u001b[1;34m": "color: #39C5BB; font-weight: bold;",
+        "\u001b[1;36m": "color: #00FFFF; font-weight: bold;",
+        "\u001b[1;33m": "color: #FFFF00; font-weight: bold;",
+        "\u001b[31m": "color: #FF0000;",
+        "\u001b[1;31m": "color: #FF0000; font-weight: bold;",
         "\u001b[0m": "color: inherit; font-weight: normal;",
-        "\u001b[32m": "color: #6cc070;",
-        default: "color: #c8c8c8;",
-      },
+        "\u001b[32m": "color: #00FF00;",
+        default: "color: #FFFFFF;",
+      } as Record<string, string>,
       logLevels: ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
-      selectedLevels: [0, 1, 2, 3, 4],
+      selectedLevels: [0, 1, 2, 3, 4] as number[],
       levelColors: {
         DEBUG: "grey",
         INFO: "blue-lighten-3",
         WARNING: "amber",
         ERROR: "red",
         CRITICAL: "purple",
-      },
-      localLogCache: [],
-      eventSource: null,
-      retryTimer: null,
+      } as Record<string, string>,
+      localLogCache: [] as LogObject[],
+      eventSource: null as EventSourcePolyfill | null,
+      retryTimer: null as number | null,
       retryAttempts: 0,
       maxRetryAttempts: 10,
       baseRetryDelay: 1000,
-      lastEventId: null,
+      lastEventId: null as string | null,
     };
   },
   computed: {
@@ -125,10 +130,7 @@ export default {
     document.addEventListener("fullscreenchange", this.handleFullscreenChange);
   },
   beforeUnmount() {
-    document.removeEventListener(
-      "fullscreenchange",
-      this.handleFullscreenChange,
-    );
+    document.removeEventListener("fullscreenchange", this.handleFullscreenChange);
     if (this.eventSource) {
       this.eventSource.close();
       this.eventSource = null;
@@ -146,11 +148,11 @@ export default {
         this.eventSource = null;
       }
 
-      console.log(`正在连接日志流... (尝试次数: ${this.retryAttempts})`);
+      console.info(`Connecting to the log stream (attempt: ${this.retryAttempts})`);
 
       const token = localStorage.getItem("token");
 
-      this.eventSource = new EventSourcePolyfill(logApi.liveUrl(), {
+      this.eventSource = new EventSourcePolyfill(resolveApiUrl("/api/live-log"), {
         headers: {
           Authorization: token ? `Bearer ${token}` : "",
         },
@@ -159,7 +161,7 @@ export default {
       });
 
       this.eventSource.onopen = () => {
-        console.log("日志流连接成功！");
+        console.info("Log stream connected successfully.");
         this.retryAttempts = 0;
 
         if (!this.lastEventId) {
@@ -167,7 +169,7 @@ export default {
         }
       };
 
-      this.eventSource.onmessage = (event) => {
+      this.eventSource.onmessage = (event: SseMessageEvent) => {
         try {
           if (event.lastEventId) {
             this.lastEventId = event.lastEventId;
@@ -180,8 +182,8 @@ export default {
         }
       };
 
-      this.eventSource.onerror = (err) => {
-        if (err.status === 401) {
+      this.eventSource.onerror = (err: SseEvent) => {
+        if ("status" in err && err.status === 401) {
           console.error("鉴权失败 (401)，可能是 Token 过期了。");
         } else {
           console.warn("日志流连接错误:", err);
@@ -197,14 +199,8 @@ export default {
           return;
         }
 
-        const delay = Math.min(
-          this.baseRetryDelay * Math.pow(2, this.retryAttempts),
-          30000,
-        );
-
-        console.log(
-          `⏳ ${delay}ms 后尝试第 ${this.retryAttempts + 1} 次重连...`,
-        );
+        const delay = Math.min(this.baseRetryDelay * 2 ** this.retryAttempts, 30000);
+        console.info(`Retrying log stream in ${delay}ms (attempt: ${this.retryAttempts + 1})`);
 
         if (this.retryTimer) {
           clearTimeout(this.retryTimer);
@@ -223,27 +219,21 @@ export default {
       };
     },
 
-    processNewLogs(newLogs) {
+    processNewLogs(newLogs: LogObject[]) {
       if (!newLogs || newLogs.length === 0) return;
 
       let hasUpdate = false;
 
       newLogs.forEach((log) => {
         const exists = this.localLogCache.some(
-          (existing) =>
-            existing.time === log.time &&
-            existing.data === log.data &&
-            existing.level === log.level,
+          (existing) => existing.time === log.time && existing.data === log.data && existing.level === log.level,
         );
 
         if (!exists) {
           this.localLogCache.push(log);
           hasUpdate = true;
 
-          if (
-            this.isLevelSelected(log.level) &&
-            !this.isHiddenByCategory(log)
-          ) {
+          if (this.isLevelSelected(log.level) && !this.isHiddenByCategory(log)) {
             this.printLog(log.data);
           }
         }
@@ -261,7 +251,7 @@ export default {
 
     async fetchLogHistory() {
       try {
-        const res = await logApi.history();
+        const res = await axios.get("/api/log-history");
         if (res.data.data.logs && res.data.data.logs.length > 0) {
           this.processNewLogs(res.data.data.logs);
         }
@@ -270,13 +260,13 @@ export default {
       }
     },
 
-    getLevelColor(level) {
+    getLevelColor(level: string) {
       return this.levelColors[level] || "grey";
     },
 
-    isLevelSelected(level) {
+    isLevelSelected(level: string) {
       for (let i = 0; i < this.selectedLevels.length; ++i) {
-        let level_ = this.logLevels[this.selectedLevels[i]];
+        const level_ = this.logLevels[this.selectedLevels[i]];
         if (level_ === level) {
           return true;
         }
@@ -284,8 +274,8 @@ export default {
       return false;
     },
 
-    isHiddenByCategory(log) {
-      return this.hideUserChat && log && log.category === "user_chat";
+    isHiddenByCategory(log: LogObject) {
+      return this.hideUserChat && log.category === "user_chat";
     },
 
     refreshDisplay() {
@@ -295,10 +285,7 @@ export default {
 
         if (this.localLogCache && this.localLogCache.length > 0) {
           this.localLogCache.forEach((logItem) => {
-            if (
-              this.isLevelSelected(logItem.level) &&
-              !this.isHiddenByCategory(logItem)
-            ) {
+            if (this.isLevelSelected(logItem.level) && !this.isHiddenByCategory(logItem)) {
               this.printLog(logItem.data);
             }
           });
@@ -309,10 +296,8 @@ export default {
     toggleFullscreen() {
       const container = document.getElementById("console-wrapper");
       if (!document.fullscreenElement) {
-        container.requestFullscreen().catch((err) => {
-          console.error(
-            `Error attempting to enable full-screen mode: ${err.message}`,
-          );
+        container?.requestFullscreen().catch((err: Error) => {
+          console.error(`Error attempting to enable full-screen mode: ${err.message}`);
         });
       } else {
         document.exitFullscreen();
@@ -323,16 +308,14 @@ export default {
       this.isFullscreen = !!document.fullscreenElement;
     },
 
-    appendLogContent(element, log) {
-      const levelMatch = log.match(
-        /\[(DEBG|INFO|WARN|ERRO|CRIT|DEBUG|WARNING|ERROR|CRITICAL)\]/,
-      );
+    appendLogContent(element: HTMLElement, log: string) {
+      const levelMatch = log.match(/\[(DEBG|INFO|WARN|ERRO|CRIT|DEBUG|WARNING|ERROR|CRITICAL)\]/);
       if (!levelMatch) {
         element.innerText = `${log}`;
         return;
       }
 
-      const levelStart = levelMatch.index;
+      const levelStart = levelMatch.index!;
       const levelEnd = levelStart + levelMatch[0].length;
       const prefix = log.slice(0, levelStart).trimEnd();
       const message = log.slice(levelEnd).trimStart();
@@ -355,15 +338,15 @@ export default {
       element.appendChild(messageSpan);
     },
 
-    printLog(log) {
-      let ele = document.getElementById("term");
+    printLog(log: string) {
+      const ele = document.getElementById("term");
       if (!ele) {
         return;
       }
 
-      let span = document.createElement("pre");
-      let style = this.logColorAnsiMap["default"];
-      for (let key in this.logColorAnsiMap) {
+      const span = document.createElement("pre");
+      let style = this.logColorAnsiMap.default;
+      for (const key in this.logColorAnsiMap) {
         if (log.startsWith(key)) {
           style = this.logColorAnsiMap[key];
           log = log.replace(key, "").replace("\u001b[0m", "");
@@ -371,7 +354,7 @@ export default {
         }
       }
 
-      span.style = style;
+      span.style.cssText = style;
       span.classList.add("console-log-line", "fade-in");
       this.appendLogContent(span, log);
       ele.appendChild(span);
@@ -476,8 +459,9 @@ export default {
 :deep(.console-log-line) {
   display: block;
   margin: 0 0 2px;
-  font-family: SFMono-Regular, Menlo, Monaco, Consolas,
-    var(--astrbot-font-cjk-mono), monospace;
+  font-family:
+    SFMono-Regular, Menlo, Monaco, Consolas, var(--astrbot-font-cjk-mono),
+    monospace;
   font-size: 12px;
   white-space: pre-wrap;
 }

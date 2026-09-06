@@ -7,16 +7,15 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
+from types import ModuleType
+from typing import ClassVar
 
-import aiohttp
 from PIL import Image, ImageDraw, ImageFont
 
 from astrbot.core.config import VERSION
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
-from astrbot.core.utils.http_ssl import build_tls_connector
 from astrbot.core.utils.io import save_temp_img
-
-from . import RenderStrategy
+from astrbot.core.utils.t2i import RenderStrategy
 
 logger = logging.getLogger("astrbot")
 
@@ -31,11 +30,18 @@ ACCENT = (47, 134, 189)
 CONTENT_MARGIN = 32
 
 
+def _get_aiohttp() -> ModuleType:
+    """Defer HTTP imports until a Markdown image needs to be downloaded."""
+    import aiohttp
+
+    return aiohttp
+
+
 class FontManager:
     """Load and cache cross-platform fonts with CJK coverage."""
 
-    _font_cache: dict[
-        tuple[int, bool, bool], ImageFont.FreeTypeFont | ImageFont.ImageFont
+    _font_cache: ClassVar[
+        dict[tuple[int, bool, bool], ImageFont.FreeTypeFont | ImageFont.ImageFont]
     ] = {}
 
     @classmethod
@@ -106,9 +112,9 @@ class FontManager:
             cls._font_cache[cache_key] = font
             return font
 
-        font = ImageFont.load_default(size=size)
-        cls._font_cache[cache_key] = font
-        return font
+        default_font = ImageFont.load_default(size=size)
+        cls._font_cache[cache_key] = default_font
+        return default_font
 
 
 class TextMeasurer:
@@ -129,11 +135,11 @@ class TextMeasurer:
             Width and line height in pixels.
         """
         width = math.ceil(font.getlength(text)) if text else 0
-        try:
+        if isinstance(font, ImageFont.FreeTypeFont):
             ascent, descent = font.getmetrics()
             height = math.ceil(ascent + descent)
-        except AttributeError:
-            left, top, right, bottom = font.getbbox(text or "Ag")
+        else:
+            _, top, _, bottom = font.getbbox(text or "Ag")
             height = math.ceil(bottom - top)
         return width, max(1, height)
 
@@ -835,6 +841,7 @@ class CodeBlock(MarkdownBlock):
         )
         text_y = y + 13
         if self.language:
+            assert self.label_font is not None, "Call measure() before render()."
             label = self.language.upper()
             label_width = TextMeasurer.get_text_size(label, self.label_font)[0]
             draw.text(
@@ -907,6 +914,7 @@ class MathBlock(MarkdownBlock):
             The next y coordinate.
         """
         del image, font_size
+        assert self.font is not None, "Call measure() before render()."
         text_y = y + 10
         for line in self.lines:
             line_width = TextMeasurer.get_text_size(line, self.font)[0]
@@ -1026,6 +1034,8 @@ class TableBlock(MarkdownBlock):
             The next y coordinate.
         """
         del image, font_size
+        assert self.body_font is not None, "Call measure() before render()."
+        assert self.header_font is not None, "Call measure() before render()."
         table_y = y + 8
         table_height = sum(self.row_heights)
         row_y = table_y
@@ -1093,8 +1103,12 @@ class ImageBlock(MarkdownBlock):
 
     async def load(self) -> None:
         """Load the image over HTTP with a bounded timeout."""
-        timeout = aiohttp.ClientTimeout(total=12)
         try:
+            # The TLS helper imports aiohttp too, so keep it on the image-only path.
+            from astrbot.core.utils.http_ssl import build_tls_connector
+
+            aiohttp = _get_aiohttp()
+            timeout = aiohttp.ClientTimeout(total=12)
             async with (
                 aiohttp.ClientSession(
                     trust_env=True,
@@ -1171,6 +1185,7 @@ class ImageBlock(MarkdownBlock):
         """
         del font_size
         if self.display_image is None:
+            assert self.font is not None, "Call measure() before render()."
             text_y = y + 7
             _, line_height = TextMeasurer.get_text_size("Ag", self.font)
             for line in self.fallback_lines:

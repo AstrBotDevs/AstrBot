@@ -1,7 +1,7 @@
 """
 AstrBot 测试数据
 
-此目录存放测试用的静态数据和配置文件。
+此目录存放测试用的静态数据和配置文件｡
 
 目录结构:
 - fixtures/
@@ -32,7 +32,7 @@ FIXTURES_DIR = Path(__file__).parent
 
 
 def load_fixture(filename: str) -> dict:
-    """加载 JSON 格式的测试数据。"""
+    """加载 JSON 格式的测试数据｡"""
     filepath = FIXTURES_DIR / filename
     if not filepath.exists():
         raise FileNotFoundError(f"Fixture not found: {filepath}")
@@ -40,7 +40,7 @@ def load_fixture(filename: str) -> dict:
 
 
 def get_fixture_path(filename: str) -> Path:
-    """获取测试数据文件路径。"""
+    """获取测试数据文件路径｡"""
     filepath = FIXTURES_DIR / filename
     if not filepath.exists():
         raise FileNotFoundError(f"Fixture not found: {filepath}")

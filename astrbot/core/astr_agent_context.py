@@ -1,3 +1,5 @@
+from typing import ClassVar
+
 from pydantic import Field
 from pydantic.dataclasses import dataclass
 
@@ -8,7 +10,7 @@ from astrbot.core.star.context import Context
 
 @dataclass
 class AstrAgentContext:
-    __pydantic_config__ = {"arbitrary_types_allowed": True}
+    __pydantic_config__: ClassVar[dict[str, bool]] = {"arbitrary_types_allowed": True}
 
     context: Context
     """The star context instance"""

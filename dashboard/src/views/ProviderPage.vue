@@ -132,6 +132,7 @@
                     :supports-reasoning="supportsReasoning"
                     :format-context-limit="formatContextLimit"
                     :testing-providers="testingProviders"
+                    :saving-providers="savingProviderToggles"
                     :tm="tm"
                     @fetch-models="fetchAvailableModels"
                     @open-manual-model="openManualModelDialog"
@@ -309,20 +310,20 @@ import { useProviderSources } from '@/composables/useProviderSources'
 const props = defineProps({
   defaultTab: {
     type: String,
-    default: 'chat_completion'
-  }
-})
+    default: "chat_completion",
+  },
+});
 
 const { tm } = useModuleI18n('features/provider')
 
 const snackbar = ref({
   show: false,
-  message: '',
-  color: 'success'
-})
+  message: "",
+  color: "success",
+});
 
-function showMessage(message, color = 'success') {
-  snackbar.value = { show: true, message, color }
+function showMessage(message, color = "success") {
+  snackbar.value = { show: true, message, color };
 }
 
 const {
@@ -333,6 +334,7 @@ const {
   loadingSources,
   loadingModels,
   savingSource,
+  savingProviderToggles,
   testingProviders,
   isSourceModified,
   configSchema,
@@ -366,12 +368,12 @@ const {
   modelAlreadyConfigured,
   toggleProviderEnable,
   testProvider,
-  loadConfig
+  loadConfig,
 } = useProviderSources({
   defaultTab: props.defaultTab,
   tm,
-  showMessage
-})
+  showMessage,
+});
 
 const unsavedLegacyProviderMarker = Symbol('unsavedLegacyProvider')
 const legacyProviderDrafts = ref([])
@@ -399,7 +401,7 @@ const {
   providerEditDialogTitle,
   openProviderEdit,
   openModelAddDialog,
-  saveEditedProvider
+  saveEditedProvider,
 } = useProviderModelConfigDialog({
   selectedProviderSource,
   configSchema,
@@ -407,39 +409,42 @@ const {
   modelAlreadyConfigured,
   loadConfig,
   tm,
-  showMessage
-})
+  showMessage,
+});
 
 function openManualModelDialog() {
   if (!selectedProviderSource.value) {
-    showMessage(tm('providerSources.selectHint'), 'error')
-    return
+    showMessage(tm("providerSources.selectHint"), "error");
+    return;
   }
-  manualModelId.value = ''
-  showManualModelDialog.value = true
+  manualModelId.value = "";
+  showManualModelDialog.value = true;
 }
 
 async function confirmManualModel() {
-  const modelId = manualModelId.value.trim()
+  const modelId = manualModelId.value.trim();
   if (!selectedProviderSource.value) {
-    showMessage(tm('providerSources.selectHint'), 'error')
-    return
+    showMessage(tm("providerSources.selectHint"), "error");
+    return;
   }
   if (!modelId) {
-    showMessage(tm('models.manualModelRequired'), 'error')
-    return
+    showMessage(tm("models.manualModelRequired"), "error");
+    return;
   }
   if (modelAlreadyConfigured(modelId)) {
-    showMessage(tm('models.manualModelExists'), 'error')
-    return
+    showMessage(tm("models.manualModelExists"), "error");
+    return;
   }
-  showManualModelDialog.value = false
-  openModelAddDialog(modelId)
+  showManualModelDialog.value = false;
+  openModelAddDialog(modelId);
 }
 
-watch(() => props.defaultTab, (val) => {
-  updateDefaultTab(val)
-})
+watch(
+  () => props.defaultTab,
+  (val) => {
+    updateDefaultTab(val);
+  },
+);
 
 watch(selectedProviderType, () => {
   selectedLegacyProvider.value = null
@@ -511,8 +516,8 @@ function selectLegacyProvider(provider) {
   let defaultConfig = {}
   for (const key in templates) {
     if (templates[key]?.type === provider.type) {
-      defaultConfig = templates[key]
-      break
+      defaultConfig = templates[key];
+      break;
     }
   }
 
@@ -523,7 +528,7 @@ function selectLegacyProvider(provider) {
           if (typeof source[key] === 'object' && source[key] !== null) {
             target[key] = Array.isArray(source[key]) ? [...source[key]] : { ...source[key] }
           } else {
-            target[key] = source[key]
+            target[key] = source[key];
           }
         }
       }
@@ -533,26 +538,22 @@ function selectLegacyProvider(provider) {
       if (typeof reference[key] === 'object' && reference[key] !== null) {
         if (!(key in target)) {
           if (Array.isArray(reference[key])) {
-            target[key] = [...reference[key]]
+            target[key] = [...reference[key]];
           } else {
-            target[key] = {}
+            target[key] = {};
           }
         }
         if (!Array.isArray(reference[key])) {
-          mergeConfigWithOrder(
-            target[key],
-            source && source[key] ? source[key] : {},
-            reference[key]
-          )
+          mergeConfigWithOrder(target[key], source && source[key] ? source[key] : {}, reference[key]);
         }
       } else if (!(key in target)) {
-        target[key] = reference[key]
+        target[key] = reference[key];
       }
     }
-  }
+  };
 
   if (defaultConfig) {
-    mergeConfigWithOrder(newSelectedProviderConfig.value, provider, defaultConfig)
+    mergeConfigWithOrder(newSelectedProviderConfig.value, provider, defaultConfig);
   }
 
   updatingMode.value = !provider[unsavedLegacyProviderMarker]
@@ -597,9 +598,9 @@ async function saveLegacyProvider() {
       isLegacyProviderModified.value = false
     }
   } catch (err) {
-    showMessage(err.response?.data?.message || err.message, 'error')
+    showMessage(err.response?.data?.message || err.message, "error");
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 
@@ -629,7 +630,7 @@ async function deleteLegacyProvider(provider) {
 }
 
 function isProviderTesting(providerId) {
-  return testingProviders.value.includes(providerId)
+  return testingProviders.value.includes(providerId);
 }
 
 async function testSingleProvider(provider) {

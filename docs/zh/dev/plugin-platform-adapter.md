@@ -65,7 +65,7 @@ from astrbot.api.message_components import (
     Image,
     Record,
 )  # 消息链中的组件，可以根据需要导入
-from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.platform.message_session import MessageSession
 from astrbot.api.platform import register_platform_adapter
 from astrbot import logger
 from .client import FakeClient
@@ -87,7 +87,7 @@ class FakePlatformAdapter(Platform):
         self.settings = platform_settings  # platform_settings 平台设置。
 
     async def send_by_session(
-        self, session: MessageSesion, message_chain: MessageChain
+        self, session: MessageSession, message_chain: MessageChain
     ):
         # 必须实现
         await super().send_by_session(session, message_chain)
@@ -105,7 +105,7 @@ class FakePlatformAdapter(Platform):
         # FakeClient 是我们自己定义的，这里只是示例。这个是其回调函数
         async def on_received(data):
             logger.info(data)
-            abm = await self.convert_message(data=data)  # 转换成 AstrBotMessage
+            abm = await self.convert_message(data=data)  # Convert to AstrBotMessage
             await self.handle_msg(abm)
 
         # 初始化 FakeClient
@@ -131,7 +131,7 @@ class FakePlatformAdapter(Platform):
         abm.raw_message = data  # 原始消息。
         abm.self_id = data["bot_id"]
         abm.session_id = data["userid"]  # 会话 ID。重要！
-        abm.message_id = data["message_id"]  # 消息 ID。
+        abm.message_id = data["message_id"]  # Message ID.
 
         return abm
 
@@ -182,62 +182,6 @@ class FakePlatformEvent(AstrMessageEvent):
                 )
 
         await super().send(message)  # 需要最后加上这一段，执行父类的 send 方法。
-```
-
-## 媒体消息处理
-
-平台适配器不需要在每个平台里重复实现媒体解析逻辑。你只需要把平台消息转换成 AstrBot 的消息组件，组件里的 `file` / `url` 可以保存以下媒体引用：
-
-- 本地路径，例如 `/tmp/a.jpg`
-- 标准 `file:` URI，例如 `file:///tmp/a.jpg`
-- HTTP(S) URL，例如 `https://example.com/a.jpg`
-- `base64://`，例如 `base64://iVBORw0KGgo...`
-- Data URI，例如 `data:image/png;base64,iVBORw0KGgo...`
-- 历史兼容的裸 base64，例如 `iVBORw0KGgo...`，但新代码不推荐主动生成这种格式
-
-如果你手上已经是本地文件，推荐使用组件提供的构造方法，它会生成标准 `file:` URI：
-
-```py
-from astrbot.api.message_components import Image, Record, Video
-
-abm.message.append(Image.fromFileSystem("/tmp/image.png"))
-abm.message.append(Record.fromFileSystem("/tmp/audio.wav"))
-abm.message.append(Video.fromFileSystem("/tmp/video.mp4"))
-```
-
-如果平台只给了可访问的 URL，直接放到组件里即可：
-
-```py
-abm.message.append(Image(file=image_url, url=image_url))
-abm.message.append(Record(file=audio_url, url=audio_url))
-abm.message.append(Video(file=video_url, url=video_url))
-```
-
-进入插件和 LLM 前，AstrBot 的预处理阶段会尽量把消息链里的媒体标准化：
-
-- `Image` 会通过统一媒体处理工具落地为本地文件，并在需要时转换为 JPEG。
-- `Record` 会落地为本地文件，并在需要时转换为 WAV。
-- `Reply` 中的 `Image` / `Record` 也会做同样处理。
-- 这些由核心创建的临时文件会挂到当前事件上，在事件结束后清理。
-
-发送消息时，如果平台 SDK 需要本地文件路径，调用组件的 `convert_to_file_path()` 即可，不要手写 `path.startswith("file://")` 之类的判断：
-
-```py
-if isinstance(i, Image):
-    image_path = await i.convert_to_file_path()
-    await self.client.send_image(to=self.get_sender_id(), image_path=image_path)
-elif isinstance(i, Record):
-    audio_path = await i.convert_to_file_path()
-    await self.client.send_audio(to=self.get_sender_id(), audio_path=audio_path)
-elif isinstance(i, Video):
-    video_path = await i.convert_to_file_path()
-    await self.client.send_video(to=self.get_sender_id(), video_path=video_path)
-```
-
-如果适配器自己下载了平台媒体并写入 AstrBot 临时目录，请在创建事件后把路径登记到事件上，避免事件结束后留下临时文件：
-
-```py
-message_event.track_temporary_local_file(temp_media_path)
 ```
 
 最后，main.py 只需这样，在初始化的时候导入 fake_platform_adapter 模块。装饰器会自动注册。

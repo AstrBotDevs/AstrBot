@@ -1,7 +1,4 @@
-import {
-  createHighlighter,
-  normalizeLimitedShikiLanguage,
-} from "./shikiLimitedBundle";
+import { createHighlighter, normalizeLimitedShikiLanguage } from "./shikiLimitedBundle";
 
 export const SHIKI_THEMES = {
   light: "github-light",
@@ -51,10 +48,7 @@ export function renderShikiCode(highlighter, code, language, colorMode = "auto")
   try {
     return highlighter.codeToHtml(code, options);
   } catch (err) {
-    console.warn(
-      `Failed to render code with Shiki language "${normalizedLanguage}". Falling back to plain text.`,
-      err,
-    );
+    console.warn(`Failed to render code with Shiki language "${normalizedLanguage}". Falling back to plain text.`, err);
 
     const fallbackOptions =
       colorMode === "dark"

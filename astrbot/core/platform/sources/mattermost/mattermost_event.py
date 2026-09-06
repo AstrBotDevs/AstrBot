@@ -45,10 +45,10 @@ class MattermostMessageEvent(AstrMessageEvent):
                 else:
                     message_buffer.chain.extend(chain.chain)
             if not message_buffer:
-                return None
+                return
             message_buffer.squash_plain()
             await self.send(message_buffer)
-            return None
+            return
 
         text_buffer = ""
 
@@ -68,9 +68,11 @@ class MattermostMessageEvent(AstrMessageEvent):
 
         if text_buffer.strip():
             await self.send(MessageChain([Plain(text_buffer)]))
-        return None
+        return
 
-    async def get_group(self, group_id=None, **kwargs):
+    async def get_group(
+        self, group_id: str | None = None, **kwargs: object
+    ) -> Group | None:
         """Gets Mattermost channel information and all visible members.
 
         Args:

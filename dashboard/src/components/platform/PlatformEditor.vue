@@ -163,7 +163,7 @@
               clearable
               :disabled="!routesReady"
             >
-              <template #item="{ props: itemProps, item }">
+              <template #item="{ props: itemProps, internalItem: item }">
                 <v-list-item v-bind="itemProps">
                   <template #title>
                     <UmoDisplay
@@ -177,7 +177,7 @@
                   </template>
                 </v-list-item>
               </template>
-              <template #selection="{ item }">
+              <template #selection="{ internalItem: item }">
                 <UmoDisplay
                   v-if="item"
                   v-bind="getSessionDisplayProps(item.raw)"

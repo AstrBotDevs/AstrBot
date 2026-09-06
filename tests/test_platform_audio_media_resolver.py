@@ -41,8 +41,7 @@ def _patch_resolver(monkeypatch, module) -> None:
 
 
 @pytest.mark.asyncio
-async def test_line_audio_component_uses_media_resolver_for_external_url(monkeypatch):
-    _patch_resolver(monkeypatch, line_adapter)
+async def test_line_audio_component_defers_external_conversion_to_preprocess():
     adapter = LinePlatformAdapter.__new__(LinePlatformAdapter)
 
     record = await adapter._build_audio_component(
@@ -56,20 +55,12 @@ async def test_line_audio_component_uses_media_resolver_for_external_url(monkeyp
     )
 
     assert isinstance(record, Record)
-    assert record.file == WAV_PATH
-    assert record.url == WAV_PATH
-    assert FakeMediaResolver.calls == [
-        (
-            "https://example.test/voice.m4a",
-            {"media_type": "audio", "default_suffix": ".wav"},
-            {"target_format": "wav"},
-        )
-    ]
+    assert record.file == "https://example.test/voice.m4a"
+    assert record.url == "https://example.test/voice.m4a"
 
 
 @pytest.mark.asyncio
-async def test_lark_audio_component_uses_media_resolver_after_download(monkeypatch):
-    _patch_resolver(monkeypatch, lark_adapter)
+async def test_lark_audio_component_retains_download_for_event_cleanup(monkeypatch):
     adapter = LarkPlatformAdapter.__new__(LarkPlatformAdapter)
 
     async def fake_download_file_resource_to_temp(**kwargs):
@@ -91,36 +82,20 @@ async def test_lark_audio_component_uses_media_resolver_after_download(monkeypat
 
     assert len(records) == 1
     assert isinstance(records[0], Record)
-    assert records[0].file == WAV_PATH
-    assert records[0].url == WAV_PATH
-    assert FakeMediaResolver.calls == [
-        (
-            "/tmp/lark-source.opus",
-            {"media_type": "audio", "default_suffix": ".wav"},
-            {"target_format": "wav"},
-        )
-    ]
+    assert records[0].file == "/tmp/lark-source.opus"
+    assert records[0].url == "/tmp/lark-source.opus"
 
 
 @pytest.mark.asyncio
-async def test_qqofficial_audio_attachment_uses_media_resolver(monkeypatch):
-    _patch_resolver(monkeypatch, qqofficial_platform_adapter)
-
+async def test_qqofficial_audio_attachment_defers_conversion_to_preprocess():
     record = await QQOfficialPlatformAdapter._prepare_audio_attachment(
         "https://example.test/voice.amr",
         "voice.amr",
     )
 
     assert isinstance(record, Record)
-    assert record.file == WAV_PATH
-    assert record.url == WAV_PATH
-    assert FakeMediaResolver.calls == [
-        (
-            "https://example.test/voice.amr",
-            {"media_type": "audio", "default_suffix": ".amr"},
-            {"target_format": "wav"},
-        )
-    ]
+    assert record.file == "https://example.test/voice.amr"
+    assert record.url == "https://example.test/voice.amr"
 
 
 @pytest.mark.asyncio

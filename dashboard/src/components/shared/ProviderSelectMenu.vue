@@ -305,6 +305,8 @@ const props = withDefaults(
     modelValue?: string | string[];
     fallbackModel?: string;
     providerType?: string;
+    providerSubtype?: string;
+    buttonText?: string;
     variant?: "config" | "input" | "header";
     allowEmpty?: boolean;
     multiple?: boolean;
@@ -313,6 +315,8 @@ const props = withDefaults(
     modelValue: "",
     fallbackModel: "",
     providerType: "chat_completion",
+    providerSubtype: "",
+    buttonText: "",
     variant: "config",
     allowEmpty: true,
     multiple: false,
@@ -336,6 +340,7 @@ const menuOpen = ref(false);
 const providerDrawer = ref(false);
 const loadingProviders = ref(false);
 const providersLoaded = ref(false);
+let loadingScope = "";
 
 const selectedProviderIds = computed(() =>
   props.multiple && Array.isArray(props.modelValue)
@@ -351,6 +356,7 @@ const selectedProvider = computed(() =>
 );
 
 const triggerTitle = computed(() => {
+  if (props.buttonText) return props.buttonText;
   if (props.multiple) {
     return selectedProviderIds.value.length > 0
       ? sharedTm("providerSelector.selectedModelCount", {
@@ -393,25 +399,34 @@ const filteredProviders = computed(() => {
 });
 
 async function loadProviderConfigs(force = false) {
-  if (loadingProviders.value || (providersLoaded.value && !force)) return;
+  const scope = `${props.providerType}:${props.providerSubtype}`;
+  if (scope === loadingScope && (loadingProviders.value || (providersLoaded.value && !force))) return;
+  loadingScope = scope;
   loadingProviders.value = true;
   try {
     const response = await providerApi.listByProviderType(props.providerType);
+    if (loadingScope !== scope) return;
+    if (response.data.status !== "ok") throw new Error(response.data.message || providerTm("models.fetchError"));
     if (response.data.status === "ok") {
       modelMetadata.value = (response.data.model_metadata || {}) as Record<
         string,
         ProviderModelMetadata
       >;
-      providerConfigs.value = (
-        (response.data.data || []) as unknown as ProviderConfig[]
-      ).filter((provider) => provider.enable !== false);
+      providerConfigs.value = (response.data.data || []).flatMap((provider) =>
+        typeof provider.id === "string" && provider.enable !== false && (!props.providerSubtype || provider.type === props.providerSubtype)
+          ? [{ ...provider, id: provider.id } as ProviderConfig]
+          : [],
+      );
       providersLoaded.value = true;
     }
   } catch (error) {
+    if (loadingScope !== scope) return;
     console.error("Failed to load provider list:", error);
     providerConfigs.value = [];
+    providersLoaded.value = false;
+    toastError(error instanceof Error ? error.message : providerTm("models.fetchError"));
   } finally {
-    loadingProviders.value = false;
+    if (loadingScope === scope) loadingProviders.value = false;
   }
 }
 
@@ -525,6 +540,13 @@ function getCurrentSelection() {
     modelName: selectedProvider.value?.model || props.fallbackModel || "",
   };
 }
+
+watch(() => [props.providerType, props.providerSubtype], () => {
+  providerConfigs.value = [];
+  modelMetadata.value = {};
+  providersLoaded.value = false;
+  void loadProviderConfigs(true);
+}, { immediate: true });
 
 watch(providerDrawer, (isOpen, wasOpen) => {
   if (!isOpen && wasOpen) loadProviderConfigs(true);

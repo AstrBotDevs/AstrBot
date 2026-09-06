@@ -33,6 +33,9 @@ from astrbot.core.platform.sources.qqofficial.qqofficial_platform_adapter import
 from astrbot.core.platform.sources.qqofficial_webhook.qo_webhook_adapter import (
     QQOfficialWebhookPlatformAdapter,
 )
+from astrbot.core.platform.sources.qqofficial_webhook.qo_webhook_server import (
+    QQOfficialWebhook,
+)
 
 
 def _make_group_payload(
@@ -296,7 +299,15 @@ async def test_get_group_uses_authenticated_client_for_ws_and_webhook(use_webhoo
         }
     )
     adapter.client.api = SimpleNamespace(_http=SimpleNamespace(request=request))
+    if isinstance(adapter, QQOfficialWebhookPlatformAdapter):
+        webhook = QQOfficialWebhook.__new__(QQOfficialWebhook)
+        webhook._extra_data_cache = {abm.message_id: {"message_type": 1}}
+        adapter.webhook_helper = webhook
     event = adapter.create_event(abm)
+    if isinstance(adapter, QQOfficialWebhookPlatformAdapter):
+        assert event.get_extra("message_type") == 1
+        assert adapter.webhook_helper is not None
+        assert adapter.webhook_helper.pop_extra_data(abm.message_id) == {}
 
     group = await event.get_group()
 

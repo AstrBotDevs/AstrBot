@@ -1,4 +1,3 @@
-import asyncio
 from typing import Literal, TypedDict
 
 import aiohttp
@@ -48,11 +47,7 @@ async def update_llm_metadata() -> None:
                     data = await response.json()
                     if not isinstance(data, dict):
                         raise ValueError("LLM metadata response must be a JSON object")
-            except (
-                aiohttp.ClientError,
-                asyncio.TimeoutError,
-                ValueError,
-            ) as e:
+            except (aiohttp.ClientError, TimeoutError, ValueError) as e:
                 last_error = e
                 logger.warning(f"Endpoint {url} failed: {e}, trying next...")
                 continue

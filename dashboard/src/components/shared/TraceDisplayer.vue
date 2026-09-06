@@ -1,644 +1,435 @@
-<script setup>
-import { ChevronDown, ChevronRight } from "@lucide/vue";
-import { logApi } from "@/api/v1";
+<script setup lang="ts">
+import { EventSourcePolyfill, type MessageEvent as SseMessageEvent } from "event-source-polyfill";
+import { onBeforeUnmount, onMounted, shallowRef } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
-import { EventSourcePolyfill } from "event-source-polyfill";
+import axios, { resolveApiUrl } from "@/utils/request";
 
+interface TraceLog {
+  type: string;
+  span_id: string;
+  name?: string;
+  umo?: string;
+  sender_name?: string;
+  message_outline?: string;
+  time: number;
+  action: string;
+  fields?: unknown;
+}
+
+interface TraceRecord {
+  time: number;
+  action: string;
+  fieldsText: string;
+  timeLabel: string;
+  key: string;
+}
+
+interface TraceEvent {
+  span_id: string;
+  name?: string;
+  umo?: string;
+  sender_name?: string;
+  message_outline?: string;
+  first_time: number;
+  last_time: number;
+  collapsed: boolean;
+  visibleCount: number;
+  records: TraceRecord[];
+  hasAgentPrepare: boolean;
+}
+
+const props = defineProps({
+  maxItems: { type: Number, default: 300 },
+});
 const { tm } = useModuleI18n("features/trace");
+let isMounted = false;
+const events = shallowRef<TraceEvent[]>([]);
+const eventIndex = new Map<string, TraceEvent>();
+const highlightMap = shallowRef<Record<string, boolean>>({});
+const highlightTimers = new Map<string, ReturnType<typeof setTimeout>>();
+let eventSource: EventSourcePolyfill | null = null;
+let retryTimer: ReturnType<typeof setTimeout> | null = null;
+let retryAttempts = 0;
+const maxRetryAttempts = 10;
+const baseRetryDelay = 1000;
+let lastEventId: string | null = null;
+
+onMounted(async () => {
+  isMounted = true;
+  await fetchTraceHistory();
+  connectSSE();
+});
+
+onBeforeUnmount(() => {
+  isMounted = false;
+  eventSource?.close();
+  eventSource = null;
+  if (retryTimer) clearTimeout(retryTimer);
+  retryTimer = null;
+  highlightTimers.forEach((timer) => clearTimeout(timer));
+  highlightTimers.clear();
+  retryAttempts = 0;
+});
+
+async function fetchTraceHistory() {
+  if (!isMounted) return;
+  try {
+    const res = await axios.get("/api/log-history");
+    if (!isMounted) return;
+    const logs: TraceLog[] = res.data?.data?.logs || [];
+    processNewTraces(logs.filter((item) => item.type === "trace"));
+  } catch (error) {
+    console.error("Failed to fetch trace history:", error);
+  }
+}
+
+function connectSSE() {
+  if (!isMounted) return;
+  eventSource?.close();
+  eventSource = null;
+  const token = localStorage.getItem("token");
+  if (!token) return;
+  eventSource = new EventSourcePolyfill(resolveApiUrl("/api/live-log"), {
+    headers: { Authorization: `Bearer ${token}` },
+    heartbeatTimeout: 300000,
+    withCredentials: true,
+  });
+  eventSource.onopen = () => {
+    retryAttempts = 0;
+    if (!lastEventId) void fetchTraceHistory();
+  };
+  eventSource.onmessage = (event: SseMessageEvent) => {
+    if (!isMounted) return;
+    try {
+      if (event.lastEventId) lastEventId = event.lastEventId;
+      const payload: TraceLog = JSON.parse(event.data);
+      if (payload?.type !== "trace") return;
+      processNewTraces([payload]);
+    } catch (error) {
+      console.error("Failed to parse trace payload:", error);
+    }
+  };
+  eventSource.onerror = () => {
+    eventSource?.close();
+    eventSource = null;
+    if (!isMounted) return;
+    if (retryAttempts >= maxRetryAttempts) {
+      console.error("Trace stream reached max retry attempts.");
+      return;
+    }
+    const delay = Math.min(baseRetryDelay * 2 ** retryAttempts, 30000);
+    if (retryTimer) clearTimeout(retryTimer);
+    retryTimer = setTimeout(async () => {
+      retryTimer = null;
+      retryAttempts++;
+      if (!lastEventId) await fetchTraceHistory();
+      connectSSE();
+    }, delay);
+  };
+}
+
+function processNewTraces(newTraces: TraceLog[]) {
+  if (!isMounted || !newTraces.length) return;
+  const touched = new Set<string>();
+  const currentEvents = [...events.value];
+  newTraces.forEach((trace) => {
+    if (!trace.span_id) return;
+    const recordKey = `${trace.time}-${trace.span_id}-${trace.action}`;
+    let event = eventIndex.get(trace.span_id);
+    if (!event) {
+      event = {
+        span_id: trace.span_id,
+        name: trace.name,
+        umo: trace.umo,
+        sender_name: trace.sender_name,
+        message_outline: trace.message_outline,
+        first_time: trace.time,
+        last_time: trace.time,
+        collapsed: true,
+        visibleCount: 20,
+        records: [],
+        hasAgentPrepare: trace.action === "astr_agent_prepare",
+      };
+      eventIndex.set(trace.span_id, event);
+      currentEvents.push(event);
+    }
+    if (event.records.some((item) => item.key === recordKey)) return;
+    event.records.push({
+      time: trace.time,
+      action: trace.action,
+      fieldsText: formatFields(trace.fields),
+      timeLabel: formatTime(trace.time),
+      key: recordKey,
+    });
+    if (trace.action === "astr_agent_prepare") event.hasAgentPrepare = true;
+    if (!event.first_time || trace.time < event.first_time) event.first_time = trace.time;
+    if (!event.last_time || trace.time > event.last_time) event.last_time = trace.time;
+    if (!event.sender_name && trace.sender_name) event.sender_name = trace.sender_name;
+    if (!event.message_outline && trace.message_outline) event.message_outline = trace.message_outline;
+    touched.add(trace.span_id);
+  });
+  if (!touched.size) return;
+  currentEvents.forEach((event) => event.records.sort((a, b) => b.time - a.time));
+  currentEvents.sort((a, b) => b.first_time - a.first_time);
+  if (currentEvents.length > props.maxItems) {
+    currentEvents.splice(props.maxItems).forEach((event) => {
+      eventIndex.delete(event.span_id);
+    });
+  }
+  events.value = currentEvents;
+  touched.forEach(pulseEvent);
+}
+
+function pulseEvent(spanId: string) {
+  if (!spanId || !isMounted || !eventIndex.has(spanId)) return;
+  clearTimeout(highlightTimers.get(spanId));
+  highlightMap.value = { ...highlightMap.value, [spanId]: true };
+  const timer = setTimeout(() => {
+    if (!isMounted) return;
+    const next = { ...highlightMap.value };
+    delete next[spanId];
+    highlightMap.value = next;
+    highlightTimers.delete(spanId);
+  }, 1500);
+  highlightTimers.set(spanId, timer);
+}
+
+function toggleEvent(spanId: string) {
+  const event = eventIndex.get(spanId);
+  if (!event) return;
+  event.collapsed = !event.collapsed;
+  events.value = [...events.value];
+}
+
+function showMore(spanId: string) {
+  const event = eventIndex.get(spanId);
+  if (!event) return;
+  event.visibleCount = Math.min(event.records.length, event.visibleCount + 20);
+  events.value = [...events.value];
+}
+
+function getVisibleRecords(event: TraceEvent) {
+  return event.records.slice(0, event.visibleCount);
+}
+
+function formatTime(ts: number) {
+  if (!ts) return "";
+  const date = new Date(ts * 1000);
+  return `${date.toLocaleString()}.${String(date.getMilliseconds()).padStart(3, "0")}`;
+}
+
+function shortSpan(spanId: string) {
+  return spanId.slice(0, 8);
+}
+
+function formatFields(fields: unknown): string {
+  if (!fields) return "";
+  try {
+    // Keep the entire history payload, including long LLM/tool fields.
+    return JSON.stringify(fields, null, 2) ?? "";
+  } catch {
+    return String(fields);
+  }
+}
 </script>
 
 <template>
-  <div class="trace-wrapper">
-    <div ref="scrollEl" class="trace-table">
-      <div class="trace-row trace-header">
-        <div class="trace-cell time">{{ tm("table.time") }}</div>
-        <div class="trace-cell span">{{ tm("table.eventId") }}</div>
-        <div class="trace-cell umo">UMO</div>
-        <div class="trace-cell sender">{{ tm("table.sender") }}</div>
-        <div class="trace-cell outline">{{ tm("table.outline") }}</div>
-        <div class="trace-cell fields"></div>
+  <div class="timeline-container">
+    <div class="trace-timeline">
+      <div v-if="events.length === 0" class="tl-empty">
+        <div class="tl-empty-icon"><v-icon>mdi-timer-sand</v-icon></div>
+        <div class="tl-empty-text">{{ tm("empty") }}</div>
+        <div class="tl-empty-hint">发送消息后即可看到调用链路</div>
       </div>
       <div
-        class="trace-group"
-        :class="{ highlight: highlightMap[event.span_id] }"
-        v-for="event in events"
+        v-for="(event, idx) in events"
         :key="event.span_id"
+        class="tl-item"
+        :class="{ 'tl-item-active': highlightMap[event.span_id], 'tl-item-expanded': !event.collapsed }"
       >
-        <div class="trace-row trace-event">
-          <div class="trace-cell time" :data-label="tm('table.time')">
-            {{ formatTime(event.first_time) }}
-          </div>
+        <div class="tl-track">
+          <div class="tl-dot" :class="{ 'tl-dot-active': event.hasAgentPrepare }"></div>
+          <div v-if="idx < events.length - 1" class="tl-line"></div>
+        </div>
+        <div class="tl-card">
           <div
-            class="trace-cell span"
-            :data-label="tm('table.eventId')"
-            :title="event.span_id"
+            class="tl-card-header"
+            role="button"
+            tabindex="0"
+            :aria-expanded="!event.collapsed"
+            @click="toggleEvent(event.span_id)"
+            @keydown.enter.prevent="toggleEvent(event.span_id)"
+            @keydown.space.prevent="toggleEvent(event.span_id)"
           >
-            <div class="event-title">
-              {{ shortSpan(event.span_id) }}
+            <div class="tl-card-top">
+              <span class="tl-event-id" :title="event.span_id">{{ shortSpan(event.span_id) }}</span>
+              <span class="tl-umo">{{ event.umo || "-" }}</span>
+              <span class="tl-time">{{ formatTime(event.first_time) }}</span>
+            </div>
+            <div class="tl-card-bottom">
+              <span class="tl-sender">{{ event.sender_name || "Unknown" }}</span>
+              <span class="tl-outline">{{ event.message_outline || "-" }}</span>
+              <span class="tl-expand-btn">{{ event.collapsed ? tm("expand") : tm("collapse") }}</span>
             </div>
           </div>
-          <div class="trace-cell umo" data-label="UMO">{{ event.umo }}</div>
-          <div class="trace-cell sender" :data-label="tm('table.sender')">
-            <div
-              class="event-sub"
-              style="
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
-              "
-            >
-              {{ event.sender_name || "-" }}
+          <div v-if="!event.collapsed && event.records.length > 0" class="tl-records">
+            <div class="tl-records-header">调用链 · {{ event.records.length }} 条记录</div>
+            <div v-for="record in getVisibleRecords(event)" :key="record.key" class="tl-record">
+              <div class="tl-record-left">
+                <div class="tl-record-time">{{ record.timeLabel }}</div>
+                <div class="tl-record-action">{{ record.action }}</div>
+              </div>
+              <pre class="tl-record-fields">{{ record.fieldsText }}</pre>
             </div>
-          </div>
-          <div class="trace-cell outline" :data-label="tm('table.outline')">
-            <div class="event-sub outline">
-              {{ event.message_outline || "-" }}
+            <div v-if="event.visibleCount < event.records.length" class="tl-records-more">
+              <button type="button" @click.stop="showMore(event.span_id)">
+                {{ tm("showMore") }} (+{{ event.records.length - event.visibleCount }})
+              </button>
             </div>
-          </div>
-          <div class="trace-cell fields event-controls">
-            <v-btn
-              class="event-toggle"
-              size="x-small"
-              variant="text"
-              color="primary"
-              :aria-label="event.collapsed ? tm('expand') : tm('collapse')"
-              @click="toggleEvent(event.span_id)"
-            >
-              <component
-                :is="event.collapsed ? ChevronRight : ChevronDown"
-                :size="13"
-                :stroke-width="2"
-                aria-hidden="true"
-              />
-              <span>{{ event.collapsed ? tm("expand") : tm("collapse") }}</span>
-              <span v-if="event.hasAgentPrepare" class="agent-dot" />
-            </v-btn>
           </div>
         </div>
-        <div class="trace-records" v-if="!event.collapsed">
-          <div
-            class="trace-record"
-            v-for="record in getVisibleRecords(event)"
-            :key="record.key"
-          >
-            <div class="trace-record-time">{{ record.timeLabel }}</div>
-            <div class="trace-record-action">{{ record.action }}</div>
-            <pre class="trace-record-fields">{{ record.fieldsText }}</pre>
-          </div>
-          <div
-            class="event-more"
-            v-if="event.visibleCount < event.records.length"
-          >
-            <v-btn
-              size="x-small"
-              variant="tonal"
-              color="primary"
-              @click="showMore(event.span_id)"
-            >
-              {{ tm("showMore") }}
-            </v-btn>
-          </div>
-        </div>
-      </div>
-      <div v-if="events.length === 0" class="trace-empty">
-        {{ tm("empty") }}
       </div>
     </div>
   </div>
 </template>
 
-<script>
-export default {
-  name: "TraceDisplayer",
-  props: {
-    autoScroll: {
-      type: Boolean,
-      default: true,
-    },
-    maxItems: {
-      type: Number,
-      default: 300,
-    },
-  },
-  data() {
-    return {
-      events: [],
-      eventIndex: {},
-      highlightMap: {},
-      highlightTimers: {},
-      eventSource: null,
-      retryTimer: null,
-      retryAttempts: 0,
-      maxRetryAttempts: 10,
-      baseRetryDelay: 1000,
-      lastEventId: null,
-    };
-  },
-  async mounted() {
-    await this.fetchTraceHistory();
-    this.connectSSE();
-  },
-  beforeUnmount() {
-    if (this.eventSource) {
-      this.eventSource.close();
-      this.eventSource = null;
-    }
-    if (this.retryTimer) {
-      clearTimeout(this.retryTimer);
-      this.retryTimer = null;
-    }
-    this.retryAttempts = 0;
-  },
-  methods: {
-    async fetchTraceHistory() {
-      try {
-        const res = await logApi.history();
-        const logs = res.data?.data?.logs || [];
-        const traces = logs.filter((item) => item.type === "trace");
-        this.processNewTraces(traces);
-      } catch (err) {
-        console.error("Failed to fetch trace history:", err);
-      }
-    },
-    connectSSE() {
-      if (this.eventSource) {
-        this.eventSource.close();
-        this.eventSource = null;
-      }
-
-      const token = localStorage.getItem("token");
-
-      this.eventSource = new EventSourcePolyfill(logApi.liveUrl(), {
-        headers: {
-          Authorization: token ? `Bearer ${token}` : "",
-        },
-        heartbeatTimeout: 300000,
-        withCredentials: true,
-      });
-
-      this.eventSource.onopen = () => {
-        this.retryAttempts = 0;
-        if (!this.lastEventId) {
-          this.fetchTraceHistory();
-        }
-      };
-
-      this.eventSource.onmessage = (event) => {
-        try {
-          if (event.lastEventId) {
-            this.lastEventId = event.lastEventId;
-          }
-
-          const payload = JSON.parse(event.data);
-          if (payload?.type !== "trace") {
-            return;
-          }
-          this.processNewTraces([payload]);
-        } catch (e) {
-          console.error("Failed to parse trace payload:", e);
-        }
-      };
-
-      this.eventSource.onerror = (err) => {
-        if (this.eventSource) {
-          this.eventSource.close();
-          this.eventSource = null;
-        }
-
-        if (this.retryAttempts >= this.maxRetryAttempts) {
-          console.error("Trace stream reached max retry attempts.");
-          return;
-        }
-
-        const delay = Math.min(
-          this.baseRetryDelay * Math.pow(2, this.retryAttempts),
-          30000,
-        );
-
-        if (this.retryTimer) {
-          clearTimeout(this.retryTimer);
-          this.retryTimer = null;
-        }
-
-        this.retryTimer = setTimeout(async () => {
-          this.retryAttempts++;
-          if (!this.lastEventId) {
-            await this.fetchTraceHistory();
-          }
-          this.connectSSE();
-        }, delay);
-      };
-    },
-    processNewTraces(newTraces) {
-      if (!newTraces || newTraces.length === 0) return;
-
-      let hasUpdate = false;
-      const touched = new Set();
-      newTraces.forEach((trace) => {
-        if (!trace.span_id) return;
-        const recordKey = `${trace.time}-${trace.span_id}-${trace.action}`;
-        let event = this.eventIndex[trace.span_id];
-        if (!event) {
-          event = {
-            span_id: trace.span_id,
-            name: trace.name,
-            umo: trace.umo,
-            sender_name: trace.sender_name,
-            message_outline: trace.message_outline,
-            first_time: trace.time,
-            last_time: trace.time,
-            collapsed: true,
-            visibleCount: 20,
-            records: [],
-            hasAgentPrepare: trace.action === "astr_agent_prepare",
-          };
-          this.eventIndex[trace.span_id] = event;
-          this.events.push(event);
-          hasUpdate = true;
-        }
-
-        const exists = event.records.some((item) => item.key === recordKey);
-        if (exists) return;
-
-        event.records.push({
-          time: trace.time,
-          action: trace.action,
-          fieldsText: this.formatFields(trace.fields),
-          timeLabel: this.formatTime(trace.time),
-          key: recordKey,
-        });
-        if (trace.action === "astr_agent_prepare") {
-          event.hasAgentPrepare = true;
-        }
-        if (!event.first_time || trace.time < event.first_time) {
-          event.first_time = trace.time;
-        }
-        if (!event.last_time || trace.time > event.last_time) {
-          event.last_time = trace.time;
-        }
-        if (!event.sender_name && trace.sender_name) {
-          event.sender_name = trace.sender_name;
-        }
-        if (!event.message_outline && trace.message_outline) {
-          event.message_outline = trace.message_outline;
-        }
-        touched.add(trace.span_id);
-        hasUpdate = true;
-      });
-
-      if (hasUpdate) {
-        this.events.forEach((event) => {
-          event.records.sort((a, b) => b.time - a.time);
-        });
-        this.events.sort((a, b) => b.first_time - a.first_time);
-        if (this.events.length > this.maxItems) {
-          const overflow = this.events.length - this.maxItems;
-          const removed = this.events.splice(this.maxItems, overflow);
-          removed.forEach((event) => {
-            delete this.eventIndex[event.span_id];
-          });
-        }
-        touched.forEach((spanId) => {
-          this.pulseEvent(spanId);
-        });
-      }
-    },
-    scrollToBottom() {
-      const el = this.$refs.scrollEl;
-      if (!el) return;
-      el.scrollTop = el.scrollHeight;
-    },
-    toggleEvent(spanId) {
-      const event = this.eventIndex[spanId];
-      if (!event) return;
-      event.collapsed = !event.collapsed;
-    },
-    showMore(spanId) {
-      const event = this.eventIndex[spanId];
-      if (!event) return;
-      event.visibleCount = Math.min(
-        event.records.length,
-        event.visibleCount + 20,
-      );
-    },
-    pulseEvent(spanId) {
-      if (!spanId) return;
-      if (this.highlightTimers[spanId]) {
-        clearTimeout(this.highlightTimers[spanId]);
-      }
-      this.highlightMap = { ...this.highlightMap, [spanId]: true };
-      const remove = setTimeout(() => {
-        const next = { ...this.highlightMap };
-        delete next[spanId];
-        this.highlightMap = next;
-        const timers = { ...this.highlightTimers };
-        delete timers[spanId];
-        this.highlightTimers = timers;
-      }, 1200);
-      this.highlightTimers = { ...this.highlightTimers, [spanId]: remove };
-    },
-    getVisibleRecords(event) {
-      if (!event.records.length) return [];
-      return event.records.slice(0, event.visibleCount);
-    },
-    formatTime(ts) {
-      if (!ts) return "";
-      const date = new Date(ts * 1000);
-      const base = date.toLocaleString();
-      const ms = String(date.getMilliseconds()).padStart(3, "0");
-      return `${base}.${ms}`;
-    },
-    shortSpan(spanId) {
-      if (!spanId) return "";
-      return spanId.slice(0, 8);
-    },
-    formatFields(fields) {
-      if (!fields) return "";
-      try {
-        const text = JSON.stringify(fields, null, 2);
-        if (text.length > 2000) {
-          return `${text}`;
-        }
-        return text;
-      } catch (e) {
-        return String(fields);
-      }
-    },
-  },
-};
-</script>
-
 <style scoped>
-.trace-wrapper {
+.timeline-container {
+  display: flex;
+  flex-direction: column;
   height: 100%;
   min-height: 0;
-}
-
-.trace-table {
-  color: rgba(var(--v-theme-on-surface), 0.88);
-  font-family: SFMono-Regular, Menlo, Monaco, Consolas,
-    var(--astrbot-font-cjk-mono), monospace;
-  height: 100%;
-  overflow: auto;
-  padding: 0 4px 4px;
-  scrollbar-gutter: stable;
-}
-
-.trace-row {
-  display: grid;
-  gap: 14px;
-  grid-template-columns:
-    minmax(156px, 1.1fr) 90px minmax(220px, 2fr)
-    minmax(100px, 0.8fr) minmax(180px, 1.5fr) 86px;
-  min-width: 940px;
-}
-
-.trace-group {
-  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
-  background: transparent;
-  padding: 9px 8px;
-  transition: background 0.16s ease;
-}
-
-.trace-group:hover {
-  background: rgba(var(--v-theme-on-surface), 0.025);
-}
-
-.trace-group.highlight {
-  background: rgba(59, 130, 246, 0.08);
-  transition: background 0.6s ease;
-}
-
-.trace-event {
-  align-items: center;
-}
-
-.trace-header {
-  background: var(--trace-card, #f5f6f7);
-  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.12);
-  color: rgba(var(--v-theme-on-surface), 0.58);
-  font-weight: 650;
-  padding: 8px;
-  position: sticky;
-  top: 0;
-  z-index: 2;
-}
-
-.trace-cell {
-  font-size: 12px;
-  min-width: 0;
+  color: var(--trace-text, rgba(226, 232, 240, 0.92));
+  font-family: inherit;
   overflow: hidden;
-  text-overflow: ellipsis;
 }
 
-.event-title {
-  font-weight: 600;
-  color: rgba(var(--v-theme-on-surface), 0.88);
-}
-
-.event-meta {
-  font-size: 12px;
-  color: rgba(var(--v-theme-on-surface), 0.62);
-  margin-top: 4px;
-}
-
-.event-sub {
-  font-size: 12px;
-  color: rgba(var(--v-theme-on-surface), 0.72);
-  margin-top: 2px;
-  word-break: break-word;
-}
-
-.event-sub.outline {
-  color: rgba(var(--v-theme-on-surface), 0.62);
-}
-
-.event-controls {
+.trace-timeline {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 20px;
   display: flex;
-  justify-content: flex-end;
+  flex-direction: column;
 }
 
-.event-toggle :deep(.v-btn__content) {
-  gap: 4px;
-}
-
-.agent-dot {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #22c55e;
-  margin-left: 6px;
-  vertical-align: middle;
-}
-
-.trace-cell.fields pre {
-  margin: 0;
-  white-space: pre-wrap;
-  word-break: break-word;
-  color: rgba(var(--v-theme-on-surface), 0.72);
-}
-
-.trace-empty {
-  padding: 24px;
-  text-align: center;
-  color: rgba(var(--v-theme-on-surface), 0.62);
-}
-
-.trace-record {
-  display: grid;
-  background: rgba(var(--v-theme-on-surface), 0.025);
-  border-radius: 8px;
-  gap: 10px;
-  grid-template-columns: 180px 150px minmax(0, 1fr);
-  margin-top: 4px;
-  padding: 8px 10px;
-}
-
-.trace-record:last-child {
-  border-bottom: none;
-}
-
-.trace-record-time {
-  color: rgba(var(--v-theme-on-surface), 0.62);
-  font-size: 11px;
-}
-
-.trace-record-action {
-  color: rgba(var(--v-theme-on-surface), 0.88);
-  font-weight: 600;
-  font-size: 11px;
-}
-
-.trace-record-fields {
-  margin: 0;
-  white-space: pre-wrap;
-  word-break: break-word;
-  color: rgba(var(--v-theme-on-surface), 0.72);
-  font-size: 11px;
-  line-height: 1.5;
-}
-
-.event-more {
+.tl-empty {
   display: flex;
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
-  padding: 6px 0 2px;
+  flex: 1;
+  min-height: 320px;
+  padding: 48px 24px;
+  text-align: center;
+  border: 1px solid var(--trace-border, rgba(83, 104, 120, 0.3));
+  border-radius: 14px;
+  background: var(--trace-empty-surface, rgba(7, 16, 24, 0.8));
 }
 
-.trace-records {
-  padding: 6px 0 2px;
+.tl-empty-icon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  margin-bottom: 16px;
+  font-size: 24px;
+  border-radius: 999px;
+  background: var(--trace-empty-icon-bg, rgba(0, 242, 255, 0.12));
+  box-shadow: inset 0 0 0 1px var(--trace-border-strong, rgba(0, 242, 255, 0.18));
 }
 
-@media (max-width: 768px) {
-  .trace-table {
-    overflow-x: hidden;
-    padding: 0 2px 2px;
-  }
+.tl-empty-text {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.4;
+  color: var(--trace-title, #f4feff) !important;
+  -webkit-text-fill-color: var(--trace-title, #f4feff);
+  margin-bottom: 8px;
+}
 
-  .trace-row.trace-header {
-    display: none;
-  }
+.tl-empty-hint {
+  max-width: 38ch;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--trace-muted, rgba(203, 213, 225, 0.76)) !important;
+  -webkit-text-fill-color: var(--trace-muted, rgba(203, 213, 225, 0.76));
+}
 
-  .trace-group {
-    border-bottom: 0;
-    border-radius: 10px;
-    padding: 10px;
-  }
+.tl-item { display: flex; gap: 0; margin-bottom: 0; }
+.tl-item:last-child .tl-line { display: none; }
+.tl-track { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; width: 32px; }
+.tl-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--trace-card-bg, rgba(10, 18, 25, 0.94));
+  border: 2px solid var(--trace-border, rgba(83, 104, 120, 0.3));
+  flex-shrink: 0;
+  margin-top: 18px;
+  z-index: 1;
+  transition: all 0.3s ease;
+}
+.tl-dot-active { background: var(--trace-primary, #00f2ff); border-color: var(--trace-primary, #00f2ff); box-shadow: 0 0 8px rgba(0, 242, 255, 0.5); }
+.tl-item-active .tl-dot { background: var(--trace-primary, #00f2ff); border-color: var(--trace-primary, #00f2ff); box-shadow: 0 0 12px rgba(0, 242, 255, 0.8); transform: scale(1.3); }
+.tl-line { width: 2px; flex: 1; background: var(--trace-track, rgba(71, 85, 105, 0.42)); margin-top: 4px; min-height: 20px; }
+.tl-item-active .tl-line { background: var(--trace-track-active, rgba(0, 242, 255, 0.3)); }
 
-  .trace-group + .trace-group {
-    margin-top: 6px;
-  }
+.tl-card {
+  flex: 1;
+  min-width: 0;
+  margin-left: 12px;
+  margin-bottom: 16px;
+  background: var(--trace-card-bg, rgba(10, 18, 25, 0.94));
+  border: 1px solid var(--trace-border, rgba(83, 104, 120, 0.3));
+  border-radius: 12px;
+  overflow: hidden;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease;
+}
+.tl-item-active .tl-card { border-color: var(--trace-border-active, rgba(0, 242, 255, 0.38)); box-shadow: var(--trace-shadow, 0 10px 24px rgba(15, 23, 42, 0.08)); }
+.tl-item-expanded .tl-card { border-color: var(--trace-border-strong, rgba(0, 242, 255, 0.18)); }
+.tl-card-header { padding: 14px 16px; cursor: pointer; transition: background 0.2s ease; }
+.tl-card-header:hover { background: var(--trace-primary-soft, rgba(0, 242, 255, 0.1)); }
+.tl-card-top { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+.tl-event-id {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--trace-primary, #00f2ff);
+  background: var(--trace-primary-soft, rgba(0, 242, 255, 0.1));
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--trace-border-strong, rgba(0, 242, 255, 0.18));
+  font-family: var(--astrbot-font-mono);
+}
+.tl-umo { font-size: 11px; color: var(--trace-muted, rgba(203, 213, 225, 0.76)) !important; -webkit-text-fill-color: var(--trace-muted, rgba(203, 213, 225, 0.76)); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tl-time { font-size: 10px; color: var(--trace-subtle, rgba(148, 163, 184, 0.76)) !important; -webkit-text-fill-color: var(--trace-subtle, rgba(148, 163, 184, 0.76)); flex-shrink: 0; font-family: var(--astrbot-font-mono); }
+.tl-card-bottom { display: flex; align-items: center; gap: 12px; }
+.tl-sender { font-size: 13px; font-weight: 600; color: var(--trace-text, rgba(226, 232, 240, 0.92)) !important; -webkit-text-fill-color: var(--trace-text, rgba(226, 232, 240, 0.92)); max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tl-outline { flex: 1; font-size: 13px; color: var(--trace-muted, rgba(203, 213, 225, 0.76)) !important; -webkit-text-fill-color: var(--trace-muted, rgba(203, 213, 225, 0.76)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tl-expand-btn { font-size: 11px; font-weight: 600; color: var(--trace-primary, #00f2ff); background: var(--trace-primary-soft, rgba(0, 242, 255, 0.1)); border: 1px solid var(--trace-border-strong, rgba(0, 242, 255, 0.18)); padding: 4px 10px; border-radius: 999px; flex-shrink: 0; font-family: var(--astrbot-font-mono); }
 
-  .trace-event {
-    align-items: start;
-    display: grid;
-    gap: 6px 10px;
-    grid-template-areas:
-      "outline controls"
-      "sender controls"
-      "umo umo"
-      "time span";
-    grid-template-columns: minmax(0, 1fr) auto;
-    min-width: 0;
-  }
+.tl-records { border-top: 1px solid var(--trace-border, rgba(83, 104, 120, 0.3)); background: var(--trace-record-bg, rgba(3, 10, 16, 0.52)); padding: 14px 16px; }
+.tl-records-header { font-size: 11px; color: var(--trace-subtle, rgba(148, 163, 184, 0.76)) !important; -webkit-text-fill-color: var(--trace-subtle, rgba(148, 163, 184, 0.76)); letter-spacing: 0.04em; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--trace-border, rgba(83, 104, 120, 0.3)); font-family: var(--astrbot-font-mono); }
+.tl-record { display: flex; gap: 12px; margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--trace-border, rgba(83, 104, 120, 0.3)); }
+.tl-record:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+.tl-record-left { flex-shrink: 0; width: 200px; }
+.tl-record-time { font-size: 10px; color: var(--trace-subtle, rgba(148, 163, 184, 0.76)) !important; -webkit-text-fill-color: var(--trace-subtle, rgba(148, 163, 184, 0.76)); margin-bottom: 2px; font-family: var(--astrbot-font-mono); }
+.tl-record-action { font-size: 11px; font-weight: 700; color: var(--trace-primary, #00f2ff); font-family: var(--astrbot-font-mono); }
+.tl-record-fields { flex: 1; min-width: 0; margin: 0; font-size: 11px; color: var(--trace-text, rgba(226, 232, 240, 0.92)) !important; -webkit-text-fill-color: var(--trace-text, rgba(226, 232, 240, 0.92)); white-space: pre-wrap; word-break: break-word; font-family: inherit; background: transparent; border: none; padding: 0; line-height: 1.6; }
+.tl-records-more { text-align: center; padding-top: 10px; }
+.tl-records-more button { background: var(--trace-primary-soft, rgba(0, 242, 255, 0.1)); border: 1px solid var(--trace-border-strong, rgba(0, 242, 255, 0.18)); color: var(--trace-primary, #00f2ff); padding: 6px 14px; border-radius: 999px; cursor: pointer; font-size: 11px; font-family: var(--astrbot-font-mono); transition: all 0.2s ease; }
+.tl-records-more button:hover { background: var(--trace-primary-soft, rgba(0, 242, 255, 0.1)); border-color: var(--trace-border-active, rgba(0, 242, 255, 0.38)); }
+.timeline-container :is(div, span, pre, button) { mix-blend-mode: normal; }
 
-  .trace-cell.time {
-    grid-area: time;
-  }
+@media (prefers-reduced-motion: reduce) {
+  .tl-dot, .tl-card, .tl-card-header, .tl-records-more button { transition: none; }
+}
 
-  .trace-cell.span {
-    grid-area: span;
-    text-align: right;
-  }
-
-  .trace-cell.umo {
-    grid-area: umo;
-  }
-
-  .trace-cell.sender {
-    grid-area: sender;
-  }
-
-  .trace-cell.outline {
-    grid-area: outline;
-  }
-
-  .trace-cell.fields {
-    grid-area: controls;
-  }
-
-  .trace-cell.time,
-  .trace-cell.span {
-    color: rgba(var(--v-theme-on-surface), 0.52);
-    font-size: 10px;
-  }
-
-  .trace-cell.umo {
-    background: rgba(var(--v-theme-on-surface), 0.035);
-    border-radius: 6px;
-    color: rgba(var(--v-theme-on-surface), 0.62);
-    font-size: 10px;
-    overflow-wrap: anywhere;
-    padding: 5px 7px;
-    text-overflow: clip;
-    white-space: normal;
-  }
-
-  .trace-cell.umo::before {
-    content: attr(data-label) " · ";
-    font-weight: 650;
-  }
-
-  .trace-cell.outline .event-sub {
-    color: rgba(var(--v-theme-on-surface), 0.88);
-    font-size: 13px;
-    font-weight: 600;
-    margin: 0;
-  }
-
-  .trace-cell.sender .event-sub {
-    font-size: 11px;
-    margin: 0;
-  }
-
-  .event-toggle {
-    min-width: 30px;
-    padding-inline: 6px;
-  }
-
-  .event-toggle span:not(.agent-dot) {
-    display: none;
-  }
-
-  .trace-record {
-    gap: 5px;
-    grid-template-columns: 1fr;
-    padding: 8px;
-  }
-
-  .trace-record-time,
-  .trace-record-action {
-    font-size: 10px;
-  }
+@media (max-width: 700px) {
+  .tl-umo { display: none; }
+  .tl-card-top, .tl-card-bottom, .tl-record { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .tl-record-left, .tl-sender { width: 100%; max-width: none; }
+  .trace-timeline, .timeline-container { padding: 16px; }
+  .tl-empty { min-height: 260px; padding: 40px 20px; }
 }
 </style>

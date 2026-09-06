@@ -27,14 +27,30 @@
       "description": "Dify 配置",
       "agent_runner": {
         "config": {
-          "dify_api_type": { "description": "应用类型" },
-          "dify_api_key": { "description": "API Key" },
-          "dify_api_base": { "description": "API Base URL" },
-          "dify_workflow_output_key": { "description": "Workflow 输出变量名" },
-          "dify_query_input_key": { "description": "Prompt 输入变量名" },
-          "variables": { "description": "变量" },
-          "timeout": { "description": "超时时间（秒）" },
-          "proxy": { "description": "代理地址" }
+          "dify_api_type": {
+            "description": "应用类型"
+          },
+          "dify_api_key": {
+            "description": "API Key"
+          },
+          "dify_api_base": {
+            "description": "API Base URL"
+          },
+          "dify_workflow_output_key": {
+            "description": "Workflow 输出变量名"
+          },
+          "dify_query_input_key": {
+            "description": "Prompt 输入变量名"
+          },
+          "variables": {
+            "description": "变量"
+          },
+          "timeout": {
+            "description": "超时时间（秒）"
+          },
+          "proxy": {
+            "description": "代理地址"
+          }
         }
       }
     },
@@ -42,12 +58,24 @@
       "description": "Coze 配置",
       "agent_runner": {
         "config": {
-          "coze_api_key": { "description": "API Key" },
-          "bot_id": { "description": "Bot ID" },
-          "coze_api_base": { "description": "API Base URL" },
-          "auto_save_history": { "description": "由 Coze 管理对话记录" },
-          "timeout": { "description": "超时时间（秒）" },
-          "proxy": { "description": "代理地址" }
+          "coze_api_key": {
+            "description": "API Key"
+          },
+          "bot_id": {
+            "description": "Bot ID"
+          },
+          "coze_api_base": {
+            "description": "API Base URL"
+          },
+          "auto_save_history": {
+            "description": "由 Coze 管理对话记录"
+          },
+          "timeout": {
+            "description": "超时时间（秒）"
+          },
+          "proxy": {
+            "description": "代理地址"
+          }
         }
       }
     },
@@ -55,17 +83,35 @@
       "description": "阿里云百炼应用配置",
       "agent_runner": {
         "config": {
-          "dashscope_app_type": { "description": "应用类型" },
-          "dashscope_api_key": { "description": "API Key" },
-          "dashscope_app_id": { "description": "应用 ID" },
-          "rag_options": {
-            "pipeline_ids": { "description": "知识库 Pipeline ID" },
-            "file_ids": { "description": "文件 ID" },
-            "output_reference": { "description": "输出引用" }
+          "dashscope_app_type": {
+            "description": "应用类型"
           },
-          "variables": { "description": "变量" },
-          "timeout": { "description": "超时时间（秒）" },
-          "proxy": { "description": "代理地址" }
+          "dashscope_api_key": {
+            "description": "API Key"
+          },
+          "dashscope_app_id": {
+            "description": "应用 ID"
+          },
+          "rag_options": {
+            "pipeline_ids": {
+              "description": "知识库 Pipeline ID"
+            },
+            "file_ids": {
+              "description": "文件 ID"
+            },
+            "output_reference": {
+              "description": "输出引用"
+            }
+          },
+          "variables": {
+            "description": "变量"
+          },
+          "timeout": {
+            "description": "超时时间（秒）"
+          },
+          "proxy": {
+            "description": "代理地址"
+          }
         }
       }
     },
@@ -73,18 +119,42 @@
       "description": "DeerFlow 配置",
       "agent_runner": {
         "config": {
-          "deerflow_api_base": { "description": "API Base URL" },
-          "deerflow_api_key": { "description": "API Key" },
-          "deerflow_auth_header": { "description": "Authorization Header" },
-          "deerflow_assistant_id": { "description": "Assistant ID" },
-          "deerflow_model_name": { "description": "模型名称覆盖" },
-          "deerflow_thinking_enabled": { "description": "启用思考模式" },
-          "deerflow_plan_mode": { "description": "启用计划模式" },
-          "deerflow_subagent_enabled": { "description": "启用子智能体" },
-          "deerflow_max_concurrent_subagents": { "description": "子智能体最大并发数" },
-          "deerflow_recursion_limit": { "description": "递归深度上限" },
-          "timeout": { "description": "超时时间（秒）" },
-          "proxy": { "description": "代理地址" }
+          "deerflow_api_base": {
+            "description": "API Base URL"
+          },
+          "deerflow_api_key": {
+            "description": "API Key"
+          },
+          "deerflow_auth_header": {
+            "description": "Authorization Header"
+          },
+          "deerflow_assistant_id": {
+            "description": "Assistant ID"
+          },
+          "deerflow_model_name": {
+            "description": "模型名称覆盖"
+          },
+          "deerflow_thinking_enabled": {
+            "description": "启用思考模式"
+          },
+          "deerflow_plan_mode": {
+            "description": "启用计划模式"
+          },
+          "deerflow_subagent_enabled": {
+            "description": "启用子智能体"
+          },
+          "deerflow_max_concurrent_subagents": {
+            "description": "子智能体最大并发数"
+          },
+          "deerflow_recursion_limit": {
+            "description": "递归深度上限"
+          },
+          "timeout": {
+            "description": "超时时间（秒）"
+          },
+          "proxy": {
+            "description": "代理地址"
+          }
         }
       }
     },
@@ -147,7 +217,9 @@
       "agent_runner": {
         "config": {
           "persona": {
-            "persona_id": { "description": "默认采用的人格" },
+            "persona_id": {
+              "description": "默认采用的人格"
+            },
             "safety_mode": {
               "description": "健康模式",
               "hint": "引导模型输出健康、安全的内容，避免有害或敏感话题。"
@@ -255,6 +327,14 @@
           "booter": {
             "description": "沙箱环境驱动器"
           },
+          "bwrap_rw_binds": {
+            "description": "Bubblewrap 读写挂载目录",
+            "hint": "额外的读写挂载目录（回车添加，可添加多个。默认 /tmp, /var/tmp 已经是读写，整个宿主机系统默认是只读挂载于沙箱内的相同位置）。"
+          },
+          "bwrap_ro_binds": {
+            "description": "Bubblewrap 额外只读挂载目录",
+            "hint": "Bubblewrap 沙箱额外的只读挂载目录（回车添加，可添加多个。宿主机系统目录/usr, /etc, /opt默认只读挂载于沙箱内的相同位置）。"
+          },
           "shipyard_neo_endpoint": {
             "description": "Shipyard Neo API Endpoint",
             "hint": "Shipyard Neo(Bay) 服务的 API 地址，默认 http://127.0.0.1:8114。"
@@ -342,7 +422,10 @@
             },
             "overflow_strategy": {
               "description": "历史超限或上下文接近上限时的处理方式",
-              "labels": ["按对话轮数截断", "由 LLM 压缩上下文"],
+              "labels": [
+                "按对话轮数截断",
+                "由 LLM 压缩上下文"
+              ],
               "hint": "普通会话历史仅在超过\"压缩前最多保留对话轮数\"后执行该策略；请求发送前也会在上下文 token 接近模型窗口时使用同一策略保护本次请求。"
             },
             "instruction": {
@@ -370,11 +453,16 @@
       "agent_runner": {
         "config": {
           "misc": {
-            "max_steps": { "description": "工具调用轮数上限" },
+            "max_steps": {
+              "description": "工具调用轮数上限"
+            },
             "tool_schema_mode": {
               "description": "工具调用模式",
               "hint": "skills-like 先下发工具名称与描述，再下发参数；full 一次性下发完整参数。",
-              "labels": ["Skills-like（两阶段）", "Full（完整参数）"]
+              "labels": [
+                "Skills-like（两阶段）",
+                "Full（完整参数）"
+              ]
             },
             "tool_call_timeout": {
               "description": "工具调用超时时间(秒)"
@@ -559,7 +647,7 @@
       },
       "appid": {
         "description": "appid",
-        "hint": "必填项。当前消息平台的 AppID。如何获取请参考对应平台接入文档。"
+        "hint": "必填项。QQ 官方机器人平台的 appid。如何获取请参考文档。"
       },
       "callback_server_host": {
         "description": "回调服务器主机",
@@ -1258,8 +1346,8 @@
         },
         "ssl": {
           "enable": {
-            "description": "启用 WebUI HTTPS",
-            "hint": "启用后，WebUI 将直接使用 HTTPS 提供服务。"
+            "description": "启用 AstrBot 面板 HTTPS",
+            "hint": "启用后，AstrBot 面板 将直接使用 HTTPS 提供服务。"
           },
           "cert_file": {
             "description": "SSL 证书文件路径",

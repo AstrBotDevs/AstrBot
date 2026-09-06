@@ -124,14 +124,11 @@ const previewTitle = computed(() => {
   if (!props.modelValue) {
     return tm("personaQuickPreview.title");
   }
-  const personaName = isDefaultPersona.value
-    ? tm("personaSelector.defaultPersona")
-    : props.modelValue;
+  const personaName = isDefaultPersona.value ? tm("personaSelector.defaultPersona") : props.modelValue;
   return tm("personaQuickPreview.titleWithName", { name: personaName });
 });
-const canEdit = computed(
-  () => props.editable && Boolean(personaData.value) && !isDefaultPersona.value,
-);
+const canEdit = computed(() => props.editable && Boolean(personaData.value) && !isDefaultPersona.value);
+
 async function persistCapabilities(field, nextValue, previousValue) {
   const personaId = props.modelValue;
   personaData.value = { ...personaData.value, [field]: nextValue };
@@ -142,9 +139,7 @@ async function persistCapabilities(field, nextValue, previousValue) {
   try {
     const response = await personaApi.update(personaId, { [field]: nextValue });
     if (response.data?.status !== "ok") {
-      throw new Error(
-        response.data?.message || tm("personaQuickPreview.unknownError"),
-      );
+      throw new Error(response.data?.message || tm("personaQuickPreview.unknownError"));
     }
     if (props.modelValue === personaId) {
       saved.value = true;
@@ -157,10 +152,7 @@ async function persistCapabilities(field, nextValue, previousValue) {
   } catch (error) {
     if (props.modelValue === personaId) {
       personaData.value = { ...personaData.value, [field]: previousValue };
-      saveError.value =
-        error?.response?.data?.message ||
-        error?.message ||
-        tm("personaQuickPreview.unknownError");
+      saveError.value = error?.response?.data?.message || error?.message || tm("personaQuickPreview.unknownError");
     }
     return false;
   } finally {
@@ -171,8 +163,7 @@ async function persistCapabilities(field, nextValue, previousValue) {
 async function loadToolsMeta() {
   try {
     const response = await toolApi.list();
-    availableTools.value =
-      response.data?.status === "ok" ? response.data?.data || [] : [];
+    availableTools.value = response.data?.status === "ok" ? response.data?.data || [] : [];
   } catch (error) {
     console.error("Failed to load tools metadata:", error);
     availableTools.value = [];
@@ -184,8 +175,12 @@ async function loadSkillsMeta() {
     const response = await skillApi.list();
     if (response.data?.status === "ok") {
       const payload = response.data?.data || [];
-      const skills = Array.isArray(payload) ? payload : payload.skills || [];
-      availableSkills.value = skills.filter((skill) => skill.active !== false);
+      if (Array.isArray(payload)) {
+        availableSkills.value = payload.filter((skill) => skill.active !== false);
+      } else {
+        const skills = payload.skills || [];
+        availableSkills.value = skills.filter((skill) => skill.active !== false);
+      }
     } else {
       availableSkills.value = [];
     }
@@ -213,8 +208,7 @@ async function loadPersonaPreview(personaId) {
   try {
     const response = await personaApi.get(personaId);
     if (loadVersion === personaLoadVersion) {
-      personaData.value =
-        response.data?.status === "ok" ? response.data?.data || null : null;
+      personaData.value = response.data?.status === "ok" ? response.data?.data || null : null;
     }
   } catch (error) {
     console.error("Failed to load persona preview:", error);

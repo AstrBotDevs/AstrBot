@@ -1,6 +1,5 @@
 import asyncio
 import copy
-import sys
 import time
 import traceback
 import typing as T
@@ -8,6 +7,7 @@ import uuid
 from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from pathlib import Path
+from typing import override
 
 from mcp.types import (
     BlobResourceContents,
@@ -62,11 +62,6 @@ from ..response import AgentResponseData, AgentStats
 from ..run_context import ContextWrapper, TContext
 from ..tool_executor import BaseFunctionToolExecutor
 from .base import AgentResponse, AgentState, BaseAgentRunner
-
-if sys.version_info >= (3, 12):
-    from typing import override
-else:
-    from typing_extensions import override
 
 
 @dataclass(slots=True)
@@ -206,7 +201,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     @override
     async def reset(
         self,
-        provider: Provider,
+        provider: Provider | None,
         request: ProviderRequest,
         run_context: ContextWrapper[TContext],
         tool_executor: BaseFunctionToolExecutor[TContext],
@@ -231,6 +226,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         read_tool: FunctionTool | None = None,
         **kwargs: T.Any,
     ) -> None:
+        if provider is None:
+            raise ValueError("The local agent runner requires a provider.")
         self.req = request
         self.streaming = streaming
         self.enforce_max_turns = enforce_max_turns

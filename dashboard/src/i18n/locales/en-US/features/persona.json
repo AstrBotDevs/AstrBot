@@ -13,7 +13,8 @@
     "addDialogPair": "Add Dialog Pair",
     "export": "Export",
     "import": "Import Persona",
-    "more": "More actions"
+    "more": "More actions",
+    "clone": "Clone"
   },
   "labels": {
     "presetDialogs": "Preset Dialogs ({count} pairs)",
@@ -103,11 +104,15 @@
     "toolsCount": "tools",
     "skillsCount": "skills",
     "contextMenu": {
-      "moveTo": "Move to..."
+      "moveTo": "Move to...",
+      "export": "Export"
     },
     "messages": {
       "moveSuccess": "Persona moved successfully",
-      "moveError": "Failed to move persona"
+      "moveError": "Failed to move persona",
+      "exportError": "Failed to export persona",
+      "exportSuccess": "Exported successfully(excluding skills and tools)",
+      "importError": "Failed to import persona"
     }
   },
   "folder": {
@@ -156,5 +161,16 @@
     "description": "Select a destination folder for \"{name}\"",
     "success": "Moved successfully",
     "error": "Failed to move"
+  },
+  "cloneDialog": {
+    "description": "Create a copy of \"{name}\" with a new ID",
+    "error": "Failed to clone persona",
+    "newPersonaId": "New Persona ID",
+    "newPersonaIdHint": "Enter a unique name for the cloned persona",
+    "success": "Persona cloned successfully",
+    "title": "Clone Persona",
+    "validation": {
+      "required": "Persona ID is required"
+    }
   }
 }

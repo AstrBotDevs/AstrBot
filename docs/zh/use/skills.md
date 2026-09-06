@@ -8,7 +8,7 @@ AstrBot 在 v4.13.0 之后引入了对 Anthropic Skills 的支持，使得用户
 
 - 按需加载 (Progressive Disclosure)：模型初始只加载技能名称和简短描述。只有当任务匹配时，才会加载详细的 SKILL.md 指令，从而节省上下文窗口并降低成本。
 - 高度可复用：技能可以在不同的 Claude API 项目、Claude Code 或 Claude.ai 中通用。
-- 执行能力：技能可以包含可执行代码脚本，配合 Anthropic 代码执行环境（Code Execution）直接生成或处理文件。 
+- 执行能力：技能可以包含可执行代码脚本，配合 Anthropic 代码执行环境（Code Execution）直接生成或处理文件。
 
 ## 上传 Skills 到 AstrBot
 

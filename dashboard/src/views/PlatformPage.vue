@@ -43,7 +43,7 @@
                   hide-details
                   :placeholder="tm('workspace.selectHint')"
                 >
-                  <template #selection="{ item }">
+                  <template #selection="{ internalItem: item }">
                     <div class="bot-mobile-selection">
                       <img
                         :src="getPlatformIconFor(item.raw.platform)"
@@ -53,7 +53,7 @@
                       <span>{{ item.raw.title }}</span>
                     </div>
                   </template>
-                  <template #item="{ props: itemProps, item }">
+                  <template #item="{ props: itemProps, internalItem: item }">
                     <v-list-item
                       v-bind="itemProps"
                       :subtitle="item.raw.subtitle"
@@ -149,7 +149,7 @@
               :key="selectedPlatform.id"
               :platform="selectedPlatform"
               :metadata="metadata"
-              :runtime-stat="getPlatformStat(selectedPlatform.id)"
+              :runtime-stat="getPlatformStat(selectedPlatform.id) || undefined"
               :has-qr-payload="hasQrPayload(selectedPlatform.id)"
               @saved="handlePlatformSaved"
               @show-toast="showToast"
@@ -316,7 +316,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { botApi, fileApi, systemConfigApi } from "@/api/v1";
 import AddNewPlatform from "@/components/platform/AddNewPlatform.vue";
@@ -333,20 +333,49 @@ import { getPlatformIcon } from "@/utils/platformUtils";
 const { tm } = useModuleI18n("features/platform");
 const confirmDialog = useConfirmDialog();
 
-const configData = ref({});
-const metadata = ref({});
+interface PlatformConfig {
+  id: string;
+  type?: string;
+  enable?: boolean;
+  [key: string]: unknown;
+}
+interface PlatformQrStat {
+  qr_status?: string;
+  qrcode_img_content?: string;
+  qrcode?: string;
+}
+interface PlatformStat {
+  id: string;
+  status?: string;
+  error_count?: number;
+  last_error?: { message: string; timestamp: number | string; traceback?: string };
+  weixin_oc?: PlatformQrStat;
+  [key: string]: unknown;
+}
+interface PlatformTemplate { id?: string; type?: string; logo_token?: string }
+interface PlatformMetadata {
+  platform_group?: { metadata?: { platform?: { config_template?: Record<string, PlatformTemplate> } } };
+}
+interface RuntimeConfig {
+  platform?: PlatformConfig[];
+  callback_api_base?: string;
+}
+interface ToastMessage { message: string; type: "success" | "error" }
+
+const configData = ref<RuntimeConfig>({});
+const metadata = ref<PlatformMetadata>({});
 const loadingPlatforms = ref(true);
-const selectedPlatformId = ref(null);
+const selectedPlatformId = ref<string | null>(null);
 const showAddPlatformDialog = ref(false);
-const platformStats = ref({});
+const platformStats = ref<Record<string, PlatformStat>>({});
 const showWebhookDialog = ref(false);
 const currentWebhookUuid = ref("");
 const showQrDialog = ref(false);
 const currentQrPlatformId = ref("");
 const showErrorDialog = ref(false);
-const currentErrorPlatform = ref(null);
+const currentErrorPlatform = ref<PlatformStat | null>(null);
 const snackbar = ref({ show: false, message: "", color: "success" });
-let statsRefreshInterval = null;
+let statsRefreshInterval: number | null = null;
 
 const platforms = computed(() => configData.value.platform || []);
 
@@ -384,16 +413,17 @@ onBeforeUnmount(() => {
   window.removeEventListener("astrbot-locale-changed", handleLocaleChange);
 });
 
-async function getConfig(preferredPlatformId = null) {
+async function getConfig(preferredPlatformId: string | null = null) {
   loadingPlatforms.value = true;
   try {
     const response = await systemConfigApi.runtime();
-    configData.value = response.data.data.config;
-    metadata.value = response.data.data.metadata;
+    if (response.data.status !== "ok") throw new Error(response.data.message || tm("messages.getConfigFailed"));
+    configData.value = (response.data.data.config || {}) as RuntimeConfig;
+    metadata.value = (response.data.data.metadata || {}) as PlatformMetadata;
 
     const platformI18n = response.data.data.platform_i18n_translations;
     if (platformI18n && typeof platformI18n === "object") {
-      mergeDynamicTranslations("features.config-metadata", platformI18n);
+      mergeDynamicTranslations("features.config-metadata", platformI18n as Parameters<typeof mergeDynamicTranslations>[1]);
     }
 
     const nextSelectedId = preferredPlatformId || selectedPlatformId.value;
@@ -414,10 +444,9 @@ async function getPlatformStats() {
     const response = await botApi.stats();
     if (response.data.status !== "ok") return;
     platformStats.value = Object.fromEntries(
-      (response.data.data.platforms || []).map((platform) => [
-        platform.id,
-        platform,
-      ]),
+      (response.data.data.platforms || []).flatMap((platform) =>
+        typeof platform.id === "string" ? [[platform.id, { ...platform, id: platform.id } as PlatformStat]] : [],
+      ),
     );
   } catch (error) {
     console.warn("Failed to load bot runtime status:", error);
@@ -428,12 +457,12 @@ function handleLocaleChange() {
   getConfig(selectedPlatformId.value);
 }
 
-function getPlatformIconFor(platform) {
+function getPlatformIconFor(platform: PlatformConfig) {
   const templates =
     metadata.value["platform_group"]?.metadata?.platform?.config_template || {};
   const template =
-    templates[platform?.type] ||
-    templates[platform?.id] ||
+    (platform.type && templates[platform.type]) ||
+    templates[platform.id] ||
     Object.values(templates).find((item) => item?.type === platform?.type);
   if (template?.logo_token) {
     return fileApi.tokenUrl(template.logo_token);
@@ -441,11 +470,11 @@ function getPlatformIconFor(platform) {
   return getPlatformIcon(platform?.type || platform?.id);
 }
 
-function getPlatformStat(platformId) {
+function getPlatformStat(platformId: string): PlatformStat | null {
   return platformStats.value[platformId] || null;
 }
 
-function getPlatformStatusLabel(platform) {
+function getPlatformStatusLabel(platform: PlatformConfig) {
   if (platform.enable === false) {
     return tm("workspace.disabled");
   }
@@ -453,7 +482,7 @@ function getPlatformStatusLabel(platform) {
   return tm(`runtimeStatus.${status}`);
 }
 
-function getPlatformStatusClass(platform) {
+function getPlatformStatusClass(platform: PlatformConfig) {
   if (platform.enable === false) return "bot-list-item__status-dot--disabled";
   const status = getPlatformStat(platform.id)?.status;
   if (status === "running") return "bot-list-item__status-dot--success";
@@ -462,12 +491,13 @@ function getPlatformStatusClass(platform) {
   return "bot-list-item__status-dot--disabled";
 }
 
-async function deletePlatform(platform) {
+async function deletePlatform(platform: PlatformConfig) {
   const message = `${tm("messages.deleteConfirm")} ${platform.id}?`;
   if (!(await askForConfirmationDialog(message, confirmDialog))) return;
 
   try {
     const response = await botApi.delete(platform.id);
+    if (response.data.status !== "ok") throw new Error(response.data.message || tm("messages.deleteFailed"));
     if (selectedPlatformId.value === platform.id) {
       selectedPlatformId.value = null;
     }
@@ -478,48 +508,49 @@ async function deletePlatform(platform) {
   }
 }
 
-function handlePlatformCreated(platformId) {
+function handlePlatformCreated(platformId?: string) {
   getConfig(platformId || null);
   getPlatformStats();
 }
 
-function handlePlatformSaved(platformId) {
+function handlePlatformSaved(platformId: string) {
   getConfig(platformId);
   getPlatformStats();
 }
 
-function getPlatformQrLoginStat(platformId) {
+function getPlatformQrLoginStat(platformId: string): PlatformQrStat | null {
   const stat = getPlatformStat(platformId);
   if (stat?.weixin_oc) return stat.weixin_oc;
   if (stat && typeof stat === "object") {
     return Object.values(stat).find(
-      (value) =>
-        value &&
+      (value): value is PlatformQrStat =>
+        value !== null &&
         typeof value === "object" &&
-        ("qrcode_img_content" in value || "qrcode" in value),
-    );
+        (("qrcode_img_content" in value && typeof value.qrcode_img_content === "string") ||
+          ("qrcode" in value && typeof value.qrcode === "string")),
+    ) || null;
   }
   return null;
 }
 
-function hasQrPayload(platformId) {
+function hasQrPayload(platformId: string) {
   const stat = getPlatformQrLoginStat(platformId);
   return Boolean(stat?.qrcode_img_content || stat?.qrcode);
 }
 
-function openPlatformQrDialog(platformId) {
+function openPlatformQrDialog(platformId: string) {
   currentQrPlatformId.value = platformId;
   showQrDialog.value = true;
 }
 
-function showErrorDetails(platform) {
+function showErrorDetails(platform: PlatformConfig) {
   const stat = getPlatformStat(platform.id);
-  if (!stat || stat.error_count <= 0) return;
+  if (!stat || (stat.error_count || 0) <= 0) return;
   currentErrorPlatform.value = stat;
   showErrorDialog.value = true;
 }
 
-function getWebhookUrl(webhookUuid) {
+function getWebhookUrl(webhookUuid: string) {
   const callbackBase =
     configData.value.callback_api_base || "http(s)://<your-domain-or-ip>";
   return `${callbackBase.replace(
@@ -528,12 +559,12 @@ function getWebhookUrl(webhookUuid) {
   )}/api/v1/webhooks/platforms/${webhookUuid}`;
 }
 
-function openWebhookDialog(webhookUuid) {
+function openWebhookDialog(webhookUuid: string) {
   currentWebhookUuid.value = webhookUuid;
   showWebhookDialog.value = true;
 }
 
-async function copyWebhookUrl(webhookUuid) {
+async function copyWebhookUrl(webhookUuid: string) {
   const copied = await copyToClipboard(getWebhookUrl(webhookUuid));
   if (copied) {
     showSuccess(tm("webhookCopied"));
@@ -542,7 +573,7 @@ async function copyWebhookUrl(webhookUuid) {
   }
 }
 
-function showToast({ message, type }) {
+function showToast({ message, type }: ToastMessage) {
   snackbar.value = {
     show: true,
     message,
@@ -550,13 +581,14 @@ function showToast({ message, type }) {
   };
 }
 
-function showSuccess(message) {
+function showSuccess(message: string) {
   showToast({ message, type: "success" });
 }
 
-function showError(error) {
+function showError(error: unknown) {
+  const apiError = error as { response?: { data?: { message?: string } }; message?: string } | null;
   const message =
-    error?.response?.data?.message || error?.message || String(error);
+    apiError?.response?.data?.message || apiError?.message || String(error);
   showToast({ message, type: "error" });
 }
 </script>
@@ -812,8 +844,12 @@ function showError(error) {
   margin-bottom: 10px;
 }
 
-.error-message {
-  word-break: break-word;
+.platform-content {
+  background: var(--platform-panel-bg);
+  border: 1px solid var(--platform-border);
+  border-radius: 12px;
+  backdrop-filter: blur(16px);
+  box-shadow: var(--platform-shadow);
 }
 
 .traceback-box {

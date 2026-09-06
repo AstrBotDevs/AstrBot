@@ -22,8 +22,8 @@ def _get_dashboard_port() -> int:
 
 
 def _is_dashboard_ssl_enabled() -> bool:
-    env_ssl = os.environ.get("DASHBOARD_SSL_ENABLE") or os.environ.get(
-        "ASTRBOT_DASHBOARD_SSL_ENABLE"
+    env_ssl = os.environ.get("ASTRBOT_SSL_ENABLE") or os.environ.get(
+        "DASHBOARD_SSL_ENABLE",
     )
     if env_ssl is not None:
         return env_ssl.strip().lower() in {"1", "true", "yes", "on"}
@@ -41,8 +41,8 @@ def log_webhook_info(platform_name: str, webhook_uuid: str) -> None:
     Args:
         platform_name: 平台名称
         webhook_uuid: webhook 的 UUID
-    """
 
+    """
     callback_base = _get_callback_api_base()
 
     if not callback_base:
@@ -73,7 +73,8 @@ def ensure_platform_webhook_config(platform_cfg: dict) -> bool:
         platform_cfg (dict): 平台配置字典
 
     Returns:
-        bool: 如果生成了 webhook_uuid 则返回 True，否则返回 False
+        bool: 如果生成了 webhook_uuid 则返回 True,否则返回 False
+
     """
     pt = platform_cfg.get("type", "")
     if pt in WEBHOOK_SUPPORTED_PLATFORMS and not platform_cfg.get("webhook_uuid"):

@@ -108,7 +108,7 @@ const SECTION_ICONS = {
 };
 
 export default {
-  name: 'AstrBotCoreConfigWrapper',
+  name: "AstrBotCoreConfigWrapper",
   components: {
     AiConfigPanel,
     AstrBotConfigV4,
@@ -118,21 +118,21 @@ export default {
     metadata: {
       type: Object,
       required: true,
-      default: () => ({})
+      default: () => ({}),
     },
     config_data: {
       type: Object,
       required: true,
-      default: () => ({})
+      default: () => ({}),
     },
     readonly: {
       type: Boolean,
-      default: false
+      default: false,
     },
     searchKeyword: {
       type: String,
-      default: ''
-    }
+      default: "",
+    },
   },
   setup() {
     const { tm: tmConfig } = useModuleI18n('features/config');
@@ -141,7 +141,7 @@ export default {
 
     const tm = (key) => {
       const metadataResult = tmMetadata(key);
-      if (!metadataResult.startsWith('[MISSING:') && !metadataResult.startsWith('[INVALID:')) {
+      if (!metadataResult.startsWith("[MISSING:") && !metadataResult.startsWith("[INVALID:")) {
         return metadataResult;
       }
       return tmConfig(key);
@@ -156,10 +156,12 @@ export default {
   },
   computed: {
     normalizedSearchKeyword() {
-      return String(this.searchKeyword || '').trim().toLowerCase();
+      return String(this.searchKeyword || "")
+        .trim()
+        .toLowerCase();
     },
     visibleSections() {
-      if (!this.metadata || typeof this.metadata !== 'object') {
+      if (!this.metadata || typeof this.metadata !== "object") {
         return [];
       }
       const allSections = Object.entries(this.metadata)
@@ -185,7 +187,7 @@ export default {
       if (!sectionKeys.includes(this.tab)) {
         this.tab = sectionKeys[0] ?? null;
       }
-    }
+    },
   },
   mounted() {
     this.tab = this.visibleSections[0]?.key ?? null;
@@ -205,7 +207,7 @@ export default {
       ));
     },
     metaObjectHasSearchMatch(metaObject, keyword) {
-      if (!metaObject || typeof metaObject !== 'object') {
+      if (!metaObject || typeof metaObject !== "object") {
         return false;
       }
       const directText = [
