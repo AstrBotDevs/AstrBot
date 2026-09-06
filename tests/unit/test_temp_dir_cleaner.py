@@ -7,7 +7,7 @@ import asyncio
 import os
 import time
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -54,11 +54,7 @@ def _write_file(path: Path, size: int, mtime: float | None = None) -> None:
 
 
 def _file_sizes(temp_dir: Path) -> list[tuple[Path, int]]:
-    return [
-        (f, f.stat().st_size)
-        for f in sorted(temp_dir.rglob("*"))
-        if f.is_file()
-    ]
+    return [(f, f.stat().st_size) for f in sorted(temp_dir.rglob("*")) if f.is_file()]
 
 
 # ---------------------------------------------------------------------------

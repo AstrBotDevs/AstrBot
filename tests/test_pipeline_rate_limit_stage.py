@@ -1,11 +1,7 @@
 """Tests for astrbot.core.pipeline.rate_limit_check.stage module."""
 
-from unittest.mock import MagicMock
-
-import pytest
-
 from astrbot.core.pipeline.rate_limit_check.stage import RateLimitStage
-from astrbot.core.pipeline.stage import registered_stages, Stage
+from astrbot.core.pipeline.stage import Stage, registered_stages
 
 
 class TestRateLimitStage:
@@ -14,6 +10,7 @@ class TestRateLimitStage:
     def test_module_import(self):
         """Verify the rate_limit_check stage module can be imported."""
         import astrbot.core.pipeline.rate_limit_check.stage  # noqa: F811
+
         assert hasattr(
             astrbot.core.pipeline.rate_limit_check.stage,
             "RateLimitStage",

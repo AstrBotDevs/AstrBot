@@ -559,7 +559,8 @@ class WeixinOCAdapter(Platform):
             self._context_tokens = self._normalize_context_tokens(raw_context_tokens)
 
     def _normalize_context_tokens(
-        self, raw_context_tokens: Mapping[object, object]
+        self,
+        raw_context_tokens: Mapping[str, object],
     ) -> dict[str, str]:
         normalized_context_tokens: dict[str, str] = {}
         for user_id, context_token in raw_context_tokens.items():

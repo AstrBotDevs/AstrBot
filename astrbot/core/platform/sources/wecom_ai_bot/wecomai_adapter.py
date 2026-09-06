@@ -451,7 +451,7 @@ class WecomAIBotAdapter(Platform):
             if image_url:
                 _img_url_to_process.append((image_url, image_payload.get("aeskey")))
         elif msgtype == WecomAIBotConstants.MSG_TYPE_MIXED:
-            msg_items = WecomAIBotMessageParser.parse_mixed_message(message_data)
+            msg_items = WecomAIBotMessageParser.parse_mixed_message(message_data) or []
             text_parts = []
             for item in msg_items or []:
                 if item.get("msgtype") == WecomAIBotConstants.MSG_TYPE_TEXT:

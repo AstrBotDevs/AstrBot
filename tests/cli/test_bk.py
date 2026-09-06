@@ -1,5 +1,3 @@
-import asyncio
-import hashlib
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -45,9 +43,10 @@ def mock_gpg_tools():
     mock_process.wait = AsyncMock(return_value=None)
     mock_process.returncode = 0
 
-    with patch("astrbot.cli.commands.cmd_bk.shutil.which") as mock_which, patch(
-        "asyncio.create_subprocess_exec", new_callable=AsyncMock
-    ) as mock_exec:
+    with (
+        patch("astrbot.cli.commands.cmd_bk.shutil.which") as mock_which,
+        patch("asyncio.create_subprocess_exec", new_callable=AsyncMock) as mock_exec,
+    ):
         mock_which.return_value = "/usr/bin/gpg"
         mock_exec.return_value = mock_process
         yield mock_which, mock_exec
@@ -79,10 +78,10 @@ def test_export_gpg_sign(mock_exporter, mock_kb_manager, mock_gpg_tools):
     runner = CliRunner()
 
     # Mock Path operations used in GPG block
-    with patch("pathlib.Path.unlink") as mock_unlink, patch(
-        "pathlib.Path.exists", return_value=True
+    with (
+        patch("pathlib.Path.unlink") as mock_unlink,
+        patch("pathlib.Path.exists", return_value=True),
     ):
-
         result = runner.invoke(bk, ["export", "--gpg-sign"])
 
         assert result.exit_code == 0
@@ -132,10 +131,10 @@ def test_export_digest(mock_exporter, mock_kb_manager):
 
     # Mock file operations for digest calculation using anyio.open_file
     mock_data = b"test data for checksum"
-    with patch("anyio.open_file", new_callable=AsyncMock) as mock_open, patch(
-        "anyio.Path.write_text", new_callable=AsyncMock
-    ) as mock_write_text:
-
+    with (
+        patch("anyio.open_file", new_callable=AsyncMock) as mock_open,
+        patch("anyio.Path.write_text", new_callable=AsyncMock) as mock_write_text,
+    ):
         # Mock reading file content
         mock_file = MagicMock()
         mock_file.read = AsyncMock(side_effect=[mock_data, b""])
@@ -145,6 +144,7 @@ def test_export_digest(mock_exporter, mock_kb_manager):
 
         assert result.exit_code == 0
         assert "Digest generated" in result.output
+        mock_write_text.assert_awaited_once()
 
 
 def test_import_simple(mock_importer, mock_kb_manager):
@@ -166,10 +166,10 @@ def test_import_decrypt(mock_importer, mock_kb_manager, mock_gpg_tools):
 
     # path.exists needs to return True for initial check,
     # then unlink needs to be mocked for cleanup
-    with patch("pathlib.Path.exists", return_value=True), patch(
-        "pathlib.Path.unlink"
-    ) as mock_unlink:
-
+    with (
+        patch("pathlib.Path.exists", return_value=True),
+        patch("pathlib.Path.unlink") as mock_unlink,
+    ):
         result = runner.invoke(bk, ["import", "backup.zip.gpg", "--yes"])
 
         assert result.exit_code == 0

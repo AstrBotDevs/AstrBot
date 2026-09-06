@@ -6,13 +6,13 @@ verification code drift apart.
 """
 
 from astrbot.core.utils.auth_password import (
+    get_dashboard_login_challenge,
     hash_dashboard_password,
-    validate_dashboard_password,
-    verify_dashboard_password,
     is_default_dashboard_password,
     is_legacy_dashboard_password,
-    get_dashboard_login_challenge,
+    validate_dashboard_password,
     verify_dashboard_login_proof,
+    verify_dashboard_password,
 )
 
 
@@ -59,14 +59,17 @@ def test_login_challenge_for_generated_hash():
 
 def test_login_challenge_pbkdf2():
     """get_dashboard_login_challenge + verify_dashboard_login_proof for PBKDF2."""
-    import hashlib, hmac
+    import hashlib
+    import hmac
 
     salt = "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6"
     password = "test-pw"
     iterations = 600000
     algo = "pbkdf2_sha256"
     # Build a PBKDF2 hash matching auth_password format: algo$iterations$salt$derived_key
-    dk = hashlib.pbkdf2_hmac("sha256", password.encode(), bytes.fromhex(salt), iterations)
+    dk = hashlib.pbkdf2_hmac(
+        "sha256", password.encode(), bytes.fromhex(salt), iterations
+    )
     stored = f"{algo}${iterations}${salt}${dk.hex()}"
 
     challenge = get_dashboard_login_challenge(stored)
@@ -82,6 +85,4 @@ def test_login_challenge_pbkdf2():
     ).hexdigest()
 
     assert verify_dashboard_login_proof(stored, "any-nonce", proof)
-    assert not verify_dashboard_login_proof(
-        stored, "any-nonce", "invalid-proof"
-    )
+    assert not verify_dashboard_login_proof(stored, "any-nonce", "invalid-proof")

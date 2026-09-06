@@ -83,6 +83,7 @@ class TestConversationManagerInit:
 
     def test_register_on_session_deleted(self, mgr):
         """Verify register_on_session_deleted adds callback."""
+
         async def callback(_umo: str):
             pass
 
@@ -139,7 +140,9 @@ class TestConversationManagerNewConversation:
         created_conv = _make_conv_v2(conversation_id="new-conv")
         mock_db.create_conversation.return_value = created_conv
 
-        with patch("astrbot.core.conversation_mgr.sp.session_put", AsyncMock()) as sp_put:
+        with patch(
+            "astrbot.core.conversation_mgr.sp.session_put", AsyncMock()
+        ) as sp_put:
             cid = await mgr.new_conversation(
                 "qq:group:123",
                 platform_id="qq",
@@ -204,7 +207,9 @@ class TestConversationManagerSwitchConversation:
         """Verify switch updates cache and persists to session prefs."""
         mgr.session_conversations["origin:1"] = "old-id"
 
-        with patch("astrbot.core.conversation_mgr.sp.session_put", AsyncMock()) as sp_put:
+        with patch(
+            "astrbot.core.conversation_mgr.sp.session_put", AsyncMock()
+        ) as sp_put:
             await mgr.switch_conversation("origin:1", "new-id")
 
         assert mgr.session_conversations["origin:1"] == "new-id"
@@ -311,7 +316,9 @@ class TestConversationManagerGetCurrConversationId:
         """Verify returns cached conversation ID without hitting session prefs."""
         mgr.session_conversations["origin:1"] = "cached-id"
 
-        with patch("astrbot.core.conversation_mgr.sp.session_get", AsyncMock()) as sp_get:
+        with patch(
+            "astrbot.core.conversation_mgr.sp.session_get", AsyncMock()
+        ) as sp_get:
             cid = await mgr.get_curr_conversation_id("origin:1")
 
         assert cid == "cached-id"
@@ -330,6 +337,7 @@ class TestConversationManagerGetCurrConversationId:
 
         assert cid == "pref-id"
         assert mgr.session_conversations["origin:1"] == "pref-id"
+        sp_get.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_returns_none_when_not_found(self, mgr):
@@ -604,7 +612,9 @@ class TestConversationManagerAddMessagePair:
         """Verify raises when conversation is not found."""
         mock_db.get_conversation_by_id.return_value = None
 
-        with pytest.raises(Exception, match="Conversation with id nonexistent not found"):
+        with pytest.raises(
+            Exception, match="Conversation with id nonexistent not found"
+        ):
             await mgr.add_message_pair(
                 "nonexistent",
                 {"role": "user", "content": "hi"},
@@ -655,12 +665,14 @@ class TestConversationManagerGetHumanReadableContext:
                 platform_id="qq",
                 user_id="user:1",
                 cid="c1",
-                history=json.dumps([
-                    {"role": "user", "content": "hello"},
-                    {"role": "assistant", "content": "world"},
-                    {"role": "user", "content": "how are you"},
-                    {"role": "assistant", "content": "fine"},
-                ]),
+                history=json.dumps(
+                    [
+                        {"role": "user", "content": "hello"},
+                        {"role": "assistant", "content": "world"},
+                        {"role": "user", "content": "how are you"},
+                        {"role": "assistant", "content": "fine"},
+                    ]
+                ),
                 title="Chat",
                 created_at=1000,
                 updated_at=1001,
@@ -738,13 +750,15 @@ class TestConversationManagerGetHumanReadableContext:
                 platform_id="qq",
                 user_id="user:1",
                 cid="c1",
-                history=json.dumps([
-                    {"role": "user", "content": "search weather"},
-                    {
-                        "role": "assistant",
-                        "tool_calls": [{"function": {"name": "get_weather"}}],
-                    },
-                ]),
+                history=json.dumps(
+                    [
+                        {"role": "user", "content": "search weather"},
+                        {
+                            "role": "assistant",
+                            "tool_calls": [{"function": {"name": "get_weather"}}],
+                        },
+                    ]
+                ),
                 title="Chat",
                 created_at=1000,
                 updated_at=1001,

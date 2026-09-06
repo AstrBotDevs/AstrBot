@@ -4,12 +4,9 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, call, patch
 
-import pytest
-
 from astrbot.core.pipeline.bootstrap import (
     _BUILTIN_STAGE_MODULES,
     _EXPECTED_STAGE_NAMES,
-    _builtin_stages_registered,
     ensure_builtin_stages_registered,
 )
 
@@ -200,7 +197,10 @@ class TestEnsureBuiltinStagesRegistered:
     @patch("astrbot.core.pipeline.bootstrap.registered_stages", new=[])
     def test_module_paths_alignment(self):
         """Verify each expected stage name has a corresponding module path."""
-        from astrbot.core.pipeline.bootstrap import _BUILTIN_STAGE_MODULES, _EXPECTED_STAGE_NAMES
+        from astrbot.core.pipeline.bootstrap import (
+            _BUILTIN_STAGE_MODULES,
+            _EXPECTED_STAGE_NAMES,
+        )
 
         # Derive expected names from module paths
         derived_names = set()
@@ -208,7 +208,12 @@ class TestEnsureBuiltinStagesRegistered:
             parts = mod_path.split(".")
             # For modules like astrbot.core.pipeline.process_stage.stage
             # the stage name is found in the penultimate segment
-            if parts[-2] in ("process_stage", "respond", "rate_limit_check", "preprocess_stage"):
+            if parts[-2] in (
+                "process_stage",
+                "respond",
+                "rate_limit_check",
+                "preprocess_stage",
+            ):
                 # Special cases: ProcessStage, RespondStage, RateLimitStage, PreProcessStage
                 if parts[-2] == "process_stage":
                     derived_names.add("ProcessStage")
@@ -231,6 +236,7 @@ class TestEnsureBuiltinStagesRegistered:
     def test_real_registration_smoke(self):
         """Smoke test: calling ensure_builtin_stages_registered with actual modules."""
         import sys
+
         import astrbot.core.pipeline.bootstrap as bootstrap_mod
         from astrbot.core.pipeline import stage as stage_mod
 

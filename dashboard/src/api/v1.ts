@@ -3,7 +3,6 @@ import type { AxiosRequestConfig, AxiosResponse } from 'axios';
 import * as openApiV1 from './generated/openapi-v1';
 import {
   type BackupChunkUploadRequest,
-  client as openApiV1Client,
   type BackupExportRequest,
   type BackupRenameRequest,
   type BackupUploadInitRequest,
@@ -61,6 +60,7 @@ import {
   type UpdateRequest,
 } from './generated/openapi-v1';
 import { apiV1Client, fetchWithAuth, httpClient } from './http';
+import { client as openApiV1Client } from './generated/openapi-v1/client.gen';
 
 openApiV1Client.setConfig({
   axios: httpClient,
@@ -122,7 +122,7 @@ export interface VersionData {
   version?: string;
   dashboard_version?: string;
   change_pwd_hint?: boolean;
-  md5_pwd_hint?: boolean;
+  legacy_pwd_hint?: boolean;
   password_upgrade_required?: boolean;
   runtime?: RuntimeInfo;
   [key: string]: unknown;

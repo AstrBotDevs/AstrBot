@@ -6,13 +6,10 @@ LastEditTime: 2025-02-25 14:06:30
 import asyncio
 import re
 from datetime import datetime
-from typing import Protocol, cast
+from importlib import import_module
+from typing import Protocol, runtime_checkable
 
 import anyio
-from funasr_onnx import SenseVoiceSmall
-from funasr_onnx.utils.postprocess_utils import (
-    rich_transcription_postprocess,
-)
 
 from astrbot.core import logger
 from astrbot.core.provider.entities import ProviderType
@@ -22,7 +19,18 @@ from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_file
 from astrbot.core.utils.tencent_record_helper import tencent_silk_to_wav
 
+SenseVoiceSmall = import_module("funasr_onnx").SenseVoiceSmall
+_postprocess = import_module("funasr_onnx.utils.postprocess_utils")
 
+
+def rich_transcription_postprocess(text: str) -> str:
+    result = _postprocess.rich_transcription_postprocess(text)
+    if not isinstance(result, str):
+        raise TypeError("SenseVoice postprocessing must return a string.")
+    return result
+
+
+@runtime_checkable
 class SenseVoiceModel(Protocol):
     def __call__(
         self,
@@ -53,13 +61,12 @@ class ProviderSenseVoiceSTTSelfHost(STTProvider):
         logger.info("下载或者加载 SenseVoice 模型中,这可能需要一些时间 ...")
 
         # 将模型加载放到线程池中执行
-        self.model = await asyncio.get_running_loop().run_in_executor(
-            None,
-            lambda: cast(
-                "SenseVoiceModel",
-                SenseVoiceSmall(self.model_name, quantize=True, batch_size=16),
-            ),
+        model = await asyncio.to_thread(
+            SenseVoiceSmall, self.model_name, quantize=True, batch_size=16
         )
+        if not isinstance(model, SenseVoiceModel):
+            raise TypeError("The installed SenseVoice model is not callable.")
+        self.model = model
 
         logger.info("SenseVoice 模型加载完成｡")
 

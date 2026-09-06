@@ -1,8 +1,9 @@
 """Import smoke tests for astrbot.core.star.star_handler."""
+
 from astrbot.core.star.star_handler import (
-    StarHandlerRegistry,
-    StarHandlerMetadata,
     EventType,
+    StarHandlerMetadata,
+    StarHandlerRegistry,
     star_handlers_registry,
 )
 

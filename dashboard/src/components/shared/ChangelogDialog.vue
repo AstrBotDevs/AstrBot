@@ -2,7 +2,8 @@
 import { enableKatex, enableMermaid, MarkdownRender } from "markstream-vue";
 import { computed, ref, watch } from "vue";
 import { useI18n } from "@/i18n/composables";
-import axios from "@/utils/request";
+import { resolveErrorMessage } from "@/utils/errorUtils.js";
+import axios, { isAxiosError } from "@/utils/request";
 import "markstream-vue/index.css";
 import "katex/dist/katex.min.css";
 import "highlight.js/styles/github.css";
@@ -31,7 +32,7 @@ const changelogLoading = ref(false);
 const changelogError = ref("");
 const changelogVersion = ref("");
 const selectedVersion = ref("");
-const availableVersions = ref([]);
+const availableVersions = ref<string[]>([]);
 const loadingVersions = ref(false);
 
 // 获取当前版本号（从版本信息中提取）
@@ -49,7 +50,7 @@ async function getCurrentVersion() {
 }
 
 // 加载更新日志
-async function loadChangelog(version) {
+async function loadChangelog(version?: string) {
   const targetVersion = version || selectedVersion.value || changelogVersion.value;
   if (!targetVersion) {
     changelogError.value = t("core.navigation.changelogDialog.selectVersion");
@@ -73,7 +74,7 @@ async function loadChangelog(version) {
     }
   } catch (err) {
     console.error("Failed to load changelog:", err);
-    if (err.response?.status === 404 || err.response?.data?.message?.includes("not found")) {
+    if ((isAxiosError(err) && err.response?.status === 404) || resolveErrorMessage(err).includes("not found")) {
       changelogError.value = t("core.navigation.changelogDialog.notFound");
     } else {
       changelogError.value = t("core.navigation.changelogDialog.error");
@@ -87,9 +88,12 @@ async function loadChangelog(version) {
 async function loadAvailableVersions() {
   loadingVersions.value = true;
   try {
-    const res = await axios.get("/api/stat/changelog/list");
+    const res = await axios.get<{
+      status: "ok" | "error";
+      data?: { versions?: string[] };
+    }>("/api/stat/changelog/list");
     if (res.data.status === "ok") {
-      availableVersions.value = res.data.data.versions || [];
+      availableVersions.value = res.data.data?.versions || [];
     }
   } catch (err) {
     console.error("Failed to load versions:", err);
@@ -120,10 +124,12 @@ watch(dialog, async (newValue) => {
     if (changelogVersion.value && availableVersions.value.includes(changelogVersion.value)) {
       selectedVersion.value = changelogVersion.value;
       await loadChangelog();
-    } else if (availableVersions.value.length > 0) {
-      // 否则选择第一个（最新的）
-      selectedVersion.value = availableVersions.value[0];
-      await loadChangelog(availableVersions.value[0]);
+    } else {
+      const latestVersion = availableVersions.value[0];
+      if (latestVersion) {
+        selectedVersion.value = latestVersion;
+        await loadChangelog(latestVersion);
+      }
     }
   } else {
     // 关闭时重置状态
@@ -166,8 +172,8 @@ getCurrentVersion();
             @update:model-value="onVersionChange"
           >
             <template #item="{ item, props }">
-              <v-list-item v-bind="props" :title="`v${item.value}`">
-                <template v-if="item.value === changelogVersion" #append>
+              <v-list-item v-bind="props" :title="`v${item}`">
+                <template v-if="item === changelogVersion" #append>
                   <v-chip size="x-small" color="primary" variant="tonal">
                     {{ t("core.navigation.changelogDialog.current") }}
                   </v-chip>
@@ -175,7 +181,7 @@ getCurrentVersion();
               </v-list-item>
             </template>
             <template #selection="{ item }">
-              <span>v{{ item.value }}</span>
+              <span>v{{ item }}</span>
             </template>
           </v-select>
         </div>

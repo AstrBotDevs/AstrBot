@@ -100,7 +100,11 @@ export function useChunkedUpload(api: ChunkedUploadApi) {
         while (!failure && !cancelled && (pending.length > 0 || active.length > 0)) {
             while (pending.length > 0 && active.length < CONCURRENT_UPLOADS) {
                 const chunkIndex = pending.shift()!;
-                const promise = uploadOneChunk(chunkIndex, sessionId, generation).finally(() => {
+                const promise = uploadOneChunk(chunkIndex, sessionId, generation).catch(error => {
+                    // A concurrent success can win Promise.race after another
+                    // chunk failed, so record failure before removing its slot.
+                    failure = error;
+                }).finally(() => {
                     const idx = active.indexOf(promise);
                     if (idx > -1) active.splice(idx, 1);
                 });
@@ -122,11 +126,33 @@ export function useChunkedUpload(api: ChunkedUploadApi) {
     }
 
     async function initSession() {
+        const uploadFile = file;
+        if (!uploadFile) throw new Error('No upload file selected');
         phase.value = 'init';
         const data = envelopeData(
-            await api.initUpload({ filename: file!.name, total_size: file!.size }),
+            await api.initUpload({ filename: uploadFile.name, total_size: uploadFile.size }),
         );
-        uploadId = data.upload_id;
+        // Retain the session ID so cancellation can abort an init response
+        // that arrived after cancel() cleared the local file state.
+        uploadId = typeof data?.upload_id === 'string' ? data.upload_id : '';
+        if (cancelled) throw new Error('cancelled');
+        if (
+            !uploadId ||
+            !Number.isSafeInteger(data.chunk_size) || data.chunk_size <= 0 ||
+            !Number.isSafeInteger(data.total_chunks) || data.total_chunks <= 0 ||
+            data.total_chunks !== Math.ceil(uploadFile.size / data.chunk_size)
+        ) {
+            const invalidSessionId = uploadId;
+            uploadId = '';
+            if (invalidSessionId) {
+                try {
+                    await api.abortUpload({ upload_id: invalidSessionId });
+                } catch (error) {
+                    console.error('Failed to abort invalid upload session:', error);
+                }
+            }
+            throw new Error('Invalid upload session');
+        }
         chunkSize = data.chunk_size;
         totalChunks = data.total_chunks;
         planChunks();
@@ -173,7 +199,7 @@ export function useChunkedUpload(api: ChunkedUploadApi) {
             let received: number[] = [];
             if (uploadId) {
                 try {
-                    const data = await envelopeData(api.statusUpload({ upload_id: uploadId }));
+                    const data = envelopeData(await api.statusUpload({ upload_id: uploadId }));
                     received = data.received_chunks;
                 } catch {
                     // Session expired or unknown: fall back to a fresh one.

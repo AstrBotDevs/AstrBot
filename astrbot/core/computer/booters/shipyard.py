@@ -5,6 +5,9 @@ import shlex
 from typing import TYPE_CHECKING, Any
 
 from shipyard import ShipyardClient, Spec
+from shipyard.filesystem import FileSystemComponent as ShipyardFileSystemComponent
+from shipyard.python import PythonComponent as ShipyardPythonComponent
+from shipyard.shell import ShellComponent as ShipyardShellComponent
 
 from astrbot.api import logger
 
@@ -32,8 +35,29 @@ def _maybe_model_dump(value: Any) -> dict[str, Any]:
     return {}
 
 
+class ShipyardPythonWrapper:
+    """Adapt the SDK's Python executor without forwarding unsupported kwargs."""
+
+    def __init__(self, python: ShipyardPythonComponent) -> None:
+        self._python = python
+
+    async def exec(
+        self,
+        code: str,
+        kernel_id: str | None = None,
+        timeout: int = 30,
+        silent: bool = False,
+        cwd: str | None = None,
+    ) -> dict[str, Any]:
+        if cwd is not None:
+            raise NotImplementedError("Shipyard Python does not support cwd.")
+        return await self._python.exec(
+            code, kernel_id=kernel_id, timeout=timeout, silent=silent
+        )
+
+
 class ShipyardShellWrapper:
-    def __init__(self, _shipyard_shell: ShellComponent):
+    def __init__(self, _shipyard_shell: ShipyardShellComponent) -> None:
         self._shell = _shipyard_shell
 
     async def exec(
@@ -110,9 +134,9 @@ class ShipyardShellWrapper:
 class ShipyardFileSystemWrapper:
     def __init__(
         self,
-        _shipyard_fs: FileSystemComponent,
+        _shipyard_fs: ShipyardFileSystemComponent,
         _shipyard_shell: ShellComponent,
-    ):
+    ) -> None:
         self._fs = _shipyard_fs
         self._shell = _shipyard_shell
 
@@ -245,19 +269,20 @@ class ShipyardBooter(ComputerBooter):
             session_id,
         )
         self._ship = ship
-        self._shell = ShipyardShellWrapper(self._ship.shell)  # type: ignore[arg-type]
-        self._fs = ShipyardFileSystemWrapper(self._ship.fs, self._shell)  # type: ignore[arg-type]
+        self._shell = ShipyardShellWrapper(self._ship.shell)
+        self._fs = ShipyardFileSystemWrapper(self._ship.fs, self._shell)
+        self._python = ShipyardPythonWrapper(self._ship.python)
 
     async def shutdown(self, **kwargs) -> None:
         logger.info("[Computer] booter_shutdown booter=shipyard status=done")
 
     @property
     def fs(self) -> FileSystemComponent:
-        return self._ship.fs  # type: ignore[return-value]
+        return self._fs
 
     @property
     def python(self) -> PythonComponent:
-        return self._ship.python
+        return self._python
 
     @property
     def shell(self) -> ShellComponent:

@@ -318,9 +318,10 @@ class PluginRoute(Route):
         if not plugin:
             return None
 
+        token_locale = payload.get("locale")
         locale = (
-            payload.get("locale")
-            if isinstance(payload.get("locale"), str)
+            token_locale
+            if isinstance(token_locale, str)
             else self._get_request_locale()
         )
         plugin_i18n = plugin.i18n or {}
@@ -835,7 +836,7 @@ class PluginRoute(Route):
             "iat": now,
             "exp": now + timedelta(seconds=_PLUGIN_PAGE_ASSET_TOKEN_TTL_SECONDS),
         }
-        return cast("str", jwt.encode(payload, jwt_secret, algorithm="HS256"))
+        return jwt.encode(payload, jwt_secret, algorithm="HS256")
 
     def _prepare_plugin_page_query_params(
         self,
@@ -1515,7 +1516,7 @@ class PluginRoute(Route):
             info["handler_name"] = handler.handler_name
 
             component_type = "hook"
-            component = None
+            component: dict[str, object] | None = None
             if handler.event_type == EventType.AdapterMessageEvent:
                 # 处理平台适配器消息事件
                 has_admin = False
@@ -1665,7 +1666,7 @@ class PluginRoute(Route):
             self._build_command_group_child(sub_filter)
             for sub_filter in command_group_filter.sub_command_filters
         ]
-        component = {
+        component: dict[str, object] = {
             "type": "command",
             "name": parts[-1],
             "description": self._get_command_description(
@@ -1682,7 +1683,7 @@ class PluginRoute(Route):
         command_filter: CommandFilter | CommandGroupFilter,
     ) -> dict:
         if isinstance(command_filter, CommandGroupFilter):
-            component = {
+            component: dict[str, object] = {
                 "name": command_filter.group_name,
                 "description": self._get_command_description(command_filter),
             }

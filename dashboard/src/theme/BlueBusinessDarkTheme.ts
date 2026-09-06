@@ -1,4 +1,4 @@
-import type { ThemeTypes } from "@/types/themeTypes/ThemeType";
+import type { ThemeDefinition } from "vuetify";
 import { DARK_THEME_NAME } from "./constants";
 
 /**
@@ -10,7 +10,7 @@ import { DARK_THEME_NAME } from "./constants";
  * - Higher saturation for better contrast in dark mode
  * - Surface tint color applied to create depth perception
  */
-const BlueBusinessDarkTheme: ThemeTypes = {
+const BlueBusinessDarkTheme = {
   name: DARK_THEME_NAME,
   dark: true,
   variables: {
@@ -139,6 +139,6 @@ const BlueBusinessDarkTheme: ThemeTypes = {
     // === Overlay ===
     overlay: "#000000AA",
   },
-};
+} satisfies ThemeDefinition & { name: string };
 
 export { BlueBusinessDarkTheme };

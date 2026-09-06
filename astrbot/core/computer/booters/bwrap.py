@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import sys
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from astrbot.core.computer.olayer import (
@@ -72,8 +73,10 @@ def build_bwrap_cmd(config: BwrapConfig, script_cmd: list[str]) -> list[str]:
     if not config.share_net:
         cmd.append("--unshare-net")
 
-    # Bind paths to itself so paths match
-    for path in config.ro_binds:
+    # A root bind already includes system symlinks; rebinding /lib or /bin fails.
+    ro_binds = ["/"] if "/" in config.ro_binds else config.ro_binds
+    # Bind paths to themselves so host and sandbox paths match.
+    for path in ro_binds:
         if os.path.exists(path):
             cmd.extend(["--ro-bind", path, path])
 
@@ -175,7 +178,11 @@ class BwrapPythonComponent(PythonComponent):
         kernel_id: str | None = None,
         timeout: int = 30,
         silent: bool = False,
+        cwd: str | None = None,
     ) -> dict[str, Any]:
+        if cwd is not None:
+            raise NotImplementedError("BubbleWrap Python uses the sandbox workspace.")
+
         def _run() -> dict[str, Any]:
             bwrap_cmd = build_bwrap_cmd(
                 self.config,
@@ -386,7 +393,7 @@ class BwrapBooter(ComputerBooter):
         await asyncio.to_thread(os.makedirs, workspace_dir, exist_ok=True)
 
         self.config = BwrapConfig(
-            workspace_dir=await asyncio.to_thread(os.path.abspath, workspace_dir),
+            workspace_dir=str(await asyncio.to_thread(Path(workspace_dir).resolve)),
             rw_binds=self._rw_binds,
             ro_binds=self._ro_binds,
         )

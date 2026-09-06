@@ -1,11 +1,12 @@
 """Smoke tests for ProviderOpenAIOfficial and its subclasses (openrouter, groq, zhipu, xai)."""
-from unittest.mock import MagicMock, patch
 
+from unittest.mock import patch
+
+from astrbot.core.provider.sources.groq_source import ProviderGroq
 from astrbot.core.provider.sources.openai_source import ProviderOpenAIOfficial
 from astrbot.core.provider.sources.openrouter_source import ProviderOpenRouter
-from astrbot.core.provider.sources.groq_source import ProviderGroq
-from astrbot.core.provider.sources.zhipu_source import ProviderZhipu
 from astrbot.core.provider.sources.xai_source import ProviderXAI
+from astrbot.core.provider.sources.zhipu_source import ProviderZhipu
 
 
 @patch("astrbot.core.provider.sources.openai_source.create_proxy_client")
@@ -79,6 +80,11 @@ def test_xai_search_injection_disabled(mock_async_openai, mock_create_proxy):
     payloads = {"messages": []}
     provider._maybe_inject_xai_search(payloads)
     assert "search_parameters" not in payloads
+
+
+def test_zhipu_subclasses_openai_provider() -> None:
+    """Keep the Zhipu provider import and inheritance smoke check explicit."""
+    assert issubclass(ProviderZhipu, ProviderOpenAIOfficial)
 
 
 def test_sanitize_assistant_messages_filters_empty():

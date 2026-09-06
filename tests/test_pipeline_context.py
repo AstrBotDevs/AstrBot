@@ -1,11 +1,5 @@
 """Tests for astrbot.core.pipeline.context module."""
 
-from dataclasses import dataclass
-from unittest.mock import MagicMock
-
-import pytest
-
-from astrbot.core.pipeline import context as pipeline_context_module
 from astrbot.core.pipeline.context import PipelineContext
 from astrbot.core.pipeline.context_utils import call_event_hook, call_handler
 
@@ -16,6 +10,7 @@ class TestPipelineContext:
     def test_module_import(self):
         """Verify the context module can be imported."""
         import astrbot.core.pipeline.context  # noqa: F811
+
         assert hasattr(
             astrbot.core.pipeline.context,
             "PipelineContext",

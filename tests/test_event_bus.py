@@ -3,12 +3,9 @@
 from asyncio import Queue
 from unittest.mock import MagicMock
 
-import pytest
-
-from astrbot.core.event_bus import EventBus
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
+from astrbot.core.event_bus import EventBus
 from astrbot.core.pipeline.scheduler import PipelineScheduler
-from astrbot.core.platform import AstrMessageEvent
 
 
 class TestEventBus:
@@ -17,6 +14,7 @@ class TestEventBus:
     def test_module_import(self):
         """Verify the event_bus module can be imported."""
         import astrbot.core.event_bus  # noqa: F811
+
         assert hasattr(
             astrbot.core.event_bus,
             "EventBus",

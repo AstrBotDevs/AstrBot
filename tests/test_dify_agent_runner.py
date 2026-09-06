@@ -1,7 +1,5 @@
 """Import smoke tests for DifyAgentRunner."""
 
-import pytest
-
 from astrbot.core.agent.runners.dify.dify_agent_runner import DifyAgentRunner
 
 

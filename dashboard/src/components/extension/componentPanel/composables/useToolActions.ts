@@ -1,16 +1,14 @@
 /**
  * Tool actions composable
  */
-import { ref, computed, type Ref } from 'vue';
-import { toolApi } from '@/api/v1';
-import { normalizeTextInput } from '@/utils/inputValue';
-import type { ToolItem, ToolSummary } from '../types';
+import { ref, computed, type Ref } from "vue";
+import { toolApi } from "@/api/v1";
+import { normalizeTextInput } from "@/utils/inputValue";
+import { resolveErrorMessage } from "@/utils/errorUtils.js";
+import type { ToolItem, ToolSummary } from "../types";
 
-export function useToolActions(
-  tools: Ref<ToolItem[]>,
-  toast: (message: string, color?: string) => void
-) {
-  const toolSearch = ref('');
+export function useToolActions(tools: Ref<ToolItem[]>, toast: (message: string, color?: string) => void) {
+  const toolSearch = ref("");
   const showBuiltinTools = ref(true);
 
   const filteredTools = computed(() => {
@@ -18,16 +16,14 @@ export function useToolActions(
 
     // Filter builtin tools
     if (!showBuiltinTools.value) {
-      result = result.filter(tool => tool.origin !== 'builtin');
+      result = result.filter((tool) => tool.origin !== "builtin");
     }
 
     // Filter by search query
     const query = normalizeTextInput(toolSearch.value).trim().toLowerCase();
     if (query) {
       result = result.filter(
-        tool =>
-          tool.name?.toLowerCase().includes(query) ||
-          tool.description?.toLowerCase().includes(query)
+        (tool) => tool.name?.toLowerCase().includes(query) || tool.description?.toLowerCase().includes(query),
       );
     }
 
@@ -38,42 +34,32 @@ export function useToolActions(
     const all = tools.value;
     return {
       total: all.length,
-      active: all.filter(t => t.active).length,
-      inactive: all.filter(t => !t.active).length,
+      active: all.filter((t) => t.active).length,
+      inactive: all.filter((t) => !t.active).length,
     };
   });
 
   /**
    * Toggle a tool's active state (optimistic update).
    */
-  const toggleTool = async (
-    tool: ToolItem,
-    readonlyMessage: string,
-    successMessage: string,
-    errorMessage: string
-  ) => {
+  const toggleTool = async (tool: ToolItem, readonlyMessage: string, successMessage: string, errorMessage: string) => {
     if (tool.readonly) {
-      toast(readonlyMessage, 'info');
+      toast(readonlyMessage, "info");
       return;
     }
     const previous = tool.active;
     tool.active = !tool.active;
     try {
       const res = await toolApi.setEnabled(tool.name, tool.active);
-      if (res.data.status === 'ok') {
+      if (res.data.status === "ok") {
         toast(res.data.message || successMessage);
       } else {
         tool.active = previous;
-        toast(res.data.message || errorMessage, 'error');
+        toast(res.data.message || errorMessage, "error");
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       tool.active = previous;
-      toast(
-        error?.response?.data?.message ||
-          error?.message ||
-          errorMessage,
-        'error'
-      );
+      toast(resolveErrorMessage(error, errorMessage), "error");
     }
   };
 
@@ -82,31 +68,26 @@ export function useToolActions(
    */
   const updateToolPermission = async (
     tool: ToolItem,
-    permission: 'admin' | 'member',
+    permission: "admin" | "member",
     successMessage: string,
     builtinMessage: string,
-    errorMessage: string
+    errorMessage: string,
   ) => {
-    if (tool.origin === 'builtin') {
-      toast(builtinMessage, 'info');
+    if (tool.origin === "builtin") {
+      toast(builtinMessage, "info");
       return;
     }
     try {
       const res = await toolApi.setPermission(tool.name, permission);
-      if (res.data.status === 'ok') {
+      if (res.data.status === "ok") {
         tool.permission = permission;
         tool.permission_configured = true;
-        toast(successMessage, 'success');
+        toast(successMessage, "success");
       } else {
-        toast(res.data.message || errorMessage, 'error');
+        toast(res.data.message || errorMessage, "error");
       }
-    } catch (error: any) {
-      toast(
-        error?.response?.data?.message ||
-          error?.message ||
-          errorMessage,
-        'error'
-      );
+    } catch (error: unknown) {
+      toast(resolveErrorMessage(error, errorMessage), "error");
     }
   };
 

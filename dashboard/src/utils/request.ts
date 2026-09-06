@@ -155,6 +155,11 @@ service.interceptors.request.use((config: InternalAxiosRequestConfig) => {
     config.url = normalizePathForBase(config.url, normalizedBaseUrl);
   }
 
+  // Send dashboard credentials only to the configured backend.
+  const requestUrl = new URL(service.getUri(config), window.location.href);
+  const backendUrl = new URL(resolveApiUrl("/api/"), window.location.href);
+  if (requestUrl.origin !== backendUrl.origin) return config;
+
   const token = localStorage.getItem("token");
   if (token) {
     config.headers.set("Authorization", `Bearer ${token}`);

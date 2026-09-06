@@ -1,6 +1,6 @@
 <template>
   <h5>{{ tm("network.proxySelector.title") }}</h5>
-  <v-radio-group v-model="radioValue" class="mt-2" hide-details="true">
+  <v-radio-group v-model="radioValue" class="mt-2" hide-details>
     <v-radio :label="tm('network.proxySelector.noProxy')" value="0" />
     <v-radio value="1">
       <template #label>
@@ -23,7 +23,7 @@
       <v-radio-group
         v-model="githubProxyRadioControl"
         class="mt-2"
-        hide-details="true"
+        hide-details
       >
         <v-radio
           v-for="(proxy, idx) in githubProxies"
@@ -69,7 +69,7 @@
               variant="outlined"
               style="width: 100vw"
               :placeholder="tm('network.proxySelector.custom')"
-              hide-details="true"
+              hide-details
             />
           </template>
         </v-radio>
@@ -105,7 +105,7 @@ export default {
     };
   },
   watch: {
-    selectedGitHubProxy: function (newVal, oldVal) {
+    selectedGitHubProxy: function (newVal) {
       if (this.initializing) {
         return;
       }
@@ -195,7 +195,7 @@ export default {
             latency: 0,
           };
         }
-      } catch (error) {
+      } catch {
         this.proxyStatus[idx] = {
           available: false,
           latency: 0,
@@ -208,7 +208,7 @@ export default {
     async testAllProxies() {
       this.loadingTestingConnection = true;
 
-      const promises = this.githubProxies.map((proxy, idx) => this.testSingleProxy(idx));
+      const promises = this.githubProxies.map((_, idx) => this.testSingleProxy(idx));
 
       await Promise.all(promises);
       this.loadingTestingConnection = false;

@@ -1,5 +1,6 @@
 """Import smoke tests for astrbot.core.star.star."""
-from astrbot.core.star.star import StarMetadata, star_registry, star_map
+
+from astrbot.core.star.star import StarMetadata, star_map, star_registry
 
 
 def test_star_metadata_class():

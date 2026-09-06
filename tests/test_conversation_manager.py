@@ -2,8 +2,6 @@
 
 from unittest.mock import MagicMock
 
-import pytest
-
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.db import BaseDatabase
 
@@ -14,6 +12,7 @@ class TestConversationManager:
     def test_module_import(self):
         """Verify the conversation_mgr module can be imported."""
         import astrbot.core.conversation_mgr  # noqa: F811
+
         assert hasattr(
             astrbot.core.conversation_mgr,
             "ConversationManager",

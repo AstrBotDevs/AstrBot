@@ -143,7 +143,7 @@ class WecomAIBotLongConnectionClient:
         if cmd in {"aibot_msg_callback", "aibot_event_callback"}:
             # Keep the receive loop available for command acknowledgements sent by
             # the callback handler, such as the configured initial response.
-            task = asyncio.create_task(self.message_handler(payload))
+            task = asyncio.create_task(self._dispatch_message(payload))
             self._message_handler_tasks.add(task)
             task.add_done_callback(self._on_message_handler_done)
             return
@@ -154,6 +154,10 @@ class WecomAIBotLongConnectionClient:
                 payload.get("errcode"),
                 payload.get("errmsg"),
             )
+
+    async def _dispatch_message(self, payload: dict[str, Any]) -> None:
+        """Wrap arbitrary awaitable handlers in a task-compatible coroutine."""
+        await self.message_handler(payload)
 
     def _on_message_handler_done(self, task: asyncio.Task[None]) -> None:
         """Release a completed callback task and report its exception."""

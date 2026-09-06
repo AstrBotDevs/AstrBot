@@ -1,14 +1,12 @@
 """Tests for astrbot.core.platform.message_session — MessageSession."""
 
-import pytest
-
-from astrbot.core.platform.message_session import MessageSession, MessageSesion
+from astrbot.core.platform.message_session import MessageSesion, MessageSession
 from astrbot.core.platform.message_type import MessageType
-
 
 # ===================================================================
 # Construction
 # ===================================================================
+
 
 class TestConstruction:
     """MessageSession construction and post_init."""
@@ -46,6 +44,7 @@ class TestConstruction:
 # __str__
 # ===================================================================
 
+
 class TestStr:
     """MessageSession.__str__ produces the unified-msg-origin format."""
 
@@ -78,6 +77,7 @@ class TestStr:
 # from_str
 # ===================================================================
 
+
 class TestFromStr:
     """MessageSession.from_str parses the unified-msg-origin string."""
 
@@ -89,9 +89,7 @@ class TestFromStr:
         assert session.session_id == "user_007"
 
     def test_parses_group_message(self):
-        session = MessageSession.from_str(
-            "slack:GroupMessage:channel_C01"
-        )
+        session = MessageSession.from_str("slack:GroupMessage:channel_C01")
         assert session.platform_name == "slack"
         assert session.message_type == MessageType.GROUP_MESSAGE
         assert session.session_id == "channel_C01"
@@ -127,6 +125,7 @@ class TestFromStr:
 # Back-compat alias
 # ===================================================================
 
+
 class TestAlias:
     """MessageSesion (note the typo) should be an alias for MessageSession."""
 
@@ -146,6 +145,7 @@ class TestAlias:
 # ===================================================================
 # Dataclass equality
 # ===================================================================
+
 
 class TestEquality:
     """MessageSession is a dataclass so it inherits __eq__."""

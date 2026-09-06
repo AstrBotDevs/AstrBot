@@ -1,12 +1,21 @@
 import codecs
 import json
 from collections.abc import AsyncGenerator
-from typing import Any
+from typing import Any, Literal, NotRequired, TypedDict
 
 import anyio
 from aiohttp import ClientResponse, ClientSession, ClientTimeout, FormData
 
 from astrbot.core import logger
+
+
+class DifyFilePayload(TypedDict):
+    """File reference accepted by Dify chat and workflow requests."""
+
+    type: str
+    transfer_method: Literal["local_file", "remote_url"]
+    upload_file_id: NotRequired[str]
+    url: NotRequired[str]
 
 
 async def _stream_sse(resp: ClientResponse) -> AsyncGenerator[dict, None]:
@@ -47,7 +56,7 @@ class DifyAPIClient:
         user: str,
         response_mode: str = "streaming",
         conversation_id: str = "",
-        files: list[dict[str, object]] | None = None,
+        files: list[DifyFilePayload] | None = None,
         request_timeout: float = 60,
     ) -> AsyncGenerator[dict[str, Any], None]:
         if files is None:
@@ -81,7 +90,7 @@ class DifyAPIClient:
         inputs: dict[str, object],
         user: str,
         response_mode: str = "streaming",
-        files: list[dict[str, object]] | None = None,
+        files: list[DifyFilePayload] | None = None,
         request_timeout: float = 60,
     ):
         if files is None:

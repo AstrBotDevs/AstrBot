@@ -26,7 +26,10 @@ class _FakeAsyncAnthropic:
         ("https://api.anthropic.com/", "https://api.anthropic.com"),
         ("https://api.anthropic.com/v1", "https://api.anthropic.com"),
         ("https://api.anthropic.com/v1/", "https://api.anthropic.com"),
-        ("https://gateway.example.com/anthropic", "https://gateway.example.com/anthropic"),
+        (
+            "https://gateway.example.com/anthropic",
+            "https://gateway.example.com/anthropic",
+        ),
     ],
 )
 def test_anthropic_provider_normalizes_api_base(
@@ -750,15 +753,12 @@ async def test_query_handles_none_usage_when_content_filtered(monkeypatch):
         "The request was rejected because it was considered high risk"
     )
 
-    class _FakeMessageBlock:
-        def __init__(self, text: str):
-            self.type = "text"
-            self.text = text
-
     class _FakeMessage:
         def __init__(self):
             self.id = "msg_content_filter"
-            self.content = [_FakeMessageBlock(content_filter_message)]
+            self.content = [
+                anthropic_source.TextBlock(type="text", text=content_filter_message)
+            ]
             self.stop_reason = "content_filter"
             self.usage = None
 

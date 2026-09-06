@@ -559,9 +559,10 @@ class TestBoxliteBooter:
         mock_boxlite.SimpleBox = MagicMock()
 
         with patch.dict(sys.modules, {"boxlite": mock_boxlite}):
-            # BoxliteBooter is abstract now, cannot instantiate
-            # This test is skipped
-            pass
+            from astrbot.core.computer.booters.boxlite import BoxliteBooter
+
+            # Importing the abstract class must still expose the booter contract.
+            assert issubclass(BoxliteBooter, ComputerBooter)
 
 
 class TestComputerClient:

@@ -38,7 +38,7 @@ def test_platform_base_import():
     """Platform ABC is importable and has abstract methods."""
     from astrbot.core.platform.platform import Platform
 
-    assert len(getattr(Platform, '__abstractmethods__', ())) > 0
+    assert len(getattr(Platform, "__abstractmethods__", ())) > 0
 
 
 def test_compile_all():
@@ -54,7 +54,7 @@ def test_compile_all():
             compile(f.read_bytes(), str(f), "exec")
         except SyntaxError as e:
             errors.append(f"{f}: {e}")
-    assert not errors, f"Compile errors:\n" + "\n".join(errors[:10])
+    assert not errors, "Compile errors:\n" + "\n".join(errors[:10])
 
 
 def test_cli_entry():
@@ -90,7 +90,7 @@ def test_sqlite_implements_all_abstract():
 
     missing = [
         m
-        for m in getattr(BaseDatabase, '__abstractmethods__', ())
+        for m in getattr(BaseDatabase, "__abstractmethods__", ())
         if not hasattr(SQLiteDatabase, m)
         or getattr(SQLiteDatabase, m) is getattr(BaseDatabase, m, None)
     ]
@@ -114,13 +114,17 @@ def test_log_router_import():
 def test_password_utils_import():
     """All password utility functions are importable."""
     from astrbot.core.utils.auth_password import (
-        hash_dashboard_password,
-        verify_dashboard_password,
-        verify_dashboard_login_proof,
         get_dashboard_login_challenge,
+        hash_dashboard_password,
         is_default_dashboard_password,
         is_legacy_dashboard_password,
+        verify_dashboard_login_proof,
+        verify_dashboard_password,
     )
 
     assert callable(hash_dashboard_password)
     assert callable(verify_dashboard_password)
+    assert callable(verify_dashboard_login_proof)
+    assert callable(get_dashboard_login_challenge)
+    assert callable(is_default_dashboard_password)
+    assert callable(is_legacy_dashboard_password)

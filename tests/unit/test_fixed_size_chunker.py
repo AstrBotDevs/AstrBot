@@ -11,7 +11,6 @@ import pytest
 
 from astrbot.core.knowledge_base.chunking.fixed_size import FixedSizeChunker
 
-
 # ---------------------------------------------------------------
 # Construction
 # ---------------------------------------------------------------
@@ -254,8 +253,16 @@ class TestFixedSizeChunkerEdgeCases:
         # start=0: "abcde", start=1: "bcdef", ..., start=5: "fghij",
         # then start=6: "ghij", start=7: "hij", start=8: "ij", start=9: "j"
         assert result == [
-            "abcde", "bcdef", "cdefg", "defgh", "efghi", "fghij",
-            "ghij", "hij", "ij", "j",
+            "abcde",
+            "bcdef",
+            "cdefg",
+            "defgh",
+            "efghi",
+            "fghij",
+            "ghij",
+            "hij",
+            "ij",
+            "j",
         ]
 
     @pytest.mark.asyncio

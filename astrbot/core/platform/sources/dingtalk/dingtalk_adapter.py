@@ -5,7 +5,7 @@ import time
 import uuid
 from concurrent.futures import CancelledError as FutureCancelledError
 from pathlib import Path
-from typing import Literal, NoReturn, cast
+from typing import Literal, cast
 
 import aiohttp
 import dingtalk_stream
@@ -47,6 +47,17 @@ def _dingtalk_reconnect_delay(retry_count: int) -> int:
         DINGTALK_RECONNECT_INITIAL_DELAY * 2 ** (safe_retry_count - 1),
         DINGTALK_RECONNECT_MAX_DELAY,
     )
+
+
+class _StoppableDingTalkStreamClient(dingtalk_stream.DingTalkStreamClient):
+    """Keep the SDK's bound connection method while allowing shutdown to stop retries."""
+
+    reconnect_enabled: bool = True
+
+    def open_connection(self) -> object:
+        if not self.reconnect_enabled:
+            raise KeyboardInterrupt("Graceful shutdown")
+        return super().open_connection()
 
 
 class MyEventHandler(dingtalk_stream.EventHandler):
@@ -92,7 +103,7 @@ class DingtalkPlatformAdapter(Platform):
         self.client = AstrCallbackClient()
 
         credential = dingtalk_stream.Credential(self.client_id, self.client_secret)
-        client = dingtalk_stream.DingTalkStreamClient(credential, logger=logger)
+        client = _StoppableDingTalkStreamClient(credential, logger=logger)
         client.register_all_event_handler(MyEventHandler())
         client.register_callback_handler(
             dingtalk_stream.ChatbotMessage.TOPIC,
@@ -874,13 +885,10 @@ class DingtalkPlatformAdapter(Platform):
         await loop.run_in_executor(None, start_client, loop)
 
     async def terminate(self) -> None:
-        def monkey_patch_close() -> NoReturn:
-            raise KeyboardInterrupt("Graceful shutdown")
-
         self._terminated_event.set()
         self._shutdown_event.set()
         if self.client_.websocket is not None:
-            self.client_.open_connection = monkey_patch_close
+            self.client_.reconnect_enabled = False
             await self.client_.websocket.close(code=1000, reason="Graceful shutdown")
 
     def get_client(self):

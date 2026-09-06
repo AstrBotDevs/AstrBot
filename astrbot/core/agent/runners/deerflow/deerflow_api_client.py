@@ -194,7 +194,7 @@ class DeerFlowAPIClient:
         async with session.delete(
             url,
             headers=self.headers,
-            timeout=timeout,
+            timeout=ClientTimeout(total=timeout),
             proxy=self.proxy,
         ) as resp:
             if resp.status not in (200, 202, 204, 404):

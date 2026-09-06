@@ -213,14 +213,14 @@
           <v-spacer />
           <v-btn
             variant="text"
-            :disabled="savingProviders.includes(providerEditData?.id)"
+            :disabled="isSavingEditedProvider"
             @click="showProviderEditDialog = false"
           >
             {{ tm("dialogs.config.cancel") }}
           </v-btn>
           <v-btn
             color="primary"
-            :loading="savingProviders.includes(providerEditData?.id)"
+            :loading="isSavingEditedProvider"
             @click="saveEditedProvider"
           >
             {{ tm("dialogs.config.save") }}
@@ -238,6 +238,7 @@ import ProviderSourcesPanel from "@/components/provider/ProviderSourcesPanel.vue
 import AstrBotConfig from "@/components/shared/AstrBotConfig.vue";
 import { useProviderSources } from "@/composables/useProviderSources";
 import { useModuleI18n } from "@/i18n/composables";
+import { resolveErrorMessage } from "@/utils/errorUtils.js";
 import axios from "@/utils/request";
 
 const props = defineProps({
@@ -269,7 +270,7 @@ const snackbar = ref({
   color: "success",
 });
 
-function showMessage(message, color = "success") {
+function showMessage(message: string, color = "success") {
   snackbar.value = { show: true, message, color };
 }
 
@@ -325,6 +326,10 @@ const showProviderEditDialog = ref(false);
 const providerEditData = ref<ProviderData | null>(null);
 const providerEditOriginalId = ref("");
 const savingProviders = ref<string[]>([]);
+const isSavingEditedProvider = computed(() => {
+  const provider = providerEditData.value;
+  return provider !== null && savingProviders.value.includes(provider.id);
+});
 
 function closeDialog() {
   dialog.value = false;
@@ -364,13 +369,15 @@ function openProviderEdit(provider: ProviderData) {
 }
 
 async function saveEditedProvider() {
-  if (!providerEditData.value) return;
+  const provider = providerEditData.value;
+  if (!provider) return;
+  const providerId = provider.id;
 
-  savingProviders.value.push(providerEditData.value.id);
+  savingProviders.value.push(providerId);
   try {
     const res = await axios.post("/api/config/provider/update", {
-      id: providerEditOriginalId.value || providerEditData.value.id,
-      config: providerEditData.value,
+      id: providerEditOriginalId.value || providerId,
+      config: provider,
     });
 
     if (res.data.status === "error") {
@@ -381,9 +388,9 @@ async function saveEditedProvider() {
     showProviderEditDialog.value = false;
     await loadConfig();
   } catch (err) {
-    showMessage(err.response?.data?.message || err.message || tm("providerSources.saveError"), "error");
+    showMessage(resolveErrorMessage(err, tm("providerSources.saveError")), "error");
   } finally {
-    savingProviders.value = savingProviders.value.filter((id) => id !== providerEditData.value?.id);
+    savingProviders.value = savingProviders.value.filter((id) => id !== providerId);
   }
 }
 
@@ -401,7 +408,7 @@ async function toggleProviderEnable(provider: ProviderData, value: boolean) {
     }
     showMessage(res.data.message || tm("messages.success.statusUpdate"));
   } catch (error) {
-    showMessage(error.response?.data?.message || error.message || tm("providerSources.saveError"), "error");
+    showMessage(resolveErrorMessage(error, tm("providerSources.saveError")), "error");
   } finally {
     await loadConfig();
   }

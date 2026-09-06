@@ -44,10 +44,10 @@
             :loading="loading"
           >
             <template #item="{ props, item }">
-              <v-list-item v-bind="props" :title="item.raw.name">
+              <v-list-item v-bind="props" :title="item.name">
                 <template #append>
                   <v-chip
-                    v-if="item.raw.name === activeTemplate"
+                    v-if="item.name === activeTemplate"
                     color="success"
                     variant="tonal"
                     size="small"
@@ -62,7 +62,7 @@
                     size="small"
                     class="ml-2"
                     :loading="applyLoading"
-                    @click.stop="setActiveTemplate(item.raw.name)"
+                    @click.stop="setActiveTemplate(item.name)"
                   >
                     {{ tm("t2iTemplateEditor.apply") }}
                   </v-btn>
@@ -238,7 +238,7 @@
         <v-card-text>
           {{
             tm("t2iTemplateEditor.confirmDeleteMessage", {
-              name: selectedTemplate,
+              name: selectedTemplate ?? "",
             })
           }}
         </v-card-text>
@@ -268,7 +268,7 @@
         <v-card-text>
           {{
             tm("t2iTemplateEditor.confirmApplyMessage", {
-              name: selectedTemplate,
+              name: selectedTemplate ?? "",
             })
           }}
         </v-card-text>
@@ -295,6 +295,7 @@
 import { VueMonacoEditor } from "@guolao/vue-monaco-editor";
 import { computed, nextTick, ref, watch } from "vue";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
+import { resolveErrorMessage } from "@/utils/errorUtils.js";
 import axios from "@/utils/request";
 import { useToast } from "@/utils/toast";
 
@@ -310,10 +311,19 @@ const resetLoading = ref(false);
 const previewLoading = ref(false);
 const applyLoading = ref(false);
 
-// 模板管理
-const templates = ref([]);
+interface TemplateListItem {
+  name: string;
+  is_default: boolean;
+}
+
+type TemplateResponse<T> =
+  | { status: "ok"; data: T; message?: string }
+  | { status: "error"; data?: null; message?: string };
+
+// Template management
+const templates = ref<TemplateListItem[]>([]);
 const activeTemplate = ref("base");
-const selectedTemplate = ref(null);
+const selectedTemplate = ref<string | null>(null);
 const editingName = ref(""); // 用于新建模式下的名称输入
 const templateContent = ref("");
 const isCreatingNew = ref(false);
@@ -364,7 +374,7 @@ const previewContent = computed(() => {
     content = content.replace(/\{\{\s*version\s*\}\}/g, previewData.value.version);
     return content;
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = resolveErrorMessage(error);
     return `<div style="color: red; padding: 20px;">模板渲染错误: ${message}</div>`;
   }
 });
@@ -374,8 +384,8 @@ const loadInitialData = async () => {
   loading.value = true;
   try {
     const [listRes, activeRes] = await Promise.all([
-      axios.get("/api/t2i/templates"),
-      axios.get("/api/t2i/templates/active"),
+      axios.get<TemplateResponse<TemplateListItem[]>>("/api/t2i/templates"),
+      axios.get<TemplateResponse<{ active_template: string }>>("/api/t2i/templates/active"),
     ]);
 
     if (listRes.data.status === "ok") {
@@ -401,11 +411,12 @@ const loadInitialData = async () => {
   }
 };
 
-const loadTemplateContent = async (name) => {
+const loadTemplateContent = async (name: string) => {
   if (!name) return;
   previewLoading.value = true;
   try {
-    const response = await axios.get(`/api/t2i/templates/${name}`);
+    const response = await axios.get<TemplateResponse<{ name: string; content: string }>>(`/api/t2i/templates/${name}`);
+    if (selectedTemplate.value !== name || !dialog.value) return;
     if (response.data.status === "ok") {
       templateContent.value = response.data.data.content;
     } else {
@@ -424,12 +435,15 @@ const saveTemplate = async () => {
     if (isCreatingNew.value) {
       // --- 创建新模板 ---
       if (!editingName.value) return;
-      const response = await axios.post("/api/t2i/templates/create", {
+      const response = await axios.post<TemplateResponse<{ name: string }>>("/api/t2i/templates/create", {
         name: editingName.value,
         content: templateContent.value,
       });
-      await loadInitialData(); // 重新加载所有数据
-      selectedTemplate.value = response.data.data.name;
+      const result = response.data;
+      if (result.status !== "ok") throw new Error(result.message);
+      const createdName = result.data.name;
+      await loadInitialData();
+      selectedTemplate.value = createdName;
       isCreatingNew.value = false;
     } else {
       // --- 更新现有模板 ---
@@ -439,22 +453,22 @@ const saveTemplate = async () => {
       });
     }
   } catch (error) {
-    const msg = (error as any)?.response?.data?.message || (error as any)?.message || String(error);
-    console.error("保存模板失败:", msg);
+    const msg = resolveErrorMessage(error);
+    console.error("Failed to save template:", msg);
     toast.error(msg);
   } finally {
     saveLoading.value = false;
   }
 };
 
-const setActiveTemplate = async (name) => {
+const setActiveTemplate = async (name: string) => {
   applyLoading.value = true;
   try {
     await axios.post("/api/t2i/templates/set_active", { name });
     activeTemplate.value = name;
   } catch (error) {
-    const msg = (error as any)?.response?.data?.message || (error as any)?.message || String(error);
-    console.error(`应用模板 '${name}' 失败:`, msg);
+    const msg = resolveErrorMessage(error);
+    console.error(`Failed to apply template '${name}':`, msg);
     toast.error(msg);
   } finally {
     applyLoading.value = false;
@@ -476,8 +490,8 @@ const confirmDelete = async () => {
     await loadInitialData();
     selectedTemplate.value = "base";
   } catch (error) {
-    const msg = (error as any)?.response?.data?.message || (error as any)?.message || String(error);
-    console.error(`删除模板失败:`, msg);
+    const msg = resolveErrorMessage(error);
+    console.error("Failed to delete template:", msg);
     toast.error(msg);
   } finally {
     saveLoading.value = false;
@@ -496,8 +510,8 @@ const confirmReset = async () => {
       await setActiveTemplate("base");
     }
   } catch (error) {
-    const msg = (error as any)?.response?.data?.message || (error as any)?.message || String(error);
-    console.error("重置模板失败:", msg);
+    const msg = resolveErrorMessage(error);
+    console.error("Failed to reset template:", msg);
     toast.error(msg);
   } finally {
     resetLoading.value = false;
@@ -541,10 +555,12 @@ const promptApplyAndClose = () => {
 };
 
 const confirmApplyAndClose = async () => {
-  if (isCreatingNew.value) return;
+  const name = selectedTemplate.value;
+  if (isCreatingNew.value || !name) return;
 
   await saveTemplate();
-  await setActiveTemplate(selectedTemplate.value);
+  if (!dialog.value || isCreatingNew.value || selectedTemplate.value !== name) return;
+  await setActiveTemplate(name);
   applyAndCloseDialog.value = false;
   closeDialog();
 };

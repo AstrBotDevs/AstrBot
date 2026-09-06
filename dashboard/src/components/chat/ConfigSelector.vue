@@ -86,6 +86,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
+import { configProfileApi } from "@/api/v1";
 import { useModuleI18n } from "@/i18n/composables";
 import {
   getStoredDashboardUsername,

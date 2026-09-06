@@ -42,7 +42,7 @@ from typing import Any, Protocol, runtime_checkable
 from astrbot.api import FunctionTool, logger
 from astrbot.api.event import MessageChain
 from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.agent.tool import ToolExecResult
+from astrbot.core.agent.tool import ParametersType, ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.computer.computer_client import get_booter
 from astrbot.core.computer.file_read_utils import read_file_tool_result
@@ -317,17 +317,18 @@ def _normalize_rw_path(
     )
     if not normalized_path:
         raise ValueError("`path` must be a non-empty string.")
-    if restricted:
-        allowed_roots = (
-            _write_allowed_roots(
-                umo,
-                current_workspace_root,
-                include_installed_skills=allow_installed_skill_write,
-            )
-            if write
-            else _read_allowed_roots(umo, current_workspace_root)
+    if not restricted:
+        return normalized_path
+    allowed_roots = (
+        _write_allowed_roots(
+            umo,
+            current_workspace_root,
+            include_installed_skills=allow_installed_skill_write,
         )
-    if restricted and not _is_path_within_allowed_roots(
+        if write
+        else _read_allowed_roots(umo, current_workspace_root)
+    )
+    if not _is_path_within_allowed_roots(
         normalized_path,
         umo=umo,
         allowed_roots=allowed_roots,
@@ -366,7 +367,7 @@ def _decode_escaped_text(value: str) -> str:
 class FileReadTool(FunctionTool):
     name: str = "astrbot_file_read_tool"
     description: str = "read file content. Supports text, image, and PDF (text extraction), docx and epub files."
-    parameters: dict = field(
+    parameters: ParametersType | None = field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -487,7 +488,7 @@ class FileReadTool(FunctionTool):
 class FileWriteTool(FunctionTool):
     name: str = "astrbot_file_write_tool"
     description: str = "Write UTF-8 text content to a file."
-    parameters: dict = field(
+    parameters: ParametersType | None = field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -596,7 +597,7 @@ class FileWriteTool(FunctionTool):
 class FileEditTool(FunctionTool):
     name: str = "astrbot_file_edit_tool"
     description: str = "Editing files."
-    parameters: dict = field(
+    parameters: ParametersType | None = field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -731,7 +732,7 @@ class FileEditTool(FunctionTool):
 class GrepTool(FunctionTool):
     name: str = "astrbot_grep_tool"
     description: str = "Search and read file contents using ripgrep."
-    parameters: dict = field(
+    parameters: ParametersType | None = field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -1010,7 +1011,7 @@ class FileUploadTool(FunctionTool):
         "need to process it inside the sandbox. The local_path must point to an "
         "existing file on the host filesystem."
     )
-    parameters: dict = field(
+    parameters: ParametersType | None = field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -1031,7 +1032,7 @@ class FileUploadTool(FunctionTool):
         self,
         context: ContextWrapper[AstrAgentContext],
         local_path: str,
-    ) -> str | None:
+    ) -> str:
         if permission_error := check_admin_permission(context, "File upload/download"):
             return permission_error
         sb = await get_booter(
@@ -1075,7 +1076,7 @@ class FileDownloadTool(FunctionTool):
         "to the user. Use this ONLY when the user asks to retrieve/export a file "
         "that was created or modified inside the sandbox."
     )
-    parameters: dict = field(
+    parameters: ParametersType | None = field(
         default_factory=lambda: {
             "type": "object",
             "properties": {

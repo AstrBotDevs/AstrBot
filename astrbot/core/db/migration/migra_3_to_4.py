@@ -259,7 +259,9 @@ def _get_dict_preference(key: str) -> dict[str, object]:
     value = sp_v3.get(key, default={})
     if not isinstance(value, dict):
         raise TypeError(f"旧偏好设置 {key} 应为 dict, 实际为 {type(value).__name__}")
-    return value
+    if any(not isinstance(key, str) for key in value):
+        raise TypeError(f"Legacy preference {key} must use string keys")
+    return {key: item for key, item in value.items() if isinstance(key, str)}
 
 
 async def migration_preferences(

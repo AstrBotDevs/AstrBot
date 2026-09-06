@@ -20,10 +20,20 @@ export const useCustomizerStore = defineStore("customizer", {
   }),
 
   getters: {
+    themeMode: (state): "light" | "dark" | "system" =>
+      state.autoSwitchTheme ? "system" : state.uiTheme === DARK_THEME_NAME ? "dark" : "light",
     isDarkTheme: (state) => state.uiTheme === DARK_THEME_NAME,
     isDark: (state) => (state.uiTheme ? DARK_THEMES.has(state.uiTheme) : false),
   },
   actions: {
+    SET_THEME_MODE(mode: "light" | "dark" | "system") {
+      this.SET_AUTO_SYNC(mode === "system");
+      if (mode === "system") {
+        this.APPLY_SYSTEM_THEME();
+      } else {
+        this.SET_UI_THEME(mode === "dark" ? DARK_THEME_NAME : LIGHT_THEME_NAME);
+      }
+    },
     SET_SIDEBAR_DRAWER() {
       this.Sidebar_drawer = !this.Sidebar_drawer;
     },

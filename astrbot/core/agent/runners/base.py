@@ -38,6 +38,7 @@ class BaseAgentRunner(Generic[TContext]):
         tool_executor: BaseFunctionToolExecutor[TContext],
         agent_hooks: BaseAgentRunHooks[TContext],
         streaming: bool = False,
+        *,
         enforce_max_turns: int = -1,
         llm_compress_instruction: str | None = None,
         llm_compress_keep_recent: int = 0,

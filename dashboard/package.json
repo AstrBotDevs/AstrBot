@@ -15,7 +15,8 @@
     "lint": "biome check --write",
     "lint:check": "biome check",
     "lint:unsafe": "biome check --write --unsafe",
-    "postinstall": "node scripts/patch-dompurify.mjs"
+    "postinstall": "node scripts/patch-dompurify.mjs",
+    "generate:api": "openapi-ts -i ../openspec/openapi-v1.yaml -o src/api/generated/openapi-v1 -c @hey-api/client-axios"
   },
   "dependencies": {
     "@guolao/vue-monaco-editor": "^1.6.0",
@@ -56,10 +57,14 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.13",
+    "@hey-api/openapi-ts": "0.72.2",
     "@mdi/font": "7.4.47",
     "@types/chance": "1.1.7",
+    "@types/d3": "^7.4.3",
+    "@types/event-source-polyfill": "^1.0.5",
     "@types/markdown-it": "^14.1.2",
     "@types/node": "^25.5.2",
+    "@types/qrcode": "^1.5.6",
     "@vitejs/plugin-vue": "6.0.5",
     "@vue/tsconfig": "^0.9.1",
     "sass": "1.98.0",

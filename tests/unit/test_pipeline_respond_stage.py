@@ -28,7 +28,9 @@ from astrbot.core.pipeline.respond.stage import RespondStage
 def _reload_stage_module():
     """Reload the stage module to avoid stale imports from test_pipeline_bootstrap."""
     import importlib
+
     import astrbot.core.pipeline.respond.stage as stage_mod
+
     importlib.reload(stage_mod)
     globals()["RespondStage"] = stage_mod.RespondStage
 
@@ -179,7 +181,9 @@ class TestRespondStageCalcCompInterval:
         stage.log_base = 2
         plain = Plain(text="hello world")
 
-        with patch("astrbot.core.pipeline.respond.stage.random.uniform") as mock_uniform:
+        with patch(
+            "astrbot.core.pipeline.respond.stage.random.uniform"
+        ) as mock_uniform:
             mock_uniform.return_value = 2.0
             interval = await stage._calc_comp_interval(plain)
 
@@ -192,7 +196,9 @@ class TestRespondStageCalcCompInterval:
         stage.interval_method = "log"
         image = Image(file="/path/to/img.jpg")
 
-        with patch("astrbot.core.pipeline.respond.stage.random.uniform") as mock_uniform:
+        with patch(
+            "astrbot.core.pipeline.respond.stage.random.uniform"
+        ) as mock_uniform:
             mock_uniform.return_value = 1.5
             interval = await stage._calc_comp_interval(image)
 
@@ -206,7 +212,9 @@ class TestRespondStageCalcCompInterval:
         stage.interval = [2.0, 4.0]
         plain = Plain(text="test")
 
-        with patch("astrbot.core.pipeline.respond.stage.random.uniform") as mock_uniform:
+        with patch(
+            "astrbot.core.pipeline.respond.stage.random.uniform"
+        ) as mock_uniform:
             mock_uniform.return_value = 3.0
             interval = await stage._calc_comp_interval(plain)
 
@@ -232,13 +240,17 @@ class TestRespondStageHasMeaningfulContent:
         comp = Image(file="", url="http://example.com/img.jpg")
         assert stage._has_meaningful_content(comp) is True
 
-    @pytest.mark.skip(reason="Image component has no file_id field; _has_meaningful_content checks file_id which raises AttributeError")
+    @pytest.mark.skip(
+        reason="Image component has no file_id field; _has_meaningful_content checks file_id which raises AttributeError"
+    )
     def test_image_with_file_id(self, stage):
         """Verify Image with file_id returns True."""
         comp = Image(file_id="abc123")
         assert stage._has_meaningful_content(comp) is True
 
-    @pytest.mark.skip(reason="Image component has no file_id field; _has_meaningful_content checks file_id which raises AttributeError")
+    @pytest.mark.skip(
+        reason="Image component has no file_id field; _has_meaningful_content checks file_id which raises AttributeError"
+    )
     def test_image_empty(self, stage):
         """Verify Image without url or file_id returns False."""
         comp = Image()
@@ -429,7 +441,9 @@ class TestRespondStageProcess:
 
     @pytest.mark.asyncio
     async def test_process_streaming_finish_prevents_duplicate_send(
-        self, stage, mock_event,
+        self,
+        stage,
+        mock_event,
     ):
         """Verify prevent duplicate send after streaming finish."""
         mock_event.get_extra.return_value = True  # _streaming_finished already True
@@ -443,6 +457,7 @@ class TestRespondStageProcess:
     @pytest.mark.asyncio
     async def test_process_streaming_result(self, stage, mock_event):
         """Verify STREAMING_RESULT is delivered directly to event.send_streaming."""
+
         async def dummy_async_stream():
             yield "chunk1"
 
@@ -498,7 +513,9 @@ class TestRespondStageProcess:
 
     @pytest.mark.asyncio
     async def test_process_chain_with_record_forced_separate(
-        self, stage, mock_event,
+        self,
+        stage,
+        mock_event,
     ):
         """Verify Record components are sent separately."""
         result = MessageEventResult()

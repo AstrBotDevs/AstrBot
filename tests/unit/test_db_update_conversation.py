@@ -10,6 +10,7 @@ import pytest
 def test_sqlite_update_conversation_accepts_clear_persona():
     """Verify SQLiteDatabase.update_conversation accepts all abstract params."""
     from inspect import signature
+
     from astrbot.core.db import BaseDatabase
     from astrbot.core.db.sqlite import SQLiteDatabase
 

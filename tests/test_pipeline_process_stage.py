@@ -1,9 +1,7 @@
 """Tests for astrbot.core.pipeline.process_stage.stage module."""
 
-import pytest
-
 from astrbot.core.pipeline.process_stage.stage import ProcessStage
-from astrbot.core.pipeline.stage import registered_stages, Stage
+from astrbot.core.pipeline.stage import Stage, registered_stages
 
 
 class TestProcessStage:
@@ -12,6 +10,7 @@ class TestProcessStage:
     def test_module_import(self):
         """Verify the process_stage module can be imported."""
         import astrbot.core.pipeline.process_stage.stage  # noqa: F811
+
         assert hasattr(
             astrbot.core.pipeline.process_stage.stage,
             "ProcessStage",

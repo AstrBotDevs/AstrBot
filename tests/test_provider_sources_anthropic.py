@@ -1,6 +1,8 @@
 """Smoke tests for ProviderAnthropic."""
-import pytest
+
 from unittest.mock import patch
+
+import pytest
 
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse

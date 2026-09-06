@@ -7,14 +7,11 @@ separators, and edge cases with chunk_size/overlap validation).
 All tests isolate the chunker from any external dependencies.
 """
 
-from unittest.mock import MagicMock, patch
-
 import pytest
 
 from astrbot.core.knowledge_base.chunking.recursive import (
     RecursiveCharacterChunker,
 )
-
 
 # ---------------------------------------------------------------
 # Construction
@@ -297,7 +294,9 @@ class TestRecursiveCharacterChunkerSplitByCharacter:
     def test_split_by_character_raises_on_overlap_ge_chunk_size(self):
         """Test that overlap >= chunk_size raises ValueError."""
         chunker = RecursiveCharacterChunker()
-        with pytest.raises(ValueError, match="chunk_overlap must be less than chunk_size"):
+        with pytest.raises(
+            ValueError, match="chunk_overlap must be less than chunk_size"
+        ):
             chunker._split_by_character("test", chunk_size=5, overlap=5)
 
     def test_single_character_chunks(self):

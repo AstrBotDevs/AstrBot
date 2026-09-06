@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, TypedDict
+
 from astrbot import logger
 from astrbot.api import sp
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
@@ -5,6 +9,34 @@ from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import Persona, PersonaFolder, Personality
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.sentinels import NOT_GIVEN
+
+if TYPE_CHECKING:
+    from astrbot.core.config.astrbot_config import AstrBotConfig
+
+
+class LegacyPersonaConfig(TypedDict):
+    """Compatibility payload for pre-v4 persona consumers."""
+
+    prompt: str
+    name: str
+    begin_dialogs: list[str]
+    mood_imitation_dialogs: list[str]
+    tools: list[str] | None
+    skills: list[str] | None
+    custom_error_message: str | None
+
+
+def _get_configured_persona_id(config: AstrBotConfig) -> str:
+    """Resolve the configured persona without depending on legacy provider fields."""
+    agent_runner = config.get("agent_runner", {})
+    runner_config = agent_runner.get("config", {})
+    persona_id = (
+        runner_config.get("persona", {}).get("persona_id", "default")
+        if agent_runner.get("runner_type", "local") == "local"
+        else runner_config.get("persona_id", "default")
+    )
+    return persona_id if isinstance(persona_id, str) else "default"
+
 
 DEFAULT_PERSONALITY = Personality(
     prompt="You are a helpful and friendly assistant.",
@@ -23,18 +55,12 @@ class PersonaManager:
     def __init__(self, db_helper: BaseDatabase, acm: AstrBotConfigManager) -> None:
         self.db = db_helper
         self.acm = acm
-        default_runner = acm.default_conf.get("agent_runner", {})
-        default_runner_config = default_runner.get("config", {})
-        self.default_persona: str = (
-            default_runner_config.get("persona", {}).get("persona_id", "default")
-            if default_runner.get("runner_type") == "local"
-            else default_runner_config.get("persona_id", "default")
-        )
+        self.default_persona: str = _get_configured_persona_id(acm.default_conf)
         self.personas: list[Persona] = []
         self.selected_default_persona: Persona | None = None
         self.personas_v3: list[Personality] = []
         self.selected_default_persona_v3: Personality | None = None
-        self.persona_v3_config: list[dict] = []
+        self.persona_v3_config: list[LegacyPersonaConfig] = []
 
     async def initialize(self) -> None:
         self.personas = await self.get_all_personas()
@@ -69,14 +95,7 @@ class PersonaManager:
         umo: str | MessageSession | None = None,
     ) -> Personality:
         """获取默认 persona"""
-        cfg = self.acm.get_conf(umo)
-        agent_runner = cfg.get("agent_runner", {})
-        runner_config = agent_runner.get("config", {})
-        default_persona_id = (
-            runner_config.get("persona", {}).get("persona_id", "default")
-            if agent_runner.get("runner_type") == "local"
-            else runner_config.get("persona_id", "default")
-        )
+        default_persona_id = _get_configured_persona_id(self.acm.get_conf(umo))
         return self.get_persona_v3_by_id(default_persona_id) or DEFAULT_PERSONALITY
 
     async def resolve_selected_persona(
@@ -113,14 +132,7 @@ class PersonaManager:
             if persona_id == "[%None]":
                 pass
             elif persona_id is None:
-                cfg = self.acm.get_conf(umo)
-                agent_runner = cfg.get("agent_runner", {})
-                runner_config = agent_runner.get("config", {})
-                persona_id = (
-                    runner_config.get("persona", {}).get("persona_id", "default")
-                    if agent_runner.get("runner_type") == "local"
-                    else runner_config.get("persona_id", "default")
-                )
+                persona_id = _get_configured_persona_id(self.acm.get_conf(umo))
 
         persona = next(
             (item for item in self.personas_v3 if item["name"] == persona_id),
@@ -393,7 +405,9 @@ class PersonaManager:
         self.get_v3_persona_data()
         return new_persona
 
-    def get_v3_persona_data(self) -> tuple[list[dict], list[Personality], Personality]:
+    def get_v3_persona_data(
+        self,
+    ) -> tuple[list[LegacyPersonaConfig], list[Personality], Personality]:
         """获取 AstrBot <4.0.0 版本的 persona 数据｡
 
         Returns:
@@ -402,7 +416,7 @@ class PersonaManager:
             - Personality: 默认选择的 Personality 对象｡
 
         """
-        v3_persona_config = [
+        v3_persona_config: list[LegacyPersonaConfig] = [
             {
                 "prompt": persona.system_prompt,
                 "name": persona.persona_id,

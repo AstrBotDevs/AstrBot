@@ -3,18 +3,16 @@
 Tests Context methods with mock-based isolation.
 """
 
-from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from astrbot.core.star.context import Context
-from astrbot.core.star.star import StarMetadata, star_map, star_registry
+from astrbot.core.star.star import StarMetadata, star_registry
 from astrbot.core.star.star_handler import (
     EventType,
-    StarHandlerMetadata,
     star_handlers_registry,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -73,11 +71,21 @@ class TestContextInit:
         assert context.provider_manager is mock_dependencies["provider_manager"]
         assert context.platform_manager is mock_dependencies["platform_manager"]
         assert context.conversation_manager is mock_dependencies["conversation_manager"]
-        assert context.message_history_manager is mock_dependencies["message_history_manager"]
+        assert (
+            context.message_history_manager
+            is mock_dependencies["message_history_manager"]
+        )
         assert context.persona_manager is mock_dependencies["persona_manager"]
         assert context.astrbot_config_mgr is mock_dependencies["astrbot_config_mgr"]
         assert context.kb_manager is mock_dependencies["knowledge_base_manager"]
         assert context.cron_manager is mock_dependencies["cron_manager"]
+
+    def test_registrations_are_isolated_per_context(
+        self, context: Context, mock_dependencies: dict[str, MagicMock]
+    ) -> None:
+        another = Context(**mock_dependencies)
+        assert another._registered_web_apis is not context._registered_web_apis
+        assert another._register_tasks is not context._register_tasks
 
     def test_init_sets_empty_registrations(self, context):
         """Runtime registration containers start empty."""
@@ -99,9 +107,9 @@ class TestGetUsingProvider:
         from astrbot.core.provider.provider import Provider
 
         mock_provider = MagicMock(spec=Provider)
-        mock_dependencies["provider_manager"].get_using_provider.return_value = (
-            mock_provider
-        )
+        mock_dependencies[
+            "provider_manager"
+        ].get_using_provider.return_value = mock_provider
         result = context.get_using_provider("test_umo")
         assert result is mock_provider
         mock_dependencies["provider_manager"].get_using_provider.assert_called_once()
@@ -114,9 +122,9 @@ class TestGetUsingProvider:
 
     def test_raises_value_error_on_wrong_type(self, context, mock_dependencies):
         """get_using_provider raises ValueError when provider is wrong type."""
-        mock_dependencies["provider_manager"].get_using_provider.return_value = (
-            "not_a_provider"
-        )
+        mock_dependencies[
+            "provider_manager"
+        ].get_using_provider.return_value = "not_a_provider"
         with pytest.raises(ValueError, match="类型不正确"):
             context.get_using_provider("test_umo")
 
@@ -186,6 +194,7 @@ class TestRegisterCommands:
 
     def test_registers_command_handler(self, context):
         """register_commands creates a StarHandlerMetadata and appends it."""
+
         async def fake_handler():
             pass
 
@@ -274,6 +283,7 @@ class TestRegisterWebApi:
 
     def test_registers_new_api(self, context):
         """register_web_api appends a new web API route."""
+
         async def handler():
             pass
 
@@ -293,6 +303,7 @@ class TestRegisterWebApi:
 
     def test_replaces_existing_route_with_same_methods(self, context):
         """register_web_api replaces a previously registered API with same route and methods."""
+
         async def old_handler():
             pass
 
@@ -317,6 +328,7 @@ class TestRegisterWebApi:
 
     def test_allows_different_methods_on_same_route(self, context):
         """register_web_api treats different HTTP methods as separate entries."""
+
         async def handler():
             pass
 
@@ -369,11 +381,14 @@ class TestAddLLMTools:
 
         def _remove_func(name: str) -> None:
             mock_dependencies["provider_manager"].llm_tools.func_list = [
-                t for t in mock_dependencies["provider_manager"].llm_tools.func_list
+                t
+                for t in mock_dependencies["provider_manager"].llm_tools.func_list
                 if t.name != name
             ]
 
-        mock_dependencies["provider_manager"].llm_tools.remove_func.side_effect = _remove_func
+        mock_dependencies[
+            "provider_manager"
+        ].llm_tools.remove_func.side_effect = _remove_func
         context.add_llm_tools(new_tool)
 
         assert old_tool not in mock_dependencies["provider_manager"].llm_tools.func_list
@@ -390,6 +405,7 @@ class TestRegisterLLMTool:
 
     def test_registers_handler_and_adds_func(self, context, mock_dependencies):
         """register_llm_tool creates a StarHandlerMetadata and adds to func_list."""
+
         async def handler():
             pass
 
@@ -414,6 +430,7 @@ class TestRegisterLLMTool:
 
     def test_calls_add_func_on_manager(self, context, mock_dependencies):
         """register_llm_tool delegates to llm_tools.add_func."""
+
         async def handler():
             pass
 
@@ -428,7 +445,9 @@ class TestRegisterLLMTool:
             func_obj=handler,
         )
 
-        mock_dependencies["provider_manager"].llm_tools.add_func.assert_called_once_with(
+        mock_dependencies[
+            "provider_manager"
+        ].llm_tools.add_func.assert_called_once_with(
             "my_tool",
             [{"type": "string", "name": "arg1"}],
             "desc",
@@ -446,6 +465,7 @@ class TestRegisterTask:
 
     def test_appends_task(self, context):
         """register_task appends to _register_tasks."""
+
         async def task():
             pass
 
@@ -459,6 +479,7 @@ class TestResetRuntimeRegistrations:
     @pytest.mark.skip(reason="reset_runtime_registrations was removed from Context")
     def test_clears_web_apis_and_tasks(self, context):
         """reset_runtime_registrations clears both containers."""
+
         async def handler():
             pass
 

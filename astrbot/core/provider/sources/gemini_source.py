@@ -7,7 +7,7 @@ import uuid
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import PurePath
-from typing import ClassVar, Literal, cast
+from typing import ClassVar, Literal
 from urllib.parse import urlparse
 
 import aiofiles
@@ -168,6 +168,11 @@ class ProviderGoogleGenAI(Provider):
             and threshold_str in self.THRESHOLD_MAPPING
         ]
 
+    def _require_client(self) -> genai.client.AsyncClient:
+        if self.client is None:
+            raise RuntimeError("Gemini client is unavailable after termination.")
+        return self.client
+
     async def _handle_api_error(self, e: APIError, keys: list[str]) -> bool:
         """处理API错误,返回是否需要重试"""
         if e.message is None:
@@ -327,7 +332,7 @@ class ProviderGoogleGenAI(Provider):
             logprobs=payloads.get("logprobs"),
             seed=payloads.get("seed"),
             response_modalities=modalities,
-            tools=tool_list,  # type: ignore[arg-type]
+            tools=[*tool_list],
             tool_config=tool_config,
             safety_settings=self.safety_settings or None,
             thinking_config=thinking_config,
@@ -636,12 +641,13 @@ class ProviderGoogleGenAI(Provider):
                     temperature,
                     streaming=False,
                 )
+                client = self._require_client()
                 async with self._conversation_header(conversation_id):
                     result = await retry_provider_request(
                         "Gemini",
-                        lambda: self.client.models.generate_content(
+                        lambda: client.models.generate_content(
                             model=model,
-                            contents=cast(types.ContentListUnion, conversation),
+                            contents=[*conversation],
                             config=config,
                         ),
                         max_attempts=request_max_retries,
@@ -716,13 +722,15 @@ class ProviderGoogleGenAI(Provider):
                     tools,
                     payloads.get("tool_choice", "auto"),
                     system_instruction,
+                    streaming=True,
                 )
+                client = self._require_client()
                 async with self._conversation_header(conversation_id):
                     result = await retry_provider_request(
                         "Gemini",
-                        lambda: self.client.models.generate_content_stream(
+                        lambda: client.models.generate_content_stream(
                             model=model,
-                            contents=cast(types.ContentListUnion, conversation),
+                            contents=[*conversation],
                             config=config,
                         ),
                         max_attempts=request_max_retries,
@@ -984,7 +992,7 @@ class ProviderGoogleGenAI(Provider):
         try:
             models = await retry_provider_request(
                 "Gemini",
-                lambda: self.client.models.list(),
+                lambda: self._require_client().models.list(),
             )
             return [
                 m.name.replace("models/", "")

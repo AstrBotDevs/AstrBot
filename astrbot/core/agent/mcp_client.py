@@ -183,10 +183,15 @@ def _get_stdio_command_allowlist() -> set[str]:
 def _validate_stdio_args(command_name: str, args: object) -> None:
     if args is None:
         return
-    if not isinstance(args, list) or not all(isinstance(arg, str) for arg in args):
+    if not isinstance(args, list):
         raise ValueError("MCP stdio args must be a list of strings.")
-
+    validated_args: list[str] = []
     for arg in args:
+        if not isinstance(arg, str):
+            raise ValueError("MCP stdio args must be a list of strings.")
+        validated_args.append(arg)
+
+    for arg in validated_args:
         if "\x00" in arg or "\r" in arg or "\n" in arg:
             raise ValueError("MCP stdio args cannot contain control characters.")
 
@@ -194,7 +199,7 @@ def _validate_stdio_args(command_name: str, args: object) -> None:
         if any(
             arg == "-c"
             or (arg.startswith("-") and not arg.startswith("--") and "c" in arg)
-            for arg in args
+            for arg in validated_args
         ):
             raise ValueError(
                 "MCP stdio Python servers must be launched from a module or file; inline code flags such as -c are not allowed."
@@ -208,22 +213,22 @@ def _validate_stdio_args(command_name: str, args: object) -> None:
                 and not arg.startswith("--")
                 and any(c in arg for c in "ep")
             )
-            for arg in args
+            for arg in validated_args
         ):
             raise ValueError(
                 "MCP stdio JavaScript servers must be launched from a package or file; inline eval flags are not allowed."
             )
     elif command_name == "docker":
-        denied = []
-        for i, arg in enumerate(args):
+        denied: list[str] = []
+        for i, arg in enumerate(validated_args):
             if arg in _DENIED_DOCKER_ARGS:
                 denied.append(arg)
             elif (
                 arg in {"--network", "--net", "--pid", "--ipc"}
-                and i + 1 < len(args)
-                and args[i + 1] == "host"
+                and i + 1 < len(validated_args)
+                and validated_args[i + 1] == "host"
             ):
-                denied.append(f"{arg} {args[i + 1]}")
+                denied.append(f"{arg} {validated_args[i + 1]}")
         if denied:
             raise ValueError(
                 f"MCP stdio Docker args are unsafe and not allowed: {', '.join(denied)}."

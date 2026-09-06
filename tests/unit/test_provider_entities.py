@@ -7,8 +7,6 @@ ProviderMeta, ProviderMetaData, and RerankResult construction and edge cases.
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-
 from astrbot.core.agent.message import (
     AssistantMessageSegment,
     ContentPart,
@@ -26,7 +24,6 @@ from astrbot.core.provider.entities import (
     TokenUsage,
     ToolCallsResult,
 )
-
 
 # =========================================================================
 # ProviderMeta / ProviderMetaData
@@ -243,16 +240,18 @@ class TestProviderRequest:
 
     def test_append_tool_calls_result_list(self):
         tcr1 = MagicMock(spec=ToolCallsResult)
-        tcr2 = MagicMock(spec=ToolCallsResult)
         req = ProviderRequest(tool_calls_result=[tcr1])
-        tcr3 = MagicMock(spec=ToolCallsResult)
-        req.append_tool_calls_result(tcr3)
+        tcr2 = MagicMock(spec=ToolCallsResult)
+        req.append_tool_calls_result(tcr2)
         from typing import cast
+
         result = cast(list, req.tool_calls_result)
         assert len(result) == 2
 
     def test_print_friendly_context_no_contexts(self):
-        req = ProviderRequest(prompt="hello", image_urls=["a.png"], audio_urls=["b.wav"])
+        req = ProviderRequest(
+            prompt="hello", image_urls=["a.png"], audio_urls=["b.wav"]
+        )
         result = req._print_friendly_context()
         assert "prompt: hello" in result
         assert "image_count: 1" in result
@@ -307,7 +306,9 @@ class TestProviderRequest:
         req = ProviderRequest(prompt="", image_urls=[])
         import asyncio
 
-        with patch.object(req, "_encode_image_bs64", return_value="data:image/jpeg;base64,abc"):
+        with patch.object(
+            req, "_encode_image_bs64", return_value="data:image/jpeg;base64,abc"
+        ):
             req.image_urls = ["http://example.com/img.png"]
             ctx = asyncio.run(req.assemble_context())
             assert ctx["role"] == "user"

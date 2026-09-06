@@ -965,22 +965,19 @@ class FunctionToolManager:
 
     def get_func_desc_openai_style(self, omit_empty_parameter_field=False) -> list:
         """获得 OpenAI API 风格的**已经激活**的工具描述"""
-        tools = [f for f in self.func_list if f.active]
-        toolset = ToolSet(tools)
+        toolset = ToolSet([f for f in self.func_list if f.active])
         return toolset.openai_schema(
             omit_empty_parameter_field=omit_empty_parameter_field,
         )
 
     def get_func_desc_anthropic_style(self) -> list:
         """获得 Anthropic API 风格的**已经激活**的工具描述"""
-        tools = [f for f in self.func_list if f.active]
-        toolset = ToolSet(tools)
+        toolset = ToolSet([f for f in self.func_list if f.active])
         return toolset.anthropic_schema()
 
     def get_func_desc_google_genai_style(self) -> dict:
         """获得 Google GenAI API 风格的**已经激活**的工具描述"""
-        tools = [f for f in self.func_list if f.active]
-        toolset = ToolSet(tools)
+        toolset = ToolSet([f for f in self.func_list if f.active])
         return toolset.google_schema()
 
     @deprecated(reason="Use deactivate_llm_tool_async() instead.")

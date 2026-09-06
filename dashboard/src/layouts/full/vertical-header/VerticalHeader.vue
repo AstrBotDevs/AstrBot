@@ -50,7 +50,7 @@ const LAST_CHAT_ROUTE_KEY = "astrbot:last_chat_route";
 const SHOW_PRE_RELEASES_KEY = "astrbot:updateDialog:showPreReleases";
 let dialog = ref(false);
 let accountWarning = ref(false);
-let accountWarningMd5 = ref(false);
+let accountWarningLegacy = ref(false);
 let accountWarningUpgrade = ref(false);
 let updateStatusDialog = ref(false);
 let aboutDialog = ref(false);
@@ -469,27 +469,27 @@ function getVersion() {
         res.data.data?.dashboard_version || undefined,
       );
       const change_pwd_hint = res.data.data?.change_pwd_hint;
-      const md5_pwd_hint = res.data.data?.md5_pwd_hint;
+      const legacy_pwd_hint = res.data.data?.legacy_pwd_hint;
       const password_upgrade_required =
         res.data.data?.password_upgrade_required;
-      if (change_pwd_hint || md5_pwd_hint || password_upgrade_required) {
+      if (change_pwd_hint || legacy_pwd_hint || password_upgrade_required) {
         dialog.value = true;
         accountWarning.value = true;
         accountWarningUpgrade.value = !!password_upgrade_required;
-        accountWarningMd5.value =
-          !!md5_pwd_hint && !password_upgrade_required;
+        accountWarningLegacy.value =
+          !!legacy_pwd_hint && !password_upgrade_required;
         if (
           change_pwd_hint ||
-          (md5_pwd_hint && !password_upgrade_required)
+          (legacy_pwd_hint && !password_upgrade_required)
         ) {
           localStorage.setItem("change_pwd_hint", "true");
         } else {
           localStorage.removeItem("change_pwd_hint");
         }
-        if (md5_pwd_hint && !password_upgrade_required) {
-          localStorage.setItem("md5_pwd_hint", "true");
+        if (legacy_pwd_hint && !password_upgrade_required) {
+          localStorage.setItem("legacy_pwd_hint", "true");
         } else {
-          localStorage.removeItem("md5_pwd_hint");
+          localStorage.removeItem("legacy_pwd_hint");
         }
         if (password_upgrade_required) {
           localStorage.setItem("password_upgrade_required", "true");
@@ -497,10 +497,10 @@ function getVersion() {
           localStorage.removeItem("password_upgrade_required");
         }
       } else {
-        accountWarningMd5.value = false;
+        accountWarningLegacy.value = false;
         accountWarningUpgrade.value = false;
         localStorage.removeItem("change_pwd_hint");
-        localStorage.removeItem("md5_pwd_hint");
+        localStorage.removeItem("legacy_pwd_hint");
         localStorage.removeItem("password_upgrade_required");
       }
     })
@@ -511,16 +511,16 @@ function getVersion() {
 
 function initPasswordWarningFromStorage() {
   const hasChangePwdHint = localStorage.getItem("change_pwd_hint") === "true";
-  const hasMd5PwdHint =
-    localStorage.getItem("md5_pwd_hint") === "true";
+  const hasLegacyPwdHint =
+    localStorage.getItem("legacy_pwd_hint") === "true";
   const hasPasswordUpgradeRequired =
     localStorage.getItem("password_upgrade_required") === "true";
-  if (hasChangePwdHint || hasMd5PwdHint || hasPasswordUpgradeRequired) {
+  if (hasChangePwdHint || hasLegacyPwdHint || hasPasswordUpgradeRequired) {
     dialog.value = true;
     accountWarning.value = true;
     accountWarningUpgrade.value = hasPasswordUpgradeRequired;
-    accountWarningMd5.value =
-      hasMd5PwdHint && !hasPasswordUpgradeRequired;
+    accountWarningLegacy.value =
+      hasLegacyPwdHint && !hasPasswordUpgradeRequired;
   }
 }
 
@@ -1876,8 +1876,8 @@ onMounted(async () => {
               t(
                 accountWarningUpgrade
                   ? "core.header.accountDialog.securityWarningUpgrade"
-                  : accountWarningMd5
-                  ? "core.header.accountDialog.securityWarningMd5"
+                  : accountWarningLegacy
+                  ? "core.header.accountDialog.securityWarningLegacy"
                   : "core.header.accountDialog.securityWarning",
               )
             }}</strong>

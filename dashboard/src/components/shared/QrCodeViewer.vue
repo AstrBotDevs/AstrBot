@@ -46,7 +46,7 @@ export default {
     },
   },
   methods: {
-    async renderQRCode(rawValue) {
+    async renderQRCode(rawValue: string) {
       const value = String(rawValue || "").trim();
       if (!value) {
         this.imageSrc = "";

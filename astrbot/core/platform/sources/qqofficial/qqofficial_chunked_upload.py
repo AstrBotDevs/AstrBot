@@ -317,10 +317,11 @@ class QQOfficialChunkedUploader:
                 ),
                 _MAX_RETRY_TIMEOUT_SECONDS,
             )
+            configured_retry_delay = upload_config.get("retry_delay")
             retry_delay = max(
                 float(
-                    upload_config.get("retry_delay")
-                    if upload_config.get("retry_delay") is not None
+                    configured_retry_delay
+                    if configured_retry_delay is not None
                     else _DEFAULT_RETRY_DELAY_SECONDS
                 ),
                 0.0,
@@ -348,7 +349,9 @@ class QQOfficialChunkedUploader:
             async with semaphore:
                 if not isinstance(part, Mapping):
                     raise QQOfficialChunkedUploadError(f"Invalid upload part: {part!r}")
-                await self._upload_part(session, part)
+                await self._upload_part(
+                    session, {str(key): value for key, value in part.items()}
+                )
 
         await asyncio.gather(*(upload_part(part) for part in parts))
 
@@ -399,7 +402,7 @@ class QQOfficialChunkedUploader:
         )
 
     async def _upload_part(
-        self, session: _UploadSession, part: Mapping[str, Any]
+        self, session: _UploadSession, part: Mapping[str, object]
     ) -> None:
         """Upload and acknowledge one server-indexed part from upload_prepare.
 
@@ -411,9 +414,14 @@ class QQOfficialChunkedUploader:
             QQOfficialChunkedUploadError: If the part is invalid or upload fails.
         """
         raw_index = part.get("index") if "index" in part else part.get("part_index")
+        raw_size = part.get("block_size") or session.block_size
         try:
+            if not isinstance(raw_index, int | float | str) or not isinstance(
+                raw_size, int | float | str
+            ):
+                raise TypeError("Part index and size must be numeric")
             part_index = int(raw_index)
-            part_size = int(part.get("block_size") or session.block_size)
+            part_size = int(raw_size)
         except (TypeError, ValueError) as exc:
             raise QQOfficialChunkedUploadError(
                 f"Invalid upload part metadata: {part!r}"
@@ -487,7 +495,7 @@ class QQOfficialChunkedUploader:
                     last_error = RuntimeError(
                         f"COS returned HTTP {response.status}: {response_text}"
                     )
-            except (aiohttp.ClientError, asyncio.TimeoutError, OSError) as exc:
+            except (aiohttp.ClientError, TimeoutError, OSError) as exc:
                 last_error = exc
             if attempt < _PART_PUT_ATTEMPTS - 1:
                 await asyncio.sleep(session.retry_delay)
@@ -568,14 +576,11 @@ class QQOfficialChunkedUploader:
                 http_session = self._http._session
                 if http_session is None:
                     raise QQOfficialChunkedUploadError("QQ HTTP session is unavailable")
-                route = Route(
-                    method,
-                    path,
-                    is_sandbox=self._http.is_sandbox,
-                )
+                domain = Route.SANDBOX_DOMAIN if self._http.is_sandbox else Route.DOMAIN
+                url = f"{Route.SCHEME}://{domain}{path}"
                 async with http_session.request(
                     method,
-                    route.url,
+                    url,
                     headers=self._http._headers,
                     json=dict(body),
                     timeout=aiohttp.ClientTimeout(total=_API_TIMEOUT_SECONDS),
@@ -592,25 +597,34 @@ class QQOfficialChunkedUploader:
                         raise QQOfficialChunkedUploadError(
                             f"QQ API {path} returned non-object JSON: {raw!r}"
                         )
-                    raw_code = raw.get("code", raw.get("biz_code"))
+                    response_data = {str(key): value for key, value in raw.items()}
+                    raw_code = response_data.get("code", response_data.get("biz_code"))
                     try:
                         code: int | str | None = (
-                            int(raw_code) if raw_code is not None else None
+                            int(raw_code)
+                            if isinstance(raw_code, int | float | str)
+                            else None
+                            if raw_code is None
+                            else str(raw_code)
                         )
                     except (TypeError, ValueError):
                         code = str(raw_code)
                     if response.status >= 400 or code not in (None, 0):
                         raise _QQOfficialAPIError(
                             code,
-                            str(raw.get("message") or raw.get("msg") or "QQ API error"),
+                            str(
+                                response_data.get("message")
+                                or response_data.get("msg")
+                                or "QQ API error"
+                            ),
                             response.status,
                         )
-                    return raw
+                    return response_data
             except _QQOfficialAPIError:
                 raise
             except QQOfficialChunkedUploadError:
                 raise
-            except (aiohttp.ClientError, asyncio.TimeoutError, OSError) as exc:
+            except (aiohttp.ClientError, TimeoutError, OSError) as exc:
                 last_error = exc
                 if attempt < _API_TRANSPORT_ATTEMPTS - 1:
                     await asyncio.sleep(min(2**attempt, 8))

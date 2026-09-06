@@ -1,8 +1,9 @@
 """Import smoke tests for astrbot.core.star.star_manager."""
+
 from astrbot.core.star.star_manager import (
+    PluginDependencyInstallError,
     PluginManager,
     PluginVersionIncompatibleError,
-    PluginDependencyInstallError,
 )
 
 

@@ -109,7 +109,7 @@ class MisskeyPlatformEvent(AstrMessageEvent):
                     await self.client.send_room_message(room_id, content)
                 elif original_message_id and hasattr(self.client, "create_note"):
                     visibility, visible_user_ids = resolve_message_visibility(
-                        raw_message,
+                        raw_message=raw_message,
                     )
                     await self.client.create_note(
                         content,

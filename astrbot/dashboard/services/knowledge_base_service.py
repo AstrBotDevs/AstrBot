@@ -15,6 +15,12 @@ from astrbot.core.provider.provider import EmbeddingProvider, RerankProvider
 from astrbot.core.utils.astrbot_path import get_astrbot_system_tmp_path
 from astrbot.dashboard.schemas import KnowledgeBaseRequest
 from astrbot.dashboard.utils import generate_tsne_visualization
+from astrbot.dashboard.validation import (
+    integer_field,
+    is_json_object,
+    is_string_list,
+    string_field,
+)
 
 
 class KnowledgeBaseServiceError(Exception):
@@ -28,8 +34,8 @@ class KnowledgeBaseService:
         self.upload_tasks: dict[str, dict[str, Any]] = {}
 
     @staticmethod
-    def _payload(data: object) -> dict[str, Any]:
-        return data if isinstance(data, dict) else {}
+    def _payload(data: object) -> dict[str, object]:
+        return data if is_json_object(data) else {}
 
     @staticmethod
     def _canonical_kb_payload(data: object) -> dict[str, Any]:
@@ -40,7 +46,7 @@ class KnowledgeBaseService:
         like ``kb_id``.
         """
         raw = KnowledgeBaseService._payload(data)
-        canonical = KnowledgeBaseRequest(**raw).canonical_payload()
+        canonical = KnowledgeBaseRequest.model_validate(raw).canonical_payload()
         raw.update(canonical)
         return raw
 
@@ -405,7 +411,7 @@ class KnowledgeBaseService:
         return kb_helper.kb.model_dump(), "创建知识库成功"
 
     async def get_kb(self, kb_id: str | None) -> dict[str, Any]:
-        if not kb_id:
+        if not isinstance(kb_id, str) or not kb_id:
             raise KnowledgeBaseServiceError("缺少参数 kb_id")
         kb_helper = await self.get_kb_manager().get_kb(kb_id)
         if not kb_helper:
@@ -418,7 +424,7 @@ class KnowledgeBaseService:
     async def update_kb(self, data: object) -> tuple[dict[str, Any], str]:
         payload = self._canonical_kb_payload(data)
         kb_id = payload.get("kb_id")
-        if not kb_id:
+        if not isinstance(kb_id, str) or not kb_id:
             raise KnowledgeBaseServiceError("缺少参数 kb_id")
 
         update_keys = [
@@ -444,8 +450,11 @@ class KnowledgeBaseService:
         update_data = {key: getattr(current, key, None) for key in update_keys}
         update_data.update(provided_updates)
 
+        kb_name = string_field(update_data, "kb_name")
+        update_data.pop("kb_name", None)
         kb_helper = await self.get_kb_manager().update_kb(
             kb_id=kb_id,
+            kb_name=current.kb_name if kb_name is None else kb_name,
             **update_data,
         )
         if not kb_helper:
@@ -455,7 +464,7 @@ class KnowledgeBaseService:
     async def delete_kb(self, data: object) -> tuple[None, str]:
         payload = self._payload(data)
         kb_id = payload.get("kb_id")
-        if not kb_id:
+        if not isinstance(kb_id, str) or not kb_id:
             raise KnowledgeBaseServiceError("缺少参数 kb_id")
         success = await self.get_kb_manager().delete_kb(kb_id)
         if not success:
@@ -463,7 +472,7 @@ class KnowledgeBaseService:
         return None, "删除知识库成功"
 
     async def get_kb_stats(self, kb_id: str | None) -> dict[str, Any]:
-        if not kb_id:
+        if not isinstance(kb_id, str) or not kb_id:
             raise KnowledgeBaseServiceError("缺少参数 kb_id")
         kb_helper = await self.get_kb_manager().get_kb(kb_id)
         if not kb_helper:
@@ -492,7 +501,7 @@ class KnowledgeBaseService:
         page_size: int,
         search: str | None = None,
     ) -> dict[str, Any]:
-        if not kb_id:
+        if not isinstance(kb_id, str) or not kb_id:
             raise KnowledgeBaseServiceError("缺少参数 kb_id")
         kb_helper = await self.get_kb_manager().get_kb(kb_id)
         if not kb_helper:
@@ -550,7 +559,7 @@ class KnowledgeBaseService:
         batch_size = int(form_data.get("batch_size", 32))
         tasks_limit = int(form_data.get("tasks_limit", 3))
         max_retries = int(form_data.get("max_retries", 3))
-        if not kb_id:
+        if not isinstance(kb_id, str) or not kb_id:
             raise KnowledgeBaseServiceError("缺少参数 kb_id")
 
         file_list = []
@@ -624,7 +633,7 @@ class KnowledgeBaseService:
     @staticmethod
     def validate_import_request(data: dict[str, Any]):
         kb_id = data.get("kb_id")
-        if not kb_id:
+        if not isinstance(kb_id, str) or not kb_id:
             raise KnowledgeBaseServiceError("缺少参数 kb_id")
 
         documents = data.get("documents")
@@ -715,9 +724,9 @@ class KnowledgeBaseService:
         kb_id: str | None,
         doc_id: str | None,
     ) -> dict[str, Any]:
-        if not kb_id:
+        if not isinstance(kb_id, str) or not kb_id:
             raise KnowledgeBaseServiceError("缺少参数 kb_id")
-        if not doc_id:
+        if not isinstance(doc_id, str) or not doc_id:
             raise KnowledgeBaseServiceError("缺少参数 doc_id")
         kb_helper = await self.get_kb_manager().get_kb(kb_id)
         if not kb_helper:
@@ -739,9 +748,9 @@ class KnowledgeBaseService:
         payload = self._payload(data)
         kb_id = payload.get("kb_id")
         doc_id = payload.get("doc_id")
-        if not kb_id:
+        if not isinstance(kb_id, str) or not kb_id:
             raise KnowledgeBaseServiceError("缺少参数 kb_id")
-        if not doc_id:
+        if not isinstance(doc_id, str) or not doc_id:
             raise KnowledgeBaseServiceError("缺少参数 doc_id")
         kb_helper = await self.get_kb_manager().get_kb(kb_id)
         if not kb_helper:
@@ -754,11 +763,11 @@ class KnowledgeBaseService:
         kb_id = payload.get("kb_id")
         chunk_id = payload.get("chunk_id")
         doc_id = payload.get("doc_id")
-        if not kb_id:
+        if not isinstance(kb_id, str) or not kb_id:
             raise KnowledgeBaseServiceError("缺少参数 kb_id")
-        if not chunk_id:
+        if not isinstance(chunk_id, str) or not chunk_id:
             raise KnowledgeBaseServiceError("缺少参数 chunk_id")
-        if not doc_id:
+        if not isinstance(doc_id, str) or not doc_id:
             raise KnowledgeBaseServiceError("缺少参数 doc_id")
         kb_helper = await self.get_kb_manager().get_kb(kb_id)
         if not kb_helper:
@@ -774,9 +783,9 @@ class KnowledgeBaseService:
         page: int,
         page_size: int,
     ) -> dict[str, Any]:
-        if not kb_id:
+        if not isinstance(kb_id, str) or not kb_id:
             raise KnowledgeBaseServiceError("缺少参数 kb_id")
-        if not doc_id:
+        if not isinstance(doc_id, str) or not doc_id:
             raise KnowledgeBaseServiceError("缺少参数 doc_id")
         kb_helper = await self.get_kb_manager().get_kb(kb_id)
         if not kb_helper:
@@ -815,13 +824,13 @@ class KnowledgeBaseService:
         kb_names = payload.get("kb_names")
         debug = payload.get("debug", False)
 
-        if not query:
+        if not isinstance(query, str) or not query:
             raise KnowledgeBaseServiceError("缺少参数 query")
         kb_manager = self.get_kb_manager()
-        if not kb_names or not isinstance(kb_names, list):
+        if not kb_names or not is_string_list(kb_names):
             raise KnowledgeBaseServiceError("缺少参数 kb_names 或格式错误")
 
-        top_k = payload.get("top_k", 5)
+        top_k = integer_field(payload, "top_k", 5, error_type=KnowledgeBaseServiceError)
         results = await kb_manager.retrieve(
             query=query,
             kb_names=kb_names,
@@ -853,10 +862,10 @@ class KnowledgeBaseService:
     async def upload_document_from_url(self, data: object) -> dict[str, Any]:
         payload = self._payload(data)
         kb_id = payload.get("kb_id")
-        if not kb_id:
+        if not isinstance(kb_id, str) or not kb_id:
             raise KnowledgeBaseServiceError("缺少参数 kb_id")
         url = payload.get("url")
-        if not url:
+        if not isinstance(url, str) or not url:
             raise KnowledgeBaseServiceError("缺少参数 url")
 
         kb_helper = await self.get_kb_manager().get_kb(kb_id)
@@ -870,13 +879,13 @@ class KnowledgeBaseService:
                 task_id=task_id,
                 kb_helper=kb_helper,
                 url=url,
-                chunk_size=payload.get("chunk_size", 512),
-                chunk_overlap=payload.get("chunk_overlap", 50),
-                batch_size=payload.get("batch_size", 32),
-                tasks_limit=payload.get("tasks_limit", 3),
-                max_retries=payload.get("max_retries", 3),
-                enable_cleaning=payload.get("enable_cleaning", False),
-                cleaning_provider_id=payload.get("cleaning_provider_id"),
+                chunk_size=integer_field(payload, "chunk_size", 512),
+                chunk_overlap=integer_field(payload, "chunk_overlap", 50),
+                batch_size=integer_field(payload, "batch_size", 32),
+                tasks_limit=integer_field(payload, "tasks_limit", 3),
+                max_retries=integer_field(payload, "max_retries", 3),
+                enable_cleaning=bool(payload.get("enable_cleaning", False)),
+                cleaning_provider_id=string_field(payload, "cleaning_provider_id"),
             ),
         )
         return {

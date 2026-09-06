@@ -1,17 +1,17 @@
 from __future__ import annotations
 
 from astrbot.builtin_stars.web_searcher.provider_routing import (
+    DEFAULT_ENGINE_ORDER,
+    DEFAULT_WEB_SEARCH_PROVIDER,
+    ENGINE_REGISTRY,
     NormalizedProvider,
+    build_default_engine_order,
+    is_known_websearch_provider,
     normalize_websearch,
     normalize_websearch_provider,
     normalize_websearch_provider_for_tools,
     resolve_tool_branch_provider,
-    build_default_engine_order,
-    is_known_websearch_provider,
     validate_default_engine_registry,
-    DEFAULT_WEB_SEARCH_PROVIDER,
-    DEFAULT_ENGINE_ORDER,
-    ENGINE_REGISTRY,
 )
 
 
@@ -57,5 +57,5 @@ def test_provider_routing_constants():
 
 
 def test_provider_routing_validate():
-    engines = {name: None for name in DEFAULT_ENGINE_ORDER}
+    engines = dict.fromkeys(DEFAULT_ENGINE_ORDER)
     validate_default_engine_registry(engines)

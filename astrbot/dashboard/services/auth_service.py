@@ -51,6 +51,7 @@ from astrbot.dashboard.password_state import (
     set_password_change_required,
     set_password_storage_upgraded,
 )
+from astrbot.dashboard.validation import is_json_object
 
 CHAT_ADMIN_SCOPE = "chat:admin"
 CONFIG_EDIT_ADMIN_SCOPE = "config:edit_admin"
@@ -172,7 +173,7 @@ class AuthService:
         )
 
     async def totp_setup(self, post_data: object) -> AuthServiceResult:
-        if isinstance(post_data, dict) and post_data.get("secret"):
+        if is_json_object(post_data) and post_data.get("secret"):
             secret = post_data["secret"]
             code = post_data.get("code")
             if not isinstance(secret, str) or not secret.strip():
@@ -197,7 +198,7 @@ class AuthService:
             )
 
         if is_totp_enabled(self.config):
-            if not isinstance(post_data, dict):
+            if not is_json_object(post_data):
                 return self.error("Invalid request payload")
 
             set_rotation_verified(False)
@@ -243,7 +244,7 @@ class AuthService:
         return await self.complete_setup(post_data)
 
     async def complete_setup(self, post_data: object) -> AuthServiceResult:
-        if not isinstance(post_data, dict):
+        if not is_json_object(post_data):
             return self.error("Invalid request payload")
 
         new_username = post_data.get("username")
@@ -291,16 +292,12 @@ class AuthService:
         storage_upgraded = await is_password_storage_upgraded(self.db, self.config)
         password = get_dashboard_password_hash(self.config, upgraded=storage_upgraded)
 
-        req_username = (
-            post_data.get("username") if isinstance(post_data, dict) else None
-        )
-        req_password = (
-            post_data.get("password") if isinstance(post_data, dict) else None
-        )
-        totp_code = post_data.get("code") if isinstance(post_data, dict) else None
+        req_username = post_data.get("username") if is_json_object(post_data) else None
+        req_password = post_data.get("password") if is_json_object(post_data) else None
+        totp_code = post_data.get("code") if is_json_object(post_data) else None
         trust_device_flag = (
             post_data.get("trust_device_flag") is True
-            if isinstance(post_data, dict)
+            if is_json_object(post_data)
             else False
         )
         if not isinstance(req_username, str) or not isinstance(req_password, str):
@@ -395,7 +392,7 @@ class AuthService:
 
         storage_upgraded = await is_password_storage_upgraded(self.db, self.config)
         password = get_dashboard_password_hash(self.config, upgraded=storage_upgraded)
-        if not isinstance(post_data, dict):
+        if not is_json_object(post_data):
             return self.error("Invalid request payload")
 
         req_password = post_data.get("password")

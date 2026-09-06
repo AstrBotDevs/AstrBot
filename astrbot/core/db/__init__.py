@@ -141,7 +141,7 @@ class BaseDatabase(abc.ABC):
         ...
 
     @abc.abstractmethod
-    async def get_conversation_by_id(self, cid: str) -> ConversationV2:
+    async def get_conversation_by_id(self, cid: str) -> ConversationV2 | None:
         """Get a specific conversation by its ID."""
         ...
 
@@ -209,8 +209,8 @@ class BaseDatabase(abc.ABC):
         clear_persona: bool = False,
         content: list[dict] | None = None,
         token_usage: int | None = None,
-    ) -> None:
-        """Update a conversation's history."""
+    ) -> ConversationV2 | None:
+        """Update a conversation's history, or return None if it does not exist."""
         ...
 
     @abc.abstractmethod
@@ -407,12 +407,12 @@ class BaseDatabase(abc.ABC):
         path: str,
         type: str,
         mime_type: str,
-    ):
+    ) -> Attachment:
         """Insert a new attachment record."""
         ...
 
     @abc.abstractmethod
-    async def get_attachment_by_id(self, attachment_id: str) -> Attachment:
+    async def get_attachment_by_id(self, attachment_id: str) -> Attachment | None:
         """Get an attachment by its ID."""
         ...
 
@@ -514,7 +514,7 @@ class BaseDatabase(abc.ABC):
         ...
 
     @abc.abstractmethod
-    async def get_persona_by_id(self, persona_id: str) -> Persona:
+    async def get_persona_by_id(self, persona_id: str) -> Persona | None:
         """Get a persona by its ID."""
         ...
 
@@ -648,7 +648,9 @@ class BaseDatabase(abc.ABC):
         ...
 
     @abc.abstractmethod
-    async def get_preference(self, scope: str, scope_id: str, key: str) -> Preference:
+    async def get_preference(
+        self, scope: str, scope_id: str, key: str
+    ) -> Preference | None:
         """Get a preference by scope ID and key."""
         ...
 

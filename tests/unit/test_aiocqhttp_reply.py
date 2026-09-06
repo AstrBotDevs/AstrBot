@@ -16,11 +16,12 @@ import pytest
 
 import astrbot.core.message.components as Comp
 from astrbot.core.message.message_event_result import MessageChain
-from astrbot.core.pipeline.respond.stage import RespondStage  # noqa: F401 — 预加载避免循环导入
+from astrbot.core.pipeline.respond.stage import (
+    RespondStage,  # noqa: F401 — 预加载避免循环导入
+)
 from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import (
     AiocqhttpMessageEvent,
 )
-
 
 # ============================================================
 # Reply.toDict() 输出格式测试
@@ -193,7 +194,5 @@ def test_reply_to_dict_matches_onebot_v11_format():
     actual = reply.toDict()
 
     assert actual == expected, (
-        f"Reply.toDict() 输出不符合 OneBot V11 标准。\n"
-        f"期望: {expected}\n"
-        f"实际: {actual}"
+        f"Reply.toDict() 输出不符合 OneBot V11 标准。\n期望: {expected}\n实际: {actual}"
     )

@@ -8,7 +8,7 @@ All tests use mocks to isolate the manager from its dependencies.
 
 import sys
 import types
-from unittest.mock import ANY, AsyncMock, MagicMock, call, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -19,8 +19,7 @@ def stub_provider_manager_module():
     original_module = sys.modules.get("astrbot.core.provider.manager")
     stub_module = types.ModuleType("astrbot.core.provider.manager")
 
-    class ProviderManager:
-        ...
+    class ProviderManager: ...
 
     setattr(stub_module, "ProviderManager", ProviderManager)
     sys.modules["astrbot.core.provider.manager"] = stub_module
@@ -107,7 +106,9 @@ def mock_knowledge_base():
 
 
 @pytest.mark.asyncio
-async def test_manager_construction(stub_provider_manager_module, mock_provider_manager):
+async def test_manager_construction(
+    stub_provider_manager_module, mock_provider_manager
+):
     """Test that KnowledgeBaseManager can be constructed with a provider manager."""
     from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 
@@ -214,8 +215,8 @@ async def test_create_kb_success(
     mock_session,
 ):
     """Test that create_kb creates a new KB, persists it, and returns a KBHelper."""
-    from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
     from astrbot.core.knowledge_base.kb_helper import KBHelper
+    from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 
     mock_kb_db.get_db.return_value = mock_db_context
 
@@ -297,8 +298,8 @@ async def test_get_kb_returns_helper_for_known_id(
     mock_knowledge_base,
 ):
     """Test that get_kb returns the correct KBHelper for a known kb_id."""
-    from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
     from astrbot.core.knowledge_base.kb_helper import KBHelper
+    from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 
     helper = KBHelper.__new__(KBHelper)
     helper.kb = mock_knowledge_base
@@ -317,8 +318,8 @@ async def test_get_kb_by_name_returns_helper(
     mock_knowledge_base,
 ):
     """Test that get_kb_by_name returns the correct helper by matching kb_name."""
-    from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
     from astrbot.core.knowledge_base.kb_helper import KBHelper
+    from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 
     helper = KBHelper.__new__(KBHelper)
     helper.kb = mock_knowledge_base
@@ -375,8 +376,8 @@ async def test_delete_kb_removes_helper(
     mock_knowledge_base,
 ):
     """Test that delete_kb removes the KBHelper, deletes vec_db, and removes from DB."""
-    from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
     from astrbot.core.knowledge_base.kb_helper import KBHelper
+    from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 
     mock_kb_db.get_db.return_value = mock_db_context
 
@@ -426,8 +427,8 @@ async def test_list_kbs_returns_all_knowledge_bases(
     mock_knowledge_base,
 ):
     """Test that list_kbs returns KnowledgeBase objects for all instances."""
-    from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
     from astrbot.core.knowledge_base.kb_helper import KBHelper
+    from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 
     helper = KBHelper.__new__(KBHelper)
     helper.kb = mock_knowledge_base
@@ -453,8 +454,8 @@ async def test_terminate_closes_all_helpers_and_db(
     mock_knowledge_base,
 ):
     """Test that terminate() terminates all helpers and closes the database."""
-    from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
     from astrbot.core.knowledge_base.kb_helper import KBHelper
+    from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 
     helper = KBHelper.__new__(KBHelper)
     helper.kb = mock_knowledge_base
@@ -481,8 +482,8 @@ async def test_terminate_handles_helper_failure_gracefully(
     mock_knowledge_base,
 ):
     """Test that terminate() continues even if one helper raises."""
-    from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
     from astrbot.core.knowledge_base.kb_helper import KBHelper
+    from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 
     helper = KBHelper.__new__(KBHelper)
     helper.kb = mock_knowledge_base
@@ -527,8 +528,8 @@ async def test_retrieve_raises_when_all_kbs_unavailable(
     mock_knowledge_base,
 ):
     """Test that retrieve raises ValueError when all matching KBs have init_error."""
-    from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
     from astrbot.core.knowledge_base.kb_helper import KBHelper
+    from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 
     helper = KBHelper.__new__(KBHelper)
     helper.kb = mock_knowledge_base
@@ -548,8 +549,8 @@ async def test_retrieve_returns_formatted_results(
     mock_knowledge_base,
 ):
     """Test that retrieve returns properly formatted results when KBs are available."""
-    from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
     from astrbot.core.knowledge_base.kb_helper import KBHelper
+    from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 
     helper = KBHelper.__new__(KBHelper)
     helper.kb = mock_knowledge_base
@@ -630,8 +631,8 @@ async def test_upload_from_url_delegates_to_helper(
     mock_knowledge_base,
 ):
     """Test that upload_from_url delegates to the correct KBHelper."""
-    from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
     from astrbot.core.knowledge_base.kb_helper import KBHelper
+    from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 
     helper = KBHelper.__new__(KBHelper)
     helper.kb = mock_knowledge_base

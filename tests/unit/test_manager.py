@@ -1,13 +1,12 @@
 """Tests for astrbot.core.platform.manager — PlatformManager."""
 
-import asyncio
 from asyncio import Queue
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from astrbot.core.platform.manager import PlatformManager
-from astrbot.core.platform.platform import Platform, PlatformError, PlatformStatus
+from astrbot.core.platform.platform import Platform, PlatformStatus
 
 
 # ---------------------------------------------------------------------------
@@ -32,6 +31,7 @@ class DummyPlatform(Platform):
 
     def meta(self):
         from astrbot.core.platform.platform_metadata import PlatformMetadata
+
         return PlatformMetadata(
             name=self.config.get("type", "dummy"),
             description="dummy",
@@ -46,6 +46,7 @@ class DummyPlatform(Platform):
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def mock_config() -> MagicMock:
@@ -71,6 +72,7 @@ def manager(mock_config: MagicMock, event_queue: Queue) -> PlatformManager:
 # ===================================================================
 # Construction
 # ===================================================================
+
 
 class TestConstruction:
     """PlatformManager.__init__ stores constructor arguments and initialises
@@ -101,6 +103,7 @@ class TestConstruction:
 # _is_valid_platform_id
 # ===================================================================
 
+
 class TestIsValidPlatformId:
     """_is_valid_platform_id rejects None, empty, or ids containing ':'/'!'."""
 
@@ -124,6 +127,7 @@ class TestIsValidPlatformId:
 # ===================================================================
 # _sanitize_platform_id
 # ===================================================================
+
 
 class TestSanitizePlatformId:
     """_sanitize_platform_id replaces ':'/'!' with '_'."""
@@ -158,6 +162,7 @@ class TestSanitizePlatformId:
 # get_insts
 # ===================================================================
 
+
 class TestGetInsts:
     """get_insts returns the internal platform_insts list."""
 
@@ -171,6 +176,7 @@ class TestGetInsts:
 # ===================================================================
 # get_all_stats
 # ===================================================================
+
 
 class TestGetAllStats:
     """get_all_stats aggregates stats from all registered platforms."""
@@ -234,14 +240,13 @@ class TestGetAllStats:
 # terminate_platform
 # ===================================================================
 
+
 class TestTerminatePlatform:
     """terminate_platform removes the platform from maps and calls terminate."""
 
     @pytest.mark.asyncio
     async def test_removes_and_terminates(self, manager: PlatformManager):
-        p = DummyPlatform(
-            {"id": "test_id", "type": "dummy"}, {}, Queue()
-        )
+        p = DummyPlatform({"id": "test_id", "type": "dummy"}, {}, Queue())
         manager._inst_map["test_id"] = {
             "inst": p,
             "client_id": p.client_self_id,
@@ -260,6 +265,7 @@ class TestTerminatePlatform:
 # ===================================================================
 # terminate (all)
 # ===================================================================
+
 
 class TestTerminateAll:
     """terminate() cleans up all registered platforms."""
@@ -286,6 +292,7 @@ class TestTerminateAll:
 # load_platform
 # ===================================================================
 
+
 class TestLoadPlatform:
     """load_platform handles disabled flag and invalid IDs."""
 
@@ -299,9 +306,7 @@ class TestLoadPlatform:
                 assert "Loading" not in str(call)
 
     @pytest.mark.asyncio
-    async def test_sanitizes_invalid_platform_id(
-        self, manager: PlatformManager
-    ):
+    async def test_sanitizes_invalid_platform_id(self, manager: PlatformManager):
         """A platform ID containing ':' should be sanitized automatically."""
         platform_cfg = {
             "enable": True,
@@ -317,9 +322,7 @@ class TestLoadPlatform:
         assert platform_cfg["id"] == "bad_id"
 
     @pytest.mark.asyncio
-    async def test_logs_error_when_type_not_in_map(
-        self, manager: PlatformManager
-    ):
+    async def test_logs_error_when_type_not_in_map(self, manager: PlatformManager):
         """If the platform type is not registered, load_platform logs an error."""
         platform_cfg = {
             "enable": True,
@@ -329,7 +332,5 @@ class TestLoadPlatform:
         with patch("astrbot.core.platform.manager.logger") as mock_logger:
             await manager.load_platform(platform_cfg)
             # Should have logged an error about adapter not found
-            error_messages = [
-                str(c) for c in mock_logger.error.call_args_list
-            ]
+            error_messages = [str(c) for c in mock_logger.error.call_args_list]
             assert any("not found" in msg for msg in error_messages)

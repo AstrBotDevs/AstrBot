@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, type PropType } from "vue";
 import PluginPlatformChip from "@/components/shared/PluginPlatformChip.vue";
 import { useModuleI18n } from "@/i18n/composables";
 import { usePluginI18n } from "@/utils/pluginI18n";
@@ -7,9 +7,31 @@ import { usePluginI18n } from "@/utils/pluginI18n";
 const { tm } = useModuleI18n("features/extension");
 const { pluginShortDesc } = usePluginI18n();
 
+interface MarketPlugin {
+  name: string;
+  market_plugin_id?: string | null;
+  display_name?: string | null;
+  trimmedName?: string;
+  author?: unknown;
+  logo?: string | null;
+  desc?: string | null;
+  short_desc?: string | null;
+  version?: string | null;
+  social_link?: string | null;
+  repo?: string | null;
+  tags?: string[];
+  support_platforms?: string[] | null;
+  stars?: number | null;
+  download_count?: number | null;
+  pinned?: boolean;
+  installed?: boolean;
+  astrbot_version_supported?: boolean;
+  i18n?: unknown;
+}
+
 const props = defineProps({
   plugin: {
-    type: Object,
+    type: Object as PropType<MarketPlugin>,
     required: true,
   },
   defaultPluginIcon: {
@@ -24,7 +46,7 @@ const props = defineProps({
 
 const emit = defineEmits(["install", "open"]);
 
-const normalizePlatformList = (platforms) => {
+const normalizePlatformList = (platforms: unknown): string[] => {
   if (!Array.isArray(platforms)) return [];
   return platforms.filter((item) => typeof item === "string");
 };
@@ -49,7 +71,7 @@ const hasDownloadCount = computed(() => {
   );
 });
 
-const handleInstall = (plugin) => {
+const handleInstall = (plugin: typeof props.plugin) => {
   if (!canInstallPlugin.value) return;
   emit("install", plugin);
 };
@@ -198,7 +220,7 @@ const handleOpen = () => {
           {{ tag === "danger" ? tm("tags.danger") : tag }}
         </v-chip>
         <PluginPlatformChip
-          :platforms="plugin.support_platforms"
+          :platforms="platformDisplayList"
           size="x-small"
           :chip-style="{ height: '20px' }"
         />

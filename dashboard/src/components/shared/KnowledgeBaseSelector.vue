@@ -2,16 +2,14 @@
   <div class="d-flex align-center justify-space-between" style="gap: 8px">
     <div style="flex: 1; min-width: 0; overflow: hidden">
       <span
-        v-if="
-          !modelValue || (Array.isArray(modelValue) && modelValue.length === 0)
-        "
+        v-if="configuredKnowledgeBases.length === 0"
         style="color: rgb(var(--v-theme-primaryText))"
       >
         {{ tm("knowledgeBaseSelector.notSelected") }}
       </span>
       <div v-else class="d-flex flex-wrap gap-1">
         <v-chip
-          v-for="name in modelValue"
+          v-for="name in configuredKnowledgeBases"
           :key="name"
           size="small"
           color="primary"
@@ -132,14 +130,29 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { computed, type PropType, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useModuleI18n } from "@/i18n/composables";
 import axios from "@/utils/request";
 
+interface KnowledgeBaseItem {
+  kb_id: string;
+  kb_name: string;
+  emoji?: string | null;
+  description?: string | null;
+  doc_count?: number;
+  chunk_count?: number;
+}
+
+interface KnowledgeBaseListResponse {
+  status: "ok" | "error";
+  message?: string;
+  data?: { items?: KnowledgeBaseItem[] };
+}
+
 const props = defineProps({
   modelValue: {
-    type: Array,
+    type: Array as PropType<unknown[]>,
     default: () => [],
   },
   buttonText: {
@@ -153,22 +166,27 @@ const router = useRouter();
 const { tm } = useModuleI18n("core.shared");
 
 const dialog = ref(false);
-const knowledgeBaseList = ref([]);
+const knowledgeBaseList = ref<KnowledgeBaseItem[]>([]);
 const loading = ref(false);
-const selectedKnowledgeBases = ref([]);
+const selectedKnowledgeBases = ref<string[]>([]);
+const configuredKnowledgeBases = computed(() =>
+  Array.isArray(props.modelValue)
+    ? props.modelValue.filter((name): name is string => typeof name === "string")
+    : [],
+);
 
 // 监听 modelValue 变化，同步到 selectedKnowledgeBases
 watch(
-  () => props.modelValue,
+  configuredKnowledgeBases,
   (newValue) => {
-    selectedKnowledgeBases.value = Array.isArray(newValue) ? [...newValue] : [];
+    selectedKnowledgeBases.value = [...newValue];
   },
   { immediate: true },
 );
 
 async function openDialog() {
-  // 初始化选中状态
-  selectedKnowledgeBases.value = Array.isArray(props.modelValue) ? [...props.modelValue] : [];
+  // Initialize the selection from the validated config values.
+  selectedKnowledgeBases.value = [...configuredKnowledgeBases.value];
 
   dialog.value = true;
   await loadKnowledgeBases();
@@ -177,7 +195,7 @@ async function openDialog() {
 async function loadKnowledgeBases() {
   loading.value = true;
   try {
-    const response = await axios.get("/api/kb/list", {
+    const response = await axios.get<KnowledgeBaseListResponse>("/api/kb/list", {
       params: {
         page: 1,
         page_size: 100,
@@ -185,7 +203,7 @@ async function loadKnowledgeBases() {
     });
 
     if (response.data.status === "ok") {
-      knowledgeBaseList.value = response.data.data.items || [];
+      knowledgeBaseList.value = response.data.data?.items || [];
     } else {
       console.error("加载知识库列表失败:", response.data.message);
       knowledgeBaseList.value = [];
@@ -198,11 +216,11 @@ async function loadKnowledgeBases() {
   }
 }
 
-function isSelected(kbName) {
+function isSelected(kbName: string) {
   return selectedKnowledgeBases.value.includes(kbName);
 }
 
-function selectKnowledgeBase(kbName) {
+function selectKnowledgeBase(kbName: string) {
   // 多选模式：切换选中状态
   const index = selectedKnowledgeBases.value.indexOf(kbName);
   if (index > -1) {
@@ -212,7 +230,7 @@ function selectKnowledgeBase(kbName) {
   }
 }
 
-function removeKnowledgeBase(kbName) {
+function removeKnowledgeBase(kbName: string) {
   const index = selectedKnowledgeBases.value.indexOf(kbName);
   if (index > -1) {
     selectedKnowledgeBases.value.splice(index, 1);
@@ -228,8 +246,8 @@ function confirmSelection() {
 }
 
 function cancelSelection() {
-  // 恢复到原始值
-  selectedKnowledgeBases.value = Array.isArray(props.modelValue) ? [...props.modelValue] : [];
+  // Restore the original selection.
+  selectedKnowledgeBases.value = [...configuredKnowledgeBases.value];
   dialog.value = false;
 }
 

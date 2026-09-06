@@ -80,7 +80,7 @@ class ProviderDashscopeTTSAPI(TTSProvider):
         return MultiModalConversation.call(
             headers=self.request_headers.copy(),
             model=model,
-            messages=None,
+            messages=[],
             api_key=self.chosen_api_key,
             voice=self.voice or "Cherry",
             text=text,

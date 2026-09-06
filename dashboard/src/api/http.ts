@@ -104,6 +104,7 @@ function normalizeAxiosError(error: AxiosError) {
         'user',
         'token',
         'change_pwd_hint',
+        'legacy_pwd_hint',
         'md5_pwd_hint',
         'password_upgrade_required',
       ].forEach((key) => localStorage.removeItem(key));

@@ -99,7 +99,7 @@ def scrub_docx(input_path: Path, output_path: Path) -> None:
                 if info.filename.endswith(".xml"):
                     content = _scrub_xml(info.filename, content)
                 destination.writestr(info, content)
-        Document(temporary_path)
+        Document(str(temporary_path))
         shutil.move(temporary_path, output_path)
     finally:
         if temporary_path.exists():

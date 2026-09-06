@@ -1,7 +1,5 @@
 """Import smoke tests for DashscopeAgentRunner."""
 
-import pytest
-
 from astrbot.core.agent.runners.dashscope.dashscope_agent_runner import (
     DashscopeAgentRunner,
 )

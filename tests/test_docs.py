@@ -90,8 +90,9 @@ class TestCoreDocs:
         ]
         for readme in readme_files:
             content = readme.read_text(encoding="utf-8")
-            assert "Sponsors" in content or "sponsors" in content.lower(), \
+            assert "Sponsors" in content or "sponsors" in content.lower(), (
                 f"{readme.name} missing Sponsors section"
+            )
 
     def test_agents_md_exists(self):
         """AGENTS.md should exist."""
@@ -102,7 +103,9 @@ class TestCoreDocs:
     def test_claude_md_exists(self):
         """AGENTS.md should exist and contain AI coding guidelines (merged from CLAUDE.md)."""
         agents_md = PROJECT_ROOT / "AGENTS.md"
-        assert agents_md.exists(), "AGENTS.md not found (CLAUDE.md content was merged into AGENTS.md)"
+        assert agents_md.exists(), (
+            "AGENTS.md not found (CLAUDE.md content was merged into AGENTS.md)"
+        )
         assert agents_md.stat().st_size > 0, "AGENTS.md is empty"
         content = agents_md.read_text(encoding="utf-8")
         assert "AstrBot" in content, "AGENTS.md should contain project guidelines"
@@ -124,8 +127,14 @@ class TestCoreDocs:
         ]
         for doc in core_docs:
             if doc.exists():
-                lines = [l for l in doc.read_text(encoding="utf-8").splitlines() if l.strip()]
-                assert len(lines) >= min_lines, f"{doc.name} has less than {min_lines} lines"
+                lines = [
+                    line
+                    for line in doc.read_text(encoding="utf-8").splitlines()
+                    if line.strip()
+                ]
+                assert len(lines) >= min_lines, (
+                    f"{doc.name} has less than {min_lines} lines"
+                )
 
 
 class TestDocLinks:
@@ -185,8 +194,9 @@ class TestDocFormatting:
                     files_with_issues.append(f"{md_file.relative_to(PROJECT_ROOT)}:{i}")
                     break
 
-        assert not files_with_issues, \
+        assert not files_with_issues, (
             f"Files with trailing whitespace: {files_with_issues}"
+        )
 
     def test_readme_files_end_with_newline(self):
         """README files should end with a newline."""
@@ -198,8 +208,9 @@ class TestDocFormatting:
             if content and not content.endswith("\n"):
                 files_without_newline.append(readme.name)
 
-        assert not files_without_newline, \
+        assert not files_without_newline, (
             f"Files without trailing newline: {files_without_newline}"
+        )
 
 
 class TestSkillDocs:
@@ -221,10 +232,13 @@ class TestSkillDocs:
         content = skill_doc.read_text(encoding="utf-8")
         assert "---" in content, "Skill doc missing frontmatter delimiter"
         assert "name:" in content, "Skill doc missing 'name' in frontmatter"
-        assert "description:" in content, "Skill doc missing 'description' in frontmatter"
+        assert "description:" in content, (
+            "Skill doc missing 'description' in frontmatter"
+        )
 
 
 # Helper functions
+
 
 def _get_all_dirs(root: Path) -> list[Path]:
     """Get all directories under root, including root itself."""

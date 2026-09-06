@@ -4,14 +4,12 @@ Covers validation branches, interval-based jobs, run-once auto-cleanup,
 and failure paths not covered by the main test suite.
 """
 
-from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from astrbot.core.cron.manager import CronJobManager, CronJobSchedulingError
 from astrbot.core.db.po import CronJob
-
 
 # ---- Fixtures (self-contained) ----
 
@@ -77,7 +75,9 @@ class TestAddBasicJobEdgeCases:
         assert call_payload["interval_seconds"] == 300
 
     @pytest.mark.asyncio
-    async def test_add_basic_job_both_cron_and_interval_raises(self, cron_manager, mock_db):
+    async def test_add_basic_job_both_cron_and_interval_raises(
+        self, cron_manager, mock_db
+    ):
         """Providing both cron_expression and interval_seconds raises ValueError."""
         handler = MagicMock()
         with pytest.raises(ValueError, match="must have exactly one value"):
@@ -89,7 +89,9 @@ class TestAddBasicJobEdgeCases:
             )
 
     @pytest.mark.asyncio
-    async def test_add_basic_job_neither_cron_nor_interval_raises(self, cron_manager, mock_db):
+    async def test_add_basic_job_neither_cron_nor_interval_raises(
+        self, cron_manager, mock_db
+    ):
         """Providing neither cron_expression nor interval_seconds raises ValueError."""
         handler = MagicMock()
         with pytest.raises(ValueError, match="must have exactly one value"):
@@ -125,7 +127,9 @@ class TestAddBasicJobEdgeCases:
         assert call_payload["custom_key"] == "custom_value"
 
     @pytest.mark.asyncio
-    async def test_add_basic_job_non_persistent_not_scheduled(self, cron_manager, mock_db):
+    async def test_add_basic_job_non_persistent_not_scheduled(
+        self, cron_manager, mock_db
+    ):
         """A disabled non-persistent job is stored but not scheduled."""
         job = CronJob(
             job_id="np-job", name="NonPersist", job_type="basic", enabled=False
@@ -170,17 +174,11 @@ class TestRunJobEdgeCases:
         await cron_manager._run_job("basic-done")
 
         # Status should be updated twice: running -> completed
-        update_calls = [
-            c for c in mock_db.update_cron_job.call_args_list
-        ]
+        update_calls = list(mock_db.update_cron_job.call_args_list)
         # At minimum one call with status="running" and one with status="completed"
-        running_calls = [
-            c for c in update_calls
-            if c.kwargs.get("status") == "running"
-        ]
+        running_calls = [c for c in update_calls if c.kwargs.get("status") == "running"]
         completed_calls = [
-            c for c in update_calls
-            if c.kwargs.get("status") == "completed"
+            c for c in update_calls if c.kwargs.get("status") == "completed"
         ]
         assert len(running_calls) >= 1, "Expected a 'running' status update"
         assert len(completed_calls) >= 1, "Expected a 'completed' status update"
@@ -208,7 +206,9 @@ class TestRunJobEdgeCases:
         assert last_call.kwargs["last_error"] is not None
 
     @pytest.mark.asyncio
-    async def test_run_job_run_once_deletes_after_completion(self, cron_manager, mock_db):
+    async def test_run_job_run_once_deletes_after_completion(
+        self, cron_manager, mock_db
+    ):
         """A run_once job is deleted after it completes successfully."""
         job = CronJob(
             job_id="once-job",
@@ -229,7 +229,9 @@ class TestRunJobEdgeCases:
         mock_delete.assert_awaited_once_with("once-job")
 
     @pytest.mark.asyncio
-    async def test_run_job_active_agent_uses_synthetic_session_when_missing(self, cron_manager, mock_db):
+    async def test_run_job_active_agent_uses_synthetic_session_when_missing(
+        self, cron_manager, mock_db
+    ):
         """An active-agent job without a delivery session uses its cron session."""
         job = CronJob(
             job_id="aa-no-session",
@@ -283,7 +285,9 @@ class TestUpdateAndSyncEdgeCases:
         mock_schedule.assert_called_once_with(updated_job)
 
     @pytest.mark.asyncio
-    async def test_update_job_removes_scheduled_when_disabled(self, cron_manager, mock_db):
+    async def test_update_job_removes_scheduled_when_disabled(
+        self, cron_manager, mock_db
+    ):
         """update_job removes the job from the scheduler when disabled."""
         job_id = "disable-job"
         updated_job = CronJob(
@@ -304,7 +308,9 @@ class TestUpdateAndSyncEdgeCases:
         mock_schedule.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_sync_from_db_schedules_basic_with_handler(self, cron_manager, mock_db):
+    async def test_sync_from_db_schedules_basic_with_handler(
+        self, cron_manager, mock_db
+    ):
         """sync_from_db schedules basic jobs when their handler is registered."""
         job = CronJob(
             job_id="sync-basic",
@@ -323,7 +329,9 @@ class TestUpdateAndSyncEdgeCases:
         mock_schedule.assert_called_once_with(job)
 
     @pytest.mark.asyncio
-    async def test_sync_from_db_skips_basic_without_handler(self, cron_manager, mock_db):
+    async def test_sync_from_db_skips_basic_without_handler(
+        self, cron_manager, mock_db
+    ):
         """sync_from_db skips basic jobs that have no registered handler."""
         job = CronJob(
             job_id="orphan-basic",
@@ -341,7 +349,9 @@ class TestUpdateAndSyncEdgeCases:
         mock_schedule.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_sync_from_db_schedules_active_agent_without_handler(self, cron_manager, mock_db):
+    async def test_sync_from_db_schedules_active_agent_without_handler(
+        self, cron_manager, mock_db
+    ):
         """Active-agent jobs are scheduled regardless of handler registration."""
         job = CronJob(
             job_id="sync-active",
@@ -392,7 +402,9 @@ class TestScheduleJobTriggers:
         assert aps_job.trigger.interval.total_seconds() == 600
 
     @pytest.mark.asyncio
-    async def test_schedule_invalid_cron_raises_scheduling_error(self, cron_manager, mock_context):
+    async def test_schedule_invalid_cron_raises_scheduling_error(
+        self, cron_manager, mock_context
+    ):
         """An invalid cron expression raises CronJobSchedulingError."""
         job = CronJob(
             job_id="bad-cron",
@@ -410,7 +422,9 @@ class TestScheduleJobTriggers:
             cron_manager._schedule_job(job)
 
     @pytest.mark.asyncio
-    async def test_schedule_run_once_without_run_at_raises(self, cron_manager, mock_context):
+    async def test_schedule_run_once_without_run_at_raises(
+        self, cron_manager, mock_context
+    ):
         """A run_once job without run_at in payload or expression raises CronJobSchedulingError."""
         job = CronJob(
             job_id="no-run-at",

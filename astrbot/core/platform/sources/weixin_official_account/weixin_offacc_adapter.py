@@ -40,7 +40,10 @@ class WeixinOfficialAccountServer:
         user_buffer: dict[Any, dict[str, Any]],
     ) -> None:
         self.server = quart.Quart(__name__)
-        self.port = int(config.get("port"))
+        port = config.get("port")
+        if port is None:
+            raise ValueError("Weixin Official Account callback port is required")
+        self.port = int(port)
         self.callback_server_host = config.get("callback_server_host", "0.0.0.0")
         self.token = config.get("token")
         self.encoding_aes_key = config.get("encoding_aes_key")
@@ -109,7 +112,13 @@ class WeixinOfficialAccountServer:
     def _preview(self, msg: BaseMessage, limit: int = 24) -> str:
         """生成消息预览文本,供占位符使用"""
         if isinstance(msg, TextMessage):
-            t = msg.content.strip()
+            content = msg.content
+            text = (
+                content.decode("utf-8", errors="replace")
+                if isinstance(content, bytes)
+                else str(content)
+            )
+            t = text.strip()
             return t[:limit] + "..." if len(t) > limit else t or "空消息"
         if isinstance(msg, ImageMessage):
             return "图片"

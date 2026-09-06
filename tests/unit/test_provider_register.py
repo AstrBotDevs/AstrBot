@@ -15,7 +15,6 @@ from astrbot.core.provider.register import (
     register_provider_adapter,
 )
 
-
 # =========================================================================
 # Fixtures — fresh state per test
 # =========================================================================
@@ -156,6 +155,7 @@ class TestRegisterProviderAdapter:
             pass
 
         with pytest.raises(ValueError, match="已经注册"):
+
             @register_provider_adapter("dup_provider", "Second")
             class SecondProvider:
                 pass

@@ -1,15 +1,14 @@
 """Unit tests for astrbot.core.agent.tool: FunctionTool, ToolSchema, ToolSet."""
 
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
-from unittest.mock import MagicMock, AsyncMock
 from jsonschema.exceptions import ValidationError
 
 from astrbot.core.agent.tool import (
     FunctionTool,
     ToolSchema,
     ToolSet,
-    ToolArgumentSpec,
-    ToolExecResult,
 )
 
 
@@ -28,9 +27,7 @@ class TestToolSchema:
         """Construct with valid JSON Schema parameters."""
         params = {
             "type": "object",
-            "properties": {
-                "query": {"type": "string", "description": "Search query"}
-            },
+            "properties": {"query": {"type": "string", "description": "Search query"}},
             "required": ["query"],
         }
         schema = ToolSchema(name="search", description="Search tool", parameters=params)
@@ -53,7 +50,9 @@ class TestToolSchema:
 
     def test_tool_schema_parameters_none_allowed(self):
         """parameters=None is valid and passes validation."""
-        schema = ToolSchema(name="no_params", description="No parameters", parameters=None)
+        schema = ToolSchema(
+            name="no_params", description="No parameters", parameters=None
+        )
         assert schema.parameters is None
 
     def test_tool_schema_empty_parameters_object(self):
@@ -81,8 +80,10 @@ class TestFunctionTool:
 
     def test_function_tool_with_handler(self):
         """Construct with an async handler."""
+
         async def handler(context, **kwargs):
             return "ok"
+
         tool = FunctionTool(
             name="greet",
             description="Greet",
@@ -123,6 +124,7 @@ class TestFunctionTool:
         tool = FunctionTool(name="todo", description="Not implemented")
         with pytest.raises(NotImplementedError, match="FunctionTool.call"):
             import asyncio
+
             asyncio.run(tool.call(MagicMock()))
 
     def test_function_tool_with_parameters(self):
@@ -136,7 +138,9 @@ class TestFunctionTool:
 
     def test_function_tool_active_false(self):
         """Construct with active=False."""
-        tool = FunctionTool(name="inactive_tool", description="Not active", active=False)
+        tool = FunctionTool(
+            name="inactive_tool", description="Not active", active=False
+        )
         assert tool.active is False
 
     def test_function_tool_inherits_validation(self):
@@ -280,10 +284,14 @@ class TestToolSet:
             "properties": {"q": {"type": "string"}},
         }
         ts = ToolSet()
-        ts.add_tool(FunctionTool(
-            name="search", description="Search", parameters=params,
-            handler=AsyncMock(),
-        ))
+        ts.add_tool(
+            FunctionTool(
+                name="search",
+                description="Search",
+                parameters=params,
+                handler=AsyncMock(),
+            )
+        )
         light = ts.get_light_tool_set()
         assert len(light) == 1
         light_tool = light.get_tool("search")
@@ -338,7 +346,9 @@ class TestToolSet:
             "type": "object",
             "properties": {"val": {"type": "number", "description": "A value"}},
         }
-        ts.add_tool(FunctionTool(name="sqrt", description="Square root", parameters=params))
+        ts.add_tool(
+            FunctionTool(name="sqrt", description="Square root", parameters=params)
+        )
         schema = ts.google_schema()
         assert "function_declarations" in schema
         assert schema["function_declarations"][0]["name"] == "sqrt"

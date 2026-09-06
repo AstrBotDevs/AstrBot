@@ -3,11 +3,12 @@ from __future__ import annotations
 import asyncio
 import functools
 import random
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 import aiohttp
 import anyio
 import boxlite
+from shipyard import ShipyardClient
 from shipyard.filesystem import FileSystemComponent as ShipyardFileSystemComponent
 from shipyard.python import PythonComponent as ShipyardPythonComponent
 from shipyard.shell import ShellComponent as ShipyardShellComponent
@@ -24,11 +25,16 @@ from astrbot.core.computer.olayer import (
 )
 
 from .base import ComputerBooter
-from .shipyard import ShipyardFileSystemWrapper, ShipyardShellWrapper
+from .shipyard import (
+    ShipyardFileSystemWrapper,
+    ShipyardPythonWrapper,
+    ShipyardShellWrapper,
+)
 
 
-class MockShipyardSandboxClient:
+class MockShipyardSandboxClient(ShipyardClient):
     def __init__(self, sb_url: str) -> None:
+        super().__init__(endpoint_url=sb_url, access_token="boxlite-local")
         self.sb_url = sb_url.rstrip("/")
 
     async def _exec_operation(
@@ -52,9 +58,14 @@ class MockShipyardSandboxClient:
                     f"Failed to exec operation: {response.status} {error_text}",
                 )
 
-    async def upload_file(self, path: str, remote_path: str) -> dict:
-        """Upload a file to the sandbox"""
-        url = f"http://{self.sb_url}/upload"
+    async def upload_file(
+        self, ship_id: str, file_path: str, session_id: str, remote_file_path: str
+    ) -> dict[str, Any]:
+        return await self.upload_sandbox_file(file_path, remote_file_path)
+
+    async def upload_sandbox_file(self, path: str, remote_path: str) -> dict:
+        """Upload a file to the local sandbox without a Bay API prefix."""
+        url = f"{self.sb_url}/upload"
 
         try:
             # Read file content
@@ -199,22 +210,23 @@ class BoxliteBooter(ComputerBooter):
             sb_url=f"http://127.0.0.1:{random_port}",
         )
         raw_fs = ShipyardFileSystemComponent(
-            client=cast("Any", self.mocked),
+            client=self.mocked,
             ship_id=self.box.id,
             session_id=session_id,
         )
-        self._python = ShipyardPythonComponent(
-            client=cast("Any", self.mocked),
+        raw_python = ShipyardPythonComponent(
+            client=self.mocked,
             ship_id=self.box.id,
             session_id=session_id,
         )
         raw_shell = ShipyardShellComponent(
-            client=cast("Any", self.mocked),
+            client=self.mocked,
             ship_id=self.box.id,
             session_id=session_id,
         )
-        self._shell = ShipyardShellWrapper(cast("Any", raw_shell))
-        self._fs = ShipyardFileSystemWrapper(cast("Any", raw_fs), self._shell)
+        self._python = ShipyardPythonWrapper(raw_python)
+        self._shell = ShipyardShellWrapper(raw_shell)
+        self._fs = ShipyardFileSystemWrapper(raw_fs, self._shell)
 
         await self.mocked.wait_healthy(self.box.id, session_id)
 
@@ -246,7 +258,7 @@ class BoxliteBooter(ComputerBooter):
 
     async def upload_file(self, path: str, file_name: str) -> dict:
         """Upload file to sandbox"""
-        return await self.mocked.upload_file(path, file_name)
+        return await self.mocked.upload_sandbox_file(path, file_name)
 
     @classmethod
     @functools.cache
