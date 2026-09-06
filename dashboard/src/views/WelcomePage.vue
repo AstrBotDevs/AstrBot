@@ -19,6 +19,32 @@
               {{ tm('onboard.title') }}
             </div>
 
+            <v-alert
+              v-if="!pythonCompatible"
+              type="warning"
+              variant="tonal"
+              border="start"
+              density="comfortable"
+              class="mb-5"
+            >
+              <template v-slot:prepend>
+                <v-icon>mdi-alert-outline</v-icon>
+              </template>
+              <div class="text-body-1 font-weight-bold mb-1">
+                {{ tm('pythonWarning.title') }}
+              </div>
+              <div class="text-body-2 text-medium-emphasis">
+                {{
+                  tm('pythonWarning.description', {
+                    current:
+                      pythonVersion || tm('pythonWarning.unknownVersion'),
+                    required:
+                      pythonRequiredVersion || tm('pythonWarning.unknownVersion'),
+                  })
+                }}
+              </div>
+            </v-alert>
+
             <v-timeline align="start" side="end" density="compact" class="welcome-timeline" truncate-line="both">
               <v-timeline-item :dot-color="providerStepState === 'completed' ? 'success' : 'primary'"
                 icon="mdi-numeric-1" fill-dot size="small">
@@ -196,7 +222,7 @@ import { computed, ref, watch, onMounted } from 'vue';
 import axios from 'axios';
 import AddNewPlatform from '@/components/platform/AddNewPlatform.vue';
 import ProviderConfigDialog from '@/components/chat/ProviderConfigDialog.vue';
-import { configProfileApi, providerApi, systemConfigApi } from '@/api/v1';
+import { configProfileApi, providerApi, statsApi, systemConfigApi } from '@/api/v1';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import { useToast } from '@/utils/toast';
 import { MarkdownRender } from 'markstream-vue';
@@ -226,6 +252,21 @@ const computerAccessRuntime = ref<ComputerAccessRuntime>('none');
 const savedComputerAccessRuntime = ref<ComputerAccessRuntime>('none');
 const savingComputerAccess = ref(false);
 const welcomeAnnouncementRaw = ref<unknown>(null);
+const pythonVersion = ref('');
+const pythonRequiredVersion = ref('');
+const pythonCompatible = ref(true);
+
+async function loadPythonCompat() {
+  try {
+    const res = await statsApi.version();
+    const data = (res.data.data || {}) as any;
+    pythonVersion.value = String(data.python_version || '');
+    pythonRequiredVersion.value = String(data.python_required_version || '');
+    pythonCompatible.value = data.python_compatible !== false;
+  } catch (e) {
+    console.error(e);
+  }
+}
 
 function resolveWelcomeAnnouncement(raw: unknown, currentLocale: string) {
   if (typeof raw === 'string') {
@@ -462,6 +503,7 @@ async function loadWelcomeAnnouncement() {
 }
 
 onMounted(async () => {
+  await loadPythonCompat();
   await loadWelcomeAnnouncement();
 
   try {
