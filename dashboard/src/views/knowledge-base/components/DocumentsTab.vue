@@ -12,6 +12,7 @@
     <!-- 文档列表 -->
     <v-card variant="outlined">
       <v-data-table-server :headers="headers" :items="documents" :loading="loading"
+        :items-per-page-options="[10, 25, 50, 100]"
         :items-per-page="pageSize" :page="page" :items-length="total"
         @update:page="onPageChange" @update:items-per-page="onItemsPerPageChange">
         <template #item.doc_name="{ item }">
