@@ -432,3 +432,94 @@ class TestContextTruncator:
         # 多 user 场景下截断后仍有 user
         roles = [m.role for m in result_before]
         assert "user" in roles
+
+    def test_truncate_to_token_budget_keeps_recent_within_budget(self):
+        """Test token-budget truncation keeps the newest messages within budget."""
+        truncator = ContextTruncator()
+        messages = self.create_messages(20)
+
+        class Counter:
+            def count_tokens(self, msgs):
+                return len(msgs)
+
+        # budget of 5 tokens should keep the newest ~5 messages (+1 anchor user)
+        result = truncator.truncate_to_token_budget(messages, Counter(), 5)
+        assert len(result) <= 6
+        assert result[0].role == "user"
+        assert result[-1].content == "Message 19"  # newest kept
+
+    def test_truncate_to_token_budget_under_budget_unchanged(self):
+        """Messages already under budget are returned unchanged."""
+        truncator = ContextTruncator()
+        messages = self.create_messages(4)
+
+        class Counter:
+            def count_tokens(self, msgs):
+                return len(msgs)
+
+        result = truncator.truncate_to_token_budget(messages, Counter(), 100)
+        assert len(result) == 4
+
+    def test_truncate_to_token_budget_preserves_system(self):
+        """System messages are preserved during token-budget truncation."""
+        truncator = ContextTruncator()
+        messages = self.create_messages(20, include_system=True)
+
+        class Counter:
+            def count_tokens(self, msgs):
+                return len(msgs)
+
+        result = truncator.truncate_to_token_budget(messages, Counter(), 5)
+        assert result[0].role == "system"
+
+    def test_truncate_to_token_budget_single_oversized_keeps_latest_user(self):
+        """A single oversized latest user request must be kept whole, so the
+        active request is never dropped in favor of an older question."""
+        truncator = ContextTruncator()
+        messages = self.create_messages(6)
+        messages[5] = self.create_message("user", "x" * 5000)  # huge latest request
+
+        class Counter:
+            def count_tokens(self, msgs):
+                return sum(len(getattr(m, "content", "") or "") for m in msgs)
+
+        result = truncator.truncate_to_token_budget(messages, Counter(), 10)
+        assert any(
+            m.role == "user" and len(m.content) == 5000 for m in result
+        ), "active request must not be dropped"
+
+    def test_truncate_to_token_budget_system_excluded_from_budget(self):
+        """Huge system messages are preserved and don't consume the budget."""
+        truncator = ContextTruncator()
+        messages = [self.create_message("system", "s" * 5000)]
+        for i in range(10):
+            role = "user" if i % 2 == 0 else "assistant"
+            messages.append(self.create_message(role, f"M{i}"))
+
+        class Counter:
+            def count_tokens(self, msgs):
+                return sum(len(getattr(m, "content", "") or "") for m in msgs)
+
+        result = truncator.truncate_to_token_budget(messages, Counter(), 5)
+        # system preserved; budget (after excluding the huge system) keeps the
+        # newest non-system round only
+        assert result[0].role == "system"
+        assert result[-1].content == "M9"
+        assert len(result) <= 3
+
+    def test_truncate_to_token_budget_uneven_keeps_recent(self):
+        """A huge middle message is dropped; recent messages are kept."""
+        truncator = ContextTruncator()
+        messages = [
+            self.create_message("user", "a"),
+            self.create_message("assistant", "b"),
+            self.create_message("user", "x" * 100),
+            self.create_message("assistant", "c"),
+        ]
+
+        class Counter:
+            def count_tokens(self, msgs):
+                return sum(len(getattr(m, "content", "") or "") for m in msgs)
+
+        result = truncator.truncate_to_token_budget(messages, Counter(), 5)
+        assert result[-1].content == "c"

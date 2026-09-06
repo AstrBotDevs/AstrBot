@@ -200,3 +200,75 @@ class ContextTruncator:
             system_messages, truncated_non_system, messages
         )
         return self.fix_messages(result)
+
+    def truncate_to_token_budget(
+        self,
+        messages: list[Message],
+        token_counter,
+        budget: int,
+    ) -> list[Message]:
+        """Truncate by token budget, keeping the most recent messages.
+
+        Unlike ``truncate_by_halving`` (which blindly halves by message count and
+        can produce crude, disproportionate cuts), this drops the OLDEST messages
+        until the remaining non-system suffix fits within ``budget`` tokens.
+        System messages are always preserved and their cost is excluded from the
+        budget. If a single newest message alone exceeds the budget (e.g. the
+        active request), it is kept whole -- budget overflow is accepted in that
+        case rather than discarding the active request.
+
+        Args:
+            messages: The message list to truncate.
+            token_counter: Token counter used to estimate size.
+            budget: Maximum tokens to keep (the context cap).
+
+        Returns:
+            The truncated message list.
+        """
+        if budget <= 0:
+            return messages
+
+        system_messages, non_system_messages = self._split_system_rest(messages)
+        if not non_system_messages:
+            return messages
+
+        if token_counter.count_tokens(messages) <= budget:
+            return messages
+
+        # Deduct the system messages token cost first, so the budget applies to
+        # the non-system suffix only; system messages are always preserved.
+        system_tokens = token_counter.count_tokens(system_messages)
+        effective_budget = max(1, budget - system_tokens)
+
+        # Walk from the most recent message backwards, accumulating tokens until
+        # the effective budget is exceeded; keep the newest suffix that fits.
+        best_start = 0
+        accum = 0
+        for start in range(len(non_system_messages) - 1, -1, -1):
+            accum += token_counter.count_tokens([non_system_messages[start]])
+            if accum > effective_budget:
+                best_start = start + 1
+                break
+            best_start = start
+
+        truncated_non_system = non_system_messages[best_start:]
+
+        # A single oversized message (active request / huge tool output) can
+        # exceed the budget alone; keep the newest user message whole instead of
+        # answering a stale question. Overflow is accepted by design.
+        if not any(m.role == "user" for m in truncated_non_system):
+            newest_user_idx = next(
+                (
+                    i
+                    for i in range(len(non_system_messages) - 1, -1, -1)
+                    if non_system_messages[i].role == "user"
+                ),
+                None,
+            )
+            if newest_user_idx is not None:
+                truncated_non_system = non_system_messages[newest_user_idx:]
+
+        result = self._ensure_user_message(
+            system_messages, truncated_non_system, messages
+        )
+        return self.fix_messages(result)

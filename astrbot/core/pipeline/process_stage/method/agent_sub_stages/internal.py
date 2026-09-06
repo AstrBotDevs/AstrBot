@@ -480,6 +480,11 @@ class InternalAgentSubStage(Stage):
         checkpoint_id = event.get_extra("llm_checkpoint_id")
         has_checkpoint = isinstance(checkpoint_id, str) and bool(checkpoint_id)
         message_to_save = dump_messages_with_checkpoints(messages_to_save)
+        logger.info(
+            "[conversation] saving history for cid=%s: %d messages.",
+            req.conversation.cid,
+            len(message_to_save),
+        )
         if not user_aborted and (
             llm_response is None or llm_response.role != "assistant"
         ):

@@ -277,6 +277,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.tool_executor = tool_executor
         self.agent_hooks = agent_hooks
         self.run_context = run_context
+        self._request_messages: list[Message] | None = None
+        self._request_messages_base: int | None = None
         self._aborted = False
         self._abort_signal = asyncio.Event()
         self._pending_follow_ups: list[FollowUpTicket] = []
@@ -497,12 +499,33 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 abort_task.cancel()
             await asyncio.gather(abort_task, return_exceptions=True)
 
+    def _effective_request_messages(self) -> list[Message]:
+        """Return the messages to send to the provider.
+
+        Request-time context processing (compression/truncation) result is kept
+        in ``_request_messages`` and only used for the current provider call;
+        ``run_context.messages`` always stays as the full persistent history.
+        """
+        request_messages = getattr(self, "_request_messages", None)
+        return request_messages if request_messages is not None else self.run_context.messages
+
     async def _iter_llm_responses(
         self, *, include_model: bool = True
     ) -> T.AsyncGenerator[LLMResponse, None]:
         """Yields chunks *and* a final LLMResponse."""
+        request_messages = self._effective_request_messages()
+        if not request_messages:
+            logger.warning(
+                "Skipping LLM request because no messages remain after agent/request "
+                "hooks and context processing."
+            )
+            yield LLMResponse(
+                role="err",
+                completion_text="No messages remain for the LLM request.",
+            )
+            return
         payload = {
-            "contexts": self._sanitize_contexts_for_provider(self.run_context.messages),
+            "contexts": self._sanitize_contexts_for_provider(request_messages),
             "func_tool": self._func_tool_for_provider(),
             "session_id": self.req.session_id,
             "extra_user_content_parts": self.req.extra_user_content_parts,  # list[ContentPart]
@@ -534,7 +557,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self,
     ) -> T.AsyncGenerator[LLMResponse, None]:
         """Wrap _iter_llm_responses with provider fallback handling."""
-        if not self.run_context.messages:
+        if not self._effective_request_messages():
             logger.warning(
                 "Skipping LLM request because no messages remain after agent/request "
                 "hooks and context processing."
@@ -815,17 +838,29 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         # Process request-time context before sending it to the provider.
         token_usage = self.req.conversation.token_usage if self.req.conversation else 0
         self._simple_print_message_role("[BefCompact]", self.run_context.messages)
+        # Keep run_context.messages as the full persistent history; compressed
+        # results are only for the current provider request, never persisted.
+        # Build the request source incrementally (snapshot + new delta) so we
+        # do not re-compress the whole history on every step.
+        if self._request_messages is None or self._request_messages_base is None:
+            source = list(self.run_context.messages)
+        else:
+            source = [
+                *self._request_messages,
+                *self.run_context.messages[self._request_messages_base:],
+            ]
         processed_messages = await self._await_or_stop(
             self.request_context_manager.process(
-                self.run_context.messages,
+                source,
                 trusted_token_usage=token_usage,
             )
         )
         if processed_messages is None:
             yield await self._finalize_aborted_step()
             return
-        self.run_context.messages = processed_messages
-        self._simple_print_message_role("[AftCompact]", self.run_context.messages)
+        self._request_messages = processed_messages
+        self._request_messages_base = len(self.run_context.messages)
+        self._simple_print_message_role("[AftCompact]", self._request_messages)
 
         async for llm_response in self._iter_llm_responses_with_fallback():
             if llm_response.is_chunk:
@@ -1372,7 +1407,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     ) -> list[dict[str, T.Any]]:
         """Build contexts for re-querying LLM with param-only tool schemas."""
         contexts: list[dict[str, T.Any]] = []
-        for msg in self.run_context.messages:
+        for msg in self._effective_request_messages():
             if hasattr(msg, "model_dump"):
                 contexts.append(msg.model_dump())  # type: ignore[call-arg]
             elif isinstance(msg, dict):

@@ -152,7 +152,13 @@ class LLMSummaryCompressor:
             "2. If any tools were used, summarize tool usage (total call count) and extract the most valuable insights from tool outputs.\n"
             "3. If any materials (files, documents, code, references) were read during the conversation that may be helpful for subsequent work, list each one with its scope and path.\n"
             "4. If there was an initial user goal, state it first and describe the current progress/status.\n"
-            "5. Write the summary in the user's language.\n"
+            "5. HARD PRESERVE the following hard facts, do NOT summarize or omit them: "
+            "URLs, links, and file paths; coordinates, IDs, version numbers, ports; "
+            "concrete decision reasons, choices made, and constraints; numeric facts, "
+            "measured values, and exact parameters. For secrets/tokens/API keys/"
+            "credentials, preserve their NAME, location and purpose; keep the exact "
+            "value only when continuing the task genuinely requires it.\n"
+            "6. Write the summary in the user's language.\n"
         )
 
     def should_compress(

@@ -582,7 +582,7 @@ class TestContextManager:
 
     @pytest.mark.asyncio
     async def test_double_check_after_compression(self):
-        """Test that halving is applied if still over threshold after compression."""
+        """Test that token-budget truncation is applied if still over threshold after compression."""
         config = ContextConfig(max_context_tokens=100)
         manager = ContextManager(config)
 
@@ -598,13 +598,32 @@ class TestContextManager:
             with patch.object(manager.compressor, "__call__", new=mock_compress):
                 with patch.object(
                     manager.truncator,
-                    "truncate_by_halving",
+                    "truncate_to_token_budget",
                     return_value=long_messages[:5],
-                ) as mock_halving:
+                ) as mock_token_budget:
                     _ = await manager.process(long_messages)
 
-                    # Halving should be called
-                    mock_halving.assert_called_once()
+                    # Token-budget truncation should be called
+                    mock_token_budget.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_enforce_turns_skipped_when_llm_compress(self):
+        """When LLM compression is configured, enforce_max_turns must not
+        unconditionally hard-truncate."""
+        config = ContextConfig(
+            enforce_max_turns=2,
+            max_context_tokens=10_000,
+            llm_compress_provider=MockProvider(),  # type: ignore
+            llm_compress_keep_recent_ratio=0.15,
+        )
+        manager = ContextManager(config)
+        messages = self.create_messages(20)
+
+        result = await manager.process(messages)
+
+        # Hard turn limit should be skipped; no turn-based truncation applied.
+        assert len(result) == 20
+
 
     # ==================== Combined Truncation and Compression Tests ====================
 
