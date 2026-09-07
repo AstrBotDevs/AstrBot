@@ -592,6 +592,37 @@ export type ReorderRequest = {
     }>;
 };
 
+/**
+ * The AstrBot backend runtime, including when running inside a container. Values are captured at application startup.
+ */
+export type RuntimeInfo = {
+    /**
+     * Lowercase platform.system() value, commonly linux, darwin, or windows.
+     */
+    os: string;
+    /**
+     * Unmodified platform.machine() value, such as x86_64, AMD64, arm64, or aarch64. May be empty if unknown.
+     */
+    arch: string;
+    /**
+     * Local process sandbox dependency detection. It does not describe file tool permissions or verify that sandboxed processes can launch.
+     */
+    sandbox: {
+        backend: ('bubblewrap' | 'seatbelt') | null;
+        /**
+         * detected means bwrap was found in PATH or /usr/bin/sandbox-exec was found on macOS; missing means the corresponding executable was not found; unsupported means this platform has no Local process sandbox backend. These identifiers are independent of the UI language.
+         */
+        status: 'detected' | 'missing' | 'unsupported';
+    };
+};
+
+export type backend = 'bubblewrap' | 'seatbelt';
+
+/**
+ * detected means bwrap was found in PATH or /usr/bin/sandbox-exec was found on macOS; missing means the corresponding executable was not found; unsupported means this platform has no Local process sandbox backend. These identifiers are independent of the UI language.
+ */
+export type status = 'detected' | 'missing' | 'unsupported';
+
 export type SessionGroupRequest = {
     name?: string;
     umos?: Array<(string)>;
@@ -3282,7 +3313,11 @@ export type GetProviderTokenStatsResponse = (SuccessEnvelope);
 
 export type GetProviderTokenStatsError = unknown;
 
-export type GetVersionResponse = (SuccessEnvelope);
+export type GetVersionResponse = ((SuccessEnvelope & {
+    data?: {
+        runtime: RuntimeInfo;
+    };
+}));
 
 export type GetVersionError = unknown;
 

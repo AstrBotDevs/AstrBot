@@ -3,7 +3,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import httpx
 import jwt
@@ -13,6 +13,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, PlainTextResponse
 
 import astrbot.dashboard.services.config_service as config_service
+import astrbot.dashboard.services.stat_service as stat_service
 from astrbot.core import file_token_service
 from astrbot.core.utils import llm_metadata
 from astrbot.dashboard.api.app import create_dashboard_asgi_app
@@ -1040,6 +1041,70 @@ def _jwt_headers() -> dict[str, str]:
         algorithm="HS256",
     )
     return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("desktop_auth", [False, True])
+async def test_version_routes_return_startup_runtime_snapshot(
+    monkeypatch, fake_core_lifecycle, fake_db: FakeDb, desktop_auth
+):
+    """Both version routes and auth modes expose the same startup snapshot."""
+    platform = SimpleNamespace(
+        system=Mock(return_value="Linux"), machine=Mock(return_value="aarch64")
+    )
+    which = Mock(return_value=None)
+    monkeypatch.setattr(stat_service, "platform", platform)
+    monkeypatch.setattr(stat_service, "shutil", SimpleNamespace(which=which))
+    monkeypatch.setattr(
+        stat_service, "is_desktop_session_auth_enabled", lambda: desktop_auth
+    )
+    monkeypatch.setattr(
+        stat_service, "get_dashboard_version", AsyncMock(return_value="v1.2.3")
+    )
+    monkeypatch.setattr(
+        stat_service, "is_password_storage_upgraded", AsyncMock(return_value=True)
+    )
+    monkeypatch.setattr(
+        stat_service,
+        "get_dashboard_password_hash",
+        lambda *args, **kwargs: "stored-hash",
+    )
+    monkeypatch.setattr(
+        stat_service.StatService, "is_default_cred", AsyncMock(return_value=False)
+    )
+    app = create_dashboard_asgi_app(
+        core_lifecycle=fake_core_lifecycle, db=fake_db, jwt_secret=JWT_SECRET
+    )
+
+    # Installing a dependency after startup takes effect after restarting AstrBot.
+    which.return_value = "/usr/bin/bwrap"
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(
+        transport=transport, base_url="http://testserver"
+    ) as client:
+        for path in ("/api/v1/stats/version", "/api/stat/version"):
+            response = await client.get(path, headers=_jwt_headers())
+            assert response.status_code == 200
+            payload = response.json()
+            assert payload["status"] == "ok"
+            assert payload["data"]["runtime"] == {
+                "os": "linux",
+                "arch": "aarch64",
+                "sandbox": {"backend": "bubblewrap", "status": "missing"},
+            }
+            assert payload["data"]["version"]
+            assert payload["data"]["dashboard_version"] == "v1.2.3"
+            assert payload["data"]["change_pwd_hint"] is False
+            assert payload["data"]["md5_pwd_hint"] is False
+            assert payload["data"]["password_upgrade_required"] is False
+
+        response = await client.get("/api/v1/stats/versions")
+        assert response.status_code == 200
+        assert "runtime" not in response.json()["data"]
+
+    which.assert_called_once_with("bwrap")
+    platform.system.assert_called_once_with()
+    platform.machine.assert_called_once_with()
 
 
 @pytest.mark.asyncio

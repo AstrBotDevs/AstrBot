@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import ast
 import asyncio
+import platform
 import re
+import shutil
 import threading
 import time
 import traceback
@@ -60,6 +62,30 @@ class StatService:
         self.config = config
         self.storage_cleaner = StorageCleaner(config)
 
+        # Snapshot dependency presence at startup; this does not test sandbox launch.
+        system = platform.system().lower()
+        sandbox = {"backend": None, "status": "unsupported"}
+        if system == "linux":
+            sandbox = {
+                "backend": "bubblewrap",
+                "status": "detected" if shutil.which("bwrap") else "missing",
+            }
+        elif system == "darwin":
+            sandbox = {
+                "backend": "seatbelt",
+                "status": (
+                    "detected"
+                    if shutil.which("sandbox-exec", path="/usr/bin")
+                    == "/usr/bin/sandbox-exec"
+                    else "missing"
+                ),
+            }
+        self.runtime = {
+            "os": system,
+            "arch": platform.machine(),
+            "sandbox": sandbox,
+        }
+
     async def restart_core(self) -> None:
         if DEMO_MODE:
             raise StatServiceError(
@@ -107,6 +133,7 @@ class StatService:
                 "change_pwd_hint": False,
                 "md5_pwd_hint": False,
                 "password_upgrade_required": False,
+                "runtime": self.runtime,
             }
         storage_upgraded = await is_password_storage_upgraded(
             self.db_helper,
@@ -124,6 +151,7 @@ class StatService:
             "change_pwd_hint": await self.is_default_cred(),
             "md5_pwd_hint": md5_pwd_hint,
             "password_upgrade_required": not storage_upgraded,
+            "runtime": self.runtime,
         }
 
     async def get_public_versions(

@@ -1,9 +1,11 @@
 import time
 from datetime import datetime, timedelta
-from unittest.mock import MagicMock
+from types import SimpleNamespace
+from unittest.mock import MagicMock, Mock
 
 import pytest
 
+import astrbot.dashboard.services.stat_service as stat_service
 from astrbot.dashboard.services.stat_service import StatService
 
 
@@ -14,6 +16,46 @@ def _make_service(db) -> StatService:
     core_lifecycle.platform_manager.get_insts.return_value = []
     core_lifecycle.start_time = int(time.time()) - 100
     return StatService(db_helper=db, core_lifecycle=core_lifecycle, config={})
+
+
+@pytest.mark.parametrize(
+    ("system", "arch", "executable", "backend", "status"),
+    [
+        ("Linux", "x86_64", "/usr/bin/bwrap", "bubblewrap", "detected"),
+        ("Linux", "aarch64", None, "bubblewrap", "missing"),
+        ("Darwin", "arm64", "/usr/bin/sandbox-exec", "seatbelt", "detected"),
+        ("Darwin", "x86_64", None, "seatbelt", "missing"),
+        ("Darwin", "arm64", "/opt/bin/sandbox-exec", "seatbelt", "missing"),
+        ("Windows", "AMD64", None, None, "unsupported"),
+        ("Windows", "ARM64", None, None, "unsupported"),
+        ("FreeBSD", "", None, None, "unsupported"),
+    ],
+)
+def test_runtime_detects_platform_dependencies(
+    monkeypatch, system, arch, executable, backend, status
+):
+    """Report dependency presence without requiring a native sandbox in CI."""
+    monkeypatch.setattr(
+        stat_service,
+        "platform",
+        SimpleNamespace(system=lambda: system, machine=lambda: arch),
+    )
+    which = Mock(return_value=executable)
+    monkeypatch.setattr(stat_service, "shutil", SimpleNamespace(which=which))
+
+    service = _make_service(MagicMock())
+
+    assert service.runtime == {
+        "os": system.lower(),
+        "arch": arch,
+        "sandbox": {"backend": backend, "status": status},
+    }
+    if system == "Linux":
+        which.assert_called_once_with("bwrap")
+    elif system == "Darwin":
+        which.assert_called_once_with("sandbox-exec", path="/usr/bin")
+    else:
+        which.assert_not_called()
 
 
 @pytest.mark.asyncio
