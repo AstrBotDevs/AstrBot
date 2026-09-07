@@ -458,6 +458,12 @@
         "dual_output": {
           "description": "Output Both Voice and Text When TTS is Enabled"
         }
+      },
+      "platform_settings": {
+        "full_lang_aliases": {
+          "description": "All-language aliases",
+          "hint": "When enabled, command aliases in all languages (e.g. /帮助, /ヘルプ) can be triggered regardless of the current session language. When disabled, only the main command and aliases matching the current language are accepted. The main command (e.g. /help) is always available."
+        }
       }
     }
   },

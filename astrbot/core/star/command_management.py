@@ -27,6 +27,8 @@ class CommandDescriptor:
     plugin_display_name: str | None = None
     module_path: str = ""
     description: str = ""
+    desc_i18n: dict = field(default_factory=dict)
+    """分语言描述,键为语言代码(如 ``zh-CN``);为空表示插件未声明。"""
     command_type: str = "command"  # "command" | "group" | "sub_command"
     raw_command_name: str | None = None
     current_fragment: str | None = None
@@ -327,6 +329,7 @@ def _build_descriptor(handler: StarHandlerMetadata) -> CommandDescriptor | None:
         plugin_display_name=plugin_display,
         module_path=handler.handler_module_path,
         description=handler.desc or "",
+        desc_i18n=dict(handler.desc_i18n) if handler.desc_i18n else {},
         command_type=command_type,
         raw_command_name=raw_fragment,
         current_fragment=current_fragment,
@@ -468,10 +471,31 @@ def _bind_configs_to_descriptors(
 def _group_conflicts(
     descriptors: list[CommandDescriptor],
 ) -> dict[str, list[CommandDescriptor]]:
+    """按指令名(主名 + 别名)分组,返回存在冲突的名字。
+
+    冲突不仅发生在主命令名相同的情况下,也发生在"某指令的别名与另一指令的
+    主名或别名相同"的情况下——运行时两者都会匹配并同时触发。
+    """
     conflicts: dict[str, list[CommandDescriptor]] = defaultdict(list)
+    seen_handlers: dict[str, set[str]] = defaultdict(set)
     for desc in descriptors:
-        if desc.effective_command and desc.enabled and _is_plugin_activated(desc):
-            conflicts[desc.effective_command].append(desc)
+        if not desc.enabled or not _is_plugin_activated(desc):
+            continue
+
+        names: list[str] = []
+        if desc.effective_command:
+            names.append(desc.effective_command)
+        for alias in desc.aliases:
+            full_alias = _compose_command(desc.parent_signature, alias)
+            if full_alias and full_alias not in names:
+                names.append(full_alias)
+
+        for name in names:
+            if desc.handler_full_name in seen_handlers[name]:
+                continue
+            seen_handlers[name].add(desc.handler_full_name)
+            conflicts[name].append(desc)
+
     return {k: v for k, v in conflicts.items() if len(v) > 1}
 
 
@@ -527,6 +551,7 @@ def _descriptor_to_dict(desc: CommandDescriptor) -> dict[str, Any]:
         "plugin_display_name": desc.plugin_display_name,
         "module_path": desc.module_path,
         "description": desc.description,
+        "descriptions": desc.desc_i18n,
         "type": desc.command_type,
         "parent_signature": desc.parent_signature,
         "parent_group_handler": desc.parent_group_handler,

@@ -838,6 +838,17 @@ class PluginService:
         desc = getattr(handler_md, "desc", "") if handler_md else ""
         return desc or fallback or "无描述"
 
+    @staticmethod
+    def _get_command_i18n_descriptions(
+        command_filter: CommandFilter | CommandGroupFilter,
+    ) -> dict[str, str]:
+        """取插件指令的分语言描述(desc_i18n),键为语言代码。"""
+        handler_md = getattr(command_filter, "handler_md", None)
+        if not handler_md:
+            return {}
+        i18n = getattr(handler_md, "desc_i18n", None) or {}
+        return {k: str(v) for k, v in i18n.items() if isinstance(v, str)}
+
     def _build_command_filter_component(
         self,
         command_filter: CommandFilter,
@@ -853,6 +864,7 @@ class PluginService:
                 command_filter,
                 fallback_desc,
             ),
+            "descriptions": self._get_command_i18n_descriptions(command_filter),
         }
         return self._wrap_command_component(parts[:-1], component)
 
@@ -875,6 +887,7 @@ class PluginService:
                 command_group_filter,
                 fallback_desc,
             ),
+            "descriptions": self._get_command_i18n_descriptions(command_group_filter),
         }
         if subcommands:
             component["subcommands"] = subcommands
@@ -888,6 +901,7 @@ class PluginService:
             component: dict[str, Any] = {
                 "name": command_filter.group_name,
                 "description": self._get_command_description(command_filter),
+                "descriptions": self._get_command_i18n_descriptions(command_filter),
             }
             subcommands = [
                 self._build_command_group_child(sub_filter)
@@ -900,6 +914,7 @@ class PluginService:
         return {
             "name": command_filter.command_name,
             "description": self._get_command_description(command_filter),
+            "descriptions": self._get_command_i18n_descriptions(command_filter),
         }
 
     @staticmethod

@@ -38,6 +38,7 @@ from astrbot.core.star.filter.platform_adapter_type import (
 )
 from astrbot.core.subagent_orchestrator import SubAgentOrchestrator
 from astrbot.core.utils.astrbot_path import get_astrbot_system_tmp_path
+from astrbot.core.utils.lang_utils import resolve_lang
 
 from ..exceptions import ProviderNotFoundError
 from .filter.command import CommandFilter
@@ -610,6 +611,29 @@ class Context:
             # 使用默认配置
             return self._config
         return self.astrbot_config_mgr.get_conf(umo)
+
+    async def get_lang(self, umo: str | None = None) -> str:
+        """获取当前会话/全局的语言。
+
+        解析链:会话级 ``sp``(``lang`` 键, scope=umo)→ 全局配置
+        ``language`` 字段 → ``DEFAULT_LANG``。
+
+        Args:
+            umo: unified_message_origin,用于解析会话级语言;为 ``None`` 时
+                只使用全局配置。
+
+        Returns:
+            规范语言代码,如 ``"zh-CN"`` / ``"en-US"`` / ``"ru-RU"`` / ``"ja-JP"``。
+        """
+        session_lang = None
+        if umo:
+            try:
+                from astrbot.core import sp
+
+                session_lang = await sp.session_get(umo, "lang", None)
+            except BaseException:
+                session_lang = None
+        return resolve_lang(self.get_config(umo), session_lang)
 
     async def send_message(
         self,

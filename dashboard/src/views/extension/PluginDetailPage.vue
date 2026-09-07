@@ -497,8 +497,13 @@ const toggleCommandGroup = (key) => {
 };
 
 const getComponentDescription = (component) => {
+  // desc_i18n:按 WebUI 当前语言取,再回退 description/desc 原文
+  const i18nDesc =
+    component?.descriptions &&
+    typeof component.descriptions === "object" &&
+    component.descriptions[locale.value];
   const fallback =
-    component?.description || component?.desc || tm("status.unknown");
+    i18nDesc || component?.description || component?.desc || tm("status.unknown");
   if (getComponentGroupKey(component) === "page") {
     return String(
       pluginPageDescription(pluginData.value, component, fallback),

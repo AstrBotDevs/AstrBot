@@ -105,6 +105,7 @@ DEFAULT_CONFIG = {
         "friend_message_needs_wake_prefix": False,
         "ignore_bot_self_message": False,
         "ignore_at_all": False,
+        "full_lang_aliases": False,
     },
     "provider_sources": [],  # provider sources
     "provider": [],  # models from provider_sources
@@ -277,6 +278,7 @@ DEFAULT_CONFIG = {
         },
     },
     "wake_prefix": ["/"],
+    "language": "zh-CN",  # 默认语言: zh-CN / en-US / ru-RU / ja-JP
     "log_level": "INFO",
     "log_file_enable": False,
     "log_file_path": "logs/astrbot.log",
@@ -4037,6 +4039,11 @@ CONFIG_METADATA_3 = {
                 "description": "其他配置",
                 "type": "object",
                 "items": {
+                    "platform_settings.full_lang_aliases": {
+                        "description": "全语言别名",
+                        "type": "bool",
+                        "hint": "启用后,所有语言的指令别名(如 /帮助、/ヘルプ)均可直接触发,不受当前会话语言限制;关闭时仅主命令与当前语言对应的别名可用。主命令(如 /help)始终可用。",
+                    },
                     "provider_settings.display_reasoning_text": {
                         "description": "显示思考内容",
                         "type": "bool",
@@ -4398,6 +4405,11 @@ CONFIG_METADATA_3 = {
                 "description": "其他配置",
                 "type": "object",
                 "items": {
+                    "platform_settings.full_lang_aliases": {
+                        "description": "全语言别名",
+                        "type": "bool",
+                        "hint": "启用后,所有语言的指令别名(如 /帮助、/ヘルプ)均可直接触发,不受当前会话语言限制;关闭时仅主命令与当前语言对应的别名可用。主命令(如 /help)始终可用。",
+                    },
                     "platform_settings.ignore_bot_self_message": {
                         "description": "是否忽略机器人自身的消息",
                         "type": "bool",

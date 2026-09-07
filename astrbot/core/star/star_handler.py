@@ -269,6 +269,9 @@ class StarHandlerMetadata(Generic[H]):
     desc: str = ""
     """Handler 的描述信息"""
 
+    desc_i18n: dict = field(default_factory=dict)
+    """Handler 的分语言描述信息,键为语言代码(如 ``zh-CN``)。"""
+
     extras_configs: dict = field(default_factory=dict)
     """插件注册的一些其他的信息, 如 priority 等"""
 

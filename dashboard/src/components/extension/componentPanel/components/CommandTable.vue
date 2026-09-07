@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { useModuleI18n } from '@/i18n/composables';
+import { useI18n, useModuleI18n } from '@/i18n/composables';
 import type { CommandItem, TypeInfo, StatusInfo } from '../types';
 
 const { tm } = useModuleI18n('features/command');
+const { locale } = useI18n();
 
 // Props
 const props = defineProps<{
@@ -20,6 +21,13 @@ const emit = defineEmits<{
   (e: 'view-details', cmd: CommandItem): void;
   (e: 'update-permission', cmd: CommandItem, permission: 'admin' | 'member'): void;
 }>();
+
+// 按 WebUI 当前语言解析指令描述:descriptions[locale] -> description 原文
+const resolveDescription = (cmd: CommandItem): string => {
+  const lang = locale.value;
+  const descriptions = cmd.descriptions || {};
+  return descriptions[lang] || cmd.description;
+};
 
 // 表格表头
 const commandHeaders = computed(() => [
@@ -149,8 +157,8 @@ const getRowProps = ({ item }: { item: CommandItem }) => {
       </template>
 
       <template v-slot:item.description="{ item }">
-        <div class="text-body-2 text-medium-emphasis" style="max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="item.description">
-          {{ item.description || '-' }}
+        <div class="text-body-2 text-medium-emphasis" style="max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="resolveDescription(item)">
+          {{ resolveDescription(item) || '-' }}
         </div>
       </template>
 

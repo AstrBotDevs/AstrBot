@@ -14,6 +14,7 @@ from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.message.message_event_result import MessageEventResult
 from astrbot.core.provider.func_tool_manager import PY_TO_JSON_TYPE, SUPPORTED_TYPES
 from astrbot.core.provider.register import llm_tools
+from astrbot.core.utils.lang_utils import MultiLangAlias
 
 from ..filter.command import CommandFilter
 from ..filter.command_group import CommandGroupFilter
@@ -65,6 +66,15 @@ def get_handler_or_create(
     if "desc" in kwargs:
         md.desc = kwargs["desc"]
         del kwargs["desc"]
+    if "desc_i18n" in kwargs:
+        desc_i18n = kwargs["desc_i18n"]
+        if isinstance(desc_i18n, dict):
+            md.desc_i18n = desc_i18n
+        else:
+            logger.warning(
+                "desc_i18n for %s is not a dict; ignored.", handler_full_name
+            )
+        del kwargs["desc_i18n"]
     md.extras_configs = kwargs
 
     if not dont_add:
@@ -92,6 +102,9 @@ def register_command(
                 alias,
                 None,
                 parent_command_names=parent_command_names,
+                alias_lang_map=(
+                    dict(alias.lang_map) if isinstance(alias, MultiLangAlias) else None
+                ),
             )
             command_name.parent_group.add_sub_command_filter(new_command)
         else:
@@ -105,7 +118,14 @@ def register_command(
             "No command_name argument was provided while registering a bare command."
         )
     else:
-        new_command = CommandFilter(command_name, alias, None)
+        new_command = CommandFilter(
+            command_name,
+            alias,
+            None,
+            alias_lang_map=(
+                dict(alias.lang_map) if isinstance(alias, MultiLangAlias) else None
+            ),
+        )
         add_to_event_filters = True
 
     def decorator(awaitable):

@@ -37,10 +37,14 @@ class CommandFilter(HandlerFilter):
         alias: set | None = None,
         handler_md: StarHandlerMetadata | None = None,
         parent_command_names: list[str] | None = None,
+        alias_lang_map: dict[str, str] | None = None,
     ) -> None:
         self.command_name = command_name
         self.alias = alias if alias else set()
         self._original_command_name = command_name
+        self.alias_lang_map = dict(alias_lang_map) if alias_lang_map else {}
+        """别名 -> 语言代码 映射。非空时,"全语言别名"开关关闭状态下的
+        别名匹配会按当前会话语言过滤(无映射的别名视为全语言,始终生效)。"""
         self.parent_command_names = (
             parent_command_names if parent_command_names is not None else [""]
         )
@@ -182,6 +186,57 @@ class CommandFilter(HandlerFilter):
         ]
         return self._cmpl_cmd_names
 
+    def get_lang_filtered_command_names(
+        self,
+        event: AstrMessageEvent,
+        cfg: AstrBotConfig,
+    ) -> list[str]:
+        """返回按"全语言别名"开关与当前语言过滤后的有效指令名。
+
+        规则:
+        - 主命令名始终有效;
+        - ``full_lang_aliases`` 开启(或未配置):所有别名有效;
+        - 关闭:仅当前语言对应的别名有效;不在 ``alias_lang_map`` 中的别名
+          (旧式 ``alias={"帮助"}``)视为全语言别名,始终有效。
+
+        Args:
+            event: 消息事件,语言可来自 ``_astrbot_lang`` extra(会话级)。
+            cfg: AstrBot 配置,包含 ``platform_settings.full_lang_aliases``
+                与根字段 ``language``。
+
+        Returns:
+            过滤后的完整指令名列表(含父级前缀)。
+        """
+        if not self.alias_lang_map:
+            return self.get_complete_command_names()
+
+        full_lang_aliases = (
+            cfg.get("platform_settings", {}).get("full_lang_aliases", False)
+            if cfg
+            else False
+        )
+
+        names = [self.command_name]
+        if full_lang_aliases:
+            names.extend(list(self.alias))
+        else:
+            lang = event.get_extra("_astrbot_lang", None) if event else None
+            if not lang and cfg:
+                lang = cfg.get("language", "")
+            for alias in self.alias:
+                alias_lang = self.alias_lang_map.get(alias)
+                if alias_lang is None:
+                    # 无语言信息的别名视为全语言别名
+                    names.append(alias)
+                elif lang and alias_lang == lang:
+                    names.append(alias)
+
+        return [
+            f"{parent} {cmd}" if parent else cmd
+            for cmd in names
+            for parent in self.parent_command_names or [""]
+        ]
+
     def equals(self, message_str: str) -> bool:
         for full_cmd in self.get_complete_command_names():
             if message_str == full_cmd:
@@ -198,7 +253,7 @@ class CommandFilter(HandlerFilter):
         # 检查是否以指令开头
         message_str = re.sub(r"\s+", " ", event.get_message_str().strip())
         ok = False
-        for full_cmd in self.get_complete_command_names():
+        for full_cmd in self.get_lang_filtered_command_names(event, cfg):
             if message_str.startswith(f"{full_cmd} ") or message_str == full_cmd:
                 ok = True
                 message_str = message_str[len(full_cmd) :].strip()
