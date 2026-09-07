@@ -88,3 +88,16 @@ async def test_persona_update_without_subagent_orchestrator(persona_core):
     )
     persona = await persona_core.persona_mgr.get_persona("custom")
     assert persona.system_prompt == "New prompt"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("invalid_config", [None, [], "invalid", False])
+async def test_persona_update_with_non_object_subagent_config(persona_core, invalid_config):
+    persona_core.astrbot_config["subagent_orchestrator"] = invalid_config
+    result = await PersonaService(persona_core).update_persona(
+        {"persona_id": "custom", "system_prompt": "New prompt"}
+    )
+    assert result == {"message": "人格更新成功"}
+    persona = await persona_core.persona_mgr.get_persona("custom")
+    assert persona.system_prompt == "New prompt"
+    assert persona_core.subagent_orchestrator.handoffs == []

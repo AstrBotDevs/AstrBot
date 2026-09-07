@@ -118,9 +118,12 @@ class PersonaService:
         orchestrator = getattr(self.core_lifecycle, "subagent_orchestrator", None)
         if orchestrator is not None:
             # Handoffs snapshot persona prompts, dialogs and tools when loaded.
-            await orchestrator.reload_from_config(
-                self.core_lifecycle.astrbot_config.get("subagent_orchestrator", {})
+            orchestrator_config = self.core_lifecycle.astrbot_config.get(
+                "subagent_orchestrator", {}
             )
+            if not isinstance(orchestrator_config, dict):
+                orchestrator_config = {}
+            await orchestrator.reload_from_config(orchestrator_config)
         return {"message": "人格更新成功"}
 
     async def delete_persona(self, data: object) -> dict:
