@@ -11,6 +11,45 @@ from astrbot.core.provider.sources.gemini_source import ProviderGoogleGenAI
 
 
 @pytest.mark.asyncio
+async def test_gemini_thinking_level_is_serialized_on_every_request():
+    model = "gemini-3.7-flash"
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    provider.provider_config = {"gm_thinking_config": {"level": "HIGH"}}
+    provider.provider_settings = {}
+    provider.model_name = model
+    provider.safety_settings = []
+
+    first_config = await provider._prepare_query_config({"model": model})
+    second_config = await provider._prepare_query_config({"model": model})
+
+    assert first_config.thinking_config is not None
+    assert second_config.thinking_config is not None
+    assert first_config.thinking_config.model_dump(exclude_none=True) == {
+        "thinking_level": types.ThinkingLevel.HIGH,
+    }
+    assert second_config.thinking_config.model_dump(exclude_none=True) == {
+        "thinking_level": types.ThinkingLevel.HIGH,
+    }
+
+
+@pytest.mark.asyncio
+async def test_gemini_37_minimal_thinking_level_falls_back_to_medium():
+    model = "gemini-3.7-flash"
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    provider.provider_config = {"gm_thinking_config": {"level": "MINIMAL"}}
+    provider.provider_settings = {}
+    provider.model_name = model
+    provider.safety_settings = []
+
+    config = await provider._prepare_query_config({"model": model})
+
+    assert config.thinking_config is not None
+    assert config.thinking_config.model_dump(exclude_none=True) == {
+        "thinking_level": types.ThinkingLevel.MEDIUM,
+    }
+
+
+@pytest.mark.asyncio
 async def test_gemini_prepare_conversation_removes_leading_model_content():
     provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
 

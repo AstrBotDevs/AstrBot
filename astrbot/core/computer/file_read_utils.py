@@ -217,14 +217,14 @@ def read_local_text_range_sync(
     lines: list[str] = []
     start = 0 if offset is None else offset
     end = None if limit is None else start + limit
+    # Normalize CRLF with universal newlines for both paths and safe handles.
     if file_descriptor is None:
-        file_obj = open(path, encoding=encoding, newline="")
+        file_obj = open(path, encoding=encoding)
     else:
         file_obj = os.fdopen(
             os.dup(file_descriptor),
             mode="r",
             encoding=encoding,
-            newline="",
         )
         file_obj.seek(0)
     with file_obj:

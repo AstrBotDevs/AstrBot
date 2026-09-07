@@ -1733,6 +1733,25 @@ async def test_skills_like_requery_passes_extra_user_content_parts():
     assert parts[0].text == "<image_caption>一张猫的照片</image_caption>"
 
 
+def test_skills_like_requery_preserves_existing_context_prefix():
+    messages = [
+        Message(role="system", content="stable system prompt"),
+        Message(role="user", content="earlier user message"),
+        Message(role="assistant", content="earlier assistant message"),
+        Message(role="user", content="current request"),
+    ]
+    runner = ToolLoopAgentRunner()
+    runner.run_context = ContextWrapper(context=None, messages=messages)
+    original_contexts = [message.model_dump() for message in messages]
+
+    contexts = runner._build_tool_requery_context(["test_tool"])
+
+    assert contexts[:-1] == original_contexts
+    assert contexts[-1]["role"] == "user"
+    assert "test_tool" in contexts[-1]["content"]
+    assert [message.model_dump() for message in messages] == original_contexts
+
+
 @pytest.mark.asyncio
 async def test_follow_up_accepted_when_active_and_not_stopping(
     runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
