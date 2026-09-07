@@ -832,6 +832,22 @@ class MediaResolver:
                         )
                     return None
 
+                if mime_type == "image/gif":
+                    try:
+                        def _transcode_gif_to_png(data: bytes) -> tuple[bytes, str]:
+                            with PILImage.open(io.BytesIO(data)) as img:
+                                img.seek(0)
+                                out_buf = io.BytesIO()
+                                if img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info):
+                                    img.convert("RGBA").save(out_buf, format="PNG")
+                                else:
+                                    img.convert("RGB").save(out_buf, format="PNG")
+                                return out_buf.getvalue(), "image/png"
+
+                        media_bytes, mime_type = await asyncio.to_thread(_transcode_gif_to_png, media_bytes)
+                    except Exception as exc:
+                        logger.warning(f"GIF transcode to PNG failed, keeping original: {exc}")
+
                 return ResolvedMediaData(
                     base64_data=base64.b64encode(media_bytes).decode("utf-8"),
                     mime_type=mime_type,
