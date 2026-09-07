@@ -327,6 +327,7 @@ CONFIG_METADATA_2 = {
                         "secret": "",
                         "enable_group_c2c": True,
                         "enable_guild_direct_message": True,
+                        "use_markdown": True,
                     },
                     "QQ 官方机器人(Webhook)": {
                         "id": "default",
@@ -334,6 +335,7 @@ CONFIG_METADATA_2 = {
                         "enable": True,
                         "appid": "",
                         "secret": "",
+                        "use_markdown": True,
                         "is_sandbox": False,
                         "unified_webhook_mode": True,
                         "webhook_uuid": "",
@@ -923,6 +925,11 @@ CONFIG_METADATA_2 = {
                         "description": "启用频道私聊",
                         "type": "bool",
                         "hint": "启用后，机器人可以接收到频道的私聊消息。",
+                    },
+                    "use_markdown": {
+                        "description": "主动消息使用 Markdown",
+                        "type": "bool",
+                        "hint": "启用后，机器人主动发送消息默认以 Markdown 模式发送；插件显式调用 use_markdown() 指定行为时不受此配置影响。",
                     },
                     "ws_reverse_host": {
                         "description": "反向 Websocket 主机",
