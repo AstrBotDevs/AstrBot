@@ -1160,14 +1160,21 @@ class TestEnsurePersonaAndSkills:
         req = ProviderRequest()
         req.conversation = MagicMock(persona_id="no-skills")
 
-        await module._ensure_persona_and_skills(req, {}, mock_context, mock_event)
+        await module._ensure_persona_and_skills(
+            req, {"computer_use_runtime": "local"}, mock_context, mock_event
+        )
 
         assert "Workspace scoped skill." not in req.system_prompt
         assert "## Skills" not in req.system_prompt
 
     @pytest.mark.asyncio
-    async def test_ensure_skills_skips_workspace_skills_in_sandbox_runtime(
+    @pytest.mark.parametrize(
+        "runtime_settings",
+        [{}, {"computer_use_runtime": "none"}, {"computer_use_runtime": "sandbox"}],
+    )
+    async def test_ensure_skills_skips_workspace_skills_outside_local_runtime(
         self,
+        runtime_settings,
         monkeypatch,
         tmp_path,
         mock_event,
@@ -1214,7 +1221,7 @@ class TestEnsurePersonaAndSkills:
 
         await module._ensure_persona_and_skills(
             req,
-            {"computer_use_runtime": "sandbox"},
+            runtime_settings,
             mock_context,
             mock_event,
         )

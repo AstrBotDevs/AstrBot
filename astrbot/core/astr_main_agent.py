@@ -568,7 +568,7 @@ async def _ensure_persona_and_skills(
         req.system_prompt += CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT
 
     # Inject skills prompt
-    runtime = cfg.get("computer_use_runtime", "local")
+    runtime = cfg.get("computer_use_runtime", "none")
     skill_manager = SkillManager()
     skills = skill_manager.list_skills(active_only=True, runtime=runtime)
     skills = _filter_skills_for_current_config(skills, cfg)

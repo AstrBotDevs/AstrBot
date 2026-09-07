@@ -26,9 +26,20 @@ def test_local_python_tool_description_contains_os():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("runtime", ["none", "sandbox", "invalid", None])
+@pytest.mark.parametrize(
+    "runtime_settings",
+    [
+        {},
+        {"computer_use_runtime": "none"},
+        {"computer_use_runtime": "sandbox"},
+        {"computer_use_runtime": "invalid"},
+        {"computer_use_runtime": None},
+    ],
+)
 @pytest.mark.parametrize("role", ["member", "admin"])
-async def test_local_python_tool_rejects_nonlocal_runtime(runtime, role, monkeypatch):
+async def test_local_python_tool_rejects_nonlocal_runtime(
+    runtime_settings, role, monkeypatch
+):
     """Reject retained local tools before accessing the host, regardless of role."""
     get_local_booter = MagicMock()
     workspace_root = AsyncMock()
@@ -47,7 +58,7 @@ async def test_local_python_tool_rejects_nonlocal_runtime(runtime, role, monkeyp
             context=SimpleNamespace(
                 get_config=lambda **_kwargs: {
                     "provider_settings": {
-                        "computer_use_runtime": runtime,
+                        **runtime_settings,
                         "computer_use_require_admin": False,
                     }
                 }
@@ -63,10 +74,7 @@ async def test_local_python_tool_rejects_nonlocal_runtime(runtime, role, monkeyp
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("runtime_settings", [{}, {"computer_use_runtime": "local"}])
-async def test_local_python_tool_uses_session_workspace(
-    tmp_path, monkeypatch, runtime_settings
-):
+async def test_local_python_tool_uses_session_workspace(tmp_path, monkeypatch):
     """Local Python execution should use the same workspace as local shell."""
     tool = LocalPythonTool()
     python_exec = AsyncMock(
@@ -96,7 +104,7 @@ async def test_local_python_tool_uses_session_workspace(
             context=SimpleNamespace(
                 get_config=lambda **_kwargs: {
                     "provider_settings": {
-                        **runtime_settings,
+                        "computer_use_runtime": "local",
                         "computer_use_require_admin": True,
                     }
                 }
