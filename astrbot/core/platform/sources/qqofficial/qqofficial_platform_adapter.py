@@ -12,6 +12,7 @@ from typing import Any, cast
 import botpy
 import botpy.message
 from botpy import Client
+from botpy.api import BotAPI
 from botpy.connection import ConnectionState
 from botpy.gateway import BotWebSocket
 
@@ -31,6 +32,7 @@ from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.utils.media_utils import MediaResolver
 
 from ...register import register_platform_adapter
+from .qqofficial_http import QQOfficialHttp
 from .qqofficial_message_event import QQOfficialMessageEvent
 
 # remove logger handler
@@ -182,6 +184,11 @@ class ManagedBotWebSocket(BotWebSocket):
 class botClient(Client):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
+        self.http = QQOfficialHttp(
+            timeout=self.http.timeout,
+            is_sandbox=self.http.is_sandbox,
+        )
+        self.api = BotAPI(http=self.http)
         self._shutting_down = False
         self._active_websockets: set[ManagedBotWebSocket] = set()
 
@@ -447,16 +454,24 @@ class QQOfficialPlatformAdapter(Platform):
                         payload["media"] = media
                         payload["msg_type"] = 7
                         payload.pop("msg_id", None)
-                ret = await self.client.api.post_group_message(
-                    group_openid=session.session_id,
-                    **payload,
+                ret = await QQOfficialMessageEvent._send_with_markdown_fallback(
+                    send_func=lambda retry_payload: self.client.api.post_group_message(
+                        group_openid=session.session_id,
+                        **retry_payload,
+                    ),
+                    payload=payload,
+                    plain_text=plain_text,
                 )
             else:
                 if image_path:
                     payload["file_image"] = image_path
-                ret = await self.client.api.post_message(
-                    channel_id=session.session_id,
-                    **payload,
+                ret = await QQOfficialMessageEvent._send_with_markdown_fallback(
+                    send_func=lambda retry_payload: self.client.api.post_message(
+                        channel_id=session.session_id,
+                        **retry_payload,
+                    ),
+                    payload=payload,
+                    plain_text=plain_text,
                 )
 
         elif session.message_type == MessageType.FRIEND_MESSAGE:
@@ -505,10 +520,14 @@ class QQOfficialPlatformAdapter(Platform):
                     payload["media"] = media
                     payload["msg_type"] = 7
 
-            ret = await QQOfficialMessageEvent.post_c2c_message(
-                send_helper,  # type: ignore
-                openid=session.session_id,
-                **payload,
+            ret = await QQOfficialMessageEvent._send_with_markdown_fallback(
+                send_func=lambda retry_payload: QQOfficialMessageEvent.post_c2c_message(
+                    send_helper,  # type: ignore
+                    openid=session.session_id,
+                    **retry_payload,
+                ),
+                payload=payload,
+                plain_text=plain_text,
             )
         else:
             logger.warning(

@@ -5,13 +5,14 @@ import time
 from binascii import Error as BinasciiError
 from typing import cast
 
-from botpy import BotAPI, BotHttp, BotWebSocket, Client, ConnectionSession, Token
+from botpy import BotAPI, BotWebSocket, Client, ConnectionSession, Token
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric import ed25519
 
 from astrbot.api import logger
 from astrbot.core.platform.webhook_server import FastAPIWebhookServer
 
+from ..qqofficial.qqofficial_http import QQOfficialHttp
 from ..qqofficial.qqofficial_platform_adapter import _ensure_group_message_create_parser
 
 # remove logger handler
@@ -83,7 +84,7 @@ class QQOfficialWebhook:
         if isinstance(self.port, str):
             self.port = int(self.port)
 
-        self.http: BotHttp = BotHttp(
+        self.http = QQOfficialHttp(
             timeout=300,
             is_sandbox=self.is_sandbox,
             app_id=self.appid,

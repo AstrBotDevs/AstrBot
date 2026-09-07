@@ -6,7 +6,7 @@ from collections.abc import AsyncGenerator
 import astrbot.core.message.components as Comp
 from astrbot.core import logger
 from astrbot.core.message.components import BaseMessageComponent, ComponentType
-from astrbot.core.message.message_event_result import MessageChain, ResultContentType
+from astrbot.core.message.message_event_result import ResultContentType
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.star_handler import EventType
 from astrbot.core.utils.path_util import path_Mapping
@@ -284,8 +284,9 @@ class RespondStage(Stage):
                             header_comps.clear()
                     except Exception as e:
                         logger.error(
-                            "Failed to send the message chain: "
-                            f"chain = {MessageChain([comp])}, error = {e}",
+                            "Failed to send a message component: type=%s, error=%s",
+                            comp.type,
+                            e,
                             exc_info=True,
                         )
             else:
@@ -310,8 +311,10 @@ class RespondStage(Stage):
                         await event.send(chain)
                     except Exception as e:
                         logger.error(
-                            f"Failed to send the message chain: chain = {chain}, "
-                            f"error = {e}",
+                            "Failed to send a separated message component: "
+                            "type=%s, error=%s",
+                            comp.type,
+                            e,
                             exc_info=True,
                         )
                 chain = result.derive(result.chain)
@@ -320,8 +323,10 @@ class RespondStage(Stage):
                         await event.send(chain)
                     except Exception as e:
                         logger.error(
-                            f"Failed to send the message chain: chain = {chain}, "
-                            f"error = {e}",
+                            "Failed to send a message chain: component_count=%d, "
+                            "error=%s",
+                            len(result.chain),
+                            e,
                             exc_info=True,
                         )
 

@@ -10,10 +10,12 @@ from pathlib import Path
 from typing import Any
 
 import aiohttp
-from botpy.http import BotHttp, Route
+from botpy.http import Route
 from botpy.types.message import Media
 
 from astrbot.api import logger
+
+from .qqofficial_http import QQOfficialHttp
 
 QQOFFICIAL_CHUNKED_UPLOAD_THRESHOLD = 10 * 1024 * 1024
 
@@ -125,7 +127,7 @@ def _read_file_part(file_path: Path, offset: int, length: int) -> bytes:
 class QQOfficialChunkedUploader:
     """Upload one local file with the QQ Official multipart protocol."""
 
-    def __init__(self, http: BotHttp) -> None:
+    def __init__(self, http: QQOfficialHttp) -> None:
         """Initialize the uploader with qq-botpy's authenticated HTTP client.
 
         Args:
@@ -474,19 +476,20 @@ class QQOfficialChunkedUploader:
         last_error: Exception | None = None
         for attempt in range(_PART_PUT_ATTEMPTS):
             try:
-                async with http_session.request(
-                    "PUT",
-                    url,
-                    data=data,
-                    headers={"Content-Length": str(len(data))},
-                    timeout=aiohttp.ClientTimeout(total=_API_TIMEOUT_SECONDS),
-                ) as response:
-                    if 200 <= response.status < 300:
-                        return
-                    response_text = (await response.text(errors="replace"))[:200]
-                    last_error = RuntimeError(
-                        f"COS returned HTTP {response.status}: {response_text}"
-                    )
+                async with self._http.request_slot():
+                    async with http_session.request(
+                        "PUT",
+                        url,
+                        data=data,
+                        headers={"Content-Length": str(len(data))},
+                        timeout=aiohttp.ClientTimeout(total=_API_TIMEOUT_SECONDS),
+                    ) as response:
+                        if 200 <= response.status < 300:
+                            return
+                        response_text = (await response.text(errors="replace"))[:200]
+                        last_error = RuntimeError(
+                            f"COS returned HTTP {response.status}: {response_text}"
+                        )
             except (aiohttp.ClientError, asyncio.TimeoutError, OSError) as exc:
                 last_error = exc
             if attempt < _PART_PUT_ATTEMPTS - 1:
@@ -573,13 +576,16 @@ class QQOfficialChunkedUploader:
                     path,
                     is_sandbox=self._http.is_sandbox,
                 )
-                async with http_session.request(
-                    method,
-                    route.url,
-                    headers=self._http._headers,
-                    json=dict(body),
-                    timeout=aiohttp.ClientTimeout(total=_API_TIMEOUT_SECONDS),
-                ) as response:
+                async with (
+                    self._http.request_slot(),
+                    http_session.request(
+                        method,
+                        route.url,
+                        headers=self._http._headers,
+                        json=dict(body),
+                        timeout=aiohttp.ClientTimeout(total=_API_TIMEOUT_SECONDS),
+                    ) as response,
+                ):
                     try:
                         raw: object = await response.json(content_type=None)
                     except ValueError:
