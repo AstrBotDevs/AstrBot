@@ -419,7 +419,6 @@ async function fetchConversations() {
     params.umo = umoQuery.value.trim();
   } else {
     params.exclude_ids = "astrbot";
-    params.exclude_platforms = "webchat";
   }
   if (selectedBotIds.value.length) {
     params.platforms = selectedBotIds.value.join(",");

@@ -119,16 +119,24 @@ class ConversationService:
         """
         history_platform_ids = set(await self.db_helper.get_conversation_platform_ids())
         configured_platforms = self.core_lifecycle.astrbot_config.get("platform", [])
-        return {
-            "bots": [
-                {
-                    "id": str(platform.get("id", "")),
-                    "type": str(platform.get("type", "")),
-                }
-                for platform in configured_platforms
-                if platform.get("id") in history_platform_ids
-            ]
-        }
+        bots = [
+            {
+                "id": str(platform.get("id", "")),
+                "type": str(platform.get("type", "")),
+            }
+            for platform in configured_platforms
+            if platform.get("id") in history_platform_ids
+        ]
+
+        # WebChat is a built-in platform that the platform manager always
+        # starts regardless of config, so expose it as a filterable bot ID even
+        # when it is missing from the configured platform list.
+        if "webchat" in history_platform_ids and not any(
+            bot["id"] == "webchat" for bot in bots
+        ):
+            bots.append({"id": "webchat", "type": "webchat"})
+
+        return {"bots": bots}
 
     async def get_conversation_detail(self, data: object) -> dict:
         payload = self._payload(data)
