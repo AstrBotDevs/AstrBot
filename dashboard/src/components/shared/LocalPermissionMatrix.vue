@@ -4,19 +4,33 @@
     <v-alert v-else-if="!runtime" type="warning" variant="tonal" density="compact">
       {{ tm('runtimeUnknown') }}
     </v-alert>
-    <v-alert v-else-if="unsupported" type="info" variant="text" density="compact">
-      {{ tm('unsupported') }}
-    </v-alert>
-    <v-alert
-      v-else-if="runtime.sandbox.status === 'missing'"
-      type="warning"
-      variant="tonal"
-      density="compact"
-    >
-      {{ tm('missingDependency', {
-        dependency: runtime.sandbox.backend === 'bubblewrap' ? 'bwrap' : '/usr/bin/sandbox-exec (Seatbelt)'
-      }) }}
-    </v-alert>
+    <dl v-else class="runtime-info">
+      <div>
+        <dt><Monitor :size="14" aria-hidden="true" />{{ tm('runtime.os') }}</dt>
+        <dd>{{ { linux: 'Linux', darwin: 'macOS', windows: 'Windows' }[runtime.os] || runtime.os }}</dd>
+      </div>
+      <div>
+        <dt><Cpu :size="14" aria-hidden="true" />{{ tm('runtime.arch') }}</dt>
+        <dd>{{ runtime.arch || '—' }}</dd>
+      </div>
+      <div :class="{ 'runtime-info--warning': sandboxMissing }">
+        <dt>
+          <component
+            :is="sandboxMissing ? ShieldAlert : unsupported ? ShieldOff : Shield"
+            :size="14"
+            :class="sandboxMissing ? 'text-warning' : unsupported ? '' : 'text-primary'"
+            aria-hidden="true"
+          />
+          {{ tm('runtime.sandbox') }}
+        </dt>
+        <dd>
+          {{ tm(`runtime.status.${runtime.sandbox.status}`, {
+            backend: runtime.sandbox.backend === 'seatbelt' ? 'Seatbelt' : 'bubblewrap',
+            dependency: runtime.sandbox.backend === 'seatbelt' ? 'sandbox-exec' : 'bwrap'
+          }) }}
+        </dd>
+      </div>
+    </dl>
 
     <v-table class="permission-table">
       <thead>
@@ -121,7 +135,7 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { FolderOpen, LockKeyhole, ShieldAlert } from '@lucide/vue'
+import { Cpu, FolderOpen, LockKeyhole, Monitor, Shield, ShieldAlert, ShieldOff } from '@lucide/vue'
 import { useModuleI18n } from '@/i18n/composables'
 import { statsApi } from '@/api/v1'
 
@@ -240,6 +254,45 @@ const memberHasElevatedAccess = computed(() => {
   width: 100%;
   min-width: 0;
   padding-top: 12px;
+}
+
+.runtime-info,
+.runtime-info > div,
+.runtime-info dt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.runtime-info {
+  flex-wrap: wrap;
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 20px;
+}
+
+.runtime-info > div {
+  flex-wrap: wrap;
+  padding: 6px 10px;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  border-radius: 8px;
+  background: rgba(var(--v-theme-on-surface), 0.025);
+}
+
+.runtime-info dt {
+  gap: 6px;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  font-size: 0.75rem;
+}
+
+.runtime-info dd {
+  margin: 0;
+  font-weight: 500;
+}
+
+.runtime-info > .runtime-info--warning {
+  border-color: rgba(var(--v-theme-warning), 0.3);
+  background: rgba(var(--v-theme-warning), 0.08);
 }
 
 .permission-table {

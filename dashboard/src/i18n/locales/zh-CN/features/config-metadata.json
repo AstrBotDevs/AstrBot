@@ -338,10 +338,18 @@
           "full": "不受限访问"
         },
         "unsupportedSelection": "当前策略不受支持",
-        "unsupported": "当前系统暂不支持本地隔离。",
-        "missingDependency": "未找到 {dependency}，隔离执行不可用。",
         "runtimeUnknown": "运行环境信息不可用。",
-        "memberWarning": "普通成员已获得联网或主机文件访问权限。"
+        "memberWarning": "普通成员已获得联网或主机文件访问权限。",
+        "runtime": {
+          "os": "操作系统",
+          "arch": "架构",
+          "sandbox": "本地隔离",
+          "status": {
+            "detected": "{backend} · 已检测到",
+            "missing": "缺少 {dependency}",
+            "unsupported": "暂不支持"
+          }
+        }
       }
     },
     "proactive_capability": {

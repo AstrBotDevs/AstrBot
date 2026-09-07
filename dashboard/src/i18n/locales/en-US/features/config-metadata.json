@@ -322,10 +322,18 @@
           "full": "Unrestricted access"
         },
         "unsupportedSelection": "Current policy is unsupported",
-        "unsupported": "Local isolation is not supported on this system.",
-        "missingDependency": "{dependency} was not found. Isolated execution is unavailable.",
         "runtimeUnknown": "Runtime information is unavailable.",
-        "memberWarning": "Members have network or host file access."
+        "memberWarning": "Members have network or host file access.",
+        "runtime": {
+          "os": "OS",
+          "arch": "Architecture",
+          "sandbox": "Local isolation",
+          "status": {
+            "detected": "{backend} · Detected",
+            "missing": "Missing {dependency}",
+            "unsupported": "Unsupported"
+          }
+        }
       }
     },
     "proactive_capability": {
