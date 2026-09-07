@@ -7,7 +7,7 @@ import type { ValidationResult, ValidationError, UsageReport, TranslationStats }
 
 export class I18nValidator {
   private baseLocale: string = 'zh-CN';
-  private supportedLocales: string[] = ['zh-CN', 'en-US'];
+  private supportedLocales: string[] = ['zh-CN', 'en-US', 'ru-RU', 'ja-JP'];
 
   /**
    * 验证翻译完整性

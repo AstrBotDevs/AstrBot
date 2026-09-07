@@ -1,0 +1,44 @@
+{
+  "title": "Alkaid ラボ",
+  "subtitle": "最先端の AI 機能を探索",
+  "comingSoon": "この先は、また今度探索しましょう。",
+  "page": {
+    "title": "The Alkaid Project.",
+    "subtitle": "AstrBot Alpha プロジェクト",
+    "navigation": {
+      "knowledgeBase": "ナレッジベース（プラグイン）",
+      "longTermMemory": "長期記憶レイヤー",
+      "other": "…"
+    }
+  },
+  "features": {
+    "knowledgeBase": "ナレッジベース",
+    "longTermMemory": "長期記憶",
+    "advancedChat": "高度なチャット",
+    "multiModal": "マルチモーダル対話"
+  },
+  "status": {
+    "experimental": "実験的",
+    "beta": "ベータ版",
+    "stable": "安定版",
+    "deprecated": "非推奨"
+  },
+  "sigma": {
+    "subtitle": "AstrBot 実験プロジェクト",
+    "visualization": "可視化",
+    "filterUserId": "ユーザー ID で絞り込む",
+    "filter": "絞り込む",
+    "resetFilter": "絞り込みをリセット",
+    "refreshGraph": "グラフを再読み込み",
+    "nodeDetails": "ノード詳細",
+    "id": "ID",
+    "type": "種類",
+    "name": "名前",
+    "userId": "ユーザー ID",
+    "timestamp": "タイムスタンプ",
+    "graphStats": "グラフ統計",
+    "nodeCount": "ノード数",
+    "edgeCount": "エッジ数",
+    "inDevelopment": "開発中"
+  }
+}

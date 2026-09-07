@@ -1,0 +1,2031 @@
+{
+  "ai_group": {
+    "name": "AI 設定",
+    "agent_runner": {
+      "description": "エージェントの実行方式",
+      "hint": "AI 会話のランナーを選択します。ランナーを切り替えると、新しい種類のデフォルト設定が適用され、以前の種類のパラメーターは引き継がれません。",
+      "provider_settings": {
+        "enable": {
+          "description": "有効化",
+          "hint": "AI 会話のマスタースイッチ"
+        }
+      },
+      "agent_runner": {
+        "runner_type": {
+          "description": "ランナー",
+          "labels": [
+            "組み込みエージェント",
+            "Dify",
+            "Coze",
+            "Alibaba Cloud Bailianアプリケーション",
+            "DeerFlow"
+          ]
+        }
+      }
+    },
+    "dify_runner": {
+      "description": "Dify 設定",
+      "agent_runner": {
+        "config": {
+          "dify_api_type": {
+            "description": "アプリケーションの種類"
+          },
+          "dify_api_key": {
+            "description": "API Key"
+          },
+          "dify_api_base": {
+            "description": "API Base URL"
+          },
+          "dify_workflow_output_key": {
+            "description": "ワークフロー出力変数名"
+          },
+          "dify_query_input_key": {
+            "description": "プロンプト入力変数名"
+          },
+          "variables": {
+            "description": "変数"
+          },
+          "timeout": {
+            "description": "タイムアウト（秒）"
+          },
+          "proxy": {
+            "description": "プロキシアドレス"
+          }
+        }
+      }
+    },
+    "coze_runner": {
+      "description": "Coze 設定",
+      "agent_runner": {
+        "config": {
+          "coze_api_key": {
+            "description": "API Key"
+          },
+          "bot_id": {
+            "description": "Bot ID"
+          },
+          "coze_api_base": {
+            "description": "API Base URL"
+          },
+          "auto_save_history": {
+            "description": "Coze が会話履歴を管理"
+          },
+          "timeout": {
+            "description": "タイムアウト（秒）"
+          },
+          "proxy": {
+            "description": "プロキシアドレス"
+          }
+        }
+      }
+    },
+    "dashscope_runner": {
+      "description": "Alibaba Cloud Bailianアプリケーション設定",
+      "agent_runner": {
+        "config": {
+          "dashscope_app_type": {
+            "description": "アプリケーションの種類"
+          },
+          "dashscope_api_key": {
+            "description": "API Key"
+          },
+          "dashscope_app_id": {
+            "description": "アプリケーション ID"
+          },
+          "rag_options": {
+            "pipeline_ids": {
+              "description": "ナレッジベース Pipeline ID"
+            },
+            "file_ids": {
+              "description": "ファイル ID"
+            },
+            "output_reference": {
+              "description": "参照を出力"
+            }
+          },
+          "variables": {
+            "description": "変数"
+          },
+          "timeout": {
+            "description": "タイムアウト（秒）"
+          },
+          "proxy": {
+            "description": "プロキシアドレス"
+          }
+        }
+      }
+    },
+    "deerflow_runner": {
+      "description": "DeerFlow 設定",
+      "agent_runner": {
+        "config": {
+          "deerflow_api_base": {
+            "description": "API Base URL"
+          },
+          "deerflow_api_key": {
+            "description": "API Key"
+          },
+          "deerflow_auth_header": {
+            "description": "Authorization Header"
+          },
+          "deerflow_assistant_id": {
+            "description": "Assistant ID"
+          },
+          "deerflow_model_name": {
+            "description": "モデル名の上書き"
+          },
+          "deerflow_thinking_enabled": {
+            "description": "思考モードを有効化"
+          },
+          "deerflow_plan_mode": {
+            "description": "計画モードを有効化"
+          },
+          "deerflow_subagent_enabled": {
+            "description": "サブエージェントを有効化"
+          },
+          "deerflow_max_concurrent_subagents": {
+            "description": "サブエージェントの最大同時実行数"
+          },
+          "deerflow_recursion_limit": {
+            "description": "再帰深度の上限"
+          },
+          "timeout": {
+            "description": "タイムアウト（秒）"
+          },
+          "proxy": {
+            "description": "プロキシアドレス"
+          }
+        }
+      }
+    },
+    "ai": {
+      "description": "モデル",
+      "hint": "組み込みエージェントが使用する会話モデルと、共通の画像説明モデル・音声モデルを設定します。",
+      "agent_runner": {
+        "config": {
+          "model": {
+            "provider_id": {
+              "description": "デフォルト会話モデル",
+              "hint": "空欄の場合は最初のモデルを使用します。"
+            },
+            "fallback_provider_ids": {
+              "description": "フォールバック会話モデル一覧",
+              "hint": "メインの会話モデルへのリクエストが失敗した場合、これらの会話モデルへ順番に切り替えます。"
+            },
+            "request_max_retries": {
+              "description": "リクエストの最大再試行回数",
+              "hint": "1 回のモデルリクエストで再試行可能なエラーが発生した場合の最大試行回数です。"
+            }
+          }
+        }
+      },
+      "provider_settings": {
+        "default_image_caption_provider_id": {
+          "description": "デフォルト画像説明モデル",
+          "hint": "空欄の場合は使用しません。非マルチモーダルモデルで利用できます。"
+        },
+        "image_caption_prompt": {
+          "description": "画像説明用プロンプト"
+        }
+      },
+      "provider_stt_settings": {
+        "enable": {
+          "description": "音声認識を有効化",
+          "hint": "STT のマスタースイッチ"
+        },
+        "provider_id": {
+          "description": "デフォルト音声認識モデル",
+          "hint": "ユーザーは /provider コマンドを使用して、セッションごとに STT モデルを選択することもできます。"
+        }
+      },
+      "provider_tts_settings": {
+        "enable": {
+          "description": "音声合成を有効化",
+          "hint": "TTS のマスタースイッチ"
+        },
+        "provider_id": {
+          "description": "デフォルト音声合成モデル"
+        },
+        "trigger_probability": {
+          "description": "TTS の実行確率"
+        }
+      }
+    },
+    "persona": {
+      "description": "ペルソナ",
+      "hint": "AstrBot にペルソナを設定します。",
+      "agent_runner": {
+        "config": {
+          "persona": {
+            "persona_id": {
+              "description": "デフォルトのペルソナ"
+            },
+            "safety_mode": {
+              "description": "セーフティモード",
+              "hint": "安全で健全な内容を出力するようモデルを誘導し、有害またはセンシティブな話題を避けます。"
+            },
+            "safety_mode_strategy": {
+              "description": "セーフティモードの方式",
+              "hint": "セーフティモードの適用方式を選択します。"
+            }
+          }
+        }
+      }
+    },
+    "knowledgebase": {
+      "description": "ナレッジベース",
+      "hint": "AstrBot の「外部の頭脳」です。",
+      "kb_names": {
+        "description": "ナレッジベース一覧",
+        "hint": "複数選択できます。"
+      },
+      "kb_fusion_top_k": {
+        "description": "統合検索結果数",
+        "hint": "複数のナレッジベースからの検索結果を統合した後に返す件数です。"
+      },
+      "kb_final_top_k": {
+        "description": "最終結果数",
+        "hint": "ナレッジベースから取得する結果数です。値を大きくすると関連情報が増える可能性がありますが、ノイズも増える場合があります。用途に応じて調整してください。"
+      },
+      "kb_agentic_mode": {
+        "description": "エージェント型ナレッジベース検索",
+        "hint": "有効にすると、ナレッジベース検索が LLM Tool として提供され、モデルが検索を実行するタイミングを自律的に判断します。モデルが関数呼び出しに対応している必要があります。"
+      }
+    },
+    "websearch": {
+      "description": "ウェブ検索",
+      "hint": "AstrBot がインターネットへアクセスし、最新情報を取得できるようにします。",
+      "provider_settings": {
+        "web_search": {
+          "description": "ウェブ検索を有効化"
+        },
+        "websearch_provider": {
+          "description": "ウェブ検索プロバイダー"
+        },
+        "websearch_tavily_key": {
+          "description": "Tavily API Key",
+          "hint": "複数の Key を追加してローテーションできます。"
+        },
+        "websearch_bocha_key": {
+          "description": "BoCha API Key",
+          "hint": "複数の Key を追加してローテーションできます。"
+        },
+        "websearch_brave_key": {
+          "description": "Brave Search API Key",
+          "hint": "複数の Key を追加してローテーションできます。"
+        },
+        "websearch_firecrawl_key": {
+          "description": "Firecrawl API Key",
+          "hint": "複数の Key を追加してローテーションできます。"
+        },
+        "websearch_anysearch_key": {
+          "description": "AnySearch API Key",
+          "hint": "複数の Key を追加してローテーションできます。空欄の場合は匿名モードを使用します（1 日あたりの無料枠あり）。"
+        },
+        "websearch_baidu_app_builder_key": {
+          "description": "Baidu Qianfan Smart Cloud APP Builder API Key",
+          "hint": "参照: [https://console.bce.baidu.com/iam/#/iam/apikey/list](https://console.bce.baidu.com/iam/#/iam/apikey/list)"
+        },
+        "web_search_link": {
+          "description": "引用元を表示"
+        },
+        "websearch_exa_key": {
+          "description": "Exa API Key",
+          "hint": "複数の Key を追加してローテーションできます。Key の取得: https://dashboard.exa.ai"
+        }
+      }
+    },
+    "file_extract": {
+      "description": "ドキュメント解析機能",
+      "provider_settings": {
+        "file_extract": {
+          "enable": {
+            "description": "ドキュメント解析機能を有効化"
+          },
+          "provider": {
+            "description": "ドキュメント解析プロバイダー"
+          },
+          "moonshotai_api_key": {
+            "description": "Moonshot AI API Key"
+          }
+        }
+      }
+    },
+    "agent_computer_use": {
+      "description": "コンピューター操作機能",
+      "hint": "AstrBot がローカル環境または隔離されたサンドボックス環境へアクセスし、より複雑なタスクを実行できるようにします。詳細：[コンピューター操作](https://docs.astrbot.app/en/use/computer.html)。",
+      "provider_settings": {
+        "computer_use_runtime": {
+          "description": "実行環境",
+          "hint": "エージェントにアクセスを許可する環境です。`local` はローカル環境、`sandbox` はサンドボックス環境、`none` はどの環境も許可しないことを示します。"
+        },
+        "computer_use_require_admin": {
+          "description": "AstrBot 管理者権限を必須にする",
+          "hint": "有効にすると、コンピューター操作機能の利用に AstrBot 管理者権限が必要になります。管理者は「プラットフォーム設定 -> 管理者」で追加できます。/sid コマンドで管理者 ID を確認できます。"
+        },
+        "sandbox": {
+          "booter": {
+            "description": "サンドボックス環境ドライバー"
+          },
+          "shipyard_neo_endpoint": {
+            "description": "Shipyard Neo API Endpoint",
+            "hint": "Shipyard Neo（Bay）サービスの API アドレスです。デフォルトは http://127.0.0.1:8114 です。"
+          },
+          "shipyard_neo_access_token": {
+            "description": "Shipyard Neo アクセストークン",
+            "hint": "Bay の API Key（sk-bay-...）です。空欄の場合は credentials.json から自動検出します。"
+          },
+          "shipyard_neo_profile": {
+            "description": "Shipyard Neo Profile",
+            "hint": "Shipyard Neo サンドボックスの profile（例: python-default）です。空欄の場合は、より多くの機能を備えた profile を自動選択します。"
+          },
+          "shipyard_neo_ttl": {
+            "description": "Shipyard Neo Sandbox の有効期間（秒）",
+            "hint": "Shipyard Neo サンドボックスの有効期間（秒）です。"
+          },
+          "cua_image": {
+            "description": "CUA イメージ",
+            "hint": "CUA サンドボックスのイメージまたは OS 種類です。デフォルトは linux です。linux、macos、windows、android を指定できますが、利用可能な値は CUA SDK の対応状況によります。"
+          },
+          "cua_os_type": {
+            "description": "CUA OS の種類",
+            "hint": "CUA サンドボックスの OS 種類です。デフォルトは linux です。"
+          },
+          "cua_idle_timeout": {
+            "description": "CUA アイドルタイムアウト（秒）",
+            "hint": "CUA サンドボックスのアイドルタイムアウト（秒）です。0 より大きい場合、セッションのアイドル時間がこの値に達すると AstrBot が CUA サンドボックスを自動的に終了します。0 は無効を示します。"
+          },
+          "cua_telemetry_enabled": {
+            "description": "CUA テレメトリ",
+            "hint": "CUA SDK によるテレメトリデータの送信を許可するかどうかを指定します。デフォルトは無効です。"
+          },
+          "cua_local": {
+            "description": "CUA ローカルサンドボックス",
+            "hint": "CUA ローカルサンドボックスを優先するかどうかを指定します。デフォルトで有効になっており、クラウドサンドボックス用の CUA_API_KEY を用意せずに利用できます。無効にすると CUA クラウドサンドボックスを使用できます。"
+          },
+          "cua_api_key": {
+            "description": "CUA API Key",
+            "hint": "CUA クラウドサンドボックスの API Key です。ローカルサンドボックスを無効にした場合のみ必要です。CUA_API_KEY 環境変数でも指定できます。"
+          },
+          "shipyard_endpoint": {
+            "description": "Shipyard API Endpoint",
+            "hint": "Shipyard サービスの API アクセス先です。"
+          },
+          "shipyard_access_token": {
+            "description": "Shipyard アクセストークン",
+            "hint": "Shipyard サービスへのアクセスに使用するトークンです。"
+          },
+          "shipyard_ttl": {
+            "description": "Shipyard Ship の有効期間（秒）",
+            "hint": "Shipyard セッションの有効期間（秒）です。"
+          },
+          "shipyard_max_sessions": {
+            "description": "Shipyard Ship のセッション再利用上限",
+            "hint": "1 つのインスタンスが処理できる最大セッション数を指定します。"
+          }
+        }
+      }
+    },
+    "proactive_capability": {
+      "description": "プロアクティブ機能",
+      "hint": "AstrBot が指定時刻にタスクを自動実行し、結果を届けられるようにします。詳細：[プロアクティブエージェント](https://docs.astrbot.app/en/use/proactive-agent.html)。",
+      "provider_settings": {
+        "proactive_capability": {
+          "add_cron_tools": {
+            "description": "有効化",
+            "hint": "有効にすると、プロアクティブエージェントに必要なツールがエージェントへ渡されます。将来の指定時刻に行うことを AstrBot に伝えると、予定どおりにタスクを実行して結果を送信します。"
+          }
+        }
+      }
+    },
+    "truncate_and_compress": {
+      "hint": "AstrBot が作業メモリを管理する方法を設定します。詳細：[コンテキスト管理方式](https://docs.astrbot.app/en/use/context-compress.html)。",
+      "description": "コンテキスト管理方式",
+      "agent_runner": {
+        "config": {
+          "compression": {
+            "max_turns": {
+              "description": "圧縮前に保持する最大会話ターン数",
+              "hint": "通常の会話履歴がこのターン数を超えた場合にのみ、以下の方式で永続的な切り捨てまたは LLM 圧縮を行います。リクエスト送信前にも、この値に基づいてコンテキストを制限します。-1 はターン数を制限しないことを示します。"
+            },
+            "trim_turns": {
+              "description": "上限超過時に一度に破棄するターン数",
+              "hint": "「圧縮前に保持する最大会話ターン数」を超え、LLM 圧縮を使用できない場合に、一度に破棄する古い会話のターン数です。リクエスト時の切り捨てにもこの値を使用します。"
+            },
+            "overflow_strategy": {
+              "description": "履歴の上限超過時またはコンテキスト上限接近時の処理方式",
+              "labels": [
+                "会話ターン数で切り捨て",
+                "LLM でコンテキストを圧縮"
+              ],
+              "hint": "通常の会話履歴では、「圧縮前に保持する最大会話ターン数」を超えた場合にのみこの方式を適用します。リクエスト送信前にも、コンテキストのトークン数がモデルのウィンドウ上限に近づいた場合、同じ方式でコンテキストを縮小し、リクエストがモデルの上限を超えないようにします。"
+            },
+            "instruction": {
+              "description": "コンテキスト圧縮用プロンプト",
+              "hint": "空欄の場合はデフォルトのプロンプトを使用します。"
+            },
+            "keep_recent_ratio": {
+              "description": "圧縮時に保持する直近コンテキストの割合",
+              "hint": "現在のコンテキストのトークン数に対する割合で直近の内容を保持します。範囲は 0～0.3 です。0.15 は 15% を保持することを示し、0 より大きい場合は少なくとも最後の 1 ターンを保持します。"
+            },
+            "provider_id": {
+              "description": "コンテキスト圧縮に使用するモデルプロバイダー ID",
+              "hint": "空欄の場合は現在のチャットモデルで圧縮します。モデルが利用できない場合や圧縮に失敗した場合は、「会話ターン数で切り捨て」方式にフォールバックします。"
+            },
+            "fallback_max_tokens": {
+              "description": "コンテキストウィンドウのフォールバック値",
+              "hint": "max_context_tokens が 0 で、モデルが組み込みメタデータに存在しない場合、この値をコンテキストウィンドウサイズとして使用します。デフォルトは 128000 です。"
+            }
+          }
+        }
+      }
+    },
+    "others": {
+      "description": "その他の設定",
+      "agent_runner": {
+        "config": {
+          "misc": {
+            "max_steps": {
+              "description": "ツール呼び出しの最大ターン数"
+            },
+            "tool_schema_mode": {
+              "description": "ツールスキーマモード",
+              "hint": "skills-like は最初にツール名と説明を渡し、その後にパラメーターを渡します。full は完全なパラメーターを一度に渡します。",
+              "labels": [
+                "Skills-like（2 段階）",
+                "Full（完全なパラメーター）"
+              ]
+            },
+            "tool_call_timeout": {
+              "description": "ツール呼び出しタイムアウト（秒）"
+            },
+            "sanitize_context_by_modalities": {
+              "description": "モデル機能に応じて履歴コンテキストをクリーンアップ",
+              "hint": "有効にすると、LLM への各リクエスト前に、現在のモデルプロバイダーで選択したモデルの機能に応じて、未対応の画像やツール呼び出し構造を会話から削除します（モデルが参照する履歴が変わります）。"
+            }
+          }
+        }
+      },
+      "provider_settings": {
+        "display_reasoning_text": {
+          "description": "思考内容を表示"
+        },
+        "identifier": {
+          "description": "ユーザー識別",
+          "hint": "有効にすると、プロンプトの先頭にユーザー ID 情報を含めます。"
+        },
+        "group_name_display": {
+          "description": "グループ名を表示",
+          "hint": "有効にすると、対応プラットフォーム（OneBot v11）でプロンプトの先頭にグループ名情報を含めます。"
+        },
+        "datetime_system_prompt": {
+          "description": "現実世界の時刻認識",
+          "hint": "有効にすると、システムプロンプトに現在時刻の情報を追加します。"
+        },
+        "show_tool_use_status": {
+          "description": "関数呼び出し状態を出力"
+        },
+        "show_tool_call_result": {
+          "description": "関数呼び出し結果を出力",
+          "hint": "「関数呼び出し状態を出力」が有効な場合のみ機能し、最大 70 文字まで表示します。"
+        },
+        "buffer_intermediate_messages": {
+          "description": "エージェントの中間メッセージを統合",
+          "hint": "有効にすると、非ストリーミングモードで複数ステップのツール呼び出し中に生成された中間テキストをバッファし、エージェントの完了後に 1 件の返信へ統合して送信します。"
+        },
+        "max_quoted_fallback_images": {
+          "description": "転送メッセージから取得する画像数の上限",
+          "hint": "転送メッセージの解析で取得した画像を注入する最大数です。超過分は切り捨てられます。"
+        },
+        "quoted_message_parser": {
+          "max_component_chain_depth": {
+            "description": "転送メッセージのリッチテキスト解析深度",
+            "hint": "転送メッセージ内のリッチテキストコンポーネントチェーンを解析する際に許可する最大再帰深度です。"
+          },
+          "max_forward_node_depth": {
+            "description": "転送メッセージのネスト解析深度",
+            "hint": "ネストされた転送ノードを解析する際に許可する最大再帰深度です。"
+          },
+          "max_forward_fetch": {
+            "description": "転送メッセージの再帰取得上限",
+            "hint": "get_forward_msg を再帰的に呼び出して転送内容を取得する最大回数です。"
+          },
+          "warn_on_action_failure": {
+            "description": "転送メッセージ解析失敗時に警告",
+            "hint": "有効にすると、get_msg/get_forward_msg のすべての試行が失敗した場合に warning ログを出力します。"
+          }
+        },
+        "streaming_response": {
+          "description": "ストリーミング出力"
+        },
+        "unsupported_streaming_strategy": {
+          "description": "ストリーミング返信に未対応のプラットフォーム",
+          "hint": "ストリーミング返信に対応していないプラットフォームでの処理方法を選択します。リアルタイム分割返信では、ストリーミング応答の受信中に句読点などの分割位置を検出すると、受信済みの内容を直ちに送信します。",
+          "labels": [
+            "リアルタイム分割返信",
+            "ストリーミング返信を無効化"
+          ]
+        },
+        "wake_prefix": {
+          "description": "LLM チャット用の追加呼び出しプレフィックス",
+          "hint": "呼び出しプレフィックスが `/`、追加チャットプレフィックスが `chat` の場合、LLM リクエストを実行するには `/chat` が必要です。"
+        },
+        "prompt_prefix": {
+          "description": "ユーザープロンプト",
+          "hint": "{{prompt}} をユーザー入力のプレースホルダーとして使用できます。プレースホルダーを指定しない場合は、ユーザー入力の前に追加されます。"
+        },
+        "image_compress_enabled": {
+          "description": "画像圧縮を有効化",
+          "hint": "有効にすると、マルチモーダルモデルへ送信する前に、サイズの大きいローカル画像を圧縮します。"
+        },
+        "image_compress_options": {
+          "description": "画像圧縮設定",
+          "hint": "画像圧縮のサイズ、品質、実行しきい値を設定します。",
+          "max_size": {
+            "description": "最大辺長",
+            "hint": "圧縮後の画像の長辺をピクセル単位で指定します。このサイズを超える場合は縦横比を維持して縮小します。"
+          },
+          "quality": {
+            "description": "JPEG 品質",
+            "hint": "JPEG の出力品質を 1～100 の範囲で指定します。値が高いほど画質が向上し、ファイルサイズも大きくなります。"
+          }
+        },
+        "reachability_check": {
+          "description": "プロバイダーの接続確認",
+          "hint": "/provider コマンドでモデルを一覧表示する際に、接続性を並行して確認します。有効にするとモデルを呼び出して接続をテストするため、追加のトークンを消費する場合があります。"
+        }
+      },
+      "provider_tts_settings": {
+        "dual_output": {
+          "description": "TTS 有効時に音声とテキストを同時に出力"
+        }
+      }
+    }
+  },
+  "platform_group": {
+    "name": "プラットフォーム設定",
+    "platform": {
+      "description": "メッセージプラットフォームアダプター",
+      "app_id": {
+        "description": "アプリケーション ID",
+        "hint": "メッセージプラットフォームの開発者コンソールで発行されたアプリケーション ID です。"
+      },
+      "app_secret": {
+        "description": "アプリケーションシークレット",
+        "hint": "メッセージプラットフォームの開発者コンソールで発行されたアプリケーションシークレットです。漏えいしないよう安全に管理してください。"
+      },
+      "domain": {
+        "description": "オープンプラットフォーム API アドレス",
+        "hint": "オープンプラットフォーム API のベースアドレスです。公式のデフォルトサービスを使用する場合、通常は変更不要です。"
+      },
+      "corpid": {
+        "description": "企業 ID",
+        "hint": "WeCom 管理画面の企業 ID（CorpID）です。"
+      },
+      "token": {
+        "description": "コールバック Token",
+        "hint": "メッセージプラットフォームのコールバック設定で、リクエストの検証に使用する Token です。"
+      },
+      "encoding_aes_key": {
+        "description": "メッセージ暗号化キー",
+        "hint": "メッセージプラットフォームのコールバック設定にある EncodingAESKey です。メッセージの暗号化と復号に使用します。"
+      },
+      "api_base_url": {
+        "description": "API ベースアドレス",
+        "hint": "メッセージプラットフォーム API のベースアドレスです。公式のデフォルトサービスを使用する場合、通常は変更不要です。"
+      },
+      "client_id": {
+        "description": "クライアント ID",
+        "hint": "メッセージプラットフォームの開発者コンソールで発行されたクライアント ID です。"
+      },
+      "client_secret": {
+        "description": "クライアントシークレット",
+        "hint": "メッセージプラットフォームの開発者コンソールで発行されたクライアントシークレットです。漏えいしないよう安全に管理してください。"
+      },
+      "start_message": {
+        "description": "Start コマンドの返信",
+        "hint": "ユーザーが Telegram Bot に /start コマンドを送信したときの返信内容です。"
+      },
+      "telegram_api_base_url": {
+        "description": "API アドレス",
+        "hint": "Telegram Bot API のベースアドレスです。公式サービスを使用する場合、通常は変更不要です。"
+      },
+      "telegram_file_base_url": {
+        "description": "ファイル API アドレス",
+        "hint": "Telegram Bot API のファイルダウンロード用インターフェースのベースアドレスです。公式サービスを使用する場合、通常は変更不要です。"
+      },
+      "bot_token": {
+        "description": "Slack Bot Token",
+        "hint": "Slack アプリの Bot User OAuth Token です。通常は xoxb- で始まります。"
+      },
+      "app_token": {
+        "description": "Slack App Token",
+        "hint": "Slack Socket Mode で使用する App-Level Token です。通常は xapp- で始まります。"
+      },
+      "signing_secret": {
+        "description": "Slack Signing Secret",
+        "hint": "Slack アプリの Signing Secret です。Webhook リクエストの検証に使用します。"
+      },
+      "channel_access_token": {
+        "description": "LINE チャネルアクセストークン",
+        "hint": "LINE Messaging API チャネルの Channel Access Token です。"
+      },
+      "channel_secret": {
+        "description": "LINE チャネルシークレット",
+        "hint": "LINE Messaging API チャネルの Channel Secret です。"
+      },
+      "active_send_mode": {
+        "description": "プロアクティブ送信 API を使用"
+      },
+      "appid": {
+        "description": "appid",
+        "hint": "必須項目です。現在のメッセージプラットフォームの AppID を指定します。取得方法は、各プラットフォームの連携ドキュメントを参照してください。"
+      },
+      "callback_server_host": {
+        "description": "コールバックサーバーのホスト",
+        "hint": "コールバックサーバーのホストです。空欄の場合、コールバックサーバーは有効になりません。"
+      },
+      "card_template_id": {
+        "description": "カードテンプレート ID",
+        "hint": "任意項目です。DingTalk のインタラクティブカードテンプレート ID です。有効にすると、ストリーミング返信にインタラクティブカードを使用します。"
+      },
+      "discord_activity_name": {
+        "description": "Discord アクティビティ名",
+        "hint": "任意の Discord アクティビティ名です。空欄の場合はアクティビティを設定しません。"
+      },
+      "discord_allow_bot_messages": {
+        "description": "Bot メッセージの受信を許可",
+        "hint": "有効にすると、AstrBot が他の Discord Bot からのメッセージを受信します。メッセージ転送など、ボット間通信に適しています。デフォルトは無効です。"
+      },
+      "discord_command_register": {
+        "description": "Discord コマンドを登録",
+        "hint": "有効にすると、プラグインコマンドを Discord のスラッシュコマンドとして自動登録します。"
+      },
+      "discord_proxy": {
+        "description": "Discord プロキシアドレス",
+        "hint": "任意のプロキシアドレス: http://ip:port"
+      },
+      "discord_token": {
+        "description": "Discord Bot Token",
+        "hint": "ここに Discord Bot Token を入力してください。"
+      },
+      "enable": {
+        "description": "有効化",
+        "hint": "このアダプターを有効にするかどうかを指定します。無効なアダプターに対応するメッセージプラットフォームでは、メッセージを受信しません。"
+      },
+      "enable_group_c2c": {
+        "description": "メッセージ一覧のダイレクトメッセージを有効化",
+        "hint": "有効にすると、ボットが QQ のメッセージ一覧にあるダイレクトメッセージを受信できます。QQ Bot プラットフォームで QR コードをスキャンし、Bot を友だちに追加する必要がある場合があります。詳細はドキュメントを参照してください。"
+      },
+      "enable_guild_direct_message": {
+        "description": "チャンネルのダイレクトメッセージを有効化",
+        "hint": "有効にすると、ボットがチャンネルのダイレクトメッセージを受信できます。"
+      },
+      "id": {
+        "description": "ボット名",
+        "hint": "ボット名"
+      },
+      "is_sandbox": {
+        "description": "サンドボックスモード"
+      },
+      "kf_name": {
+        "description": "WeCom カスタマーサービスアカウント名",
+        "hint": "この項目を入力すると、WeCom アプリではなく WeCom カスタマーサービスを使用します。https://kf.weixin.qq.com/kf/frame#/accounts で取得できます。"
+      },
+      "lark_connection_mode": {
+        "description": "接続方式",
+        "labels": [
+          "常時接続モード",
+          "Webhook サーバーモード"
+        ]
+      },
+      "lark_encrypt_key": {
+        "description": "Encrypt Key",
+        "hint": "Lark のコールバックデータを復号するための暗号化キー"
+      },
+      "lark_verification_token": {
+        "description": "Verification Token",
+        "hint": "Lark のコールバックリクエストを検証するためのトークン"
+      },
+      "misskey_allow_insecure_downloads": {
+        "description": "安全でないダウンロードを許可（SSL 検証を無効化）",
+        "hint": "リモートサーバーの証明書に問題があり正常にダウンロードできない場合、フォールバックとして SSL 検証を自動的に無効化します。一部の画像ホスティングサービスの証明書設定に問題がある場合に使用します。セキュリティ上のリスクがあるため、必要な場合にのみ有効にしてください。"
+      },
+      "misskey_default_visibility": {
+        "description": "デフォルトの投稿公開範囲",
+        "hint": "ボットが投稿する際のデフォルト公開範囲です。public: 公開、home: ホームタイムライン、followers: フォロワーのみ。"
+      },
+      "misskey_download_chunk_size": {
+        "description": "ストリーミングダウンロードのチャンクサイズ（バイト）",
+        "hint": "ストリーミングダウンロードと MD5 計算で 1 回に読み取るバイト数です。小さすぎるとオーバーヘッドが増え、大きすぎるとメモリ使用量が増えます。"
+      },
+      "misskey_download_timeout": {
+        "description": "リモートダウンロードのタイムアウト（秒）",
+        "hint": "リモートファイルをダウンロードする際のタイムアウト（秒）です。非同期アップロードからローカルアップロードへフォールバックする場合に使用します。"
+      },
+      "misskey_enable_chat": {
+        "description": "チャットメッセージへの応答を有効化",
+        "hint": "有効にすると、ボットがダイレクトチャットメッセージを監視して応答します。"
+      },
+      "misskey_enable_file_upload": {
+        "description": "Misskey へのファイルアップロードを有効化",
+        "hint": "有効にすると、アダプターがメッセージチェーン内のファイルを Misskey へアップロードします。URL ファイルは最初にサーバー側アップロードを試行し、非同期アップロードに失敗した場合はダウンロード後のローカルアップロードへフォールバックします。"
+      },
+      "misskey_instance_url": {
+        "description": "Misskey インスタンス URL",
+        "hint": "例: https://misskey.example。Bot アカウントが存在する Misskey インスタンスのアドレスを入力します。"
+      },
+      "misskey_local_only": {
+        "description": "ローカルのみ（連合しない）",
+        "hint": "有効にすると、ボットの投稿はこのインスタンス内でのみ表示され、他のインスタンスには連合されません。"
+      },
+      "misskey_max_download_bytes": {
+        "description": "ダウンロード可能な最大バイト数（超過時は中止）",
+        "hint": "OOM を防ぐためにダウンロードファイルの最大サイズを制限する場合は、最大バイト数を入力します。空欄または null は無制限を示します。"
+      },
+      "misskey_token": {
+        "description": "Misskey Access Token",
+        "hint": "連携サービスの設定で生成された API 認証用アクセストークンです。"
+      },
+      "misskey_upload_concurrency": {
+        "description": "同時アップロード数の上限",
+        "hint": "同時に実行するファイルアップロードタスクの上限です（整数、デフォルトは 3）。"
+      },
+      "misskey_upload_folder": {
+        "description": "Drive のアップロード先フォルダー ID",
+        "hint": "任意項目です。Misskey Drive のアップロード先フォルダー ID を入力すると、ファイルがそのフォルダーに保存されます。空欄の場合はアカウントの Drive ルートを使用します。"
+      },
+      "port": {
+        "description": "コールバックサーバーのポート",
+        "hint": "コールバックサーバーのポートです。空欄の場合、コールバックサーバーは有効になりません。"
+      },
+      "satori_api_base_url": {
+        "description": "Satori API エンドポイント",
+        "hint": "Satori API のベースアドレスです。"
+      },
+      "satori_auto_reconnect": {
+        "description": "自動再接続を有効化",
+        "hint": "切断時に WebSocket へ自動的に再接続するかどうかを指定します。"
+      },
+      "satori_endpoint": {
+        "description": "Satori WebSocket エンドポイント",
+        "hint": "Satori イベント用の WebSocket エンドポイントです。"
+      },
+      "satori_heartbeat_interval": {
+        "description": "Satori ハートビート間隔",
+        "hint": "ハートビートメッセージを送信する間隔（秒）です。"
+      },
+      "satori_reconnect_delay": {
+        "description": "Satori 再接続待機時間",
+        "hint": "再接続を試行するまでの待機時間（秒）です。"
+      },
+      "satori_token": {
+        "description": "Satori Token",
+        "hint": "Satori API の認証に使用する Token です。"
+      },
+      "secret": {
+        "description": "secret",
+        "hint": "必須項目です。"
+      },
+      "slack_connection_mode": {
+        "description": "Slack Connection Mode",
+        "hint": "Slack の接続モードです。`webhook` は webhook サーバー、`socket` は Slack の Socket Mode を使用します。"
+      },
+      "slack_webhook_host": {
+        "description": "Slack Webhook Host",
+        "hint": "Slack の接続モードが `webhook` の場合のみ有効です。"
+      },
+      "slack_webhook_path": {
+        "description": "Slack Webhook Path",
+        "hint": "Slack の接続モードが `webhook` の場合のみ有効です。"
+      },
+      "slack_webhook_port": {
+        "description": "Slack Webhook Port",
+        "hint": "Slack の接続モードが `webhook` の場合のみ有効です。"
+      },
+      "telegram_command_auto_refresh": {
+        "description": "コマンドの自動更新",
+        "hint": "有効にすると、AstrBot が実行中に Telegram コマンドを自動更新します。（この項目だけを設定しても機能しません）"
+      },
+      "telegram_command_register": {
+        "description": "コマンド登録",
+        "hint": "有効にすると、AstrBot が Telegram コマンドを自動登録します。"
+      },
+      "telegram_command_register_interval": {
+        "description": "コマンド自動更新間隔",
+        "hint": "Telegram コマンドの自動更新間隔（秒）です。"
+      },
+      "telegram_polling_restart_delay": {
+        "description": "ポーリング再起動待機時間",
+        "hint": "ポーリングが予期せず終了し、自動再起動を試行するまでの待機時間（秒）です。デフォルトは 5s です。"
+      },
+      "telegram_token": {
+        "description": "Bot Token",
+        "hint": "中国本土のネットワーク環境を使用している場合は、`その他の設定` でプロキシを設定するか、api_base を変更してください。"
+      },
+      "mattermost_url": {
+        "description": "Mattermost URL",
+        "hint": "Mattermost サービスのアドレスです。例: https://chat.example.com。"
+      },
+      "mattermost_bot_token": {
+        "description": "Mattermost Bot Token",
+        "hint": "Mattermost で Bot アカウントを作成した後に生成されるアクセストークンです。"
+      },
+      "mattermost_reconnect_delay": {
+        "description": "Mattermost 再接続待機時間",
+        "hint": "WebSocket 切断後に再接続するまでの待機時間（秒）です。デフォルトは 5 秒です。"
+      },
+      "type": {
+        "description": "アダプターの種類"
+      },
+      "unified_webhook_mode": {
+        "description": "統合 Webhook モード",
+        "hint": "Webhook モードで AstrBot の統合 Webhook エントリーポイントを使用し、個別のポートを開く必要をなくします。コールバックアドレスは /api/v1/webhooks/platforms/{webhook_uuid} です。"
+      },
+      "webhook_uuid": {
+        "description": "Webhook UUID",
+        "hint": "統合 Webhook モードの一意識別子です。プラットフォームの作成時に自動生成されます。"
+      },
+      "wecom_ai_bot_name": {
+        "description": "WeCom AI ボット名",
+        "hint": "一部のコマンドが使用できなくなるため、正しい値を入力してください。"
+      },
+      "wecom_ai_bot_connection_mode": {
+        "description": "WeCom AI Bot の接続モード",
+        "hint": "Webhook コールバックモードでは Token/EncodingAESKey、常時接続モードでは BotID/Secret の設定が必要です。"
+      },
+      "wecomaibot_friend_message_welcome_text": {
+        "description": "WeCom AI Bot のダイレクトメッセージ歓迎文",
+        "hint": "任意項目です。ユーザーがその日に AI Bot とのダイレクトメッセージセッションを開始した際に、「💭 考え中...」などの歓迎文を返信します。空欄の場合は返信しません。"
+      },
+      "wecomaibot_init_respond_text": {
+        "description": "WeCom AI Bot の初期応答テキスト",
+        "hint": "任意項目です。ボットがメッセージを受信した際に最初に返信するテキストです。空欄の場合は設定しません。"
+      },
+      "wecomaibot_token": {
+        "description": "WeCom AI Bot Token",
+        "hint": "Webhook コールバックモードの認証に使用します。"
+      },
+      "wecomaibot_encoding_aes_key": {
+        "description": "WeCom AI Bot EncodingAESKey",
+        "hint": "Webhook コールバックモードのメッセージ暗号化と復号に使用します。"
+      },
+      "wecomaibot_ws_bot_id": {
+        "description": "常時接続 BotID",
+        "hint": "WeCom AI Bot の常時接続モードで使用する BotID 認証情報です。"
+      },
+      "wecomaibot_ws_secret": {
+        "description": "常時接続 Secret",
+        "hint": "WeCom AI Bot の常時接続モードで使用する Secret 認証情報です。"
+      },
+      "wecomaibot_ws_url": {
+        "description": "常時接続 WebSocket アドレス",
+        "hint": "デフォルトは wss://openws.work.weixin.qq.com です。通常は変更不要です。"
+      },
+      "wecomaibot_heartbeat_interval": {
+        "description": "常時接続のハートビート間隔",
+        "hint": "常時接続モードのハートビート間隔（秒）です。30 秒を推奨します。"
+      },
+      "wpp_active_message_poll": {
+        "description": "プロアクティブメッセージのポーリングを有効化",
+        "hint": "WeChat メッセージが AstrBot に適時同期されない場合にのみ有効にしてください。デフォルトは無効です。"
+      },
+      "wpp_active_message_poll_interval": {
+        "description": "プロアクティブメッセージのポーリング間隔",
+        "hint": "プロアクティブメッセージのポーリング間隔（秒）です。デフォルトは 3 秒です。古いメッセージと判断される可能性があるため、60 秒を超えないようにしてください。"
+      },
+      "ws_reverse_host": {
+        "description": "リバース WebSocket ホスト",
+        "hint": "AstrBot がサーバーとして動作します。"
+      },
+      "ws_reverse_port": {
+        "description": "リバース WebSocket ポート"
+      },
+      "ws_reverse_token": {
+        "description": "リバース WebSocket Token",
+        "hint": "リバース WebSocket Token です。未設定の場合、Token 検証は有効になりません。"
+      },
+      "msg_push_webhook_url": {
+        "description": "WeCom メッセージプッシュ Webhook URL",
+        "hint": "任意項目です。プロアクティブメッセージのプッシュに使用します。WeCom グループの「メッセージプッシュ」から URL を取得してください。より良いメッセージ送信体験のため、設定を推奨します。"
+      },
+      "only_use_webhook_url_to_send": {
+        "description": "Webhook のみでメッセージを送信",
+        "hint": "任意項目です。有効にすると、WeCom AI Bot のすべての返信をメッセージプッシュ Webhook 経由で送信します。メッセージプッシュ Webhook は画像やファイルなど、より多くのメッセージ形式に対応しています。タイプライター効果が不要な場合は、このオプションを強く推奨します。"
+      },
+      "weixin_oc_base_url": {
+        "description": "Base URL アドレス",
+        "hint": "デフォルト: https://ilinkai.weixin.qq.com"
+      },
+      "weixin_oc_bot_type": {
+        "description": "QR コードログインパラメーター bot_type",
+        "hint": "デフォルト: 3"
+      },
+      "weixin_oc_qr_poll_interval": {
+        "description": "QR コード状態のポーリング間隔（秒）",
+        "hint": "QR コードの状態をポーリングする間隔（秒）です。"
+      },
+      "weixin_oc_long_poll_timeout_ms": {
+        "description": "getUpdates ロングポーリングタイムアウト（ミリ秒）",
+        "hint": "セッションメッセージ取得インターフェースのタイムアウトパラメーターです。"
+      },
+      "weixin_oc_api_timeout_ms": {
+        "description": "HTTP リクエストタイムアウト（ミリ秒）",
+        "hint": "共通 API リクエストのタイムアウトパラメーターです。"
+      },
+      "weixin_oc_token": {
+        "description": "ログイン後のトークン（任意）",
+        "hint": "QR コードログインに成功すると自動的に設定されます。高度な用途では手動入力も可能です。"
+      },
+      "kook_bot_token": {
+        "description": "Bot Token",
+        "type": "string",
+        "hint": "必須項目です。KOOK Developer Platform で取得した Bot Token を指定します。"
+      },
+      "kook_reconnect_delay": {
+        "description": "再接続待機時間",
+        "type": "int",
+        "hint": "再接続までの待機時間（秒）です。指数バックオフ方式を使用します。"
+      },
+      "kook_max_reconnect_delay": {
+        "description": "最大再接続待機時間",
+        "type": "int",
+        "hint": "再接続待機時間の最大値（秒）です。"
+      },
+      "kook_max_retry_delay": {
+        "description": "最大再試行待機時間",
+        "type": "int",
+        "hint": "再試行の最大待機時間（秒）です。"
+      },
+      "kook_heartbeat_interval": {
+        "description": "ハートビート間隔",
+        "type": "int",
+        "hint": "ハートビート確認の間隔（秒）です。"
+      },
+      "kook_heartbeat_timeout": {
+        "description": "ハートビートタイムアウト",
+        "type": "int",
+        "hint": "ハートビート確認のタイムアウト（秒）です。"
+      },
+      "kook_max_heartbeat_failures": {
+        "description": "ハートビートの最大失敗回数",
+        "type": "int",
+        "hint": "許容するハートビート失敗回数の上限です。超過すると接続を切断します。"
+      },
+      "kook_max_consecutive_failures": {
+        "description": "最大連続失敗回数",
+        "type": "int",
+        "hint": "許容する連続失敗回数の上限です。超過すると再試行を停止します。"
+      }
+    },
+    "general": {
+      "description": "基本設定",
+      "admins_id": {
+        "description": "管理者 ID"
+      },
+      "platform_settings": {
+        "unique_session": {
+          "description": "セッションを分離",
+          "hint": "有効にすると、グループメンバーごとに独立したコンテキストを使用します。"
+        },
+        "friend_message_needs_wake_prefix": {
+          "description": "ダイレクトメッセージでウェイクワードを必須にする"
+        },
+        "reply_prefix": {
+          "description": "返信テキストのプレフィックス"
+        },
+        "reply_with_mention": {
+          "description": "返信時に送信者をメンション"
+        },
+        "reply_with_quote": {
+          "description": "返信時に送信者のメッセージを引用"
+        },
+        "forward_threshold": {
+          "description": "転送メッセージの文字数しきい値"
+        },
+        "empty_mention_waiting": {
+          "description": "ボットへのメンションのみで待機を開始"
+        }
+      },
+      "wake_prefix": {
+        "description": "ウェイクワード"
+      },
+      "disable_builtin_commands": {
+        "description": "組み込みコマンドを無効化",
+        "hint": "help、sid、new など、AstrBot のすべての組み込みコマンドを無効にします。"
+      }
+    },
+    "whitelist": {
+      "description": "ホワイトリスト",
+      "platform_settings": {
+        "enable_id_white_list": {
+          "description": "ホワイトリストを有効化",
+          "hint": "有効にすると、ホワイトリストに登録されたセッションにのみ応答します。ホワイトリストが空の場合は無効とみなし、すべての ID を許可します。"
+        },
+        "id_whitelist": {
+          "description": "ホワイトリスト ID 一覧",
+          "hint": "/sid で ID を取得できます。一覧が空の場合、このホワイトリストは無効です（すべての ID が許可されます）。"
+        },
+        "id_whitelist_log": {
+          "description": "ログを出力",
+          "hint": "有効にすると、メッセージがホワイトリストを通過しなかった場合に INFO レベルのログを出力します。"
+        },
+        "wl_ignore_admin_on_group": {
+          "description": "管理者のグループメッセージは ID ホワイトリストを無視"
+        },
+        "wl_ignore_admin_on_friend": {
+          "description": "管理者のダイレクトメッセージは ID ホワイトリストを無視"
+        }
+      }
+    },
+    "rate_limit": {
+      "description": "レート制限",
+      "platform_settings": {
+        "rate_limit": {
+          "time": {
+            "description": "メッセージレート制限の時間枠（秒）"
+          },
+          "count": {
+            "description": "時間枠内の最大メッセージ数"
+          },
+          "strategy": {
+            "description": "レート制限方式"
+          }
+        }
+      }
+    },
+    "content_safety": {
+      "description": "コンテンツセーフティ",
+      "content_safety": {
+        "also_use_in_response": {
+          "description": "モデルの応答内容も確認"
+        },
+        "baidu_aip": {
+          "enable": {
+            "description": "Baidu コンテンツセーフティ審査を使用",
+            "hint": "baidu-aip ライブラリを手動でインストールする必要があります。"
+          },
+          "app_id": {
+            "description": "App ID"
+          },
+          "api_key": {
+            "description": "API Key"
+          },
+          "secret_key": {
+            "description": "Secret Key"
+          }
+        },
+        "internal_keywords": {
+          "enable": {
+            "description": "キーワードチェック"
+          },
+          "extra_keywords": {
+            "description": "追加キーワード",
+            "hint": "追加のブロック対象キーワード一覧です。正規表現に対応しています。"
+          }
+        }
+      }
+    },
+    "t2i": {
+      "description": "長文の画像化",
+      "t2i": {
+        "description": "長文を画像として出力"
+      },
+      "t2i_word_threshold": {
+        "description": "画像化する文字数のしきい値"
+      }
+    },
+    "others": {
+      "description": "その他の設定",
+      "platform_settings": {
+        "ignore_bot_self_message": {
+          "description": "ボット自身のメッセージを無視"
+        },
+        "ignore_at_all": {
+          "description": "@全員メンションイベントを無視"
+        },
+        "no_permission_reply": {
+          "description": "ユーザーの権限不足時に返信"
+        }
+      },
+      "platform_specific": {
+        "lark": {
+          "pre_ack_emoji": {
+            "enable": {
+              "description": "[Lark] 事前応答リアクションを有効化"
+            },
+            "emojis": {
+              "description": "リアクション一覧（Lark リアクション列挙名）",
+              "hint": "リアクション列挙名の参照: [https://open.feishu.cn/document/server-docs/im-v1/message-reaction/emojis-introduce](https://open.feishu.cn/document/server-docs/im-v1/message-reaction/emojis-introduce)"
+            }
+          }
+        },
+        "telegram": {
+          "pre_ack_emoji": {
+            "enable": {
+              "description": "[Telegram] 事前応答リアクションを有効化"
+            },
+            "emojis": {
+              "description": "リアクション一覧（Unicode）",
+              "hint": "Telegram は固定のリアクションセットのみ対応しています。参照: [https://gist.github.com/Soulter/3f22c8e5f9c7e152e967e8bc28c97fc9](https://gist.github.com/Soulter/3f22c8e5f9c7e152e967e8bc28c97fc9)"
+            }
+          }
+        },
+        "discord": {
+          "pre_ack_emoji": {
+            "enable": {
+              "description": "[Discord] 事前応答リアクションを有効化"
+            },
+            "emojis": {
+              "description": "リアクション一覧（Unicode またはカスタム絵文字名）",
+              "hint": "Unicode 絵文字を入力します。例: 👍、🤔、⏳"
+            }
+          }
+        }
+      }
+    }
+  },
+  "plugin_group": {
+    "name": "プラグイン設定",
+    "plugin": {
+      "description": "プラグイン",
+      "plugin_set": {
+        "description": "利用可能なプラグイン",
+        "hint": "無効化されていないすべてのプラグインがデフォルトで有効になります。プラグインページで無効化されている場合、ここでの選択は反映されません。"
+      }
+    }
+  },
+  "ext_group": {
+    "name": "拡張機能",
+    "segmented_reply": {
+      "description": "分割返信",
+      "platform_settings": {
+        "segmented_reply": {
+          "enable": {
+            "description": "分割返信を有効化"
+          },
+          "only_llm_result": {
+            "description": "LLM の結果のみ分割"
+          },
+          "interval_method": {
+            "description": "間隔の算出方法",
+            "hint": "random はランダムな待機時間を使用し、log はメッセージ長から待機時間を算出します。$y=log_{log\\_base}(x)$ で、x は文字数、y の単位は秒です。"
+          },
+          "interval": {
+            "description": "ランダム間隔時間",
+            "hint": "形式: 最小値,最大値（例: 1.5,3.5）"
+          },
+          "log_base": {
+            "description": "対数の底",
+            "hint": "対数間隔の底です。デフォルトは 2.6、範囲は 1.0～10.0 です。"
+          },
+          "words_count_threshold": {
+            "description": "分割返信の文字数しきい値",
+            "hint": "分割返信を行う文字数の上限です。この値未満のメッセージのみ分割し、超える長文は分割せずそのまま送信します。デフォルトは 150 です。"
+          },
+          "split_mode": {
+            "description": "分割モード",
+            "hint": "メッセージの分割に使用します。デフォルトでは句点や疑問符などの句読点に基づいて分割します。`[。？！]` を入力すると、すべての句点、疑問符、感嘆符が削除されます。re.findall(r'<regex>', text)",
+            "labels": [
+              "正規表現",
+              "分割語句一覧"
+            ]
+          },
+          "regex": {
+            "description": "分割用正規表現",
+            "hint": "正規表現の規則に基づいて分割位置を検出します。区切り文字に一致するパターンを推奨します。"
+          },
+          "split_words": {
+            "description": "分割語句一覧",
+            "hint": "一覧内のいずれかの語句を検出したときに分割します。"
+          },
+          "content_cleanup_rule": {
+            "description": "コンテンツフィルター用正規表現",
+            "hint": "分割後のコンテンツから指定した内容を削除します。`[。?!]` を入力すると、すべての句点、疑問符、感嘆符が削除されます。"
+          }
+        }
+      }
+    },
+    "ltm": {
+      "description": "グループチャットのコンテキスト認識",
+      "provider_ltm_settings": {
+        "group_icl_enable": {
+          "description": "グループチャット履歴をコンテキストへ注入"
+        },
+        "group_message_max_cnt": {
+          "description": "コンテキストへ注入する最大メッセージ数"
+        },
+        "image_caption": {
+          "description": "画像を自動解析",
+          "hint": "グループチャット用の画像説明モデルを設定する必要があります。"
+        },
+        "image_caption_provider_id": {
+          "description": "グループチャット用画像説明モデル",
+          "hint": "グループチャット履歴をコンテキストへ注入する際の画像認識に使用します。デフォルトの画像説明モデルとは別に設定します。"
+        },
+        "group_message_history_enable": {
+          "description": "グループチャット履歴を永続化",
+          "hint": "有効にするとグループメッセージを保存し、現在のグループチャット履歴を検索するツールをモデルへ提供します。現在、メディアメッセージの保存には対応しておらず、[Image] などのプレースホルダーテキストとして保存されます。"
+        },
+        "group_message_history_max_cnt": {
+          "description": "永続化する最大メッセージ数"
+        },
+        "active_reply": {
+          "enable": {
+            "description": "プロアクティブ返信"
+          },
+          "method": {
+            "description": "プロアクティブ返信の方式"
+          },
+          "possibility_reply": {
+            "description": "返信確率",
+            "hint": "0.0～1.0 の値"
+          },
+          "whitelist": {
+            "description": "プロアクティブ返信のホワイトリスト",
+            "hint": "空欄の場合、ホワイトリストによる絞り込みは無効です。/sid で ID を取得できます。"
+          }
+        }
+      }
+    }
+  },
+  "system_group": {
+    "name": "システム設定",
+    "system": {
+      "description": "システム設定",
+      "t2i_strategy": {
+        "description": "テキスト画像化方式",
+        "hint": "長文を画像としてレンダリングする方式です。`remote` はリモートの HTML ベースのレンダリングサービス、`local` は PIL によるローカルレンダリングを使用します。`local` を使用する場合、`font.ttf` という名前の TTF フォントを data ディレクトリに配置すると、フォントをカスタマイズできます。"
+      },
+      "t2i_endpoint": {
+        "description": "テキスト画像化サービスの API アドレス",
+        "hint": "空欄の場合は AstrBot API サービスを使用します。"
+      },
+      "t2i_template": {
+        "description": "テキスト画像化用カスタムテンプレート",
+        "hint": "有効にすると、テキスト画像化に使用する HTML テンプレートをカスタマイズできます。"
+      },
+      "t2i_active_template": {
+        "description": "現在適用中のテキスト画像化テンプレート",
+        "hint": "この値は、テキスト画像化テンプレート管理ページで管理されます。"
+      },
+      "log_level": {
+        "description": "コンソールログレベル",
+        "hint": "コンソールへ出力するログのレベルです。"
+      },
+      "log_file_enable": {
+        "description": "ファイルログを有効化",
+        "hint": "コンソールへ出力すると同時に、ログをファイルへ書き込みます。"
+      },
+      "log_file_path": {
+        "description": "ログファイルのパス",
+        "hint": "相対パスは data ディレクトリを基準とします（例: logs/astrbot.log）。絶対パスにも対応しています。"
+      },
+      "log_file_max_mb": {
+        "description": "ログファイルの最大サイズ（MB）",
+        "hint": "サイズを超えると自動的にローテーションします。デフォルトは 20MB です。"
+      },
+      "temp_dir_max_size": {
+        "description": "一時ディレクトリの最大サイズ（MB）",
+        "hint": "data/temp ディレクトリの合計サイズを MB 単位で制限します。システムは 10 分ごとに確認し、上限を超えると更新日時の古いファイルから削除して、現在のサイズの約 30% を解放します。"
+      },
+      "trace_log_enable": {
+        "description": "Trace ファイルログを有効化",
+        "hint": "Trace イベントを個別のファイルへ書き込みます（コンソール出力には影響しません）。"
+      },
+      "trace_log_path": {
+        "description": "Trace ログファイルのパス",
+        "hint": "相対パスは data ディレクトリを基準とします（例: logs/astrbot.trace.log）。絶対パスにも対応しています。"
+      },
+      "trace_log_max_mb": {
+        "description": "Trace ログの最大サイズ（MB）",
+        "hint": "サイズを超えると自動的にローテーションします。デフォルトは 20MB です。"
+      },
+      "pip_install_arg": {
+        "description": "pip インストールの追加引数",
+        "hint": "プラグインの依存関係をインストールする際は、Python の pip を使用します。`--break-system-package` などの追加引数を指定できます。"
+      },
+      "pypi_index_url": {
+        "description": "PyPI リポジトリアドレス",
+        "hint": "Python の依存関係をインストールする際に使用する PyPI リポジトリアドレスです。デフォルトは [https://mirrors.aliyun.com/pypi/simple/](https://mirrors.aliyun.com/pypi/simple/) です。"
+      },
+      "callback_api_base": {
+        "description": "外部からアクセス可能なコールバック API アドレス",
+        "hint": "外部サービスは、AstrBot が生成したコールバックリンク（ファイルダウンロードリンクなど）を通じて AstrBot バックエンドへアクセスする場合があります。AstrBot はデプロイ環境で外部から到達可能なホストアドレス（ホスト）を自動判定できないため、この設定で外部サービスから AstrBot へアクセスするアドレスを明示的に指定します。例: [http://localhost:6185](http://localhost:6185)、[https://example.com](https://example.com)。"
+      },
+      "disable_metrics": {
+        "description": "匿名利用統計を無効化",
+        "hint": "この設定を有効にすると、AstrBot は匿名の利用統計データをアップロードしません。"
+      },
+      "dashboard": {
+        "trust_proxy_headers": {
+          "description": "プロキシリクエストヘッダーからのクライアント IP を信頼",
+          "hint": "無効にすると X-Forwarded-For/X-Real-IP を無視し、接続元アドレスのみを使用します。"
+        },
+        "auth_rate_limit": {
+          "enable": {
+            "description": "ログイン認証のレート制限を有効化",
+            "hint": "無効にすると、ログインや TOTP などの認証エンドポイントにレート制限を適用しません。"
+          },
+          "average_interval": {
+            "description": "認証エンドポイントの平均レート制限間隔（秒）",
+            "hint": "認証リクエスト間の最小平均間隔です。たとえば 1.0 に設定すると、1 秒あたり最大 1 リクエストを処理します。"
+          },
+          "max_burst": {
+            "description": "認証エンドポイントの最大バースト数",
+            "hint": "瞬間的に許可するバーストリクエストの最大数です。たとえば 3 に設定すると、短時間に最大 3 件のリクエストを連続処理できます。"
+          }
+        },
+        "ssl": {
+          "enable": {
+            "description": "WebUI HTTPS を有効化",
+            "hint": "有効にすると、WebUI が HTTPS で直接サービスを提供します。"
+          },
+          "cert_file": {
+            "description": "SSL 証明書ファイルのパス",
+            "hint": "証明書ファイルのパス（PEM）です。絶対パスと、現在の作業ディレクトリを基準とする相対パスに対応しています。"
+          },
+          "key_file": {
+            "description": "SSL 秘密鍵ファイルのパス",
+            "hint": "秘密鍵ファイルのパス（PEM）です。絶対パスと、現在の作業ディレクトリを基準とする相対パスに対応しています。"
+          },
+          "ca_certs": {
+            "description": "SSL CA 証明書ファイルのパス",
+            "hint": "任意項目です。CA 証明書ファイルのパスを指定します。"
+          }
+        },
+        "totp": {
+          "enable": {
+            "description": "WebUI の TOTP 二要素認証を有効化",
+            "hint": "有効にすると、WebUI へのログイン時に追加の認証コード入力が必要になります。"
+          },
+          "manage": "管理",
+          "configuration": "TOTP",
+          "statusPending": "設定が必要",
+          "statusEnabled": "有効",
+          "setupRequiredHint": "TOTP は有効ですが、設定が完了していません。「管理」をクリックして初期設定を完了してください。",
+          "setupTitle": "TOTP を設定",
+          "setupSubtitle": "認証アプリで QR コードをスキャンし、認証コードを入力してください。",
+          "setupConfirm": "確認して続行",
+          "activeSubtitle": "この QR コードまたはシークレットキーを使用して、新しい認証デバイスを追加できます。",
+          "rotateTitle": "TOTP シークレットキーを変更",
+          "rotateSubtitle": "新しいキーを生成して認証を完了すると、現在のキーが置き換えられます。",
+          "rotate": "キーを変更",
+          "rotateRecovery": "リカバリーコードを変更",
+          "rotateConfirm": "変更を確認",
+          "rotateCancel": "キャンセル",
+          "rotateCode": "認証コード",
+          "rotateCodeHint": "新しいキーを確認するため、認証アプリに表示されている認証コードを入力してください。",
+          "rotateError": "認証コードが無効です。もう一度お試しください。",
+          "recoveryTitle": "リカバリーコード",
+          "recoverySubtitle": "リカバリーコードは一度しか表示されません。続行する前に安全な場所へ保存してください。",
+          "recoveryWarning": "リカバリーコードを紛失すると、通常の方法ではアカウントへのアクセスを復旧できません。",
+          "recoveryAcknowledge": "リカバリーコードを保存しました",
+          "recoveryClose": "完了",
+          "disableTitle": "TOTP を無効化",
+          "disableSubtitle": "二要素認証を無効にするため、認証コードを入力してください。",
+          "disableRecoverySubtitle": "二要素認証を無効にするため、リカバリーコードを入力してください。",
+          "disableCode": "認証コード",
+          "disableRecoveryCode": "リカバリーコード",
+          "disableConfirm": "無効化を確認",
+          "disableCancel": "キャンセル",
+          "disableError": "認証に失敗しました。もう一度お試しください。",
+          "disableUseRecovery": "TOTP を使用できませんか？",
+          "disableUseCode": "認証コードを使用",
+          "configSaveTitle": "二要素認証",
+          "configSaveSubtitle": "保護された設定を変更するため、認証コードを入力してください。",
+          "configSaveRotationHint": "TOTP キーの変更中は、変更前と変更後の認証コードをどちらも使用できます（1 回の変更操作につき一度のみ）。",
+          "configSaveCode": "認証コード",
+          "configSaveConfirm": "続行",
+          "configSaveCancel": "キャンセル",
+          "configSaveError": "認証に失敗しました。もう一度お試しください。"
+        }
+      },
+      "timezone": {
+        "description": "タイムゾーン",
+        "hint": "タイムゾーンを設定します。Asia/Shanghai などの IANA タイムゾーン名を入力してください。空欄の場合はシステムのデフォルトタイムゾーンを使用します。タイムゾーン一覧: [https://data.iana.org/time-zones/tzdb-2021a/zone1970.tab](https://data.iana.org/time-zones/tzdb-2021a/zone1970.tab)"
+      },
+      "http_proxy": {
+        "description": "HTTP プロキシ",
+        "hint": "有効にすると、環境変数を設定してプロキシを有効にします。形式は `http://ip:port` です。"
+      },
+      "no_proxy": {
+        "description": "プロキシを使用しないアドレス一覧"
+      }
+    }
+  },
+  "provider_group": {
+    "provider": {
+      "api_key": {
+        "description": "API Key"
+      },
+      "dashscope_api_key": {
+        "description": "DashScope API Key"
+      },
+      "gemini_tts_api_key": {
+        "description": "Gemini API Key"
+      },
+      "genie_onnx_model_dir": {
+        "description": "ONNX モデルディレクトリ",
+        "hint": "ONNX モデルファイルを含むディレクトリのパス"
+      },
+      "genie_language": {
+        "description": "言語"
+      },
+      "xai_native_search": {
+        "description": "ネイティブ検索を有効化",
+        "hint": "有効にすると、xAI の Chat Completions ネイティブ Live Search を使用してウェブ検索を行います（従量課金）。xAI プロバイダーにのみ適用されます。"
+      },
+      "rerank_api_base": {
+        "description": "リランキングモデル API Base URL",
+        "hint": "最終的なリクエスト URL は、Base URL とパスサフィックスを結合して生成されます（デフォルトは `/v1/rerank`）。"
+      },
+      "rerank_api_suffix": {
+        "description": "API URL パスサフィックス",
+        "hint": "base_url の末尾へ追加するパスサフィックスです（例: /v1/rerank）。空欄の場合は追加しません。"
+      },
+      "rerank_api_key": {
+        "description": "API Key",
+        "hint": "API Key が不要な場合は空欄にしてください。"
+      },
+      "rerank_model": {
+        "description": "リランキングモデル名"
+      },
+      "return_documents": {
+        "description": "リランキング結果に元のドキュメントを含める",
+        "hint": "デフォルトは false です。ネットワーク転送量を削減できます。"
+      },
+      "instruct": {
+        "description": "カスタムリランキングタスクの説明",
+        "hint": "qwen3-rerank モデルを使用する場合のみ有効です。英語での記述を推奨します。"
+      },
+      "nvidia_rerank_api_base": {
+        "description": "API Base URL"
+      },
+      "nvidia_rerank_api_key": {
+        "description": "API Key"
+      },
+      "nvidia_rerank_model": {
+        "description": "リランキングモデル名",
+        "hint": "NVIDIA Docs を参照してモデル名を入力してください。"
+      },
+      "nvidia_rerank_model_endpoint": {
+        "description": "カスタムモデルエンドポイント",
+        "hint": "カスタム URL の末尾に追加するエンドポイントです。デフォルトは /reranking です。"
+      },
+      "nvidia_rerank_truncate": {
+        "description": "テキスト切り捨て方式",
+        "hint": "入力テキストが長すぎる場合に、モデルの最大コンテキスト長へ収まるよう入力を切り捨てるかどうかを指定します。"
+      },
+      "tei_rerank_truncate": {
+        "description": "長すぎるテキストを切り捨て",
+        "hint": "入力がモデルの最大コンテキスト長を超えた場合に自動的に切り捨てるかどうかを指定します。有効にする場合は「切り捨て方向」と組み合わせて使用します。"
+      },
+      "tei_rerank_truncation_direction": {
+        "description": "切り捨て方向",
+        "hint": "テキストの左側（left）または右側（right）のどちらから切り捨てるかを選択します。「長すぎるテキストを切り捨て」が True の場合のみ有効です。"
+      },
+      "tei_rerank_raw_scores": {
+        "description": "生のスコアを返す",
+        "hint": "True の場合、sigmoid で正規化せず、モデルの生の logit スコア（負の値の場合があります）を返します。デフォルトは False です。"
+      },
+      "tei_rerank_return_text": {
+        "description": "リランキング結果に元のドキュメントを含める",
+        "hint": "True の場合、各リランキング結果に元のテキストを含めます。ネットワーク転送量を削減するため、デフォルトは False です。"
+      },
+      "launch_model_if_not_running": {
+        "description": "モデルが未実行の場合に自動起動",
+        "hint": "モデルが Xinference サービスで実行されていない場合に、自動起動を試行するかどうかを指定します。本番環境では無効化を推奨します。"
+      },
+      "modalities": {
+        "description": "モデル機能",
+        "hint": "モデルが対応するモダリティと機能です。",
+        "labels": [
+          "テキスト",
+          "画像",
+          "音声",
+          "ツール使用"
+        ]
+      },
+      "custom_headers": {
+        "description": "カスタムリクエストヘッダー",
+        "hint": "ここで追加したキーと値のペアは、カスタム HTTP リクエストヘッダーとして OpenAI SDK の default_headers に統合されます。値は文字列である必要があります。"
+      },
+      "ollama_disable_thinking": {
+        "description": "思考モードを無効化",
+        "hint": "Ollama の思考モードを無効にします。"
+      },
+      "custom_extra_body": {
+        "description": "カスタムリクエストボディパラメーター",
+        "hint": "リクエストに temperature、top_p、max_tokens、reasoning_effort などの追加パラメーターを含めるために使用します。",
+        "template_schema": {
+          "temperature": {
+            "description": "Temperature パラメーター",
+            "hint": "出力のランダム性を制御します。通常の範囲は 0～2 で、値が高いほどランダムになります。",
+            "name": "Temperature"
+          },
+          "top_p": {
+            "description": "Top-p サンプリング",
+            "hint": "Nucleus サンプリングのパラメーターです。通常の範囲は 0～1 で、モデルが考慮する確率質量を制御します。",
+            "name": "Top-p"
+          },
+          "max_tokens": {
+            "description": "最大トークン数",
+            "hint": "生成する最大トークン数です。",
+            "name": "Max Tokens"
+          },
+          "reasoning_effort": {
+            "description": "推論強度",
+            "hint": "推論モデルの推論強度を制御します。対応する値はモデルによって異なります。",
+            "name": "Reasoning Effort"
+          }
+        }
+      },
+      "gpt_weights_path": {
+        "description": "GPT モデルファイルのパス",
+        "hint": "拡張子が「.ckpt」のファイルです。二重引用符を付けずに絶対パスで指定してください。空欄の場合は GPT_SoVITS 組み込みの SoVITS モデルを使用します（GPT_SoVITS 側でデフォルトモデルを変更することを推奨します）。"
+      },
+      "sovits_weights_path": {
+        "description": "SoVITS モデルファイルのパス",
+        "hint": "拡張子が「.pth」のファイルです。二重引用符を付けずに絶対パスで指定してください。空欄の場合は GPT_SoVITS 組み込みの SoVITS モデルを使用します（GPT_SoVITS 側でデフォルトモデルを変更することを推奨します）。"
+      },
+      "gsv_default_parms": {
+        "description": "GPT_SoVITS のデフォルトパラメーター",
+        "hint": "参照音声ファイルのパスと参照音声テキストは必須です。その他のパラメーターは必要に応じて設定してください。",
+        "gsv_ref_audio_path": {
+          "description": "参照音声ファイルのパス",
+          "hint": "必須です。二重引用符を付けずに絶対パスで指定してください。"
+        },
+        "gsv_prompt_text": {
+          "description": "参照音声テキスト",
+          "hint": "必須です。参照音声で読み上げられているテキストを入力してください。"
+        },
+        "gsv_prompt_lang": {
+          "description": "参照音声テキストの言語",
+          "hint": "参照音声で読み上げられているテキストの言語を入力してください。デフォルトは中国語です。"
+        },
+        "gsv_aux_ref_audio_paths": {
+          "description": "補助参照音声ファイルのパス",
+          "hint": "補助参照音声ファイルです。任意項目です。"
+        },
+        "gsv_text_lang": {
+          "description": "テキストの言語",
+          "hint": "デフォルトは中国語です。"
+        },
+        "gsv_top_k": {
+          "description": "生成音声の多様性",
+          "hint": ""
+        },
+        "gsv_top_p": {
+          "description": "Nucleus サンプリングのしきい値",
+          "hint": ""
+        },
+        "gsv_temperature": {
+          "description": "生成音声のランダム性",
+          "hint": ""
+        },
+        "gsv_text_split_method": {
+          "description": "テキストの分割方法",
+          "hint": "選択肢: `cut0`: 分割しない、`cut1`: 4 文ごとに分割、`cut2`: 50 文字ごとに分割、`cut3`: 中国語の句点で分割、`cut4`: 英語のピリオドで分割、`cut5`: 句読点で分割"
+        },
+        "gsv_batch_size": {
+          "description": "バッチサイズ",
+          "hint": ""
+        },
+        "gsv_batch_threshold": {
+          "description": "バッチ処理のしきい値",
+          "hint": ""
+        },
+        "gsv_split_bucket": {
+          "description": "並列処理のためテキストをバケットへ分割",
+          "hint": ""
+        },
+        "gsv_speed_factor": {
+          "description": "音声の再生速度",
+          "hint": "1 は元の速度です。"
+        },
+        "gsv_fragment_interval": {
+          "description": "音声セグメント間の間隔",
+          "hint": ""
+        },
+        "gsv_streaming_mode": {
+          "description": "ストリーミングモードを有効化",
+          "hint": ""
+        },
+        "gsv_seed": {
+          "description": "ランダムシード",
+          "hint": "結果の再現性を確保するために使用します。"
+        },
+        "gsv_parallel_infer": {
+          "description": "推論を並列実行",
+          "hint": ""
+        },
+        "gsv_repetition_penalty": {
+          "description": "繰り返しペナルティ",
+          "hint": ""
+        },
+        "gsv_media_type": {
+          "description": "出力メディアの種類",
+          "hint": "wav を推奨します。"
+        }
+      },
+      "embedding_dimensions": {
+        "description": "Embedding 次元数",
+        "hint": "Embedding ベクトルの次元数です。モデルに応じて調整が必要な場合があるため、対象モデルのドキュメントを参照してください。値が正しくないとベクトルデータベースが正常に動作しないため、必ず正確に設定してください。"
+      },
+      "embedding_dimensions_mode": {
+        "description": "Embedding 次元数パラメーターの送信モード",
+        "hint": "OpenAI 互換の Embedding リクエストで dimensions パラメーターを送信するかどうかを制御します。auto は公式の OpenAI embedding-3 モデルにのみ自動送信します。サードパーティーの互換 API で必要な場合は always、エラーになる場合は never に変更してください。"
+      },
+      "embedding_model": {
+        "description": "Embedding モデル",
+        "hint": "Embedding モデル名です。"
+      },
+      "embedding_api_key": {
+        "description": "API Key"
+      },
+      "embedding_api_base": {
+        "description": "API Base URL"
+      },
+      "openai_embedding": {
+        "hint": "テストに失敗する場合は、一部の OpenAI API バージョンとの互換性のため、末尾に /v1 を追加してみてください。"
+      },
+      "gemini_embedding": {
+        "hint": "Gemini Embedding では /v1beta を手動で追加する必要はありません。"
+      },
+      "dashscope_embedding": {
+        "hint": "Alibaba Cloud BailianEmbedding のデフォルトアドレスは https://dashscope.aliyuncs.com/api/v1 です。"
+      },
+      "volcengine_cluster": {
+        "description": "Volcengine クラスター",
+        "hint": "音声クローンモデルを使用する場合は volcano_icl または volcano_icl_concurr を選択できます。デフォルトは volcano_tts です。"
+      },
+      "volcengine_voice_type": {
+        "description": "Volcengine ボイス",
+        "hint": "音声 id（Voice_type）を入力します。"
+      },
+      "volcengine_speed_ratio": {
+        "description": "話速設定",
+        "hint": "話速を 0.2～3.0 の範囲で設定します。デフォルトは 1.0 です。"
+      },
+      "volcengine_volume_ratio": {
+        "description": "音量設定",
+        "hint": "音量を 0.0～2.0 の範囲で設定します。デフォルトは 1.0 です。"
+      },
+      "azure_tts_voice": {
+        "description": "ボイス設定",
+        "hint": "API のボイス名"
+      },
+      "azure_tts_style": {
+        "description": "スタイル設定",
+        "hint": "ボイス固有の話し方のスタイルです。喜び、共感、落ち着きなどの感情を表現できます。"
+      },
+      "azure_tts_role": {
+        "description": "ロール設定（任意）",
+        "hint": "話者のロールプレイを設定します。ボイス名を変更せずに、異なる年齢や性別を模倣できます。たとえば男性の音声でピッチやイントネーションを変えて女性の音声を模倣しても、ボイス名は変わりません。ロールが指定されていない場合、または選択したボイスがそのロールに対応していない場合、この属性は無視されます。"
+      },
+      "azure_tts_rate": {
+        "description": "話速設定",
+        "hint": "テキストの読み上げ速度を指定します。単語または文単位で適用できます。元の音声の 0.5～2 倍の範囲で指定してください。"
+      },
+      "azure_tts_volume": {
+        "description": "音声音量設定",
+        "hint": "音声の音量レベルを指定します。文単位で音量を変更できます。0.0～100.0（最小音量から最大音量、例: 75）の数値で指定します。デフォルトは 100.0 です。"
+      },
+      "azure_tts_region": {
+        "description": "API リージョン",
+        "hint": "Azure_TTS がデータを処理するリージョンです。詳細は https://learn.microsoft.com/ja-jp/azure/ai-services/speech-service/regions を参照してください。"
+      },
+      "azure_tts_subscription_key": {
+        "description": "サービスサブスクリプションキー",
+        "hint": "Azure_TTS サービスのサブスクリプションキーです（Token ではありません）"
+      },
+      "dashscope_tts_voice": {
+        "description": "ボイス"
+      },
+      "gm_resp_image_modal": {
+        "description": "画像モダリティを有効化",
+        "hint": "有効にすると、画像コンテンツを返せるようになります。モデルが対応していない場合はエラーになります。対応モデルは Google Gemini の公式ウェブサイトを確認してください。画像を生成する場合は、より良い結果を得るために `メンバー認識を有効化` 設定を無効にしてください。"
+      },
+      "gm_native_search": {
+        "description": "ネイティブ検索を有効化",
+        "hint": "有効にすると、すべての関数ツールが無効になります。無料利用枠の制限は公式ドキュメントを参照してください。"
+      },
+      "gm_native_coderunner": {
+        "description": "ネイティブコードランナーを有効化",
+        "hint": "有効にすると、すべての関数ツールが無効になります。"
+      },
+      "gm_url_context": {
+        "description": "URL コンテキスト機能を有効化",
+        "hint": "有効にすると、すべての関数ツールが無効になります。"
+      },
+      "gm_safety_settings": {
+        "description": "セーフティフィルター",
+        "hint": "モデル入力のコンテンツセーフティフィルターレベルを設定します。レベルは NONE（ブロックしない）、HIGH（高リスク時にブロック）、MEDIUM_AND_ABOVE（中リスク以上をブロック）、LOW_AND_ABOVE（低リスク以上をブロック）です。詳細は Gemini API ドキュメントを参照してください。",
+        "harassment": {
+          "description": "ハラスメント",
+          "hint": "否定的または有害なコメント"
+        },
+        "hate_speech": {
+          "description": "ヘイトスピーチ",
+          "hint": "粗暴、無礼、または冒涜的な内容"
+        },
+        "sexually_explicit": {
+          "description": "露骨な性的コンテンツ",
+          "hint": "性行為やその他のわいせつな内容への言及"
+        },
+        "dangerous_content": {
+          "description": "危険なコンテンツ",
+          "hint": "有害な行為を推奨、助長、または促進する情報"
+        }
+      },
+      "gm_thinking_config": {
+        "description": "思考設定",
+        "budget": {
+          "description": "思考予算",
+          "hint": "モデルの推論で使用する思考トークン数の上限を指定します。参照：https://ai.google.dev/gemini-api/docs/thinking#set-budget"
+        },
+        "level": {
+          "description": "思考レベル",
+          "hint": "Gemini 3 以降のモデルでの使用を推奨します。推論動作を制御できます。参照: https://ai.google.dev/gemini-api/docs/thinking#thinking-levels"
+        }
+      },
+      "anth_thinking_config": {
+        "description": "思考設定",
+        "type": {
+          "description": "思考タイプ",
+          "hint": "'adaptive' に設定すると適応型思考を使用します（Opus 4.6+ / Sonnet 4.6+ を推奨）。空欄の場合は手動予算モードを使用します。参照: https://platform.claude.com/docs/en/build-with-claude/adaptive-thinking"
+        },
+        "budget": {
+          "description": "思考予算",
+          "hint": "Anthropic thinking.budget_tokens パラメーターです。1024 以上である必要があります。思考タイプが空欄の場合のみ有効です。Opus 4.6 / Sonnet 4.6 では非推奨です。参照: https://platform.claude.com/docs/en/build-with-claude/extended-thinking"
+        },
+        "effort": {
+          "description": "思考の深さ",
+          "hint": "思考タイプが 'adaptive' の場合に思考の深さを制御します。デフォルトは 'high' です。'max' は Opus 4.6 でのみ使用できます。参照: https://platform.claude.com/docs/en/build-with-claude/effort"
+        }
+      },
+      "minimax-group-id": {
+        "description": "ユーザーグループ",
+        "hint": "「アカウント管理 -> 基本情報」で確認できます。"
+      },
+      "minimax-langboost": {
+        "description": "対象言語／方言",
+        "hint": "指定した言語や方言の認識能力を強化し、その言語／方言を使用する場面での音声性能を向上させます。"
+      },
+      "minimax-voice-speed": {
+        "description": "話速",
+        "hint": "生成音声の話速です。範囲は [0.5, 2]、デフォルトは 1.0 です。値が大きいほど速くなります。"
+      },
+      "minimax-voice-vol": {
+        "description": "音量",
+        "hint": "生成音声の音量です。範囲は (0, 10]、デフォルトは 1.0 です。値が大きいほど音量が高くなります。"
+      },
+      "minimax-voice-pitch": {
+        "description": "ピッチ",
+        "hint": "生成音声のピッチです。範囲は [-12, 12]、デフォルトは 0 です。"
+      },
+      "minimax-is-timber-weight": {
+        "description": "混合ボイスを有効化",
+        "hint": "混合ボイスを有効にし、カスタムの重みで最大 4 種類のボイスを混合できます。有効にすると単一ボイス設定は自動的に無視されます。"
+      },
+      "minimax-timber-weight": {
+        "description": "混合ボイス",
+        "hint": "混合するボイスとその重みを指定します。最大 4 種類、重みは [1, 100] の整数です。公式 API 音声デバッグコンソールのコードプレビューでプリセットとテンプレートを確認できます。JSON 文字列形式に厳密に従って記述し、解析に成功したかコンソールで確認してください。構造はデフォルト値と公式のコードプレビューを参照してください。"
+      },
+      "minimax-voice-id": {
+        "description": "単一ボイス",
+        "hint": "単一ボイスの ID です。詳細は公式ドキュメントを参照してください。"
+      },
+      "minimax-voice-emotion": {
+        "description": "感情",
+        "hint": "合成音声の感情を制御します。auto の場合はテキスト内容に基づいて感情を自動選択します。"
+      },
+      "minimax-voice-latex": {
+        "description": "latex 数式の読み上げに対応",
+        "hint": "latex 数式を読み上げます。入力テキストが公式要件どおりにフォーマットされている必要があります。"
+      },
+      "minimax-voice-english-normalization": {
+        "description": "英語テキストの正規化に対応",
+        "hint": "数字読み上げ時の性能を向上できますが、遅延がわずかに増加します。"
+      },
+      "rag_options": {
+        "description": "RAG オプション",
+        "hint": "ナレッジベース検索の設定です。任意項目です。エージェントアプリケーション（RAG アプリケーションを含む）でのみ使用できます。Alibaba Cloud Bailianアプリケーションでこの機能を有効にすると、複数ターンの会話は利用できなくなります。",
+        "pipeline_ids": {
+          "description": "ナレッジベース ID 一覧",
+          "hint": "指定したナレッジベース内のすべてのドキュメントを検索します。https://bailian.console.aliyun.com/ の「データアプリケーション -> ナレッジインデックス」で作成し、ID を取得してください。"
+        },
+        "file_ids": {
+          "description": "非構造化ドキュメント ID。指定すると、対象の非構造化ドキュメントを検索します。",
+          "hint": "指定した非構造化ドキュメントを検索します。https://bailian.console.aliyun.com/ の「データ管理」で作成し、ID を取得してください。"
+        },
+        "output_reference": {
+          "description": "ナレッジベース／ドキュメントの参照を出力",
+          "hint": "各回答の末尾に参照元を追加します。デフォルトは False です。"
+        }
+      },
+      "sensevoice_hint": {
+        "description": "SenseVoice をデプロイ",
+        "hint": "有効にする前に、pip で funasr、funasr_onnx、torchaudio、torch、modelscope、jieba ライブラリをインストールし（デフォルトは CPU を使用し、約 1 GB をダウンロードします）、ffmpeg もインストールしてください。未導入の場合、正常に文字起こしできません。"
+      },
+      "is_emotion": {
+        "description": "感情認識",
+        "hint": "感情認識を有効にするかどうかを指定します。happy｜sad｜angry｜neutral｜fearful｜disgusted｜surprised｜unknown"
+      },
+      "stt_model": {
+        "description": "モデル名",
+        "hint": "modelscope 上のモデル名です。デフォルト: iic/SenseVoiceSmall。"
+      },
+      "variables": {
+        "description": "ワークフローの固定入力変数",
+        "hint": "任意項目です。ワークフローの固定入力変数として使用します。会話中に `/set` コマンドで変数を動的に設定することもできます。変数名が重複した場合は、動的に設定した値が優先されます。"
+      },
+      "dashscope_app_type": {
+        "description": "アプリケーションの種類",
+        "hint": "Bailianアプリケーションの種類です。"
+      },
+      "timeout": {
+        "description": "タイムアウト",
+        "hint": "タイムアウト時間（秒）です。"
+      },
+      "openai-tts-voice": {
+        "description": "voice",
+        "hint": "OpenAI TTS のボイスです。OpenAI のデフォルト対応値: 'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'"
+      },
+      "elevenlabs-tts-voice-id": {
+        "description": "ボイス ID",
+        "hint": "ElevenLabs のボイス ID です。https://elevenlabs.io/app/voice-library でボイス ID を参照してコピーできます。デフォルトは 'JBFqnCBsd6RMkjVDRZzb'（George）です。"
+      },
+      "elevenlabs-tts-output-format": {
+        "description": "出力形式",
+        "hint": "音声の出力形式です。例: 'mp3_44100_128'、'mp3_22050_32'、'wav_44100'、'opus_48000_128'。raw PCM/u-law/a-law 形式には対応していません。デフォルトは 'mp3_44100_128' です。"
+      },
+      "elevenlabs-tts-stability": {
+        "description": "安定性",
+        "hint": "ボイスの安定性を [0, 1] の範囲で指定します。値が高いほど安定し、低いほど表現力が増します。空欄の場合はサーバー側のデフォルト値を使用します。"
+      },
+      "elevenlabs-tts-similarity-boost": {
+        "description": "類似度ブースト",
+        "hint": "出力が元のボイスにどの程度近いかを設定します。"
+      },
+      "elevenlabs-tts-style": {
+        "description": "スタイルの強調度",
+        "hint": "ボイススタイルの強調度を [0, 1] の範囲で指定します。値が高いほど遅延が増えます。空欄の場合はサーバー側のデフォルト値を使用します。"
+      },
+      "elevenlabs-tts-use-speaker-boost": {
+        "description": "話者ブースト",
+        "hint": "元の話者との類似度を高めます。遅延がわずかに増加する場合があります。"
+      },
+      "mimo-tts-voice": {
+        "description": "ボイス",
+        "hint": "MiMo TTS のボイス名です。選択肢には 'mimo_default'、'default_en'、'default_zh' があります。"
+      },
+      "mimo-tts-format": {
+        "description": "出力形式",
+        "hint": "MiMo TTS が生成する音声形式です。'wav'、'mp3'、'pcm' に対応しています。"
+      },
+      "mimo-tts-style-prompt": {
+        "description": "スタイルプロンプト",
+        "hint": "<style>...</style> タグとして合成対象テキストの先頭に追加され、話速、感情、キャラクター、スタイルを制御します。例: 楽しく、速く、孫悟空、ささやき声。空欄でも構いません。"
+      },
+      "mimo-tts-dialect": {
+        "description": "方言",
+        "hint": "スタイルプロンプトとともに先頭の <style>...</style> タグへ追加します。例：東北方言、四川方言、河南方言、広東語。空欄でも構いません。"
+      },
+      "mimo-tts-seed-text": {
+        "description": "シードテキスト",
+        "hint": "任意の user メッセージとして送信し、口調やスタイルの調整を補助します。合成対象テキストには連結されません。"
+      },
+      "fishaudio-tts-character": {
+        "description": "character",
+        "hint": "fishaudio TTS のキャラクターです。デフォルトはクレーです。その他のキャラクター: https://fish.audio/zh-CN/discovery"
+      },
+      "fishaudio-tts-reference-id": {
+        "description": "reference_id",
+        "hint": "fishaudio TTS の参照モデル ID（任意）です。指定すると、キャラクター名で検索せずにモデル ID を直接使用します。例: 626bb6d3f3364c9cbc3aa6a67300a664。その他のモデル: https://fish.audio/zh-CN/discovery。モデル詳細画面でモデル ID をコピーできます。"
+      },
+      "whisper_hint": {
+        "description": "Whisper モデルをローカルデプロイする際の注意事項",
+        "hint": "有効にする前に、pip で openai-whisper ライブラリをインストールし（NVIDIA GPU ユーザーは主に torch と cuda のため約 2 GB、CPU ユーザーは約 1 GB をダウンロードします）、ffmpeg もインストールしてください。未導入の場合、正常に文字起こしできません。"
+      },
+      "whisper_device": {
+        "description": "推論デバイス",
+        "hint": "Whisper の推論デバイスです。Apple Silicon では mps を選択できます。その他の環境では cpu を推奨します。mps を指定しても現在の環境で利用できない場合は、cpu へ自動的にフォールバックします。"
+      },
+      "id": {
+        "description": "ID"
+      },
+      "type": {
+        "description": "モデルプロバイダーの種類"
+      },
+      "provider_type": {
+        "description": "モデルプロバイダーの機能の種類"
+      },
+      "enable": {
+        "description": "有効化"
+      },
+      "key": {
+        "description": "API Key"
+      },
+      "api_base": {
+        "description": "API Base URL"
+      },
+      "proxy": {
+        "description": "プロキシアドレス",
+        "hint": "HTTP/HTTPS プロキシアドレスです。形式例: http://127.0.0.1:7890。このプロバイダーの API リクエストにのみ適用され、Docker 内部ネットワークの通信には影響しません。"
+      },
+      "model": {
+        "description": "モデル ID",
+        "hint": "モデル名です。例: gpt-4o-mini, deepseek-chat。"
+      },
+      "max_context_tokens": {
+        "description": "モデルのコンテキストウィンドウサイズ",
+        "hint": "モデルの最大コンテキストトークン数です。0 の場合、利用可能であればモデルメタデータから自動入力します。"
+      },
+      "dify_api_key": {
+        "description": "API Key",
+        "hint": "Dify API Key です。この項目は必須です。"
+      },
+      "dify_api_base": {
+        "description": "API Base URL",
+        "hint": "Dify API Base URL です。デフォルトは https://api.dify.ai/v1 です。"
+      },
+      "dify_api_type": {
+        "description": "Dify アプリケーションの種類",
+        "hint": "Dify API の種類です。Dify 公式サイトによると、現在 chat、chatflow、agent、workflow のアプリケーション種類に対応しています。"
+      },
+      "dify_workflow_output_key": {
+        "description": "Dify ワークフロー出力変数名",
+        "hint": "Dify ワークフローの出力変数名です。アプリケーションの種類が `workflow` の場合のみ使用します。デフォルトは `astrbot_wf_output` です。"
+      },
+      "dify_query_input_key": {
+        "description": "プロンプト入力変数名",
+        "hint": "送信するメッセージテキストに対応する入力変数名です。デフォルトは astrbot_text_query です。"
+      },
+      "coze_api_key": {
+        "description": "Coze API Key",
+        "hint": "Coze サービスへのアクセスに使用する Coze API Key です。"
+      },
+      "bot_id": {
+        "description": "Bot ID",
+        "hint": "Coze Bot の ID です。Coze プラットフォームで Bot を作成すると取得できます。"
+      },
+      "coze_api_base": {
+        "description": "API Base URL",
+        "hint": "Coze API の Base URL です。デフォルトは https://api.coze.cn です。"
+      },
+      "deerflow_api_base": {
+        "description": "API Base URL",
+        "hint": "DeerFlow API ゲートウェイアドレスです。デフォルトは http://127.0.0.1:2026 です。"
+      },
+      "deerflow_api_key": {
+        "description": "DeerFlow API Key",
+        "hint": "任意項目です。DeerFlow ゲートウェイで Bearer 認証を設定している場合に入力します。"
+      },
+      "deerflow_auth_header": {
+        "description": "Authorization Header",
+        "hint": "任意項目です。カスタム Authorization リクエストヘッダーです。DeerFlow API Key より優先されます。"
+      },
+      "deerflow_assistant_id": {
+        "description": "Assistant ID",
+        "hint": "DeerFlow 2.0 LangGraph assistant_id です。デフォルトは lead_agent です。"
+      },
+      "deerflow_model_name": {
+        "description": "モデル名の上書き",
+        "hint": "任意項目です。DeerFlow のデフォルトモデルを上書きします（ランタイムの configurable にある model_name に対応）。"
+      },
+      "deerflow_thinking_enabled": {
+        "description": "思考モードを有効化"
+      },
+      "deerflow_plan_mode": {
+        "description": "計画モードを有効化",
+        "hint": "DeerFlow 2.0 ランタイムの configurable にある is_plan_mode に対応します。"
+      },
+      "deerflow_subagent_enabled": {
+        "description": "サブエージェントを有効化",
+        "hint": "DeerFlow 2.0 ランタイムの configurable にある subagent_enabled に対応します。"
+      },
+      "deerflow_max_concurrent_subagents": {
+        "description": "サブエージェントの最大同時実行数",
+        "hint": "DeerFlow 2.0 ランタイムの configurable にある max_concurrent_subagents に対応します。サブエージェントが有効な場合のみ機能し、デフォルトは 3 です。"
+      },
+      "deerflow_recursion_limit": {
+        "description": "再帰深度の上限",
+        "hint": "LangGraph recursion_limit に対応します。"
+      },
+      "auto_save_history": {
+        "description": "Coze が会話履歴を管理",
+        "hint": "有効にすると、Coze が会話履歴を管理します。この場合、AstrBot にローカル保存されたコンテキストは参照専用となり、AstrBot のコンテキストに対する操作も反映されません。無効の場合は AstrBot がコンテキストを管理します。"
+      }
+    }
+  },
+  "help": {
+    "documentation": "公式ドキュメント",
+    "support": "サポートコミュニティ",
+    "helpText": "設定について不明な点がある場合は、{{documentation}} または {{support}} をご覧ください。",
+    "helpPrefix": "設定について不明な点がある場合は、",
+    "helpMiddle": "または",
+    "helpSuffix": "をご覧ください。"
+  }
+}

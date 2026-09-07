@@ -1,0 +1,21 @@
+{
+  "title": "トレース",
+  "autoScroll": {
+    "enabled": "自動スクロール：オン",
+    "disabled": "自動スクロール：オフ"
+  },
+  "hint": "現在は AstrBot のメインエージェントによる一部のモデル呼び出し経路のみ記録しています。今後、記録範囲を拡充します。",
+  "toggleLabel": "トレースを記録",
+  "recording": "記録中",
+  "paused": "一時停止中",
+  "table": {
+    "time": "時刻",
+    "eventId": "イベント ID",
+    "sender": "送信者",
+    "outline": "内容"
+  },
+  "expand": "展開",
+  "collapse": "折りたたむ",
+  "showMore": "さらに表示",
+  "empty": "トレースデータはありません"
+}

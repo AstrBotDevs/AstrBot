@@ -1,0 +1,28 @@
+{
+  "title": "プラットフォームログ",
+  "autoScroll": {
+    "label": "自動スクロール",
+    "enabled": "自動スクロールを有効にしました",
+    "disabled": "自動スクロールを無効にしました"
+  },
+  "hideUserChat": {
+    "label": "ユーザーの会話を除外",
+    "enabled": "ユーザーの会話を除外しました",
+    "disabled": "ユーザーの会話を除外"
+  },
+  "pipInstall": {
+    "button": "pip パッケージをインストール",
+    "dialogTitle": "pip パッケージをインストール",
+    "packageLabel": "*パッケージ名（例：llmtuner）",
+    "mirrorLabel": "PyPI リポジトリ URL を強制指定（任意）",
+    "mirrorHint": "PyPI リポジトリ URL の強制指定 > 設定項目 `PyPI リポジトリアドレス`",
+    "cancelButton": "キャンセル",
+    "installButton": "インストール",
+    "installSuccess": "インストールしました。",
+    "installFailed": "インストールできませんでした。",
+    "requestFailed": "リクエストに失敗しました。"
+  },
+  "debugHint": {
+    "text": "Debug ログは「設定ファイル → システム → コンソールログレベル」で有効にできます"
+  }
+}

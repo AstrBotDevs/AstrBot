@@ -1,0 +1,135 @@
+{
+  "logoTitle": "AstrBot WebUI",
+  "version": {
+    "hasNewVersion": "AstrBot の新しいバージョンがあります！",
+    "dashboardHasNewVersion": "WebUI の新しいバージョンがあります！"
+  },
+  "buttons": {
+    "update": "更新",
+    "account": "アカウント",
+    "logout": "ログアウト",
+    "theme": {
+      "title": "テーマ",
+      "light": "ライトモード",
+      "dark": "ダークモード",
+      "system": "システム設定に従う"
+    }
+  },
+  "updateDialog": {
+    "title": "AstrBot を更新",
+    "currentVersion": "現在のバージョン",
+    "status": {
+      "checking": "更新を確認しています…",
+      "switching": "バージョンを切り替えています…",
+      "updating": "更新しています…"
+    },
+    "tabs": {
+      "release": "😊 正式版"
+    },
+    "advancedSettings": "詳細設定",
+    "releases": "バージョン一覧",
+    "updateToLatest": "最新バージョンに更新",
+    "showPreReleases": "プレリリース版を表示",
+    "preRelease": "プレリリース",
+    "preReleaseWarning": {
+      "title": "プレリリース版に関する注意",
+      "description": "プレリリースと表示されたバージョンには、未知の問題やバグが含まれている可能性があるため、本番環境での使用は推奨されません。問題が見つかった場合は、以下に報告してください：",
+      "issueLink": "GitHub Issues"
+    },
+    "tip": "💡 ヒント：",
+    "tipContinue": "デフォルトでは、バージョンの切り替え時に対応する WebUI ファイルがダウンロードされます。WebUI のコードはプロジェクトの dashboard ディレクトリにあり、npm を使用して独自にビルドすることもできます。",
+    "dockerTip": "バージョンの切り替え時に、ボット本体と管理画面の両方の更新を試みます。Docker でデプロイしている場合は、イメージを再取得するか、",
+    "dockerTipLink": "watchtower",
+    "dockerTipContinue": "を使用して更新を自動的に監視・取得することもできます。",
+    "table": {
+      "tag": "タグ",
+      "publishDate": "公開日",
+      "content": "内容",
+      "sourceUrl": "ソース URL",
+      "actions": "操作",
+      "view": "表示",
+      "switch": "切り替え"
+    },
+    "releaseNotes": {
+      "title": "変更履歴",
+      "latestLabel": "最新バージョン"
+    },
+    "progress": {
+      "target": "対象バージョン：",
+      "preparing": "更新を準備しています…",
+      "dashboard": "WebUI をダウンロード",
+      "core": "プロジェクトコードをダウンロード",
+      "dependencies": "依存関係を更新しています…",
+      "restart": "再起動を準備しています…",
+      "restarting": "AstrBot を再起動しています",
+      "completed": "更新が完了しました",
+      "successReady": "更新に成功しました",
+      "autoReloadIn": "{seconds} 秒後にページを自動的に再読み込みします",
+      "reloadNow": "今すぐ再読み込み",
+      "failed": "更新に失敗しました"
+    },
+    "redirectConfirm": {
+      "title": "公式アップデートガイドを開く",
+      "message": "GitHub Releases ページを開きます。続行しますか？",
+      "latestLabel": "最新バージョン",
+      "targetVersion": "対象バージョン：",
+      "currentVersion": "現在のバージョン：",
+      "guideTitle": "ページを開いた後の手順：",
+      "guideStep1": "OS とアーキテクチャに対応するインストーラーをダウンロードします。",
+      "guideStep2": "インストール後に AstrBot を再起動します。",
+      "guideStep3": "Docker を使用している場合は、イメージを更新する方法を優先してください。"
+    },
+    "desktopApp": {
+      "title": "デスクトップアプリを更新",
+      "message": "AstrBot デスクトップアプリの更新を確認し、アップグレードします。",
+      "currentVersion": "現在のバージョン：",
+      "latestVersion": "最新バージョン：",
+      "checking": "デスクトップアプリの更新を確認しています…",
+      "hasNewVersion": "新しいバージョンがあります。確認をクリックするとアップグレードできます。",
+      "isLatest": "最新バージョンです",
+      "installing": "更新をダウンロードしてインストールしています。完了後、アプリは自動的に再起動します…",
+      "checkFailed": "更新の確認に失敗しました。しばらくしてからもう一度お試しください。",
+      "installFailed": "アップグレードに失敗しました。しばらくしてからもう一度お試しください。"
+    },
+    "dashboardUpdate": {
+      "title": "管理画面のみを最新バージョンに更新",
+      "currentVersion": "現在のバージョン",
+      "hasNewVersion": "新しいバージョンがあります！",
+      "isLatest": "最新バージョンです。",
+      "fallback": "全体の更新に失敗した場合に、WebUI のみを再ダウンロードできます。",
+      "downloadAndUpdate": "ダウンロードして更新"
+    }
+  },
+  "accountDialog": {
+    "title": "アカウント設定",
+    "securityWarning": "セキュリティ上の注意：アカウントを保護するため、パスワードを変更してください",
+    "securityWarningMd5": "新しいバージョンの AstrBot ではセキュリティが強化されています。パスワードを変更してください。",
+    "securityWarningUpgrade": "旧形式で保存されたパスワードが検出されました。セキュリティのアップグレードを完了するには、パスワードを変更してください。",
+    "form": {
+      "currentPassword": "現在のパスワード",
+      "newPassword": "新しいパスワード",
+      "confirmPassword": "新しいパスワードを確認",
+      "newUsername": "新しいユーザー名（任意）",
+      "passwordHint": "8 文字以上で、大文字、小文字、数字を含めてください",
+      "confirmPasswordHint": "確認のため、新しいパスワードをもう一度入力してください",
+      "usernameHint": "現在のユーザー名を変更しない場合は空欄にしてください",
+      "defaultCredentials": "デフォルトのユーザー名は astrbot です。初期パスワードは初回起動時に自動生成され、コンソールに表示されます。"
+    },
+    "validation": {
+      "passwordRequired": "パスワードを入力してください",
+      "passwordMinLength": "パスワードは 8 文字以上にしてください",
+      "passwordUppercase": "パスワードには大文字を 1 文字以上含めてください",
+      "passwordLowercase": "パスワードには小文字を 1 文字以上含めてください",
+      "passwordDigit": "パスワードには数字を 1 文字以上含めてください",
+      "passwordMatch": "パスワードが一致しません",
+      "usernameMinLength": "ユーザー名は 3 文字以上にしてください"
+    },
+    "actions": {
+      "save": "変更を保存",
+      "cancel": "キャンセル"
+    },
+    "messages": {
+      "updateFailed": "変更に失敗しました。もう一度お試しください"
+    }
+  }
+}

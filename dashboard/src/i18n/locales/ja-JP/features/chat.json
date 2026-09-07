@@ -1,0 +1,219 @@
+{
+  "title": "チャットしよう！",
+  "subtitle": "AI アシスタントと会話",
+  "input": {
+    "placeholder": "何でも聞いてください",
+    "projectPlaceholder": "次に何をしますか？",
+    "send": "送信",
+    "clear": "クリア",
+    "upload": "ファイルをアップロード",
+    "voice": "音声入力",
+    "recordingPrompt": "録音中です。お話しください…",
+    "chatPrompt": "チャットしよう！",
+    "dropToUpload": "ドロップしてファイルをアップロード",
+    "stopGenerating": "生成を停止"
+  },
+  "message": {
+    "user": "ユーザー",
+    "assistant": "アシスタント",
+    "system": "システム",
+    "error": "エラーメッセージ",
+    "loading": "考え中…"
+  },
+  "voice": {
+    "start": "録音を開始",
+    "stop": "録音を停止",
+    "recording": "新しい録音",
+    "processing": "処理中…",
+    "error": "録音に失敗しました",
+    "listening": "音声を検出しています…",
+    "speaking": "発話中",
+    "startRecording": "音声入力を開始",
+    "liveMode": "リアルタイム会話"
+  },
+  "welcome": {
+    "title": "今日は何を話しますか？",
+    "subtitle": "あなたの AI 会話アシスタント",
+    "quickActions": "クイック操作",
+    "examples": "質問例"
+  },
+  "actions": {
+    "copy": "コピー",
+    "regenerate": "再生成",
+    "retry": "再試行",
+    "retryWithModel": "別のモデルを使用",
+    "noAvailableModels": "利用可能なモデルがありません",
+    "like": "高評価",
+    "dislike": "低評価",
+    "share": "共有",
+    "newChat": "新しいチャット",
+    "deleteChat": "この会話を削除",
+    "editTitle": "タイトルを編集",
+    "fullscreen": "全画面モード",
+    "exitFullscreen": "全画面を終了",
+    "reply": "引用して返信",
+    "providerConfig": "モデル設定",
+    "toolsUsed": "使用したツール",
+    "toolCallUsed": "{name} ツールを使用しました",
+    "pythonCodeAnalysis": "Python コード分析を使用しました"
+  },
+  "ipython": {
+    "output": "出力"
+  },
+  "toolStatus": {
+    "done": "完了",
+    "running": "実行中"
+  },
+  "thread": {
+    "title": "分岐",
+    "askInThread": "新しい分岐で質問",
+    "count": "{count} 件の分岐",
+    "createFailed": "分岐の作成に失敗しました",
+    "delete": "分岐を削除",
+    "confirmDelete": "この分岐を削除しますか？この操作は元に戻せません。",
+    "placeholder": "この内容についてさらに質問…"
+  },
+  "conversation": {
+    "title": "会話",
+    "newConversation": "新しい会話",
+    "noHistory": "会話履歴がありません",
+    "systemStatus": "システム状態",
+    "llmService": "LLM サービス",
+    "speechToText": "音声認識",
+    "editDisplayName": "セッション名を編集",
+    "displayName": "セッション名",
+    "displayNameUpdated": "セッション名を更新しました",
+    "displayNameUpdateFailed": "セッション名の更新に失敗しました",
+    "confirmDelete": "「{name}」を削除しますか？この操作は元に戻せません。"
+  },
+  "modes": {
+    "darkMode": "ダークモードに切り替え",
+    "lightMode": "ライトモードに切り替え"
+  },
+  "shortcuts": {
+    "help": "ヘルプを表示",
+    "voiceRecord": "音声を録音",
+    "pasteImage": "画像を貼り付け",
+    "sendKey": {
+      "title": "送信ショートカット",
+      "enterToSend": "Enter で送信",
+      "shiftEnterToSend": "Shift+Enter で送信"
+    }
+  },
+  "streaming": {
+    "enabled": "ストリーミング応答を有効にしました",
+    "disabled": "ストリーミング応答を無効にしました",
+    "on": "ストリーミング",
+    "off": "通常"
+  },
+  "transport": {
+    "title": "通信方式",
+    "sse": "SSE",
+    "websocket": "WebSocket"
+  },
+  "config": {
+    "title": "設定"
+  },
+  "reasoning": {
+    "thinking": "思考プロセス",
+    "summarySeparator": "、",
+    "thinkSummary": "思考 {count} 回",
+    "toolSummary": "ツール使用 {count} 回",
+    "think": "思考",
+    "toolUsed": "ツールを使用"
+  },
+  "reply": {
+    "replyTo": "引用",
+    "notFound": "メッセージが見つかりません"
+  },
+  "project": {
+    "title": "プロジェクト",
+    "create": "プロジェクトを作成",
+    "edit": "プロジェクトを編集",
+    "name": "プロジェクト名",
+    "emoji": "アイコン（Emoji）",
+    "description": "プロジェクトの説明（任意）",
+    "workspace": {
+      "type": "ワークスペース",
+      "session": "セッションごとに分離",
+      "project": "プロジェクト共有ワークスペース",
+      "custom": "カスタムパス",
+      "path": "ワークスペースのパス"
+    },
+    "loadingSessions": "会話を読み込み中…",
+    "noSessions": "このプロジェクトには会話がありません",
+    "noProjects": "プロジェクトがありません",
+    "confirmDelete": "プロジェクト「{title}」を削除しますか？プロジェクト内の会話は削除されません。"
+  },
+  "workspaceFiles": {
+    "title": "ワークスペースのファイル",
+    "open": "ワークスペースのファイルを開く",
+    "close": "ワークスペースのファイルを閉じる",
+    "refresh": "ファイルツリーを再読み込み",
+    "filter": "ファイルを絞り込み…",
+    "clearFilter": "ファイルの絞り込みを解除",
+    "empty": "ワークスペースにファイルがありません",
+    "noMatches": "一致するファイルがありません",
+    "loadFailed": "ワークスペースのファイルを読み込めませんでした",
+    "previewFailed": "ファイルを読み込めませんでした",
+    "tooLarge": "ファイルが大きすぎるためプレビューできません",
+    "download": "ファイルをダウンロード",
+    "downloadFailed": "ファイルのダウンロードに失敗しました",
+    "dialogPreview": "拡大プレビューを開く",
+    "closePreview": "ファイルプレビューを閉じる",
+    "closeDialogPreview": "拡大プレビューを閉じる"
+  },
+  "time": {
+    "today": "今日",
+    "yesterday": "昨日"
+  },
+  "stats": {
+    "tokens": "トークン",
+    "inputTokens": "入力（その他）",
+    "outputTokens": "出力トークン",
+    "cachedTokens": "入力（キャッシュ）",
+    "duration": "所要時間",
+    "ttft": "最初のトークンまでの時間"
+  },
+  "tokenUsage": {
+    "tooltip": "{used} / {limit} トークン（{percent}%）"
+  },
+  "refs": {
+    "title": "参照",
+    "sources": "出典"
+  },
+  "connection": {
+    "title": "接続状態のお知らせ",
+    "message": "チャット接続を再確立する必要があります。",
+    "reasons": "次の原因が考えられます：",
+    "reasonWindowResize": "チャットウィンドウのサイズを切り替えた（正常な動作）",
+    "reasonMultipleTabs": "別のタブでチャットページを開いた",
+    "reasonNetworkIssue": "ネットワーク接続が一時的に切断された",
+    "notice": "注意：メッセージを確実に受信するため、同時に維持できるチャット接続は 1 件のみです。複数のタブでチャットを使用している場合は、1 ページだけ残してください。",
+    "understand": "了解しました",
+    "status": {
+      "reconnecting": "再接続中…",
+      "reconnected": "チャット接続を再確立しました",
+      "failed": "接続に失敗しました。ページを再読み込みしてください"
+    }
+  },
+  "commandSuggestion": {
+    "navigate": "移動",
+    "select": "決定",
+    "close": "閉じる"
+  },
+  "errors": {
+    "sendMessageFailed": "メッセージの送信に失敗しました。もう一度お試しください",
+    "createSessionFailed": "セッションの作成に失敗しました。ページを再読み込みしてください"
+  },
+  "batch": {
+    "selected": "{count} 件を選択中",
+    "confirmDelete": "{count} 件の会話を削除しますか？この操作は元に戻せません。",
+    "selectAll": "すべて選択",
+    "deselectAll": "すべて選択解除",
+    "delete": "削除",
+    "exit": "終了",
+    "partialFailure": "{total} 件の会話のうち {failed} 件を削除できませんでした",
+    "requestFailed": "会話の削除に失敗しました。もう一度お試しください。"
+  }
+}

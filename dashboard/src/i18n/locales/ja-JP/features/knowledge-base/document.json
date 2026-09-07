@@ -1,0 +1,60 @@
+{
+  "title": "ドキュメント詳細",
+  "backToKB": "ナレッジベースに戻る",
+  "states": {
+    "loadError": "ドキュメント詳細の読み込みに失敗しました",
+    "chunksLoadError": "チャンク一覧の読み込みに失敗しました",
+    "retry": "再試行"
+  },
+  "info": {
+    "title": "ドキュメント情報",
+    "name": "ドキュメント名",
+    "type": "ファイル形式",
+    "size": "ファイルサイズ",
+    "chunkCount": "チャンク数",
+    "createdAt": "アップロード日時"
+  },
+  "chunks": {
+    "title": "チャンク一覧",
+    "empty": "チャンクがありません",
+    "index": "番号",
+    "content": "内容",
+    "charCount": "文字数",
+    "actions": "操作",
+    "view": "表示",
+    "edit": "編集",
+    "delete": "削除",
+    "preview": "プレビュー",
+    "search": "チャンクを検索",
+    "searchPlaceholder": "キーワードを入力してチャンクの内容を検索…",
+    "showing": "表示範囲：",
+    "deleteConfirm": "このチャンクを削除してもよろしいですか？",
+    "deleteSuccess": "チャンクを削除しました",
+    "deleteFailed": "チャンクの削除に失敗しました"
+  },
+  "edit": {
+    "title": "チャンクを編集",
+    "content": "チャンクの内容",
+    "cancel": "キャンセル",
+    "save": "保存",
+    "saveSuccess": "チャンクを保存しました",
+    "saveFailed": "チャンクの保存に失敗しました"
+  },
+  "delete": {
+    "title": "チャンクを削除",
+    "confirmText": "このチャンクを削除してもよろしいですか？",
+    "warning": "削除後は元に戻せず、ナレッジベースの検索結果に影響する可能性があります。",
+    "cancel": "キャンセル",
+    "confirm": "削除",
+    "deleteSuccess": "チャンクを削除しました",
+    "deleteFailed": "チャンクの削除に失敗しました"
+  },
+  "view": {
+    "title": "チャンク詳細",
+    "index": "番号",
+    "content": "内容",
+    "charCount": "文字数",
+    "vecDocId": "ベクトル ID",
+    "close": "閉じる"
+  }
+}
