@@ -1,4 +1,6 @@
 import asyncio
+import threading
+import time
 
 import pytest
 
@@ -6,7 +8,7 @@ from astrbot.core.utils import event_loop_diagnostics as diagnostics
 
 
 def test_load_event_loop_diagnostic_settings_defaults():
-    """Default settings enable lag monitoring and stack dump watchdog."""
+    """Default settings enable lag monitoring and the stack dump watchdog."""
     settings = diagnostics.load_event_loop_diagnostic_settings()
 
     assert settings.lag_monitor_enabled is True
@@ -26,7 +28,7 @@ async def test_create_event_loop_diagnostic_tasks_defaults():
     try:
         assert [task.get_name() for task in tasks] == [
             "event_loop_lag_monitor",
-            "event_loop_faulthandler_watchdog",
+            "event_loop_watchdog",
         ]
     finally:
         for task in tasks:
@@ -35,100 +37,78 @@ async def test_create_event_loop_diagnostic_tasks_defaults():
 
 
 @pytest.mark.asyncio
-async def test_faulthandler_watchdog_cancels_pending_dump(monkeypatch):
-    """The faulthandler watchdog should cancel its pending dump on shutdown."""
-    calls = []
-
-    class FakeFaultHandler:
-        def cancel_dump_traceback_later(self):
-            calls.append("cancel")
-
-        def dump_traceback_later(self, timeout, repeat, file):
-            calls.append(("dump", timeout, repeat, file))
-
-    fake_faulthandler = FakeFaultHandler()
-    monkeypatch.setattr(diagnostics, "faulthandler", fake_faulthandler)
-
+async def test_event_loop_watchdog_stops_worker_thread():
+    """The event loop watchdog should stop its worker thread on shutdown."""
     task = asyncio.create_task(
-        diagnostics.faulthandler_event_loop_watchdog(timeout=10, interval=1)
+        diagnostics.event_loop_watchdog(timeout=10, interval=0.01)
     )
-    await asyncio.sleep(0)
+    await asyncio.sleep(0.02)
     task.cancel()
     await asyncio.gather(task, return_exceptions=True)
 
-    assert any(isinstance(call, tuple) and call[0] == "dump" for call in calls)
-    assert calls[-1] == "cancel"
+    assert not any(
+        thread.name == "event_loop_watchdog" for thread in threading.enumerate()
+    )
 
 
 @pytest.mark.asyncio
-async def test_faulthandler_watchdog_writes_rotating_log(tmp_path, monkeypatch):
-    """The faulthandler watchdog should write to and rotate its log file."""
+async def test_event_loop_watchdog_writes_rotating_log(tmp_path):
+    """The watchdog should write to and rotate its log file."""
     log_path = tmp_path / "logs" / "event_loop_watchdog.log"
     log_path.parent.mkdir()
     log_path.write_text("x" * 8, encoding="utf-8")
-    calls = []
-
-    class FakeFaultHandler:
-        def cancel_dump_traceback_later(self):
-            calls.append("cancel")
-
-        def dump_traceback_later(self, timeout, repeat, file):
-            calls.append(("dump", timeout, repeat, file.name))
-            file.write("watchdog dump\n")
-            file.flush()
-
-    fake_faulthandler = FakeFaultHandler()
-    monkeypatch.setattr(diagnostics, "faulthandler", fake_faulthandler)
 
     task = asyncio.create_task(
-        diagnostics.faulthandler_event_loop_watchdog(
-            timeout=10,
-            interval=1,
+        diagnostics.event_loop_watchdog(
+            timeout=0.02,
+            interval=0.005,
             dump_path=log_path,
             max_bytes=4,
         )
     )
     await asyncio.sleep(0)
+    time.sleep(0.05)  # noqa: ASYNC251 - Intentionally block the event loop.
+    await asyncio.sleep(0.02)
     task.cancel()
     await asyncio.gather(task, return_exceptions=True)
 
-    assert log_path.read_text(encoding="utf-8") == "watchdog dump\n"
-    assert log_path.with_name("event_loop_watchdog.log.1").read_text(
-        encoding="utf-8"
-    ) == "x" * 8
-    assert any(isinstance(call, tuple) and call[0] == "dump" for call in calls)
+    log_content = log_path.read_text(encoding="utf-8")
+    assert "Event loop stalled for" in log_content
+    assert "test_event_loop_diagnostics.py" in log_content
+    assert (
+        log_path.with_name("event_loop_watchdog.log.1").read_text(encoding="utf-8")
+        == "x" * 8
+    )
 
 
 @pytest.mark.asyncio
-async def test_faulthandler_watchdog_survives_dump_failure(tmp_path, monkeypatch):
-    """The watchdog should keep running after faulthandler arm failures."""
+async def test_event_loop_watchdog_survives_dump_failure(tmp_path, monkeypatch):
+    """The watchdog should keep running after stack dump failures."""
     log_path = tmp_path / "event_loop_watchdog.log"
-    armed_again = asyncio.Event()
-    calls = []
+    dumped = threading.Event()
+    attempts = 0
 
-    class FakeFaultHandler:
-        def cancel_dump_traceback_later(self):
-            calls.append("cancel")
+    def flaky_open(path, max_bytes):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise OSError("boom")
+        dumped.set()
+        return path.open("a", encoding="utf-8")
 
-        def dump_traceback_later(self, timeout, repeat, file):
-            calls.append(("dump", timeout, repeat, file.name))
-            if len([call for call in calls if isinstance(call, tuple)]) == 1:
-                raise RuntimeError("boom")
-            armed_again.set()
-
-    fake_faulthandler = FakeFaultHandler()
-    monkeypatch.setattr(diagnostics, "faulthandler", fake_faulthandler)
+    monkeypatch.setattr(diagnostics, "_open_watchdog_log_file", flaky_open)
 
     task = asyncio.create_task(
-        diagnostics.faulthandler_event_loop_watchdog(
-            timeout=10,
-            interval=0.01,
+        diagnostics.event_loop_watchdog(
+            timeout=0.02,
+            interval=0.005,
             dump_path=log_path,
         )
     )
-    await asyncio.wait_for(armed_again.wait(), timeout=1)
+    await asyncio.sleep(0)
+    time.sleep(0.06)  # noqa: ASYNC251 - Intentionally block the event loop.
+    assert dumped.is_set()
     task.cancel()
     await asyncio.gather(task, return_exceptions=True)
 
-    dump_calls = [call for call in calls if isinstance(call, tuple)]
-    assert len(dump_calls) >= 2
+    assert attempts >= 2
