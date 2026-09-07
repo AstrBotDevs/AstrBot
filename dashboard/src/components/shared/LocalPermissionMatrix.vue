@@ -1,49 +1,49 @@
 <template>
   <div class="local-permission-matrix">
-    <v-table density="compact" class="permission-table">
+    <v-table class="permission-table">
       <thead>
         <tr>
-          <th>{{ tm('ai_group.agent_computer_use.local_permissions.role') }}</th>
-          <th class="text-center">{{ tm('ai_group.agent_computer_use.local_permissions.execution') }}</th>
-          <th class="text-center">{{ tm('ai_group.agent_computer_use.local_permissions.network') }}</th>
-          <th class="text-center">{{ tm('ai_group.agent_computer_use.local_permissions.hostFilesystem') }}</th>
-          <th>{{ tm('ai_group.agent_computer_use.local_permissions.result') }}</th>
+          <th scope="col">{{ tm('ai_group.agent_computer_use.local_permissions.role') }}</th>
+          <th scope="col" class="text-center">{{ tm('ai_group.agent_computer_use.local_permissions.execution') }}</th>
+          <th scope="col" class="text-center">{{ tm('ai_group.agent_computer_use.local_permissions.network') }}</th>
+          <th scope="col" class="text-center">{{ tm('ai_group.agent_computer_use.local_permissions.hostFilesystem') }}</th>
+          <th scope="col" class="text-center">{{ tm('ai_group.agent_computer_use.local_permissions.result') }}</th>
         </tr>
       </thead>
       <tbody>
-        <tr v-for="role in roles" :key="role">
+        <tr v-for="role in roles" :key="role" class="permission-row">
           <td class="role-cell">
             {{ tm(`ai_group.agent_computer_use.local_permissions.roles.${role}`) }}
           </td>
-          <td class="permission-cell">
+          <td class="permission-cell" :data-label="tm('ai_group.agent_computer_use.local_permissions.execution')">
             <v-checkbox-btn
               :model-value="policy(role).allow_execution"
               color="primary"
               density="compact"
-              :aria-label="tm('ai_group.agent_computer_use.local_permissions.execution')"
+              :aria-label="`${tm(`ai_group.agent_computer_use.local_permissions.roles.${role}`)} · ${tm('ai_group.agent_computer_use.local_permissions.execution')}`"
               @update:model-value="updatePermission(role, 'allow_execution', Boolean($event))"
             />
           </td>
-          <td class="permission-cell">
+          <td class="permission-cell" :data-label="tm('ai_group.agent_computer_use.local_permissions.network')">
             <v-checkbox-btn
               :model-value="policy(role).allow_network"
               :disabled="!policy(role).allow_execution"
               color="primary"
               density="compact"
-              :aria-label="tm('ai_group.agent_computer_use.local_permissions.network')"
+              :aria-label="`${tm(`ai_group.agent_computer_use.local_permissions.roles.${role}`)} · ${tm('ai_group.agent_computer_use.local_permissions.network')}`"
               @update:model-value="updatePermission(role, 'allow_network', Boolean($event))"
             />
           </td>
-          <td class="permission-cell">
+          <td class="permission-cell" :data-label="tm('ai_group.agent_computer_use.local_permissions.hostFilesystem')">
             <v-checkbox-btn
               :model-value="policy(role).filesystem_scope === 'host'"
               color="primary"
               density="compact"
-              :aria-label="tm('ai_group.agent_computer_use.local_permissions.hostFilesystem')"
+              :aria-label="`${tm(`ai_group.agent_computer_use.local_permissions.roles.${role}`)} · ${tm('ai_group.agent_computer_use.local_permissions.hostFilesystem')}`"
               @update:model-value="updatePermission(role, 'filesystem_scope', $event ? 'host' : 'workspace')"
             />
           </td>
-          <td>
+          <td class="permission-status">
             <v-chip size="small" :color="policyResult(role).color" variant="tonal">
               {{ policyResult(role).label }}
             </v-chip>
@@ -61,7 +61,7 @@
       type="warning"
       variant="tonal"
       density="compact"
-      class="mt-3"
+      class="permission-warning"
     >
       {{ tm('ai_group.agent_computer_use.local_permissions.memberWarning') }}
     </v-alert>
@@ -151,17 +151,25 @@ const memberHasElevatedAccess = computed(() => {
 
 <style scoped>
 .local-permission-matrix {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
   width: 100%;
+  min-width: 0;
+  padding-top: 12px;
 }
 
 .permission-table {
+  min-width: 0;
   border: 1px solid rgba(var(--v-theme-on-surface), 0.16);
   border-radius: 8px;
 }
 
 .permission-table th {
-  white-space: nowrap;
+  white-space: normal;
+  line-height: 1.4;
   font-size: 0.8rem;
+  background: rgba(var(--v-theme-on-surface), 0.035);
 }
 
 .permission-table :deep(th),
@@ -170,7 +178,7 @@ const memberHasElevatedAccess = computed(() => {
 }
 
 .role-cell {
-  min-width: 92px;
+  min-width: 80px;
   font-weight: 500;
 }
 
@@ -182,19 +190,87 @@ const memberHasElevatedAccess = computed(() => {
   justify-content: center;
 }
 
-.permission-help {
-  margin-top: 10px;
-  font-size: 0.8rem;
-  line-height: 1.45;
+.permission-status {
+  text-align: center;
 }
 
-@media (max-width: 720px) {
-  .local-permission-matrix {
-    overflow-x: auto;
+.permission-status :deep(.v-chip) {
+  height: auto;
+  min-height: 24px;
+  padding-block: 4px;
+}
+
+.permission-status :deep(.v-chip__content) {
+  white-space: normal;
+}
+
+.permission-help {
+  font-size: 0.8rem;
+  line-height: 1.65;
+}
+
+.permission-warning {
+  font-size: 0.8rem;
+  line-height: 1.6;
+}
+
+@media (max-width: 600px) {
+  .permission-table {
+    border: 0;
+    background: transparent;
   }
 
-  .permission-table {
-    min-width: 620px;
+  .permission-table :deep(table) {
+    display: block;
+  }
+
+  .permission-table thead {
+    display: none;
+  }
+
+  .permission-table tbody {
+    display: grid;
+    gap: 12px;
+  }
+
+  .permission-table .permission-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    padding: 12px;
+    border: 1px solid rgba(var(--v-theme-on-surface), 0.16);
+    border-radius: 8px;
+  }
+
+  .permission-table .permission-row > td {
+    height: auto;
+    min-width: 0;
+    padding: 0;
+    border-bottom: 0 !important;
+  }
+
+  .permission-table .permission-row > .permission-cell {
+    display: flex;
+    grid-column: 1 / -1;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 44px;
+  }
+
+  .permission-cell :deep(.v-selection-control) {
+    flex: 0 0 auto;
+  }
+
+  .permission-cell::before {
+    content: attr(data-label);
+    font-size: 0.8rem;
+    text-align: left;
+  }
+
+  .permission-status {
+    grid-column: 2;
+    grid-row: 1;
   }
 }
 </style>

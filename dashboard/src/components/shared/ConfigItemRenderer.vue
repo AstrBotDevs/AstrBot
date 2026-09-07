@@ -1,5 +1,5 @@
 <template>
-  <div class="w-100">
+  <div class="w-100" :class="{ 'config-field--full-width': itemMeta?.full_width }">
     <!-- Special handling for specific metadata types -->
     <template v-if="itemMeta?._special === 'select_provider'">
       <ProviderSelector :model-value="modelValue" @update:model-value="emitUpdate" :provider-type="'chat_completion'" />

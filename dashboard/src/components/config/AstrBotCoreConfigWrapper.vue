@@ -402,8 +402,8 @@ export default {
   padding: 0;
 }
 
-.config-standard-section__groups :deep(.config-input > *),
-:deep(.config-product-groups .config-input > *) {
+.config-standard-section__groups :deep(.config-input > :not(.config-field--full-width)),
+:deep(.config-product-groups .config-input > :not(.config-field--full-width)) {
   width: 100%;
   max-width: 270px;
 }
