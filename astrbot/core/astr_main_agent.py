@@ -205,7 +205,7 @@ class MainAgentBuildConfig:
     """This will inject healthy and safe system prompt into the main agent,
     to prevent LLM output harmful information"""
     safety_mode_strategy: str = "system_prompt"
-    computer_use_runtime: str = "local"
+    computer_use_runtime: str = "none"
     """The runtime for agent computer use: none, local, or sandbox."""
     sandbox_cfg: dict = field(default_factory=dict)
     add_cron_tools: bool = True
