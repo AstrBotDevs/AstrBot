@@ -762,6 +762,10 @@
         "description": "统一 Webhook 模式",
         "hint": "Webhook 模式下使用 AstrBot 统一 Webhook 入口，无需单独开启端口。回调地址为 /api/v1/webhooks/platforms/{webhook_uuid}。"
       },
+      "use_markdown": {
+        "description": "主动消息使用 Markdown",
+        "hint": "启用后，机器人主动发送消息默认以 Markdown 模式发送；插件显式调用 use_markdown() 指定行为时不受此配置影响。"
+      },
       "webhook_uuid": {
         "description": "Webhook UUID",
         "hint": "统一 Webhook 模式下的唯一标识符，创建平台时自动生成。"

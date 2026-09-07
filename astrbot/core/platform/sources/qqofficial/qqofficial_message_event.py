@@ -329,13 +329,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         for component in message.chain:
             is_media = isinstance(component, Image | Record | Video | File)
             if is_media and current_has_media:
-                chunks.append(
-                    MessageChain(
-                        chain=current_chain,
-                        use_t2i_=message.use_t2i_,
-                        type=message.type,
-                    )
-                )
+                chunks.append(message.derive(current_chain))
                 current_chain = []
                 current_has_media = False
 
@@ -343,13 +337,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             current_has_media = current_has_media or is_media
 
         if current_chain or not message.chain:
-            chunks.append(
-                MessageChain(
-                    chain=current_chain,
-                    use_t2i_=message.use_t2i_,
-                    type=message.type,
-                )
-            )
+            chunks.append(message.derive(current_chain))
 
         return chunks
 
@@ -611,8 +599,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
         return ret
 
+    @staticmethod
     async def _send_with_markdown_fallback(
-        self,
         send_func,
         payload: dict,
         plain_text: str,
@@ -638,7 +626,9 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
             # QQ 流式 markdown 分片校验：内容必须以换行结尾。
             # 某些边界场景服务端仍可能判定失败，这里做一次修正重试。
-            if stream and self.STREAM_MARKDOWN_NEWLINE_ERROR in str(err):
+            if stream and QQOfficialMessageEvent.STREAM_MARKDOWN_NEWLINE_ERROR in str(
+                err
+            ):
                 retry_payload = payload.copy()
 
                 markdown_payload = retry_payload.get("markdown")
@@ -657,7 +647,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 return await send_func(retry_payload)
 
             if (
-                self.MARKDOWN_NOT_ALLOWED_ERROR not in str(err)
+                QQOfficialMessageEvent.MARKDOWN_NOT_ALLOWED_ERROR not in str(err)
                 or not payload.get("markdown")
                 or not plain_text
             ):
