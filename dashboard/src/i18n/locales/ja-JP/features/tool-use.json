@@ -1,0 +1,192 @@
+{
+  "title": "関数ツール管理",
+  "subtitle": "MCP サーバーを管理し、利用可能な関数ツールを確認します。",
+  "tooltip": {
+    "info": "関数呼び出しと MCP とは？",
+    "marketplace": "コミュニティの MCP サーバーを閲覧・インストール",
+    "serverConfig": "MCP サーバー（stdio）の設定では、次のフィールドを使用できます：\ncommand：コマンド名（例：python または uv）\nargs：コマンド引数の配列（例：[\"run\", \"server.py\"]）\nenv：環境変数オブジェクト（例：{\"api_key\": \"abc\"}）\ncwd：作業ディレクトリのパス（例：/path/to/server）\nencoding：出力エンコーディング（既定：utf-8）\nencoding_error_handler：テキストのエンコーディングエラー処理（既定：strict）\nその他のフィールドについては MCP ドキュメントを参照してください。\n⚠️ Docker で AstrBot をデプロイする場合は、AstrBot がマウントした data ディレクトリ内に MCP サーバーをインストールしてください。"
+  },
+  "tabs": {
+    "local": "ローカルサーバー",
+    "marketplace": "MCP マーケット"
+  },
+  "mcpServers": {
+    "title": "MCP サーバー",
+    "description": "MCP サーバーを管理します",
+    "buttons": {
+      "refresh": "再読み込み",
+      "add": "サーバーを追加",
+      "connect": "接続",
+      "disconnect": "切断",
+      "useTemplateStdio": "Stdio テンプレート",
+      "useTemplateStreamableHttp": "Streamable HTTP テンプレート",
+      "useTemplateSse": "SSE テンプレート",
+      "sync": "サーバーを同期"
+    },
+    "empty": "MCP サーバーがありません。「サーバーを追加」をクリックして追加してください",
+    "status": {
+      "noTools": "利用可能なツールがありません",
+      "availableTools": "利用可能なツール",
+      "connected": "接続済み",
+      "disconnected": "未接続",
+      "configSummary": "設定：{keys}",
+      "noConfig": "設定されていません"
+    }
+  },
+  "functionTools": {
+    "title": "関数ツール",
+    "buttons": {
+      "view": "ツールを表示"
+    },
+    "search": "関数ツールを検索",
+    "empty": "利用可能な関数ツールがありません",
+    "description": "機能の説明",
+    "parameters": "パラメーター一覧",
+    "noParameters": "このツールにはパラメーターがありません",
+    "filter": {
+      "showBuiltin": "組み込みツールを表示"
+    },
+    "table": {
+      "paramName": "パラメーター名",
+      "type": "種類",
+      "description": "説明",
+      "required": "必須",
+      "origin": "提供元",
+      "originName": "提供元の名前",
+      "readonly": "読み取り専用",
+      "permission": "権限",
+      "permissionAdmin": "管理者",
+      "permissionMember": "すべてのユーザー",
+      "permissionEveryone": "すべてのユーザー",
+      "permissionBuiltin": "システム組み込み",
+      "actions": "操作"
+    },
+    "configTags": {
+      "tooltipTitle": "このツールが設定ファイル {config} で有効になっている理由：",
+      "conditions": {
+        "truthy": "{key} が有効です",
+        "equals": "{key} = {expected}",
+        "in": "{key} が {expected} に一致しました",
+        "fallback": "{key} の現在値は {actual} です"
+      }
+    },
+    "summary": {
+      "total": "合計",
+      "active": "有効",
+      "inactive": "無効"
+    }
+  },
+  "marketplace": {
+    "title": "MCP サーバーマーケット",
+    "search": "サーバーを検索",
+    "buttons": {
+      "refresh": "再読み込み",
+      "detail": "詳細",
+      "import": "インポート"
+    },
+    "loading": "MCP サーバーマーケットを読み込み中…",
+    "empty": "利用可能な MCP サーバーがありません",
+    "status": {
+      "availableTools": "利用可能なツール（{count}）",
+      "noToolsInfo": "利用可能なツール情報がありません"
+    }
+  },
+  "dialogs": {
+    "addServer": {
+      "title": "MCP サーバーを追加",
+      "editTitle": "MCP サーバーを編集",
+      "fields": {
+        "name": "サーバー名",
+        "nameRequired": "名前は必須です",
+        "enable": "保存後にサーバーへ接続",
+        "config": "サーバー設定"
+      },
+      "errors": {
+        "configEmpty": "設定を空にはできません",
+        "jsonFormat": "JSON 形式エラー：{error}",
+        "jsonParse": "JSON 解析エラー：{error}"
+      },
+      "buttons": {
+        "cancel": "キャンセル",
+        "save": "保存",
+        "testConnection": "接続をテスト",
+        "sync": "同期"
+      },
+      "tips": {
+        "timeoutConfig": "ツール呼び出しのタイムアウトは設定ページで個別に指定してください",
+        "transportRecommendation": "Streamable HTTP または SSE モードの使用を推奨します。stdio モードは AstrBot ホスト上でローカルプロセスを起動するため、信頼できる MCP サーバーにのみ使用してください。"
+      }
+    },
+    "serverDetail": {
+      "title": "サーバー詳細",
+      "installConfig": "インストール設定",
+      "availableTools": "利用可能なツール",
+      "buttons": {
+        "close": "閉じる",
+        "importConfig": "設定をインポート"
+      }
+    },
+    "confirmDelete": "MCP サーバー「{name}」を削除してもよろしいですか？この操作は元に戻せません。"
+  },
+  "syncProvider": {
+    "title": "MCP サーバーを同期",
+    "subtitle": "プロバイダーの MCP サーバー設定をローカルに同期します。",
+    "steps": {
+      "selectProvider": "ステップ 1：プロバイダーを選択",
+      "configureAuth": "ステップ 2：認証を設定",
+      "syncServers": "ステップ 3：サーバーを同期"
+    },
+    "providers": {
+      "modelscope": "ModelScope",
+      "description": "ModelScope は、さまざまな機械学習・AI サービス向けの MCP サーバーを提供するオープンなモデルコミュニティです。"
+    },
+    "fields": {
+      "provider": "プロバイダーを選択",
+      "accessToken": "アクセストークン",
+      "tokenRequired": "アクセストークンは必須です",
+      "tokenHint": "ModelScope のアクセストークンを入力してください"
+    },
+    "buttons": {
+      "cancel": "キャンセル",
+      "previous": "戻る",
+      "next": "次へ",
+      "sync": "同期を開始",
+      "getToken": "トークンを取得"
+    },
+    "status": {
+      "selectProvider": "MCP サーバーのプロバイダーを選択してください",
+      "enterToken": "続行するにはアクセストークンを入力してください",
+      "readyToSync": "サーバー設定を同期する準備ができました"
+    },
+    "messages": {
+      "syncSuccess": "MCP サーバーを同期しました",
+      "syncError": "同期に失敗しました：{error}",
+      "tokenHelp": "ModelScope のアクセストークンは、右側のボタンから取得方法を確認できます。"
+    }
+  },
+  "messages": {
+    "getServersError": "MCP サーバー一覧の取得に失敗しました：{error}",
+    "getToolsError": "関数ツール一覧の取得に失敗しました：{error}",
+    "saveSuccess": "保存しました",
+    "saveError": "保存に失敗しました：{error}",
+    "deleteSuccess": "削除しました",
+    "deleteError": "削除に失敗しました：{error}",
+    "updateSuccess": "更新しました",
+    "updateError": "更新に失敗しました：{error}",
+    "getMarketError": "MCP マーケットのサーバー一覧の取得に失敗しました：{error}",
+    "importError": {
+      "noConfig": "このサーバーには利用可能な設定がありません",
+      "invalidFormat": "サーバー設定の形式が正しくありません",
+      "failed": "設定のインポートに失敗しました：{error}"
+    },
+    "configParseError": "設定の解析に失敗しました：{error}",
+    "noAvailableConfig": "利用可能な設定がありません",
+    "toggleToolSuccess": "ツールの状態を切り替えました",
+    "toggleToolReadonly": "組み込みツールは読み取り専用のため、有効化または無効化できません。",
+    "toggleToolError": "ツールの状態を切り替えられませんでした：{error}",
+    "updateToolPermissionSuccess": "ツール {name} の権限を更新しました",
+    "updateToolPermissionFailed": "ツール権限の更新に失敗しました",
+    "updateToolPermissionBuiltin": "組み込みツールでは個別の権限を設定できません",
+    "testError": "接続テストに失敗しました：{error}"
+  }
+}
