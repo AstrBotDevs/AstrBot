@@ -426,6 +426,25 @@ async def test_local_filesystem_scope_can_grant_member_host_access(
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(os.name == "nt", reason="Restricted file access needs POSIX.")
+async def test_restricted_local_member_can_write_to_new_workspace(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    workspace = _setup_local_fs_tools(monkeypatch, tmp_path)
+    workspace.rmdir()
+
+    result = await fs_tools.FileWriteTool().call(
+        _make_context(role="member"),
+        path="notes/first.txt",
+        content="first file\n",
+    )
+
+    assert result.startswith("File written successfully:")
+    assert (workspace / "notes" / "first.txt").read_text() == "first file\n"
+
+
+@pytest.mark.asyncio
 async def test_restricted_local_member_cannot_write_plugin_provided_skill(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,

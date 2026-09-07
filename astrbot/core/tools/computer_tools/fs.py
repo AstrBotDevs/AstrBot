@@ -493,6 +493,8 @@ class FileWriteTool(FunctionTool):
             )
             file_descriptor = None
             if restricted:
+                if current_workspace_root is not None:
+                    current_workspace_root.mkdir(parents=True, exist_ok=True)
                 file_descriptor = open_file_in_allowed_roots(
                     normalized_path,
                     _write_allowed_roots(
