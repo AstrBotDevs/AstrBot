@@ -13,6 +13,7 @@ from astrbot.core.message.message_event_result import MessageChain
 from ..registry import builtin_tool
 from .util import (
     check_admin_permission,
+    is_local_runtime,
     workspace_root_for_context,
 )
 
@@ -133,6 +134,8 @@ class LocalPythonTool(FunctionTool):
     ) -> ToolExecResult:
         if permission_error := check_admin_permission(context, "Python execution"):
             return permission_error
+        if not is_local_runtime(context):
+            return "Error executing code: only local runtime is supported."
         sb = get_local_booter()
         effective_timeout = (
             min(timeout, context.tool_call_timeout)
