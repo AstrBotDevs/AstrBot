@@ -32,7 +32,7 @@ TOOL_CALL_PROMPT = (
 
 TOOL_CALL_PROMPT_SKILLS_LIKE_MODE = (
     "You MUST NOT return an empty response, especially after invoking a tool."
-    " Before calling any tool, provide a brief explanatory message to the user stating the purpose of the tool call."
+    " When using tools, briefly explain the purpose when starting a new type of task, but not before every tool call."
     " Tool schemas are provided in two stages: first only name and description; "
     "if you decide to use a tool, the full parameter schema will be provided in "
     "a follow-up step. Do not guess arguments before you see the schema."
