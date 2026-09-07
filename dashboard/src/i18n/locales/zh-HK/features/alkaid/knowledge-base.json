@@ -1,0 +1,155 @@
+{
+  "title": "知識庫",
+  "subtitle": "管理與搜尋知識庫內容",
+  "documents": {
+    "title": "文件列表",
+    "name": "文件名稱",
+    "size": "檔案大小",
+    "uploadTime": "上載時間",
+    "status": "狀態",
+    "actions": "操作"
+  },
+  "management": {
+    "delete": "刪除",
+    "preview": "預覽",
+    "download": "下載",
+    "reindex": "重新建立索引 (Reindex)"
+  },
+  "notInstalled": {
+    "title": "尚未安裝知識庫插件",
+    "install": "立即安裝"
+  },
+  "empty": {
+    "title": "暫無知識庫，請立即建立一個！🙂",
+    "create": "建立知識庫"
+  },
+  "list": {
+    "title": "知識庫列表",
+    "create": "建立知識庫",
+    "config": "設定",
+    "checkUpdate": "檢查插件更新",
+    "updatePlugin": "更新插件至 {version}",
+    "knowledgeCount": "條知識",
+    "tips": "提示: 可以在聊天頁面使用 /kb 指令查看使用方法！"
+  },
+  "createDialog": {
+    "title": "建立新知識庫",
+    "nameLabel": "知識庫名稱",
+    "descriptionLabel": "描述",
+    "descriptionPlaceholder": "知識庫的簡單描述...",
+    "embeddingModelLabel": "Embedding 模型",
+    "rerankModelLabel": "Rerank 模型",
+    "providerInfo": "Provider ID: {id} | Embedding 模型維度: {dimensions}",
+    "rerankProviderInfo": "Provider ID: {id}",
+    "tips": "提示: 選擇了知識庫的 Embedding 模型後，請勿再修改該供應商的模型或向量維度資訊，否則會嚴重影響召回率 (Recall Rate) 甚至產生錯誤。",
+    "cancel": "取消",
+    "create": "建立"
+  },
+  "emojiPicker": {
+    "title": "選擇 Emoji",
+    "close": "關閉",
+    "categories": {
+      "emotions": "笑臉與情感",
+      "animals": "動物與大自然",
+      "food": "食物與飲品",
+      "activities": "活動與物件",
+      "travel": "旅遊與地點",
+      "symbols": "符號與旗幟"
+    }
+  },
+  "contentDialog": {
+    "title": "知識庫管理",
+    "embeddingModel": "Embedding 模型",
+    "vectorDimension": "向量維度",
+    "usage": "使用方法: 在聊天頁面輸入 \"/kb use {name}\"",
+    "tabs": {
+      "upload": "上載檔案",
+      "search": "搜尋內容",
+      "fromURL": "由 URL 匯入"
+    }
+  },
+  "upload": {
+    "title": "上載檔案至知識庫",
+    "subtitle": "支援 txt、pdf、word、excel 等多種格式",
+    "dropzone": "將檔案拖曳至此處或點擊上載",
+    "chunkSettings": {
+      "title": "分塊 (Chunking) 設定",
+      "tooltip": "Chunk Size 決定每塊文字的大小，Overlap 決定相鄰文字之間的重疊量。\n較小的 Chunk 準確度較高但數量較多，適當的 Overlap 可以提高搜尋準確度。",
+      "chunkSizeLabel": "Chunk Size",
+      "chunkSizeHint": "控制每塊文字的大小，留空則使用預設值",
+      "overlapLabel": "Overlap Length",
+      "overlapHint": "控制相鄰文字的重疊量，留空則使用預設值"
+    },
+    "upload": "上載檔案",
+    "uploading": "正在上載..."
+  },
+  "search": {
+    "queryLabel": "搜尋知識庫內容",
+    "queryPlaceholder": "輸入關鍵字搜尋知識庫...",
+    "resultCountLabel": "結果數量",
+    "searching": "正在搜尋...",
+    "resultsTitle": "搜尋結果",
+    "relevance": "相關度",
+    "noResults": "找不到符合的內容"
+  },
+  "deleteDialog": {
+    "title": "確認刪除",
+    "confirmText": "確定要刪除知識庫 {name}？",
+    "warning": "此操作無法復原，所有知識庫內容將被永久刪除。",
+    "cancel": "取消",
+    "delete": "刪除"
+  },
+  "messages": {
+    "pluginNotAvailable": "插件未安裝或無法使用",
+    "pluginNotActivated": "astrbot_plugin_knowledge_base 插件未啟用，請前往插件管理頁面啟用，然後重新啟動 AstrBot。",
+    "checkPluginFailed": "檢查插件失敗",
+    "installFailed": "安裝失敗",
+    "installPluginFailed": "安裝插件失敗",
+    "getKnowledgeBaseListFailed": "獲取知識庫列表失敗",
+    "knowledgeBaseCreated": "知識庫建立成功",
+    "createFailed": "建立失敗",
+    "createKnowledgeBaseFailed": "建立知識庫失敗",
+    "pleaseEnterKnowledgeBaseName": "請輸入知識庫名稱",
+    "pleaseSelectFile": "請先選擇檔案",
+    "operationSuccess": "操作成功: {message}",
+    "uploadFailed": "上載失敗",
+    "fileUploadFailed": "檔案上載失敗",
+    "pleaseEnterSearchContent": "請輸入搜尋內容",
+    "noMatchingContent": "找不到符合的內容",
+    "searchFailed": "搜尋失敗",
+    "searchKnowledgeBaseFailed": "搜尋知識庫失敗",
+    "deleteTargetNotExists": "刪除目標不存在",
+    "knowledgeBaseDeleted": "知識庫刪除成功",
+    "deleteFailed": "刪除失敗",
+    "deleteKnowledgeBaseFailed": "刪除知識庫失敗",
+    "getEmbeddingModelListFailed": "獲取 Embedding 模型列表失敗",
+    "updateAvailable": "發現新版本: {current} -> {latest}",
+    "pluginUpToDate": "插件已是最新版本",
+    "pluginNotFoundInMarket": "在插件市場找不到此插件",
+    "checkUpdateFailed": "檢查更新失敗",
+    "updateSuccess": "插件更新成功",
+    "updateFailed": "更新失敗",
+    "updatePluginFailed": "更新插件失敗"
+  },
+  "importFromUrl": {
+    "title": "由 URL 匯入",
+    "urlLabel": "網頁 URL",
+    "urlPlaceholder": "請輸入要提取知識的網頁地址",
+    "optionsTitle": "匯入選項",
+    "tooltip": "這些選項控制如何從 URL 內容提取與處理文字。\n留空將使用插件的預設設定。\n啟用 LLM 文本修復與摘要後可能需要較長處理時間。",
+    "useLlmRepairLabel": "啟用 LLM 文本修復",
+    "useClusteringSummaryLabel": "啟用 Clustering Summary",
+    "repairLlmProviderIdLabel": "文本修復模型",
+    "summarizeLlmProviderIdLabel": "摘要模型",
+    "embeddingProviderIdLabel": "Embedding 模型",
+    "chunkSizeLabel": "Chunk Size",
+    "chunkOverlapLabel": "Overlap Length",
+    "startImport": "開始匯入",
+    "importing": "正在匯入...",
+    "importSuccess": "匯入成功",
+    "importFailed": "匯入失敗",
+    "uploadingChunks": "內容提取成功，正在上載 Chunk...",
+    "preRequisite": "提示：請先前往插件市場安裝 astrbot_plugin_url_2_knowledge_base，並跟隨插件文件中的指示完成 playwright 安裝後才能使用此功能。",
+    "allChunksUploaded": "所有 Chunk 上載成功"
+  }
+}

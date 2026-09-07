@@ -1,0 +1,158 @@
+{
+  "title": "自訂規則",
+  "subtitle": "為特定工作階段設定自訂規則，優先級高於全域設定",
+  "buttons": {
+    "refresh": "重新整理",
+    "edit": "編輯",
+    "editRule": "編輯規則",
+    "deleteAllRules": "刪除所有規則",
+    "addRule": "新增規則",
+    "save": "儲存",
+    "cancel": "取消",
+    "delete": "刪除",
+    "clear": "清除",
+    "next": "下一步",
+    "editCustomName": "編輯備註",
+    "batchDelete": "批次刪除"
+  },
+  "customRules": {
+    "title": "自訂規則",
+    "rulesCount": "條規則",
+    "hasRules": "已設定",
+    "noRules": "暫無自訂規則",
+    "noRulesDesc": "點擊「新增規則」為特定工作階段配置自訂規則",
+    "serviceConfig": "服務設定",
+    "pluginConfig": "插件設定",
+    "kbConfig": "知識庫設定",
+    "providerConfig": "模型設定",
+    "configured": "已設定",
+    "noCustomName": "未設定備註"
+  },
+  "quickEditName": {
+    "title": "編輯備註名稱"
+  },
+  "search": {
+    "placeholder": "搜尋工作階段..."
+  },
+  "table": {
+    "headers": {
+      "umoInfo": "訊息工作階段來源",
+      "rulesOverview": "規則概覽",
+      "actions": "操作"
+    }
+  },
+  "persona": {
+    "none": "跟隨設定檔"
+  },
+  "provider": {
+    "followConfig": "跟隨設定檔"
+  },
+  "addRule": {
+    "title": "新增自訂規則",
+    "description": "選擇一個訊息工作階段來源 (UMO) 來配置自訂規則。自訂規則的優先級高於該來源所屬設定檔中的全域規則。可以使用 /sid 指令獲取該來源的 UMO 資訊。",
+    "selectUmo": "選擇工作階段",
+    "noUmos": "暫無可用工作階段"
+  },
+  "ruleEditor": {
+    "title": "編輯自訂規則",
+    "description": "為此工作階段配置自訂規則，這些規則將會覆寫全域設定。",
+    "serviceConfig": {
+      "title": "服務設定",
+      "sessionEnabled": "啟用此訊息工作階段來源的訊息處理",
+      "llmEnabled": "啟用 LLM",
+      "ttsEnabled": "啟用 TTS",
+      "customName": "訊息工作階段來源備註名稱"
+    },
+    "providerConfig": {
+      "title": "模型設定",
+      "chatProvider": "對話模型",
+      "sttProvider": "STT 模型",
+      "ttsProvider": "TTS 模型"
+    },
+    "personaConfig": {
+      "title": "人格設定",
+      "selectPersona": "選擇人格",
+      "hint": "套用人格設定後，會強制此來源的所有對話使用該人格。"
+    },
+    "pluginConfig": {
+      "title": "插件設定",
+      "disabledPlugins": "已停用的插件",
+      "hint": "選擇要在這個工作階段停用的插件。未選擇的插件將保持啟用。"
+    },
+    "kbConfig": {
+      "title": "知識庫設定",
+      "selectKbs": "選擇知識庫",
+      "topK": "回傳結果數量 (Top K)",
+      "enableRerank": "啟用 Rerank"
+    }
+  },
+  "deleteConfirm": {
+    "title": "確認刪除",
+    "message": "確定要刪除此工作階段的所有自訂規則？刪除後將恢復使用全域設定。"
+  },
+  "batchDeleteConfirm": {
+    "title": "確認批次刪除",
+    "message": "確定要刪除已選的 {count} 條規則？刪除後將恢復使用全域設定。"
+  },
+  "batchOperations": {
+    "title": "批次操作",
+    "hint": "快速批次修改工作階段設定",
+    "scope": "套用範圍",
+    "scopeSelected": "已選的工作階段",
+    "scopeAll": "所有工作階段",
+    "scopeGroup": "所有群組聊天",
+    "scopePrivate": "所有私訊",
+    "llmStatus": "LLM 狀態",
+    "ttsStatus": "TTS 狀態",
+    "chatProvider": "對話模型",
+    "ttsProvider": "TTS 模型",
+    "apply": "套用更改"
+  },
+  "groups": {
+    "title": "群組管理",
+    "count": "{count} 個群組",
+    "addToGroup": "加入至群組",
+    "create": "建立群組",
+    "edit": "編輯群組",
+    "name": "群組名稱",
+    "sessionsCount": "{count} 個工作階段",
+    "empty": "暫無群組，點擊「建立群組」新增",
+    "availableSessions": "可選工作階段 ({count})",
+    "selectedSessions": "已選工作階段 ({count})",
+    "searchPlaceholder": "搜尋...",
+    "noMatch": "找不到符合項目",
+    "noMembers": "暫無成員",
+    "customGroupDivider": "── 自訂群組 ──",
+    "customGroupOption": "📁 {name} ({count})",
+    "groupOption": "{name} ({count} 個工作階段)",
+    "deleteConfirm": "確定要刪除群組 \"{name}\"？"
+  },
+  "status": {
+    "enabled": "啟用",
+    "disabled": "停用"
+  },
+  "messages": {
+    "refreshSuccess": "資料已重新整理",
+    "loadError": "載入資料失敗",
+    "saveSuccess": "儲存成功",
+    "saveError": "儲存失敗",
+    "clearSuccess": "已清除",
+    "clearError": "清除失敗",
+    "deleteSuccess": "刪除成功",
+    "deleteError": "刪除失敗",
+    "noChanges": "沒有需要儲存的更改",
+    "batchDeleteSuccess": "批次刪除成功",
+    "batchDeleteError": "批次刪除失敗",
+    "selectSessionsFirst": "請先選擇要操作的工作階段",
+    "selectAtLeastOneConfig": "請最少選擇一項要修改的設定",
+    "batchUpdateSuccess": "批次更新成功",
+    "partialUpdateFailed": "部分更新失敗",
+    "batchUpdateError": "批次更新失敗",
+    "groupNameRequired": "群組名稱不能為空",
+    "saveGroupError": "儲存群組失敗",
+    "deleteGroupError": "刪除群組失敗",
+    "selectSessionsToAddFirst": "請先選擇要加入的工作階段",
+    "addToGroupSuccess": "已將 {count} 個工作階段加入群組",
+    "addToGroupError": "加入失敗"
+  }
+}

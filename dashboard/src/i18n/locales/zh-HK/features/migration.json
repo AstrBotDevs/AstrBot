@@ -1,0 +1,18 @@
+{
+  "dialog": {
+    "title": "Data Migration 助手",
+    "warning": "👋 歡迎 Upgrade 去 v4.0.0。我哋喺新版本 Optimize 咗 Data Format，Detect 到需要行 Database Migrate。",
+    "loading": "Load 緊平台 List...",
+    "loadError": "Load 平台 List 失敗，請 Retry",
+    "noPlatforms": "搵唔到可用嘅平台 Config",
+    "retry": "Retry",
+    "startMigration": "開始 Migrate",
+    "migrating": "Migrate 緊...",
+    "migratingSubtitle": "畀少少耐性，Migrate 嗰陣唔好 Close 呢個 Window",
+    "migrationError": "Migrate 失敗",
+    "success": "Migrate 搞掂！",
+    "completed": "Migrate 已經搞掂",
+    "restartRecommended": "建議 Restart App 等啲改動生效。",
+    "restartNow": "即刻 Restart"
+  }
+}

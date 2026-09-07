@@ -1,0 +1,102 @@
+{
+  "title": "對話管理",
+  "subtitle": "管理與查看用戶對話紀錄",
+  "filters": {
+    "title": "篩選",
+    "platform": "機械人 ID",
+    "type": "類型",
+    "search": "搜尋關鍵字",
+    "reset": "重設"
+  },
+  "history": {
+    "title": "對話紀錄",
+    "refresh": "重新整理"
+  },
+  "batch": {
+    "deleteSelected": "刪除已選項目 ({count})",
+    "exportSelected": "匯出已選項目 ({count})"
+  },
+  "pagination": {
+    "itemsPerPage": "每頁",
+    "showingItems": "顯示 {start}-{end} 項，共 {total} 項"
+  },
+  "table": {
+    "headers": {
+      "title": "對話標題",
+      "platform": "機械人 ID",
+      "type": "訊息類型",
+      "cid": "對話 ID",
+      "umo": "訊息工作階段來源",
+      "sessionId": "Session ID",
+      "createdAt": "建立時間",
+      "updatedAt": "更新時間",
+      "actions": "操作"
+    }
+  },
+  "actions": {
+    "view": "查看",
+    "edit": "編輯",
+    "delete": "刪除"
+  },
+  "messageTypes": {
+    "group": "群組聊天",
+    "friend": "私訊",
+    "unknown": "未知"
+  },
+  "status": {
+    "noTitle": "無標題對話",
+    "unknown": "未知",
+    "noData": "暫無對話紀錄",
+    "emptyContent": "對話內容為空",
+    "audioNotSupported": "你的瀏覽器不支援播放音訊。"
+  },
+  "dialogs": {
+    "view": {
+      "title": "對話詳情",
+      "editMode": "編輯對話",
+      "previewMode": "預覽模式",
+      "saveChanges": "儲存修改",
+      "close": "關閉",
+      "confirmClose": "你有未儲存的修改，確定要關閉？"
+    },
+    "edit": {
+      "title": "編輯對話資訊",
+      "titleLabel": "對話標題",
+      "titlePlaceholder": "輸入對話標題",
+      "cancel": "取消",
+      "save": "儲存"
+    },
+    "delete": {
+      "title": "確認刪除",
+      "message": "確定要刪除對話 {title}？此操作無法復原。",
+      "cancel": "取消",
+      "confirm": "刪除"
+    },
+    "batchDelete": {
+      "title": "確認批次刪除",
+      "message": "確定要刪除已選的 {count} 個對話？此操作無法復原，請謹慎操作！",
+      "andMore": "等 {count} 個",
+      "cancel": "取消",
+      "confirm": "批次刪除",
+      "warning": "警告：此操作無法復原！"
+    }
+  },
+  "messages": {
+    "fetchError": "獲取對話列表失敗",
+    "saveSuccess": "儲存成功",
+    "saveError": "儲存失敗",
+    "deleteSuccess": "刪除成功",
+    "deleteError": "刪除失敗",
+    "historyError": "獲取對話紀錄失敗",
+    "historySaveSuccess": "對話紀錄儲存成功",
+    "historySaveError": "對話紀錄儲存失敗",
+    "invalidJson": "JSON 格式無效",
+    "noItemSelected": "請先選擇要刪除的對話",
+    "batchDeleteSuccess": "成功刪除了 {count} 個對話",
+    "batchDeleteError": "批次刪除失敗",
+    "batchDeletePartial": "刪除完成：成功 {deleted} 個，失敗 {failed} 個",
+    "exportSuccess": "匯出成功",
+    "exportError": "匯出失敗",
+    "noItemSelectedForExport": "請先選擇要匯出的對話"
+  }
+}

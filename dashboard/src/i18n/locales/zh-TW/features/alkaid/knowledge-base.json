@@ -1,0 +1,155 @@
+{
+  "title": "知識庫",
+  "subtitle": "管理和查詢知識庫內容",
+  "documents": {
+    "title": "文件列表",
+    "name": "文件名稱",
+    "size": "大小",
+    "uploadTime": "上傳時間",
+    "status": "狀態",
+    "actions": "操作"
+  },
+  "management": {
+    "delete": "刪除",
+    "preview": "預覽",
+    "download": "下載",
+    "reindex": "重新索引"
+  },
+  "notInstalled": {
+    "title": "還沒有安裝知識庫擴充套件",
+    "install": "立即安裝"
+  },
+  "empty": {
+    "title": "還沒有知識庫，快建立一個吧！🙂",
+    "create": "建立知識庫"
+  },
+  "list": {
+    "title": "知識庫列表",
+    "create": "建立知識庫",
+    "config": "設定",
+    "checkUpdate": "檢查擴充套件更新",
+    "updatePlugin": "更新擴充套件到 {version}",
+    "knowledgeCount": "條知識",
+    "tips": "Tips: 在聊天頁面透過 /kb 指令了解如何使用！"
+  },
+  "createDialog": {
+    "title": "建立新知識庫",
+    "nameLabel": "知識庫名稱",
+    "descriptionLabel": "描述",
+    "descriptionPlaceholder": "知識庫的簡短描述...",
+    "embeddingModelLabel": "嵌入模型(Embedding Model)",
+    "rerankModelLabel": "重排序模型(Rerank Model)",
+    "providerInfo": "供應商 ID: {id} | 嵌入模型維度: {dimensions}",
+    "rerankProviderInfo": "供應商 ID: {id}",
+    "tips": "Tips: 一旦選擇了一個知識庫的嵌入模型，請不要再修改該供應商的模型或者向量維度資訊，否則將嚴重影響該知識庫的召回率甚至報錯。",
+    "cancel": "取消",
+    "create": "建立"
+  },
+  "emojiPicker": {
+    "title": "選擇表情",
+    "close": "關閉",
+    "categories": {
+      "emotions": "笑臉和情感",
+      "animals": "動物和自然",
+      "food": "食物和飲料",
+      "activities": "活動和物品",
+      "travel": "旅行和地點",
+      "symbols": "符號和旗幟"
+    }
+  },
+  "contentDialog": {
+    "title": "知識庫管理",
+    "embeddingModel": "嵌入模型",
+    "vectorDimension": "向量維度",
+    "usage": "使用方式: 在聊天頁中輸入 \"/kb use {name}\"",
+    "tabs": {
+      "upload": "上傳檔案",
+      "search": "搜尋內容",
+      "fromURL": "從 URL 匯入"
+    }
+  },
+  "upload": {
+    "title": "上傳檔案到知識庫",
+    "subtitle": "支援 txt、pdf、word、excel 等多種格式",
+    "dropzone": "拖放檔案到這裡或點擊上傳",
+    "chunkSettings": {
+      "title": "區塊設定",
+      "tooltip": "區塊長度決定每塊文字的大小，重疊長度決定相鄰文字區塊之間的重疊程度。\n較小的區塊更精確但會增加數量，適當的重疊可提高檢索準確性。",
+      "chunkSizeLabel": "區塊長度",
+      "chunkSizeHint": "控制每個文字區塊大小，留空使用預設值",
+      "overlapLabel": "重疊長度",
+      "overlapHint": "控制相鄰文字區塊重疊度，留空使用預設值"
+    },
+    "upload": "上傳檔案",
+    "uploading": "正在上傳..."
+  },
+  "search": {
+    "queryLabel": "搜尋知識庫內容",
+    "queryPlaceholder": "輸入關鍵字搜尋知識庫內容...",
+    "resultCountLabel": "結果數量",
+    "searching": "正在搜尋...",
+    "resultsTitle": "搜尋結果",
+    "relevance": "相關度",
+    "noResults": "沒有找到符合的內容"
+  },
+  "deleteDialog": {
+    "title": "確認刪除",
+    "confirmText": "您確定要刪除知識庫 {name} 嗎？",
+    "warning": "此操作不可復原，所有知識庫內容將被永久刪除。",
+    "cancel": "取消",
+    "delete": "刪除"
+  },
+  "messages": {
+    "pluginNotAvailable": "擴充套件未安裝或不可用",
+    "pluginNotActivated": "astrbot_plugin_knowledge_base 擴充套件未啟用，請前往擴充套件管理頁面啟用，然後重新啟動 AstrBot。",
+    "checkPluginFailed": "檢查擴充套件失敗",
+    "installFailed": "安裝失敗",
+    "installPluginFailed": "安裝擴充套件失敗",
+    "getKnowledgeBaseListFailed": "取得知識庫列表失敗",
+    "knowledgeBaseCreated": "知識庫建立成功",
+    "createFailed": "建立失敗",
+    "createKnowledgeBaseFailed": "建立知識庫失敗",
+    "pleaseEnterKnowledgeBaseName": "請輸入知識庫名稱",
+    "pleaseSelectFile": "請先選擇檔案",
+    "operationSuccess": "操作成功：{message}",
+    "uploadFailed": "上傳失敗",
+    "fileUploadFailed": "檔案上傳失敗",
+    "pleaseEnterSearchContent": "請輸入搜尋內容",
+    "noMatchingContent": "沒有找到符合的內容",
+    "searchFailed": "搜尋失敗",
+    "searchKnowledgeBaseFailed": "搜尋知識庫失敗",
+    "deleteTargetNotExists": "刪除目標不存在",
+    "knowledgeBaseDeleted": "知識庫刪除成功",
+    "deleteFailed": "刪除失敗",
+    "deleteKnowledgeBaseFailed": "刪除知識庫失敗",
+    "getEmbeddingModelListFailed": "取得嵌入模型列表失敗",
+    "updateAvailable": "發現新版本：{current} -> {latest}",
+    "pluginUpToDate": "擴充套件已是最新版本",
+    "pluginNotFoundInMarket": "在擴充套件市場中未找到該擴充套件",
+    "checkUpdateFailed": "檢查更新失敗",
+    "updateSuccess": "擴充套件更新成功",
+    "updateFailed": "更新失敗",
+    "updatePluginFailed": "更新擴充套件失敗"
+  },
+  "importFromUrl": {
+    "title": "從 URL 匯入",
+    "urlLabel": "網頁 URL",
+    "urlPlaceholder": "請輸入要提取知識的網頁位址",
+    "optionsTitle": "匯入選項",
+    "tooltip": "這些選項控制如何從 URL 內容中提取和處理文字。\n留空將使用擴充套件的預設設定。\n啟用 LLM 文字修復和摘要後可能花費時間較長。",
+    "useLlmRepairLabel": "啟用 LLM 文字修復",
+    "useClusteringSummaryLabel": "啟用聚類摘要",
+    "repairLlmProviderIdLabel": "文字修復模型",
+    "summarizeLlmProviderIdLabel": "摘要模型",
+    "embeddingProviderIdLabel": "嵌入模型",
+    "chunkSizeLabel": "區塊長度",
+    "chunkOverlapLabel": "重疊長度",
+    "startImport": "開始匯入",
+    "importing": "正在匯入...",
+    "importSuccess": "匯入成功",
+    "importFailed": "匯入失敗",
+    "uploadingChunks": "內容提取成功，正在上傳區塊...",
+    "preRequisite": "提示：請先前往擴充套件市場安裝 astrbot_plugin_url_2_knowledge_base 並根據擴充套件文件內的指示完成 playwright 安裝後才可使用本功能",
+    "allChunksUploaded": "所有區塊上傳成功"
+  }
+}
