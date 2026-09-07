@@ -10,6 +10,7 @@ class PersonaServiceError(Exception):
 
 class PersonaService:
     def __init__(self, core_lifecycle: AstrBotCoreLifecycle) -> None:
+        self.core_lifecycle = core_lifecycle
         self.persona_mgr = core_lifecycle.persona_mgr
 
     async def list_personas(
@@ -114,6 +115,12 @@ class PersonaService:
             update_kwargs["custom_error_message"] = custom_error_message
 
         await self.persona_mgr.update_persona(**update_kwargs)
+        orchestrator = getattr(self.core_lifecycle, "subagent_orchestrator", None)
+        if orchestrator is not None:
+            # Handoffs snapshot persona prompts, dialogs and tools when loaded.
+            await orchestrator.reload_from_config(
+                self.core_lifecycle.astrbot_config.get("subagent_orchestrator", {})
+            )
         return {"message": "人格更新成功"}
 
     async def delete_persona(self, data: object) -> dict:
