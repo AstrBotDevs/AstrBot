@@ -335,6 +335,7 @@ CONFIG_METADATA_2 = {
                         "enable": True,
                         "appid": "",
                         "secret": "",
+                        "use_markdown": True,
                         "is_sandbox": False,
                         "unified_webhook_mode": True,
                         "webhook_uuid": "",
@@ -926,7 +927,7 @@ CONFIG_METADATA_2 = {
                         "hint": "启用后，机器人可以接收到频道的私聊消息。",
                     },
                     "use_markdown": {
-                        "description": "主动消息发送模式",
+                        "description": "主动消息使用 Markdown",
                         "type": "bool",
                         "hint": "启用后，机器人主动发送消息默认以 Markdown 模式发送；插件显式调用 use_markdown() 指定行为时不受此配置影响。",
                     },
