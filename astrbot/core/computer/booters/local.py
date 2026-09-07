@@ -84,7 +84,10 @@ def _decode_bytes_with_fallback(
             return decoded
 
     if os.name == "nt":
-        for encoding in ("mbcs", "cp936", "gbk", "gb18030", preferred):
+        # Native commands use the Windows system code page. Python children
+        # are forced to UTF-8 by the callers above, so prefer the system code
+        # page here instead of guessing GBK for every non-UTF-8 byte sequence.
+        for encoding in (preferred, "mbcs", "cp936", "gbk", "gb18030"):
             if decoded := _try_decode(encoding):
                 return decoded
     elif decoded := _try_decode(preferred):
@@ -94,7 +97,10 @@ def _decode_bytes_with_fallback(
 
 
 def _decode_shell_output(output: bytes | None) -> str:
-    return _decode_bytes_with_fallback(output, preferred_encoding="utf-8")
+    # Normalize CRLF so tool text output is identical across platforms.
+    return _decode_bytes_with_fallback(output, preferred_encoding="utf-8").replace(
+        "\r\n", "\n"
+    )
 
 
 @dataclass
@@ -147,6 +153,10 @@ class LocalShellComponent(ShellComponent):
             run_env = os.environ.copy()
             if env:
                 run_env.update({str(k): str(v) for k, v in env.items()})
+            if sys.platform == "win32":
+                # Python children otherwise emit text in the ANSI code page
+                # (e.g. cp1252) and crash printing non-ASCII output.
+                run_env.setdefault("PYTHONIOENCODING", "utf-8")
             working_dir = os.path.abspath(cwd) if cwd else get_astrbot_root()
             popen_command: str | list[str] = command
             popen_shell = shell
@@ -265,6 +275,9 @@ class LocalShellComponent(ShellComponent):
         run_env = os.environ.copy()
         if env:
             run_env.update({str(k): str(v) for k, v in env.items()})
+        if sys.platform == "win32":
+            # Keep managed-session child output UTF-8 (see LocalShellComponent.exec).
+            run_env.setdefault("PYTHONIOENCODING", "utf-8")
         working_dir = Path(cwd).resolve() if cwd else Path(get_astrbot_root()).resolve()
         session_id = f"sh_{uuid.uuid4().hex[:16]}"
         owner_digest = hashlib.sha256(owner_id.encode("utf-8")).hexdigest()[:16]
@@ -846,11 +859,16 @@ class LocalPythonComponent(PythonComponent):
         def _run() -> dict[str, Any]:
             try:
                 working_dir = os.path.abspath(cwd) if cwd else get_astrbot_root()
+                child_env = os.environ.copy()
+                if sys.platform == "win32":
+                    # Keep python tool output UTF-8 (see LocalShellComponent.exec).
+                    child_env.setdefault("PYTHONIOENCODING", "utf-8")
                 result = subprocess.run(
                     [os.environ.get("PYTHON", sys.executable), "-c", code],
                     timeout=timeout,
                     capture_output=True,
                     cwd=working_dir,
+                    env=child_env,
                 )
                 stdout = "" if silent else _decode_shell_output(result.stdout)
                 stderr = (

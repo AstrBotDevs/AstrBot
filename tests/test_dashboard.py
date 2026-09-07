@@ -3693,6 +3693,7 @@ async def test_skill_file_browser_and_editor_security(
     authenticated_header: dict,
     monkeypatch,
     tmp_path,
+    require_symlink,
 ):
     async def _fake_sync_skills_to_active_sandboxes():
         return

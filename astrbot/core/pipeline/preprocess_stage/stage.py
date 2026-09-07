@@ -1,5 +1,6 @@
 import asyncio
 import random
+import re
 import traceback
 from collections.abc import AsyncGenerator
 from pathlib import Path
@@ -82,9 +83,26 @@ class PreProcessStage(Stage):
             for idx, component in enumerate(message_chain):
                 if isinstance(component, Record | Image) and component.url:
                     for mapping in mappings:
-                        from_, to_ = mapping.split(":")
-                        from_ = from_.removesuffix("/")
-                        to_ = to_.removesuffix("/")
+                        # ":" is ambiguous for Windows absolute paths. Parse
+                        # the separator after a drive-lettered source first,
+                        # then handle a drive-lettered target.
+                        drive_source_mapping = re.fullmatch(
+                            r"([A-Za-z]:[^:]+):(.+)", mapping
+                        )
+                        drive_target_mapping = re.fullmatch(
+                            r"(.+):([A-Za-z]:.+)", mapping
+                        )
+                        if drive_source_mapping:
+                            from_, to_ = drive_source_mapping.groups()
+                        elif drive_target_mapping:
+                            from_, to_ = drive_target_mapping.groups()
+                        else:
+                            from_, separator, to_ = mapping.partition(":")
+                            if not separator:
+                                logger.warning(f"Invalid path mapping: {mapping}")
+                                continue
+                        from_ = from_.removesuffix("/").removesuffix("\\")
+                        to_ = to_.removesuffix("/").removesuffix("\\")
 
                         url = (
                             file_uri_to_path(component.url)

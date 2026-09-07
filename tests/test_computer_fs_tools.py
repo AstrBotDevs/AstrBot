@@ -80,8 +80,9 @@ async def test_sandbox_file_download_handles_windows_remote_filename(
     )
 
     async def _download_file(_remote_path, local_path):
+        # The local temp path keeps the original remote basename; separators
+        # are platform-native, so only the basename is asserted here.
         assert local_path.endswith("report.txt")
-        assert "\\" not in local_path
 
     booter = SimpleNamespace(download_file=AsyncMock(side_effect=_download_file))
 

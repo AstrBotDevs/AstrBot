@@ -33,8 +33,11 @@ class _FakeTaskkillResult:
 
 def _python_command(code: str) -> str:
     """Build a shell-safe Python command for the current operating system."""
-    args = [sys.executable, "-u", "-c", code]
-    return subprocess.list2cmdline(args) if os.name == "nt" else shlex.join(args)
+    if os.name == "nt":
+        # PowerShell re-parses the whole command text: invoke the executable
+        # through the call operator (&) so quoted paths with spaces survive.
+        return f"& '{sys.executable}' -u -c \"{code}\""
+    return shlex.join([sys.executable, "-u", "-c", code])
 
 
 def test_local_shell_component_decodes_utf8_output(monkeypatch):
@@ -303,10 +306,30 @@ def test_local_shell_component_prefers_utf8_before_windows_locale(
     assert result["exit_code"] == 0
 
 
-def test_local_shell_component_falls_back_to_gbk_on_windows(monkeypatch):
+def test_local_shell_component_uses_windows_locale_for_gbk(monkeypatch):
     def fake_run(*args, **kwargs):
         _ = args, kwargs
         return _FakePopen(stdout="微博热搜".encode("gbk"))
+
+    monkeypatch.setattr(subprocess, "Popen", fake_run)
+    monkeypatch.setattr(local_booter.os, "name", "nt", raising=False)
+    monkeypatch.setattr(
+        local_booter.locale,
+        "getpreferredencoding",
+        lambda _do_setlocale=False: "cp936",
+    )
+
+    result = asyncio.run(LocalShellComponent().exec("dummy"))
+
+    assert result["stdout"] == "微博热搜"
+    assert result["stderr"] == ""
+    assert result["exit_code"] == 0
+
+
+def test_local_shell_component_preserves_western_windows_output(monkeypatch):
+    def fake_run(*args, **kwargs):
+        _ = args, kwargs
+        return _FakePopen(stdout="caféA".encode("cp1252"))
 
     monkeypatch.setattr(subprocess, "Popen", fake_run)
     monkeypatch.setattr(local_booter.os, "name", "nt", raising=False)
@@ -318,7 +341,7 @@ def test_local_shell_component_falls_back_to_gbk_on_windows(monkeypatch):
 
     result = asyncio.run(LocalShellComponent().exec("dummy"))
 
-    assert result["stdout"] == "微博热搜"
+    assert result["stdout"] == "caféA"
     assert result["stderr"] == ""
     assert result["exit_code"] == 0
 
@@ -409,7 +432,8 @@ async def test_managed_shell_allows_creator_and_conversation_admin():
         creator_id="user-a",
         creator_is_admin=False,
         sandboxed=True,
-        yield_time_ms=200,
+        # Cold-starting PowerShell + Python on CI runners exceeds 200ms.
+        yield_time_ms=5_000,
     )
 
     try:

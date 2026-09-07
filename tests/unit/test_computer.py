@@ -4,6 +4,7 @@ This module tests the ComputerClient, Booter implementations (local, shipyard, b
 filesystem operations, Python execution, shell execution, and security restrictions.
 """
 
+import os
 import shlex
 import sys
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -171,9 +172,20 @@ class TestLocalShellComponent:
                 return_value=str(tmp_path),
             ),
         ):
-            # Use python to read file to avoid Windows vs Unix command differences
+            # Build a per-shell command: PowerShell needs the call operator
+            # (&) for quoted, space-containing executables; POSIX shells take
+            # the plain quoted form.
+            if os.name == "nt":
+                command = (
+                    f"& '{sys.executable}' -c \"print(open(r'{test_file}').read())\""
+                )
+            else:
+                command = (
+                    f"{shlex.quote(sys.executable)} -c "
+                    f'"print(open({str(test_file)!r}).read())"'
+                )
             result = await shell.exec(
-                f'{shlex.quote(sys.executable)} -c "print(open(r\\"{test_file}\\").read())"',
+                command,
                 cwd=str(tmp_path),
             )
             assert result["exit_code"] == 0
@@ -182,8 +194,18 @@ class TestLocalShellComponent:
     async def test_exec_with_env(self):
         """Test command execution with custom environment variables."""
         shell = LocalShellComponent()
+        if os.name == "nt":
+            command = (
+                f"& '{sys.executable}' -c "
+                "\"import os; print(os.environ.get('TEST_VAR', ''))\""
+            )
+        else:
+            command = (
+                f"{shlex.quote(sys.executable)} -c "
+                "\"import os; print(os.environ.get('TEST_VAR', ''))\""
+            )
         result = await shell.exec(
-            f'{shlex.quote(sys.executable)} -c "import os; print(os.environ.get(\\"TEST_VAR\\", \\"\\"))"',
+            command,
             env={"TEST_VAR": "test_value"},
         )
         assert result["exit_code"] == 0

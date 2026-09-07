@@ -221,7 +221,14 @@ def file_uri_to_path(file_uri: MediaRefStr) -> str:
         return str(Path(url2pathname(f"//{netloc}{path}")))
 
     path = url2pathname(path)
-    if len(path) >= 4 and path[0] == "/" and path[2] == ":" and path[1].isalpha():
+    # url2pathname keeps "/" on POSIX but converts it to "\" on Windows, so
+    # accept both prefixes before the drive colon.
+    if (
+        len(path) >= 4
+        and path[0] in ("/", "\\")
+        and path[2] == ":"
+        and path[1].isalpha()
+    ):
         path = path[1:]
     elif os.name != "nt" and path.startswith("//"):
         # Older AstrBot builds generated file:////path for POSIX absolute paths.
