@@ -1803,7 +1803,7 @@ export default {
         const config = res?.data?.data?.config || {};
         const providerSettings = config?.provider_settings || {};
         const currentRuntime =
-          providerSettings?.computer_use_runtime || "local";
+          providerSettings?.computer_use_runtime || "none";
         const booter = providerSettings?.sandbox?.booter || "";
         neoEnabled.value =
           currentRuntime === "sandbox" && booter === "shipyard_neo";

@@ -1,6 +1,6 @@
 import platform
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -23,6 +23,54 @@ def test_local_python_tool_description_contains_os():
     assert current_os in tool.description
     assert "Python environment" in tool.description
     assert "system-compatible" in tool.description
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "runtime_settings",
+    [
+        {},
+        {"computer_use_runtime": "none"},
+        {"computer_use_runtime": "sandbox"},
+        {"computer_use_runtime": "invalid"},
+        {"computer_use_runtime": None},
+    ],
+)
+@pytest.mark.parametrize("role", ["member", "admin"])
+async def test_local_python_tool_rejects_nonlocal_runtime(
+    runtime_settings, role, monkeypatch
+):
+    """Reject retained local tools before accessing the host, regardless of role."""
+    get_local_booter = MagicMock()
+    workspace_root = AsyncMock()
+    monkeypatch.setattr(
+        "astrbot.core.tools.computer_tools.python.get_local_booter", get_local_booter
+    )
+    monkeypatch.setattr(
+        "astrbot.core.tools.computer_tools.python.workspace_root_for_context",
+        workspace_root,
+    )
+    context = ContextWrapper(
+        context=SimpleNamespace(
+            event=SimpleNamespace(
+                unified_msg_origin="onebot:FriendMessage:user123", role=role
+            ),
+            context=SimpleNamespace(
+                get_config=lambda **_kwargs: {
+                    "provider_settings": {
+                        **runtime_settings,
+                        "computer_use_require_admin": False,
+                    }
+                }
+            ),
+        )
+    )
+
+    result = await LocalPythonTool().call(context, code="print('ok')")
+
+    get_local_booter.assert_not_called()
+    workspace_root.assert_not_awaited()
+    assert result == "Error executing code: only local runtime is supported."
 
 
 @pytest.mark.asyncio
@@ -55,7 +103,10 @@ async def test_local_python_tool_uses_session_workspace(tmp_path, monkeypatch):
             event=event,
             context=SimpleNamespace(
                 get_config=lambda **_kwargs: {
-                    "provider_settings": {"computer_use_require_admin": True}
+                    "provider_settings": {
+                        "computer_use_runtime": "local",
+                        "computer_use_require_admin": True,
+                    }
                 }
             ),
         ),

@@ -48,7 +48,8 @@ class _DoneRunner:
         return SimpleNamespace(role="assistant", completion_text="done")
 
 
-def test_build_handoff_toolset_keeps_permission_guards_for_default_tools():
+@pytest.mark.parametrize("runtime", ["none", "local", "sandbox", None])
+def test_build_handoff_toolset_keeps_permission_guards_for_default_tools(runtime):
     mgr = FunctionToolManager()
     plugin_tool = FunctionTool(
         name="admin_only_mcp",
@@ -59,10 +60,9 @@ def test_build_handoff_toolset_keeps_permission_guards_for_default_tools():
     mgr.func_list = [plugin_tool, handoff]
 
     event = _DummyEvent()
+    provider_settings = {} if runtime is None else {"computer_use_runtime": runtime}
     context = SimpleNamespace(
-        get_config=lambda **_kwargs: {
-            "provider_settings": {"computer_use_runtime": "none"}
-        },
+        get_config=lambda **_kwargs: {"provider_settings": provider_settings},
         get_llm_tool_manager=lambda: mgr,
     )
     run_context = ContextWrapper(context=SimpleNamespace(event=event, context=context))
@@ -72,6 +72,15 @@ def test_build_handoff_toolset_keeps_permission_guards_for_default_tools():
     assert toolset is not None
     assert isinstance(toolset.get_tool("admin_only_mcp"), _PermissionGuardedTool)
     assert toolset.get_tool("transfer_to_child") is None
+    assert (toolset.get_tool("astrbot_execute_python") is not None) == (
+        runtime == "local"
+    )
+    assert (toolset.get_tool("astrbot_execute_ipython") is not None) == (
+        runtime == "sandbox"
+    )
+    assert (toolset.get_tool("astrbot_execute_shell") is not None) == (
+        runtime in {"local", "sandbox"}
+    )
 
 
 @pytest.mark.asyncio

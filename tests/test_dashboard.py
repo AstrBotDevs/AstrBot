@@ -10,6 +10,7 @@ import zipfile
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 from urllib.parse import parse_qs, urlsplit, urlunsplit
 
 import jwt
@@ -77,7 +78,7 @@ def test_skills_service_marks_inactive_plugin_skills(monkeypatch):
         ),
     ]
     skill_manager = SimpleNamespace(
-        list_skills=lambda **_kwargs: skills,
+        list_skills=MagicMock(return_value=skills),
         get_sandbox_skills_cache_status=lambda: {},
     )
     plugins = [
@@ -107,6 +108,10 @@ def test_skills_service_marks_inactive_plugin_skills(monkeypatch):
 
     result = SkillsService(core_lifecycle).get_skills()
 
+    assert result["runtime"] == "none"
+    skill_manager.list_skills.assert_called_once_with(
+        active_only=False, runtime="none", show_sandbox_path=False
+    )
     assert [skill["name"] for skill in result["skills"]] == [
         "local-skill",
         "active-plugin-skill",
