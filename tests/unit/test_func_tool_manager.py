@@ -1,6 +1,7 @@
 import asyncio
 import inspect
 import json
+import os
 from unittest.mock import AsyncMock
 
 import pytest
@@ -114,6 +115,7 @@ def test_shell_session_schema_supports_line_writes():
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(os.name == "nt", reason="Restricted execution needs POSIX.")
 async def test_local_execute_shell_manages_running_and_closed_results(
     monkeypatch,
     tmp_path,
@@ -216,6 +218,7 @@ async def test_local_execute_shell_manages_running_and_closed_results(
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(os.name == "nt", reason="Restricted execution needs POSIX.")
 async def test_local_shell_tools_fail_closed_without_sender_identity(
     monkeypatch,
     tmp_path,
@@ -394,6 +397,7 @@ async def test_local_member_shell_is_denied_without_supported_sandbox(monkeypatc
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(os.name == "nt", reason="Restricted execution needs POSIX.")
 async def test_shell_session_tool_lists_sessions_for_current_owner(monkeypatch):
     from astrbot.core.tools.computer_tools import shell as shell_tools
 
@@ -453,6 +457,7 @@ async def test_shell_session_tool_lists_sessions_for_current_owner(monkeypatch):
         ("terminate", "terminate"),
     ],
 )
+@pytest.mark.skipif(os.name == "nt", reason="Restricted execution needs POSIX.")
 async def test_shell_session_tool_passes_member_identity_to_session_actions(
     monkeypatch,
     action,

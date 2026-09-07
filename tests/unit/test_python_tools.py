@@ -1,3 +1,4 @@
+import os
 import platform
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -27,6 +28,7 @@ def test_local_python_tool_description_contains_os():
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(os.name == "nt", reason="Restricted execution needs POSIX.")
 async def test_local_python_tool_uses_session_workspace(tmp_path, monkeypatch):
     """Local Python execution should use the same workspace as local shell."""
     tool = LocalPythonTool()

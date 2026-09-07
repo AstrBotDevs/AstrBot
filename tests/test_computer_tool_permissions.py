@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import pytest
 
 from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.computer import process_sandbox
 from astrbot.core.tools.computer_tools.shipyard_neo.browser import BrowserExecTool
 from astrbot.core.tools.computer_tools.shipyard_neo.neo_skills import (
     GetExecutionHistoryTool,
@@ -139,22 +140,25 @@ def test_local_permission_policy_denies_disabled_execution():
     assert "Local Permission Policies" in error
 
 
-def test_unavailable_local_sandbox_requires_a_full_trust_policy(monkeypatch):
-    from astrbot.core.tools.computer_tools import util as computer_util
-
-    def unavailable_sandbox():
-        raise RuntimeError("No Local process sandbox backend is available.")
-
-    monkeypatch.setattr(computer_util, "create_process_sandbox", unavailable_sandbox)
+@pytest.mark.parametrize("role", ["member", "admin"])
+@pytest.mark.parametrize(
+    ("allow_network", "filesystem_scope"),
+    [(False, "host"), (False, "workspace"), (True, "workspace")],
+)
+def test_windows_local_execution_requires_a_full_trust_policy(
+    monkeypatch, role, allow_network, filesystem_scope
+):
+    """Windows rejects restricted policies and allows explicit full trust."""
+    monkeypatch.setattr(process_sandbox, "sys", SimpleNamespace(platform="win32"))
     restricted = {
-        "member": {
+        role: {
             "allow_execution": True,
-            "allow_network": False,
-            "filesystem_scope": "host",
+            "allow_network": allow_network,
+            "filesystem_scope": filesystem_scope,
         }
     }
     full_trust = {
-        "member": {
+        role: {
             "allow_execution": True,
             "allow_network": True,
             "filesystem_scope": "host",
@@ -162,11 +166,11 @@ def test_unavailable_local_sandbox_requires_a_full_trust_policy(monkeypatch):
     }
 
     _, restricted_error = check_local_execution_permission(
-        _make_local_run_context("member", restricted),
+        _make_local_run_context(role, restricted),
         "Shell execution",
     )
     full_policy, full_error = check_local_execution_permission(
-        _make_local_run_context("member", full_trust),
+        _make_local_run_context(role, full_trust),
         "Shell execution",
     )
 

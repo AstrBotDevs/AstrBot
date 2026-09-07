@@ -288,6 +288,7 @@ def test_process_sandbox_fails_closed_on_unsupported_system(monkeypatch):
         process_sandbox.create_process_sandbox()
 
 
+@pytest.mark.skipif(os.name == "nt", reason="Unix sandbox requires POSIX.")
 def test_linux_bwrap_command_is_workspace_only_and_clears_environment(
     monkeypatch,
     tmp_path,
@@ -332,6 +333,7 @@ def test_linux_bwrap_command_is_workspace_only_and_clears_environment(
     ]
 
 
+@pytest.mark.skipif(os.name == "nt", reason="Unix sandbox requires POSIX.")
 def test_linux_bwrap_command_applies_network_and_filesystem_permissions(
     monkeypatch,
     tmp_path,
@@ -363,6 +365,7 @@ def test_linux_bwrap_command_applies_network_and_filesystem_permissions(
     assert "--tmpfs" not in host_without_network
 
 
+@pytest.mark.skipif(os.name == "nt", reason="Unix sandbox requires POSIX.")
 def test_process_sandbox_exposes_resource_limits(monkeypatch, tmp_path):
     monkeypatch.setattr(local_booter.sys, "platform", "linux")
     monkeypatch.setattr(local_booter.shutil, "which", lambda name: f"/usr/bin/{name}")
@@ -782,6 +785,7 @@ def test_linux_read_only_bwrap_grep_cannot_follow_outside_ancestor_symlink(
         ("darwin", "/usr/bin/sandbox-exec"),
     ],
 )
+@pytest.mark.skipif(os.name == "nt", reason="Unix sandbox requires POSIX.")
 async def test_managed_shell_uses_platform_sandbox(
     monkeypatch,
     tmp_path,
@@ -901,6 +905,7 @@ async def test_sandboxed_managed_shell_delegates_launch(monkeypatch, tmp_path):
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(os.name == "nt", reason="Unix sandbox requires POSIX.")
 async def test_sandboxed_managed_shell_stops_at_output_limit(monkeypatch, tmp_path):
     process_stopped = asyncio.Event()
 
@@ -964,6 +969,7 @@ async def test_sandboxed_managed_shell_stops_at_output_limit(monkeypatch, tmp_pa
         ("darwin", "/usr/bin/sandbox-exec"),
     ],
 )
+@pytest.mark.skipif(os.name == "nt", reason="Unix sandbox requires POSIX.")
 async def test_local_python_uses_platform_sandbox(
     monkeypatch,
     tmp_path,
@@ -1003,6 +1009,7 @@ async def test_local_python_uses_platform_sandbox(
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(os.name == "nt", reason="Unix sandbox requires POSIX.")
 async def test_sandboxed_local_python_caps_returned_output(monkeypatch, tmp_path):
     def fake_run(*args, **kwargs):
         kwargs["stdout"].write(b"123456")
