@@ -3780,7 +3780,7 @@ CONFIG_METADATA_3 = {
                                     "allow_network": {"type": "bool"},
                                     "filesystem_scope": {
                                         "type": "string",
-                                        "options": ["workspace", "host"],
+                                        "options": ["none", "workspace", "host"],
                                     },
                                 },
                             },
@@ -3791,7 +3791,7 @@ CONFIG_METADATA_3 = {
                                     "allow_network": {"type": "bool"},
                                     "filesystem_scope": {
                                         "type": "string",
-                                        "options": ["workspace", "host"],
+                                        "options": ["none", "workspace", "host"],
                                     },
                                 },
                             },

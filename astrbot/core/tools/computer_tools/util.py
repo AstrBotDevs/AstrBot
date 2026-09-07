@@ -20,12 +20,12 @@ class LocalPermissionPolicy:
     Args:
         allow_execution: Whether Shell and Python execution is allowed.
         allow_network: Whether the execution environment may use the network.
-        filesystem_scope: Whether Local tools may access the host or workspace only.
+        filesystem_scope: Host or workspace access, or none to disable Local tools.
     """
 
     allow_execution: bool
     allow_network: bool
-    filesystem_scope: Literal["workspace", "host"]
+    filesystem_scope: Literal["none", "workspace", "host"]
 
     @property
     def requires_sandbox(self) -> bool:
@@ -107,18 +107,45 @@ def get_local_permission_policy(
                 True,
             )
 
-    allow_execution = role_policy.get("allow_execution", default_execution) is True
+    filesystem_scope = role_policy.get("filesystem_scope", default_filesystem)
+    if filesystem_scope not in {"none", "workspace", "host"}:
+        filesystem_scope = default_filesystem
+    allow_execution = (
+        filesystem_scope != "none"
+        and role_policy.get("allow_execution", default_execution) is True
+    )
     allow_network = (
         allow_execution and role_policy.get("allow_network", default_network) is True
     )
-    filesystem_scope = role_policy.get("filesystem_scope", default_filesystem)
-    if filesystem_scope not in {"workspace", "host"}:
-        filesystem_scope = default_filesystem
     return LocalPermissionPolicy(
         allow_execution=allow_execution,
         allow_network=allow_network,
         filesystem_scope=filesystem_scope,
     )
+
+
+def check_local_file_permission(
+    context: ContextWrapper[AstrAgentContext],
+) -> str | None:
+    """Reject file tools when Local access is disabled for the caller's role.
+
+    Args:
+        context: Tool call context.
+
+    Returns:
+        A permission error, or None when the file tool may proceed.
+    """
+    if (
+        is_local_runtime(context)
+        and get_local_permission_policy(context).filesystem_scope == "none"
+    ):
+        return (
+            "error: Permission denied. Local computer tools are disabled for this "
+            "user role. Enable Local computer access for this role in AstrBot "
+            "WebUI -> Config -> Normal Config -> AI -> Agent Computer Use -> "
+            "Local Permission Policies."
+        )
+    return None
 
 
 def check_admin_permission(
@@ -158,7 +185,8 @@ def check_local_execution_permission(
     if not policy.allow_execution:
         return policy, (
             f"error: Permission denied. {operation_name} is disabled by the "
-            "Local permission policy for this user role. Enable `Execute code` "
+            "Local permission policy for this user role. Enable Local computer "
+            "access and `Execute code` "
             "for this role in AstrBot WebUI -> Config -> Normal Config -> AI -> "
             "Agent Computer Use -> Local Permission Policies."
         )

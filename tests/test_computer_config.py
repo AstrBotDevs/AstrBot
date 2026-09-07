@@ -3,13 +3,92 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 
 from astrbot.core.computer.computer_client import _discover_bay_credentials
-from astrbot.dashboard.services.config_service import _log_computer_config_changes
+from astrbot.core.config.default import CONFIG_METADATA_2
+from astrbot.dashboard.services.config_service import (
+    _log_computer_config_changes,
+    save_config,
+    validate_config,
+)
+
+
+@pytest.mark.parametrize("role", ["member", "admin"])
+@pytest.mark.parametrize("scope", ["none", "workspace", "host"])
+@pytest.mark.parametrize("execution", [False, True])
+@pytest.mark.parametrize("network", [False, True])
+def test_saving_local_permissions_enforces_linked_permissions(
+    role, scope, execution, network
+):
+    other_role = "member" if role == "admin" else "admin"
+    unchanged_policy = {
+        "filesystem_scope": "workspace",
+        "allow_execution": True,
+        "allow_network": False,
+    }
+    payload = {
+        "provider_settings": {
+            "computer_use_local_permissions": {
+                role: {
+                    "filesystem_scope": scope,
+                    "allow_execution": execution,
+                    "allow_network": network,
+                },
+                other_role: deepcopy(unchanged_policy),
+            }
+        }
+    }
+    payload["agent_runner"] = {"runner_type": "local"}
+    config = Mock(keys=lambda: [])
+
+    save_config(payload, config, is_core=True)
+
+    saved = config.save_config.call_args.args[0]["provider_settings"][
+        "computer_use_local_permissions"
+    ]
+    assert saved[role] == {
+        "filesystem_scope": scope,
+        "allow_execution": execution and scope != "none",
+        "allow_network": network and execution and scope != "none",
+    }
+    assert saved[other_role] == unchanged_policy
+
+
+@pytest.mark.parametrize(
+    "policy",
+    [
+        None,
+        {"filesystem_scope": "invalid"},
+        {"filesystem_scope": []},
+        {"allow_execution": "false"},
+        {"allow_network": 1},
+        {"filesystem_scope": "none", "allow_execution": "true"},
+    ],
+)
+def test_local_permissions_reject_invalid_values(policy):
+    payload = {
+        "provider_settings": {"computer_use_local_permissions": {"member": policy}}
+    }
+
+    errors, _ = validate_config(payload, CONFIG_METADATA_2, is_core=True)
+
+    assert errors
+
+
+def test_local_permission_validation_does_not_inject_missing_policies():
+    payload = {"provider_settings": {"computer_use_runtime": "local"}}
+    original = deepcopy(payload)
+
+    errors, saved = validate_config(payload, CONFIG_METADATA_2, is_core=True)
+
+    assert errors == []
+    assert saved == original
+
 
 # ═══════════════════════════════════════════════════════════════
 # _discover_bay_credentials

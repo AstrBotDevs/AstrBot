@@ -1,10 +1,12 @@
 import json
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.computer import process_sandbox
+from astrbot.core.tools.computer_tools import fs, python, shell, util
 from astrbot.core.tools.computer_tools.shipyard_neo.browser import BrowserExecTool
 from astrbot.core.tools.computer_tools.shipyard_neo.neo_skills import (
     GetExecutionHistoryTool,
@@ -116,6 +118,93 @@ def test_local_permission_policy_defaults_admin_to_workspace_access():
     assert resolved.allow_network is True
     assert resolved.filesystem_scope == "workspace"
     assert resolved.requires_sandbox is True
+
+
+@pytest.mark.parametrize("role", ["member", "admin", "unexpected"])
+@pytest.mark.parametrize("allow_execution", [False, True])
+@pytest.mark.parametrize("allow_network", [False, True])
+def test_none_scope_disables_execution_and_network_for_only_the_selected_role(
+    role, allow_execution, allow_network
+):
+    policy_role = "admin" if role == "admin" else "member"
+    other_role = "member" if policy_role == "admin" else "admin"
+    policy = {
+        policy_role: {
+            "filesystem_scope": "none",
+            "allow_execution": allow_execution,
+            "allow_network": allow_network,
+        },
+        other_role: {
+            "filesystem_scope": "host",
+            "allow_execution": True,
+            "allow_network": True,
+        },
+    }
+
+    resolved = get_local_permission_policy(_make_local_run_context(role, policy))
+    other = get_local_permission_policy(_make_local_run_context(other_role, policy))
+
+    assert resolved.filesystem_scope == "none"
+    assert resolved.allow_execution is False
+    assert resolved.allow_network is False
+    assert other.filesystem_scope == "host"
+    assert other.allow_execution is True
+    assert other.allow_network is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("platform", ["linux", "darwin", "win32"])
+@pytest.mark.parametrize("role", ["member", "admin"])
+@pytest.mark.parametrize(
+    ("tool", "kwargs"),
+    [
+        (fs.FileReadTool, {"path": "private.txt"}),
+        (fs.FileWriteTool, {"path": "private.txt", "content": "changed"}),
+        (fs.FileEditTool, {"path": "private.txt", "old": "secret", "new": "changed"}),
+        (fs.GrepTool, {"pattern": "secret"}),
+        (shell.LocalExecuteShellTool, {"command": "echo unexpected"}),
+        (shell.ShellSessionTool, {"action": "list"}),
+        (python.LocalPythonTool, {"code": "print('unexpected')"}),
+    ],
+)
+async def test_none_scope_denies_all_local_tools_before_accessing_resources(
+    monkeypatch, platform, role, tool, kwargs
+):
+    monkeypatch.setattr(process_sandbox, "sys", SimpleNamespace(platform=platform))
+    booter = AsyncMock(side_effect=AssertionError("Denied tools must not get a booter"))
+    workspace = AsyncMock(
+        side_effect=AssertionError("Denied tools must not resolve a workspace")
+    )
+    local_booter = Mock(
+        side_effect=AssertionError("Denied tools must not get a local booter")
+    )
+    sandbox = Mock(side_effect=AssertionError("Denied tools must not create a sandbox"))
+    monkeypatch.setattr(fs, "get_booter", booter)
+    monkeypatch.setattr(shell, "get_booter", booter)
+    monkeypatch.setattr(python, "get_local_booter", local_booter)
+    monkeypatch.setattr(fs, "workspace_root_for_context", workspace)
+    monkeypatch.setattr(shell, "workspace_root_for_context", workspace)
+    monkeypatch.setattr(python, "workspace_root_for_context", workspace)
+    monkeypatch.setattr(util, "create_process_sandbox", sandbox)
+    context = _make_local_run_context(
+        role,
+        {
+            role: {
+                "filesystem_scope": "none",
+                "allow_execution": True,
+                "allow_network": True,
+            },
+        },
+    )
+
+    result = await tool().call(context, **kwargs)
+
+    assert "Permission denied" in result
+    assert "Local Permission Policies" in result
+    booter.assert_not_called()
+    local_booter.assert_not_called()
+    workspace.assert_not_called()
+    sandbox.assert_not_called()
 
 
 def test_local_permission_policy_denies_disabled_execution():

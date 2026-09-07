@@ -302,6 +302,39 @@ def validate_config(data, schema: dict, is_core: bool) -> tuple[list[str], dict]
             **schema["misc_config_group"]["metadata"],
         }
         validate(data, meta_all)
+        provider_settings = data.get("provider_settings", {})
+        permissions = (
+            provider_settings.get("computer_use_local_permissions", {})
+            if isinstance(provider_settings, dict)
+            else {}
+        )
+        if not isinstance(permissions, dict):
+            errors.append("Local computer permissions must be an object.")
+        else:
+            for role in ("member", "admin"):
+                if role not in permissions:
+                    continue
+                policy = permissions[role]
+                if not isinstance(policy, dict):
+                    errors.append(
+                        f"Local computer permissions for {role} must be an object."
+                    )
+                    continue
+                for key in ("allow_execution", "allow_network"):
+                    if key in policy and not isinstance(policy[key], bool):
+                        errors.append(
+                            f"Local permission {role}.{key} must be a boolean."
+                        )
+                scope = policy.get("filesystem_scope", "workspace")
+                if scope not in ("none", "workspace", "host"):
+                    errors.append(
+                        f"Invalid local filesystem scope for {role}: {scope}."
+                    )
+                if scope == "none":
+                    policy["allow_execution"] = False
+                    policy["allow_network"] = False
+                elif policy.get("allow_execution", role == "admin") is False:
+                    policy["allow_network"] = False
     else:
         validate(data, schema)
 
@@ -444,7 +477,6 @@ def save_config(
     is_core: bool = False,
 ) -> None:
     if is_core:
-        _log_computer_config_changes(dict(config), post_config)
         post_config["agent_runner"] = normalize_agent_runner(
             post_config.get("agent_runner")
         )
@@ -469,6 +501,8 @@ def save_config(
     if errors:
         raise ValueError(f"格式校验未通过: {errors}")
 
+    if is_core:
+        _log_computer_config_changes(dict(config), post_config)
     config.save_config(post_config)
 
 

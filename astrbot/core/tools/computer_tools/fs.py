@@ -8,6 +8,7 @@ Tool exposure from the main agent:
   `astrbot_file_edit_tool`, and `astrbot_grep_tool`.
 
 Local behavior follows each role's `filesystem_scope` permission:
+- `none`: read/write/edit/grep are denied before accessing any local resources.
 - `host`: read/write/edit/grep are not path-restricted by this module; access
   depends on host OS permissions.
 - `workspace`: read/grep are restricted to globally installed Skills,
@@ -58,6 +59,7 @@ from ..registry import builtin_tool
 from . import util as computer_util
 from .util import (
     check_admin_permission,
+    check_local_file_permission,
     get_local_permission_policy,
     is_local_runtime,
     normalize_umo_for_workspace,
@@ -366,6 +368,9 @@ class FileReadTool(FunctionTool):
         offset: int | None = None,
         limit: int | None = None,
     ) -> ToolExecResult:
+        permission_error = check_local_file_permission(context)
+        if permission_error:
+            return permission_error
         local_env = is_local_runtime(context)
         restricted = _is_restricted_env(context)
         current_workspace_root = (
@@ -466,6 +471,9 @@ class FileWriteTool(FunctionTool):
         path: str,
         content: str,
     ) -> ToolExecResult:
+        permission_error = check_local_file_permission(context)
+        if permission_error:
+            return permission_error
         local_env = is_local_runtime(context)
         restricted = _is_restricted_env(context)
         current_workspace_root = (
@@ -579,6 +587,9 @@ class FileEditTool(FunctionTool):
         replace_all: bool = False,
     ) -> ToolExecResult:
         umo = str(context.context.event.unified_msg_origin)
+        permission_error = check_local_file_permission(context)
+        if permission_error:
+            return permission_error
         local_env = is_local_runtime(context)
         restricted = _is_restricted_env(context)
         current_workspace_root = (
@@ -837,6 +848,9 @@ class GrepTool(FunctionTool):
         if not normalized_pattern:
             return "Error: `pattern` must be a non-empty string."
 
+        permission_error = check_local_file_permission(context)
+        if permission_error:
+            return permission_error
         local_env = is_local_runtime(context)
         restricted = _is_restricted_env(context)
         current_workspace_root = (

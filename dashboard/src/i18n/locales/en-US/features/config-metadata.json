@@ -234,7 +234,7 @@
         },
         "computer_use_local_permissions": {
           "description": "Local Permission Policies",
-          "hint": "Configure code execution, execution network access, and host file access separately for members and administrators in Local mode."
+          "hint": "Authorize members and administrators separately, then configure file access, code execution, and networking. Disabling a role blocks all local execution and file tools for that role."
         },
         "computer_use_require_admin": {
           "description": "Require Admin Permission for Sandbox",
@@ -304,21 +304,28 @@
       },
       "local_permissions": {
         "role": "Role",
-        "execution": "Execute code",
-        "network": "Execution network",
-        "hostFilesystem": "Files outside workspace",
-        "result": "Result",
+        "execution": "Allow code execution",
+        "network": "Allow execution network access",
+        "filesystem": "File access scope",
+        "scopes": {
+          "workspace": "Workspace",
+          "host": "Host files"
+        },
         "roles": {
           "member": "Member",
           "admin": "Administrator"
         },
-        "states": {
-          "filesOnly": "File access only",
-          "isolated": "Isolated execution",
-          "full": "Full access"
+        "accessMode": "Local computer access",
+        "modes": {
+          "none": "Disabled",
+          "files": "File access only",
+          "full": "Unrestricted access"
         },
-        "help": "Without permission to access files outside the workspace, tools are limited to the current workspace and required Skills and temporary data directories. When network or filesystem access is restricted, AstrBot runs Agent tasks in an operating-system sandbox. Windows does not currently support restricted isolation: non-administrators cannot execute code, while administrators may execute arbitrary code.",
-        "memberWarning": "Members can access the network or files outside the workspace. Confirm that this matches your security expectations."
+        "unsupportedSelection": "Current policy is unsupported",
+        "unsupported": "Local isolation is not supported on this system.",
+        "missingDependency": "{dependency} was not found. Isolated execution is unavailable.",
+        "runtimeUnknown": "Runtime information is unavailable.",
+        "memberWarning": "Members have network or host file access."
       }
     },
     "proactive_capability": {
