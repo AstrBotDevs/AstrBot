@@ -3820,7 +3820,6 @@ CONFIG_METADATA_3 = {
                                 },
                             },
                         },
-                        "hint": "分别设置普通成员和管理员在 Local 环境中的代码执行、执行环境联网和本机文件访问权限。",
                         "condition": {
                             "provider_settings.computer_use_runtime": "local",
                         },

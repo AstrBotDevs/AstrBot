@@ -233,8 +233,7 @@
           "labels": ["No environment", "Local machine", "Third-party sandbox"]
         },
         "computer_use_local_permissions": {
-          "description": "Local Permission Policies",
-          "hint": "Authorize members and administrators separately, then configure file access, code execution, and networking. Disabling a role blocks all local execution and file tools for that role."
+          "description": "Local Permission Policies"
         },
         "computer_use_require_admin": {
           "description": "Require Admin Permission for Sandbox",

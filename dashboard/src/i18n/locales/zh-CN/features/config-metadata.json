@@ -249,8 +249,7 @@
           "labels": ["不允许任何环境", "本机环境", "第三方沙箱环境"]
         },
         "computer_use_local_permissions": {
-          "description": "本地权限策略",
-          "hint": "分别授权普通成员和管理员使用本地电脑工具，再设置文件范围、代码执行和联网权限。关闭某个身份的授权后，该身份的本地执行和文件工具全部禁用。"
+          "description": "本地权限策略"
         },
         "computer_use_require_admin": {
           "description": "沙箱能力需要 AstrBot 管理员权限",
