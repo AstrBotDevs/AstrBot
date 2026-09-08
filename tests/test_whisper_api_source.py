@@ -1,6 +1,6 @@
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -26,6 +26,36 @@ def _make_provider() -> ProviderOpenAIWhisperAPI:
         close=AsyncMock(),
     )
     return provider
+
+
+def test_init_passes_the_provider_proxy_to_the_http_client():
+    proxy = "http://127.0.0.1:7890"
+    http_client = MagicMock()
+
+    with (
+        patch(
+            "astrbot.core.provider.sources.whisper_api_source.create_proxy_client",
+            return_value=http_client,
+        ) as create_proxy_client,
+        patch(
+            "astrbot.core.provider.sources.whisper_api_source.AsyncOpenAI"
+        ) as async_openai,
+    ):
+        ProviderOpenAIWhisperAPI(
+            provider_config={
+                "id": "test-whisper-api",
+                "type": "openai_whisper_api",
+                "model": "whisper-1",
+                "api_key": "test-key",
+                "proxy": proxy,
+            },
+            provider_settings={},
+        )
+
+    create_proxy_client.assert_called_once_with(
+        "OpenAI Whisper", proxy, httpx_module=ANY
+    )
+    assert async_openai.call_args.kwargs["http_client"] is http_client
 
 
 @pytest.mark.asyncio
