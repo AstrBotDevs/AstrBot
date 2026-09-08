@@ -1292,7 +1292,7 @@ async def _anysearch_search(
                     code = data.get("code")
                     if code not in (None, 0):
                         raise Exception(
-                            f"AnySearch web search failed: {data.get('message', code)}"
+                            f"AnySearch web search failed: {data.get('message') or code}"
                         )
                     body = data.get("data") or data
                     results = []
@@ -1350,7 +1350,7 @@ class AnySearchWebSearchTool(FunctionTool[AstrAgentContext]):
     name: str = "web_search_anysearch"
     description: str = (
         "A web search tool powered by AnySearch. Supports general web search and "
-        "17 vertical domains: academic(search/biomedical/citation/preprint/dataset), "
+        "16 vertical domains: academic(search/biomedical/citation/preprint/dataset), "
         "business(company/jobs/people/trade), code(doc/snippet), "
         "energy(production/electricity), environment(aqi), "
         "finance(quote/fundamental/news/calendar/screen/macro), film(torrent), "
