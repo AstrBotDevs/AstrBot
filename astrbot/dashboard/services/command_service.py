@@ -37,7 +37,7 @@ class CommandService:
             "summary": summary,
             "wake_prefix": wake_prefix,
             # 全局语言配置:前端据此显示指令的多语言名称(/lang 的全局默认值)
-            "language": self.config.get("language", "zh-CN"),
+            "language": self.config.get("language", "en-US"),
         }
 
     async def list_conflicts(self):

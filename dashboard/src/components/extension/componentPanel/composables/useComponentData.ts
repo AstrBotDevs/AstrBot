@@ -11,7 +11,7 @@ export function useComponentData() {
   const tools = ref<ToolItem[]>([]);
   const toolsLoading = ref(false);
   /** 全局语言配置(/lang 的全局默认值),用于指令名多语言显示 */
-  const globalLanguage = ref<string>('zh-CN');
+  const globalLanguage = ref<string>('en-US');
   const summary = reactive<CommandSummary>({
     disabled: 0,
     conflicts: 0

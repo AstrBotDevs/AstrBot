@@ -264,7 +264,7 @@ async def weather(self, event, city: str):
 - The framework does not translate plugin text; maintain your own translation table and
   fall back to `en-US` or `zh-CN` when a language is missing.
 - The language comes from the **global `language` config**
-  (`data/cmd_config.json`, default `zh-CN`).
+  (`data/cmd_config.json`, default `en-US`).
 
 ### User-facing language setting
 
@@ -275,11 +275,11 @@ command names stay in English):
 ```text
 /lang              → show the current global language
 /lang zh|en|ru|jp  → set the global language (admin only)
-/lang reset        → restore the default language zh-CN (admin only)
+/lang reset        → restore the default language en-US (admin only)
 ```
 
 Administrators can also edit the `language` field in `data/cmd_config.json`
-(default `zh-CN`). An unrecognized value falls back to `zh-CN`, with a startup warning
+(default `en-US`). An unrecognized value falls back to `en-US`, with a startup warning
 and a hint in `/lang`.
 
 > In the WebUI, **command names** follow this global setting (the matching

@@ -225,7 +225,7 @@ class PluginService:
         config = getattr(self.core_lifecycle, "astrbot_config", None)
         if config is None:
             return "zh-CN"
-        return str(config.get("language", "zh-CN"))
+        return str(config.get("language", "en-US"))
 
     async def get_plugin_detail(
         self,

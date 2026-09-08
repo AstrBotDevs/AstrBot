@@ -530,7 +530,7 @@ const getCommandRowKey = (component, path) =>
 
 /** 指令名按全局语言配置显示:names[全局lang] -> 组件原名 */
 const globalLanguage = computed(() =>
-  String(pluginData.value?.language || "zh-CN"),
+  String(pluginData.value?.language || "en-US"),
 );
 
 const resolveCommandName = (component, fallback) => {

@@ -11,7 +11,7 @@ from typing import Any
 
 from astrbot import logger
 
-DEFAULT_LANG = "zh-CN"
+DEFAULT_LANG = "en-US"
 SUPPORTED_LANGS = ("zh-CN", "en-US", "ru-RU", "ja-JP")
 
 # 用户输入归一表:全部小写 -> 规范语言代码

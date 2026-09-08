@@ -268,7 +268,7 @@ async def weather(self, event, city: str):
 ```text
 /lang           → 查看当前全局语言
 /lang zh|en|ru|jp → 设置全局语言(仅管理员)
-/lang reset     → 恢复默认语言 zh-CN(仅管理员)
+/lang reset     → 恢复默认语言 en-US(仅管理员)
 ```
 
 管理员也可直接编辑 `data/cmd_config.json` 的 `language` 字段(默认 `zh-CN`)。

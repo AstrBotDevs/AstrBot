@@ -278,7 +278,7 @@ DEFAULT_CONFIG = {
         },
     },
     "wake_prefix": ["/"],
-    "language": "zh-CN",  # 默认语言: zh-CN / en-US / ru-RU / ja-JP
+    "language": "en-US",  # 默认语言: zh-CN / en-US / ru-RU / ja-JP
     "log_level": "INFO",
     "log_file_enable": False,
     "log_file_path": "logs/astrbot.log",

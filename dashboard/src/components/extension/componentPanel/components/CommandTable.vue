@@ -33,7 +33,7 @@ const resolveDescription = (cmd: CommandItem): string => {
 
 // 按全局语言配置解析指令名:names[globalLanguage] -> 主命令名
 const resolveCommandName = (cmd: CommandItem): string => {
-  const lang = props.globalLanguage || 'zh-CN';
+  const lang = props.globalLanguage || 'en-US';
   const names = cmd.names || {};
   return names[lang] || cmd.effective_command;
 };
