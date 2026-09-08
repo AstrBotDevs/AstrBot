@@ -1,12 +1,12 @@
 import json
 import os
-import uuid
 from collections.abc import AsyncIterator
 
 import aiohttp
 
 from astrbot.api import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.datetime_utils import generate_timestamp_id
 
 from ..entities import ProviderType
 from ..provider import TTSProvider
@@ -156,7 +156,7 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
     async def get_audio(self, text: str) -> str:
         temp_dir = get_astrbot_temp_path()
         os.makedirs(temp_dir, exist_ok=True)
-        path = os.path.join(temp_dir, f"minimax_tts_api_{uuid.uuid4()}.wav")
+        path = os.path.join(temp_dir, f"minimax_tts_api_{generate_timestamp_id()}.wav")
 
         try:
             # 直接将异步生成器传递给 _audio_play 方法

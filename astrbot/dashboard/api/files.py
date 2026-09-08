@@ -8,7 +8,7 @@ from astrbot.dashboard.responses import error, ok
 from astrbot.dashboard.services.chat_service import ChatService, ChatServiceError
 from astrbot.dashboard.services.file_service import FileService, FileServiceError
 
-from .auth import AuthContext, require_scope
+from .auth import AuthContext, ScopeDependency
 from .multipart import UploadFileAdapter
 
 router = APIRouter(tags=["Files"])
@@ -23,8 +23,7 @@ def get_chat_service(request: Request) -> ChatService:
     return request.app.state.services.chat
 
 
-async def require_file_scope(request: Request) -> AuthContext:
-    return await require_scope(request, "file")
+require_file_scope = ScopeDependency("file")
 
 
 async def _serve_token_file(file_token: str, service: FileService):

@@ -57,7 +57,7 @@ After login succeeds and the bot is saved, AstrBot will automatically persist th
 
 After login succeeds, send a message from WeChat. If AstrBot replies normally, the integration is working.
 
-You can also watch the `Console` page in WebUI to confirm that the adapter has completed login and started polling messages.
+You can also watch `Data` -> `Logs` in the WebUI to confirm that the adapter has completed login and started polling messages.
 
 ## Media File Storage
 

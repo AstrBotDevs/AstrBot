@@ -29,6 +29,7 @@
     "status": {
         "enabled": "Активна",
         "disabled": "Отключена",
+        "pluginDisabled": "Плагин отключён",
         "conflict": "Конфликт"
     },
     "permission": {
@@ -39,7 +40,8 @@
         "enable": "Включить",
         "disable": "Выключить",
         "rename": "Переименовать",
-        "viewDetails": "Подробности"
+        "viewDetails": "Подробности",
+        "pluginInactive": "Сначала включите плагин"
     },
     "dialogs": {
         "rename": {

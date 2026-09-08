@@ -1,18 +1,22 @@
 import copy
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import httpx
 import jwt
 import pytest
 import pytest_asyncio
 from fastapi import FastAPI, Request
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import FileResponse, PlainTextResponse
 
 import astrbot.dashboard.services.config_service as config_service
 from astrbot.core import file_token_service
+from astrbot.core.utils import llm_metadata
 from astrbot.dashboard.api.app import create_dashboard_asgi_app
+from astrbot.dashboard.api.backups import download_backup as download_backup_route
 from astrbot.dashboard.asgi_runtime import (
     FastAPIAppAdapter,
     g,
@@ -23,6 +27,7 @@ from astrbot.dashboard.asgi_runtime import (
 from astrbot.dashboard.responses import ok
 from astrbot.dashboard.services.api_key_service import ApiKeyService
 from astrbot.dashboard.services.auth_service import DASHBOARD_JWT_COOKIE_NAME
+from astrbot.dashboard.services.backup_service import BackupDownload
 from astrbot.dashboard.services.plugin_service import (
     PLUGIN_UPDATE_SOURCE_REQUIRED_MESSAGE,
     PluginServiceError,
@@ -98,6 +103,9 @@ class FakeDb:
     async def get_umo_aliases(self, _umos: list[str] | None = None) -> list[object]:
         return []
 
+    async def get_conversation_platform_ids(self) -> list[str]:
+        return ["webchat-main"]
+
     def add_api_key(self, raw_key: str, scopes: list[str]) -> None:
         self.api_keys[ApiKeyService.hash_key(raw_key)] = FakeApiKey(
             key_id="config-key",
@@ -161,7 +169,13 @@ class FakeLlmTools:
     def activate_llm_tool(self, _tool_name: str, *, star_map) -> bool:
         return True
 
+    async def activate_llm_tool_async(self, _tool_name: str, *, star_map) -> bool:
+        return True
+
     def deactivate_llm_tool(self, _tool_name: str) -> bool:
+        return True
+
+    async def deactivate_llm_tool_async(self, _tool_name: str) -> bool:
         return True
 
 
@@ -298,6 +312,10 @@ class FakeConversationManager:
         user_id = "webchat:FriendMessage:webchat!user!session-1"
         self.last_filter_args: dict[str, list[str]] = {}
         self.last_include_history = True
+        self.last_keyword_query = ""
+        self.last_umo_query = ""
+        self.last_sort = ("created_at", "desc")
+        self.last_group_by_session = False
         self.conversations: dict[tuple[str, str], FakeConversation] = {
             (user_id, "conversation/with/slash"): FakeConversation(
                 cid="conversation/with/slash",
@@ -315,9 +333,18 @@ class FakeConversationManager:
         search_query: str,
         exclude_ids: list[str],
         exclude_platforms: list[str],
+        keyword_query: str = "",
+        umo_query: str = "",
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+        group_by_session: bool = False,
         include_history: bool = True,
     ):
         self.last_include_history = include_history
+        self.last_keyword_query = keyword_query
+        self.last_umo_query = umo_query
+        self.last_sort = (sort_by, sort_order)
+        self.last_group_by_session = group_by_session
         self.last_filter_args = {
             "platforms": platforms,
             "message_types": message_types,
@@ -343,12 +370,29 @@ class FakeConversationManager:
                 for conversation in conversations
                 if search_query in conversation.title
             ]
+        if keyword_query:
+            conversations = [
+                conversation
+                for conversation in conversations
+                if keyword_query in conversation.title
+                or keyword_query in conversation.history
+            ]
+        if umo_query:
+            conversations = [
+                conversation
+                for conversation in conversations
+                if umo_query in conversation.user_id
+            ]
         conversations = [
             conversation
             for conversation in conversations
             if conversation.cid not in exclude_ids
             and conversation.platform_id not in exclude_platforms
         ]
+        conversations.sort(
+            key=lambda conversation: getattr(conversation, sort_by),
+            reverse=sort_order == "desc",
+        )
         start = (page - 1) * page_size
         return conversations[start : start + page_size], len(conversations)
 
@@ -1076,6 +1120,40 @@ async def test_v1_openapi_is_served_by_fastapi(asgi_client: httpx.AsyncClient):
     assert "/api/v1/skills" in spec["paths"]
     assert "/api/v1/file" in spec["paths"]
 
+    bot_list = spec["paths"]["/api/v1/bots"]["get"]
+    assert bot_list["x-astrbot-scope"] == "bot"
+    assert "**Required scope:** `bot`" in bot_list["description"]
+
+    conversation_list = spec["paths"]["/api/v1/conversations"]["get"]
+    assert conversation_list["x-astrbot-scope"] == "data"
+    assert "**Required scope:** `data`" in conversation_list["description"]
+
+    chat_send = spec["paths"]["/api/v1/chat"]["post"]
+    assert chat_send["x-astrbot-scope"] == "chat"
+    assert chat_send["x-astrbot-sensitive-scopes"] == ["chat:admin"]
+    assert "**Required scope:** `chat`" in chat_send["description"]
+    assert "**Conditional sensitive scope:** `chat:admin`" in chat_send["description"]
+
+    public_spec_path = (
+        Path(__file__).resolve().parents[1] / "docs" / "public" / "openapi.json"
+    )
+    public_spec = json.loads(public_spec_path.read_text(encoding="utf-8"))
+    runtime_scope_map = {
+        (method, path): operation["x-astrbot-scope"]
+        for path, methods in spec["paths"].items()
+        for method, operation in methods.items()
+        if isinstance(operation, dict) and "x-astrbot-scope" in operation
+    }
+    public_scope_map = {
+        (method, path): operation["x-astrbot-scope"]
+        for path, methods in public_spec["paths"].items()
+        for method, operation in methods.items()
+        if isinstance(operation, dict)
+        and "x-astrbot-scope" in operation
+        and not operation.get("x-websocket")
+    }
+    assert public_scope_map == runtime_scope_map
+
 
 def test_static_openapi_v1_paths_include_api_version():
     spec_path = Path(__file__).resolve().parents[1] / "openspec" / "openapi-v1.yaml"
@@ -1139,8 +1217,52 @@ async def test_dashboard_static_dist_files_are_served(
     assert page_response.status_code == 200
     assert "/assets/index-demo.js" in page_response.text
     assert missing_response.status_code == 404
+    assert missing_response.headers["content-type"].startswith("text/html")
+    assert "请先尝试重启 AstrBot" in missing_response.text
+    assert "<h2>手动安装</h2>" in missing_response.text
+    assert "WebUI files are missing" in missing_response.text
+    assert "Manual installation" in missing_response.text
+    assert "AstrBot-vx.x.x-dashboard.zip" in missing_response.text
+    assert "index.html" in missing_response.text
     assert traversal_response.status_code == 404
     assert api_response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_v1_backup_download_accepts_bearer_token(
+    tmp_path: Path,
+):
+    filename = "desktop-backup.zip"
+    backup_path = tmp_path / filename
+    backup_path.write_bytes(b"PK\x03\x04desktop-backup-content")
+    prepare_download = Mock(
+        return_value=BackupDownload(path=str(backup_path), filename=filename)
+    )
+    service = SimpleNamespace(
+        config={"dashboard": {"jwt_secret": JWT_SECRET}},
+        prepare_download=prepare_download,
+    )
+    request = Request(
+        {
+            "type": "http",
+            "headers": [(b"authorization", b"bEaReR   desktop-session-token")],
+        }
+    )
+
+    response = await download_backup_route(
+        filename=filename,
+        request=request,
+        token=None,
+        service=service,
+    )
+
+    assert isinstance(response, FileResponse)
+    assert response.path == str(backup_path)
+    prepare_download.assert_called_once_with(
+        filename=filename,
+        token="desktop-session-token",
+        jwt_secret=JWT_SECRET,
+    )
 
 
 @pytest.mark.asyncio
@@ -1337,6 +1459,39 @@ async def test_conversation_list_normalizes_comma_separated_filters(
 
 
 @pytest.mark.asyncio
+async def test_conversation_workspace_filters_and_options(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+):
+    options_response = await asgi_client.get(
+        "/api/v1/conversations/filter-options",
+        headers=_jwt_headers(),
+    )
+    assert options_response.status_code == 200
+    assert options_response.json()["data"]["bots"] == [
+        {"id": "webchat-main", "type": "webchat"}
+    ]
+
+    list_response = await asgi_client.get(
+        "/api/v1/conversations",
+        params={
+            "keyword": "Demo",
+            "umo": "session-1",
+            "sort_by": "updated_at",
+            "sort_order": "asc",
+            "group_by_session": "true",
+        },
+        headers=_jwt_headers(),
+    )
+    assert list_response.status_code == 200
+    manager = fake_core_lifecycle.conversation_manager
+    assert manager.last_keyword_query == "Demo"
+    assert manager.last_umo_query == "session-1"
+    assert manager.last_sort == ("updated_at", "asc")
+    assert manager.last_group_by_session is True
+
+
+@pytest.mark.asyncio
 async def test_v1_conversation_detail_requires_user_id(
     asgi_client: httpx.AsyncClient,
 ):
@@ -1525,6 +1680,41 @@ async def test_v1_providers_matches_dashboard_provider_alias_list(
 
 
 @pytest.mark.asyncio
+async def test_v1_provider_schema_keeps_reasoning_in_model_metadata(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    fake_core_lifecycle.astrbot_config["provider"][0]["reasoning"] = True
+    model_metadata = {
+        "id": "gpt-4o-mini",
+        "reasoning": True,
+        "tool_call": True,
+        "knowledge": "2023-10",
+        "release_date": "2024-07-18",
+        "modalities": {"input": ["text"], "output": ["text"]},
+        "open_weights": False,
+        "limit": {"context": 128000, "output": 16384},
+    }
+    monkeypatch.setattr(
+        llm_metadata,
+        "LLM_METADATAS",
+        {"gpt-4o-mini": model_metadata},
+    )
+
+    response = await asgi_client.get(
+        "/api/v1/providers/schema",
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    provider = next(item for item in data["providers"] if item["id"] == "gpt-mini")
+    assert "reasoning" not in provider
+    assert data["model_metadata"]["gpt-4o-mini"] == model_metadata
+
+
+@pytest.mark.asyncio
 async def test_v1_provider_source_rename_updates_provider_refs(
     asgi_client: httpx.AsyncClient,
     fake_core_lifecycle,
@@ -1576,6 +1766,7 @@ async def test_v1_provider_update_keeps_dashboard_id_rename_behavior(
                 "provider_source_id": "openai-source",
                 "model": "gpt-4o-mini",
                 "enable": True,
+                "reasoning": True,
             }
         },
         headers=_jwt_headers(),
@@ -1585,9 +1776,36 @@ async def test_v1_provider_update_keeps_dashboard_id_rename_behavior(
     assert response.json()["status"] == "ok"
     config = fake_core_lifecycle.astrbot_config
     assert config["provider"][0]["id"] == "gpt-renamed"
+    assert "reasoning" not in config["provider"][0]
     assert fake_core_lifecycle.provider_manager.reloaded_providers == [
         config["provider"][0]
     ]
+
+
+@pytest.mark.asyncio
+async def test_v1_create_source_provider_strips_reasoning_metadata(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+):
+    response = await asgi_client.post(
+        "/api/v1/providers",
+        json={
+            "config": {
+                "id": "gpt-source-model",
+                "provider_source_id": "openai-source",
+                "model": "gpt-4o-mini",
+                "enable": True,
+                "reasoning": True,
+            }
+        },
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+    provider = fake_core_lifecycle.astrbot_config["provider"][-1]
+    assert provider["id"] == "gpt-source-model"
+    assert "reasoning" not in provider
 
 
 @pytest.mark.asyncio
@@ -1603,6 +1821,7 @@ async def test_v1_create_standalone_provider_matches_dashboard_alias_capability(
                 "type": "edge_tts",
                 "provider_type": "text_to_speech",
                 "enable": True,
+                "reasoning": True,
             }
         },
         headers=_jwt_headers(),
@@ -1615,6 +1834,7 @@ async def test_v1_create_standalone_provider_matches_dashboard_alias_capability(
         "type": "edge_tts",
         "provider_type": "text_to_speech",
         "enable": True,
+        "reasoning": True,
     }
 
 
@@ -1701,7 +1921,12 @@ async def test_v1_safe_provider_routes_accept_slash_ids(
     assert get_response.status_code == 200
     assert get_response.json()["data"]["provider"]["id"] == provider_id
     assert schema_response.status_code == 200
-    assert "config_schema" in schema_response.json()["data"]
+    config_schema = schema_response.json()["data"]["config_schema"]
+    reasoning_effort_preset = config_schema["provider"]["items"]["custom_extra_body"][
+        "template_schema"
+    ]["reasoning_effort"]
+    assert reasoning_effort_preset["type"] == "string"
+    assert reasoning_effort_preset["default"] == "high"
     assert path_test_response.status_code == 200
     assert path_test_response.json()["data"]["status"] == "available"
     assert safe_test_response.status_code == 200
@@ -3213,7 +3438,36 @@ async def test_v1_mcp_scope_accepts_api_key(
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "ok"
-    assert any(server["name"] == "demo-server" for server in data["data"])
+    demo_server = next(
+        server for server in data["data"] if server["name"] == "demo-server"
+    )
+    assert demo_server["connected"] is False
+
+
+@pytest.mark.asyncio
+async def test_v1_mcp_list_reports_connected_runtime(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+):
+    fake_tools = fake_core_lifecycle.provider_manager.llm_tools
+    fake_tools.mcp_server_runtime_view["demo-server"] = SimpleNamespace(
+        client=SimpleNamespace(
+            tools=[SimpleNamespace(name="demo_tool")],
+            server_errlogs=[],
+        ),
+    )
+
+    response = await asgi_client.get(
+        "/api/v1/mcp/servers",
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    demo_server = next(
+        server for server in response.json()["data"] if server["name"] == "demo-server"
+    )
+    assert demo_server["connected"] is True
+    assert demo_server["tools"] == ["demo_tool"]
 
 
 @pytest.mark.asyncio
@@ -3223,10 +3477,13 @@ async def test_v1_skill_scope_accepts_api_key_and_rejects_plural_scope(
     fake_db: FakeDb,
     monkeypatch: pytest.MonkeyPatch,
 ):
+    def fake_get_skills():
+        return {"skills": [{"name": "demo_skill"}]}
+
     monkeypatch.setattr(
         asgi_app.state.services.skills,
         "get_skills",
-        lambda: {"skills": [{"name": "demo_skill"}]},
+        fake_get_skills,
     )
 
     plural_key = "abk_fastapi_v1_skills"
@@ -3485,6 +3742,30 @@ async def test_v1_persona_by_id_update_preserves_explicit_null_tools_and_skills(
     assert response.json()["data"] == {"message": "人格更新成功"}
     assert persona.tools is None
     assert persona.skills is None
+
+
+@pytest.mark.asyncio
+async def test_v1_persona_create_preserves_explicit_empty_tools_and_skills(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+):
+    persona_id = "persona-empty-capabilities"
+
+    response = await asgi_client.post(
+        "/api/v1/personas",
+        json={
+            "persona_id": persona_id,
+            "system_prompt": "A persona with no optional capabilities.",
+            "tools": [],
+            "skills": [],
+        },
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    persona = fake_core_lifecycle.persona_mgr.personas[persona_id]
+    assert persona.tools == []
+    assert persona.skills == []
 
 
 @pytest.mark.asyncio

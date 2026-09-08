@@ -87,6 +87,35 @@ You can also click the + button in the bottom right corner to manually install p
 
 If a plugin fails to load, the admin panel will display the error message and provide a **"Try one-click reload fix"** button. This allows you to quickly reload the plugin after fixing the environment (e.g., installing missing dependencies) or modifying the code, without having to restart the entire application.
 
+## Data
+
+Select `Data` in the left sidebar to switch between `Statistics`, `Conversations`, `Logs`, and `Trace` from the tabs at the top of one workspace.
+
+### Statistics
+
+The `Statistics` tab summarizes platform instances, messages, model calls, tokens, and uptime. It also shows message trends, platform message rankings, model-call trends, model usage rankings, and conversation model usage rankings. Use the range selector at the top to view 1 day, 3 days, or 1 week.
+
+### Conversations
+
+Use the `Conversations` tab to find and manage saved conversation records:
+
+- Filter by keyword, bot ID, private/group conversation type, or UMO, and sort by creation or update time.
+- By default, the list loads 30 records per page from the server. When **Group by session** is enabled, pagination switches to UMO sessions and expanding a session reveals all of its conversations. Full message history is loaded only after you select a conversation and is then shown in the preview on the right.
+- Edit titles, export multiple selected conversations, or delete multiple selected conversations.
+- Use the `{}` button in the preview header to inspect the raw `history` JSON in a read-only, word-wrapped Monaco editor.
+- Select `Back to legacy` in the upper-right corner if you still need the original table-based view.
+
+### Logs
+
+The `Logs` tab shows AstrBot runtime logs in real time. You can filter by log level and install missing Pip packages from this page. To view DEBUG logs, first enable the console DEBUG log level under `Config -> System Config`.
+
+### Trace
+
+The `Trace` tab shows AstrBot execution traces in real time and is useful for debugging model-call paths and tool invocations. Use the switch at the top to enable or disable trace recording.
+
+> [!NOTE]
+> Trace recording currently covers only some model-call paths from the AstrBot main Agent. Coverage will continue to improve.
+
 ## Command Management
 
 Use the `Command Management` menu on the left to centrally manage all registered commands; system plugins are hidden by default.
@@ -94,15 +123,6 @@ Use the `Command Management` menu on the left to centrally manage all registered
 Filter by plugin, type (command / command group / subcommand), permission, and status, and combine with the search box for quick lookup. Command group rows can expand to show subcommands, badges display the subcommand count, and subcommand rows are indented to indicate hierarchy.
 
 You can enable/disable and rename each command.
-
-## Trace
-
-In the `Trace` page of the admin panel, you can view the real-time execution trace of AstrBot. This is useful for debugging model call paths, tool invocation processes, etc.
-
-You can enable or disable trace recording using the switch at the top of the page.
-
-> [!NOTE]
-> Currently only recording partial model call paths from AstrBot main Agent. More coverage will be added.
 
 ## Updating the Admin Panel
 

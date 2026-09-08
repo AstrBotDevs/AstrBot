@@ -1,3 +1,5 @@
+import asyncio
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -8,6 +10,7 @@ from astrbot.core.provider.provider import EmbeddingProvider
 from astrbot.dashboard.api.knowledge_bases import (
     list_knowledge_bases,
 )
+from astrbot.dashboard.api.multipart import MultiDict
 from astrbot.dashboard.schemas import (
     KnowledgeBaseRequest,
 )
@@ -250,7 +253,9 @@ async def test_create_kb_raises_when_embedding_provider_is_missing():
     kb_manager = MagicMock()
     service = make_service(kb_manager)
 
-    with pytest.raises(KnowledgeBaseServiceError, match="缺少参数 embedding_provider_id"):
+    with pytest.raises(
+        KnowledgeBaseServiceError, match="缺少参数 embedding_provider_id"
+    ):
         await service.create_kb({"kb_name": "Test KB"})
 
 
@@ -264,3 +269,78 @@ async def test_create_kb_raises_when_embedding_provider_is_invalid():
         await service.create_kb(
             {"kb_name": "Test KB", "embedding_provider_id": "missing-provider"}
         )
+
+
+@pytest.mark.asyncio
+async def test_upload_document_accepts_more_than_ten_files_and_cleans_temporary_files(
+    tmp_path, monkeypatch
+):
+    """Upload files without a count limit and remove their temporary copies.
+
+    Args:
+        tmp_path: Temporary directory provided by pytest.
+        monkeypatch: Pytest fixture used to isolate staging and task scheduling.
+    """
+    kb_helper = SimpleNamespace(
+        upload_document=AsyncMock(
+            return_value=SimpleNamespace(model_dump=lambda: {"doc_id": "doc-1"})
+        )
+    )
+    kb_manager = SimpleNamespace(get_kb=AsyncMock(return_value=kb_helper))
+    service = make_service(kb_manager)
+    uploads = []
+    for index in range(11):
+        content = f"content-{index}".encode()
+        uploads.append(
+            (
+                f"file{index}",
+                SimpleNamespace(
+                    filename=f"document-{index}.txt",
+                    save=AsyncMock(
+                        side_effect=lambda destination, content=content: Path(
+                            destination
+                        ).write_bytes(content)
+                    ),
+                ),
+            )
+        )
+
+    created_tasks = []
+    create_task = asyncio.create_task
+
+    def capture_task(coroutine):
+        """Capture a scheduled background task for deterministic waiting.
+
+        Args:
+            coroutine: Upload coroutine passed to ``asyncio.create_task``.
+
+        Returns:
+            The scheduled asyncio task.
+        """
+        task = create_task(coroutine)
+        created_tasks.append(task)
+        return task
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.services.knowledge_base_service.get_astrbot_system_tmp_path",
+        lambda: tmp_path,
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.services.knowledge_base_service.asyncio.create_task",
+        capture_task,
+    )
+
+    result = await service.upload_document(
+        content_type="multipart/form-data",
+        form_data=MultiDict([("kb_id", "kb-1")]),
+        files=MultiDict(uploads),
+    )
+    await created_tasks[0]
+
+    assert result["file_count"] == 11
+    assert kb_helper.upload_document.await_count == 11
+    assert [
+        call.kwargs["file_content"]
+        for call in kb_helper.upload_document.await_args_list
+    ] == [f"content-{index}".encode() for index in range(11)]
+    assert not list(tmp_path.glob("kb_upload_*"))

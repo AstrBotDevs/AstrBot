@@ -9,6 +9,7 @@ from anthropic.types import Message as AnthropicMessage
 from deprecated import deprecated
 from google.genai.types import GenerateContentResponse
 from openai.types.chat.chat_completion import ChatCompletion
+from openai.types.responses import Response
 
 import astrbot.core.message.components as Comp
 from astrbot import logger
@@ -312,7 +313,7 @@ class LLMResponse:
     """The signature of the reasoning content, if any."""
 
     raw_completion: (
-        ChatCompletion | GenerateContentResponse | AnthropicMessage | None
+        ChatCompletion | Response | GenerateContentResponse | AnthropicMessage | None
     ) = None
     """The raw completion response from the LLM provider."""
 
@@ -339,6 +340,7 @@ class LLMResponse:
         reasoning_content: str | None = None,
         reasoning_signature: str | None = None,
         raw_completion: ChatCompletion
+        | Response
         | GenerateContentResponse
         | AnthropicMessage
         | None = None,

@@ -111,6 +111,26 @@ def temp_dir(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
+def require_symlink(tmp_path: Path) -> Path:
+    """Skip the test when symlink creation is denied by the OS.
+
+    Windows only allows symbolic links with admin or developer-mode
+    privileges, so tests that build symlink fixtures cannot run there.
+    """
+    probe = tmp_path / ".symlink_probe"
+    try:
+        probe.symlink_to(tmp_path)
+    except OSError as exc:
+        # 1314 (ERROR_PRIVILEGE_NOT_HELD): Windows requires admin or
+        # developer mode. Anything else is a real error and must fail.
+        if getattr(exc, "winerror", None) == 1314:
+            pytest.skip("symlink creation is not permitted on this platform")
+        raise
+    probe.unlink()
+    return tmp_path
+
+
+@pytest.fixture
 def event_queue() -> Queue:
     """Create a shared asyncio queue fixture for tests."""
     return Queue()
@@ -305,6 +325,12 @@ async def mock_context(
 
     provider_manager = MagicMock()
     provider_manager.get_using_provider = MagicMock(return_value=mock_provider)
+    provider_manager.get_using_provider_async = AsyncMock(
+        side_effect=lambda *args, **kwargs: provider_manager.get_using_provider(
+            *args,
+            **kwargs,
+        )
+    )
     provider_manager.get_provider_by_id = MagicMock(return_value=mock_provider)
 
     platform_manager = MagicMock()

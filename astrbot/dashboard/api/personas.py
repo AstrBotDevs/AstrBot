@@ -18,7 +18,7 @@ from astrbot.dashboard.services.persona_service import (
     PersonaServiceError,
 )
 
-from .auth import AuthContext, require_dashboard_user, require_scope
+from .auth import AuthContext, ScopeDependency, require_dashboard_user
 
 router = APIRouter(tags=["Personas"])
 legacy_router = APIRouter(
@@ -32,8 +32,7 @@ def get_service(request: Request) -> PersonaService:
     return request.app.state.services.personas
 
 
-async def require_persona_scope(request: Request) -> AuthContext:
-    return await require_scope(request, "persona")
+require_persona_scope = ScopeDependency("persona")
 
 
 async def _json_or_empty(request: Request) -> dict[str, Any]:

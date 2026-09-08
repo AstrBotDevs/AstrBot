@@ -30,7 +30,7 @@ const buildFailedPluginItems = (raw) => {
   });
 };
 
-export const useExtensionPage = () => {
+export const useExtensionPage = (initialTab = "installed") => {
   const commonStore = useCommonStore();
   const { t } = useI18n();
   const { tm } = useModuleI18n("features/extension");
@@ -64,12 +64,15 @@ export const useExtensionPage = () => {
     }
   };
   const handleConflictConfirm = () => {
-    activeTab.value = "commands";
+    conflictDialog.show = false;
+    void router.push({ name: "ExtensionComponents" });
   };
 
   const fileInput = ref(null);
-  const activeTab = ref("installed");
   const validTabs = ["installed", "market", "mcp", "skills", "components"];
+  const activeTab = ref(
+    validTabs.includes(initialTab) ? initialTab : "installed",
+  );
   const isValidTab = (tab) => validTabs.includes(tab);
   const getLocationHash = () => route.hash || "";
   const extractTabFromHash = (hash) => getValidHashTab(hash, validTabs);
@@ -206,7 +209,7 @@ export const useExtensionPage = () => {
   const marketSearch = ref("");
   const debouncedMarketSearch = ref("");
   const refreshingMarket = ref(false);
-  const sortBy = ref("default"); // default, stars, author, updated
+  const sortBy = ref("default"); // default, stars, downloads, author, updated
   const sortOrder = ref("desc"); // desc (降序) or asc (升序)
   const randomPluginNames = ref([]);
   const marketCategoryFilter = ref("all");
@@ -389,6 +392,15 @@ export const useExtensionPage = () => {
         const starsB = b.stars ?? 0;
         return sortOrder.value === "desc" ? starsB - starsA : starsA - starsB;
       });
+    } else if (sortBy.value === "downloads") {
+      // 按下载量排序
+      plugins.sort((a, b) => {
+        const downloadsA = a.download_count ?? 0;
+        const downloadsB = b.download_count ?? 0;
+        return sortOrder.value === "desc"
+          ? downloadsB - downloadsA
+          : downloadsA - downloadsB;
+      });
     } else if (sortBy.value === "author") {
       // 按作者名字典序排序
       plugins.sort((a, b) => {
@@ -420,11 +432,13 @@ export const useExtensionPage = () => {
     const allPlugins = pluginMarketData.value;
     if (allPlugins.length === 0) return [];
 
-    const pluginsByName = new Map(
-      allPlugins.map((plugin) => [plugin.name, plugin]),
+    // Key by the unique market plugin key: metadata `name` is not unique and
+    // would collapse same-named plugins into one entry.
+    const pluginsByKey = new Map(
+      allPlugins.map((plugin) => [getMarketPluginKey(plugin), plugin]),
     );
     const selected = randomPluginNames.value
-      .map((name) => pluginsByName.get(name))
+      .map((key) => pluginsByKey.get(key))
       .filter(Boolean);
 
     if (selected.length > 0) {
@@ -450,7 +464,7 @@ export const useExtensionPage = () => {
     const shuffled = shufflePlugins(pluginMarketData.value);
     randomPluginNames.value = shuffled
       .slice(0, Math.min(RANDOM_PLUGINS_COUNT, shuffled.length))
-      .map((plugin) => plugin.name);
+      .map((plugin) => getMarketPluginKey(plugin));
   };
 
   // 分页计算属性
@@ -674,6 +688,17 @@ export const useExtensionPage = () => {
     return String(plugin?.market_plugin_id || "").trim();
   };
 
+  // Unique identity for a market entry. Metadata `name` alone is not unique —
+  // different authors can publish plugins with the same name — so fall back to
+  // repo and finally name for legacy registry entries without an explicit id.
+  const getMarketPluginKey = (plugin) => {
+    return (
+      getMarketPluginId(plugin) ||
+      String(plugin?.repo || "").trim() ||
+      String(plugin?.name || "").trim()
+    );
+  };
+
   const getMarketInstallSourcePayload = () => {
     const plugin = selectedMarketInstallPlugin.value;
     if (
@@ -699,7 +724,10 @@ export const useExtensionPage = () => {
   const findMarketPluginForExtension = (extension) => {
     if (!extension) return null;
     const source = extension.install_source || {};
-    if (source.implicit === true || source.install_method !== "market") {
+    // Implicit records (legacy plugins installed before source persistence)
+    // still carry the plugin repo, so resolve them against the default market
+    // instead of treating them as unmatchable.
+    if (source.install_method !== "market") {
       return null;
     }
     if (extension.update_market_plugin) {
@@ -753,10 +781,12 @@ export const useExtensionPage = () => {
       extension.update_market_plugin = null;
 
       const source = extension.install_source;
+      // Implicit records (legacy plugins with no persisted install source)
+      // resolve to the default registry, so keep them in the update check
+      // instead of skipping them entirely.
       if (
         !extension.updates_enabled ||
         !source ||
-        source.implicit === true ||
         source.install_method !== "market"
       ) {
         return;
@@ -2325,15 +2355,13 @@ export const useExtensionPage = () => {
 
   // 生命周期
   onMounted(async () => {
-    if (!syncTabFromHash(getLocationHash())) {
+    const hasRouteTab = isValidTab(route.meta.extensionTab);
+    if (!hasRouteTab && !syncTabFromHash(getLocationHash())) {
       await replaceTabRoute(router, route, activeTab.value);
     }
     loading_.value = true;
     try {
       await getExtensions({ withLoading: false });
-
-      // 加载自定义插件源
-      await loadCustomSources();
 
       // 检查是否有 open_config 参数
       const plugin_name = Array.isArray(route.query.open_config)
@@ -2344,20 +2372,43 @@ export const useExtensionPage = () => {
         openExtensionConfig(plugin_name);
       }
 
-      const data = await commonStore.getPluginCollections(
-        false,
-        selectedSource.value,
-      );
-      pluginMarketData.value = data;
-      trimExtensionName();
-      checkAlreadyInstalled();
-      await annotateMarketVersionSupport();
-      await checkUpdate();
-      refreshRandomPlugins();
+      if (activeTab.value === "market") {
+        await loadCustomSources();
+        const data = await commonStore.getPluginCollections(
+          false,
+          selectedSource.value,
+        );
+        pluginMarketData.value = data;
+        trimExtensionName();
+        checkAlreadyInstalled();
+        await annotateMarketVersionSupport();
+        await checkUpdate();
+        refreshRandomPlugins();
+      }
     } catch (err) {
       toast(tm("messages.getMarketDataFailed") + " " + err, "error");
     } finally {
       loading_.value = false;
+    }
+
+    if (activeTab.value === "installed") {
+      void (async () => {
+        try {
+          await loadCustomSources();
+          const data = await commonStore.getPluginCollections(
+            false,
+            selectedSource.value,
+          );
+          pluginMarketData.value = data;
+          trimExtensionName();
+          checkAlreadyInstalled();
+          await annotateMarketVersionSupport();
+          await checkUpdate();
+          refreshRandomPlugins();
+        } catch (err) {
+          console.debug("Failed to load plugin update metadata:", err);
+        }
+      })();
     }
   });
 
@@ -2429,6 +2480,7 @@ export const useExtensionPage = () => {
   watch(
     () => route.hash,
     (newHash) => {
+      if (isValidTab(route.meta.extensionTab)) return;
       const tab = extractTabFromHash(newHash);
       if (tab && tab !== activeTab.value) {
         activeTab.value = tab;
@@ -2437,6 +2489,7 @@ export const useExtensionPage = () => {
   );
 
   watch(activeTab, (newTab) => {
+    if (isValidTab(route.meta.extensionTab)) return;
     if (!isValidTab(newTab)) return;
     if (route.hash === `#${newTab}`) return;
     void replaceTabRoute(router, route, newTab);
@@ -2534,6 +2587,8 @@ export const useExtensionPage = () => {
     randomPluginNames,
     normalizeStr,
     toPinyinText,
+    getMarketPluginId,
+    getMarketPluginKey,
     toInitials,
     filteredExtensions,
     filteredPlugins,

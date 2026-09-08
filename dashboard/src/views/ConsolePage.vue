@@ -1,171 +1,210 @@
-<script setup>
-import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
-import { useModuleI18n } from '@/i18n/composables';
-import { updatesApi } from '@/api/v1';
-import { useToast } from '@/utils/toast';
+<script setup lang="ts">
+import { reactive, ref, watch } from "vue";
+import { PackagePlus } from "@lucide/vue";
+import ConsoleDisplayer from "@/components/shared/ConsoleDisplayer.vue";
+import { useModuleI18n } from "@/i18n/composables";
+import { useCustomizerStore } from "@/stores/customizer";
+import { updatesApi } from "@/api/v1";
+import { useToast } from "@/utils/toast";
 
-const { tm } = useModuleI18n('features/console');
+const { tm } = useModuleI18n("features/console");
+const toast = useToast();
+const customizerStore = useCustomizerStore();
+
+const autoScrollEnabled = ref(
+  localStorage.getItem("console_auto_scroll") !== "false",
+);
+const hideUserChatEnabled = ref(
+  localStorage.getItem("console_hide_user_chat") === "true",
+);
+const pipDialog = ref(false);
+const pipInstallPayload = reactive({ package: "", mirror: "" });
+const loading = ref(false);
+
+watch(autoScrollEnabled, (value) => {
+  localStorage.setItem("console_auto_scroll", String(value));
+});
+
+watch(hideUserChatEnabled, (value) => {
+  localStorage.setItem("console_hide_user_chat", String(value));
+});
+
+async function pipInstall() {
+  loading.value = true;
+  try {
+    const response = await updatesApi.installPip(pipInstallPayload);
+    if (response.data.status !== "ok") {
+      throw new Error(response.data.message || tm("pipInstall.installFailed"));
+    }
+    toast.success(response.data.message || tm("pipInstall.installSuccess"));
+    pipDialog.value = false;
+  } catch (error: any) {
+    toast.error(
+      error?.response?.data?.message ||
+        error?.message ||
+        tm("pipInstall.requestFailed"),
+    );
+  } finally {
+    loading.value = false;
+  }
+}
 </script>
 
 <template>
-  <div class="console-page">
-    <div class="console-header">
-      <div>
-        <h1 class="text-h2 mb-1">{{ tm('title') }}</h1>
-        <p class="text-body-2 text-medium-emphasis mb-0">
-          {{ tm('debugHint.text') }}
-        </p>
-      </div>
-      <div class="d-flex align-center">
-        <v-switch
-          v-model="hideUserChatEnabled"
-          :label="hideUserChatEnabled ? tm('hideUserChat.enabled') : tm('hideUserChat.disabled')"
-          hide-details
-          density="compact"
-          inset
-          color="primary"
-          style="margin-right: 16px;"
-        ></v-switch>
-        <v-switch
-          v-model="autoScrollEnabled"
-          :label="autoScrollEnabled ? tm('autoScroll.enabled') : tm('autoScroll.disabled')"
-          hide-details
-          density="compact"
-          inset
-          color="primary"
-          style="margin-right: 16px;"
-        ></v-switch>
-        <v-dialog v-model="pipDialog" width="400">
-          <template v-slot:activator="{ props }">
-            <v-btn variant="text" v-bind="props">{{ tm('pipInstall.button') }}</v-btn>
-          </template>
-          <v-card>
-            <v-card-title class="text-h3 pa-4 pb-0 pl-6">
-              <span>{{ tm('pipInstall.dialogTitle') }}</span>
-            </v-card-title>
-            <v-card-text>
-              <v-text-field v-model="pipInstallPayload.package" :label="tm('pipInstall.packageLabel')" variant="outlined"></v-text-field>
-              <v-text-field v-model="pipInstallPayload.mirror" :label="tm('pipInstall.mirrorLabel')" variant="outlined"></v-text-field>
-              <small>{{ tm('pipInstall.mirrorHint') }}</small>
-            </v-card-text>
-            <v-card-actions>
-              <v-spacer></v-spacer>
-              <v-btn color="blue-darken-1" variant="text" @click="pipInstall" :loading="loading">
-                {{ tm('pipInstall.installButton') }}
+  <div class="console-page" :class="{ 'is-dark': customizerStore.isDark }">
+    <ConsoleDisplayer
+      class="console-display"
+      workspace-mode
+      :auto-scroll="autoScrollEnabled"
+      :hide-user-chat="hideUserChatEnabled"
+    >
+      <template #header-actions>
+        <div class="console-header-actions">
+          <v-switch
+            v-model="hideUserChatEnabled"
+            :label="tm('hideUserChat.label')"
+            :aria-label="tm('hideUserChat.label')"
+            hide-details
+            density="compact"
+            inset
+            color="primary"
+          />
+          <v-switch
+            v-model="autoScrollEnabled"
+            :label="tm('autoScroll.label')"
+            :aria-label="tm('autoScroll.label')"
+            hide-details
+            density="compact"
+            inset
+            color="primary"
+          />
+          <v-dialog v-model="pipDialog" width="440">
+            <template #activator="{ props }">
+              <v-btn
+                v-bind="props"
+                class="pip-install-button"
+                size="small"
+                variant="tonal"
+              >
+                <PackagePlus :size="15" aria-hidden="true" />
+                <span>{{ tm("pipInstall.button") }}</span>
               </v-btn>
-            </v-card-actions>
-          </v-card>
-        </v-dialog>
-      </div>
-    </div>
-    <ConsoleDisplayer ref="consoleDisplayer" class="console-display" :hide-user-chat="hideUserChatEnabled" />
+            </template>
+            <v-card>
+              <v-card-title class="text-h3 pa-4 pb-0 pl-6">
+                {{ tm("pipInstall.dialogTitle") }}
+              </v-card-title>
+              <v-card-text class="pa-6 pb-2">
+                <v-text-field
+                  v-model="pipInstallPayload.package"
+                  :label="tm('pipInstall.packageLabel')"
+                  density="compact"
+                  variant="solo-filled"
+                  flat
+                />
+                <v-text-field
+                  v-model="pipInstallPayload.mirror"
+                  :label="tm('pipInstall.mirrorLabel')"
+                  density="compact"
+                  variant="solo-filled"
+                  flat
+                  hide-details
+                />
+                <div class="pip-mirror-hint">
+                  {{ tm("pipInstall.mirrorHint") }}
+                </div>
+              </v-card-text>
+              <v-card-actions class="pa-4 pt-0">
+                <v-spacer />
+                <v-btn variant="text" @click="pipDialog = false">
+                  {{ tm("pipInstall.cancelButton") }}
+                </v-btn>
+                <v-btn
+                  color="primary"
+                  variant="tonal"
+                  :loading="loading"
+                  @click="pipInstall"
+                >
+                  {{ tm("pipInstall.installButton") }}
+                </v-btn>
+              </v-card-actions>
+            </v-card>
+          </v-dialog>
+        </div>
+      </template>
+    </ConsoleDisplayer>
   </div>
 </template>
-<script>
-export default {
-  name: 'ConsolePage',
-  components: {
-    ConsoleDisplayer
-  },
-  data() {
-    return {
-      autoScrollEnabled: localStorage.getItem('console_auto_scroll') !== 'false',
-      hideUserChatEnabled: localStorage.getItem('console_hide_user_chat') === 'true',
-      pipDialog: false,
-      pipInstallPayload: {
-        package: '',
-        mirror: ''
-      },
-      loading: false
-    }
-  },
-  mounted() {
-    if (this.$refs.consoleDisplayer) {
-      this.$refs.consoleDisplayer.autoScroll = this.autoScrollEnabled;
-    }
-  },
-  watch: {
-    autoScrollEnabled(val) {
-      localStorage.setItem('console_auto_scroll', val);
-      if (this.$refs.consoleDisplayer) {
-        this.$refs.consoleDisplayer.autoScroll = val;
-      }
-    },
-    hideUserChatEnabled(val) {
-      localStorage.setItem('console_hide_user_chat', val);
-    }
-  },
-  methods: {
-    pipInstall() {
-      const toast = useToast();
-      this.loading = true;
-      updatesApi.installPip(this.pipInstallPayload)
-        .then(res => {
-          if (res.data.status === 'ok') {
-            toast.success(res.data.message || tm('pipInstall.installSuccess'));
-            this.pipDialog = false;
-          } else {
-            toast.error(res.data.message || tm('pipInstall.installFailed'));
-          }
-        })
-        .catch(err => {
-          toast.error(err.response?.data?.message || tm('pipInstall.requestFailed'));
-        }).finally(() => {
-          this.loading = false;
-        });
-    }
-  }
-}
-
-</script>
 
 <style scoped>
 .console-page {
-  display: flex;
-  flex-direction: column;
-  height: calc(100vh - 67px);
+  --console-workspace-card: #f5f6f7;
+
+  height: calc(100dvh - 112px);
   margin: 0 auto;
-  max-width: 1400px;
-  padding: 24px;
+  max-width: 1560px;
+  min-height: 0;
+  padding: 0 12px 8px;
   width: 100%;
 }
 
-.console-header {
-  align-items: flex-start;
-  display: flex;
-  flex-shrink: 0;
-  justify-content: space-between;
-  margin-bottom: 24px;
+.console-page.is-dark {
+  --console-workspace-card: rgba(var(--v-theme-on-surface), 0.06);
 }
 
 .console-display {
-  flex: 1;
+  height: 100%;
   min-height: 0;
   width: 100%;
 }
 
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-
-  to {
-    opacity: 1;
-  }
+.console-header-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
 }
 
-.fade-in {
-  animation: fadeIn 0.2s ease-in-out;
+.console-header-actions :deep(.v-switch .v-selection-control) {
+  min-height: 34px;
 }
 
-@media (max-width: 768px) {
+.console-header-actions :deep(.v-label) {
+  font-size: 0.75rem;
+  opacity: 0.72;
+}
+
+.pip-install-button :deep(.v-btn__content) {
+  gap: 6px;
+}
+
+.pip-mirror-hint {
+  color: rgba(var(--v-theme-on-surface), 0.52);
+  font-size: 0.72rem;
+  line-height: 1.5;
+  margin-top: 8px;
+}
+
+@media (max-width: 800px) {
   .console-page {
-    padding: 16px;
+    height: calc(100dvh - 112px);
+    padding: 0 4px 6px;
   }
 
-  .console-header {
-    flex-direction: column;
-    gap: 12px;
+  .console-header-actions {
+    width: 100%;
+  }
+}
+
+@media (max-width: 520px) {
+  .console-header-actions {
+    display: grid;
+    gap: 4px 10px;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .pip-install-button {
+    grid-column: 1 / -1;
   }
 }
 </style>

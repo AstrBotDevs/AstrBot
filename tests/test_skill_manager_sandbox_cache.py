@@ -16,6 +16,22 @@ def _write_skill(root: Path, name: str, description: str) -> None:
     )
 
 
+@pytest.fixture(autouse=True)
+def _isolate_plugin_skills(monkeypatch, tmp_path: Path) -> None:
+    plugins_root = tmp_path / "plugins"
+    builtin_plugins_root = tmp_path / "builtin_plugins"
+    plugins_root.mkdir()
+    builtin_plugins_root.mkdir()
+    monkeypatch.setattr(
+        "astrbot.core.skills.skill_manager.get_astrbot_plugin_path",
+        lambda: str(plugins_root),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.skills.skill_manager.get_astrbot_builtin_plugin_path",
+        lambda: str(builtin_plugins_root),
+    )
+
+
 def test_list_skills_merges_local_and_sandbox_cache(monkeypatch, tmp_path: Path):
     data_dir = tmp_path / "data"
     temp_dir = tmp_path / "temp"

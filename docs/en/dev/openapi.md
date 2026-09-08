@@ -30,26 +30,17 @@ The local OpenAPI schema is available at `http://localhost:6185/api/v1/openapi.j
 
 ## Scope Permissions
 
-When creating an API Key, you can configure `scopes`. Each scope controls the range of accessible endpoints:
-
-| Scope | Purpose | Accessible Endpoints |
-| --- | --- | --- |
-| `bot` | Manage bot/platform configurations | `GET /api/v1/bot-types`, `GET/POST /api/v1/bots`, `PATCH /api/v1/bots/enabled` |
-| `provider` | Manage model providers and provider sources | `GET/POST /api/v1/providers`, `GET/PUT/DELETE /api/v1/provider-sources/by-id` |
-| `persona` | Manage personas and persona folders | `GET/POST /api/v1/personas`, `GET/POST /api/v1/persona-folders` |
-| `im` | Send proactive IM messages and query bot/platform list | `POST /api/v1/im/message`, `GET /api/v1/im/bots` |
-| `config` | Manage config profiles, system config, and shared configuration. This scope also includes `bot` and `provider` access. | `GET /api/v1/configs`, `GET/PUT /api/v1/system-config`, `GET/POST /api/v1/config-profiles` |
-| `chat` | Access chat capabilities and query sessions | `POST /api/v1/chat`, `GET /api/v1/chat/sessions` |
-| `file` | Upload and download chat attachments | `POST /api/v1/file`, `GET /api/v1/file`, `POST /api/v1/files` |
-| `plugin` | Manage plugins, plugin config, plugin sources, and marketplace entries | `GET /api/v1/plugins`, `GET/PUT /api/v1/plugins/config`, `POST /api/v1/plugins/install/url` |
-| `mcp` | Manage MCP server configurations and provider sync | `GET/POST /api/v1/mcp/servers`, `PATCH /api/v1/mcp/servers/{server_name}/enabled`, `POST /api/v1/mcp/providers/modelscope/sync` |
-| `skill` | Manage skills, skill archives, skill files, and Shipyard Neo skill workflows | `GET/POST /api/v1/skills`, `PUT /api/v1/skills/{skill_name}/files/{file_path}`, `POST /api/v1/skills/neo/sync` |
+API Keys can be configured with `scopes`. See the [API Scope–Endpoint Reference](./openapi-scopes.md) for each scope's purpose, inheritance rules, and complete endpoint list.
 
 If the API Key does not include the required scope for the target endpoint, the request will return `403 Insufficient API key scope`.
 
-`config` is a broad management scope. When an API key is created with `config`, AstrBot grants the key `config`, `bot`, and `provider` access together. The WebUI mirrors this dependency: selecting `config` selects `bot` and `provider`; deselecting `bot` or `provider` removes `config`.
+- `config` is not selected by default in the WebUI and automatically includes `bot` and `provider`.
+- `config:edit_admin` and `chat:admin` must be granted explicitly and are never inherited from their parent scopes.
+- Deselecting `bot` or `provider` in the WebUI also removes the dependent `config` scope.
 
-Developer API keys currently support only the 10 scopes listed above. `tool`, `skills`, `kb`, `data`, and `system` are not valid developer API key scopes. Use the singular `skill` scope for `/api/v1/skills/*` endpoints. The public OpenAPI reference only includes endpoints covered by supported developer API key scopes.
+Developer API keys currently support 11 top-level scopes and two sensitive sub-scopes. `tool`, `skills`, `kb`, and `system` are not valid developer API key scopes. Use the singular `skill` scope for `/api/v1/skills/*` endpoints.
+
+Every operation in the interactive reference also displays `Required scope: ...`; operations involving administrator capabilities additionally display `Conditional sensitive scope: ...`.
 
 ## Common Endpoints
 
@@ -130,7 +121,7 @@ Notes:
 
 `POST /api/v1/chat` additionally requires `username`, with optional `session_id` (a UUID is auto-generated if omitted).
 
-`username` is a caller-declared WebChat identity. It is used as the message sender and session owner in the message pipeline, including sender-ID-based command permission checks. Treat API keys with the `chat` scope as trusted backend credentials. If you expose chat access to end users, proxy requests through your own service and map each external user to an allowed `username`; do not let clients submit administrator IDs or other reserved sender IDs directly.
+`username` is a caller-declared WebChat identity used as the message sender and session owner. A key with only `chat` is rejected when the value matches any configured administrator ID and is prevented from receiving an administrator role inside the message pipeline. The sensitive `chat:admin` sub-scope explicitly permits configured administrator IDs; it does not make arbitrary usernames administrators. Integrations should still map external users to stable, application-controlled usernames.
 
 ```json
 {

@@ -1574,7 +1574,7 @@ class PluginManager:
 
             if plugin_id:
                 try:
-                    await self.context.get_db().clear_preferences("plugin", plugin_id)
+                    await sp.clear_async("plugin", plugin_id)
                     logger.info(
                         f"Cleared KV data for plugin {plugin_label} ({plugin_id})"
                     )

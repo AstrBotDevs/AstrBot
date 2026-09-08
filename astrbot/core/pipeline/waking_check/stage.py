@@ -13,13 +13,14 @@ from astrbot.core.star.star_handler import EventType, star_handlers_registry
 
 from ..context import PipelineContext
 from ..stage import Stage, register_stage
+from .umo_auto_name import UmoAutoNameRecorder
 
 UNIQUE_SESSION_ID_BUILDERS: dict[str, Callable[[AstrMessageEvent], str | None]] = {
     "aiocqhttp": lambda e: f"{e.get_sender_id()}_{e.get_group_id()}",
     "slack": lambda e: f"{e.get_sender_id()}_{e.get_group_id()}",
     "dingtalk": lambda e: e.get_sender_id(),
-    "qq_official": lambda e: e.get_sender_id(),
-    "qq_official_webhook": lambda e: e.get_sender_id(),
+    "qq_official": lambda e: f"{e.get_sender_id()}_{e.get_group_id()}",
+    "qq_official_webhook": lambda e: f"{e.get_sender_id()}_{e.get_group_id()}",
     "lark": lambda e: f"{e.get_sender_id()}%{e.get_group_id()}",
     "misskey": lambda e: f"{e.get_session_id()}_{e.get_sender_id()}",
     "matrix": lambda e: f"{e.get_sender_id()}_{e.get_group_id() or e.get_session_id()}",
@@ -73,6 +74,10 @@ class WakingCheckStage(Stage):
         )
         platform_settings = self.ctx.astrbot_config.get("platform_settings", {})
         self.unique_session = platform_settings.get("unique_session", False)
+        self._umo_auto_name_recorder = UmoAutoNameRecorder(
+            ctx.db_helper,
+            ctx.astrbot_config_id,
+        )
 
     async def process(
         self,
@@ -94,8 +99,12 @@ class WakingCheckStage(Stage):
 
         # 设置 sender 身份
         event.message_str = event.message_str.strip()
+        api_key_allow_admin_role = event.get_extra("_api_key_allow_admin_role")
         for admin_id in self.ctx.astrbot_config["admins_id"]:
-            if str(event.get_sender_id()) == admin_id:
+            if (
+                api_key_allow_admin_role is not False
+                and str(event.get_sender_id()) == admin_id
+            ):
                 event.role = "admin"
                 break
 
@@ -214,6 +223,8 @@ class WakingCheckStage(Stage):
                         f"{star_map[handler.handler_module_path].name}.",
                     )
                     event.stop_event()
+                    if event.is_wake:
+                        self._umo_auto_name_recorder.schedule(event)
                     return
 
                 is_wake = True
@@ -240,5 +251,7 @@ class WakingCheckStage(Stage):
         event.set_extra("activated_handlers", activated_handlers)
         event.set_extra("handlers_parsed_params", handlers_parsed_params)
 
-        if not is_wake:
+        if is_wake:
+            self._umo_auto_name_recorder.schedule(event)
+        else:
             event.stop_event()

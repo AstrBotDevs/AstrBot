@@ -15,6 +15,8 @@ from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.provider.sources.groq_source import ProviderGroq
 from astrbot.core.provider.sources.openai_source import ProviderOpenAIOfficial
+from pathlib import Path
+
 from astrbot.core.utils.media_utils import ResolvedMediaData, file_uri_to_path
 
 
@@ -62,6 +64,16 @@ def _make_groq_provider(overrides: dict | None = None) -> ProviderGroq:
 
 def test_create_http_client_uses_openai_httpx_module(monkeypatch):
     captured: dict[str, object] = {}
+    fake_httpx_module = object()
+
+    from openai import _base_client as openai_base_client
+
+    monkeypatch.setattr(
+        openai_base_client,
+        "httpx",
+        fake_httpx_module,
+        raising=False,
+    )
 
     def fake_create_proxy_client(
         provider_label: str,
@@ -82,9 +94,7 @@ def test_create_http_client_uses_openai_httpx_module(monkeypatch):
     provider = ProviderOpenAIOfficial.__new__(ProviderOpenAIOfficial)
     provider._create_http_client({"proxy": ""})
 
-    from openai import _base_client as openai_base_client
-
-    assert captured["httpx_module"] is openai_base_client.httpx
+    assert captured["httpx_module"] is fake_httpx_module
 
 
 def test_create_http_client_falls_back_to_global_httpx_module(monkeypatch):
@@ -903,19 +913,21 @@ async def test_prepare_chat_payload_materializes_context_file_uri_image_urls(tmp
 
 
 def test_file_uri_to_path_preserves_windows_drive_letter():
-    assert file_uri_to_path("file:///C:/tmp/quoted-image.png") == (
+    # Compare as Path objects so the assertion is independent of the host
+    # path separator convention.
+    assert Path(file_uri_to_path("file:///C:/tmp/quoted-image.png")) == Path(
         "C:/tmp/quoted-image.png"
     )
 
 
 def test_file_uri_to_path_preserves_windows_netloc_drive_letter():
-    assert file_uri_to_path("file://C:/tmp/quoted-image.png") == (
+    assert Path(file_uri_to_path("file://C:/tmp/quoted-image.png")) == Path(
         "C:/tmp/quoted-image.png"
     )
 
 
 def test_file_uri_to_path_preserves_remote_netloc_as_unc_path():
-    assert file_uri_to_path("file://server/share/quoted-image.png") == (
+    assert Path(file_uri_to_path("file://server/share/quoted-image.png")) == Path(
         "//server/share/quoted-image.png"
     )
 

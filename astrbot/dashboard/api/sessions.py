@@ -17,7 +17,7 @@ from astrbot.dashboard.services.session_management_service import (
     SessionManagementServiceError,
 )
 
-from .auth import AuthContext, require_dashboard_user, require_scope
+from .auth import AuthContext, ScopeDependency, require_dashboard_user
 
 router = APIRouter(tags=["Sessions"])
 legacy_router = APIRouter(
@@ -31,8 +31,7 @@ def get_service(request: Request) -> SessionManagementService:
     return request.app.state.services.sessions
 
 
-async def require_data_scope(request: Request) -> AuthContext:
-    return await require_scope(request, "data")
+require_data_scope = ScopeDependency("data")
 
 
 async def _json_or_empty(request: Request) -> dict:
@@ -203,7 +202,7 @@ async def list_session_groups(
     service: SessionManagementService = Depends(get_service),
 ):
     try:
-        return ok(service.list_groups())
+        return ok(await service.list_groups())
     except SessionManagementServiceError as exc:
         return _service_error(exc)
     except Exception as exc:
@@ -217,7 +216,7 @@ async def create_session_group(
     service: SessionManagementService = Depends(get_service),
 ):
     try:
-        return ok(service.create_group(payload.model_dump(exclude_none=True)))
+        return ok(await service.create_group(payload.model_dump(exclude_none=True)))
     except SessionManagementServiceError as exc:
         return _service_error(exc)
     except Exception as exc:
@@ -233,7 +232,7 @@ async def update_session_group(
 ):
     try:
         body = payload.model_dump(exclude_none=True)
-        return ok(service.update_group({"group_id": group_id, **body}))
+        return ok(await service.update_group({"group_id": group_id, **body}))
     except SessionManagementServiceError as exc:
         return _service_error(exc)
     except Exception as exc:
@@ -247,7 +246,7 @@ async def delete_session_group(
     service: SessionManagementService = Depends(get_service),
 ):
     try:
-        return ok(service.delete_group({"group_id": group_id}))
+        return ok(await service.delete_group({"group_id": group_id}))
     except SessionManagementServiceError as exc:
         return _service_error(exc)
     except Exception as exc:

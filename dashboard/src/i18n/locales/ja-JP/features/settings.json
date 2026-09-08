@@ -1,0 +1,307 @@
+{
+  "page": {
+    "title": "設定"
+  },
+  "sections": {
+    "general": {
+      "title": "一般"
+    },
+    "appearance": {
+      "title": "外観"
+    },
+    "network": {
+      "title": "ネットワーク"
+    },
+    "security": {
+      "title": "セキュリティ"
+    },
+    "maintenance": {
+      "title": "メンテナンス"
+    },
+    "openapi": {
+      "title": "OpenAPI"
+    },
+    "resources": {
+      "title": "概要"
+    }
+  },
+  "resources": {
+    "changelog": {
+      "subtitle": "現在および過去のバージョンの変更内容を確認します。"
+    },
+    "documentation": {
+      "subtitle": "AstrBot の公式ドキュメントを開きます。"
+    },
+    "faq": {
+      "subtitle": "よくある質問とトラブルシューティングを確認します。"
+    },
+    "github": {
+      "subtitle": "AstrBot の GitHub リポジトリを開きます。"
+    }
+  },
+  "systemConfig": {
+    "restartRequired": "システム設定を保存しました。一部の設定は AstrBot の再起動後に反映されます。",
+    "groups": {
+      "runtime": {
+        "title": "基本動作",
+        "subtitle": "タイムゾーンと外部から到達可能なコールバック URL。"
+      },
+      "network": {
+        "title": "プロキシと依存パッケージの取得元",
+        "subtitle": "実行時プロキシ、Python 依存パッケージのインストール設定、PyPI ミラー。"
+      },
+      "webuiSecurity": {
+        "title": "WebUI セキュリティ",
+        "subtitle": "HTTPS、信頼済みプロキシヘッダー、ログイン回数制限、TOTP。"
+      },
+      "logs": {
+        "title": "ログ",
+        "subtitle": "コンソールログ、ファイルログ、Trace ファイルログ。"
+      },
+      "tempStorage": {
+        "title": "キャッシュ",
+        "subtitle": "一時ディレクトリを自動消去するしきい値。"
+      },
+      "t2iRendering": {
+        "title": "長文の画像化",
+        "subtitle": "長文を画像としてレンダリングする際の方式、エンドポイント、カスタムテンプレート。"
+      }
+    },
+    "timePreview": {
+      "label": "AstrBot の現在時刻"
+    },
+    "messages": {
+      "loadFailed": "システム設定の読み込みに失敗しました",
+      "saveSuccess": "システム設定を保存しました",
+      "saveFailed": "システム設定の保存に失敗しました"
+    }
+  },
+  "network": {
+    "title": "ネットワーク",
+    "githubProxy": {
+      "title": "GitHub プロキシアドレス",
+      "subtitle": "プラグインのダウンロードや AstrBot の更新に使用する GitHub プロキシアドレスを設定します。中国本土のネットワーク環境で有効です。カスタム入力は即時反映されます。各アドレスの安定性は保証されません。プラグインやプロジェクトの更新時にエラーが発生した場合は、まずプロキシアドレスが正常に利用できるか確認してください。",
+      "label": "GitHub プロキシアドレスを選択"
+    },
+    "proxySelector": {
+      "title": "GitHub プロキシ",
+      "noProxy": "GitHub プロキシを使用しない",
+      "useProxy": "GitHub プロキシを使用",
+      "testConnection": "接続をテスト",
+      "available": "利用可能",
+      "unavailable": "利用不可",
+      "custom": "カスタム"
+    }
+  },
+  "theme": {
+    "title": "テーマ",
+    "subtitle": "テーマのメインカラーとアクセントカラーを設定します。データはブラウザー内に保存されます。",
+    "customize": {
+      "title": "テーマカラー",
+      "primary": "メインカラー",
+      "secondary": "アクセントカラー",
+      "reset": "既定に戻す"
+    }
+  },
+  "system": {
+    "title": "システム",
+    "restart": {
+      "title": "再起動",
+      "subtitle": "AstrBot を再起動",
+      "confirm": "AstrBot を再起動しますか？再起動中は WebUI が一時的に利用できなくなります。",
+      "button": "再起動"
+    },
+    "backup": {
+      "title": "データのバックアップと復元",
+      "subtitle": "AstrBot のすべてのデータをエクスポートまたはインポートして、新しいサーバーへ移行できます。",
+      "button": "バックアップ管理"
+    },
+    "cleanup": {
+      "title": "ログとキャッシュの消去",
+      "subtitle": "ログとキャッシュの使用量を確認し、まとめて消去します。",
+      "refresh": "使用量を再読み込み",
+      "clean": "消去",
+      "cleanAll": "すべて消去",
+      "panel": {
+        "title": "消去の詳細",
+        "subtitle": "現在の使用量：{size}"
+      },
+      "fileCount": "{count} ファイル",
+      "confirm": "{target}を消去しますか？",
+      "targetNames": {
+        "cache": "キャッシュ",
+        "logs": "ログ",
+        "all": "ログとキャッシュ"
+      },
+      "targets": {
+        "cache": {
+          "title": "キャッシュ",
+          "subtitle": "一時ファイル、プラグインマーケットのキャッシュ、スキルのキャッシュを削除します。",
+          "button": "キャッシュを消去"
+        },
+        "logs": {
+          "title": "ログ",
+          "subtitle": "過去のログを削除し、現在書き込み中のログファイルを空にします。",
+          "button": "ログを消去"
+        }
+      },
+      "messages": {
+        "statusFailed": "ストレージ使用量の読み込みに失敗しました",
+        "cleanupSuccess": "{count} ファイルを消去し、{size} を解放しました",
+        "cleanupFailed": "消去に失敗しました"
+      }
+    }
+  },
+  "sidebar": {
+    "title": "サイドバー",
+    "customize": {
+      "title": "サイドバーをカスタマイズ",
+      "subtitle": "ドラッグしてモジュールを並べ替えるか、「その他の機能」グループへ移動またはグループから取り出します。設定はブラウザー内にのみ保存されます。",
+      "reset": "既定に戻す",
+      "mainItems": "メインモジュール",
+      "moreItems": "その他の機能"
+    }
+  },
+  "backup": {
+    "dialog": {
+      "title": "バックアップ管理"
+    },
+    "tabs": {
+      "export": "バックアップをエクスポート",
+      "import": "バックアップをインポート",
+      "list": "バックアップ一覧"
+    },
+    "export": {
+      "title": "バックアップを作成",
+      "description": "データベース、ナレッジベース、設定、添付ファイル、スキルを含むすべてのデータを ZIP バックアップファイルとしてエクスポートします。",
+      "includes": "バックアップ内容：メインデータベース、ナレッジベース（メタデータ＋ベクトルインデックス＋ドキュメント）、設定ファイル、添付ファイル、スキル",
+      "button": "エクスポートを開始",
+      "processing": "エクスポート中…",
+      "wait": "データをパッケージ化しています。しばらくお待ちください…",
+      "completed": "エクスポートが完了しました",
+      "download": "バックアップをダウンロード",
+      "another": "新しいバックアップを作成",
+      "failed": "エクスポートに失敗しました",
+      "retry": "再試行"
+    },
+    "import": {
+      "title": "バックアップをインポート",
+      "warning": "⚠️ インポートすると既存のデータが削除され、バックアップの内容で上書きされます。現在のデータを必ずバックアップしてください。",
+      "selectFile": "バックアップファイルを選択（.zip）",
+      "uploadAndCheck": "アップロードして確認",
+      "uploading": "アップロード中…",
+      "uploadWait": "バックアップファイルをアップロードしています。しばらくお待ちください…",
+      "uploadInit": "アップロードを初期化中…",
+      "uploadingChunks": "分割データをアップロード中…",
+      "uploadComplete": "アップロードが完了しました。ファイルを結合中…",
+      "checking": "バックアップファイルを確認中…",
+      "invalidBackup": "無効なバックアップファイル",
+      "backupContents": "バックアップ内容",
+      "tables": "テーブル",
+      "knowledgeBases": "ナレッジベース",
+      "configFiles": "設定ファイル",
+      "confirmImport": "インポートを確認",
+      "button": "インポートを開始",
+      "processing": "インポート中…",
+      "wait": "データを復元しています。しばらくお待ちください…",
+      "completed": "インポートが完了しました",
+      "restartRequired": "データをインポートしました。すべての変更を反映するため、AstrBot をすぐに再起動することを推奨します。",
+      "restartNow": "今すぐ再起動",
+      "failed": "インポートに失敗しました",
+      "retry": "再試行",
+      "version": {
+        "backupVersion": "バックアップのバージョン",
+        "currentVersion": "現在のバージョン",
+        "backupTime": "バックアップ日時",
+        "matchTitle": "✅ バージョン一致",
+        "matchMessage": "インポートすると、以下を含む既存のすべてのデータが削除され、バックアップの内容で上書きされます：\n• メインデータベース（会話履歴、設定など）\n• ナレッジベース\n• プラグインとプラグインデータ\n• 設定ファイル\n• スキル\n\nこの操作は元に戻せません。続行しますか？",
+        "minorDiffTitle": "⚠️ バージョン差異の警告",
+        "minorDiffMessage": "マイナーバージョンが異なっていても通常はインポートできますが、データ構造が一部異なる可能性があります。\nインポートすると既存のすべてのデータが削除され、バックアップの内容で上書きされます。\n\n続行しますか？",
+        "majorDiffTitle": "⛔ インポートできません",
+        "majorDiffMessage": "メジャーバージョンが異なります。メジャーバージョンをまたぐインポートはデータ破損の原因となる可能性があります。\n同じメジャーバージョンの AstrBot を使用してください。"
+      }
+    },
+    "list": {
+      "empty": "バックアップファイルがありません",
+      "refresh": "一覧を再読み込み",
+      "confirmDelete": "このバックアップファイルを削除しますか？この操作は元に戻せません。",
+      "uploaded": "アップロード済み",
+      "restore": "このバックアップを復元",
+      "rename": "名前を変更",
+      "renameTitle": "バックアップファイル名を変更",
+      "newName": "新しいファイル名",
+      "renameHint": "ファイル名には英字、数字、アンダースコア、ハイフン、ピリオドのみ使用できます",
+      "renameRequired": "ファイル名を入力してください",
+      "renameInvalidChars": "ファイル名に使用できない文字が含まれています",
+      "renameFailed": "名前の変更に失敗しました",
+      "ftpHint": "大きなバックアップファイルは、FTP/SFTP などを使用して data/backups ディレクトリへ直接アップロードすることもできます"
+    }
+  },
+  "apiKey": {
+    "title": "API キー",
+    "manageTitle": "開発者アクセスキー",
+    "subtitle": "外部の開発者が公開 HTTP API を呼び出すための API キーを作成します。",
+    "name": "キー名",
+    "expiresInDays": "有効期限",
+    "expiryOptions": {
+      "day1": "1 日",
+      "day7": "7 日",
+      "day30": "30 日",
+      "day90": "90 日",
+      "permanent": "無期限"
+    },
+    "permanentWarning": "無期限の API キーは高いリスクがあります。安全に保管し、必要な場合にのみ使用してください。",
+    "scopes": "権限範囲",
+    "sensitiveSubscope": "機密サブ権限",
+    "chatAdminWarning": "chat:admin を付与すると、この API キーは設定済みの管理者 ID を使用して管理者操作を実行できます。完全に信頼できる呼び出し元にのみ付与してください。",
+    "createConfirm": "次の権限を持つ API キーを作成しますか？\n\n{scopes}",
+    "sensitiveCreateConfirm": "次の高リスク権限を持つ API キーを作成しようとしています：\n\n{scopes}\n\nこの API キーの所持者が管理者権限を取得する可能性があります。続行しますか？",
+    "scopeDescriptions": {
+      "bot": "ボットとプラットフォームの設定を読み取り、管理します。",
+      "provider": "モデルプロバイダーを読み取り、管理します。",
+      "persona": "ペルソナを読み取り、管理します。",
+      "im": "インスタントメッセージング関連の API にアクセスします。",
+      "config": "システム設定とプロファイル設定を読み取り、管理します。bot と provider の権限も含まれます。",
+      "editAdmin": "admins_id の変更を許可します。ユーザーに管理者権限が付与される可能性があります。",
+      "chat": "セッションの作成、メッセージの送信、ChatUI プロジェクトの管理を行います。",
+      "chatAdmin": "username に設定済みの管理者 ID の使用を許可し、対応する管理者権限を付与します。",
+      "data": "統計情報と実行データにアクセスします。",
+      "file": "API ファイルをアップロードし、アクセスします。",
+      "plugin": "プラグインを読み取り、管理します。",
+      "mcp": "MCP サーバーを読み取り、管理します。",
+      "skill": "スキルを読み取り、管理します。"
+    },
+    "create": "API キーを作成",
+    "revoke": "無効化",
+    "delete": "削除",
+    "copy": "コピー",
+    "docsLink": "ドキュメントを開く",
+    "plaintextHint": "このキーを今すぐ保存してください。平文は二度と表示されません。",
+    "empty": "API キーがありません",
+    "status": {
+      "active": "有効",
+      "inactive": "無効"
+    },
+    "table": {
+      "name": "名前",
+      "prefix": "プレフィックス",
+      "scopes": "権限",
+      "status": "状態",
+      "lastUsed": "最終使用日時",
+      "createdAt": "作成日時",
+      "actions": "操作"
+    },
+    "messages": {
+      "loadFailed": "API キーの読み込みに失敗しました",
+      "scopeRequired": "権限を 1 つ以上選択してください",
+      "createSuccess": "API キーを作成しました",
+      "createFailed": "API キーの作成に失敗しました",
+      "revokeSuccess": "API キーを無効化しました",
+      "revokeFailed": "API キーの無効化に失敗しました",
+      "deleteSuccess": "API キーを削除しました",
+      "deleteFailed": "API キーの削除に失敗しました",
+      "copySuccess": "API キーをコピーしました",
+      "copyFailed": "API キーのコピーに失敗しました"
+    }
+  }
+}

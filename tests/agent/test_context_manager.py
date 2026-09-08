@@ -530,6 +530,23 @@ class TestContextManager:
         assert len(result) <= len(messages)
 
     @pytest.mark.asyncio
+    async def test_trusted_usage_triggers_compression_before_provider_call(self):
+        config = ContextConfig(max_context_tokens=100, truncate_turns=1)
+        manager = ContextManager(config)
+        messages = [self.create_message("user", "short")]
+        compressed = [self.create_message("user", "compressed")]
+        mock_compressor = AsyncMock(return_value=compressed)
+        mock_compressor.should_compress = MagicMock(side_effect=[True, False])
+        manager.compressor = mock_compressor
+
+        result = await manager.process(messages, trusted_token_usage=83)
+
+        first_check = mock_compressor.should_compress.call_args_list[0]
+        assert first_check.args == (messages, 83, 100)
+        mock_compressor.assert_awaited_once_with(messages)
+        assert result == compressed
+
+    @pytest.mark.asyncio
     async def test_token_compression_with_zero_max_tokens(self):
         """Test that compression is skipped when max_context_tokens is 0."""
         config = ContextConfig(max_context_tokens=0)

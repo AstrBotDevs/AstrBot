@@ -4,6 +4,7 @@ import shlex
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
+from time import monotonic
 from typing import Any
 
 from astrbot.api import FunctionTool
@@ -66,7 +67,7 @@ class ExecuteShellTool(FunctionTool):
             "properties": {
                 "command": {
                     "type": "string",
-                    "description": "The shell command to execute in the current runtime shell (for example, cmd.exe on Windows). Equal to 'cd {working_dir} && {your_command}'.",
+                    "description": "The shell command to execute in the current runtime shell (for example, PowerShell on Windows). Equal to 'cd {working_dir} && {your_command}'.",
                 },
                 "background": {
                     "type": "boolean",
@@ -122,20 +123,30 @@ class ExecuteShellTool(FunctionTool):
                 creator_id = context.context.event.get_sender_id()
                 if not creator_id:
                     return "Error executing command: sender identity is unavailable."
-                return json.dumps(
-                    await sb.shell.exec_managed(
-                        command,
-                        owner_id=context.context.event.unified_msg_origin,
-                        creator_id=creator_id,
-                        creator_is_admin=context.context.event.role == "admin",
-                        sandboxed=False,
-                        cwd=cwd,
-                        env=env,
-                        timeout=timeout,
-                        yield_time_ms=0 if background else yield_time_ms,
-                    ),
-                    ensure_ascii=False,
+                started_at = monotonic()
+                result = await sb.shell.exec_managed(
+                    command,
+                    owner_id=context.context.event.unified_msg_origin,
+                    creator_id=creator_id,
+                    creator_is_admin=context.context.event.role == "admin",
+                    sandboxed=False,
+                    cwd=cwd,
+                    env=env,
+                    timeout=timeout,
+                    yield_time_ms=0 if background else yield_time_ms,
                 )
+                elapsed_seconds = monotonic() - started_at
+                if result.get("session_closed") and result.get("status") in {
+                    "completed",
+                    "failed",
+                }:
+                    message = (
+                        f"Command completed with exit code {result['exit_code']} "
+                        f"(wall time: {elapsed_seconds:.2f}s)."
+                    )
+                    output = f"{result['stdout']}{result['stderr']}"
+                    return f"{message}\nOutput:\n{output}"
+                return json.dumps(result, ensure_ascii=False)
 
             effective_background = background and not _is_self_detached_command(command)
 
@@ -244,7 +255,8 @@ class ShellSessionTool(FunctionTool):
 
     name: str = "astrbot_shell_session"
     description: str = (
-        "List, poll, write to, interrupt, or terminate managed shell sessions. "
+        "List, poll, write raw text or complete lines to, interrupt, or terminate "
+        "managed shell sessions. "
         "Sessions are isolated to the current conversation and sender. "
         "Administrators can manage all sessions in the conversation."
     )
@@ -254,7 +266,14 @@ class ShellSessionTool(FunctionTool):
             "properties": {
                 "action": {
                     "type": "string",
-                    "enum": ["list", "poll", "write", "interrupt", "terminate"],
+                    "enum": [
+                        "list",
+                        "poll",
+                        "write",
+                        "write_line",
+                        "interrupt",
+                        "terminate",
+                    ],
                     "description": "Session operation to perform.",
                 },
                 "session_id": {
@@ -263,7 +282,10 @@ class ShellSessionTool(FunctionTool):
                 },
                 "chars": {
                     "type": "string",
-                    "description": "Text written verbatim when action is write.",
+                    "description": (
+                        "Text sent verbatim by write. For write_line, provide one "
+                        "line without a line ending; a real LF is appended automatically."
+                    ),
                     "default": "",
                 },
                 "cursor": {
@@ -306,7 +328,7 @@ class ShellSessionTool(FunctionTool):
             context: Current agent tool context.
             action: Session operation to perform.
             session_id: Managed session identifier, except for list.
-            chars: Text written for the write action.
+            chars: Text written verbatim for write or with a trailing LF for write_line.
             cursor: Optional output byte cursor.
             yield_time_ms: Maximum wait for output or process exit.
             max_output_chars: Maximum output bytes to return.
@@ -357,13 +379,13 @@ class ShellSessionTool(FunctionTool):
                         yield_time_ms=yield_time_ms,
                         max_output_chars=max_output_chars,
                     )
-                elif action == "write":
+                elif action in {"write", "write_line"}:
                     result = await sb.shell.write_session(
                         owner_id=owner_id,
                         requester_id=requester_id,
                         requester_is_admin=requester_is_admin,
                         session_id=session_id,
-                        chars=chars,
+                        chars=f"{chars}\n" if action == "write_line" else chars,
                     )
                 elif action == "interrupt":
                     result = await sb.shell.interrupt_session(

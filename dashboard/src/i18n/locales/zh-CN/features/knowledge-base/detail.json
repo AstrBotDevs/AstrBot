@@ -4,6 +4,10 @@
   "breadcrumb": {
     "list": "知识库"
   },
+  "states": {
+    "loadError": "知识库详情加载失败",
+    "retry": "重试"
+  },
   "tabs": {
     "overview": "概览",
     "documents": "文档管理",

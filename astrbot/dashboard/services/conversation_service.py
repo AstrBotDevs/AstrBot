@@ -31,6 +31,7 @@ class ConversationService:
     ) -> None:
         self.db_helper = db_helper
         self.conv_mgr = core_lifecycle.conversation_manager
+        self.core_lifecycle = core_lifecycle
 
     async def list_conversations(
         self,
@@ -42,6 +43,11 @@ class ConversationService:
         search_query: str,
         exclude_ids: str,
         exclude_platforms: str,
+        keyword_query: str = "",
+        umo_query: str = "",
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+        group_by_session: bool = False,
         include_history: bool = True,
     ) -> dict:
         platform_list = [item.strip() for item in platforms.split(",") if item.strip()]
@@ -69,6 +75,11 @@ class ConversationService:
                 search_query=search_query,
                 exclude_ids=exclude_id_list,
                 exclude_platforms=exclude_platform_list,
+                keyword_query=keyword_query.strip(),
+                umo_query=umo_query.strip(),
+                sort_by=sort_by,
+                sort_order=sort_order,
+                group_by_session=group_by_session,
                 include_history=include_history,
             )
         except Exception as exc:
@@ -95,8 +106,37 @@ class ConversationService:
                 "page_size": page_size,
                 "total": total_count,
                 "total_pages": total_pages,
+                "grouped_by_session": group_by_session,
             },
         }
+
+    async def get_filter_options(self) -> dict:
+        """Build robot filter options from configured conversation platforms.
+
+        Returns:
+            Robot IDs and adapter types that exist in both configuration and
+            conversation history.
+        """
+        history_platform_ids = set(await self.db_helper.get_conversation_platform_ids())
+        configured_platforms = self.core_lifecycle.astrbot_config.get("platform", [])
+        bots = [
+            {
+                "id": str(platform.get("id", "")),
+                "type": str(platform.get("type", "")),
+            }
+            for platform in configured_platforms
+            if platform.get("id") in history_platform_ids
+        ]
+
+        # WebChat is a built-in platform that the platform manager always
+        # starts regardless of config, so expose it as a filterable bot ID even
+        # when it is missing from the configured platform list.
+        if "webchat" in history_platform_ids and not any(
+            bot["id"] == "webchat" for bot in bots
+        ):
+            bots.append({"id": "webchat", "type": "webchat"})
+
+        return {"bots": bots}
 
     async def get_conversation_detail(self, data: object) -> dict:
         payload = self._payload(data)

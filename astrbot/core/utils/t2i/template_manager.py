@@ -1,15 +1,29 @@
 # astrbot/core/utils/t2i/template_manager.py
 
+import hashlib
 import logging
 import os
 import re
 import shutil
+from pathlib import Path
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_path
 
 logger = logging.getLogger("astrbot")
 
 _ALLOWED_VARS = frozenset({"text", "version", "shiki_runtime"})
+
+# Built-in base templates copied by releases that support user template overrides.
+# Matching copies are safe to upgrade because their content was never customized.
+_LEGACY_CORE_TEMPLATE_HASHES = {
+    "base.html": frozenset(
+        {
+            "23714149d06b3abdcee3a5ac1aed3a95785efd75a49a3a3f4a8d26e0f84253e1",
+            "380ccf1824c877635bd2e97df3df0f1960166dfa582aebce768b583c4d6c480a",
+            "7d0beae08e25ae51f6b3f8f00338fada559e0b883cef15ec609309d17ba708f0",
+        }
+    )
+}
 
 _SSTI_BLACKLIST: list[tuple[str, re.Pattern]] = [
     (
@@ -83,8 +97,30 @@ class TemplateManager:
                 shutil.copyfile(src, dst)
 
     def _initialize_user_templates(self) -> None:
-        """如果用户目录下缺少核心模板，则进行复制。"""
+        """复制缺失的核心模板，并升级未被用户修改的旧版模板。"""
         self._copy_core_templates(overwrite=False)
+
+        for filename, legacy_hashes in _LEGACY_CORE_TEMPLATE_HASHES.items():
+            src = Path(self.builtin_template_dir) / filename
+            dst = Path(self.user_template_dir) / filename
+            if not src.exists() or not dst.exists():
+                continue
+
+            try:
+                # Text mode normalizes CRLF so unmodified Windows copies also migrate.
+                content = dst.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError) as err:
+                logger.warning(
+                    "Failed to inspect core T2I template %s for migration: %s",
+                    filename,
+                    err,
+                )
+                continue
+
+            content_hash = hashlib.sha256(content.encode()).hexdigest()
+            if content_hash in legacy_hashes:
+                shutil.copyfile(src, dst)
+                logger.info("Updated unmodified core T2I template: %s", filename)
 
     def _get_user_template_path(self, name: str) -> str:
         """获取用户模板的完整路径，防止路径遍历漏洞。"""

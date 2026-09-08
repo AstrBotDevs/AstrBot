@@ -1,0 +1,97 @@
+name: "🐛 报告 Bug"
+title: "[Bug] "
+description: 提交问题报告以帮助我们改进。
+labels: ["bug"]
+body:
+  - type: textarea
+    attributes:
+      label: 问题描述
+      description: 发生了什么？
+      placeholder: 清晰且具体的描述发生了什么，或遇到了什么问题。
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: 如何复现？
+      description: 复现该问题的步骤。
+      placeholder: |
+        例如:
+        1. 打开 ...
+        2. 点击 ...
+        3. 问题复现
+    validations:
+      required: true
+
+  - type: input
+    attributes:
+      label: AstrBot 版本
+      description: 发生问题的 AstrBot 版本。请不要使用诸如 `latest` 之类的无意义值。
+    validations:
+      required: true
+
+  - type: dropdown
+    attributes:
+      label: 操作系统
+      description: AstrBot 运行所在的操作系统。
+      options:
+        - "Windows"
+        - "MacOS"
+        - "Linux"
+        - "Other"
+    validations:
+      required: true
+
+  - type: input
+    attributes:
+      # 考虑到部署方式未来可能扩增，为了避免频繁修改表单，故此处使用 input 让用户自己填。
+      label: 部署方式
+      description: AstrBot 的部署方式。
+      placeholder: 例如 Docker、Windows Desktop。
+    validations:
+      required: true
+
+  - type: input
+    attributes:
+      # 同上
+      label: 使用的消息平台适配器
+      description: 发生问题时使用的消息平台适配器。
+      placeholder: 例如 QQ 官方机器人（WebSocket）、Onebot v11。
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: 错误日志
+      description: 与问题相关的 Debug 级别的日志。没有有效日志的 Issue 将被关闭，谢谢理解。
+      render: text
+    validations:
+      required: true
+
+  - type: upload
+    attributes:
+      label: 辅助信息
+      description: |
+        与问题相关的其他辅助信息，例如复现视频、完整日志文件。图片请在问题描述中上传。<br>
+        如果您要提供的日志过长以至不适合直接填写到上一栏，您可以选择只在上一栏贴关键日志，将完整的日志文件上传到这里。
+    validations:
+      accept: ".txt,.log,.mp4,.mov,.webm,.zip,.gz"
+
+  - type: checkboxes
+    attributes:
+      label: 检查清单
+      options:
+        - label: 我已在 [Issue 列表](https://github.com/AstrBotDevs/AstrBot/issues)中搜索过相关问题仍无法解决，或该问题从未被报告过。
+          required: true
+        - label: 我已尝试过禁用所有插件，排除了可能是因插件导致的问题。
+          required: true
+        - label: 我报告的问题与 AstrBot 本体相关，而非在报告某一插件的问题。
+          required: true
+        - label: 我已阅读并同意本项目的[贡献者行为准则](https://github.com/AstrBotDevs/AstrBot/blob/master/CODE_OF_CONDUCT.md)。
+          required: true
+        - label: (可选)我愿意提交 PR 以帮助修复该问题。
+          required: false
+
+  - type: markdown
+    attributes:
+      value: "最后，感谢您抽出时间报告问题！"

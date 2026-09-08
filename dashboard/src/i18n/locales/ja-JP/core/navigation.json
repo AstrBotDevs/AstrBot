@@ -1,0 +1,57 @@
+{
+  "welcome": "ようこそ",
+  "dashboard": "ダッシュボード",
+  "platforms": "ボット",
+  "providers": "モデルプロバイダー",
+  "commands": "コマンド管理",
+  "persona": "ペルソナ設定",
+  "data": "データとログ",
+  "dataTabs": {
+    "statistics": "統計",
+    "conversations": "会話",
+    "logs": "ログ",
+    "trace": "トレース"
+  },
+  "subagent": "サブエージェント編成",
+  "toolUse": "MCP",
+  "extension": "プラグイン",
+  "extensionTabs": {
+    "installed": "プラグイン",
+    "market": "プラグインマーケット",
+    "mcp": "MCP",
+    "skills": "スキル",
+    "components": "ハンドラー管理"
+  },
+  "config": "設定ファイル",
+  "chat": "チャット",
+  "cron": "スケジュールタスク",
+  "conversation": "会話データ",
+  "sessionManagement": "カスタムルール",
+  "console": "プラットフォームログ",
+  "trace": "トレース",
+  "alkaid": "Alkaid",
+  "knowledgeBase": "ナレッジベース",
+  "about": "概要",
+  "settings": "設定",
+  "changelog": "変更履歴",
+  "documentation": "公式ドキュメント",
+  "faq": "FAQ",
+  "github": "GitHub",
+  "drag": "ドラッグ",
+  "groups": {
+    "more": "その他の機能"
+  },
+  "changelogDialog": {
+    "title": "変更履歴",
+    "loading": "読み込み中…",
+    "error": "読み込みに失敗しました",
+    "notFound": "このバージョンの変更履歴が見つかりません",
+    "selectVersion": "バージョンを選択",
+    "current": "現在"
+  },
+  "configTabs": {
+    "normal": "一般設定",
+    "system": "システム設定"
+  },
+  "pluginWebui": "プラグインページ"
+}

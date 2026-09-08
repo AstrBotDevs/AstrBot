@@ -18,14 +18,6 @@
         :multiple="true"
       />
     </template>
-    <template v-else-if="getSpecialName(itemMeta?._special) === 'select_agent_runner_provider'">
-      <ProviderSelector
-        :model-value="modelValue"
-        @update:model-value="emitUpdate"
-        :provider-type="'agent_runner'"
-        :provider-subtype="getSpecialSubtype(itemMeta?._special)"
-      />
-    </template>
     <template v-else-if="itemMeta?._special === 'provider_pool'">
       <ProviderSelector :model-value="modelValue" @update:model-value="emitUpdate" :provider-type="'chat_completion'"
         :button-text="t('core.shared.providerSelector.selectProviderPool')" />
@@ -143,6 +135,10 @@
       v-else-if="itemMeta?.type === 'string'"
       :model-value="modelValue"
       @update:model-value="emitUpdate"
+      :type="stringInputType"
+      :append-inner-icon="secretToggleIcon"
+      :autocomplete="itemMeta?.secret ? 'new-password' : undefined"
+      @click:append-inner="secretVisible = !secretVisible"
       density="compact"
       variant="outlined"
       class="config-field"
@@ -213,6 +209,7 @@
       v-else-if="itemMeta?.type === 'list'"
       :model-value="modelValue"
       @update:model-value="emitUpdate"
+      :secret="Boolean(itemMeta?.secret)"
       class="config-field"
     />
 
@@ -231,6 +228,10 @@
       v-else
       :model-value="modelValue"
       @update:model-value="emitUpdate"
+      :type="stringInputType"
+      :append-inner-icon="secretToggleIcon"
+      :autocomplete="itemMeta?.secret ? 'new-password' : undefined"
+      @click:append-inner="secretVisible = !secretVisible"
       density="compact"
       variant="outlined"
       class="config-field"
@@ -256,6 +257,7 @@ import { usePluginI18n } from '@/utils/pluginI18n'
 
 const numericTemp = ref(null)
 const listSearchText = ref('')
+const secretVisible = ref(false)
 
 const props = defineProps({
   modelValue: {
@@ -298,6 +300,15 @@ const { getRaw } = useModuleI18n('features/config-metadata')
 const { configText } = usePluginI18n()
 
 function emitUpdate(val) {
+  if (
+    props.itemMeta?._special === 'agent_runner_type'
+    && props.configRoot?.agent_runner
+    && props.itemMeta?.runner_defaults?.[val]
+  ) {
+    props.configRoot.agent_runner.config = JSON.parse(
+      JSON.stringify(props.itemMeta.runner_defaults[val])
+    )
+  }
   emit('update:modelValue', val)
 }
 
@@ -306,6 +317,14 @@ const listSelectItems = computed(() =>
     ? getSelectItems(props.itemMeta)
     : []
 )
+
+const stringInputType = computed(() =>
+  props.itemMeta?.secret && !secretVisible.value ? 'password' : 'text'
+)
+const secretToggleIcon = computed(() => {
+  if (!props.itemMeta?.secret) return undefined
+  return secretVisible.value ? 'mdi-eye-off-outline' : 'mdi-eye-outline'
+})
 
 function toNumber(val) {
   const n = parseFloat(val)
@@ -353,24 +372,6 @@ function getSelectItems(itemMeta) {
   return itemMeta.options || []
 }
 
-function parseSpecialValue(value) {
-  if (!value || typeof value !== 'string') {
-    return { name: '', subtype: '' }
-  }
-  const [name, ...rest] = value.split(':')
-  return {
-    name,
-    subtype: rest.join(':') || ''
-  }
-}
-
-function getSpecialName(value) {
-  return parseSpecialValue(value).name
-}
-
-function getSpecialSubtype(value) {
-  return parseSpecialValue(value).subtype
-}
 </script>
 
 <style scoped>

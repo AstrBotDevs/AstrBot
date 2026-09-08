@@ -4,6 +4,7 @@ import pytest
 
 from astrbot.dashboard.services.open_api_service import (
     OpenApiService,
+    OpenApiServiceError,
     OpenApiWebSocketChatBridge,
 )
 
@@ -12,6 +13,9 @@ def _service() -> OpenApiService:
     core_lifecycle = SimpleNamespace(
         platform_manager=SimpleNamespace(platform_insts=[]),
         platform_message_history_manager=None,
+        astrbot_config_mgr=SimpleNamespace(
+            confs={"default": {"admins_id": ["admin-user"]}}
+        ),
     )
     return OpenApiService(SimpleNamespace(), core_lifecycle)
 
@@ -45,7 +49,7 @@ async def test_run_chat_websocket_closes_when_api_key_is_invalid(monkeypatch):
     closed: list[tuple[int, str]] = []
 
     async def authenticate_api_key(_raw_key):
-        return False, "Invalid API key"
+        return None, "Invalid API key"
 
     monkeypatch.setattr(service, "authenticate_api_key", authenticate_api_key)
 
@@ -88,10 +92,15 @@ async def test_run_chat_websocket_handles_control_messages(monkeypatch):
     handled: list[dict] = []
 
     async def authenticate_api_key(_raw_key):
-        return True, None
+        return ["chat", "chat:admin"], None
 
     async def handle_chat_ws_send(**kwargs):
-        handled.append(kwargs["post_data"])
+        handled.append(
+            {
+                "post_data": kwargs["post_data"],
+                "allow_admin_username": kwargs["allow_admin_username"],
+            }
+        )
 
     monkeypatch.setattr(service, "authenticate_api_key", authenticate_api_key)
     monkeypatch.setattr(service, "handle_chat_ws_send", handle_chat_ws_send)
@@ -130,4 +139,49 @@ async def test_run_chat_websocket_handles_control_messages(monkeypatch):
             "data": "Unsupported message type: unknown",
         },
     ]
-    assert handled == [{"t": "send", "message": "hello"}]
+    assert handled == [
+        {
+            "post_data": {"t": "send", "message": "hello"},
+            "allow_admin_username": True,
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_prepare_chat_send_rejects_configured_admin_username():
+    """The shared HTTP/WS boundary must reject administrator impersonation."""
+    service = _service()
+
+    with pytest.raises(
+        OpenApiServiceError,
+        match="username is reserved for an AstrBot administrator",
+    ):
+        await service.prepare_chat_send(
+            {"username": "admin-user", "message": "hello"},
+            [],
+        )
+
+
+@pytest.mark.asyncio
+async def test_prepare_chat_send_allows_admin_username_with_subscope(monkeypatch):
+    """The explicit chat-admin subscope should preserve legitimate admin calls."""
+    service = _service()
+
+    async def ensure_chat_session(_username, _session_id):
+        return None
+
+    monkeypatch.setattr(service, "ensure_chat_session", ensure_chat_session)
+
+    username, session_id, config_id = await service.prepare_chat_send(
+        {
+            "username": "admin-user",
+            "session_id": "admin-session",
+            "message": "hello",
+        },
+        [],
+        allow_admin_username=True,
+    )
+
+    assert username == "admin-user"
+    assert session_id == "admin-session"
+    assert config_id is None

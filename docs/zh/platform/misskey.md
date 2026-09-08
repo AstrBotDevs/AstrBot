@@ -87,7 +87,7 @@ Misskey 在`v2025.4.0`及以后的版本中为加入“聊天”组件支持，�
 
 ## 历史记录
 
-聊天和贴文单个用户的对话历史在 AstrBot 的 WebUI 控制台“对话历史”会以`chat:UserID`的 id 记录，传统贴文则是以`note:UserID`的 id 记录。
+聊天和贴文单个用户的对话历史会显示在 AstrBot WebUI 的 `数据` -> `对话` 中，并以 `chat:UserID` 作为会话 ID；传统贴文则以 `note:UserID` 作为会话 ID。
 
 ::: tip Misskey 用户的 UserID 在哪里？
 位于用户个人页面部分的`Raw`页面内可以查询，UserID 是单个实例中 Misskey 用户唯一的关键身份标识。

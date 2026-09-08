@@ -1,12 +1,12 @@
 import asyncio
 import os
 import subprocess
-import uuid
 
 import edge_tts
 
 from astrbot.core import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.datetime_utils import generate_timestamp_id
 
 from ..entities import ProviderType
 from ..provider import TTSProvider
@@ -47,8 +47,10 @@ class ProviderEdgeTTS(TTSProvider):
 
     async def get_audio(self, text: str) -> str:
         temp_dir = get_astrbot_temp_path()
-        mp3_path = os.path.join(temp_dir, f"edge_tts_temp_{uuid.uuid4()}.mp3")
-        wav_path = os.path.join(temp_dir, f"edge_tts_{uuid.uuid4()}.wav")
+        mp3_path = os.path.join(
+            temp_dir, f"edge_tts_temp_{generate_timestamp_id()}.mp3"
+        )
+        wav_path = os.path.join(temp_dir, f"edge_tts_{generate_timestamp_id()}.wav")
 
         # 构建 Edge TTS 参数
         kwargs = {"text": text, "voice": self.voice}

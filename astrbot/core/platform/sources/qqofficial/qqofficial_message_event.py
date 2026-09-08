@@ -4,6 +4,7 @@ import copy
 import logging
 import os
 import random
+from pathlib import Path
 from typing import cast
 
 import aiofiles
@@ -27,7 +28,11 @@ from tenacity import (
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import File, Image, Plain, Record, Video
-from astrbot.api.platform import AstrBotMessage, PlatformMetadata
+from astrbot.api.platform import AstrBotMessage, Group, PlatformMetadata
+from astrbot.core.platform.sources.qqofficial.qqofficial_chunked_upload import (
+    QQOFFICIAL_CHUNKED_UPLOAD_THRESHOLD,
+    QQOfficialChunkedUploader,
+)
 from astrbot.core.utils.media_utils import MediaResolver, file_uri_to_path, is_file_uri
 
 
@@ -102,6 +107,110 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.bot = bot
         self.send_buffer = None
+
+    async def get_group(self, group_id: str | None = None, **kwargs) -> Group | None:
+        """Get QQ group or guild-channel information for this event.
+
+        QQ group metadata is restricted to allowlisted bots. When the API is
+        unavailable, the basic group object attached to the incoming message is
+        returned so callers can still rely on the group identifier.
+
+        Args:
+            group_id: Optional QQ group OpenID or guild channel ID. Defaults to
+                the current message group identifier.
+            **kwargs: Reserved for compatibility with the base event API.
+
+        Returns:
+            Available group information, or ``None`` for a private event without
+            an explicit group identifier.
+        """
+        del kwargs
+        target_id = group_id or self.message_obj.group_id
+        if not target_id:
+            return None
+
+        current_group = self.message_obj.group
+        group = (
+            current_group
+            if current_group and current_group.group_id == target_id
+            else Group(group_id=target_id)
+        )
+        source = self.message_obj.raw_message
+
+        if isinstance(source, botpy.message.GroupMessage):
+            try:
+                route = Route(
+                    "GET",
+                    "/v2/groups/{group_openid}/info",
+                    group_openid=target_id,
+                )
+                payload = await self.bot.api._http.request(route)
+                if not isinstance(payload, dict):
+                    logger.warning(
+                        "[QQOfficial] Group info API returned an invalid response for %s",
+                        target_id,
+                    )
+                    return group
+
+                group.group_name = payload.get("group_name") or group.group_name
+                member_count = payload.get(
+                    "group_member_num",
+                    payload.get("member_count"),
+                )
+                if member_count is not None:
+                    try:
+                        group.member_count = int(member_count)
+                    except (TypeError, ValueError):
+                        logger.warning(
+                            "[QQOfficial] Group info API returned an invalid member_count for %s",
+                            target_id,
+                        )
+            except Exception as exc:
+                logger.warning(
+                    "[QQOfficial] Failed to get group info for %s: %s",
+                    target_id,
+                    exc,
+                )
+            return group
+
+        if isinstance(source, botpy.message.Message):
+            try:
+                channel = await self.bot.api.get_channel(target_id)
+                if not isinstance(channel, dict):
+                    logger.warning(
+                        "[QQOfficial] Channel API returned an invalid response for %s",
+                        target_id,
+                    )
+                    return group
+
+                group.group_name = channel.get("name") or group.group_name
+                guild_id = channel.get("guild_id") or getattr(source, "guild_id", None)
+                if guild_id:
+                    guild = await self.bot.api.get_guild(str(guild_id))
+                    if isinstance(guild, dict):
+                        # QQ subchannels have no independent avatar or member roster;
+                        # these fields describe their parent guild while the ID and
+                        # name above continue to identify the current subchannel.
+                        group.group_avatar = guild.get("icon") or group.group_avatar
+                        group.group_owner = guild.get("owner_id") or group.group_owner
+                        member_count = guild.get("member_count")
+                        if member_count is not None:
+                            try:
+                                group.member_count = int(member_count)
+                            except (TypeError, ValueError):
+                                logger.warning(
+                                    "[QQOfficial] Guild API returned an invalid member_count for %s",
+                                    guild_id,
+                                )
+            except Exception as exc:
+                logger.warning(
+                    "[QQOfficial] Failed to get channel info for %s: %s",
+                    target_id,
+                    exc,
+                )
+            return group
+
+        return group
 
     async def send(self, message: MessageChain) -> None:
         self.send_buffer = message
@@ -220,13 +329,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         for component in message.chain:
             is_media = isinstance(component, Image | Record | Video | File)
             if is_media and current_has_media:
-                chunks.append(
-                    MessageChain(
-                        chain=current_chain,
-                        use_t2i_=message.use_t2i_,
-                        type=message.type,
-                    )
-                )
+                chunks.append(message.derive(current_chain))
                 current_chain = []
                 current_has_media = False
 
@@ -234,13 +337,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             current_has_media = current_has_media or is_media
 
         if current_chain or not message.chain:
-            chunks.append(
-                MessageChain(
-                    chain=current_chain,
-                    use_t2i_=message.use_t2i_,
-                    type=message.type,
-                )
-            )
+            chunks.append(message.derive(current_chain))
 
         return chunks
 
@@ -288,8 +385,6 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             file_source,
             file_name,
         ) = await QQOfficialMessageEvent._parse_to_qqofficial(message_to_send)
-        if record_file_path:
-            self.track_temporary_local_file(record_file_path)
 
         # C2C 流式仅用于文本分片，富媒体时降级为普通发送，避免平台侧流式校验报错。
         if stream and (
@@ -504,8 +599,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
         return ret
 
+    @staticmethod
     async def _send_with_markdown_fallback(
-        self,
         send_func,
         payload: dict,
         plain_text: str,
@@ -531,7 +626,9 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
             # QQ 流式 markdown 分片校验：内容必须以换行结尾。
             # 某些边界场景服务端仍可能判定失败，这里做一次修正重试。
-            if stream and self.STREAM_MARKDOWN_NEWLINE_ERROR in str(err):
+            if stream and QQOfficialMessageEvent.STREAM_MARKDOWN_NEWLINE_ERROR in str(
+                err
+            ):
                 retry_payload = payload.copy()
 
                 markdown_payload = retry_payload.get("markdown")
@@ -550,7 +647,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 return await send_func(retry_payload)
 
             if (
-                self.MARKDOWN_NOT_ALLOWED_ERROR not in str(err)
+                QQOfficialMessageEvent.MARKDOWN_NOT_ALLOWED_ERROR not in str(err)
                 or not payload.get("markdown")
                 or not plain_text
             ):
@@ -629,8 +726,49 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         srv_send_msg: bool = False,
         file_name: str | None = None,
         **kwargs,
-    ) -> Media | None:
-        """上传媒体文件"""
+    ) -> Media:
+        """Upload media to a QQ group or C2C session.
+
+        Args:
+            file_source: Local file path or remote URL to upload.
+            file_type: QQ media type identifier.
+            srv_send_msg: Whether QQ should send the media immediately.
+            file_name: Optional display name for the uploaded file.
+            **kwargs: Recipient identifier as ``openid`` or ``group_openid``.
+
+        Returns:
+            Metadata for the uploaded media.
+
+        Raises:
+            ValueError: No supported recipient identifier was provided.
+            Exception: The upload request fails or returns an invalid response.
+        """
+        local_file = Path(file_source)
+        if (
+            local_file.is_file()
+            and local_file.stat().st_size > QQOFFICIAL_CHUNKED_UPLOAD_THRESHOLD
+        ):
+            openid = kwargs.get("openid")
+            group_openid = None if openid else kwargs.get("group_openid")
+            if not openid and not group_openid:
+                raise ValueError("Invalid upload parameters")
+            uploader = QQOfficialChunkedUploader(self.bot.api._http)
+            if openid:
+                return await uploader.upload_c2c(
+                    file_path=local_file,
+                    file_type=file_type,
+                    file_name=file_name or local_file.name,
+                    user_openid=openid,
+                    srv_send_msg=srv_send_msg,
+                )
+            return await uploader.upload_group(
+                file_path=local_file,
+                file_type=file_type,
+                file_name=file_name or local_file.name,
+                group_openid=group_openid,
+                srv_send_msg=srv_send_msg,
+            )
+
         # 构建基础payload
         payload: dict = {"file_type": file_type, "srv_send_msg": srv_send_msg}
         if file_name:
@@ -659,7 +797,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 group_openid=kwargs["group_openid"],
             )
         else:
-            return None
+            raise ValueError("Invalid upload parameters")
 
         @_qqofficial_retry()
         async def _do_upload():
@@ -671,25 +809,29 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
         try:
             result = await _do_upload()
-
-            if result:
-                if not isinstance(result, dict):
-                    logger.error(f"上传文件响应格式错误: {result}")
-                    return None
-
-                return Media(
-                    file_uuid=result["file_uuid"],
-                    file_info=result["file_info"],
-                    ttl=result.get("ttl", 0),
-                )
         except APIReturnNoneError:
-            logger.warning(f"上传文件API返回None，共尝试5次后放弃: {file_source}")
+            logger.warning(
+                "Media upload API returned None after 5 attempts: %s",
+                file_source,
+            )
+            raise
         except (botpy.errors.ServerError, botpy.errors.SequenceNumberError):
-            logger.error(f"上传媒体文件失败，共尝试5次后放弃: {file_source}")
-        except Exception as e:
-            logger.error(f"上传请求错误: {e}")
+            logger.error("Media upload failed after 5 attempts: %s", file_source)
+            raise
+        except Exception as exc:
+            logger.error("Media upload request failed: %s", exc)
+            raise
 
-        return None
+        if not isinstance(result, dict):
+            raise RuntimeError(
+                f"Failed to upload media, response is not dict: {result}"
+            )
+
+        return Media(
+            file_uuid=result["file_uuid"],
+            file_info=result["file_info"],
+            ttl=result.get("ttl", 0),
+        )
 
     async def post_c2c_message(
         self,

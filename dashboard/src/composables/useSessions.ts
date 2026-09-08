@@ -68,9 +68,7 @@ export function useSessions(chatboxMode: boolean = false) {
             // 更新 URL
             const basePath = chatboxMode ? '/chatbox' : '/chat';
             router.push(`${basePath}/${sessionId}`);
-            
-            await getSessions();
-            
+
             // 确保新创建的会话被选中高亮
             selectedSessions.value = [sessionId];
             

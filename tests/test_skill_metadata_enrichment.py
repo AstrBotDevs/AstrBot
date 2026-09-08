@@ -616,6 +616,73 @@ def test_list_skills_includes_plugin_provided_skills(monkeypatch, tmp_path: Path
     assert skill.path.endswith("plugins/astrbot_plugin_demo/skills/demo-skill/SKILL.md")
 
 
+def test_list_skills_includes_builtin_plugin_skill_as_preset(
+    monkeypatch,
+    tmp_path: Path,
+):
+    import astrbot.core.star.star as star_module
+    from astrbot.core.star.star import StarMetadata
+
+    data_dir = tmp_path / "data"
+    skills_root = tmp_path / "skills"
+    plugins_root = tmp_path / "plugins"
+    builtin_plugins_root = tmp_path / "builtin_plugins"
+    data_dir.mkdir(parents=True)
+    skills_root.mkdir()
+    plugins_root.mkdir()
+
+    monkeypatch.setattr(
+        "astrbot.core.skills.skill_manager.get_astrbot_data_path",
+        lambda: str(data_dir),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.skills.skill_manager.get_astrbot_builtin_plugin_path",
+        lambda: str(builtin_plugins_root),
+    )
+    monkeypatch.setattr(
+        star_module,
+        "star_registry",
+        [
+            StarMetadata(
+                name="astrbot",
+                root_dir_name="astrbot",
+                reserved=True,
+                activated=True,
+            )
+        ],
+    )
+
+    skill_dir = builtin_plugins_root / "astrbot" / "skills" / "skill-creator"
+    skill_dir.mkdir(parents=True)
+    skill_dir.joinpath("SKILL.md").write_text(
+        "---\n"
+        "name: skill-creator\n"
+        "description: Create AstrBot Skills.\n"
+        "---\n"
+        "# Skill Creator\n",
+        encoding="utf-8",
+    )
+
+    mgr = SkillManager(skills_root=str(skills_root), plugins_root=str(plugins_root))
+    skills = mgr.list_skills()
+
+    assert len(skills) == 1
+    skill = skills[0]
+    assert skill.name == "skill-creator"
+    assert skill.active is True
+    assert skill.preset is True
+    assert skill.source_type == "plugin"
+    assert skill.plugin_name == "astrbot"
+    assert skill.readonly is True
+    assert [item.name for item in mgr.list_skills(active_only=True)] == [
+        "skill-creator"
+    ]
+
+    mgr.set_skill_active("skill-creator", False)
+
+    assert mgr.list_skills(active_only=True) == []
+
+
 def test_list_skills_includes_inactive_plugin_provided_skills_for_inventory(
     monkeypatch,
     tmp_path: Path,

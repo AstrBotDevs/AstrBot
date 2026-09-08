@@ -5,6 +5,8 @@ from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any, ClassVar
 
+from deprecated import deprecated
+
 from astrbot.api.platform import AstrBotMessage, MessageMember, MessageType
 from astrbot.core.message.components import BaseMessageComponent
 from astrbot.core.message.message_event_result import MessageChain
@@ -132,6 +134,7 @@ class StarTools:
         adapter.commit_event(event)
 
     @classmethod
+    @deprecated(reason="Use activate_llm_tool_async() instead.")
     def activate_llm_tool(cls, name: str) -> bool:
         """Activates a registered function-calling tool.
 
@@ -149,6 +152,24 @@ class StarTools:
         return cls._context.activate_llm_tool(name)
 
     @classmethod
+    async def activate_llm_tool_async(cls, name: str) -> bool:
+        """Asynchronously activates a registered function-calling tool.
+
+        Args:
+            name: Tool name.
+
+        Returns:
+            Whether the tool was activated successfully.
+
+        Raises:
+            ValueError: If StarTools is not initialized.
+        """
+        if cls._context is None:
+            raise ValueError("StarTools not initialized")
+        return await cls._context.activate_llm_tool_async(name)
+
+    @classmethod
+    @deprecated(reason="Use deactivate_llm_tool_async() instead.")
     def deactivate_llm_tool(cls, name: str) -> bool:
         """Deactivates a registered function-calling tool.
 
@@ -164,6 +185,23 @@ class StarTools:
         if cls._context is None:
             raise ValueError("StarTools not initialized")
         return cls._context.deactivate_llm_tool(name)
+
+    @classmethod
+    async def deactivate_llm_tool_async(cls, name: str) -> bool:
+        """Asynchronously deactivates a registered function-calling tool.
+
+        Args:
+            name: Tool name.
+
+        Returns:
+            Whether the tool was deactivated successfully.
+
+        Raises:
+            ValueError: If StarTools is not initialized.
+        """
+        if cls._context is None:
+            raise ValueError("StarTools not initialized")
+        return await cls._context.deactivate_llm_tool_async(name)
 
     @classmethod
     def register_llm_tool(
