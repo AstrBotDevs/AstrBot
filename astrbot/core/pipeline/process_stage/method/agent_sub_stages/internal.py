@@ -2,6 +2,7 @@
 
 import asyncio
 import base64
+import random
 from collections.abc import AsyncGenerator
 from dataclasses import replace
 
@@ -225,6 +226,44 @@ class InternalAgentSubStage(Stage):
             if await call_event_hook(event, EventType.OnWaitingLLMRequestEvent):
                 return
 
+            stream_to_general = (
+                self.unsupported_streaming_strategy == "turn_off"
+                and not event.platform_meta.support_streaming_message
+            )
+
+            # When the reply would be streamed but TTS voice replies are
+            # enabled, streaming delivery bypasses the result decorate stage
+            # (the only place text is converted into voice messages). Roll the
+            # dice before the agent runner is built and reset, so forced
+            # replies are created without streaming. Live mode has its own
+            # streaming TTS pipeline and is excluded.
+            if (
+                streaming_response
+                and not stream_to_general
+                and event.get_extra("action_type") != "live"
+            ):
+                tts_cfg = self.ctx.astrbot_config.get("provider_tts_settings", {})
+                if tts_cfg.get("enable"):
+                    try:
+                        tts_prob = float(tts_cfg.get("trigger_probability", 1.0))
+                    except (TypeError, ValueError):
+                        tts_prob = 1.0
+                    if random.random() < max(0.0, min(tts_prob, 1.0)):
+                        # Only force when a usable TTS provider exists, so a
+                        # misconfigured TTS setup cannot silently disable
+                        # streaming for regular chat replies.
+                        try:
+                            tts_provider = await self.ctx.plugin_manager.context.get_using_tts_provider_async(
+                                event.unified_msg_origin
+                            )
+                        except ValueError:
+                            # The session may resolve to a provider of the
+                            # wrong type; treat it as no usable TTS provider.
+                            tts_provider = None
+                        if tts_provider is not None:
+                            event.set_extra("tts_forced", True)
+                            streaming_response = False
+
             async with session_lock_manager.acquire_lock(event.unified_msg_origin):
                 logger.debug("acquired session lock for llm request")
                 agent_runner: AgentRunner | None = None
@@ -268,11 +307,6 @@ class InternalAgentSubStage(Stage):
                             logger.error(error_message)
                             await self._send_llm_error_message(event, error_message)
                             return
-
-                    stream_to_general = (
-                        self.unsupported_streaming_strategy == "turn_off"
-                        and not event.platform_meta.support_streaming_message
-                    )
 
                     if await call_event_hook(event, EventType.OnLLMRequestEvent, req):
                         if reset_coro:
