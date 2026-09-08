@@ -556,7 +556,7 @@ async def get_booter(
 ) -> ComputerBooter:
     config = context.get_config(umo=session_id)
 
-    runtime = config.get("provider_settings", {}).get("computer_use_runtime", "local")
+    runtime = config.get("provider_settings", {}).get("computer_use_runtime", "none")
     if runtime == "local":
         return get_local_booter()
     elif runtime == "none":

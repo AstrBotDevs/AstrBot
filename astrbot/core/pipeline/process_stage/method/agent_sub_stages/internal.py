@@ -122,7 +122,7 @@ class InternalAgentSubStage(Stage):
             "safety_mode_strategy", "system_prompt"
         )
 
-        self.computer_use_runtime = settings.get("computer_use_runtime")
+        self.computer_use_runtime = settings.get("computer_use_runtime", "none")
         self.sandbox_cfg = settings.get("sandbox", {})
 
         # Proactive capability configuration

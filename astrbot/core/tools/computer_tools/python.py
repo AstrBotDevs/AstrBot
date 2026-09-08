@@ -141,7 +141,7 @@ class LocalPythonTool(FunctionTool):
         if permission_error:
             return permission_error
         if local_policy is None:
-            return "Error executing code: Local permission policy is unavailable."
+            return "Error executing code: only local runtime is supported."
         sandboxed = local_policy.requires_sandbox
         sb = get_local_booter()
         if not isinstance(sb.python, LocalPythonComponent):

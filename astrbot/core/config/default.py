@@ -339,6 +339,7 @@ CONFIG_METADATA_2 = {
                         "secret": "",
                         "enable_group_c2c": True,
                         "enable_guild_direct_message": True,
+                        "use_markdown": True,
                     },
                     "QQ 官方机器人(Webhook)": {
                         "id": "default",
@@ -346,6 +347,7 @@ CONFIG_METADATA_2 = {
                         "enable": True,
                         "appid": "",
                         "secret": "",
+                        "use_markdown": True,
                         "is_sandbox": False,
                         "unified_webhook_mode": True,
                         "webhook_uuid": "",
@@ -935,6 +937,11 @@ CONFIG_METADATA_2 = {
                         "description": "启用频道私聊",
                         "type": "bool",
                         "hint": "启用后，机器人可以接收到频道的私聊消息。",
+                    },
+                    "use_markdown": {
+                        "description": "主动消息使用 Markdown",
+                        "type": "bool",
+                        "hint": "启用后，机器人主动发送消息默认以 Markdown 模式发送；插件显式调用 use_markdown() 指定行为时不受此配置影响。",
                     },
                     "ws_reverse_host": {
                         "description": "反向 Websocket 主机",
@@ -3253,12 +3260,13 @@ CONFIG_METADATA_2 = {
 
 
 """
-v4.7.0 之后，name, description, hint 等字段已经实现 i18n 国际化。国际化资源文件位于：
+Since v4.7.0, fields such as name, description, and hint support i18n.
+Their resources are stored in:
 
-- dashboard/src/i18n/locales/en-US/features/config-metadata.json
-- dashboard/src/i18n/locales/zh-CN/features/config-metadata.json
+- dashboard/src/i18n/locales/<locale>/features/config-metadata.json
 
-如果在此文件中添加了新的配置字段，请务必同步更新上述两个国际化资源文件。
+When adding configuration fields here, update this file for every supported
+Dashboard locale.
 """
 CONFIG_METADATA_3 = {
     "ai_group": {
