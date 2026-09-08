@@ -6,9 +6,38 @@ from dataclasses import dataclass, field
 from typing import Any, Generic, Literal, TypeVar, overload
 
 from .filter import HandlerFilter
-from .star import star_map
+from .star import StarMetadata, star_map
 
 T = TypeVar("T", bound="StarHandlerMetadata")
+
+
+def plugin_package_root(plugin: StarMetadata) -> str | None:
+    """The module subtree a plugin owns, derived from its root directory.
+
+    ``module_path`` points at the entry module (``...my_plugin.main``), but a
+    plugin may define hooks in sibling modules (``...my_plugin.hooks``), so
+    matching needs the package root (``...my_plugin``).
+    """
+    if not plugin.root_dir_name:
+        return None
+    base = "astrbot.builtin_stars." if plugin.reserved else "data.plugins."
+    return base + plugin.root_dir_name
+
+
+def plugin_for_handler_module(module_path: str) -> StarMetadata | None:
+    """Resolve the plugin a handler module belongs to.
+
+    ``star_map`` is keyed by entry module, so a helper-module handler misses
+    the exact lookup; fall back to matching the plugin's package root.
+    """
+    plugin = star_map.get(module_path)
+    if plugin is not None:
+        return plugin
+    for plugin in star_map.values():
+        root = plugin_package_root(plugin)
+        if root and (module_path == root or module_path.startswith(root + ".")):
+            return plugin
+    return None
 
 
 class StarHandlerRegistry(Generic[T]):
@@ -162,12 +191,12 @@ class StarHandlerRegistry(Generic[T]):
                 continue
             # 过滤启用状态
             if only_activated:
-                plugin = star_map.get(handler.handler_module_path)
+                plugin = plugin_for_handler_module(handler.handler_module_path)
                 if not (plugin and plugin.activated):
                     continue
             # 过滤插件白名单
             if plugins_name is not None and plugins_name != ["*"]:
-                plugin = star_map.get(handler.handler_module_path)
+                plugin = plugin_for_handler_module(handler.handler_module_path)
                 if not plugin:
                     continue
                 if (
@@ -191,16 +220,21 @@ class StarHandlerRegistry(Generic[T]):
     def get_handlers_by_module_name(
         self,
         module_name: str,
+        plugin_package: str | None = None,
     ) -> list[StarHandlerMetadata]:
-        # A plugin's hooks can live in helper modules under its package root;
-        # an exact match misses those, leaving them unbound at load and
-        # leaked at unload.
-        prefix = module_name + "."
+        # A plugin's hooks can live in helper modules beside or below its
+        # entry module; an exact match misses those, leaving them unbound at
+        # load and leaked at unload. The caller that knows the plugin's root
+        # directory passes the package root so sibling modules match too.
+        prefixes = [module_name + "."]
+        if plugin_package and plugin_package != module_name:
+            prefixes.append(plugin_package + ".")
         return [
             handler
             for handler in self._handlers
             if handler.handler_module_path == module_name
-            or handler.handler_module_path.startswith(prefix)
+            or handler.handler_module_path == plugin_package
+            or any(handler.handler_module_path.startswith(p) for p in prefixes)
         ]
 
     def clear(self) -> None:

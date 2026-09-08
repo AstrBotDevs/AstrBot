@@ -51,7 +51,11 @@ from .context import Context
 from .error_messages import format_plugin_error
 from .filter.permission import PermissionType, PermissionTypeFilter
 from .star import star_map, star_registry
-from .star_handler import EventType, star_handlers_registry
+from .star_handler import (
+    EventType,
+    plugin_package_root,
+    star_handlers_registry,
+)
 from .updater import PLUGIN_METADATA_FILENAMES, _PluginUpdater
 
 try:
@@ -1255,6 +1259,7 @@ class PluginManager:
                     related_handlers = (
                         star_handlers_registry.get_handlers_by_module_name(
                             metadata.module_path,
+                            plugin_package=plugin_package_root(metadata),
                         )
                     )
                     for handler in related_handlers:
@@ -1376,6 +1381,7 @@ class PluginManager:
                 full_names = []
                 for handler in star_handlers_registry.get_handlers_by_module_name(
                     metadata.module_path,
+                    plugin_package=plugin_package_root(metadata),
                 ):
                     full_names.append(handler.handler_full_name)
 
@@ -1888,6 +1894,7 @@ class PluginManager:
                 break
         for handler in star_handlers_registry.get_handlers_by_module_name(
             plugin_module_path,
+            plugin_package=plugin_package_root(plugin) if plugin else None,
         ):
             logger.info(
                 f"Removed handler {handler.handler_name} from plugin {plugin_name} "

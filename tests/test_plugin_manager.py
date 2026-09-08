@@ -2462,7 +2462,9 @@ async def test_submodule_hook_binds_on_activation_and_unloads_with_plugin(
     _clear_star_runtime_state()
     plugin_name = "demo_plugin"
     module_path = f"data.plugins.{plugin_name}.main"
-    submodule_path = f"{module_path}.hooks"
+    # Sibling of the entry module: the common real-world layout from #9938
+    # (my_plugin/hooks.py next to my_plugin/main.py), not a child of it.
+    submodule_path = f"data.plugins.{plugin_name}.hooks"
 
     class DemoPlugin:
         def __init__(self, context):
@@ -2546,6 +2548,16 @@ async def test_submodule_hook_binds_on_activation_and_unloads_with_plugin(
         assert hook_handler.handler.func is raw_hook_handler
         assert hook_handler.handler.args == (metadata.star_cls,)
         assert await hook_handler.handler("event") == (metadata.star_cls, "event")
+
+        # The pipeline must actually select the bound handler: star_map is
+        # keyed by the entry module, so dispatch needs the package-aware
+        # lookup, not an exact star_map.get(handler_module_path).
+        selected = (
+            star_manager_module.star_handlers_registry.get_handlers_by_event_type(
+                EventType.OnDecoratingResultEvent
+            )
+        )
+        assert hook_handler in selected
 
         await plugin_manager_pm._unbind_plugin(plugin_name, module_path)
         assert hook_handler not in star_manager_module.star_handlers_registry
