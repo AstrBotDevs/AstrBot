@@ -349,8 +349,12 @@ class ThirdPartyAgentSubStage(Stage):
             except (TypeError, ValueError):
                 tts_prob = 1.0
             tts_prob = max(0.0, min(tts_prob, 1.0))
-            if random.random() <= tts_prob:
+            if random.random() < tts_prob:
                 event.set_extra("tts_forced", True)
+                # ``streaming_response`` is passed to the runner reset below,
+                # so it must be disabled as well, otherwise the runner still
+                # streams while the non-streaming handler is selected.
+                streaming_response = False
                 streaming_used = False
 
         runner_closed = False
