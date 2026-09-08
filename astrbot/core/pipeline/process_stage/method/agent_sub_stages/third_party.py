@@ -1,5 +1,6 @@
 import asyncio
 import inspect
+import random
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import TYPE_CHECKING
 
@@ -334,6 +335,23 @@ class ThirdPartyAgentSubStage(Stage):
             and not event.platform_meta.support_streaming_message
         )
         streaming_used = streaming_response and not stream_to_general
+
+        # When the reply would be streamed but TTS voice replies are enabled,
+        # streaming delivery bypasses the result decorate stage (the only place
+        # where text is converted into voice messages). Roll the dice once here
+        # so a fraction of replies controlled by
+        # provider_tts_settings.trigger_probability are fully generated first
+        # and then voiced, while the rest keep the streaming behavior.
+        tts_cfg = self.ctx.astrbot_config.get("provider_tts_settings", {})
+        if streaming_used and tts_cfg.get("enable"):
+            try:
+                tts_prob = float(tts_cfg.get("trigger_probability", 1.0))
+            except (TypeError, ValueError):
+                tts_prob = 1.0
+            tts_prob = max(0.0, min(tts_prob, 1.0))
+            if random.random() <= tts_prob:
+                event.set_extra("tts_forced", True)
+                streaming_used = False
 
         runner_closed = False
         stream_consumed = False

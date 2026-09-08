@@ -2,6 +2,7 @@
 
 import asyncio
 import base64
+import random
 from collections.abc import AsyncGenerator
 from dataclasses import replace
 
@@ -347,6 +348,27 @@ class InternalAgentSubStage(Stage):
                                 user_aborted=agent_runner.was_aborted(),
                             )
 
+                    # When the reply would be streamed but TTS voice replies are
+                    # enabled, streaming delivery bypasses the result decorate
+                    # stage (which is the only place text is converted into voice
+                    # messages). Roll the dice once here so that a fraction of
+                    # replies -- controlled by provider_tts_settings.
+                    # trigger_probability -- are fully generated first and then
+                    # voiced, while the rest keep the streaming behavior.
+                    tts_cfg = self.ctx.astrbot_config.get("provider_tts_settings", {})
+                    if (
+                        streaming_response
+                        and not stream_to_general
+                        and tts_cfg.get("enable")
+                    ):
+                        try:
+                            tts_prob = float(tts_cfg.get("trigger_probability", 1.0))
+                        except (TypeError, ValueError):
+                            tts_prob = 1.0
+                        tts_prob = max(0.0, min(tts_prob, 1.0))
+                        if random.random() <= tts_prob:
+                            event.set_extra("tts_forced", True)
+                            streaming_response = False
                     elif streaming_response and not stream_to_general:
                         # 流式响应
                         event.set_result(
