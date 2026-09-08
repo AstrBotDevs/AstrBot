@@ -352,11 +352,14 @@ class ThirdPartyAgentSubStage(Stage):
                 # Only force when a usable TTS provider exists, so a
                 # misconfigured TTS setup cannot silently disable streaming
                 # for regular chat replies.
-                tts_provider = (
-                    await self.ctx.plugin_manager.context.get_using_tts_provider_async(
+                try:
+                    tts_provider = await self.ctx.plugin_manager.context.get_using_tts_provider_async(
                         event.unified_msg_origin
                     )
-                )
+                except ValueError:
+                    # The session may resolve to a provider of the wrong
+                    # type; treat it as no usable TTS provider.
+                    tts_provider = None
                 if tts_provider is not None:
                     event.set_extra("tts_forced", True)
                     # ``streaming_response`` is passed to the runner reset
