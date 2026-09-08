@@ -5,6 +5,7 @@ from typing import Literal
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.computer.process_sandbox import create_process_sandbox
+from astrbot.core.config.default import get_local_permission_defaults
 from astrbot.core.db import BaseDatabase
 from astrbot.core.utils.astrbot_path import get_astrbot_workspaces_path
 from astrbot.core.workspace import (
@@ -93,29 +94,28 @@ def get_local_permission_policy(
     )
     provider_settings = cfg.get("provider_settings", {})
     role = "admin" if context.context.event.role == "admin" else "member"
-    default_execution = role == "admin"
-    default_network = role == "admin"
-    default_filesystem = "workspace"
+    defaults = get_local_permission_defaults()[role]
 
     permissions = provider_settings.get("computer_use_local_permissions")
     role_policy = permissions.get(role) if isinstance(permissions, dict) else None
     if not isinstance(role_policy, dict):
         role_policy = {}
         if role == "member" and not isinstance(permissions, dict):
-            default_execution = not provider_settings.get(
+            defaults["allow_execution"] = not provider_settings.get(
                 "computer_use_require_admin",
                 True,
             )
 
-    filesystem_scope = role_policy.get("filesystem_scope", default_filesystem)
+    filesystem_scope = role_policy.get("filesystem_scope", defaults["filesystem_scope"])
     if filesystem_scope not in {"none", "workspace", "host"}:
-        filesystem_scope = default_filesystem
+        filesystem_scope = defaults["filesystem_scope"]
     allow_execution = (
         filesystem_scope != "none"
-        and role_policy.get("allow_execution", default_execution) is True
+        and role_policy.get("allow_execution", defaults["allow_execution"]) is True
     )
     allow_network = (
-        allow_execution and role_policy.get("allow_network", default_network) is True
+        allow_execution
+        and role_policy.get("allow_network", defaults["allow_network"]) is True
     )
     return LocalPermissionPolicy(
         allow_execution=allow_execution,

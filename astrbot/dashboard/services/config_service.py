@@ -19,6 +19,7 @@ from astrbot.core.config.default import (
     CONFIG_METADATA_3_SYSTEM,
     DEFAULT_CONFIG,
     DEFAULT_VALUE_MAP,
+    get_local_permission_defaults,
 )
 from astrbot.core.config.i18n_utils import ConfigMetadataI18n
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
@@ -323,6 +324,7 @@ def validate_config(
         }
         validate(data, meta_all)
         provider_settings = data.get("provider_settings", {})
+        defaults = get_local_permission_defaults(runtime.get("os") if runtime else None)
         permissions = (
             provider_settings.get("computer_use_local_permissions", {})
             if isinstance(provider_settings, dict)
@@ -346,7 +348,9 @@ def validate_config(
                         errors.append(
                             f"Local permission {role}.{key} must be a boolean."
                         )
-                scope = policy.get("filesystem_scope", "workspace")
+                scope = policy.get(
+                    "filesystem_scope", defaults[role]["filesystem_scope"]
+                )
                 if scope not in ("none", "workspace", "host"):
                     errors.append(
                         f"Invalid local filesystem scope for {role}: {scope}."
@@ -354,7 +358,10 @@ def validate_config(
                 if scope == "none":
                     policy["allow_execution"] = False
                     policy["allow_network"] = False
-                elif policy.get("allow_execution", role == "admin") is False:
+                elif (
+                    policy.get("allow_execution", defaults[role]["allow_execution"])
+                    is False
+                ):
                     policy["allow_network"] = False
 
         if (
@@ -367,9 +374,6 @@ def validate_config(
             old_settings = (current_config or {}).get("provider_settings", {})
             old_permissions = old_settings.get("computer_use_local_permissions", {})
             was_local = old_settings.get("computer_use_runtime") == "local"
-            defaults = DEFAULT_CONFIG["provider_settings"][
-                "computer_use_local_permissions"
-            ]
             for role in ("member", "admin"):
                 # Keep unchanged legacy policies, but check both roles when
                 # activating Local access or creating a profile.

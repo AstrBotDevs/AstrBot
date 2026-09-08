@@ -393,7 +393,11 @@ async def test_local_member_stays_restricted_when_admin_requirement_is_disabled(
     outside_file.write_text("host secret\n", encoding="utf-8")
 
     result = await fs_tools.FileReadTool().call(
-        _make_context(role="member", require_admin=False),
+        _make_context(
+            role="member",
+            require_admin=False,
+            local_permissions={"member": {"filesystem_scope": "workspace"}},
+        ),
         path=str(outside_file),
     )
 
@@ -462,7 +466,10 @@ async def test_restricted_local_member_cannot_write_plugin_provided_skill(
     plugin_skill.write_text("# Demo Skill\n", encoding="utf-8")
 
     result = await fs_tools.FileWriteTool().call(
-        _make_context(role="member"),
+        _make_context(
+            role="member",
+            local_permissions={"member": {"filesystem_scope": "workspace"}},
+        ),
         path=str(plugin_skill),
         content="# Changed\n",
     )
@@ -548,13 +555,17 @@ async def test_restricted_local_member_rejects_workspace_hardlink_alias(
     outside_file.write_text("outside-secret\n", encoding="utf-8")
     hardlink_path = workspace / "linked.txt"
     _make_hardlink_or_skip(outside_file, hardlink_path)
+    context = _make_context(
+        role="member",
+        local_permissions={"member": {"filesystem_scope": "workspace"}},
+    )
 
     read_result = await fs_tools.FileReadTool().call(
-        _make_context(role="member"),
+        context,
         path="linked.txt",
     )
     write_result = await fs_tools.FileWriteTool().call(
-        _make_context(role="member"),
+        context,
         path="linked.txt",
         content="changed\n",
     )
@@ -595,7 +606,10 @@ async def test_windows_restricted_file_access_fails_closed(
     monkeypatch.setattr(local_file_security, "os", SimpleNamespace(name="nt"))
 
     result = await tool_type().call(
-        _make_context(role=role),
+        _make_context(
+            role=role,
+            local_permissions={role: {"filesystem_scope": "workspace"}},
+        ),
         **arguments,
     )
 
@@ -757,7 +771,10 @@ async def test_restricted_local_grep_requests_read_only_os_sandbox(
     monkeypatch.setattr(fs_tools, "get_booter", _fake_get_booter)
 
     result = await fs_tools.GrepTool().call(
-        _make_context(role="member"),
+        _make_context(
+            role="member",
+            local_permissions={"member": {"filesystem_scope": "workspace"}},
+        ),
         pattern="needle",
         path="target.txt",
     )

@@ -1,12 +1,39 @@
 """如需修改配置，请在 `data/cmd_config.json` 中修改或者在管理面板中可视化修改。"""
 
 import os
+import platform
 
 from astrbot import __version__
 from astrbot.core.computer.booters.cua_defaults import CUA_DEFAULT_CONFIG
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 from .agent_runner import get_agent_runner_config_default
+
+
+def get_local_permission_defaults(system: str | None = None) -> dict:
+    """Return fresh Local permission defaults for the operating system.
+
+    Args:
+        system: Operating system name, or None to use the current system.
+
+    Returns:
+        Per-role policies. Windows disables member access and gives admins
+        unrestricted access because workspace isolation is unavailable.
+    """
+    windows = (system or platform.system()).lower() == "windows"
+    return {
+        "member": {
+            "allow_execution": False,
+            "allow_network": False,
+            "filesystem_scope": "none" if windows else "workspace",
+        },
+        "admin": {
+            "allow_execution": True,
+            "allow_network": True,
+            "filesystem_scope": "host" if windows else "workspace",
+        },
+    }
+
 
 VERSION = __version__
 
@@ -152,18 +179,7 @@ DEFAULT_CONFIG = {
             "add_cron_tools": True,
         },
         "computer_use_runtime": "none",
-        "computer_use_local_permissions": {
-            "member": {
-                "allow_execution": False,
-                "allow_network": False,
-                "filesystem_scope": "workspace",
-            },
-            "admin": {
-                "allow_execution": True,
-                "allow_network": True,
-                "filesystem_scope": "workspace",
-            },
-        },
+        "computer_use_local_permissions": get_local_permission_defaults(),
         "computer_use_require_admin": True,
         "sandbox": {
             "booter": "shipyard_neo",

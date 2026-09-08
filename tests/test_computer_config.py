@@ -140,7 +140,7 @@ def test_local_permission_platform_matrix(
         ("local", "local", "member", {}, False),
         ("local", "local", "admin", {"filesystem_scope": "host"}, False),
         ("local", "local", "member", {"allow_execution": True}, True),
-        ("local", "local", "member", None, True),
+        ("local", "local", "member", None, False),
         ("none", "local", "member", {}, True),
         ("local", "none", "member", {}, False),
         ("local", "sandbox", "member", {}, False),

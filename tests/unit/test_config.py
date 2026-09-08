@@ -4,11 +4,12 @@ import asyncio
 import json
 import os
 import threading
+from pathlib import Path
 
 import pytest
 
 from astrbot.core.config.astrbot_config import AstrBotConfig, RateLimitStrategy
-from astrbot.core.config.default import DEFAULT_VALUE_MAP
+from astrbot.core.config.default import DEFAULT_VALUE_MAP, get_local_permission_defaults
 from astrbot.core.config.i18n_utils import ConfigMetadataI18n
 from astrbot.core.utils.auth_password import (
     DEFAULT_DASHBOARD_PASSWORD,
@@ -92,27 +93,18 @@ class TestAstrBotConfigLoad:
         assert config.provider_settings["enable"] is False
 
     @pytest.mark.parametrize("require_admin", [True, False])
+    @pytest.mark.parametrize("system", ["Windows", "Linux", "Darwin"])
     def test_migrates_legacy_local_computer_permissions(
         self,
         temp_config_path,
         require_admin,
+        system,
     ):
         """Legacy admin switches should become explicit Local role policies."""
         default_config = {
             "provider_settings": {
                 "computer_use_require_admin": True,
-                "computer_use_local_permissions": {
-                    "member": {
-                        "allow_execution": False,
-                        "allow_network": False,
-                        "filesystem_scope": "workspace",
-                    },
-                    "admin": {
-                        "allow_execution": True,
-                        "allow_network": True,
-                        "filesystem_scope": "workspace",
-                    },
-                },
+                "computer_use_local_permissions": get_local_permission_defaults(system),
             }
         }
         with open(temp_config_path, "w", encoding="utf-8-sig") as file:
@@ -132,15 +124,53 @@ class TestAstrBotConfigLoad:
 
         permissions = config["provider_settings"]["computer_use_local_permissions"]
         assert permissions["member"] == {
-            "allow_execution": not require_admin,
+            "allow_execution": system != "Windows" and not require_admin,
             "allow_network": False,
-            "filesystem_scope": "workspace",
+            "filesystem_scope": "none" if system == "Windows" else "workspace",
         }
         assert permissions["admin"] == {
             "allow_execution": True,
             "allow_network": True,
             "filesystem_scope": "host",
         }
+        assert (
+            json.loads(Path(temp_config_path).read_text(encoding="utf-8-sig"))[
+                "provider_settings"
+            ]["computer_use_local_permissions"]
+            == permissions
+        )
+
+    @pytest.mark.parametrize("system", ["Windows", "Linux", "Darwin"])
+    @pytest.mark.parametrize("scope", [None, "none", "workspace", "host"])
+    def test_local_defaults_preserve_existing_policies(
+        self, temp_config_path, system, scope
+    ):
+        defaults = get_local_permission_defaults(system)
+        existing = {"member": {"filesystem_scope": scope}} if scope else {}
+        if scope:
+            Path(temp_config_path).write_text(
+                json.dumps(
+                    {"provider_settings": {"computer_use_local_permissions": existing}}
+                )
+            )
+        config = AstrBotConfig(
+            temp_config_path,
+            default_config={
+                "provider_settings": {"computer_use_local_permissions": defaults}
+            },
+        )
+        expected = {
+            role: {**policy, **existing.get(role, {})}
+            for role, policy in defaults.items()
+        }
+        assert config["provider_settings"]["computer_use_local_permissions"] == expected
+        assert (
+            json.loads(Path(temp_config_path).read_text(encoding="utf-8-sig"))[
+                "provider_settings"
+            ]["computer_use_local_permissions"]
+            == expected
+        )
+        assert defaults == get_local_permission_defaults(system)
 
     def test_first_deploy_flag(self, temp_config_path, minimal_default_config):
         """Test first_deploy flag is set for new config."""

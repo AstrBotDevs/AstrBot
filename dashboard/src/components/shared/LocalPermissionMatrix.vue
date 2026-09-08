@@ -133,6 +133,13 @@
   </div>
 </template>
 
+<script>
+export const windowsPermissionDefaults = {
+  member: { filesystem_scope: 'none', allow_execution: false, allow_network: false },
+  admin: { filesystem_scope: 'host', allow_execution: true, allow_network: true }
+}
+</script>
+
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { Cpu, FolderOpen, LockKeyhole, Monitor, Shield, ShieldAlert, ShieldOff } from '@lucide/vue'
@@ -153,7 +160,7 @@ const runtimeLoading = ref(true)
 const unsupported = computed(() => runtime.value?.sandbox?.status === 'unsupported')
 const sandboxMissing = computed(() => runtime.value?.sandbox?.status === 'missing')
 const roles = ['member', 'admin']
-const defaults = {
+const defaults = computed(() => runtime.value?.os === 'windows' ? windowsPermissionDefaults : {
   member: {
     allow_execution: false,
     allow_network: false,
@@ -164,7 +171,7 @@ const defaults = {
     allow_network: true,
     filesystem_scope: 'workspace'
   }
-}
+})
 
 onMounted(async () => {
   try {
@@ -179,11 +186,11 @@ onMounted(async () => {
 
 function policy(role) {
   const resolved = {
-    ...defaults[role],
+    ...defaults.value[role],
     ...(props.modelValue?.[role] || {})
   }
   if (!['none', 'workspace', 'host'].includes(resolved.filesystem_scope)) {
-    resolved.filesystem_scope = defaults[role].filesystem_scope
+    resolved.filesystem_scope = defaults.value[role].filesystem_scope
   }
   resolved.allow_execution = resolved.filesystem_scope !== 'none' && resolved.allow_execution === true
   resolved.allow_network = resolved.allow_execution && resolved.allow_network === true
@@ -215,9 +222,9 @@ function updatePermission(role, changes) {
 }
 
 const accessPolicies = {
-  none: { filesystem_scope: 'none', allow_execution: false, allow_network: false },
+  none: windowsPermissionDefaults.member,
   files: { filesystem_scope: 'host', allow_execution: false, allow_network: false },
-  full: { filesystem_scope: 'host', allow_execution: true, allow_network: true }
+  full: windowsPermissionDefaults.admin
 }
 const accessIcons = { none: LockKeyhole, files: FolderOpen, full: ShieldAlert }
 const permissionLocks = computed(() => Object.fromEntries(roles.map(role => {

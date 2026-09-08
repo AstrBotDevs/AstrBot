@@ -97,24 +97,17 @@ class AstrBotConfig(dict):
             and "computer_use_local_permissions" in default_provider_settings
             and "computer_use_local_permissions" not in provider_settings
         ):
-            # Preserve the legacy Local meaning while replacing its use of the
-            # shared admin switch with explicit per-role permissions.
-            member_execution = not provider_settings.get(
-                "computer_use_require_admin",
-                True,
+            # Preserve legacy POSIX access; Windows uses its supported defaults.
+            permissions = copy.deepcopy(
+                default_provider_settings["computer_use_local_permissions"]
             )
-            provider_settings["computer_use_local_permissions"] = {
-                "member": {
-                    "allow_execution": member_execution,
-                    "allow_network": False,
-                    "filesystem_scope": "workspace",
-                },
-                "admin": {
-                    "allow_execution": True,
-                    "allow_network": True,
-                    "filesystem_scope": "host",
-                },
-            }
+            permissions["member"]["allow_execution"] = permissions["member"][
+                "filesystem_scope"
+            ] != "none" and not provider_settings.get(
+                "computer_use_require_admin", True
+            )
+            permissions["admin"]["filesystem_scope"] = "host"
+            provider_settings["computer_use_local_permissions"] = permissions
             config_migrated = True
         # 检查配置完整性，并插入
         has_new = self.check_config_integrity(default_config, conf, schema=schema)

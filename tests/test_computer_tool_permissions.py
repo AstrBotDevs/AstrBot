@@ -6,6 +6,7 @@ import pytest
 
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.computer import process_sandbox
+from astrbot.core.config import default as config_defaults
 from astrbot.core.tools.computer_tools import fs, python, shell, util
 from astrbot.core.tools.computer_tools.shipyard_neo.browser import BrowserExecTool
 from astrbot.core.tools.computer_tools.shipyard_neo.neo_skills import (
@@ -108,16 +109,29 @@ def test_local_permission_policy_treats_unknown_roles_as_members():
 
     assert resolved.allow_execution is False
     assert resolved.allow_network is False
-    assert resolved.filesystem_scope == "workspace"
+    assert (
+        resolved.filesystem_scope
+        == config_defaults.get_local_permission_defaults()["member"]["filesystem_scope"]
+    )
 
 
-def test_local_permission_policy_defaults_admin_to_workspace_access():
-    resolved = get_local_permission_policy(_make_local_run_context("admin", {}))
+@pytest.mark.parametrize("system", ["Windows", "Linux", "Darwin"])
+@pytest.mark.parametrize("role", ["member", "admin", "unexpected"])
+@pytest.mark.parametrize("permissions", [None, {}])
+def test_local_permission_policy_platform_defaults(
+    monkeypatch, system, role, permissions
+):
+    monkeypatch.setattr(
+        config_defaults, "platform", SimpleNamespace(system=lambda: system)
+    )
+    resolved = get_local_permission_policy(_make_local_run_context(role, permissions))
 
-    assert resolved.allow_execution is True
-    assert resolved.allow_network is True
-    assert resolved.filesystem_scope == "workspace"
-    assert resolved.requires_sandbox is True
+    assert resolved.allow_execution == (role == "admin")
+    assert resolved.allow_network == (role == "admin")
+    assert resolved.filesystem_scope == (
+        ("host" if role == "admin" else "none") if system == "Windows" else "workspace"
+    )
+    assert resolved.requires_sandbox == (system != "Windows" or role != "admin")
 
 
 @pytest.mark.parametrize("role", ["member", "admin", "unexpected"])
