@@ -343,9 +343,11 @@
           "os": "操作系统",
           "arch": "架构",
           "sandbox": "本地隔离",
+          "unavailableHint": "沙箱启动失败，受限 Shell/Python 执行及工作区文件搜索会受到影响。请根据下方错误检查系统安全策略（如 Linux 的 AppArmor、用户命名空间限制）或容器限制，修复后重启 AstrBot 重新检测。",
           "status": {
-            "detected": "{backend} · 已检测到",
+            "detected": "{backend} · 启动检测通过",
             "missing": "缺少 {dependency}",
+            "unavailable": "{backend} · 已安装但无法启动",
             "unsupported": "暂不支持"
           }
         }

@@ -415,9 +415,11 @@
           "os": "OS",
           "arch": "アーキテクチャ",
           "sandbox": "ローカル隔離",
+          "unavailableHint": "サンドボックスの起動に失敗したため、制限付きの Shell/Python 実行とワークスペース内のファイル検索に影響があります。以下のエラーを参考に、システムのセキュリティポリシー（Linux の AppArmor やユーザー名前空間の制限など）またはコンテナの制限を確認し、修正後に AstrBot を再起動して再検査してください。",
           "status": {
-            "detected": "{backend} · 検出済み",
+            "detected": "{backend} · 起動確認済み",
             "missing": "{dependency} が見つかりません",
+            "unavailable": "{backend} · インストール済みですが起動できません",
             "unsupported": "未対応"
           }
         }

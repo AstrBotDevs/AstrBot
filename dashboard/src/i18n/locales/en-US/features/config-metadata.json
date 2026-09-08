@@ -327,9 +327,11 @@
           "os": "OS",
           "arch": "Architecture",
           "sandbox": "Local isolation",
+          "unavailableHint": "Sandbox startup failed, affecting restricted Shell/Python execution and workspace file search. Use the error below to check system security policies (such as Linux AppArmor and user namespace restrictions) or container restrictions, then restart AstrBot to check again.",
           "status": {
-            "detected": "{backend} · Detected",
+            "detected": "{backend} · Startup check passed",
             "missing": "Missing {dependency}",
+            "unavailable": "{backend} · Installed but cannot start",
             "unsupported": "Unsupported"
           }
         }

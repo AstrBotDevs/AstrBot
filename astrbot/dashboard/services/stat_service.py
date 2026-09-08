@@ -5,6 +5,7 @@ import asyncio
 import platform
 import re
 import shutil
+import tempfile
 import threading
 import time
 import traceback
@@ -18,6 +19,7 @@ import psutil
 from sqlmodel import col, func, select
 
 from astrbot.core import DEMO_MODE, logger
+from astrbot.core.computer.process_sandbox import SandboxSpec, create_process_sandbox
 from astrbot.core.config import VERSION
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
@@ -32,7 +34,7 @@ from astrbot.core.desktop_runtime import (
     is_desktop_session_auth_enabled,
 )
 from astrbot.core.umo_alias import build_umo_alias_map, serialize_umo_alias
-from astrbot.core.utils.astrbot_path import get_astrbot_path
+from astrbot.core.utils.astrbot_path import get_astrbot_path, get_astrbot_temp_path
 from astrbot.core.utils.auth_password import (
     is_default_dashboard_password,
     is_md5_dashboard_password,
@@ -62,7 +64,7 @@ class StatService:
         self.config = config
         self.storage_cleaner = StorageCleaner(config)
 
-        # Snapshot dependency presence at startup; this does not test sandbox launch.
+        # Probe sandbox startup once; restart AstrBot to refresh this snapshot.
         system = platform.system().lower()
         sandbox = {"backend": None, "status": "unsupported"}
         if system == "linux":
@@ -80,6 +82,28 @@ class StatService:
                     else "missing"
                 ),
             }
+        if sandbox["status"] == "detected":
+            try:
+                temp_root = Path(get_astrbot_temp_path())
+                temp_root.mkdir(parents=True, exist_ok=True)
+                with tempfile.TemporaryDirectory(
+                    prefix="sandbox-probe-", dir=temp_root
+                ) as workspace:
+                    result = create_process_sandbox().run(
+                        ["/bin/true"],
+                        SandboxSpec(workspace=Path(workspace)),
+                        timeout=5,
+                        output_limit=1024,
+                    )
+                if result.returncode != 0:
+                    raise RuntimeError(
+                        result.stderr.decode("utf-8", errors="replace").strip()
+                        or f"Sandbox probe exited with code {result.returncode}."
+                    )
+            except (OSError, RuntimeError) as exc:
+                sandbox.update(
+                    status="unavailable", error=str(exc)[:1024] or type(exc).__name__
+                )
         self.runtime = {
             "os": system,
             "arch": platform.machine(),

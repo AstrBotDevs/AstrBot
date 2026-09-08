@@ -5323,7 +5323,7 @@ components:
           description: Unmodified platform.machine() value, such as x86_64, AMD64, arm64, or aarch64. May be empty if unknown.
         sandbox:
           type: object
-          description: Local process sandbox dependency detection. It does not describe file tool permissions or verify that sandboxed processes can launch.
+          description: Local process sandbox startup check, captured when AstrBot starts. It does not verify DNS resolution or every permitted operation.
           required: [backend, status]
           properties:
             backend:
@@ -5331,8 +5331,11 @@ components:
               enum: [bubblewrap, seatbelt, null]
             status:
               type: string
-              enum: [detected, missing, unsupported]
-              description: detected means bwrap was found in PATH or /usr/bin/sandbox-exec was found on macOS; missing means the corresponding executable was not found; unsupported means this platform has no Local process sandbox backend. These identifiers are independent of the UI language.
+              enum: [detected, missing, unavailable, unsupported]
+              description: detected means the executable was found and a minimal workspace sandbox launched successfully; missing means the corresponding executable was not found; unavailable means it was found but sandbox startup failed; unsupported means this platform has no Local process sandbox backend. These identifiers are independent of the UI language.
+            error:
+              type: string
+              description: Bounded startup error detail, included when status is unavailable. Restart AstrBot after fixing the environment to refresh the check.
 
     SuccessEnvelope:
       type: object

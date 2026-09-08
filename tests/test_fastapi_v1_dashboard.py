@@ -1045,16 +1045,25 @@ def _jwt_headers() -> dict[str, str]:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("desktop_auth", [False, True])
+@pytest.mark.parametrize("status", ["missing", "unavailable", "detected"])
 async def test_version_routes_return_startup_runtime_snapshot(
-    monkeypatch, fake_core_lifecycle, fake_db: FakeDb, desktop_auth
+    monkeypatch, tmp_path, fake_core_lifecycle, fake_db: FakeDb, desktop_auth, status
 ):
     """Both version routes and auth modes expose the same startup snapshot."""
     platform = SimpleNamespace(
         system=Mock(return_value="Linux"), machine=Mock(return_value="aarch64")
     )
-    which = Mock(return_value=None)
+    which = Mock(return_value=None if status == "missing" else "/usr/bin/bwrap")
     monkeypatch.setattr(stat_service, "platform", platform)
     monkeypatch.setattr(stat_service, "shutil", SimpleNamespace(which=which))
+    error = "bwrap: setting up uid map: Permission denied"
+    sandbox = Mock()
+    sandbox.run.return_value = SimpleNamespace(
+        returncode=1 if status == "unavailable" else 0, stderr=error.encode()
+    )
+    factory = Mock(return_value=sandbox)
+    monkeypatch.setattr(stat_service, "create_process_sandbox", factory)
+    monkeypatch.setattr(stat_service, "get_astrbot_temp_path", lambda: str(tmp_path))
     monkeypatch.setattr(
         stat_service, "is_desktop_session_auth_enabled", lambda: desktop_auth
     )
@@ -1076,8 +1085,12 @@ async def test_version_routes_return_startup_runtime_snapshot(
         core_lifecycle=fake_core_lifecycle, db=fake_db, jwt_secret=JWT_SECRET
     )
 
-    # Installing a dependency after startup takes effect after restarting AstrBot.
+    # Environment changes take effect in this snapshot after restarting AstrBot.
     which.return_value = "/usr/bin/bwrap"
+    sandbox.run.return_value.returncode = 0
+    expected_sandbox = {"backend": "bubblewrap", "status": status}
+    if status == "unavailable":
+        expected_sandbox["error"] = error
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(
         transport=transport, base_url="http://testserver"
@@ -1090,7 +1103,7 @@ async def test_version_routes_return_startup_runtime_snapshot(
             assert payload["data"]["runtime"] == {
                 "os": "linux",
                 "arch": "aarch64",
-                "sandbox": {"backend": "bubblewrap", "status": "missing"},
+                "sandbox": expected_sandbox,
             }
             assert payload["data"]["version"]
             assert payload["data"]["dashboard_version"] == "v1.2.3"
@@ -1105,6 +1118,7 @@ async def test_version_routes_return_startup_runtime_snapshot(
     which.assert_called_once_with("bwrap")
     platform.system.assert_called_once_with()
     platform.machine.assert_called_once_with()
+    assert factory.call_count == (0 if status == "missing" else 1)
 
 
 @pytest.mark.asyncio
@@ -1714,6 +1728,8 @@ async def test_v1_system_config_update_preserves_independent_bot_provider_sectio
         ("windows", None, "unsupported", "windows"),
         ("linux", "bubblewrap", "missing", "bwrap"),
         ("darwin", "seatbelt", "missing", "sandbox-exec"),
+        ("linux", "bubblewrap", "unavailable", "setting up uid map: Permission denied"),
+        ("darwin", "seatbelt", "unavailable", "sandbox_apply: Operation not permitted"),
     ],
 )
 @pytest.mark.parametrize(
@@ -1738,6 +1754,8 @@ async def test_config_api_validates_local_permissions(
     runtime = asgi_app.state.services.stats.runtime
     assert asgi_app.state.services.config_profiles.runtime is runtime
     runtime.update({"os": system, "sandbox": {"backend": backend, "status": status}})
+    if status == "unavailable":
+        runtime["sandbox"]["error"] = reason
     original = copy.deepcopy(fake_core_lifecycle.astrbot_config)
     payload = copy.deepcopy(original)
     payload["agent_runner"] = {"runner_type": "local"}
@@ -1765,6 +1783,9 @@ async def test_config_api_validates_local_permissions(
         assert response.json()["status"] == "error"
         assert "Local permission member:" in response.json()["message"]
         assert reason in response.json()["message"]
+        if status == "unavailable":
+            assert "installed but cannot start" in response.json()["message"]
+            assert "Missing" not in response.json()["message"]
         assert fake_core_lifecycle.astrbot_config == original
         assert fake_core_lifecycle.reloaded_config_ids == []
     else:

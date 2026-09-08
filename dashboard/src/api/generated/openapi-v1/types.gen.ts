@@ -605,23 +605,27 @@ export type RuntimeInfo = {
      */
     arch: string;
     /**
-     * Local process sandbox dependency detection. It does not describe file tool permissions or verify that sandboxed processes can launch.
+     * Local process sandbox startup check, captured when AstrBot starts. It does not verify DNS resolution or every permitted operation.
      */
     sandbox: {
         backend: ('bubblewrap' | 'seatbelt') | null;
         /**
-         * detected means bwrap was found in PATH or /usr/bin/sandbox-exec was found on macOS; missing means the corresponding executable was not found; unsupported means this platform has no Local process sandbox backend. These identifiers are independent of the UI language.
+         * detected means the executable was found and a minimal workspace sandbox launched successfully; missing means the corresponding executable was not found; unavailable means it was found but sandbox startup failed; unsupported means this platform has no Local process sandbox backend. These identifiers are independent of the UI language.
          */
-        status: 'detected' | 'missing' | 'unsupported';
+        status: 'detected' | 'missing' | 'unavailable' | 'unsupported';
+        /**
+         * Bounded startup error detail, included when status is unavailable. Restart AstrBot after fixing the environment to refresh the check.
+         */
+        error?: string;
     };
 };
 
 export type backend = 'bubblewrap' | 'seatbelt';
 
 /**
- * detected means bwrap was found in PATH or /usr/bin/sandbox-exec was found on macOS; missing means the corresponding executable was not found; unsupported means this platform has no Local process sandbox backend. These identifiers are independent of the UI language.
+ * detected means the executable was found and a minimal workspace sandbox launched successfully; missing means the corresponding executable was not found; unavailable means it was found but sandbox startup failed; unsupported means this platform has no Local process sandbox backend. These identifiers are independent of the UI language.
  */
-export type status = 'detected' | 'missing' | 'unsupported';
+export type status = 'detected' | 'missing' | 'unavailable' | 'unsupported';
 
 export type SessionGroupRequest = {
     name?: string;

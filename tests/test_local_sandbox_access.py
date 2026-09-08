@@ -8,7 +8,7 @@ import socket
 import sys
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -21,15 +21,30 @@ from astrbot.core.computer.process_sandbox import (
     seatbelt,
 )
 from astrbot.core.tools.computer_tools import fs, python, shell
+from astrbot.dashboard.services import stat_service
 
 
-@pytest.mark.skipif(
+requires_local_sandbox = pytest.mark.skipif(
     not (
         (sys.platform.startswith("linux") and shutil.which("bwrap"))
         or (sys.platform == "darwin" and Path("/usr/bin/sandbox-exec").exists())
     ),
     reason="Requires a supported Local process sandbox.",
 )
+
+
+@requires_local_sandbox
+def test_runtime_probe_launches_native_sandbox(monkeypatch, tmp_path):
+    """Verify the dashboard startup check against each platform's real backend."""
+    monkeypatch.setattr(stat_service, "get_astrbot_temp_path", lambda: str(tmp_path))
+
+    service = stat_service.StatService(MagicMock(), MagicMock(), {})
+
+    assert service.runtime["sandbox"]["status"] == "detected", service.runtime
+    assert not list(tmp_path.iterdir())
+
+
+@requires_local_sandbox
 @pytest.mark.parametrize("filesystem_scope", ["workspace", "host"])
 def test_local_sandbox_resolves_dns_with_network_enabled(tmp_path, filesystem_scope):
     """Resolve a public hostname through the operating system's real DNS resolver."""
@@ -53,13 +68,7 @@ def test_local_sandbox_resolves_dns_with_network_enabled(tmp_path, filesystem_sc
     assert result.stdout.strip() == b"DNS resolution succeeded"
 
 
-@pytest.mark.skipif(
-    not (
-        (sys.platform.startswith("linux") and shutil.which("bwrap"))
-        or (sys.platform == "darwin" and Path("/usr/bin/sandbox-exec").exists())
-    ),
-    reason="Requires a supported Local process sandbox.",
-)
+@requires_local_sandbox
 @pytest.mark.parametrize("filesystem_scope", ["workspace", "host"])
 def test_local_sandbox_cannot_connect_when_network_disabled(tmp_path, filesystem_scope):
     """Reject a reachable host connection even after enabling filesystem access."""
@@ -186,13 +195,7 @@ def test_seatbelt_grants_additional_roots_with_separate_write_access(
     assert "(deny network*)" in profile
 
 
-@pytest.mark.skipif(
-    not (
-        (sys.platform.startswith("linux") and shutil.which("bwrap"))
-        or (sys.platform == "darwin" and Path("/usr/bin/sandbox-exec").exists())
-    ),
-    reason="Requires a supported Local process sandbox.",
-)
+@requires_local_sandbox
 @pytest.mark.parametrize("tool_kind", ["shell", "python"])
 @pytest.mark.parametrize("role", ["member", "admin"])
 @pytest.mark.asyncio

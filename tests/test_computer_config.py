@@ -91,16 +91,16 @@ def test_local_permission_validation_does_not_inject_missing_policies():
 
 
 @pytest.mark.parametrize("role", ["member", "admin"])
-@pytest.mark.parametrize("status", ["detected", "missing", "unsupported"])
+@pytest.mark.parametrize("status", ["detected", "missing", "unavailable", "unsupported"])
 @pytest.mark.parametrize(
     ("scope", "execution", "network", "denied_on"),
     [
         ("none", False, False, ()),
         ("workspace", False, False, ("unsupported",)),
         ("host", False, False, ()),
-        ("workspace", True, False, ("missing", "unsupported")),
-        ("workspace", True, True, ("missing", "unsupported")),
-        ("host", True, False, ("missing", "unsupported")),
+        ("workspace", True, False, ("missing", "unavailable", "unsupported")),
+        ("workspace", True, True, ("missing", "unavailable", "unsupported")),
+        ("host", True, False, ("missing", "unavailable", "unsupported")),
         ("host", True, True, ()),
     ],
 )

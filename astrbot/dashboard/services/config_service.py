@@ -402,7 +402,18 @@ def validate_config(
                         if runtime["sandbox"]["backend"] == "seatbelt"
                         else "bubblewrap (bwrap)"
                     )
-                    reason = f"Missing {dependency}; restricted Local execution is unavailable."
+                    if runtime["sandbox"]["status"] == "unavailable":
+                        detail = runtime["sandbox"].get(
+                            "error", "Sandbox startup failed."
+                        )
+                        reason = (
+                            f"{dependency} is installed but cannot start a sandbox: "
+                            f"{detail} Restricted Local execution is unavailable. "
+                            "Check system security policies or container restrictions, "
+                            "then restart AstrBot to check again."
+                        )
+                    else:
+                        reason = f"Missing {dependency}; restricted Local execution is unavailable."
                 errors.append(f"Local permission {role}: {reason}")
     else:
         validate(data, schema)

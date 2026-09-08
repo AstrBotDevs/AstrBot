@@ -13,12 +13,12 @@
         <dt><Cpu :size="14" aria-hidden="true" />{{ tm('runtime.arch') }}</dt>
         <dd>{{ runtime.arch || '—' }}</dd>
       </div>
-      <div :class="{ 'runtime-info--warning': sandboxMissing }">
+      <div :class="{ 'runtime-info--warning': sandboxUnavailable }">
         <dt>
           <component
-            :is="sandboxMissing ? ShieldAlert : unsupported ? ShieldOff : Shield"
+            :is="sandboxUnavailable ? ShieldAlert : unsupported ? ShieldOff : Shield"
             :size="14"
-            :class="sandboxMissing ? 'text-warning' : unsupported ? '' : 'text-primary'"
+            :class="sandboxUnavailable ? 'text-warning' : unsupported ? '' : 'text-primary'"
             aria-hidden="true"
           />
           {{ tm('runtime.sandbox') }}
@@ -31,6 +31,11 @@
         </dd>
       </div>
     </dl>
+
+    <v-alert v-if="runtime?.sandbox?.status === 'unavailable'" type="warning" variant="tonal" density="compact">
+      <div>{{ tm('runtime.unavailableHint') }}</div>
+      <div v-if="runtime.sandbox.error" class="sandbox-error mt-2">{{ runtime.sandbox.error }}</div>
+    </v-alert>
 
     <v-table class="permission-table">
       <thead>
@@ -158,7 +163,7 @@ const { tm } = useModuleI18n('features/config-metadata.ai_group.agent_computer_u
 const runtime = ref(null)
 const runtimeLoading = ref(true)
 const unsupported = computed(() => runtime.value?.sandbox?.status === 'unsupported')
-const sandboxMissing = computed(() => runtime.value?.sandbox?.status === 'missing')
+const sandboxUnavailable = computed(() => ['missing', 'unavailable'].includes(runtime.value?.sandbox?.status))
 const roles = ['member', 'admin']
 const defaults = computed(() => runtime.value?.os === 'windows' ? windowsPermissionDefaults : {
   member: {
@@ -202,10 +207,10 @@ function updatePermission(role, changes) {
     ...policy(role),
     ...changes
   }
-  if (updatedRole.filesystem_scope === 'none' || (sandboxMissing.value && changes.filesystem_scope === 'workspace')) {
+  if (updatedRole.filesystem_scope === 'none' || (sandboxUnavailable.value && changes.filesystem_scope === 'workspace')) {
     updatedRole.allow_execution = false
   }
-  if (sandboxMissing.value && changes.allow_execution === true) {
+  if (sandboxUnavailable.value && changes.allow_execution === true) {
     if (updatedRole.filesystem_scope === 'workspace') {
       updatedRole.allow_execution = false
     } else {
@@ -231,9 +236,9 @@ const permissionLocks = computed(() => Object.fromEntries(roles.map(role => {
   const current = policy(role)
   return [role, {
     execution: !runtime.value || current.filesystem_scope === 'none' ||
-      (sandboxMissing.value && current.filesystem_scope === 'workspace' && !current.allow_execution),
+      (sandboxUnavailable.value && current.filesystem_scope === 'workspace' && !current.allow_execution),
     network: !runtime.value || !current.allow_execution ||
-      (sandboxMissing.value && current.allow_network)
+      (sandboxUnavailable.value && current.allow_network)
   }]
 })))
 const accessModes = computed(() => Object.fromEntries(roles.map(role => {
@@ -255,6 +260,12 @@ const memberHasElevatedAccess = computed(() => {
 </script>
 
 <style scoped>
+.sandbox-error {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: monospace;
+}
+
 .local-permission-matrix {
   display: grid;
   gap: 12px;
