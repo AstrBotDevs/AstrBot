@@ -90,7 +90,7 @@ class StatService:
                     prefix="sandbox-probe-", dir=temp_root
                 ) as workspace:
                     result = create_process_sandbox().run(
-                        ["/bin/true"],
+                        ["/bin/sh", "-c", ":"],
                         SandboxSpec(workspace=Path(workspace)),
                         timeout=5,
                         output_limit=1024,

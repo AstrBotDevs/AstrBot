@@ -66,7 +66,7 @@ def test_runtime_detects_platform_dependencies(
         factory.assert_called_once_with()
         sandbox.run.assert_called_once()
         args, kwargs = sandbox.run.call_args
-        assert args[0] == ["/bin/true"]
+        assert args[0] == ["/bin/sh", "-c", ":"]
         assert args[1].filesystem_scope == "workspace"
         assert args[1].allow_network is False
         assert not args[1].workspace.exists()
