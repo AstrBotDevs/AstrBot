@@ -263,22 +263,27 @@ async def weather(self, event, city: str):
 - `context.get_lang(umo)` is equivalent and can be called directly on the plugin context.
 - The framework does not translate plugin text; maintain your own translation table and
   fall back to `en-US` or `zh-CN` when a language is missing.
-- Resolution chain: session level (set by `/lang`) → global `language` config → `zh-CN`.
+- The language comes from the **global `language` config**
+  (`data/cmd_config.json`, default `zh-CN`).
 
 ### User-facing language setting
 
-Users set the session language with the built-in `/lang` command (built-in command names
-stay in English):
+The language is a **global setting** shared by all sessions; per-session overrides are
+not supported. Users view or change it with the built-in `/lang` command (built-in
+command names stay in English):
 
 ```text
-/lang              → show current language (session / global / default)
-/lang zh|en|ru|jp  → set session language (admin only)
-/lang reset        → remove the session-level override
+/lang              → show the current global language
+/lang zh|en|ru|jp  → set the global language (admin only)
+/lang reset        → restore the default language zh-CN (admin only)
 ```
 
-Administrators can also change the global default in `data/cmd_config.json`
-(the `language` field, default `zh-CN`). An unrecognized global value falls back to
-`zh-CN`, with a startup warning and a hint in `/lang`.
+Administrators can also edit the `language` field in `data/cmd_config.json`
+(default `zh-CN`). An unrecognized value falls back to `zh-CN`, with a startup warning
+and a hint in `/lang`.
+
+> In the WebUI, **command names** follow this global setting (the matching
+> `multi_alias` alias), while **command descriptions** follow the WebUI locale.
 
 ## Compatibility with older AstrBot versions
 

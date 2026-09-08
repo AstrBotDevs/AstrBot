@@ -112,24 +112,17 @@ async def get_lang(context: Any, umo: str | None = None) -> str:
     return await context.get_lang(umo)
 
 
-def resolve_lang(
-    config: dict[str, Any] | None,
-    session_lang: str | None = None,
-) -> str:
-    """按"会话级 -> 全局配置 -> 默认"解析当前语言。
+def resolve_lang(config: dict[str, Any] | None) -> str:
+    """按"全局配置 -> 默认"解析当前语言。
 
     Args:
         config: AstrBot 配置(含 ``language`` 根字段)。
-        session_lang: 会话级语言(由 ``sp`` 读出后传入),可为 ``None``。
 
     Returns:
         规范语言代码;无法解析时返回 ``DEFAULT_LANG``。
     """
-    for candidate in (session_lang, (config or {}).get("language")):
-        norm = normalize_lang(candidate)
-        if norm:
-            return norm
-    return DEFAULT_LANG
+    norm = normalize_lang((config or {}).get("language"))
+    return norm or DEFAULT_LANG
 
 
 def validate_global_language(config: dict[str, Any] | None) -> None:

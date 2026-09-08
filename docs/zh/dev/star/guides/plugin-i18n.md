@@ -258,21 +258,24 @@ async def weather(self, event, city: str):
 
 - `context.get_lang(umo)` 也可以直接在插件内使用，二者等价。
 - 框架不翻译插件文案，插件自行维护翻译表；缺语言时建议回退到 `en-US` 或 `zh-CN`。
-- 语言解析链：会话级(`/lang` 设置)→ 全局 `language` 配置 → 默认 `zh-CN`。
+- 语言来源：**全局 `language` 配置**（`data/cmd_config.json`，默认 `zh-CN`）。
 
 ### 用户设置语言
 
-用户通过内置指令 `/lang` 设置当前会话语言(内置指令名保持原有英文命名)：
+语言是**全局配置**,所有会话统一使用;不支持按会话单独设置。
+用户通过内置指令 `/lang` 查看或修改(内置指令名保持原有英文命名)：
 
 ```text
-/lang           → 查看当前语言(会话级/全局/默认)
-/lang zh|en|ru|jp → 设置当前会话语言(仅管理员)
-/lang reset     → 移除会话级设置
+/lang           → 查看当前全局语言
+/lang zh|en|ru|jp → 设置全局语言(仅管理员)
+/lang reset     → 恢复默认语言 zh-CN(仅管理员)
 ```
 
-管理员也可在 WebUI「其他配置」中修改全局默认语言(`language`，手工编辑
-`data/cmd_config.json`，默认 `zh-CN`)。全局配置填错时按 `zh-CN` 生效，
-启动日志与 `/lang` 查看会给出提示。
+管理员也可直接编辑 `data/cmd_config.json` 的 `language` 字段(默认 `zh-CN`)。
+全局配置填错时按 `zh-CN` 生效，启动日志与 `/lang` 查看会给出提示。
+
+> WebUI 里**指令名**按该全局配置显示（`multi_alias` 注册的对应语言别名）；
+> 指令**描述**按 WebUI 界面语言显示。
 
 ## 兼容旧版 AstrBot
 

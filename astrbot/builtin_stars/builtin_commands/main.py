@@ -83,7 +83,7 @@ class Main(star.Star):
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("lang")
     async def lang(self, event: AstrMessageEvent, value: str | None = None) -> None:
-        """View or set session/global language (admin)"""
+        """View or set the global language (admin)"""
         await self.lang_c.lang(event, value)
 
     @filter.command("set")

@@ -160,13 +160,11 @@ class WakingCheckStage(Stage):
         activated_handlers = []
         handlers_parsed_params = {}  # 注册了指令的 handler
 
-        # 解析当前会话语言供多语言别名过滤使用(会话级 -> 全局 -> 默认)
+        # 解析全局语言配置供多语言别名过滤使用
         try:
-            from astrbot.core import sp
             from astrbot.core.utils.lang_utils import resolve_lang
 
-            session_lang = await sp.session_get(event.unified_msg_origin, "lang", None)
-            resolved_lang = resolve_lang(self.ctx.astrbot_config, session_lang)
+            resolved_lang = resolve_lang(self.ctx.astrbot_config)
         except BaseException:
             resolved_lang = None
         if resolved_lang:

@@ -613,27 +613,18 @@ class Context:
         return self.astrbot_config_mgr.get_conf(umo)
 
     async def get_lang(self, umo: str | None = None) -> str:
-        """获取当前会话/全局的语言。
+        """获取全局语言配置。
 
-        解析链:会话级 ``sp``(``lang`` 键, scope=umo)→ 全局配置
-        ``language`` 字段 → ``DEFAULT_LANG``。
+        语言统一由全局配置 ``language`` 决定(``zh-CN`` / ``en-US`` /
+        ``ru-RU`` / ``ja-JP``),不支持按会话单独设置。
 
         Args:
-            umo: unified_message_origin,用于解析会话级语言;为 ``None`` 时
-                只使用全局配置。
+            umo: 保留参数(兼容插件调用),不再影响结果。
 
         Returns:
-            规范语言代码,如 ``"zh-CN"`` / ``"en-US"`` / ``"ru-RU"`` / ``"ja-JP"``。
+            规范语言代码,如 ``"zh-CN"``。
         """
-        session_lang = None
-        if umo:
-            try:
-                from astrbot.core import sp
-
-                session_lang = await sp.session_get(umo, "lang", None)
-            except BaseException:
-                session_lang = None
-        return resolve_lang(self.get_config(umo), session_lang)
+        return resolve_lang(self.get_config())
 
     async def send_message(
         self,

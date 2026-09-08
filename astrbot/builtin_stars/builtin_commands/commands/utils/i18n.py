@@ -193,10 +193,10 @@ MSGS: dict[str, dict[str, str]] = {
     },
     # lang.py
     "lang.current": {
-        "zh-CN": "当前语言: {lang}(来源: {source})。",
-        "en-US": "Current language: {lang} (source: {source}).",
-        "ru-RU": "Текущий язык: {lang} (источник: {source}).",
-        "ja-JP": "現在の言語: {lang}(ソース: {source})。",
+        "zh-CN": "当前语言: {lang}(全局配置)。",
+        "en-US": "Current language: {lang} (global config).",
+        "ru-RU": "Текущий язык: {lang} (глобальная настройка).",
+        "ja-JP": "現在の言語: {lang}(グローバル設定)。",
     },
     "lang.global_invalid": {
         "zh-CN": "⚠️ 全局语言为 {value}(未识别),当前按默认 {lang} 生效。",
@@ -205,16 +205,16 @@ MSGS: dict[str, dict[str, str]] = {
         "ja-JP": "⚠️ グローバル言語 {value} は認識されません。デフォルト {lang} を使用します。",
     },
     "lang.set": {
-        "zh-CN": "✅ 已设置本会话语言为 {lang}。",
-        "en-US": "✅ Session language set to {lang}.",
-        "ru-RU": "✅ Язык сессии установлен: {lang}.",
-        "ja-JP": "✅ セッション言語を {lang} に設定しました。",
+        "zh-CN": "✅ 已设置全局语言为 {lang}。",
+        "en-US": "✅ Global language set to {lang}.",
+        "ru-RU": "✅ Глобальный язык установлен: {lang}.",
+        "ja-JP": "✅ グローバル言語を {lang} に設定しました。",
     },
     "lang.reset": {
-        "zh-CN": "✅ 已移除会话级语言设置,回退到全局配置。",
-        "en-US": "✅ Session language override removed; using global config.",
-        "ru-RU": "✅ Локальная настройка языка удалена; используется глобальная.",
-        "ja-JP": "✅ セッション言語の設定を解除し、グローバル設定に戻しました。",
+        "zh-CN": "✅ 已恢复默认语言 {lang}。",
+        "en-US": "✅ Reset to default language {lang}.",
+        "ru-RU": "✅ Язык сброшен к значению по умолчанию: {lang}.",
+        "ja-JP": "✅ デフォルト言語 {lang} に戻しました。",
     },
     "lang.invalid": {
         "zh-CN": "❌ 不支持的语言: {value}。可用: {langs}。",
@@ -233,10 +233,10 @@ CMD_DESCS: dict[str, dict[str, str]] = {
         "ja-JP": "ヘルプを表示",
     },
     "lang": {
-        "zh-CN": "查看或设置会话语言(仅管理员)",
-        "en-US": "View or set session/global language (admin)",
-        "ru-RU": "Просмотр и настройка языка сессии (админ)",
-        "ja-JP": "セッション言語の表示・設定(管理者のみ)",
+        "zh-CN": "查看或设置全局语言(仅管理员)",
+        "en-US": "View or set the global language (admin)",
+        "ru-RU": "Просмотр и настройка глобального языка (админ)",
+        "ja-JP": "グローバル言語の表示・設定(管理者のみ)",
     },
     "name": {
         "zh-CN": "设置当前 UMO 的显示名称",

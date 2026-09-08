@@ -49,13 +49,13 @@ class TestLangUtils:
         assert normalize_lang("") is None
         assert normalize_lang(None) is None
 
-    def test_resolve_lang_priority(self):
-        # 会话级 > 全局 > 默认
-        assert resolve_lang({"language": "en-US"}, "ja-JP") == "ja-JP"
-        assert resolve_lang({"language": "en-US"}, None) == "en-US"
-        assert resolve_lang({"language": "en-US"}, "") == "en-US"
-        assert resolve_lang({"language": "fr"}, None) == DEFAULT_LANG
-        assert resolve_lang(None, None) == DEFAULT_LANG
+    def test_resolve_lang_from_global_config(self):
+        # 语言只来自全局配置;非法值回退默认
+        assert resolve_lang({"language": "en-US"}) == "en-US"
+        assert resolve_lang({"language": "zh"}) == "zh-CN"
+        assert resolve_lang({"language": "fr"}) == DEFAULT_LANG
+        assert resolve_lang({}) == DEFAULT_LANG
+        assert resolve_lang(None) == DEFAULT_LANG
 
     def test_multi_alias(self):
         aliases = multi_alias(zh="帮助", ru="справка", jp="ヘルプ")
