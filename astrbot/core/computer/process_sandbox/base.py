@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import sys
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -184,8 +183,6 @@ class ProcessSandbox(ABC):
             )
 
         sandbox_argv = list(argv)
-        if Path(sandbox_argv[0]) == Path(sys.executable):
-            sandbox_argv[0] = str(Path(sys.executable).resolve())
         workspace = spec.workspace.resolve()
         if not workspace.is_dir():
             raise RuntimeError(f"Sandbox workspace does not exist: {workspace}")

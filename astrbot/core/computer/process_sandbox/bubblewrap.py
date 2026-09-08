@@ -102,6 +102,20 @@ class BubblewrapProcessSandbox(UnixProcessSandbox):
                 for path in readonly_paths
             ):
                 readonly_paths.add(executable_path)
+            # Keep the venv entry point usable when uv links its interpreter
+            # through a directory alias outside the mounted Python prefixes.
+            pending = [Path(sys.executable)]
+            seen_links: set[Path] = set()
+            while pending:
+                path = pending.pop()
+                for link in (path, *path.parents):
+                    if link in seen_links or not link.is_symlink():
+                        continue
+                    seen_links.add(link)
+                    target = link.parent / link.readlink() / path.relative_to(link)
+                    pending.append(Path(os.path.abspath(target)))
+                    if not any(link.is_relative_to(root) for root in readonly_paths):
+                        readonly_paths.add(link)
             readonly_paths = {path for path in readonly_paths if path.exists()}
 
             required_directories = {Path("/tmp"), Path("/tmp/home")}
@@ -128,6 +142,17 @@ class BubblewrapProcessSandbox(UnixProcessSandbox):
                     command.extend(("--ro-bind", str(path), str(path)))
             for path in sorted(writable_paths, key=lambda item: len(item.parts)):
                 command.extend(("--bind", str(path), str(path)))
+            # A writable workspace or attachment root must not make AstrBot's
+            # Python installation writable when it contains that installation.
+            for path in sorted(
+                {Path(sys.prefix).resolve(), Path(sys.base_prefix).resolve()},
+                key=lambda item: len(item.parts),
+            ):
+                if any(
+                    path.is_relative_to(root) or root.is_relative_to(path)
+                    for root in writable_paths
+                ):
+                    command.extend(("--ro-bind", str(path), str(path)))
             command.extend(("--chdir", str(workspace)))
 
         for key, value in sorted(env.items()):
@@ -136,7 +161,7 @@ class BubblewrapProcessSandbox(UnixProcessSandbox):
             (
                 "--setenv",
                 "PATH",
-                "/usr/local/bin:/usr/bin:/bin",
+                f"{Path(sys.executable).parent}:/usr/local/bin:/usr/bin:/bin",
                 "--setenv",
                 "HOME",
                 str(workspace) if spec.filesystem_scope == "host" else "/tmp/home",

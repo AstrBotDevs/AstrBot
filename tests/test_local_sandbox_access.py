@@ -5,6 +5,7 @@ from __future__ import annotations
 import shlex
 import shutil
 import socket
+import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -19,6 +20,7 @@ from astrbot.core.computer.process_sandbox import (
     bubblewrap,
     create_process_sandbox,
     seatbelt,
+    unix,
 )
 from astrbot.core.tools.computer_tools import fs, python, shell
 from astrbot.dashboard.services import stat_service
@@ -42,6 +44,139 @@ def test_runtime_probe_launches_native_sandbox(monkeypatch, tmp_path):
 
     assert service.runtime["sandbox"]["status"] == "detected", service.runtime
     assert not list(tmp_path.iterdir())
+
+
+@requires_local_sandbox
+@pytest.mark.parametrize("entry", ["python", "shell"])
+def test_local_sandbox_reads_existing_python_dependencies(tmp_path, entry):
+    """Reuse installed dependencies while denying write access to the real runtime."""
+    code = f"""
+import errno
+import os
+import sys
+from pathlib import Path
+import aiohttp
+import pydantic
+
+assert sys.prefix == {sys.prefix!r}, sys.prefix
+assert Path(sys.executable).parent == Path({sys.executable!r}).parent
+for path in (sys.executable, os.__file__, aiohttp.__file__, pydantic.__file__):
+    try:
+        fd = os.open(path, os.O_WRONLY)
+    except OSError as exc:
+        assert exc.errno in (errno.EACCES, errno.EPERM, errno.EROFS, errno.ETXTBSY), exc
+    else:
+        os.close(fd)
+        raise AssertionError("Python environment is writable: " + path)
+Path("output.txt").write_text("workspace remains writable")
+print("existing dependencies are read-only")
+"""
+    argv = [sys.executable, "-c", code]
+    if entry == "shell":
+        argv = ["/bin/sh", "-c", shlex.join(["python", "-c", code])]
+
+    result = create_process_sandbox().run(
+        argv, SandboxSpec(workspace=tmp_path), timeout=15
+    )
+
+    assert result.returncode == 0, result.stderr.decode()
+    assert result.stdout.strip() == b"existing dependencies are read-only"
+    assert (tmp_path / "output.txt").read_text() == "workspace remains writable"
+
+
+@requires_local_sandbox
+@pytest.mark.parametrize(
+    "location", ["outside", "workspace", "writable_root", "writable_packages"]
+)
+def test_local_sandbox_protects_venv_inside_writable_roots(
+    monkeypatch, tmp_path, location
+):
+    """Deny package changes even when a writable root contains the virtualenv."""
+    workspace = tmp_path / "workspace"
+    attachments = tmp_path / "attachments"
+    workspace.mkdir()
+    attachments.mkdir()
+    parent = {"workspace": workspace, "writable_root": attachments}.get(location, tmp_path)
+    prefix = parent / ".venv"
+    base_python = Path(sys._base_executable)
+    subprocess.run(
+        [str(base_python), "-m", "venv", "--without-pip", "--symlinks", str(prefix)],
+        check=True,
+        capture_output=True,
+        timeout=20,
+    )
+    # Exercise an interpreter directory alias, as used by uv installations.
+    alias = tmp_path / "python alias"
+    alias.symlink_to(base_python.parent, target_is_directory=True)
+    executable = prefix / "bin" / "python"
+    executable.unlink()
+    executable.symlink_to(alias / base_python.name)
+    package = (
+        prefix
+        / "lib"
+        / f"python{sys.version_info.major}.{sys.version_info.minor}"
+        / "site-packages"
+        / "sandbox_dependency.py"
+    )
+    package.write_text("VALUE = 'original'\n", encoding="utf-8")
+    config = prefix / "pyvenv.cfg"
+    original_config = config.read_bytes()
+    runtime_sys = SimpleNamespace(
+        executable=str(executable),
+        prefix=str(prefix),
+        base_prefix=sys.base_prefix,
+        platform=sys.platform,
+    )
+    for module in (bubblewrap, seatbelt, unix):
+        monkeypatch.setattr(module, "sys", runtime_sys)
+    code = f"""
+import errno
+import os
+import sys
+from pathlib import Path
+import sandbox_dependency
+
+assert sys.prefix == {str(prefix)!r}, sys.prefix
+assert sandbox_dependency.VALUE == "original"
+package = Path(sandbox_dependency.__file__)
+for path in (Path(sys.executable), Path(sys.prefix) / "pyvenv.cfg", package):
+    try:
+        fd = os.open(path, os.O_WRONLY)
+    except OSError as exc:
+        assert exc.errno in (errno.EACCES, errno.EPERM, errno.EROFS, errno.ETXTBSY), exc
+    else:
+        os.close(fd)
+        raise AssertionError("Python environment is writable: " + str(path))
+for operation in ("install", "uninstall", "replace"):
+    try:
+        if operation == "install":
+            package.with_name("new_dependency.py").write_text("changed")
+        elif operation == "uninstall":
+            package.unlink()
+        else:
+            package.rename(package.with_suffix(".backup"))
+    except OSError as exc:
+        assert exc.errno in (errno.EACCES, errno.EPERM, errno.EROFS), exc
+    else:
+        raise AssertionError("Package modification succeeded: " + operation)
+Path("output.txt").write_text("workspace remains writable")
+print("virtualenv is read-only")
+"""
+    result = create_process_sandbox().run(
+        [str(executable), "-c", code],
+        SandboxSpec(
+            workspace=workspace,
+            writable_roots=(package.parent if location == "writable_packages" else attachments,),
+        ),
+        timeout=15,
+    )
+
+    assert result.returncode == 0, result.stderr.decode()
+    assert result.stdout.strip() == b"virtualenv is read-only"
+    assert package.read_text() == "VALUE = 'original'\n"
+    assert config.read_bytes() == original_config
+    assert not package.with_name("new_dependency.py").exists()
+    assert (workspace / "output.txt").read_text() == "workspace remains writable"
 
 
 @requires_local_sandbox
@@ -294,7 +429,7 @@ print("file policy verified")
         if tool_kind == "shell":
             result = await shell.LocalExecuteShellTool().call(
                 context,
-                command=shlex.join([str(Path(sys.executable).resolve()), "-c", code]),
+                command=shlex.join([sys.executable, "-c", code]),
                 timeout=15,
             )
             assert "exit code 0" in result, result

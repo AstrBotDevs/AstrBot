@@ -451,7 +451,7 @@ def test_macos_seatbelt_command_restricts_profile_and_environment(
     ]
     assert "CUSTOM_VALUE=visible" in environment
     assert environment[-4:] == [
-        f"PATH={Path(sys.executable).resolve().parent}:/usr/bin:/bin",
+        f"PATH={Path(sys.executable).parent}:/usr/bin:/bin",
         f"HOME={workspace}",
         f"TMPDIR={workspace}",
         "LANG=C.UTF-8",
@@ -1000,7 +1000,7 @@ async def test_local_python_uses_platform_sandbox(
     assert result["data"]["output"]["text"] == "done\n"
     assert calls[0][0][0][0] == sandbox_executable
     assert calls[0][0][0][-3:] == [
-        str(Path(sys.executable).resolve()),
+        sys.executable,
         "-c",
         "print('done')",
     ]

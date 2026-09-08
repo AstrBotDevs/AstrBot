@@ -113,6 +113,11 @@ class SeatbeltProcessSandbox(UnixProcessSandbox):
                 if root in writable_roots:
                     operations += " file-write*"
                 profile += f'\n(allow {operations} (subpath (param "{parameter}")))\n'
+            # Explicit denial also protects Python inside an otherwise writable root.
+            profile += (
+                '\n(deny file-write* (subpath (param "PYTHON_PREFIX")) '
+                '(subpath (param "PYTHON_BASE_PREFIX")))\n'
+            )
 
         executable_definitions: list[str] = []
         executable_rules: list[str] = []
@@ -125,10 +130,9 @@ class SeatbeltProcessSandbox(UnixProcessSandbox):
             "\n    ".join(executable_rules),
         )
 
-        sandbox_python = str(Path(sys.executable).resolve())
         environment = [
             *(f"{key}={value}" for key, value in sorted(env.items())),
-            f"PATH={Path(sandbox_python).parent}:/usr/bin:/bin",
+            f"PATH={Path(sys.executable).parent}:/usr/bin:/bin",
             f"HOME={workspace}",
             f"TMPDIR={workspace}",
             "LANG=C.UTF-8",
