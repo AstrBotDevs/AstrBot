@@ -280,6 +280,7 @@ async def test_local_shell_tools_fail_closed_without_sender_identity(
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(os.name == "nt", reason="Restricted execution needs POSIX.")
 async def test_local_member_shell_uses_sandbox_backend(
     monkeypatch,
     tmp_path,
@@ -368,7 +369,12 @@ async def test_local_member_shell_is_denied_without_supported_sandbox(monkeypatc
             return {
                 "provider_settings": {
                     "computer_use_runtime": "local",
-                    "computer_use_require_admin": False,
+                    "computer_use_local_permissions": {
+                        "member": {
+                            "filesystem_scope": "workspace",
+                            "allow_execution": True,
+                        }
+                    },
                 }
             }
 

@@ -55,7 +55,7 @@ def _is_path_within(path: Path, roots: tuple[Path, ...]) -> bool:
 
 def _is_restricted_local_env(context: ContextWrapper[AstrAgentContext]) -> bool:
     return is_local_runtime(context) and (
-        get_local_permission_policy(context).filesystem_scope == "workspace"
+        get_local_permission_policy(context).filesystem_scope != "host"
     )
 
 

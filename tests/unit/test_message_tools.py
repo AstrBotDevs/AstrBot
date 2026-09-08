@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from astrbot.core.config import default as config_defaults
 from astrbot.core.message.message_event_result import MessageEventResult
 from astrbot.core.pipeline.respond.stage import RespondStage
 from astrbot.core.tools.message_tools import SendMessageToUserTool
@@ -25,9 +26,7 @@ def _make_context(
         }
     }
     if local_permissions is not None:
-        cfg["provider_settings"]["computer_use_local_permissions"] = (
-            local_permissions
-        )
+        cfg["provider_settings"]["computer_use_local_permissions"] = local_permissions
     extras = {}
     event = SimpleNamespace(
         unified_msg_origin=current_session,
@@ -317,16 +316,36 @@ async def test_send_message_missing_image_path_stops_before_send(tmp_path, monke
 
 
 @pytest.mark.asyncio
-async def test_non_admin_cannot_send_arbitrary_local_absolute_file(tmp_path):
-    """Non-admin users cannot send host files outside the allowed local roots."""
+@pytest.mark.parametrize("system", ["Windows", "Linux", "Darwin"])
+@pytest.mark.parametrize("component_type", ["file", "image", "record", "video"])
+@pytest.mark.parametrize(
+    ("role", "scope"),
+    [
+        ("member", None),
+        ("member", "none"),
+        ("admin", "none"),
+        ("member", "workspace"),
+        ("admin", "workspace"),
+    ],
+)
+async def test_restricted_role_cannot_send_arbitrary_local_absolute_file(
+    tmp_path, monkeypatch, system, component_type, role, scope
+):
+    """Only explicit host access permits sending files outside trusted roots."""
+    monkeypatch.setattr(
+        config_defaults, "platform", SimpleNamespace(system=lambda: system)
+    )
     tool = SendMessageToUserTool()
-    ctx = _make_context(role="member", require_admin=True)
+    ctx = _make_context(
+        role=role,
+        local_permissions={role: {"filesystem_scope": scope}} if scope else None,
+    )
     secret_path = tmp_path / "secret.txt"
     secret_path.write_text("secret", encoding="utf-8")
 
     result = await tool.call(
         ctx,
-        messages=[{"type": "file", "path": str(secret_path)}],
+        messages=[{"type": component_type, "path": str(secret_path)}],
     )
 
     assert "error: Local file send is restricted for this user" in result
@@ -359,13 +378,15 @@ async def test_member_with_host_scope_can_send_local_absolute_file(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_non_admin_can_send_workspace_file(tmp_path, monkeypatch):
+@pytest.mark.parametrize("scope", ["none", "workspace"])
+async def test_non_admin_can_send_workspace_file(tmp_path, monkeypatch, scope):
     """Non-admin users can send files inside their per-session workspace."""
     tool = SendMessageToUserTool()
     ctx = _make_context(
         current_session="feishu:GroupMessage:oc_workspace",
         role="member",
         require_admin=True,
+        local_permissions={"member": {"filesystem_scope": scope}},
     )
     workspace_root = tmp_path / "workspaces"
     workspace_file = workspace_root / "feishu_GroupMessage_oc_workspace" / "result.txt"
@@ -386,10 +407,13 @@ async def test_non_admin_can_send_workspace_file(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_non_admin_can_send_temp_file(tmp_path, monkeypatch):
+@pytest.mark.parametrize("scope", ["none", "workspace"])
+async def test_non_admin_can_send_temp_file(tmp_path, monkeypatch, scope):
     """Non-admin users can send generated files under AstrBot temp."""
     tool = SendMessageToUserTool()
-    ctx = _make_context(role="member", require_admin=True)
+    ctx = _make_context(
+        role="member", local_permissions={"member": {"filesystem_scope": scope}}
+    )
     temp_root = tmp_path / "temp"
     temp_root.mkdir()
     output_path = temp_root / "output.txt"

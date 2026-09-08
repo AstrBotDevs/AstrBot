@@ -134,6 +134,7 @@ async def test_local_python_tool_uses_session_workspace(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(os.name == "nt", reason="Restricted execution needs POSIX.")
 async def test_local_member_python_uses_sandbox_backend(
     tmp_path,
     monkeypatch,
@@ -213,7 +214,12 @@ async def test_local_member_python_is_denied_without_supported_sandbox(monkeypat
                 get_config=lambda **_kwargs: {
                     "provider_settings": {
                         "computer_use_runtime": "local",
-                        "computer_use_require_admin": False,
+                        "computer_use_local_permissions": {
+                            "member": {
+                                "filesystem_scope": "workspace",
+                                "allow_execution": True,
+                            }
+                        },
                     }
                 }
             ),
