@@ -2449,3 +2449,106 @@ async def test_repeated_deactivated_loads_bind_handlers_once_when_activated(
         llm_tools.func_list = original_func_list
         cast(Any, plugin_manager_pm.context).stars.remove(metadata)
         _clear_star_runtime_state()
+
+
+@pytest.mark.asyncio
+async def test_submodule_hook_binds_on_activation_and_unloads_with_plugin(
+    plugin_manager_pm: PluginManager, monkeypatch
+):
+    """A hook defined in a helper submodule of a plugin package must bind at
+    activation and unload with the plugin (#9938: the exact-module match left
+    such handlers raw, so calling them raised "missing positional argument").
+    """
+    _clear_star_runtime_state()
+    plugin_name = "demo_plugin"
+    module_path = f"data.plugins.{plugin_name}.main"
+    submodule_path = f"{module_path}.hooks"
+
+    class DemoPlugin:
+        def __init__(self, context):
+            self.context = context
+
+        async def initialize(self):
+            pass
+
+    metadata = star_manager_module.StarMetadata(
+        name=plugin_name,
+        author="AstrBot Team",
+        desc="Demo plugin",
+        version="1.0.0",
+        root_dir_name=plugin_name,
+        module_path=module_path,
+        star_cls_type=cast(Any, DemoPlugin),
+        star_cls=None,
+        activated=False,
+    )
+    cast(Any, plugin_manager_pm.context).stars.append(metadata)
+    star_manager_module.star_map[module_path] = metadata
+    star_manager_module.star_registry.append(metadata)
+
+    async def raw_hook_handler(plugin, event):
+        return plugin, event
+
+    raw_hook_handler.__module__ = submodule_path
+    hook_handler = StarHandlerMetadata(
+        event_type=EventType.OnDecoratingResultEvent,
+        handler_full_name=f"{submodule_path}_raw_hook_handler",
+        handler_name="raw_hook_handler",
+        handler_module_path=submodule_path,
+        handler=raw_hook_handler,
+        event_filters=[],
+    )
+    star_manager_module.star_handlers_registry.append(hook_handler)
+
+    preferences = {"inactivated_plugins": [module_path], "inactivated_llm_tools": []}
+
+    async def mock_global_get(key, default=None):
+        return preferences.get(key, default)
+
+    async def mock_global_put(key, value):
+        preferences[key] = value
+
+    async def mock_import_plugin_with_dependency_recovery(
+        path, module_str, root_dir_name, requirements_path, *, reserved=False
+    ):
+        del module_str, root_dir_name, requirements_path, reserved
+        assert path == module_path
+        return ModuleType(module_path)
+
+    async def mock_sync_command_configs():
+        return None
+
+    monkeypatch.setattr(star_manager_module.sp, "global_get", mock_global_get)
+    monkeypatch.setattr(star_manager_module.sp, "global_put", mock_global_put)
+    monkeypatch.setattr(
+        plugin_manager_pm,
+        "_get_plugin_modules",
+        lambda: [{"pname": plugin_name, "module": "main"}],
+    )
+    monkeypatch.setattr(
+        plugin_manager_pm,
+        "_import_plugin_with_dependency_recovery",
+        mock_import_plugin_with_dependency_recovery,
+    )
+    monkeypatch.setattr(plugin_manager_pm, "_load_plugin_metadata", lambda **_: None)
+    monkeypatch.setattr(
+        star_manager_module, "sync_command_configs", mock_sync_command_configs
+    )
+
+    try:
+        success, error = await plugin_manager_pm.load(specified_module_path=module_path)
+        assert success is True and error is None
+        assert hook_handler.handler is raw_hook_handler  # deactivated: stays raw
+
+        await plugin_manager_pm.turn_on_plugin(plugin_name)
+
+        assert isinstance(hook_handler.handler, functools.partial)
+        assert hook_handler.handler.func is raw_hook_handler
+        assert hook_handler.handler.args == (metadata.star_cls,)
+        assert await hook_handler.handler("event") == (metadata.star_cls, "event")
+
+        await plugin_manager_pm._unbind_plugin(plugin_name, module_path)
+        assert hook_handler not in star_manager_module.star_handlers_registry
+    finally:
+        cast(Any, plugin_manager_pm.context).stars.remove(metadata)
+        _clear_star_runtime_state()

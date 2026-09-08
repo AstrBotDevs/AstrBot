@@ -192,10 +192,15 @@ class StarHandlerRegistry(Generic[T]):
         self,
         module_name: str,
     ) -> list[StarHandlerMetadata]:
+        # A plugin's hooks can live in helper modules under its package root;
+        # an exact match misses those, leaving them unbound at load and
+        # leaked at unload.
+        prefix = module_name + "."
         return [
             handler
             for handler in self._handlers
             if handler.handler_module_path == module_name
+            or handler.handler_module_path.startswith(prefix)
         ]
 
     def clear(self) -> None:
