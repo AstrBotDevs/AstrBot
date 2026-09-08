@@ -513,6 +513,28 @@ class TestBoxliteBooter:
 class TestComputerClient:
     """Tests for computer_client module functions."""
 
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("runtime", [None, "none", "local"])
+    async def test_get_booter_requires_explicit_runtime(self, runtime):
+        """An omitted runtime must not start or reuse a computer environment."""
+        from astrbot.core.computer import computer_client
+
+        provider_settings = {} if runtime is None else {"computer_use_runtime": runtime}
+        context = MagicMock()
+        context.get_config.return_value = {"provider_settings": provider_settings}
+        with (
+            patch.object(computer_client, "get_local_booter") as get_local_booter,
+            patch.object(computer_client, "session_booter", {"session": MagicMock()}),
+        ):
+            if runtime == "local":
+                result = await computer_client.get_booter(context, "session")
+                assert result is get_local_booter.return_value
+                get_local_booter.assert_called_once_with()
+            else:
+                with pytest.raises(RuntimeError, match="disabled by configuration"):
+                    await computer_client.get_booter(context, "session")
+                get_local_booter.assert_not_called()
+
     def test_get_local_booter(self):
         """Test get_local_booter returns singleton LocalBooter."""
         from astrbot.core.computer import computer_client

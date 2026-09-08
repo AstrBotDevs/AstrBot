@@ -12,7 +12,9 @@
     "chunks": "分块",
     "sessionConfig": "会话配置",
     "initError": "初始化失败",
-    "retry": "重试"
+    "retry": "重试",
+    "noDescription": "暂无描述",
+    "switchLegacy": "切换到旧版知识库"
   },
   "card": {
     "edit": "编辑",
@@ -34,7 +36,9 @@
     "rerankProviderInfo": "提供商: {id}",
     "cancel": "取消",
     "submit": "创建",
-    "nameRequired": "请输入知识库名称"
+    "nameRequired": "请输入知识库名称",
+    "nameChangeHint": "后续如修改知识库名称，需同步更新配置文件。",
+    "embeddingLockedHint": "嵌入模型选择后无法修改，如需更换请创建新的知识库。"
   },
   "edit": {
     "title": "编辑知识库",

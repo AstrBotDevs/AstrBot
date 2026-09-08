@@ -1,0 +1,258 @@
+{
+  "title": "ボット",
+  "subtitle": "プラットフォームアダプターのインスタンスを管理し、さまざまなメッセージプラットフォームに接続します",
+  "adapters": "プラットフォームアダプター",
+  "addAdapter": "ボットを作成",
+  "emptyText": "プラットフォームアダプターがありません。「ボットを作成」をクリックして追加してください",
+  "workspace": {
+    "listTitle": "ボット",
+    "selectHint": "設定するボットを選択してください",
+    "empty": "ボットがありません。作成すると設定を開始できます。",
+    "enabled": "ボットを有効化",
+    "disabled": "無効",
+    "delete": "ボットを削除",
+    "save": "変更を保存",
+    "configTitle": "接続設定",
+    "configDescription": "ボットとメッセージプラットフォームの接続方法を設定します。",
+    "routes": {
+      "title": "会話設定",
+      "description": "会話ごとに異なる設定ファイルを使用できます。個別に紐付けられていない会話には、以下のデフォルト設定が適用されます。",
+      "loadFailed": "会話設定を読み込めませんでした。接続設定は引き続き編集できますが、今回は会話設定を変更しません。",
+      "defaultTitle": "このボットのデフォルト設定",
+      "defaultDescription": "個別に設定されていないすべての会話に適用されます。",
+      "systemDefault": "システムデフォルト設定（default）",
+      "bindTitle": "特定の会話に使用する設定を選択",
+      "bindDescription": "既存の会話を選択し、使用する設定ファイルを指定してください。",
+      "sessionLabel": "会話を選択",
+      "configLabel": "設定ファイル",
+      "bind": "紐付けを追加",
+      "noSessions": "会話がありません。先に対応するメッセージプラットフォームでこのボットと一度会話してください。",
+      "boundTitle": "紐付け済みの会話",
+      "boundCount": "{count} 件",
+      "remove": "紐付けを解除",
+      "noBindings": "個別に紐付けられた会話はありません。すべての会話にデフォルト設定が適用されます。",
+      "advanced": "高度なルーティングルール",
+      "advancedDescription": "UMO pattern を使用して複数の会話を一括で照合します。ルールは上から順に照合され、AstrBot の会話ソース形式に詳しいユーザー向けです。",
+      "patternLabel": "UMO pattern",
+      "patternPlaceholder": "例：bot-id:GroupMessage:*",
+      "addPattern": "ルールを追加",
+      "patternRequired": "UMO pattern を入力してください",
+      "patternInvalid": "形式は「プラットフォーム:メッセージタイプ:会話 ID」である必要があります",
+      "patternPlatformMismatch": "ルールのプラットフォーム部分は現在のボット ID と一致する必要があります",
+      "duplicatePattern": "重複する設定ルートがあります。確認してから再試行してください。",
+      "sessionTypes": {
+        "group": "グループチャット",
+        "friend": "ダイレクトメッセージ",
+        "other": "会話"
+      }
+    }
+  },
+  "viewWebhook": "Webhook URL を表示",
+  "webhookCopied": "Webhook URL をクリップボードにコピーしました",
+  "webhookCopyFailed": "コピーに失敗しました。手動でコピーしてください",
+  "webhookDialog": {
+    "title": "Webhook コールバック URL",
+    "description": "コールバック URL は以下のとおりです。インターネットからアクセスできることを確認してください。ログでもコールバック URL を確認できます。「設定 → 一般」にある「外部からアクセス可能なコールバック API アドレス」の設定を推奨します。",
+    "close": "閉じる"
+  },
+  "details": {
+    "adapterType": "アダプタータイプ",
+    "token": "Token",
+    "description": "説明"
+  },
+  "dialog": {
+    "add": "追加",
+    "edit": "編集",
+    "adapter": "ボット",
+    "refresh": "再読み込み",
+    "cancel": "キャンセル",
+    "save": "保存",
+    "addPlatform": "ボットを作成",
+    "connectTitle": "{name} に接続",
+    "viewTutorial": "接続チュートリアルを表示",
+    "noTemplates": "プラットフォームテンプレートがありません",
+    "idConflict": {
+      "title": "ID 競合の警告",
+      "message": "ID「{id}」の重複が検出されました。新しい ID を使用してください。",
+      "confirm": "OK"
+    },
+    "securityWarning": {
+      "title": "セキュリティに関する注意",
+      "aiocqhttpTokenMissing": "接続のセキュリティを強化するため、ws_reverse_token の設定を強く推奨します。トークンを設定しない場合、セキュリティ上のリスクが生じる可能性があります。",
+      "learnMore": "詳細を見る"
+    },
+    "invalidPlatformId": "プラットフォーム ID に ':' または '!' を含めることはできません。"
+  },
+  "createDialog": {
+    "step1Title": "メッセージプラットフォームのカテゴリを選択",
+    "step1Hint": "ボットをどこに接続しますか？例：QQ、WeCom、Feishu、Discord、Telegram など。",
+    "platformTypeLabel": "メッセージプラットフォームのカテゴリ",
+    "platformTooltips": {
+      "qq_official": "QQ 公式ボットプラットフォームです。プライベートチャットと QQ グループへの追加（グループオーナー権限のみ必要）に対応し、QQ 内で Markdown をレンダリングできます。QR コードをスキャンして簡単に作成できます。",
+      "qq_official_webhook": "QQ 公式ボットプラットフォームです。プライベートチャットと QQ グループへの追加（グループオーナー権限のみ必要）に対応し、QQ 内で Markdown をレンダリングできます。QR コードをスキャンして簡単に作成できます。この Webhook 方式では環境にパブリック IP アドレスが必要なため、上記の WebSocket 方式を推奨します。",
+      "aiocqhttp": "広く利用されているインスタントメッセージングプロトコルです。NapCat などのサードパーティサービスを介してインスタントメッセージングアプリに接続できます。",
+      "weixin_oc": "WeChat が公式に提供するボット接続方式です。プライベートチャットのみに対応し、QR コードをスキャンして簡単に作成できます。"
+    },
+    "configFileTitle": "設定ファイル",
+    "optional": "任意",
+    "configHint": "ボットをどのように設定しますか？設定ファイルには、チャットモデル、ペルソナ、ナレッジベース、プラグインの適用範囲など、さまざまなボット設定が含まれます。",
+    "configDefaultHint": "デフォルトでは設定ファイル「default」を使用します。後から設定することもできます。",
+    "useExistingConfig": "既存の設定ファイルを使用",
+    "selectConfigLabel": "設定ファイルを選択",
+    "createNewConfig": "新しい設定ファイルを作成",
+    "newConfigNameLabel": "新しい設定ファイル名",
+    "newConfigTitle": "新しい設定ファイルを使用",
+    "newConfigLoadFailed": "デフォルト設定テンプレートを読み込めませんでした",
+    "addRouteRule": "ルーティングルールを追加",
+    "viewMode": "表示",
+    "editMode": "編集",
+    "noRouteRules": "このプラットフォームにはルーティングルールがありません。デフォルト設定ファイルが使用されます",
+    "sessionIdPlaceholder": "セッション ID または *",
+    "routeSource": {
+      "selectPlaceholder": "セッションソースを選択",
+      "noData": "このボットには、まだ統合済みのメッセージ送信元がありません。対応するメッセージプラットフォームでこのボットと一度会話すると、ここに表示されます。",
+      "switchToKnown": "既存のソースから選択する方式に切り替え",
+      "switchToManual": "手動入力に切り替え"
+    },
+    "allSessions": "すべてのセッション",
+    "configMissing": "設定ファイルが見つかりません",
+    "routeHint": "メッセージ送信時、セッションソースに基づき、上から順に最初に一致した設定ファイルが使用されます。すべてに一致させるには * を使用します。セッション ID を取得するには /sid コマンドを使用します。どれにも一致しない場合はデフォルト設定ファイルが使用されます。",
+    "warningContinue": "警告を無視して作成を続行",
+    "warningEditAgain": "再編集",
+    "configDrawerTitle": "設定ファイル管理",
+    "configDrawerIdLabel": "ID",
+    "configTableHeaders": {
+      "configId": "このインスタンスに関連付けられた設定ファイル ID",
+      "scope": "このインスタンスでの適用範囲"
+    },
+    "routeTableHeaders": {
+      "source": "メッセージセッションソース（メッセージタイプ:セッション ID）",
+      "config": "使用する設定ファイル",
+      "actions": "操作"
+    },
+    "messageTypeOptions": {
+      "all": "すべてのメッセージ",
+      "group": "グループメッセージ（GroupMessage）",
+      "friend": "ダイレクトメッセージ（FriendMessage）"
+    },
+    "messageTypeLabels": {
+      "all": "すべてのメッセージ",
+      "group": "グループメッセージ",
+      "friend": "ダイレクトメッセージ"
+    }
+  },
+  "messages": {
+    "updateSuccess": "更新しました",
+    "addSuccess": "追加しました",
+    "deleteSuccess": "削除しました",
+    "statusUpdateSuccess": "ステータスを更新しました",
+    "deleteConfirm": "プラットフォームアダプターを削除してもよろしいですか",
+    "configNotFoundOpenConfig": "対象の設定ファイルが見つかりません。確認できるよう設定ページを開きました。",
+    "updateMissingPlatformId": "プラットフォーム ID がないため、更新に失敗しました。",
+    "platformUpdateFailed": "プラットフォームの更新に失敗しました。",
+    "addSuccessWithConfig": "プラットフォームを追加し、設定ファイルに保存しました",
+    "configIdMissing": "設定ファイル ID を取得できません。",
+    "routingUpdateFailed": "ルーティングテーブルの更新に失敗しました: {message}",
+    "createConfigFailed": "新しい設定ファイルの作成に失敗しました: {message}",
+    "platformIdMissing": "プラットフォーム ID を取得できません。",
+    "routingSaveFailed": "ルーティングテーブルの保存に失敗しました: {message}"
+  },
+  "status": {
+    "enabled": "有効",
+    "disabled": "無効",
+    "connecting": "接続中",
+    "connected": "接続済み",
+    "disconnected": "切断済み",
+    "error": "エラー"
+  },
+  "runtimeStatus": {
+    "running": "実行中",
+    "error": "エラーが発生しました",
+    "pending": "起動待ち",
+    "stopped": "停止済み",
+    "unknown": "不明",
+    "errors": "件のエラー"
+  },
+  "platformQr": {
+    "title": "QR コードログイン",
+    "show": "QR コードを表示",
+    "status": "QR コードのステータス",
+    "waiting": "QR コードを待機中",
+    "close": "閉じる"
+  },
+  "registrationAction": {
+    "lark": {
+      "title": "QR コードで作成",
+      "show": "QR コードで作成",
+      "scanTitle": "スマートフォン版 Feishu で QR コードをスキャンしてください",
+      "feishu": "Feishu 中国版",
+      "lark": "Lark グローバル版"
+    },
+    "weixinOc": {
+      "title": "個人 WeChat の QR コードログイン",
+      "scanTitle": "スマートフォン版 WeChat で QR コードをスキャンしてください",
+      "created": "ログインしました",
+      "status": {
+        "idle": "未開始",
+        "starting": "QR コードを取得中",
+        "pending": "スキャンと確認を待機中",
+        "created": "ログインしました。下の保存ボタンを忘れずにクリックしてください！",
+        "denied": "ユーザーがキャンセルしました",
+        "expired": "有効期限が切れました",
+        "error": "ログインに失敗しました"
+      }
+    },
+    "dingtalk": {
+      "title": "DingTalk の QR コードで作成",
+      "scanTitle": "スマートフォン版 DingTalk で QR コードをスキャンしてください",
+      "created": "作成しました"
+    },
+    "qqOfficial": {
+      "title": "QQ 公式ボットを QR コードで紐付け",
+      "scanTitle": "スマートフォン版 QQ で QR コードをスキャンしてください",
+      "created": "紐付けました",
+      "status": {
+        "idle": "未開始",
+        "starting": "QR コードを取得中",
+        "pending": "スキャンと確認を待機中",
+        "created": "紐付けました。下の保存ボタンを忘れずにクリックしてください！",
+        "denied": "ユーザーがキャンセルしました",
+        "expired": "有効期限が切れました",
+        "error": "紐付けに失敗しました"
+      }
+    },
+    "start": "作成を開始",
+    "created": "作成しました",
+    "startFailed": "QR コードによる作成を開始できませんでした",
+    "pollFailed": "QR コードによる作成ステータスを取得できませんでした",
+    "platformIdLabel": "ボット ID",
+    "platformIdRequired": "ボット ID は必須です",
+    "platformIdInvalid": "ボット ID にスペース、':' または '!' を含めることはできません",
+    "mode": {
+      "title": "作成方法を選択",
+      "scan": "QR コードで簡単に作成",
+      "manual": "手動で作成",
+      "larkManual": "手動で作成（企業のセルフホスト型 Feishu プラットフォームに対応）"
+    },
+    "scanTitle": "スマートフォン版 Feishu で QR コードをスキャンしてください",
+    "status": {
+      "idle": "未開始",
+      "starting": "開始中",
+      "pending": "スキャンと確認を待機中",
+      "slow_down": "ポーリング間隔を延長中",
+      "created": "作成しました。下の保存ボタンを忘れずにクリックしてください！",
+      "denied": "ユーザーがキャンセルしました",
+      "expired": "有効期限が切れました",
+      "error": "作成に失敗しました"
+    }
+  },
+  "errorDialog": {
+    "title": "エラー詳細",
+    "platformId": "プラットフォーム ID",
+    "errorCount": "エラー数",
+    "lastError": "最新のエラー",
+    "occurredAt": "発生日時",
+    "traceback": "スタックトレース",
+    "close": "閉じる"
+  }
+}

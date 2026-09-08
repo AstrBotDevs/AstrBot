@@ -1,0 +1,17 @@
+{
+  "hero": {
+    "title": "AstrBot",
+    "subtitle": "AstrBot は、複数のプラットフォームと大規模言語モデルに対応したオープンソースのチャットボット開発フレームワークです。",
+    "starButton": "このプロジェクトに Star を付ける 🌟",
+    "issueButton": "Issue を送信"
+  },
+  "contributors": {
+    "title": "コントリビューター",
+    "description": "本プロジェクトは、多くのオープンソースコミュニティメンバーによって共同でメンテナンスされています。すべてのコントリビューターの貢献に感謝します。",
+    "viewLink": "AstrBot のコントリビューターを見る"
+  },
+  "stats": {
+    "title": "グローバルデプロイ",
+    "license": "AstrBot は AGPL v3 ライセンスの下でオープンソースとして公開されています"
+  }
+}
