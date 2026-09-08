@@ -1,5 +1,6 @@
 import asyncio
 import inspect
+import random
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import TYPE_CHECKING
 
@@ -334,6 +335,36 @@ class ThirdPartyAgentSubStage(Stage):
             and not event.platform_meta.support_streaming_message
         )
         streaming_used = streaming_response and not stream_to_general
+
+        # When the reply would be streamed but TTS voice replies are enabled,
+        # streaming delivery bypasses the result decorate stage (the only place
+        # where text is converted into voice messages). Roll the dice once here
+        # so a fraction of replies controlled by
+        # provider_tts_settings.trigger_probability are fully generated first
+        # and then voiced, while the rest keep the streaming behavior.
+        tts_cfg = self.ctx.astrbot_config.get("provider_tts_settings", {})
+        if streaming_used and tts_cfg.get("enable"):
+            try:
+                tts_prob = float(tts_cfg.get("trigger_probability", 1.0))
+            except (TypeError, ValueError):
+                tts_prob = 1.0
+            if random.random() < max(0.0, min(tts_prob, 1.0)):
+                # Only force when a usable TTS provider exists, so a
+                # misconfigured TTS setup cannot silently disable streaming
+                # for regular chat replies.
+                tts_provider = (
+                    await self.ctx.plugin_manager.context.get_using_tts_provider_async(
+                        event.unified_msg_origin
+                    )
+                )
+                if tts_provider is not None:
+                    event.set_extra("tts_forced", True)
+                    # ``streaming_response`` is passed to the runner reset
+                    # below, so it must be disabled as well, otherwise the
+                    # runner still streams while the non-streaming handler is
+                    # selected.
+                    streaming_response = False
+                    streaming_used = False
 
         runner_closed = False
         stream_consumed = False
