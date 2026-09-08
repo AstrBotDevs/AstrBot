@@ -1721,6 +1721,83 @@ async def test_v1_system_config_update_preserves_independent_bot_provider_sectio
 
 
 @pytest.mark.asyncio
+async def test_config_update_revokes_only_affected_shell_sessions(
+    asgi_app, fake_core_lifecycle, monkeypatch, tmp_path
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.booters.local import LocalBooter
+    from astrbot.core.tools.computer_tools import shell as shell_tools
+
+    config = fake_core_lifecycle.astrbot_config
+    config["agent_runner"] = {"runner_type": "local"}
+    config["provider_settings"] = {
+        "computer_use_runtime": "local",
+        "computer_use_local_permissions": {
+            role: {
+                "allow_execution": True,
+                "allow_network": True,
+                "filesystem_scope": "host",
+            }
+            for role in ("admin", "member")
+        },
+    }
+    other_config = copy.deepcopy(config)
+    booter = LocalBooter()
+    monkeypatch.setattr(computer_client, "local_booter", booter)
+    monkeypatch.setattr(
+        shell_tools, "workspace_root_for_context", AsyncMock(return_value=tmp_path)
+    )
+    sessions = []
+    try:
+        for role, profile in (
+            ("member", config),
+            ("admin", config),
+            ("member", other_config),
+        ):
+            context = SimpleNamespace(
+                context=SimpleNamespace(
+                    context=SimpleNamespace(get_config=lambda umo, p=profile: p),
+                    event=SimpleNamespace(
+                        role=role,
+                        unified_msg_origin="test:friend:revocation",
+                        get_sender_id=lambda: "creator",
+                    ),
+                )
+            )
+            result = json.loads(
+                await shell_tools.LocalExecuteShellTool().call(
+                    context, command='python -u -c "input()"', yield_time_ms=0
+                )
+            )
+            sessions.append(booter.shell._sessions[result["session_id"]])
+
+        service = asgi_app.state.services.config_profiles
+        payload = copy.deepcopy(config)
+        payload["wake_prefix"] = ["changed"]
+        await service.update_profile("default", payload)
+        assert all(session.process.returncode is None for session in sessions)
+
+        payload = copy.deepcopy(config)
+        payload["provider_settings"]["computer_use_local_permissions"]["member"][
+            "allow_execution"
+        ] = False
+        await service.update_profile("default", payload)
+        assert sessions[0].process.returncode is not None
+        assert all(session.process.returncode is None for session in sessions[1:])
+        assert sessions[0].session_id not in booter.shell._sessions
+
+        # Pre-upgrade sessions must not acquire a grant from the current config.
+        sessions[2].permission_check = None
+        payload = copy.deepcopy(config)
+        payload["provider_settings"]["computer_use_runtime"] = "none"
+        await service.update_profile("default", payload)
+        assert all(session.process.returncode is not None for session in sessions)
+        assert not booter.shell._sessions
+    finally:
+        await booter.shell.shutdown_sessions()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("scope", ["workspace", "host"])
 @pytest.mark.parametrize(
     ("system", "backend", "status", "reason"),

@@ -183,6 +183,7 @@ async def test_local_execute_shell_manages_running_and_closed_results(
         creator_id="admin-user",
         creator_is_admin=True,
         sandboxed=True,
+        permission_check=ANY,
         allow_network=True,
         filesystem_scope="workspace",
         readable_roots=ANY,
@@ -357,6 +358,7 @@ async def test_local_member_shell_uses_sandbox_backend(
         timeout=300,
         yield_time_ms=250,
         sandboxed=True,
+        permission_check=ANY,
         allow_network=False,
         filesystem_scope="workspace",
         readable_roots=ANY,
@@ -441,10 +443,7 @@ async def test_shell_session_tool_lists_sessions_for_current_owner(monkeypatch):
     class FakeWrapper:
         context = FakeAstrContext()
 
-    async def fake_get_booter(context, session_id):
-        return booter
-
-    monkeypatch.setattr(shell_tools, "get_booter", fake_get_booter)
+    monkeypatch.setattr(shell_tools, "get_local_booter", lambda: booter)
 
     result = await ShellSessionTool().call(FakeWrapper(), action="list")
 
@@ -509,10 +508,7 @@ async def test_shell_session_tool_passes_member_identity_to_session_actions(
     class FakeWrapper:
         context = FakeAstrContext()
 
-    async def fake_get_booter(context, session_id):
-        return booter
-
-    monkeypatch.setattr(shell_tools, "get_booter", fake_get_booter)
+    monkeypatch.setattr(shell_tools, "get_local_booter", lambda: booter)
 
     result = await ShellSessionTool().call(
         FakeWrapper(),

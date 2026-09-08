@@ -10,6 +10,7 @@ import subprocess
 import sys
 import time
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, cast
@@ -144,6 +145,7 @@ class _LocalShellSession:
     output_event: asyncio.Event
     reader_task: asyncio.Task[None]
     wait_task: asyncio.Task[int]
+    permission_check: Callable[[], bool] | None = None
     timeout_task: asyncio.Task[None] | None = None
     cursor: int = 0
     timed_out: bool = False
@@ -263,6 +265,7 @@ class LocalShellComponent(ShellComponent):
         creator_id: str,
         creator_is_admin: bool,
         sandboxed: bool,
+        permission_check: Callable[[], bool],
         allow_network: bool = False,
         filesystem_scope: str = "workspace",
         readable_roots: tuple[Path, ...] = (),
@@ -281,6 +284,7 @@ class LocalShellComponent(ShellComponent):
             creator_id: Sender ID that created the session.
             creator_is_admin: Whether the creator was an administrator.
             sandboxed: Whether the process is isolated from the host.
+            permission_check: Check that the creation permissions still apply.
             allow_network: Whether an isolated process may access the network.
             filesystem_scope: Filesystem scope applied to an isolated process.
             readable_roots: Additional directories readable by an isolated process.
@@ -295,7 +299,7 @@ class LocalShellComponent(ShellComponent):
             Process result with output, status, and session metadata.
 
         Raises:
-            PermissionError: If the command matches a blocked pattern.
+            PermissionError: If the command is blocked or its permissions changed.
             RuntimeError: If the requested platform sandbox is unavailable.
             ValueError: If a timing or output limit is invalid.
         """
@@ -316,131 +320,142 @@ class LocalShellComponent(ShellComponent):
         output_path = output_dir / f"{session_id}.log"
         output_path.touch()
 
-        try:
-            if sandboxed:
-                process = await create_process_sandbox().spawn_shell(
-                    command,
-                    SandboxSpec(
-                        workspace=working_dir,
-                        allow_network=allow_network,
-                        filesystem_scope=filesystem_scope,
-                        readable_roots=readable_roots,
-                        writable_roots=writable_roots,
-                    ),
-                    env={str(k): str(v) for k, v in (env or {}).items()},
+        # Configuration invalidation must also see processes still being spawned.
+        async with self._sessions_lock:
+            if not permission_check():
+                output_path.unlink(missing_ok=True)
+                raise PermissionError(
+                    "Local shell permissions changed; retry the command."
                 )
-            else:
-                run_env = os.environ.copy()
-                if env:
-                    run_env.update({str(k): str(v) for k, v in env.items()})
-                process_kwargs: dict[str, Any] = {}
-                if sys.platform == "win32":
-                    # Keep managed-session Python output UTF-8.
-                    run_env.setdefault("PYTHONIOENCODING", "utf-8")
-                    process_factory = asyncio.create_subprocess_exec
-                    shell_executable = resolve_windows_shell()
-                    process_args = (
-                        shell_executable,
-                        "-NoLogo",
-                        "-NoProfile",
-                        "-NonInteractive",
-                        "-Command",
+            try:
+                if sandboxed:
+                    process = await create_process_sandbox().spawn_shell(
                         command,
-                    )
-                    process_kwargs["creationflags"] = getattr(
-                        subprocess,
-                        "CREATE_NEW_PROCESS_GROUP",
-                        0,
+                        SandboxSpec(
+                            workspace=working_dir,
+                            allow_network=allow_network,
+                            filesystem_scope=filesystem_scope,
+                            readable_roots=readable_roots,
+                            writable_roots=writable_roots,
+                        ),
+                        env={str(k): str(v) for k, v in (env or {}).items()},
                     )
                 else:
-                    process_factory = asyncio.create_subprocess_shell
-                    process_args = (command,)
-                    process_kwargs["start_new_session"] = True
-                process = await process_factory(
-                    *process_args,
-                    cwd=working_dir,
-                    env=run_env,
-                    stdin=asyncio.subprocess.PIPE,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.STDOUT,
-                    **process_kwargs,
-                )
-        except Exception:
-            output_path.unlink(missing_ok=True)
-            raise
+                    run_env = os.environ.copy()
+                    if env:
+                        run_env.update({str(k): str(v) for k, v in env.items()})
+                    process_kwargs: dict[str, Any] = {}
+                    if sys.platform == "win32":
+                        # Keep managed-session Python output UTF-8.
+                        run_env.setdefault("PYTHONIOENCODING", "utf-8")
+                        process_factory = asyncio.create_subprocess_exec
+                        shell_executable = resolve_windows_shell()
+                        process_args = (
+                            shell_executable,
+                            "-NoLogo",
+                            "-NoProfile",
+                            "-NonInteractive",
+                            "-Command",
+                            command,
+                        )
+                        process_kwargs["creationflags"] = getattr(
+                            subprocess,
+                            "CREATE_NEW_PROCESS_GROUP",
+                            0,
+                        )
+                    else:
+                        process_factory = asyncio.create_subprocess_shell
+                        process_args = (command,)
+                        process_kwargs["start_new_session"] = True
+                    process = await process_factory(
+                        *process_args,
+                        cwd=working_dir,
+                        env=run_env,
+                        stdin=asyncio.subprocess.PIPE,
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.STDOUT,
+                        **process_kwargs,
+                    )
+            except Exception:
+                output_path.unlink(missing_ok=True)
+                raise
 
-        output_event = asyncio.Event()
+            output_event = asyncio.Event()
 
-        async def _capture_output() -> None:
-            if process.stdout is None:
-                return
-            output_size = 0
-            with output_path.open("ab") as output_file:
-                while chunk := await process.stdout.read(8192):
-                    if sandboxed:
-                        remaining = _LOCAL_SANDBOX_MAX_OUTPUT_BYTES - output_size
-                        if remaining <= 0:
-                            session.output_limited = True
+            async def _capture_output() -> None:
+                if process.stdout is None:
+                    return
+                output_size = 0
+                with output_path.open("ab") as output_file:
+                    while chunk := await process.stdout.read(8192):
+                        if sandboxed:
+                            remaining = _LOCAL_SANDBOX_MAX_OUTPUT_BYTES - output_size
+                            if remaining <= 0:
+                                session.output_limited = True
+                                process.terminate()
+                                return
+                            if len(chunk) > remaining:
+                                chunk = chunk[:remaining]
+                                session.output_limited = True
+                        output_file.write(chunk)
+                        output_file.flush()
+                        output_size += len(chunk)
+                        output_event.set()
+                        if session.output_limited:
                             process.terminate()
                             return
-                        if len(chunk) > remaining:
-                            chunk = chunk[:remaining]
-                            session.output_limited = True
-                    output_file.write(chunk)
-                    output_file.flush()
-                    output_size += len(chunk)
-                    output_event.set()
-                    if session.output_limited:
-                        process.terminate()
-                        return
 
-        reader_task = asyncio.create_task(
-            _capture_output(),
-            name=f"local_shell_output_{session_id}",
-        )
-        wait_task = asyncio.create_task(
-            process.wait(),
-            name=f"local_shell_wait_{session_id}",
-        )
-        wait_task.add_done_callback(lambda _: output_event.set())
-        session = _LocalShellSession(
-            session_id=session_id,
-            owner_id=owner_id,
-            creator_id=creator_id,
-            creator_is_admin=creator_is_admin,
-            sandboxed=sandboxed,
-            process=process,
-            output_path=output_path,
-            started_at=time.time(),
-            output_event=output_event,
-            reader_task=reader_task,
-            wait_task=wait_task,
-        )
-
-        if timeout is not None:
-
-            async def _enforce_timeout() -> None:
-                try:
-                    await asyncio.wait_for(
-                        asyncio.shield(wait_task),
-                        timeout=timeout,
-                    )
-                except asyncio.TimeoutError:
-                    session.timed_out = True
-                    logger.warning(
-                        "Managed local shell session timed out: session_id=%s pid=%s",
-                        session_id,
-                        process.pid,
-                    )
-                    await self._terminate_process(session)
-
-            session.timeout_task = asyncio.create_task(
-                _enforce_timeout(),
-                name=f"local_shell_timeout_{session_id}",
+            reader_task = asyncio.create_task(
+                _capture_output(),
+                name=f"local_shell_output_{session_id}",
+            )
+            wait_task = asyncio.create_task(
+                process.wait(),
+                name=f"local_shell_wait_{session_id}",
+            )
+            wait_task.add_done_callback(lambda _: output_event.set())
+            session = _LocalShellSession(
+                session_id=session_id,
+                owner_id=owner_id,
+                creator_id=creator_id,
+                creator_is_admin=creator_is_admin,
+                sandboxed=sandboxed,
+                process=process,
+                output_path=output_path,
+                started_at=time.time(),
+                output_event=output_event,
+                reader_task=reader_task,
+                wait_task=wait_task,
+                permission_check=permission_check,
             )
 
-        async with self._sessions_lock:
+            if timeout is not None:
+
+                async def _enforce_timeout() -> None:
+                    try:
+                        await asyncio.wait_for(
+                            asyncio.shield(wait_task),
+                            timeout=timeout,
+                        )
+                    except asyncio.TimeoutError:
+                        session.timed_out = True
+                        logger.warning(
+                            "Managed local shell session timed out: session_id=%s pid=%s",
+                            session_id,
+                            process.pid,
+                        )
+                        await self._terminate_process(session)
+
+                session.timeout_task = asyncio.create_task(
+                    _enforce_timeout(),
+                    name=f"local_shell_timeout_{session_id}",
+                )
+
             self._sessions[session_id] = session
+
+        if not permission_check():
+            await self.shutdown_sessions(invalid_only=True)
+            raise PermissionError("Local shell permissions changed; retry the command.")
 
         if yield_time_ms > 0:
             try:
@@ -688,7 +703,11 @@ class LocalShellComponent(ShellComponent):
             requester_is_admin,
             session_id,
         )
-        if session.process.returncode is not None or session.process.stdin is None:
+        if (
+            session.terminated
+            or session.process.returncode is not None
+            or session.process.stdin is None
+        ):
             raise ValueError(f"Shell session {session_id} is not accepting input.")
         session.process.stdin.write(chars.encode("utf-8"))
         await session.process.stdin.drain()
@@ -787,12 +806,22 @@ class LocalShellComponent(ShellComponent):
             max_output_chars=max_output_chars,
         )
 
-    async def shutdown_sessions(self) -> None:
-        """Terminate and remove every managed local shell session."""
+    async def shutdown_sessions(self, *, invalid_only: bool = False) -> None:
+        """Terminate and remove managed local shell sessions.
+
+        Args:
+            invalid_only: Keep sessions whose creation permissions still apply.
+        """
         async with self._sessions_lock:
-            sessions = list(self._sessions.values())
-        for session in sessions:
-            session.terminated = True
+            sessions = [
+                session
+                for session in self._sessions.values()
+                if not invalid_only
+                or getattr(session, "permission_check", None) is None
+                or not session.permission_check()
+            ]
+            for session in sessions:
+                session.terminated = True
         termination_results = await asyncio.gather(
             *(self._terminate_process(session) for session in sessions),
             return_exceptions=True,
@@ -830,7 +859,7 @@ class LocalShellComponent(ShellComponent):
             Matching managed shell session.
 
         Raises:
-            ValueError: If the session does not exist for this owner.
+            ValueError: If the session is unavailable or its permissions changed.
         """
         async with self._sessions_lock:
             session = self._sessions.get(session_id)
@@ -842,7 +871,19 @@ class LocalShellComponent(ShellComponent):
                 and (session.creator_is_admin or session.creator_id != requester_id)
             )
         ):
-            raise ValueError(f"Shell session {session_id} was not found.")
+            raise ValueError(
+                f"Shell session {session_id} was not found or has expired. "
+                "Start a new shell session."
+            )
+        if (
+            getattr(session, "permission_check", None) is None
+            or not session.permission_check()
+        ):
+            await self.shutdown_sessions(invalid_only=True)
+            raise ValueError(
+                f"Shell session {session_id} expired after a permission change. "
+                "Start a new shell session."
+            )
         return session
 
     async def _terminate_process(self, session: _LocalShellSession) -> None:
@@ -851,7 +892,7 @@ class LocalShellComponent(ShellComponent):
         Args:
             session: Managed shell session to terminate.
         """
-        if session.process.returncode is not None:
+        if os.name == "nt" and session.process.returncode is not None:
             return
         if session.sandboxed:
             session.process.terminate()
@@ -881,14 +922,19 @@ class LocalShellComponent(ShellComponent):
                 timeout=5,
             )
         except asyncio.TimeoutError:
-            if session.sandboxed or os.name == "nt":
+            pass
+        # The leader may have exited while children remain in its process group.
+        if session.sandboxed:
+            session.process.kill()
+        elif os.name == "nt":
+            if session.process.returncode is None:
                 session.process.kill()
-            else:
-                try:
-                    os.killpg(session.process.pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
-            await session.wait_task
+        else:
+            try:
+                os.killpg(session.process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        await session.wait_task
 
     async def _remove_session(self, session: _LocalShellSession) -> None:
         """Remove a completed session and its temporary output file.

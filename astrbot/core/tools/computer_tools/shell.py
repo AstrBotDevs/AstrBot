@@ -12,13 +12,14 @@ from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.computer.booters.local import LocalShellComponent
-from astrbot.core.computer.computer_client import get_booter
+from astrbot.core.computer.computer_client import get_booter, get_local_booter
 from astrbot.core.utils.astrbot_path import get_astrbot_system_tmp_path
 
 from ..registry import builtin_tool
 from .fs import _read_allowed_roots, _write_allowed_roots
 from .util import (
     check_local_execution_permission,
+    get_local_permission_policy,
     is_local_runtime,
     workspace_root_for_context,
 )
@@ -150,6 +151,10 @@ class ExecuteShellTool(FunctionTool):
                     creator_id=creator_id,
                     creator_is_admin=context.context.event.role == "admin",
                     sandboxed=sandboxed,
+                    permission_check=lambda: (
+                        is_local_runtime(context)
+                        and get_local_permission_policy(context) == local_policy
+                    ),
                     allow_network=(
                         local_policy.allow_network if local_policy else True
                     ),
@@ -368,16 +373,13 @@ class ShellSessionTool(FunctionTool):
             context,
             "Shell session management",
         )
-        if permission_error:
+        if permission_error and action != "terminate":
             return permission_error
-        if not is_local_runtime(context):
+        if not is_local_runtime(context) and action != "terminate":
             return "Error managing shell session: only local runtime is supported."
 
         try:
-            sb = await get_booter(
-                context.context.context,
-                context.context.event.unified_msg_origin,
-            )
+            sb = get_local_booter()
             if not isinstance(sb.shell, LocalShellComponent):
                 return "Error managing shell session: local shell component is unavailable."
 

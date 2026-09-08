@@ -245,6 +245,7 @@ async def test_managed_shell_uses_windows_powershell(monkeypatch, tmp_path):
         creator_id="user-a",
         creator_is_admin=False,
         sandboxed=False,
+        permission_check=lambda: True,
         cwd=str(tmp_path),
         yield_time_ms=5_000,
     )
@@ -844,6 +845,7 @@ async def test_managed_shell_uses_platform_sandbox(
         cwd=str(tmp_path),
         yield_time_ms=5_000,
         sandboxed=True,
+        permission_check=lambda: True,
     )
 
     assert result["status"] == "completed"
@@ -896,6 +898,7 @@ async def test_sandboxed_managed_shell_delegates_launch(monkeypatch, tmp_path):
         cwd=str(tmp_path),
         yield_time_ms=5_000,
         sandboxed=True,
+        permission_check=lambda: True,
     )
 
     assert result["status"] == "completed"
@@ -954,6 +957,7 @@ async def test_sandboxed_managed_shell_stops_at_output_limit(monkeypatch, tmp_pa
         cwd=str(tmp_path),
         yield_time_ms=5_000,
         sandboxed=True,
+        permission_check=lambda: True,
     )
 
     assert result["status"] == "output_limited"
@@ -1103,6 +1107,7 @@ async def test_managed_shell_prefers_pwsh_when_available(monkeypatch, tmp_path):
         creator_id="user-a",
         creator_is_admin=False,
         sandboxed=False,
+        permission_check=lambda: True,
         cwd=str(tmp_path),
         yield_time_ms=5_000,
     )
@@ -1236,6 +1241,39 @@ def test_local_shell_component_falls_back_when_windows_taskkill_fails(monkeypatc
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(os.name == "nt", reason="Unix process-group cleanup.")
+async def test_managed_shell_cleans_children_after_leader_exits():
+    shell = LocalShellComponent()
+    result = await shell.exec_managed(
+        "(trap '' TERM; printf 'ready\\n'; sleep 30) & read line",
+        owner_id="owner",
+        creator_id="user",
+        creator_is_admin=False,
+        sandboxed=False,
+        permission_check=lambda: True,
+        yield_time_ms=0,
+    )
+    session = shell._sessions[result["session_id"]]
+    try:
+        await asyncio.wait_for(session.output_event.wait(), 5)
+        session.process.stdin.write(b"\n")
+        await session.process.stdin.drain()
+        for _ in range(500):
+            if session.process.returncode is not None:
+                break
+            await asyncio.sleep(0.01)
+        assert session.process.returncode is not None
+        # The child keeps stdout open and ignores SIGTERM after its parent exits.
+        assert not session.reader_task.done()
+        session.permission_check = None
+        await asyncio.wait_for(shell.shutdown_sessions(invalid_only=True), 8)
+        assert session.reader_task.done()
+        assert not shell._sessions
+    finally:
+        await shell.shutdown_sessions()
+
+
+@pytest.mark.asyncio
 async def test_managed_shell_returns_completed_output_without_open_session():
     shell = LocalShellComponent()
 
@@ -1245,6 +1283,7 @@ async def test_managed_shell_returns_completed_output_without_open_session():
         creator_id="user-a",
         creator_is_admin=False,
         sandboxed=False,
+        permission_check=lambda: True,
         yield_time_ms=5_000,
     )
 
@@ -1268,6 +1307,7 @@ async def test_managed_shell_allows_creator_and_conversation_admin():
         creator_id="user-a",
         creator_is_admin=False,
         sandboxed=False,
+        permission_check=lambda: True,
         # Cold-starting PowerShell + Python on CI runners exceeds 200ms.
         yield_time_ms=5_000,
     )
@@ -1329,6 +1369,7 @@ async def test_managed_shell_rejects_cross_user_session_access():
         creator_id="admin-user",
         creator_is_admin=True,
         sandboxed=False,
+        permission_check=lambda: True,
         yield_time_ms=100,
     )
 
@@ -1418,6 +1459,7 @@ async def test_managed_shell_accepts_stdin_and_polls_incremental_output():
         creator_id="user-a",
         creator_is_admin=False,
         sandboxed=False,
+        permission_check=lambda: True,
         yield_time_ms=100,
     )
 
@@ -1464,6 +1506,7 @@ async def test_managed_shell_hard_timeout_terminates_session():
         creator_id="user-a",
         creator_is_admin=False,
         sandboxed=False,
+        permission_check=lambda: True,
         timeout=1,
         yield_time_ms=0,
     )
@@ -1493,6 +1536,7 @@ async def test_managed_shell_keeps_completed_session_until_output_is_drained():
         creator_id="user-a",
         creator_is_admin=False,
         sandboxed=False,
+        permission_check=lambda: True,
         yield_time_ms=5_000,
         max_output_chars=10_000,
     )

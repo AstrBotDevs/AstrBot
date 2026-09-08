@@ -11,6 +11,8 @@ from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from astrbot.core import file_token_service, logger
+from astrbot.core.computer import computer_client
+from astrbot.core.computer.booters.local import LocalShellComponent
 from astrbot.core.config.agent_runner import normalize_agent_runner
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.config.default import (
@@ -802,6 +804,9 @@ class ConfigProfileService:
         save_config(
             config, self.acm.confs[config_id], is_core=True, runtime=self.runtime
         )
+        booter = computer_client.local_booter
+        if booter is not None and isinstance(booter.shell, LocalShellComponent):
+            await booter.shell.shutdown_sessions(invalid_only=True)
         if protected_2fa_changed and self.db is not None:
             await revoke_user_trusted_devices(self.db)
         await self.core_lifecycle.reload_pipeline_scheduler(config_id)
