@@ -90,6 +90,100 @@ def test_local_permission_validation_does_not_inject_missing_policies():
     assert saved == original
 
 
+@pytest.mark.parametrize("role", ["member", "admin"])
+@pytest.mark.parametrize("status", ["detected", "missing", "unsupported"])
+@pytest.mark.parametrize(
+    ("scope", "execution", "network", "denied_on"),
+    [
+        ("none", False, False, ()),
+        ("workspace", False, False, ("unsupported",)),
+        ("host", False, False, ()),
+        ("workspace", True, False, ("missing", "unsupported")),
+        ("workspace", True, True, ("missing", "unsupported")),
+        ("host", True, False, ("missing", "unsupported")),
+        ("host", True, True, ()),
+    ],
+)
+def test_local_permission_platform_matrix(
+    role, status, scope, execution, network, denied_on
+):
+    permissions = {r: {"filesystem_scope": "none"} for r in ("member", "admin")}
+    permissions[role] = {
+        "filesystem_scope": scope,
+        "allow_execution": execution,
+        "allow_network": network,
+    }
+    errors, _ = validate_config(
+        {
+            "provider_settings": {
+                "computer_use_runtime": "local",
+                "computer_use_local_permissions": permissions,
+            }
+        },
+        CONFIG_METADATA_2,
+        is_core=True,
+        runtime={
+            "os": "windows" if status == "unsupported" else "linux",
+            "sandbox": {"status": status, "backend": "bubblewrap"},
+        },
+    )
+
+    assert bool(errors) == (status in denied_on)
+    if errors:
+        assert len(errors) == 1
+        assert errors[0].startswith(f"Local permission {role}:")
+
+
+@pytest.mark.parametrize(
+    ("old_mode", "new_mode", "role", "change", "rejected"),
+    [
+        ("local", "local", "member", {}, False),
+        ("local", "local", "admin", {"filesystem_scope": "host"}, False),
+        ("local", "local", "member", {"allow_execution": True}, True),
+        ("local", "local", "member", None, True),
+        ("none", "local", "member", {}, True),
+        ("local", "none", "member", {}, False),
+        ("local", "sandbox", "member", {}, False),
+        ("local", "local", "member", {"filesystem_scope": "none"}, False),
+    ],
+)
+def test_windows_legacy_permissions(old_mode, new_mode, role, change, rejected):
+    old = {
+        "provider_settings": {
+            "computer_use_runtime": old_mode,
+            "computer_use_local_permissions": {
+                r: {
+                    "filesystem_scope": "workspace",
+                    "allow_execution": False,
+                    "allow_network": True,
+                }
+                for r in ("member", "admin")
+            },
+        }
+    }
+    payload = deepcopy(old)
+    settings = payload["provider_settings"]
+    settings.update(computer_use_runtime=new_mode, default_provider_id="new-provider")
+    permissions = settings["computer_use_local_permissions"]
+    if change is None:
+        del permissions[role]
+    else:
+        permissions[role].update(change)
+
+    errors, normalized = validate_config(
+        payload,
+        CONFIG_METADATA_2,
+        is_core=True,
+        current_config=old,
+        runtime={"os": "windows", "sandbox": {"status": "unsupported"}},
+    )
+
+    assert bool(errors) == rejected
+    if not rejected:
+        saved = normalized["provider_settings"]["computer_use_local_permissions"]
+        assert all(not policy["allow_network"] for policy in saved.values())
+
+
 # ═══════════════════════════════════════════════════════════════
 # _discover_bay_credentials
 # ═══════════════════════════════════════════════════════════════

@@ -15,7 +15,8 @@ def test_get_system_config_includes_effective_server_time() -> None:
             astrbot_config_mgr=SimpleNamespace(
                 confs={"default": {"timezone": "Asia/Shanghai"}}
             )
-        )
+        ),
+        runtime={"os": "windows", "sandbox": {"status": "unsupported"}},
     )
 
     with patch("astrbot.dashboard.services.config_service.datetime") as mock_datetime:
@@ -40,7 +41,17 @@ async def test_profile_mutations_await_config_manager() -> None:
         reload_pipeline_scheduler=AsyncMock(),
         pipeline_scheduler_mapping={"profile-id": object()},
     )
-    service = ConfigProfileService(lifecycle)
+    service = ConfigProfileService(
+        lifecycle, runtime={"os": "windows", "sandbox": {"status": "unsupported"}}
+    )
+
+    with pytest.raises(ValueError, match="Local permission member:") as exc:
+        await service.create_profile(
+            "Invalid", {"provider_settings": {"computer_use_runtime": "local"}}
+        )
+    assert "Local permission admin:" in str(exc.value)
+    config_manager.create_conf.assert_not_awaited()
+    lifecycle.reload_pipeline_scheduler.assert_not_awaited()
 
     result = await service.create_profile("Profile", {"timezone": "UTC"})
     await service.rename_profile("profile-id", "Renamed")

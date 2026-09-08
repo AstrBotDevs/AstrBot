@@ -203,7 +203,27 @@ def sanitize_filename(name: str) -> str:
     return _sanitize_filename(name)
 
 
-def validate_config(data, schema: dict, is_core: bool) -> tuple[list[str], dict]:
+def validate_config(
+    data,
+    schema: dict,
+    is_core: bool,
+    *,
+    runtime: dict | None = None,
+    current_config: dict | None = None,
+) -> tuple[list[str], dict]:
+    """Validate configuration values and normalize linked Local permissions.
+
+    Args:
+        data: Submitted configuration, normalized in place.
+        schema: Configuration metadata used for validation.
+        is_core: Whether this is a core configuration rather than a plugin.
+        runtime: Startup runtime snapshot for platform-specific validation.
+        current_config: Existing configuration whose unchanged Local policies
+            may be retained when saving unrelated settings.
+
+    Returns:
+        Validation errors and the normalized configuration.
+    """
     errors = []
 
     def validate(data: dict, metadata: dict = schema, path="") -> None:
@@ -308,6 +328,7 @@ def validate_config(data, schema: dict, is_core: bool) -> tuple[list[str], dict]
             if isinstance(provider_settings, dict)
             else {}
         )
+        submitted_permissions = copy.deepcopy(permissions)
         if not isinstance(permissions, dict):
             errors.append("Local computer permissions must be an object.")
         else:
@@ -335,6 +356,50 @@ def validate_config(data, schema: dict, is_core: bool) -> tuple[list[str], dict]
                     policy["allow_network"] = False
                 elif policy.get("allow_execution", role == "admin") is False:
                     policy["allow_network"] = False
+
+        if (
+            not errors
+            and runtime is not None
+            and isinstance(provider_settings, dict)
+            and provider_settings.get("computer_use_runtime") == "local"
+            and runtime["sandbox"]["status"] != "detected"
+        ):
+            old_settings = (current_config or {}).get("provider_settings", {})
+            old_permissions = old_settings.get("computer_use_local_permissions", {})
+            was_local = old_settings.get("computer_use_runtime") == "local"
+            defaults = DEFAULT_CONFIG["provider_settings"][
+                "computer_use_local_permissions"
+            ]
+            for role in ("member", "admin"):
+                # Keep unchanged legacy policies, but check both roles when
+                # activating Local access or creating a profile.
+                if was_local and submitted_permissions.get(
+                    role, {}
+                ) == old_permissions.get(role, {}):
+                    continue
+                policy = {**defaults[role], **permissions.get(role, {})}
+                scope = policy["filesystem_scope"]
+                if scope == "none":
+                    continue
+                unsupported = runtime["sandbox"]["status"] == "unsupported"
+                if not (
+                    (unsupported and scope == "workspace")
+                    or (
+                        policy["allow_execution"]
+                        and (scope == "workspace" or not policy["allow_network"])
+                    )
+                ):
+                    continue
+                if unsupported:
+                    reason = f"Local isolation is not supported on {runtime['os']}."
+                else:
+                    dependency = (
+                        "Seatbelt (/usr/bin/sandbox-exec)"
+                        if runtime["sandbox"]["backend"] == "seatbelt"
+                        else "bubblewrap (bwrap)"
+                    )
+                    reason = f"Missing {dependency}; restricted Local execution is unavailable."
+                errors.append(f"Local permission {role}: {reason}")
     else:
         validate(data, schema)
 
@@ -475,7 +540,20 @@ def save_config(
     post_config: dict,
     config: AstrBotConfig,
     is_core: bool = False,
+    *,
+    runtime: dict | None = None,
 ) -> None:
+    """Validate and persist a dashboard configuration update.
+
+    Args:
+        post_config: Submitted configuration to validate and save.
+        config: Existing configuration and persistence target.
+        is_core: Whether this is a core configuration rather than a plugin.
+        runtime: Startup runtime snapshot supplied by the profile service.
+
+    Raises:
+        ValueError: If configuration validation fails.
+    """
     if is_core:
         post_config["agent_runner"] = normalize_agent_runner(
             post_config.get("agent_runner")
@@ -487,6 +565,8 @@ def save_config(
                 post_config,
                 CONFIG_METADATA_2,
                 is_core,
+                runtime=runtime,
+                current_config=dict(config),
             )
         else:
             errors, post_config = validate_config(
@@ -511,10 +591,13 @@ class ConfigProfileService:
         self,
         core_lifecycle: AstrBotCoreLifecycle,
         db: BaseDatabase | None = None,
+        *,
+        runtime: dict,
     ) -> None:
         self.core_lifecycle = core_lifecycle
         self.acm = core_lifecycle.astrbot_config_mgr
         self.db = db
+        self.runtime = runtime
 
     def get_profile_schema(self) -> dict:
         return {
@@ -576,6 +659,7 @@ class ConfigProfileService:
 
         Raises:
             ApiError: If caller attempts to define administrator IDs without scope.
+            ValueError: If configuration validation fails.
         """
         if (
             not allow_admin_id_change
@@ -592,6 +676,11 @@ class ConfigProfileService:
             profile_config["agent_runner"] = normalize_agent_runner(
                 profile_config["agent_runner"]
             )
+        errors, profile_config = validate_config(
+            profile_config, CONFIG_METADATA_2, is_core=True, runtime=self.runtime
+        )
+        if errors:
+            raise ValueError(f"Configuration validation failed: {errors}")
         conf_id = await self.acm.create_conf(
             name=name,
             config=profile_config,
@@ -658,7 +747,7 @@ class ConfigProfileService:
 
         Raises:
             ApiError: If admin IDs change without permission or TOTP is invalid.
-            ValueError: If the requested config profile does not exist.
+            ValueError: If the profile does not exist or validation fails.
         """
         if config_id not in self.acm.confs:
             raise ValueError(f"Config file {config_id} does not exist")
@@ -695,7 +784,9 @@ class ConfigProfileService:
             _set_nested_value(config, ("dashboard", "totp", "recovery_code_hash"), "")
 
         set_pending_totp_secret(None)
-        save_config(config, self.acm.confs[config_id], is_core=True)
+        save_config(
+            config, self.acm.confs[config_id], is_core=True, runtime=self.runtime
+        )
         if protected_2fa_changed and self.db is not None:
             await revoke_user_trusted_devices(self.db)
         await self.core_lifecycle.reload_pipeline_scheduler(config_id)

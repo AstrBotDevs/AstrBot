@@ -1668,7 +1668,9 @@ async def test_v1_system_config_update_preserves_independent_bot_provider_sectio
     fake_core_lifecycle,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    def fake_save_config(post_config: dict, config: FakeAstrBotConfig, is_core=False):
+    def fake_save_config(
+        post_config: dict, config: FakeAstrBotConfig, is_core=False, *, runtime=None
+    ):
         config.save_config(post_config)
 
     monkeypatch.setattr(config_service, "save_config", fake_save_config)
@@ -1702,6 +1704,79 @@ async def test_v1_system_config_update_preserves_independent_bot_provider_sectio
         "default_provider_id": "gpt-mini"
     }
     assert fake_core_lifecycle.reloaded_config_ids == ["default"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("scope", ["workspace", "host"])
+@pytest.mark.parametrize(
+    ("system", "backend", "status", "reason"),
+    [
+        ("windows", None, "unsupported", "windows"),
+        ("linux", "bubblewrap", "missing", "bwrap"),
+        ("darwin", "seatbelt", "missing", "sandbox-exec"),
+    ],
+)
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/v1/system-config",
+        "/api/v1/config-profiles/default",
+        "/api/config/astrbot/update",
+    ],
+)
+async def test_config_api_validates_local_permissions(
+    asgi_app,
+    asgi_client,
+    fake_core_lifecycle,
+    path,
+    scope,
+    system,
+    backend,
+    status,
+    reason,
+):
+    runtime = asgi_app.state.services.stats.runtime
+    assert asgi_app.state.services.config_profiles.runtime is runtime
+    runtime.update({"os": system, "sandbox": {"backend": backend, "status": status}})
+    original = copy.deepcopy(fake_core_lifecycle.astrbot_config)
+    payload = copy.deepcopy(original)
+    payload["agent_runner"] = {"runner_type": "local"}
+    payload["provider_settings"] = {
+        "computer_use_runtime": "local",
+        "computer_use_local_permissions": {
+            "member": {
+                "filesystem_scope": scope,
+                "allow_execution": True,
+                "allow_network": True,
+            },
+            "admin": {"filesystem_scope": "none"},
+        },
+    }
+    legacy = path.startswith("/api/config/")
+    response = await asgi_client.request(
+        "POST" if legacy else "PUT",
+        path,
+        headers=_jwt_headers(),
+        json={"conf_id": "default", "config": payload} if legacy else payload,
+    )
+
+    assert response.status_code == (400 if scope == "workspace" and not legacy else 200)
+    if scope == "workspace":
+        assert response.json()["status"] == "error"
+        assert "Local permission member:" in response.json()["message"]
+        assert reason in response.json()["message"]
+        assert fake_core_lifecycle.astrbot_config == original
+        assert fake_core_lifecycle.reloaded_config_ids == []
+    else:
+        assert response.json()["status"] == "ok"
+        payload["provider_settings"]["computer_use_local_permissions"]["admin"].update(
+            allow_execution=False, allow_network=False
+        )
+        assert (
+            fake_core_lifecycle.astrbot_config["provider_settings"]
+            == payload["provider_settings"]
+        )
+        assert fake_core_lifecycle.reloaded_config_ids == ["default"]
 
 
 @pytest.mark.asyncio
