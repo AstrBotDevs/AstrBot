@@ -81,9 +81,9 @@ MSGS: dict[str, dict[str, str]] = {
     },
     "name.set": {
         "zh-CN": "✅ UMO 名称已设置为: {alias}\nUMO: {umo}",
-        "en-US": "✅ UMO name set to: {alias}\nUMO: {umo}",
-        "ru-RU": "✅ Имя UMO задано: {alias}\nUMO: {umo}",
-        "ja-JP": "✅ UMO 名を設定しました: {alias}\nUMO: {umo}",
+        "en-US": "UMO name set to: {alias}\nUMO: {umo}",
+        "ru-RU": "Имя UMO задано: {alias}\nUMO: {umo}",
+        "ja-JP": "UMO 名を設定しました: {alias}\nUMO: {umo}",
     },
     # provider.py
     "provider.testing": {
@@ -301,35 +301,47 @@ CMD_DESCS: dict[str, dict[str, str]] = {
 }
 
 
-async def t(context: Context, umo: str, key: str, **params) -> str:
-    """按当前会话语言取内置指令文案。
+async def t(context: Context, session_umo: str, key: str, **params) -> str:
+    """按全局语言取内置指令文案。
 
     Args:
-        context: 插件上下文(用于解析语言)。
-        umo: unified_message_origin。
+        context: 插件上下文(用于解析语言)。缺失 ``get_lang`` 时回退默认语言。
+        session_umo: unified_message_origin(保留用于日志/扩展)。
         key: 文案键(如 ``"reset.success"``)。
-        **params: 占位符参数(如 ``cid=...``)。
+        **params: 占位符参数(如 ``cid=...``)。注意占位符名不能与
+            ``session_umo`` 冲突;文案中的 ``{umo}`` 等占位符可正常传入。
 
     Returns:
-        翻译后的文案;找不到时回退 ``zh-CN``,再回退键名本身。
+        翻译后的文案;找不到时回退 ``DEFAULT_LANG``,再回退键名本身。
     """
-    lang = await context.get_lang(umo)
+    lang = await _resolve_lang(context, session_umo)
     entry = MSGS.get(key, {})
     text = entry.get(lang) or entry.get(DEFAULT_LANG) or key
     return text.format(**params)
 
 
-async def command_desc(context: Context, umo: str, cmd: str) -> str:
-    """按当前会话语言取内置指令描述(用于 /help)。
+async def command_desc(context: Context, session_umo: str, cmd: str) -> str:
+    """按全局语言取内置指令描述(用于 /help)。
 
     Args:
-        context: 插件上下文(用于解析语言)。
-        umo: unified_message_origin。
+        context: 插件上下文(用于解析语言)。缺失 ``get_lang`` 时回退默认语言。
+        session_umo: unified_message_origin(保留用于日志/扩展)。
         cmd: 命令名(如 ``"reset"``)。
 
     Returns:
-        翻译后的描述;找不到时回退 ``zh-CN``,再回退空串。
+        翻译后的描述;找不到时回退 ``DEFAULT_LANG``,再回退空串。
     """
-    lang = await context.get_lang(umo)
+    lang = await _resolve_lang(context, session_umo)
     entry = CMD_DESCS.get(cmd, {})
     return entry.get(lang) or entry.get(DEFAULT_LANG) or ""
+
+
+async def _resolve_lang(context: Context, session_umo: str) -> str:
+    """解析语言;上下文缺少 ``get_lang``(如测试替身)时回退默认语言。"""
+    get_lang = getattr(context, "get_lang", None)
+    if get_lang is None:
+        return DEFAULT_LANG
+    try:
+        return await get_lang(session_umo)
+    except BaseException:
+        return DEFAULT_LANG

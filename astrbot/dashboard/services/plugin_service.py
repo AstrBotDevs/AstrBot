@@ -34,6 +34,7 @@ from astrbot.core.star.star_manager import (
     PluginVersionUnsupportedError,
 )
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_temp_path
+from astrbot.core.utils.lang_utils import normalize_lang
 
 PLUGIN_UPDATE_CONCURRENCY = 3
 PLUGIN_OPERATION_FAILED_MESSAGE = "插件操作失败，请查看服务端日志。"
@@ -221,11 +222,11 @@ class PluginService:
         )
 
     def _get_global_language(self) -> str:
-        """取全局语言配置(/lang 的全局默认值),用于指令名多语言显示。"""
+        """取全局语言配置(归一化),用于指令名多语言显示。"""
         config = getattr(self.core_lifecycle, "astrbot_config", None)
         if config is None:
-            return "zh-CN"
-        return str(config.get("language", "en-US"))
+            return "en-US"
+        return normalize_lang(config.get("language")) or "en-US"
 
     async def get_plugin_detail(
         self,

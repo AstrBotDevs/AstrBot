@@ -311,7 +311,7 @@ try:
 except ImportError:  # older AstrBot without these APIs
 
     async def get_lang(context, umo=None):
-        return "zh-CN"  # fall back to a fixed language
+        return "en-US"  # fall back to a fixed language
 
     def multi_alias(**langs):
         return set(langs.values())  # aliases still work (without language info)

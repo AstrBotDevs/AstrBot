@@ -258,7 +258,7 @@ async def weather(self, event, city: str):
 
 - `context.get_lang(umo)` 也可以直接在插件内使用，二者等价。
 - 框架不翻译插件文案，插件自行维护翻译表；缺语言时建议回退到 `en-US` 或 `zh-CN`。
-- 语言来源：**全局 `language` 配置**（`data/cmd_config.json`，默认 `zh-CN`）。
+- 语言来源：**全局 `language` 配置**（`data/cmd_config.json`，默认 `en-US`）。
 
 ### 用户设置语言
 
@@ -271,8 +271,8 @@ async def weather(self, event, city: str):
 /lang reset     → 恢复默认语言 en-US(仅管理员)
 ```
 
-管理员也可直接编辑 `data/cmd_config.json` 的 `language` 字段(默认 `zh-CN`)。
-全局配置填错时按 `zh-CN` 生效，启动日志与 `/lang` 查看会给出提示。
+管理员也可直接编辑 `data/cmd_config.json` 的 `language` 字段(默认 `en-US`)。
+全局配置填错时按 `en-US` 生效，启动日志与 `/lang` 查看会给出提示。
 
 > WebUI 里**指令名**按该全局配置显示（`multi_alias` 注册的对应语言别名）；
 > 指令**描述**按 WebUI 界面语言显示。
@@ -301,7 +301,7 @@ try:
 except ImportError:  # 旧版 AstrBot 没有这些 API
 
     async def get_lang(context, umo=None):
-        return "zh-CN"  # 降级为固定语言
+        return "en-US"  # 降级为固定语言
 
     def multi_alias(**langs):
         return set(langs.values())  # 降级:别名仍可用(不带语言信息)

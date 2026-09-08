@@ -9,6 +9,7 @@ from astrbot.core.star.command_management import (
     toggle_command,
     update_command_permission,
 )
+from astrbot.core.utils.lang_utils import normalize_lang
 
 
 class CommandServiceError(Exception):
@@ -36,8 +37,8 @@ class CommandService:
             "items": commands,
             "summary": summary,
             "wake_prefix": wake_prefix,
-            # 全局语言配置:前端据此显示指令的多语言名称(/lang 的全局默认值)
-            "language": self.config.get("language", "en-US"),
+            # 全局语言配置(归一化后返回):前端据此显示指令的多语言名称
+            "language": normalize_lang(self.config.get("language")) or "en-US",
         }
 
     async def list_conflicts(self):
