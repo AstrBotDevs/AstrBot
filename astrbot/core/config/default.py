@@ -1629,6 +1629,18 @@ CONFIG_METADATA_2 = {
                         "proxy": "",
                         "custom_headers": {},
                     },
+                    "ScitiX": {
+                        "id": "scitix",
+                        "provider": "scitix",
+                        "type": "openai_chat_completion",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "api_base": "https://api.scitix.ai/model-api/v1",
+                        "timeout": 120,
+                        "proxy": "",
+                        "custom_headers": {},
+                    },
                     "PPIO": {
                         "id": "ppio",
                         "provider": "ppio",
