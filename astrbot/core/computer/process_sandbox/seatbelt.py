@@ -98,6 +98,22 @@ class SeatbeltProcessSandbox(UnixProcessSandbox):
         if spec.allow_network:
             profile = profile.replace("(deny network*)", "(allow network*)")
 
+        root_definitions: list[str] = []
+        if spec.filesystem_scope == "workspace":
+            writable_roots = {root.resolve() for root in spec.writable_roots}
+            readable_roots = {
+                root.resolve()
+                for root in (*spec.readable_roots, *spec.writable_roots)
+                if root.is_dir()
+            }
+            for index, root in enumerate(sorted(readable_roots)):
+                parameter = f"ALLOWED_ROOT_{index}"
+                root_definitions.extend(("-D", f"{parameter}={root}"))
+                operations = "file-read* file-map-executable"
+                if root in writable_roots:
+                    operations += " file-write*"
+                profile += f'\n(allow {operations} (subpath (param "{parameter}")))\n'
+
         executable_definitions: list[str] = []
         executable_rules: list[str] = []
         for index, read_path in enumerate(self._executable_read_paths(executable_path)):
@@ -121,6 +137,7 @@ class SeatbeltProcessSandbox(UnixProcessSandbox):
             seatbelt_path,
             "-D",
             f"WORKSPACE={workspace}",
+            *root_definitions,
             *executable_definitions,
             "-D",
             f"PYTHON_PREFIX={Path(sys.prefix).resolve()}",

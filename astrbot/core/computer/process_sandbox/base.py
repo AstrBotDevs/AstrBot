@@ -55,6 +55,9 @@ class SandboxSpec:
         filesystem_scope: Whether the process sees only its workspace or the
             host filesystem.
         limits: Resource ceilings enforced by the platform backend.
+        readable_roots: Additional directories that may be read in workspace scope.
+        writable_roots: Additional directories that may be read and modified in
+            workspace scope. Missing writable directories are created before launch.
     """
 
     workspace: Path
@@ -62,6 +65,8 @@ class SandboxSpec:
     allow_network: bool = False
     filesystem_scope: str = "workspace"
     limits: SandboxLimits = field(default_factory=SandboxLimits)
+    readable_roots: tuple[Path, ...] = ()
+    writable_roots: tuple[Path, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -184,6 +189,9 @@ class ProcessSandbox(ABC):
         workspace = spec.workspace.resolve()
         if not workspace.is_dir():
             raise RuntimeError(f"Sandbox workspace does not exist: {workspace}")
+        if spec.filesystem_scope == "workspace":
+            for root in spec.writable_roots:
+                root.mkdir(parents=True, exist_ok=True)
 
         normalized_env: dict[str, str] = {}
         for raw_key, raw_value in (env or {}).items():

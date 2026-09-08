@@ -12,6 +12,7 @@ from astrbot.core.computer.computer_client import get_booter, get_local_booter
 from astrbot.core.message.message_event_result import MessageChain
 
 from ..registry import builtin_tool
+from .fs import _read_allowed_roots, _write_allowed_roots
 from .util import (
     check_admin_permission,
     check_local_execution_permission,
@@ -156,6 +157,17 @@ class LocalPythonTool(FunctionTool):
         try:
             current_workspace_root = await workspace_root_for_context(context)
             current_workspace_root.mkdir(parents=True, exist_ok=True)
+            sandbox_roots = {}
+            if sandboxed and local_policy.filesystem_scope == "workspace":
+                umo = context.context.event.unified_msg_origin
+                sandbox_roots = {
+                    "readable_roots": _read_allowed_roots(umo, current_workspace_root),
+                    "writable_roots": _write_allowed_roots(
+                        umo,
+                        current_workspace_root,
+                        include_installed_skills=context.context.event.role == "admin",
+                    ),
+                }
             result = await sb.python.exec(
                 code,
                 timeout=effective_timeout,
@@ -164,6 +176,7 @@ class LocalPythonTool(FunctionTool):
                 sandboxed=sandboxed,
                 allow_network=local_policy.allow_network,
                 filesystem_scope=local_policy.filesystem_scope,
+                **sandbox_roots,
             )
             return await handle_result(result, context.context.event)
         except Exception as e:

@@ -265,6 +265,8 @@ class LocalShellComponent(ShellComponent):
         sandboxed: bool,
         allow_network: bool = False,
         filesystem_scope: str = "workspace",
+        readable_roots: tuple[Path, ...] = (),
+        writable_roots: tuple[Path, ...] = (),
         cwd: str | None = None,
         env: dict[str, str] | None = None,
         timeout: int | None = None,
@@ -281,6 +283,8 @@ class LocalShellComponent(ShellComponent):
             sandboxed: Whether the process is isolated from the host.
             allow_network: Whether an isolated process may access the network.
             filesystem_scope: Filesystem scope applied to an isolated process.
+            readable_roots: Additional directories readable by an isolated process.
+            writable_roots: Additional directories writable by an isolated process.
             cwd: Working directory for the process.
             env: Additional environment variables.
             timeout: Hard process lifetime in seconds. None disables it.
@@ -320,6 +324,8 @@ class LocalShellComponent(ShellComponent):
                         workspace=working_dir,
                         allow_network=allow_network,
                         filesystem_scope=filesystem_scope,
+                        readable_roots=readable_roots,
+                        writable_roots=writable_roots,
                     ),
                     env={str(k): str(v) for k, v in (env or {}).items()},
                 )
@@ -923,6 +929,8 @@ class LocalPythonComponent(PythonComponent):
         sandboxed: bool = False,
         allow_network: bool = False,
         filesystem_scope: str = "workspace",
+        readable_roots: tuple[Path, ...] = (),
+        writable_roots: tuple[Path, ...] = (),
     ) -> dict[str, Any]:
         """Execute Python locally, optionally inside the platform sandbox.
 
@@ -935,6 +943,8 @@ class LocalPythonComponent(PythonComponent):
             sandboxed: Whether to isolate execution with the platform sandbox.
             allow_network: Whether an isolated process may access the network.
             filesystem_scope: Filesystem scope applied to an isolated process.
+            readable_roots: Additional directories readable by an isolated process.
+            writable_roots: Additional directories writable by an isolated process.
 
         Returns:
             Python output and error data in the computer component format.
@@ -953,6 +963,8 @@ class LocalPythonComponent(PythonComponent):
                             workspace=working_dir,
                             allow_network=allow_network,
                             filesystem_scope=filesystem_scope,
+                            readable_roots=readable_roots,
+                            writable_roots=writable_roots,
                         ),
                         timeout=timeout,
                         output_limit=_LOCAL_SANDBOX_MAX_OUTPUT_BYTES,

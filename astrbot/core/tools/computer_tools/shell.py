@@ -16,6 +16,7 @@ from astrbot.core.computer.computer_client import get_booter
 from astrbot.core.utils.astrbot_path import get_astrbot_system_tmp_path
 
 from ..registry import builtin_tool
+from .fs import _read_allowed_roots, _write_allowed_roots
 from .util import (
     check_local_execution_permission,
     is_local_runtime,
@@ -128,6 +129,20 @@ class ExecuteShellTool(FunctionTool):
                 creator_id = context.context.event.get_sender_id()
                 if not creator_id:
                     return "Error executing command: sender identity is unavailable."
+                sandbox_roots = {}
+                if local_policy and local_policy.filesystem_scope == "workspace":
+                    umo = context.context.event.unified_msg_origin
+                    sandbox_roots = {
+                        "readable_roots": _read_allowed_roots(
+                            umo, current_workspace_root
+                        ),
+                        "writable_roots": _write_allowed_roots(
+                            umo,
+                            current_workspace_root,
+                            include_installed_skills=context.context.event.role
+                            == "admin",
+                        ),
+                    }
                 started_at = monotonic()
                 result = await sb.shell.exec_managed(
                     command,
@@ -145,6 +160,7 @@ class ExecuteShellTool(FunctionTool):
                     env=env,
                     timeout=min(timeout or 300, 300) if sandboxed else timeout,
                     yield_time_ms=0 if background else yield_time_ms,
+                    **sandbox_roots,
                 )
                 elapsed_seconds = monotonic() - started_at
                 if result.get("session_closed") and result.get("status") in {

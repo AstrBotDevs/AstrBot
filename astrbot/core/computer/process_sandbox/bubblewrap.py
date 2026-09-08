@@ -9,6 +9,12 @@ from .base import SandboxSpec
 from .unix import UnixProcessSandbox, build_resource_limited_argv
 
 _TMP_BYTES = 256 * 1024 * 1024
+_NETWORK_CONFIG_PATHS = {
+    Path("/etc/resolv.conf"),
+    Path("/etc/hosts"),
+    Path("/etc/host.conf"),
+    Path("/etc/gai.conf"),
+}
 
 
 class BubblewrapProcessSandbox(UnixProcessSandbox):
@@ -82,6 +88,15 @@ class BubblewrapProcessSandbox(UnixProcessSandbox):
             Path(sys.base_prefix).resolve(),
         }
         if spec.filesystem_scope == "workspace":
+            if spec.allow_network:
+                readonly_paths.update(_NETWORK_CONFIG_PATHS)
+            readonly_paths.update(root.resolve() for root in spec.readable_roots)
+            writable_paths = {root.resolve() for root in spec.writable_roots}
+            if spec.workspace_writable:
+                writable_paths.add(workspace)
+            else:
+                readonly_paths.add(workspace)
+            readonly_paths.difference_update(writable_paths)
             if not any(
                 executable_path == path or executable_path.is_relative_to(path)
                 for path in readonly_paths
@@ -90,7 +105,7 @@ class BubblewrapProcessSandbox(UnixProcessSandbox):
             readonly_paths = {path for path in readonly_paths if path.exists()}
 
             required_directories = {Path("/tmp"), Path("/tmp/home")}
-            for path in (*readonly_paths, workspace):
+            for path in (*readonly_paths, *writable_paths):
                 required_directories.update(
                     parent
                     for parent in path.parents
@@ -105,19 +120,15 @@ class BubblewrapProcessSandbox(UnixProcessSandbox):
             command.extend(("--proc", "/proc", "--dev", "/dev"))
 
             for path in sorted(readonly_paths, key=lambda item: len(item.parts)):
-                if path.is_symlink():
+                # Resolver files often link into /run. Bind their contents without
+                # exposing the rest of the host service's runtime directory.
+                if path.is_symlink() and path not in _NETWORK_CONFIG_PATHS:
                     command.extend(("--symlink", os.readlink(path), str(path)))
                 else:
                     command.extend(("--ro-bind", str(path), str(path)))
-            command.extend(
-                (
-                    "--bind" if spec.workspace_writable else "--ro-bind",
-                    str(workspace),
-                    str(workspace),
-                    "--chdir",
-                    str(workspace),
-                )
-            )
+            for path in sorted(writable_paths, key=lambda item: len(item.parts)):
+                command.extend(("--bind", str(path), str(path)))
+            command.extend(("--chdir", str(workspace)))
 
         for key, value in sorted(env.items()):
             command.extend(("--setenv", key, value))

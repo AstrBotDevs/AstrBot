@@ -46,6 +46,16 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install uv
 
+      - name: Install Linux sandbox dependency
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap
+
+      - name: Verify macOS sandbox dependency
+        if: runner.os == 'macOS'
+        run: test -x /usr/bin/sandbox-exec
+
       - name: Run tests
         run: |
           chmod +x scripts/run_pytests_ci.sh

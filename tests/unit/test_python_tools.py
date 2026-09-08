@@ -1,7 +1,7 @@
 import os
 import platform
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import ANY, AsyncMock, MagicMock
 
 import pytest
 
@@ -130,6 +130,8 @@ async def test_local_python_tool_uses_session_workspace(tmp_path, monkeypatch):
         sandboxed=True,
         allow_network=True,
         filesystem_scope="workspace",
+        readable_roots=ANY,
+        writable_roots=ANY,
     )
 
 
@@ -187,6 +189,8 @@ async def test_local_member_python_uses_sandbox_backend(
         sandboxed=True,
         allow_network=False,
         filesystem_scope="workspace",
+        readable_roots=ANY,
+        writable_roots=ANY,
     )
 
 

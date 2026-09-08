@@ -2,7 +2,7 @@ import asyncio
 import inspect
 import json
 import os
-from unittest.mock import AsyncMock
+from unittest.mock import ANY, AsyncMock
 
 import pytest
 
@@ -185,6 +185,8 @@ async def test_local_execute_shell_manages_running_and_closed_results(
         sandboxed=True,
         allow_network=True,
         filesystem_scope="workspace",
+        readable_roots=ANY,
+        writable_roots=ANY,
         cwd=str(tmp_path),
         env={},
         timeout=300,
@@ -357,6 +359,8 @@ async def test_local_member_shell_uses_sandbox_backend(
         sandboxed=True,
         allow_network=False,
         filesystem_scope="workspace",
+        readable_roots=ANY,
+        writable_roots=ANY,
     )
 
 
