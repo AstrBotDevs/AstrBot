@@ -25,7 +25,6 @@ from astrbot.core.computer.process_sandbox import (
 from astrbot.core.tools.computer_tools import fs, python, shell
 from astrbot.dashboard.services import stat_service
 
-
 requires_local_sandbox = pytest.mark.skipif(
     not (
         (sys.platform.startswith("linux") and shutil.which("bwrap"))
@@ -33,6 +32,50 @@ requires_local_sandbox = pytest.mark.skipif(
     ),
     reason="Requires a supported Local process sandbox.",
 )
+
+
+@requires_local_sandbox
+@pytest.mark.asyncio
+async def test_managed_shell_output_cannot_be_redirected_outside_sandbox(
+    monkeypatch, tmp_path
+):
+    """Keep host output reads on the original handle after shared-path attacks."""
+    workspace = tmp_path / "workspace"
+    shared_temp = tmp_path / "shared-temp"
+    workspace.mkdir()
+    shared_temp.mkdir()
+    secret = tmp_path / "host-only.txt"
+    secret.write_text("host-only marker", encoding="utf-8")
+    monkeypatch.setattr(local, "get_astrbot_system_tmp_path", lambda: str(shared_temp))
+    code = f"""
+from pathlib import Path
+
+secret = Path({str(secret)!r})
+assert not secret.exists(), "The host file must be outside the sandbox."
+for log in Path({str(shared_temp)!r}).rglob("sh_*.log"):
+    log.unlink()
+    log.symlink_to(secret)
+print("original process output")
+"""
+    component = local.LocalShellComponent()
+    try:
+        result = await component.exec_managed(
+            shlex.join(["python", "-c", code]),
+            owner_id="test:GroupMessage:output",
+            creator_id="member",
+            creator_is_admin=False,
+            sandboxed=True,
+            permission_check=lambda: True,
+            cwd=str(workspace),
+            writable_roots=(shared_temp,),
+            timeout=10,
+        )
+        assert result["exit_code"] == 0, result
+        assert result["stdout"] == "original process output\n"
+        assert result["session_closed"] is True
+        assert secret.read_text(encoding="utf-8") == "host-only marker"
+    finally:
+        await component.shutdown_sessions()
 
 
 @requires_local_sandbox
@@ -96,7 +139,9 @@ def test_local_sandbox_protects_venv_inside_writable_roots(
     attachments = tmp_path / "attachments"
     workspace.mkdir()
     attachments.mkdir()
-    parent = {"workspace": workspace, "writable_root": attachments}.get(location, tmp_path)
+    parent = {"workspace": workspace, "writable_root": attachments}.get(
+        location, tmp_path
+    )
     prefix = parent / ".venv"
     base_python = Path(sys._base_executable)
     subprocess.run(
@@ -166,7 +211,9 @@ print("virtualenv is read-only")
         [str(executable), "-c", code],
         SandboxSpec(
             workspace=workspace,
-            writable_roots=(package.parent if location == "writable_packages" else attachments,),
+            writable_roots=(
+                package.parent if location == "writable_packages" else attachments,
+            ),
         ),
         timeout=15,
     )

@@ -1268,6 +1268,7 @@ async def test_managed_shell_cleans_children_after_leader_exits():
         session.permission_check = None
         await asyncio.wait_for(shell.shutdown_sessions(invalid_only=True), 8)
         assert session.reader_task.done()
+        assert session.output_file.closed
         assert not shell._sessions
     finally:
         await shell.shutdown_sessions()
@@ -1510,6 +1511,7 @@ async def test_managed_shell_hard_timeout_terminates_session():
         timeout=1,
         yield_time_ms=0,
     )
+    session = shell._sessions[result["session_id"]]
 
     try:
         timed_out = await shell.poll_session(
@@ -1523,6 +1525,7 @@ async def test_managed_shell_hard_timeout_terminates_session():
         assert timed_out["status"] == "timed_out"
         assert timed_out["exit_code"] is not None
         assert timed_out["session_closed"] is True
+        assert session.output_file.closed
     finally:
         await shell.shutdown_sessions()
 
@@ -1540,10 +1543,12 @@ async def test_managed_shell_keeps_completed_session_until_output_is_drained():
         yield_time_ms=5_000,
         max_output_chars=10_000,
     )
+    session = shell._sessions[result["session_id"]]
 
     try:
         assert result["status"] == "completed"
         assert result["has_more"] is True
+        assert not session.output_file.closed
         output = result["stdout"]
         while result["has_more"]:
             result = await shell.poll_session(
@@ -1557,6 +1562,7 @@ async def test_managed_shell_keeps_completed_session_until_output_is_drained():
 
         assert output.splitlines() == ["x" * 25000]
         assert result["session_closed"] is True
+        assert session.output_file.closed
         assert await shell.list_sessions(
             owner_id="owner-a",
             requester_id="user-a",

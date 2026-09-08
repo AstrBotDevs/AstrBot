@@ -1,19 +1,21 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import locale
 import os
 import shutil
 import signal
 import subprocess
 import sys
+import tempfile
+import threading
 import time
 import uuid
+from _thread import LockType
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, BinaryIO, cast
 
 if sys.version_info < (3, 14):
     import python_ripgrep
@@ -140,7 +142,8 @@ class _LocalShellSession:
     creator_is_admin: bool
     sandboxed: bool
     process: SandboxProcess | asyncio.subprocess.Process
-    output_path: Path
+    output_file: BinaryIO
+    output_lock: LockType
     started_at: float
     output_event: asyncio.Event
     reader_task: asyncio.Task[None]
@@ -314,19 +317,18 @@ class LocalShellComponent(ShellComponent):
 
         working_dir = Path(cwd).resolve() if cwd else Path(get_astrbot_root()).resolve()
         session_id = f"sh_{uuid.uuid4().hex[:16]}"
-        owner_digest = hashlib.sha256(owner_id.encode("utf-8")).hexdigest()[:16]
-        output_dir = Path(get_astrbot_system_tmp_path()) / "shell" / owner_digest
+        output_dir = Path(get_astrbot_system_tmp_path())
         output_dir.mkdir(parents=True, exist_ok=True)
-        output_path = output_dir / f"{session_id}.log"
-        output_path.touch()
-
         # Configuration invalidation must also see processes still being spawned.
         async with self._sessions_lock:
             if not permission_check():
-                output_path.unlink(missing_ok=True)
                 raise PermissionError(
                     "Local shell permissions changed; retry the command."
                 )
+            # Shared temporary roots are writable by sandboxed processes. Keep
+            # output on an anonymous handle to prevent redirecting host I/O.
+            output_file = tempfile.TemporaryFile(mode="w+b", dir=output_dir)
+            output_lock = threading.Lock()
             try:
                 if sandboxed:
                     process = await create_process_sandbox().spawn_shell(
@@ -376,8 +378,8 @@ class LocalShellComponent(ShellComponent):
                         stderr=asyncio.subprocess.STDOUT,
                         **process_kwargs,
                     )
-            except Exception:
-                output_path.unlink(missing_ok=True)
+            except BaseException:
+                output_file.close()
                 raise
 
             output_event = asyncio.Event()
@@ -386,24 +388,25 @@ class LocalShellComponent(ShellComponent):
                 if process.stdout is None:
                     return
                 output_size = 0
-                with output_path.open("ab") as output_file:
-                    while chunk := await process.stdout.read(8192):
-                        if sandboxed:
-                            remaining = _LOCAL_SANDBOX_MAX_OUTPUT_BYTES - output_size
-                            if remaining <= 0:
-                                session.output_limited = True
-                                process.terminate()
-                                return
-                            if len(chunk) > remaining:
-                                chunk = chunk[:remaining]
-                                session.output_limited = True
-                        output_file.write(chunk)
-                        output_file.flush()
-                        output_size += len(chunk)
-                        output_event.set()
-                        if session.output_limited:
+                while chunk := await process.stdout.read(8192):
+                    if sandboxed:
+                        remaining = _LOCAL_SANDBOX_MAX_OUTPUT_BYTES - output_size
+                        if remaining <= 0:
+                            session.output_limited = True
                             process.terminate()
                             return
+                        if len(chunk) > remaining:
+                            chunk = chunk[:remaining]
+                            session.output_limited = True
+                    with output_lock:
+                        output_file.seek(0, os.SEEK_END)
+                        output_file.write(chunk)
+                        output_file.flush()
+                    output_size += len(chunk)
+                    output_event.set()
+                    if session.output_limited:
+                        process.terminate()
+                        return
 
             reader_task = asyncio.create_task(
                 _capture_output(),
@@ -421,7 +424,8 @@ class LocalShellComponent(ShellComponent):
                 creator_is_admin=creator_is_admin,
                 sandboxed=sandboxed,
                 process=process,
-                output_path=output_path,
+                output_file=output_file,
+                output_lock=output_lock,
                 started_at=time.time(),
                 output_event=output_event,
                 reader_task=reader_task,
@@ -528,8 +532,8 @@ class LocalShellComponent(ShellComponent):
                 )
             )
             try:
-                output_size = session.output_path.stat().st_size
-            except OSError:
+                output_size = os.fstat(session.output_file.fileno()).st_size
+            except (OSError, ValueError):
                 output_size = session.cursor
             items.append(
                 {
@@ -588,14 +592,13 @@ class LocalShellComponent(ShellComponent):
             raise ValueError("`cursor` must be greater than or equal to 0.")
 
         def _read_output() -> tuple[bytes, int, int]:
-            try:
-                output_size = session.output_path.stat().st_size
-            except FileNotFoundError:
-                return b"", read_cursor, read_cursor
-            normalized_cursor = min(read_cursor, output_size)
-            with session.output_path.open("rb") as output_file:
-                output_file.seek(normalized_cursor)
-                raw_output = output_file.read(max_output_chars)
+            with session.output_lock:
+                if session.output_file.closed:
+                    return b"", read_cursor, read_cursor
+                output_size = os.fstat(session.output_file.fileno()).st_size
+                normalized_cursor = min(read_cursor, output_size)
+                session.output_file.seek(normalized_cursor)
+                raw_output = session.output_file.read(max_output_chars)
             return (
                 raw_output,
                 normalized_cursor + len(raw_output),
@@ -956,11 +959,8 @@ class LocalShellComponent(ShellComponent):
                 await timeout_task
             except asyncio.CancelledError:
                 pass
-        session.output_path.unlink(missing_ok=True)
-        try:
-            session.output_path.parent.rmdir()
-        except OSError:
-            pass
+        with session.output_lock:
+            session.output_file.close()
 
 
 @dataclass

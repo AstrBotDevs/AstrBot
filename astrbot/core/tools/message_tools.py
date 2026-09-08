@@ -179,6 +179,12 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                         f"Blocked path: {local_candidate}."
                     )
 
+        # Local runtime has no separate sandbox: the workspace and local-file
+        # branches above already enforced the caller's permissions, so probing
+        # the host shell here would bypass them and expose host paths.
+        if is_local_runtime(context):
+            raise FileNotFoundError(f"{component_type} path does not exist: {path}")
+
         try:
             sb = await get_booter(
                 context.context.context,

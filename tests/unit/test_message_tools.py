@@ -291,7 +291,9 @@ async def test_send_message_empty_messages_returns_error():
 async def test_send_message_missing_image_path_stops_before_send(tmp_path, monkeypatch):
     """Missing image paths fail before sending any message components."""
     tool = SendMessageToUserTool()
-    ctx = _make_context()
+    # Sandbox runtime so the booter is still consulted for missing paths;
+    # local runtime now rejects them before any booter call.
+    ctx = _make_context(runtime="sandbox")
     missing_image_path = tmp_path / "missing.png"
 
     async def mock_get_booter(*args, **kwargs):
@@ -525,3 +527,55 @@ async def test_send_message_downloads_trailing_slash_sandbox_file_with_basename(
     sent_chain = ctx.context.context.send_message.await_args.args[1]
     sent_file = sent_chain.chain[0]
     assert sent_file.name == "export"
+
+
+@pytest.mark.asyncio
+async def test_send_message_local_runtime_skips_sandbox_file_probe(
+    tmp_path, monkeypatch
+):
+    """Local runtime must resolve send-file paths only via permission-checked branches.
+
+    Falling through to the booter branch would probe the host shell without
+    the caller's filesystem permissions.
+    """
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    secret = tmp_path / "host-only.txt"
+    secret.write_text("host-only marker", encoding="utf-8")
+    allowed = workspace / "allowed.txt"
+    allowed.write_text("workspace file", encoding="utf-8")
+
+    async def mock_workspace_root_for_context(_context):
+        return workspace
+
+    async def mock_get_booter(*args, **kwargs):
+        del args, kwargs
+        raise AssertionError("local runtime must not query a sandbox booter")
+
+    monkeypatch.setattr(
+        "astrbot.core.tools.message_tools.workspace_root_for_context",
+        mock_workspace_root_for_context,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.tools.message_tools.get_booter",
+        mock_get_booter,
+    )
+
+    tool = SendMessageToUserTool()
+    ctx = _make_context(
+        role="member",
+        local_permissions={
+            "member": {
+                "allow_execution": False,
+                "allow_network": False,
+                "filesystem_scope": "workspace",
+            }
+        },
+    )
+
+    resolved, downloaded = await tool._resolve_path_from_sandbox(ctx, "allowed.txt")
+    assert resolved == str(allowed.resolve())
+    assert downloaded is False
+
+    with pytest.raises(FileNotFoundError):
+        await tool._resolve_path_from_sandbox(ctx, "host-only.txt")
