@@ -220,6 +220,13 @@ class PluginService:
             discover_pages=discover_pages,
         )
 
+    def _get_global_language(self) -> str:
+        """取全局语言配置(/lang 的全局默认值),用于指令名多语言显示。"""
+        config = getattr(self.core_lifecycle, "astrbot_config", None)
+        if config is None:
+            return "zh-CN"
+        return str(config.get("language", "zh-CN"))
+
     async def get_plugin_detail(
         self,
         *,
@@ -251,6 +258,8 @@ class PluginService:
                     plugin,
                     serialize_pages,
                 ),
+                # 全局语言配置:前端据此显示指令的多语言名称(/lang 的全局默认值)
+                "language": self._get_global_language(),
             }
 
         raise PluginServiceError("插件不存在")
@@ -849,6 +858,18 @@ class PluginService:
         i18n = getattr(handler_md, "desc_i18n", None) or {}
         return {k: str(v) for k, v in i18n.items() if isinstance(v, str)}
 
+    @staticmethod
+    def _get_command_i18n_names(
+        command_filter: CommandFilter | CommandGroupFilter,
+    ) -> dict[str, str]:
+        """取指令的分语言名称(来自 multi_alias 的别名映射),键为语言代码。"""
+        alias_lang_map = getattr(command_filter, "alias_lang_map", None) or {}
+        names: dict[str, str] = {}
+        for alias, lang in alias_lang_map.items():
+            if alias and lang:
+                names.setdefault(str(lang), str(alias))
+        return names
+
     def _build_command_filter_component(
         self,
         command_filter: CommandFilter,
@@ -865,6 +886,7 @@ class PluginService:
                 fallback_desc,
             ),
             "descriptions": self._get_command_i18n_descriptions(command_filter),
+            "names": self._get_command_i18n_names(command_filter),
         }
         return self._wrap_command_component(parts[:-1], component)
 
@@ -888,6 +910,7 @@ class PluginService:
                 fallback_desc,
             ),
             "descriptions": self._get_command_i18n_descriptions(command_group_filter),
+            "names": self._get_command_i18n_names(command_group_filter),
         }
         if subcommands:
             component["subcommands"] = subcommands
@@ -902,6 +925,7 @@ class PluginService:
                 "name": command_filter.group_name,
                 "description": self._get_command_description(command_filter),
                 "descriptions": self._get_command_i18n_descriptions(command_filter),
+                "names": self._get_command_i18n_names(command_filter),
             }
             subcommands = [
                 self._build_command_group_child(sub_filter)
@@ -915,6 +939,7 @@ class PluginService:
             "name": command_filter.command_name,
             "description": self._get_command_description(command_filter),
             "descriptions": self._get_command_i18n_descriptions(command_filter),
+            "names": self._get_command_i18n_names(command_filter),
         }
 
     @staticmethod

@@ -10,6 +10,8 @@ export function useComponentData() {
   const commands = ref<CommandItem[]>([]);
   const tools = ref<ToolItem[]>([]);
   const toolsLoading = ref(false);
+  /** 全局语言配置(/lang 的全局默认值),用于指令名多语言显示 */
+  const globalLanguage = ref<string>('zh-CN');
   const summary = reactive<CommandSummary>({
     disabled: 0,
     conflicts: 0
@@ -42,6 +44,9 @@ export function useComponentData() {
         const s = res.data.data.summary || {};
         summary.disabled = s.disabled || 0;
         summary.conflicts = s.conflicts || 0;
+        if (typeof res.data.data.language === 'string' && res.data.data.language) {
+          globalLanguage.value = res.data.data.language;
+        }
       } else {
         toast(res.data.message || errorMessage, 'error');
       }
@@ -73,6 +78,7 @@ export function useComponentData() {
     commands,
     tools,
     toolsLoading,
+    globalLanguage,
     summary,
     snackbar,
     toast,

@@ -528,6 +528,20 @@ const openComponentPage = (component) => {
 const getCommandRowKey = (component, path) =>
   component?.handler_full_name || component?.path || path.join(" ");
 
+/** 指令名按全局语言配置显示:names[全局lang] -> 组件原名 */
+const globalLanguage = computed(() =>
+  String(pluginData.value?.language || "zh-CN"),
+);
+
+const resolveCommandName = (component, fallback) => {
+  const names = component?.names;
+  if (names && typeof names === "object") {
+    const localized = names[globalLanguage.value];
+    if (localized) return String(localized);
+  }
+  return fallback;
+};
+
 const buildCommandComponentRows = (commandComponents) => {
   const rows = [];
 
@@ -546,7 +560,7 @@ const buildCommandComponentRows = (commandComponents) => {
         children.length > 0 ? "group" : depth > 0 ? "subCommand" : "handler",
       key,
       component,
-      displayCommand: name,
+      displayCommand: resolveCommandName(component, name),
       children,
       depth,
     });

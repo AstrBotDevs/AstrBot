@@ -37,6 +37,8 @@ class CommandDescriptor:
     original_command: str | None = None
     effective_command: str | None = None
     aliases: list[str] = field(default_factory=list)
+    alias_lang_map: dict[str, str] = field(default_factory=dict)
+    """别名 -> 语言代码 映射(来自 ``multi_alias``);用于按语言显示指令名。"""
     permission: str = "everyone"
     enabled: bool = True
     is_group: bool = False
@@ -338,6 +340,7 @@ def _build_descriptor(handler: StarHandlerMetadata) -> CommandDescriptor | None:
         original_command=original_command,
         effective_command=effective_command,
         aliases=sorted(getattr(filter_ref, "alias", set())),
+        alias_lang_map=dict(getattr(filter_ref, "alias_lang_map", {}) or {}),
         permission=_determine_permission(handler),
         enabled=handler.enabled,
         is_group=isinstance(filter_ref, CommandGroupFilter),
@@ -543,6 +546,25 @@ def _is_command_in_use(
     return False
 
 
+def _localized_command_names(desc: CommandDescriptor) -> dict[str, str]:
+    """返回 ``语言代码 -> 该语言下的指令名``(来自多语言别名)。
+
+    仅包含通过 ``multi_alias`` 注册了语言映射的别名;无映射时返回空字典,
+    调用方回退到 ``effective_command``(主命令名)。
+
+    Args:
+        desc: 指令描述符。
+
+    Returns:
+        语言代码到指令显示名的映射,如 ``{"zh-CN": "天气", "ja-JP": "天気"}``。
+    """
+    names: dict[str, str] = {}
+    for alias, lang in desc.alias_lang_map.items():
+        if alias and lang:
+            names.setdefault(lang, alias)
+    return names
+
+
 def _descriptor_to_dict(desc: CommandDescriptor) -> dict[str, Any]:
     result = {
         "handler_full_name": desc.handler_full_name,
@@ -559,6 +581,7 @@ def _descriptor_to_dict(desc: CommandDescriptor) -> dict[str, Any]:
         "current_fragment": desc.current_fragment,
         "effective_command": desc.effective_command,
         "aliases": desc.aliases,
+        "names": _localized_command_names(desc),
         "permission": desc.permission,
         "enabled": desc.enabled,
         "plugin_activated": _is_plugin_activated(desc),

@@ -12,6 +12,8 @@ export interface CommandItem {
   description: string;
   /** 分语言描述,键为语言代码(如 zh-CN);由插件 desc_i18n 提供 */
   descriptions?: Record<string, string>;
+  /** 分语言指令名,键为语言代码(如 zh-CN);由插件 multi_alias 提供 */
+  names?: Record<string, string>;
   type: CommandType;
   parent_signature: string;
   parent_group_handler: string;

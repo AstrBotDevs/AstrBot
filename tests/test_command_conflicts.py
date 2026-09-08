@@ -6,7 +6,9 @@ from types import SimpleNamespace
 
 from astrbot.core.star.command_management import (
     CommandDescriptor,
+    _descriptor_to_dict,
     _group_conflicts,
+    _localized_command_names,
 )
 
 
@@ -16,6 +18,7 @@ def _desc(
     aliases: list[str] | None = None,
     parent_signature: str = "",
     enabled: bool = True,
+    alias_lang_map: dict[str, str] | None = None,
 ) -> CommandDescriptor:
     """构造一个用于冲突检测的最小 descriptor(不依赖插件注册表)。"""
     return CommandDescriptor(
@@ -23,10 +26,32 @@ def _desc(
         handler_full_name=handler_full_name,
         effective_command=effective,
         aliases=list(aliases or []),
+        alias_lang_map=dict(alias_lang_map or {}),
         parent_signature=parent_signature,
         module_path="test.module.not_registered",
         enabled=enabled,
     )
+
+
+def test_localized_command_names_from_multi_alias():
+    desc = _desc(
+        "m_a",
+        "weather",
+        ["天气", "天気"],
+        alias_lang_map={"天气": "zh-CN", "天気": "ja-JP"},
+    )
+    assert _localized_command_names(desc) == {"zh-CN": "天气", "ja-JP": "天気"}
+    # 也应通过 _descriptor_to_dict 暴露给前端
+    assert _descriptor_to_dict(desc)["names"] == {
+        "zh-CN": "天气",
+        "ja-JP": "天気",
+    }
+
+
+def test_localized_command_names_empty_without_mapping():
+    desc = _desc("m_a", "weather", ["天气"])
+    assert _localized_command_names(desc) == {}
+    assert _descriptor_to_dict(desc)["names"] == {}
 
 
 def test_no_conflict_for_distinct_commands():

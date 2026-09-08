@@ -11,6 +11,8 @@ const props = defineProps<{
   items: CommandItem[];
   expandedGroups: Set<string>;
   loading?: boolean;
+  /** 全局语言配置(/lang 的全局默认值),用于指令名多语言显示 */
+  globalLanguage?: string;
 }>();
 
 // Emits
@@ -27,6 +29,13 @@ const resolveDescription = (cmd: CommandItem): string => {
   const lang = locale.value;
   const descriptions = cmd.descriptions || {};
   return descriptions[lang] || cmd.description;
+};
+
+// 按全局语言配置解析指令名:names[globalLanguage] -> 主命令名
+const resolveCommandName = (cmd: CommandItem): string => {
+  const lang = props.globalLanguage || 'zh-CN';
+  const names = cmd.names || {};
+  return names[lang] || cmd.effective_command;
 };
 
 // 表格表头
@@ -135,7 +144,7 @@ const getRowProps = ({ item }: { item: CommandItem }) => {
           <div v-else-if="item.type === 'sub_command'" class="ml-6"></div>
           <div>
             <div class="text-subtitle-1 font-weight-medium">
-              <code :class="{ 'sub-command-code': item.type === 'sub_command' }">{{ item.effective_command }}</code>
+              <code :class="{ 'sub-command-code': item.type === 'sub_command' }">{{ resolveCommandName(item) }}</code>
             </div>
           </div>
         </div>
