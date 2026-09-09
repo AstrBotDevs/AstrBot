@@ -750,12 +750,18 @@ async def test_restricted_local_edit_reuses_first_opened_file(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("path", ["target.txt", None])
 async def test_restricted_local_grep_requests_read_only_os_sandbox(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
+    path,
 ):
     workspace = _setup_local_fs_tools(monkeypatch, tmp_path)
     (workspace / "target.txt").write_text("needle\n", encoding="utf-8")
+    missing_root = tmp_path / "missing-temp"
+    monkeypatch.setattr(
+        fs_tools, "_read_allowed_roots", lambda *args: (workspace, missing_root)
+    )
     calls = []
 
     class _RecordingFileSystem:
@@ -776,10 +782,12 @@ async def test_restricted_local_grep_requests_read_only_os_sandbox(
             local_permissions={"member": {"filesystem_scope": "workspace"}},
         ),
         pattern="needle",
-        path="target.txt",
+        path=path,
     )
 
     assert "needle" in result
+    assert len(calls) == 1
+    assert not missing_root.exists()
     assert calls[0]["sandboxed"] is True
     assert calls[0]["sandbox_root"] == str(workspace)
 

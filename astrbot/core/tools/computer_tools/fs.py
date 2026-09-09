@@ -800,6 +800,7 @@ class GrepTool(FunctionTool):
                 return [
                     str(root)
                     for root in _read_allowed_roots(umo, current_workspace_root)
+                    if root.exists()
                 ]
             if local_env:
                 return [str(current_workspace_root or _workspace_root(umo))]
