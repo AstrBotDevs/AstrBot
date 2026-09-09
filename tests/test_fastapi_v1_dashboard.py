@@ -1190,6 +1190,18 @@ async def test_dashboard_static_dist_files_are_served(
         "window.__astrbotStaticTest = true;",
         encoding="utf-8",
     )
+    (assets_folder / "index-AbCd1234.js").write_text(
+        "window.__astrbotHashedStaticTest = true;",
+        encoding="utf-8",
+    )
+    (assets_folder / "config-metadata.json").write_text("{}", encoding="utf-8")
+    (assets_folder / "version").write_text("v4.27.4", encoding="utf-8")
+    t2i_folder = static_folder / "t2i"
+    t2i_folder.mkdir()
+    (t2i_folder / "shiki_runtime.iife.js").write_text(
+        "window.__astrbotShikiRuntimeTest = true;",
+        encoding="utf-8",
+    )
     (tmp_path / "secret.txt").write_text("outside static root", encoding="utf-8")
 
     app = create_dashboard_asgi_app(
@@ -1204,7 +1216,13 @@ async def test_dashboard_static_dist_files_are_served(
         base_url="http://testserver",
     ) as client:
         asset_response = await client.get("/assets/index-demo.js")
+        hashed_asset_response = await client.get("/assets/index-AbCd1234.js")
+        word_suffix_asset_response = await client.get("/assets/config-metadata.json")
+        version_response = await client.get("/assets/version")
+        unversioned_asset_response = await client.get("/t2i/shiki_runtime.iife.js")
         favicon_response = await client.get("/favicon.svg")
+        root_response = await client.get("/")
+        index_response = await client.get("/index.html")
         page_response = await client.get("/config")
         missing_response = await client.get("/assets/missing.js")
         traversal_response = await client.get("/assets/%2E%2E/%2E%2E/secret.txt")
@@ -1212,9 +1230,21 @@ async def test_dashboard_static_dist_files_are_served(
 
     assert asset_response.status_code == 200
     assert "window.__astrbotStaticTest" in asset_response.text
+    assert asset_response.headers["cache-control"] == "no-cache"
+    assert hashed_asset_response.status_code == 200
+    assert hashed_asset_response.headers["cache-control"] == "no-cache"
+    assert word_suffix_asset_response.status_code == 200
+    assert word_suffix_asset_response.headers["cache-control"] == "no-cache"
+    assert version_response.status_code == 200
+    assert version_response.headers["cache-control"] == "no-store"
+    assert unversioned_asset_response.status_code == 200
+    assert unversioned_asset_response.headers["cache-control"] == "no-cache"
     assert favicon_response.status_code == 200
     assert favicon_response.text == "<svg></svg>"
+    assert root_response.headers["cache-control"] == "no-store"
+    assert index_response.headers["cache-control"] == "no-store"
     assert page_response.status_code == 200
+    assert page_response.headers["cache-control"] == "no-store"
     assert "/assets/index-demo.js" in page_response.text
     assert missing_response.status_code == 404
     assert missing_response.headers["content-type"].startswith("text/html")
@@ -1226,6 +1256,60 @@ async def test_dashboard_static_dist_files_are_served(
     assert "index.html" in missing_response.text
     assert traversal_response.status_code == 404
     assert api_response.status_code == 404
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("desktop_managed", "query", "should_clear_cache"),
+    [
+        (True, "?astrbot_bundle=desktop-4.27.5-core-4.27.5-webui-deadbeef", True),
+        (True, "", False),
+        (False, "?astrbot_bundle=desktop-4.27.5-core-4.27.5-webui-deadbeef", False),
+    ],
+)
+async def test_dashboard_index_clears_legacy_cache_only_for_desktop_bundle(
+    fake_core_lifecycle,
+    fake_db: FakeDb,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    desktop_managed: bool,
+    query: str,
+    should_clear_cache: bool,
+):
+    static_folder = tmp_path / "dist"
+    static_folder.mkdir()
+    (static_folder / "index.html").write_text(
+        "<!doctype html>",
+        encoding="utf-8",
+    )
+    if desktop_managed:
+        monkeypatch.setenv("ASTRBOT_DESKTOP_MANAGED", "1")
+    else:
+        monkeypatch.delenv("ASTRBOT_DESKTOP_MANAGED", raising=False)
+
+    app = create_dashboard_asgi_app(
+        core_lifecycle=fake_core_lifecycle,
+        db=fake_db,
+        jwt_secret=JWT_SECRET,
+        static_folder=str(static_folder),
+    )
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://testserver",
+    ) as client:
+        responses = [
+            await client.get(f"/{query}"),
+            await client.get(f"/index.html{query}"),
+        ]
+
+    for response in responses:
+        assert response.status_code == 200
+        assert response.headers["cache-control"] == "no-store"
+        if should_clear_cache:
+            assert response.headers["clear-site-data"] == '"cache"'
+        else:
+            assert "clear-site-data" not in response.headers
 
 
 @pytest.mark.asyncio
