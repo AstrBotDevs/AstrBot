@@ -349,6 +349,15 @@ class _PluginUpdater(_RepoZipUpdater):
         if "desc" not in normalized_metadata and "description" in normalized_metadata:
             normalized_metadata["desc"] = normalized_metadata["description"]
 
+        # YAML parses unquoted versions like `version: 2.4` as floats. Coerce
+        # scalar numbers to strings in the caller's dict as well, so callers
+        # reading the original metadata (e.g. StarMetadata loading) see a str.
+        for field in PLUGIN_METADATA_REQUIRED_FIELDS:
+            value = normalized_metadata.get(field)
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                normalized_metadata[field] = str(value)
+                metadata[field] = str(value)
+
         missing_fields = [
             field
             for field in PLUGIN_METADATA_REQUIRED_FIELDS
