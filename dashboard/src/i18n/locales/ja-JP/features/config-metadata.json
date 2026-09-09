@@ -317,11 +317,15 @@
       "provider_settings": {
         "computer_use_runtime": {
           "description": "実行環境",
-          "hint": "エージェントにアクセスを許可する環境です。`local` はローカル環境、`sandbox` はサンドボックス環境、`none` はどの環境も許可しないことを示します。"
+          "hint": "エージェントにアクセスを許可する環境です。",
+          "labels": ["環境を使用しない", "ローカルコンピューター", "外部サンドボックス"]
+        },
+        "computer_use_local_permissions": {
+          "description": "ローカル権限ポリシー"
         },
         "computer_use_require_admin": {
-          "description": "AstrBot 管理者権限を必須にする",
-          "hint": "有効にすると、コンピューター操作機能の利用に AstrBot 管理者権限が必要になります。管理者は「プラットフォーム設定 -> 管理者」で追加できます。/sid コマンドで管理者 ID を確認できます。"
+          "description": "サンドボックスに管理者権限を必須にする",
+          "hint": "有効にすると、外部サンドボックスの利用に AstrBot 管理者権限が必要になります。管理者は「プラットフォーム設定 -> 管理者」で追加できます。/sid コマンドで管理者 ID を確認できます。"
         },
         "sandbox": {
           "booter": {
@@ -382,6 +386,41 @@
           "shipyard_max_sessions": {
             "description": "Shipyard Ship のセッション再利用上限",
             "hint": "1 つのインスタンスが処理できる最大セッション数を指定します。"
+          }
+        }
+      },
+      "local_permissions": {
+        "role": "ユーザー区分",
+        "execution": "コード実行を許可",
+        "network": "実行環境のネットワーク接続を許可",
+        "filesystem": "ファイルアクセス範囲",
+        "scopes": {
+          "workspace": "ワークスペース",
+          "host": "ホストのファイル"
+        },
+        "roles": {
+          "member": "一般メンバー",
+          "admin": "管理者"
+        },
+        "accessMode": "ローカルコンピューターへのアクセス",
+        "modes": {
+          "none": "無効",
+          "files": "ファイルアクセスのみ",
+          "full": "制限なし"
+        },
+        "unsupportedSelection": "現在のポリシーはサポートされていません",
+        "runtimeUnknown": "実行環境の情報を取得できません。",
+        "memberWarning": "一般メンバーにネットワーク接続またはホストのファイルへのアクセスが許可されています。",
+        "runtime": {
+          "os": "OS",
+          "arch": "アーキテクチャ",
+          "sandbox": "ローカル隔離",
+          "unavailableHint": "サンドボックスの起動に失敗したため、制限付きの Shell/Python 実行とワークスペース内のファイル検索に影響があります。以下のエラーを参考に、システムのセキュリティポリシー（Linux の AppArmor やユーザー名前空間の制限など）またはコンテナの制限を確認し、修正後に AstrBot を再起動して再検査してください。",
+          "status": {
+            "detected": "{backend} · 起動確認済み",
+            "missing": "{dependency} が見つかりません",
+            "unavailable": "{backend} · インストール済みですが起動できません",
+            "unsupported": "未対応"
           }
         }
       }

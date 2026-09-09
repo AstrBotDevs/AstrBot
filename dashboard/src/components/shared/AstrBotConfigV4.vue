@@ -280,7 +280,7 @@ function getSpecialSubtype(value) {
         class="config-item"
       >
         <v-row v-if="!itemMeta?.invisible" class="config-row">
-          <v-col cols="12" sm="6" class="property-info">
+          <v-col cols="12" :sm="itemMeta?.full_width ? 12 : 6" class="property-info">
             <v-list-item density="compact">
               <v-list-item-title class="property-name">
                 {{ getItemDescription(itemKey, itemMeta) }}
@@ -293,7 +293,7 @@ function getSpecialSubtype(value) {
               </v-list-item-subtitle>
             </v-list-item>
           </v-col>
-          <v-col cols="12" sm="6" class="config-input">
+          <v-col cols="12" :sm="itemMeta?.full_width ? 12 : 6" class="config-input">
             <TemplateListEditor
               v-if="itemMeta?.type === 'template_list'"
               v-model="createSelectorModel(itemKey).value"

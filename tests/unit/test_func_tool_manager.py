@@ -1,7 +1,8 @@
 import asyncio
 import inspect
 import json
-from unittest.mock import AsyncMock
+import os
+from unittest.mock import ANY, AsyncMock
 
 import pytest
 
@@ -114,6 +115,7 @@ def test_shell_session_schema_supports_line_writes():
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(os.name == "nt", reason="Restricted execution needs POSIX.")
 async def test_local_execute_shell_manages_running_and_closed_results(
     monkeypatch,
     tmp_path,
@@ -180,10 +182,15 @@ async def test_local_execute_shell_manages_running_and_closed_results(
         owner_id="umo",
         creator_id="admin-user",
         creator_is_admin=True,
-        sandboxed=False,
+        sandboxed=True,
+        permission_check=ANY,
+        allow_network=True,
+        filesystem_scope="workspace",
+        readable_roots=ANY,
+        writable_roots=ANY,
         cwd=str(tmp_path),
         env={},
-        timeout=None,
+        timeout=300,
         yield_time_ms=250,
     )
     for status, exit_code, wall_time in (
@@ -214,6 +221,7 @@ async def test_local_execute_shell_manages_running_and_closed_results(
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(os.name == "nt", reason="Restricted execution needs POSIX.")
 async def test_local_shell_tools_fail_closed_without_sender_identity(
     monkeypatch,
     tmp_path,
@@ -275,6 +283,133 @@ async def test_local_shell_tools_fail_closed_without_sender_identity(
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(os.name == "nt", reason="Restricted execution needs POSIX.")
+async def test_local_member_shell_uses_sandbox_backend(
+    monkeypatch,
+    tmp_path,
+):
+    from astrbot.core.tools.computer_tools import shell as shell_tools
+    from astrbot.core.tools.computer_tools import util as computer_util
+
+    shell = LocalShellComponent()
+    shell.exec_managed = AsyncMock(
+        return_value={
+            "session_id": "sh_test",
+            "status": "running",
+            "stdout": "",
+            "stderr": "",
+            "exit_code": None,
+        }
+    )
+    booter = type("FakeBooter", (), {"shell": shell})()
+
+    class FakeConfig:
+        def get_config(self, umo):
+            return {
+                "provider_settings": {
+                    "computer_use_runtime": "local",
+                    "computer_use_require_admin": False,
+                }
+            }
+
+    class FakeEvent:
+        unified_msg_origin = "umo"
+        role = "member"
+
+        @staticmethod
+        def get_sender_id():
+            return "member-user"
+
+    wrapper = type(
+        "FakeWrapper",
+        (),
+        {
+            "context": type(
+                "FakeAstrContext", (), {"context": FakeConfig(), "event": FakeEvent()}
+            )()
+        },
+    )()
+
+    async def fake_get_booter(context, session_id):
+        return booter
+
+    monkeypatch.setattr(computer_util, "create_process_sandbox", object)
+    monkeypatch.setattr(shell_tools, "get_booter", fake_get_booter)
+    monkeypatch.setattr(
+        shell_tools,
+        "workspace_root_for_context",
+        AsyncMock(return_value=tmp_path),
+    )
+
+    result = await LocalExecuteShellTool().call(
+        wrapper,
+        command="python server.py",
+        yield_time_ms=250,
+    )
+
+    assert json.loads(result)["session_id"] == "sh_test"
+    shell.exec_managed.assert_awaited_once_with(
+        "python server.py",
+        owner_id="umo",
+        creator_id="member-user",
+        creator_is_admin=False,
+        cwd=str(tmp_path),
+        env={},
+        timeout=300,
+        yield_time_ms=250,
+        sandboxed=True,
+        permission_check=ANY,
+        allow_network=False,
+        filesystem_scope="workspace",
+        readable_roots=ANY,
+        writable_roots=ANY,
+    )
+
+
+@pytest.mark.asyncio
+async def test_local_member_shell_is_denied_without_supported_sandbox(monkeypatch):
+    from astrbot.core.tools.computer_tools import util as computer_util
+
+    class FakeConfig:
+        def get_config(self, umo):
+            return {
+                "provider_settings": {
+                    "computer_use_runtime": "local",
+                    "computer_use_local_permissions": {
+                        "member": {
+                            "filesystem_scope": "workspace",
+                            "allow_execution": True,
+                        }
+                    },
+                }
+            }
+
+    class FakeEvent:
+        unified_msg_origin = "umo"
+        role = "member"
+
+    wrapper = type(
+        "FakeWrapper",
+        (),
+        {
+            "context": type(
+                "FakeAstrContext", (), {"context": FakeConfig(), "event": FakeEvent()}
+            )()
+        },
+    )()
+
+    def unavailable_sandbox():
+        raise RuntimeError("No Local process sandbox backend is available.")
+
+    monkeypatch.setattr(computer_util, "create_process_sandbox", unavailable_sandbox)
+
+    result = await LocalExecuteShellTool().call(wrapper, command="pwd")
+
+    assert "No Local process sandbox backend" in result
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(os.name == "nt", reason="Restricted execution needs POSIX.")
 async def test_shell_session_tool_lists_sessions_for_current_owner(monkeypatch):
     from astrbot.core.tools.computer_tools import shell as shell_tools
 
@@ -308,10 +443,7 @@ async def test_shell_session_tool_lists_sessions_for_current_owner(monkeypatch):
     class FakeWrapper:
         context = FakeAstrContext()
 
-    async def fake_get_booter(context, session_id):
-        return booter
-
-    monkeypatch.setattr(shell_tools, "get_booter", fake_get_booter)
+    monkeypatch.setattr(shell_tools, "get_local_booter", lambda: booter)
 
     result = await ShellSessionTool().call(FakeWrapper(), action="list")
 
@@ -334,6 +466,7 @@ async def test_shell_session_tool_lists_sessions_for_current_owner(monkeypatch):
         ("terminate", "terminate"),
     ],
 )
+@pytest.mark.skipif(os.name == "nt", reason="Restricted execution needs POSIX.")
 async def test_shell_session_tool_passes_member_identity_to_session_actions(
     monkeypatch,
     action,
@@ -375,10 +508,7 @@ async def test_shell_session_tool_passes_member_identity_to_session_actions(
     class FakeWrapper:
         context = FakeAstrContext()
 
-    async def fake_get_booter(context, session_id):
-        return booter
-
-    monkeypatch.setattr(shell_tools, "get_booter", fake_get_booter)
+    monkeypatch.setattr(shell_tools, "get_local_booter", lambda: booter)
 
     result = await ShellSessionTool().call(
         FakeWrapper(),

@@ -4389,12 +4389,26 @@ paths:
   /api/v1/stats/version:
     get:
       tags: [Stats]
-      summary: Get AstrBot version
+      summary: Get AstrBot version and runtime information
+      description: Runtime information is detected once at application startup. Restart AstrBot after installing sandbox dependencies to refresh it.
       operationId: getVersion
       x-astrbot-scope: system
       responses:
         "200":
-          $ref: "#/components/responses/Ok"
+          description: Version information with a backend runtime snapshot
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [runtime]
+                        properties:
+                          runtime:
+                            $ref: "#/components/schemas/RuntimeInfo"
 
   /api/v1/stats/versions:
     get:
@@ -5296,6 +5310,33 @@ components:
         type: string
 
   schemas:
+    RuntimeInfo:
+      type: object
+      description: The AstrBot backend runtime, including when running inside a container. Values are captured at application startup.
+      required: [os, arch, sandbox]
+      properties:
+        os:
+          type: string
+          description: Lowercase platform.system() value, commonly linux, darwin, or windows.
+        arch:
+          type: string
+          description: Unmodified platform.machine() value, such as x86_64, AMD64, arm64, or aarch64. May be empty if unknown.
+        sandbox:
+          type: object
+          description: Local process sandbox startup check, captured when AstrBot starts. It does not verify DNS resolution or every permitted operation.
+          required: [backend, status]
+          properties:
+            backend:
+              type: [string, "null"]
+              enum: [bubblewrap, seatbelt, null]
+            status:
+              type: string
+              enum: [detected, missing, unavailable, unsupported]
+              description: detected means the executable was found and a minimal workspace sandbox launched successfully; missing means the corresponding executable was not found; unavailable means it was found but sandbox startup failed; unsupported means this platform has no Local process sandbox backend. These identifiers are independent of the UI language.
+            error:
+              type: string
+              description: Bounded startup error detail, included when status is unavailable. Restart AstrBot after fixing the environment to refresh the check.
+
     SuccessEnvelope:
       type: object
       required: [status, data]

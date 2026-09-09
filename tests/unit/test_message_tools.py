@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from astrbot.core.config import default as config_defaults
 from astrbot.core.message.message_event_result import MessageEventResult
 from astrbot.core.pipeline.respond.stage import RespondStage
 from astrbot.core.tools.message_tools import SendMessageToUserTool
@@ -15,6 +16,7 @@ def _make_context(
     role="admin",
     require_admin=True,
     runtime="local",
+    local_permissions=None,
 ):
     """Build a minimal ContextWrapper for SendMessageToUserTool."""
     cfg = {
@@ -23,6 +25,8 @@ def _make_context(
             "computer_use_runtime": runtime,
         }
     }
+    if local_permissions is not None:
+        cfg["provider_settings"]["computer_use_local_permissions"] = local_permissions
     extras = {}
     event = SimpleNamespace(
         unified_msg_origin=current_session,
@@ -287,7 +291,9 @@ async def test_send_message_empty_messages_returns_error():
 async def test_send_message_missing_image_path_stops_before_send(tmp_path, monkeypatch):
     """Missing image paths fail before sending any message components."""
     tool = SendMessageToUserTool()
-    ctx = _make_context()
+    # Sandbox runtime so the booter is still consulted for missing paths;
+    # local runtime now rejects them before any booter call.
+    ctx = _make_context(runtime="sandbox")
     missing_image_path = tmp_path / "missing.png"
 
     async def mock_get_booter(*args, **kwargs):
@@ -312,16 +318,36 @@ async def test_send_message_missing_image_path_stops_before_send(tmp_path, monke
 
 
 @pytest.mark.asyncio
-async def test_non_admin_cannot_send_arbitrary_local_absolute_file(tmp_path):
-    """Non-admin users cannot send host files outside the allowed local roots."""
+@pytest.mark.parametrize("system", ["Windows", "Linux", "Darwin"])
+@pytest.mark.parametrize("component_type", ["file", "image", "record", "video"])
+@pytest.mark.parametrize(
+    ("role", "scope"),
+    [
+        ("member", None),
+        ("member", "none"),
+        ("admin", "none"),
+        ("member", "workspace"),
+        ("admin", "workspace"),
+    ],
+)
+async def test_restricted_role_cannot_send_arbitrary_local_absolute_file(
+    tmp_path, monkeypatch, system, component_type, role, scope
+):
+    """Only explicit host access permits sending files outside trusted roots."""
+    monkeypatch.setattr(
+        config_defaults, "platform", SimpleNamespace(system=lambda: system)
+    )
     tool = SendMessageToUserTool()
-    ctx = _make_context(role="member", require_admin=True)
+    ctx = _make_context(
+        role=role,
+        local_permissions={role: {"filesystem_scope": scope}} if scope else None,
+    )
     secret_path = tmp_path / "secret.txt"
     secret_path.write_text("secret", encoding="utf-8")
 
     result = await tool.call(
         ctx,
-        messages=[{"type": "file", "path": str(secret_path)}],
+        messages=[{"type": component_type, "path": str(secret_path)}],
     )
 
     assert "error: Local file send is restricted for this user" in result
@@ -330,13 +356,39 @@ async def test_non_admin_cannot_send_arbitrary_local_absolute_file(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_non_admin_can_send_workspace_file(tmp_path, monkeypatch):
+async def test_member_with_host_scope_can_send_local_absolute_file(tmp_path):
+    """Host filesystem scope should cover the local file-send bridge."""
+    permissions = {
+        "member": {
+            "allow_execution": False,
+            "allow_network": False,
+            "filesystem_scope": "host",
+        }
+    }
+    tool = SendMessageToUserTool()
+    ctx = _make_context(role="member", local_permissions=permissions)
+    file_path = tmp_path / "result.txt"
+    file_path.write_text("result", encoding="utf-8")
+
+    result = await tool.call(
+        ctx,
+        messages=[{"type": "file", "path": str(file_path)}],
+    )
+
+    assert "Message sent to session" in result
+    ctx.context.context.send_message.assert_called_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("scope", ["none", "workspace"])
+async def test_non_admin_can_send_workspace_file(tmp_path, monkeypatch, scope):
     """Non-admin users can send files inside their per-session workspace."""
     tool = SendMessageToUserTool()
     ctx = _make_context(
         current_session="feishu:GroupMessage:oc_workspace",
         role="member",
         require_admin=True,
+        local_permissions={"member": {"filesystem_scope": scope}},
     )
     workspace_root = tmp_path / "workspaces"
     workspace_file = workspace_root / "feishu_GroupMessage_oc_workspace" / "result.txt"
@@ -357,10 +409,13 @@ async def test_non_admin_can_send_workspace_file(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_non_admin_can_send_temp_file(tmp_path, monkeypatch):
+@pytest.mark.parametrize("scope", ["none", "workspace"])
+async def test_non_admin_can_send_temp_file(tmp_path, monkeypatch, scope):
     """Non-admin users can send generated files under AstrBot temp."""
     tool = SendMessageToUserTool()
-    ctx = _make_context(role="member", require_admin=True)
+    ctx = _make_context(
+        role="member", local_permissions={"member": {"filesystem_scope": scope}}
+    )
     temp_root = tmp_path / "temp"
     temp_root.mkdir()
     output_path = temp_root / "output.txt"
@@ -472,3 +527,55 @@ async def test_send_message_downloads_trailing_slash_sandbox_file_with_basename(
     sent_chain = ctx.context.context.send_message.await_args.args[1]
     sent_file = sent_chain.chain[0]
     assert sent_file.name == "export"
+
+
+@pytest.mark.asyncio
+async def test_send_message_local_runtime_skips_sandbox_file_probe(
+    tmp_path, monkeypatch
+):
+    """Local runtime must resolve send-file paths only via permission-checked branches.
+
+    Falling through to the booter branch would probe the host shell without
+    the caller's filesystem permissions.
+    """
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    secret = tmp_path / "host-only.txt"
+    secret.write_text("host-only marker", encoding="utf-8")
+    allowed = workspace / "allowed.txt"
+    allowed.write_text("workspace file", encoding="utf-8")
+
+    async def mock_workspace_root_for_context(_context):
+        return workspace
+
+    async def mock_get_booter(*args, **kwargs):
+        del args, kwargs
+        raise AssertionError("local runtime must not query a sandbox booter")
+
+    monkeypatch.setattr(
+        "astrbot.core.tools.message_tools.workspace_root_for_context",
+        mock_workspace_root_for_context,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.tools.message_tools.get_booter",
+        mock_get_booter,
+    )
+
+    tool = SendMessageToUserTool()
+    ctx = _make_context(
+        role="member",
+        local_permissions={
+            "member": {
+                "allow_execution": False,
+                "allow_network": False,
+                "filesystem_scope": "workspace",
+            }
+        },
+    )
+
+    resolved, downloaded = await tool._resolve_path_from_sandbox(ctx, "allowed.txt")
+    assert resolved == str(allowed.resolve())
+    assert downloaded is False
+
+    with pytest.raises(FileNotFoundError):
+        await tool._resolve_path_from_sandbox(ctx, "host-only.txt")

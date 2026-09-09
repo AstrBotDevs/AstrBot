@@ -245,11 +245,15 @@
       "provider_settings": {
         "computer_use_runtime": {
           "description": "运行环境",
-          "hint": "允许 Agent 访问的环境。local 为本机环境，sandbox 为沙箱环境，none 为不允许任何环境。"
+          "hint": "允许 Agent 访问的环境。",
+          "labels": ["不允许任何环境", "本机环境", "第三方沙箱环境"]
+        },
+        "computer_use_local_permissions": {
+          "description": "本地权限策略"
         },
         "computer_use_require_admin": {
-          "description": "需要 AstrBot 管理员权限",
-          "hint": "开启后，需要 AstrBot 管理员权限才能调用使用电脑能力。在平台配置->管理员中可添加管理员。使用 /sid 指令查看管理员 ID。"
+          "description": "沙箱能力需要 AstrBot 管理员权限",
+          "hint": "开启后，需要 AstrBot 管理员权限才能调用远程沙箱能力。在平台配置->管理员中可添加管理员。使用 /sid 指令查看管理员 ID。"
         },
         "sandbox": {
           "booter": {
@@ -310,6 +314,41 @@
           "shipyard_max_sessions": {
             "description": "Shipyard Ship 会话复用上限",
             "hint": "决定了一个实例承载的最大会话数量。"
+          }
+        }
+      },
+      "local_permissions": {
+        "role": "用户身份",
+        "execution": "允许执行代码",
+        "network": "允许执行环境联网",
+        "filesystem": "文件访问范围",
+        "scopes": {
+          "workspace": "工作区",
+          "host": "主机文件"
+        },
+        "roles": {
+          "member": "普通成员",
+          "admin": "管理员"
+        },
+        "accessMode": "本地电脑访问",
+        "modes": {
+          "none": "关闭",
+          "files": "仅文件访问",
+          "full": "不受限访问"
+        },
+        "unsupportedSelection": "当前策略不受支持",
+        "runtimeUnknown": "运行环境信息不可用。",
+        "memberWarning": "普通成员已获得联网或主机文件访问权限。",
+        "runtime": {
+          "os": "操作系统",
+          "arch": "架构",
+          "sandbox": "本地隔离",
+          "unavailableHint": "沙箱启动失败，受限 Shell/Python 执行及工作区文件搜索会受到影响。请根据下方错误检查系统安全策略（如 Linux 的 AppArmor、用户命名空间限制）或容器限制，修复后重启 AstrBot 重新检测。",
+          "status": {
+            "detected": "{backend} · 启动检测通过",
+            "missing": "缺少 {dependency}",
+            "unavailable": "{backend} · 已安装但无法启动",
+            "unsupported": "暂不支持"
           }
         }
       }

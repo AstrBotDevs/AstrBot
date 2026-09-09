@@ -229,11 +229,15 @@
       "provider_settings": {
         "computer_use_runtime": {
           "description": "Computer Use Runtime",
-          "hint": "Environment allowed for Agent usage. `local` means the local machine environment, `sandbox` means the sandbox environment, and `none` means no environment is allowed."
+          "hint": "Environment the Agent is allowed to access.",
+          "labels": ["No environment", "Local machine", "Third-party sandbox"]
+        },
+        "computer_use_local_permissions": {
+          "description": "Local Permission Policies"
         },
         "computer_use_require_admin": {
-          "description": "Require AstrBot Admin Permission",
-          "hint": "When enabled, AstrBot admin permission is required to use computer capabilities. Admins can be added in Platform Config. Use the /sid command to view admin IDs."
+          "description": "Require Admin Permission for Sandbox",
+          "hint": "When enabled, AstrBot admin permission is required to use remote sandbox capabilities. Admins can be added in Platform Config. Use the /sid command to view admin IDs."
         },
         "sandbox": {
           "booter": {
@@ -294,6 +298,41 @@
           "shipyard_max_sessions": {
             "description": "Shipyard Max Sessions",
             "hint": "Maximum number of Shipyard sessions an instance can handle."
+          }
+        }
+      },
+      "local_permissions": {
+        "role": "Role",
+        "execution": "Allow code execution",
+        "network": "Allow execution network access",
+        "filesystem": "File access scope",
+        "scopes": {
+          "workspace": "Workspace",
+          "host": "Host files"
+        },
+        "roles": {
+          "member": "Member",
+          "admin": "Administrator"
+        },
+        "accessMode": "Local computer access",
+        "modes": {
+          "none": "Disabled",
+          "files": "File access only",
+          "full": "Unrestricted access"
+        },
+        "unsupportedSelection": "Current policy is unsupported",
+        "runtimeUnknown": "Runtime information is unavailable.",
+        "memberWarning": "Members have network or host file access.",
+        "runtime": {
+          "os": "OS",
+          "arch": "Architecture",
+          "sandbox": "Local isolation",
+          "unavailableHint": "Sandbox startup failed, affecting restricted Shell/Python execution and workspace file search. Use the error below to check system security policies (such as Linux AppArmor and user namespace restrictions) or container restrictions, then restart AstrBot to check again.",
+          "status": {
+            "detected": "{backend} · Startup check passed",
+            "missing": "Missing {dependency}",
+            "unavailable": "{backend} · Installed but cannot start",
+            "unsupported": "Unsupported"
           }
         }
       }
