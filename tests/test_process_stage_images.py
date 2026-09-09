@@ -489,7 +489,7 @@ def test_image_preparation_stays_outside_agent_runner_and_providers():
         (root / "provider").rglob("*.py")
     )
     for path in paths:
-        source = path.read_text()
+        source = path.read_text(encoding="utf-8")
         assert (
             "prepare_model_image" not in source
             and "resolve_image_ref_to_images" not in source
