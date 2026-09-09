@@ -52,6 +52,15 @@ def _is_path_within(path: Path, roots: tuple[Path, ...]) -> bool:
     return any(path == root or path.is_relative_to(root) for root in roots)
 
 
+# Extra key on the event recording plain texts already delivered to the current
+# session via send_message_to_user during this agent run. Proactive callers
+# (cron jobs, background task wakeups) read it to avoid re-sending the final
+# assistant text the model already delivered through the tool.
+SENT_TO_CURRENT_SESSION_PLAIN_TEXTS_EXTRA_KEY = (
+    "_send_message_to_user_current_session_plain_texts"
+)
+
+
 def _is_restricted_local_env(context: ContextWrapper[AstrAgentContext]) -> bool:
     if not is_local_runtime(context):
         return False
@@ -349,14 +358,14 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
             sent_plain_text = message_chain.get_plain_text().strip()
             if sent_plain_text:
                 sent_plain_texts = context.context.event.get_extra(
-                    "_send_message_to_user_current_session_plain_texts",
+                    SENT_TO_CURRENT_SESSION_PLAIN_TEXTS_EXTRA_KEY,
                     [],
                 )
                 if not isinstance(sent_plain_texts, list):
                     sent_plain_texts = []
                 sent_plain_texts.append(sent_plain_text)
                 context.context.event.set_extra(
-                    "_send_message_to_user_current_session_plain_texts",
+                    SENT_TO_CURRENT_SESSION_PLAIN_TEXTS_EXTRA_KEY,
                     sent_plain_texts,
                 )
         return f"Message sent to session {target_session}"

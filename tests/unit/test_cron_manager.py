@@ -15,6 +15,10 @@ from astrbot.core.cron.manager import (
     _normalize_crontab_day_of_week,
 )
 from astrbot.core.db.po import CronJob
+from astrbot.core.provider.entities import LLMResponse
+from astrbot.core.tools.message_tools import (
+    SENT_TO_CURRENT_SESSION_PLAIN_TEXTS_EXTRA_KEY,
+)
 
 
 @pytest.fixture
@@ -814,6 +818,252 @@ class TestRunActiveAgentJob:
         sample_cron_job.job_id = "no-handler-job"
         with pytest.raises(RuntimeError, match="handler not found"):
             await cron_manager._run_basic_job(sample_cron_job)
+
+
+class TestWokeMainAgentFinalDelivery:
+    """The cron agent's final text must reach the bound session (#9980)."""
+
+    @pytest.mark.asyncio
+    async def test_delivers_final_text_to_delivery_session(self, cron_manager):
+        """A finished cron agent's final assistant text is sent to the session."""
+        ctx = MagicMock()
+        ctx.get_config.return_value = {
+            "admins_id": [],
+            "provider_settings": {},
+            "agent_runner": {
+                "runner_type": "local",
+                "config": {"misc": {}, "compression": {}},
+            },
+        }
+        cron_manager.ctx = ctx
+
+        conv = MagicMock()
+        conv.history = "[]"
+
+        class FakeRunner:
+            state = AgentState.DONE
+
+            async def step_until_done(self, max_step):
+                return
+                yield  # pragma: no cover
+
+            def get_final_llm_resp(self):
+                return LLMResponse(role="assistant", completion_text="Done: 42")
+
+        event_box = {}
+
+        async def fake_build_main_agent(*, event, plugin_context, config, req):
+            event_box["event"] = event
+            event.send = AsyncMock()
+            return MagicMock(agent_runner=FakeRunner())
+
+        with (
+            patch(
+                "astrbot.core.astr_main_agent._get_session_conv",
+                AsyncMock(return_value=conv),
+            ),
+            patch(
+                "astrbot.core.astr_main_agent.build_main_agent",
+                side_effect=fake_build_main_agent,
+            ),
+            patch(
+                "astrbot.core.cron.manager.persist_agent_history",
+                AsyncMock(),
+            ),
+        ):
+            await cron_manager._woke_main_agent(
+                message="run scheduled task",
+                session_str="test:FriendMessage:user123",
+                extras={"cron_job": {"id": "job-1"}, "cron_payload": {}},
+                delivery_session_str="test:FriendMessage:user123",
+            )
+
+        event_box["event"].send.assert_awaited_once()
+        chain = event_box["event"].send.await_args.args[0]
+        assert chain.get_plain_text() == "Done: 42"
+
+    @pytest.mark.asyncio
+    async def test_skips_delivery_when_tool_already_sent_same_text(self, cron_manager):
+        """No duplicate send when the model delivered the text via the tool."""
+        ctx = MagicMock()
+        ctx.get_config.return_value = {
+            "admins_id": [],
+            "provider_settings": {},
+            "agent_runner": {
+                "runner_type": "local",
+                "config": {"misc": {}, "compression": {}},
+            },
+        }
+        cron_manager.ctx = ctx
+
+        conv = MagicMock()
+        conv.history = "[]"
+
+        class FakeRunner:
+            state = AgentState.DONE
+
+            async def step_until_done(self, max_step):
+                return
+                yield  # pragma: no cover
+
+            def get_final_llm_resp(self):
+                return LLMResponse(role="assistant", completion_text="Done: 42")
+
+        event_box = {}
+
+        async def fake_build_main_agent(*, event, plugin_context, config, req):
+            event_box["event"] = event
+            event.send = AsyncMock()
+            # Simulate send_message_to_user having delivered the same text.
+            event.set_extra(SENT_TO_CURRENT_SESSION_PLAIN_TEXTS_EXTRA_KEY, ["Done: 42"])
+            return MagicMock(agent_runner=FakeRunner())
+
+        with (
+            patch(
+                "astrbot.core.astr_main_agent._get_session_conv",
+                AsyncMock(return_value=conv),
+            ),
+            patch(
+                "astrbot.core.astr_main_agent.build_main_agent",
+                side_effect=fake_build_main_agent,
+            ),
+            patch(
+                "astrbot.core.cron.manager.persist_agent_history",
+                AsyncMock(),
+            ),
+        ):
+            await cron_manager._woke_main_agent(
+                message="run scheduled task",
+                session_str="test:FriendMessage:user123",
+                extras={"cron_job": {"id": "job-1"}, "cron_payload": {}},
+                delivery_session_str="test:FriendMessage:user123",
+            )
+
+        event_box["event"].send.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("llm_role", "completion_text", "delivery_session_str"),
+        [
+            pytest.param("assistant", "Done: 42", "", id="no_delivery_session"),
+            pytest.param(
+                "assistant", "", "test:FriendMessage:user123", id="empty_text"
+            ),
+            pytest.param(
+                "tool", "Done: 42", "test:FriendMessage:user123", id="non_assistant"
+            ),
+        ],
+    )
+    async def test_skips_delivery_for_non_deliverable_responses(
+        self, cron_manager, llm_role, completion_text, delivery_session_str
+    ):
+        """Nothing is sent when there is no target, no text, or no assistant reply."""
+        ctx = MagicMock()
+        ctx.get_config.return_value = {
+            "admins_id": [],
+            "provider_settings": {},
+            "agent_runner": {
+                "runner_type": "local",
+                "config": {"misc": {}, "compression": {}},
+            },
+        }
+        cron_manager.ctx = ctx
+
+        conv = MagicMock()
+        conv.history = "[]"
+
+        class FakeRunner:
+            state = AgentState.DONE
+
+            async def step_until_done(self, max_step):
+                return
+                yield  # pragma: no cover
+
+            def get_final_llm_resp(self):
+                return LLMResponse(role=llm_role, completion_text=completion_text)
+
+        event_box = {}
+
+        async def fake_build_main_agent(*, event, plugin_context, config, req):
+            event_box["event"] = event
+            event.send = AsyncMock()
+            return MagicMock(agent_runner=FakeRunner())
+
+        with (
+            patch(
+                "astrbot.core.astr_main_agent._get_session_conv",
+                AsyncMock(return_value=conv),
+            ),
+            patch(
+                "astrbot.core.astr_main_agent.build_main_agent",
+                side_effect=fake_build_main_agent,
+            ),
+            patch(
+                "astrbot.core.cron.manager.persist_agent_history",
+                AsyncMock(),
+            ),
+        ):
+            await cron_manager._woke_main_agent(
+                message="run scheduled task",
+                session_str=delivery_session_str or "cron:OtherMessage:job-1",
+                extras={"cron_job": {"id": "job-1"}, "cron_payload": {}},
+                delivery_session_str=delivery_session_str,
+            )
+
+        event_box["event"].send.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_delivery_failure_does_not_fail_the_job(self, cron_manager):
+        """A failed send is logged but must not mark the job as failed."""
+        ctx = MagicMock()
+        ctx.get_config.return_value = {
+            "admins_id": [],
+            "provider_settings": {},
+            "agent_runner": {
+                "runner_type": "local",
+                "config": {"misc": {}, "compression": {}},
+            },
+        }
+        cron_manager.ctx = ctx
+
+        conv = MagicMock()
+        conv.history = "[]"
+
+        class FakeRunner:
+            state = AgentState.DONE
+
+            async def step_until_done(self, max_step):
+                return
+                yield  # pragma: no cover
+
+            def get_final_llm_resp(self):
+                return LLMResponse(role="assistant", completion_text="Done: 42")
+
+        async def fake_build_main_agent(*, event, plugin_context, config, req):
+            event.send = AsyncMock(side_effect=RuntimeError("platform offline"))
+            return MagicMock(agent_runner=FakeRunner())
+
+        with (
+            patch(
+                "astrbot.core.astr_main_agent._get_session_conv",
+                AsyncMock(return_value=conv),
+            ),
+            patch(
+                "astrbot.core.astr_main_agent.build_main_agent",
+                side_effect=fake_build_main_agent,
+            ),
+            patch(
+                "astrbot.core.cron.manager.persist_agent_history",
+                AsyncMock(),
+            ),
+        ):
+            # Must not raise.
+            await cron_manager._woke_main_agent(
+                message="run scheduled task",
+                session_str="test:FriendMessage:user123",
+                extras={"cron_job": {"id": "job-1"}, "cron_payload": {}},
+                delivery_session_str="test:FriendMessage:user123",
+            )
 
 
 class TestGetNextRunTime:

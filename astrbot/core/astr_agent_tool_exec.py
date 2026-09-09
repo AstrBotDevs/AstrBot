@@ -532,6 +532,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             _get_session_conv,
             build_main_agent,
         )
+        from astrbot.core.tools.message_tools import (
+            SENT_TO_CURRENT_SESSION_PLAIN_TEXTS_EXTRA_KEY,
+        )
 
         event = run_context.context.event
         ctx = run_context.context.context
@@ -638,6 +641,24 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         if not llm_resp:
             logger.warning("background task agent got no response")
             return
+
+        final_text = (llm_resp.completion_text or "").strip()
+        if llm_resp.role == "assistant" and final_text:
+            # Same delivery gap as the cron path (#9980): the final text only
+            # lands in persisted history unless it is explicitly sent. Skip
+            # when the model already delivered this exact text via
+            # send_message_to_user earlier in the same run.
+            already_sent = cron_event.get_extra(
+                SENT_TO_CURRENT_SESSION_PLAIN_TEXTS_EXTRA_KEY, []
+            )
+            if final_text not in already_sent:
+                try:
+                    await cron_event.send(MessageChain().message(final_text))
+                except Exception as e:  # noqa: BLE001
+                    logger.warning(
+                        f"Failed to deliver background task final response: {e}",
+                        exc_info=True,
+                    )
 
     @classmethod
     async def _execute_local(
