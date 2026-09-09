@@ -1,4 +1,4 @@
-"""Regression tests for session-specific Cron context compression settings."""
+"""Regression tests for session compression in chat, Cron and background wakeups."""
 
 import copy
 import json
@@ -8,7 +8,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from astrbot.core.agent.tool import FunctionTool
+from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.astr_main_agent import MainAgentBuildConfig
+from astrbot.core.config.agent_runner import resolve_context_compression_config
 from astrbot.core.config.default import DEFAULT_CONFIG
 from astrbot.core.cron.manager import CronJobManager
 from astrbot.core.pipeline.process_stage.method.agent_sub_stages.internal import (
@@ -19,6 +22,9 @@ from astrbot.core.provider.entities import LLMResponse
 
 def test_explicit_build_settings_and_per_request_overrides_are_preserved():
     """Keep direct callers and dataclasses.replace independent of raw settings."""
+    defaults = MainAgentBuildConfig(tool_call_timeout=60)
+    assert defaults.max_context_length == 50
+    assert defaults.dequeue_context_length == 10
     direct = MainAgentBuildConfig(
         tool_call_timeout=60, max_context_length=7, dequeue_context_length=2
     )
@@ -26,7 +32,9 @@ def test_explicit_build_settings_and_per_request_overrides_are_preserved():
     assert direct.dequeue_context_length == 2
 
     source = {"max_turns": 12, "trim_turns": 3, "provider_id": "summary-model"}
-    configured = MainAgentBuildConfig(tool_call_timeout=60, compression_config=source)
+    configured = MainAgentBuildConfig(
+        tool_call_timeout=60, **resolve_context_compression_config(source)
+    )
     source["max_turns"] = 99
     per_request = replace(configured, streaming_response=False, max_context_length=8)
     assert configured.max_context_length == 12
@@ -37,6 +45,7 @@ def test_explicit_build_settings_and_per_request_overrides_are_preserved():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("entrypoint", ["cron", "background"])
 @pytest.mark.parametrize(
     ("compression", "expected"),
     [
@@ -86,9 +95,16 @@ def test_explicit_build_settings_and_per_request_overrides_are_preserved():
             ("truncate_by_turns", "", 0.15, "", -1, 5, 128000),
             id="unlimited-turns",
         ),
+        pytest.param(
+            {"max_turns": -1, "trim_turns": -3},
+            ("truncate_by_turns", "", 0.15, "", -1, 1, 128000),
+            id="unlimited-turns-minimum-trim",
+        ),
     ],
 )
-async def test_cron_uses_same_compression_settings_as_chat(compression, expected):
+async def test_wakeup_uses_same_compression_settings_as_chat(
+    compression, expected, entrypoint
+):
     """Resolve compression from the bound session without changing its history."""
     conf = copy.deepcopy(DEFAULT_CONFIG)
     conf["agent_runner"]["config"]["compression"] = compression or {}
@@ -132,15 +148,43 @@ async def test_cron_uses_same_compression_settings_as_chat(compression, expected
             AsyncMock(return_value=SimpleNamespace(agent_runner=runner)),
         ) as build,
         patch("astrbot.core.cron.manager.persist_agent_history", AsyncMock()),
+        patch("astrbot.core.astr_agent_tool_exec.persist_agent_history", AsyncMock()),
     ):
-        await manager._woke_main_agent(
-            message="Run the scheduled task",
-            session_str="test:FriendMessage:user123",
-            extras={"cron_job": {"id": "job-1"}, "cron_payload": {}},
-        )
+        if entrypoint == "cron":
+            await manager._woke_main_agent(
+                message="Run the scheduled task",
+                session_str="test:FriendMessage:user123",
+                extras={"cron_job": {"id": "job-1"}, "cron_payload": {}},
+            )
+        else:
+            ctx.get_llm_tool_manager.return_value.get_builtin_tool.return_value = (
+                FunctionTool(
+                    name="send_message_to_user",
+                    description="Send the background result.",
+                    parameters={"type": "object", "properties": {}},
+                )
+            )
+            await FunctionToolExecutor._wake_main_agent_for_background_result(
+                SimpleNamespace(
+                    context=SimpleNamespace(
+                        event=SimpleNamespace(
+                            unified_msg_origin="test:FriendMessage:user123",
+                            role="member",
+                        ),
+                        context=ctx,
+                    ),
+                    tool_call_timeout=120,
+                ),
+                task_id="task-1",
+                tool_name="background-tool",
+                result_text="Task completed.",
+                tool_args={},
+                note="Background task finished",
+                summary_name="BackgroundTask",
+            )
 
     ctx.get_config.assert_called_once_with(umo="test:FriendMessage:user123")
-    cron_config = build.await_args.kwargs["config"]
+    wakeup_config = build.await_args.kwargs["config"]
     fields = (
         "context_limit_reached_strategy",
         "llm_compress_instruction",
@@ -150,9 +194,9 @@ async def test_cron_uses_same_compression_settings_as_chat(compression, expected
         "dequeue_context_length",
         "fallback_max_context_tokens",
     )
-    assert tuple(getattr(cron_config, name) for name in fields) == expected
+    assert tuple(getattr(wakeup_config, name) for name in fields) == expected
     assert tuple(getattr(stage.main_agent_cfg, name) for name in fields) == expected
-    assert cron_config.streaming_response is False
+    assert wakeup_config.streaming_response is False
     request = build.await_args.kwargs["req"]
     assert request.contexts == history
     assert "An earlier request" not in request.system_prompt

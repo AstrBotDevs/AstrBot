@@ -19,6 +19,7 @@ from astrbot.core.astr_main_agent import (
     MainAgentBuildResult,
     build_main_agent,
 )
+from astrbot.core.config.agent_runner import resolve_context_compression_config
 from astrbot.core.message.components import File, Image, Record, Reply, Video
 from astrbot.core.message.message_event_result import (
     MessageChain,
@@ -117,7 +118,7 @@ class InternalAgentSubStage(Stage):
             file_extract_enabled=self.file_extract_enabled,
             file_extract_prov=self.file_extract_prov,
             file_extract_msh_api_key=self.file_extract_msh_api_key,
-            compression_config=compression_config,
+            **resolve_context_compression_config(compression_config),
             llm_safety_mode=self.llm_safety_mode,
             safety_mode_strategy=self.safety_mode_strategy,
             computer_use_runtime=self.computer_use_runtime,

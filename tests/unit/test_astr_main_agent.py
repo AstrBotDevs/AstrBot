@@ -13,6 +13,7 @@ from astrbot.core.agent.message import Message, dump_messages_with_checkpoints
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
+from astrbot.core.config.agent_runner import resolve_context_compression_config
 from astrbot.core.conversation_mgr import Conversation
 from astrbot.core.cron.manager import CronJobManager
 from astrbot.core.message.components import File, Image, Plain, Reply, Video
@@ -1653,15 +1654,17 @@ class TestBuildMainAgent:
                 plugin_context=mock_context,
                 config=ama.MainAgentBuildConfig(
                     tool_call_timeout=60,
-                    compression_config={
-                        "overflow_strategy": "llm_compress",
-                        "provider_id": "summary-model",
-                        "instruction": "Keep unfinished tasks.",
-                        "keep_recent_ratio": 0.3,
-                        "max_turns": 12,
-                        "trim_turns": 3,
-                        "fallback_max_tokens": 16384,
-                    },
+                    **resolve_context_compression_config(
+                        {
+                            "overflow_strategy": "llm_compress",
+                            "provider_id": "summary-model",
+                            "instruction": "Keep unfinished tasks.",
+                            "keep_recent_ratio": 0.3,
+                            "max_turns": 12,
+                            "trim_turns": 3,
+                            "fallback_max_tokens": 16384,
+                        }
+                    ),
                 ),
             )
 

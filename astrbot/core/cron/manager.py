@@ -12,6 +12,7 @@ from apscheduler.triggers.date import DateTrigger
 
 from astrbot import logger
 from astrbot.core.agent.tool import ToolSet
+from astrbot.core.config.agent_runner import resolve_context_compression_config
 from astrbot.core.cron.events import CronMessageEvent
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import CronJob
@@ -462,7 +463,7 @@ class CronJobManager:
         )
         config = MainAgentBuildConfig(
             tool_call_timeout=tool_call_timeout,
-            compression_config=(
+            **resolve_context_compression_config(
                 cfg.get("agent_runner", {}).get("config", {}).get("compression", {})
             ),
             llm_safety_mode=persona_config.get("safety_mode", True),
