@@ -462,6 +462,9 @@ class CronJobManager:
         )
         config = MainAgentBuildConfig(
             tool_call_timeout=tool_call_timeout,
+            compression_config=(
+                cfg.get("agent_runner", {}).get("config", {}).get("compression", {})
+            ),
             llm_safety_mode=persona_config.get("safety_mode", True),
             safety_mode_strategy=persona_config.get(
                 "safety_mode_strategy", "system_prompt"

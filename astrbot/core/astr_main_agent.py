@@ -8,7 +8,7 @@ import os
 import platform
 import zoneinfo
 from collections.abc import Coroutine
-from dataclasses import dataclass, field
+from dataclasses import InitVar, dataclass, field
 from pathlib import Path
 
 from astrbot.core import logger
@@ -217,6 +217,39 @@ class MainAgentBuildConfig:
     timezone: str | None = None
     max_quoted_fallback_images: int = 20
     """Maximum number of images injected from quoted-message fallback extraction."""
+    compression_config: InitVar[dict | None] = None
+    """Session compression settings, resolved only during construction when supplied."""
+
+    def __post_init__(self, compression_config: dict | None) -> None:
+        """Resolve the shared compression settings for chat and scheduled agents.
+
+        Args:
+            compression_config: The session's ``agent_runner.config.compression``
+                section. None preserves explicitly supplied build configuration
+                fields; an empty mapping uses the ordinary chat parser's defaults.
+        """
+        if compression_config is None:
+            return
+        self.context_limit_reached_strategy = compression_config.get(
+            "overflow_strategy", "truncate_by_turns"
+        )
+        self.llm_compress_instruction = compression_config.get("instruction", "")
+        self.llm_compress_keep_recent_ratio = compression_config.get(
+            "keep_recent_ratio", 0.15
+        )
+        self.llm_compress_provider_id = compression_config.get("provider_id", "")
+        self.max_context_length = compression_config.get("max_turns", -1)
+        self.dequeue_context_length = min(
+            max(1, compression_config.get("trim_turns", 1)),
+            self.max_context_length - 1
+            if self.max_context_length > 0
+            else compression_config.get("trim_turns", 1),
+        )
+        if self.dequeue_context_length <= 0:
+            self.dequeue_context_length = 1
+        self.fallback_max_context_tokens = compression_config.get(
+            "fallback_max_tokens", 128000
+        )
 
 
 @dataclass(slots=True)
