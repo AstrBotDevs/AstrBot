@@ -20,6 +20,7 @@ from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.astr_main_agent_resources import (
     BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT,
 )
+from astrbot.core.config.agent_runner import resolve_context_compression_config
 from astrbot.core.cron.events import CronMessageEvent
 from astrbot.core.message.components import Image
 from astrbot.core.message.message_event_result import (
@@ -570,6 +571,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         )
         config = MainAgentBuildConfig(
             tool_call_timeout=run_context.tool_call_timeout,
+            **resolve_context_compression_config(
+                cfg.get("agent_runner", {}).get("config", {}).get("compression", {})
+            ),
             streaming_response=provider_settings.get("stream", False),
             llm_safety_mode=persona_config.get("safety_mode", True),
             safety_mode_strategy=persona_config.get(

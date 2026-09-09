@@ -13,6 +13,7 @@ from astrbot.core.agent.message import Message, dump_messages_with_checkpoints
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
+from astrbot.core.config.agent_runner import resolve_context_compression_config
 from astrbot.core.conversation_mgr import Conversation
 from astrbot.core.cron.manager import CronJobManager
 from astrbot.core.message.components import File, Image, Plain, Reply, Video
@@ -1628,6 +1629,54 @@ class TestBuildMainAgent:
         assert result is not None
         mock_runner.reset.assert_awaited_once()
         assert mock_runner.reset.await_args.kwargs["enforce_max_turns"] == 7
+
+    @pytest.mark.asyncio
+    async def test_build_main_agent_passes_session_compression_to_runner(
+        self, mock_event, mock_context, mock_provider
+    ):
+        """Pass the summary provider, token budget and turn limits to the runner."""
+        compressor = MagicMock(spec=Provider)
+        mock_context.get_provider_by_id.side_effect = lambda provider_id: (
+            compressor if provider_id == "summary-model" else None
+        )
+        mock_context.get_using_provider.return_value = mock_provider
+        mock_provider.get_model.return_value = "unknown-model-for-compression-test"
+        _setup_conversation_for_build(mock_context.conversation_manager)
+
+        with (
+            patch("astrbot.core.astr_main_agent.AgentRunner") as runner_cls,
+            patch("astrbot.core.astr_main_agent.AstrAgentContext"),
+        ):
+            runner = runner_cls.return_value
+            runner.reset = AsyncMock()
+            result = await ama.build_main_agent(
+                event=mock_event,
+                plugin_context=mock_context,
+                config=ama.MainAgentBuildConfig(
+                    tool_call_timeout=60,
+                    **resolve_context_compression_config(
+                        {
+                            "overflow_strategy": "llm_compress",
+                            "provider_id": "summary-model",
+                            "instruction": "Keep unfinished tasks.",
+                            "keep_recent_ratio": 0.3,
+                            "max_turns": 12,
+                            "trim_turns": 3,
+                            "fallback_max_tokens": 16384,
+                        }
+                    ),
+                ),
+            )
+
+        assert result is not None
+        runner.reset.assert_awaited_once()
+        kwargs = runner.reset.await_args.kwargs
+        assert kwargs["llm_compress_provider"] is compressor
+        assert kwargs["llm_compress_instruction"] == "Keep unfinished tasks."
+        assert kwargs["llm_compress_keep_recent_ratio"] == 0.3
+        assert kwargs["enforce_max_turns"] == 12
+        assert kwargs["truncate_turns"] == 3
+        assert kwargs["provider"].provider_config["max_context_tokens"] == 16384
 
     @pytest.mark.asyncio
     async def test_build_main_agent_no_provider(self, mock_event, mock_context):
