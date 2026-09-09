@@ -106,6 +106,11 @@ class FakeDb:
     async def get_conversation_platform_ids(self) -> list[str]:
         return ["webchat-main"]
 
+    async def get_platform_sessions_by_ids(
+        self, _session_ids: list[str]
+    ) -> list[object]:
+        return []
+
     def add_api_key(self, raw_key: str, scopes: list[str]) -> None:
         self.api_keys[ApiKeyService.hash_key(raw_key)] = FakeApiKey(
             key_id="config-key",
