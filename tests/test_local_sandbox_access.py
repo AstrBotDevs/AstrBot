@@ -51,7 +51,13 @@ async def test_managed_shell_output_cannot_be_redirected_outside_sandbox(
 from pathlib import Path
 
 secret = Path({str(secret)!r})
-assert not secret.exists(), "The host file must be outside the sandbox."
+# Seatbelt allows metadata queries while denying access to file contents.
+try:
+    secret.read_bytes()
+except (FileNotFoundError, PermissionError):
+    pass
+else:
+    raise AssertionError("The host file must not be readable inside the sandbox.")
 for log in Path({str(shared_temp)!r}).rglob("sh_*.log"):
     log.unlink()
     log.symlink_to(secret)
