@@ -164,6 +164,30 @@ def test_queue_handler_only_scans_plugins_for_global_logger(
         existing_logger.filters[:] = previous_filters
 
 
+@pytest.mark.parametrize(
+    ("logger_name", "expected_plugin_name"),
+    [
+        ("astrbot.plugin.payload_plugin", "payload_plugin"),
+        ("astrbot.core.payload", None),
+    ],
+)
+def test_queue_handler_includes_plugin_name(
+    logger_name: str,
+    expected_plugin_name: str | None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Ensure broker entries include the structured plugin name."""
+    broker = LogBroker()
+    logger = logging.Logger(logger_name)
+    logger.setLevel(logging.INFO)
+    monkeypatch.setattr(LogManager, "_log_broker", None)
+
+    LogManager.set_queue_handler(logger, broker)
+    logger.info("payload test")
+
+    assert broker.log_cache[-1]["plugin_name"] == expected_plugin_name
+
+
 def test_plugin_log_level_is_persisted_atomically(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

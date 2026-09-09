@@ -109,6 +109,7 @@
     "contents": "Plugin Handlers",
     "noContents": "No handlers",
     "notFound": "Plugin not found",
+    "logsTitle": "Plugin logs",
     "docsTitle": "Documentation",
     "docsEmpty": "No documentation",
     "changelogTitle": "Changelog",

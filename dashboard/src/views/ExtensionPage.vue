@@ -306,6 +306,7 @@ const updateDialogPluginLogo = computed(() => {
     :market-plugin="selectedMarketPlugin"
     :source-tab="selectedDetailTab"
     :state="pageState"
+    :installed-plugin-name="selectedInstalledPlugin?.name || ''"
   />
 
   <div v-else-if="selectedPluginId && loading_" class="pa-4">

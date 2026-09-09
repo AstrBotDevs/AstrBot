@@ -37,9 +37,11 @@ class _RecordEnricherFilter(logging.Filter):
 
     def filter(self, record: logging.LogRecord) -> bool:
         if record.name.startswith(PLUGIN_LOGGER_PREFIX):
-            # Records from a per-plugin logger are tagged with the plugin name.
-            record.plugin_tag = f"[{record.name[len(PLUGIN_LOGGER_PREFIX) :]}]"
+            plugin_name = record.name[len(PLUGIN_LOGGER_PREFIX) :] or None
+            record.plugin_name = plugin_name
+            record.plugin_tag = f"[{plugin_name}]" if plugin_name else "[Plug]"
         else:
+            record.plugin_name = None
             record.plugin_tag = (
                 "[Plug]" if _is_plugin_path(record.pathname) else "[Core]"
             )
@@ -182,6 +184,7 @@ class LogQueueHandler(logging.Handler):
                 "time": time.time(),
                 "data": log_entry,
                 "category": getattr(record, "category", None) or "system",
+                "plugin_name": getattr(record, "plugin_name", None),
             },
         )
 
