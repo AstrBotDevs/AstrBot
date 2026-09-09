@@ -13,6 +13,7 @@ class ContextManager:
     def __init__(
         self,
         config: ContextConfig,
+        conversation_id: str | None = None,
     ) -> None:
         """Initialize the context manager.
 
@@ -22,6 +23,7 @@ class ContextManager:
 
         Args:
             config: The context configuration.
+            conversation_id: Conversation UUID forwarded to summary requests.
         """
         self.config = config
 
@@ -36,6 +38,7 @@ class ContextManager:
                 keep_recent_ratio=config.llm_compress_keep_recent_ratio,
                 instruction_text=config.llm_compress_instruction,
                 token_counter=self.token_counter,
+                conversation_id=conversation_id,
             )
         else:
             self.compressor = TruncateByTurnsCompressor(

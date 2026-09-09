@@ -696,6 +696,7 @@ async def _request_img_caption(
     cfg: dict,
     image_urls: list[str],
     plugin_context: Context,
+    conversation_id: str | None = None,
 ) -> str:
     prov = plugin_context.get_provider_by_id(provider_id)
     if prov is None:
@@ -715,6 +716,7 @@ async def _request_img_caption(
     llm_resp = await prov.text_chat(
         prompt=img_cap_prompt,
         image_urls=image_urls,
+        conversation_id=conversation_id,
     )
     return llm_resp.completion_text
 
@@ -738,6 +740,7 @@ async def _ensure_img_caption(
             cfg,
             compressed_urls,
             plugin_context,
+            conversation_id=req.conversation.cid if req.conversation else None,
         )
         if caption:
             req.extra_user_content_parts.append(
@@ -947,6 +950,9 @@ async def _process_quote_message(
                     llm_resp = await prov.text_chat(
                         prompt="Please describe the image content.",
                         image_urls=[compress_path],
+                        conversation_id=req.conversation.cid
+                        if req.conversation
+                        else None,
                     )
                     if llm_resp.completion_text:
                         content_parts.append(
@@ -1111,6 +1117,7 @@ async def _handle_webchat(
 
     try:
         llm_resp = await prov.text_chat(
+            conversation_id=req.conversation.cid if req.conversation else None,
             system_prompt=(
                 "You are a conversation title generator. "
                 "Generate a concise title in the same language as the user’s input, "
@@ -1458,6 +1465,9 @@ async def build_main_agent(
                 return None
 
             req.prompt = event.message_str[len(config.provider_wake_prefix) :]
+            conversation = await _get_session_conv(event, plugin_context)
+            req.conversation = conversation
+            req.contexts = json.loads(conversation.history)
 
             # media files attachments
             for comp in event.message_obj.message:
@@ -1575,9 +1585,6 @@ async def build_main_agent(
                             exc_info=True,
                         )
 
-            conversation = await _get_session_conv(event, plugin_context)
-            req.conversation = conversation
-            req.contexts = json.loads(conversation.history)
             event.set_extra("provider_request", req)
 
     if isinstance(req.contexts, str):

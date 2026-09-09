@@ -257,7 +257,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             custom_compressor=self.custom_compressor,
         )
         self.request_context_manager = ContextManager(
-            self.request_context_manager_config
+            self.request_context_manager_config,
+            conversation_id=self.req.conversation.cid
+            if self.req.conversation
+            else None,
         )
 
         self.provider = provider
@@ -505,6 +508,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             "contexts": self._sanitize_contexts_for_provider(self.run_context.messages),
             "func_tool": self._func_tool_for_provider(),
             "session_id": self.req.session_id,
+            "conversation_id": self.req.conversation.cid
+            if self.req.conversation
+            else None,
             "extra_user_content_parts": self.req.extra_user_content_parts,  # list[ContentPart]
             "abort_signal": self._abort_signal,
             "request_max_retries": self.request_max_retries,
@@ -1427,6 +1433,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         func_tool=param_subset,
                         model=self.req.model,
                         session_id=self.req.session_id,
+                        conversation_id=self.req.conversation.cid
+                        if self.req.conversation
+                        else None,
                         extra_user_content_parts=self.req.extra_user_content_parts,
                         # tool_choice="required",
                         abort_signal=self._abort_signal,
@@ -1459,6 +1468,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             func_tool=param_subset,
                             model=self.req.model,
                             session_id=self.req.session_id,
+                            conversation_id=self.req.conversation.cid
+                            if self.req.conversation
+                            else None,
                             extra_user_content_parts=self.req.extra_user_content_parts,
                             # tool_choice="required",
                             abort_signal=self._abort_signal,

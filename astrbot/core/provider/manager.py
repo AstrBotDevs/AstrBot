@@ -455,6 +455,14 @@ class ProviderManager:
                 from .sources.mirarouter_source import (
                     ProviderMiraRouter as ProviderMiraRouter,
                 )
+            case (
+                "opencode_go_chat_completion"
+                | "opencode_go_responses"
+                | "opencode_go_messages"
+            ):
+                from .sources.opencode_go_source import (
+                    ProviderOpenCodeGo as ProviderOpenCodeGo,
+                )
             case "openrouter_chat_completion":
                 from .sources.openrouter_source import (
                     ProviderOpenRouter as ProviderOpenRouter,
