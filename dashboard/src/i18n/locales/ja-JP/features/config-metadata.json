@@ -536,7 +536,7 @@
         },
         "image_compress_enabled": {
           "description": "画像圧縮を有効化",
-          "hint": "有効にすると、マルチモーダルモデルへ送信する前に、サイズの大きいローカル画像を圧縮します。"
+          "hint": "デフォルトで有効。マルチモーダルモデルへの送信前に、大きなローカル画像を圧縮し、画像を PNG に統一します。"
         },
         "image_compress_options": {
           "description": "画像圧縮設定",
@@ -1507,6 +1507,7 @@
           "ツール使用"
         ]
       },
+
       "custom_headers": {
         "description": "カスタムリクエストヘッダー",
         "hint": "ここで追加したキーと値のペアは、カスタム HTTP リクエストヘッダーとして OpenAI SDK の default_headers に統合されます。値は文字列である必要があります。"

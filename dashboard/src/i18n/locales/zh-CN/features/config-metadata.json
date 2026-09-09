@@ -456,7 +456,7 @@
         },
         "image_compress_enabled": {
           "description": "启用图片压缩",
-          "hint": "启用后，发送给多模态模型前会先压缩本地大图片。"
+          "hint": "默认开启。发送给多模态模型前压缩本地大图片，并统一转换为 PNG。"
         },
         "image_compress_options": {
           "description": "图片压缩配置",
@@ -1431,6 +1431,7 @@
           "工具使用"
         ]
       },
+
       "custom_headers": {
         "description": "自定义请求头",
         "hint": "此处添加的键值对将被合并到 OpenAI SDK 的 default_headers 中，用于自定义 HTTP 请求头。值必须为字符串。"

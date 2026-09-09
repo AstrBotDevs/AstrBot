@@ -435,7 +435,7 @@
         },
         "image_compress_enabled": {
           "description": "Enable image compression",
-          "hint": "When enabled, large local images are compressed before being sent to multimodal models."
+          "hint": "Enabled by default. Compress large local images and convert images to PNG before sending them to multimodal models."
         },
         "image_compress_options": {
           "description": "Image compression settings",
@@ -1410,6 +1410,7 @@
           "Tool use"
         ]
       },
+
       "custom_headers": {
         "description": "Custom request headers",
         "hint": "Key/value pairs added here are merged into the OpenAI SDK default_headers for custom HTTP headers. Values must be strings."

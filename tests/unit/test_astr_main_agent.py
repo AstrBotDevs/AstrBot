@@ -1752,6 +1752,8 @@ class TestBuildMainAgent:
         """Test building main agent with image attachments."""
         module = ama
         mock_image = MagicMock(spec=Image)
+        mock_image.url = None
+        mock_image.file = "file:///path/to/image.jpg"
         mock_image.convert_to_file_path = AsyncMock(return_value="/path/to/image.jpg")
         mock_event.message_obj.message = [mock_image]
 
@@ -1874,10 +1876,6 @@ class TestBuildMainAgent:
                 "convert_to_file_path",
                 AsyncMock(return_value="/tmp/quoted.jpg"),
             ),
-            patch(
-                "astrbot.core.astr_main_agent._compress_image_for_provider",
-                AsyncMock(side_effect=lambda path, _settings: path),
-            ),
         ):
             mock_runner = MagicMock()
             mock_runner.reset = AsyncMock()
@@ -1944,10 +1942,6 @@ class TestBuildMainAgent:
                 Image,
                 "convert_to_file_path",
                 AsyncMock(return_value="/tmp/quoted.jpg"),
-            ),
-            patch(
-                "astrbot.core.astr_main_agent._compress_image_for_provider",
-                AsyncMock(side_effect=lambda path, _settings: path),
             ),
         ):
             mock_runner = MagicMock()
