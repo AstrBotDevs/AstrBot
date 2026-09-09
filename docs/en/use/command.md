@@ -15,7 +15,7 @@ The following commands are shipped with AstrBot and loaded by default:
 - `/help`: View currently enabled commands and AstrBot version information.
 - `/sid`: View current message source information, including UMO, user ID, platform ID, message type, and session ID. This is commonly used when configuring admins, allowlists, or routing rules.
 - `/name`: Set a display alias for the current UMO, which means one concrete group or private-chat message source on a platform, so it is easier to recognize in WebUI. This command requires admin permission.
-- `/reset`: Reset the current conversation's LLM context.
+- `/reset`: Create and switch to a new conversation, just like `/new`.
 - `/stop`: Stop Agent tasks currently running in the current session.
 - `/new`: Create and switch to a new conversation.
 - `/stats`: View token usage statistics for the current conversation.
@@ -71,27 +71,31 @@ Display rules:
 
 `/name` requires admin permission.
 
-### `/reset`
+### `/reset` and `/new`
 
-`/reset` resets the LLM context of the current session.
+`/reset` and `/new` use the same restart flow. Both command entries and their individual command management settings are retained.
 
 For AstrBot's built-in Agent Runner, it:
 
-- Stops running tasks in the current session.
-- Clears the context messages of the current conversation.
-- Notifies long-term memory to clear the current session state.
+- Marks other active events in the current session as stopped, without waiting for every task to exit.
+- Creates and selects an empty conversation, preserving previous history and inheriting the current persona.
+- Clears the current session's group context cache after the reply is sent.
 
 For third-party Agent Runners such as `dify`, `coze`, `dashscope`, and `deerflow`, it:
 
 - Stops running tasks in the current session.
 - Removes the saved third-party conversation ID for this session, so the next turn starts a new conversation.
 
+DeerFlow also attempts to delete the old remote thread. Third-party runners do not guarantee retention of previous history.
+
 Permission notes:
 
 - In private chat, regular users can use it by default.
-- In group chat with `unique_session` enabled, regular users can use it by default.
-- In group chat without `unique_session`, admin permission is required by default.
-- If command permission settings have been customized, the actual configuration takes precedence.
+- Group chats require AstrBot administrator permission by default, independently of session isolation. This refers to configured administrator IDs, not automatically detected group administrators.
+- Enable **Allow Non-Administrators to Start Group Conversations** under **Platform Configuration → General** to allow members. With shared context this affects the whole group; with member isolation it affects only the sender's conversation.
+- Additional command management restrictions still apply. The setting does not bypass disabled commands or administrator-only command permissions.
+
+Upgrade note: legacy reset scene permissions are no longer used. The new setting defaults to disabled, including for previously isolated group sessions; explicitly enable it to let regular group members start conversations. Existing session isolation settings are preserved.
 
 ### `/stop`
 

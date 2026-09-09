@@ -66,6 +66,7 @@ DEFAULT_CONFIG = {
     "config_version": 3,
     "platform_settings": {
         "unique_session": False,
+        "allow_member_new_conversation": False,
         "rate_limit": {
             "time": 60,
             "count": 30,
@@ -1133,6 +1134,9 @@ CONFIG_METADATA_2 = {
                 "type": "object",
                 "items": {
                     "unique_session": {
+                        "type": "bool",
+                    },
+                    "allow_member_new_conversation": {
                         "type": "bool",
                     },
                     "rate_limit": {
@@ -4243,9 +4247,14 @@ CONFIG_METADATA_3 = {
                         "items": {"type": "string"},
                     },
                     "platform_settings.unique_session": {
-                        "description": "隔离会话",
+                        "description": "隔离群聊上下文",
                         "type": "bool",
                         "hint": "启用后，群成员的上下文独立。",
+                    },
+                    "platform_settings.allow_member_new_conversation": {
+                        "description": "允许非管理员在群聊中新建对话",
+                        "type": "bool",
+                        "hint": "允许普通成员使用 /new 和 /reset。共享上下文时会切换整个群的当前对话；成员隔离时只影响自己的对话。内置 Agent 的旧记录保留。命令管理中的权限限制仍然有效。",
                     },
                     "wake_prefix": {
                         "description": "唤醒词",

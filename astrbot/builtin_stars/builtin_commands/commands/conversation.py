@@ -12,8 +12,6 @@ from astrbot.core.agent.runners.deerflow.deerflow_api_client import DeerFlowAPIC
 from astrbot.core.db.po import ProviderStat
 from astrbot.core.utils.active_event_registry import active_event_registry
 
-from .utils.rst_scene import RstScene
-
 THIRD_PARTY_AGENT_RUNNER_KEY = {
     "dify": "dify_conversation_id",
     "coze": "coze_conversation_id",
@@ -109,78 +107,6 @@ class ConversationCommands:
             return None
         return conv.persona_id
 
-    async def reset(self, message: AstrMessageEvent) -> None:
-        """重置 LLM 会话"""
-        umo = message.unified_msg_origin
-        cfg = self.context.get_config(umo=message.unified_msg_origin)
-        is_unique_session = cfg["platform_settings"]["unique_session"]
-        is_group = bool(message.get_group_id())
-
-        scene = RstScene.get_scene(is_group, is_unique_session)
-
-        alter_cmd_cfg = await sp.get_async("global", "global", "alter_cmd", {})
-        plugin_config = alter_cmd_cfg.get("astrbot", {})
-        reset_cfg = plugin_config.get("reset", {})
-
-        required_perm = reset_cfg.get(
-            scene.key,
-            "admin" if is_group and not is_unique_session else "member",
-        )
-
-        if required_perm == "admin" and message.role != "admin":
-            message.set_result(
-                MessageEventResult().message(
-                    f"Reset command requires admin permission in {scene.name} scenario, "
-                    f"you (ID {message.get_sender_id()}) are not admin, cannot perform this action.",
-                ),
-            )
-            return
-
-        agent_runner_type = cfg["agent_runner"]["runner_type"]
-        if agent_runner_type in THIRD_PARTY_AGENT_RUNNER_KEY:
-            active_event_registry.stop_all(umo, exclude=message)
-            await _clear_third_party_agent_runner_state(
-                self.context,
-                umo,
-                agent_runner_type,
-            )
-            message.set_result(
-                MessageEventResult().message("✅ Conversation reset successfully.")
-            )
-            return
-
-        if not await self.context.get_using_provider_async(umo):
-            message.set_result(
-                MessageEventResult().message(
-                    "😕 Cannot find any LLM provider. Configure one first."
-                ),
-            )
-            return
-
-        cid = await self.context.conversation_manager.get_curr_conversation_id(umo)
-
-        if not cid:
-            message.set_result(
-                MessageEventResult().message(
-                    "😕 You are not in a conversation. Use /new to create one.",
-                ),
-            )
-            return
-
-        active_event_registry.stop_all(umo, exclude=message)
-
-        await self.context.conversation_manager.update_conversation(
-            umo,
-            cid,
-            [],
-        )
-
-        ret = "✅ Conversation reset successfully."
-
-        message.set_extra("_clean_group_context_session", True)
-
-        message.set_result(MessageEventResult().message(ret))
-
     async def stop(self, message: AstrMessageEvent) -> None:
         """停止当前会话正在运行的 Agent"""
         cfg = self.context.get_config(umo=message.unified_msg_origin)
@@ -208,8 +134,27 @@ class ConversationCommands:
         )
 
     async def new_conv(self, message: AstrMessageEvent) -> None:
-        """创建新对话"""
+        """Start a new conversation without clearing the previous history.
+
+        Args:
+            message: Command event identifying the session and sender.
+        """
         cfg = self.context.get_config(umo=message.unified_msg_origin)
+        if (
+            message.get_group_id()
+            and not message.is_admin()
+            and not cfg.get("platform_settings", {}).get(
+                "allow_member_new_conversation", False
+            )
+        ):
+            message.set_result(
+                MessageEventResult().message(
+                    "Only AstrBot administrators can use /new or /reset in groups. "
+                    "Enable member conversation creation in platform settings to allow it."
+                )
+            )
+            return
+
         agent_runner_type = cfg["agent_runner"]["runner_type"]
         if agent_runner_type in THIRD_PARTY_AGENT_RUNNER_KEY:
             active_event_registry.stop_all(message.unified_msg_origin, exclude=message)
@@ -235,7 +180,7 @@ class ConversationCommands:
 
         message.set_result(
             MessageEventResult().message(
-                f"✅ Switched to new conversation: {cid[:4]}。"
+                f"✅ Switched to new conversation: {cid[:4]}."
             ),
         )
 

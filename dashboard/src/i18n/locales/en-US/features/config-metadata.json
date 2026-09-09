@@ -888,8 +888,12 @@
       },
       "platform_settings": {
         "unique_session": {
-          "description": "Isolate Sessions",
+          "description": "Isolate Group Chat Contexts",
           "hint": "When enabled, group members have independent contexts."
+        },
+        "allow_member_new_conversation": {
+          "description": "Allow Non-Administrators to Start Group Conversations",
+          "hint": "Allow members to use /new and /reset. With shared context, this switches the conversation for the whole group; with member isolation, only their own conversation changes. Previous history is kept for the built-in agent. Command management permission restrictions still apply."
         },
         "friend_message_needs_wake_prefix": {
           "description": "Private Messages Require Wake Word"

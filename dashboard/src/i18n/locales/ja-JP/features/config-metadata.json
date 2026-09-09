@@ -985,8 +985,12 @@
       },
       "platform_settings": {
         "unique_session": {
-          "description": "セッションを分離",
+          "description": "グループのコンテキストを分離",
           "hint": "有効にすると、グループメンバーごとに独立したコンテキストを使用します。"
+        },
+        "allow_member_new_conversation": {
+          "description": "管理者以外によるグループでの新規会話を許可",
+          "hint": "一般メンバーに /new と /reset の使用を許可します。コンテキスト共有時はグループ全体の会話が切り替わり、メンバー別の分離時は自分の会話のみが切り替わります。内蔵 Agent の過去の履歴は保持されます。コマンド管理の権限制限は引き続き適用されます。"
         },
         "friend_message_needs_wake_prefix": {
           "description": "ダイレクトメッセージでウェイクワードを必須にする"

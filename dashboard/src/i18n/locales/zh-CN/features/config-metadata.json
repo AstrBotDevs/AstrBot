@@ -909,8 +909,12 @@
       },
       "platform_settings": {
         "unique_session": {
-          "description": "隔离会话",
+          "description": "隔离群聊上下文",
           "hint": "启用后,群成员的上下文独立。"
+        },
+        "allow_member_new_conversation": {
+          "description": "允许非管理员在群聊中新建对话",
+          "hint": "允许普通成员使用 /new 和 /reset。共享上下文时会切换整个群的当前对话；成员隔离时只影响自己的对话。内置 Agent 的旧记录保留。命令管理中的权限限制仍然有效。"
         },
         "friend_message_needs_wake_prefix": {
           "description": "私聊消息需要唤醒词"
