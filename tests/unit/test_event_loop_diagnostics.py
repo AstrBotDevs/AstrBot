@@ -105,10 +105,12 @@ async def test_event_loop_watchdog_survives_dump_failure(tmp_path, monkeypatch):
             dump_path=log_path,
         )
     )
-    await asyncio.sleep(0)
-    time.sleep(0.06)  # noqa: ASYNC251 - Intentionally block the event loop.
-    assert dumped.is_set()
-    task.cancel()
-    await asyncio.gather(task, return_exceptions=True)
+    try:
+        await asyncio.sleep(0)
+        # Keep the event loop stalled until the watchdog retries the dump.
+        assert dumped.wait(timeout=2)
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
 
     assert attempts >= 2
