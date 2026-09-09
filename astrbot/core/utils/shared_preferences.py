@@ -16,6 +16,7 @@ from .astrbot_path import get_astrbot_data_path
 
 _VT = TypeVar("_VT")
 _MISSING = object()
+_DELETED = object()
 logger = logging.getLogger("astrbot")
 _WriteOperation = tuple[
     str,
@@ -52,6 +53,9 @@ class SharedPreferences:
         # See https://github.com/AstrBotDevs/AstrBot/pull/9649 for the original
         # deadlock scenario and design rationale.
         self._cache: dict[tuple[str, str, str], Any] = {}
+        # Deletions must mask database values until queued writes are persisted.
+        # Scope markers also cover historical keys that were never cached.
+        self._cleared_scopes: set[tuple[str, str]] = set()
         self._cache_lock = threading.RLock()
         self._cache_initialized = False
         self._initializing = False
@@ -83,8 +87,9 @@ class SharedPreferences:
             if action == "put" and key is not None:
                 self._cache[(scope, scope_id, key)] = deepcopy(value)
             elif action == "remove" and key is not None:
-                self._cache.pop((scope, scope_id, key), None)
+                self._cache[(scope, scope_id, key)] = _DELETED
             elif action == "clear":
+                self._cleared_scopes.add((scope, scope_id))
                 keys = [
                     cache_key
                     for cache_key in self._cache
@@ -288,8 +293,12 @@ class SharedPreferences:
             return default
         with self._cache_lock:
             value = self._cache.get((scope, scope_id, key), _MISSING)
+            if value is _DELETED:
+                return default
             if value is not _MISSING:
                 return deepcopy(value)
+            if (scope, scope_id) in self._cleared_scopes:
+                return default
         preference = await self.db_helper.get_preference(scope, scope_id, key)
         if preference is None:
             return default
@@ -483,8 +492,12 @@ class SharedPreferences:
         resolved_scope_id = scope_id or "unknown"
         with self._cache_lock:
             value = self._cache.get((resolved_scope, resolved_scope_id, key), _MISSING)
+            if value is _DELETED:
+                return default
             if value is not _MISSING:
                 return default if value is None else deepcopy(value)
+            if (resolved_scope, resolved_scope_id) in self._cleared_scopes:
+                return default
         # Overlay miss: fall back to a point query through a dedicated
         # synchronous database connection. This briefly blocks the calling
         # thread (unavoidable for a synchronous API), but never touches the
@@ -560,17 +573,21 @@ class SharedPreferences:
                 )
                 persisted = []
 
-        values = {
-            (preference.scope, preference.scope_id, preference.key): preference
-            for preference in persisted
-        }
         with self._cache_lock:
+            values = {
+                (preference.scope, preference.scope_id, preference.key): preference
+                for preference in persisted
+                if (preference.scope, preference.scope_id) not in self._cleared_scopes
+            }
             for (cache_scope, cache_scope_id, cache_key), value in self._cache.items():
                 if (
                     cache_scope == scope
                     and (scope_id is None or cache_scope_id == scope_id)
                     and (key is None or cache_key == key)
                 ):
+                    if value is _DELETED:
+                        values.pop((cache_scope, cache_scope_id, cache_key), None)
+                        continue
                     values[(cache_scope, cache_scope_id, cache_key)] = Preference(
                         scope=cache_scope,
                         scope_id=cache_scope_id,

@@ -8,6 +8,72 @@ from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.utils.shared_preferences import SharedPreferences
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("action", ["remove", "clear"])
+@pytest.mark.parametrize("reader", ["sync", "async", "range"])
+@pytest.mark.parametrize("cached", [False, True])
+async def test_pending_deletion_hides_persisted_values(
+    preferences, action, reader, cached
+):
+    store, database = preferences
+    if cached:
+        await store.put_async("plugin", "example", "state", "old")
+    else:
+        await database.insert_preference_or_update(
+            "plugin", "example", "state", {"val": "old"}
+        )
+
+    # The writer cannot run before the following synchronous read. Async reads
+    # must also see the deletion immediately, without depending on writer timing.
+    if action == "remove":
+        store.remove("state", scope="plugin", scope_id="example")
+    else:
+        store.clear(scope="plugin", scope_id="example")
+
+    if reader == "sync":
+        assert store.get("state", "missing", "plugin", "example") == "missing"
+    elif reader == "async":
+        assert (
+            await store.get_async("plugin", "example", "state", "missing") == "missing"
+        )
+    else:
+        assert store.range_get("plugin", "example") == []
+
+    await store.flush()
+    assert await database.get_preference("plugin", "example", "state") is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("action", ["remove", "clear"])
+async def test_put_after_deletion_is_visible_and_preserves_other_scopes(
+    preferences, action
+):
+    store, database = preferences
+    for scope, scope_id in [
+        ("plugin", "example"),
+        ("plugin", "other"),
+        ("umo", "example"),
+    ]:
+        await store.put_async(scope, scope_id, "state", "old")
+    if action == "remove":
+        store.remove("state", scope="plugin", scope_id="example")
+    else:
+        store.clear(scope="plugin", scope_id="example")
+    store.put("state", "new", scope="plugin", scope_id="example")
+
+    assert store.get("state", scope="plugin", scope_id="example") == "new"
+    assert await store.get_async("plugin", "example", "state") == "new"
+    values = {
+        (item.scope_id, item.key): item.value["val"]
+        for item in store.range_get("plugin")
+    }
+    assert values == {("example", "state"): "new", ("other", "state"): "old"}
+    assert store.get("state", scope="umo", scope_id="example") == "old"
+    await store.flush()
+    persisted = await database.get_preference("plugin", "example", "state")
+    assert persisted.value == {"val": "new"}
+
+
 @pytest_asyncio.fixture
 async def preferences(tmp_path):
     database = SQLiteDatabase(str(tmp_path / "preferences.db"))
@@ -19,6 +85,41 @@ async def preferences(tmp_path):
     finally:
         await store.close()
         await database.engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("action", ["remove", "clear"])
+async def test_async_deletion_is_visible_while_persistence_is_pending(
+    preferences, monkeypatch, action
+):
+    store, database = preferences
+    await store.put_async("plugin", "example", "state", "old")
+    started = asyncio.Event()
+    release = asyncio.Event()
+    method_name = "remove_preference" if action == "remove" else "clear_preferences"
+    original = getattr(database, method_name)
+
+    async def delayed_delete(*args):
+        started.set()
+        await release.wait()
+        await original(*args)
+
+    monkeypatch.setattr(database, method_name, delayed_delete)
+    operation = (
+        store.remove_async("plugin", "example", "state")
+        if action == "remove"
+        else store.clear_async("plugin", "example")
+    )
+    task = asyncio.create_task(operation)
+    try:
+        await asyncio.wait_for(started.wait(), timeout=2)
+        assert not task.done()
+        assert await store.get_async("plugin", "example", "state") is None
+        assert store.get("state", scope="plugin", scope_id="example") is None
+        assert store.range_get("plugin", "example") == []
+    finally:
+        release.set()
+        await task
 
 
 @pytest.mark.asyncio
