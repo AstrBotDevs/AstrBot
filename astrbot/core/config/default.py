@@ -4254,7 +4254,7 @@ CONFIG_METADATA_3 = {
                     "platform_settings.allow_member_new_conversation": {
                         "description": "允许非管理员在群聊中新建对话",
                         "type": "bool",
-                        "hint": "允许普通成员使用 /new 和 /reset。共享上下文时会切换整个群的当前对话；成员隔离时只影响自己的对话。内置 Agent 的旧记录保留。命令管理中的权限限制仍然有效。",
+                        "hint": "允许普通成员使用 /new 和 /reset 指令（关闭隔离对话时指令会切换整个群的对话；开启隔离对话时指令只影响自己的对话。内置 Agent 不会删除旧对话）。命令管理中的权限限制仍然有效。",
                     },
                     "wake_prefix": {
                         "description": "唤醒词",
