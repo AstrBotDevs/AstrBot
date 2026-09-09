@@ -1041,7 +1041,7 @@
             },
             "platform_settings": {
                 "unique_session": {
-                    "description": "Изолировать контекст участников группы",
+                    "description": "Изолировать диалоги",
                     "hint": "У каждого участника группы будет свой независимый контекст."
                 },
                 "allow_member_new_conversation": {

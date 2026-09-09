@@ -985,7 +985,7 @@
       },
       "platform_settings": {
         "unique_session": {
-          "description": "グループのコンテキストを分離",
+          "description": "会話を分離",
           "hint": "有効にすると、グループメンバーごとに独立したコンテキストを使用します。"
         },
         "allow_member_new_conversation": {

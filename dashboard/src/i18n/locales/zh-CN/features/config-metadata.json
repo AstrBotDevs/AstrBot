@@ -909,7 +909,7 @@
       },
       "platform_settings": {
         "unique_session": {
-          "description": "隔离群聊上下文",
+          "description": "隔离对话",
           "hint": "启用后,群成员的上下文独立。"
         },
         "allow_member_new_conversation": {

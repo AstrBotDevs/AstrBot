@@ -888,7 +888,7 @@
       },
       "platform_settings": {
         "unique_session": {
-          "description": "Isolate Group Chat Contexts",
+          "description": "Isolate Conversation",
           "hint": "When enabled, group members have independent contexts."
         },
         "allow_member_new_conversation": {

@@ -4247,7 +4247,7 @@ CONFIG_METADATA_3 = {
                         "items": {"type": "string"},
                     },
                     "platform_settings.unique_session": {
-                        "description": "隔离群聊上下文",
+                        "description": "隔离对话",
                         "type": "bool",
                         "hint": "启用后，群成员的上下文独立。",
                     },
