@@ -3,7 +3,7 @@ from __future__ import annotations
 import enum
 import json
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 
 from anthropic.types import Message as AnthropicMessage
 from deprecated import deprecated
@@ -114,6 +114,12 @@ class ProviderRequest:
     """附加的上次请求后工具调用的结果。参考: https://platform.openai.com/docs/guides/function-calling#handling-function-calls"""
     model: str | None = None
     """模型名称，为 None 时使用提供商的默认模型"""
+    oauth_web_search: Literal["inherit", "disabled", "cached", "live"] = "inherit"
+    """请求级 Codex OAuth 托管搜索策略。"""
+    retry_rate_limits: bool = True
+    """是否允许 Provider 重试 HTTP 429。"""
+    fallback_on_rate_limit: bool = True
+    """是否允许 Agent 在 HTTP 429 后切换备用 Provider。"""
 
     def __repr__(self) -> str:
         return (
@@ -327,6 +333,8 @@ class LLMResponse:
     """The ID of the response. For chunked responses, it's the ID of the chunk; for non-chunked responses, it's the ID of the response."""
     usage: TokenUsage | None = None
     """The usage of the response. For chunked responses, it's the usage of the chunk; for non-chunked responses, it's the usage of the response."""
+    status_code: int | None = None
+    """HTTP status code associated with an error response, when available."""
 
     def __init__(
         self,
@@ -347,6 +355,7 @@ class LLMResponse:
         is_chunk: bool = False,
         id: str | None = None,
         usage: TokenUsage | None = None,
+        status_code: int | None = None,
     ) -> None:
         """初始化 LLMResponse
 
@@ -384,6 +393,7 @@ class LLMResponse:
             self.id = id
         if usage is not None:
             self.usage = usage
+        self.status_code = status_code
 
     @property
     def completion_text(self):

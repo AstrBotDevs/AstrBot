@@ -743,6 +743,94 @@ paths:
         "200":
           $ref: "#/components/responses/Ok"
 
+  /api/v1/provider-sources/openai-oauth/start:
+    post:
+      tags: [Provider Sources]
+      summary: Start OpenAI OAuth authorization for a provider source
+      operationId: startProviderSourceOpenAIOAuth
+      x-astrbot-scope: provider
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [source_id]
+              properties:
+                source_id:
+                  type: string
+                config:
+                  $ref: "#/components/schemas/DynamicConfig"
+              additionalProperties: false
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/provider-sources/openai-oauth/complete:
+    post:
+      tags: [Provider Sources]
+      summary: Complete OpenAI OAuth authorization for a provider source
+      operationId: completeProviderSourceOpenAIOAuth
+      x-astrbot-scope: provider
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [source_id, input]
+              properties:
+                source_id:
+                  type: string
+                input:
+                  type: string
+              additionalProperties: false
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/provider-sources/openai-oauth/refresh:
+    post:
+      tags: [Provider Sources]
+      summary: Refresh OpenAI OAuth credentials for a provider source
+      operationId: refreshProviderSourceOpenAIOAuth
+      x-astrbot-scope: provider
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [source_id]
+              properties:
+                source_id:
+                  type: string
+              additionalProperties: false
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/provider-sources/openai-oauth/disconnect:
+    post:
+      tags: [Provider Sources]
+      summary: Disconnect OpenAI OAuth credentials from a provider source
+      operationId: disconnectProviderSourceOpenAIOAuth
+      x-astrbot-scope: provider
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [source_id]
+              properties:
+                source_id:
+                  type: string
+              additionalProperties: false
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
   /api/v1/provider-sources/models:
     get:
       tags: [Provider Sources]

@@ -1063,6 +1063,48 @@ export type DeleteProviderSourceByIdResponse = (SuccessEnvelope);
 
 export type DeleteProviderSourceByIdError = unknown;
 
+export type StartProviderSourceOpenAioAuthData = {
+    body: {
+        source_id: string;
+        config?: DynamicConfig;
+    };
+};
+
+export type StartProviderSourceOpenAioAuthResponse = (SuccessEnvelope);
+
+export type StartProviderSourceOpenAioAuthError = unknown;
+
+export type CompleteProviderSourceOpenAioAuthData = {
+    body: {
+        source_id: string;
+        input: string;
+    };
+};
+
+export type CompleteProviderSourceOpenAioAuthResponse = (SuccessEnvelope);
+
+export type CompleteProviderSourceOpenAioAuthError = unknown;
+
+export type RefreshProviderSourceOpenAioAuthData = {
+    body: {
+        source_id: string;
+    };
+};
+
+export type RefreshProviderSourceOpenAioAuthResponse = (SuccessEnvelope);
+
+export type RefreshProviderSourceOpenAioAuthError = unknown;
+
+export type DisconnectProviderSourceOpenAioAuthData = {
+    body: {
+        source_id: string;
+    };
+};
+
+export type DisconnectProviderSourceOpenAioAuthResponse = (SuccessEnvelope);
+
+export type DisconnectProviderSourceOpenAioAuthError = unknown;
+
 export type ListProviderSourceModelsByIdData = {
     query: {
         capability?: ProviderCapability;

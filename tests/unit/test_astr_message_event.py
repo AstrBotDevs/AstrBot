@@ -612,6 +612,9 @@ class TestRequestLlm:
             image_urls=["http://example.com/img.jpg"],
             contexts=[{"role": "user", "content": "Hi"}],
             system_prompt="You are helpful",
+            oauth_web_search="disabled",
+            retry_rate_limits=False,
+            fallback_on_rate_limit=False,
         )
 
         assert request.prompt == "Hello"
@@ -619,6 +622,9 @@ class TestRequestLlm:
         assert request.image_urls == ["http://example.com/img.jpg"]
         assert request.contexts == [{"role": "user", "content": "Hi"}]
         assert request.system_prompt == "You are helpful"
+        assert request.oauth_web_search == "disabled"
+        assert request.retry_rate_limits is False
+        assert request.fallback_on_rate_limit is False
 
 
 class TestSendStreaming:

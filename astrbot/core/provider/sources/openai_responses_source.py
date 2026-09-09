@@ -345,9 +345,11 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         payloads.pop("conversation", None)
         payloads["store"] = False
 
+        request_client = self._client_for_request_retry_policy()
+
         response = await retry_provider_request(
             "OpenAI Responses",
-            lambda: self.client.responses.create(
+            lambda: request_client.responses.create(
                 **payloads,
                 stream=False,
                 extra_body=extra_body,
@@ -414,9 +416,11 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         payloads.pop("conversation", None)
         payloads["store"] = False
 
+        request_client = self._client_for_request_retry_policy()
+
         stream = await retry_provider_request(
             "OpenAI Responses",
-            lambda: self.client.responses.create(
+            lambda: request_client.responses.create(
                 **payloads,
                 stream=True,
                 extra_body=extra_body,
