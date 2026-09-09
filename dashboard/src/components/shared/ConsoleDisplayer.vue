@@ -79,6 +79,7 @@ export default {
       maxRetryAttempts: 10,
       baseRetryDelay: 1000,
       lastEventId: null,
+      scrollAnimationFrame: null,
     };
   },
   computed: {
@@ -129,6 +130,10 @@ export default {
       "fullscreenchange",
       this.handleFullscreenChange,
     );
+    if (this.scrollAnimationFrame !== null) {
+      cancelAnimationFrame(this.scrollAnimationFrame);
+      this.scrollAnimationFrame = null;
+    }
     if (this.eventSource) {
       this.eventSource.close();
       this.eventSource = null;
@@ -375,8 +380,14 @@ export default {
       span.classList.add("console-log-line", "fade-in");
       this.appendLogContent(span, log);
       ele.appendChild(span);
-      if (this.autoScroll) {
-        ele.scrollTop = ele.scrollHeight;
+      if (this.autoScroll && this.scrollAnimationFrame === null) {
+        // Scroll once per frame so a batch of logs does not force layout per line.
+        this.scrollAnimationFrame = requestAnimationFrame(() => {
+          this.scrollAnimationFrame = null;
+          if (this.autoScroll) {
+            ele.scrollTop = ele.scrollHeight;
+          }
+        });
       }
     },
   },
