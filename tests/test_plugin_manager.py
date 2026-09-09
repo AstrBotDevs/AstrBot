@@ -248,6 +248,24 @@ def test_load_plugin_metadata_coerces_numeric_version_to_string(tmp_path: Path) 
     assert loaded_metadata.version == "2.4"
 
 
+def test_load_plugin_metadata_preserves_trailing_zero_version(tmp_path: Path) -> None:
+    """Unquoted `version: 2.10` must keep its original text, not become "2.1"."""
+    plugin_path = tmp_path / "helloworld"
+    plugin_path.mkdir()
+    (plugin_path / "metadata.yaml").write_text(
+        "name: helloworld\n"
+        "desc: test plugin\n"
+        "version: 2.10\n"
+        "author: AstrBot Team\n",
+        encoding="utf-8",
+    )
+
+    loaded_metadata = PluginManager._load_plugin_metadata(str(plugin_path))
+
+    assert loaded_metadata is not None
+    assert loaded_metadata.version == "2.10"
+
+
 def test_loaded_metadata_can_copy_i18n_into_existing_star_metadata(tmp_path: Path):
     plugin_path = tmp_path / "helloworld"
     _write_local_test_plugin(plugin_path, TEST_PLUGIN_REPO)

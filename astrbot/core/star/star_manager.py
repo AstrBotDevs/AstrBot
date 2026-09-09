@@ -52,7 +52,7 @@ from .error_messages import format_plugin_error
 from .filter.permission import PermissionType, PermissionTypeFilter
 from .star import star_map, star_registry
 from .star_handler import EventType, star_handlers_registry
-from .updater import PLUGIN_METADATA_FILENAMES, _PluginUpdater
+from .updater import PLUGIN_METADATA_FILENAMES, _PluginUpdater, load_plugin_yaml
 
 try:
     from watchfiles import PythonFilter, awatch
@@ -512,7 +512,7 @@ class PluginManager:
         if metadata_path:
             metadata_label = metadata_path.name
             with metadata_path.open(encoding="utf-8") as f:
-                metadata = yaml.safe_load(f)
+                metadata = load_plugin_yaml(f)
 
         if isinstance(metadata, dict):
             if "desc" not in metadata and "description" in metadata:
@@ -647,7 +647,7 @@ class PluginManager:
             )
 
         with metadata_path.open(encoding="utf-8") as f:
-            metadata = yaml.safe_load(f)
+            metadata = load_plugin_yaml(f)
 
         if not isinstance(metadata, dict):
             raise Exception(f"{metadata_path.name} 格式错误。")
