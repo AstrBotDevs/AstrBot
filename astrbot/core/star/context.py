@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from asyncio import Queue
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any, Protocol
@@ -31,6 +32,11 @@ from astrbot.core.provider.provider import (
     RerankProvider,
     STTProvider,
     TTSProvider,
+    provider_stats_managed_by_agent,
+)
+from astrbot.core.provider.stats import (
+    record_agent_runner_stats,
+    record_llm_response_stats,
 )
 from astrbot.core.star.filter.platform_adapter_type import (
     ADAPTER_NAME_2_TYPE,
@@ -201,15 +207,39 @@ class Context:
         prov = await self.provider_manager.get_provider_by_id(chat_provider_id)
         if not prov or not isinstance(prov, Provider):
             raise ProviderNotFoundError(f"Provider {chat_provider_id} not found")
-        llm_resp = await prov.text_chat(
-            prompt=prompt,
-            image_urls=image_urls,
-            audio_urls=audio_urls,
-            func_tool=tools,
-            contexts=contexts,
-            system_prompt=system_prompt,
-            **kwargs,
-        )
+        start_time = time.time()
+        llm_resp = None
+        failed_usage = None
+        stats_token = provider_stats_managed_by_agent.set(True)
+        try:
+            try:
+                llm_resp = await prov.text_chat(
+                    prompt=prompt,
+                    image_urls=image_urls,
+                    audio_urls=audio_urls,
+                    func_tool=tools,
+                    contexts=contexts,
+                    system_prompt=system_prompt,
+                    **kwargs,
+                )
+            except Exception as exc:
+                failed_usage = getattr(exc, "_astrbot_token_usage", None)
+                raise
+            finally:
+                provider_stats_managed_by_agent.reset(stats_token)
+        finally:
+            session_id = kwargs.get("session_id") or "sdk"
+            await record_llm_response_stats(
+                self._db,
+                umo=f"provider:{chat_provider_id}:{session_id}",
+                provider=prov,
+                response=llm_resp,
+                start_time=start_time,
+                end_time=time.time(),
+                conversation_id=kwargs.get("conversation_id"),
+                usage=failed_usage,
+                agent_type="provider",
+            )
         return llm_resp
 
     async def tool_loop_agent(
@@ -299,6 +329,7 @@ class Context:
             for k, v in kwargs.items()
             if k not in ["stream", "agent_hooks", "agent_context"]
         }
+        other_kwargs["provider_stats_managed_by_agent"] = True
         if request.func_tool and request.func_tool.get_tool("astrbot_file_read_tool"):
             other_kwargs.setdefault(
                 "tool_result_overflow_dir", get_astrbot_system_tmp_path()
@@ -319,9 +350,19 @@ class Context:
             streaming=streaming,
             **other_kwargs,
         )
-        async for _ in agent_runner.step_until_done(max_steps):
-            pass
-        llm_resp = agent_runner.get_final_llm_resp()
+        llm_resp = None
+        try:
+            async for _ in agent_runner.step_until_done(max_steps):
+                pass
+            llm_resp = agent_runner.get_final_llm_resp()
+        finally:
+            await record_agent_runner_stats(
+                self._db,
+                umo=event.unified_msg_origin,
+                request=request,
+                agent_runner=agent_runner,
+                final_response=llm_resp,
+            )
         if not llm_resp:
             raise Exception("Agent did not produce a final LLM response")
         return llm_resp
