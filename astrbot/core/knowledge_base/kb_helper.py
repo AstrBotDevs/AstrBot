@@ -834,9 +834,12 @@ class KBHelper:
 
         if not cleaning_provider_id:
             logger.warning(
-                "启用了内容清洗，但未提供 cleaning_provider_id，跳过清洗并使用默认分块。"
+                "启用了内容清洗，但未提供 cleaning_provider_id，跳过清洗并使用指定参数分块: "
+                f"chunk_size={chunk_size}, chunk_overlap={chunk_overlap}"
             )
-            return await self.chunker.chunk(content)
+            return await self.chunker.chunk(
+                content, chunk_size=chunk_size, chunk_overlap=chunk_overlap
+            )
 
         if progress_callback:
             await progress_callback("cleaning", 0, 100)
@@ -891,5 +894,7 @@ class KBHelper:
 
         except Exception as e:
             logger.error(f"使用 Provider '{cleaning_provider_id}' 清洗内容失败: {e}")
-            # 清洗失败，返回默认分块结果，保证流程不中断
-            return await self.chunker.chunk(content)
+            # 清洗失败，回退到普通分块，但保留本次传入的分块参数，保证流程不中断
+            return await self.chunker.chunk(
+                content, chunk_size=chunk_size, chunk_overlap=chunk_overlap
+            )
