@@ -232,6 +232,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         **kwargs: T.Any,
     ) -> None:
         self.req = request
+        # Transient agents need one identity across tool calls and summary requests.
+        self._conversation_id = (
+            request.conversation.cid if request.conversation else uuid.uuid4().hex
+        )
         self.streaming = streaming
         self.enforce_max_turns = enforce_max_turns
         self.llm_compress_instruction = llm_compress_instruction
@@ -258,9 +262,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         )
         self.request_context_manager = ContextManager(
             self.request_context_manager_config,
-            conversation_id=self.req.conversation.cid
-            if self.req.conversation
-            else None,
+            conversation_id=self._conversation_id,
         )
 
         self.provider = provider
@@ -508,9 +510,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             "contexts": self._sanitize_contexts_for_provider(self.run_context.messages),
             "func_tool": self._func_tool_for_provider(),
             "session_id": self.req.session_id,
-            "conversation_id": self.req.conversation.cid
-            if self.req.conversation
-            else None,
+            "conversation_id": self._conversation_id,
             "extra_user_content_parts": self.req.extra_user_content_parts,  # list[ContentPart]
             "abort_signal": self._abort_signal,
             "request_max_retries": self.request_max_retries,
@@ -1433,9 +1433,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         func_tool=param_subset,
                         model=self.req.model,
                         session_id=self.req.session_id,
-                        conversation_id=self.req.conversation.cid
-                        if self.req.conversation
-                        else None,
+                        conversation_id=self._conversation_id,
                         extra_user_content_parts=self.req.extra_user_content_parts,
                         # tool_choice="required",
                         abort_signal=self._abort_signal,
@@ -1468,9 +1466,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             func_tool=param_subset,
                             model=self.req.model,
                             session_id=self.req.session_id,
-                            conversation_id=self.req.conversation.cid
-                            if self.req.conversation
-                            else None,
+                            conversation_id=self._conversation_id,
                             extra_user_content_parts=self.req.extra_user_content_parts,
                             # tool_choice="required",
                             abort_signal=self._abort_signal,

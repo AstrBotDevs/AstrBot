@@ -5,6 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock
+from uuid import uuid4
 
 import pytest
 
@@ -19,6 +20,7 @@ from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
+from astrbot.core.db.po import Conversation
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest, TokenUsage
 from astrbot.core.provider.provider import Provider
@@ -615,6 +617,79 @@ async def test_tool_loop_next_request_includes_tool_result(
     assert len(tool_messages) == 1
     assert tool_messages[0].tool_call_id == "call_context_refresh"
     assert "工具执行结果" in tool_messages[0].content
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+@pytest.mark.parametrize("persistent", [False, True])
+@pytest.mark.parametrize("tool_schema_mode", ["full", "skills_like"])
+async def test_conversation_identity_is_stable_within_each_run(
+    runner,
+    mock_provider,
+    tool_set,
+    mock_tool_executor,
+    mock_hooks,
+    streaming,
+    persistent,
+    tool_schema_mode,
+):
+    """Keep one identity through tools, requery repair, compression, and reset."""
+    conversation = (
+        Conversation(platform_id="test", user_id="user", cid=str(uuid4()))
+        if persistent
+        else None
+    )
+    identities = []
+    for _ in range(2):
+        tool_response = LLMResponse(
+            role="assistant",
+            tools_call_name=["test_tool"],
+            tools_call_args=[{"query": "test"}],
+            tools_call_ids=["call_identity"],
+        )
+        responses = [tool_response]
+        if tool_schema_mode == "skills_like":
+            responses.extend([LLMResponse(role="assistant"), tool_response])
+        responses.extend(
+            [
+                LLMResponse(role="assistant", completion_text="final"),
+                LLMResponse(role="assistant", completion_text="summary"),
+            ]
+        )
+        mock_provider.text_chat = AsyncMock(side_effect=responses)
+        request = ProviderRequest(
+            prompt="Run the tool",
+            func_tool=tool_set,
+            conversation=conversation,
+        )
+        await runner.reset(
+            provider=mock_provider,
+            request=request,
+            run_context=ContextWrapper(context=None),
+            tool_executor=mock_tool_executor,
+            agent_hooks=mock_hooks,
+            streaming=streaming,
+            tool_schema_mode=tool_schema_mode,
+            llm_compress_provider=mock_provider,
+            llm_compress_keep_recent_ratio=0,
+        )
+        async for _ in runner.step_until_done(3):
+            pass
+        assert runner.done()
+        assert any(message.role == "tool" for message in runner.run_context.messages)
+        await runner.request_context_manager.compressor(runner.run_context.messages)
+
+        calls = mock_provider.text_chat.call_args_list
+        assert len(calls) == (5 if tool_schema_mode == "skills_like" else 3)
+        identity = calls[0].kwargs["conversation_id"]
+        assert identity
+        assert all(call.kwargs["conversation_id"] == identity for call in calls)
+        assert request.conversation is conversation
+        if conversation:
+            assert identity == conversation.cid
+        identities.append(identity)
+
+    assert (identities[0] == identities[1]) is persistent
 
 
 @pytest.mark.asyncio

@@ -1,10 +1,13 @@
 import asyncio
 import hashlib
 import json
+from functools import partial
 from uuid import uuid4
 
 import httpx
 import pytest
+from anthropic import _base_client as anthropic_base_client
+from openai import _base_client as openai_base_client
 
 from astrbot import __version__
 from astrbot.core.agent.context.config import ContextConfig
@@ -25,11 +28,11 @@ def go_http(monkeypatch):
     """Capture real SDK HTTP requests with deterministic protocol responses."""
     requests = []
 
-    async def handle(request):
+    async def handle(request, *, httpx_module):
         requests.append(request)
         await asyncio.sleep(0)
         if request.method == "GET":
-            return httpx.Response(200, json={"data": [{"id": "kimi-k2.6"}]})
+            return httpx_module.Response(200, json={"data": [{"id": "kimi-k2.6"}]})
         body = json.loads(request.content)
         model = body["model"]
         if request.url.path.endswith("/chat/completions"):
@@ -128,13 +131,23 @@ def go_http(monkeypatch):
                 f"event: {event.get('type', 'message')}\ndata: {json.dumps(event)}\n\n"
                 for event in events
             )
-            return httpx.Response(
+            return httpx_module.Response(
                 200, text=content, headers={"Content-Type": "text/event-stream"}
             )
-        return httpx.Response(200, json=response)
+        return httpx_module.Response(200, json=response)
 
-    def client(*args):
-        return httpx.AsyncClient(transport=httpx.MockTransport(handle))
+    def client(provider, _config):
+        sdk = (
+            anthropic_base_client
+            if isinstance(provider, ProviderAnthropic)
+            else openai_base_client
+        )
+        httpx_module = getattr(sdk, "httpx", getattr(sdk, "httpx2", httpx))
+        return httpx_module.AsyncClient(
+            transport=httpx_module.MockTransport(
+                partial(handle, httpx_module=httpx_module)
+            )
+        )
 
     monkeypatch.setattr(ProviderOpenAIOfficial, "_create_http_client", client)
     monkeypatch.setattr(ProviderAnthropic, "_create_http_client", client)
@@ -178,6 +191,7 @@ async def test_go_http_identity_and_concurrent_sessions(
             "prompt": "Write a Python function",
             "conversation_id": conversation_id,
             "model": f"opencode-go/{model}",
+            "extra_headers": {"X-Request-Test": "request-header"},
         }
         if streaming:
             result = [item async for item in provider.text_chat_stream(**kwargs)]
@@ -190,7 +204,8 @@ async def test_go_http_identity_and_concurrent_sessions(
         await send(sessions[0])
         assert len(go_http) == 5
         assert {r.headers["x-opencode-session"] for r in go_http} == {
-            hashlib.sha256(conversation_id.encode()).hexdigest() for conversation_id in sessions
+            hashlib.sha256(conversation_id.encode()).hexdigest()
+            for conversation_id in sessions
         }
         assert (
             go_http[-1].headers["x-opencode-session"]
@@ -208,7 +223,12 @@ async def test_go_http_identity_and_concurrent_sessions(
             assert request.url.path == f"/zen/go/v1/{endpoint}"
             assert request.headers["user-agent"] == f"AstrBot/{__version__}"
             assert request.headers["x-custom"] == "keep"
-            assert json.loads(request.content)["model"] == model
+            assert request.headers["x-request-test"] == "request-header"
+            body = json.loads(request.content)
+            assert body["model"] == model
+            assert "extra_headers" not in body
+            assert "x-opencode-session" not in body
+            assert "X-Request-Test" not in body
     finally:
         await provider.terminate()
 
