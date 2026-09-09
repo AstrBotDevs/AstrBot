@@ -1721,14 +1721,16 @@ async def test_v1_system_config_update_preserves_independent_bot_provider_sectio
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("change", ["member_execution", "admin_removal"])
 async def test_config_update_revokes_only_affected_shell_sessions(
-    asgi_app, fake_core_lifecycle, monkeypatch, tmp_path
+    asgi_app, fake_core_lifecycle, monkeypatch, tmp_path, change
 ):
     from astrbot.core.computer import computer_client
     from astrbot.core.computer.booters.local import LocalBooter
     from astrbot.core.tools.computer_tools import shell as shell_tools
 
     config = fake_core_lifecycle.astrbot_config
+    config["admins_id"] = ["creator", "other-admin"]
     config["agent_runner"] = {"runner_type": "local"}
     config["provider_settings"] = {
         "computer_use_runtime": "local",
@@ -1749,10 +1751,11 @@ async def test_config_update_revokes_only_affected_shell_sessions(
     )
     sessions = []
     try:
-        for role, profile in (
-            ("member", config),
-            ("admin", config),
-            ("member", other_config),
+        for role, profile, sender_id in (
+            ("member", config, "member"),
+            ("admin", config, "creator"),
+            ("admin", other_config, "creator"),
+            ("admin", config, "other-admin"),
         ):
             context = SimpleNamespace(
                 context=SimpleNamespace(
@@ -1760,7 +1763,7 @@ async def test_config_update_revokes_only_affected_shell_sessions(
                     event=SimpleNamespace(
                         role=role,
                         unified_msg_origin="test:friend:revocation",
-                        get_sender_id=lambda: "creator",
+                        get_sender_id=lambda sender_id=sender_id: sender_id,
                     ),
                 )
             )
@@ -1770,6 +1773,8 @@ async def test_config_update_revokes_only_affected_shell_sessions(
                 )
             )
             sessions.append(booter.shell._sessions[result["session_id"]])
+            if profile is config and sender_id == "creator":
+                admin_context = context
 
         service = asgi_app.state.services.config_profiles
         payload = copy.deepcopy(config)
@@ -1778,13 +1783,29 @@ async def test_config_update_revokes_only_affected_shell_sessions(
         assert all(session.process.returncode is None for session in sessions)
 
         payload = copy.deepcopy(config)
-        payload["provider_settings"]["computer_use_local_permissions"]["member"][
-            "allow_execution"
-        ] = False
+        if change == "admin_removal":
+            payload["admins_id"] = ["other-admin"]
+            revoked_index = 1
+        else:
+            payload["provider_settings"]["computer_use_local_permissions"]["member"][
+                "allow_execution"
+            ] = False
+            revoked_index = 0
         await service.update_profile("default", payload)
-        assert sessions[0].process.returncode is not None
-        assert all(session.process.returncode is None for session in sessions[1:])
-        assert sessions[0].session_id not in booter.shell._sessions
+        assert sessions[revoked_index].process.returncode is not None
+        assert all(
+            session.process.returncode is None
+            for index, session in enumerate(sessions)
+            if index != revoked_index
+        )
+        assert sessions[revoked_index].session_id not in booter.shell._sessions
+        if change == "admin_removal":
+            assert admin_context.context.event.role == "admin"
+            result = await shell_tools.LocalExecuteShellTool().call(
+                admin_context, command="echo unexpected", yield_time_ms=0
+            )
+            assert "permissions changed" in result
+            assert len(booter.shell._sessions) == 3
 
         # Pre-upgrade sessions must not acquire a grant from the current config.
         sessions[2].permission_check = None

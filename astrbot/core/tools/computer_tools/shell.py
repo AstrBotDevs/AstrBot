@@ -130,6 +130,7 @@ class ExecuteShellTool(FunctionTool):
                 creator_id = context.context.event.get_sender_id()
                 if not creator_id:
                     return "Error executing command: sender identity is unavailable."
+                creator_is_admin = context.context.event.role == "admin"
                 sandbox_roots = {}
                 if local_policy and local_policy.filesystem_scope == "workspace":
                     umo = context.context.event.unified_msg_origin
@@ -149,11 +150,19 @@ class ExecuteShellTool(FunctionTool):
                     command,
                     owner_id=context.context.event.unified_msg_origin,
                     creator_id=creator_id,
-                    creator_is_admin=context.context.event.role == "admin",
+                    creator_is_admin=creator_is_admin,
                     sandboxed=sandboxed,
                     permission_check=lambda: (
                         is_local_runtime(context)
                         and get_local_permission_policy(context) == local_policy
+                        # The original event role does not reflect admin removal.
+                        and (
+                            not creator_is_admin
+                            or str(creator_id)
+                            in context.context.context.get_config(
+                                umo=context.context.event.unified_msg_origin
+                            ).get("admins_id", [])
+                        )
                     ),
                     allow_network=(
                         local_policy.allow_network if local_policy else True

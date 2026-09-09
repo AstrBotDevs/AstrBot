@@ -420,6 +420,7 @@ async def test_local_execution_obeys_file_tool_roots(
     monkeypatch.setattr(shell, "get_booter", AsyncMock(return_value=booter))
     monkeypatch.setattr(python, "get_local_booter", lambda: booter)
     config = {
+        "admins_id": ["test-user"] if role == "admin" else [],
         "provider_settings": {
             "computer_use_runtime": "local",
             "computer_use_local_permissions": {
