@@ -2,6 +2,9 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+# Importing the core lifecycle first resolves the import cycle between
+# astrbot.core.provider.manager and astrbot.core.knowledge_base.
+import astrbot.core.core_lifecycle  # noqa: F401
 from astrbot.core.knowledge_base.kb_helper import KBHelper
 
 
