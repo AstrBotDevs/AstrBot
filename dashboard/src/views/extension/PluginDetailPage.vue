@@ -497,8 +497,13 @@ const toggleCommandGroup = (key) => {
 };
 
 const getComponentDescription = (component) => {
+  // desc_i18n:按 WebUI 当前语言取,再回退 description/desc 原文
+  const i18nDesc =
+    component?.descriptions &&
+    typeof component.descriptions === "object" &&
+    component.descriptions[locale.value];
   const fallback =
-    component?.description || component?.desc || tm("status.unknown");
+    i18nDesc || component?.description || component?.desc || tm("status.unknown");
   if (getComponentGroupKey(component) === "page") {
     return String(
       pluginPageDescription(pluginData.value, component, fallback),
@@ -523,6 +528,20 @@ const openComponentPage = (component) => {
 const getCommandRowKey = (component, path) =>
   component?.handler_full_name || component?.path || path.join(" ");
 
+/** 指令名按全局语言配置显示:names[全局lang] -> 组件原名 */
+const globalLanguage = computed(() =>
+  String(pluginData.value?.language || "en-US"),
+);
+
+const resolveCommandName = (component, fallback) => {
+  const names = component?.names;
+  if (names && typeof names === "object") {
+    const localized = names[globalLanguage.value];
+    if (localized) return String(localized);
+  }
+  return fallback;
+};
+
 const buildCommandComponentRows = (commandComponents) => {
   const rows = [];
 
@@ -541,7 +560,7 @@ const buildCommandComponentRows = (commandComponents) => {
         children.length > 0 ? "group" : depth > 0 ? "subCommand" : "handler",
       key,
       component,
-      displayCommand: name,
+      displayCommand: resolveCommandName(component, name),
       children,
       depth,
     });

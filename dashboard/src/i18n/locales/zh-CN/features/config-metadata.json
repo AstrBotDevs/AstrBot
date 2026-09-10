@@ -479,6 +479,12 @@
         "dual_output": {
           "description": "开启 TTS 时同时输出语音和文字内容"
         }
+      },
+      "platform_settings": {
+        "full_lang_aliases": {
+          "description": "全语言别名",
+          "hint": "启用后,所有语言的指令别名(如 /帮助、/ヘルプ)均可直接触发,不受当前会话语言限制;关闭时仅主命令与当前语言对应的别名可用。主命令(如 /help)始终可用。"
+        }
       }
     }
   },

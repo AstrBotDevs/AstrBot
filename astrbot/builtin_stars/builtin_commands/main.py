@@ -6,6 +6,7 @@ from .commands import (
     AdminCommands,
     ConversationCommands,
     HelpCommand,
+    LangCommand,
     NameCommand,
     ProviderCommands,
     SetUnsetCommands,
@@ -20,6 +21,7 @@ class Main(star.Star):
         self.admin_c = AdminCommands(self.context)
         self.conversation_c = ConversationCommands(self.context)
         self.help_c = HelpCommand(self.context)
+        self.lang_c = LangCommand(self.context)
         self.name_c = NameCommand(self.context)
         self.provider_c = ProviderCommands(self.context)
         self.setunset_c = SetUnsetCommands(self.context)
@@ -77,6 +79,12 @@ class Main(star.Star):
     async def update_dashboard(self, event: AstrMessageEvent) -> None:
         """Update AstrBot WebUI"""
         await self.admin_c.update_dashboard(event)
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.command("lang")
+    async def lang(self, event: AstrMessageEvent, value: str | None = None) -> None:
+        """View or set the global language (admin)"""
+        await self.lang_c.lang(event, value)
 
     @filter.command("set")
     async def set_variable(self, event: AstrMessageEvent, key: str, value: str) -> None:

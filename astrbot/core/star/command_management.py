@@ -27,6 +27,8 @@ class CommandDescriptor:
     plugin_display_name: str | None = None
     module_path: str = ""
     description: str = ""
+    desc_i18n: dict = field(default_factory=dict)
+    """分语言描述,键为语言代码(如 ``zh-CN``);为空表示插件未声明。"""
     command_type: str = "command"  # "command" | "group" | "sub_command"
     raw_command_name: str | None = None
     current_fragment: str | None = None
@@ -35,6 +37,8 @@ class CommandDescriptor:
     original_command: str | None = None
     effective_command: str | None = None
     aliases: list[str] = field(default_factory=list)
+    alias_lang_map: dict[str, str] = field(default_factory=dict)
+    """别名 -> 语言代码 映射(来自 ``multi_alias``);用于按语言显示指令名。"""
     permission: str = "everyone"
     enabled: bool = True
     is_group: bool = False
@@ -327,6 +331,7 @@ def _build_descriptor(handler: StarHandlerMetadata) -> CommandDescriptor | None:
         plugin_display_name=plugin_display,
         module_path=handler.handler_module_path,
         description=handler.desc or "",
+        desc_i18n=dict(handler.desc_i18n) if handler.desc_i18n else {},
         command_type=command_type,
         raw_command_name=raw_fragment,
         current_fragment=current_fragment,
@@ -335,6 +340,7 @@ def _build_descriptor(handler: StarHandlerMetadata) -> CommandDescriptor | None:
         original_command=original_command,
         effective_command=effective_command,
         aliases=sorted(getattr(filter_ref, "alias", set())),
+        alias_lang_map=dict(getattr(filter_ref, "alias_lang_map", {}) or {}),
         permission=_determine_permission(handler),
         enabled=handler.enabled,
         is_group=isinstance(filter_ref, CommandGroupFilter),
@@ -468,10 +474,31 @@ def _bind_configs_to_descriptors(
 def _group_conflicts(
     descriptors: list[CommandDescriptor],
 ) -> dict[str, list[CommandDescriptor]]:
+    """按指令名(主名 + 别名)分组,返回存在冲突的名字。
+
+    冲突不仅发生在主命令名相同的情况下,也发生在"某指令的别名与另一指令的
+    主名或别名相同"的情况下——运行时两者都会匹配并同时触发。
+    """
     conflicts: dict[str, list[CommandDescriptor]] = defaultdict(list)
+    seen_handlers: dict[str, set[str]] = defaultdict(set)
     for desc in descriptors:
-        if desc.effective_command and desc.enabled and _is_plugin_activated(desc):
-            conflicts[desc.effective_command].append(desc)
+        if not desc.enabled or not _is_plugin_activated(desc):
+            continue
+
+        names: list[str] = []
+        if desc.effective_command:
+            names.append(desc.effective_command)
+        for alias in desc.aliases:
+            full_alias = _compose_command(desc.parent_signature, alias)
+            if full_alias and full_alias not in names:
+                names.append(full_alias)
+
+        for name in names:
+            if desc.handler_full_name in seen_handlers[name]:
+                continue
+            seen_handlers[name].add(desc.handler_full_name)
+            conflicts[name].append(desc)
+
     return {k: v for k, v in conflicts.items() if len(v) > 1}
 
 
@@ -519,6 +546,25 @@ def _is_command_in_use(
     return False
 
 
+def _localized_command_names(desc: CommandDescriptor) -> dict[str, str]:
+    """返回 ``语言代码 -> 该语言下的指令名``(来自多语言别名)。
+
+    仅包含通过 ``multi_alias`` 注册了语言映射的别名;无映射时返回空字典,
+    调用方回退到 ``effective_command``(主命令名)。
+
+    Args:
+        desc: 指令描述符。
+
+    Returns:
+        语言代码到指令显示名的映射,如 ``{"zh-CN": "天气", "ja-JP": "天気"}``。
+    """
+    names: dict[str, str] = {}
+    for alias, lang in desc.alias_lang_map.items():
+        if alias and lang:
+            names.setdefault(lang, alias)
+    return names
+
+
 def _descriptor_to_dict(desc: CommandDescriptor) -> dict[str, Any]:
     result = {
         "handler_full_name": desc.handler_full_name,
@@ -527,6 +573,7 @@ def _descriptor_to_dict(desc: CommandDescriptor) -> dict[str, Any]:
         "plugin_display_name": desc.plugin_display_name,
         "module_path": desc.module_path,
         "description": desc.description,
+        "descriptions": desc.desc_i18n,
         "type": desc.command_type,
         "parent_signature": desc.parent_signature,
         "parent_group_handler": desc.parent_group_handler,
@@ -534,6 +581,7 @@ def _descriptor_to_dict(desc: CommandDescriptor) -> dict[str, Any]:
         "current_fragment": desc.current_fragment,
         "effective_command": desc.effective_command,
         "aliases": desc.aliases,
+        "names": _localized_command_names(desc),
         "permission": desc.permission,
         "enabled": desc.enabled,
         "plugin_activated": _is_plugin_activated(desc),

@@ -160,6 +160,16 @@ class WakingCheckStage(Stage):
         activated_handlers = []
         handlers_parsed_params = {}  # 注册了指令的 handler
 
+        # 解析全局语言配置供多语言别名过滤使用
+        try:
+            from astrbot.core.utils.lang_utils import resolve_lang
+
+            resolved_lang = resolve_lang(self.ctx.astrbot_config)
+        except BaseException:
+            resolved_lang = None
+        if resolved_lang:
+            event.set_extra("_astrbot_lang", resolved_lang)
+
         # 将 plugins_name 设置到 event 中
         enabled_plugins_name = self.ctx.astrbot_config.get("plugin_set", ["*"])
         if enabled_plugins_name == ["*"]:

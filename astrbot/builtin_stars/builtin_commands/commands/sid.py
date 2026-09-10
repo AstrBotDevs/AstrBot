@@ -3,6 +3,8 @@
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
 
+from .utils.i18n import t
+
 
 class SIDCommand:
     """会话ID命令类"""
@@ -17,10 +19,11 @@ class SIDCommand:
         umo_platform = event.session.platform_id
         umo_msg_type = event.session.message_type.value
         umo_session_id = event.session.session_id
+        usage = await t(self.context, event.unified_msg_origin, "sid.usage")
         ret = (
             f"UMO: 「{sid}」\n"
             f"UID: 「{user_id}」\n"
-            "*Use UMO to set whitelist and configure routing, use UID to set admin list(UMO 可用于设置白名单和配置文件路由，UID 可用于设置管理员列表)\n\n"
+            f"*{usage}\n\n"
             f"Your session information:\n"
             f"Bot ID: 「{umo_platform}」\n"
             f"Message Type: 「{umo_msg_type}」\n"

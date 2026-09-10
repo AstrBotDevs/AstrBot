@@ -1,15 +1,18 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { useModuleI18n } from '@/i18n/composables';
+import { useI18n, useModuleI18n } from '@/i18n/composables';
 import type { CommandItem, TypeInfo, StatusInfo } from '../types';
 
 const { tm } = useModuleI18n('features/command');
+const { locale } = useI18n();
 
 // Props
 const props = defineProps<{
   items: CommandItem[];
   expandedGroups: Set<string>;
   loading?: boolean;
+  /** 全局语言配置(/lang 的全局默认值),用于指令名多语言显示 */
+  globalLanguage?: string;
 }>();
 
 // Emits
@@ -20,6 +23,20 @@ const emit = defineEmits<{
   (e: 'view-details', cmd: CommandItem): void;
   (e: 'update-permission', cmd: CommandItem, permission: 'admin' | 'member'): void;
 }>();
+
+// 按 WebUI 当前语言解析指令描述:descriptions[locale] -> description 原文
+const resolveDescription = (cmd: CommandItem): string => {
+  const lang = locale.value;
+  const descriptions = cmd.descriptions || {};
+  return descriptions[lang] || cmd.description;
+};
+
+// 按全局语言配置解析指令名:names[globalLanguage] -> 主命令名
+const resolveCommandName = (cmd: CommandItem): string => {
+  const lang = props.globalLanguage || 'en-US';
+  const names = cmd.names || {};
+  return names[lang] || cmd.effective_command;
+};
 
 // 表格表头
 const commandHeaders = computed(() => [
@@ -127,7 +144,7 @@ const getRowProps = ({ item }: { item: CommandItem }) => {
           <div v-else-if="item.type === 'sub_command'" class="ml-6"></div>
           <div>
             <div class="text-subtitle-1 font-weight-medium">
-              <code :class="{ 'sub-command-code': item.type === 'sub_command' }">{{ item.effective_command }}</code>
+              <code :class="{ 'sub-command-code': item.type === 'sub_command' }">{{ resolveCommandName(item) }}</code>
             </div>
           </div>
         </div>
@@ -149,8 +166,8 @@ const getRowProps = ({ item }: { item: CommandItem }) => {
       </template>
 
       <template v-slot:item.description="{ item }">
-        <div class="text-body-2 text-medium-emphasis" style="max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="item.description">
-          {{ item.description || '-' }}
+        <div class="text-body-2 text-medium-emphasis" style="max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="resolveDescription(item)">
+          {{ resolveDescription(item) || '-' }}
         </div>
       </template>
 
