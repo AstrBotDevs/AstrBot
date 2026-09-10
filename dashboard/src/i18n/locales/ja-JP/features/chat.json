@@ -115,6 +115,8 @@
     "title": "設定"
   },
   "reasoning": {
+    "enabled": "思考内容の表示：オン",
+    "disabled": "思考内容の表示：オフ",
     "thinking": "思考プロセス",
     "summarySeparator": "、",
     "thinkSummary": "思考 {count} 回",

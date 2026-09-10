@@ -83,6 +83,10 @@ export type ChatFlags = {
      * Enable streaming model output for this request. This value takes priority over the legacy top-level enable_streaming field.
      */
     enable_streaming?: boolean;
+    /**
+     * Display reasoning content for this WebChat request independently of the global display_reasoning_text setting.
+     */
+    enable_reasoning?: boolean;
 };
 
 export type ChatMessagePatchRequest = {
