@@ -1,4 +1,5 @@
 import copy
+import importlib.util
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -17,8 +18,37 @@ from astrbot.core.config.default import (
     CONFIG_METADATA_3,
     DEFAULT_CONFIG,
 )
+from astrbot.core.star import base as star_base
 from astrbot.core.star.filter.permission import PermissionTypeFilter
-from astrbot.core.star.star_handler import star_handlers_registry
+from astrbot.core.star.register import star_handler as handler_registration
+from astrbot.core.star.star_handler import StarHandlerRegistry
+
+
+@pytest.fixture
+def restart_handlers(monkeypatch):
+    """Load real command decorators into isolated registries.
+
+    Args:
+        monkeypatch: Fixture used to restore registration targets after loading.
+
+    Returns:
+        Fresh built-in command handlers indexed by handler name.
+    """
+    registry = StarHandlerRegistry()
+    path = (
+        Path(__file__).resolve().parents[2]
+        / "astrbot/builtin_stars/builtin_commands/main.py"
+    )
+    spec = importlib.util.spec_from_file_location(Main.__module__, path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    with monkeypatch.context() as patch:
+        patch.setattr(handler_registration, "star_handlers_registry", registry)
+        patch.setattr(star_base, "star_map", {})
+        patch.setattr(star_base, "star_registry", [])
+        # Execute the decorators without replacing the cached production module.
+        spec.loader.exec_module(module)
+    return {handler.handler_name: handler for handler in registry}
 
 
 @pytest.fixture
@@ -64,17 +94,15 @@ def restart(monkeypatch):
 @pytest.mark.parametrize("group", [False, True])
 @pytest.mark.parametrize("admin", [False, True])
 @pytest.mark.parametrize("isolated", [False, True])
-async def test_restart_permission_matrix(restart, entry, group, admin, isolated):
+async def test_restart_permission_matrix(
+    restart, restart_handlers, entry, group, admin, isolated
+):
     restart.event.get_group_id.return_value = "group" if group else ""
     restart.event.is_admin.return_value = admin
     restart.config["platform_settings"] = {
         "unique_session": isolated,
     }
-    handler = next(
-        handler
-        for handler in star_handlers_registry
-        if handler.handler is getattr(Main, entry)
-    )
+    handler = restart_handlers[entry]
     permission = next(
         f for f in handler.event_filters if isinstance(f, PermissionTypeFilter)
     )
