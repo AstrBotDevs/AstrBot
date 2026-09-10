@@ -20,6 +20,7 @@ async def prepare_request_images(
     *,
     enabled: bool,
     max_size: int,
+    quality: int,
     output_dir: Path,
     prepared: dict[str, str | None],
     quote_image_ref: str | None = None,
@@ -29,8 +30,9 @@ async def prepare_request_images(
     Args:
         req: Working request; shared lists and image blocks are copied on write.
         event: Owner of downloaded source files and prepared working files.
-        enabled: Whether the current pipeline profile enables PNG preparation.
+        enabled: Whether the current pipeline profile enables model image preparation.
         max_size: Normalized longest-edge limit for this request.
+        quality: JPEG output quality in the range 1-100.
         output_dir: Event working file directory, separate from the shared cache.
         prepared: Per-request mapping reused after the request hook.
         quote_image_ref: Optional input for the dedicated quote caption branch.
@@ -50,7 +52,7 @@ async def prepare_request_images(
             path = None
             if enabled:
                 path = await prepare_model_image(
-                    ref, max_size=max_size, output_dir=output_dir
+                    ref, max_size=max_size, output_dir=output_dir, quality=quality
                 )
                 if path:
                     event.track_temporary_local_file(path)

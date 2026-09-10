@@ -1,4 +1,4 @@
-"""Pixel, error and lifecycle contracts for the stage's PNG encoder."""
+"""Pixel, error and lifecycle contracts for the stage's image encoder."""
 
 import asyncio
 import errno
@@ -20,7 +20,9 @@ def isolated_cache(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("fmt", ["JPEG", "PNG", "BMP", "WEBP", "GIF"])
-async def test_still_formats_return_owned_png_without_mutating_source(tmp_path, fmt):
+async def test_oversized_opaque_stills_become_jpeg_without_mutating_source(
+    tmp_path, fmt
+):
     source = tmp_path / "misleading.jpg"
     Image.new("RGB", (200, 100), "red").save(source, fmt)
     original = source.read_bytes()
@@ -28,11 +30,121 @@ async def test_still_formats_return_owned_png_without_mutating_source(tmp_path, 
         str(source), max_size=80, output_dir=tmp_path
     )
     assert path and Path(path).is_file() and Path(path) != source
+    assert path.endswith(".jpg")
     with Image.open(path) as image:
-        assert image.format == "PNG" and getattr(image, "n_frames", 1) == 1
+        assert image.format == "JPEG" and getattr(image, "n_frames", 1) == 1
         assert image.size == (80, 40)
-        assert image.getpixel((40, 20))[0] >= 250
+        assert abs(image.getpixel((40, 20))[0] - 255) <= 3
     assert source.read_bytes() == original
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("fmt", ["JPEG", "PNG"])
+async def test_compliant_stills_pass_through_byte_identical(tmp_path, fmt):
+    source = tmp_path / f"ok.{fmt.lower()}"
+    Image.new("RGB", (200, 100), "red").save(source, fmt)
+    original = source.read_bytes()
+    path = await media.prepare_model_image(
+        str(source), max_size=1280, output_dir=tmp_path
+    )
+    assert path and Path(path).read_bytes() == original
+    assert source.read_bytes() == original
+
+
+@pytest.mark.asyncio
+async def test_rotated_jpeg_is_normalized_to_upright_jpeg(tmp_path):
+    source = tmp_path / "rotated.jpg"
+    exif = Image.Exif()
+    exif[274] = 6
+    Image.new("RGB", (200, 100), "red").save(source, exif=exif)
+    original = source.read_bytes()
+    path = await media.prepare_model_image(
+        str(source), max_size=1280, output_dir=tmp_path
+    )
+    assert path and Path(path).read_bytes() != original
+    with Image.open(path) as image:
+        assert image.format == "JPEG" and image.size == (100, 200)
+        assert image.getexif().get(274, 1) == 1
+    assert source.read_bytes() == original
+
+
+@pytest.mark.asyncio
+async def test_oversized_alpha_png_flattens_to_jpeg(tmp_path, monkeypatch):
+    monkeypatch.setattr(media, "MODEL_IMAGE_PNG_FALLBACK_MAX_BYTES", 1)
+    source = tmp_path / "alpha.png"
+    Image.new("RGBA", (2000, 100), (255, 0, 0, 128)).save(source)
+    path = await media.prepare_model_image(
+        str(source), max_size=1280, output_dir=tmp_path
+    )
+    assert path and path.endswith(".jpg")
+    with Image.open(path) as image:
+        assert image.format == "JPEG" and image.mode == "RGB"
+        r, g, b = image.getpixel((0, 0))
+        assert r > 200 and 90 < g < 170 and 90 < b < 170
+
+
+@pytest.mark.asyncio
+async def test_16bit_jpeg_conversion_scales_instead_of_clipping(tmp_path):
+    source = tmp_path / "gradient.png"
+    size = (2000, 100)
+    row = b"".join(
+        int(x * 65535 / (size[0] - 1)).to_bytes(2, "little") for x in range(size[0])
+    )
+    Image.frombytes("I;16", size, row * size[1]).save(source)
+    path = await media.prepare_model_image(
+        str(source), max_size=1280, output_dir=tmp_path
+    )
+    assert path and path.endswith(".jpg")
+    with Image.open(path) as image:
+        assert image.format == "JPEG" and image.mode == "L"
+        low, high = image.getextrema()
+        assert low < 50 and high > 200
+
+
+@pytest.mark.asyncio
+async def test_jpeg_transcode_preserves_icc_profile(tmp_path):
+    ImageCms = pytest.importorskip("PIL.ImageCms")
+    icc = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB")).tobytes()
+    source = tmp_path / "photo.jpg"
+    Image.new("RGB", (2000, 100), "red").save(source, icc_profile=icc)
+    path = await media.prepare_model_image(
+        str(source), max_size=1280, output_dir=tmp_path
+    )
+    assert path and path.endswith(".jpg")
+    with Image.open(path) as result:
+        assert result.format == "JPEG"
+        assert result.info.get("icc_profile") == icc
+
+
+@pytest.mark.asyncio
+async def test_cmyk_icc_profile_is_not_attached_to_rgb_jpeg(tmp_path):
+    ImageCms = pytest.importorskip("PIL.ImageCms")
+    icc = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB")).tobytes()
+    source = tmp_path / "cmyk.jpg"
+    Image.new("CMYK", (2000, 100), (0, 255, 255, 0)).save(source, icc_profile=icc)
+    path = await media.prepare_model_image(
+        str(source), max_size=1280, output_dir=tmp_path
+    )
+    assert path and path.endswith(".jpg")
+    with Image.open(path) as result:
+        assert result.format == "JPEG" and result.mode == "RGB"
+        assert not result.info.get("icc_profile")
+
+
+@pytest.mark.asyncio
+async def test_jpeg_quality_is_honored_and_cached_separately(tmp_path):
+    source = tmp_path / "photo.bmp"
+    Image.new("RGB", (200, 100), "red").save(source)
+    low = await media.prepare_model_image(
+        str(source), max_size=1280, output_dir=tmp_path, quality=10
+    )
+    high = await media.prepare_model_image(
+        str(source), max_size=1280, output_dir=tmp_path, quality=95
+    )
+    assert low and high and low != high
+    low_bytes, high_bytes = Path(low).read_bytes(), Path(high).read_bytes()
+    assert low_bytes.startswith(b"\xff\xd8") and high_bytes.startswith(b"\xff\xd8")
+    assert len(low_bytes) < len(high_bytes)
 
 
 @pytest.mark.asyncio
@@ -62,13 +174,12 @@ async def test_animation_sampling_cover_and_blank_cells(tmp_path, fmt, cover, co
     )
     indices = [0, 1] if count == 2 else [0, 1, 3, 4, 6, 7, 8, 10, 11]
     with Image.open(path) as image:
-        assert image.format == "PNG" and getattr(image, "n_frames", 1) == 1
+        assert image.format == "JPEG" and getattr(image, "n_frames", 1) == 1
         assert image.size == (36, 24)
         for cell in range(9):
             expected = colors[indices[cell]] if cell < len(indices) else (255, 255, 255)
-            assert (
-                image.getpixel(((cell % 3) * 12 + 6, (cell // 3) * 8 + 4)) == expected
-            )
+            pixel = image.getpixel(((cell % 3) * 12 + 6, (cell // 3) * 8 + 4))
+            assert all(abs(actual - want) <= 6 for actual, want in zip(pixel, expected))
     small = await media.prepare_model_image(
         str(source), max_size=18, output_dir=tmp_path
     )
@@ -89,9 +200,14 @@ async def test_exif_and_cmyk_are_preserved_for_display(tmp_path):
         str(source), max_size=80, output_dir=tmp_path
     )
     with Image.open(path) as result:
-        assert result.size == (40, 80) and result.mode == "RGB"
+        assert (
+            result.format == "JPEG" and result.size == (40, 80) and result.mode == "RGB"
+        )
         assert result.getexif().get(274, 1) == 1
-        assert result.getpixel((20, 40)) == (255, 0, 0)
+        assert all(
+            abs(actual - want) <= 6
+            for actual, want in zip(result.getpixel((20, 40)), (255, 0, 0))
+        )
     assert source.read_bytes() == original
 
 
@@ -128,15 +244,18 @@ async def test_palette_and_binary_thin_lines_use_lanczos(tmp_path, mode):
         str(source), max_size=16, output_dir=tmp_path
     )
     with Image.open(path) as result:
-        assert result.convert("L").getextrema()[0] < 255
-        assert result.convert("L").tobytes() == expected.convert("L").tobytes()
+        actual = result.convert("L")
+        assert actual.getextrema()[0] < 255
+        expected_l = expected.convert("L")
+        diff = sum(abs(a - b) for a, b in zip(actual.tobytes(), expected_l.tobytes()))
+        assert diff <= 8 * actual.width * actual.height
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "size,limit", [((2560, 1280), 1280), ((5120, 2560), 1280), ((513, 257), 128)]
 )
-async def test_16bit_gradient_survives_large_reduction(tmp_path, size, limit):
+async def test_16bit_gradient_normalizes_to_8bit_jpeg(tmp_path, size, limit):
     source = tmp_path / "gradient.png"
     row = b"".join(
         int(x * 65535 / (size[0] - 1)).to_bytes(2, "little") for x in range(size[0])
@@ -147,11 +266,10 @@ async def test_16bit_gradient_survives_large_reduction(tmp_path, size, limit):
         str(source), max_size=limit, output_dir=tmp_path
     )
     with Image.open(path) as result:
-        assert result.mode == "I;16" and result.size == (limit, limit // 2)
+        assert result.format == "JPEG" and result.mode == "L"
+        assert result.size == (limit, limit // 2)
         low, high = result.getextrema()
-        assert low < 1000 and high > 64000
-        values = [result.getpixel((x, 0)) for x in range(limit)]
-        assert values == sorted(values) and len(set(values)) == limit
+        assert low < 50 and high > 200
     assert source.read_bytes() == original
 
 
@@ -175,7 +293,7 @@ def test_size_normalization(value, expected):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("bad_cache", [b"", b"bad", None, "jpeg"])
+@pytest.mark.parametrize("bad_cache", [b"", b"bad", None, "animated"])
 async def test_bad_cache_rebuilt_and_work_files_independent(
     tmp_path, monkeypatch, bad_cache
 ):
@@ -184,11 +302,16 @@ async def test_bad_cache_rebuilt_and_work_files_independent(
     first = await media.prepare_model_image(
         str(source), max_size=16, output_dir=tmp_path
     )
-    cache = next((tmp_path / "cache" / media.CONVERT_CACHE_DIR_NAME).glob("*.png"))
+    cache = next((tmp_path / "cache" / media.CONVERT_CACHE_DIR_NAME).glob("*.img"))
     if bad_cache is None:
         cache.unlink()
-    elif bad_cache == "jpeg":
-        Image.new("RGB", (16, 8), "blue").save(cache, "JPEG")
+    elif bad_cache == "animated":
+        Image.new("RGB", (16, 8), "blue").save(
+            cache,
+            "GIF",
+            save_all=True,
+            append_images=[Image.new("RGB", (16, 8), "red")],
+        )
     else:
         cache.write_bytes(bad_cache)
     second = await media.prepare_model_image(

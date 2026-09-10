@@ -43,7 +43,10 @@ from astrbot.core.provider.entities import (
 )
 from astrbot.core.star.star_handler import EventType
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-from astrbot.core.utils.media_utils import normalize_model_image_max_size
+from astrbot.core.utils.media_utils import (
+    IMAGE_COMPRESS_DEFAULT_QUALITY,
+    normalize_model_image_max_size,
+)
 from astrbot.core.utils.metrics import Metric
 from astrbot.core.utils.session_lock import session_lock_manager
 
@@ -239,6 +242,12 @@ class InternalAgentSubStage(Stage):
                     max_size = normalize_model_image_max_size(
                         options.get("max_size") if isinstance(options, dict) else None
                     )
+                    quality = (
+                        options.get("quality") if isinstance(options, dict) else None
+                    )
+                    if isinstance(quality, bool) or not isinstance(quality, int):
+                        quality = IMAGE_COMPRESS_DEFAULT_QUALITY
+                    quality = min(max(quality, 1), 100)
                     output_dir = Path(get_astrbot_temp_path())
                     prepared: dict[str, str | None] = {}
                     supports_image = _provider_supports_modality(provider, "image")
@@ -258,6 +267,7 @@ class InternalAgentSubStage(Stage):
                         event,
                         enabled=enabled,
                         max_size=max_size,
+                        quality=quality,
                         output_dir=output_dir,
                         prepared=prepared,
                         quote_image_ref=quote_image_ref,
@@ -324,6 +334,7 @@ class InternalAgentSubStage(Stage):
                         event,
                         enabled=enabled,
                         max_size=max_size,
+                        quality=quality,
                         output_dir=output_dir,
                         prepared=prepared,
                     )

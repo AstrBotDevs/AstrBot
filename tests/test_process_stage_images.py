@@ -213,7 +213,10 @@ async def test_profile_toggle_and_preprocess_to_first_model(
     assert len(harness.captured) == 1
     req = harness.captured[0].req
     with PILImage.open(req.image_urls[0]) as image:
-        assert image.format == (fmt if enabled is False else "PNG")
+        expected = (
+            fmt if enabled is False else (fmt if fmt in {"JPEG", "PNG"} else "JPEG")
+        )
+        assert image.format == expected
         assert image.size == (
             (90, 45) if enabled is not False and fmt == "GIF" else (60, 30)
         )
@@ -344,16 +347,16 @@ async def test_plugin_request_extra_metadata_hook_and_history(
     assert req.contexts == historical
     images = [p for p in saved[-1]["content"] if p["type"] == "image_url"]
     assert images and all(
-        p["image_url"]["url"].startswith("data:image/png;base64,") for p in images
+        p["image_url"]["url"].startswith("data:image/jpeg;base64,") for p in images
     )
     assert all(p["image_url"].get("id") != "dict-id" for p in images)
     paths = list(event._temporary_local_files)
-    cache_files = list((harness.work / media.CONVERT_CACHE_DIR_NAME).glob("*.png"))
     event.cleanup_temporary_local_files()
+    cache_files = list((harness.work / media.CONVERT_CACHE_DIR_NAME).glob("*.img"))
     assert all(not Path(path).exists() for path in paths)
     assert cache_files and all(path.exists() for path in cache_files)
     assert all(
-        base64.b64decode(p["image_url"]["url"].split(",", 1)[1]).startswith(b"\x89PNG")
+        base64.b64decode(p["image_url"]["url"].split(",", 1)[1]).startswith(b"\xff\xd8")
         for p in images
     )
     from astrbot.core.provider.sources.anthropic_source import ProviderAnthropic
@@ -362,7 +365,7 @@ async def test_plugin_request_extra_metadata_hook_and_history(
     _, payload = anthropic._prepare_payload([saved[-1]])
     visual = [part for part in payload[0]["content"] if part["type"] == "image"]
     assert len(visual) == len(images)
-    assert all(part["source"]["media_type"] == "image/png" for part in visual)
+    assert all(part["source"]["media_type"] == "image/jpeg" for part in visual)
 
 
 @pytest.mark.asyncio
@@ -378,7 +381,7 @@ async def test_caption_first_call_uses_prepared_quote(harness, tmp_path, plugin)
         assert "image_settings" not in kwargs
         for ref in kwargs["image_urls"]:
             with PILImage.open(ref) as image:
-                assert image.format == "PNG" and getattr(image, "n_frames", 1) == 1
+                assert image.format == "JPEG" and getattr(image, "n_frames", 1) == 1
         captured.extend(kwargs["image_urls"])
         return LLMResponse(role="assistant", completion_text="caption")
 
@@ -534,7 +537,7 @@ async def test_localized_reference_lifetime_and_ownership(
         enabled or reference != "file"
     )
     with PILImage.open(path) as image:
-        assert image.format == ("PNG" if enabled else "GIF")
+        assert image.format == ("JPEG" if enabled else "GIF")
     if not enabled:
         assert path.read_bytes() == source.read_bytes()
 
@@ -562,7 +565,7 @@ async def test_two_plugin_requests_on_one_event_are_prepared_independently(
     assert len(harness.captured) == 2
     for runner in harness.captured:
         with PILImage.open(runner.req.image_urls[0]) as image:
-            assert image.format == "PNG"
+            assert image.format == "JPEG"
     assert first.image_urls[0].endswith(".gif") and second.image_urls[0].endswith(
         ".bmp"
     )
@@ -653,7 +656,7 @@ async def test_late_image_component_sources_are_event_owned(
     await process_event(harness, event, preprocess_first=True)
     owned = [Path(path) for path in event._temporary_local_files]
     assert len(owned) == 2
-    assert sorted(PILImage.open(path).format for path in owned) == ["GIF", "PNG"]
+    assert sorted(PILImage.open(path).format for path in owned) == ["GIF", "JPEG"]
     assert late_image.file == ref
     assert all(path.exists() for path in owned)
 

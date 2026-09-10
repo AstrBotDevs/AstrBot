@@ -4144,7 +4144,7 @@ CONFIG_METADATA_3 = {
                     "provider_settings.image_compress_enabled": {
                         "description": "启用图片压缩",
                         "type": "bool",
-                        "hint": "默认开启。发送给多模态模型前压缩本地大图片，并统一转换为 PNG。",
+                        "hint": "默认开启。发送给多模态模型前按需压缩转换图片：合规的 JPEG/PNG 原样发送，动图生成拼图预览。",
                     },
                     "provider_settings.image_compress_options.max_size": {
                         "description": "最大边长",

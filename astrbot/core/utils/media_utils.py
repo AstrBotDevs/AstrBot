@@ -1014,9 +1014,12 @@ def _inspect_image(image_bytes: bytes) -> int:
     return frame_count
 
 
-_IMAGE_CONVERT_CACHE_VERSION = "v7-resampled-png"
+_IMAGE_CONVERT_CACHE_VERSION = "v9-icc"
 """Bump when conversion output semantics change (modes, transparency, sizing)
 so stale cache entries produced by older code are never served."""
+
+MODEL_IMAGE_PNG_FALLBACK_MAX_BYTES = 1024 * 1024
+"""PNG outputs larger than this are flattened onto white and re-encoded as JPEG."""
 
 
 def normalize_model_image_max_size(value: object) -> int:
@@ -1061,21 +1064,29 @@ def normalize_model_image_max_size(value: object) -> int:
 
 
 def _encode_image_frame_bytes(
-    image: PILImage.Image, max_size: int | None = None
+    image: PILImage.Image,
+    max_size: int | None = None,
+    quality: int = IMAGE_COMPRESS_DEFAULT_QUALITY,
 ) -> bytes:
-    """Encode a display-oriented frame as PNG, preserving transparency.
+    """Encode a display-oriented frame as JPEG, or PNG when it carries transparency.
 
     Args:
         image: Opened source frame, which is never mutated.
         max_size: Optional longest-edge limit; smaller images are not enlarged.
+        quality: JPEG output quality in the range 1-100.
 
     Returns:
-        Encoded single-frame PNG bytes.
+        Encoded single-frame JPEG or PNG bytes. A PNG larger than
+        MODEL_IMAGE_PNG_FALLBACK_MAX_BYTES is flattened onto white and
+        re-encoded as JPEG to bound the request payload size. High-bit-depth
+        samples are min-max normalized to 8-bit before JPEG encoding.
     """
     oriented = ImageOps.exif_transpose(image)
     prepared = oriented
+    extras: list[PILImage.Image] = []
     try:
-        if _image_has_alpha(oriented):
+        has_alpha = _image_has_alpha(oriented)
+        if has_alpha:
             # Promote RGB/L color-key transparency as well as palette alpha.
             prepared = oriented.convert("RGBA")
         elif oriented.mode not in {"1", "L", "LA", "P", "RGB", "RGBA", "I", "I;16"}:
@@ -1092,11 +1103,45 @@ def _encode_image_frame_bytes(
                 PILImage.Resampling.LANCZOS,
                 reducing_gap=None if prepared.mode == "I;16" else 2.0,
             )
+        # JPEG saving does not auto-embed the source ICC profile like PNG does;
+        # attach it explicitly, but only when the color space survived intact
+        # (conversions like CMYK -> RGB invalidate the source profile).
+        icc_profile = image.info.get("icc_profile")
+        if image.mode not in {"RGB", "RGBA", "L", "LA", "P", "1", "I", "I;16"}:
+            icc_profile = None
+        save_kwargs = {"icc_profile": icc_profile} if icc_profile else {}
+        if has_alpha:
+            buffer = io.BytesIO()
+            prepared.save(buffer, "PNG", **save_kwargs)
+            data = buffer.getvalue()
+            if len(data) <= MODEL_IMAGE_PNG_FALLBACK_MAX_BYTES:
+                return data
+            # Oversized PNG flattens onto white and re-encodes as JPEG.
+            rgba = prepared if prepared.mode == "RGBA" else prepared.convert("RGBA")
+            extras.append(rgba)
+            flattened = PILImage.new("RGB", rgba.size, (255, 255, 255))
+            extras.append(flattened)
+            flattened.paste(rgba, mask=rgba.getchannel("A"))
+            prepared = flattened
+        elif prepared.mode in {"I", "I;16"}:
+            # convert() clips high-bit-depth samples at 255 instead of scaling;
+            # min-max normalize to 8-bit so the content survives JPEG.
+            low, high = prepared.getextrema()
+            if high > low:
+                scaled = prepared.point(lambda v: (v - low) * (255.0 / (high - low)))
+                extras.append(scaled)
+                prepared = scaled
+            prepared = prepared.convert("L")
+        elif prepared.mode not in {"RGB", "L"}:
+            # JPEG output supports only RGB and L among the remaining modes.
+            prepared = prepared.convert("L" if prepared.mode == "1" else "RGB")
         buffer = io.BytesIO()
-        prepared.save(buffer, "PNG")
+        prepared.save(buffer, "JPEG", quality=quality, optimize=True, **save_kwargs)
         return buffer.getvalue()
     finally:
-        if prepared is not oriented:
+        for extra in extras:
+            extra.close()
+        if prepared is not oriented and prepared not in extras:
             prepared.close()
         oriented.close()
 
@@ -1126,7 +1171,7 @@ def _read_valid_cached_image_bytes(output_path: Path) -> bytes | None:
         frame_count = _inspect_image(data)
         with PILImage.open(io.BytesIO(data)) as image:
             if (
-                image.format != "PNG"
+                image.format not in {"PNG", "JPEG"}
                 or frame_count != 1
                 or image.getexif().get(274, 1) != 1
             ):
@@ -1178,31 +1223,36 @@ def _publish_image_cache_atomic(
             logger.debug("Failed to clean up image cache temp file: %s", exc)
 
 
-def _convert_image_bytes_sync(source_bytes: bytes, max_size: int) -> bytes:
-    """Normalize a validated still image to PNG with an optional derived cache.
+def _convert_image_bytes_sync(
+    source_bytes: bytes, max_size: int, quality: int
+) -> bytes:
+    """Normalize a validated still image with an optional derived cache.
 
     Args:
         source_bytes: Encoded source bytes already checked by _inspect_image.
         max_size: Longest-edge limit in pixels.
+        quality: JPEG output quality in the range 1-100.
 
     Returns:
-        Single-frame PNG bytes, reusing an oriented static PNG within the size limit.
+        Single-frame JPEG or PNG bytes. An oriented JPEG or PNG within the size
+        limit is reused unchanged; anything else is re-encoded.
     """
     with PILImage.open(io.BytesIO(source_bytes)) as image:
         if (
-            image.format == "PNG"
+            image.format in {"PNG", "JPEG"}
             and image.getexif().get(274, 1) == 1
             and max(image.size) <= max_size
         ):
             return source_bytes
         cache_key = _image_convert_cache_key(
-            source_bytes, f"{_IMAGE_CONVERT_CACHE_VERSION}|convert|s={max_size}"
+            source_bytes,
+            f"{_IMAGE_CONVERT_CACHE_VERSION}|convert|s={max_size}|q={quality}",
         )
-        output_path = _image_convert_cache_dir() / (cache_key + ".png")
+        output_path = _image_convert_cache_dir() / (cache_key + ".img")
         cached = _read_valid_cached_image_bytes(output_path)
         if cached is not None:
             return cached
-        encoded = _encode_image_frame_bytes(image, max_size=max_size)
+        encoded = _encode_image_frame_bytes(image, max_size=max_size, quality=quality)
     _publish_image_cache_atomic(output_path, encoded)
     return encoded
 
@@ -1226,6 +1276,7 @@ def _even_frame_indices(total_frames: int, max_frames: int) -> list[int]:
 def _extract_animation_montage_sync(
     source_bytes: bytes,
     max_size: int,
+    quality: int,
 ) -> tuple[bytes, bool]:
     """Tile evenly spaced frames of an animated image into one grid montage.
 
@@ -1243,9 +1294,9 @@ def _extract_animation_montage_sync(
     """
     cache_key = _image_convert_cache_key(
         source_bytes,
-        f"{_IMAGE_CONVERT_CACHE_VERSION}|montage|s={max_size}",
+        f"{_IMAGE_CONVERT_CACHE_VERSION}|montage|s={max_size}|q={quality}",
     )
-    output_path = _image_convert_cache_dir() / (cache_key + ".png")
+    output_path = _image_convert_cache_dir() / (cache_key + ".img")
     cached = _read_valid_cached_image_bytes(output_path)
     if cached is not None:
         return cached, False
@@ -1302,7 +1353,7 @@ def _extract_animation_montage_sync(
                     finally:
                         if resized is not frame:
                             resized.close()
-            encoded = _encode_image_frame_bytes(canvas)
+            encoded = _encode_image_frame_bytes(canvas, quality=quality)
         finally:
             canvas.close()
     _publish_image_cache_atomic(output_path, encoded)
@@ -1314,16 +1365,19 @@ async def prepare_model_image(
     *,
     max_size: int,
     output_dir: Path,
+    quality: int = IMAGE_COMPRESS_DEFAULT_QUALITY,
 ) -> str | None:
-    """Prepare a single local PNG for the caller to own until consumption.
+    """Prepare a single local model-ready image for the caller to own until consumption.
 
     Args:
         image_ref: Source reference accepted by MediaResolver.
         max_size: Validated longest-edge limit for stills and animation montages.
         output_dir: Directory for independent request-owned working files.
+        quality: JPEG output quality in the range 1-100.
 
     Returns:
-        An existing PNG path, or None for a recoverable input or write failure.
+        An existing JPEG or PNG path, or None for a recoverable input or write
+        failure.
         The caller owns this file; shared cache entries are never returned.
     """
     try:
@@ -1332,17 +1386,18 @@ async def prepare_model_image(
         frame_count = await asyncio.to_thread(_inspect_image, image_bytes)
         if frame_count > 1:
             converted_bytes, _ = await asyncio.to_thread(
-                _extract_animation_montage_sync, image_bytes, max_size
+                _extract_animation_montage_sync, image_bytes, max_size, quality
             )
         else:
             converted_bytes = await asyncio.to_thread(
-                _convert_image_bytes_sync, image_bytes, max_size
+                _convert_image_bytes_sync, image_bytes, max_size, quality
             )
         # Publish the working file synchronously after encoding, so cancellation
         # cannot leave an untracked background write alive after this call.
         output_dir.mkdir(parents=True, exist_ok=True)
+        suffix = ".jpg" if converted_bytes.startswith(b"\xff\xd8") else ".png"
         fd, name = tempfile.mkstemp(
-            prefix="model_image_", suffix=".png", dir=output_dir
+            prefix="model_image_", suffix=suffix, dir=output_dir
         )
         output_path = Path(name)
         try:
