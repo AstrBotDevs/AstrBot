@@ -6,6 +6,8 @@ import vuetify from 'vite-plugin-vuetify';
 import webfontDl from 'vite-plugin-webfont-dl';
 // @ts-ignore — .mjs not in TS project scope; Vite resolves this at runtime
 import { runMdiSubset } from './scripts/subset-mdi-font.mjs';
+// @ts-ignore — .mjs not in TS project scope; Vite resolves this at runtime
+import { pdfjsAssets } from './scripts/pdfjs-assets.mjs';
 
 const t2iShikiRuntimePath = fileURLToPath(
   new URL('../astrbot/core/utils/t2i/template/shiki_runtime.iife.js', import.meta.url)
@@ -61,6 +63,7 @@ export default defineConfig(({ command }) => ({
     // Only run MDI subsetting during production builds, skip in dev server
     ...(command === 'build' ? [mdiSubset()] : []),
     t2iShikiRuntimeAsset(),
+    pdfjsAssets(),
     vue({
       template: {
         compilerOptions: {

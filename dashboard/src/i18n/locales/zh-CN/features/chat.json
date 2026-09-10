@@ -173,9 +173,9 @@
     "confirmDelete": "确定要删除项目 \"{title}\" 吗？项目中的对话不会被删除。"
   },
   "workspaceFiles": {
-    "title": "工作区文件",
-    "open": "打开工作区文件",
-    "close": "关闭工作区文件",
+    "title": "文件",
+    "open": "打开文件",
+    "close": "关闭文件面板",
     "refresh": "刷新文件树",
     "filter": "筛选文件...",
     "clearFilter": "清除文件筛选",
@@ -188,7 +188,23 @@
     "downloadFailed": "下载文件失败",
     "dialogPreview": "放大预览",
     "closePreview": "关闭文件预览",
-    "closeDialogPreview": "关闭放大预览"
+    "closeDialogPreview": "关闭放大预览",
+    "pdf": {
+      "zoomControls": "PDF 缩放",
+      "zoomOut": "缩小",
+      "zoomIn": "放大",
+      "fitWidth": "适应页面宽度",
+      "loading": "正在加载 PDF…",
+      "pageLabel": "第 {page} 页，共 {total} 页",
+      "passwordProtected": "此 PDF 受密码保护，请下载后输入密码查看。",
+      "loadFailed": "无法预览此 PDF，仍可下载文件查看。",
+      "tooLarge": "超过 50 MB 的 PDF 暂不支持预览，请下载后查看。"
+    },
+    "openTabs": "已打开的文件",
+    "closeTab": "关闭 {name}",
+    "showTree": "展开文件树",
+    "hideTree": "收起文件树",
+    "selectFile": "选择文件开始预览"
   },
   "time": {
     "today": "今天",

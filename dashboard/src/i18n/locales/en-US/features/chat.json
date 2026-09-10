@@ -173,9 +173,9 @@
     "confirmDelete": "Are you sure you want to delete project \"{title}\"? Conversations in this project will not be deleted."
   },
   "workspaceFiles": {
-    "title": "Workspace Files",
-    "open": "Open workspace files",
-    "close": "Close workspace files",
+    "title": "Files",
+    "open": "Open files",
+    "close": "Close files",
     "refresh": "Refresh file tree",
     "filter": "Filter files...",
     "clearFilter": "Clear file filter",
@@ -188,7 +188,23 @@
     "downloadFailed": "Failed to download this file",
     "dialogPreview": "Open larger preview",
     "closePreview": "Close file preview",
-    "closeDialogPreview": "Close larger preview"
+    "closeDialogPreview": "Close larger preview",
+    "pdf": {
+      "zoomControls": "PDF zoom",
+      "zoomOut": "Zoom out",
+      "zoomIn": "Zoom in",
+      "fitWidth": "Fit page width",
+      "loading": "Loading PDF…",
+      "pageLabel": "Page {page} of {total}",
+      "passwordProtected": "This PDF is password protected. Download it to open it with a password.",
+      "loadFailed": "Unable to preview this PDF. You can still download the file.",
+      "tooLarge": "PDFs larger than 50 MB cannot be previewed. Download the file to view it."
+    },
+    "openTabs": "Open files",
+    "closeTab": "Close {name}",
+    "showTree": "Show file tree",
+    "hideTree": "Hide file tree",
+    "selectFile": "Select a file to preview"
   },
   "time": {
     "today": "Today",

@@ -35,6 +35,7 @@
     "markstream-vue": "1.0.5-beta.0",
     "mermaid": "^11.12.2",
     "monaco-editor": "^0.52.2",
+    "pdfjs-dist": "6.3.289",
     "pinia": "2.1.6",
     "pinyin-pro": "^3.26.0",
     "qrcode": "^1.5.4",
