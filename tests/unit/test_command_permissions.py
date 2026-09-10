@@ -22,17 +22,31 @@ from astrbot.core.star.star_handler import (
 @pytest.mark.parametrize("permission", COMMAND_PERMISSION_TYPES)
 @pytest.mark.parametrize("group", [False, True])
 @pytest.mark.parametrize("admin", [False, True])
-def test_permission_matrix(permission, group, admin):
+@pytest.mark.parametrize("isolated", [False, True])
+def test_permission_matrix(permission, group, admin, isolated):
     event = MagicMock()
     event.get_group_id.return_value = "group" if group else ""
     event.is_admin.return_value = admin
+    event.get_extra.side_effect = {"_session_isolated": isolated}.get
     expected = (
-        admin or permission == "member" or (permission == "group_admin" and not group)
+        admin
+        or permission == "member"
+        or (permission == "group_admin" and not group)
+        or (permission == "shared_group_admin" and (not group or isolated))
     )
     assert (
         PermissionTypeFilter(COMMAND_PERMISSION_TYPES[permission]).filter(event, {})
         == expected
     )
+
+
+def test_shared_group_permission_requires_actual_isolation():
+    event = MagicMock()
+    event.get_group_id.return_value = "group"
+    event.is_admin.return_value = False
+    event.get_extra.side_effect = {}.get
+    permission = PermissionTypeFilter(PermissionType.SHARED_GROUP_ADMIN)
+    assert not permission.filter(event, {"platform_settings": {"unique_session": True}})
 
 
 @pytest.fixture
@@ -47,7 +61,7 @@ def command(monkeypatch):
         handler_name="probe",
         handler_module_path=module,
         handler=probe,
-        event_filters=[PermissionTypeFilter(PermissionType.GROUP_ADMIN)],
+        event_filters=[PermissionTypeFilter(PermissionType.SHARED_GROUP_ADMIN)],
     )
     handler.event_filters.append(CommandFilter("probe", handler_md=handler))
     registry = StarHandlerRegistry()
@@ -99,7 +113,7 @@ async def test_invalid_permission_does_not_change_state(command, permission):
             handler.handler_full_name, permission
         )
     assert saved == {}
-    assert management._determine_permission(handler) == "group_admin"
+    assert management._determine_permission(handler) == "shared_group_admin"
 
 
 @pytest.mark.asyncio
@@ -112,6 +126,7 @@ async def test_invalid_permission_does_not_change_state(command, permission):
         {"permission": "member"},
         {"permission": "admin"},
         {"permission": "group_admin"},
+        {"permission": "shared_group_admin"},
     ],
 )
 @pytest.mark.parametrize("existing_filter", [False, True])
@@ -146,6 +161,6 @@ async def test_plugin_load_restores_only_explicit_permission(
     assert success, error
     expected = config.get("permission")
     if expected not in COMMAND_PERMISSION_TYPES:
-        expected = "group_admin" if existing_filter else "everyone"
+        expected = "shared_group_admin" if existing_filter else "everyone"
     assert management._determine_permission(handler) == expected
     assert metadata.star_handler_full_names == [handler.handler_full_name]

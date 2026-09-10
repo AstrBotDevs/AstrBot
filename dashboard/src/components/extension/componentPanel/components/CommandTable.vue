@@ -163,7 +163,7 @@ const getRowProps = ({ item }: { item: CommandItem }) => {
               :active="(item.permission === 'everyone' ? 'member' : item.permission) === permission"
             >
               <v-list-item-title>{{ tm(commandPermissions[permission].label) }}</v-list-item-title>
-              <v-list-item-subtitle v-if="permission === 'group_admin'">{{ tm('permission.groupAdminHint') }}</v-list-item-subtitle>
+              <v-list-item-subtitle v-if="commandPermissions[permission].hint">{{ tm(commandPermissions[permission].hint!) }}</v-list-item-subtitle>
             </v-list-item>
           </v-list>
         </v-menu>

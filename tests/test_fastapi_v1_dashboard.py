@@ -3375,7 +3375,9 @@ async def test_v1_command_patch_updates_service(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("permission", ["member", "admin", "group_admin"])
+@pytest.mark.parametrize(
+    "permission", ["member", "admin", "group_admin", "shared_group_admin"]
+)
 async def test_v1_command_permission_patch_updates_service(
     asgi_app: FastAPI,
     asgi_client: httpx.AsyncClient,

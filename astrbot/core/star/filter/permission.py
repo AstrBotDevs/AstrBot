@@ -12,12 +12,14 @@ class PermissionType(enum.Flag):
     ADMIN = enum.auto()
     MEMBER = enum.auto()
     GROUP_ADMIN = enum.auto()
+    SHARED_GROUP_ADMIN = enum.auto()
 
 
 COMMAND_PERMISSION_TYPES = {
     "admin": PermissionType.ADMIN,
     "member": PermissionType.MEMBER,
     "group_admin": PermissionType.GROUP_ADMIN,
+    "shared_group_admin": PermissionType.SHARED_GROUP_ADMIN,
 }
 
 
@@ -42,4 +44,10 @@ class PermissionTypeFilter(HandlerFilter):
             self.permission_type == PermissionType.GROUP_ADMIN and event.get_group_id()
         ):
             return event.is_admin()
+        if (
+            self.permission_type == PermissionType.SHARED_GROUP_ADMIN
+            and event.get_group_id()
+        ):
+            # The pipeline marks actual isolation, including platform support.
+            return event.is_admin() or bool(event.get_extra("_session_isolated", False))
         return True

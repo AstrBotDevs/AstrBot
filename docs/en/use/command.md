@@ -91,12 +91,13 @@ DeerFlow also attempts to delete the old remote thread. Third-party runners do n
 Permission notes:
 
 - In private chat, regular users can use it by default.
-- Group chats require AstrBot administrator permission by default, independently of session isolation. This refers to configured administrator IDs, not automatically detected group administrators.
-- In WebUI, open **Extensions → Handlers → Command** and select **Show system plugins commands**. Configure `new` and `reset` individually using **Everyone**, **Administrators Only**, or **Administrators Only in Group Chats**. These permissions apply across all configuration profiles; explicitly saved permissions take precedence over command defaults.
-- The default is **Administrators Only in Group Chats**. Select **Everyone** to allow regular group members. With **Isolate Conversation** disabled, the command switches the conversation for the whole group; with it enabled, it affects only the sender's conversation.
+- Group chats default to **Follow Conversation Isolation**: everyone can use the commands when **Isolate Conversation** is enabled and isolation is applied by the platform; otherwise, only AstrBot administrators can use them. Administrators are configured administrator IDs, not automatically detected group administrators. Platforms without isolation support retain the shared-group restriction.
+- In WebUI, open **Extensions → Handlers → Command** and select **Show System Plugin Commands**. Configure `new` and `reset` individually using **Everyone**, **Administrators Only**, **Administrators Only in Group Chats**, or **Follow Conversation Isolation**. The selected permission applies across all configuration profiles. **Follow Conversation Isolation** evaluates isolation using the incoming message's profile; the other three choices remain fixed when isolation settings change.
+- **Administrators Only** restricts both private and group chats. **Administrators Only in Group Chats** allows everyone in private chats but requires administrator permission in groups.
+- With **Isolate Conversation** disabled, the command switches the conversation for the whole group; with isolation enabled and applied, it affects only the sender's conversation. Select **Everyone** to allow regular members to use the command in shared group conversations.
 - Command disabling and renaming are also managed here.
 
-Upgrade note: legacy reset scene permissions are no longer used. Unless command permissions were explicitly configured, an administrator must set the relevant command to **Everyone** in command management to let regular group members start conversations. Existing **Isolate Conversation** settings are preserved.
+Upgrade note: commands without explicitly saved permissions default to **Follow Conversation Isolation**. Permissions saved in command management and **Isolate Conversation** settings are preserved. Select **Follow Conversation Isolation** to restore automatic permission checks. If you customized the legacy `group_unique_on`, `group_unique_off`, or `private` values under `alter_cmd.astrbot.reset`, these values are no longer read; select the desired permission in command management instead.
 
 ### `/stop`
 

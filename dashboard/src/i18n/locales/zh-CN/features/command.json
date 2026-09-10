@@ -35,8 +35,11 @@
   "permission": {
     "groupAdmin": "仅群聊限管理员",
     "groupAdminHint": "私聊所有人可用，群聊仅 AstrBot 管理员可用。",
+    "followIsolation": "跟随对话隔离",
+    "followIsolationHint": "已隔离的群聊所有人可用，未隔离的群聊仅 AstrBot 管理员可用；私聊所有人可用。",
     "everyone": "所有人",
-    "admin": "仅管理员"
+    "admin": "仅管理员",
+    "adminHint": "私聊和群聊均仅限 AstrBot 管理员使用，不随对话隔离设置变化。"
   },
   "tooltips": {
     "enable": "启用指令",

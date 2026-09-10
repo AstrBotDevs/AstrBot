@@ -152,7 +152,9 @@ async def update_command_permission(
         raise ValueError("指定的处理函数不存在或不是指令。")
 
     if permission_type not in COMMAND_PERMISSION_TYPES:
-        raise ValueError("Permission must be admin, member, or group_admin.")
+        raise ValueError(
+            "Permission must be one of: " + ", ".join(COMMAND_PERMISSION_TYPES) + "."
+        )
 
     handler = descriptor.handler
     found_plugin = star_map.get(handler.handler_module_path)

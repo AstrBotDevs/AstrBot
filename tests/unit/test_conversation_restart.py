@@ -18,9 +18,20 @@ from astrbot.core.config.default import (
     CONFIG_METADATA_3,
     DEFAULT_CONFIG,
 )
+from astrbot.core.message.components import Plain
+from astrbot.core.pipeline.waking_check import stage as waking
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
+from astrbot.core.platform.message_type import MessageType
+from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.star import base as star_base
-from astrbot.core.star.filter.permission import PermissionTypeFilter
+from astrbot.core.star import star_handler
+from astrbot.core.star.filter.permission import (
+    COMMAND_PERMISSION_TYPES,
+    PermissionTypeFilter,
+)
 from astrbot.core.star.register import star_handler as handler_registration
+from astrbot.core.star.star import StarMetadata
 from astrbot.core.star.star_handler import StarHandlerRegistry
 
 
@@ -102,12 +113,13 @@ async def test_restart_permission_matrix(
     restart.config["platform_settings"] = {
         "unique_session": isolated,
     }
+    restart.extras["_session_isolated"] = isolated
     handler = restart_handlers[entry]
     permission = next(
         f for f in handler.event_filters if isinstance(f, PermissionTypeFilter)
     )
     allowed = permission.filter(restart.event, restart.config)
-    assert allowed == (admin or not group)
+    assert allowed == (admin or not group or isolated)
     if allowed:
         await handler.handler(restart.plugin, restart.event)
     restart.manager.update_conversation.assert_not_awaited()
@@ -115,7 +127,7 @@ async def test_restart_permission_matrix(
         restart.stop.assert_not_called()
         restart.manager.get_curr_conversation_id.assert_not_awaited()
         restart.manager.new_conversation.assert_not_awaited()
-        assert not restart.extras
+        assert restart.extras == {"_session_isolated": isolated}
     else:
         restart.stop.assert_called_once_with(
             restart.event.unified_msg_origin, exclude=restart.event
@@ -126,6 +138,97 @@ async def test_restart_permission_matrix(
             persona_id="persona",
         )
         assert restart.extras["_clean_group_context_session"] is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("entry", ["new_conv", "reset"])
+@pytest.mark.parametrize(
+    "platform",
+    ["aiocqhttp", "qq_official", "qq_official_webhook", "telegram", "discord"],
+)
+@pytest.mark.parametrize("override", [None, *COMMAND_PERMISSION_TYPES])
+async def test_restart_permissions_follow_pipeline_isolation(
+    restart, restart_handlers, monkeypatch, entry, platform, override
+):
+    handler = restart_handlers[entry]
+    permission = next(
+        f for f in handler.event_filters if isinstance(f, PermissionTypeFilter)
+    )
+    if override is not None:
+        permission.permission_type = COMMAND_PERMISSION_TYPES[override]
+    original_permission = permission.permission_type
+    registry = StarHandlerRegistry()
+    registry.append(handler)
+    monkeypatch.setattr(waking, "star_handlers_registry", registry)
+    for target in (waking, star_handler):
+        monkeypatch.setattr(
+            target,
+            "star_map",
+            {handler.handler_module_path: StarMetadata(name="builtin_commands")},
+        )
+    monkeypatch.setattr(
+        waking.SessionPluginManager,
+        "filter_handlers_by_session",
+        AsyncMock(side_effect=lambda event, handlers: handlers),
+    )
+    profiles = {}
+    # Interleave profiles and reload one of them, without changing global filters.
+    for profile, enabled in [
+        ("shared", False),
+        ("isolated", True),
+        ("shared", False),
+        ("isolated", False),
+        ("isolated", True),
+    ]:
+        config = {
+            "platform_settings": {"unique_session": enabled},
+            "admins_id": [],
+            "wake_prefix": ["/"],
+        }
+        if profile not in profiles or profiles[profile].unique_session != enabled:
+            stage = waking.WakingCheckStage()
+            await stage.initialize(
+                SimpleNamespace(
+                    astrbot_config=config,
+                    astrbot_config_id=profile,
+                    db_helper=MagicMock(),
+                )
+            )
+            stage._umo_auto_name_recorder = MagicMock()
+            profiles[profile] = stage
+        message = AstrBotMessage()
+        message.type = MessageType.GROUP_MESSAGE
+        message.group_id = "group"
+        message.self_id = "bot"
+        message.sender = MessageMember(user_id="member")
+        text = "/new" if entry == "new_conv" else "/reset"
+        message.message = [Plain(text)]
+        event = AstrMessageEvent(
+            text, message, PlatformMetadata(platform, "test", "qq"), "group"
+        )
+        event.send = AsyncMock()
+        # A stale marker must never grant access on a shared-group event.
+        event.set_extra("_session_isolated", True)
+        await profiles[profile].process(event)
+        isolated = enabled and platform in waking.UNIQUE_SESSION_ID_BUILDERS
+        assert event.get_extra("_session_isolated") is isolated
+        assert event.session_id == ("member_group" if isolated else "group")
+        allowed = override == "member" or (
+            override in (None, "shared_group_admin") and isolated
+        )
+        assert event.is_stopped() is not allowed
+        assert event.get_extra("activated_handlers", []) == (
+            [handler] if allowed else []
+        )
+        assert permission.permission_type == original_permission
+        restart.manager.new_conversation.reset_mock()
+        if allowed:
+            await handler.handler(restart.plugin, event)
+            restart.manager.new_conversation.assert_awaited_once_with(
+                event.unified_msg_origin, "qq", persona_id="persona"
+            )
+        else:
+            restart.manager.new_conversation.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -278,8 +381,36 @@ def test_restart_config_metadata_and_translations(locale):
     settings = metadata["platform_group"]["general"]["platform_settings"]
     assert key not in settings
     assert settings["unique_session"]["description"]
+    assert settings["unique_session"]["hint"]
+    if locale == "zh-CN":
+        assert (
+            settings["unique_session"]["hint"]
+            == CONFIG_METADATA_3["platform_group"]["metadata"]["general"]["items"][
+                "platform_settings.unique_session"
+            ]["hint"]
+        )
     permissions = json.loads((path / "command.json").read_text(encoding="utf-8-sig"))[
         "permission"
     ]
     assert permissions["groupAdmin"]
     assert permissions["groupAdminHint"]
+    assert permissions["followIsolation"]
+    assert permissions["followIsolationHint"]
+    assert permissions["adminHint"]
+
+
+@pytest.mark.parametrize(("locale", "language"), [("zh-CN", "zh"), ("en-US", "en")])
+def test_restart_docs_use_current_permission_labels(locale, language):
+    root = Path(__file__).resolve().parents[2]
+    translations = json.loads(
+        (
+            root / "dashboard/src/i18n/locales" / locale / "features/command.json"
+        ).read_text(encoding="utf-8-sig")
+    )
+    guide = (root / "docs" / language / "use/command.md").read_text(encoding="utf-8")
+    for key in ("everyone", "admin", "groupAdmin", "followIsolation"):
+        assert translations["permission"][key] in guide
+    assert translations["filters"]["showSystemPlugins"] in guide
+    assert "allow_member_new_conversation" not in guide
+    assert "Allow Non-Administrators to Start Group Conversations" not in guide
+    assert "允许非管理员在群聊中新建对话" not in guide
