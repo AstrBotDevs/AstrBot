@@ -550,6 +550,66 @@ class TestRunJob:
         mock_db.update_cron_job.assert_not_called()
 
 
+class TestCronFallbackProviders:
+    """Cron wakeups must inherit agent_runner fallback providers (#10026)."""
+
+    @pytest.mark.asyncio
+    async def test_woke_main_agent_forwards_fallback_provider_ids(
+        self, cron_manager, mock_context
+    ):
+        from types import SimpleNamespace
+
+        captured = {}
+
+        class FakeRunner:
+            state = AgentState.DONE
+
+            async def step_until_done(self, max_step):
+                return
+                yield  # pragma: no cover
+
+            def get_final_llm_resp(self):
+                return None
+
+        async def fake_build_main_agent(*, event, plugin_context, config, req):
+            captured["config"] = config
+            return SimpleNamespace(agent_runner=FakeRunner())
+
+        mock_context.get_config = MagicMock(
+            return_value={
+                "admins_id": [],
+                "agent_runner": {
+                    "config": {
+                        "model": {"fallback_provider_ids": ["backup-a", "backup-b"]}
+                    }
+                },
+            }
+        )
+        cron_manager.ctx = mock_context
+
+        with (
+            patch(
+                "astrbot.core.astr_main_agent.build_main_agent",
+                side_effect=fake_build_main_agent,
+            ),
+            patch(
+                "astrbot.core.astr_main_agent._get_session_conv",
+                new=AsyncMock(return_value=SimpleNamespace(history="[]")),
+            ),
+            patch(
+                "astrbot.core.cron.manager.persist_agent_history",
+                new=AsyncMock(return_value=None),
+            ),
+        ):
+            await cron_manager._woke_main_agent(
+                message="run scheduled task",
+                session_str="test:FriendMessage:user123",
+                extras={"cron_job": {"id": "job-1"}, "cron_payload": {}},
+            )
+
+        assert captured["config"].fallback_provider_ids == ["backup-a", "backup-b"]
+
+
 class TestRunActiveAgentJob:
     """Tests for active agent cron job execution."""
 

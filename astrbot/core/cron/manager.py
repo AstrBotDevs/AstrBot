@@ -475,6 +475,13 @@ class CronJobManager:
             computer_use_runtime=provider_settings.get("computer_use_runtime", "none"),
             sandbox_cfg=provider_settings.get("sandbox", {}),
             provider_settings=provider_settings,
+            # The interactive pipeline forwards this from agent_runner config;
+            # cron wakeups must inherit it too or a primary-model failure
+            # fails the whole scheduled run with no fallback (#10026).
+            fallback_provider_ids=cfg.get("agent_runner", {})
+            .get("config", {})
+            .get("model", {})
+            .get("fallback_provider_ids", []),
         )
         req = ProviderRequest()
         conv = await _get_session_conv(event=cron_event, plugin_context=self.ctx)
