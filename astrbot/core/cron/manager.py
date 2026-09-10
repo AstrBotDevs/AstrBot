@@ -544,14 +544,19 @@ class CronJobManager:
             return
 
         final_text = (llm_resp.completion_text or "").strip()
-        if llm_resp.role == "assistant" and final_text and delivery_session_str:
-            # The runner's final text is only folded into the persisted history;
-            # without an explicit send the bound session never receives it,
-            # which is exactly the "only intermediate messages" symptom of
-            # #9980. Send to delivery_session_str (not the event session, which
-            # falls back to a synthetic cron session) and skip when the model
-            # already delivered this exact text via send_message_to_user
-            # earlier in the same run.
+        if (
+            getattr(runner, "reached_max_steps", False)
+            and llm_resp.role == "assistant"
+            and final_text
+            and delivery_session_str
+        ):
+            # Deliver ONLY on the forced wrap-up at max steps: there all tools
+            # were removed, so the model had no channel to reach the user even
+            # if it wanted to (#9980). On normal completion the model still has
+            # send_message_to_user available and may intentionally stay silent
+            # (e.g. conditional notify-only jobs), so the framework must not
+            # decide for it. Skip when the model already delivered this exact
+            # text earlier in the same run.
             already_sent = cron_event.get_extra(
                 SENT_TO_CURRENT_SESSION_PLAIN_TEXTS_EXTRA_KEY, []
             )

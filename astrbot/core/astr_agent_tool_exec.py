@@ -643,11 +643,17 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             return
 
         final_text = (llm_resp.completion_text or "").strip()
-        if llm_resp.role == "assistant" and final_text:
-            # Same delivery gap as the cron path (#9980): the final text only
-            # lands in persisted history unless it is explicitly sent. Skip
-            # when the model already delivered this exact text via
-            # send_message_to_user earlier in the same run.
+        if (
+            getattr(runner, "reached_max_steps", False)
+            and llm_resp.role == "assistant"
+            and final_text
+        ):
+            # Same delivery gap as the cron path (#9980), and same narrowing:
+            # only the forced wrap-up at max steps removed every tool, so only
+            # there the final text could not have been sent via
+            # send_message_to_user. On normal completion the model may
+            # intentionally stay silent. Skip when this exact text was already
+            # delivered earlier in the same run.
             already_sent = cron_event.get_extra(
                 SENT_TO_CURRENT_SESSION_PLAIN_TEXTS_EXTRA_KEY, []
             )

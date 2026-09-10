@@ -843,6 +843,7 @@ class TestWokeMainAgentFinalDelivery:
 
         class FakeRunner:
             state = AgentState.DONE
+            reached_max_steps = True
 
             async def step_until_done(self, max_step):
                 return
@@ -904,6 +905,7 @@ class TestWokeMainAgentFinalDelivery:
 
         class FakeRunner:
             state = AgentState.DONE
+            reached_max_steps = True
 
             async def step_until_done(self, max_step):
                 return
@@ -978,6 +980,7 @@ class TestWokeMainAgentFinalDelivery:
 
         class FakeRunner:
             state = AgentState.DONE
+            reached_max_steps = True
 
             async def step_until_done(self, max_step):
                 return
@@ -1039,6 +1042,7 @@ class TestWokeMainAgentFinalDelivery:
 
         class FakeRunner:
             state = AgentState.DONE
+            reached_max_steps = True
 
             async def step_until_done(self, max_step):
                 return
@@ -1081,6 +1085,74 @@ class TestWokeMainAgentFinalDelivery:
         event_box["event"].send.assert_not_awaited()
 
     @pytest.mark.asyncio
+    async def test_normal_completion_stays_silent(self, cron_manager):
+        """On normal completion the framework must not deliver the final text.
+
+        The model still has send_message_to_user available and may intend to
+        stay silent (e.g. a conditional notify-only cron job), so DONE alone
+        does not imply the user should be notified.
+        """
+        ctx = MagicMock()
+        ctx.get_config.return_value = {
+            "admins_id": [],
+            "provider_settings": {},
+            "agent_runner": {
+                "runner_type": "local",
+                "config": {"misc": {}, "compression": {}},
+            },
+        }
+        ctx.send_message = AsyncMock(return_value=True)
+        cron_manager.ctx = ctx
+
+        conv = MagicMock()
+        conv.history = "[]"
+
+        class FakeRunner:
+            state = AgentState.DONE
+            reached_max_steps = False
+
+            async def step_until_done(self, max_step):
+                return
+                yield  # pragma: no cover
+
+            def get_final_llm_resp(self):
+                return LLMResponse(
+                    role="assistant",
+                    completion_text="Not reached yet, no notification needed",
+                )
+
+        event_box = {}
+
+        async def fake_build_main_agent(*, event, plugin_context, config, req):
+            event_box["event"] = event
+            event.send = AsyncMock()
+            return MagicMock(agent_runner=FakeRunner())
+
+        with (
+            patch(
+                "astrbot.core.astr_main_agent._get_session_conv",
+                AsyncMock(return_value=conv),
+            ),
+            patch(
+                "astrbot.core.astr_main_agent.build_main_agent",
+                side_effect=fake_build_main_agent,
+            ),
+            patch(
+                "astrbot.core.cron.manager.persist_agent_history",
+                AsyncMock(),
+            ),
+        ):
+            await cron_manager._woke_main_agent(
+                message="run scheduled task",
+                session_str="test:FriendMessage:user123",
+                extras={"cron_job": {"id": "job-1"}, "cron_payload": {}},
+                delivery_session_str="test:FriendMessage:user123",
+            )
+
+        ctx.send_message.assert_not_called()
+        event_box["event"].send.assert_not_awaited()
+
+    @pytest.mark.asyncio
     async def test_delivery_failure_does_not_fail_the_job(self, cron_manager):
         """A failed send is logged but must not mark the job as failed."""
         ctx = MagicMock()
@@ -1099,6 +1171,7 @@ class TestWokeMainAgentFinalDelivery:
 
         class FakeRunner:
             state = AgentState.DONE
+            reached_max_steps = True
 
             async def step_until_done(self, max_step):
                 return

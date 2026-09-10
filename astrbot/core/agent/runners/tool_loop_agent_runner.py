@@ -233,6 +233,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     ) -> None:
         self.req = request
         self.streaming = streaming
+        self._reached_max_steps = False
         self.enforce_max_turns = enforce_max_turns
         self.llm_compress_instruction = llm_compress_instruction
         self.llm_compress_keep_recent_ratio = llm_compress_keep_recent_ratio
@@ -1068,6 +1069,16 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
             self.req.append_tool_calls_result(tool_calls_result)
 
+    @property
+    def reached_max_steps(self) -> bool:
+        """Whether this run ended via the forced final response at max steps.
+
+        Only meaningful after ``step_until_done`` has run; a forced wrap-up
+        removes all tools, so any final text the model produced there could
+        not be delivered through ``send_message_to_user``.
+        """
+        return self._reached_max_steps
+
     async def step_until_done(
         self, max_step: int
     ) -> T.AsyncGenerator[AgentResponse, None]:
@@ -1083,6 +1094,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             logger.warning(
                 f"Agent reached max steps ({max_step}), forcing a final response."
             )
+            self._reached_max_steps = True
             # 拔掉所有工具
             if self.req:
                 self.req.func_tool = None
