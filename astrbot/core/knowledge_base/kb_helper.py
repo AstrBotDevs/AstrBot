@@ -34,22 +34,34 @@ if TYPE_CHECKING:
 
 
 class RateLimiter:
-    """一个简单的速率限制器"""
+    """一个简单的速率限制器
+
+    Concurrent waiters (e.g. chunks processed with ``asyncio.gather``) each
+    reserve the next release slot under a lock and then sleep until that slot,
+    so they are released one ``interval`` apart instead of waking up together
+    and bursting past the configured RPM.
+    """
 
     def __init__(self, max_rpm: int) -> None:
         self.max_per_minute = max_rpm
         self.interval = 60.0 / max_rpm if max_rpm > 0 else 0
         self.last_call_time = 0
+        self._next_slot = 0.0
+        self._lock = asyncio.Lock()
 
     async def __aenter__(self):
         if self.interval == 0:
             return
 
-        now = time.monotonic()
-        elapsed = now - self.last_call_time
+        async with self._lock:
+            now = time.monotonic()
+            # Idle time is credited: an idle limiter releases immediately.
+            slot = max(now, self._next_slot)
+            self._next_slot = slot + self.interval
 
-        if elapsed < self.interval:
-            await asyncio.sleep(self.interval - elapsed)
+        delay = slot - time.monotonic()
+        if delay > 0:
+            await asyncio.sleep(delay)
 
         self.last_call_time = time.monotonic()
 
