@@ -944,11 +944,12 @@ export const chatApi = {
       }),
     );
   },
-  downloadProjectWorkspaceFile(projectId: string, path: string) {
+  downloadProjectWorkspaceFile(projectId: string, path: string, signal?: AbortSignal) {
     return openApiV1.downloadChatProjectWorkspaceFile({
       path: { project_id: projectId },
       query: { path },
       responseType: 'blob',
+      signal,
     }) as Promise<AxiosResponse<Blob>>;
   },
   addProjectSession(projectId: string, sessionId: string) {

@@ -173,9 +173,9 @@
     "confirmDelete": "プロジェクト「{title}」を削除しますか？プロジェクト内の会話は削除されません。"
   },
   "workspaceFiles": {
-    "title": "ワークスペースのファイル",
-    "open": "ワークスペースのファイルを開く",
-    "close": "ワークスペースのファイルを閉じる",
+    "title": "ファイル",
+    "open": "ファイルを開く",
+    "close": "ファイルパネルを閉じる",
     "refresh": "ファイルツリーを再読み込み",
     "filter": "ファイルを絞り込み…",
     "clearFilter": "ファイルの絞り込みを解除",
@@ -188,7 +188,23 @@
     "downloadFailed": "ファイルのダウンロードに失敗しました",
     "dialogPreview": "拡大プレビューを開く",
     "closePreview": "ファイルプレビューを閉じる",
-    "closeDialogPreview": "拡大プレビューを閉じる"
+    "closeDialogPreview": "拡大プレビューを閉じる",
+    "pdf": {
+      "zoomControls": "PDF のズーム",
+      "zoomOut": "縮小",
+      "zoomIn": "拡大",
+      "fitWidth": "ページ幅に合わせる",
+      "loading": "PDF を読み込み中…",
+      "pageLabel": "{total} ページ中 {page} ページ",
+      "passwordProtected": "この PDF はパスワードで保護されています。ダウンロードしてパスワードを入力してください。",
+      "loadFailed": "この PDF をプレビューできません。ファイルをダウンロードして確認してください。",
+      "tooLarge": "50 MB を超える PDF はプレビューできません。ダウンロードして確認してください。"
+    },
+    "openTabs": "開いているファイル",
+    "closeTab": "{name} を閉じる",
+    "showTree": "ファイルツリーを表示",
+    "hideTree": "ファイルツリーを隠す",
+    "selectFile": "ファイルを選択してプレビュー"
   },
   "time": {
     "today": "今日",
