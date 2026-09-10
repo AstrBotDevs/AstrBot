@@ -375,7 +375,10 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 image_url = component.url or component.file or ""
                 if not image_url.startswith(("http://", "https://")):
                     return None
-                markdown_parts.append(f"![image]({image_url})")
+                # Keep the image on its own block: QQ renders an inline image so
+                # that it overlaps the surrounding text when no break separates
+                # them.
+                markdown_parts.append(f"\n![image]({image_url})\n")
                 has_public_image = True
             else:
                 # At/Record/Video/File and friends have no markdown equivalent.
@@ -390,7 +393,21 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         if not self.send_buffer:
             return None
 
-        message_chains = self._split_message_chain_by_media(self.send_buffer)
+        # Markdown 能在同一条消息里承载多张图片，所以只有富媒体路径才需要按
+        # 媒体拆分消息链。
+        use_md = getattr(self.send_buffer, "use_markdown_", None)
+        markdown_with_images = (
+            None
+            if use_md is False or stream is not None
+            else QQOfficialMessageEvent._build_markdown_with_public_images(
+                self.send_buffer
+            )
+        )
+        if markdown_with_images is not None:
+            message_chains = [self.send_buffer]
+        else:
+            message_chains = self._split_message_chain_by_media(self.send_buffer)
+
         stream_for_chain = stream if len(message_chains) == 1 else None
 
         ret = None

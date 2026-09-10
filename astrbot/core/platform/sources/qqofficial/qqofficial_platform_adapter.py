@@ -353,14 +353,6 @@ class QQOfficialPlatformAdapter(Platform):
                 session.session_id.rsplit("_", 1)[-1],
             )
 
-        message_chains = QQOfficialMessageEvent._split_message_chain_by_media(
-            message_chain
-        )
-        if len(message_chains) > 1:
-            for split_message_chain in message_chains:
-                await self._send_by_session_common(session, split_message_chain)
-            return
-
         use_md = getattr(message_chain, "use_markdown_", None)
         markdown_disabled = use_md is False or (
             use_md is None and not self.use_markdown_default
@@ -376,6 +368,17 @@ class QQOfficialPlatformAdapter(Platform):
                 message_chain
             )
         )
+
+        # Markdown 能在同一条消息里承载多张图片，所以只有富媒体路径才需要按
+        # 媒体拆分消息链。
+        if markdown_with_images is None:
+            message_chains = QQOfficialMessageEvent._split_message_chain_by_media(
+                message_chain
+            )
+            if len(message_chains) > 1:
+                for split_message_chain in message_chains:
+                    await self._send_by_session_common(session, split_message_chain)
+                return
 
         if markdown_with_images is not None:
             markdown_content, plain_text = markdown_with_images

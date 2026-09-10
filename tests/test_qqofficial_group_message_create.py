@@ -751,6 +751,9 @@ async def test_ws_group_markdown_with_public_image_embeds_image(monkeypatch):
     assert markdown_content.index("caption") < markdown_content.index(
         "https://example.com/a.png"
     ), "text must stay before the image"
+    # The image must sit on its own block: QQ renders an inline image so that it
+    # overlaps the surrounding text when no line break separates them.
+    assert "\n![image](" in markdown_content
 
 
 @pytest.mark.asyncio
@@ -799,6 +802,57 @@ async def test_group_reply_markdown_with_public_image_embeds_image():
     assert markdown_content.index("caption") < markdown_content.index(
         "https://example.com/a.png"
     ), "text must stay before the image"
+    # The image must sit on its own block: QQ renders an inline image so that it
+    # overlaps the surrounding text when no line break separates them.
+    assert "\n![image](" in markdown_content
+
+
+@pytest.mark.asyncio
+async def test_ws_group_markdown_with_multiple_public_images_sends_one_message():
+    """Markdown carries several images, so the chain must not be split by media."""
+    adapter = QQOfficialPlatformAdapter(
+        {
+            "id": "qq-official-test",
+            "appid": "123",
+            "secret": "secret",
+            "enable_group_c2c": True,
+            "enable_guild_direct_message": False,
+        },
+        {},
+        asyncio.Queue(),
+    )
+    adapter.client.api = SimpleNamespace(
+        post_group_message=AsyncMock(return_value={"id": "sent-md"}),
+        post_message=AsyncMock(),
+    )
+    adapter._session_scene["group-1"] = "group"
+
+    await adapter.send_by_session(
+        MessageSession("qq_official", MessageType.GROUP_MESSAGE, "group-1"),
+        MessageChain(
+            chain=[
+                Plain("A"),
+                Image.fromURL("https://example.com/1.png"),
+                Plain("B"),
+                Image.fromURL("https://example.com/2.png"),
+                Plain("C"),
+            ],
+            use_markdown_=True,
+        ),
+    )
+
+    assert adapter.client.api.post_group_message.await_count == 1
+    kwargs = adapter.client.api.post_group_message.await_args.kwargs
+    assert kwargs["msg_type"] == 2
+    markdown_content = kwargs["markdown"]["content"]
+    positions = [
+        markdown_content.index("A"),
+        markdown_content.index("https://example.com/1.png"),
+        markdown_content.index("B"),
+        markdown_content.index("https://example.com/2.png"),
+        markdown_content.index("C"),
+    ]
+    assert positions == sorted(positions), "component order must be preserved"
 
 
 @pytest.mark.asyncio
