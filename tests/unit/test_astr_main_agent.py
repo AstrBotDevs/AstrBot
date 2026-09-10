@@ -2,15 +2,19 @@
 
 import datetime
 import os
+from contextlib import nullcontext
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from astrbot.core import astr_main_agent as ama
+from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.message import Message, dump_messages_with_checkpoints
 from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.agent.runners.base import AgentState
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.config.agent_runner import resolve_context_compression_config
@@ -21,9 +25,10 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.provider import Provider
 from astrbot.core.provider import manager as provider_manager_module
-from astrbot.core.provider.entities import ProviderRequest, ProviderType
+from astrbot.core.provider.entities import LLMResponse, ProviderRequest, ProviderType
 from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.skills.skill_manager import SkillInfo
+from astrbot.core.star.context import Context
 from astrbot.core.star.star import StarMetadata
 
 
@@ -115,6 +120,119 @@ def test_provider_supports_modality_requires_explicit_list():
 
     provider.provider_config = {"modalities": "image"}
     assert not ama._provider_supports_modality(provider, "image")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("entrypoint", ["cron", "background"])
+@pytest.mark.parametrize(
+    "scenario",
+    ["primary-success", "exception", "error-response", "all-fail", "unconfigured"],
+)
+async def test_proactive_agent_uses_session_fallback_models(
+    entrypoint, scenario, mock_context, mock_provider, mock_event, mock_conversation
+):
+    """Exercise real agent construction and failover from both wakeup entrypoints.
+
+    Args:
+        entrypoint: Proactive wakeup path to execute.
+        scenario: Provider outcomes and fallback configuration to exercise.
+        mock_context: Session context fixture.
+        mock_provider: Primary provider fixture.
+        mock_event: Originating message event fixture.
+        mock_conversation: Stored conversation fixture.
+    """
+    mock_context.mock_add_spec(Context)
+    calls = []
+    providers = {"primary": mock_provider}
+    for name in ("backup-1", "backup-2"):
+        providers[name] = MagicMock(spec=Provider)
+    for name, provider in providers.items():
+        provider.provider_config = {
+            "id": name,
+            "modalities": ["text", "tool_use"],
+            "max_context_tokens": 8192,
+        }
+        provider.get_model.return_value = name
+        if name == "primary" and scenario == "primary-success":
+            result = LLMResponse(role="assistant", completion_text="Primary completed.")
+        elif name == "primary" and scenario == "error-response":
+            result = LLMResponse(role="err", completion_text="Primary unavailable.")
+        elif name == "backup-2" and scenario != "all-fail":
+            result = LLMResponse(role="assistant", completion_text="Backup completed.")
+        else:
+            result = RuntimeError(f"{name} unavailable")
+        provider.text_chat = AsyncMock(side_effect=[result])
+        calls.append(provider.text_chat)
+
+    model = (
+        {}
+        if scenario == "unconfigured"
+        else {"fallback_provider_ids": ["backup-1", "backup-2"]}
+    )
+    mock_context.get_config.return_value = {
+        "agent_runner": {"config": {"model": model}},
+        "provider_settings": {},
+    }
+    mock_context.get_using_provider_async.side_effect = None
+    mock_context.get_using_provider_async.return_value = mock_provider
+    mock_context.get_provider_by_id.side_effect = providers.get
+    mock_event.unified_msg_origin = "test:FriendMessage:user123"
+    mock_event.role = "member"
+    runner = ama.AgentRunner()
+    failed = scenario in ("all-fail", "unconfigured")
+    expectation = (
+        pytest.raises(RuntimeError, match="Cron agent run ended in ERROR")
+        if entrypoint == "cron" and failed
+        else nullcontext()
+    )
+    with (
+        patch.object(
+            ama, "_get_session_conv", AsyncMock(return_value=mock_conversation)
+        ),
+        patch.object(ama, "_decorate_llm_request", AsyncMock()),
+        patch.object(ama, "_apply_kb", AsyncMock()),
+        patch.object(ama, "MAIN_AGENT_HOOKS", BaseAgentRunHooks()),
+        patch.object(ama, "AgentRunner", return_value=runner),
+        patch("astrbot.core.cron.manager.persist_agent_history", AsyncMock()),
+        patch("astrbot.core.astr_agent_tool_exec.persist_agent_history", AsyncMock()),
+        expectation,
+    ):
+        if entrypoint == "cron":
+            manager = CronJobManager(MagicMock())
+            manager.ctx = mock_context
+            await manager._woke_main_agent(
+                message="Run the scheduled task",
+                session_str=mock_event.unified_msg_origin,
+                extras={"cron_job": {"id": "job-1"}, "cron_payload": {}},
+            )
+        else:
+            await FunctionToolExecutor._wake_main_agent_for_background_result(
+                ContextWrapper(
+                    context=SimpleNamespace(event=mock_event, context=mock_context)
+                ),
+                task_id="task-1",
+                tool_name="background-tool",
+                result_text="Work finished.",
+                tool_args={},
+                note="Background task finished",
+                summary_name="BackgroundTask",
+            )
+
+    expected_calls = (
+        [1, 0, 0] if scenario in ("primary-success", "unconfigured") else [1, 1, 1]
+    )
+    assert [call.await_count for call in calls] == expected_calls
+    if failed:
+        assert runner.state == AgentState.ERROR
+    else:
+        assert runner.state == AgentState.DONE
+        response = runner.get_final_llm_resp()
+        assert response.role == "assistant"
+        assert response.completion_text == (
+            "Primary completed."
+            if scenario == "primary-success"
+            else "Backup completed."
+        )
 
 
 @pytest.fixture
@@ -269,9 +387,12 @@ def test_append_system_reminders_includes_weekday(mock_event):
 
 
 def test_local_mode_prompt_uses_windows_powershell_51():
-    with patch("astrbot.core.astr_main_agent.platform.system", return_value="Windows"), patch(
-        "astrbot.core.astr_main_agent.resolve_windows_shell",
-        return_value="powershell.exe",
+    with (
+        patch("astrbot.core.astr_main_agent.platform.system", return_value="Windows"),
+        patch(
+            "astrbot.core.astr_main_agent.resolve_windows_shell",
+            return_value="powershell.exe",
+        ),
     ):
         prompt = ama._build_local_mode_prompt()
 
@@ -281,9 +402,12 @@ def test_local_mode_prompt_uses_windows_powershell_51():
 
 
 def test_local_mode_prompt_hints_pwsh_when_resolved():
-    with patch("astrbot.core.astr_main_agent.platform.system", return_value="Windows"), patch(
-        "astrbot.core.astr_main_agent.resolve_windows_shell",
-        return_value="pwsh.exe",
+    with (
+        patch("astrbot.core.astr_main_agent.platform.system", return_value="Windows"),
+        patch(
+            "astrbot.core.astr_main_agent.resolve_windows_shell",
+            return_value="pwsh.exe",
+        ),
     ):
         prompt = ama._build_local_mode_prompt()
 
@@ -293,9 +417,12 @@ def test_local_mode_prompt_hints_pwsh_when_resolved():
 
 
 def test_local_mode_prompt_ignores_pwsh_on_non_windows():
-    with patch("astrbot.core.astr_main_agent.platform.system", return_value="Linux"), patch(
-        "astrbot.core.astr_main_agent.resolve_windows_shell",
-        return_value="pwsh.exe",
+    with (
+        patch("astrbot.core.astr_main_agent.platform.system", return_value="Linux"),
+        patch(
+            "astrbot.core.astr_main_agent.resolve_windows_shell",
+            return_value="pwsh.exe",
+        ),
     ):
         prompt = ama._build_local_mode_prompt()
 
