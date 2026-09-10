@@ -145,23 +145,28 @@
       hide-details
     ></v-text-field>
 
-    <div
-      v-else-if="itemMeta?.type === 'int' || itemMeta?.type === 'float'"
-      class="d-flex align-center gap-3"
-    >
-      <v-slider
-        v-if="itemMeta?.slider"
-        :model-value="toNumber(numericTemp ?? modelValue)"
-        @update:model-value="val => { numericTemp = val; emitUpdate(toNumber(val)) }"
-        @end="numericTemp = null"
-        :min="itemMeta?.slider?.min ?? 0"
-        :max="itemMeta?.slider?.max ?? 100"
-        :step="itemMeta?.slider?.step ?? 1"
-        color="primary"
-        density="compact"
-        hide-details
-        style="flex: 1"
-      ></v-slider>
+    <div v-else-if="itemMeta?.type === 'int' || itemMeta?.type === 'float'" class="d-flex align-center gap-3">
+      <div v-if="itemMeta?.slider" style="flex: 3; display: flex; align-items: center; gap: 8px">
+        <span style="min-width: 5px; text-align: right;">
+          {{ itemMeta?.slider?.min ?? 0 }}
+        </span>
+
+        <v-slider :model-value="toNumber(numericTemp ?? modelValue)"
+          @update:model-value="val => { numericTemp = val; emitUpdate(toNumber(val)) }" 
+          @end="numericTemp = null"
+          :min="itemMeta?.slider?.min ?? 0" 
+          :max="itemMeta?.slider?.max ?? 100" 
+          :step="itemMeta?.slider?.step ?? 1"
+          color="primary" 
+          density="compact" 
+          hide-details 
+          style="flex: 1"></v-slider>
+
+        <span style="min-width: 5px; text-align: left;">
+          {{ itemMeta?.slider?.max ?? 100 }}
+        </span>
+      </div>
+
       <v-text-field
         :model-value="numericTemp ?? modelValue"
         @update:model-value="val => (numericTemp = val)"
@@ -171,7 +176,7 @@
         class="config-field"
         type="number"
         hide-details
-        style="flex: 1"
+        style="flex: 2"
       ></v-text-field>
     </div>
 
