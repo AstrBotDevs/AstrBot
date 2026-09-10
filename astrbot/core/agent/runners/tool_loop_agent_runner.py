@@ -947,29 +947,38 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     logger.warning(
                         "skills_like tool re-query returned no tool calls; fallback to assistant response."
                     )
-                    if llm_resp.reasoning_content:
-                        yield AgentResponse(
-                            type="llm_result",
-                            data=AgentResponseData(
-                                chain=MessageChain(type="reasoning").message(
-                                    llm_resp.reasoning_content,
-                                ),
-                            ),
-                        )
-                    if llm_resp.result_chain:
-                        yield AgentResponse(
-                            type="llm_result",
-                            data=AgentResponseData(chain=llm_resp.result_chain),
-                        )
-                    elif llm_resp.completion_text:
-                        yield AgentResponse(
-                            type="llm_result",
-                            data=AgentResponseData(
-                                chain=MessageChain().message(llm_resp.completion_text),
-                            ),
-                        )
-
                     await self._complete_with_assistant_response(llm_resp)
+                    # Re-query uses text_chat(), so its reply has no stream chunks.
+                    # Emit it after hooks, retaining llm_result for non-streaming consumers.
+                    response_types = (
+                        ("streaming_delta", "llm_result")
+                        if self.streaming
+                        else ("llm_result",)
+                    )
+                    for response_type in response_types:
+                        if llm_resp.reasoning_content:
+                            yield AgentResponse(
+                                type=response_type,
+                                data=AgentResponseData(
+                                    chain=MessageChain(type="reasoning").message(
+                                        llm_resp.reasoning_content,
+                                    ),
+                                ),
+                            )
+                        if llm_resp.result_chain:
+                            yield AgentResponse(
+                                type=response_type,
+                                data=AgentResponseData(chain=llm_resp.result_chain),
+                            )
+                        elif llm_resp.completion_text:
+                            yield AgentResponse(
+                                type=response_type,
+                                data=AgentResponseData(
+                                    chain=MessageChain().message(
+                                        llm_resp.completion_text
+                                    ),
+                                ),
+                            )
                     return
                 else:
                     llm_resp.tools_call_name = requery_resp.tools_call_name
