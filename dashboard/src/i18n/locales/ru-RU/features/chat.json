@@ -115,6 +115,8 @@
     "title": "Конфигурация"
   },
   "reasoning": {
+    "enabled": "Рассуждения включены",
+    "disabled": "Рассуждения выключены",
     "thinking": "Рассуждение",
     "summarySeparator": ", ",
     "thinkSummary": "Размышлений: {count}",

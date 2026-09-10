@@ -115,6 +115,8 @@
     "title": "Config"
   },
   "reasoning": {
+    "enabled": "Reasoning enabled",
+    "disabled": "Reasoning disabled",
     "thinking": "Thinking Process",
     "summarySeparator": ", ",
     "thinkSummary": "Thought {count} times",
