@@ -891,10 +891,6 @@
           "description": "Isolate Conversation",
           "hint": "When enabled, group members have independent contexts."
         },
-        "allow_member_new_conversation": {
-          "description": "Allow Non-Administrators to Start Group Conversations",
-          "hint": "Allow members to use the /new and /reset commands (with Isolate Conversation disabled, the commands switch the conversation for the whole group; with it enabled, they affect only the sender's conversation. The built-in agent does not delete previous conversations). Command management permission restrictions still apply."
-        },
         "friend_message_needs_wake_prefix": {
           "description": "Private Messages Require Wake Word"
         },

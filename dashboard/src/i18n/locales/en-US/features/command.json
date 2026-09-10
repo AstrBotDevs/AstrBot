@@ -33,6 +33,8 @@
     "conflict": "Conflict"
   },
   "permission": {
+    "groupAdmin": "Administrators Only in Group Chats",
+    "groupAdminHint": "Everyone can use this command in private chats; only AstrBot administrators can use it in groups.",
     "everyone": "Everyone",
     "admin": "Admin"
   },

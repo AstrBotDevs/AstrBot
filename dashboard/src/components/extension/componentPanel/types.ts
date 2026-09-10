@@ -30,7 +30,8 @@ export interface CommandItem {
 export type CommandType = 'command' | 'group' | 'sub_command';
 
 /** 权限类型 */
-export type PermissionType = 'admin' | 'everyone' | 'member';
+export type CommandPermission = 'admin' | 'member' | 'group_admin';
+export type PermissionType = CommandPermission | 'everyone';
 
 /** 指令摘要统计 */
 export interface CommandSummary {

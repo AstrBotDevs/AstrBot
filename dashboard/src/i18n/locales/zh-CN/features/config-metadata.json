@@ -912,10 +912,6 @@
           "description": "隔离对话",
           "hint": "启用后,群成员的上下文独立。"
         },
-        "allow_member_new_conversation": {
-          "description": "允许非管理员在群聊中新建对话",
-          "hint": "允许普通成员使用 /new 和 /reset 指令（关闭隔离对话时指令会切换整个群的对话；开启隔离对话时指令只影响自己的对话。内置 Agent 不会删除旧对话）。命令管理中的权限限制仍然有效。"
-        },
         "friend_message_needs_wake_prefix": {
           "description": "私聊消息需要唤醒词"
         },

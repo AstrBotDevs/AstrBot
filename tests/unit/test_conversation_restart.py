@@ -17,7 +17,8 @@ from astrbot.core.config.default import (
     CONFIG_METADATA_3,
     DEFAULT_CONFIG,
 )
-from astrbot.core.star.filter.permission import PermissionType, PermissionTypeFilter
+from astrbot.core.star.filter.permission import PermissionTypeFilter
+from astrbot.core.star.star_handler import star_handlers_registry
 
 
 @pytest.fixture
@@ -63,28 +64,30 @@ def restart(monkeypatch):
 @pytest.mark.parametrize("group", [False, True])
 @pytest.mark.parametrize("admin", [False, True])
 @pytest.mark.parametrize("isolated", [False, True])
-@pytest.mark.parametrize("allow", [False, True])
-async def test_restart_permission_matrix(restart, entry, group, admin, isolated, allow):
+async def test_restart_permission_matrix(restart, entry, group, admin, isolated):
     restart.event.get_group_id.return_value = "group" if group else ""
     restart.event.is_admin.return_value = admin
     restart.config["platform_settings"] = {
         "unique_session": isolated,
-        "allow_member_new_conversation": allow,
     }
-    await getattr(restart.plugin, entry)(restart.event)
-    restart.context.get_config.assert_called_once_with(
-        umo=restart.event.unified_msg_origin
+    handler = next(
+        handler
+        for handler in star_handlers_registry
+        if handler.handler is getattr(Main, entry)
     )
+    permission = next(
+        f for f in handler.event_filters if isinstance(f, PermissionTypeFilter)
+    )
+    allowed = permission.filter(restart.event, restart.config)
+    assert allowed == (admin or not group)
+    if allowed:
+        await handler.handler(restart.plugin, restart.event)
     restart.manager.update_conversation.assert_not_awaited()
-    if group and not admin and not allow:
+    if not allowed:
         restart.stop.assert_not_called()
         restart.manager.get_curr_conversation_id.assert_not_awaited()
         restart.manager.new_conversation.assert_not_awaited()
         assert not restart.extras
-        assert (
-            "administrators"
-            in restart.event.set_result.call_args.args[0].get_plain_text()
-        )
     else:
         restart.stop.assert_called_once_with(
             restart.event.unified_msg_origin, exclude=restart.event
@@ -109,21 +112,6 @@ async def test_restart_without_provider_or_current_conversation(restart, entry):
         persona_id=None,
     )
     restart.context.get_using_provider_async.assert_not_awaited()
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("runner", ["local", *commands.THIRD_PARTY_AGENT_RUNNER_KEY])
-async def test_missing_setting_denies_before_external_cleanup(
-    restart, monkeypatch, runner
-):
-    restart.event.is_admin.return_value = False
-    restart.config["agent_runner"]["runner_type"] = runner
-    clear = AsyncMock()
-    monkeypatch.setattr(commands, "_clear_third_party_agent_runner_state", clear)
-    await restart.plugin.reset(restart.event)
-    restart.stop.assert_not_called()
-    clear.assert_not_awaited()
-    restart.manager.new_conversation.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -229,74 +217,41 @@ async def test_restart_cleans_only_target_group_cache(restart):
     assert list(cache.raw_records[other]) == ["other context"]
 
 
-def test_new_setting_does_not_override_command_admin_filter(restart):
-    restart.config["platform_settings"]["allow_member_new_conversation"] = True
-    restart.event.is_admin.return_value = False
-    assert not PermissionTypeFilter(PermissionType.ADMIN).filter(
-        restart.event, restart.config
-    )
-
-
-def test_old_config_receives_safe_default_and_preserves_isolation(tmp_path):
+def test_config_preserves_isolation(tmp_path):
     path = tmp_path / "config.json"
     config = copy.deepcopy(DEFAULT_CONFIG)
-    config["platform_settings"].pop("allow_member_new_conversation")
     config["platform_settings"]["unique_session"] = True
     path.write_text(json.dumps(config), encoding="utf-8")
     loaded = AstrBotConfig(str(path))
     assert loaded["platform_settings"]["unique_session"] is True
-    assert loaded["platform_settings"]["allow_member_new_conversation"] is False
-    loaded["platform_settings"]["allow_member_new_conversation"] = True
-    loaded.save_config()
-    assert (
-        AstrBotConfig(str(path))["platform_settings"]["allow_member_new_conversation"]
-        is True
-    )
-
-
-@pytest.mark.asyncio
-async def test_restart_uses_each_sessions_config(restart):
-    restart.event.is_admin.return_value = False
-    allowed = copy.deepcopy(restart.config)
-    allowed["platform_settings"]["allow_member_new_conversation"] = True
-    restart.context.get_config.side_effect = lambda umo: (
-        allowed if umo == "qq:GroupMessage:allowed" else restart.config
-    )
-    restart.event.unified_msg_origin = "qq:GroupMessage:allowed"
-    await restart.plugin.reset(restart.event)
-    restart.event.unified_msg_origin = "qq:GroupMessage:denied"
-    await restart.plugin.new_conv(restart.event)
-    assert restart.manager.new_conversation.await_count == 1
-    assert restart.stop.call_count == 1
 
 
 @pytest.mark.parametrize("locale", ["zh-CN", "en-US", "ru-RU", "ja-JP"])
 def test_restart_config_metadata_and_translations(locale):
     key = "allow_member_new_conversation"
-    assert DEFAULT_CONFIG["platform_settings"][key] is False
+    assert key not in DEFAULT_CONFIG["platform_settings"]
     assert (
-        CONFIG_METADATA_2["platform_group"]["metadata"]["platform_settings"]["items"][
-            key
-        ]["type"]
-        == "bool"
+        key
+        not in CONFIG_METADATA_2["platform_group"]["metadata"]["platform_settings"][
+            "items"
+        ]
     )
     assert (
-        CONFIG_METADATA_3["platform_group"]["metadata"]["general"]["items"][
-            f"platform_settings.{key}"
-        ]["type"]
-        == "bool"
+        f"platform_settings.{key}"
+        not in CONFIG_METADATA_3["platform_group"]["metadata"]["general"]["items"]
     )
     path = (
         Path(__file__).resolve().parents[2]
-        / "dashboard"
-        / "src"
-        / "i18n"
-        / "locales"
+        / "dashboard/src/i18n/locales"
         / locale
         / "features"
-        / "config-metadata.json"
     )
-    metadata = json.loads(path.read_text(encoding="utf-8"))
-    item = metadata["platform_group"]["general"]["platform_settings"][key]
-    assert item["description"]
-    assert "/new" in item["hint"] and "/reset" in item["hint"]
+    metadata = json.loads((path / "config-metadata.json").read_text(encoding="utf-8"))
+    settings = metadata["platform_group"]["general"]["platform_settings"]
+    assert key not in settings
+    assert settings["unique_session"]["description"]
+    permissions = json.loads((path / "command.json").read_text(encoding="utf-8-sig"))[
+        "permission"
+    ]
+    assert permissions["groupAdmin"]
+    assert permissions["groupAdminHint"]

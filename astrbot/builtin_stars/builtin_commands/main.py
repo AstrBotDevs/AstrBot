@@ -42,6 +42,7 @@ class Main(star.Star):
         await self.name_c.name(event, alias)
 
     @filter.command("reset")
+    @filter.permission_type(filter.PermissionType.GROUP_ADMIN)
     async def reset(self, message: AstrMessageEvent) -> None:
         """Start a new conversation, keeping previous history.
 
@@ -56,6 +57,7 @@ class Main(star.Star):
         await self.conversation_c.stop(message)
 
     @filter.command("new")
+    @filter.permission_type(filter.PermissionType.GROUP_ADMIN)
     async def new_conv(self, message: AstrMessageEvent) -> None:
         """Start a new conversation, keeping previous history.
 

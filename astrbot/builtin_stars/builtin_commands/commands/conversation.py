@@ -140,21 +140,6 @@ class ConversationCommands:
             message: Command event identifying the session and sender.
         """
         cfg = self.context.get_config(umo=message.unified_msg_origin)
-        if (
-            message.get_group_id()
-            and not message.is_admin()
-            and not cfg.get("platform_settings", {}).get(
-                "allow_member_new_conversation", False
-            )
-        ):
-            message.set_result(
-                MessageEventResult().message(
-                    "Only AstrBot administrators can use /new or /reset in groups. "
-                    "Enable member conversation creation in platform settings to allow it."
-                )
-            )
-            return
-
         agent_runner_type = cfg["agent_runner"]["runner_type"]
         if agent_runner_type in THIRD_PARTY_AGENT_RUNNER_KEY:
             active_event_registry.stop_all(message.unified_msg_origin, exclude=message)
