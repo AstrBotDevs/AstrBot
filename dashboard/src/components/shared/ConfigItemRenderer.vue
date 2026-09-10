@@ -300,6 +300,7 @@ const { getRaw } = useModuleI18n('features/config-metadata')
 const { configText } = usePluginI18n()
 
 function emitUpdate(val) {
+  val = validateNumericConfig(props.itemMeta?.type, val)
   if (
     props.itemMeta?._special === 'agent_runner_type'
     && props.configRoot?.agent_runner
@@ -329,6 +330,34 @@ const secretToggleIcon = computed(() => {
 function toNumber(val) {
   const n = parseFloat(val)
   return isNaN(n) ? 0 : n
+}
+
+function validateNumericConfig(modelType, rawValue) {
+  if (modelType === 'int' || modelType === 'float') {
+    // 如果有滑动条定义，应用边界限制
+    const slider = props.itemMeta?.slider
+    if (slider) {
+      const min = slider.min ?? 0
+      const max = slider.max ?? 100
+      return Math.max(min, Math.min(max, rawValue))
+    } else {
+      return rawValue
+    }
+  } else if (modelType === 'dict') {
+    Object.entries(rawValue).forEach(([key, value]) => {
+      const templatesSchema = props.itemMeta?.template_schema
+      const templateType = templatesSchema?.[key]?.type
+      const templateSlider = templatesSchema?.[key]?.slider
+      if ((templateType === 'int' || templateType === 'float') && templateSlider) {
+        const min = templateSlider.min ?? 0
+        const max = templateSlider.max ?? 100
+        rawValue[key] = Math.max(min, Math.min(max, value))
+      }
+    })
+    return rawValue
+  } else {
+    return rawValue
+  }
 }
 
 function getLabel(itemMeta, index, option) {
