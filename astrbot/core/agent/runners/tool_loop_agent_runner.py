@@ -127,6 +127,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         "Stop calling tools, and based on the information you have gathered, "
         "summarize your task and findings, and reply to the user directly."
     )
+    # Class-level default so the read-only property is safe before reset().
+    _reached_max_steps: bool = False
     SKILLS_LIKE_REQUERY_INSTRUCTION_TEMPLATE = (
         "You have decided to call tool(s): {tool_names}. Now call the tool(s) "
         "with required arguments using the tool schema, and follow the existing "

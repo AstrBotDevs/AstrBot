@@ -666,6 +666,52 @@ async def test_normal_completion_without_max_step(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("max_calls_before_normal_response", "max_steps", "expected_reached"),
+    [
+        pytest.param(100, 3, True, id="forced_wrap_up_sets_flag"),
+        pytest.param(2, 10, False, id="normal_completion_keeps_flag_false"),
+    ],
+)
+async def test_reached_max_steps_flag(
+    runner,
+    mock_provider,
+    provider_request,
+    mock_tool_executor,
+    mock_hooks,
+    max_calls_before_normal_response,
+    max_steps,
+    expected_reached,
+):
+    """reached_max_steps 只在强制收尾分支置位，正常完成保持 False。
+
+    下游（cron / 后台唤醒）依赖该标记决定是否补投最终文本：正常结束时
+    模型仍有 send_message_to_user 可用，可能有意保持静默。
+    """
+    assert runner.reached_max_steps is False
+
+    mock_provider.should_call_tools = True
+    mock_provider.max_calls_before_normal_response = max_calls_before_normal_response
+
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async for _ in runner.step_until_done(max_steps):
+        pass
+
+    assert runner.done()
+    assert runner.reached_max_steps is expected_reached
+    # 标记与"工具被拔掉"这一强制收尾特征严格一致
+    assert (runner.req.func_tool is None) is expected_reached
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("streaming", [False, True])
 async def test_stats_separate_latest_context_from_cumulative_usage(
     runner, provider_request, mock_tool_executor, mock_hooks, streaming
