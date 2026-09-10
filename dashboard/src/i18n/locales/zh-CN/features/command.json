@@ -36,7 +36,7 @@
     "groupAdmin": "仅群聊限管理员",
     "groupAdminHint": "私聊所有人可用，群聊仅 AstrBot 管理员可用。",
     "everyone": "所有人",
-    "admin": "管理员"
+    "admin": "仅管理员"
   },
   "tooltips": {
     "enable": "启用指令",

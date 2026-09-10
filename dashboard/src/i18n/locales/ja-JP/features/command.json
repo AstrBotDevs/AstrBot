@@ -36,7 +36,7 @@
     "groupAdmin": "グループ内のみ管理者に制限",
     "groupAdminHint": "個人チャットでは全員、グループでは AstrBot 管理者のみ使用できます。",
     "everyone": "すべてのユーザー",
-    "admin": "管理者"
+    "admin": "管理者のみ"
   },
   "tooltips": {
     "enable": "コマンドを有効にする",
