@@ -364,6 +364,7 @@
             :staged-files="stagedNonImageFiles"
             :disabled="sending"
             :enable-streaming="enableStreaming"
+            :enable-reasoning="enableReasoning"
             :is-recording="isRecording"
             :is-running="
               Boolean(currSessionId && isSessionRunning(currSessionId))
@@ -378,6 +379,7 @@
             @send="sendCurrentMessage"
             @stop="stopCurrentSession"
             @toggle-streaming="toggleStreaming"
+            @toggle-reasoning="enableReasoning = !enableReasoning"
             @remove-image="removeImage"
             @remove-audio="removeAudio"
             @remove-file="removeFile"
@@ -449,6 +451,7 @@
             :staged-files="stagedNonImageFiles"
             :disabled="sending"
             :enable-streaming="enableStreaming"
+            :enable-reasoning="enableReasoning"
             :is-recording="isRecording"
             :is-running="
               Boolean(currSessionId && isSessionRunning(currSessionId))
@@ -465,6 +468,7 @@
             @send="sendCurrentMessage"
             @stop="stopCurrentSession"
             @toggle-streaming="toggleStreaming"
+            @toggle-reasoning="enableReasoning = !enableReasoning"
             @remove-image="removeImage"
             @remove-audio="removeAudio"
             @remove-file="removeFile"
@@ -743,6 +747,7 @@ const threadSelection = reactive<{
   selectedText: "",
 });
 const enableStreaming = ref(true);
+const enableReasoning = ref(true);
 const sendShortcut = ref<"enter" | "shift_enter">("enter");
 let composerResizeObserver: ResizeObserver | null = null;
 const {
@@ -1400,6 +1405,7 @@ async function sendCurrentMessage() {
       parts: outgoingParts,
       transport: transportMode.value,
       enableStreaming: enableStreaming.value,
+      enableReasoning: enableReasoning.value,
       selectedProvider: selection?.providerId || "",
       selectedModel: selection?.modelName || "",
       userRecord,
@@ -1521,6 +1527,7 @@ async function saveMessageEdit() {
         sessionId: currSessionId.value,
         sourceRecord: target,
         enableStreaming: enableStreaming.value,
+        enableReasoning: enableReasoning.value,
         selectedProvider: selection?.providerId || "",
         selectedModel: selection?.modelName || "",
       });
@@ -1556,6 +1563,7 @@ async function handleRegenerateMessage(
     effectiveSelection?.providerId || "",
     effectiveSelection?.modelName || "",
     enableStreaming.value,
+    enableReasoning.value,
   );
 }
 

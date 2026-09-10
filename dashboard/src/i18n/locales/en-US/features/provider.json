@@ -92,6 +92,19 @@
     "title": "Provider Types"
   },
   "providerSources": {
+    "website": "Website",
+    "setupGuide": "Setup guide",
+    "selector": {
+      "ssycloud": "SSYCloud",
+      "title": "New model provider",
+      "sponsors": "Sponsors",
+      "sponsorInfoTitle": "AstrBot sponsors",
+      "sponsorInfoBody": "AstrBot is a free, open-source project supported by sponsorships. We may receive a small amount of revenue when you access model resources through our sponsors. You are welcome to support us by using these services.",
+      "providers": "Providers",
+      "search": "Search",
+      "clearSearch": "Clear search",
+      "noResults": "No matching providers"
+    },
     "title": "Provider Sources",
     "add": "Add",
     "delete": "Delete provider source",

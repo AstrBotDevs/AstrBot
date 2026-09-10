@@ -1003,7 +1003,7 @@ async def test_anysearch_search_does_not_failover_on_server_error_500(monkeypatc
 
 @pytest.mark.asyncio
 async def test_anysearch_search_tool_clamps_max_results(monkeypatch):
-    """max_results is clamped into the documented 1-20 range."""
+    """max_results is clamped into the documented 1-10 range."""
     session = _FakeAnysearchSession(
         _FakeAnysearchResponse(status=200, json_data={"data": {"results": []}})
     )
@@ -1017,10 +1017,10 @@ async def test_anysearch_search_tool_clamps_max_results(monkeypatch):
     tool = AnySearchWebSearchTool()
     context = _context_with_provider_settings({"websearch_anysearch_key": ["test-key"]})
 
-    # �� 99 �� Ӧ�ñ�� 20
+    # �� 99 �� Ӧ�ñ�� 10
     await tool.call(context, query="test", max_results=99)
     payload = session.posted.get("json", {})
-    assert payload.get("max_results") == 20
+    assert payload.get("max_results") == 10
 
     # �� 0 �� Ӧ�ñ�� 1
     await tool.call(context, query="test", max_results=0)
@@ -1070,3 +1070,355 @@ async def test_anysearch_search_falls_back_to_content_for_snippet(monkeypatch):
     assert results[0].title == "Test Title"
     assert results[0].url == "https://example.com"
 
+
+# --- AnySearch vertical-field normalization and business-error tests ---
+
+
+@pytest.mark.asyncio
+async def test_anysearch_search_preserves_vertical_structured_fields(monkeypatch):
+    """Structured vertical fields are appended to the snippet as text."""
+    session = _FakeAnysearchSession(
+        _FakeAnysearchResponse(
+            status=200,
+            json_data={
+                "code": 0,
+                "message": "success",
+                "data": {
+                    "results": [
+                        {
+                            "title": "Apple Inc. (AAPL)",
+                            "url": "https://example.com/aapl",
+                            "price": 316.85,
+                            "change": -0.89,
+                            "market_cap": "4.7T",
+                            "favicon": "https://example.com/favicon.ico",
+                            "chart": {"1d": [1, 2, 3]},
+                            "optional_note": None,
+                        }
+                    ]
+                },
+            },
+        )
+    )
+
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    provider_settings = {"websearch_anysearch_key": ["test-key"]}
+    results = await _anysearch_search(provider_settings, {"query": "AAPL quote"})
+
+    assert len(results) == 1
+    result = results[0]
+    assert result.title == "Apple Inc. (AAPL)"
+    assert result.url == "https://example.com/aapl"
+    assert "price: 316.85" in result.snippet
+    assert "change: -0.89" in result.snippet
+    assert "market_cap: 4.7T" in result.snippet
+    # Well-known and None-valued fields are excluded.
+    assert "favicon" not in result.snippet
+    assert "optional_note" not in result.snippet
+    # Nested structures are serialized as JSON text instead of being dropped.
+    assert 'chart: {"1d": [1, 2, 3]}' in result.snippet
+
+
+@pytest.mark.asyncio
+async def test_anysearch_search_surfaces_business_error_on_code_nonzero(monkeypatch):
+    """An HTTP 200 business error is raised instead of becoming an empty result."""
+    session = _FakeAnysearchCycleSession(
+        [
+            _FakeAnysearchResponse(
+                status=200,
+                json_data={
+                    "code": -1,
+                    "message": "Missing required params for tag 'travel.flight': date.",
+                    "request_id": "req_12345",
+                },
+            ),
+            _FakeAnysearchResponse(status=200, json_data={"data": {"results": []}}),
+        ]
+    )
+
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    provider_settings = {"websearch_anysearch_key": ["key1", "key2"]}
+
+    with pytest.raises(Exception, match="Missing required params for tag"):
+        await _anysearch_search(provider_settings, {"query": "test"})
+
+    # Business errors are not retryable, so the second key is never attempted.
+    assert len(session.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_anysearch_search_handles_missing_message_field(monkeypatch):
+    """When the business error has no message, the numeric code is surfaced."""
+    session = _FakeAnysearchSession(
+        _FakeAnysearchResponse(
+            status=200,
+            json_data={"code": 1001, "request_id": "req_12345"},
+        )
+    )
+
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    provider_settings = {"websearch_anysearch_key": ["test-key"]}
+
+    with pytest.raises(Exception, match="1001"):
+        await _anysearch_search(provider_settings, {"query": "test"})
+
+
+# --- AnySearch tool payload construction tests ---
+
+
+@pytest.mark.asyncio
+async def test_anysearch_search_tool_preserves_valid_max_results(monkeypatch):
+    """In-range max_results values are forwarded unchanged."""
+    session = _FakeAnysearchSession(
+        _FakeAnysearchResponse(status=200, json_data={"data": {"results": []}})
+    )
+
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    tool = AnySearchWebSearchTool()
+    context = _context_with_provider_settings({"websearch_anysearch_key": ["test-key"]})
+
+    for value in (1, 5, 10):
+        await tool.call(context, query="test", max_results=value)
+        payload = session.posted.get("json", {})
+        assert payload.get("max_results") == value
+
+
+@pytest.mark.asyncio
+async def test_anysearch_search_tool_supports_zone_global(monkeypatch):
+    """zone="global" is forwarded to the API payload."""
+    session = _FakeAnysearchSession(
+        _FakeAnysearchResponse(status=200, json_data={"data": {"results": []}})
+    )
+
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    tool = AnySearchWebSearchTool()
+    context = _context_with_provider_settings({"websearch_anysearch_key": ["test-key"]})
+
+    await tool.call(context, query="test", zone="global")
+    payload = session.posted.get("json", {})
+    assert payload.get("zone") == "global"
+
+
+@pytest.mark.asyncio
+async def test_anysearch_search_tool_supports_zone_cn(monkeypatch):
+    """zone="cn" is forwarded to the API payload."""
+    session = _FakeAnysearchSession(
+        _FakeAnysearchResponse(status=200, json_data={"data": {"results": []}})
+    )
+
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    tool = AnySearchWebSearchTool()
+    context = _context_with_provider_settings({"websearch_anysearch_key": ["test-key"]})
+
+    await tool.call(context, query="test", zone="cn")
+    payload = session.posted.get("json", {})
+    assert payload.get("zone") == "cn"
+
+
+@pytest.mark.asyncio
+async def test_anysearch_search_tool_ignores_invalid_zone(monkeypatch):
+    """An unsupported zone value is dropped from the API payload."""
+    session = _FakeAnysearchSession(
+        _FakeAnysearchResponse(status=200, json_data={"data": {"results": []}})
+    )
+
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    tool = AnySearchWebSearchTool()
+    context = _context_with_provider_settings({"websearch_anysearch_key": ["test-key"]})
+
+    await tool.call(context, query="test", zone="unsupported-region")
+    payload = session.posted.get("json", {})
+    assert "zone" not in payload
+
+
+@pytest.mark.asyncio
+async def test_anysearch_search_tool_forwards_params_dict(monkeypatch):
+    """A dict params argument is forwarded to the API payload."""
+    session = _FakeAnysearchSession(
+        _FakeAnysearchResponse(status=200, json_data={"data": {"results": []}})
+    )
+
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    tool = AnySearchWebSearchTool()
+    context = _context_with_provider_settings({"websearch_anysearch_key": ["test-key"]})
+
+    await tool.call(
+        context,
+        query="AAPL quote",
+        tag="finance.quote",
+        params={"symbol": "AAPL", "type": "stock"},
+    )
+    payload = session.posted.get("json", {})
+    assert payload.get("params") == {"symbol": "AAPL", "type": "stock"}
+
+
+@pytest.mark.asyncio
+async def test_anysearch_search_tool_forwards_params_with_other_fields(monkeypatch):
+    """params coexists with the other payload fields without overwriting them."""
+    session = _FakeAnysearchSession(
+        _FakeAnysearchResponse(status=200, json_data={"data": {"results": []}})
+    )
+
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    tool = AnySearchWebSearchTool()
+    context = _context_with_provider_settings({"websearch_anysearch_key": ["test-key"]})
+
+    await tool.call(
+        context,
+        query="SHA to PEK",
+        max_results=5,
+        tag="travel.flight",
+        zone="cn",
+        language="zh-CN",
+        params={"departure": "SHA", "arrival": "PEK", "date": "2026-09-10"},
+    )
+    payload = session.posted.get("json", {})
+    assert payload == {
+        "query": "SHA to PEK",
+        "max_results": 5,
+        "format": "json",
+        "tag": "travel.flight",
+        "zone": "cn",
+        "language": "zh-CN",
+        "params": {"departure": "SHA", "arrival": "PEK", "date": "2026-09-10"},
+    }
+
+
+@pytest.mark.asyncio
+async def test_anysearch_search_tool_ignores_non_dict_params(monkeypatch):
+    """A non-dict params argument is dropped instead of being forwarded."""
+    session = _FakeAnysearchSession(
+        _FakeAnysearchResponse(status=200, json_data={"data": {"results": []}})
+    )
+
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    tool = AnySearchWebSearchTool()
+    context = _context_with_provider_settings({"websearch_anysearch_key": ["test-key"]})
+
+    await tool.call(context, query="test", params="not-a-dict")
+    payload = session.posted.get("json", {})
+    assert "params" not in payload
+
+
+@pytest.mark.asyncio
+async def test_anysearch_search_preserves_params_field(monkeypatch):
+    """The payload passed to _anysearch_search is posted unchanged, including params."""
+    session = _FakeAnysearchSession(
+        _FakeAnysearchResponse(status=200, json_data={"data": {"results": []}})
+    )
+
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    provider_settings = {"websearch_anysearch_key": ["test-key"]}
+    await _anysearch_search(
+        provider_settings,
+        {"query": "test", "params": {"ticker": "AAPL"}},
+    )
+
+    assert session.posted.get("json", {}).get("params") == {"ticker": "AAPL"}
+
+
+@pytest.mark.asyncio
+async def test_anysearch_search_serializes_nested_vertical_fields(monkeypatch):
+    """Nested dict/list vertical fields are serialized as JSON text, not dropped."""
+    session = _FakeAnysearchSession(
+        _FakeAnysearchResponse(
+            status=200,
+            json_data={
+                "code": 0,
+                "message": "success",
+                "data": {
+                    "results": [
+                        {
+                            "title": "CVE-2021-44228",
+                            "url": "https://example.com/cve",
+                            "cvss": 10.0,
+                            "affected_products": ["log4j-core 2.0-2.14.1"],
+                            "references": [
+                                "https://nvd.nist.gov/vuln/detail/CVE-2021-44228"
+                            ],
+                        },
+                        {
+                            "title": "SHA-PEK flight",
+                            "url": "https://example.com/flight",
+                            "segments": [
+                                {"from": "SHA", "to": "XIY"},
+                                {"from": "XIY", "to": "PEK"},
+                            ],
+                        },
+                    ]
+                },
+            },
+        )
+    )
+
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    provider_settings = {"websearch_anysearch_key": ["test-key"]}
+    results = await _anysearch_search(provider_settings, {"query": "CVE-2021-44228"})
+
+    assert len(results) == 2
+    vuln, flight = results
+    assert "cvss: 10.0" in vuln.snippet
+    assert 'affected_products: ["log4j-core 2.0-2.14.1"]' in vuln.snippet
+    assert "nvd.nist.gov/vuln/detail/CVE-2021-44228" in vuln.snippet
+    assert '"from": "SHA"' in flight.snippet
+    assert '"to": "PEK"' in flight.snippet

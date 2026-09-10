@@ -19,6 +19,7 @@ from astrbot.core.astr_main_agent import (
     MainAgentBuildResult,
     build_main_agent,
 )
+from astrbot.core.config.agent_runner import resolve_context_compression_config
 from astrbot.core.message.components import File, Image, Record, Reply, Video
 from astrbot.core.message.message_event_result import (
     MessageChain,
@@ -95,28 +96,6 @@ class InternalAgentSubStage(Stage):
             "moonshotai_api_key", ""
         )
 
-        # 上下文管理相关
-        self.context_limit_reached_strategy: str = compression_config.get(
-            "overflow_strategy", "truncate_by_turns"
-        )
-        self.llm_compress_instruction: str = compression_config.get("instruction", "")
-        self.llm_compress_keep_recent_ratio: float = compression_config.get(
-            "keep_recent_ratio", 0.15
-        )
-        self.llm_compress_provider_id: str = compression_config.get("provider_id", "")
-        self.max_context_length = compression_config.get("max_turns", -1)
-        self.dequeue_context_length: int = min(
-            max(1, compression_config.get("trim_turns", 1)),
-            self.max_context_length - 1
-            if self.max_context_length > 0
-            else compression_config.get("trim_turns", 1),
-        )
-        if self.dequeue_context_length <= 0:
-            self.dequeue_context_length = 1
-        self.fallback_max_context_tokens: int = compression_config.get(
-            "fallback_max_tokens", 128000
-        )
-
         self.llm_safety_mode = persona_config.get("safety_mode", True)
         self.safety_mode_strategy = persona_config.get(
             "safety_mode_strategy", "system_prompt"
@@ -139,13 +118,7 @@ class InternalAgentSubStage(Stage):
             file_extract_enabled=self.file_extract_enabled,
             file_extract_prov=self.file_extract_prov,
             file_extract_msh_api_key=self.file_extract_msh_api_key,
-            context_limit_reached_strategy=self.context_limit_reached_strategy,
-            llm_compress_instruction=self.llm_compress_instruction,
-            llm_compress_keep_recent_ratio=self.llm_compress_keep_recent_ratio,
-            llm_compress_provider_id=self.llm_compress_provider_id,
-            max_context_length=self.max_context_length,
-            dequeue_context_length=self.dequeue_context_length,
-            fallback_max_context_tokens=self.fallback_max_context_tokens,
+            **resolve_context_compression_config(compression_config),
             llm_safety_mode=self.llm_safety_mode,
             safety_mode_strategy=self.safety_mode_strategy,
             computer_use_runtime=self.computer_use_runtime,
@@ -178,6 +151,10 @@ class InternalAgentSubStage(Stage):
             streaming_response = self.streaming_response
             if (enable_streaming := event.get_extra("enable_streaming")) is not None:
                 streaming_response = bool(enable_streaming)
+
+            show_reasoning = self.show_reasoning
+            if (enable_reasoning := event.get_extra("enable_reasoning")) is not None:
+                show_reasoning = bool(enable_reasoning)
 
             has_provider_request = event.get_extra("provider_request") is not None
             has_valid_message = bool(event.message_str and event.message_str.strip())
@@ -327,7 +304,7 @@ class InternalAgentSubStage(Stage):
                                     self.max_step,
                                     self.show_tool_use,
                                     self.show_tool_call_result,
-                                    show_reasoning=self.show_reasoning,
+                                    show_reasoning=show_reasoning,
                                     buffer_intermediate_messages=self.buffer_intermediate_messages,
                                 ),
                             ),
@@ -358,7 +335,7 @@ class InternalAgentSubStage(Stage):
                                     self.max_step,
                                     self.show_tool_use,
                                     self.show_tool_call_result,
-                                    show_reasoning=self.show_reasoning,
+                                    show_reasoning=show_reasoning,
                                     buffer_intermediate_messages=self.buffer_intermediate_messages,
                                 ),
                             ),
@@ -389,7 +366,7 @@ class InternalAgentSubStage(Stage):
                             self.show_tool_use,
                             self.show_tool_call_result,
                             stream_to_general,
-                            show_reasoning=self.show_reasoning,
+                            show_reasoning=show_reasoning,
                             buffer_intermediate_messages=self.buffer_intermediate_messages,
                         ):
                             yield

@@ -34,6 +34,14 @@ function setAxiosHeader(
 }
 
 function attachAxiosHeaders(config: InternalAxiosRequestConfig) {
+  // Dashboard credentials must not be attached to third-party requests.
+  try {
+    const requestUrl = new URL(axios.getUri(config), window.location.href);
+    if (requestUrl.origin !== window.location.origin) return config;
+  } catch {
+    return config;
+  }
+
   const token = getToken();
   if (token) {
     setAxiosHeader(config.headers, AUTH_HEADER, `Bearer ${token}`);
@@ -113,6 +121,19 @@ function installAxiosInterceptors(instance: AxiosInstance) {
 
 export function fetchWithAuth(input: RequestInfo | URL, init?: RequestInit) {
   const fetchImpl = originalFetch ?? window.fetch.bind(window);
+  // The global fetch wrapper also handles public, cross-origin resources.
+  try {
+    const requestUrl = new URL(
+      input instanceof Request ? input.url : input,
+      window.location.href,
+    );
+    if (requestUrl.origin !== window.location.origin) {
+      return fetchImpl(input, init);
+    }
+  } catch {
+    return fetchImpl(input, init);
+  }
+
   const token = getToken();
   const locale = getLocale();
 

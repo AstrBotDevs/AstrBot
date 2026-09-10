@@ -559,7 +559,12 @@ async def test_astrbot_updater_prepares_both_packages_before_applying(
     def fake_apply_core(_path: Path) -> None:
         calls.append("apply-core")
 
-    def fake_extract_dashboard(_path: Path, _data_path: Path) -> None:
+    def fake_extract_dashboard(
+        _path: Path,
+        _data_path: Path,
+        _expected_version: str | None = None,
+    ) -> None:
+        assert _expected_version == "v99.0.0"
         calls.append("apply-dashboard")
 
     async def record_progress(event: UpdateProgress) -> None:
@@ -770,19 +775,34 @@ async def test_astrbot_updater_ensure_dashboard_downloads_matching_assets(
 
 
 @pytest.mark.asyncio
-async def test_astrbot_updater_ensure_dashboard_keeps_usable_stale_assets_on_failure(
+@pytest.mark.parametrize(
+    "desktop_managed",
+    [False, True],
+    ids=["standalone", "desktop-managed"],
+)
+async def test_astrbot_updater_stale_fallback_is_standalone_only(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    desktop_managed: bool,
 ) -> None:
     updater = AstrBotUpdater()
     data_path = tmp_path / "data"
     data_dist = data_path / "dist"
-    data_dist.mkdir(parents=True)
-    (data_dist / "index.html").write_text("stale", encoding="utf-8")
+    (data_dist / "assets").mkdir(parents=True)
+    (data_dist / "index.html").write_text(
+        '<script type="module" src="/assets/old.js"></script>',
+        encoding="utf-8",
+    )
+    (data_dist / "assets" / "old.js").write_text("old", encoding="utf-8")
+    (data_dist / "assets" / "version").write_text("v0.0.1", encoding="utf-8")
 
     async def fail_download(**_kwargs) -> None:
         raise RuntimeError("unavailable")
 
+    if desktop_managed:
+        monkeypatch.setenv("ASTRBOT_DESKTOP_MANAGED", "1")
+    else:
+        monkeypatch.delenv("ASTRBOT_DESKTOP_MANAGED", raising=False)
     monkeypatch.setattr(core_updater, "get_astrbot_data_path", lambda: str(data_path))
     monkeypatch.setattr(
         core_updater,
@@ -791,26 +811,74 @@ async def test_astrbot_updater_ensure_dashboard_keeps_usable_stale_assets_on_fai
     )
     monkeypatch.setattr(
         core_updater,
-        "_is_dist_compatible",
-        lambda *_args: False,
-    )
-    monkeypatch.setattr(
-        core_updater,
-        "_should_use_bundled_dist",
-        lambda *_args: False,
-    )
-    monkeypatch.setattr(
-        core_updater,
-        "_read_dashboard_version",
-        lambda _path: "v0.0.1",
-    )
-    monkeypatch.setattr(
-        core_updater,
         "_download_package",
         fail_download,
     )
 
-    assert await updater.ensure_dashboard() == data_dist
+    if desktop_managed:
+        with pytest.raises(RuntimeError, match="unavailable"):
+            await updater.ensure_dashboard()
+    else:
+        assert await updater.ensure_dashboard() == data_dist
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("desktop_managed", [False, True])
+async def test_astrbot_updater_first_install_fails_when_offline_without_assets(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    desktop_managed: bool,
+) -> None:
+    updater = AstrBotUpdater()
+    data_path = tmp_path / "data"
+
+    async def fail_download(**_kwargs) -> None:
+        raise RuntimeError("offline")
+
+    if desktop_managed:
+        monkeypatch.setenv("ASTRBOT_DESKTOP_MANAGED", "1")
+    else:
+        monkeypatch.delenv("ASTRBOT_DESKTOP_MANAGED", raising=False)
+    monkeypatch.setattr(core_updater, "get_astrbot_data_path", lambda: str(data_path))
+    monkeypatch.setattr(
+        core_updater,
+        "_get_bundled_dist_path",
+        lambda: tmp_path / "missing-bundled-dist",
+    )
+    monkeypatch.setattr(core_updater, "_download_package", fail_download)
+
+    with pytest.raises(RuntimeError, match="offline"):
+        await updater.ensure_dashboard()
+
+
+@pytest.mark.asyncio
+async def test_astrbot_updater_does_not_return_incomplete_assets_on_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    updater = AstrBotUpdater()
+    data_path = tmp_path / "data"
+    data_dist = data_path / "dist"
+    (data_dist / "assets").mkdir(parents=True)
+    (data_dist / "index.html").write_text(
+        '<script type="module" src="/assets/missing.js"></script>',
+        encoding="utf-8",
+    )
+
+    async def fail_download(**_kwargs) -> None:
+        raise RuntimeError("unavailable")
+
+    monkeypatch.delenv("ASTRBOT_DESKTOP_MANAGED", raising=False)
+    monkeypatch.setattr(core_updater, "get_astrbot_data_path", lambda: str(data_path))
+    monkeypatch.setattr(
+        core_updater,
+        "_get_bundled_dist_path",
+        lambda: tmp_path / "missing-bundled-dist",
+    )
+    monkeypatch.setattr(core_updater, "_download_package", fail_download)
+
+    with pytest.raises(RuntimeError, match="unavailable"):
+        await updater.ensure_dashboard()
 
 
 @pytest.mark.asyncio
@@ -990,6 +1058,59 @@ async def test_download_dashboard_falls_back_when_hosted_package_is_not_zip(
         "https://astrbot-registry.soulter.top/download/astrbot-dashboard/v99.0.0/dist.zip",
         "https://github.com/AstrBotDevs/AstrBot/releases/download/v99.0.0/AstrBot-v99.0.0-dashboard.zip",
     ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("version", "expected_version"),
+    [
+        ("v99.0.0", "v99.0.0"),
+        ("a" * 40, None),
+    ],
+)
+async def test_download_dashboard_propagates_expected_version_to_extractor(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    version: str,
+    expected_version: str | None,
+) -> None:
+    captured: dict[str, object] = {}
+
+    async def fake_download_file(_url: str, path: str, **_kwargs) -> None:
+        with zipfile.ZipFile(path, "w") as archive:
+            archive.writestr("dist/index.html", "dashboard")
+
+    def fake_extract_package(
+        zip_path: Path,
+        extract_path: Path,
+        expected_version: str | None = None,
+    ) -> None:
+        captured.update(
+            zip_path=zip_path,
+            extract_path=extract_path,
+            expected_version=expected_version,
+        )
+
+    monkeypatch.setattr(dashboard_assets, "download_file", fake_download_file)
+    monkeypatch.setattr(
+        dashboard_assets,
+        "_extract_package",
+        fake_extract_package,
+    )
+
+    zip_path = tmp_path / "dashboard.zip"
+    extract_path = tmp_path / "extract"
+    await dashboard_assets._download_package(
+        path=zip_path,
+        extract_path=extract_path,
+        version=version,
+    )
+
+    assert captured == {
+        "zip_path": zip_path,
+        "extract_path": extract_path,
+        "expected_version": expected_version,
+    }
 
 
 @pytest.mark.asyncio

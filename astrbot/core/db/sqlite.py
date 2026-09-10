@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from deprecated import deprecated
-from sqlalchemy import CursorResult, Row, case, not_
+from sqlalchemy import CursorResult, Row, case, literal, not_
 from sqlalchemy.dialects.sqlite import dialect as sqlite_dialect
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -46,6 +46,31 @@ from astrbot.core.sentinels import NOT_GIVEN
 
 TxResult = T.TypeVar("TxResult")
 CRON_FIELD_NOT_SET = object()
+
+
+def _webchat_session_title_match(keyword: str):
+    """Build a correlated EXISTS condition matching WebChat session titles.
+
+    WebChat generates its title on the platform session instead of the
+    conversation row, so the conversation is matched through the unified
+    message origin suffix ``!<session_id>``.
+
+    Args:
+        keyword: Search text matched against the session display name.
+
+    Returns:
+        A SQLAlchemy EXISTS expression usable inside a conversation query.
+    """
+    return (
+        select(1)
+        .where(col(PlatformSession.display_name).ilike(f"%{keyword}%"))
+        .where(
+            col(ConversationV2.user_id).like(
+                literal("%!").concat(col(PlatformSession.session_id)),
+            )
+        )
+        .exists()
+    )
 
 
 class SQLiteDatabase(BaseDatabase):
@@ -362,6 +387,8 @@ class SQLiteDatabase(BaseDatabase):
 
             if platform_ids:
                 conditions.append(col(ConversationV2.platform_id).in_(platform_ids))
+            # WebChat titles live on the platform session, not on the
+            # conversation row, so the search also matches session titles.
             if search_query:
                 escaped_search_query = json.dumps(
                     search_query,
@@ -374,6 +401,7 @@ class SQLiteDatabase(BaseDatabase):
                         col(ConversationV2.conversation_id).ilike(f"%{search_query}%"),
                         col(ConversationV2.content).ilike(f"%{search_query}%"),
                         col(ConversationV2.content).ilike(f"%{escaped_search_query}%"),
+                        _webchat_session_title_match(search_query),
                     )
                 )
             keyword_query = str(kwargs.get("keyword_query") or "").strip()
@@ -387,6 +415,7 @@ class SQLiteDatabase(BaseDatabase):
                         col(ConversationV2.title).ilike(f"%{keyword_query}%"),
                         col(ConversationV2.content).ilike(f"%{keyword_query}%"),
                         col(ConversationV2.content).ilike(f"%{escaped_keyword_query}%"),
+                        _webchat_session_title_match(keyword_query),
                     )
                 )
             message_types = kwargs.get("message_types") or []

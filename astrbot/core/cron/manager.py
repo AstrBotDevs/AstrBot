@@ -11,7 +11,9 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.date import DateTrigger
 
 from astrbot import logger
+from astrbot.core.agent.runners.base import AgentState
 from astrbot.core.agent.tool import ToolSet
+from astrbot.core.config.agent_runner import resolve_context_compression_config
 from astrbot.core.cron.events import CronMessageEvent
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import CronJob
@@ -462,6 +464,9 @@ class CronJobManager:
         )
         config = MainAgentBuildConfig(
             tool_call_timeout=tool_call_timeout,
+            **resolve_context_compression_config(
+                cfg.get("agent_runner", {}).get("config", {}).get("compression", {})
+            ),
             llm_safety_mode=persona_config.get("safety_mode", True),
             safety_mode_strategy=persona_config.get(
                 "safety_mode_strategy", "system_prompt"
@@ -496,14 +501,24 @@ class CronJobManager:
             event=cron_event, plugin_context=self.ctx, config=config, req=req
         )
         if not result:
-            logger.error("Failed to build main agent for cron job.")
-            return
+            raise RuntimeError("Failed to build main agent for cron job.")
 
         runner = result.agent_runner
         async for _ in runner.step_until_done(agent_max_step):
             # agent will send message to user via using tools
             pass
         llm_resp = runner.get_final_llm_resp()
+        if runner.state == AgentState.ERROR:
+            # The run failed (e.g. malformed function call at max steps) but
+            # no exception escapes the runner; without this the job was
+            # recorded as completed with last_error=NULL and the user saw
+            # only intermediate messages (#9980).
+            detail = (
+                f": {llm_resp.completion_text}"
+                if llm_resp and llm_resp.completion_text
+                else ""
+            )
+            raise RuntimeError(f"Cron agent run ended in ERROR state{detail}")
         cron_meta = extras.get("cron_job", {}) if extras else {}
         summary_note = (
             f"[CronJob] {cron_meta.get('name') or cron_meta.get('id', 'unknown')}: {cron_meta.get('description', '')} "
