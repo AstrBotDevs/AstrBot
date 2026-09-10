@@ -10,7 +10,8 @@ from astrbot.core.knowledge_base.kb_helper import RateLimiter
 
 
 @pytest.mark.asyncio
-async def test_concurrent_waiters_keep_the_configured_interval():
+@pytest.mark.parametrize("event_loop_stall", [0, 0.4])
+async def test_concurrent_waiters_keep_the_configured_interval(event_loop_stall):
     limiter = RateLimiter(600)  # 0.1 s between calls
     times: list[float] = []
 
@@ -18,7 +19,12 @@ async def test_concurrent_waiters_keep_the_configured_interval():
         async with limiter:
             times.append(time.monotonic())
 
-    await asyncio.gather(*(enter() for _ in range(6)))
+    tasks = [asyncio.create_task(enter()) for _ in range(6)]
+    if event_loop_stall:
+        await asyncio.sleep(0.05)
+        # Simulate a blocked event loop while several callers are waiting.
+        time.sleep(event_loop_stall)
+    await asyncio.gather(*tasks)
 
     times.sort()
     gaps = [b - a for a, b in zip(times, times[1:])]
