@@ -1823,13 +1823,14 @@ async def test_skills_like_requery_reply_reaches_stream_bridge_once(
     assert sum(chain.get_plain_text() == reasoning for chain in chains) == int(
         streaming and not stream_to_general and show_reasoning
     )
-    expected_types = ["streaming_delta", "llm_result"] if streaming else ["llm_result"]
+    expected_types = ["llm_result", "streaming_delta"] if streaming else ["llm_result"]
     assert final_events == [
         (response_type, chain_type)
         for response_type in expected_types
         for chain_type in ("reasoning", None)
     ]
-    assert all(hooks_at_emission)
+    # Preserve existing llm_result ordering; only new deltas follow the hooks.
+    assert hooks_at_emission == [False, False] + ([True, True] if streaming else [])
     assert runner.done()
     assert runner.get_final_llm_resp().completion_text == final_text
     assert runner.run_context.messages[-1].content[-1].text == final_text
