@@ -6,6 +6,18 @@ import pytest
 from astrbot.core.platform.sources.lark.lark_adapter import LarkPlatformAdapter
 
 
+@pytest.fixture(autouse=True)
+def mock_private_chat_storage(monkeypatch):
+    """Keep sender-name tests independent of persistent routing storage.
+
+    Args:
+        monkeypatch: Fixture used to replace the route storage writer.
+    """
+    monkeypatch.setattr(
+        "astrbot.core.platform.sources.lark.lark_adapter.sp.put_async", AsyncMock()
+    )
+
+
 def _private_message_event(message_id: str = "message-1") -> SimpleNamespace:
     """Builds a Lark private-message event.
 
@@ -45,6 +57,8 @@ def _adapter(user_response: SimpleNamespace) -> LarkPlatformAdapter:
         Lark adapter test double.
     """
     adapter = LarkPlatformAdapter.__new__(LarkPlatformAdapter)
+    adapter.config = {"id": "lark-test"}
+    adapter.appid = "cli_test"
     adapter.bot_open_id = "ou_bot"
     adapter.bot_name = "AstrBot"
     adapter._user_name_cache = {}
