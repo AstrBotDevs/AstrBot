@@ -85,7 +85,6 @@ class ProviderOpenCodeGo(Provider):
             The normalized model response.
         """
         model = (model or self.get_model()).removeprefix("opencode-go/")
-        delegate = self.delegate
         extra_headers = {
             key: value
             for key, value in (kwargs.pop("extra_headers", None) or {}).items()
@@ -95,7 +94,7 @@ class ProviderOpenCodeGo(Provider):
         extra_headers["x-opencode-session"] = hashlib.sha256(
             (kwargs.pop("conversation_id", None) or uuid4().hex).encode()
         ).hexdigest()
-        return await delegate.text_chat(
+        return await self.delegate.text_chat(
             prompt=prompt,
             session_id=session_id,
             image_urls=image_urls,
@@ -106,9 +105,7 @@ class ProviderOpenCodeGo(Provider):
             tool_calls_result=tool_calls_result,
             model=model,
             extra_user_content_parts=extra_user_content_parts,
-            tool_choice="any"
-            if isinstance(delegate, ProviderAnthropic) and tool_choice == "required"
-            else tool_choice,
+            tool_choice=tool_choice,
             extra_headers=extra_headers,
             **kwargs,
         )
@@ -149,7 +146,6 @@ class ProviderOpenCodeGo(Provider):
             Normalized response chunks.
         """
         model = (model or self.get_model()).removeprefix("opencode-go/")
-        delegate = self.delegate
         extra_headers = {
             key: value
             for key, value in (kwargs.pop("extra_headers", None) or {}).items()
@@ -158,7 +154,7 @@ class ProviderOpenCodeGo(Provider):
         extra_headers["x-opencode-session"] = hashlib.sha256(
             (kwargs.pop("conversation_id", None) or uuid4().hex).encode()
         ).hexdigest()
-        async for response in delegate.text_chat_stream(
+        async for response in self.delegate.text_chat_stream(
             prompt=prompt,
             session_id=session_id,
             image_urls=image_urls,
@@ -169,9 +165,7 @@ class ProviderOpenCodeGo(Provider):
             tool_calls_result=tool_calls_result,
             model=model,
             extra_user_content_parts=extra_user_content_parts,
-            tool_choice="any"
-            if isinstance(delegate, ProviderAnthropic) and tool_choice == "required"
-            else tool_choice,
+            tool_choice=tool_choice,
             extra_headers=extra_headers,
             **kwargs,
         ):

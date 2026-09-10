@@ -22,6 +22,12 @@ from astrbot.core.provider.sources.opencode_go_source import (
     ProviderOpenCodeGoResponses,
 )
 
+GO_PROTOCOL_CASES = [
+    (ProviderOpenCodeGo, "chat/completions"),
+    (ProviderOpenCodeGoResponses, "responses"),
+    (ProviderOpenCodeGoMessages, "messages"),
+]
+
 
 @pytest.fixture
 def go_http(monkeypatch):
@@ -156,14 +162,7 @@ def go_http(monkeypatch):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("streaming", [False, True])
-@pytest.mark.parametrize(
-    "provider_class,endpoint",
-    [
-        (ProviderOpenCodeGo, "chat/completions"),
-        (ProviderOpenCodeGoResponses, "responses"),
-        (ProviderOpenCodeGoMessages, "messages"),
-    ],
-)
+@pytest.mark.parametrize("provider_class,endpoint", GO_PROTOCOL_CASES)
 async def test_go_http_identity_and_concurrent_sessions(
     go_http, provider_class, endpoint, streaming
 ):
@@ -179,11 +178,10 @@ async def test_go_http_identity_and_concurrent_sessions(
         },
         {},
     )
-    sessions = [
-        str(uuid4()),
-        str(uuid4()),
-        str(uuid4()),
-        str(uuid4()),
+    sessions = [str(uuid4()) for _ in range(4)]
+    expected_session_ids = [
+        hashlib.sha256(conversation_id.encode()).hexdigest()
+        for conversation_id in sessions
     ]
 
     async def send(conversation_id):
@@ -203,22 +201,10 @@ async def test_go_http_identity_and_concurrent_sessions(
         await asyncio.gather(*(send(conversation_id) for conversation_id in sessions))
         await send(sessions[0])
         assert len(go_http) == 5
-        assert {r.headers["x-opencode-session"] for r in go_http} == {
-            hashlib.sha256(conversation_id.encode()).hexdigest()
-            for conversation_id in sessions
-        }
-        assert (
-            go_http[-1].headers["x-opencode-session"]
-            == hashlib.sha256(sessions[0].encode()).hexdigest()
-        )
-        assert (
-            sum(
-                r.headers["x-opencode-session"]
-                == go_http[-1].headers["x-opencode-session"]
-                for r in go_http
-            )
-            == 2
-        )
+        actual_session_ids = [r.headers["x-opencode-session"] for r in go_http]
+        assert set(actual_session_ids) == set(expected_session_ids)
+        assert actual_session_ids[-1] == expected_session_ids[0]
+        assert actual_session_ids.count(expected_session_ids[0]) == 2
         for request in go_http:
             assert request.url.path == f"/zen/go/v1/{endpoint}"
             assert request.headers["user-agent"] == f"AstrBot/{__version__}"
@@ -234,14 +220,7 @@ async def test_go_http_identity_and_concurrent_sessions(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "provider_class,endpoint",
-    [
-        (ProviderOpenCodeGo, "chat/completions"),
-        (ProviderOpenCodeGoResponses, "responses"),
-        (ProviderOpenCodeGoMessages, "messages"),
-    ],
-)
+@pytest.mark.parametrize("provider_class,endpoint", GO_PROTOCOL_CASES)
 async def test_go_model_changes_preserve_selected_protocol(
     go_http, provider_class, endpoint
 ):
