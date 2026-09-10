@@ -1,6 +1,6 @@
 <template>
-  <transition name="workspace-panel-slide">
-    <aside v-if="modelValue" class="workspace-files-panel">
+  <transition name="chat-panel">
+    <aside v-if="modelValue" class="workspace-files-panel chat-side-panel">
       <div class="workspace-toolbar">
         <div class="workspace-filter">
           <Search :size="17" />
@@ -158,7 +158,11 @@
         ><code>{{ fileContent }}</code></pre>
       </section>
 
-      <v-dialog v-model="previewDialog" max-width="1000" width="calc(100% - 32px)">
+      <v-dialog
+        v-model="previewDialog"
+        max-width="1000"
+        width="calc(100% - 32px)"
+      >
         <v-card class="workspace-dialog-preview">
           <header class="workspace-dialog-preview-header">
             <div class="workspace-preview-path" :title="selectedFilePath">
@@ -201,6 +205,7 @@
 </template>
 
 <script setup lang="ts">
+import "@/components/chat/chatPanelTransition.css";
 import { computed, ref, watch } from "vue";
 import {
   ChevronDown,
@@ -425,11 +430,7 @@ async function openEntry(entry: WorkspaceEntry) {
 }
 
 async function downloadSelectedFile() {
-  if (
-    !props.projectId ||
-    !selectedFilePath.value ||
-    fileDownloading.value
-  ) {
+  if (!props.projectId || !selectedFilePath.value || fileDownloading.value) {
     return;
   }
   fileDownloading.value = true;
@@ -462,7 +463,8 @@ function formatSize(size: number) {
 
 <style scoped>
 .workspace-files-panel {
-  width: clamp(340px, 29vw, 440px);
+  --chat-side-panel-width: clamp(340px, 29vw, 440px);
+  width: var(--chat-side-panel-width);
   height: calc(100% - var(--chat-panel-top-offset, 0px));
   margin-top: var(--chat-panel-top-offset, 0px);
   border-left: 1px solid var(--chat-border, rgba(var(--v-border-color), 0.14));
@@ -472,19 +474,6 @@ function formatSize(size: number) {
   flex-direction: column;
   flex: 0 0 auto;
   min-width: 0;
-}
-
-.workspace-panel-slide-enter-active,
-.workspace-panel-slide-leave-active {
-  transition:
-    transform 0.2s ease,
-    opacity 0.2s ease;
-}
-
-.workspace-panel-slide-enter-from,
-.workspace-panel-slide-leave-to {
-  transform: translateX(100%);
-  opacity: 0;
 }
 
 .workspace-preview-header {

@@ -1,6 +1,18 @@
 {
   "title": "聊天吧!",
   "subtitle": "与AI助手进行对话",
+  "settings": {
+    "general": "通用",
+    "chat": "聊天",
+    "appearance": "外观",
+    "light": "浅色",
+    "dark": "深色",
+    "system": "跟随系统",
+    "streaming": "流式输出",
+    "streamingHint": "回复生成时逐步显示内容，仅影响 ChatUI。",
+    "reasoning": "显示思考内容",
+    "reasoningHint": "显示模型返回的思考过程，仅影响 ChatUI。"
+  },
   "input": {
     "placeholder": "想问什么都可以",
     "projectPlaceholder": "接下来做点什么？",
@@ -18,7 +30,19 @@
     "assistant": "助手",
     "system": "系统",
     "error": "错误消息",
-    "loading": "思考中..."
+    "loading": "思考中...",
+    "loadingVariants": [
+      "(｡•̀ᴗ-)✧ 思考中...",
+      "(・_・ヾ 琢磨中...",
+      "(๑•̀ㅂ•́)و 整理思路中...",
+      "(｡･ω･｡) 寻找灵感中...",
+      "( •̀ ω •́ )✧ 认真分析中...",
+      "(つ•̀ω•́)つ 组织语言中...",
+      "(・・。)ゞ 捋捋头绪中...",
+      "(ง •_•)ง 努力想办法中...",
+      "( ˘ω˘ ) 脑内推演中...",
+      "(ﾉ◕ヮ◕)ﾉ 酝酿答案中..."
+    ]
   },
   "voice": {
     "start": "开始录音",
@@ -38,6 +62,7 @@
     "examples": "示例问题"
   },
   "actions": {
+    "scrollToBottom": "回到底部",
     "copy": "复制",
     "regenerate": "重新生成",
     "retry": "重试",

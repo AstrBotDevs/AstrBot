@@ -16,13 +16,7 @@
         :class="isUserMessage(msg) ? 'from-user' : 'from-bot'"
       >
         <v-avatar v-if="!isUserMessage(msg)" class="bot-avatar" size="48">
-          <v-progress-circular
-            v-if="isMessageStreaming(msgIndex)"
-            indeterminate
-            size="22"
-            width="2"
-          />
-          <span v-else class="bot-avatar-symbol" aria-hidden="true">✦</span>
+          <span class="bot-avatar-symbol" aria-hidden="true">✦</span>
         </v-avatar>
 
         <div class="message-stack">
@@ -30,11 +24,7 @@
             class="message-bubble"
             :class="{ user: isUserMessage(msg), bot: !isUserMessage(msg) }"
           >
-            <div v-if="messageContent(msg).isLoading" class="loading-message">
-              <span>{{ tm("message.loading") }}</span>
-            </div>
-
-            <template v-else>
+            <MessageContentTransition :loading="messageContent(msg).isLoading">
               <template
                 v-for="(block, blockIndex) in renderBlocks(msg)"
                 :key="`${msgIndex}-block-${blockIndex}-${block.kind}`"
@@ -89,7 +79,10 @@
                       type="button"
                       @click="openImage(partUrl(part))"
                     >
-                      <img :src="partUrl(part)" :alt="part.filename || 'image'" />
+                      <img
+                        :src="partUrl(part)"
+                        :alt="part.filename || 'image'"
+                      />
                     </button>
 
                     <audio
@@ -110,7 +103,8 @@
                       v-else-if="part.type === 'file'"
                       class="file-part"
                       :style="{
-                        '--attachment-color': attachmentPresentation(part).color,
+                        '--attachment-color':
+                          attachmentPresentation(part).color,
                       }"
                     >
                       <v-icon
@@ -185,7 +179,7 @@
                   </template>
                 </template>
               </template>
-            </template>
+            </MessageContentTransition>
           </div>
 
           <div v-if="showMessageMeta(msg, msgIndex)" class="message-meta">
@@ -275,6 +269,7 @@
 </template>
 
 <script setup lang="ts">
+import MessageContentTransition from "@/components/chat/MessageContentTransition.vue";
 import { computed, nextTick, reactive, ref } from "vue";
 import axios from "axios";
 import {
@@ -686,14 +681,6 @@ function formatDuration(seconds: number) {
 
 .plain-content {
   white-space: pre-wrap;
-}
-
-.loading-message {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 4px;
-  color: var(--chat-muted);
 }
 
 .reply-quote {
