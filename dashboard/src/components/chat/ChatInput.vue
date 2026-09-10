@@ -573,7 +573,7 @@ function autoResize() {
     window.matchMedia("(max-width: 768px)").matches;
   const viewportHeight =
     typeof window !== "undefined" ? window.innerHeight : 900;
-  const minHeight = 36;
+  const minHeight = 48;
   const maxHeight = isMobileViewport
     ? Math.min(220, Math.round(viewportHeight * 0.42))
     : Math.min(420, Math.round(viewportHeight * 0.48));
@@ -1006,7 +1006,7 @@ defineExpose({
   width: 100%;
   box-sizing: border-box;
   min-width: 0;
-  min-height: 36px;
+  min-height: 48px;
   max-height: min(48vh, 420px);
   margin: 0;
   padding: 4px 2px;
