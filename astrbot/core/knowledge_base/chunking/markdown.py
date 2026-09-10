@@ -312,7 +312,7 @@ class MarkdownChunker(BaseChunker):
     def _find_fenced_code_ranges(text: str) -> list[tuple[int, int]]:
         """找到所有围栏代码块的 (start, end) 范围"""
         ranges: list[tuple[int, int]] = []
-        fence_pattern = re.compile(r"^(`{3,}|~{3,})", re.MULTILINE)
+        fence_pattern = re.compile(r"^ {0,3}(`{3,}|~{3,})", re.MULTILINE)
         matches = list(fence_pattern.finditer(text))
 
         i = 0

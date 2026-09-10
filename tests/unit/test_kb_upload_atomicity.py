@@ -350,6 +350,7 @@ async def test_upload_document_cleans_up_on_storage_failure(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("fence", ["```", "~~~"])
 @pytest.mark.parametrize(
     ("file_name", "file_type"),
     [
@@ -364,6 +365,7 @@ async def test_upload_document_cleans_up_on_storage_failure(
 async def test_upload_document_preserves_markdown_heading_paths(
     file_name: str,
     file_type: str,
+    fence: str,
     tmp_path: Path,
     stub_provider_manager_module,
 ) -> None:
@@ -384,10 +386,17 @@ async def test_upload_document_preserves_markdown_heading_paths(
     helper.kb_medias_dir = tmp_path / "medias"
     helper.chunker = AsyncMock()
 
+    code_block = (
+        f"   {fence}python\n"
+        "# This is a code comment\n"
+        "print(123)\n"
+        f"   {fence}"
+    )
     parse_result = MagicMock(
         text=(
             "# Handbook\n\nOverview.\n\n"
             "## Installation\n\nInstall the package.\n\n"
+            f"{code_block}\n\n"
             "### Linux\n\nRun the command."
         ),
         media=[],
@@ -415,6 +424,8 @@ async def test_upload_document_preserves_markdown_heading_paths(
     embedding_contents = helper.vec_db.insert_batch.await_args.kwargs[
         "embedding_contents"
     ]
+    assert len(contents) == 3
+    assert code_block in contents[1]
     assert "Handbook > Installation\n\n### Linux" in contents[2]
     assert embedding_contents[2] == f"guide\n\n{contents[2]}"
 
