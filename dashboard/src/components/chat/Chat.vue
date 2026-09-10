@@ -2397,7 +2397,6 @@ kbd {
 @media (min-width: 761px) {
   .chat-main.has-side-panel {
     --chat-content-width: calc(100% - 40px);
-    --chat-content-max-width: 100%;
   }
 
   .messages-list-shell,
