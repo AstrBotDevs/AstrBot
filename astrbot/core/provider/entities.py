@@ -81,6 +81,16 @@ class ToolCallsResult:
     def to_openai_messages_model(
         self,
     ) -> list[AssistantMessageSegment | ToolCallMessageSegment]:
+        # A tool-call pair must be marked temp together (or not at all): a
+        # partial mark would persist a dangling assistant(tool_calls) that
+        # providers reject on the next round.
+        info_is_temp = self.tool_calls_info._no_save
+        if any(message._no_save != info_is_temp for message in self.tool_calls_result):
+            raise ValueError(
+                "ToolCallsResult pair must be marked temp together: call "
+                "mark_as_temp() on both tool_calls_info and every message in "
+                "tool_calls_result, or on neither."
+            )
         return [
             self.tool_calls_info,
             *self.tool_calls_result,

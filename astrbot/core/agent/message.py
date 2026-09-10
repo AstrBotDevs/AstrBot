@@ -14,6 +14,7 @@ from pydantic import (
 from pydantic_core import core_schema
 
 ContentPartT = TypeVar("ContentPartT", bound="ContentPart")
+MessageT = TypeVar("MessageT", bound="Message")
 
 
 class ContentPart(BaseModel):
@@ -214,6 +215,19 @@ class Message(BaseModel):
 
     _no_save: bool = PrivateAttr(default=False)
     _checkpoint_after: CheckpointData | None = PrivateAttr(default=None)
+
+    def mark_as_temp(self: MessageT) -> MessageT:
+        """Mark this message as provider-facing only, not persisted.
+
+        Injected pairs (e.g. fake tool-call results) should mark both the
+        assistant and tool messages so no dangling tool message remains in
+        history.
+
+        Returns:
+            Self, for method chaining.
+        """
+        self._no_save = True
+        return self
 
     @model_validator(mode="after")
     def check_content_required(self):

@@ -315,6 +315,20 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         ):
             m = await self._assemble_request_context_for_provider(request)
             messages.append(Message.model_validate(m))
+        # Plugin-injected tool call results (on_llm_request → req.append_tool_calls_result)
+        # follow the current user message so the assistant(tool_calls) → tool(result)
+        # block belongs to the current turn. Providers consume the same
+        # ProviderRequest.tool_calls_result in this order (see text_chat payload
+        # assembly), so binding it here keeps the in-run context identical to what
+        # a plain provider call would send.
+        if request.tool_calls_result:
+            tool_call_results = (
+                request.tool_calls_result
+                if isinstance(request.tool_calls_result, list)
+                else [request.tool_calls_result]
+            )
+            for tcr in tool_call_results:
+                messages.extend(tcr.to_openai_messages_model())
         if request.system_prompt:
             messages.insert(
                 0,
