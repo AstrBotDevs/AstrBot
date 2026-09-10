@@ -152,6 +152,11 @@
         <div v-else-if="fileError" class="workspace-preview-state">
           {{ fileError }}
         </div>
+        <div
+          v-else-if="highlightedContent"
+          class="workspace-preview-content"
+          v-html="highlightedContent"
+        />
         <pre
           v-else
           class="workspace-preview-content"
@@ -194,6 +199,11 @@
           <div v-else-if="fileError" class="workspace-preview-state">
             {{ fileError }}
           </div>
+          <div
+            v-else-if="highlightedContent"
+            class="workspace-preview-content workspace-dialog-preview-content"
+            v-html="highlightedContent"
+          />
           <pre
             v-else
             class="workspace-preview-content workspace-dialog-preview-content"
@@ -207,6 +217,7 @@
 <script setup lang="ts">
 import "@/components/chat/chatPanelTransition.css";
 import { computed, ref, watch } from "vue";
+import { useTheme } from "vuetify";
 import {
   ChevronDown,
   ChevronRight,
@@ -244,6 +255,7 @@ const emit = defineEmits<{
 }>();
 
 const { tm } = useModuleI18n("features/chat");
+const theme = useTheme();
 const rootEntries = ref<WorkspaceEntry[]>([]);
 const loadedProjectId = ref("");
 const rootLoading = ref(false);
@@ -251,6 +263,7 @@ const treeError = ref("");
 const filterQuery = ref("");
 const selectedFilePath = ref("");
 const fileContent = ref("");
+const highlightedContent = ref("");
 const fileLoading = ref(false);
 const fileError = ref("");
 const fileDownloading = ref(false);
@@ -295,6 +308,39 @@ watch(
     }
   },
   { immediate: true },
+);
+
+watch(
+  [fileContent, selectedFilePath, () => theme.global.current.value.dark],
+  async ([content, path, dark], _, onCleanup) => {
+    let cancelled = false;
+    onCleanup(() => {
+      cancelled = true;
+    });
+    highlightedContent.value = "";
+    if (!content || !path) return;
+
+    try {
+      const { getShikiHighlighter, renderShikiCode } = await import(
+        "@/utils/shiki"
+      );
+      const highlighter = await getShikiHighlighter();
+      if (cancelled) return;
+
+      const name = path.split("/").pop()?.toLowerCase() || "";
+      const language = name.startsWith("dockerfile.")
+        ? "dockerfile"
+        : name.split(".").pop();
+      highlightedContent.value = renderShikiCode(
+        highlighter,
+        content,
+        language,
+        dark ? "dark" : "light",
+      );
+    } catch (error) {
+      if (!cancelled) console.warn("Failed to highlight workspace file", error);
+    }
+  },
 );
 
 function close() {
@@ -680,6 +726,15 @@ function formatSize(size: number) {
   line-height: 1.55;
   tab-size: 2;
   white-space: pre;
+}
+
+.workspace-preview-content :deep(pre),
+.workspace-preview-content :deep(code) {
+  margin: 0;
+  padding: 0;
+  font: inherit;
+  tab-size: inherit;
+  background: transparent !important;
 }
 
 .workspace-dialog-preview {
