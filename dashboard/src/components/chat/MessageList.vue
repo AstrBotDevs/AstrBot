@@ -592,6 +592,7 @@ function formatDuration(seconds: number) {
 
 <style scoped>
 .message-list-root {
+  container: chat-messages / inline-size;
   --chat-border: rgba(var(--v-border-color), 0.16);
   --chat-muted: rgba(var(--v-theme-on-surface), 0.62);
   width: 100%;
@@ -863,6 +864,16 @@ function formatDuration(seconds: number) {
   max-height: 88vh;
   border-radius: 8px;
   object-fit: contain;
+}
+
+@container chat-messages (max-width: 600px) {
+  .message-row.from-bot .bot-avatar {
+    display: none;
+  }
+
+  .message-bubble.bot {
+    padding-inline: 0;
+  }
 }
 
 @media (max-width: 760px) {

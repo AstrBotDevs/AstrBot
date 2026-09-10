@@ -97,7 +97,7 @@
       <div class="composer-row">
         <div class="input-field-shell">
           <textarea
-            rows="2"
+            rows="1"
             ref="inputField"
             v-model="localPrompt"
             @keydown="handleKeyDown"
@@ -131,7 +131,7 @@
                 class="input-neutral-btn input-outline-control"
                 :aria-label="tm('input.upload')"
               >
-                <Plus :size="20" :stroke-width="1.75" />
+                <Plus :size="18" :stroke-width="1.75" />
               </v-btn>
             </template>
 
@@ -202,8 +202,8 @@
               >
                 <v-progress-circular
                   :model-value="tokenUsagePercent"
-                  size="24"
-                  width="2.5"
+                  size="20"
+                  width="2"
                   class="token-usage-progress"
                 />
               </span>
@@ -216,8 +216,8 @@
             variant="text"
             class="record-btn input-icon-btn"
           >
-            <CircleStop v-if="isRecording" :size="20" :stroke-width="1.75" />
-            <Mic v-else :size="20" :stroke-width="1.75" />
+            <CircleStop v-if="isRecording" :size="18" :stroke-width="1.75" />
+            <Mic v-else :size="18" :stroke-width="1.75" />
             <v-tooltip activator="parent" location="top">
               {{
                 isRecording ? tm("voice.speaking") : tm("voice.startRecording")
@@ -232,7 +232,7 @@
             color="primary"
             class="send-btn input-action-btn"
           >
-            <Square :size="16" :stroke-width="1.75" />
+            <Square :size="14" :stroke-width="1.75" />
             <v-tooltip activator="parent" location="top">
               {{ tm("input.stopGenerating") }}
             </v-tooltip>
@@ -247,7 +247,7 @@
             :aria-label="tm('input.send')"
             class="send-btn input-action-btn"
           >
-            <ArrowUp :size="20" :stroke-width="1.75" />
+            <ArrowUp :size="18" :stroke-width="1.75" />
           </v-btn>
         </div>
       </div>
@@ -573,7 +573,7 @@ function autoResize() {
     window.matchMedia("(max-width: 768px)").matches;
   const viewportHeight =
     typeof window !== "undefined" ? window.innerHeight : 900;
-  const minHeight = 48;
+  const minHeight = 36;
   const maxHeight = isMobileViewport
     ? Math.min(220, Math.round(viewportHeight * 0.42))
     : Math.min(420, Math.round(viewportHeight * 0.48));
@@ -877,9 +877,9 @@ defineExpose({
 .input-action-btn,
 .input-outline-control,
 .input-icon-btn {
-  width: 32px !important;
-  height: 32px !important;
-  min-width: 32px !important;
+  width: 28px !important;
+  height: 28px !important;
+  min-width: 28px !important;
 }
 
 .input-area.is-dark .input-action-btn:not(.v-btn--disabled) {
@@ -901,12 +901,12 @@ defineExpose({
 }
 
 .token-usage-indicator {
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  flex: 0 0 24px;
+  flex: 0 0 20px;
   border-radius: 50%;
   color: var(--token-usage-color);
 }
@@ -966,10 +966,10 @@ defineExpose({
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  min-height: 120px;
-  padding: 10px 18px !important;
+  min-height: 96px;
+  padding: 8px 14px !important;
   border: 1px solid #d9d9d9;
-  border-radius: 24px !important;
+  border-radius: 20px !important;
   background: #fff !important;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08) !important;
 }
@@ -994,7 +994,7 @@ defineExpose({
     "field field field"
     "left . right";
   align-items: center;
-  gap: 6px 10px;
+  gap: 4px 8px;
 }
 
 .input-field-shell {
@@ -1007,7 +1007,7 @@ defineExpose({
   width: 100%;
   box-sizing: border-box;
   min-width: 0;
-  min-height: 48px;
+  min-height: 36px;
   max-height: min(48vh, 420px);
   margin: 0;
   padding: 4px 2px;
@@ -1018,8 +1018,8 @@ defineExpose({
   resize: none;
   outline: none;
   font-family: inherit;
-  font-size: 16px;
-  line-height: 24px;
+  font-size: 14px;
+  line-height: 22px;
   overflow-y: auto;
   overflow-wrap: break-word;
 }
@@ -1052,13 +1052,13 @@ defineExpose({
   align-items: center;
   justify-content: flex-end;
   flex-shrink: 0;
-  gap: 10px;
+  gap: 8px;
   margin-top: 0 !important;
 }
 
 .input-right-actions :deep(.provider-chip) {
-  height: 36px !important;
-  min-height: 36px !important;
+  height: 28px !important;
+  min-height: 28px !important;
   border-radius: 999px !important;
 }
 
@@ -1305,9 +1305,8 @@ defineExpose({
   .input-container {
     width: calc(100% - 20px) !important;
     max-width: 100% !important;
-    min-height: 112px;
     margin: 0 10px calc(8px + env(safe-area-inset-bottom)) !important;
-    padding: 10px !important;
+    padding: 8px 10px !important;
   }
 
   .composer-row {
@@ -1326,12 +1325,13 @@ defineExpose({
   }
 
   .chat-textarea {
+    font-size: 16px;
     max-height: min(42vh, 220px);
   }
 
   :deep(.provider-chip) {
-    height: 36px !important;
-    min-height: 36px !important;
+    height: 28px !important;
+    min-height: 28px !important;
     border-radius: 999px !important;
     padding: 0 12px !important;
     font-size: 14px !important;
