@@ -1465,9 +1465,6 @@ async def build_main_agent(
                 return None
 
             req.prompt = event.message_str[len(config.provider_wake_prefix) :]
-            conversation = await _get_session_conv(event, plugin_context)
-            req.conversation = conversation
-            req.contexts = json.loads(conversation.history)
 
             # media files attachments
             for comp in event.message_obj.message:
@@ -1585,6 +1582,9 @@ async def build_main_agent(
                             exc_info=True,
                         )
 
+            conversation = await _get_session_conv(event, plugin_context)
+            req.conversation = conversation
+            req.contexts = json.loads(conversation.history)
             event.set_extra("provider_request", req)
 
     if isinstance(req.contexts, str):
