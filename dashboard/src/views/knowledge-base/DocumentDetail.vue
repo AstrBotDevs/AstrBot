@@ -398,6 +398,7 @@ const deleteChunk = async (chunk: any) => {
 const getFileIcon = (fileType: string) => {
   const type = fileType?.toLowerCase() || ''
   if (type.includes('pdf')) return 'mdi-file-pdf-box'
+  if (type.includes('ppt')) return 'mdi-file-powerpoint-box'
   if (type.includes('epub')) return 'mdi-book-open-page-variant'
   if (type.includes('md')) return 'mdi-language-markdown'
   if (type.includes('txt')) return 'mdi-file-document-outline'

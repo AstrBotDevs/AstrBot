@@ -282,6 +282,18 @@ class KBHelper:
                     parse_result = await parser.parse(file_content, file_name)
                 except KnowledgeBaseUploadError:
                     raise
+                except ValueError as exc:
+                    message = str(exc)
+                    if not message.startswith("暂时不支持的文件格式"):
+                        message = (
+                            "文档解析失败：无法读取或解析上传文件。"
+                            "请确认文件格式受支持且文件内容未损坏。"
+                        )
+                    raise KnowledgeBaseUploadError(
+                        stage="parsing",
+                        user_message=message,
+                        details={"file_name": file_name},
+                    ) from exc
                 except Exception as exc:
                     raise KnowledgeBaseUploadError(
                         stage="parsing",
@@ -334,6 +346,7 @@ class KBHelper:
                         ".md",
                         ".mdx",
                         ".mkd",
+                        ".pptx",
                         ".rst",
                         ".xls",
                         ".xlsx",
