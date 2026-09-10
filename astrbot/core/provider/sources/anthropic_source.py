@@ -809,6 +809,8 @@ class ProviderAnthropic(Provider):
         model = model or self.get_model()
 
         payloads = {"messages": new_messages, "model": model}
+        if extra_headers := kwargs.get("extra_headers"):
+            payloads["extra_headers"] = extra_headers
         if func_tool and not func_tool.empty():
             payloads["tool_choice"] = tool_choice
 
@@ -881,6 +883,8 @@ class ProviderAnthropic(Provider):
         model = model or self.get_model()
 
         payloads = {"messages": new_messages, "model": model}
+        if extra_headers := kwargs.get("extra_headers"):
+            payloads["extra_headers"] = extra_headers
         if func_tool and not func_tool.empty():
             payloads["tool_choice"] = tool_choice
 
