@@ -92,10 +92,11 @@ Permission notes:
 
 - In private chat, regular users can use it by default.
 - Group chats require AstrBot administrator permission by default, independently of session isolation. This refers to configured administrator IDs, not automatically detected group administrators.
-- Enable **Allow Non-Administrators to Start Group Conversations** under **Platform Configuration → General** to allow members. With shared context this affects the whole group; with member isolation it affects only the sender's conversation.
-- Additional command management restrictions still apply. The setting does not bypass disabled commands or administrator-only command permissions.
+- In WebUI, open **Extensions → Handlers → Command** and select **Show system plugins commands**. Configure `new` and `reset` individually using **Everyone**, **Administrators Only**, or **Administrators Only in Group Chats**. These permissions apply across all configuration profiles; explicitly saved permissions take precedence over command defaults.
+- The default is **Administrators Only in Group Chats**. Select **Everyone** to allow regular group members. With **Isolate Conversation** disabled, the command switches the conversation for the whole group; with it enabled, it affects only the sender's conversation.
+- Command disabling and renaming are also managed here.
 
-Upgrade note: legacy reset scene permissions are no longer used. The new setting defaults to disabled, including for previously isolated group sessions; explicitly enable it to let regular group members start conversations. Existing session isolation settings are preserved.
+Upgrade note: legacy reset scene permissions are no longer used. Unless command permissions were explicitly configured, an administrator must set the relevant command to **Everyone** in command management to let regular group members start conversations. Existing **Isolate Conversation** settings are preserved.
 
 ### `/stop`
 
