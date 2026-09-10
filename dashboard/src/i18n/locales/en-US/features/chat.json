@@ -1,6 +1,18 @@
 {
   "title": "Let's Chat!",
   "subtitle": "Chat with AI Assistant",
+  "settings": {
+    "general": "General",
+    "chat": "Chat",
+    "appearance": "Appearance",
+    "light": "Light",
+    "dark": "Dark",
+    "system": "System",
+    "streaming": "Streaming output",
+    "streamingHint": "Show responses as they are generated. Applies only to ChatUI.",
+    "reasoning": "Show reasoning",
+    "reasoningHint": "Display reasoning returned by the model. Applies only to ChatUI."
+  },
   "input": {
     "placeholder": "Ask anything...",
     "projectPlaceholder": "What should we work on next?",
@@ -18,7 +30,19 @@
     "assistant": "Assistant",
     "system": "System",
     "error": "Error Message",
-    "loading": "Thinking..."
+    "loading": "Thinking...",
+    "loadingVariants": [
+      "(｡•̀ᴗ-)✧ Thinking...",
+      "(・_・ヾ Pondering...",
+      "(๑•̀ㅂ•́)و Gathering my thoughts...",
+      "(｡･ω･｡) Looking for inspiration...",
+      "( •̀ ω •́ )✧ Thinking it through...",
+      "(つ•̀ω•́)つ Finding the right words...",
+      "(・・。)ゞ Connecting the dots...",
+      "(ง •_•)ง Working it out...",
+      "( ˘ω˘ ) Exploring possibilities...",
+      "(ﾉ◕ヮ◕)ﾉ Brewing an answer..."
+    ]
   },
   "voice": {
     "start": "Start Recording",
@@ -38,6 +62,7 @@
     "examples": "Example Questions"
   },
   "actions": {
+    "scrollToBottom": "Scroll to bottom",
     "copy": "Copy",
     "regenerate": "Regenerate",
     "retry": "Retry",

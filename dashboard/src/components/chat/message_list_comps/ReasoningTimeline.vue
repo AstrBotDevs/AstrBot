@@ -21,13 +21,14 @@
         <MarkdownRender
           v-if="entry.kind === 'think'"
           :content="entry.think || ''"
-          class="reasoning-text markdown-content"
+          class="chat-markdown reasoning-text markdown-content"
           :final="!isStreaming"
           :smooth-streaming="isStreaming ? 'auto' : false"
           :fade="false"
           :typewriter="false"
           :is-dark="isDark"
           :max-live-nodes="MARKDOWN_RENDER_MAX_LIVE_NODES"
+          :style="CHAT_MARKDOWN_HEADING_STYLE"
         />
 
         <div v-else-if="entry.tool" class="reasoning-tool-call-block">
@@ -48,11 +49,7 @@
               />
             </template>
           </ToolCallItem>
-          <ToolCallCard
-            v-else
-            :tool-call="entry.tool"
-            :is-dark="isDark"
-          />
+          <ToolCallCard v-else :tool-call="entry.tool" :is-dark="isDark" />
         </div>
       </div>
     </div>
@@ -62,7 +59,10 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { MarkdownRender } from "markstream-vue";
-import { MARKDOWN_RENDER_MAX_LIVE_NODES } from "@/components/chat/markdownRenderConfig";
+import {
+  CHAT_MARKDOWN_HEADING_STYLE,
+  MARKDOWN_RENDER_MAX_LIVE_NODES,
+} from "@/components/chat/markdownRenderConfig";
 import IPythonToolBlock from "@/components/chat/message_list_comps/IPythonToolBlock.vue";
 import ToolCallCard from "@/components/chat/message_list_comps/ToolCallCard.vue";
 import ToolCallItem from "@/components/chat/message_list_comps/ToolCallItem.vue";
@@ -123,7 +123,9 @@ const timelineEntries = computed<TimelineEntry[]>(() => {
     part.tool_calls.forEach((tool, toolIndex) => {
       const normalizedTool = normalizeToolCall(tool);
       entries.push({
-        key: `tool-${String(tool.id || tool.name || `${partIndex}-${toolIndex}`)}`,
+        key: `tool-${String(
+          tool.id || tool.name || `${partIndex}-${toolIndex}`,
+        )}`,
         kind: "tool_call",
         title: tm("reasoning.toolUsed"),
         tool: normalizedTool,
@@ -136,7 +138,9 @@ const timelineEntries = computed<TimelineEntry[]>(() => {
 
 function normalizeToolCall(tool: Record<string, unknown>) {
   const normalized = { ...tool };
-  normalized.args = parseJsonSafe(normalized.args ?? normalized.arguments ?? {});
+  normalized.args = parseJsonSafe(
+    normalized.args ?? normalized.arguments ?? {},
+  );
   normalized.result = parseJsonSafe(normalized.result);
   normalized.ts = normalized.ts ?? Date.now() / 1000;
   if (normalized.result && typeof normalized.result === "object") {

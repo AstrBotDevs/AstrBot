@@ -29,11 +29,9 @@
               class="message-bubble"
               :class="{ user: isUserMessage(msg), bot: !isUserMessage(msg) }"
             >
-              <div v-if="messageContent(msg).isLoading" class="loading-message">
-                {{ tm("message.loading") }}
-              </div>
-
-              <template v-else>
+              <MessageContentTransition
+                :loading="messageContent(msg).isLoading"
+              >
                 <template
                   v-for="(block, blockIndex) in renderBlocks(msg)"
                   :key="`${msgIndex}-block-${blockIndex}-${block.kind}`"
@@ -161,7 +159,7 @@
                     </template>
                   </template>
                 </template>
-              </template>
+              </MessageContentTransition>
             </div>
           </div>
         </div>
@@ -176,18 +174,16 @@
         :staged-audio-url="stagedAudioUrl"
         :staged-files="stagedNonImageFiles"
         :disabled="sending || initializing"
-        :enable-streaming="enableStreaming"
-        :enable-reasoning="enableReasoning"
+        show-settings
         :is-recording="false"
         :is-running="Boolean(currSessionId && isSessionRunning(currSessionId))"
         :session-id="currSessionId || null"
         :current-session="currentSession"
         :config-id="configId || 'default'"
-        send-shortcut="enter"
+        :send-shortcut="sendShortcut"
         @send="sendCurrentMessage"
         @stop="stopCurrentSession"
-        @toggle-streaming="enableStreaming = !enableStreaming"
-        @toggle-reasoning="enableReasoning = !enableReasoning"
+        @open-settings="settingsOpen = true"
         @remove-image="removeImage"
         @remove-audio="removeAudio"
         @remove-file="removeFile"
@@ -195,6 +191,14 @@
         @file-select="handleFilesSelected"
       />
     </section>
+
+    <ChatSettingsDialog
+      v-model="settingsOpen"
+      v-model:enable-streaming="enableStreaming"
+      v-model:enable-reasoning="enableReasoning"
+      v-model:send-shortcut="sendShortcut"
+      v-model:transport-mode="transportMode"
+    />
 
     <v-overlay
       v-model="imagePreview.visible"
@@ -208,6 +212,7 @@
 </template>
 
 <script setup lang="ts">
+import MessageContentTransition from "@/components/chat/MessageContentTransition.vue";
 import {
   computed,
   nextTick,
@@ -215,8 +220,10 @@ import {
   onMounted,
   reactive,
   ref,
+  watch,
 } from "vue";
 import { chatApi, configRouteApi, fileApi } from "@/api/v1";
+import ChatSettingsDialog from "@/components/chat/ChatSettingsDialog.vue";
 import ChatInput from "@/components/chat/ChatInput.vue";
 import { useDragUpload } from "@/composables/useDragUpload";
 import {
@@ -259,6 +266,8 @@ const currSessionId = ref("");
 const currentSession = ref<Session | null>(null);
 const draft = ref("");
 const initializing = ref(false);
+const settingsOpen = ref(false);
+const sendShortcut = ref<"enter" | "shift_enter">("enter");
 const enableStreaming = ref(true);
 const enableReasoning = ref(true);
 const shouldStickToBottom = ref(true);
@@ -305,11 +314,15 @@ const {
   },
 });
 
-const transportMode = computed<TransportMode>(() =>
+const transportMode = ref<TransportMode>(
   (localStorage.getItem("chat.transportMode") as TransportMode) === "websocket"
     ? "websocket"
     : "sse",
 );
+
+watch(transportMode, (mode) => {
+  localStorage.setItem("chat.transportMode", mode);
+});
 
 onMounted(async () => {
   await ensureSession();
@@ -620,8 +633,8 @@ function closeImage() {
 
 .message-bubble.user {
   padding: 12px 18px;
-  border-radius: 1.5rem;
-  background: rgba(var(--v-theme-primary), 0.12);
+  border-radius: 16px;
+  background: rgba(var(--v-theme-primary), 0.16);
 }
 
 .message-bubble.bot {
@@ -633,7 +646,6 @@ function closeImage() {
   white-space: pre-wrap;
 }
 
-.loading-message,
 .tool-call-inline-status {
   color: var(--standalone-muted);
 }

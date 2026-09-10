@@ -1,24 +1,9 @@
 <template>
-  <div
-    class="input-area fade-in"
-    :class="{ 'is-dark': isDark }"
-  >
+  <div class="input-area fade-in" :class="{ 'is-dark': isDark }">
     <div
       class="input-container"
       :class="{
-        'is-multiline': inputIsMultiline,
         'has-attachments': hasStagedAttachments,
-      }"
-      :style="{
-        width: 'var(--chat-content-width, 76%)',
-        maxWidth: 'var(--chat-content-max-width, 760px)',
-        margin: '0 auto',
-        border: isDark ? 'none' : '1px solid #e0e0e0',
-        borderRadius: '24px',
-        boxShadow: isDark ? 'none' : '0px 2px 2px rgba(0, 0, 0, 0.1)',
-        backgroundColor: isDark ? '#2d2d2d' : '#fff',
-        position: 'relative',
-        transition: 'min-height 0.2s ease, padding 0.2s ease',
       }"
     >
       <!-- 引用预览区 -->
@@ -110,6 +95,27 @@
       />
 
       <div class="composer-row">
+        <div class="input-field-shell">
+          <textarea
+            rows="1"
+            ref="inputField"
+            v-model="localPrompt"
+            @keydown="handleKeyDown"
+            @input="handleInput"
+            @compositionstart="handleCompositionStart"
+            @compositionend="handleCompositionEnd"
+            @compositioncancel="handleCompositionEnd"
+            @blur="handleBlur"
+            @paste="handlePaste"
+            :disabled="disabled"
+            :placeholder="props.placeholder || tm('input.placeholder')"
+            class="chat-textarea"
+            autocomplete="off"
+            autocorrect="off"
+            autocapitalize="sentences"
+            spellcheck="false"
+          ></textarea>
+        </div>
         <div class="input-left-actions">
           <!-- Settings Menu -->
           <StyledMenu
@@ -120,10 +126,13 @@
             <template v-slot:activator="{ props: activatorProps }">
               <v-btn
                 v-bind="activatorProps"
-                icon="mdi-plus"
-                variant="outlined"
+                icon
+                variant="text"
                 class="input-neutral-btn input-outline-control"
-              />
+                :aria-label="tm('input.upload')"
+              >
+                <Plus :size="18" :stroke-width="1.75" />
+              </v-btn>
             </template>
 
             <!-- Upload Files -->
@@ -149,82 +158,20 @@
               @config-changed="handleConfigChange"
             />
 
-            <!-- Streaming Toggle in Menu -->
             <v-list-item
+              v-if="showSettings"
               class="styled-menu-item"
               rounded="md"
-              @click="$emit('toggleStreaming')"
+              @click="$emit('openSettings')"
             >
-              <template v-slot:prepend>
-                <v-icon icon="mdi-lightning-bolt" size="small"></v-icon>
+              <template #prepend>
+                <v-icon icon="mdi-cog-outline" size="small" />
               </template>
-              <v-list-item-title>
-                {{
-                  enableStreaming
-                    ? tm("streaming.enabled")
-                    : tm("streaming.disabled")
-                }}
-              </v-list-item-title>
-            </v-list-item>
-            <v-list-item
-              class="styled-menu-item"
-              rounded="md"
-              @click="$emit('toggleReasoning')"
-            >
-              <template v-slot:prepend>
-                <v-icon icon="mdi-brain" size="small"></v-icon>
-              </template>
-              <v-list-item-title>
-                {{
-                  enableReasoning
-                    ? tm("reasoning.enabled")
-                    : tm("reasoning.disabled")
-                }}
-              </v-list-item-title>
+              <v-list-item-title>{{
+                t("core.common.settings")
+              }}</v-list-item-title>
             </v-list-item>
           </StyledMenu>
-
-        </div>
-        <div class="input-field-shell">
-          <input
-            v-if="!inputIsMultiline"
-            ref="inputField"
-            v-model="localPrompt"
-            @keydown="handleKeyDown"
-            @input="handleInput"
-            @compositionstart="handleCompositionStart"
-            @compositionend="handleCompositionEnd"
-            @compositioncancel="handleCompositionEnd"
-            @blur="handleBlur"
-            @paste="handlePaste"
-            :disabled="disabled"
-            :placeholder="props.placeholder || tm('input.placeholder')"
-            class="chat-text-input"
-            autocomplete="off"
-            autocorrect="off"
-            autocapitalize="sentences"
-            spellcheck="false"
-            type="text"
-          />
-          <textarea
-            v-else
-            ref="inputField"
-            v-model="localPrompt"
-            @keydown="handleKeyDown"
-            @input="handleInput"
-            @compositionstart="handleCompositionStart"
-            @compositionend="handleCompositionEnd"
-            @compositioncancel="handleCompositionEnd"
-            @blur="handleBlur"
-            @paste="handlePaste"
-            :disabled="disabled"
-            :placeholder="props.placeholder || tm('input.placeholder')"
-            class="chat-textarea"
-            autocomplete="off"
-            autocorrect="off"
-            autocapitalize="sentences"
-            spellcheck="false"
-          ></textarea>
         </div>
         <div class="input-right-actions">
           <input
@@ -246,11 +193,7 @@
             class="mr-1"
             width="1.5"
           />
-          <v-tooltip
-            v-if="tokenUsageVisible"
-            location="top"
-            max-width="320"
-          >
+          <v-tooltip v-if="tokenUsageVisible" location="top" max-width="320">
             <template #activator="{ props: tokenTooltipProps }">
               <span
                 v-bind="tokenTooltipProps"
@@ -259,36 +202,22 @@
               >
                 <v-progress-circular
                   :model-value="tokenUsagePercent"
-                  size="24"
-                  width="2.5"
+                  size="20"
+                  width="2"
                   class="token-usage-progress"
                 />
               </span>
             </template>
             <span>{{ props.tokenUsage?.tooltip }}</span>
           </v-tooltip>
-          <!-- <v-btn @click="$emit('openLiveMode')"
-                        icon
-                        variant="text"
-                        color="purple" 
-                        size="small"
-                    >
-                        <v-icon icon="mdi-phone-in-talk" variant="text" plain></v-icon>
-                        <v-tooltip activator="parent" location="top">
-                            {{ tm('voice.liveMode') }}
-                        </v-tooltip>
-                    </v-btn> -->
           <v-btn
             @click="handleRecordClick"
             icon
             variant="text"
             class="record-btn input-icon-btn"
           >
-            <v-icon
-              :icon="isRecording ? 'mdi-stop-circle' : 'mdi-microphone'"
-              variant="text"
-              plain
-            ></v-icon>
+            <CircleStop v-if="isRecording" :size="18" :stroke-width="1.75" />
+            <Mic v-else :size="18" :stroke-width="1.75" />
             <v-tooltip activator="parent" location="top">
               {{
                 isRecording ? tm("voice.speaking") : tm("voice.startRecording")
@@ -299,10 +228,11 @@
             icon
             v-if="isRunning && !canSend"
             @click="$emit('stop')"
-            variant="tonal"
+            variant="flat"
+            color="primary"
             class="send-btn input-action-btn"
           >
-            <v-icon icon="mdi-stop" variant="text" plain></v-icon>
+            <Square :size="14" :stroke-width="1.75" />
             <v-tooltip activator="parent" location="top">
               {{ tm("input.stopGenerating") }}
             </v-tooltip>
@@ -310,11 +240,15 @@
           <v-btn
             v-else
             @click="$emit('send')"
-            icon="mdi-arrow-up"
-            variant="tonal"
+            icon
+            variant="flat"
+            color="primary"
             :disabled="!canSend"
+            :aria-label="tm('input.send')"
             class="send-btn input-action-btn"
-          />
+          >
+            <ArrowUp :size="18" :stroke-width="1.75" />
+          </v-btn>
         </div>
       </div>
     </div>
@@ -331,7 +265,8 @@ import {
   onBeforeUnmount,
 } from "vue";
 import { useDisplay } from "vuetify";
-import { useModuleI18n } from "@/i18n/composables";
+import { ArrowUp, CircleStop, Mic, Plus, Square } from "@lucide/vue";
+import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { useCustomizerStore } from "@/stores/customizer";
 import { isComposingEnter } from "@/utils/imeInput.mjs";
 import { commandApi } from "@/api/v1";
@@ -370,8 +305,7 @@ interface Props {
   stagedAudioUrl: string;
   stagedFiles?: StagedFileInfo[];
   disabled: boolean;
-  enableStreaming: boolean;
-  enableReasoning: boolean;
+  showSettings?: boolean;
   isRecording: boolean;
   isRunning: boolean;
   sessionId?: string | null;
@@ -392,6 +326,7 @@ const props = withDefaults(defineProps<Props>(), {
   replyTo: null,
   sendShortcut: "shift_enter",
   showProviderSelector: true,
+  showSettings: false,
   tokenUsage: null,
 });
 
@@ -399,8 +334,7 @@ const emit = defineEmits<{
   "update:prompt": [value: string];
   send: [];
   stop: [];
-  toggleStreaming: [];
-  toggleReasoning: [];
+  openSettings: [];
   removeImage: [index: number];
   removeAudio: [];
   removeFile: [index: number];
@@ -413,11 +347,12 @@ const emit = defineEmits<{
 }>();
 
 const { tm } = useModuleI18n("features/chat");
+const { t } = useI18n();
 const isDark = computed(
   () => useCustomizerStore().uiTheme === "PurpleThemeDark",
 );
 
-const inputField = ref<HTMLInputElement | HTMLTextAreaElement | null>(null);
+const inputField = ref<HTMLTextAreaElement | null>(null);
 const imageInputRef = ref<HTMLInputElement | null>(null);
 const providerModelMenuRef = ref<InstanceType<typeof ProviderModelMenu> | null>(
   null,
@@ -425,7 +360,6 @@ const providerModelMenuRef = ref<InstanceType<typeof ProviderModelMenu> | null>(
 const providerSelectorAvailable = ref(true);
 const isReplyClosing = ref(false);
 const isComposing = ref(false);
-const inputIsMultiline = ref(false);
 const lastCompositionEndAt = ref<number | null>(null);
 const longPasteThreshold = 10_000;
 
@@ -530,7 +464,9 @@ const filteredCommands = computed(() => {
 
   for (const cmd of enabledCommands.value) {
     const commandText = normalizeCommandSearchText(cmd.effective_command);
-    const pluginText = normalizeCommandSearchText(cmd.plugin_display_name || "");
+    const pluginText = normalizeCommandSearchText(
+      cmd.plugin_display_name || "",
+    );
     const descriptionText = normalizeCommandSearchText(cmd.description || "");
     const matchesCommand = commandText.includes(query);
     const matchesMetadata =
@@ -632,77 +568,24 @@ const tokenUsageColor = computed(() =>
 function autoResize() {
   const el = inputField.value;
   if (!el) return;
-  if (!(el instanceof HTMLTextAreaElement)) {
-    const shouldExpand =
-      localPrompt.value.includes("\n") ||
-      (el.clientWidth > 0 && el.scrollWidth > el.clientWidth + 4);
-    if (shouldExpand) {
-      const cursor = el.selectionStart ?? localPrompt.value.length;
-      inputIsMultiline.value = true;
-      nextTick(() => {
-        inputField.value?.focus();
-        inputField.value?.setSelectionRange(cursor, cursor);
-        autoResize();
-      });
-    }
-    return;
-  }
   const isMobileViewport =
     typeof window !== "undefined" &&
     window.matchMedia("(max-width: 768px)").matches;
   const viewportHeight =
     typeof window !== "undefined" ? window.innerHeight : 900;
-  const minHeight = isMobileViewport ? 56 : 52;
+  const minHeight = 48;
   const maxHeight = isMobileViewport
     ? Math.min(220, Math.round(viewportHeight * 0.42))
     : Math.min(420, Math.round(viewportHeight * 0.48));
-  if (!localPrompt.value) {
-    inputIsMultiline.value = false;
-    el.style.height = minHeight + "px";
-    return;
-  }
   el.style.height = "auto";
-  el.style.setProperty("min-height", "0", "important");
-  const measuredHeight = el.scrollHeight;
-  el.style.removeProperty("min-height");
-  const computed = getComputedStyle(el);
-  let lineHeight = parseFloat(computed.lineHeight);
-  if (!Number.isFinite(lineHeight)) {
-    lineHeight = parseFloat(computed.fontSize) * 1.2;
-  }
-  const paddingVertical =
-    parseFloat(computed.paddingTop) + parseFloat(computed.paddingBottom);
-  const shouldUseMultiline =
-    localPrompt.value.includes("\n") ||
-    measuredHeight > lineHeight + paddingVertical + 0.5;
-  if (inputIsMultiline.value !== shouldUseMultiline) {
-    const cursor = el.selectionStart ?? localPrompt.value.length;
-    inputIsMultiline.value = shouldUseMultiline;
-    nextTick(() => {
-      inputField.value?.focus();
-      inputField.value?.setSelectionRange(cursor, cursor);
-      autoResize();
-    });
-    return;
-  }
-  el.style.height = shouldUseMultiline
-    ? Math.min(Math.max(measuredHeight, minHeight), maxHeight) + "px"
-    : minHeight + "px";
+  el.style.height =
+    Math.min(Math.max(el.scrollHeight, minHeight), maxHeight) + "px";
 }
 
 watch(
   () => props.prompt,
-  (value) => {
-    if (!value) {
-      inputIsMultiline.value = false;
-    }
-    nextTick(autoResize);
-  },
+  () => nextTick(autoResize),
 );
-
-watch(inputIsMultiline, () => {
-  nextTick(autoResize);
-});
 
 function handleKeyDown(e: KeyboardEvent) {
   // 命令提示激活时，拦截方向键和 Enter/Esc
@@ -771,22 +654,6 @@ function handleKeyDown(e: KeyboardEvent) {
     if (canSend.value) {
       emit("send");
     }
-    return;
-  }
-
-  if (!inputIsMultiline.value) {
-    e.preventDefault();
-    const target = e.target as HTMLInputElement;
-    const start = target.selectionStart ?? localPrompt.value.length;
-    const end = target.selectionEnd ?? start;
-    localPrompt.value =
-      localPrompt.value.slice(0, start) + "\n" + localPrompt.value.slice(end);
-    inputIsMultiline.value = true;
-    nextTick(() => {
-      inputField.value?.focus();
-      inputField.value?.setSelectionRange(start + 1, start + 1);
-      autoResize();
-    });
   }
 }
 
@@ -826,7 +693,9 @@ async function fetchCommands() {
   commandSuggestionLoading.value = true;
   try {
     const cid = currentConfigId.value;
-    const res = await commandApi.list(cid && cid !== "default" ? cid : undefined);
+    const res = await commandApi.list(
+      cid && cid !== "default" ? cid : undefined,
+    );
     if (res.data.status === "ok") {
       allCommands.value = res.data.data.items || [];
       // 读取当前配置的唤醒词列表，用于指令候选的触发前缀
@@ -911,23 +780,6 @@ function handlePaste(e: ClipboardEvent) {
     return;
   }
 
-  if (!inputIsMultiline.value && pastedText.includes("\n")) {
-    e.preventDefault();
-    const target = e.target as HTMLInputElement;
-    const start = target.selectionStart ?? localPrompt.value.length;
-    const end = target.selectionEnd ?? start;
-    localPrompt.value =
-      localPrompt.value.slice(0, start) +
-      pastedText +
-      localPrompt.value.slice(end);
-    inputIsMultiline.value = true;
-    nextTick(() => {
-      inputField.value?.focus();
-      const cursor = start + pastedText.length;
-      inputField.value?.setSelectionRange(cursor, cursor);
-      autoResize();
-    });
-  }
   emit("pasteImage", e);
 }
 
@@ -1006,7 +858,7 @@ defineExpose({
 }
 
 .input-neutral-btn {
-  color: #6f6f6f !important;
+  color: #000 !important;
 }
 
 .input-neutral-btn:hover {
@@ -1022,24 +874,26 @@ defineExpose({
   background: #e7e7e7;
 }
 
-.input-action-btn {
-  background: #5594c6 !important;
-  color: #fff !important;
+.input-action-btn,
+.input-outline-control,
+.input-icon-btn {
+  width: 28px !important;
+  height: 28px !important;
+  min-width: 28px !important;
 }
 
-.input-action-btn:hover {
-  background: #4c86b3 !important;
-}
-
-.input-action-btn:disabled {
-  background: rgba(85, 148, 198, 0.24) !important;
-  color: rgba(255, 255, 255, 0.72) !important;
+.input-area.is-dark .input-action-btn:not(.v-btn--disabled) {
+  background-color: color-mix(
+    in srgb,
+    rgb(var(--v-theme-primary)) 85%,
+    #000
+  ) !important;
 }
 
 .input-icon-btn {
   background: transparent !important;
   color: rgb(var(--v-theme-on-surface)) !important;
-  margin-right: 8px;
+  margin-right: 0;
 }
 
 .input-icon-btn:hover {
@@ -1047,12 +901,12 @@ defineExpose({
 }
 
 .token-usage-indicator {
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  flex: 0 0 24px;
+  flex: 0 0 20px;
   border-radius: 50%;
   color: var(--token-usage-color);
 }
@@ -1072,9 +926,7 @@ defineExpose({
 }
 
 .input-outline-control {
-  width: 36px !important;
-  height: 36px !important;
-  min-width: 36px !important;
+  border-radius: 50% !important;
   border: 0 !important;
   border-color: transparent !important;
   background: transparent !important;
@@ -1107,48 +959,23 @@ defineExpose({
   background: rgba(255, 255, 255, 0.06) !important;
 }
 
-.input-area.is-dark .input-action-btn {
-  background: rgb(var(--v-theme-on-surface)) !important;
-  color: rgb(var(--v-theme-surface)) !important;
-}
-
-.input-area.is-dark .input-action-btn:hover {
-  background: rgba(var(--v-theme-on-surface), 0.86) !important;
-}
-
-.input-area.is-dark .input-action-btn:disabled {
-  background: rgba(var(--v-theme-on-surface), 0.14) !important;
-  color: rgba(var(--v-theme-on-surface), 0.4) !important;
-}
-
 .input-container {
+  position: relative;
+  width: var(--chat-content-width, 76%);
+  max-width: var(--chat-content-max-width, 760px);
+  margin: 0 auto;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  min-height: 64px;
-  padding: 6px 12px 6px 14px !important;
-  border-color: #f0f0f0 !important;
-  border-radius: 999px !important;
+  padding: 8px 14px !important;
+  border: 1px solid #d9d9d9;
+  border-radius: 20px !important;
   background: #fff !important;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06) !important;
-}
-
-.input-container.is-multiline {
-  justify-content: flex-start;
-  padding: 16px 20px 14px !important;
-  border-radius: 34px !important;
-}
-
-.input-container.has-attachments {
-  justify-content: flex-start;
-  min-height: 130px;
-  padding: 14px 18px 10px !important;
-  border-radius: 30px !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08) !important;
 }
 
 .input-area.is-dark .input-container {
-  border: 1px solid rgba(255, 255, 255, 0.12) !important;
-  background: #2d2d2d !important;
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+  background: #242424 !important;
   box-shadow: none !important;
 }
 
@@ -1160,79 +987,54 @@ defineExpose({
 
 .composer-row {
   width: 100%;
-  min-height: 52px;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
-  grid-template-areas: "left field right";
-  align-items: center;
-  column-gap: 10px;
-}
-
-.input-container.is-multiline .composer-row {
   grid-template-areas:
     "field field field"
     "left . right";
-  row-gap: 10px;
-  align-items: end;
+  align-items: center;
+  gap: 4px 8px;
 }
 
 .input-field-shell {
   grid-area: field;
   min-width: 0;
-  min-height: 52px;
-  display: flex;
-  align-items: center;
 }
 
-.input-container.is-multiline .input-field-shell {
-  min-height: auto;
-  align-items: flex-start;
-}
-
-.chat-text-input,
 .chat-textarea {
   display: block;
   width: 100%;
   box-sizing: border-box;
   min-width: 0;
-  min-height: 52px !important;
-  max-height: 72px !important;
+  min-height: 48px;
+  max-height: min(48vh, 420px);
   margin: 0;
-  padding: 0 !important;
-  border: 0 !important;
-  border-radius: 0 !important;
-  background: transparent !important;
-  box-shadow: none !important;
+  padding: 4px 2px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
   resize: none;
   outline: none;
   font-family: inherit;
-  font-size: 18px !important;
-}
-
-.chat-text-input {
-  height: 52px !important;
-  padding: 0 !important;
-  line-height: normal !important;
-  overflow: hidden;
-}
-
-.chat-textarea {
-  max-height: min(48vh, 420px) !important;
-  padding: 12px 0 !important;
+  font-size: 14px;
+  line-height: 22px;
   overflow-y: auto;
   overflow-wrap: break-word;
-  line-height: 28px !important;
-  transition: height 0.16s ease;
 }
 
-.chat-text-input::placeholder,
 .chat-textarea::placeholder {
   color: rgba(var(--v-theme-on-surface), 0.56);
   opacity: 1;
 }
 
+.input-area.is-dark .chat-textarea::placeholder {
+  color: rgba(var(--v-theme-on-surface), 0.4);
+}
+
 .input-left-actions {
   grid-area: left;
+  margin-inline-start: -8px;
   display: flex;
   align-items: center;
   flex: 0 0 auto !important;
@@ -1249,48 +1051,14 @@ defineExpose({
   align-items: center;
   justify-content: flex-end;
   flex-shrink: 0;
-  gap: 10px;
+  gap: 8px;
   margin-top: 0 !important;
 }
 
-.input-outline-control {
-  width: 34px !important;
-  height: 34px !important;
-  min-width: 34px !important;
-  border: 0 !important;
-  border-color: transparent !important;
-  border-radius: 50% !important;
-  box-shadow: none !important;
-}
-
-.input-icon-btn {
-  width: 42px !important;
-  height: 42px !important;
-  min-width: 42px !important;
-  margin-right: 0;
-}
-
 .input-right-actions :deep(.provider-chip) {
-  height: 40px !important;
-  min-height: 40px !important;
+  height: 28px !important;
+  min-height: 28px !important;
   border-radius: 999px !important;
-}
-
-.input-area:not(.is-dark) .input-action-btn {
-  width: 46px !important;
-  height: 46px !important;
-  min-width: 46px !important;
-  background: #8fcfb4 !important;
-  color: #fff !important;
-}
-
-.input-area:not(.is-dark) .input-action-btn:hover {
-  background: #7fc4a8 !important;
-}
-
-.input-area:not(.is-dark) .input-action-btn:disabled {
-  background: #f2f5f3 !important;
-  color: rgba(0, 0, 0, 0.18) !important;
 }
 
 .reply-preview {
@@ -1534,68 +1302,15 @@ defineExpose({
   }
 
   .input-container {
-    display: flex !important;
-    flex-direction: column;
-    justify-content: center;
     width: calc(100% - 20px) !important;
     max-width: 100% !important;
-    min-height: 64px;
     margin: 0 10px calc(8px + env(safe-area-inset-bottom)) !important;
-    padding: 6px 8px 6px 10px !important;
-    overflow: hidden;
-    border: 1px solid rgba(var(--v-theme-on-surface), 0.14) !important;
-    border-radius: 999px !important;
-    background: #fff !important;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08) !important;
-  }
-
-  .input-container.is-multiline {
-    justify-content: flex-start;
-    min-height: 128px;
-    padding: 10px !important;
-    border-radius: 26px !important;
-  }
-
-  .input-container.has-attachments {
-    justify-content: flex-start;
-    min-height: 124px;
-    padding: 10px !important;
-    border-radius: 26px !important;
-  }
-
-  .input-area.is-dark .input-container {
-    border-color: rgba(255, 255, 255, 0.16) !important;
-    background: #2d2d2d !important;
-    box-shadow: none !important;
+    padding: 8px 10px !important;
   }
 
   .composer-row {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    grid-template-areas: "left field right";
-    min-height: 52px;
-    row-gap: 0;
-    column-gap: 8px;
-    align-items: center;
-  }
-
-  .input-container.is-multiline .composer-row {
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    grid-template-areas:
-      "field field field"
-      "left . right";
-    min-height: auto;
     row-gap: 4px;
-  }
-
-  .input-field-shell {
-    min-height: 52px;
-    align-items: center;
-  }
-
-  .input-container.is-multiline .input-field-shell {
-    min-height: 56px;
-    align-items: flex-start;
+    column-gap: 8px;
   }
 
   .input-left-actions,
@@ -1608,73 +1323,14 @@ defineExpose({
     gap: 6px;
   }
 
-  .input-outline-control {
-    width: 38px !important;
-    height: 38px !important;
-    min-width: 38px !important;
-    border: 0 !important;
-    border-color: transparent !important;
-    border-radius: 50% !important;
-  }
-
-  .chat-text-input,
   .chat-textarea {
-    min-height: 52px !important;
-    max-height: 132px !important;
-    border: 0 !important;
-    border-radius: 0 !important;
-    background: transparent !important;
-    box-shadow: none !important;
-    font-size: 18px !important;
-  }
-
-  .chat-text-input {
-    height: 52px !important;
-    padding: 0 2px !important;
-    line-height: normal !important;
-    overflow: hidden;
-  }
-
-  .chat-textarea {
-    max-height: min(42vh, 220px) !important;
-    padding: 4px 10px 2px !important;
-    line-height: 24px !important;
-    overflow-y: auto;
-  }
-
-  .chat-text-input::placeholder,
-  .chat-textarea::placeholder {
-    color: rgba(var(--v-theme-on-surface), 0.56);
-    opacity: 1;
-  }
-
-  .input-icon-btn {
-    width: 38px !important;
-    height: 38px !important;
-    min-width: 38px !important;
-    margin-right: 0;
-  }
-
-  .input-action-btn {
-    width: 42px !important;
-    height: 42px !important;
-    min-width: 42px !important;
-    border-radius: 50% !important;
-  }
-
-  .input-action-btn:not(:disabled) {
-    background: rgb(var(--v-theme-on-surface)) !important;
-    color: rgb(var(--v-theme-surface)) !important;
-  }
-
-  .input-action-btn:disabled {
-    background: rgba(var(--v-theme-on-surface), 0.04) !important;
-    color: rgba(var(--v-theme-on-surface), 0.18) !important;
+    font-size: 16px;
+    max-height: min(42vh, 220px);
   }
 
   :deep(.provider-chip) {
-    height: 38px !important;
-    min-height: 38px !important;
+    height: 28px !important;
+    min-height: 28px !important;
     border-radius: 999px !important;
     padding: 0 12px !important;
     font-size: 14px !important;
