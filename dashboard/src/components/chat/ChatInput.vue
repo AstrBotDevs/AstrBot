@@ -966,7 +966,6 @@ defineExpose({
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  min-height: 96px;
   padding: 8px 14px !important;
   border: 1px solid #d9d9d9;
   border-radius: 20px !important;

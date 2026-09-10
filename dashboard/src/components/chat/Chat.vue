@@ -2359,6 +2359,7 @@ async function stopCurrentSession() {
 .composer-shell :deep(.input-area),
 .project-composer-shell :deep(.input-area) {
   padding-top: 0;
+  padding-inline: 0;
   border-top: 0;
 }
 
