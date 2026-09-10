@@ -548,14 +548,24 @@ class CronJobManager:
             # The runner's final text is only folded into the persisted history;
             # without an explicit send the bound session never receives it,
             # which is exactly the "only intermediate messages" symptom of
-            # #9980. Skip when the model already delivered this exact text via
-            # send_message_to_user earlier in the same run.
+            # #9980. Send to delivery_session_str (not the event session, which
+            # falls back to a synthetic cron session) and skip when the model
+            # already delivered this exact text via send_message_to_user
+            # earlier in the same run.
             already_sent = cron_event.get_extra(
                 SENT_TO_CURRENT_SESSION_PLAIN_TEXTS_EXTRA_KEY, []
             )
             if final_text not in already_sent:
                 try:
-                    await cron_event.send(MessageChain().message(final_text))
+                    sent = await self.ctx.send_message(
+                        delivery_session_str,
+                        MessageChain().message(final_text),
+                    )
+                    if not sent:
+                        logger.warning(
+                            "Failed to deliver cron agent final response: "
+                            f"no platform found for session {delivery_session_str}"
+                        )
                 except Exception as e:  # noqa: BLE001
                     logger.warning(
                         f"Failed to deliver cron agent final response: {e}",

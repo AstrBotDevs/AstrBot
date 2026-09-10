@@ -835,6 +835,7 @@ class TestWokeMainAgentFinalDelivery:
                 "config": {"misc": {}, "compression": {}},
             },
         }
+        ctx.send_message = AsyncMock(return_value=True)
         cron_manager.ctx = ctx
 
         conv = MagicMock()
@@ -878,9 +879,11 @@ class TestWokeMainAgentFinalDelivery:
                 delivery_session_str="test:FriendMessage:user123",
             )
 
-        event_box["event"].send.assert_awaited_once()
-        chain = event_box["event"].send.await_args.args[0]
+        ctx.send_message.assert_awaited_once()
+        target_session, chain = ctx.send_message.await_args.args
+        assert str(target_session) == "test:FriendMessage:user123"
         assert chain.get_plain_text() == "Done: 42"
+        event_box["event"].send.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_skips_delivery_when_tool_already_sent_same_text(self, cron_manager):
@@ -940,6 +943,7 @@ class TestWokeMainAgentFinalDelivery:
             )
 
         event_box["event"].send.assert_not_awaited()
+        ctx.send_message.assert_not_called()
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
@@ -1010,6 +1014,70 @@ class TestWokeMainAgentFinalDelivery:
                 delivery_session_str=delivery_session_str,
             )
 
+        ctx.send_message.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_delivery_targets_delivery_session_not_event_session(
+        self, cron_manager
+    ):
+        """The text goes to delivery_session_str even when it differs from the
+        event's session (which otherwise falls back to a synthetic one)."""
+        ctx = MagicMock()
+        ctx.get_config.return_value = {
+            "admins_id": [],
+            "provider_settings": {},
+            "agent_runner": {
+                "runner_type": "local",
+                "config": {"misc": {}, "compression": {}},
+            },
+        }
+        ctx.send_message = AsyncMock(return_value=True)
+        cron_manager.ctx = ctx
+
+        conv = MagicMock()
+        conv.history = "[]"
+
+        class FakeRunner:
+            state = AgentState.DONE
+
+            async def step_until_done(self, max_step):
+                return
+                yield  # pragma: no cover
+
+            def get_final_llm_resp(self):
+                return LLMResponse(role="assistant", completion_text="Done: 42")
+
+        event_box = {}
+
+        async def fake_build_main_agent(*, event, plugin_context, config, req):
+            event_box["event"] = event
+            event.send = AsyncMock()
+            return MagicMock(agent_runner=FakeRunner())
+
+        with (
+            patch(
+                "astrbot.core.astr_main_agent._get_session_conv",
+                AsyncMock(return_value=conv),
+            ),
+            patch(
+                "astrbot.core.astr_main_agent.build_main_agent",
+                side_effect=fake_build_main_agent,
+            ),
+            patch(
+                "astrbot.core.cron.manager.persist_agent_history",
+                AsyncMock(),
+            ),
+        ):
+            await cron_manager._woke_main_agent(
+                message="run scheduled task",
+                session_str="cron:OtherMessage:job-1",
+                extras={"cron_job": {"id": "job-1"}, "cron_payload": {}},
+                delivery_session_str="test:FriendMessage:user123",
+            )
+
+        ctx.send_message.assert_awaited_once()
+        target_session, _ = ctx.send_message.await_args.args
+        assert str(target_session) == "test:FriendMessage:user123"
         event_box["event"].send.assert_not_awaited()
 
     @pytest.mark.asyncio
@@ -1040,8 +1108,10 @@ class TestWokeMainAgentFinalDelivery:
                 return LLMResponse(role="assistant", completion_text="Done: 42")
 
         async def fake_build_main_agent(*, event, plugin_context, config, req):
-            event.send = AsyncMock(side_effect=RuntimeError("platform offline"))
+            event.send = AsyncMock()
             return MagicMock(agent_runner=FakeRunner())
+
+        ctx.send_message = AsyncMock(side_effect=RuntimeError("platform offline"))
 
         with (
             patch(
