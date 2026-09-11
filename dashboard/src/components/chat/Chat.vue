@@ -2370,7 +2370,7 @@ async function stopCurrentSession() {
 }
 
 .history-load-error {
-  margin: 0 auto 20px;
+  margin: 0 auto 12px;
 }
 
 .conversation-stack.is-empty .welcome-state {

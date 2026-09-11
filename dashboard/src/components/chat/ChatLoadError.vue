@@ -29,13 +29,10 @@ const { tm } = useModuleI18n("features/chat");
 .chat-load-error {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   width: fit-content;
   max-width: 100%;
-  padding: 6px 8px 6px 12px;
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
-  border-radius: 12px;
-  background: rgba(var(--v-theme-on-surface), 0.035);
+  padding: 1px 0;
   color: rgba(var(--v-theme-on-surface), 0.62);
   font-size: 0.8125rem;
   line-height: 1.5;

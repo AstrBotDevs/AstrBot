@@ -259,7 +259,7 @@ onBeforeUnmount(() => {
 }
 
 .reasoning-error {
-  margin-top: 8px;
+  margin-top: 4px;
 }
 
 .reasoning-header {
