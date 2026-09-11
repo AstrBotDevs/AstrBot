@@ -1521,6 +1521,18 @@ CONFIG_METADATA_2 = {
                         "proxy": "",
                         "custom_headers": {},
                     },
+                    "DaoXE": {
+                        "id": "daoxe",
+                        "provider": "daoxe",
+                        "type": "daoxe_chat_completion",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "timeout": 120,
+                        "api_base": "https://api.daoxe.com/v1",
+                        "proxy": "",
+                        "custom_headers": {},
+                    },
                     "SSYCloud(胜算云)": {
                         "id": "ssycloud",
                         "provider": "ssycloud",

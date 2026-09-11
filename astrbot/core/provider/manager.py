@@ -459,6 +459,10 @@ class ProviderManager:
                 from .sources.openrouter_source import (
                     ProviderOpenRouter as ProviderOpenRouter,
                 )
+            case "daoxe_chat_completion":
+                from .sources.daoxe_source import (
+                    ProviderDaoXE as ProviderDaoXE,
+                )
             case "ssycloud_chat_completion":
                 from .sources.ssycloud_source import (
                     ProviderSSYCloud as ProviderSSYCloud,

@@ -269,7 +269,14 @@ const providerSourceFieldLinks = computed(() => (
           href: 'https://www.shengsuanyun.com/?from=CH_T70U2X9L'
         }
       }
-    : {}
+    : selectedProviderSource.value?.provider === 'daoxe'
+      ? {
+          key: {
+            label: tm('providerSources.getApiKey'),
+            href: 'https://docs.daoxe.com/'
+          }
+        }
+      : {}
 ))
 
 const showManualModelDialog = ref(false)
