@@ -8,8 +8,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from deprecated import deprecated
-from sqlalchemy import CursorResult, Row, case, not_
+from sqlalchemy import CursorResult, Row, case, literal, not_
 from sqlalchemy.dialects.sqlite import dialect as sqlite_dialect
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import defer
 from sqlmodel import col, delete, desc, func, or_, select, text, update
@@ -47,6 +48,31 @@ TxResult = T.TypeVar("TxResult")
 CRON_FIELD_NOT_SET = object()
 
 
+def _webchat_session_title_match(keyword: str):
+    """Build a correlated EXISTS condition matching WebChat session titles.
+
+    WebChat generates its title on the platform session instead of the
+    conversation row, so the conversation is matched through the unified
+    message origin suffix ``!<session_id>``.
+
+    Args:
+        keyword: Search text matched against the session display name.
+
+    Returns:
+        A SQLAlchemy EXISTS expression usable inside a conversation query.
+    """
+    return (
+        select(1)
+        .where(col(PlatformSession.display_name).ilike(f"%{keyword}%"))
+        .where(
+            col(ConversationV2.user_id).like(
+                literal("%!").concat(col(PlatformSession.session_id)),
+            )
+        )
+        .exists()
+    )
+
+
 class SQLiteDatabase(BaseDatabase):
     def __init__(self, db_path: str) -> None:
         self.db_path = db_path
@@ -72,6 +98,9 @@ class SQLiteDatabase(BaseDatabase):
             await self._ensure_platform_message_history_checkpoint_column(conn)
             await self._ensure_chatui_project_workspace_columns(conn)
             await self._ensure_conversation_indexes(conn)
+            # The table-level unique constraint already provides an index for UMO
+            # lookups. Older schemas also created this redundant explicit index.
+            await conn.execute(text("DROP INDEX IF EXISTS ix_umo_aliases_umo"))
             await conn.commit()
 
     async def _ensure_conversation_indexes(self, conn) -> None:
@@ -358,6 +387,8 @@ class SQLiteDatabase(BaseDatabase):
 
             if platform_ids:
                 conditions.append(col(ConversationV2.platform_id).in_(platform_ids))
+            # WebChat titles live on the platform session, not on the
+            # conversation row, so the search also matches session titles.
             if search_query:
                 escaped_search_query = json.dumps(
                     search_query,
@@ -370,6 +401,7 @@ class SQLiteDatabase(BaseDatabase):
                         col(ConversationV2.conversation_id).ilike(f"%{search_query}%"),
                         col(ConversationV2.content).ilike(f"%{search_query}%"),
                         col(ConversationV2.content).ilike(f"%{escaped_search_query}%"),
+                        _webchat_session_title_match(search_query),
                     )
                 )
             keyword_query = str(kwargs.get("keyword_query") or "").strip()
@@ -383,6 +415,7 @@ class SQLiteDatabase(BaseDatabase):
                         col(ConversationV2.title).ilike(f"%{keyword_query}%"),
                         col(ConversationV2.content).ilike(f"%{keyword_query}%"),
                         col(ConversationV2.content).ilike(f"%{escaped_keyword_query}%"),
+                        _webchat_session_title_match(keyword_query),
                     )
                 )
             message_types = kwargs.get("message_types") or []
@@ -2176,30 +2209,80 @@ class SQLiteDatabase(BaseDatabase):
         auto_name: str | None,
         user_alias: str | None,
     ) -> UmoAlias:
-        """Create or update alias metadata for a UMO."""
+        """Create or replace user-controlled alias metadata for a UMO.
+
+        Args:
+            umo: Unified message origin to name.
+            creator_sender_id: Sender responsible for the manual alias update.
+            auto_name: Latest name discovered from platform metadata.
+            user_alias: User-controlled display alias.
+
+        Returns:
+            Persisted UMO alias record.
+        """
+        now = datetime.now(timezone.utc)
+        statement = sqlite_insert(UmoAlias).values(
+            umo=umo,
+            creator_sender_id=creator_sender_id,
+            auto_name=auto_name,
+            user_alias=user_alias,
+            created_at=now,
+            updated_at=now,
+        )
+        statement = statement.on_conflict_do_update(
+            index_elements=[UmoAlias.umo],
+            set_={
+                "creator_sender_id": statement.excluded.creator_sender_id,
+                "auto_name": statement.excluded.auto_name,
+                "user_alias": statement.excluded.user_alias,
+                "updated_at": now,
+            },
+        )
         async with self.get_db() as session:
             session: AsyncSession
             async with session.begin():
+                await session.execute(statement)
                 result = await session.execute(
                     select(UmoAlias).where(col(UmoAlias.umo) == umo)
                 )
-                alias = result.scalar_one_or_none()
-                if alias:
-                    alias.creator_sender_id = creator_sender_id
-                    alias.auto_name = auto_name
-                    alias.user_alias = user_alias
-                    alias.updated_at = datetime.now(timezone.utc)
-                else:
-                    alias = UmoAlias(
-                        umo=umo,
-                        creator_sender_id=creator_sender_id,
-                        auto_name=auto_name,
-                        user_alias=user_alias,
-                    )
-                    session.add(alias)
-                await session.flush()
-                await session.refresh(alias)
-                return alias
+                return result.scalar_one()
+
+    async def upsert_umo_auto_name(
+        self,
+        umo: str,
+        creator_sender_id: str,
+        auto_name: str,
+    ) -> None:
+        """Persist an automatic UMO name without changing its manual alias.
+
+        Args:
+            umo: Unified message origin to name.
+            creator_sender_id: Sender that first caused the UMO to be recorded.
+            auto_name: Name discovered from the inbound platform message.
+        """
+        now = datetime.now(timezone.utc)
+        statement = sqlite_insert(UmoAlias).values(
+            umo=umo,
+            creator_sender_id=creator_sender_id,
+            auto_name=auto_name,
+            user_alias=None,
+            created_at=now,
+            updated_at=now,
+        )
+        statement = statement.on_conflict_do_update(
+            index_elements=[UmoAlias.umo],
+            set_={
+                "auto_name": statement.excluded.auto_name,
+                "updated_at": now,
+            },
+            where=col(UmoAlias.auto_name).is_distinct_from(
+                statement.excluded.auto_name
+            ),
+        )
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                await session.execute(statement)
 
     async def get_umo_alias(self, umo: str) -> UmoAlias | None:
         """Get alias metadata for one UMO."""

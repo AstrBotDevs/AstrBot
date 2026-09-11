@@ -448,6 +448,7 @@ async def test_chat_stream_forwards_normalized_request_flags(chat_service_instan
             "enable_inline_genui": True,
             "enable_default_system_prompt": False,
             "enable_streaming": False,
+            "enable_reasoning": True,
         }
         assert "enable_streaming" not in payload
     finally:

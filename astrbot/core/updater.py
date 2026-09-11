@@ -15,9 +15,11 @@ from astrbot.core.dashboard_assets import (
     _extract_package,
     _get_bundled_dist_path,
     _is_dist_compatible,
+    _is_dist_complete,
     _read_dashboard_version,
     _should_use_bundled_dist,
 )
+from astrbot.core.desktop_runtime import is_desktop_managed_backend
 from astrbot.core.repository import GitHubRepository
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_data_path,
@@ -313,6 +315,7 @@ class AstrBotUpdater(_RepoZipUpdater):
                 _extract_package,
                 dashboard_zip_path,
                 Path(get_astrbot_data_path()),
+                target_version if len(target_version) != 40 else None,
             )
             await emit_progress(
                 "apply",
@@ -322,13 +325,17 @@ class AstrBotUpdater(_RepoZipUpdater):
             )
 
     async def ensure_dashboard(self) -> Path:
-        """Ensure a complete Dashboard matching the running Core version exists.
+        """Ensure acceptable Dashboard assets exist for the active runtime.
+
+        Desktop-managed runtimes only receive assets matching the running Core.
+        Standalone runtimes retain the legacy offline fallback to a structurally
+        complete ``data/dist`` when a matching package cannot be prepared.
 
         Returns:
             Directory containing the Dashboard assets to serve.
 
         Raises:
-            Exception: If no compatible Dashboard can be prepared.
+            Exception: If no acceptable Dashboard can be prepared.
         """
         data_dist_path = Path(get_astrbot_data_path()) / "dist"
         bundled_dist = _get_bundled_dist_path()
@@ -359,10 +366,10 @@ class AstrBotUpdater(_RepoZipUpdater):
                 allow_insecure_ssl_fallback=False,
             )
         except Exception:
-            if (data_dist_path / "index.html").is_file():
+            if not is_desktop_managed_backend() and _is_dist_complete(data_dist_path):
                 logger.warning(
-                    "Using existing Dashboard %s because a compatible package "
-                    "could not be prepared for v%s.",
+                    "Using existing standalone Dashboard %s because a compatible "
+                    "package could not be prepared for v%s.",
                     existing_version or "unknown",
                     VERSION,
                 )

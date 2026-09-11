@@ -8,6 +8,7 @@ from astrbot.core.config import AstrBotConfig
 from .context_utils import call_event_hook, call_handler
 
 if TYPE_CHECKING:
+    from astrbot.core.db import BaseDatabase
     from astrbot.core.star import PluginManager
 
 
@@ -18,5 +19,6 @@ class PipelineContext:
     astrbot_config: AstrBotConfig  # AstrBot 配置对象
     plugin_manager: PluginManager  # 插件管理器对象
     astrbot_config_id: str
+    db_helper: BaseDatabase | None = None
     call_handler = call_handler
     call_event_hook = call_event_hook

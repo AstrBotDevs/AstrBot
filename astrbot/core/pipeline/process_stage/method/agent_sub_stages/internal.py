@@ -19,6 +19,7 @@ from astrbot.core.astr_main_agent import (
     MainAgentBuildResult,
     build_main_agent,
 )
+from astrbot.core.config.agent_runner import resolve_context_compression_config
 from astrbot.core.message.components import File, Image, Record, Reply, Video
 from astrbot.core.message.message_event_result import (
     MessageChain,
@@ -55,13 +56,18 @@ class InternalAgentSubStage(Stage):
         self.ctx = ctx
         conf = ctx.astrbot_config
         settings = conf["provider_settings"]
+        runner_config = conf["agent_runner"]["config"]
+        model_config = runner_config["model"]
+        persona_config = runner_config["persona"]
+        compression_config = runner_config["compression"]
+        misc_config = runner_config["misc"]
         self.streaming_response: bool = settings["streaming_response"]
         self.unsupported_streaming_strategy: str = settings[
             "unsupported_streaming_strategy"
         ]
-        self.max_step: int = settings.get("max_agent_step", 30)
-        self.tool_call_timeout: int = settings.get("tool_call_timeout", 60)
-        self.tool_schema_mode: str = settings.get("tool_schema_mode", "full")
+        self.max_step: int = misc_config.get("max_steps", 30)
+        self.tool_call_timeout: int = misc_config.get("tool_call_timeout", 120)
+        self.tool_schema_mode: str = misc_config.get("tool_schema_mode", "full")
         if self.tool_schema_mode not in ("skills_like", "full"):
             logger.warning(
                 "Unsupported tool_schema_mode: %s, fallback to skills_like",
@@ -77,7 +83,7 @@ class InternalAgentSubStage(Stage):
             False,
         )
         self.show_reasoning = settings.get("display_reasoning_text", False)
-        self.sanitize_context_by_modalities: bool = settings.get(
+        self.sanitize_context_by_modalities: bool = misc_config.get(
             "sanitize_context_by_modalities",
             False,
         )
@@ -90,36 +96,12 @@ class InternalAgentSubStage(Stage):
             "moonshotai_api_key", ""
         )
 
-        # 上下文管理相关
-        self.context_limit_reached_strategy: str = settings.get(
-            "context_limit_reached_strategy", "truncate_by_turns"
-        )
-        self.llm_compress_instruction: str = settings.get(
-            "llm_compress_instruction", ""
-        )
-        self.llm_compress_keep_recent_ratio: float = settings.get(
-            "llm_compress_keep_recent_ratio", 0.15
-        )
-        self.llm_compress_provider_id: str = settings.get(
-            "llm_compress_provider_id", ""
-        )
-        self.max_context_length = settings["max_context_length"]  # int
-        self.dequeue_context_length: int = min(
-            max(1, settings["dequeue_context_length"]),
-            self.max_context_length - 1,
-        )
-        if self.dequeue_context_length <= 0:
-            self.dequeue_context_length = 1
-        self.fallback_max_context_tokens: int = settings.get(
-            "fallback_max_context_tokens", 128000
-        )
-
-        self.llm_safety_mode = settings.get("llm_safety_mode", True)
-        self.safety_mode_strategy = settings.get(
+        self.llm_safety_mode = persona_config.get("safety_mode", True)
+        self.safety_mode_strategy = persona_config.get(
             "safety_mode_strategy", "system_prompt"
         )
 
-        self.computer_use_runtime = settings.get("computer_use_runtime")
+        self.computer_use_runtime = settings.get("computer_use_runtime", "none")
         self.sandbox_cfg = settings.get("sandbox", {})
 
         # Proactive capability configuration
@@ -136,19 +118,18 @@ class InternalAgentSubStage(Stage):
             file_extract_enabled=self.file_extract_enabled,
             file_extract_prov=self.file_extract_prov,
             file_extract_msh_api_key=self.file_extract_msh_api_key,
-            context_limit_reached_strategy=self.context_limit_reached_strategy,
-            llm_compress_instruction=self.llm_compress_instruction,
-            llm_compress_keep_recent_ratio=self.llm_compress_keep_recent_ratio,
-            llm_compress_provider_id=self.llm_compress_provider_id,
-            max_context_length=self.max_context_length,
-            dequeue_context_length=self.dequeue_context_length,
-            fallback_max_context_tokens=self.fallback_max_context_tokens,
+            **resolve_context_compression_config(compression_config),
             llm_safety_mode=self.llm_safety_mode,
             safety_mode_strategy=self.safety_mode_strategy,
             computer_use_runtime=self.computer_use_runtime,
             sandbox_cfg=self.sandbox_cfg,
             add_cron_tools=self.add_cron_tools,
-            provider_settings=settings,
+            provider_settings={
+                **settings,
+                "default_personality": persona_config.get("persona_id", "default"),
+            },
+            fallback_provider_ids=model_config.get("fallback_provider_ids", []),
+            request_max_retries=model_config.get("request_max_retries", 5),
             subagent_orchestrator=conf.get("subagent_orchestrator", {}),
             timezone=self.ctx.plugin_manager.context.get_config().get("timezone"),
             max_quoted_fallback_images=settings.get("max_quoted_fallback_images", 20),
@@ -170,6 +151,10 @@ class InternalAgentSubStage(Stage):
             streaming_response = self.streaming_response
             if (enable_streaming := event.get_extra("enable_streaming")) is not None:
                 streaming_response = bool(enable_streaming)
+
+            show_reasoning = self.show_reasoning
+            if (enable_reasoning := event.get_extra("enable_reasoning")) is not None:
+                show_reasoning = bool(enable_reasoning)
 
             has_provider_request = event.get_extra("provider_request") is not None
             has_valid_message = bool(event.message_str and event.message_str.strip())
@@ -319,7 +304,7 @@ class InternalAgentSubStage(Stage):
                                     self.max_step,
                                     self.show_tool_use,
                                     self.show_tool_call_result,
-                                    show_reasoning=self.show_reasoning,
+                                    show_reasoning=show_reasoning,
                                     buffer_intermediate_messages=self.buffer_intermediate_messages,
                                 ),
                             ),
@@ -350,7 +335,7 @@ class InternalAgentSubStage(Stage):
                                     self.max_step,
                                     self.show_tool_use,
                                     self.show_tool_call_result,
-                                    show_reasoning=self.show_reasoning,
+                                    show_reasoning=show_reasoning,
                                     buffer_intermediate_messages=self.buffer_intermediate_messages,
                                 ),
                             ),
@@ -381,7 +366,7 @@ class InternalAgentSubStage(Stage):
                             self.show_tool_use,
                             self.show_tool_call_result,
                             stream_to_general,
-                            show_reasoning=self.show_reasoning,
+                            show_reasoning=show_reasoning,
                             buffer_intermediate_messages=self.buffer_intermediate_messages,
                         ):
                             yield

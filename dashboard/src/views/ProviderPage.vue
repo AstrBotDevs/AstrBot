@@ -67,9 +67,12 @@
               <div class="provider-config-header">
                 <div class="provider-config-headline">
                   <div class="provider-config-title">{{ selectedProviderSource.id }}</div>
-                  <div class="provider-config-subtitle">
-                    {{ selectedProviderSource.api_base || 'N/A' }}
-                  </div>
+                  <ProviderSourceSubtitle
+                    class="provider-config-subtitle"
+                    :api-base="selectedProviderSource.api_base"
+                    :sponsor="selectedSponsor"
+                    :tm="tm"
+                  />
                 </div>
 
                 <div class="provider-config-actions">
@@ -293,38 +296,16 @@
       {{ snackbar.message }}
     </v-snackbar>
 
-    <v-dialog v-model="showAgentRunnerDialog" max-width="520" persistent>
-      <v-card>
-        <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex align-center">
-          <v-icon start class="me-2">mdi-information</v-icon>
-          请前往「配置文件」页测试 Agent 执行器
-        </v-card-title>
-        <v-card-text class="py-4 text-body-1 text-medium-emphasis">
-          Agent 执行器的测试请在「配置文件」页进行。
-          <ol class="ml-4 mt-4 mb-4">
-            <li>找到对应的配置文件并打开。</li>
-            <li>找到 Agent 执行方式部分，修改执行器后点击保存。</li>
-            <li>点击右下角的 💬 聊天按钮进行测试。</li>
-          </ol>
-          要让机器人应用这个 Agent 执行器，你也需要前往修改 Agent 执行器。
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer></v-spacer>
-          <v-btn color="grey" variant="text" @click="showAgentRunnerDialog = false">好的</v-btn>
-          <v-btn color="primary" variant="tonal" @click="goToConfigPage">点击前往</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
   </div>
 </template>
 
 <script setup>
 import { computed, nextTick, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
 import { providerApi } from '@/api/v1'
 import { useModuleI18n } from '@/i18n/composables'
 import AstrBotConfig from '@/components/shared/AstrBotConfig.vue'
 import ProviderModelsPanel from '@/components/provider/ProviderModelsPanel.vue'
+import ProviderSourceSubtitle from '@/components/provider/ProviderSourceSubtitle.vue'
 import ProviderSourcesPanel from '@/components/provider/ProviderSourcesPanel.vue'
 import { useProviderModelConfigDialog } from '@/composables/useProviderModelConfigDialog'
 import { useProviderSources } from '@/composables/useProviderSources'
@@ -337,7 +318,6 @@ const props = defineProps({
 })
 
 const { tm } = useModuleI18n('features/provider')
-const router = useRouter()
 
 const snackbar = ref({
   show: false,
@@ -353,6 +333,7 @@ const {
   providers,
   selectedProviderType,
   selectedProviderSource,
+  selectedSponsor,
   availableModels,
   loadingSources,
   loadingModels,
@@ -405,7 +386,6 @@ const newProviderOriginalId = ref('')
 const updatingMode = ref(false)
 const loading = ref(false)
 const isLegacyProviderModified = ref(false)
-const showAgentRunnerDialog = ref(false)
 const showManualModelDialog = ref(false)
 let suppressLegacyProviderWatch = false
 
@@ -663,20 +643,7 @@ async function testSingleProvider(provider) {
     showMessage('该提供商未被用户启用', 'error')
     return
   }
-  if (
-    provider.provider_type === 'agent_runner' ||
-    selectedProviderType.value === 'agent_runner'
-  ) {
-    showAgentRunnerDialog.value = true
-    return
-  }
-
   await testProvider(provider)
-}
-
-function goToConfigPage() {
-  router.push('/config')
-  showAgentRunnerDialog.value = false
 }
 </script>
 

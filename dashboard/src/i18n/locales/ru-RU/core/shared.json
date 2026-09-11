@@ -14,6 +14,12 @@
         "chunkCount": "Фрагментов: {count}"
     },
     "pluginSetSelector": {
+        "title": "Плагины",
+        "subtitle": "Выберите плагины, доступные этому профилю.",
+        "preset": "Встроенный",
+        "searchPlaceholder": "Поиск плагинов",
+        "selectAll": "Выбрать все",
+        "noSearchResults": "Подходящие плагины не найдены",
         "notSelected": "Плагины не включены",
         "allPlugins": "Включить все плагины (*)",
         "selectedCount": "Выбрано плагинов: {count}",
@@ -34,6 +40,9 @@
     },
     "providerSelector": {
         "notSelected": "Не выбрано",
+        "defaultModel": "Модель по умолчанию",
+        "model": "Модель",
+        "searchPlaceholder": "Поиск моделей",
         "buttonText": "Выбрать провайдера...",
         "dialogTitle": "Выбор провайдера",
         "loading": "Загрузка...",
@@ -46,6 +55,7 @@
         "createProvider": "Создать провайдера",
         "manageProviders": "Управление провайдерами",
         "selectProviderPool": "Выбрать пул провайдеров...",
+        "selectedModelCount": "Выбрано моделей: {count}",
         "selectedCount": "Выбрано провайдеров: {count}"
     },
     "personaSelector": {

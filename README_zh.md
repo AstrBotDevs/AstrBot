@@ -152,6 +152,7 @@ uv tool upgrade astrbot --python 3.12
 | DeepSeek | LLM |
 | Ollama (本地部署) | LLM |
 | LM Studio (本地部署) | LLM |
+| [MiraRouter](https://mirarouter.com/) | LLM (API 网关, 支持所有模型) |
 | [AIHubMix](https://aihubmix.com/?aff=4bfH) | LLM (API 网关, 支持所有模型) |
 | [优云智算](https://www.compshare.cn/?ytag=GPU_YY-gh_astrbot&referral_code=FV7DcGowN4hB5UuXKgpE74) | LLM (API 网关, 支持所有模型) |
 | [302.AI](https://share.302.ai/rr1M3l) | LLM (API 网关, 支持所有模型)|
