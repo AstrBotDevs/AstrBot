@@ -4,6 +4,8 @@
       class="reasoning-header"
       :class="{ 'reasoning-header--trigger': openInSidebar }"
       type="button"
+      :disabled="reasoningStatus === 'loading'"
+      :aria-busy="reasoningStatus === 'loading'"
       @click="handlePrimaryAction"
     >
       <span class="reasoning-title">
@@ -12,7 +14,15 @@
         </ThinkingIndicator>
         <template v-else>{{ reasoningTitle }}</template>
       </span>
+      <v-progress-circular
+        v-if="reasoningStatus === 'loading'"
+        indeterminate
+        size="16"
+        width="2"
+        :aria-label="tm('reasoning.loading')"
+      />
       <ChevronRight
+        v-else
         :size="20"
         :stroke-width="1.75"
         aria-hidden="true"
@@ -23,6 +33,17 @@
         }"
       />
     </button>
+
+    <div
+      v-if="reasoningStatus === 'error'"
+      class="reasoning-error"
+      role="alert"
+    >
+      <span>{{ tm("reasoning.loadFailed") }}</span>
+      <v-btn size="small" variant="text" @click="handlePrimaryAction">
+        {{ tm("actions.retry") }}
+      </v-btn>
+    </div>
 
     <div
       v-if="!openInSidebar && isExpanded"
@@ -124,10 +145,8 @@ const previewTransitionName = computed(() =>
 );
 
 function handlePrimaryAction() {
-  if (
-    props.hasReasoning &&
-    props.reasoningStatus !== "loaded"
-  ) {
+  if (props.reasoningStatus === "loading") return;
+  if (props.hasReasoning && props.reasoningStatus !== "loaded") {
     emit("load-reasoning");
     return;
   }
@@ -240,6 +259,14 @@ onBeforeUnmount(() => {
   color: rgba(var(--v-theme-on-surface), 0.7);
   font-size: inherit;
   line-height: inherit;
+}
+
+.reasoning-error {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  color: rgb(var(--v-theme-error));
 }
 
 .reasoning-header {
