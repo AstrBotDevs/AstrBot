@@ -402,4 +402,7 @@ class _RepoZipUpdater:
             )
 
     def _format_name(self, name: str) -> str:
-        return name.replace("-", "_").lower()
+        # Replace hyphens with underscores to create valid Python identifiers.
+        # Keep the original case so the directory name matches the plugin
+        # metadata name and avoids case-sensitivity issues during rename.
+        return name.replace("-", "_")
