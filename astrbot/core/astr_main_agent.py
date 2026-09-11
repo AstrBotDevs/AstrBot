@@ -1471,7 +1471,7 @@ async def build_main_agent(
                         event.track_temporary_local_file(image_path)
                     req.image_urls.append(image_path)
                     req.extra_user_content_parts.append(
-                        TextPart(text=f"[Image Attachment: path {image_path}]")
+                        TextPart(text=f"[Image Attachment: path {path}]")
                     )
                 elif isinstance(comp, Record):
                     audio_path = await comp.convert_to_file_path()
@@ -1509,7 +1509,7 @@ async def build_main_agent(
                             if _is_generated_compressed_image_path(path, image_path):
                                 event.track_temporary_local_file(image_path)
                             req.image_urls.append(image_path)
-                            _append_quoted_image_attachment(req, image_path)
+                            _append_quoted_image_attachment(req, path)
                         elif isinstance(reply_comp, Record):
                             audio_path = await reply_comp.convert_to_file_path()
                             req.audio_urls.append(audio_path)

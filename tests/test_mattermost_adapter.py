@@ -6,10 +6,12 @@ import pytest
 
 import astrbot.api.message_components as Comp
 from astrbot.api.platform import Group
+from astrbot.core.pipeline.preprocess_stage import stage as preprocess_stage
 from astrbot.core.platform.sources.mattermost.client import MattermostClient
 from astrbot.core.platform.sources.mattermost.mattermost_adapter import (
     MattermostPlatformAdapter,
 )
+from astrbot.core.utils import media_utils
 from tests.fixtures.helpers import make_platform_config
 
 
@@ -114,6 +116,75 @@ async def test_mattermost_parse_post_attachments_maps_media_types(tmp_path):
         path = Path(temp_path)
         assert path.exists()
         assert path.name.endswith(Path(expected_name).suffix)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("image_kind", ["png", "jpeg", "invalid"])
+async def test_mattermost_attachments_follow_preprocessing_cleanup_rules(
+    tmp_path, monkeypatch, image_kind
+):
+    import wave
+
+    from PIL import Image as PILImage
+
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    monkeypatch.setattr(
+        preprocess_stage, "get_astrbot_temp_path", lambda: str(tmp_path)
+    )
+    image_path = tmp_path / f"image.{image_kind}"
+    if image_kind == "invalid":
+        image_path.write_bytes(b"not an image")
+    else:
+        PILImage.new("RGB", (2, 2), (255, 0, 0)).save(image_path)
+    audio_path = tmp_path / "voice.wav"
+    with wave.open(str(audio_path), "wb") as audio_file:
+        audio_file.setparams((1, 2, 8000, 0, "NONE", "not compressed"))
+        audio_file.writeframes(b"\x00\x00" * 80)
+    video_path = tmp_path / "clip.mp4"
+    video_path.write_bytes(b"video")
+    document_path = tmp_path / "report.pdf"
+    document_path.write_bytes(b"document")
+    downloaded_paths = [image_path, audio_path, video_path, document_path]
+    image = Comp.Image.fromFileSystem(str(image_path))
+    adapter = _build_adapter()
+    adapter.client.parse_post_attachments = AsyncMock(
+        return_value=(
+            [
+                image,
+                Comp.Record(file=str(audio_path), url=str(audio_path)),
+                Comp.Video.fromFileSystem(str(video_path)),
+                Comp.File(name="report.pdf", file=str(document_path)),
+            ],
+            [str(path) for path in downloaded_paths],
+        )
+    )
+    message = await adapter.convert_message(
+        post={
+            "id": "post-1",
+            "channel_id": "channel-1",
+            "user_id": "user-1",
+            "message": "hello",
+            "file_ids": ["img", "audio", "video", "doc"],
+        },
+        data={"channel_type": "D", "sender_name": "alice"},
+    )
+    event = adapter.create_event(message)
+    assert event._temporary_local_files == []
+    stage = preprocess_stage.PreProcessStage()
+    stage.config = {}
+    stage.platform_settings = {}
+    stage.stt_settings = {"enable": False}
+
+    await stage.process(event)
+    event.cleanup_temporary_local_files()
+
+    assert image_path.exists() == (image_kind != "png")
+    assert not audio_path.exists()
+    assert video_path.exists()
+    assert document_path.exists()
+    assert Path(await image.convert_to_file_path()).exists()
+    if image_kind == "png":
+        assert image.file != str(image_path)
 
 
 @pytest.mark.asyncio

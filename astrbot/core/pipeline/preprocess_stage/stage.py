@@ -131,9 +131,9 @@ class PreProcessStage(Stage):
             elif isinstance(component, Image):
                 try:
                     original_path = await component.convert_to_file_path()
-                    self._track_temp_media(event, original_path)
                     image_path = await ensure_jpeg(original_path)
-                    self._track_temp_media(event, image_path)
+                    if image_path != original_path:
+                        self._track_temp_media(event, original_path)
                     component.file = image_path
                     component.path = image_path
                     # Image.convert_to_file_path() prefers url, so keep it aligned.
@@ -167,9 +167,9 @@ class PreProcessStage(Stage):
                     elif isinstance(reply_comp, Image):
                         try:
                             original_path = await reply_comp.convert_to_file_path()
-                            self._track_temp_media(event, original_path)
                             image_path = await ensure_jpeg(original_path)
-                            self._track_temp_media(event, image_path)
+                            if image_path != original_path:
+                                self._track_temp_media(event, original_path)
                             reply_comp.file = image_path
                             reply_comp.path = image_path
                             # Image.convert_to_file_path() prefers url, so keep it aligned.
