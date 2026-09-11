@@ -1817,7 +1817,7 @@ function maybeLoadEarlierOnScroll(container: HTMLElement) {
   const sessionId = currSessionId.value;
   const pagination = activeSessionPagination.value;
   if (!sessionId || !pagination) return;
-  if (!pagination.has_more || pagination.loading) return;
+  if (!pagination.has_more || pagination.loading || pagination.error) return;
   if (container.scrollHeight <= container.clientHeight) return;
   if (container.scrollTop > LOAD_EARLIER_SCROLL_THRESHOLD) return;
   void loadEarlierWithAnchor();
