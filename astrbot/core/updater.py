@@ -1,12 +1,20 @@
 import asyncio
+import hashlib
 import os
 import shutil
+import tarfile
 import tempfile
 import zipfile
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from pathlib import Path
+from email.parser import BytesParser
+from html.parser import HTMLParser
+from pathlib import Path, PurePosixPath
 from typing import Literal
+from urllib.parse import parse_qs, unquote, urldefrag, urljoin, urlsplit
+
+from packaging.utils import InvalidSdistFilename, parse_sdist_filename
+from packaging.version import Version
 
 from astrbot.core import logger
 from astrbot.core.config.default import VERSION
@@ -57,6 +65,20 @@ class UpdateProgress:
 
 
 UpdateProgressCallback = Callable[[UpdateProgress], Awaitable[None]]
+
+
+class _SourceDistributionLinks(HTMLParser):
+    """Collect non-yanked download links from a PyPI Simple HTML index."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.links: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        attributes = dict(attrs)
+        href = attributes.get("href")
+        if tag == "a" and href and "data-yanked" not in attributes:
+            self.links.append(href)
 
 
 class AstrBotUpdater(_RepoZipUpdater):
@@ -201,6 +223,12 @@ class AstrBotUpdater(_RepoZipUpdater):
                 payload,
             )
 
+        if os.environ.get("ASTRBOT_CLI") or os.environ.get("ASTRBOT_LAUNCHER"):
+            raise RuntimeError(
+                "You are running AstrBot via CLI; use pip or uv tool upgrade "
+                "to update AstrBot."
+            )
+
         target_version = version
         target_release = None
         if not target_version or target_version == "latest":
@@ -211,20 +239,6 @@ class AstrBotUpdater(_RepoZipUpdater):
             target_version = target_release["tag_name"]
             if self._compare_version(VERSION, target_version) >= 0:
                 raise RuntimeError("AstrBot is already up to date.")
-        elif target_version.startswith("v"):
-            releases = await self._fetch_release_info(self._release_api)
-            target_release = next(
-                (
-                    release
-                    for release in releases
-                    if release["tag_name"] == target_version
-                ),
-                None,
-            )
-            if target_release is None:
-                raise RuntimeError(
-                    f"No update package was found for version {target_version}."
-                )
 
         update_temp_parent = Path(get_astrbot_temp_path()) / "updates"
         if update_temp_parent.is_symlink():
@@ -240,47 +254,84 @@ class AstrBotUpdater(_RepoZipUpdater):
             dashboard_zip_path = update_temp_dir / "dashboard.zip"
             core_zip_path = update_temp_dir / "core.zip"
 
-            await emit_progress(
-                "dashboard",
-                "running",
-                "正在下载 WebUI...",
-                0,
-            )
-            await _download_package(
-                path=str(dashboard_zip_path),
-                version=target_version,
-                proxy=proxy,
-                progress_callback=dashboard_progress,
-                extract=False,
-                allow_insecure_ssl_fallback=False,
-            )
-            await emit_progress(
-                "dashboard",
-                "done",
-                "WebUI 下载完成。",
-                45,
-            )
+            mirror_prepared = False
+            if target_version.startswith("v"):
+                await emit_progress(
+                    "dashboard",
+                    "running",
+                    "Checking the PyPI mirror for the update...",
+                    0,
+                )
+                mirror_prepared = await self._download_pypi_package(
+                    target_version,
+                    core_zip_path,
+                    dashboard_zip_path,
+                    progress_callback=dashboard_progress,
+                )
+            if mirror_prepared:
+                await emit_progress(
+                    "dashboard", "done", "Bundled WebUI prepared from PyPI.", 45
+                )
+                await emit_progress(
+                    "core", "done", "AstrBot source prepared from PyPI.", 90
+                )
+            else:
+                if target_version.startswith("v") and target_release is None:
+                    releases = await self._fetch_release_info(self._release_api)
+                    target_release = next(
+                        (
+                            release
+                            for release in releases
+                            if release["tag_name"] == target_version
+                        ),
+                        None,
+                    )
+                    if target_release is None:
+                        raise RuntimeError(
+                            f"No update package was found for version {target_version}."
+                        )
 
-            await emit_progress(
-                "core",
-                "running",
-                "正在下载 AstrBot 项目代码...",
-                45,
-            )
-            await self._download_core_package(
-                latest=False,
-                version=target_version,
-                proxy=proxy,
-                path=core_zip_path,
-                progress_callback=core_progress,
-                release_data=target_release,
-            )
-            await emit_progress(
-                "core",
-                "done",
-                "项目代码下载完成。",
-                90,
-            )
+                await emit_progress(
+                    "dashboard",
+                    "running",
+                    "正在下载 WebUI...",
+                    0,
+                )
+                await _download_package(
+                    path=str(dashboard_zip_path),
+                    version=target_version,
+                    proxy=proxy,
+                    progress_callback=dashboard_progress,
+                    extract=False,
+                    allow_insecure_ssl_fallback=False,
+                )
+                await emit_progress(
+                    "dashboard",
+                    "done",
+                    "WebUI 下载完成。",
+                    45,
+                )
+
+                await emit_progress(
+                    "core",
+                    "running",
+                    "正在下载 AstrBot 项目代码...",
+                    45,
+                )
+                await self._download_core_package(
+                    latest=False,
+                    version=target_version,
+                    proxy=proxy,
+                    path=core_zip_path,
+                    progress_callback=core_progress,
+                    release_data=target_release,
+                )
+                await emit_progress(
+                    "core",
+                    "done",
+                    "项目代码下载完成。",
+                    90,
+                )
 
             await emit_progress(
                 "verify",
@@ -322,6 +373,176 @@ class AstrBotUpdater(_RepoZipUpdater):
                 "done",
                 "更新文件应用完成。",
                 92,
+            )
+
+    async def _download_pypi_package(
+        self,
+        version: str,
+        core_zip_path: Path,
+        dashboard_zip_path: Path,
+        progress_callback=None,
+    ) -> bool:
+        """Prepare a matching source distribution and its bundled Dashboard.
+
+        Args:
+            version: Target release tag.
+            core_zip_path: Temporary destination for the existing Core apply flow.
+            dashboard_zip_path: Temporary destination for the Dashboard apply flow.
+            progress_callback: Download progress observer.
+
+        Returns:
+            Whether both packages are validated and ready. Mirror failures return
+            False so the caller can use the existing update sources.
+        """
+        index_url = "https://mirrors.cernet.edu.cn/pypi/web/simple/astrbot/"
+        source_path = core_zip_path.with_suffix(".tar.gz")
+        try:
+            target = Version(version)
+            async with self._create_httpx_client(timeout=10.0) as client:
+                response = await client.get(index_url)
+                response.raise_for_status()
+            parser = _SourceDistributionLinks()
+            parser.feed(response.text)
+            for link in parser.links:
+                url = urljoin(str(response.url), link)
+                parsed = urlsplit(url)
+                filename = PurePosixPath(unquote(parsed.path)).name
+                if parsed.scheme != "https" or not filename.endswith(".tar.gz"):
+                    continue
+                try:
+                    name, candidate = parse_sdist_filename(filename)
+                except InvalidSdistFilename:
+                    continue
+                if name != "astrbot" or candidate != target:
+                    continue
+                digest = parse_qs(parsed.fragment).get("sha256", [""])[0]
+                if len(digest) != 64 or any(
+                    char not in "0123456789abcdef" for char in digest.lower()
+                ):
+                    raise ValueError("PyPI source link has no valid SHA-256 digest")
+                logger.info("Downloading AstrBot source and WebUI from %s", url)
+                await self._download_file(
+                    urldefrag(url)[0],
+                    str(source_path),
+                    timeout=60.0,
+                    progress_callback=progress_callback,
+                )
+                await asyncio.to_thread(
+                    self._prepare_pypi_package,
+                    source_path,
+                    digest,
+                    version,
+                    core_zip_path,
+                    dashboard_zip_path,
+                )
+                return True
+            logger.info("AstrBot %s is not available in the PyPI mirror.", version)
+        except Exception as exc:
+            logger.warning(
+                "PyPI update package failed: %s. Falling back to the existing "
+                "Core and Dashboard download sources.",
+                exc,
+            )
+        finally:
+            source_path.unlink(missing_ok=True)
+        core_zip_path.unlink(missing_ok=True)
+        dashboard_zip_path.unlink(missing_ok=True)
+        return False
+
+    @staticmethod
+    def _prepare_pypi_package(
+        source_path: Path,
+        expected_digest: str,
+        version: str,
+        core_zip_path: Path,
+        dashboard_zip_path: Path,
+    ) -> None:
+        """Validate an sdist and stage ZIPs for the existing update application.
+
+        Args:
+            source_path: Downloaded tar.gz source distribution.
+            expected_digest: SHA-256 advertised by the mirror index.
+            version: Target release tag.
+            core_zip_path: Prepared Core ZIP destination.
+            dashboard_zip_path: Prepared Dashboard ZIP destination.
+
+        Raises:
+            ValueError: If the archive hash, paths, metadata, or assets are invalid.
+        """
+        digest = hashlib.sha256()
+        with source_path.open("rb") as source:
+            for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                digest.update(chunk)
+        if digest.hexdigest() != expected_digest.lower():
+            raise ValueError("PyPI source archive SHA-256 mismatch")
+
+        with tempfile.TemporaryDirectory(
+            prefix="pypi-source-", dir=source_path.parent
+        ) as staging_name:
+            staging = Path(staging_name)
+            with tarfile.open(source_path, "r:gz") as archive:
+                members = archive.getmembers()
+                roots: set[str] = set()
+                seen: set[PurePosixPath] = set()
+                for member in members:
+                    path = PurePosixPath(member.name)
+                    if (
+                        not path.parts
+                        or path.is_absolute()
+                        or ".." in path.parts
+                        or "\\" in member.name
+                        or ":" in member.name
+                        or not (member.isfile() or member.isdir())
+                        or path in seen
+                    ):
+                        raise ValueError(f"Unsafe PyPI archive member: {member.name}")
+                    roots.add(path.parts[0])
+                    seen.add(path)
+                if len(roots) != 1:
+                    raise ValueError("PyPI source archive must have one root directory")
+                root_name = roots.pop()
+                name, source_version = parse_sdist_filename(f"{root_name}.tar.gz")
+                if name != "astrbot" or source_version != Version(version):
+                    raise ValueError("PyPI source directory does not match the release")
+
+                # Copy only regular files; never follow archive links or execute code.
+                for member in members:
+                    destination = staging.joinpath(*PurePosixPath(member.name).parts)
+                    if member.isdir():
+                        destination.mkdir(parents=True, exist_ok=True)
+                        continue
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    with (
+                        archive.extractfile(member) as source,
+                        destination.open("wb") as output,
+                    ):
+                        shutil.copyfileobj(source, output)
+
+            root = staging / root_name
+            for required in (
+                "PKG-INFO",
+                "main.py",
+                "pyproject.toml",
+                "requirements.txt",
+                "astrbot/__init__.py",
+            ):
+                if not (root / required).is_file():
+                    raise ValueError(f"PyPI source archive is missing {required}")
+            with (root / "PKG-INFO").open("rb") as metadata_file:
+                metadata = BytesParser().parse(metadata_file, headersonly=True)
+            if str(metadata.get("Name", "")).lower() != "astrbot" or Version(
+                str(metadata.get("Version", ""))
+            ) != Version(version):
+                raise ValueError("PyPI source metadata does not match the release")
+            dashboard = root / "astrbot" / "dashboard" / "dist"
+            if not _is_dist_compatible(dashboard, version):
+                raise ValueError("PyPI source has an incomplete or mismatched WebUI")
+
+            shutil.make_archive(
+                str(core_zip_path.with_suffix("")), "zip", staging, root_name
+            )
+            shutil.make_archive(
+                str(dashboard_zip_path.with_suffix("")), "zip", dashboard.parent, "dist"
             )
 
     async def ensure_dashboard(self) -> Path:
