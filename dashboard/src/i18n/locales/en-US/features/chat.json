@@ -149,6 +149,9 @@
     "think": "Thinking",
     "toolUsed": "Using Tool"
   },
+  "history": {
+    "loading": "Loading earlier messages"
+  },
   "reply": {
     "replyTo": "Reply to",
     "notFound": "Message not found"

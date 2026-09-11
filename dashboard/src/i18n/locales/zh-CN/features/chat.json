@@ -149,6 +149,9 @@
     "think": "思考",
     "toolUsed": "使用工具"
   },
+  "history": {
+    "loading": "正在加载更早的消息"
+  },
   "reply": {
     "replyTo": "引用",
     "notFound": "无法定位消息"

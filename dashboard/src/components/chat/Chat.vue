@@ -268,6 +268,16 @@
         class="conversation-stack"
         :class="{ 'is-empty': isEmptyChat }"
       >
+        <v-progress-linear
+          v-if="activeSessionPagination?.loading"
+          class="history-loading"
+          color="primary"
+          height="2"
+          indeterminate
+          absolute
+          location="top"
+          :aria-label="tm('history.loading')"
+        />
         <section
           ref="messagesContainer"
           class="messages-panel"
@@ -2340,6 +2350,11 @@ async function stopCurrentSession() {
   overflow-anchor: none;
   padding: 24px 0 calc(var(--chat-composer-height, 82px) + 34px);
   scroll-padding-bottom: calc(var(--chat-composer-height, 82px) + 34px);
+}
+
+.history-loading {
+  z-index: 2;
+  pointer-events: none;
 }
 
 .conversation-stack.is-empty .messages-panel {
