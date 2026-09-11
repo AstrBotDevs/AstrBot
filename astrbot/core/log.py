@@ -203,6 +203,8 @@ class LogManager:
         "asyncio": logging.WARNING,
         "tzlocal": logging.WARNING,
         "apscheduler": logging.WARNING,
+        "httpx": logging.WARNING,
+        "httpcore": logging.WARNING,
     }
 
     @classmethod
