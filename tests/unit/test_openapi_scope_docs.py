@@ -44,10 +44,6 @@ def test_public_openapi_documents_sensitive_subscopes() -> None:
         "**Required scope:** `chat`\n\n**Conditional sensitive scope:** `chat:admin`"
     )
 
-    chat_message = spec["paths"]["/api/v1/chat/messages/{message_id}"]["get"]
-    assert chat_message["x-astrbot-sensitive-scopes"] == ["chat:admin"]
-    assert "`chat:admin`" in chat_message["description"]
-
     system_config_update = spec["paths"]["/api/v1/system-config"]["put"]
     assert system_config_update["x-astrbot-sensitive-scopes"] == ["config:edit_admin"]
     assert "`config:edit_admin`" in system_config_update["description"]

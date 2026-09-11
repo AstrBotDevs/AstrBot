@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, Path, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from astrbot.dashboard.async_utils import run_maybe_async
-from astrbot.dashboard.responses import ApiError, error, ok
+from astrbot.dashboard.responses import error, ok
 from astrbot.dashboard.schemas import (
     ChatMessagePatchRequest,
     ChatMessageRegenerateRequest,
@@ -15,7 +15,6 @@ from astrbot.dashboard.schemas import (
     ChatThreadCreateRequest,
     ChatThreadMessageRequest,
 )
-from astrbot.dashboard.services.auth_service import CHAT_ADMIN_SCOPE
 from astrbot.dashboard.services.chat_service import (
     ChatService,
     ChatServiceError,
@@ -151,55 +150,6 @@ async def get_chat_session(
             page_size=page_size,
         )
     )
-
-
-@router.get(
-    "/chat/messages/{message_id}",
-    openapi_extra={"x-astrbot-sensitive-scopes": [CHAT_ADMIN_SCOPE]},
-)
-async def get_chat_message(
-    message_id: int = Path(..., gt=0),
-    username: str | None = Query(default=None),
-    auth: AuthContext = Depends(require_chat_scope),
-    service: ChatService = Depends(get_service),
-):
-    """Get a full WebChat history message after ownership validation.
-
-    Args:
-        message_id: Positive platform history record ID.
-        username: Effective username for API-key callers. JWT callers cannot
-            override the username claim with this query value.
-        auth: Authenticated dashboard or API-key context.
-        service: Chat service used to load and authorize the message.
-
-    Returns:
-        An ``ok`` envelope containing the complete, non-stripped message.
-
-    Raises:
-        ApiError: If the username is missing, reserved, or does not own the
-            message. All lookup and ownership failures return the same 404.
-    """
-    effective_username = auth.username
-    if auth.via == "api_key":
-        effective_username = str(username or "").strip()
-        if not effective_username:
-            raise ApiError("Message not found", status_code=404)
-        if "*" not in auth.scopes and CHAT_ADMIN_SCOPE not in auth.scopes:
-            configs = getattr(
-                getattr(service, "core_lifecycle", None),
-                "astrbot_config_mgr",
-                None,
-            )
-            for config in getattr(configs, "confs", {}).values():
-                admin_ids = (
-                    config.get("admins_id", []) if isinstance(config, dict) else []
-                )
-                if any(str(admin_id) == effective_username for admin_id in admin_ids):
-                    raise ApiError("Message not found", status_code=404)
-    try:
-        return ok(await service.get_message(effective_username, message_id))
-    except ChatServiceError as exc:
-        raise ApiError("Message not found", status_code=404) from exc
 
 
 @router.patch("/chat/sessions/{session_id}")

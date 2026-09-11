@@ -12,10 +12,8 @@ from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
 from astrbot.dashboard.api.auth import AuthContext
 from astrbot.dashboard.api.chat import (
-    get_chat_message,
     get_chat_session,
 )
-from astrbot.dashboard.responses import ApiError
 from astrbot.dashboard.services.chat_service import (
     ChatService,
     ChatServiceError,
@@ -53,13 +51,23 @@ def test_v1_history_routes_keep_legacy_default_page_size():
 
 
 @pytest.mark.asyncio
-async def test_get_session_returns_complete_content_and_pagination_metadata():
+@pytest.mark.parametrize(
+    ("page", "total", "has_row", "has_more"),
+    [(1, 0, False, False), (2, 3, True, True), (3, 3, True, False), (4, 3, False, False)],
+)
+async def test_get_session_returns_complete_content_and_pagination_metadata(
+    page, total, has_row, has_more
+):
     content = {
         "type": "bot",
         "message": [
             {"type": "think", "think": "first thought"},
-            {"type": "tool_call", "id": "tool-1", "name": "search", "args": {"q": "x"}},
-            {"type": "tool_call_result", "id": "tool-1", "result": "full tool result"},
+            {
+                "type": "tool_call",
+                "tool_calls": [
+                    {"id": "tool-1", "name": "search", "arguments": {"q": "x"}, "result": "full tool result"}
+                ],
+            },
             {"type": "plain", "text": "intermediate answer"},
             {"type": "reasoning", "text": "legacy thought"},
             {"type": "think", "think": "second thought"},
@@ -68,21 +76,21 @@ async def test_get_session_returns_complete_content_and_pagination_metadata():
         "reasoning": "top-level reasoning",
     }
     original = deepcopy(content)
-    history = [FakeHistory(content, record_id=2)]
+    history = [FakeHistory(content, record_id=2)] if has_row else []
 
     class Manager:
         async def get(self, **kwargs):
             assert kwargs == {
                 "platform_id": "webchat",
                 "user_id": "session-1",
-                "page": 2,
+                "page": page,
                 "page_size": 1,
             }
             return history
 
         async def count(self, **kwargs):
             assert kwargs == {"platform_id": "webchat", "user_id": "session-1"}
-            return 3
+            return total
 
     class Database:
         async def get_platform_session_by_id(self, session_id):
@@ -102,67 +110,18 @@ async def test_get_session_returns_complete_content_and_pagination_metadata():
     service.running_convs = {}
     service.get_active_chat_runs = lambda _username, _session_id: []
 
-    result = await service.get_session("owner", "session-1", page=2, page_size=1)
-    assert result["total"] == 3
-    assert result["page"] == 2
+    result = await service.get_session("owner", "session-1", page=page, page_size=1)
+    assert result["total"] == total
+    assert result["page"] == page
     assert result["page_size"] == 1
-    assert result["has_more"] is True
-    assert result["history"][0]["content"] == original
-    assert "has_reasoning" not in result["history"][0]
-    assert "reasoning_len" not in result["history"][0]
-    assert history[0].content == original
-
-
-@pytest.mark.asyncio
-async def test_message_route_uses_api_key_username_but_ignores_jwt_query():
-    seen: list[str] = []
-
-    class Service:
-        async def get_message(self, username, _message_id):
-            seen.append(username)
-            return {"message": {"id": 1}}
-
-    service = Service()
-    api_key_auth = AuthContext("api-key-user", [], via="api_key")
-    jwt_auth = AuthContext("jwt-user", [], via="jwt")
-
-    await get_chat_message(1, "api-key-user", api_key_auth, service)
-    await get_chat_message(1, "spoofed", jwt_auth, service)
-    assert seen == ["api-key-user", "jwt-user"]
-
-    with pytest.raises(ApiError) as missing_username:
-        await get_chat_message(1, None, api_key_auth, service)
-    assert missing_username.value.status_code == 404
-
-    class MissingService:
-        async def get_message(self, _username, _message_id):
-            raise ChatServiceError("Message not found")
-
-    with pytest.raises(ApiError) as foreign:
-        await get_chat_message(1, "owner", jwt_auth, MissingService())
-    assert foreign.value.status_code == 404
-
-
-@pytest.mark.asyncio
-async def test_message_route_rejects_reserved_admin_username_without_subscope():
-    class Service:
-        core_lifecycle = SimpleNamespace(
-            astrbot_config_mgr=SimpleNamespace(
-                confs={"default": {"admins_id": ["admin-user"]}}
-            )
-        )
-
-        async def get_message(self, _username, _message_id):
-            return {"message": {"id": 1}}
-
-    with pytest.raises(ApiError) as reserved:
-        await get_chat_message(
-            1,
-            "admin-user",
-            AuthContext("key-owner", ["chat"], via="api_key"),
-            Service(),
-        )
-    assert reserved.value.status_code == 404
+    assert result["has_more"] is has_more
+    if has_row:
+        assert result["history"][0]["content"] == original
+        assert "has_reasoning" not in result["history"][0]
+        assert "reasoning_len" not in result["history"][0]
+        assert history[0].content == original
+    else:
+        assert result["history"] == []
 
 
 @pytest.mark.asyncio
@@ -248,76 +207,6 @@ async def test_real_history_pagination_and_count_are_scope_isolated(tmp_path):
     assert await manager.get("webchat", "session-1", page=99, page_size=2) == []
     thread_page = await manager.get("webchat_thread", "thread-1", page=1, page_size=2)
     assert [item.content["message"][0]["text"] for item in thread_page] == ["t1"]
-    await db.engine.dispose()
-
-
-@pytest.mark.asyncio
-async def test_get_message_ownership_matrix_uses_real_database(tmp_path):
-    db = SQLiteDatabase(str(tmp_path / "ownership.db"))
-    await db.initialize()
-    owner_session = await db.create_platform_session(
-        creator="owner", session_id="owned-session"
-    )
-    foreign_session = await db.create_platform_session(
-        creator="foreign", session_id="foreign-session"
-    )
-    owner_thread = await db.create_webchat_thread(
-        creator="owner",
-        parent_session_id=owner_session.session_id,
-        parent_message_id=1,
-        base_checkpoint_id="checkpoint-owner",
-        selected_text="owner thread",
-    )
-    foreign_thread = await db.create_webchat_thread(
-        creator="foreign",
-        parent_session_id=foreign_session.session_id,
-        parent_message_id=1,
-        base_checkpoint_id="checkpoint-foreign",
-        selected_text="foreign thread",
-    )
-    content = {
-        "type": "bot",
-        "message": [
-            {"type": "think", "think": "private"},
-            {"type": "plain", "text": "answer"},
-        ],
-        "reasoning": "private",
-    }
-    owned_webchat = await db.insert_platform_message_history(
-        platform_id="webchat", user_id=owner_session.session_id, content=content
-    )
-    owned_thread = await db.insert_platform_message_history(
-        platform_id="webchat_thread", user_id=owner_thread.thread_id, content=content
-    )
-    foreign_webchat = await db.insert_platform_message_history(
-        platform_id="webchat", user_id=foreign_session.session_id, content=content
-    )
-    foreign_thread_record = await db.insert_platform_message_history(
-        platform_id="webchat_thread", user_id=foreign_thread.thread_id, content=content
-    )
-    orphan = await db.insert_platform_message_history(
-        platform_id="webchat", user_id="missing-session", content=content
-    )
-    unsupported = await db.insert_platform_message_history(
-        platform_id="qq", user_id="qq-user", content=content
-    )
-
-    service = object.__new__(ChatService)
-    service.db = db
-    webchat_result = await service.get_message("owner", owned_webchat.id)
-    thread_result = await service.get_message("owner", owned_thread.id)
-    assert webchat_result["message"]["content"] == content
-    assert thread_result["message"]["content"] == content
-
-    for record_id in (
-        foreign_webchat.id,
-        foreign_thread_record.id,
-        orphan.id,
-        unsupported.id,
-        999999,
-    ):
-        with pytest.raises(ChatServiceError, match="^Message not found$"):
-            await service.get_message("owner", record_id)
     await db.engine.dispose()
 
 

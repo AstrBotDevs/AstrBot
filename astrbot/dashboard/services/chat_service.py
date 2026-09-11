@@ -1597,48 +1597,6 @@ class ChatService:
             raise ChatServiceError("Missing key: thread_id")
         return await self.get_thread(username, thread_id)
 
-    async def get_message(self, username: str, message_id: int) -> dict:
-        """Get one full WebChat history record after ownership validation.
-
-        Args:
-            username: Authenticated dashboard username.
-            message_id: Positive platform history record ID.
-
-        Returns:
-            A full, non-stripped serialized history record.
-
-        Raises:
-            ChatServiceError: If the record is missing, unsupported, or not owned
-                by the authenticated user. All such cases use the same message.
-        """
-        if message_id < 1:
-            raise ChatServiceError("Message not found")
-        record = await self.db.get_platform_message_history_by_id(message_id)
-        if not record:
-            raise ChatServiceError("Message not found")
-
-        if record.platform_id == "webchat":
-            session = await self.db.get_platform_session_by_id(record.user_id)
-            if (
-                not session
-                or session.platform_id != "webchat"
-                or session.creator != username
-                or session.session_id != record.user_id
-            ):
-                raise ChatServiceError("Message not found")
-        elif record.platform_id == "webchat_thread":
-            thread = await self.db.get_webchat_thread_by_id(record.user_id)
-            if (
-                not thread
-                or thread.creator != username
-                or thread.thread_id != record.user_id
-            ):
-                raise ChatServiceError("Message not found")
-        else:
-            raise ChatServiceError("Message not found")
-
-        return {"message": serialize_history_entry(record)}
-
     async def prepare_thread_chat_payload(self, username: str, data: dict) -> dict:
         thread_id = data.get("thread_id")
         if not thread_id:

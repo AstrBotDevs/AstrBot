@@ -1421,22 +1421,6 @@ export type StopChatSessionResponse = (SuccessEnvelope);
 
 export type StopChatSessionError = unknown;
 
-export type GetChatMessageData = {
-    path: {
-        message_id: number;
-    };
-    query?: {
-        /**
-         * Required for API-key callers; ignored for JWT callers.
-         */
-        username?: string;
-    };
-};
-
-export type GetChatMessageResponse = (SuccessEnvelope);
-
-export type GetChatMessageError = (unknown);
-
 export type ResumeChatRunData = {
     path: {
         run_id: string;
