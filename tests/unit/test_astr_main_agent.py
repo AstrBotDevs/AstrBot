@@ -265,12 +265,18 @@ def test_append_system_reminders_includes_weekday(mock_event):
         "<system_reminder>Current datetime: "
         "2026-06-08 12:34 (UTC), Weekday: Monday</system_reminder>"
     ]
+    # The datetime reminder is provider-facing only and must not be persisted
+    # into conversation history.
+    assert req.extra_user_content_parts[0]._no_save is True
 
 
 def test_local_mode_prompt_uses_windows_powershell_51():
-    with patch("astrbot.core.astr_main_agent.platform.system", return_value="Windows"), patch(
-        "astrbot.core.astr_main_agent.resolve_windows_shell",
-        return_value="powershell.exe",
+    with (
+        patch("astrbot.core.astr_main_agent.platform.system", return_value="Windows"),
+        patch(
+            "astrbot.core.astr_main_agent.resolve_windows_shell",
+            return_value="powershell.exe",
+        ),
     ):
         prompt = ama._build_local_mode_prompt()
 
@@ -280,9 +286,12 @@ def test_local_mode_prompt_uses_windows_powershell_51():
 
 
 def test_local_mode_prompt_hints_pwsh_when_resolved():
-    with patch("astrbot.core.astr_main_agent.platform.system", return_value="Windows"), patch(
-        "astrbot.core.astr_main_agent.resolve_windows_shell",
-        return_value="pwsh.exe",
+    with (
+        patch("astrbot.core.astr_main_agent.platform.system", return_value="Windows"),
+        patch(
+            "astrbot.core.astr_main_agent.resolve_windows_shell",
+            return_value="pwsh.exe",
+        ),
     ):
         prompt = ama._build_local_mode_prompt()
 
@@ -292,9 +301,12 @@ def test_local_mode_prompt_hints_pwsh_when_resolved():
 
 
 def test_local_mode_prompt_ignores_pwsh_on_non_windows():
-    with patch("astrbot.core.astr_main_agent.platform.system", return_value="Linux"), patch(
-        "astrbot.core.astr_main_agent.resolve_windows_shell",
-        return_value="pwsh.exe",
+    with (
+        patch("astrbot.core.astr_main_agent.platform.system", return_value="Linux"),
+        patch(
+            "astrbot.core.astr_main_agent.resolve_windows_shell",
+            return_value="pwsh.exe",
+        ),
     ):
         prompt = ama._build_local_mode_prompt()
 
