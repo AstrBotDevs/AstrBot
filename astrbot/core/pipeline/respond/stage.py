@@ -49,6 +49,10 @@ class RespondStage(Stage):
         Comp.Unknown: lambda comp: bool(comp.text and comp.text.strip()),
     }
 
+    # Inline components that belong to the sentence itself; segmented reply
+    # keeps a run of them in the same bubble instead of splitting the text.
+    INLINE_SEGMENT_TYPES = {ComponentType.Plain, ComponentType.Face}
+
     async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
         self.config = ctx.astrbot_config
@@ -95,14 +99,50 @@ class RespondStage(Stage):
             word_count = len([c for c in text if c.isalnum()])
         return word_count
 
-    async def _calc_comp_interval(self, comp: BaseMessageComponent) -> float:
-        """分段回复 计算间隔时间"""
+    @staticmethod
+    def _group_segment_chain(
+        chain: list[BaseMessageComponent],
+    ) -> list[list[BaseMessageComponent]]:
+        """Group consecutive inline components into one bubble per group.
+
+        Each returned segment is either a run of inline components (a whole
+        sentence with inline faces) or a single component that is sent on
+        its own.
+        """
+        segments: list[list[BaseMessageComponent]] = []
+        inline_group: list[BaseMessageComponent] = []
+        for comp in chain:
+            if comp.type in RespondStage.INLINE_SEGMENT_TYPES:
+                inline_group.append(comp)
+                continue
+            if inline_group:
+                segments.append(inline_group)
+                inline_group = []
+            segments.append([comp])
+        if inline_group:
+            segments.append(inline_group)
+        return segments
+
+    async def _calc_comp_interval(
+        self,
+        comps: BaseMessageComponent | list[BaseMessageComponent],
+    ) -> float:
+        """分段回复 计算间隔时间
+
+        ``comps`` may also be a sequence of components sharing one bubble;
+        the log-method interval is then computed from the total Plain word
+        count of that bubble.
+        """
+        if isinstance(comps, list):
+            text = "".join(comp.text for comp in comps if isinstance(comp, Comp.Plain))
+        else:
+            text = comps.text if isinstance(comps, Comp.Plain) else ""
         if self.interval_method == "log":
-            if isinstance(comp, Comp.Plain):
-                wc = await self._word_cnt(comp.text)
-                i = math.log(wc + 1, self.log_base)
-                return random.uniform(i, i + 0.5)
-            return random.uniform(1, 1.75)
+            if not text:
+                return random.uniform(1, 1.75)
+            wc = await self._word_cnt(text)
+            i = math.log(wc + 1, self.log_base)
+            return random.uniform(i, i + 0.5)
         # random
         return random.uniform(self.interval[0], self.interval[1])
 
@@ -273,19 +313,22 @@ class RespondStage(Stage):
                         f"actual_chain: {result.chain}",
                     )
                     return
-                for comp in result.chain:
-                    i = await self._calc_comp_interval(comp)
+                segments = self._group_segment_chain(result.chain)
+                for segment in segments:
+                    i = await self._calc_comp_interval(segment)
                     await asyncio.sleep(i)
                     try:
-                        if comp.type in need_separately:
-                            await event.send(result.derive([comp]))
+                        if segment[0].type in need_separately:
+                            await event.send(result.derive(segment))
                         else:
-                            await event.send(result.derive([*header_comps, comp]))
+                            await event.send(
+                                result.derive([*header_comps, *segment]),
+                            )
                             header_comps.clear()
                     except Exception as e:
                         logger.error(
                             "Failed to send the message chain: "
-                            f"chain = {MessageChain([comp])}, error = {e}",
+                            f"chain = {MessageChain(segment)}, error = {e}",
                             exc_info=True,
                         )
             else:
