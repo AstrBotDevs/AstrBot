@@ -141,7 +141,7 @@
   },
   "reasoning": {
     "loading": "正在加载思考和工具调用内容",
-    "loadFailed": "无法加载思考或工具调用内容，请重试。",
+    "loadFailed": "思考与工具记录加载失败",
     "enabled": "思考内容已开启",
     "disabled": "思考内容已关闭",
     "thinking": "思考过程",
@@ -152,6 +152,8 @@
     "toolUsed": "使用工具"
   },
   "history": {
+    "loadFailed": "历史消息加载失败",
+    "loadEarlierFailed": "更早的消息加载失败",
     "loading": "正在加载更早的消息"
   },
   "reply": {

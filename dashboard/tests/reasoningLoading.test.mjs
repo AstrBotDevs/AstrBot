@@ -34,7 +34,38 @@ test("reasoning loading and failures are visible without replacing the activity 
           reasoningActivityTitle: () => "Activity summary",
         };
       }
-      if (name === "@lucide/vue") return { ChevronRight: () => vue.h("span") };
+      if (name === "@lucide/vue") {
+        return Object.fromEntries(
+          ["ChevronRight", "CircleAlert", "RotateCw"].map((icon) => [
+            icon,
+            () => vue.h("span"),
+          ]),
+        );
+      }
+      if (name === "@/components/chat/ChatLoadError.vue") {
+        const child = parse(
+          readFileSync(
+            new URL(
+              "../src/components/chat/ChatLoadError.vue",
+              import.meta.url,
+            ),
+            "utf8",
+          ),
+        );
+        const compiled = compileScript(child.descriptor, {
+          id: "load-error",
+          inlineTemplate: true,
+        });
+        const childContext = vm.createContext({
+          exports: {},
+          require: context.require,
+        });
+        vm.runInContext(
+          ts.transpile(compiled.content, { module: ts.ModuleKind.CommonJS }),
+          childContext,
+        );
+        return childContext.exports;
+      }
       if (name.endsWith(".vue")) return { default: () => vue.h("div") };
       throw new Error(`Unexpected import: ${name}`);
     },

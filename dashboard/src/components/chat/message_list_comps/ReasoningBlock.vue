@@ -34,16 +34,12 @@
       />
     </button>
 
-    <div
+    <ChatLoadError
       v-if="reasoningStatus === 'error'"
       class="reasoning-error"
-      role="alert"
-    >
-      <span>{{ tm("reasoning.loadFailed") }}</span>
-      <v-btn size="small" variant="text" @click="handlePrimaryAction">
-        {{ tm("actions.retry") }}
-      </v-btn>
-    </div>
+      :message="tm('reasoning.loadFailed')"
+      @retry="handlePrimaryAction"
+    />
 
     <div
       v-if="!openInSidebar && isExpanded"
@@ -78,6 +74,7 @@ import {
   type MessagePart,
 } from "@/composables/useMessages";
 import { useModuleI18n } from "@/i18n/composables";
+import ChatLoadError from "@/components/chat/ChatLoadError.vue";
 import ThinkingIndicator from "@/components/chat/ThinkingIndicator.vue";
 import ReasoningTimeline from "@/components/chat/message_list_comps/ReasoningTimeline.vue";
 
@@ -262,11 +259,7 @@ onBeforeUnmount(() => {
 }
 
 .reasoning-error {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 4px;
-  color: rgb(var(--v-theme-error));
+  margin-top: 8px;
 }
 
 .reasoning-header {

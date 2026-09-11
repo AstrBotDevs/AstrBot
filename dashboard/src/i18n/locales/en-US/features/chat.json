@@ -141,7 +141,7 @@
   },
   "reasoning": {
     "loading": "Loading reasoning and tool calls",
-    "loadFailed": "Unable to load reasoning or tool calls. Please retry.",
+    "loadFailed": "Could not load reasoning and tool activity",
     "enabled": "Reasoning enabled",
     "disabled": "Reasoning disabled",
     "thinking": "Thinking Process",
@@ -152,6 +152,8 @@
     "toolUsed": "Using Tool"
   },
   "history": {
+    "loadFailed": "Could not load messages",
+    "loadEarlierFailed": "Could not load earlier messages",
     "loading": "Loading earlier messages"
   },
   "reply": {

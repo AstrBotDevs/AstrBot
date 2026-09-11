@@ -295,19 +295,13 @@
 
           <div
             v-else-if="!activeMessages.length && activeSessionPagination?.error"
-            class="welcome-state chat-load-error"
+            class="welcome-state"
           >
-            <div class="chat-load-error-message">
-              {{ activeSessionPagination.error }}
-            </div>
-            <v-btn
-              size="small"
-              variant="text"
-              :loading="activeSessionPagination.loading"
-              @click="retryCurrentSessionLoad"
-            >
-              {{ tm("actions.retry") }}
-            </v-btn>
+            <ChatLoadError
+              :message="tm('history.loadFailed')"
+              :loading="loadingMessages"
+              @retry="retryCurrentSessionLoad"
+            />
           </div>
 
           <div v-else-if="!activeMessages.length" class="welcome-state">
@@ -319,20 +313,13 @@
             ref="messagesContent"
             class="messages-list-shell"
           >
-            <div
+            <ChatLoadError
               v-if="activeSessionPagination?.error"
-              class="load-earlier-bar load-earlier-error"
-            >
-              <span>{{ activeSessionPagination.error }}</span>
-              <v-btn
-                size="small"
-                variant="text"
-                :loading="activeSessionPagination.loading"
-                @click="retryCurrentSessionLoad"
-              >
-                {{ tm("actions.retry") }}
-              </v-btn>
-            </div>
+              class="history-load-error"
+              :message="tm('history.loadEarlierFailed')"
+              :loading="activeSessionPagination.loading"
+              @retry="retryCurrentSessionLoad"
+            />
             <ChatMessageList
               v-model:edit-draft="messageEditDraft"
               :messages="activeMessages"
@@ -532,6 +519,7 @@ import ChatInput from "@/components/chat/ChatInput.vue";
 import ChatMessageList from "@/components/chat/ChatMessageList.vue";
 import ChatUILogo from "@/components/chat/ChatUILogo.vue";
 import type { RegenerateModelSelection } from "@/components/chat/RegenerateMenu.vue";
+import ChatLoadError from "@/components/chat/ChatLoadError.vue";
 import ReasoningSidebar from "@/components/chat/ReasoningSidebar.vue";
 import ThreadPanel from "@/components/chat/ThreadPanel.vue";
 import WorkspaceFilesPanel from "@/components/chat/WorkspaceFilesPanel.vue";
@@ -2381,14 +2369,8 @@ async function stopCurrentSession() {
   text-align: center;
 }
 
-.chat-load-error-message {
-  max-width: min(460px, 90%);
-  color: rgb(var(--v-theme-error));
-  line-height: 1.5;
-}
-
-.load-earlier-error {
-  color: rgb(var(--v-theme-error));
+.history-load-error {
+  margin: 0 auto 20px;
 }
 
 .conversation-stack.is-empty .welcome-state {
