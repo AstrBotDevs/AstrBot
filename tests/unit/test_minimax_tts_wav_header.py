@@ -16,6 +16,7 @@ def _make_wav(
     riff_size: int = WAV_SIZE_PLACEHOLDER,
     data_size: int = WAV_SIZE_PLACEHOLDER,
     extra_chunks: bytes = b"",
+    trailing_chunks: bytes = b"",
 ) -> bytes:
     """Build a minimal PCM WAV file, optionally with placeholder sizes."""
     fmt = struct.pack("<HHIIHH", 1, 1, 32000, 64000, 2, 16)
@@ -28,6 +29,7 @@ def _make_wav(
         + b"data"
         + struct.pack("<I", data_size)
         + payload
+        + trailing_chunks
     )
     return b"RIFF" + struct.pack("<I", riff_size) + chunks
 
@@ -96,6 +98,20 @@ class TestPatchStreamedWavHeader:
         # An un-walkable chunk before ``data`` must not be guessed around.
         junk = b"junk" + struct.pack("<I", WAV_SIZE_PLACEHOLDER) + b"abcd"
         wav = _make_wav(payload=b"xy", extra_chunks=junk)
+        assert _patch_streamed_wav_header(wav) == wav
+
+    def test_placeholder_data_with_trailing_chunk_left_untouched(self):
+        payload = b"\x00\x01" * 100
+        info = b"INFOabcd"
+        list_chunk = b"LIST" + struct.pack("<I", len(info)) + info
+        wav = _make_wav(payload=payload, trailing_chunks=list_chunk)
+
+        # The placeholder makes the boundary unknowable; metadata must not be
+        # counted as audio data.
+        assert _patch_streamed_wav_header(wav) == wav
+
+    def test_odd_placeholder_payload_left_untouched(self):
+        wav = _make_wav(payload=b"abc")
         assert _patch_streamed_wav_header(wav) == wav
 
     def test_truncation_cases(self):
