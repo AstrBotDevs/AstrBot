@@ -638,6 +638,11 @@ class ProviderOpenAIOfficial(Provider):
 
         state = ChatCompletionStreamState()
 
+        # 上游 tool_call.index -> 规范化后的 0 起始下标。
+        # 必须是每次请求独立的局部状态，不能挂在 self 上，
+        # 否则并发请求会互相污染下标映射。
+        tool_call_index_map: dict[int, int] = {}
+
         async for chunk in stream:
             choice = chunk.choices[0] if chunk.choices else None
             delta = choice.delta if choice else None
@@ -651,6 +656,21 @@ class ProviderOpenAIOfficial(Provider):
                     # Gemini and some OpenAI-compatible proxies omit this field
                     if not hasattr(tc, "index") or tc.index is None:
                         tc.index = idx
+                    else:
+                        # Some OpenAI-compatible gateways start tool_call.index at 1
+                        # (the OpenAI spec requires 0-based indexing). The SDK streaming
+                        # snapshot accumulator uses index directly as a list subscript,
+                        # so index=1 on an empty list raises IndexError and the tool_call
+                        # name/arguments get split across misaligned slots, eventually
+                        # producing a malformed tool_call with id=None/name="" that fails
+                        # downstream ToolCall pydantic validation.
+                        # Remap upstream indexes to a contiguous 0-based sequence.
+                        remapped = tool_call_index_map.setdefault(
+                            tc.index,
+                            len(tool_call_index_map),
+                        )
+                        if remapped != tc.index:
+                            tc.index = remapped
             # 跳过 delta=None 的 chunk，避免 SDK 内部 _convert_initial_chunk_into_snapshot
             # 第 747 行 choice.delta.to_dict() 抛出 NoneType 错误。
             # refs: AstrBot#6689 / openai-python#5069 / #5047
