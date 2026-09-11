@@ -319,7 +319,15 @@ class AstrBotCoreLifecycle:
         # 把插件中注册的所有协程函数注册到事件总线中并执行
         extra_tasks = []
         for task in self.star_context._register_tasks:
-            extra_tasks.append(asyncio.create_task(task, name=task.__name__))  # type: ignore
+            if isinstance(task, asyncio.Task):
+                extra_tasks.append(task)
+            elif asyncio.iscoroutine(task):
+                extra_tasks.append(asyncio.create_task(task, name=task.__name__))
+            else:
+                logger.warning(
+                    f"忽略无法识别的插件注册任务（期望协程或 asyncio.Task）: {task!r}",
+                )
+        self.star_context._register_tasks.clear()
 
         tasks_ = [
             event_bus_task,
