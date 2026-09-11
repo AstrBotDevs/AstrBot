@@ -333,62 +333,21 @@ def serialize_thread(thread) -> dict:
     }
 
 
-def serialize_history_entry(history, strip_reasoning: bool = False) -> dict:
+def serialize_history_entry(history) -> dict:
     """Serialize a PlatformMessageHistory record with UTC-aware timestamps.
 
     Args:
         history: A PlatformMessageHistory instance. Must not be None.
-        strip_reasoning: Omit persisted thinking parts from list responses while
-            retaining a lightweight marker for lazy loading.
 
     Returns:
         Dict with all model fields plus created_at/updated_at serialized as
         UTC-aware ISO strings (e.g. ``2026-07-06T04:00:00+00:00``).
     """
-    serialized = {
+    return {
         **history.model_dump(),
         "created_at": to_utc_isoformat(history.created_at),
         "updated_at": to_utc_isoformat(history.updated_at),
     }
-    if not strip_reasoning:
-        return serialized
-
-    content = serialized.get("content")
-    if not isinstance(content, dict) or content.get("type") != "bot":
-        return serialized
-
-    content = deepcopy(content)
-    message_parts = content.get("message")
-    reasoning_length = 0
-    has_reasoning = False
-    stripped_parts: list[dict] = []
-    if isinstance(message_parts, list):
-        for part in message_parts:
-            if not isinstance(part, dict):
-                stripped_parts.append(part)
-                continue
-            if part.get("type") in {"think", "reasoning"}:
-                reasoning_text = part.get("think")
-                if not isinstance(reasoning_text, str):
-                    reasoning_text = part.get("text")
-                if isinstance(reasoning_text, str) and reasoning_text:
-                    has_reasoning = True
-                    reasoning_length += len(reasoning_text)
-                continue
-            stripped_parts.append(part)
-    if isinstance(message_parts, list):
-        content["message"] = stripped_parts
-
-    if not has_reasoning:
-        top_level_reasoning = content.get("reasoning")
-        if isinstance(top_level_reasoning, str) and top_level_reasoning:
-            has_reasoning = True
-            reasoning_length = len(top_level_reasoning)
-    content.pop("reasoning", None)
-    serialized["content"] = content
-    serialized["has_reasoning"] = has_reasoning
-    serialized["reasoning_len"] = reasoning_length
-    return serialized
 
 
 def find_checkpoint_index(history: list[dict], checkpoint_id: str) -> int | None:
@@ -1458,7 +1417,6 @@ class ChatService:
         session_id: str,
         page: int = 1,
         page_size: int = 1000,
-        strip_reasoning: bool = False,
     ) -> dict:
         """Get one WebChat session and a page of its history.
 
@@ -1467,7 +1425,6 @@ class ChatService:
             session_id: WebChat session identifier.
             page: One-based history page, with page one containing the newest rows.
             page_size: Number of history records to return (at most 1000).
-            strip_reasoning: Whether to omit thinking content from list records.
 
         Returns:
             Session metadata, history page, and pagination metadata.
@@ -1505,10 +1462,7 @@ class ChatService:
         )
 
         response_data = {
-            "history": [
-                serialize_history_entry(history, strip_reasoning=strip_reasoning)
-                for history in history_ls
-            ],
+            "history": [serialize_history_entry(history) for history in history_ls],
             "total": total,
             "page": page,
             "page_size": page_size,

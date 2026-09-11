@@ -19,7 +19,6 @@ from astrbot.dashboard.responses import ApiError
 from astrbot.dashboard.services.chat_service import (
     ChatService,
     ChatServiceError,
-    serialize_history_entry,
 )
 
 
@@ -49,61 +48,27 @@ class FakeHistory:
         }
 
 
-def test_serializer_strips_both_reasoning_shapes_without_mutating_input():
-    content = {
-        "type": "bot",
-        "message": [
-            {"type": "plain", "text": "answer"},
-            {"type": "think", "think": "abc"},
-            {"type": "reasoning", "text": "de"},
-            {"type": "tool_call", "tool_calls": [{"id": "tool-1"}]},
-        ],
-        "reasoning": "ignored-fallback",
-    }
-    original = deepcopy(content)
-    record = FakeHistory(content)
-
-    stripped = serialize_history_entry(record, strip_reasoning=True)
-
-    assert stripped["content"]["message"] == [
-        {"type": "plain", "text": "answer"},
-        {"type": "tool_call", "tool_calls": [{"id": "tool-1"}]},
-    ]
-    assert stripped["content"].get("reasoning") is None
-    assert stripped["has_reasoning"] is True
-    assert stripped["reasoning_len"] == 5
-    assert content == original
-
-    full = serialize_history_entry(record)
-    assert full["content"] == original
-
-
-def test_serializer_falls_back_to_top_level_reasoning_and_preserves_user():
-    bot = FakeHistory(
-        {
-            "type": "bot",
-            "message": [{"type": "plain", "text": "x"}],
-            "reasoning": "fallback",
-        }
-    )
-    stripped = serialize_history_entry(bot, strip_reasoning=True)
-    assert stripped["has_reasoning"] is True
-    assert stripped["reasoning_len"] == len("fallback")
-    assert "reasoning" not in stripped["content"]
-
-    user = FakeHistory({"type": "user", "message": [{"type": "plain", "text": "hi"}]})
-    user_data = serialize_history_entry(user, strip_reasoning=True)
-    assert user_data["content"] == user.content
-    assert "has_reasoning" not in user_data
-
-
 def test_v1_history_routes_keep_legacy_default_page_size():
     assert signature(get_chat_session).parameters["page_size"].default.default == 1000
 
 
 @pytest.mark.asyncio
-async def test_get_session_forwards_page_and_count_metadata():
-    history = [FakeHistory({"type": "user", "message": []}, record_id=2)]
+async def test_get_session_returns_complete_content_and_pagination_metadata():
+    content = {
+        "type": "bot",
+        "message": [
+            {"type": "think", "think": "first thought"},
+            {"type": "tool_call", "id": "tool-1", "name": "search", "args": {"q": "x"}},
+            {"type": "tool_call_result", "id": "tool-1", "result": "full tool result"},
+            {"type": "plain", "text": "intermediate answer"},
+            {"type": "reasoning", "text": "legacy thought"},
+            {"type": "think", "think": "second thought"},
+            {"type": "plain", "text": "final answer"},
+        ],
+        "reasoning": "top-level reasoning",
+    }
+    original = deepcopy(content)
+    history = [FakeHistory(content, record_id=2)]
 
     class Manager:
         async def get(self, **kwargs):
@@ -142,6 +107,10 @@ async def test_get_session_forwards_page_and_count_metadata():
     assert result["page"] == 2
     assert result["page_size"] == 1
     assert result["has_more"] is True
+    assert result["history"][0]["content"] == original
+    assert "has_reasoning" not in result["history"][0]
+    assert "reasoning_len" not in result["history"][0]
+    assert history[0].content == original
 
 
 @pytest.mark.asyncio
@@ -353,13 +322,13 @@ async def test_get_message_ownership_matrix_uses_real_database(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_v1_session_route_passes_list_stripping_contract():
+async def test_v1_session_route_forwards_pagination_parameters():
     seen = {}
 
     class Service:
         async def get_session(self, username, session_id, **kwargs):
             seen.update(username=username, session_id=session_id, **kwargs)
-            return {"history": [{"has_reasoning": True}]}
+            return {"history": []}
 
     result = await get_chat_session(
         "session-1",
@@ -374,5 +343,4 @@ async def test_v1_session_route_passes_list_stripping_contract():
         "session_id": "session-1",
         "page": 2,
         "page_size": 50,
-        "strip_reasoning": True,
     }

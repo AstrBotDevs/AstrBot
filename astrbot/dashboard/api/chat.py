@@ -149,7 +149,6 @@ async def get_chat_session(
             session_id,
             page=page,
             page_size=page_size,
-            strip_reasoning=True,
         )
     )
 
