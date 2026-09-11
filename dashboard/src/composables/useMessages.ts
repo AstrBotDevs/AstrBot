@@ -63,10 +63,6 @@ export interface ChatRecord {
   sender_name?: string;
   llm_checkpoint_id?: string | null;
   threads?: ChatThread[];
-  hasReasoning?: boolean;
-  reasoningLen?: number;
-  reasoningStatus?: "unloaded" | "loading" | "loaded" | "error";
-  reasoningError?: string;
 }
 
 export interface HistoryPaginationState {
@@ -161,17 +157,14 @@ export function useMessages(options: UseMessagesOptions) {
   const sending = ref(false);
   const messagesBySession = reactive<Record<string, ChatRecord[]>>({});
   const loadedSessions = reactive<Record<string, boolean>>({});
-  const paginationBySession = reactive<Record<string, HistoryPaginationState>>({});
+  const paginationBySession = reactive<Record<string, HistoryPaginationState>>(
+    {},
+  );
   const activeConnections = reactive<Record<string, ActiveConnection>>({});
   const chatWebSockets: Record<string, WebSocket> = {};
   const closingChatWebSockets = new WeakSet<WebSocket>();
   const deferredBotAnchors = new WeakMap<ChatRecord, ChatRecord>();
   const attachmentBlobCache = new Map<string, Promise<string>>();
-  const reasoningLoadPromises = new WeakMap<
-    ChatRecord,
-    Promise<ChatRecord | null>
-  >();
-  const reasoningGenerations = new WeakMap<ChatRecord, number>();
   const sessionLoadEpochs = reactive<Record<string, number>>({});
   const loadingSessionId = ref<string | null>(null);
   const sessionProjects = reactive<Record<string, ChatSessionProject | null>>(
@@ -305,7 +298,9 @@ export function useMessages(options: UseMessagesOptions) {
         page_size: 50,
       });
       if (response.data?.status !== "ok") {
-        throw new Error(response.data?.message || "Failed to load session messages");
+        throw new Error(
+          response.data?.message || "Failed to load session messages",
+        );
       }
       const payload = response.data?.data || {};
       const history = payload.history || [];
@@ -400,7 +395,9 @@ export function useMessages(options: UseMessagesOptions) {
       });
       if (sessionLoadEpochs[sessionId] !== epoch) return;
       if (response.data?.status !== "ok") {
-        throw new Error(response.data?.message || "Failed to load earlier messages");
+        throw new Error(
+          response.data?.message || "Failed to load earlier messages",
+        );
       }
       const payload = response.data?.data || {};
       const records = (payload.history || []).map(normalizeHistoryRecord);
@@ -574,10 +571,6 @@ export function useMessages(options: UseMessagesOptions) {
       ? normalizeHistoryRecord(payload.message)
       : null;
     if (updated) {
-      reasoningGenerations.set(
-        record,
-        (reasoningGenerations.get(record) || 0) + 1,
-      );
       Object.assign(record, updated);
       await resolveRecordMedia([record]);
     }
@@ -656,15 +649,6 @@ export function useMessages(options: UseMessagesOptions) {
   ) {
     if (!sessionId || botRecord.id == null) return;
     const targetMessageId = botRecord.id;
-
-    reasoningGenerations.set(
-      botRecord,
-      (reasoningGenerations.get(botRecord) || 0) + 1,
-    );
-    botRecord.hasReasoning = false;
-    botRecord.reasoningLen = 0;
-    botRecord.reasoningStatus = "loaded";
-    botRecord.reasoningError = undefined;
 
     botRecord.id = `local-regenerate-${Date.now()}`;
     botRecord.created_at = new Date().toISOString();
@@ -754,77 +738,21 @@ export function useMessages(options: UseMessagesOptions) {
       content.message || [],
       content.reasoning || "",
     );
-    const extractedReasoning = extractReasoningText(
-      normalizedMessage,
-      content.reasoning || "",
-    );
     const normalizedContent: ChatContent = {
       type: content.type || (record.sender_id === "bot" ? "bot" : "user"),
       message: normalizedMessage,
-      reasoning: extractedReasoning,
+      reasoning: extractReasoningText(
+        normalizedMessage,
+        content.reasoning || "",
+      ),
       agentStats: content.agentStats || content.agent_stats,
       refs: content.refs,
     };
 
-    const hasReasoning =
-      record.has_reasoning === true || Boolean(extractedReasoning);
     return {
       ...record,
       content: normalizedContent,
-      hasReasoning,
-      reasoningLen:
-        Number.isFinite(Number(record.reasoning_len))
-          ? Number(record.reasoning_len)
-          : extractedReasoning.length,
-      reasoningStatus: hasReasoning
-        ? extractedReasoning
-          ? "loaded"
-          : "unloaded"
-        : "loaded",
     };
-  }
-
-  async function loadMessageReasoning(record: ChatRecord) {
-    if (!record.hasReasoning || record.id == null) return record;
-    if (record.reasoningStatus === "loaded") return record;
-    const requestId = String(record.id);
-    const requestGeneration = reasoningGenerations.get(record) || 0;
-    const pending = reasoningLoadPromises.get(record);
-    if (pending) return pending;
-    record.reasoningStatus = "loading";
-    const request = chatApi
-      .getMessage(record.id)
-      .then(async (response) => {
-        const full = response.data?.data?.message;
-        if (!full) throw new Error("Reasoning message is unavailable");
-        const normalized = normalizeHistoryRecord(full);
-        await resolveRecordMedia([normalized]);
-        if (
-          String(record.id) !== requestId ||
-          (reasoningGenerations.get(record) || 0) !== requestGeneration
-        ) {
-          return record;
-        }
-        record.content = normalized.content;
-        record.hasReasoning = normalized.hasReasoning;
-        record.reasoningLen = normalized.reasoningLen;
-        record.reasoningStatus = "loaded";
-        record.reasoningError = undefined;
-        return record;
-      })
-      .catch((error) => {
-        if (
-          String(record.id) === requestId &&
-          (reasoningGenerations.get(record) || 0) === requestGeneration
-        ) {
-          record.reasoningStatus = "error";
-          record.reasoningError = String((error as Error)?.message || error);
-        }
-        throw error;
-      })
-      .finally(() => reasoningLoadPromises.delete(record));
-    reasoningLoadPromises.set(record, request);
-    return request;
   }
 
   function attachThreads(records: ChatRecord[], threads: ChatThread[]) {
@@ -1283,10 +1211,6 @@ export function useMessages(options: UseMessagesOptions) {
         snapshot.status === "running" &&
         snapshotRecord.content.message.length === 0;
       botRecord.content = snapshotRecord.content;
-      botRecord.hasReasoning = snapshotRecord.hasReasoning;
-      botRecord.reasoningLen = snapshotRecord.reasoningLen;
-      botRecord.reasoningStatus = snapshotRecord.reasoningStatus;
-      botRecord.reasoningError = undefined;
       botRecord.llm_checkpoint_id = snapshotRecord.llm_checkpoint_id;
       void resolveRecordMedia([botRecord]);
       return;
@@ -1409,7 +1333,6 @@ export function useMessages(options: UseMessagesOptions) {
     messageParts,
     loadSessionMessages,
     loadEarlierMessages,
-    loadMessageReasoning,
     createLocalExchange,
     sendMessageStream,
     editMessage,
@@ -1697,10 +1620,6 @@ export function appendReasoningPart(record: ChatRecord, text: string) {
     content.message.push({ type: "think", think: text });
   }
   content.reasoning = extractReasoningText(content.message);
-  record.hasReasoning = true;
-  record.reasoningLen = content.reasoning.length;
-  record.reasoningStatus = "loaded";
-  record.reasoningError = undefined;
 }
 
 export function upsertToolCall(record: ChatRecord, toolCall: any) {

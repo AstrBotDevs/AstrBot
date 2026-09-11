@@ -140,8 +140,6 @@
     "title": "Config"
   },
   "reasoning": {
-    "loading": "Loading reasoning and tool calls",
-    "loadFailed": "Could not load reasoning and tool activity",
     "enabled": "Reasoning enabled",
     "disabled": "Reasoning disabled",
     "thinking": "Thinking Process",

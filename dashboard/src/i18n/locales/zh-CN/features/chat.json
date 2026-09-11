@@ -140,8 +140,6 @@
     "title": "配置文件"
   },
   "reasoning": {
-    "loading": "正在加载思考和工具调用内容",
-    "loadFailed": "思考与工具记录加载失败",
     "enabled": "思考内容已开启",
     "disabled": "思考内容已关闭",
     "thinking": "思考过程",

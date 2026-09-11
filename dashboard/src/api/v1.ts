@@ -835,14 +835,6 @@ export const chatApi = {
       }),
     );
   },
-  getMessage(messageId: string | number, username?: string) {
-    return typed<any>(
-      openApiV1.getChatMessage({
-        path: { message_id: Number(messageId) },
-        query: username ? { username } : undefined,
-      }),
-    );
-  },
   updateSession(sessionId: string, payload: ChatSessionPatchRequest) {
     return typed<any>(
       openApiV1.updateChatSession({

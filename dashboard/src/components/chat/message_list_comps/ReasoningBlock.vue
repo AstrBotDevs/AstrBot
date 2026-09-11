@@ -4,8 +4,6 @@
       class="reasoning-header"
       :class="{ 'reasoning-header--trigger': openInSidebar }"
       type="button"
-      :disabled="reasoningStatus === 'loading'"
-      :aria-busy="reasoningStatus === 'loading'"
       @click="handlePrimaryAction"
     >
       <span class="reasoning-title">
@@ -14,15 +12,7 @@
         </ThinkingIndicator>
         <template v-else>{{ reasoningTitle }}</template>
       </span>
-      <v-progress-circular
-        v-if="reasoningStatus === 'loading'"
-        indeterminate
-        size="16"
-        width="2"
-        :aria-label="tm('reasoning.loading')"
-      />
       <ChevronRight
-        v-else
         :size="20"
         :stroke-width="1.75"
         aria-hidden="true"
@@ -33,13 +23,6 @@
         }"
       />
     </button>
-
-    <ChatLoadError
-      v-if="reasoningStatus === 'error'"
-      class="reasoning-error"
-      :message="tm('reasoning.loadFailed')"
-      @retry="handlePrimaryAction"
-    />
 
     <div
       v-if="!openInSidebar && isExpanded"
@@ -74,7 +57,6 @@ import {
   type MessagePart,
 } from "@/composables/useMessages";
 import { useModuleI18n } from "@/i18n/composables";
-import ChatLoadError from "@/components/chat/ChatLoadError.vue";
 import ThinkingIndicator from "@/components/chat/ThinkingIndicator.vue";
 import ReasoningTimeline from "@/components/chat/message_list_comps/ReasoningTimeline.vue";
 
@@ -86,13 +68,10 @@ const props = defineProps<{
   isStreaming?: boolean;
   hasNonReasoningContent?: boolean;
   openInSidebar?: boolean;
-  hasReasoning?: boolean;
-  reasoningStatus?: "unloaded" | "loading" | "loaded" | "error";
 }>();
 
 const emit = defineEmits<{
   open: [];
-  "load-reasoning": [];
 }>();
 
 const { tm } = useModuleI18n("features/chat");
@@ -142,11 +121,6 @@ const previewTransitionName = computed(() =>
 );
 
 function handlePrimaryAction() {
-  if (props.reasoningStatus === "loading") return;
-  if (props.hasReasoning && props.reasoningStatus !== "loaded") {
-    emit("load-reasoning");
-    return;
-  }
   if (openInSidebar.value) {
     emit("open");
     return;
@@ -230,19 +204,6 @@ watch(
   },
 );
 
-watch(
-  () => props.reasoningStatus,
-  (status, previousStatus) => {
-    if (
-      status === "loaded" &&
-      previousStatus !== "loaded" &&
-      !openInSidebar.value
-    ) {
-      isExpanded.value = true;
-    }
-  },
-);
-
 onBeforeUnmount(() => {
   stopPreviewStartTimer();
   stopPreviewTimer();
@@ -256,10 +217,6 @@ onBeforeUnmount(() => {
   color: rgba(var(--v-theme-on-surface), 0.7);
   font-size: inherit;
   line-height: inherit;
-}
-
-.reasoning-error {
-  margin-top: 4px;
 }
 
 .reasoning-header {

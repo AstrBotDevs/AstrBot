@@ -343,7 +343,6 @@
               @select-bot-text="handleBotTextSelection"
               @open-thread="openThreadPanel"
               @open-reasoning="openReasoningPanel"
-              @load-reasoning="loadReasoningForMessage"
               @open-refs="openRefsSidebar"
             />
           </div>
@@ -527,7 +526,6 @@ import RefsSidebar from "@/components/chat/message_list_comps/RefsSidebar.vue";
 import { useSessions, type Session } from "@/composables/useSessions";
 import {
   messageBlocks as buildMessageBlocks,
-  thinkingParts,
   useMessages,
   type ChatRecord,
   type ChatThread,
@@ -706,24 +704,10 @@ function toggleChatSidebar() {
 
 const activeReasoningParts = computed<MessagePart[]>(() => {
   if (!activeReasoningTarget.value) return [];
-  const target = activeReasoningTarget.value;
-  const targetContent = target.message.content || {
-    type: "bot",
-    message: [],
-  };
-  const blocks = buildMessageBlocks(targetContent);
-  if (target.blockIndex < 0) {
-    return blocks
-      .filter((block) => block.kind === "thinking")
-      .flatMap((block) => block.parts);
-  }
-  if (
-    target.message.hasReasoning &&
-    target.message.reasoningStatus !== "loaded"
-  ) {
-    return thinkingParts(targetContent);
-  }
-  const block = blocks[target.blockIndex];
+  const blocks = buildMessageBlocks(
+    activeReasoningTarget.value.message.content || { type: "bot", message: [] },
+  );
+  const block = blocks[activeReasoningTarget.value.blockIndex];
   return block?.kind === "thinking" ? block.parts : [];
 });
 
@@ -745,7 +729,6 @@ const {
   messageParts,
   loadSessionMessages,
   loadEarlierMessages,
-  loadMessageReasoning,
   createLocalExchange,
   sendMessageStream,
   editMessage,
@@ -1624,26 +1607,6 @@ function openReasoningPanel(payload: {
   selectedRefs.value = null;
   activeReasoningTarget.value = payload;
   reasoningPanelOpen.value = true;
-}
-
-async function loadReasoningForMessage(message: ChatRecord) {
-  const sessionId = currSessionId.value;
-  const messageId = message.id == null ? "" : String(message.id);
-  try {
-    await loadMessageReasoning(message);
-    if (
-      currSessionId.value !== sessionId ||
-      !activeMessages.value.includes(message) ||
-      message.id == null ||
-      String(message.id) !== messageId
-    ) {
-      return;
-    }
-    // Lazy history omits block boundaries, so show all hydrated thinking parts.
-    openReasoningPanel({ message, blockIndex: -1 });
-  } catch (error) {
-    console.error("Failed to load message reasoning:", error);
-  }
 }
 
 async function loadEarlierWithAnchor() {

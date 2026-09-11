@@ -136,11 +136,8 @@
                     :has-non-reasoning-content="
                       hasFollowingContentBlock(msg, blockIndex)
                     "
-                    :has-reasoning="msg.hasReasoning"
-                    :reasoning-status="msg.reasoningStatus"
                     :open-in-sidebar="variant === 'main'"
                     @open="emit('openReasoning', { message: msg, blockIndex })"
-                    @load-reasoning="emit('loadReasoning', msg)"
                   />
 
                   <template v-else>
@@ -533,7 +530,6 @@ const emit = defineEmits<{
   selectBotText: [event: MouseEvent, message: ChatRecord];
   openThread: [thread: ChatThread];
   openReasoning: [payload: { message: ChatRecord; blockIndex: number }];
-  loadReasoning: [message: ChatRecord];
   openRefs: [refs: unknown];
 }>();
 
@@ -661,14 +657,7 @@ function renderBlocks(message: ChatRecord): MessageDisplayBlock[] {
     const parts = bubbleParts(message);
     return parts.length ? [{ kind: "content", parts }] : [];
   }
-  const blocks = buildMessageBlocks(messageContent(message));
-  if (
-    message.hasReasoning &&
-    !blocks.some((block) => block.kind === "thinking")
-  ) {
-    blocks.unshift({ kind: "thinking", parts: [] });
-  }
-  return blocks;
+  return buildMessageBlocks(messageContent(message));
 }
 
 function hasFollowingContentBlock(message: ChatRecord, blockIndex: number) {
