@@ -1,0 +1,11 @@
+AstrBot SDK repository notice
+=============================
+
+This repository does not currently publish a standalone open-source license text.
+
+This file exists so the source repository and its `vendor/` subtree snapshot carry
+the same notice instead of silently omitting licensing information.
+
+Unless the maintainers publish different licensing terms, do not assume this
+repository grants redistribution or modification rights beyond applicable law and
+explicit permission from the maintainers.

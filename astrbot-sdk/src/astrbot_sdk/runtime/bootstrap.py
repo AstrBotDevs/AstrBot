@@ -1,0 +1,201 @@
+"""启动引导入口。
+
+对外提供三个顶层启动函数：
+
+- ``run_supervisor``: 启动 Supervisor 进程
+- ``run_plugin_worker``: 启动单插件或组 Worker 进程
+- ``run_websocket_server``: 以 WebSocket 方式启动 Worker
+
+运行时核心类分布在同目录的子模块：
+
+- ``runtime.supervisor``: ``SupervisorRuntime`` / ``WorkerSession``
+- ``runtime.worker``: ``PluginWorkerRuntime`` / ``GroupWorkerRuntime``
+"""
+
+from __future__ import annotations
+
+import asyncio
+import sys
+from pathlib import Path
+from typing import IO
+
+from astrbot_sdk.protocol.codec import (
+    JsonProtocolCodec,
+    MsgpackProtocolCodec,
+    ProtocolCodec,
+)
+
+from .loader import PluginEnvironmentManager
+from .supervisor import (
+    SupervisorRuntime,
+    WorkerSession,
+    _install_signal_handlers,
+    _prepare_stdio_transport,
+    _sdk_source_dir,
+    _wait_for_shutdown,
+)
+from .transport import (
+    StdioTransport,
+    WebSocketServerTransport,
+    build_websocket_server_ssl_context,
+)
+from .worker import GroupWorkerRuntime, PluginWorkerRuntime, _load_plugin_specs
+
+__all__ = [
+    "GroupWorkerRuntime",
+    "PluginWorkerRuntime",
+    "SupervisorRuntime",
+    "WorkerSession",
+    "_install_signal_handlers",
+    "_prepare_stdio_transport",
+    "_sdk_source_dir",
+    "_wait_for_shutdown",
+    "run_supervisor",
+    "run_plugin_worker",
+    "run_websocket_server",
+]
+
+
+def _resolve_wire_codec(wire_codec: str | ProtocolCodec | None = None) -> ProtocolCodec:
+    if isinstance(wire_codec, ProtocolCodec):
+        return wire_codec
+    if wire_codec is None or wire_codec == "msgpack":
+        return MsgpackProtocolCodec()
+    if wire_codec == "json":
+        return JsonProtocolCodec()
+    raise ValueError(f"unsupported wire codec: {wire_codec}")
+
+
+async def run_supervisor(
+    *,
+    plugins_dir: Path = Path("plugins"),
+    stdin: IO[str] | None = None,
+    stdout: IO[str] | None = None,
+    env_manager: PluginEnvironmentManager | None = None,
+    workers_manifest: Path | None = None,
+    wire_codec: str | ProtocolCodec | None = None,
+) -> None:
+    transport_stdin, transport_stdout, original_stdout = _prepare_stdio_transport(
+        stdin,
+        stdout,
+    )
+    transport = StdioTransport(stdin=transport_stdin, stdout=transport_stdout)
+    resolved_wire_codec = _resolve_wire_codec(wire_codec)
+    runtime = SupervisorRuntime(
+        transport=transport,
+        plugins_dir=plugins_dir,
+        env_manager=env_manager,
+        workers_manifest=workers_manifest,
+        wire_codec=resolved_wire_codec,
+    )
+
+    try:
+        await runtime.start()
+        stop_event = asyncio.Event()
+        _install_signal_handlers(stop_event)
+        await _wait_for_shutdown(runtime.peer, stop_event)
+    finally:
+        await runtime.stop()
+        if original_stdout is not None:
+            sys.stdout = original_stdout
+
+
+async def run_plugin_worker(
+    *,
+    plugin_dir: Path | None = None,
+    group_metadata: Path | None = None,
+    stdin: IO[str] | None = None,
+    stdout: IO[str] | None = None,
+    wire_codec: str | ProtocolCodec | None = None,
+) -> None:
+    if plugin_dir is None and group_metadata is None:
+        raise ValueError("plugin_dir or group_metadata is required")
+    if plugin_dir is not None and group_metadata is not None:
+        raise ValueError("plugin_dir and group_metadata are mutually exclusive")
+
+    transport_stdin, transport_stdout, original_stdout = _prepare_stdio_transport(
+        stdin,
+        stdout,
+    )
+    transport = StdioTransport(stdin=transport_stdin, stdout=transport_stdout)
+    resolved_wire_codec = _resolve_wire_codec(wire_codec)
+    if group_metadata is not None:
+        runtime = GroupWorkerRuntime(
+            group_metadata_path=group_metadata,
+            transport=transport,
+            wire_codec=resolved_wire_codec,
+        )
+    else:
+        # 前置互斥校验已保证单插件模式下 plugin_dir 一定存在；这里显式收窄，
+        # 避免把入口层的 Optional 继续传播到单插件运行时。
+        assert plugin_dir is not None
+        runtime = PluginWorkerRuntime(
+            plugin_dir=plugin_dir,
+            transport=transport,
+            wire_codec=resolved_wire_codec,
+        )
+    try:
+        await runtime.start()
+        stop_event = asyncio.Event()
+        _install_signal_handlers(stop_event)
+        await _wait_for_shutdown(runtime.peer, stop_event)
+    finally:
+        await runtime.stop()
+        if original_stdout is not None:
+            sys.stdout = original_stdout
+
+
+async def run_websocket_server(
+    *,
+    worker_id: str | None = None,
+    host: str = "127.0.0.1",
+    port: int = 8765,
+    path: str = "/",
+    plugin_dirs: list[Path] | None = None,
+    tls_ca_file: Path | None = None,
+    tls_cert_file: Path | None = None,
+    tls_key_file: Path | None = None,
+    wire_codec: str | ProtocolCodec | None = None,
+) -> None:
+    resolved_plugin_dirs = [path.resolve() for path in (plugin_dirs or [Path.cwd()])]
+    resolved_wire_codec = _resolve_wire_codec(wire_codec)
+    if tls_ca_file is None or tls_cert_file is None or tls_key_file is None:
+        raise ValueError(
+            "tls_ca_file, tls_cert_file, and tls_key_file are required for websocket workers"
+        )
+    transport = WebSocketServerTransport(
+        host=host,
+        port=port,
+        path=path,
+        ssl_context=build_websocket_server_ssl_context(
+            ca_file=tls_ca_file,
+            cert_file=tls_cert_file,
+            key_file=tls_key_file,
+        ),
+    )
+    resolved_worker_id = worker_id
+    if resolved_worker_id is None and len(resolved_plugin_dirs) == 1:
+        resolved_worker_id = _load_plugin_specs([resolved_plugin_dirs[0]])[0].name
+    if len(resolved_plugin_dirs) == 1:
+        runtime = PluginWorkerRuntime(
+            plugin_dir=resolved_plugin_dirs[0],
+            worker_id=resolved_worker_id,
+            transport=transport,
+            wire_codec=resolved_wire_codec,
+        )
+    else:
+        if resolved_worker_id is None:
+            raise ValueError("worker_id is required when serving multiple plugins")
+        runtime = GroupWorkerRuntime(
+            plugin_dirs=resolved_plugin_dirs,
+            worker_id=resolved_worker_id,
+            transport=transport,
+            wire_codec=resolved_wire_codec,
+        )
+    try:
+        await runtime.start()
+        stop_event = asyncio.Event()
+        _install_signal_handlers(stop_event)
+        await _wait_for_shutdown(runtime.peer, stop_event)
+    finally:
+        await runtime.stop()
