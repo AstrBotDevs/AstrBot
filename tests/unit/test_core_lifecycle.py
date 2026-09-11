@@ -1000,3 +1000,93 @@ class TestAstrBotCoreLifecycleLoadPipelineScheduler:
 
         with pytest.raises(ValueError, match="配置文件 .* 不存在"):
             await lifecycle.reload_pipeline_scheduler("nonexistent")
+
+
+class TestAstrBotCoreLifecycleRegisteredTasks:
+    @staticmethod
+    def _make_lifecycle(mock_log_broker, mock_db, registered: list):
+        lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
+        lifecycle.event_bus = MagicMock()
+        lifecycle.event_bus.dispatch = AsyncMock()
+        lifecycle.cron_manager = None
+        lifecycle.temp_dir_cleaner = None
+        lifecycle.star_context = MagicMock()
+        lifecycle.star_context._register_tasks = registered
+        lifecycle.curr_tasks = []
+        return lifecycle
+
+    @staticmethod
+    async def _cleanup(lifecycle: AstrBotCoreLifecycle):
+        for task in lifecycle.curr_tasks:
+            task.cancel()
+        for task in lifecycle.curr_tasks:
+            try:
+                await task
+            except (asyncio.CancelledError, Exception):
+                pass
+
+    @pytest.mark.asyncio
+    async def test_load_schedules_coroutine_registered_task(
+        self, mock_log_broker, mock_db
+    ):
+        started = asyncio.Event()
+
+        async def background():
+            started.set()
+
+        registered = [background()]
+        lifecycle = self._make_lifecycle(mock_log_broker, mock_db, registered)
+
+        with patch(
+            "astrbot.core.core_lifecycle.create_event_loop_diagnostic_tasks",
+            return_value=[],
+        ):
+            lifecycle._load()
+
+        await asyncio.wait_for(started.wait(), timeout=1)
+        assert registered == []
+        assert len(lifecycle.curr_tasks) == 2
+
+        await self._cleanup(lifecycle)
+
+    @pytest.mark.asyncio
+    async def test_load_reuses_already_created_task(self, mock_log_broker, mock_db):
+        started = asyncio.Event()
+
+        async def background():
+            started.set()
+
+        existing = asyncio.create_task(background())
+        lifecycle = self._make_lifecycle(mock_log_broker, mock_db, [existing])
+
+        with patch(
+            "astrbot.core.core_lifecycle.create_event_loop_diagnostic_tasks",
+            return_value=[],
+        ):
+            lifecycle._load()
+
+        await asyncio.wait_for(started.wait(), timeout=1)
+        assert existing.get_name() in [t.get_name() for t in lifecycle.curr_tasks]
+        assert lifecycle.star_context._register_tasks == []
+
+        await self._cleanup(lifecycle)
+
+    @pytest.mark.asyncio
+    async def test_load_skips_unrecognized_awaitable(self, mock_log_broker, mock_db):
+        future = asyncio.get_running_loop().create_future()
+        lifecycle = self._make_lifecycle(mock_log_broker, mock_db, [future])
+
+        with (
+            patch(
+                "astrbot.core.core_lifecycle.create_event_loop_diagnostic_tasks",
+                return_value=[],
+            ),
+            patch("astrbot.core.core_lifecycle.logger") as mock_logger,
+        ):
+            lifecycle._load()
+
+        mock_logger.warning.assert_called_once()
+        assert len(lifecycle.curr_tasks) == 1
+
+        await self._cleanup(lifecycle)
+        future.cancel()
