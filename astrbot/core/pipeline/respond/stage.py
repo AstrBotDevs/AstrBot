@@ -130,19 +130,20 @@ class RespondStage(Stage):
         """分段回复 计算间隔时间
 
         ``comps`` may also be a sequence of components sharing one bubble;
-        the log-method interval is then computed from the total Plain word
-        count of that bubble.
+        the log-method interval is then computed from the Plain word counts
+        of that bubble, counted per component and summed.
         """
-        if isinstance(comps, list):
-            text = "".join(comp.text for comp in comps if isinstance(comp, Comp.Plain))
-        else:
-            text = comps.text if isinstance(comps, Comp.Plain) else ""
+        if not isinstance(comps, list):
+            comps = [comps]
         if self.interval_method == "log":
-            if not text:
-                return random.uniform(1, 1.75)
-            wc = await self._word_cnt(text)
-            i = math.log(wc + 1, self.log_base)
-            return random.uniform(i, i + 0.5)
+            wc = 0
+            for comp in comps:
+                if isinstance(comp, Comp.Plain):
+                    wc += await self._word_cnt(comp.text)
+            if wc:
+                i = math.log(wc + 1, self.log_base)
+                return random.uniform(i, i + 0.5)
+            return random.uniform(1, 1.75)
         # random
         return random.uniform(self.interval[0], self.interval[1])
 
