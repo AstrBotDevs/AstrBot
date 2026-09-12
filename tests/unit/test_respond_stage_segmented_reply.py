@@ -2,8 +2,10 @@
 
 With segmented reply enabled, every component used to be sent as its own
 message, so an inline Face in the middle of a sentence split the text into
-several bubbles. The stage now groups consecutive inline components
-(Plain / Face) so a sentence stays in one bubble.
+several bubbles. The stage now attaches a Face to the preceding text bubble
+(or to the following Plain when the chain starts with a Face) while adjacent
+Plain components from the segmentation-words feature (#3959) keep their
+deliberate split.
 """
 
 import math
@@ -14,7 +16,7 @@ import astrbot.core.message.components as Comp
 from astrbot.core.pipeline.respond.stage import RespondStage
 
 
-def test_inline_face_stays_in_the_same_bubble_as_text():
+def test_inline_face_rides_with_the_preceding_text_bubble():
     stage = RespondStage()
     chain = [
         Comp.Plain(text="好的"),
@@ -24,8 +26,27 @@ def test_inline_face_stays_in_the_same_bubble_as_text():
 
     segments = stage._group_segment_chain(chain)
 
-    assert len(segments) == 1
-    assert segments[0] == chain
+    assert segments == [[chain[0], chain[1]], [chain[2]]]
+
+
+def test_leading_face_joins_the_following_text_bubble():
+    stage = RespondStage()
+    face = Comp.Face(id=277)
+    chain = [face, Comp.Plain(text="你好呀")]
+
+    segments = stage._group_segment_chain(chain)
+
+    assert segments == [[face, chain[1]]]
+
+
+def test_adjacent_plain_components_keep_separate_bubbles():
+    stage = RespondStage()
+    first = Comp.Plain(text="第一段。")
+    second = Comp.Plain(text="第二段。")
+
+    segments = stage._group_segment_chain([first, second])
+
+    assert segments == [[first], [second]]
 
 
 def test_components_that_need_separate_sending_stay_alone():
@@ -36,6 +57,17 @@ def test_components_that_need_separate_sending_stay_alone():
     segments = stage._group_segment_chain(chain)
 
     assert segments == [[chain[0]], [record], [chain[2]]]
+
+
+def test_face_after_media_stays_its_own_bubble():
+    stage = RespondStage()
+    record = Comp.Record(file="file:///tmp/a.wav")
+    face = Comp.Face(id=277)
+    chain = [Comp.Plain(text="听"), record, face]
+
+    segments = stage._group_segment_chain(chain)
+
+    assert segments == [[chain[0]], [record], [face]]
 
 
 @pytest.mark.asyncio
