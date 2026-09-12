@@ -47,6 +47,7 @@ class GroupChatContext:
         self._locks: dict[str, asyncio.Lock] = {}
         self.raw_records: dict[str, deque[str]] = defaultdict(deque)
         self._record_ids: dict[str, deque[str]] = defaultdict(deque)
+        self._caption_tasks: set[asyncio.Task[None]] = set()
 
     def _get_lock(self, umo: str) -> asyncio.Lock:
         lock = self._locks.get(umo)
@@ -139,25 +140,65 @@ class GroupChatContext:
         self._locks.pop(umo, None)
         return cnt
 
-    async def handle_message(self, event: AstrMessageEvent) -> None:
+    async def handle_message(
+        self,
+        event: AstrMessageEvent,
+        *,
+        caption_images: bool = True,
+    ) -> None:
+        """Record a group message without blocking on image caption requests.
+
+        Args:
+            event: Incoming group message event.
+            caption_images: Whether passive group images should be captioned for
+                later context injection. Messages that already trigger an LLM
+                reply should set this to ``False`` because the main request
+                pipeline handles their images separately.
+        """
         if event.get_message_type() != MessageType.GROUP_MESSAGE:
             return
 
         umo = event.unified_msg_origin
         cfg = self.cfg(event)
-        final_message = await self._format_message(event, cfg)
+        final_message, caption_template, pending_images = self._format_message(
+            event,
+            cfg,
+            caption_images=caption_images,
+        )
+        record_id = uuid.uuid4().hex
 
         async with self._get_lock(umo):
             records = self.raw_records[umo]
             record_ids = self._record_ids[umo]
-            record_id = uuid.uuid4().hex
             records.append(final_message)
             record_ids.append(record_id)
             _trim_left(records, cfg["group_message_max_cnt"], record_ids)
             event.set_extra("_group_context_record_id", record_id)
             event.set_extra("_group_context_raw_idx", len(records) - 1)
 
+        if pending_images:
+            task = asyncio.create_task(
+                self._fill_image_captions(
+                    umo=umo,
+                    record_id=record_id,
+                    caption_template=caption_template,
+                    pending_images=pending_images,
+                    provider_id=cfg["image_caption_provider_id"],
+                    prompt=cfg["image_caption_prompt"],
+                )
+            )
+            self._caption_tasks.add(task)
+            task.add_done_callback(self._on_caption_task_done)
+
         logger.debug(f"group_chat_context | {umo} | {final_message}")
+
+    def _on_caption_task_done(self, task: asyncio.Task[None]) -> None:
+        """Release a completed caption task and expose unexpected failures."""
+        self._caption_tasks.discard(task)
+        if task.cancelled():
+            return
+        if exc := task.exception():
+            logger.error("Group image caption task failed.", exc_info=exc)
 
     async def on_req_llm(self, event: AstrMessageEvent, req: ProviderRequest) -> None:
         umo = event.unified_msg_origin
@@ -196,29 +237,75 @@ class GroupChatContext:
                 TextPart(text=_format_group_history_block(records_to_inject))
             )
 
-    async def _format_message(self, event: AstrMessageEvent, cfg: dict) -> str:
+    async def _fill_image_captions(
+        self,
+        *,
+        umo: str,
+        record_id: str,
+        caption_template: str,
+        pending_images: list[tuple[str, str]],
+        provider_id: str,
+        prompt: str,
+    ) -> None:
+        """Resolve image captions in the background and update one record."""
+        results = await asyncio.gather(
+            *(
+                self.get_image_caption(image_url, provider_id, prompt)
+                for _, image_url in pending_images
+            ),
+            return_exceptions=True,
+        )
+
+        resolved_message = caption_template
+        for (marker, _), result in zip(pending_images, results, strict=True):
+            if isinstance(result, BaseException):
+                logger.error("Failed to get image caption: %s", result)
+                replacement = " [Image]"
+            else:
+                replacement = f" [Image: {result}]"
+            resolved_message = resolved_message.replace(marker, replacement, 1)
+
+        async with self._get_lock(umo):
+            record_ids = self._record_ids.get(umo)
+            records = self.raw_records.get(umo)
+            if not record_ids or not records or record_id not in record_ids:
+                return
+            record_index = record_ids.index(record_id)
+            records[record_index] = resolved_message
+
+        logger.debug(f"group_chat_context captioned | {umo} | {resolved_message}")
+
+    def _format_message(
+        self,
+        event: AstrMessageEvent,
+        cfg: dict,
+        *,
+        caption_images: bool,
+    ) -> tuple[str, str, list[tuple[str, str]]]:
+        """Format one record and prepare optional background image captions."""
         datetime_str = datetime.datetime.now().strftime("%H:%M:%S")
-        parts = [f"[{event.message_obj.sender.nickname}/{datetime_str}]: "]
+        prefix = f"[{event.message_obj.sender.nickname}/{datetime_str}]: "
+        parts = [prefix]
+        template_parts = [prefix]
+        pending_images: list[tuple[str, str]] = []
 
         for comp in event.get_messages():
             if isinstance(comp, Plain):
-                parts.append(f" {comp.text}")
+                text = f" {comp.text}"
+                parts.append(text)
+                template_parts.append(text)
             elif isinstance(comp, Image):
-                if cfg["image_caption"]:
-                    try:
-                        url = comp.url if comp.url else comp.file
-                        if not url:
-                            raise Exception("图片 URL 为空")
-                        caption = await self.get_image_caption(
-                            url,
-                            cfg["image_caption_provider_id"],
-                            cfg["image_caption_prompt"],
-                        )
-                        parts.append(f" [Image: {caption}]")
-                    except Exception as e:
-                        logger.error(f"获取图片描述失败: {e}")
+                url = comp.url if comp.url else comp.file
+                should_caption = caption_images and cfg["image_caption"] and bool(url)
+                parts.append(" [Image]")
+                if should_caption:
+                    marker = f" __ASTRBOT_IMAGE_CAPTION_{uuid.uuid4().hex}__"
+                    template_parts.append(marker)
+                    pending_images.append((marker, url))
                 else:
-                    parts.append(" [Image]")
+                    template_parts.append(" [Image]")
+                    if caption_images and cfg["image_caption"] and not url:
+                        logger.error("Failed to get image caption: image URL is empty.")
             elif isinstance(comp, Json):
                 card_data = comp.data
                 if isinstance(card_data, dict) and isinstance(
@@ -249,7 +336,9 @@ class GroupChatContext:
                         normalized = " ".join(value.split())
                         fields.append(f"{label}: {_truncate_reply_text(normalized)}")
                 suffix = f": {'; '.join(fields)}" if fields else ""
-                parts.append(f" [Shared Card{suffix}]")
+                text = f" [Shared Card{suffix}]"
+                parts.append(text)
+                template_parts.append(text)
             elif isinstance(comp, At):
                 is_at_self = str(comp.qq) in (
                     event.get_self_id(),
@@ -257,19 +346,25 @@ class GroupChatContext:
                 )
                 if is_at_self:
                     parts.insert(1, "⚠️[DIRECTED AT YOU] ")
-                parts.append(f" [At: {comp.name}]")
+                    template_parts.insert(1, "⚠️[DIRECTED AT YOU] ")
+                text = f" [At: {comp.name}]"
+                parts.append(text)
+                template_parts.append(text)
             elif isinstance(comp, Reply):
                 if comp.message_str:
-                    parts.append(
-                        f" [Quote({comp.sender_nickname}: {_truncate_reply_text(comp.message_str)})]"
+                    text = (
+                        f" [Quote({comp.sender_nickname}: "
+                        f"{_truncate_reply_text(comp.message_str)})]"
                     )
                 elif comp.chain:
                     chain_desc = _describe_chain(comp.chain)
-                    parts.append(f" [Quote({comp.sender_nickname}: {chain_desc})]")
+                    text = f" [Quote({comp.sender_nickname}: {chain_desc})]"
                 else:
-                    parts.append(" [Quote]")
+                    text = " [Quote]"
+                parts.append(text)
+                template_parts.append(text)
 
-        return "".join(parts)
+        return "".join(parts), "".join(template_parts), pending_images
 
 
 _MAX_REPLY_TEXT_LENGTH = 200
