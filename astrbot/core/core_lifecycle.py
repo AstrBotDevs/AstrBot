@@ -15,6 +15,8 @@ import threading
 import time
 import traceback
 from asyncio import Queue
+from collections.abc import Awaitable
+from typing import Any
 
 from astrbot.api import logger, sp
 from astrbot.core import LogBroker, LogManager
@@ -316,17 +318,12 @@ class AstrBotCoreLifecycle:
             )
         diagnostic_tasks = create_event_loop_diagnostic_tasks()
 
-        # 把插件中注册的所有协程函数注册到事件总线中并执行
-        extra_tasks = []
+        # Register every plugin-registered task on the event bus and run it
+        extra_tasks: list[asyncio.Task] = []
         for task in self.star_context._register_tasks:
-            if isinstance(task, asyncio.Task):
-                extra_tasks.append(task)
-            elif asyncio.iscoroutine(task):
-                extra_tasks.append(asyncio.create_task(task, name=task.__name__))
-            else:
-                logger.warning(
-                    f"忽略无法识别的插件注册任务（期望协程或 asyncio.Task）: {task!r}",
-                )
+            converted = self._to_task(task)
+            if converted is not None:
+                extra_tasks.append(converted)
         self.star_context._register_tasks.clear()
 
         tasks_ = [
@@ -344,6 +341,39 @@ class AstrBotCoreLifecycle:
             )
 
         self.start_time = int(time.time())
+
+    @staticmethod
+    def _to_task(task: Awaitable[Any]) -> asyncio.Task | None:
+        """Convert a plugin-registered awaitable into an ``asyncio.Task``.
+
+        ``Context.register_task`` accepts ``Awaitable``, so coroutines,
+        ``asyncio.Task``, ``asyncio.Future`` and any object implementing
+        ``__await__`` are valid inputs and must all be scheduled.
+
+        ``_task_wrapper`` and ``stop`` rely on ``get_name()`` and ``cancel()``
+        of ``asyncio.Task``, so any other valid awaitable is wrapped into a
+        real Task instead of being dropped silently.
+
+        Args:
+            task: The awaitable registered through ``Context.register_task``.
+
+        Returns:
+            A schedulable ``asyncio.Task``, or ``None`` if the input is not
+            awaitable.
+        """
+        if isinstance(task, asyncio.Task):
+            return task
+        if asyncio.iscoroutine(task):
+            return asyncio.create_task(task, name=task.__name__)
+        if not isinstance(task, Awaitable):
+            logger.warning(f"Skipping non-awaitable plugin-registered task: {task!r}")
+            return None
+
+        async def _await_registered() -> Any:
+            return await task
+
+        name = getattr(task, "__name__", None) or type(task).__name__
+        return asyncio.create_task(_await_registered(), name=name)
 
     async def _task_wrapper(self, task: asyncio.Task) -> None:
         """异步任务包装器, 用于处理异步任务执行中出现的各种异常.
