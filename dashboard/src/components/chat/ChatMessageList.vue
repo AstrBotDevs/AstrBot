@@ -10,6 +10,7 @@
         :key="msg.id || `${msgIndex}-${msg.created_at || ''}`"
         class="message-row"
         :class="isUserMessage(msg) ? 'from-user' : 'from-bot'"
+        :data-message-id="msg.id == null ? undefined : String(msg.id)"
       >
         <v-avatar
           v-if="!isUserMessage(msg)"

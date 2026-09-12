@@ -268,6 +268,16 @@
         class="conversation-stack"
         :class="{ 'is-empty': isEmptyChat }"
       >
+        <v-progress-linear
+          v-if="activeSessionPagination?.loading"
+          class="history-loading"
+          color="primary"
+          height="2"
+          indeterminate
+          absolute
+          location="top"
+          :aria-label="tm('history.loading')"
+        />
         <section
           ref="messagesContainer"
           class="messages-panel"
@@ -283,6 +293,17 @@
             <v-progress-circular indeterminate size="32" width="3" />
           </div>
 
+          <div
+            v-else-if="!activeMessages.length && activeSessionPagination?.error"
+            class="welcome-state"
+          >
+            <ChatLoadError
+              :message="tm('history.loadFailed')"
+              :loading="loadingMessages"
+              @retry="retryCurrentSessionLoad"
+            />
+          </div>
+
           <div v-else-if="!activeMessages.length" class="welcome-state">
             <div class="welcome-title">{{ tm("welcome.title") }}</div>
           </div>
@@ -292,6 +313,13 @@
             ref="messagesContent"
             class="messages-list-shell"
           >
+            <ChatLoadError
+              v-if="activeSessionPagination?.error"
+              class="history-load-error"
+              :message="tm('history.loadEarlierFailed')"
+              :loading="activeSessionPagination.loading"
+              @retry="retryCurrentSessionLoad"
+            />
             <ChatMessageList
               v-model:edit-draft="messageEditDraft"
               :messages="activeMessages"
@@ -490,6 +518,7 @@ import ChatInput from "@/components/chat/ChatInput.vue";
 import ChatMessageList from "@/components/chat/ChatMessageList.vue";
 import ChatUILogo from "@/components/chat/ChatUILogo.vue";
 import type { RegenerateModelSelection } from "@/components/chat/RegenerateMenu.vue";
+import ChatLoadError from "@/components/chat/ChatLoadError.vue";
 import ReasoningSidebar from "@/components/chat/ReasoningSidebar.vue";
 import ThreadPanel from "@/components/chat/ThreadPanel.vue";
 import WorkspaceFilesPanel from "@/components/chat/WorkspaceFilesPanel.vue";
@@ -610,6 +639,8 @@ const messagesContent = ref<HTMLElement | null>(null);
 const composerShell = ref<HTMLElement | null>(null);
 const inputRef = ref<InstanceType<typeof ChatInput> | null>(null);
 const shouldStickToBottom = ref(true);
+const suppressAutoScroll = ref(false);
+const LOAD_EARLIER_SCROLL_THRESHOLD = 120;
 const isAwayFromBottom = ref(false);
 let lastMessagesScrollTop = 0;
 let touchScrollY = 0;
@@ -692,10 +723,12 @@ const {
   loadedSessions,
   sessionProjects,
   activeMessages,
+  paginationBySession,
   isSessionRunning,
   isUserMessage,
   messageParts,
   loadSessionMessages,
+  loadEarlierMessages,
   createLocalExchange,
   sendMessageStream,
   editMessage,
@@ -711,6 +744,10 @@ const {
     }
   },
 });
+
+const activeSessionPagination = computed(() =>
+  currSessionId.value ? paginationBySession[currSessionId.value] : undefined,
+);
 
 const transportMode = ref<TransportMode>(
   (localStorage.getItem("chat.transportMode") as TransportMode) === "websocket"
@@ -956,7 +993,7 @@ watch(
 );
 
 watch(activeMessages, () => {
-  if (shouldStickToBottom.value) {
+  if (!suppressAutoScroll.value && shouldStickToBottom.value) {
     scrollToBottom();
   }
 });
@@ -1245,9 +1282,11 @@ async function selectSession(sessionId: string, pushRoute = true) {
   replyTarget.value = null;
   if (pushRoute && route.path !== `${basePath()}/${sessionId}`) {
     await router.push(`${basePath()}/${sessionId}`);
+    if (currSessionId.value !== sessionId) return;
   }
   if (!loadedSessions[sessionId]) {
     await loadSessionMessages(sessionId);
+    if (currSessionId.value !== sessionId) return;
   }
   scrollToBottom(true);
   closeMobileSidebar();
@@ -1409,20 +1448,24 @@ function cancelMessageEdit() {
 
 async function saveMessageEdit() {
   if (!currSessionId.value || !editingMessage.value) return;
+  const sessionId = currSessionId.value;
+  const target = editingMessage.value;
   savingMessageEdit.value = true;
   try {
-    const target = editingMessage.value;
-    const result = await editMessage(
-      currSessionId.value,
-      target,
-      messageEditDraft.value,
-    );
+    const result = await editMessage(sessionId, target, messageEditDraft.value);
+    if (
+      currSessionId.value !== sessionId ||
+      !activeMessages.value.includes(target)
+    ) {
+      cancelMessageEdit();
+      return;
+    }
     cancelMessageEdit();
 
     if (result.needsRegenerate && result.truncatedAfterMessage) {
       const selection = getSelectedProviderSelection();
       continueEditedMessage({
-        sessionId: currSessionId.value,
+        sessionId,
         sourceRecord: target,
         enableStreaming: enableStreaming.value,
         enableReasoning: enableReasoning.value,
@@ -1566,6 +1609,46 @@ function openReasoningPanel(payload: {
   reasoningPanelOpen.value = true;
 }
 
+async function loadEarlierWithAnchor() {
+  const sessionId = currSessionId.value;
+  if (!sessionId || activeSessionPagination.value?.loading) return;
+  const container = messagesContainer.value;
+  const firstMessage = activeMessages.value[0];
+  const firstId = firstMessage?.id == null ? "" : String(firstMessage.id);
+  const beforeTop = firstId
+    ? container
+        ?.querySelector<HTMLElement>(
+          `[data-message-id="${CSS.escape(firstId)}"]`,
+        )
+        ?.getBoundingClientRect().top
+    : undefined;
+  suppressAutoScroll.value = true;
+  try {
+    await loadEarlierMessages(sessionId);
+    if (currSessionId.value !== sessionId) return;
+    await nextTick();
+    if (beforeTop == null || !container || !firstId) return;
+    const row = container.querySelector<HTMLElement>(
+      `[data-message-id="${CSS.escape(firstId)}"]`,
+    );
+    if (row) {
+      container.scrollTop += row.getBoundingClientRect().top - beforeTop;
+    }
+  } finally {
+    suppressAutoScroll.value = false;
+  }
+}
+
+async function retryCurrentSessionLoad() {
+  const sessionId = currSessionId.value;
+  if (!sessionId || activeSessionPagination.value?.loading) return;
+  if (activeMessages.value.length && activeSessionPagination.value?.has_more) {
+    await loadEarlierWithAnchor();
+    return;
+  }
+  await loadSessionMessages(sessionId, true, true);
+}
+
 async function deleteThread(thread: ChatThread) {
   if (deletingThread.value) return;
   if (!(await askForConfirmation(tm("thread.confirmDelete"), confirmDialog)))
@@ -1688,6 +1771,17 @@ function handleMessagesScroll() {
     shouldStickToBottom.value = true;
   }
   lastMessagesScrollTop = scrollTop;
+  maybeLoadEarlierOnScroll(container);
+}
+
+function maybeLoadEarlierOnScroll(container: HTMLElement) {
+  const sessionId = currSessionId.value;
+  const pagination = activeSessionPagination.value;
+  if (!sessionId || !pagination) return;
+  if (!pagination.has_more || pagination.loading || pagination.error) return;
+  if (container.scrollHeight <= container.clientHeight) return;
+  if (container.scrollTop > LOAD_EARLIER_SCROLL_THRESHOLD) return;
+  void loadEarlierWithAnchor();
 }
 
 function scrollToBottom(resumeFollowing = false) {
@@ -1698,7 +1792,8 @@ function scrollToBottom(resumeFollowing = false) {
   nextTick(() => {
     const container = messagesContainer.value;
     // Recheck after rendering so queued stream updates cannot override user intent.
-    if (!container || !shouldStickToBottom.value) return;
+    if (!container || suppressAutoScroll.value || !shouldStickToBottom.value)
+      return;
     container.scrollTop = container.scrollHeight;
     lastMessagesScrollTop = Math.max(0, container.scrollTop);
     isAwayFromBottom.value = false;
@@ -2208,6 +2303,11 @@ async function stopCurrentSession() {
   scroll-padding-bottom: calc(var(--chat-composer-height, 82px) + 34px);
 }
 
+.history-loading {
+  z-index: 2;
+  pointer-events: none;
+}
+
 .conversation-stack.is-empty .messages-panel {
   flex: none;
   min-height: auto;
@@ -2230,6 +2330,10 @@ async function stopCurrentSession() {
   align-items: center;
   justify-content: center;
   text-align: center;
+}
+
+.history-load-error {
+  margin: 0 auto 12px;
 }
 
 .conversation-stack.is-empty .welcome-state {

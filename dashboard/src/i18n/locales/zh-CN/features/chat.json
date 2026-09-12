@@ -149,6 +149,11 @@
     "think": "思考",
     "toolUsed": "使用工具"
   },
+  "history": {
+    "loadFailed": "历史消息加载失败",
+    "loadEarlierFailed": "更早的消息加载失败",
+    "loading": "正在加载更早的消息"
+  },
   "reply": {
     "replyTo": "引用",
     "notFound": "无法定位消息"

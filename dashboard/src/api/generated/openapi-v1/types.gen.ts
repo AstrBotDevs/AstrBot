@@ -1380,6 +1380,10 @@ export type GetChatSessionData = {
     path: {
         session_id: string;
     };
+    query?: {
+        page?: number;
+        page_size?: number;
+    };
 };
 
 export type GetChatSessionResponse = (SuccessEnvelope);
