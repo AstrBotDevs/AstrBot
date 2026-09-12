@@ -2,9 +2,7 @@ import pytest
 
 import astrbot.core.provider.sources.bailian_rerank_source as bailian_rerank_module
 from astrbot.core.config.default import CONFIG_METADATA_2
-from astrbot.core.provider.sources.bailian_rerank_source import (
-    BailianRerankProvider,
-)
+from astrbot.core.provider.sources.bailian_rerank_source import BailianRerankProvider
 
 CHINA_COMPATIBLE_URL = "https://dashscope.aliyuncs.com/compatible-api/v1/reranks"
 SINGAPORE_COMPATIBLE_URL = (
@@ -142,3 +140,126 @@ def test_native_endpoint_parses_nested_results(provider):
     assert len(results) == 1
     assert results[0].index == 0
     assert results[0].relevance_score == 0.75
+
+
+# ---------- qwen3-rerank additional cases ----------
+
+
+def test_qwen3_native_endpoint_ignores_return_documents(provider):
+    provider.base_url = NATIVE_URL
+    provider.return_documents = True
+
+    payload = provider._build_payload("q", ["d1"], None)
+
+    assert "parameters" not in payload
+
+
+def test_qwen3_native_endpoint_no_params_when_top_n_zero(provider):
+    provider.base_url = NATIVE_URL
+
+    payload = provider._build_payload("q", ["d1"], 0)
+
+    assert "parameters" not in payload
+
+
+def test_qwen3_compatible_endpoint_ignores_return_documents(provider):
+    provider.base_url = CHINA_COMPATIBLE_URL
+    provider.return_documents = True
+
+    payload = provider._build_payload("q", ["d1"], None)
+
+    assert "return_documents" not in payload
+
+
+def test_qwen3_compatible_endpoint_no_optional_fields(provider):
+    provider.base_url = CHINA_COMPATIBLE_URL
+
+    payload = provider._build_payload("q", ["d1"], None)
+
+    assert payload == {
+        "model": "qwen3-rerank",
+        "query": "q",
+        "documents": ["d1"],
+    }
+
+
+def test_qwen3_compatible_endpoint_includes_instruct(provider):
+    provider.base_url = CHINA_COMPATIBLE_URL
+    provider.instruct = "focus on facts"
+
+    payload = provider._build_payload("q", ["d1", "d2"], 3)
+
+    assert payload == {
+        "model": "qwen3-rerank",
+        "query": "q",
+        "documents": ["d1", "d2"],
+        "top_n": 3,
+        "instruct": "focus on facts",
+    }
+
+
+# ---------- non-qwen3 model (gte-rerank) ----------
+
+
+def test_gte_rerank_native_endpoint_uses_wrapped_format_with_return_documents(provider):
+    provider.model = "gte-rerank-v2"
+    provider.base_url = NATIVE_URL
+    provider.return_documents = True
+
+    payload = provider._build_payload("q", ["d1"], 2)
+
+    assert payload == {
+        "model": "gte-rerank-v2",
+        "input": {"query": "q", "documents": ["d1"]},
+        "parameters": {"top_n": 2, "return_documents": True},
+    }
+
+
+def test_gte_rerank_native_endpoint_no_instruct(provider):
+    provider.model = "gte-rerank-v2"
+    provider.base_url = NATIVE_URL
+    provider.instruct = "ignored"
+
+    payload = provider._build_payload("q", ["d1"], None)
+
+    assert payload["input"] == {"query": "q", "documents": ["d1"]}
+    assert "parameters" not in payload
+
+
+def test_gte_rerank_compatible_endpoint_uses_flat_format(provider):
+    provider.model = "gte-rerank-v2"
+    provider.base_url = CHINA_COMPATIBLE_URL
+    provider.return_documents = True
+
+    payload = provider._build_payload("q", ["d1"], 2)
+
+    assert payload == {
+        "model": "gte-rerank-v2",
+        "query": "q",
+        "documents": ["d1"],
+        "top_n": 2,
+        "return_documents": True,
+    }
+
+
+def test_gte_rerank_compatible_endpoint_no_instruct(provider):
+    provider.model = "gte-rerank-v2"
+    provider.base_url = CHINA_COMPATIBLE_URL
+    provider.instruct = "ignored"
+
+    payload = provider._build_payload("q", ["d1"], None)
+
+    assert "instruct" not in payload
+
+
+def test_gte_rerank_compatible_endpoint_no_optional_fields(provider):
+    provider.model = "gte-rerank-v2"
+    provider.base_url = SINGAPORE_COMPATIBLE_URL
+
+    payload = provider._build_payload("q", ["d1"], None)
+
+    assert payload == {
+        "model": "gte-rerank-v2",
+        "query": "q",
+        "documents": ["d1"],
+    }
