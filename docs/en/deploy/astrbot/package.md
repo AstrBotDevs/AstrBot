@@ -20,5 +20,6 @@ AstrBot requires Python 3.12 or later. Use `--python 3.12` to ensure that `uv` c
 
 ```bash
 uv tool install astrbot --python 3.12
-astrbot
+astrbot init # only needed for the first deployment
+astrbot run
 ```

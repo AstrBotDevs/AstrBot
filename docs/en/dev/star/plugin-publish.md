@@ -4,7 +4,7 @@ After completing your plugin development, you can choose to publish it to the As
 
 AstrBot uses GitHub to host plugins, so you'll need to push your plugin code to the GitHub plugin repository you created earlier.
 
-You can publish your plugin by visiting the [AstrBot Plugin Publish Page](https://cloud.astrbot.app/publish), You need to register an AstrBot Cloud account to publish plugins.
+You can publish your plugin by visiting the [AstrBot Plugin Publish Page](https://cloud.astrbot.app/publish). You need to register an AstrBot Cloud account to publish plugins.
 
 <!-- ![fill out the form](https://files.astrbot.app/docs/source/images/plugin-publish/image.png) -->
 
@@ -34,6 +34,8 @@ repo: https://github.com/your-name/repo      # Plugin repository URL
 The plugin zip package submitted to the marketplace **must not exceed 16MB**.
 
 If it exceeds this limit, the CI/CD pipeline will automatically reject the submission.
+:::
+
 ::: details To ensure your plugin passes review and publication smoothly, we recommend the following:
 
 - **Compress static assets**: Compress images, audio, and other resource files in your plugin to reduce their size.

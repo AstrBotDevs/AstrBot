@@ -69,7 +69,7 @@ In the admin panel's "Configuration" page, find `Platform Specific -> Discord ->
 - **Enable Pre-acknowledgment Emoji**: When enabled, the bot will automatically add an emoji reaction upon receiving a message
 - **Emoji List**: Enter Unicode emoji symbols, e.g., 👍, 🤔, ⏳. You can add multiple emojis, and the bot will randomly select one to use
 
-# Troubleshooting
+## Troubleshooting
 
 - If you're stuck at the final step and the bot is not online, please ensure your server can directly connect to Discord
 

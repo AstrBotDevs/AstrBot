@@ -72,16 +72,16 @@ AstrBot 支持接入优云智算提供的模型 API。
 
 ## 接入到消息平台
 
-- 飞书：[接入到飞书](https://docs.astrbot.app/deploy/platform/lark.html)
-- LINE：[接入到 LINE](https://docs.astrbot.app/deploy/platform/line.html)
-- 钉钉：[接入到钉钉](https://docs.astrbot.app/deploy/platform/dingtalk.html)
-- 企业微信：[接入到企业微信应用](https://docs.astrbot.app/deploy/platform/wecom.html)
-- 微信客服：[接入到微信客服](https://docs.astrbot.app/deploy/platform/wecom.html)
-- 微信公众平台：[接入到微信公众平台](https://docs.astrbot.app/deploy/platform/weixin-official-account.html)
-- QQ 官方机器人平台：[接入到 QQ 机器人](https://docs.astrbot.app/deploy/platform/qqofficial/webhook.html)
-- KOOK：[接入到 KOOK](https://docs.astrbot.app/deploy/platform/kook.html)
-- Slack：[接入到 Slack](https://docs.astrbot.app/deploy/platform/slack.html)
-- Discord：[接入到 Discord](https://docs.astrbot.app/deploy/platform/discord.html)
+- 飞书：[接入到飞书](https://docs.astrbot.app/platform/lark.html)
+- LINE：[接入到 LINE](https://docs.astrbot.app/platform/line.html)
+- 钉钉：[接入到钉钉](https://docs.astrbot.app/platform/dingtalk.html)
+- 企业微信：[接入到企业微信应用](https://docs.astrbot.app/platform/wecom.html)
+- 微信客服：[接入到微信客服](https://docs.astrbot.app/platform/wecom.html)
+- 微信公众平台：[接入到微信公众平台](https://docs.astrbot.app/platform/weixin-official-account.html)
+- QQ 官方机器人平台：[接入到 QQ 机器人](https://docs.astrbot.app/platform/qqofficial/webhook.html)
+- KOOK：[接入到 KOOK](https://docs.astrbot.app/platform/kook.html)
+- Slack：[接入到 Slack](https://docs.astrbot.app/platform/slack.html)
+- Discord：[接入到 Discord](https://docs.astrbot.app/platform/discord.html)
 - 更多接入方式参考 [AstrBot 官方文档](https://docs.astrbot.app/what-is-astrbot.html)
 
 ## 更多功能

@@ -1,7 +1,7 @@
 # Docker-based Code Interpreter
 
 > [!WARNING]
-> Deprecated, please refer to the latest [Agent Sandbox Environment](/en/use/astrbot-agent-sandbox.md) documentation. This feature will be unavailable after v4.12.0.
+> Deprecated, please refer to the latest [Agent Sandbox Environment](/en/use/astrbot-agent-sandbox) documentation. This feature will be unavailable after v4.12.0.
 
 Starting from version `v3.4.2`, AstrBot supports a code interpreter to enhance LLM capabilities and enable various automated operations.
 

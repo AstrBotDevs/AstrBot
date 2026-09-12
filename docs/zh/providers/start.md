@@ -1,6 +1,8 @@
 # 接入模型服务
 
-AstrBot 适配了 OpenAI、Google GenAI、Anthropic 三种原生 API 格式。您可以接入任意符合这三种 API 格式之一的模型服务提供商。
+AstrBot 适配了 OpenAI、Google GenAI、Anthropic 三种原生 API 格式。您可以接入任意符合这三种 API 格式之一的模型服务提供商。此外，v4.27.1 起还内置了 OpenAI 兼容的 Responses API 提供商（`openai_responses`，提供 `OpenAI Responses`、`DeepSeek Responses` 模板；新建 xAI 提供商默认使用该类型）。
+
+模型请求失败时会自动重试临时性网络错误和 5xx 等可重试错误（v4.26.0 起）。单次请求的最大尝试次数可通过配置项 `provider_settings.request_max_retries`（默认 `5`）调整。
 
 > [!NOTE]
 > 如果您位于中国大陆境内，我们强烈建议您使用符合当地法律法规的由**模型厂商官方提供的**或经过备案的模型服务提供商，例如：
@@ -39,3 +41,23 @@ AstrBot 适配了 OpenAI、Google GenAI、Anthropic 三种原生 API 格式。�
 > v4.13.0 之后引入
 
 支持使用环境变量加载模型服务提供商的 API Key。在提供商配置页面，将 API Key 一栏填写为 `$环境变量名称` 的名称即可，例如填写 `$DEEPSEEK_API_KEY`。
+
+## 语音合成（TTS）提供商
+
+AstrBot 内置以下文本转语音（TTS）提供商，可在 `模型提供商` 页面新增提供商时选择：
+
+| 提供商 | 说明 |
+| --- | --- |
+| OpenAI TTS API (`openai_tts_api`) | OpenAI 官方 TTS 接口 |
+| Gemini TTS (`gemini_tts`) | Google Gemini TTS 接口 |
+| Edge TTS (`edge_tts`) | 微软 Edge TTS，免费 |
+| FishAudio TTS API (`fishaudio_tts_api`) | FishAudio TTS 接口，v4.26.8 起支持配置模型 |
+| ElevenLabs TTS API (`elevenlabs_tts_api`) | ElevenLabs TTS 接口，v4.26.0 新增 |
+| MiMo TTS API (`mimo_tts_api`) | 小米 MiMo TTS 接口，v4.26.8 起默认模型为 `mimo-v2.5-tts` |
+| MiniMax TTS API (`minimax_tts_api`) | MiniMax TTS 接口 |
+| Azure TTS (`azure_tts`) | 微软 Azure 语音服务 |
+| 火山引擎 TTS (`volcengine_tts`) | 火山引擎语音合成 |
+| DashScope TTS (`dashscope_tts`) | 阿里云百炼 TTS 接口 |
+| Genie TTS (`genie_tts`) | Genie TTS 接口 |
+| GSVI TTS API (`gsvi_tts_api`) | GSVI TTS 接口 |
+| GPT-SoVITS TTS (`gsv_tts_selfhost`) | GPT-SoVITS 本地部署 |

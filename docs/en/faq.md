@@ -27,7 +27,7 @@ Set dashboard.host in data/cmd_config.json to enable remote access.
 
 ### Forgot Dashboard Password
 
-If you forgot your AstrBot dashboard password, you can use the CLI tool `astrbot password` to change the password.
+If you forgot your AstrBot dashboard password, you can change it with the CLI: run `astrbot password` in the AstrBot working directory, or run `astrbot run --reset-password`, which regenerates the initial password and prints it in the startup logs (>= v4.26.0).
 
 Another approach you can take is to find the `"dashboard"` field in `AstrBot/data/cmd_config.json`, for example:
 
@@ -91,10 +91,27 @@ After restart, AstrBot will reload or download WebUI files that match the curren
 
 1. In AstrBot WebUI's `Config -> General Config`, find `Use Computer Capabilities`, and select `local` for the runtime environment.
 2. In `Config -> Other Config`, find `Admin ID List`, and add your user ID (you can get it through the `/sid` command).
+3. Save the configuration with the button at the bottom right.
 
 > [!TIP]
 > For security reasons, when runtime environment is set to `local`, AstrBot only allows AstrBot administrators to use computer capabilities by default.
 > You can select `sandbox` for the runtime environment, which allows all users to use computer capabilities (in an isolated sandbox). For more details, see [AstrBot Sandbox Environment](/en/use/astrbot-agent-sandbox.md)
+
+### Where is the data directory when AstrBot is installed via the AstrBot Desktop client?
+
+It is located in the `.astrbot` directory under your home directory.
+
+- Windows: `C:\Users\<your-username>\.astrbot`
+- macOS / Linux: `/Users/<your-username>/.astrbot` or `/home/<your-username>/.astrbot`
+
+### Where is the data directory when AstrBot is installed via AstrBot Launcher?
+
+For older versions of AstrBot Launcher (PowerShell), the data directory is located next to the Launcher `.bat` script.
+
+For newer versions of AstrBot Launcher (GUI), the data directory is located in the `.astrbot_launcher` directory under your home directory.
+
+- Windows: `C:\Users\<your-username>\.astrbot_launcher`
+- macOS / Linux: `/Users/<your-username>/.astrbot_launcher` or `/home/<your-username>/.astrbot_launcher`
 
 ### Bot Cannot Chat in Group Conversations
 

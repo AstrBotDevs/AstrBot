@@ -30,6 +30,9 @@ The Main Agent will call built-in scheduling tools to arrange these plans.
 
 You can view and manage all future tasks by clicking **Future Tasks** in the left navigation bar of the AstrBot WebUI.
 
+> [!TIP]
+> Future task times are interpreted using the timezone configured in AstrBot (since v4.27.0), and Cron Jobs inherit the configured timezone (since v4.27.3). The effective AstrBot time is shown under `Settings` → `General`.
+
 ![](https://files.astrbot.app/docs/source/images/proactive-agent/image-1.png)
 
 ### Supported Platforms
