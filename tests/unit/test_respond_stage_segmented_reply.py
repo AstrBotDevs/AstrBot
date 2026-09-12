@@ -2,10 +2,10 @@
 
 With segmented reply enabled, every component used to be sent as its own
 message, so an inline Face in the middle of a sentence split the text into
-several bubbles. The stage now attaches a Face to the preceding text bubble
-(or to the following Plain when the chain starts with a Face) while adjacent
-Plain components from the segmentation-words feature (#3959) keep their
-deliberate split.
+several bubbles. The stage now treats an inline Face as glue: it attaches to
+the preceding text bubble and keeps the following Plain in the same bubble,
+while adjacent Plain components from the segmentation-words feature (#3959)
+keep their deliberate split.
 """
 
 import math
@@ -16,7 +16,7 @@ import astrbot.core.message.components as Comp
 from astrbot.core.pipeline.respond.stage import RespondStage
 
 
-def test_inline_face_rides_with_the_preceding_text_bubble():
+def test_inline_face_glues_the_whole_sentence_into_one_bubble():
     stage = RespondStage()
     chain = [
         Comp.Plain(text="好的"),
@@ -26,7 +26,7 @@ def test_inline_face_rides_with_the_preceding_text_bubble():
 
     segments = stage._group_segment_chain(chain)
 
-    assert segments == [[chain[0], chain[1]], [chain[2]]]
+    assert segments == [chain]
 
 
 def test_leading_face_joins_the_following_text_bubble():
@@ -68,6 +68,16 @@ def test_face_after_media_stays_its_own_bubble():
     segments = stage._group_segment_chain(chain)
 
     assert segments == [[chain[0]], [record], [face]]
+
+
+def test_face_glue_does_not_absorb_media():
+    stage = RespondStage()
+    record = Comp.Record(file="file:///tmp/a.wav")
+    chain = [Comp.Plain(text="好的"), Comp.Face(id=277), record]
+
+    segments = stage._group_segment_chain(chain)
+
+    assert segments == [[chain[0], chain[1]], [record]]
 
 
 @pytest.mark.asyncio
