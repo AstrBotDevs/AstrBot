@@ -28,7 +28,12 @@ from astrbot.core.agent.message import (
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.message_event_result import MessageChain
-from astrbot.core.provider.entities import LLMResponse, TokenUsage, ToolCallsResult
+from astrbot.core.provider.entities import (
+    LLMResponse,
+    TokenUsage,
+    ToolCallsResult,
+    fallback_tool_call_id,
+)
 from astrbot.core.utils.media_utils import (
     describe_media_ref,
     resolve_media_ref_to_base64_data,
@@ -637,6 +642,11 @@ class ProviderOpenAIOfficial(Provider):
         llm_response = LLMResponse("assistant", is_chunk=True)
 
         state = ChatCompletionStreamState()
+        # 上游返回的 tool_call.index 可能从 1 开始、乱序或缺失，而 openai SDK 直接把它
+        # 当成 tool_calls 列表的下标使用（_build_events / accumulate_delta），一旦错位就会
+        # insert 出一个只有 arguments、没有 id / name 的幽灵 tool_call（refs: AstrBot#9590）。
+        # 这里按出现顺序把它重映射成从 0 开始的连续序号，正常上游是恒等映射。
+        tool_call_index_map: dict[int, int] = {}
 
         async for chunk in stream:
             choice = chunk.choices[0] if chunk.choices else None
@@ -649,8 +659,18 @@ class ProviderOpenAIOfficial(Provider):
                         tc.type = "function"
                     # Fix for #6661: Add missing 'index' field to tool_call deltas
                     # Gemini and some OpenAI-compatible proxies omit this field
-                    if not hasattr(tc, "index") or tc.index is None:
-                        tc.index = idx
+                    raw_index = getattr(tc, "index", None)
+                    if raw_index is None:
+                        raw_index = idx
+                    # Fix for #9590: normalize 1-based / non-contiguous indexes
+                    if raw_index not in tool_call_index_map:
+                        tool_call_index_map[raw_index] = len(tool_call_index_map)
+                    normalized_index = tool_call_index_map[raw_index]
+                    if normalized_index != raw_index:
+                        logger.debug(
+                            f"normalize tool_call index {raw_index} -> {normalized_index}"
+                        )
+                    tc.index = normalized_index
             # 跳过 delta=None 的 chunk，避免 SDK 内部 _convert_initial_chunk_into_snapshot
             # 第 747 行 choice.delta.to_dict() 抛出 NoneType 错误。
             # refs: AstrBot#6689 / openai-python#5069 / #5047
@@ -907,12 +927,25 @@ class ProviderOpenAIOfficial(Provider):
                         args = {}
                     args_ls.append(args)
                     func_name_ls.append(tool_call.function.name)
-                    tool_call_ids.append(tool_call.id)
+                    # Some OpenAI-compatible upstreams omit tool_calls[].id.
+                    # The openai SDK deserializes responses leniently, so the
+                    # required field silently becomes None instead of raising.
+                    raw_call_id = getattr(tool_call, "id", None)
+                    if isinstance(raw_call_id, str) and raw_call_id.strip():
+                        call_id = raw_call_id
+                    else:
+                        # keep the placeholder aligned with the final list index so
+                        # that the agent runner and the assistant message agree on it
+                        call_id = fallback_tool_call_id(len(tool_call_ids))
+                        logger.warning(
+                            f"上游未返回 tool_call.id，回退为 {call_id}（tool={tool_call.function.name}）"
+                        )
+                    tool_call_ids.append(call_id)
 
                     # gemini-2.5 / gemini-3 series extra_content handling
                     extra_content = getattr(tool_call, "extra_content", None)
                     if extra_content is not None:
-                        tool_call_extra_content_dict[tool_call.id] = extra_content
+                        tool_call_extra_content_dict[call_id] = extra_content
 
             llm_response.role = "tool"
             llm_response.tools_call_args = args_ls
