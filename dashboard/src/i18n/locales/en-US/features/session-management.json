@@ -81,6 +81,7 @@
     },
     "kbConfig": {
       "title": "Knowledge Base Configuration",
+      "inheritGlobal": "Follow global knowledge base configuration",
       "selectKbs": "Select Knowledge Bases",
       "topK": "Top K Results",
       "enableRerank": "Enable Reranking"
