@@ -410,6 +410,9 @@ async def _apply_workspace_extra_prompt(
     req: ProviderRequest,
     plugin_context: Context,
 ) -> None:
+    if event.get_group_id():
+        return
+
     workspace_root = await _get_workspace_path_for_umo(
         event.unified_msg_origin,
         plugin_context,
@@ -573,7 +576,7 @@ async def _ensure_persona_and_skills(
     skills = skill_manager.list_skills(active_only=True, runtime=runtime)
     skills = _filter_skills_for_current_config(skills, cfg)
     workspace_skills: list[SkillInfo] = []
-    if runtime == "local":
+    if runtime == "local" and not event.get_group_id():
         workspace_root = await _get_workspace_path_for_umo(
             event.unified_msg_origin,
             plugin_context,
