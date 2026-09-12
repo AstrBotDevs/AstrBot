@@ -1058,6 +1058,7 @@ async def test_repeated_local_image_reads_reuse_original_file(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("supports_images", [False, True])
 @pytest.mark.parametrize("image_kind", ["inline", "embedded", "missing_local"])
 async def test_tool_images_without_local_file_are_cached(
     runner,
@@ -1067,6 +1068,7 @@ async def test_tool_images_without_local_file_are_cached(
     monkeypatch,
     tmp_path,
     image_kind,
+    supports_images,
 ):
     """Images without a reusable local file retain their cache and model preview."""
     from mcp.types import (
@@ -1081,7 +1083,14 @@ async def test_tool_images_without_local_file_are_cached(
 
     cache_dir = tmp_path / "tool_images"
     monkeypatch.setattr(tool_image_cache, "_cache_dir", str(cache_dir))
+    read_cached_image = MagicMock(
+        side_effect=AssertionError("Model input must use the tool's image data")
+    )
+    monkeypatch.setattr(tool_image_cache, "get_image_base64_by_path", read_cached_image)
     mock_provider.max_calls_before_normal_response = 1
+    mock_provider.provider_config["modalities"] = (
+        ["image", "tool_use"] if supports_images else ["tool_use"]
+    )
     if image_kind == "embedded":
         content = EmbeddedResource(
             type="resource",
@@ -1115,14 +1124,20 @@ async def test_tool_images_without_local_file_are_cached(
 
     cached_path = cache_dir / "call_123_0.png"
     assert cached_path.read_bytes() == b"test"
-    assert any(
-        part.image_url.url == "data:image/png;base64,dGVzdA=="
-        and part.image_url.id == str(cached_path)
+    read_cached_image.assert_not_called()
+    previews = [
+        part.image_url
         for message in runner.run_context.messages
         if message.role == "user" and isinstance(message.content, list)
         for part in message.content
         if isinstance(part, ImageURLPart)
-    )
+    ]
+    if supports_images:
+        assert len(previews) == 1
+        assert previews[0].url == "data:image/png;base64,dGVzdA=="
+        assert previews[0].id == str(cached_path)
+    else:
+        assert previews == []
 
 
 @pytest.mark.asyncio
