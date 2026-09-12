@@ -302,6 +302,71 @@ def get_checkpoint_id(message: Message | dict) -> str | None:
     return None
 
 
+_IMAGE_HISTORY_PLACEHOLDER = "[Image]"
+
+
+def _is_image_content_part(part: Any) -> bool:
+    if isinstance(part, ImageURLPart):
+        return True
+    if isinstance(part, dict) and part.get("type") == "image_url":
+        return True
+    return getattr(part, "type", None) == "image_url"
+
+
+def _image_placeholder_part_dict() -> dict[str, Any]:
+    return {"type": "text", "text": _IMAGE_HISTORY_PLACEHOLDER}
+
+
+def strip_images_from_content_parts(content: Any) -> Any:
+    """Replace image parts with a short text placeholder.
+
+    Used when persisting or reloading conversation history so previous-turn
+    image pixels / remote URLs do not keep leaking into later requests.
+    """
+    if not isinstance(content, list):
+        return content
+
+    stripped: list[Any] = []
+    previous_was_image_placeholder = False
+    for part in content:
+        if _is_image_content_part(part):
+            if previous_was_image_placeholder:
+                continue
+            if isinstance(part, ContentPart):
+                stripped.append(TextPart(text=_IMAGE_HISTORY_PLACEHOLDER))
+            else:
+                stripped.append(_image_placeholder_part_dict())
+            previous_was_image_placeholder = True
+            continue
+
+        previous_was_image_placeholder = False
+        stripped.append(part)
+    return stripped
+
+
+def strip_images_from_history_message_dict(message: dict[str, Any]) -> dict[str, Any]:
+    """Return a shallow-copied history message dict without image payloads."""
+    if not isinstance(message, dict):
+        return message
+    if is_checkpoint_message(message):
+        return message
+
+    content = message.get("content")
+    if not isinstance(content, list):
+        return message
+
+    new_message = dict(message)
+    new_message["content"] = strip_images_from_content_parts(content)
+    return new_message
+
+
+def strip_images_from_history_messages(history: list[dict] | None) -> list[dict]:
+    """Strip image payloads from a full persisted history list."""
+    if not history:
+        return []
+    return [strip_images_from_history_message_dict(item) for item in history]
+
+
 def strip_checkpoint_messages(history: list[dict]) -> list[dict]:
     """Remove internal checkpoint messages from provider-facing history."""
     return [message for message in history if not is_checkpoint_message(message)]
@@ -327,7 +392,8 @@ def _get_checkpoint_data(message: Message | dict) -> CheckpointData | None:
 def bind_checkpoint_messages(history: list[dict]) -> list[Message]:
     """Load persisted history and bind checkpoint segments to prior messages."""
     messages: list[Message] = []
-    for item in history:
+    for raw_item in history:
+        item = strip_images_from_history_message_dict(raw_item)
         if is_checkpoint_message(item):
             checkpoint = _get_checkpoint_data(item)
             if checkpoint is not None and messages:
@@ -348,10 +414,14 @@ def dump_messages_with_checkpoints(messages: list[Message]) -> list[dict]:
     for message in messages:
         message_data = message.model_dump()
         if isinstance(message.content, list):
+            # Drop ephemeral parts first, then reuse shared image-stripping rules.
+            filtered_parts = [
+                part for part in message.content if not getattr(part, "_no_save", False)
+            ]
+            stripped_parts = strip_images_from_content_parts(filtered_parts)
             message_data["content"] = [
-                part.model_dump()
-                for part in message.content
-                if not getattr(part, "_no_save", False)
+                part.model_dump() if isinstance(part, ContentPart) else part
+                for part in stripped_parts
             ]
         dumped.append(message_data)
         if message._checkpoint_after is not None:
