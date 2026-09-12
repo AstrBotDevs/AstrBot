@@ -25,6 +25,7 @@ class NvidiaRerankProvider(RerankProvider):
             "nvidia_rerank_model_endpoint", "/reranking"
         )
         self.truncate = provider_config.get("nvidia_rerank_truncate", "")
+        self.proxy = provider_config.get("proxy", "") or None
 
         self.client = None
         self.set_model(self.model)
@@ -130,7 +131,9 @@ class NvidiaRerankProvider(RerankProvider):
             payload = self._build_payload(query, documents)
             request_url = self._get_endpoint()
 
-            async with client.post(request_url, json=payload) as response:
+            async with client.post(
+                request_url, json=payload, proxy=self.proxy
+            ) as response:
                 if response.status != 200:
                     try:
                         response_data = await response.json()
