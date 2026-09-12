@@ -341,11 +341,73 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
         return chunks
 
+    @staticmethod
+    def _build_markdown_with_public_images(
+        message: MessageChain,
+    ) -> tuple[str, str] | None:
+        """Render a chain as markdown with publicly hosted images inlined.
+
+        QQ renders rich-media messages (``msg_type=7``) with the image above the
+        text, which reverses a text-then-image chain. Markdown keeps the original
+        order, but its images must reference a publicly reachable URL because the
+        platform downloads and re-hosts them itself. Local paths and base64
+        payloads therefore cannot take this path.
+
+        Args:
+            message: The message chain to render.
+
+        Returns:
+            A ``(markdown_content, text_only_content)`` tuple. The second value is
+            used when the platform rejects markdown and the adapter falls back to
+            a plain text message. Returns None when the chain cannot be rendered
+            as markdown, i.e. it carries no publicly hosted image or a component
+            that markdown cannot express.
+        """
+        markdown_parts: list[str] = []
+        text_parts: list[str] = []
+        has_public_image = False
+
+        for component in message.chain:
+            if isinstance(component, Plain):
+                markdown_parts.append(component.text)
+                text_parts.append(component.text)
+            elif isinstance(component, Image):
+                image_url = component.url or component.file or ""
+                if not image_url.startswith(("http://", "https://")):
+                    return None
+                # Keep the image on its own block: QQ renders an inline image so
+                # that it overlaps the surrounding text when no break separates
+                # them.
+                markdown_parts.append(f"\n![image]({image_url})\n")
+                has_public_image = True
+            else:
+                # At/Record/Video/File and friends have no markdown equivalent.
+                return None
+
+        if not has_public_image:
+            return None
+
+        return "".join(markdown_parts), "".join(text_parts)
+
     async def _post_send(self, stream: dict | None = None):
         if not self.send_buffer:
             return None
 
-        message_chains = self._split_message_chain_by_media(self.send_buffer)
+        # Markdown 能在同一条消息里承载多张图片，所以只有富媒体路径才需要按
+        # 媒体拆分消息链。
+        use_md = getattr(self.send_buffer, "use_markdown_", None)
+        markdown_with_images = (
+            None
+            if use_md is False or stream is not None
+            else QQOfficialMessageEvent._build_markdown_with_public_images(
+                self.send_buffer
+            )
+        )
+        if markdown_with_images is not None:
+            message_chains = [self.send_buffer]
+        else:
+            message_chains = self._split_message_chain_by_media(self.send_buffer)
+
         stream_for_chain = stream if len(message_chains) == 1 else None
 
         ret = None
@@ -376,15 +438,37 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             logger.warning(f"[QQOfficial] 不支持的消息源类型: {type(source)}")
             return None
 
-        (
-            plain_text,
-            image_base64,
-            image_path,
-            record_file_path,
-            video_file_source,
-            file_source,
-            file_name,
-        ) = await QQOfficialMessageEvent._parse_to_qqofficial(message_to_send)
+        # 图片是公网 URL 时优先内嵌进 Markdown，让 QQ 按原有图文顺序渲染；
+        # 走 msg_type=7 富媒体时 QQ 固定把图片渲染在文字上方。
+        # 这条路径无需下载图片或上传富媒体，QQ 会自行下载转存该 URL。
+        use_md = getattr(self.send_buffer, "use_markdown_", None)
+        markdown_with_images = (
+            None
+            if use_md is False or stream is not None
+            else QQOfficialMessageEvent._build_markdown_with_public_images(
+                message_to_send
+            )
+        )
+
+        if markdown_with_images is not None:
+            markdown_content, plain_text = markdown_with_images
+            image_base64 = None
+            image_path = None
+            record_file_path = None
+            video_file_source = None
+            file_source = None
+            file_name = None
+        else:
+            markdown_content = None
+            (
+                plain_text,
+                image_base64,
+                image_path,
+                record_file_path,
+                video_file_source,
+                file_source,
+                file_name,
+            ) = await QQOfficialMessageEvent._parse_to_qqofficial(message_to_send)
 
         # C2C 流式仅用于文本分片，富媒体时降级为普通发送，避免平台侧流式校验报错。
         if stream and (
@@ -394,7 +478,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             stream = None
 
         if (
-            not plain_text
+            markdown_content is None
+            and not plain_text
             and not image_base64
             and not image_path
             and not record_file_path
@@ -415,9 +500,14 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             plain_text = plain_text + "\n"
 
         # 根据消息链的 use_markdown_ 标记决定发送模式
-        use_md = getattr(self.send_buffer, "use_markdown_", None)
-        if use_md is False:
+        if markdown_content is not None:
             payload: dict = {
+                "markdown": MarkdownPayload(content=markdown_content),
+                "msg_type": 2,
+                "msg_id": self.message_obj.message_id,
+            }
+        elif use_md is False:
+            payload = {
                 "content": plain_text,
                 "msg_type": 0,
                 "msg_id": self.message_obj.message_id,

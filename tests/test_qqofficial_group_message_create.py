@@ -695,6 +695,167 @@ async def test_ws_group_send_by_session_with_media_uses_msg_type_7(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_ws_group_markdown_with_public_image_embeds_image(monkeypatch):
+    """A markdown-chain with a public image URL must keep markdown (#10019).
+
+    QQ renders ``msg_type=7`` rich-media messages with the image above the text,
+    so a text-then-image chain arrives visually reversed. When the caller asks
+    for markdown, the image URL should instead be embedded in the markdown body
+    so the client keeps the original ordering.
+    """
+    adapter = QQOfficialPlatformAdapter(
+        {
+            "id": "qq-official-test",
+            "appid": "123",
+            "secret": "secret",
+            "enable_group_c2c": True,
+            "enable_guild_direct_message": False,
+        },
+        {},
+        asyncio.Queue(),
+    )
+    adapter.client.api = SimpleNamespace(
+        post_group_message=AsyncMock(return_value={"id": "sent-md"}),
+        post_message=AsyncMock(),
+    )
+    adapter._session_scene["group-1"] = "group"
+
+    async def fake_parse(message_chain):
+        return ("caption", "ZmFrZS1iYXNlNjQ=", None, None, None, None, None)
+
+    async def fake_upload_image(self_, image_base64, file_type, **kwargs):
+        return {"file_uuid": "u-1", "file_info": "i-1", "ttl": 0}
+
+    monkeypatch.setattr(QQOfficialMessageEvent, "_parse_to_qqofficial", fake_parse)
+    monkeypatch.setattr(
+        QQOfficialMessageEvent, "upload_group_and_c2c_image", fake_upload_image
+    )
+
+    await adapter.send_by_session(
+        MessageSession("qq_official", MessageType.GROUP_MESSAGE, "group-1"),
+        MessageChain(
+            chain=[
+                Plain("caption"),
+                Image.fromURL("https://example.com/a.png"),
+            ],
+            use_markdown_=True,
+        ),
+    )
+
+    kwargs = adapter.client.api.post_group_message.await_args.kwargs
+    assert kwargs["msg_type"] == 2, "expected a markdown message, not rich media"
+    assert "media" not in kwargs, "image must not be downgraded to rich media"
+    markdown_content = kwargs["markdown"]["content"]
+    assert "caption" in markdown_content
+    assert "https://example.com/a.png" in markdown_content
+    assert markdown_content.index("caption") < markdown_content.index(
+        "https://example.com/a.png"
+    ), "text must stay before the image"
+    # The image must sit on its own block: QQ renders an inline image so that it
+    # overlaps the surrounding text when no line break separates them.
+    assert "\n![image](" in markdown_content
+
+
+@pytest.mark.asyncio
+async def test_group_reply_markdown_with_public_image_embeds_image():
+    """The reply path must inline public images as markdown too (#10019).
+
+    ``_send_by_session_common`` and ``_post_send_one`` build the payload
+    separately, so both need coverage.
+    """
+    _, message = _dispatch_group_message(_make_group_payload())
+    abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
+        message,
+        MessageType.GROUP_MESSAGE,
+    )
+    abm.session_id = abm.group_id
+    bot = SimpleNamespace(
+        api=SimpleNamespace(
+            post_group_message=AsyncMock(return_value={"id": "sent-md"}),
+            post_message=AsyncMock(),
+        )
+    )
+    event = QQOfficialMessageEvent(
+        abm.message_str,
+        abm,
+        SimpleNamespace(name="qq_official", id="qq-official-test"),
+        abm.session_id,
+        cast(Any, bot),
+    )
+
+    await event.send(
+        MessageChain(
+            chain=[
+                Plain("caption"),
+                Image.fromURL("https://example.com/a.png"),
+            ],
+            use_markdown_=True,
+        )
+    )
+
+    kwargs = bot.api.post_group_message.await_args.kwargs
+    assert kwargs["msg_type"] == 2, "expected a markdown message, not rich media"
+    assert "media" not in kwargs, "image must not be downgraded to rich media"
+    markdown_content = kwargs["markdown"]["content"]
+    assert "caption" in markdown_content
+    assert "https://example.com/a.png" in markdown_content
+    assert markdown_content.index("caption") < markdown_content.index(
+        "https://example.com/a.png"
+    ), "text must stay before the image"
+    # The image must sit on its own block: QQ renders an inline image so that it
+    # overlaps the surrounding text when no line break separates them.
+    assert "\n![image](" in markdown_content
+
+
+@pytest.mark.asyncio
+async def test_ws_group_markdown_with_multiple_public_images_sends_one_message():
+    """Markdown carries several images, so the chain must not be split by media."""
+    adapter = QQOfficialPlatformAdapter(
+        {
+            "id": "qq-official-test",
+            "appid": "123",
+            "secret": "secret",
+            "enable_group_c2c": True,
+            "enable_guild_direct_message": False,
+        },
+        {},
+        asyncio.Queue(),
+    )
+    adapter.client.api = SimpleNamespace(
+        post_group_message=AsyncMock(return_value={"id": "sent-md"}),
+        post_message=AsyncMock(),
+    )
+    adapter._session_scene["group-1"] = "group"
+
+    await adapter.send_by_session(
+        MessageSession("qq_official", MessageType.GROUP_MESSAGE, "group-1"),
+        MessageChain(
+            chain=[
+                Plain("A"),
+                Image.fromURL("https://example.com/1.png"),
+                Plain("B"),
+                Image.fromURL("https://example.com/2.png"),
+                Plain("C"),
+            ],
+            use_markdown_=True,
+        ),
+    )
+
+    assert adapter.client.api.post_group_message.await_count == 1
+    kwargs = adapter.client.api.post_group_message.await_args.kwargs
+    assert kwargs["msg_type"] == 2
+    markdown_content = kwargs["markdown"]["content"]
+    positions = [
+        markdown_content.index("A"),
+        markdown_content.index("https://example.com/1.png"),
+        markdown_content.index("B"),
+        markdown_content.index("https://example.com/2.png"),
+        markdown_content.index("C"),
+    ]
+    assert positions == sorted(positions), "component order must be preserved"
+
+
+@pytest.mark.asyncio
 async def test_friend_send_by_session_renders_markdown():
     adapter = QQOfficialPlatformAdapter(
         {
