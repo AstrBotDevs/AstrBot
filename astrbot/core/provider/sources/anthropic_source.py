@@ -301,6 +301,39 @@ class ProviderAnthropic(Provider):
                                     "text": "[Audio Attachment]",
                                 }
                             )
+                        elif part.get("type") == "video_url":
+                            # Convert OpenAI-style video_url format to Anthropic
+                            # video format so models that accept video input
+                            # actually receive the modality.
+                            video_url_data = part.get("video_url", {})
+                            url = video_url_data.get("url", "")
+                            if url.startswith("data:"):
+                                try:
+                                    header, base64_data = url.split(",", 1)
+                                    media_type = (
+                                        header.split(":", 1)[1].split(";", 1)[0].strip()
+                                        or "video/mp4"
+                                    )
+                                    converted_content.append(
+                                        {
+                                            "type": "video",
+                                            "source": {
+                                                "type": "base64",
+                                                "media_type": media_type,
+                                                "data": base64_data,
+                                            },
+                                        }
+                                    )
+                                except (ValueError, IndexError):
+                                    logger.warning(
+                                        "Failed to parse video data URI, skipping: %s",
+                                        url[:50],
+                                    )
+                            else:
+                                logger.warning(
+                                    "Unsupported video URL format for Anthropic, skipping: %s",
+                                    url[:50],
+                                )
                         else:
                             converted_content.append(part)
                     new_messages.append(
