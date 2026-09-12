@@ -1,7 +1,10 @@
+import asyncio
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
+from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queue_mgr
 from astrbot.dashboard.services.open_api_service import (
     OpenApiService,
     OpenApiServiceError,
@@ -145,6 +148,102 @@ async def test_run_chat_websocket_handles_control_messages(monkeypatch):
             "allow_admin_username": True,
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_handle_chat_ws_send_forwards_ephemeral_and_persists_terminal_with_stats():
+    service = _service()
+    session_id = "compact-openapi-session"
+    message_id = "compact-openapi-request"
+    sent: list[dict] = []
+    errors: list[tuple[str, str]] = []
+    bridge = _bridge()
+    bridge.build_user_message_parts = AsyncMock(
+        return_value=[{"type": "plain", "text": "hello"}]
+    )
+    bridge.save_bot_message = AsyncMock(return_value=None)
+    service.prepare_chat_send = AsyncMock(
+        return_value=("alice", session_id, None)
+    )
+    service.update_session_config_route = AsyncMock(return_value=None)
+
+    async def send_json(payload: dict) -> None:
+        sent.append(payload)
+
+    async def send_error(message: str, code: str) -> None:
+        errors.append((message, code))
+
+    input_queue = webchat_queue_mgr.get_or_create_queue(session_id)
+    task = asyncio.create_task(
+        service.handle_chat_ws_send(
+            post_data={
+                "message": "hello",
+                "session_id": session_id,
+                "message_id": message_id,
+            },
+            conf_list=[],
+            chat_bridge=bridge,
+            send_json=send_json,
+            send_error=send_error,
+        )
+    )
+
+    try:
+        await asyncio.wait_for(input_queue.get(), timeout=1)
+        for payload in (
+            {
+                "type": "plain",
+                "data": "⏳ Compressing context...",
+                "streaming": False,
+                "chain_type": "webchat_ephemeral",
+                "message_id": message_id,
+            },
+            {
+                "type": "plain",
+                "data": '{"current_context_tokens": 42}',
+                "streaming": False,
+                "chain_type": "agent_stats",
+                "message_id": message_id,
+            },
+            {
+                "type": "plain",
+                "data": "✅ Context compressed.",
+                "streaming": False,
+                "message_id": message_id,
+            },
+            {
+                "type": "end",
+                "data": "",
+                "streaming": False,
+                "message_id": message_id,
+            },
+        ):
+            assert await webchat_queue_mgr.put_back_queue(message_id, payload)
+
+        await asyncio.wait_for(task, timeout=1)
+
+        assert errors == []
+        assert [
+            payload["data"] for payload in sent if payload.get("type") == "plain"
+        ] == ["⏳ Compressing context...", "✅ Context compressed."]
+        assert [
+            payload["data"]
+            for payload in sent
+            if payload.get("type") == "agent_stats"
+        ] == [{"current_context_tokens": 42}]
+        bridge.save_bot_message.assert_awaited_once()
+        save_args = bridge.save_bot_message.await_args.args
+        assert save_args[0] == session_id
+        assert save_args[1] == [
+            {"type": "plain", "text": "✅ Context compressed."}
+        ]
+        assert save_args[2] == {"current_context_tokens": 42}
+        assert save_args[3] == {}
+    finally:
+        if not task.done():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+        webchat_queue_mgr.remove_queues(session_id)
 
 
 @pytest.mark.asyncio
