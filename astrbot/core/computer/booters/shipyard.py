@@ -61,10 +61,17 @@ class ShipyardShellWrapper:
             cwd=cwd,
         )
         payload = _maybe_model_dump(result)
+        data = payload.get("data")
+        if isinstance(data, dict):
+            payload.update(
+                {key: value for key, value in data.items() if value is not None}
+            )
 
-        stdout = payload.get("output", payload.get("stdout", "")) or ""
-        stderr = payload.get("error", payload.get("stderr", "")) or ""
+        stdout = payload.get("output") or payload.get("stdout") or ""
+        stderr = payload.get("error") or payload.get("stderr") or ""
         exit_code = payload.get("exit_code")
+        if exit_code is None:
+            exit_code = payload.get("return_code")
         if background:
             pid: int | None = None
             try:
