@@ -292,6 +292,9 @@ class PluginManager:
         dirs = os.listdir(path)
         # 遍历文件夹，找到 main.py 或者和文件夹同名的文件
         for d in dirs:
+            # Staged installs and rollback backups are not discoverable plugins.
+            if d.startswith((".plugin-install-", ".plugin-upload-", ".plugin-backup-")):
+                continue
             if os.path.isdir(os.path.join(path, d)):
                 if os.path.exists(os.path.join(path, d, "main.py")):
                     module_str = "main"
