@@ -1,8 +1,6 @@
 import base64
 from io import BytesIO
-from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
 
 import pytest
 
@@ -149,49 +147,6 @@ async def test_preprocess_image_cleanup_preserves_usable_file(
     )
     assert source_path.exists() == (source_kind != "png")
     assert Path(await image.convert_to_file_path()).exists()
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("quoted", [False, True])
-@pytest.mark.parametrize("remote", [False, True])
-async def test_failed_image_conversion_keeps_materialized_reference(
-    tmp_path, monkeypatch, quoted, remote
-):
-    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
-    monkeypatch.setattr(
-        preprocess_stage, "get_astrbot_temp_path", lambda: str(tmp_path)
-    )
-    invalid_bytes = b"not an image"
-    if remote:
-        image_ref = "https://example.com/image.png"
-        download = AsyncMock(
-            side_effect=lambda url, target: Path(target).write_bytes(invalid_bytes)
-        )
-        monkeypatch.setattr(media_utils, "download_file", download)
-    else:
-        image_ref = "data:image/png;base64," + base64.b64encode(invalid_bytes).decode()
-    image = Image(file=image_ref)
-    event = FakeEvent([Reply(id="reply-1", chain=[image])] if quoted else [image])
-    stage = PreProcessStage()
-    stage.config = {}
-    stage.platform_settings = {}
-    stage.stt_settings = {"enable": False}
-
-    await stage.process(event)
-
-    files = list(tmp_path.iterdir())
-    assert len(files) == 1
-    local_path = files[0]
-    assert image.file == image.path == image.url == str(local_path)
-    assert event.temporary_local_files == []
-    AstrMessageEvent.cleanup_temporary_local_files(
-        SimpleNamespace(_temporary_local_files=event.temporary_local_files)
-    )
-    assert local_path.read_bytes() == invalid_bytes
-    assert await image.convert_to_file_path() == str(local_path)
-    assert list(tmp_path.iterdir()) == files
-    if remote:
-        download.assert_awaited_once()
 
 
 @pytest.mark.asyncio

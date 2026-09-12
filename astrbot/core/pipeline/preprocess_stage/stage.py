@@ -131,10 +131,6 @@ class PreProcessStage(Stage):
             elif isinstance(component, Image):
                 try:
                     original_path = await component.convert_to_file_path()
-                    # Keep the local reference even if JPEG conversion fails.
-                    component.file = original_path
-                    component.path = original_path
-                    component.url = original_path
                     image_path = await ensure_jpeg(original_path)
                     if image_path != original_path:
                         self._track_temp_media(event, original_path)
@@ -171,10 +167,6 @@ class PreProcessStage(Stage):
                     elif isinstance(reply_comp, Image):
                         try:
                             original_path = await reply_comp.convert_to_file_path()
-                            # Keep the local reference even if JPEG conversion fails.
-                            reply_comp.file = original_path
-                            reply_comp.path = original_path
-                            reply_comp.url = original_path
                             image_path = await ensure_jpeg(original_path)
                             if image_path != original_path:
                                 self._track_temp_media(event, original_path)
