@@ -1135,10 +1135,17 @@ async def convert_audio_format(
         Exception: Raised when ffmpeg is unavailable or conversion fails.
     """
     source_path = Path(audio_path)
-    if source_path.suffix.lower() == f".{output_format}" and (
-        not source_path.exists() or _get_audio_magic_type(audio_path) == output_format
-    ):
-        return audio_path
+    if source_path.suffix.lower() == f".{output_format}":
+        # The magic-byte probe performs synchronous file I/O. Keep it off the
+        # event loop because this helper is called while processing messages.
+        if not source_path.exists():
+            return audio_path
+
+        detected_format = await asyncio.to_thread(_get_audio_magic_type, audio_path)
+        if detected_format == output_format or (
+            output_format == "ogg" and detected_format == "opus"
+        ):
+            return audio_path
 
     if output_path is None:
         temp_dir = Path(get_astrbot_temp_path())
