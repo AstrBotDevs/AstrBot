@@ -2,6 +2,8 @@ import asyncio
 import functools
 import json
 import os
+import sys
+import zipfile
 from pathlib import Path
 from types import ModuleType
 from typing import Any, cast
@@ -512,6 +514,10 @@ async def test_install_plugin_from_file_conflict_keeps_failed_plugins_clean(
         )
 
     assert local_updater.is_dir()
+    metadata_path = local_updater / "metadata.yaml"
+    metadata = yaml.safe_load(metadata_path.read_text(encoding="utf-8"))
+    metadata["name"] = "another_plugin"
+    metadata_path.write_text(yaml.safe_dump(metadata), encoding="utf-8")
     monkeypatch.setattr(
         plugin_manager_pm._updater,
         "_extract_plugin_archive",
@@ -528,6 +534,260 @@ async def test_install_plugin_from_file_conflict_keeps_failed_plugins_clean(
     ]
     assert plugin_manager_pm.failed_plugin_dict == {}
     assert new_upload_dirs == []
+    assert yaml.safe_load(metadata_path.read_text(encoding="utf-8")) == metadata
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("legacy_directory", [False, True])
+@pytest.mark.parametrize("failure", [None, "dependencies", "load", "cancel", "version"])
+async def test_upload_updates_existing_plugin_and_restores_on_failure(
+    plugin_manager_pm: PluginManager,
+    local_updater: Path,
+    monkeypatch,
+    tmp_path: Path,
+    legacy_directory: bool,
+    failure: str | None,
+):
+    """An uploaded update replaces old code or restores it after a failed load."""
+    _clear_star_runtime_state()
+    if legacy_directory:
+        local_updater = local_updater.rename(local_updater.with_name("legacy_plugin"))
+    dir_name = local_updater.name
+    module_path = f"data.plugins.{dir_name}.main"
+    old_plugin = star_manager_module.StarMetadata(
+        name=TEST_PLUGIN_NAME,
+        root_dir_name=dir_name,
+        module_path=module_path,
+        version="1.0.0",
+        reserved=False,
+    )
+    star_manager_module.star_registry.append(old_plugin)
+    star_manager_module.star_map[module_path] = old_plugin
+    sys.modules[module_path] = ModuleType(module_path)
+    monkeypatch.setattr(
+        plugin_manager_pm.context, "stars", star_manager_module.star_registry
+    )
+    (local_updater / "obsolete.py").write_text("old code", encoding="utf-8")
+    config_path = tmp_path / "config" / f"{dir_name}_config.json"
+    config_path.parent.mkdir()
+    config_path.write_text('{"custom": true}', encoding="utf-8")
+    monkeypatch.setattr(
+        plugin_manager_pm, "plugin_config_path", str(config_path.parent)
+    )
+    data_path = tmp_path / "plugin_data" / dir_name / "digest.db"
+    data_path.parent.mkdir(parents=True)
+    data_path.write_bytes(b"saved digest")
+
+    source_path = tmp_path / "new_version"
+    _write_local_test_plugin(source_path, TEST_PLUGIN_REPO, version="2.0.0")
+    metadata_path = source_path / "metadata.yaml"
+    metadata = yaml.safe_load(metadata_path.read_text(encoding="utf-8"))
+    metadata.pop("repo")
+    if failure == "version":
+        metadata["astrbot_version"] = ">=999.0"
+    metadata_path.write_text(yaml.safe_dump(metadata), encoding="utf-8")
+    (source_path / "README.md").write_text("Updated README", encoding="utf-8")
+    zip_path = tmp_path / "plugin-v2.zip"
+    with zipfile.ZipFile(zip_path, "w") as archive:
+        for path in source_path.iterdir():
+            archive.write(path, f"release-v2/{path.name}")
+
+    events = []
+
+    async def ensure_requirements(plugin_dir_path, plugin_label):
+        assert plugin_label == dir_name
+        assert (local_updater / "obsolete.py").exists()
+        assert Path(plugin_dir_path) != local_updater
+        events.append("dependencies")
+        if failure == "dependencies":
+            raise RuntimeError("dependency failure")
+
+    async def terminate(plugin):
+        assert plugin is old_plugin
+        assert (local_updater / "obsolete.py").exists()
+        events.append("terminate")
+
+    async def load(specified_dir_name=None, ignore_version_check=False):
+        assert specified_dir_name == dir_name
+        assert module_path not in sys.modules
+        assert module_path not in star_manager_module.star_map
+        assert old_plugin not in star_manager_module.star_registry
+        current = plugin_manager_pm._load_plugin_metadata(str(local_updater))
+        assert current is not None
+        events.append(current.version)
+        if current.version == "2.0.0":
+            assert not (local_updater / "obsolete.py").exists()
+            if failure == "load":
+                sys.modules[module_path] = ModuleType(module_path)
+                return False, "new plugin failed to load"
+            if failure == "cancel":
+                raise asyncio.CancelledError
+        else:
+            assert ignore_version_check is True
+            assert (local_updater / "obsolete.py").read_text() == "old code"
+        current.root_dir_name = dir_name
+        current.module_path = module_path
+        star_manager_module.star_registry.append(current)
+        star_manager_module.star_map[module_path] = current
+        return True, None
+
+    monkeypatch.setattr(
+        plugin_manager_pm, "_ensure_plugin_requirements", ensure_requirements
+    )
+    monkeypatch.setattr(plugin_manager_pm, "_terminate_plugin", terminate)
+    monkeypatch.setattr(plugin_manager_pm, "load", load)
+    try:
+        if failure:
+            exception_type = (
+                asyncio.CancelledError if failure == "cancel" else Exception
+            )
+            with pytest.raises(exception_type):
+                await plugin_manager_pm.install_plugin_from_file(str(zip_path))
+            assert (
+                plugin_manager_pm._load_plugin_metadata(str(local_updater)).version
+                == "1.0.0"
+            )
+            if failure in {"load", "cancel"}:
+                assert events == ["dependencies", "terminate", "2.0.0", "1.0.0"]
+            else:
+                assert "terminate" not in events
+                assert star_manager_module.star_map[module_path] is old_plugin
+        else:
+            result = await plugin_manager_pm.install_plugin_from_file(str(zip_path))
+            assert result == {
+                "name": TEST_PLUGIN_NAME,
+                "repo": None,
+                "readme": "Updated README",
+            }
+            assert events == ["dependencies", "terminate", "2.0.0"]
+            assert not zip_path.exists()
+        assert config_path.read_text() == '{"custom": true}'
+        assert data_path.read_bytes() == b"saved digest"
+        assert set(Path(plugin_manager_pm.plugin_store_path).iterdir()) == {
+            local_updater
+        }
+        assert plugin_manager_pm.failed_plugin_dict == {}
+    finally:
+        sys.modules.pop(module_path, None)
+        _clear_star_runtime_state()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("disabled", [False, True])
+@pytest.mark.parametrize("initialization_fails", [False, True])
+async def test_upload_update_reloads_runtime_and_preserves_activation(
+    plugin_manager_pm: PluginManager,
+    local_updater: Path,
+    monkeypatch,
+    tmp_path: Path,
+    disabled: bool,
+    initialization_fails: bool,
+):
+    """Exercise real loading, registration, disabled state, and rollback."""
+    _clear_star_runtime_state()
+    module_path = f"data.plugins.{TEST_PLUGIN_DIR}.main"
+    metadata_path = local_updater / "metadata.yaml"
+    metadata = yaml.safe_load(metadata_path.read_text(encoding="utf-8"))
+    metadata.pop("repo")
+    metadata_path.write_text(yaml.safe_dump(metadata), encoding="utf-8")
+    source = (
+        "from astrbot.api.star import Star\n"
+        "from astrbot.api.event import filter\n"
+        "class Main(Star):\n"
+        "    marker = 'old'\n"
+        "    async def initialize(self):\n"
+        "        pass\n"
+        "    @filter.command('upload_update_test')\n"
+        "    async def command(self, event):\n"
+        "        pass\n"
+    )
+    (local_updater / "main.py").write_text(source, encoding="utf-8")
+    monkeypatch.setattr(
+        plugin_manager_pm.context, "stars", star_manager_module.star_registry
+    )
+    monkeypatch.setattr(
+        plugin_manager_pm, "reserved_plugin_path", str(tmp_path / "reserved")
+    )
+    monkeypatch.setattr(
+        plugin_manager_pm, "plugin_config_path", str(tmp_path / "config")
+    )
+
+    async def global_get(key, default=None):
+        if key == "inactivated_plugins":
+            return [module_path] if disabled else []
+        return default
+
+    async def import_plugin(*, path, **kwargs):
+        if path not in sys.modules:
+            module = ModuleType(path)
+            sys.modules[path] = module
+            main_path = local_updater / "main.py"
+            exec(
+                compile(main_path.read_text(encoding="utf-8"), str(main_path), "exec"),
+                module.__dict__,
+            )
+        return sys.modules[path]
+
+    async def sync_command_configs():
+        return None
+
+    monkeypatch.setattr(star_manager_module.sp, "global_get", global_get)
+    monkeypatch.setattr(
+        star_manager_module, "sync_command_configs", sync_command_configs
+    )
+    monkeypatch.setattr(
+        plugin_manager_pm, "_import_plugin_with_dependency_recovery", import_plugin
+    )
+    try:
+        success, error = await plugin_manager_pm.load(
+            specified_dir_name=TEST_PLUGIN_DIR
+        )
+        assert success, error
+        old_plugin = star_manager_module.star_map[module_path]
+        assert old_plugin.star_cls_type.marker == "old"
+
+        metadata["version"] = "2.0.0"
+        metadata["astrbot_version"] = ">=999.0"
+        updated_source = source.replace("marker = 'old'", "marker = 'new'")
+        if initialization_fails:
+            updated_source = updated_source.replace(
+                "        pass", "        raise RuntimeError('init failed')", 1
+            )
+        zip_path = tmp_path / "update.zip"
+        with zipfile.ZipFile(zip_path, "w") as archive:
+            archive.writestr("metadata.yaml", yaml.safe_dump(metadata))
+            archive.writestr("main.py", updated_source)
+
+        if initialization_fails and not disabled:
+            with pytest.raises(Exception, match="init failed"):
+                await plugin_manager_pm.install_plugin_from_file(
+                    str(zip_path), ignore_version_check=True
+                )
+        else:
+            await plugin_manager_pm.install_plugin_from_file(
+                str(zip_path), ignore_version_check=True
+            )
+        current_plugin = star_manager_module.star_map[module_path]
+        assert current_plugin is not old_plugin
+        assert current_plugin.activated is (not disabled)
+        assert (current_plugin.star_cls is None) is disabled
+        assert current_plugin.star_cls_type.marker == (
+            "old" if initialization_fails and not disabled else "new"
+        )
+        assert len(star_manager_module.star_registry) == 1
+        assert (
+            len(
+                star_manager_module.star_handlers_registry.get_handlers_by_module_name(
+                    module_path
+                )
+            )
+            == 1
+        )
+        assert plugin_manager_pm.failed_plugin_dict == {}
+        assert plugin_manager_pm.failed_plugin_info == ""
+    finally:
+        sys.modules.pop(module_path, None)
+        _clear_star_runtime_state()
 
 
 @pytest.mark.asyncio
