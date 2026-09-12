@@ -1,11 +1,16 @@
 import asyncio
 import threading
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, call
 
 import dingtalk_stream
 import pytest
 
 from astrbot.api.message_components import At, Plain
 from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.message_session import MessageSession
+from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.platform.sources.dingtalk import dingtalk_adapter
 from astrbot.core.platform.sources.dingtalk.dingtalk_adapter import (
@@ -58,6 +63,392 @@ def test_dingtalk_reconnect_delay_has_minimum_delay():
 
 def test_dingtalk_reconnect_delay_is_capped():
     assert _dingtalk_reconnect_delay(20) == DINGTALK_RECONNECT_MAX_DELAY
+
+
+def test_message_chain_plain_text_extracts_text_only():
+    assert (
+        DingtalkPlatformAdapter._message_chain_plain_text(
+            MessageChain([Plain("hello"), Plain(" world")])
+        )
+        == "hello world"
+    )
+    assert (
+        DingtalkPlatformAdapter._message_chain_plain_text(
+            MessageChain([Plain("hello"), At(qq="user-id")])
+        )
+        is None
+    )
+    assert DingtalkPlatformAdapter._message_chain_plain_text(MessageChain()) is None
+
+
+@pytest.mark.asyncio
+async def test_send_by_session_prefers_card_for_plain_text(monkeypatch):
+    adapter = DingtalkPlatformAdapter.__new__(DingtalkPlatformAdapter)
+    adapter.client_id = "robot-code"
+    adapter.config = {"id": "dingtalk"}
+    adapter.send_plain_text_as_card = True
+    adapter.send_text_card_by_session = AsyncMock(return_value=True)
+    adapter.send_message_chain_to_group = AsyncMock()
+    base_send_calls = []
+
+    async def base_send(self, session, message_chain):
+        base_send_calls.append((self, session, message_chain))
+
+    monkeypatch.setattr(dingtalk_adapter.Platform, "send_by_session", base_send)
+
+    session = MessageSession("dingtalk", MessageType.GROUP_MESSAGE, "conversation-id")
+    message = MessageChain([Plain("card content")])
+
+    await adapter.send_by_session(session, message)
+
+    adapter.send_text_card_by_session.assert_awaited_once_with(session, "card content")
+    adapter.send_message_chain_to_group.assert_not_awaited()
+    assert base_send_calls == [(adapter, session, message)]
+
+
+@pytest.mark.asyncio
+async def test_send_by_session_falls_back_when_card_send_fails(monkeypatch):
+    adapter = DingtalkPlatformAdapter.__new__(DingtalkPlatformAdapter)
+    adapter.client_id = "robot-code"
+    adapter.config = {"id": "dingtalk"}
+    adapter.send_plain_text_as_card = True
+    adapter.send_text_card_by_session = AsyncMock(return_value=False)
+    adapter.send_message_chain_to_group = AsyncMock()
+    base_send_calls = []
+
+    async def base_send(self, session, message_chain):
+        base_send_calls.append((self, session, message_chain))
+
+    monkeypatch.setattr(dingtalk_adapter.Platform, "send_by_session", base_send)
+
+    session = MessageSession("dingtalk", MessageType.GROUP_MESSAGE, "conversation-id")
+    message = MessageChain([Plain("fallback content")])
+
+    await adapter.send_by_session(session, message)
+
+    adapter.send_text_card_by_session.assert_awaited_once_with(
+        session,
+        "fallback content",
+    )
+    adapter.send_message_chain_to_group.assert_awaited_once_with(
+        open_conversation_id="conversation-id",
+        robot_code="robot-code",
+        message_chain=message,
+    )
+    assert base_send_calls == [(adapter, session, message)]
+
+
+@pytest.mark.asyncio
+async def test_send_by_session_keeps_plain_text_normal_when_card_toggle_is_off(
+    monkeypatch,
+):
+    adapter = DingtalkPlatformAdapter.__new__(DingtalkPlatformAdapter)
+    adapter.client_id = "robot-code"
+    adapter.config = {"id": "dingtalk"}
+    adapter.send_plain_text_as_card = False
+    adapter.send_text_card_by_session = AsyncMock()
+    adapter.send_message_chain_to_group = AsyncMock()
+    base_send_calls = []
+
+    async def base_send(self, session, message_chain):
+        base_send_calls.append((self, session, message_chain))
+
+    monkeypatch.setattr(dingtalk_adapter.Platform, "send_by_session", base_send)
+
+    session = MessageSession("dingtalk", MessageType.GROUP_MESSAGE, "conversation-id")
+    message = MessageChain([Plain("normal content")])
+
+    await adapter.send_by_session(session, message)
+
+    adapter.send_text_card_by_session.assert_not_awaited()
+    adapter.send_message_chain_to_group.assert_awaited_once_with(
+        open_conversation_id="conversation-id",
+        robot_code="robot-code",
+        message_chain=message,
+    )
+    assert base_send_calls == [(adapter, session, message)]
+
+
+@pytest.mark.asyncio
+async def test_send_by_session_keeps_mixed_messages_on_normal_path(monkeypatch):
+    adapter = DingtalkPlatformAdapter.__new__(DingtalkPlatformAdapter)
+    adapter.client_id = "robot-code"
+    adapter.config = {"id": "dingtalk"}
+    adapter.send_plain_text_as_card = True
+    adapter.send_text_card_by_session = AsyncMock()
+    adapter.send_message_chain_to_group = AsyncMock()
+    base_send_calls = []
+
+    async def base_send(self, session, message_chain):
+        base_send_calls.append((self, session, message_chain))
+
+    monkeypatch.setattr(dingtalk_adapter.Platform, "send_by_session", base_send)
+
+    session = MessageSession("dingtalk", MessageType.GROUP_MESSAGE, "conversation-id")
+    message = MessageChain([Plain("hello"), At(qq="user-id")])
+
+    await adapter.send_by_session(session, message)
+
+    adapter.send_text_card_by_session.assert_not_awaited()
+    adapter.send_message_chain_to_group.assert_awaited_once_with(
+        open_conversation_id="conversation-id",
+        robot_code="robot-code",
+        message_chain=message,
+    )
+    assert base_send_calls == [(adapter, session, message)]
+
+
+@pytest.mark.asyncio
+async def test_proactive_card_is_created_then_finalized(monkeypatch):
+    class FakeResponse:
+        status = 200
+
+        async def text(self):
+            return "{}"
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return None
+
+    class FakeSession:
+        def __init__(self):
+            self.post_calls = []
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return None
+
+        def post(self, url, **kwargs):
+            self.post_calls.append((url, kwargs))
+            return FakeResponse()
+
+    adapter = DingtalkPlatformAdapter.__new__(DingtalkPlatformAdapter)
+    adapter.card_template_id = "template-id"
+    adapter.card_content_key = "content"
+    adapter.client_id = "robot-code"
+    adapter.get_access_token = AsyncMock(return_value="access-token")
+    adapter._finalize_proactive_card = AsyncMock(return_value=True)
+    http_session = FakeSession()
+    monkeypatch.setattr(
+        dingtalk_adapter.aiohttp,
+        "ClientSession",
+        lambda: http_session,
+    )
+
+    session = MessageSession("dingtalk", MessageType.GROUP_MESSAGE, "conversation-id")
+    result = await adapter.send_text_card_by_session(session, "future task result")
+
+    assert result is True
+    _, post_kwargs = http_session.post_calls[0]
+    assert post_kwargs["json"]["cardData"]["cardParamMap"] == {"content": ""}
+    out_track_id = post_kwargs["json"]["outTrackId"]
+    adapter._finalize_proactive_card.assert_awaited_once_with(
+        http_session=http_session,
+        access_token="access-token",
+        out_track_id=out_track_id,
+        content="future task result",
+    )
+
+
+@pytest.mark.asyncio
+async def test_proactive_card_animation_streams_full_content_in_steps(monkeypatch):
+    adapter = DingtalkPlatformAdapter.__new__(DingtalkPlatformAdapter)
+    adapter.animate_proactive_card = True
+    adapter.card_update_interval = 0.35
+    adapter._put_proactive_card_content = AsyncMock(return_value=True)
+    sleep = AsyncMock()
+    monkeypatch.setattr(dingtalk_adapter.asyncio, "sleep", sleep)
+    http_session = object()
+    content = "abcdefghijklmnopqrstuvwxyz1234"
+
+    result = await adapter._finalize_proactive_card(
+        http_session=http_session,
+        access_token="access-token",
+        out_track_id="out-track-id",
+        content=content,
+    )
+
+    assert result is True
+    assert adapter._put_proactive_card_content.await_args_list == [
+        call(
+            http_session=http_session,
+            access_token="access-token",
+            out_track_id="out-track-id",
+            content="",
+            is_final=False,
+        ),
+        call(
+            http_session=http_session,
+            access_token="access-token",
+            out_track_id="out-track-id",
+            content=content[:8],
+            is_final=False,
+        ),
+        call(
+            http_session=http_session,
+            access_token="access-token",
+            out_track_id="out-track-id",
+            content=content[:16],
+            is_final=False,
+        ),
+        call(
+            http_session=http_session,
+            access_token="access-token",
+            out_track_id="out-track-id",
+            content=content[:24],
+            is_final=False,
+        ),
+        call(
+            http_session=http_session,
+            access_token="access-token",
+            out_track_id="out-track-id",
+            content=content,
+            is_final=True,
+        ),
+    ]
+    assert sleep.await_count == 4
+
+
+@pytest.mark.asyncio
+async def test_proactive_card_animation_can_be_disabled():
+    adapter = DingtalkPlatformAdapter.__new__(DingtalkPlatformAdapter)
+    adapter.animate_proactive_card = False
+    adapter._put_proactive_card_content = AsyncMock(return_value=True)
+    http_session = object()
+
+    result = await adapter._finalize_proactive_card(
+        http_session=http_session,
+        access_token="access-token",
+        out_track_id="out-track-id",
+        content="complete result",
+    )
+
+    assert result is True
+    adapter._put_proactive_card_content.assert_awaited_once_with(
+        http_session=http_session,
+        access_token="access-token",
+        out_track_id="out-track-id",
+        content="complete result",
+        is_final=True,
+    )
+
+
+@pytest.mark.asyncio
+async def test_event_streams_accumulated_content_without_consuming_generator(
+    monkeypatch,
+):
+    adapter = SimpleNamespace(
+        card_template_id="template-id",
+        card_update_interval=0.35,
+        create_message_card=AsyncMock(return_value="card-token"),
+        send_card_message=AsyncMock(return_value=True),
+        send_message_chain_with_incoming=AsyncMock(),
+    )
+    event = DingtalkMessageEvent.__new__(DingtalkMessageEvent)
+    event.adapter = adapter
+    event.message_obj = SimpleNamespace(
+        raw_message=object(),
+        message_id="message-id",
+    )
+    base_stream_calls = []
+
+    async def base_send_streaming(self, generator, use_fallback=False):
+        base_stream_calls.append((self, generator, use_fallback))
+
+    monkeypatch.setattr(
+        AstrMessageEvent,
+        "send_streaming",
+        base_send_streaming,
+    )
+
+    yielded = []
+
+    async def generate():
+        for text in ("first", " second"):
+            yielded.append(text)
+            yield MessageChain([Plain(text)])
+
+    generator = generate()
+    await event.send_streaming(generator, use_fallback=True)
+
+    assert yielded == ["first", " second"]
+    assert base_stream_calls == [(event, generator, True)]
+    assert adapter.send_card_message.await_args_list == [
+        call(card_token="card-token", content="first", is_final=False),
+        call(card_token="card-token", content="first second", is_final=True),
+    ]
+    adapter.send_message_chain_with_incoming.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_event_card_send_does_not_duplicate_normal_message(monkeypatch):
+    adapter = SimpleNamespace(
+        send_plain_text_as_card=True,
+        _message_chain_plain_text=lambda message: message.chain[0].text,
+        send_text_card_with_incoming=AsyncMock(return_value=True),
+        send_message_chain_with_incoming=AsyncMock(),
+    )
+    incoming_message = object()
+    event = DingtalkMessageEvent.__new__(DingtalkMessageEvent)
+    event.adapter = adapter
+    event.message_obj = SimpleNamespace(
+        raw_message=incoming_message,
+        message_id="message-id",
+    )
+    base_send = AsyncMock()
+    monkeypatch.setattr(AstrMessageEvent, "send", base_send)
+    message = MessageChain([Plain("card content")])
+
+    await event.send(message)
+
+    adapter.send_text_card_with_incoming.assert_awaited_once_with(
+        incoming_message=incoming_message,
+        message_id="message-id",
+        content="card content",
+    )
+    adapter.send_message_chain_with_incoming.assert_not_awaited()
+    base_send.assert_awaited_once_with(message)
+
+
+@pytest.mark.asyncio
+async def test_event_falls_back_to_normal_message_when_card_finalize_fails(
+    monkeypatch,
+):
+    adapter = SimpleNamespace(
+        card_template_id="template-id",
+        card_update_interval=0.35,
+        create_message_card=AsyncMock(return_value="card-token"),
+        send_card_message=AsyncMock(side_effect=[False, False]),
+        send_message_chain_with_incoming=AsyncMock(),
+    )
+    incoming_message = object()
+    event = DingtalkMessageEvent.__new__(DingtalkMessageEvent)
+    event.adapter = adapter
+    event.message_obj = SimpleNamespace(
+        raw_message=incoming_message,
+        message_id="message-id",
+    )
+    base_send = AsyncMock()
+    base_send_streaming = AsyncMock()
+    monkeypatch.setattr(AstrMessageEvent, "send", base_send)
+    monkeypatch.setattr(AstrMessageEvent, "send_streaming", base_send_streaming)
+
+    async def generate():
+        yield MessageChain([Plain("first")])
+        yield MessageChain([Plain(" second")])
+
+    await event.send_streaming(generate())
+
+    adapter.send_message_chain_with_incoming.assert_awaited_once()
+    fallback = adapter.send_message_chain_with_incoming.await_args.kwargs
+    assert fallback["incoming_message"] is incoming_message
+    assert len(fallback["message_chain"].chain) == 1
+    assert fallback["message_chain"].chain[0].text == "first second"
+    base_send.assert_awaited_once_with(fallback["message_chain"])
 
 
 @pytest.mark.asyncio
