@@ -45,6 +45,9 @@ class AiocqhttpAdapter(Platform):
         self.host = platform_config["ws_reverse_host"]
         self.port = platform_config["ws_reverse_port"]
 
+        # 支持 NapCat HTTP API（用于 call_action 如 send_private_forward_msg）
+        api_root = platform_config.get("api_root", "")
+
         self.metadata = PlatformMetadata(
             name="aiocqhttp",
             description="适用于 OneBot 标准的消息平台适配器，支持反向 WebSockets。",
@@ -52,7 +55,7 @@ class AiocqhttpAdapter(Platform):
             support_streaming_message=False,
         )
 
-        self.bot = CQHttp(
+        bot_kwargs = dict(
             use_ws_reverse=True,
             import_name="aiocqhttp",
             api_timeout_sec=180,
@@ -60,6 +63,10 @@ class AiocqhttpAdapter(Platform):
                 "ws_reverse_token",
             ),  # 以防旧版本配置不存在
         )
+        if api_root:
+            bot_kwargs["api_root"] = api_root
+
+        self.bot = CQHttp(**bot_kwargs)
 
         @self.bot.on_request()
         async def request(event: Event) -> None:
