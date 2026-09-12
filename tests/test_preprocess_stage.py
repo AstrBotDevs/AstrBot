@@ -7,6 +7,7 @@ import pytest
 from astrbot.core.message.components import Image, Plain, Reply
 from astrbot.core.pipeline.preprocess_stage import stage as preprocess_stage
 from astrbot.core.pipeline.preprocess_stage.stage import PreProcessStage
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.utils import media_utils
 
 
@@ -29,7 +30,7 @@ class FakeEvent:
 
 
 @pytest.mark.asyncio
-async def test_preprocess_preserves_image_formats_and_tracks_temp_files(
+async def test_preprocess_preserves_image_formats_without_tracking_temp_files(
     tmp_path, monkeypatch
 ):
     from PIL import Image as PILImage
@@ -88,18 +89,64 @@ async def test_preprocess_preserves_image_formats_and_tracks_temp_files(
     assert isinstance(main_image, Image)
     assert main_image.file == main_image.path == main_image.url
     assert main_image.file.endswith(".png")
-    assert main_image.file in event.temporary_local_files
+    assert main_image.file not in event.temporary_local_files
     with PILImage.open(main_image.file) as processed_img:
         assert processed_img.format == "PNG"
         assert processed_img.getpixel((0, 0))[3] == 128
 
     assert reply_image.file == reply_image.path == reply_image.url
     assert reply_image.file.endswith(".gif")
-    assert reply_image.file in event.temporary_local_files
+    assert reply_image.file not in event.temporary_local_files
     with PILImage.open(reply_image.file) as processed_img:
         assert processed_img.format == "GIF"
         assert processed_img.is_animated
         assert processed_img.n_frames == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("quoted", [False, True])
+@pytest.mark.parametrize("source_kind", ["png", "jpeg", "invalid"])
+async def test_preprocess_image_cleanup_preserves_usable_file(
+    tmp_path, monkeypatch, quoted, source_kind
+):
+    from pathlib import Path
+
+    from PIL import Image as PILImage
+
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    monkeypatch.setattr(
+        preprocess_stage, "get_astrbot_temp_path", lambda: str(tmp_path)
+    )
+    source_path = tmp_path / f"source.{source_kind}"
+    if source_kind == "invalid":
+        source_path.write_bytes(b"not an image")
+    else:
+        PILImage.new("RGB", (2, 2), (255, 0, 0)).save(source_path)
+
+    image = Image.fromFileSystem(str(source_path))
+    event = FakeEvent([Reply(id="reply-1", chain=[image])] if quoted else [image])
+    stage = PreProcessStage()
+    stage.config = {}
+    stage.platform_settings = {}
+    stage.stt_settings = {"enable": False}
+
+    await stage.process(event)
+
+    if source_kind == "png":
+        assert event.temporary_local_files == [str(source_path)]
+        assert image.file == image.path == image.url
+        assert image.file != str(source_path)
+        with PILImage.open(image.file) as processed_img:
+            assert processed_img.format == "JPEG"
+    else:
+        assert event.temporary_local_files == []
+
+    # Exercise event cleanup to verify that the usable image survives.
+    AstrMessageEvent.cleanup_temporary_local_files(
+        SimpleNamespace(_temporary_local_files=event.temporary_local_files)
+    )
+    assert source_path.exists() == (source_kind != "png")
+    assert Path(await image.convert_to_file_path()).exists()
 
 
 @pytest.mark.asyncio

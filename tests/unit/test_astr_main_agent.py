@@ -1873,14 +1873,33 @@ class TestBuildMainAgent:
         assert result is None
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("quoted", [False, True])
+    @pytest.mark.parametrize("compression_enabled", [False, True])
     async def test_build_main_agent_with_images(
-        self, mock_event, mock_context, mock_provider
+        self,
+        mock_event,
+        mock_context,
+        mock_provider,
+        tmp_path,
+        monkeypatch,
+        quoted,
+        compression_enabled,
     ):
-        """Test building main agent with image attachments."""
+        """Keep attachment paths usable after compressed visual input is cleaned up."""
+        from types import SimpleNamespace
+
+        from PIL import Image as PILImage
+
+        from astrbot.core.utils import media_utils
+
         module = ama
-        mock_image = MagicMock(spec=Image)
-        mock_image.convert_to_file_path = AsyncMock(return_value="/path/to/image.jpg")
-        mock_event.message_obj.message = [mock_image]
+        monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+        source_path = tmp_path / "image.jpg"
+        PILImage.new("RGB", (8, 8), (255, 0, 0)).save(source_path)
+        image = Image.fromFileSystem(str(source_path))
+        mock_event.message_obj.message = (
+            [Reply(id="reply-1", chain=[image])] if quoted else [image]
+        )
 
         mock_context.get_provider_by_id.return_value = None
         mock_context.get_using_provider.return_value = mock_provider
@@ -1900,10 +1919,43 @@ class TestBuildMainAgent:
             result = await module.build_main_agent(
                 event=mock_event,
                 plugin_context=mock_context,
-                config=module.MainAgentBuildConfig(tool_call_timeout=60),
+                config=module.MainAgentBuildConfig(
+                    tool_call_timeout=60,
+                    provider_settings={
+                        "image_compress_enabled": compression_enabled,
+                        "image_compress_options": {"max_size": 2},
+                    },
+                ),
             )
 
         assert result is not None
+        request = result.provider_request
+        label = "Image Attachment in quoted message" if quoted else "Image Attachment"
+        assert f"[{label}: path {source_path}]" in [
+            part.text for part in request.extra_user_content_parts
+        ]
+        assert len(request.image_urls) == 1
+        visual_path = Path(request.image_urls[0])
+        if compression_enabled:
+            assert visual_path != source_path
+            with PILImage.open(visual_path) as visual_image:
+                assert visual_image.size == (2, 2)
+            mock_event.track_temporary_local_file.assert_called_once_with(
+                str(visual_path)
+            )
+        else:
+            assert visual_path == source_path
+            mock_event.track_temporary_local_file.assert_not_called()
+        AstrMessageEvent.cleanup_temporary_local_files(
+            SimpleNamespace(
+                _temporary_local_files=[
+                    call.args[0]
+                    for call in mock_event.track_temporary_local_file.call_args_list
+                ]
+            )
+        )
+        assert source_path.exists()
+        assert visual_path.exists() == (not compression_enabled)
 
     @pytest.mark.asyncio
     async def test_build_main_agent_skips_caption_when_main_provider_supports_images(
