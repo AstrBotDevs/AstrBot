@@ -69,7 +69,6 @@ def test_convert_chat_history_preserves_response_items_and_function_calls():
     reasoning_item = {
         "id": "rs_1",
         "type": "reasoning",
-        "status": "completed",
         "summary": [],
         "encrypted_content": "encrypted-reasoning",
     }
@@ -144,6 +143,70 @@ def test_convert_chat_history_preserves_response_items_and_function_calls():
             "type": "function_call_output",
             "call_id": "call_1",
             "output": "sunny",
+        },
+    ]
+
+
+def test_convert_chat_history_filters_nonportable_reasoning_replay_fields():
+    provider = _make_provider()
+    reasoning_state = json.dumps(
+        {
+            "type": provider._REASONING_STATE_TYPE,
+            "items": [
+                {
+                    "id": "rs_1",
+                    "type": "reasoning",
+                    "status": "completed",
+                    "summary": [],
+                    "content": [
+                        {
+                            "type": "reasoning_text",
+                            "text": "prior reasoning",
+                        }
+                    ],
+                    "encrypted_content": "encrypted-reasoning",
+                    "provider_specific": "provider-only-value",
+                }
+            ],
+        }
+    )
+
+    response_input = provider._convert_chat_messages_to_response_input(
+        [
+            {
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "think",
+                        "think": "prior reasoning",
+                        "encrypted": reasoning_state,
+                    },
+                    {
+                        "type": "text",
+                        "text": "prior answer",
+                    },
+                ],
+            }
+        ]
+    )
+
+    assert response_input == [
+        {
+            "id": "rs_1",
+            "type": "reasoning",
+            "summary": [],
+            "content": [
+                {
+                    "type": "reasoning_text",
+                    "text": "prior reasoning",
+                }
+            ],
+            "encrypted_content": "encrypted-reasoning",
+        },
+        {
+            "type": "message",
+            "role": "assistant",
+            "content": "prior answer",
         },
     ]
 
