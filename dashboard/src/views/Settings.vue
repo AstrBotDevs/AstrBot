@@ -785,12 +785,13 @@ const systemConfigGroups = computed(() => {
             't2i_endpoint',
             't2i_template',
             't2i_active_template'
-        ])
+        ]),
+        createGroup('telemetry', ['disable_metrics'])
     ].filter((group) => Object.keys(group.metadata[group.key].items).length > 0);
 });
 
 const generalSystemConfigGroups = computed(() => systemConfigGroups.value.filter((group) => (
-    group.key === 'runtime' || group.key === 'logs' || group.key === 'tempStorage'
+    group.key === 'runtime' || group.key === 'logs' || group.key === 'tempStorage' || group.key === 'telemetry'
 )));
 const appearanceSystemConfigGroups = computed(() => systemConfigGroups.value.filter((group) => (
     group.key === 't2iRendering'
