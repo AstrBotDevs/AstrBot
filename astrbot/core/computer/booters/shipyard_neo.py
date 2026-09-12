@@ -6,6 +6,7 @@ import shlex
 from typing import Any, cast
 
 from astrbot.api import logger
+from astrbot.core.db import BaseDatabase
 
 from ..olayer import (
     BrowserComponent,
@@ -20,6 +21,7 @@ from .shipyard_search_file_util import search_files_via_shell
 try:
     from shipyard_neo import BayClient
     from shipyard_neo.sandbox import Sandbox
+    from shipyard_neo.errors import NotFoundError, BayError
 except ImportError:
     logger.warning(
         "shipyard_neo_sdk is not installed. ShipyardNeoBooter will not work without it."
@@ -354,12 +356,16 @@ class ShipyardNeoBooter(ComputerBooter):
         endpoint_url: str,
         access_token: str,
         profile: str = "",
+        persist_id: str | None = None,
         ttl: int = 3600,
+        db_helper: BaseDatabase | None = None,
     ) -> None:
         self._endpoint_url = endpoint_url
         self._access_token = access_token
         self._profile = profile.strip() if profile else ""
+        self._persist_id = persist_id
         self._ttl = ttl
+        self._db_helper = db_helper
         self._client: BayClient | None = None
         self._sandbox: Sandbox | None = None
         self._bay_manager: Any = None  # BayContainerManager when auto-started
@@ -430,6 +436,8 @@ class ShipyardNeoBooter(ComputerBooter):
             access_token=self._access_token,
         )
         await self._client.__aenter__()
+        
+        cargo_id = await self._resolve_cargo_id()
 
         # Resolve profile: user-specified > smart selection > default.
         # An empty profile means auto-select; any non-empty profile must be
@@ -439,6 +447,7 @@ class ShipyardNeoBooter(ComputerBooter):
         self._sandbox = await self._client.create_sandbox(
             profile=resolved_profile,
             ttl=self._ttl,
+            cargo_id=cargo_id,
         )
 
         # --- Readiness gate: wait until sandbox session is READY ---
@@ -587,6 +596,64 @@ class ShipyardNeoBooter(ComputerBooter):
             )
 
         return chosen
+    
+    async def _resolve_cargo_id(self) -> str | None:
+        if self._persist_id is None:
+            return None
+        
+        if self._db_helper is None:
+            logger.warning(
+                "[Computer] persist_id is set but no db_helper provided; "
+                "file persistence will not work."
+            )
+            return None
+        
+        # Check if cargo with the persist_id already exists
+        ret = await self._db_helper.get_shipyard_neo_persist(self._persist_id)
+        cargo_id: str | None = None
+        if ret is not None:
+            cargo_id = ret.cargo_id
+            
+        if cargo_id is not None:
+            # Detect if the cargo exists on Bay
+            try:
+                await self._client.cargos.get(cargo_id)
+            except NotFoundError:
+                logger.info(
+                    "[Computer] No existing cargo found on Bay for persist_id=%s; "
+                    "a new cargo will be created.",
+                    self._persist_id,
+                )
+                cargo_id = None
+                
+        if cargo_id is None:
+            # Create a new cargo and save the mapping
+            try:
+                try:
+                    cargo = await self._client.cargos.create()
+                    cargo_id = cargo.id
+                except BayError as e:
+                    # 旧版 SDK 需要传入 size_limit_mb，暂时固定为 10GB
+                    cargo = await self._client.cargos.create(size_limit_mb=10240)
+                    cargo_id = cargo.id
+                
+                if cargo_id is not None:
+                    await self._db_helper.upsert_shipyard_neo_persist(self._persist_id, cargo_id)
+                    logger.info(
+                        "[Computer] Created new cargo for persist_id=%s: cargo_id=%s",
+                        self._persist_id,
+                        cargo_id,
+                    )
+            except Exception as e:
+                logger.error(
+                    "[Computer] Failed to create cargo for persist_id=%s: %s; "
+                    "file persistence will not work.",
+                    self._persist_id,
+                    e,
+                )
+                cargo_id = None
+        
+        return cargo_id
 
     async def shutdown(self, *, delete_sandbox: bool = False) -> None:
         if self._client is not None:

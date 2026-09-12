@@ -240,6 +240,7 @@ class TestGetBooterRebuild:
                     "shipyard_neo_access_token": "sk-test",
                     "shipyard_neo_ttl": 3600,
                     "shipyard_neo_profile": "python-default",
+                    "shipyard_neo_persist_id": "",
                 },
             }
         }
