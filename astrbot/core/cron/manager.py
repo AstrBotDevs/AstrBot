@@ -464,6 +464,10 @@ class CronJobManager:
         )
         config = MainAgentBuildConfig(
             tool_call_timeout=tool_call_timeout,
+            fallback_provider_ids=cfg.get("agent_runner", {})
+            .get("config", {})
+            .get("model", {})
+            .get("fallback_provider_ids", []),
             **resolve_context_compression_config(
                 cfg.get("agent_runner", {}).get("config", {}).get("compression", {})
             ),
