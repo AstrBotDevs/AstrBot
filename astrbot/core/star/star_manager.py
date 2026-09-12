@@ -49,7 +49,7 @@ from . import StarMetadata
 from .command_management import sync_command_configs
 from .context import Context
 from .error_messages import format_plugin_error
-from .filter.permission import PermissionType, PermissionTypeFilter
+from .filter.permission import COMMAND_PERMISSION_TYPES, PermissionTypeFilter
 from .star import star_map, star_registry
 from .star_handler import EventType, star_handlers_registry
 from .updater import PLUGIN_METADATA_FILENAMES, _PluginUpdater
@@ -1379,30 +1379,28 @@ class PluginManager:
                 ):
                     full_names.append(handler.handler_full_name)
 
-                    # 检查并且植入自定义的权限过滤器（alter_cmd）
+                    # Apply only explicitly saved, valid command permissions.
                     if (
                         metadata.name in alter_cmd
                         and handler.handler_name in alter_cmd[metadata.name]
                     ):
                         cmd_type = alter_cmd[metadata.name][handler.handler_name].get(
                             "permission",
-                            "member",
                         )
+                        if cmd_type not in COMMAND_PERMISSION_TYPES:
+                            continue
                         found_permission_filter = False
                         for filter_ in handler.event_filters:
                             if isinstance(filter_, PermissionTypeFilter):
-                                if cmd_type == "admin":
-                                    filter_.permission_type = PermissionType.ADMIN
-                                else:
-                                    filter_.permission_type = PermissionType.MEMBER
+                                filter_.permission_type = COMMAND_PERMISSION_TYPES[
+                                    cmd_type
+                                ]
                                 found_permission_filter = True
                                 break
                         if not found_permission_filter:
                             handler.event_filters.append(
                                 PermissionTypeFilter(
-                                    PermissionType.ADMIN
-                                    if cmd_type == "admin"
-                                    else PermissionType.MEMBER,
+                                    COMMAND_PERMISSION_TYPES[cmd_type],
                                 ),
                             )
 

@@ -4243,9 +4243,9 @@ CONFIG_METADATA_3 = {
                         "items": {"type": "string"},
                     },
                     "platform_settings.unique_session": {
-                        "description": "隔离会话",
+                        "description": "隔离对话",
                         "type": "bool",
-                        "hint": "启用后，群成员的上下文独立。",
+                        "hint": "启用后，支持隔离的渠道会为每位群成员使用独立上下文。指令权限请在「管理行为 → 指令」中设置。",
                     },
                     "wake_prefix": {
                         "description": "唤醒词",
