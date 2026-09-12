@@ -354,6 +354,7 @@ async def test_upload_document_cleans_up_on_storage_failure(
     ("file_name", "file_type"),
     [
         ("guide.docx", "docx"),
+        ("guide.pptx", "pptx"),
         ("guide.xlsx", "xlsx"),
         ("guide.xls", "xls"),
         ("guide.rst", "rst"),
@@ -417,6 +418,43 @@ async def test_upload_document_preserves_markdown_heading_paths(
     ]
     assert "Handbook > Installation\n\n### Linux" in contents[2]
     assert embedding_contents[2] == f"guide\n\n{contents[2]}"
+
+
+@pytest.mark.asyncio
+async def test_upload_document_rejects_legacy_ppt(
+    tmp_path: Path,
+    stub_provider_manager_module,
+) -> None:
+    """Legacy .ppt must fail as unsupported format, not as a corrupt file."""
+    KBHelper = _import_kb_helper()
+
+    helper = KBHelper.__new__(KBHelper)
+    helper.kb = KnowledgeBase(
+        kb_name="Test KB",
+        description="",
+        embedding_provider_id="emb",
+    )
+    helper.kb_db = MagicMock()
+    helper.kb_db.get_db = _failing_get_db()
+    helper.vec_db = AsyncMock()
+    helper.kb_medias_dir = tmp_path / "medias"
+    helper.chunker = AsyncMock()
+
+    with (
+        patch.object(helper, "_ensure_vec_db", new=AsyncMock()),
+        pytest.raises(KnowledgeBaseUploadError) as exc_info,
+    ):
+        await helper.upload_document(
+            file_name="slides.ppt",
+            file_content=b"not a pptx",
+            file_type="ppt",
+        )
+
+    assert exc_info.value.stage == "parsing"
+    assert "暂时不支持的文件格式" in exc_info.value.user_message
+    assert ".ppt" in exc_info.value.user_message
+    helper.chunker.chunk.assert_not_awaited()
+    helper.vec_db.insert_batch.assert_not_awaited()
 
 
 @pytest.mark.asyncio
