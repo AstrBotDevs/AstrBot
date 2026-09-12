@@ -49,10 +49,6 @@ class RespondStage(Stage):
         Comp.Unknown: lambda comp: bool(comp.text and comp.text.strip()),
     }
 
-    # Inline components that belong to the sentence itself; segmented reply
-    # keeps a run of them in the same bubble instead of splitting the text.
-    INLINE_SEGMENT_TYPES = {ComponentType.Plain, ComponentType.Face}
-
     async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
         self.config = ctx.astrbot_config
@@ -103,24 +99,31 @@ class RespondStage(Stage):
     def _group_segment_chain(
         chain: list[BaseMessageComponent],
     ) -> list[list[BaseMessageComponent]]:
-        """Group consecutive inline components into one bubble per group.
+        """Build the bubbles sent by segmented reply.
 
-        Each returned segment is either a run of inline components (a whole
-        sentence with inline faces) or a single component that is sent on
-        its own.
+        Every Plain and every non-inline component starts a new bubble; a
+        Face attaches to the preceding text bubble, or to the following
+        Plain when the chain starts with a Face, so an inline emoji never
+        becomes a bubble of its own while adjacent Plain components keep
+        their deliberate split (#10047, #3959).
         """
         segments: list[list[BaseMessageComponent]] = []
-        inline_group: list[BaseMessageComponent] = []
         for comp in chain:
-            if comp.type in RespondStage.INLINE_SEGMENT_TYPES:
-                inline_group.append(comp)
+            if (
+                comp.type == ComponentType.Face
+                and segments
+                and segments[-1][-1].type in (ComponentType.Plain, ComponentType.Face)
+            ):
+                segments[-1].append(comp)
                 continue
-            if inline_group:
-                segments.append(inline_group)
-                inline_group = []
             segments.append([comp])
-        if inline_group:
-            segments.append(inline_group)
+        if (
+            len(segments) >= 2
+            and segments[0][0].type == ComponentType.Face
+            and segments[1][0].type == ComponentType.Plain
+        ):
+            segments[1][:0] = segments[0]
+            segments.pop(0)
         return segments
 
     async def _calc_comp_interval(
