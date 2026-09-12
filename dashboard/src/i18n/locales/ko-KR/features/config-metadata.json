@@ -1,0 +1,1768 @@
+{
+  "ai_group": {
+    "name": "AI",
+    "agent_runner": {
+      "description": "Agent 실행기",
+      "hint": "AI 대화에 사용할 실행기를 선택하세요. 기본값은 지식 베이스, 페르소나, 도구 호출 기능을 지원하는 AstrBot 내장 Agent 실행기입니다. Dify, Coze, DeerFlow 같은 서드파티 Agent 실행기를 연동할 계획이 아니라면 이 항목을 수정할 필요가 없습니다.",
+      "provider_settings": {
+        "enable": {
+          "description": "활성화",
+          "hint": "AI 대화의 메인 스위치"
+        },
+        "agent_runner_type": {
+          "description": "실행기",
+          "labels": [
+            "내장 Agent",
+            "Dify",
+            "Coze",
+            "Alibaba Cloud Bailian 애플리케이션",
+            "DeerFlow"
+          ]
+        },
+        "coze_agent_runner_provider_id": {
+          "description": "Coze Agent 실행기 공급자 ID"
+        },
+        "dify_agent_runner_provider_id": {
+          "description": "Dify Agent 실행기 공급자 ID"
+        },
+        "dashscope_agent_runner_provider_id": {
+          "description": "Alibaba Cloud Bailian 애플리케이션 Agent 실행기 공급자 ID"
+        },
+        "deerflow_agent_runner_provider_id": {
+          "description": "DeerFlow Agent 실행기 공급자 ID"
+        }
+      }
+    },
+    "ai": {
+      "description": "모델",
+      "hint": "내장이 아닌 Agent 실행기를 사용할 경우 기본 채팅 모델과 기본 이미지 캡션 모델이 적용되지 않을 수 있지만, 일부 플러그인은 AI 기능 호출을 위해 이 설정에 의존합니다.",
+      "provider_settings": {
+        "default_provider_id": {
+          "description": "기본 채팅 모델",
+          "hint": "비워두면 첫 번째 모델을 사용합니다"
+        },
+        "fallback_chat_models": {
+          "description": "대체 채팅 모델 ID",
+          "hint": "기본 채팅 모델 요청이 실패하면 이 채팅 모델들을 순서대로 대체 사용합니다."
+        },
+        "request_max_retries": {
+          "description": "최대 재시도 횟수",
+          "hint": "재시도 가능한 오류가 발생했을 때 단일 모델 요청에 대한 최대 시도 횟수입니다."
+        },
+        "default_image_caption_provider_id": {
+          "description": "기본 이미지 캡션 모델",
+          "hint": "비활성화하려면 비워두세요. 멀티모달을 지원하지 않는 모델에 유용합니다"
+        },
+        "image_caption_prompt": {
+          "description": "이미지 캡션 프롬프트"
+        }
+      },
+      "provider_stt_settings": {
+        "enable": {
+          "description": "음성 인식(STT) 활성화",
+          "hint": "STT의 메인 스위치"
+        },
+        "provider_id": {
+          "description": "기본 음성 인식(STT) 모델",
+          "hint": "사용자는 /provider 명령어로 세션별 STT 모델을 선택할 수도 있습니다."
+        }
+      },
+      "provider_tts_settings": {
+        "enable": {
+          "description": "음성 합성(TTS) 활성화",
+          "hint": "TTS의 메인 스위치"
+        },
+        "provider_id": {
+          "description": "기본 음성 합성(TTS) 모델"
+        },
+        "trigger_probability": {
+          "description": "TTS 트리거 확률"
+        }
+      }
+    },
+    "persona": {
+      "description": "페르소나",
+      "hint": "AI 대화에 사용할 기본 페르소나를 설정합니다. 페르소나는 페르소나 탭에서 관리할 수 있습니다.",
+      "provider_settings": {
+        "default_personality": {
+          "description": "기본 페르소나"
+        }
+      }
+    },
+    "knowledgebase": {
+      "description": "지식 베이스",
+      "kb_names": {
+        "description": "지식 베이스 목록",
+        "hint": "다중 선택을 지원합니다"
+      },
+      "kb_fusion_top_k": {
+        "description": "융합 검색 결과 수",
+        "hint": "여러 지식 베이스의 검색 결과를 융합한 후 반환되는 결과 수입니다"
+      },
+      "kb_final_top_k": {
+        "description": "최종 결과 수",
+        "hint": "지식 베이스에서 조회하는 결과 수입니다. 값을 높이면 더 관련성 높은 정보를 얻을 수 있지만 노이즈도 늘어날 수 있습니다. 실제 필요에 맞게 조정하세요"
+      },
+      "kb_agentic_mode": {
+        "description": "Agentic 지식 베이스 검색",
+        "hint": "활성화하면 지식 베이스 검색이 LLM 도구가 되어, 모델이 언제 지식 베이스를 조회할지 스스로 판단할 수 있습니다. 모델이 함수 호출(function calling)을 지원해야 합니다."
+      }
+    },
+    "websearch": {
+      "description": "웹 검색",
+      "provider_settings": {
+        "web_search": {
+          "description": "웹 검색 활성화"
+        },
+        "websearch_provider": {
+          "description": "웹 검색 공급자"
+        },
+        "websearch_tavily_key": {
+          "description": "Tavily API 키",
+          "hint": "여러 개의 키를 추가하여 순환 사용할 수 있습니다."
+        },
+        "websearch_bocha_key": {
+          "description": "BoCha API 키",
+          "hint": "여러 개의 키를 추가하여 순환 사용할 수 있습니다."
+        },
+        "websearch_brave_key": {
+          "description": "Brave Search API 키",
+          "hint": "여러 개의 키를 추가하여 순환 사용할 수 있습니다."
+        },
+        "websearch_firecrawl_key": {
+          "description": "Firecrawl API 키",
+          "hint": "여러 개의 키를 추가하여 순환 사용할 수 있습니다."
+        },
+        "websearch_baidu_app_builder_key": {
+          "description": "Baidu Qianfan Smart Cloud APP Builder API 키",
+          "hint": "참고: [https://console.bce.baidu.com/iam/#/iam/apikey/list](https://console.bce.baidu.com/iam/#/iam/apikey/list)"
+        },
+        "web_search_link": {
+          "description": "출처 인용 표시"
+        },
+        "websearch_exa_key": {
+          "description": "Exa API 키",
+          "hint": "여러 개의 키를 추가하여 순환 사용할 수 있습니다. https://dashboard.exa.ai 에서 키를 발급받으세요"
+        }
+      }
+    },
+    "file_extract": {
+      "description": "파일 추출",
+      "provider_settings": {
+        "file_extract": {
+          "enable": {
+            "description": "파일 추출 활성화"
+          },
+          "provider": {
+            "description": "파일 추출 공급자"
+          },
+          "moonshotai_api_key": {
+            "description": "Moonshot AI API 키"
+          }
+        }
+      }
+    },
+    "agent_computer_use": {
+      "description": "Agent 컴퓨터 사용",
+      "hint": "AstrBot이 더 복잡한 작업을 수행할 수 있도록 사용자의 컴퓨터나 샌드박스 환경에 접근하여 사용할 수 있게 합니다. 참고: [Computer Use](https://docs.astrbot.app/use/computer.html).",
+      "provider_settings": {
+        "computer_use_runtime": {
+          "description": "컴퓨터 사용 런타임",
+          "hint": "Agent 사용을 허용할 환경입니다. `local`은 로컬 머신 환경, `sandbox`는 샌드박스 환경, `none`은 어떤 환경도 허용하지 않음을 의미합니다."
+        },
+        "computer_use_require_admin": {
+          "description": "AstrBot 관리자 권한 필요",
+          "hint": "활성화하면 컴퓨터 기능을 사용하는 데 AstrBot 관리자 권한이 필요합니다. 관리자는 플랫폼 구성에서 추가할 수 있습니다. /sid 명령어로 관리자 ID를 확인하세요."
+        },
+        "sandbox": {
+          "booter": {
+            "description": "샌드박스 환경 드라이버"
+          },
+          "shipyard_neo_endpoint": {
+            "description": "Shipyard Neo API 엔드포인트",
+            "hint": "Bay API 주소, 기본값 http://127.0.0.1:8114."
+          },
+          "shipyard_neo_access_token": {
+            "description": "Shipyard Neo 액세스 토큰",
+            "hint": "Bay API 키(sk-bay-...)입니다. 비워두면 credentials.json에서 자동으로 검색합니다."
+          },
+          "shipyard_neo_profile": {
+            "description": "Shipyard Neo 프로필",
+            "hint": "Shipyard Neo용 샌드박스 프로필입니다(예: python-default). 비워두면 가장 성능이 좋은 프로필을 자동 선택합니다."
+          },
+          "shipyard_neo_ttl": {
+            "description": "Shipyard Neo 샌드박스 TTL",
+            "hint": "샌드박스의 생존 시간(초)입니다."
+          },
+          "cua_image": {
+            "description": "CUA 이미지",
+            "hint": "CUA 샌드박스 이미지 또는 OS 유형입니다. 기본값은 linux입니다. 지원되는 값은 설치된 CUA SDK에 따라 다릅니다."
+          },
+          "cua_os_type": {
+            "description": "CUA OS 유형",
+            "hint": "CUA 샌드박스 운영체제 유형입니다. 기본값은 linux입니다."
+          },
+          "cua_idle_timeout": {
+            "description": "CUA 유휴 제한 시간",
+            "hint": "CUA 샌드박스 세션의 유휴 제한 시간(초)입니다. 0보다 크면 AstrBot이 해당 시간만큼 비활성 상태가 지속된 유휴 CUA 샌드박스를 자동으로 종료합니다. 0은 비활성화를 의미합니다."
+          },
+          "cua_telemetry_enabled": {
+            "description": "CUA 원격 측정",
+            "hint": "CUA SDK가 원격 측정 데이터를 전송하도록 허용합니다. 기본값은 비활성화입니다."
+          },
+          "cua_local": {
+            "description": "CUA 로컬 샌드박스",
+            "hint": "로컬 CUA 샌드박스를 우선 사용합니다. 클라우드 샌드박스에 CUA_API_KEY가 필요하지 않도록 기본값은 활성화입니다. CUA 클라우드 샌드박스를 사용하려면 비활성화하세요."
+          },
+          "cua_api_key": {
+            "description": "CUA API 키",
+            "hint": "CUA 클라우드 샌드박스 API 키입니다. 로컬 샌드박스가 비활성화된 경우에만 필요합니다. CUA_API_KEY 환경 변수로도 제공할 수 있습니다."
+          },
+          "shipyard_endpoint": {
+            "description": "Shipyard API 엔드포인트",
+            "hint": "Shipyard 서비스에 접근하기 위한 API 주소입니다."
+          },
+          "shipyard_access_token": {
+            "description": "Shipyard 액세스 토큰",
+            "hint": "Shipyard 서비스에 접근하기 위한 액세스 토큰입니다."
+          },
+          "shipyard_ttl": {
+            "description": "Shipyard 세션 TTL",
+            "hint": "세션의 생존 시간(초)입니다."
+          },
+          "shipyard_max_sessions": {
+            "description": "Shipyard 최대 세션 수",
+            "hint": "인스턴스 하나가 처리할 수 있는 최대 Shipyard 세션 수입니다."
+          }
+        }
+      }
+    },
+    "proactive_capability": {
+      "description": "능동형 Agent",
+      "hint": "AstrBot이 스스로 깨어나 작업을 실행하고 결과를 전달합니다. 참고: [Proactive Agent](https://docs.astrbot.app/en/use/proactive-agent.html)",
+      "provider_settings": {
+        "proactive_capability": {
+          "add_cron_tools": {
+            "description": "활성화",
+            "hint": "활성화하면 관련 도구가 Agent에 전달되어 능동형 Agent 기능을 구현합니다. 미래의 특정 시점에 무엇을 할지 AstrBot에게 알려주면 예약된 시간에 트리거되어 작업을 실행하고 결과를 사용자에게 보고합니다."
+          }
+        }
+      }
+    },
+    "truncate_and_compress": {
+      "hint": "[컨텍스트 관리](https://docs.astrbot.app/en/use/context-compress.html)",
+      "description": "컨텍스트 관리 전략",
+      "provider_settings": {
+        "max_context_length": {
+          "description": "압축 전 최대 대화 턴 수",
+          "hint": "영구 대화 기록은 이 턴 수를 초과한 뒤에만 아래 전략에 따라 잘리거나 LLM으로 압축됩니다. 요청 시점의 컨텍스트도 전송 전에 이 값의 제약을 받습니다. -1은 턴 수 제한이 없음을 의미합니다."
+        },
+        "dequeue_context_length": {
+          "description": "한도 초과 시 폐기할 턴 수",
+          "hint": "기록이 '압축 전 최대 대화 턴 수'를 초과하고 LLM 압축을 사용할 수 없을 때, 가장 오래된 턴을 한 번에 이 개수만큼 폐기합니다. 요청 시점의 잘라내기에도 동일한 값이 재사용됩니다."
+        },
+        "context_limit_reached_strategy": {
+          "description": "기록 한도 초과 또는 컨텍스트 윈도우 부담 처리 방식",
+          "labels": [
+            "턴 단위로 자르기",
+            "LLM으로 압축"
+          ],
+          "hint": "영구 대화 기록은 '압축 전 최대 대화 턴 수'를 초과한 뒤에만 이 전략을 사용합니다. 각 요청 전에는 토큰이 모델 윈도우에 근접할 때 진행 중인 컨텍스트를 보호하는 데도 동일한 전략이 사용될 수 있습니다."
+        },
+        "llm_compress_instruction": {
+          "description": "컨텍스트 압축 지시문",
+          "hint": "비워두면 기본 프롬프트를 사용합니다."
+        },
+        "llm_compress_keep_recent_ratio": {
+          "description": "유지할 최근 컨텍스트 토큰 비율",
+          "hint": "현재 컨텍스트 토큰 비율 기준으로 최근 정확한 컨텍스트를 유지합니다(0~0.3). 0.15는 15%를 유지함을 의미하며, 0보다 큰 값은 최소한 가장 최근 라운드를 유지합니다."
+        },
+        "llm_compress_provider_id": {
+          "description": "컨텍스트 압축용 모델 공급자 ID",
+          "hint": "비워두면 현재 채팅 모델이 압축에 사용됩니다. 모델을 사용할 수 없거나 압축에 실패하면 AstrBot은 '턴 단위로 자르기' 전략으로 대체합니다."
+        },
+        "fallback_max_context_tokens": {
+          "description": "대체 컨텍스트 윈도우 크기",
+          "hint": "max_context_tokens가 0이고 모델이 내장 메타데이터에 없을 때 이 값을 컨텍스트 윈도우 크기로 사용합니다. 기본값: 128000."
+        }
+      }
+    },
+    "others": {
+      "description": "기타 설정",
+      "provider_settings": {
+        "display_reasoning_text": {
+          "description": "추론 내용 표시"
+        },
+        "llm_safety_mode": {
+          "description": "건전 모드",
+          "hint": "모델 답변에 안전 가드레일을 추가합니다."
+        },
+        "safety_mode_strategy": {
+          "description": "건전 모드 전략",
+          "hint": "건전 모드를 적용하는 방식입니다."
+        },
+        "identifier": {
+          "description": "사용자 식별",
+          "hint": "활성화하면 사용자 ID 정보가 프롬프트에 포함됩니다."
+        },
+        "group_name_display": {
+          "description": "그룹 이름 표시",
+          "hint": "활성화하면 지원되는 플랫폼(OneBot v11)에서 그룹 이름 정보가 프롬프트에 포함됩니다."
+        },
+        "datetime_system_prompt": {
+          "description": "실제 시간 인식",
+          "hint": "활성화하면 현재 시간 정보가 시스템 프롬프트에 추가됩니다."
+        },
+        "show_tool_use_status": {
+          "description": "함수 호출 상태 출력"
+        },
+        "show_tool_call_result": {
+          "description": "도구 호출 결과 출력",
+          "hint": "\"함수 호출 상태 출력\"이 활성화된 경우에만 적용되며, 최대 70자까지 표시됩니다."
+        },
+        "buffer_intermediate_messages": {
+          "description": "Agent 중간 메시지 병합",
+          "hint": "활성화하면 비스트리밍 모드에서 다단계 도구 호출 중 생성된 중간 텍스트가 버퍼링되어 Agent 완료 후 하나의 병합된 답변으로 전송됩니다."
+        },
+        "sanitize_context_by_modalities": {
+          "description": "모달리티 기준 기록 정제",
+          "hint": "활성화하면 각 LLM 요청 전에 현재 공급자의 모달리티가 지원하지 않는 이미지 블록과 도구 호출 구조를 제거하여 컨텍스트를 정제합니다(모델이 보는 내용이 달라집니다)."
+        },
+        "max_quoted_fallback_images": {
+          "description": "전달 메시지 이미지 조회 한도",
+          "hint": "전달된 메시지 파싱에서 주입되는 최대 이미지 수입니다. 초과분은 잘립니다."
+        },
+        "quoted_message_parser": {
+          "max_component_chain_depth": {
+            "description": "전달 리치 텍스트 파싱 깊이",
+            "hint": "전달된 메시지 내부의 리치 텍스트 컴포넌트 체인을 파싱할 때의 최대 재귀 깊이입니다."
+          },
+          "max_forward_node_depth": {
+            "description": "전달 중첩 파싱 깊이",
+            "hint": "중첩된 전달 노드를 파싱할 때의 최대 재귀 깊이입니다."
+          },
+          "max_forward_fetch": {
+            "description": "전달 재귀 조회 한도",
+            "hint": "get_forward_msg 재귀 조회 작업의 최대 횟수입니다."
+          },
+          "warn_on_action_failure": {
+            "description": "전달 파싱 실패 시 경고",
+            "hint": "활성화하면 모든 get_msg/get_forward_msg 시도가 실패했을 때 경고 로그를 남깁니다."
+          }
+        },
+        "max_agent_step": {
+          "description": "최대 도구 호출 라운드 수"
+        },
+        "tool_call_timeout": {
+          "description": "도구 호출 제한 시간(초)"
+        },
+        "tool_schema_mode": {
+          "description": "도구 스키마 모드",
+          "hint": "Skills 방식은 먼저 이름/설명만 전송하고 파라미터는 재조회하며, Full 방식은 전체 스키마를 한 번에 전송합니다.",
+          "labels": [
+            "Skills 방식(2단계)",
+            "전체 스키마"
+          ]
+        },
+        "streaming_response": {
+          "description": "스트리밍 출력"
+        },
+        "unsupported_streaming_strategy": {
+          "description": "스트리밍을 지원하지 않는 플랫폼",
+          "hint": "스트리밍 응답을 지원하지 않는 플랫폼에 대한 처리 방식을 선택하세요. 실시간 분할 답변은 스트리밍 수신 중 마침표 등 구분점을 감지하면 즉시 내용을 전송합니다",
+          "labels": [
+            "실시간 분할 답변",
+            "스트리밍 응답 비활성화"
+          ]
+        },
+        "wake_prefix": {
+          "description": "추가 LLM 채팅 웨이크 프리픽스",
+          "hint": "웨이크 프리픽스가 /이고 추가 채팅 웨이크 프리픽스가 chat이면, LLM 요청을 트리거하려면 /chat이 필요합니다"
+        },
+        "prompt_prefix": {
+          "description": "사용자 프롬프트",
+          "hint": "사용자 입력의 자리 표시자로 {{prompt}}를 사용할 수 있습니다. 자리 표시자가 없으면 사용자 입력 앞에 추가됩니다."
+        },
+        "image_compress_enabled": {
+          "description": "이미지 압축 활성화",
+          "hint": "활성화하면 멀티모달 모델에 전송하기 전 용량이 큰 로컬 이미지를 압축합니다."
+        },
+        "image_compress_options": {
+          "description": "이미지 압축 설정",
+          "hint": "이미지 크기 조정 한도, JPEG 품질, 압축 적용 최소 크기 임계값을 제어합니다.",
+          "max_size": {
+            "description": "최대 가장자리 길이",
+            "hint": "압축된 이미지의 가장 긴 변의 길이(픽셀)입니다. 이보다 큰 이미지는 비율에 맞게 축소됩니다."
+          },
+          "quality": {
+            "description": "JPEG 품질",
+            "hint": "JPEG 출력 품질(1~100)입니다. 값이 높을수록 디테일이 잘 보존되지만 파일 크기가 커집니다."
+          }
+        },
+        "reachability_check": {
+          "description": "공급자 연결 확인",
+          "hint": "/provider 명령어 실행 시 공급자 연결 상태를 병렬로 테스트합니다. 실제로 모델에 핑을 보내므로 추가 토큰이 소모될 수 있습니다."
+        }
+      },
+      "provider_tts_settings": {
+        "dual_output": {
+          "description": "TTS 활성화 시 음성과 텍스트 동시 출력"
+        }
+      }
+    }
+  },
+  "platform_group": {
+    "name": "플랫폼",
+    "platform": {
+      "description": "메시지 플랫폼 어댑터",
+      "active_send_mode": {
+        "description": "능동 전송 API 사용"
+      },
+      "appid": {
+        "description": "App ID",
+        "hint": "필수 항목입니다. 현재 메시징 플랫폼의 App ID입니다. 발급 방법은 플랫폼 연동 문서를 참고하세요."
+      },
+      "callback_server_host": {
+        "description": "콜백 서버 호스트",
+        "hint": "콜백 서버 호스트입니다. 비워두면 콜백 서버가 비활성화됩니다."
+      },
+      "card_template_id": {
+        "description": "카드 템플릿 ID",
+        "hint": "선택 항목입니다. DingTalk 인터랙티브 카드 템플릿 ID입니다. 활성화하면 스트리밍 답변에 인터랙티브 카드가 사용됩니다."
+      },
+      "discord_activity_name": {
+        "description": "Discord 활동 이름",
+        "hint": "선택적인 Discord 활동 이름입니다. 비워두면 비활성화됩니다."
+      },
+      "discord_allow_bot_messages": {
+        "description": "봇 메시지 허용",
+        "hint": "활성화하면 AstrBot이 다른 Discord 봇의 메시지를 수신합니다. 봇 간 통신 시나리오(예: 메시지 전달)에 유용합니다. 기본값은 비활성화입니다."
+      },
+      "discord_command_register": {
+        "description": "Discord 슬래시 명령어 등록",
+        "hint": "활성화하면 AstrBot이 플러그인 명령어를 Discord 슬래시 명령어로 자동 등록합니다"
+      },
+      "discord_proxy": {
+        "description": "Discord 프록시 URL",
+        "hint": "선택적 프록시 URL: http://ip:port"
+      },
+      "discord_token": {
+        "description": "Discord 봇 토큰",
+        "hint": "여기에 Discord 봇 토큰을 입력하세요."
+      },
+      "enable": {
+        "description": "활성화",
+        "hint": "이 어댑터를 활성화할지 여부입니다. 비활성화된 어댑터는 메시지를 수신하지 않습니다."
+      },
+      "enable_group_c2c": {
+        "description": "메시지 목록 개인 채팅 활성화",
+        "hint": "활성화하면 봇이 QQ 메시지 목록에서 온 개인 채팅을 수신할 수 있습니다. QQ 봇 플랫폼에서 QR 코드를 스캔해 봇을 친구로 추가해야 할 수 있습니다. 문서를 참고하세요."
+      },
+      "enable_guild_direct_message": {
+        "description": "길드 다이렉트 메시지 활성화",
+        "hint": "활성화하면 봇이 길드 다이렉트 메시지를 수신할 수 있습니다."
+      },
+      "id": {
+        "description": "봇 이름",
+        "hint": "봇 이름"
+      },
+      "is_sandbox": {
+        "description": "샌드박스 모드"
+      },
+      "kf_name": {
+        "description": "WeChat 고객센터 계정 이름",
+        "hint": "선택 항목입니다. 고객센터 계정 이름(ID 아님)입니다. https://kf.weixin.qq.com/kf/frame#/accounts 에서 확인하세요"
+      },
+      "lark_connection_mode": {
+        "description": "구독 모드",
+        "labels": [
+          "롱 커넥션 모드",
+          "웹훅 서버 모드"
+        ]
+      },
+      "lark_encrypt_key": {
+        "description": "암호화 키",
+        "hint": "Lark 콜백 데이터를 복호화하기 위한 암호화 키입니다."
+      },
+      "lark_verification_token": {
+        "description": "검증 토큰",
+        "hint": "Lark 콜백 요청을 검증하기 위한 토큰입니다."
+      },
+      "misskey_allow_insecure_downloads": {
+        "description": "안전하지 않은 다운로드 허용(SSL 검증 비활성화)",
+        "hint": "원격 서버에 인증서 문제가 있을 경우 대체 수단으로 SSL 검증을 비활성화합니다. 보안 위험이 있으므로 필요한 경우에만 사용하세요."
+      },
+      "misskey_default_visibility": {
+        "description": "기본 게시물 공개 범위",
+        "hint": "봇 게시물의 기본 공개 범위입니다. public: 전체 공개, home: 홈 타임라인, followers: 팔로워만."
+      },
+      "misskey_download_chunk_size": {
+        "description": "스트림 다운로드 청크 크기(바이트)",
+        "hint": "스트리밍 다운로드 및 MD5 계산 시 청크당 읽는 바이트 수입니다. 너무 작으면 오버헤드가 늘고, 너무 크면 메모리를 더 사용합니다."
+      },
+      "misskey_download_timeout": {
+        "description": "원격 다운로드 제한 시간(초)",
+        "hint": "로컬 업로드로 대체할 때 사용되는 원격 파일 다운로드 제한 시간(초)입니다."
+      },
+      "misskey_enable_chat": {
+        "description": "채팅 메시지 응답 활성화",
+        "hint": "활성화하면 봇이 개인 채팅 메시지를 수신하고 응답합니다."
+      },
+      "misskey_enable_file_upload": {
+        "description": "Misskey 파일 업로드 활성화",
+        "hint": "활성화하면 어댑터가 메시지 체인의 파일을 Misskey에 업로드합니다. URL 파일은 먼저 서버 측 업로드를 시도하며, 비동기 업로드가 실패하면 로컬 다운로드 후 업로드로 대체됩니다."
+      },
+      "misskey_instance_url": {
+        "description": "Misskey 인스턴스 URL",
+        "hint": "예: https://misskey.example. 봇 계정이 있는 Misskey 인스턴스입니다."
+      },
+      "misskey_local_only": {
+        "description": "로컬 전용(연합 비활성화)",
+        "hint": "활성화하면 봇 게시물이 이 인스턴스에서만 보이고 연합(federation)되지 않습니다."
+      },
+      "misskey_max_download_bytes": {
+        "description": "최대 다운로드 크기(바이트)",
+        "hint": "OOM을 방지하기 위해 다운로드 크기 상한을 설정합니다. 비워두거나 null이면 제한이 없습니다."
+      },
+      "misskey_token": {
+        "description": "Misskey 액세스 토큰",
+        "hint": "연결 서비스 설정에서 생성된 API 액세스 토큰입니다."
+      },
+      "misskey_upload_concurrency": {
+        "description": "업로드 동시성 제한",
+        "hint": "동시에 실행되는 최대 업로드 작업 수(정수, 기본값 3)입니다."
+      },
+      "misskey_upload_folder": {
+        "description": "대상 드라이브 폴더 ID",
+        "hint": "선택 항목: Misskey 드라이브 내 대상 폴더의 ID입니다. 비워두면 루트 폴더를 사용합니다."
+      },
+      "port": {
+        "description": "콜백 서버 포트",
+        "hint": "콜백 서버 포트입니다. 비워두면 콜백 서버가 비활성화됩니다."
+      },
+      "satori_api_base_url": {
+        "description": "Satori API 엔드포인트",
+        "hint": "Satori API의 기본 URL입니다."
+      },
+      "satori_auto_reconnect": {
+        "description": "자동 재연결 활성화",
+        "hint": "WebSocket 연결이 끊기면 자동으로 재연결합니다."
+      },
+      "satori_endpoint": {
+        "description": "Satori WebSocket 엔드포인트",
+        "hint": "Satori 이벤트용 WebSocket 엔드포인트입니다."
+      },
+      "satori_heartbeat_interval": {
+        "description": "Satori 하트비트 간격",
+        "hint": "하트비트 메시지 간의 간격(초)입니다."
+      },
+      "satori_reconnect_delay": {
+        "description": "Satori 재연결 지연",
+        "hint": "재연결을 시도하기 전 대기 시간(초)입니다."
+      },
+      "satori_token": {
+        "description": "Satori 토큰",
+        "hint": "Satori API 인증용 토큰입니다."
+      },
+      "secret": {
+        "description": "시크릿",
+        "hint": "필수 항목입니다."
+      },
+      "slack_connection_mode": {
+        "description": "Slack 연결 모드",
+        "hint": "Slack의 연결 모드입니다. `webhook`은 웹훅 서버를 사용하고, `socket`은 Slack의 Socket Mode를 사용합니다."
+      },
+      "slack_webhook_host": {
+        "description": "Slack 웹훅 호스트",
+        "hint": "Slack 연결 모드가 `webhook`일 때만 유효합니다."
+      },
+      "slack_webhook_path": {
+        "description": "Slack 웹훅 경로",
+        "hint": "Slack 연결 모드가 `webhook`일 때만 유효합니다."
+      },
+      "slack_webhook_port": {
+        "description": "Slack 웹훅 포트",
+        "hint": "Slack 연결 모드가 `webhook`일 때만 유효합니다."
+      },
+      "telegram_command_auto_refresh": {
+        "description": "Telegram 명령어 자동 새로고침",
+        "hint": "활성화하면 AstrBot이 실행 중 Telegram 명령어를 자동으로 새로고침합니다. (이 설정만으로는 효과가 없습니다)"
+      },
+      "telegram_command_register": {
+        "description": "Telegram 명령어 등록",
+        "hint": "활성화하면 AstrBot이 Telegram 명령어를 자동으로 등록합니다."
+      },
+      "telegram_command_register_interval": {
+        "description": "Telegram 명령어 자동 새로고침 간격",
+        "hint": "Telegram 명령어 자동 새로고침 간격(초)입니다."
+      },
+      "telegram_polling_restart_delay": {
+        "description": "Telegram 폴링 재시작 지연",
+        "hint": "폴링 루프가 예기치 않게 종료되어 재시작이 필요할 때의 대기 시간(초)입니다. 기본값은 5초입니다."
+      },
+      "telegram_token": {
+        "description": "봇 토큰",
+        "hint": "중국 본토에 있다면 프록시를 설정하거나 기타 설정에서 api_base를 변경하세요."
+      },
+      "mattermost_url": {
+        "description": "Mattermost URL",
+        "hint": "Mattermost 서비스 URL입니다(예: https://chat.example.com)."
+      },
+      "mattermost_bot_token": {
+        "description": "Mattermost 봇 토큰",
+        "hint": "Mattermost에서 봇 계정을 생성한 뒤 발급되는 액세스 토큰입니다."
+      },
+      "mattermost_reconnect_delay": {
+        "description": "Mattermost 재연결 지연",
+        "hint": "WebSocket 연결이 끊긴 뒤 재연결까지 대기하는 시간(초)입니다. 기본값은 5초입니다."
+      },
+      "type": {
+        "description": "어댑터 유형"
+      },
+      "unified_webhook_mode": {
+        "description": "통합 웹훅 모드",
+        "hint": "활성화하면 별도의 포트를 열지 않고 AstrBot 통합 웹훅 엔트리를 사용합니다. 콜백 URL은 /api/v1/webhooks/platforms/{webhook_uuid}입니다."
+      },
+      "webhook_uuid": {
+        "description": "웹훅 UUID",
+        "hint": "통합 웹훅 모드의 고유 식별자로, 플랫폼 생성 시 자동 생성됩니다."
+      },
+      "wecom_ai_bot_name": {
+        "description": "WeCom AI 봇 이름",
+        "hint": "정확해야 합니다. 그렇지 않으면 일부 명령어가 동작하지 않습니다."
+      },
+      "wecom_ai_bot_connection_mode": {
+        "description": "WeCom AI 봇 연결 모드",
+        "hint": "웹훅 모드는 Token/EncodingAESKey가 필요하며, long_connection 모드는 BotID/Secret이 필요합니다."
+      },
+      "wecomaibot_friend_message_welcome_text": {
+        "description": "WeCom AI 봇 DM 환영 메시지",
+        "hint": "사용자가 당일 DM 세션에 진입하면 환영 메시지로 응답합니다. 비워두면 비활성화됩니다."
+      },
+      "wecomaibot_init_respond_text": {
+        "description": "WeCom AI 봇 초기 응답 텍스트",
+        "hint": "봇이 메시지를 수신했을 때 최초 답변입니다. 비워두면 비활성화됩니다."
+      },
+      "wecomaibot_token": {
+        "description": "WeCom AI 봇 토큰",
+        "hint": "웹훅 콜백 모드에서 인증에 사용됩니다."
+      },
+      "wecomaibot_encoding_aes_key": {
+        "description": "WeCom AI 봇 EncodingAESKey",
+        "hint": "웹훅 콜백 모드에서 메시지 암복호화에 사용됩니다."
+      },
+      "wecomaibot_ws_bot_id": {
+        "description": "롱 커넥션 BotID",
+        "hint": "WeCom AI 봇 롱 커넥션 모드용 BotID 자격 증명입니다."
+      },
+      "wecomaibot_ws_secret": {
+        "description": "롱 커넥션 Secret",
+        "hint": "WeCom AI 봇 롱 커넥션 모드용 Secret 자격 증명입니다."
+      },
+      "wecomaibot_ws_url": {
+        "description": "롱 커넥션 WebSocket URL",
+        "hint": "기본값은 wss://openws.work.weixin.qq.com이며 대개 변경할 필요가 없습니다."
+      },
+      "wecomaibot_heartbeat_interval": {
+        "description": "롱 커넥션 하트비트 간격",
+        "hint": "롱 커넥션 모드에서의 하트비트 간격(초)입니다. 30초를 권장합니다."
+      },
+      "wpp_active_message_poll": {
+        "description": "능동 메시지 폴링 활성화",
+        "hint": "WeChat 메시지가 AstrBot에 제때 동기화되지 않을 때만 활성화하세요. 기본값은 비활성화입니다."
+      },
+      "wpp_active_message_poll_interval": {
+        "description": "능동 메시지 폴링 간격",
+        "hint": "간격(초)이며 기본값은 3입니다. 60을 넘기면 오래된 메시지로 간주될 수 있습니다."
+      },
+      "ws_reverse_host": {
+        "description": "역방향 WebSocket 호스트",
+        "hint": "AstrBot이 서버 역할을 합니다."
+      },
+      "ws_reverse_port": {
+        "description": "역방향 WebSocket 포트"
+      },
+      "ws_reverse_token": {
+        "description": "역방향 WebSocket 토큰",
+        "hint": "역방향 WebSocket 토큰입니다. 설정하지 않으면 토큰 검증이 비활성화됩니다."
+      },
+      "msg_push_webhook_url": {
+        "description": "WeCom 메시지 푸시 웹훅 URL",
+        "hint": "능동 메시지 푸시에 사용됩니다. 더 나은 메시지 전송 경험을 위해 이 값을 설정하는 것을 강력히 권장합니다."
+      },
+      "only_use_webhook_url_to_send": {
+        "description": "웹훅으로만 답변 전송",
+        "hint": "활성화하면 모든 WeCom AI 봇 답변이 msg_push_webhook_url을 통해 전송됩니다. 메시지 푸시 웹훅은 이미지, 파일 등 더 많은 메시지 유형을 지원합니다. 타이핑 효과가 필요 없다면 이 옵션을 사용하는 것을 강력히 권장합니다. "
+      },
+      "weixin_oc_base_url": {
+        "description": "API 기본 URL",
+        "hint": "기본값: https://ilinkai.weixin.qq.com"
+      },
+      "weixin_oc_bot_type": {
+        "description": "bot_type(QR 로그인 파라미터)",
+        "hint": "기본값: 3"
+      },
+      "weixin_oc_qr_poll_interval": {
+        "description": "QR 상태 폴링 간격(초)",
+        "hint": "QR 코드 상태를 폴링하는 간격(초)입니다."
+      },
+      "weixin_oc_long_poll_timeout_ms": {
+        "description": "getUpdates 롱 폴 제한 시간(ms)",
+        "hint": "메시지 폴링용 제한 시간 파라미터입니다."
+      },
+      "weixin_oc_api_timeout_ms": {
+        "description": "HTTP 제한 시간(ms)",
+        "hint": "일반 API 요청 제한 시간입니다."
+      },
+      "weixin_oc_token": {
+        "description": "로그인 후 토큰(선택)",
+        "hint": "QR 로그인 후 자동으로 기록되며, 고급 시나리오에서는 수동으로 입력할 수 있습니다."
+      },
+      "kook_bot_token": {
+        "description": "봇 토큰",
+        "type": "string",
+        "hint": "필수 항목입니다. KOOK 개발자 플랫폼에서 발급받은 봇 토큰입니다."
+      },
+      "kook_reconnect_delay": {
+        "description": "재연결 지연",
+        "type": "int",
+        "hint": "재연결 대기 시간(초)이며, 지수 백오프 전략을 사용합니다."
+      },
+      "kook_max_reconnect_delay": {
+        "description": "최대 재연결 지연",
+        "type": "int",
+        "hint": "재연결 지연의 최대값(초)입니다."
+      },
+      "kook_max_retry_delay": {
+        "description": "최대 재시도 지연",
+        "type": "int",
+        "hint": "재시도 최대 지연 시간(초)입니다."
+      },
+      "kook_heartbeat_interval": {
+        "description": "하트비트 간격",
+        "type": "int",
+        "hint": "하트비트 감지 간격(초)입니다."
+      },
+      "kook_heartbeat_timeout": {
+        "description": "하트비트 제한 시간",
+        "type": "int",
+        "hint": "하트비트 감지 제한 시간(초)입니다."
+      },
+      "kook_max_heartbeat_failures": {
+        "description": "최대 하트비트 실패 횟수",
+        "type": "int",
+        "hint": "허용되는 최대 하트비트 실패 횟수이며, 초과 시 연결이 종료됩니다."
+      },
+      "kook_max_consecutive_failures": {
+        "description": "최대 연속 실패 횟수",
+        "type": "int",
+        "hint": "허용되는 최대 연속 실패 횟수이며, 초과 시 재시도가 중단됩니다."
+      }
+    },
+    "general": {
+      "description": "일반",
+      "admins_id": {
+        "description": "관리자 ID"
+      },
+      "platform_settings": {
+        "unique_session": {
+          "description": "세션 격리",
+          "hint": "활성화하면 그룹 구성원이 독립된 컨텍스트를 가집니다."
+        },
+        "friend_message_needs_wake_prefix": {
+          "description": "개인 메시지에 웨이크 워드 필요"
+        },
+        "reply_prefix": {
+          "description": "답변 텍스트 접두사"
+        },
+        "reply_with_mention": {
+          "description": "답변 시 발신자 멘션"
+        },
+        "reply_with_quote": {
+          "description": "답변 시 발신자 메시지 인용"
+        },
+        "forward_threshold": {
+          "description": "전달 메시지 글자 수 임계값"
+        },
+        "empty_mention_waiting": {
+          "description": "멘션만 있는 메시지에 대기 트리거"
+        }
+      },
+      "wake_prefix": {
+        "description": "웨이크 워드"
+      },
+      "disable_builtin_commands": {
+        "description": "내장 명령어 비활성화",
+        "hint": "help, sid, new 등 AstrBot의 모든 내장 명령어를 비활성화합니다."
+      }
+    },
+    "whitelist": {
+      "description": "화이트리스트",
+      "platform_settings": {
+        "enable_id_white_list": {
+          "description": "화이트리스트 활성화",
+          "hint": "활성화하면 화이트리스트에 있는 세션에만 응답합니다. 화이트리스트가 비어 있으면 화이트리스트가 비활성화되어 모든 ID가 허용됩니다."
+        },
+        "id_whitelist": {
+          "description": "화이트리스트 ID 목록",
+          "hint": "/sid 명령어로 ID를 확인하세요. 목록이 비어 있으면 화이트리스트가 비활성화됨을 의미합니다(모든 ID가 화이트리스트에 포함됨)."
+        },
+        "id_whitelist_log": {
+          "description": "로그 출력",
+          "hint": "활성화하면 메시지가 화이트리스트를 통과하지 못했을 때 INFO 레벨 로그를 출력합니다."
+        },
+        "wl_ignore_admin_on_group": {
+          "description": "관리자 그룹 메시지는 ID 화이트리스트를 우회"
+        },
+        "wl_ignore_admin_on_friend": {
+          "description": "관리자 개인 메시지는 ID 화이트리스트를 우회"
+        }
+      }
+    },
+    "rate_limit": {
+      "description": "속도 제한",
+      "platform_settings": {
+        "rate_limit": {
+          "time": {
+            "description": "메시지 속도 제한 시간(초)"
+          },
+          "count": {
+            "description": "메시지 속도 제한 횟수"
+          },
+          "strategy": {
+            "description": "속도 제한 전략"
+          }
+        }
+      }
+    },
+    "content_safety": {
+      "description": "콘텐츠 안전",
+      "content_safety": {
+        "also_use_in_response": {
+          "description": "모델 응답 콘텐츠도 검사"
+        },
+        "baidu_aip": {
+          "enable": {
+            "description": "Baidu 콘텐츠 안전 검열 사용",
+            "hint": "baidu-aip 라이브러리를 수동으로 설치해야 합니다."
+          },
+          "app_id": {
+            "description": "App ID"
+          },
+          "api_key": {
+            "description": "API 키"
+          },
+          "secret_key": {
+            "description": "Secret Key"
+          }
+        },
+        "internal_keywords": {
+          "enable": {
+            "description": "키워드 검사"
+          },
+          "extra_keywords": {
+            "description": "추가 키워드",
+            "hint": "추가 키워드 차단 목록이며, 정규식을 지원합니다."
+          }
+        }
+      }
+    },
+    "t2i": {
+      "description": "텍스트-이미지 변환",
+      "t2i": {
+        "description": "텍스트-이미지 변환 출력"
+      },
+      "t2i_word_threshold": {
+        "description": "텍스트-이미지 변환 글자 수 임계값"
+      }
+    },
+    "others": {
+      "description": "기타 설정",
+      "platform_settings": {
+        "ignore_bot_self_message": {
+          "description": "봇 자신의 메시지 무시"
+        },
+        "ignore_at_all": {
+          "description": "전체 멘션(@All) 이벤트 무시"
+        },
+        "no_permission_reply": {
+          "description": "권한이 부족한 사용자에게 응답"
+        }
+      },
+      "platform_specific": {
+        "lark": {
+          "pre_ack_emoji": {
+            "enable": {
+              "description": "[Lark] 사전 확인 이모지 활성화"
+            },
+            "emojis": {
+              "description": "이모지 목록(Lark 이모지 열거형 이름)",
+              "hint": "이모지 열거형 이름 참고: [https://open.feishu.cn/document/server-docs/im-v1/message-reaction/emojis-introduce](https://open.feishu.cn/document/server-docs/im-v1/message-reaction/emojis-introduce)"
+            }
+          }
+        },
+        "telegram": {
+          "pre_ack_emoji": {
+            "enable": {
+              "description": "[Telegram] 사전 확인 이모지 활성화"
+            },
+            "emojis": {
+              "description": "이모지 목록(유니코드)",
+              "hint": "Telegram은 고정된 반응 세트만 지원합니다. 참고: [https://gist.github.com/Soulter/3f22c8e5f9c7e152e967e8bc28c97fc9](https://gist.github.com/Soulter/3f22c8e5f9c7e152e967e8bc28c97fc9)"
+            }
+          }
+        },
+        "discord": {
+          "pre_ack_emoji": {
+            "enable": {
+              "description": "[Discord] 사전 확인 이모지 활성화"
+            },
+            "emojis": {
+              "description": "이모지 목록(유니코드 또는 커스텀 이모지 이름)",
+              "hint": "유니코드 이모지 기호를 입력하세요(예: 👍, 🤔, ⏳)"
+            }
+          }
+        }
+      }
+    }
+  },
+  "plugin_group": {
+    "name": "플러그인",
+    "plugin": {
+      "description": "플러그인",
+      "plugin_set": {
+        "description": "사용 가능한 플러그인",
+        "hint": "비활성화되지 않은 모든 플러그인은 기본적으로 활성화됩니다. 플러그인 페이지에서 비활성화된 플러그인은 여기서 선택해도 적용되지 않습니다."
+      }
+    }
+  },
+  "ext_group": {
+    "name": "확장",
+    "segmented_reply": {
+      "description": "분할 답변",
+      "platform_settings": {
+        "segmented_reply": {
+          "enable": {
+            "description": "분할 답변 활성화"
+          },
+          "only_llm_result": {
+            "description": "LLM 결과만 분할"
+          },
+          "interval_method": {
+            "description": "간격 방식",
+            "hint": "random은 무작위 지연을 사용합니다. log는 메시지 길이에 따라 지연을 계산합니다: $y=log_{log\\_base}(x)$, 여기서 x는 단어 수, y는 초 단위입니다."
+          },
+          "interval": {
+            "description": "무작위 간격 시간",
+            "hint": "형식: 최소값,최대값(예: 1.5,3.5)"
+          },
+          "log_base": {
+            "description": "로그 밑",
+            "hint": "로그 간격의 밑이며, 기본값은 2.6입니다. 값 범위: 1.0~10.0."
+          },
+          "words_count_threshold": {
+            "description": "분할 답변 글자 수 임계값",
+            "hint": "분할 답변 글자 수 임계값입니다. 이 글자 수보다 적은 메시지만 분할되며, 이보다 많은 메시지는 분할 없이 바로 전송됩니다."
+          },
+          "split_mode": {
+            "description": "분할 방식",
+            "hint": "메시지를 분할하는 데 사용됩니다. 기본적으로 마침표, 물음표 등 구두점으로 구분됩니다. 예를 들어 `[。？！]`을 입력하면 모든 마침표, 물음표, 느낌표를 제거합니다. re.findall(r'<regex>', text)",
+            "labels": [
+              "정규식",
+              "단어 목록"
+            ]
+          },
+          "regex": {
+            "description": "분할 정규 표현식",
+            "hint": "분할 지점을 식별하는 정규 표현식입니다. 구분자와 일치하는 패턴을 우선 사용하세요."
+          },
+          "split_words": {
+            "description": "분할 단어 목록",
+            "hint": "목록에 있는 단어가 감지되면 분할합니다"
+          },
+          "content_cleanup_rule": {
+            "description": "콘텐츠 필터링 정규 표현식",
+            "hint": "분할된 콘텐츠에서 지정된 내용을 제거합니다. 예를 들어 `[。?!]`은 모든 마침표, 물음표, 느낌표를 제거합니다."
+          }
+        }
+      }
+    },
+    "ltm": {
+      "description": "그룹 채팅 컨텍스트 인식(구 채팅 메모리 강화)",
+      "provider_ltm_settings": {
+        "group_icl_enable": {
+          "description": "그룹 채팅 컨텍스트 인식 활성화"
+        },
+        "group_message_max_cnt": {
+          "description": "최대 메시지 수"
+        },
+        "image_caption": {
+          "description": "이미지 자동 이해",
+          "hint": "그룹 채팅 이미지 캡션 모델 설정이 필요합니다."
+        },
+        "image_caption_provider_id": {
+          "description": "그룹 채팅 이미지 캡션 모델",
+          "hint": "그룹 채팅 컨텍스트 인식의 이미지 이해에 사용되며, 기본 이미지 캡션 모델과 별도로 구성됩니다."
+        },
+        "active_reply": {
+          "enable": {
+            "description": "능동 답변"
+          },
+          "method": {
+            "description": "능동 답변 방식"
+          },
+          "possibility_reply": {
+            "description": "답변 확률",
+            "hint": "0.0~1.0 사이의 값"
+          },
+          "whitelist": {
+            "description": "능동 답변 화이트리스트",
+            "hint": "비어 있으면 화이트리스트 필터링이 비활성화됩니다. /sid 명령어로 ID를 확인하세요."
+          }
+        }
+      }
+    }
+  },
+  "system_group": {
+    "name": "시스템",
+    "system": {
+      "description": "시스템 설정",
+      "t2i_strategy": {
+        "description": "텍스트-이미지 변환 전략",
+        "hint": "텍스트-이미지 변환 전략입니다. `remote`는 원격 HTML 기반 렌더링 서비스를 사용하고, `local`은 PIL을 사용해 로컬에서 렌더링합니다. local을 사용할 경우, 폰트를 커스터마이즈하려면 data/ 디렉터리에 'font.ttf'라는 이름의 TTF 폰트를 넣으세요."
+      },
+      "t2i_endpoint": {
+        "description": "텍스트-이미지 변환 서비스 API 엔드포인트",
+        "hint": "비워두면 AstrBot API 서비스를 사용합니다"
+      },
+      "t2i_template": {
+        "description": "텍스트-이미지 변환 커스텀 템플릿",
+        "hint": "활성화하면 텍스트-이미지 변환 렌더링용 HTML 템플릿을 커스터마이즈할 수 있습니다."
+      },
+      "t2i_active_template": {
+        "description": "현재 적용 중인 텍스트-이미지 변환 렌더링 템플릿",
+        "hint": "이 값은 텍스트-이미지 변환 템플릿 관리 페이지에서 관리됩니다."
+      },
+      "log_level": {
+        "description": "콘솔 로그 레벨",
+        "hint": "콘솔 출력용 로그 레벨입니다."
+      },
+      "log_file_enable": {
+        "description": "파일 로깅 활성화",
+        "hint": "콘솔 외에 파일에도 로그를 기록합니다."
+      },
+      "log_file_path": {
+        "description": "로그 파일 경로",
+        "hint": "상대 경로는 데이터 디렉터리 기준으로 해석됩니다(예: logs/astrbot.log). 절대 경로도 지원합니다."
+      },
+      "log_file_max_mb": {
+        "description": "로그 파일 최대 크기(MB)",
+        "hint": "이 크기를 초과하면 순환(rotate)됩니다. 기본값은 20MB입니다."
+      },
+      "temp_dir_max_size": {
+        "description": "임시 디렉터리 크기 제한(MB)",
+        "hint": "data/temp의 전체 크기를 MB 단위로 제한합니다. 시스템은 10분마다 확인하며, 초과 시 가장 오래된 파일부터 삭제하여 현재 크기의 약 30%를 확보합니다."
+      },
+      "trace_log_enable": {
+        "description": "트레이스 파일 로깅 활성화",
+        "hint": "트레이스 이벤트를 별도 파일에 기록합니다(콘솔 출력은 변경되지 않습니다)."
+      },
+      "trace_log_path": {
+        "description": "트레이스 로그 파일 경로",
+        "hint": "상대 경로는 데이터 디렉터리 기준으로 해석됩니다(예: logs/astrbot.trace.log). 절대 경로도 지원합니다."
+      },
+      "trace_log_max_mb": {
+        "description": "트레이스 로그 최대 크기(MB)",
+        "hint": "이 크기를 초과하면 순환(rotate)됩니다. 기본값은 20MB입니다."
+      },
+      "pip_install_arg": {
+        "description": "추가 pip 설치 인자",
+        "hint": "플러그인 의존성 설치 시 Python의 pip 도구가 사용됩니다. 여기에 `--break-system-package`와 같은 추가 인자를 제공할 수 있습니다."
+      },
+      "pypi_index_url": {
+        "description": "PyPI 저장소 URL",
+        "hint": "Python 의존성 설치에 사용되는 PyPI 저장소 URL입니다. 기본값은 [https://mirrors.aliyun.com/pypi/simple/](https://mirrors.aliyun.com/pypi/simple/)"
+      },
+      "callback_api_base": {
+        "description": "외부에서 접근 가능한 콜백 API 주소",
+        "hint": "외부 서비스는 AstrBot이 생성한 콜백 링크(예: 파일 다운로드 링크)를 통해 AstrBot 백엔드에 접근할 수 있습니다. AstrBot은 배포 환경에서 외부에서 접근 가능한 호스트 주소를 자동으로 판단할 수 없으므로, 외부 서비스가 AstrBot 주소에 접근하는 방법을 명시적으로 지정하려면 이 구성 항목이 필요합니다. 예: [http://localhost:6185](http://localhost:6185), [https://example.com](https://example.com) 등."
+      },
+      "disable_metrics": {
+        "description": "익명 사용 통계 비활성화",
+        "hint": "비활성화하면 AstrBot이 익명 사용 통계를 업로드하지 않습니다."
+      },
+      "dashboard": {
+        "trust_proxy_headers": {
+          "description": "클라이언트 IP에 대해 프록시 헤더 신뢰",
+          "hint": "비활성화하면 X-Forwarded-For/X-Real-IP를 무시하고 연결 주소만 사용합니다."
+        },
+        "auth_rate_limit": {
+          "enable": {
+            "description": "로그인 속도 제한 활성화",
+            "hint": "비활성화하면 인증 엔드포인트(로그인, TOTP 등)에 속도 제한이 적용되지 않습니다."
+          },
+          "average_interval": {
+            "description": "엔드포인트 속도 제한 평균 간격(초)",
+            "hint": "인증 요청 간 최소 평균 간격입니다. 예를 들어 1.0은 초당 최대 1회 요청을 의미합니다."
+          },
+          "max_burst": {
+            "description": "엔드포인트 속도 제한 최대 버스트",
+            "hint": "연속으로 허용되는 최대 버스트 요청 수입니다. 예를 들어 3이면 짧은 시간에 최대 3회 요청을 허용합니다."
+          }
+        },
+        "ssl": {
+          "enable": {
+            "description": "WebUI HTTPS 활성화",
+            "hint": "활성화하면 WebUI가 HTTPS로 직접 서비스됩니다."
+          },
+          "cert_file": {
+            "description": "SSL 인증서 파일 경로",
+            "hint": "인증서 파일 경로(PEM)입니다. 절대 경로와 상대 경로(현재 작업 디렉터리 기준)를 모두 지원합니다."
+          },
+          "key_file": {
+            "description": "SSL 개인 키 파일 경로",
+            "hint": "개인 키 파일 경로(PEM)입니다. 절대 경로와 상대 경로(현재 작업 디렉터리 기준)를 모두 지원합니다."
+          },
+          "ca_certs": {
+            "description": "SSL CA 인증서 파일 경로",
+            "hint": "선택 항목입니다. CA 인증서 파일 경로입니다."
+          }
+        },
+        "totp": {
+          "enable": {
+            "description": "WebUI TOTP 활성화",
+            "hint": "활성화하면 대시보드 로그인 시 TOTP 코드가 필요합니다."
+          },
+          "manage": "관리",
+          "configuration": "TOTP",
+          "statusPending": "설정 필요",
+          "statusEnabled": "활성화됨",
+          "setupRequiredHint": "TOTP가 활성화되어 있지만 아직 설정되지 않았습니다. 관리를 클릭하여 설정을 완료하세요.",
+          "setupTitle": "TOTP 설정",
+          "setupSubtitle": "인증 앱에서 이 QR 코드를 스캔한 후 인증 코드를 입력하세요.",
+          "setupConfirm": "확인하고 계속",
+          "activeSubtitle": "이 QR 코드 또는 시크릿을 사용해 다른 인증 기기를 추가하세요.",
+          "rotateTitle": "TOTP 시크릿 교체",
+          "rotateSubtitle": "새 시크릿을 생성한 후, 인증 앱에서 코드를 입력하여 교체를 확인하세요.",
+          "rotate": "교체",
+          "rotateRecovery": "복구 코드 교체",
+          "rotateConfirm": "교체 확인",
+          "rotateCancel": "취소",
+          "rotateCode": "인증 코드",
+          "rotateCodeHint": "인증 앱의 코드를 입력하여 새 키를 확인하세요.",
+          "rotateError": "잘못된 코드입니다. 다시 시도하세요.",
+          "recoveryTitle": "복구 코드",
+          "recoverySubtitle": "이 복구 코드는 한 번만 표시됩니다. 계속하기 전에 저장하세요.",
+          "recoveryWarning": "분실 시 일반적인 방법으로는 계정 접근을 복구할 수 없습니다.",
+          "recoveryAcknowledge": "복구 코드를 저장했습니다",
+          "recoveryClose": "완료",
+          "disableTitle": "TOTP 비활성화",
+          "disableSubtitle": "2단계 인증을 비활성화하려면 인증 코드를 입력하세요.",
+          "disableRecoverySubtitle": "2단계 인증을 비활성화하려면 복구 코드를 입력하세요.",
+          "disableCode": "인증 코드",
+          "disableRecoveryCode": "복구 코드",
+          "disableConfirm": "비활성화",
+          "disableCancel": "취소",
+          "disableError": "인증에 실패했습니다. 다시 시도하세요.",
+          "disableUseRecovery": "TOTP를 사용할 수 없나요?",
+          "disableUseCode": "인증 코드 사용",
+          "configSaveTitle": "2단계 인증",
+          "configSaveSubtitle": "보호된 구성을 변경하려면 인증 코드를 입력하세요.",
+          "configSaveRotationHint": "TOTP 키를 교체할 때는 기존 코드와 새 코드 모두 인증에 사용할 수 있습니다(교체 작업당 한 번 허용).",
+          "configSaveCode": "인증 코드",
+          "configSaveConfirm": "계속",
+          "configSaveCancel": "취소",
+          "configSaveError": "인증에 실패했습니다. 다시 시도하세요."
+        }
+      },
+      "timezone": {
+        "description": "표준시간대",
+        "hint": "표준시간대 설정입니다. Asia/Shanghai와 같은 IANA 표준시간대 이름을 입력하세요. 비워두면 시스템 기본 표준시간대를 사용합니다. 전체 표준시간대 목록: [https://data.iana.org/time-zones/tzdb-2021a/zone1970.tab](https://data.iana.org/time-zones/tzdb-2021a/zone1970.tab)"
+      },
+      "http_proxy": {
+        "description": "HTTP 프록시",
+        "hint": "활성화하면 환경 변수를 추가하여 프록시가 설정됩니다. 형식: `http://ip:port`"
+      },
+      "no_proxy": {
+        "description": "직접 연결 주소 목록"
+      }
+    }
+  },
+  "provider_group": {
+    "provider": {
+      "genie_onnx_model_dir": {
+        "description": "ONNX 모델 디렉터리",
+        "hint": "ONNX 모델 파일이 있는 디렉터리 경로입니다"
+      },
+      "genie_language": {
+        "description": "언어"
+      },
+      "xai_native_search": {
+        "description": "네이티브 검색 활성화",
+        "hint": "활성화하면 웹 조회에 xAI Chat Completions의 네이티브 Live Search를 사용합니다(사용량에 따라 과금). xAI 공급자에만 적용됩니다."
+      },
+      "rerank_api_base": {
+        "description": "재순위 모델 API 기본 URL",
+        "hint": "전체 요청 URL은 기본 URL과 경로 접미사(기본값 /v1/rerank)를 결합하여 구성됩니다."
+      },
+      "rerank_api_suffix": {
+        "description": "API URL 경로 접미사",
+        "hint": "base_url 뒤에 붙는 경로입니다(예: /v1/rerank). 비워두면 자동 추가가 비활성화됩니다."
+      },
+      "rerank_api_key": {
+        "description": "API 키",
+        "hint": "API 키가 필요 없으면 비워두세요."
+      },
+      "rerank_model": {
+        "description": "재순위 모델 이름"
+      },
+      "return_documents": {
+        "description": "재순위 결과에 원본 문서 반환",
+        "hint": "네트워크 오버헤드를 줄이기 위해 기본값은 false입니다."
+      },
+      "instruct": {
+        "description": "커스텀 재순위 작업 설명",
+        "hint": "qwen3-rerank 모델에서만 적용됩니다. 영어로 작성하는 것을 권장합니다."
+      },
+      "nvidia_rerank_api_base": {
+        "description": "API 기본 URL"
+      },
+      "nvidia_rerank_api_key": {
+        "description": "API 키"
+      },
+      "nvidia_rerank_model": {
+        "description": "재순위 모델 이름",
+        "hint": "모델 이름은 NVIDIA 문서를 참고하세요."
+      },
+      "nvidia_rerank_model_endpoint": {
+        "description": "커스텀 모델 엔드포인트",
+        "hint": "커스텀 URL 접미사 엔드포인트이며, 기본값은 /reranking입니다."
+      },
+      "nvidia_rerank_truncate": {
+        "description": "텍스트 자르기 전략",
+        "hint": "입력 텍스트가 너무 길 때 모델의 최대 컨텍스트 길이에 맞게 자를지 여부입니다."
+      },
+      "launch_model_if_not_running": {
+        "description": "실행 중이 아니면 모델 자동 시작",
+        "hint": "Xinference에서 모델이 실행 중이 아니면 자동으로 시작을 시도합니다. 프로덕션 환경에서는 비활성화를 권장합니다."
+      },
+      "modalities": {
+        "description": "모델 기능",
+        "hint": "모델이 지원하는 모달리티입니다. 모델이 이미지를 지원하지 않으면 이미지 선택을 해제하세요.",
+        "labels": [
+          "텍스트",
+          "이미지",
+          "오디오",
+          "도구 사용"
+        ]
+      },
+      "custom_headers": {
+        "description": "커스텀 요청 헤더",
+        "hint": "여기에 추가한 키/값 쌍은 OpenAI SDK의 default_headers에 병합되어 커스텀 HTTP 헤더로 사용됩니다. 값은 반드시 문자열이어야 합니다."
+      },
+      "ollama_disable_thinking": {
+        "description": "사고 모드 비활성화",
+        "hint": "Ollama의 사고(thinking) 모드를 끕니다."
+      },
+      "custom_extra_body": {
+        "description": "커스텀 요청 바디 파라미터",
+        "hint": "temperature, top_p, max_tokens 등 요청에 추가 파라미터를 더합니다.",
+        "template_schema": {
+          "temperature": {
+            "description": "온도",
+            "hint": "무작위성을 제어하며 보통 0~2 사이입니다. 값이 높을수록 더 무작위적입니다.",
+            "name": "온도"
+          },
+          "top_p": {
+            "description": "Top-p 샘플링",
+            "hint": "뉴클리어스 샘플링 파라미터로 보통 0~1 사이입니다. 고려할 확률 질량을 제어합니다.",
+            "name": "Top-p"
+          },
+          "max_tokens": {
+            "description": "최대 토큰 수",
+            "hint": "생성할 최대 토큰 수입니다.",
+            "name": "최대 토큰 수"
+          }
+        }
+      },
+      "gpt_weights_path": {
+        "description": "GPT 모델 파일 경로",
+        "hint": ".ckpt 파일입니다. 따옴표 없이 절대 경로를 사용하세요. 비워두면 GPT_SoVITS 내장 SoVITS 모델을 사용합니다(GPT_SoVITS에서 기본값을 변경하는 것을 권장합니다)."
+      },
+      "sovits_weights_path": {
+        "description": "SoVITS 모델 파일 경로",
+        "hint": ".pth 파일입니다. 따옴표 없이 절대 경로를 사용하세요. 비워두면 GPT_SoVITS 내장 SoVITS 모델을 사용합니다(GPT_SoVITS에서 기본값을 변경하는 것을 권장합니다)."
+      },
+      "gsv_default_parms": {
+        "description": "GPT_SoVITS 기본 파라미터",
+        "hint": "참조 오디오 파일 경로와 텍스트는 필수이며, 나머지 파라미터는 선택 사항입니다.",
+        "gsv_ref_audio_path": {
+          "description": "참조 오디오 파일 경로",
+          "hint": "필수 항목입니다! 따옴표 없이 절대 경로를 사용하세요."
+        },
+        "gsv_prompt_text": {
+          "description": "참조 오디오 텍스트",
+          "hint": "필수 항목입니다! 참조 오디오의 대사를 입력하세요."
+        },
+        "gsv_prompt_lang": {
+          "description": "참조 오디오 텍스트 언어",
+          "hint": "참조 오디오 텍스트의 언어이며, 기본값은 중국어입니다."
+        },
+        "gsv_aux_ref_audio_paths": {
+          "description": "보조 참조 오디오 파일 경로",
+          "hint": "보조 참조 오디오 파일이며 선택 사항입니다."
+        },
+        "gsv_text_lang": {
+          "description": "텍스트 언어",
+          "hint": "기본값은 중국어입니다."
+        },
+        "gsv_top_k": {
+          "description": "음성 다양성",
+          "hint": ""
+        },
+        "gsv_top_p": {
+          "description": "뉴클리어스 샘플링 임계값",
+          "hint": ""
+        },
+        "gsv_temperature": {
+          "description": "음성 무작위성",
+          "hint": ""
+        },
+        "gsv_text_split_method": {
+          "description": "텍스트 분할 방식",
+          "hint": "옵션: `cut0` 분할 없음, `cut1` 4문장마다 분할, `cut2` 50자마다 분할, `cut3` 중국어 마침표로 분할, `cut4` 영어 마침표로 분할, `cut5` 구두점으로 분할."
+        },
+        "gsv_batch_size": {
+          "description": "배치 크기",
+          "hint": ""
+        },
+        "gsv_batch_threshold": {
+          "description": "배치 임계값",
+          "hint": ""
+        },
+        "gsv_split_bucket": {
+          "description": "병렬 처리를 위해 텍스트를 버킷으로 분할",
+          "hint": ""
+        },
+        "gsv_speed_factor": {
+          "description": "음성 재생 속도",
+          "hint": "1이 원래 속도입니다."
+        },
+        "gsv_fragment_interval": {
+          "description": "음성 조각 간 간격",
+          "hint": ""
+        },
+        "gsv_streaming_mode": {
+          "description": "스트리밍 모드 활성화",
+          "hint": ""
+        },
+        "gsv_seed": {
+          "description": "무작위 시드",
+          "hint": "재현 가능한 결과를 위한 값입니다."
+        },
+        "gsv_parallel_infer": {
+          "description": "병렬 추론 실행",
+          "hint": ""
+        },
+        "gsv_repetition_penalty": {
+          "description": "반복 패널티",
+          "hint": ""
+        },
+        "gsv_media_type": {
+          "description": "출력 미디어 유형",
+          "hint": "권장: wav"
+        }
+      },
+      "embedding_dimensions": {
+        "description": "임베딩 차원",
+        "hint": "임베딩 벡터의 차원 수입니다. 모델별로 조정이 필요할 수 있으니 모델 문서를 참고하세요. 값이 정확하지 않으면 벡터 데이터베이스가 동작하지 않습니다."
+      },
+      "embedding_model": {
+        "description": "임베딩 모델",
+        "hint": "임베딩 모델 이름입니다."
+      },
+      "embedding_api_key": {
+        "description": "API 키"
+      },
+      "embedding_api_base": {
+        "description": "API 기본 URL"
+      },
+      "openai_embedding": {
+        "hint": "테스트가 실패하면 일부 OpenAI API 버전에서는 끝에 /v1을 추가해 보세요."
+      },
+      "gemini_embedding": {
+        "hint": "Gemini Embedding은 /v1beta를 수동으로 추가할 필요가 없습니다."
+      },
+      "volcengine_cluster": {
+        "description": "Volcengine 클러스터",
+        "hint": "음성 복제 모델의 경우 volcano_icl 또는 volcano_icl_concurr를 선택하세요. 기본값은 volcano_tts입니다."
+      },
+      "volcengine_voice_type": {
+        "description": "Volcengine 음성",
+        "hint": "음성 ID(Voice_type)를 입력하세요."
+      },
+      "volcengine_speed_ratio": {
+        "description": "말하기 속도",
+        "hint": "말하기 속도이며 범위는 0.2~3.0, 기본값은 1.0입니다."
+      },
+      "volcengine_volume_ratio": {
+        "description": "음량",
+        "hint": "음량이며 범위는 0.0~2.0, 기본값은 1.0입니다."
+      },
+      "azure_tts_voice": {
+        "description": "음성 스타일",
+        "hint": "API 음성 이름"
+      },
+      "azure_tts_style": {
+        "description": "스타일",
+        "hint": "음성별 말하기 스타일입니다. 기쁨, 공감, 차분함 등의 감정을 표현할 수 있습니다."
+      },
+      "azure_tts_role": {
+        "description": "역할(선택)",
+        "hint": "말하기 역할극입니다. 음성 이름을 바꾸지 않고도 다양한 나이와 성별을 흉내 낼 수 있습니다. 예를 들어 남성 음성이 음높이를 올려 여성 음성을 흉내 낼 수 있지만 음성 이름 자체는 바뀌지 않습니다. 역할이 없거나 지원되지 않으면 이 속성은 무시됩니다."
+      },
+      "azure_tts_rate": {
+        "description": "말하기 속도",
+        "hint": "말하기 속도를 제어합니다. 단어 또는 문장 단위로 적용할 수 있습니다. 속도는 원본 오디오의 0.5배~2배 사이여야 합니다."
+      },
+      "azure_tts_volume": {
+        "description": "말하기 음량",
+        "hint": "음량 수준을 제어합니다. 문장 단위로 변경을 적용할 수 있습니다. 0.0~100.0(조용함~큼, 예: 75)을 사용하세요. 기본값은 100.0입니다."
+      },
+      "azure_tts_region": {
+        "description": "API 지역",
+        "hint": "Azure TTS가 데이터를 처리하는 지역입니다. https://learn.microsoft.com/zh-cn/azure/ai-services/speech-service/regions 참고"
+      },
+      "azure_tts_subscription_key": {
+        "description": "서비스 구독 키",
+        "hint": "Azure TTS 구독 키입니다(토큰 아님)."
+      },
+      "dashscope_tts_voice": {
+        "description": "음성"
+      },
+      "gm_resp_image_modal": {
+        "description": "이미지 모달리티 활성화",
+        "hint": "활성화하면 응답에 이미지가 포함될 수 있습니다. 모델 지원이 필요하며, 그렇지 않으면 오류가 발생합니다. 지원 모델은 Google Gemini 웹사이트를 참고하세요. 팁: 이미지 생성이 필요하다면 더 나은 결과를 위해 `멤버 인식 사용` 설정을 비활성화하세요."
+      },
+      "gm_native_search": {
+        "description": "네이티브 검색 활성화",
+        "hint": "활성화하면 모든 함수 도구가 비활성화됩니다. 무료 할당량 제한은 공식 문서를 확인하세요."
+      },
+      "gm_native_coderunner": {
+        "description": "네이티브 코드 실행기 활성화",
+        "hint": "활성화하면 모든 함수 도구가 비활성화됩니다."
+      },
+      "gm_url_context": {
+        "description": "URL 컨텍스트 활성화",
+        "hint": "활성화하면 모든 함수 도구가 비활성화됩니다."
+      },
+      "gm_safety_settings": {
+        "description": "안전 필터",
+        "hint": "모델 입력에 대한 안전 필터링 수준을 설정합니다. 수준: NONE(차단 안 함), HIGH(고위험 차단), MEDIUM_AND_ABOVE(중위험 이상 차단), LOW_AND_ABOVE(저위험 이상 차단). Gemini API 문서를 참고하세요.",
+        "harassment": {
+          "description": "괴롭힘",
+          "hint": "부정적이거나 유해한 댓글"
+        },
+        "hate_speech": {
+          "description": "혐오 발언",
+          "hint": "무례하거나, 무시하거나, 비속한 콘텐츠"
+        },
+        "sexually_explicit": {
+          "description": "노골적인 성적 콘텐츠",
+          "hint": "성행위나 기타 외설적인 콘텐츠에 대한 언급"
+        },
+        "dangerous_content": {
+          "description": "위험한 콘텐츠",
+          "hint": "유해한 행동을 조장, 장려, 또는 조력하는 콘텐츠"
+        }
+      },
+      "gm_thinking_config": {
+        "description": "사고 구성",
+        "budget": {
+          "description": "사고 예산",
+          "hint": "추론에 사용할 사고 토큰 수를 모델에게 안내합니다. 참고: https://ai.google.dev/gemini-api/docs/thinking#set-budget"
+        },
+        "level": {
+          "description": "사고 수준",
+          "hint": "Gemini 3 이후 모델에 권장되며, 추론 동작을 제어할 수 있습니다. 참고: https://ai.google.dev/gemini-api/docs/thinking#thinking-levels"
+        }
+      },
+      "anth_thinking_config": {
+        "description": "사고 구성",
+        "type": {
+          "description": "사고 유형",
+          "hint": "Opus 4.6+ / Sonnet 4.6+에는 'adaptive'로 설정하세요(권장). 비워두면 수동 예산 모드를 사용합니다. 참고: https://platform.claude.com/docs/en/build-with-claude/adaptive-thinking"
+        },
+        "budget": {
+          "description": "사고 예산",
+          "hint": "Anthropic thinking.budget_tokens 파라미터입니다. 1024 이상이어야 합니다. type이 비어 있을 때만 사용됩니다. Opus 4.6 / Sonnet 4.6에서는 더 이상 사용되지 않습니다. 참고: https://platform.claude.com/docs/en/build-with-claude/extended-thinking"
+        },
+        "effort": {
+          "description": "노력 수준",
+          "hint": "type이 'adaptive'일 때 사고 깊이를 제어합니다. 기본값은 'high'입니다. 'max'는 Opus 4.6 전용입니다. 참고: https://platform.claude.com/docs/en/build-with-claude/effort"
+        }
+      },
+      "minimax-group-id": {
+        "description": "사용자 그룹",
+        "hint": "계정 관리 -> 기본 정보에서 확인할 수 있습니다."
+      },
+      "minimax-langboost": {
+        "description": "대상 언어/방언",
+        "hint": "지정한 언어/방언의 인식률을 높이고 해당 시나리오에서 음성 성능을 개선합니다."
+      },
+      "minimax-voice-speed": {
+        "description": "말하기 속도",
+        "hint": "합성 속도이며 범위는 [0.5, 2], 기본값은 1.0입니다. 값이 높을수록 빠릅니다."
+      },
+      "minimax-voice-vol": {
+        "description": "음량",
+        "hint": "합성 음량이며 범위는 (0, 10], 기본값은 1.0입니다. 값이 높을수록 큽니다."
+      },
+      "minimax-voice-pitch": {
+        "description": "음높이",
+        "hint": "합성 음높이이며 범위는 [-12, 12], 기본값은 0입니다."
+      },
+      "minimax-is-timber-weight": {
+        "description": "혼합 음성 활성화",
+        "hint": "최대 4개의 음성을 커스텀 가중치로 혼합할 수 있습니다. 활성화하면 단일 음성 설정은 무시됩니다."
+      },
+      "minimax-timber-weight": {
+        "description": "혼합 음성",
+        "hint": "혼합할 음성과 가중치입니다. 최대 4개의 음성, 가중치는 [1, 100] 범위의 정수입니다. 공식 API TTS 디버그 콘솔에서 프리셋과 템플릿을 확인하세요. JSON 문자열이어야 하며, 파싱 여부는 콘솔에서 확인하세요. 구조는 기본값과 공식 코드 미리보기를 참고하세요."
+      },
+      "minimax-voice-id": {
+        "description": "단일 음성",
+        "hint": "단일 음성 ID입니다. 공식 문서를 참고하세요."
+      },
+      "minimax-voice-emotion": {
+        "description": "감정",
+        "hint": "합성 음성의 감정을 제어합니다. auto로 설정하면 텍스트에 따라 감정을 자동 선택합니다."
+      },
+      "minimax-voice-latex": {
+        "description": "LaTeX 수식 읽기",
+        "hint": "LaTeX 수식을 읽습니다. 단, 입력 텍스트는 공식 요구사항에 맞게 포맷되어야 합니다."
+      },
+      "minimax-voice-english-normalization": {
+        "description": "영어 텍스트 정규화",
+        "hint": "숫자 읽기 성능이 향상되지만 지연 시간이 약간 늘어납니다."
+      },
+      "rag_options": {
+        "description": "RAG 옵션",
+        "hint": "지식 베이스 검색 설정이며 선택 사항입니다. Agent 앱 유형(RAG 앱을 포함한 Agent 앱)에서만 지원됩니다. Bailian 앱의 경우 이를 활성화하면 다중 턴 대화가 비활성화됩니다.",
+        "pipeline_ids": {
+          "description": "지식 베이스 ID 목록",
+          "hint": "지정한 지식 베이스의 모든 문서를 검색합니다. https://bailian.console.aliyun.com/ 의 데이터 앱 -> 지식 색인에서 생성 및 ID 확인이 가능합니다."
+        },
+        "file_ids": {
+          "description": "비정형 문서 ID",
+          "hint": "지정한 비정형 문서를 검색합니다. https://bailian.console.aliyun.com/ 의 데이터 관리에서 생성 및 ID 확인이 가능합니다."
+        },
+        "output_reference": {
+          "description": "지식 베이스/문서 참조 출력",
+          "hint": "각 답변 끝에 참조 출처를 추가합니다. 기본값은 False입니다."
+        }
+      },
+      "sensevoice_hint": {
+        "description": "SenseVoice 배포",
+        "hint": "활성화하기 전에 funasr, funasr_onnx, torchaudio, torch, modelscope, jieba를 설치하고(기본은 CPU, 약 1GB 다운로드) ffmpeg도 설치하세요. 그렇지 않으면 STT가 동작하지 않습니다."
+      },
+      "is_emotion": {
+        "description": "감정 인식",
+        "hint": "감정 인식을 활성화합니다. happy?sad?angry?neutral?fearful?disgusted?surprised?unknown"
+      },
+      "stt_model": {
+        "description": "모델 이름",
+        "hint": "modelscope의 모델 이름입니다. 기본값: iic/SenseVoiceSmall."
+      },
+      "variables": {
+        "description": "워크플로 고정 입력 변수",
+        "hint": "선택 항목입니다. 고정된 워크플로 입력 변수는 워크플로 입력으로 사용됩니다. 채팅 중 /set 명령어로 변수를 동적으로 설정할 수도 있습니다. 이름이 충돌하면 동적 설정이 우선합니다."
+      },
+      "dashscope_app_type": {
+        "description": "앱 유형",
+        "hint": "Bailian 앱 유형입니다."
+      },
+      "timeout": {
+        "description": "제한 시간",
+        "hint": "제한 시간(초)입니다."
+      },
+      "openai-tts-voice": {
+        "description": "음성",
+        "hint": "OpenAI TTS 음성입니다. OpenAI 기본값: 'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'."
+      },
+      "elevenlabs-tts-voice-id": {
+        "description": "음성 ID",
+        "hint": "ElevenLabs 음성 ID입니다. https://elevenlabs.io/app/voice-library 에서 음성 ID를 찾아 복사하세요. 기본값 'JBFqnCBsd6RMkjVDRZzb'(George)."
+      },
+      "elevenlabs-tts-output-format": {
+        "description": "출력 형식",
+        "hint": "오디오 출력 형식입니다(예: 'mp3_44100_128', 'mp3_22050_32', 'wav_44100', 'opus_48000_128'). Raw PCM/u-law/a-law 형식은 지원되지 않습니다. 기본값 'mp3_44100_128'."
+      },
+      "elevenlabs-tts-stability": {
+        "description": "안정성",
+        "hint": "음성 안정성이며 범위는 [0, 1]입니다. 값이 높을수록 일관되고, 낮을수록 표현력이 풍부합니다. 비워두면 서버 기본값을 사용합니다."
+      },
+      "elevenlabs-tts-similarity-boost": {
+        "description": "유사도 향상",
+        "hint": "출력이 원본 음성과 얼마나 비슷한지를 나타내며 범위는 [0, 1]입니다. 비워두면 서버 기본값을 사용합니다."
+      },
+      "elevenlabs-tts-style": {
+        "description": "스타일 과장",
+        "hint": "음성의 스타일 과장 정도이며 범위는 [0, 1]입니다. 값이 높을수록 지연 시간이 늘어납니다. 비워두면 서버 기본값을 사용합니다."
+      },
+      "elevenlabs-tts-use-speaker-boost": {
+        "description": "화자 부스트",
+        "hint": "원본 화자와의 유사도를 강화합니다. 지연 시간이 약간 늘어날 수 있습니다."
+      },
+      "mimo-tts-voice": {
+        "description": "음성",
+        "hint": "MiMo TTS 음성 이름입니다. 지원 값에는 'mimo_default', 'default_en', 'default_zh'가 포함됩니다."
+      },
+      "mimo-tts-format": {
+        "description": "출력 형식",
+        "hint": "MiMo TTS가 생성하는 오디오 형식입니다. 지원 값: 'wav', 'mp3', 'pcm'."
+      },
+      "mimo-tts-style-prompt": {
+        "description": "스타일 프롬프트",
+        "hint": "합성 대상 텍스트 앞에 <style>...</style> 태그로 추가되어 속도, 감정, 캐릭터, 스타일(예: 기쁨, 빠르게, 손오공, 속삭임)을 제어합니다. 선택 항목입니다."
+      },
+      "mimo-tts-dialect": {
+        "description": "방언",
+        "hint": "선행 <style>...</style> 태그 내부에서 스타일 프롬프트와 결합됩니다(예: 동북 관화, 사천 방언, 허난 방언, 광둥어). 선택 항목입니다."
+      },
+      "mimo-tts-seed-text": {
+        "description": "시드 텍스트",
+        "hint": "톤과 말하기 스타일을 유도하기 위한 선택적 사용자 메시지로 전송됩니다. 합성 대상 텍스트에는 추가되지 않습니다."
+      },
+      "fishaudio-tts-character": {
+        "description": "캐릭터",
+        "hint": "Fishaudio TTS 캐릭터입니다. 기본값은 Klee입니다. 더 많은 캐릭터: https://fish.audio/zh-CN/discovery"
+      },
+      "fishaudio-tts-reference-id": {
+        "description": "reference_id",
+        "hint": "Fishaudio TTS 참조 모델 ID입니다(선택). 설정하면 역할 이름으로 조회하는 대신 이 모델 ID를 직접 사용합니다. 예: 626bb6d3f3364c9cbc3aa6a67300a664. 더 많은 모델: https://fish.audio/zh-CN/discovery 에서 모델 상세 페이지를 열어 모델 ID를 복사하세요."
+      },
+      "whisper_hint": {
+        "description": "로컬 Whisper 배포 안내",
+        "hint": "활성화하기 전에 openai-whisper 라이브러리를 설치하세요(NVIDIA 사용자는 torch와 cuda 포함 약 2GB, CPU 사용자는 약 1GB 다운로드), ffmpeg도 설치하세요. 그렇지 않으면 STT가 동작하지 않습니다."
+      },
+      "whisper_device": {
+        "description": "추론 장치",
+        "hint": "Whisper 추론 장치입니다. Apple Silicon은 mps를 사용할 수 있으며, 다른 환경에서는 cpu를 사용해야 합니다. mps를 선택했지만 사용할 수 없으면 AstrBot은 cpu로 대체합니다."
+      },
+      "id": {
+        "description": "ID"
+      },
+      "type": {
+        "description": "공급자 분류"
+      },
+      "provider_type": {
+        "description": "공급자 기능 유형"
+      },
+      "enable": {
+        "description": "활성화"
+      },
+      "key": {
+        "description": "API 키"
+      },
+      "api_base": {
+        "description": "API 기본 URL"
+      },
+      "proxy": {
+        "description": "프록시 주소",
+        "hint": "HTTP/HTTPS 프록시 URL입니다(예: http://127.0.0.1:7890). 이 공급자의 API 요청에만 적용되며 Docker 내부 네트워킹에는 영향을 주지 않습니다."
+      },
+      "model": {
+        "description": "모델 ID",
+        "hint": "모델 이름입니다(예: gpt-4o-mini, deepseek-chat)."
+      },
+      "max_context_tokens": {
+        "description": "모델 컨텍스트 윈도우 크기",
+        "hint": "최대 컨텍스트 토큰 수입니다. 0이면 모델 메타데이터에서 자동으로 채워지며(가능한 경우), 수동으로 수정할 수도 있습니다."
+      },
+      "dify_api_key": {
+        "description": "API 키",
+        "hint": "Dify API 키입니다. 이 항목은 필수입니다."
+      },
+      "dify_api_base": {
+        "description": "API 기본 URL",
+        "hint": "Dify API 기본 URL입니다. 기본값: https://api.dify.ai/v1"
+      },
+      "dify_api_type": {
+        "description": "Dify 앱 유형",
+        "hint": "Dify API 유형입니다. Dify 문서에 따르면 chat, chatflow, agent, workflow 유형이 지원됩니다."
+      },
+      "dify_workflow_output_key": {
+        "description": "Dify 워크플로 출력 변수 이름",
+        "hint": "Dify 워크플로 출력 변수 이름입니다. 앱 유형이 workflow일 때만 사용됩니다. 기본값: astrbot_wf_output."
+      },
+      "dify_query_input_key": {
+        "description": "프롬프트 입력 변수 이름",
+        "hint": "메시지 텍스트용 입력 변수 이름입니다. 기본값: astrbot_text_query."
+      },
+      "coze_api_key": {
+        "description": "Coze API 키",
+        "hint": "Coze 서비스 접근용 Coze API 키입니다."
+      },
+      "bot_id": {
+        "description": "봇 ID",
+        "hint": "Coze 플랫폼에서 봇을 생성한 뒤 발급되는 Coze 봇 ID입니다."
+      },
+      "coze_api_base": {
+        "description": "API 기본 URL",
+        "hint": "Coze API의 기본 URL입니다. 기본값: https://api.coze.cn"
+      },
+      "deerflow_api_base": {
+        "description": "API 기본 URL",
+        "hint": "DeerFlow API 게이트웨이 URL입니다. 기본값: http://127.0.0.1:2026"
+      },
+      "deerflow_api_key": {
+        "description": "DeerFlow API 키",
+        "hint": "선택 항목입니다. DeerFlow 게이트웨이가 Bearer 인증으로 보호되는 경우 입력하세요."
+      },
+      "deerflow_auth_header": {
+        "description": "Authorization 헤더",
+        "hint": "선택 항목입니다. 커스텀 Authorization 헤더 값이며, DeerFlow API 키보다 우선 적용됩니다."
+      },
+      "deerflow_assistant_id": {
+        "description": "Assistant ID",
+        "hint": "LangGraph assistant_id이며, 기본값은 lead_agent입니다."
+      },
+      "deerflow_model_name": {
+        "description": "모델 이름 재정의",
+        "hint": "선택 항목입니다. DeerFlow 기본 모델을 재정의합니다(런타임 컨텍스트의 model_name에 매핑됨)."
+      },
+      "deerflow_thinking_enabled": {
+        "description": "사고 모드 활성화"
+      },
+      "deerflow_plan_mode": {
+        "description": "계획 모드 활성화",
+        "hint": "DeerFlow is_plan_mode에 매핑됩니다."
+      },
+      "deerflow_subagent_enabled": {
+        "description": "서브 에이전트 활성화",
+        "hint": "DeerFlow subagent_enabled에 매핑됩니다."
+      },
+      "deerflow_max_concurrent_subagents": {
+        "description": "최대 동시 서브 에이전트 수",
+        "hint": "DeerFlow max_concurrent_subagents에 매핑됩니다. 서브 에이전트가 활성화된 경우에만 적용됩니다. 기본값: 3."
+      },
+      "deerflow_recursion_limit": {
+        "description": "재귀 한도",
+        "hint": "LangGraph recursion_limit에 매핑됩니다."
+      },
+      "auto_save_history": {
+        "description": "Coze가 관리하는 대화 기록",
+        "hint": "활성화하면 Coze가 대화 기록을 관리합니다. AstrBot이 로컬에 저장한 컨텍스트는 적용되지 않으며(읽기 전용), AstrBot 컨텍스트에 대한 작업도 반영되지 않습니다. 비활성화하면 AstrBot이 컨텍스트를 관리합니다."
+      }
+    }
+  },
+  "help": {
+    "documentation": "공식 문서",
+    "support": "지원 그룹 참여",
+    "helpText": "구성이 이해되지 않나요? {documentation} 또는 {support}를 참고하세요.",
+    "helpPrefix": "구성이 이해되지 않나요? 참고:",
+    "helpMiddle": "또는",
+    "helpSuffix": "."
+  }
+}
