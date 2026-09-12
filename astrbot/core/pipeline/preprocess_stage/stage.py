@@ -11,7 +11,6 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.media_utils import (
     describe_media_ref,
-    ensure_jpeg,
     ensure_wav,
     file_uri_to_path,
     is_file_uri,
@@ -114,7 +113,7 @@ class PreProcessStage(Stage):
                             logger.debug(f"Path mapping: {url} -> {component.url}")
                     message_chain[idx] = component
 
-        # Normalize provider-facing media early so downstream code sees local files.
+        # Localize source images and normalize audio for downstream processing.
         message_chain = event.get_messages()
         for idx, component in enumerate(message_chain):
             if isinstance(component, Record):
@@ -130,15 +129,14 @@ class PreProcessStage(Stage):
                     logger.warning(f"Voice processing failed: {e}")
             elif isinstance(component, Image):
                 try:
-                    original_path = await component.convert_to_file_path()
-                    image_path = await ensure_jpeg(original_path)
-                    if image_path != original_path:
-                        self._track_temp_media(event, original_path)
+                    image_path = await component.convert_to_file_path()
                     component.file = image_path
                     component.path = image_path
                     # Image.convert_to_file_path() prefers url, so keep it aligned.
                     component.url = image_path
                     message_chain[idx] = component
+                    # Attachment references outlive the event; model copies do not.
+                    event.untrack_temporary_local_file(image_path)
                 except Exception as e:
                     media_ref = component.url or component.file
                     logger.warning(
@@ -166,15 +164,13 @@ class PreProcessStage(Stage):
                             )
                     elif isinstance(reply_comp, Image):
                         try:
-                            original_path = await reply_comp.convert_to_file_path()
-                            image_path = await ensure_jpeg(original_path)
-                            if image_path != original_path:
-                                self._track_temp_media(event, original_path)
+                            image_path = await reply_comp.convert_to_file_path()
                             reply_comp.file = image_path
                             reply_comp.path = image_path
                             # Image.convert_to_file_path() prefers url, so keep it aligned.
                             reply_comp.url = image_path
                             component.chain[idx] = reply_comp
+                            event.untrack_temporary_local_file(image_path)
                         except Exception as e:
                             media_ref = reply_comp.url or reply_comp.file
                             logger.warning(

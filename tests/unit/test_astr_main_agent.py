@@ -1885,8 +1885,7 @@ class TestBuildMainAgent:
         quoted,
         compression_enabled,
     ):
-        """Keep attachment paths usable after compressed visual input is cleaned up."""
-        from types import SimpleNamespace
+        """Direct builders keep raw attachments regardless of pipeline settings."""
 
         from PIL import Image as PILImage
 
@@ -1896,6 +1895,7 @@ class TestBuildMainAgent:
         monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
         source_path = tmp_path / "image.jpg"
         PILImage.new("RGB", (8, 8), (255, 0, 0)).save(source_path)
+        original = source_path.read_bytes()
         image = Image.fromFileSystem(str(source_path))
         mock_event.message_obj.message = (
             [Reply(id="reply-1", chain=[image])] if quoted else [image]
@@ -1936,16 +1936,13 @@ class TestBuildMainAgent:
         ]
         assert len(request.image_urls) == 1
         visual_path = Path(request.image_urls[0])
-        if compression_enabled:
-            assert visual_path != source_path
-            with PILImage.open(visual_path) as visual_image:
-                assert visual_image.size == (2, 2)
-            mock_event.track_temporary_local_file.assert_called_once_with(
-                str(visual_path)
-            )
-        else:
-            assert visual_path == source_path
-            mock_event.track_temporary_local_file.assert_not_called()
+        assert visual_path == source_path
+        with PILImage.open(visual_path) as visual_image:
+            assert visual_image.size == (8, 8)
+        mock_event.track_temporary_local_file.assert_not_called()
+        mock_event.untrack_temporary_local_file.assert_called_once_with(
+            str(source_path)
+        )
         AstrMessageEvent.cleanup_temporary_local_files(
             SimpleNamespace(
                 _temporary_local_files=[
@@ -1954,8 +1951,7 @@ class TestBuildMainAgent:
                 ]
             )
         )
-        assert source_path.exists()
-        assert visual_path.exists() == (not compression_enabled)
+        assert source_path.read_bytes() == original
 
     @pytest.mark.asyncio
     async def test_build_main_agent_skips_caption_when_main_provider_supports_images(
@@ -2053,10 +2049,6 @@ class TestBuildMainAgent:
                 "convert_to_file_path",
                 AsyncMock(return_value="/tmp/quoted.jpg"),
             ),
-            patch(
-                "astrbot.core.astr_main_agent._compress_image_for_provider",
-                AsyncMock(side_effect=lambda path, _settings: path),
-            ),
         ):
             mock_runner = MagicMock()
             mock_runner.reset = AsyncMock()
@@ -2123,10 +2115,6 @@ class TestBuildMainAgent:
                 Image,
                 "convert_to_file_path",
                 AsyncMock(return_value="/tmp/quoted.jpg"),
-            ),
-            patch(
-                "astrbot.core.astr_main_agent._compress_image_for_provider",
-                AsyncMock(side_effect=lambda path, _settings: path),
             ),
         ):
             mock_runner = MagicMock()

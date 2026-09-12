@@ -435,11 +435,11 @@
         },
         "image_compress_enabled": {
           "description": "Enable image compression",
-          "hint": "When enabled, large local images are compressed before being sent to multimodal models."
+          "hint": "Enabled by default. Images are resized or converted as needed before being sent to multimodal models; compliant JPEG/PNG images are sent unchanged, and animations become a preview grid."
         },
         "image_compress_options": {
           "description": "Image compression settings",
-          "hint": "Control image resize limits, JPEG quality, and the minimum size threshold for compression.",
+          "hint": "Control the size limit and JPEG output quality for model input images.",
           "max_size": {
             "description": "Maximum edge length",
             "hint": "Longest edge of the compressed image in pixels. Images larger than this are resized proportionally."
@@ -1410,6 +1410,7 @@
           "Tool use"
         ]
       },
+
       "custom_headers": {
         "description": "Custom request headers",
         "hint": "Key/value pairs added here are merged into the OpenAI SDK default_headers for custom HTTP headers. Values must be strings."

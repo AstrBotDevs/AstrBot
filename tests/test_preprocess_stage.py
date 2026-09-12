@@ -17,6 +17,7 @@ class FakeEvent:
         self.message_str = ""
         self.is_at_or_wake_command = False
         self.temporary_local_files: list[str] = []
+        self._temporary_local_files = self.temporary_local_files
 
     def get_platform_name(self):
         return "test"
@@ -24,9 +25,8 @@ class FakeEvent:
     def get_messages(self):
         return self.message_obj.message
 
-    def track_temporary_local_file(self, path: str) -> None:
-        if path not in self.temporary_local_files:
-            self.temporary_local_files.append(path)
+    track_temporary_local_file = AstrMessageEvent.track_temporary_local_file
+    untrack_temporary_local_file = AstrMessageEvent.untrack_temporary_local_file
 
 
 @pytest.mark.asyncio
@@ -105,9 +105,12 @@ async def test_preprocess_preserves_image_formats_without_tracking_temp_files(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("quoted", [False, True])
-@pytest.mark.parametrize("source_kind", ["png", "jpeg", "invalid"])
+@pytest.mark.parametrize(
+    "source_kind", ["png", "jpeg", "gif", "webp", "bmp", "invalid"]
+)
+@pytest.mark.parametrize("pretracked", [False, True])
 async def test_preprocess_image_cleanup_preserves_usable_file(
-    tmp_path, monkeypatch, quoted, source_kind
+    tmp_path, monkeypatch, quoted, source_kind, pretracked
 ):
     from pathlib import Path
 
@@ -125,6 +128,9 @@ async def test_preprocess_image_cleanup_preserves_usable_file(
 
     image = Image.fromFileSystem(str(source_path))
     event = FakeEvent([Reply(id="reply-1", chain=[image])] if quoted else [image])
+    original = source_path.read_bytes()
+    if pretracked:
+        event.track_temporary_local_file(str(source_path))
     stage = PreProcessStage()
     stage.config = {}
     stage.platform_settings = {}
@@ -132,20 +138,15 @@ async def test_preprocess_image_cleanup_preserves_usable_file(
 
     await stage.process(event)
 
-    if source_kind == "png":
-        assert event.temporary_local_files == [str(source_path)]
-        assert image.file == image.path == image.url
-        assert image.file != str(source_path)
-        with PILImage.open(image.file) as processed_img:
-            assert processed_img.format == "JPEG"
-    else:
-        assert event.temporary_local_files == []
+    assert event.temporary_local_files == []
+    assert image.file == image.path == image.url == str(source_path)
+    assert source_path.read_bytes() == original
 
     # Exercise event cleanup to verify that the usable image survives.
     AstrMessageEvent.cleanup_temporary_local_files(
         SimpleNamespace(_temporary_local_files=event.temporary_local_files)
     )
-    assert source_path.exists() == (source_kind != "png")
+    assert source_path.read_bytes() == original
     assert Path(await image.convert_to_file_path()).exists()
 
 

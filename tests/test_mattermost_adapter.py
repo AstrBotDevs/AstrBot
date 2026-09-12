@@ -136,6 +136,7 @@ async def test_mattermost_attachments_follow_preprocessing_cleanup_rules(
         image_path.write_bytes(b"not an image")
     else:
         PILImage.new("RGB", (2, 2), (255, 0, 0)).save(image_path)
+    original_image = image_path.read_bytes()
     audio_path = tmp_path / "voice.wav"
     with wave.open(str(audio_path), "wb") as audio_file:
         audio_file.setparams((1, 2, 8000, 0, "NONE", "not compressed"))
@@ -178,13 +179,12 @@ async def test_mattermost_attachments_follow_preprocessing_cleanup_rules(
     await stage.process(event)
     event.cleanup_temporary_local_files()
 
-    assert image_path.exists() == (image_kind != "png")
+    assert image_path.read_bytes() == original_image
     assert not audio_path.exists()
     assert video_path.exists()
     assert document_path.exists()
     assert Path(await image.convert_to_file_path()).exists()
-    if image_kind == "png":
-        assert image.file != str(image_path)
+    assert image.file == image.path == image.url == str(image_path)
 
 
 @pytest.mark.asyncio
