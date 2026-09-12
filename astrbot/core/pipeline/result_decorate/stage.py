@@ -11,6 +11,7 @@ from astrbot.core.pipeline.content_safety_check.stage import ContentSafetyCheckS
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.star.session_llm_manager import SessionServiceManager
+from astrbot.core.star.session_plugin_manager import SessionPluginManager
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import EventType, star_handlers_registry
 
@@ -159,6 +160,10 @@ class ResultDecorateStage(Stage):
         handlers = star_handlers_registry.get_handlers_by_event_type(
             EventType.OnDecoratingResultEvent,
             plugins_name=event.plugins_name,
+        )
+        handlers = await SessionPluginManager.filter_handlers_by_session(
+            event,
+            handlers,
         )
         for handler in handlers:
             try:
