@@ -16,6 +16,7 @@ import yaml
 from astrbot.core.star import star_manager as star_manager_module
 from astrbot.core.star.star_handler import EventType, StarHandlerMetadata
 from astrbot.core.star.star_manager import PluginDependencyInstallError, PluginManager
+from astrbot.core.star.updater import _PluginUpdater
 from astrbot.core.utils.pip_installer import PipInstallError
 from astrbot.core.utils.requirements_utils import MissingRequirementsPlan
 
@@ -216,6 +217,57 @@ def test_load_plugin_metadata_preserves_validation_error(
 
     with pytest.raises(Exception, match="version.*非空字符串"):
         PluginManager._load_plugin_metadata(str(plugin_path))
+
+
+def test_validate_plugin_metadata_coerces_numeric_version_to_string() -> None:
+    """YAML parses unquoted `version: 2.4` as a float; it must be coerced to str."""
+    metadata = {
+        "name": TEST_PLUGIN_NAME,
+        "desc": "test plugin",
+        "version": 2.4,
+        "author": "AstrBot Team",
+    }
+
+    _PluginUpdater.validate_plugin_metadata(metadata, "metadata.yaml")
+
+    assert metadata["version"] == "2.4"
+    assert isinstance(metadata["version"], str)
+
+
+def test_load_plugin_metadata_coerces_numeric_version_to_string(tmp_path: Path) -> None:
+    """A plugin whose metadata.yaml uses an unquoted numeric version must load."""
+    plugin_path = tmp_path / "helloworld"
+    plugin_path.mkdir()
+    (plugin_path / "metadata.yaml").write_text(
+        "name: helloworld\n"
+        "desc: test plugin\n"
+        "version: 2.4\n"
+        "author: AstrBot Team\n",
+        encoding="utf-8",
+    )
+
+    loaded_metadata = PluginManager._load_plugin_metadata(str(plugin_path))
+
+    assert loaded_metadata is not None
+    assert loaded_metadata.version == "2.4"
+
+
+def test_load_plugin_metadata_preserves_trailing_zero_version(tmp_path: Path) -> None:
+    """Unquoted `version: 2.10` must keep its original text, not become "2.1"."""
+    plugin_path = tmp_path / "helloworld"
+    plugin_path.mkdir()
+    (plugin_path / "metadata.yaml").write_text(
+        "name: helloworld\n"
+        "desc: test plugin\n"
+        "version: 2.10\n"
+        "author: AstrBot Team\n",
+        encoding="utf-8",
+    )
+
+    loaded_metadata = PluginManager._load_plugin_metadata(str(plugin_path))
+
+    assert loaded_metadata is not None
+    assert loaded_metadata.version == "2.10"
 
 
 def test_loaded_metadata_can_copy_i18n_into_existing_star_metadata(tmp_path: Path):
