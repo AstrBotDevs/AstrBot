@@ -1,6 +1,8 @@
+import httpx
 from openai import NOT_GIVEN, AsyncOpenAI
 
 from astrbot.core.utils.media_utils import MediaResolver
+from astrbot.core.utils.network_utils import create_proxy_client
 
 from ..entities import ProviderType
 from ..provider import STTProvider
@@ -20,11 +22,24 @@ class ProviderOpenAIWhisperAPI(STTProvider):
     ) -> None:
         super().__init__(provider_config, provider_settings)
         self.chosen_api_key = provider_config.get("api_key", "")
+        proxy = provider_config.get("proxy", "")
+        httpx_module = httpx
+        try:
+            # The OpenAI SDK can bundle its own compatible httpx module.
+            from openai import _base_client as openai_base_client
+
+            httpx_module = getattr(openai_base_client, "httpx", httpx)
+        except ImportError:
+            pass
+        http_client = create_proxy_client(
+            "OpenAI Whisper", proxy, httpx_module=httpx_module
+        )
 
         self.client = AsyncOpenAI(
             api_key=self.chosen_api_key,
             base_url=provider_config.get("api_base"),
             timeout=provider_config.get("timeout", NOT_GIVEN),
+            http_client=http_client,
         )
 
         self.set_model(provider_config["model"])
