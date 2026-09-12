@@ -14,6 +14,7 @@ from astrbot.core.platform.message_type import MessageType
 from astrbot.core.utils.session_waiter import (
     FILTERS,
     USER_SESSIONS,
+    SenderSessionFilter,
     SessionController,
     SessionWaiter,
     session_waiter,
@@ -128,7 +129,24 @@ class Main(star.Star):
                 controller.stop()
 
             try:
-                await empty_mention_waiter(event)
+                # The empty-mention waiter semantically belongs to the person
+                # who sent the empty mention, so it must be isolated by sender;
+                # otherwise in group chats the next message from any other
+                # member is mistaken for the follow-up content. Skip waiting
+                # when no reliable sender id is available, to avoid silently
+                # degrading back to group scope.
+                if event.get_sender_id():
+                    await empty_mention_waiter(
+                        event,
+                        session_filter=SenderSessionFilter(),
+                    )
+                else:
+                    logger.warning(
+                        "empty mention: no sender id available for %s, "
+                        "skipping the follow-up wait to avoid falling back "
+                        "to a group-wide waiter",
+                        event.unified_msg_origin,
+                    )
             except TimeoutError:
                 pass
             except Exception as e:
