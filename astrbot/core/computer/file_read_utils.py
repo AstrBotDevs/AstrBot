@@ -14,7 +14,7 @@ import mcp
 
 from astrbot.core.agent.context.token_counter import EstimateTokenCounter
 from astrbot.core.agent.message import Message
-from astrbot.core.agent.tool import ToolExecResult
+from astrbot.core.agent.tool import LocalImageContent, ToolExecResult
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.media_utils import (
     IMAGE_COMPRESS_DEFAULT_MAX_SIZE,
@@ -701,17 +701,16 @@ async def read_file_tool_result(
         compressed_base64_data = str(compressed_payload.get("base64", "") or "")
         if not compressed_base64_data:
             return "Error reading file: compressed image payload is empty."
-        return mcp.types.CallToolResult(
-            content=[
-                mcp.types.ImageContent(
-                    type="image",
-                    data=compressed_base64_data,
-                    mimeType=str(
-                        compressed_payload.get("mime_type", "") or "image/jpeg"
-                    ),
-                )
-            ]
+        image_content = mcp.types.ImageContent(
+            type="image",
+            data=compressed_base64_data,
+            mimeType=str(compressed_payload.get("mime_type", "") or "image/jpeg"),
         )
+        if local_mode:
+            image_content = LocalImageContent(
+                **image_content.model_dump(), file_path=str(Path(path).resolve())
+            )
+        return mcp.types.CallToolResult(content=[image_content])
 
     if offset is None and limit is None:
         if validation_error := _validate_full_text_read_request(probe):

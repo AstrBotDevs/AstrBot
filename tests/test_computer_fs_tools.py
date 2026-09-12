@@ -13,6 +13,7 @@ from mcp.types import CallToolResult, ImageContent
 from PIL import Image
 
 from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.agent.tool import LocalImageContent
 from astrbot.core.computer import file_read_utils
 from astrbot.core.computer.booters.local import LocalBooter
 from astrbot.core.tools.computer_tools import fs as fs_tools
@@ -562,6 +563,40 @@ async def test_file_read_tool_returns_image_call_tool_result_for_images(
     assert isinstance(result, CallToolResult)
     assert len(result.content) == 1
     assert isinstance(result.content[0], ImageContent)
+    assert isinstance(result.content[0], LocalImageContent)
+    assert result.content[0].file_path == str(image_path.resolve())
+    assert result.content[0].mimeType == "image/jpeg"
+    assert base64.b64decode(result.content[0].data).startswith(b"\xff\xd8\xff")
+
+
+@pytest.mark.asyncio
+async def test_sandbox_image_read_does_not_reuse_host_path(monkeypatch, tmp_path):
+    """A sandbox path is not a host file reference even when the host path exists."""
+    image_path = tmp_path / "sample.png"
+    Image.new("RGB", (32, 16), color=(255, 0, 0)).save(image_path)
+    image_bytes = image_path.read_bytes()
+    encoded_image = base64.b64encode(image_bytes).decode("ascii")
+    monkeypatch.setattr(
+        file_read_utils,
+        "_exec_python_json",
+        AsyncMock(
+            side_effect=[
+                {"sample_b64": encoded_image, "size_bytes": len(image_bytes)},
+                {"base64": encoded_image},
+            ]
+        ),
+    )
+
+    result = await file_read_utils.read_file_tool_result(
+        SimpleNamespace(),
+        local_mode=False,
+        path=str(image_path),
+        offset=None,
+        limit=None,
+    )
+
+    assert isinstance(result, CallToolResult)
+    assert type(result.content[0]) is ImageContent
     assert result.content[0].mimeType == "image/jpeg"
     assert base64.b64decode(result.content[0].data).startswith(b"\xff\xd8\xff")
 

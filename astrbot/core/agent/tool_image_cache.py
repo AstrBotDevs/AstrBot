@@ -27,6 +27,8 @@ class CachedImage:
     """The MIME type of the image."""
     created_at: float = field(default_factory=time.time)
     """Timestamp when the image was cached."""
+    base64_data: str | None = None
+    """Optional preview data, which may differ from the original file's format."""
 
 
 class ToolImageCache:

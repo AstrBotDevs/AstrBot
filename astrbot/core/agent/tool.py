@@ -16,6 +16,13 @@ ParametersType = dict[str, Any]
 ToolExecResult = str | mcp.types.CallToolResult
 
 
+class LocalImageContent(mcp.types.ImageContent):
+    """An image preview whose original file is already on the AstrBot host."""
+
+    file_path: str
+    """Absolute local path to reuse when sending the original image."""
+
+
 @dataclass
 class ToolSchema:
     """A class representing the schema of a tool for function calling."""

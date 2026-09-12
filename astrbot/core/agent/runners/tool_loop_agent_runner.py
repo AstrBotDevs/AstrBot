@@ -26,8 +26,8 @@ from tenacity import (
 
 from astrbot import logger
 from astrbot.core.agent.message import ImageURLPart, TextPart, ThinkPart
-from astrbot.core.agent.tool import FunctionTool, ToolSet
-from astrbot.core.agent.tool_image_cache import tool_image_cache
+from astrbot.core.agent.tool import FunctionTool, LocalImageContent, ToolSet
+from astrbot.core.agent.tool_image_cache import CachedImage, tool_image_cache
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.components import Json
 from astrbot.core.message.message_event_result import (
@@ -1060,8 +1060,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     # Build user message with images for LLM to review
                     image_parts = []
                     for cached_img in cached_images:
-                        img_data = tool_image_cache.get_image_base64_by_path(
-                            cached_img.file_path, cached_img.mime_type
+                        img_data = (
+                            (cached_img.base64_data, cached_img.mime_type)
+                            if cached_img.base64_data is not None
+                            else tool_image_cache.get_image_base64_by_path(
+                                cached_img.file_path, cached_img.mime_type
+                            )
                         )
                         if img_data:
                             base64_data, mime_type = img_data
@@ -1250,16 +1254,31 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             if isinstance(content_item, TextContent):
                                 result_parts.append(content_item.text)
                             elif isinstance(content_item, ImageContent):
-                                # Cache the image instead of sending directly
-                                cached_img = tool_image_cache.save_image(
-                                    base64_data=content_item.data,
-                                    tool_call_id=func_tool_id,
-                                    tool_name=func_tool_name,
-                                    index=index,
-                                    mime_type=content_item.mimeType or "image/png",
-                                )
+                                if (
+                                    isinstance(content_item, LocalImageContent)
+                                    and Path(content_item.file_path).is_file()
+                                ):
+                                    # Reuse the original path and keep its compressed
+                                    # preview in memory instead of writing a copy.
+                                    cached_img = CachedImage(
+                                        tool_call_id=func_tool_id,
+                                        tool_name=func_tool_name,
+                                        file_path=content_item.file_path,
+                                        mime_type=content_item.mimeType or "image/png",
+                                        base64_data=content_item.data,
+                                    )
+                                    image_notice = "Image available at"
+                                else:
+                                    cached_img = tool_image_cache.save_image(
+                                        base64_data=content_item.data,
+                                        tool_call_id=func_tool_id,
+                                        tool_name=func_tool_name,
+                                        index=index,
+                                        mime_type=content_item.mimeType or "image/png",
+                                    )
+                                    image_notice = "Image returned and cached at"
                                 result_parts.append(
-                                    f"Image returned and cached at path='{cached_img.file_path}'. "
+                                    f"{image_notice} path='{cached_img.file_path}'. "
                                     f"Review the image below. Use send_message_to_user to send it to the user if satisfied, "
                                     f"with type='image' and path='{cached_img.file_path}'."
                                 )

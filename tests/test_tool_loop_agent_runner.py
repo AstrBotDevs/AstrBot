@@ -918,7 +918,7 @@ async def test_tool_result_includes_all_calltoolresult_content(
 ):
     """工具返回多个 content 项时，tool result 应包含全部内容。"""
 
-    from astrbot.core.agent.tool_image_cache import tool_image_cache
+    from astrbot.core.agent.tool_image_cache import CachedImage, tool_image_cache
 
     mock_provider.should_call_tools = True
     mock_provider.max_calls_before_normal_response = 1
@@ -937,8 +937,11 @@ async def test_tool_result_includes_all_calltoolresult_content(
                 "mime_type": mime_type,
             }
         )
-        return SimpleNamespace(
-            file_path=f"/tmp/{tool_call_id}_{index}.png", mime_type=mime_type
+        return CachedImage(
+            tool_call_id=tool_call_id,
+            tool_name=tool_name,
+            file_path=f"/tmp/{tool_call_id}_{index}.png",
+            mime_type=mime_type,
         )
 
     monkeypatch.setattr(tool_image_cache, "save_image", fake_save_image)
@@ -972,6 +975,154 @@ async def test_tool_result_includes_all_calltoolresult_content(
             "mime_type": "image/png",
         }
     ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("already_cached", [False, True])
+async def test_repeated_local_image_reads_reuse_original_file(
+    runner,
+    mock_provider,
+    provider_request,
+    mock_hooks,
+    monkeypatch,
+    tmp_path,
+    already_cached,
+):
+    """Repeated reads keep the original file and expose the compressed preview."""
+    import base64
+
+    from PIL import Image
+
+    from astrbot.core.agent.tool_image_cache import tool_image_cache
+    from astrbot.core.computer.booters.local import LocalBooter
+    from astrbot.core.computer.file_read_utils import read_file_tool_result
+
+    cache_dir = tmp_path / "tool_images"
+    cache_dir.mkdir()
+    image_path = (cache_dir if already_cached else tmp_path) / "original.png"
+    Image.new("RGB", (32, 16), color=(255, 0, 0)).save(image_path)
+    original_bytes = image_path.read_bytes()
+    monkeypatch.setattr(tool_image_cache, "_cache_dir", str(cache_dir))
+    mock_provider.max_calls_before_normal_response = 2
+    original_text_chat = mock_provider.text_chat
+
+    async def text_chat(**kwargs):
+        response = await original_text_chat(**kwargs)
+        if response.tools_call_ids:
+            response.tools_call_ids = [f"call_read_{mock_provider.call_count}"]
+        return response
+
+    monkeypatch.setattr(mock_provider, "text_chat", text_chat)
+
+    async def execute(**kwargs):
+        yield await read_file_tool_result(
+            LocalBooter(),
+            local_mode=True,
+            path=str(image_path),
+            offset=None,
+            limit=None,
+        )
+
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=SimpleNamespace(execute=execute),
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+    async for _ in runner.step_until_done(3):
+        pass
+
+    assert image_path.read_bytes() == original_bytes
+    assert set(cache_dir.iterdir()) == ({image_path} if already_cached else set())
+    tool_messages = [m for m in runner.run_context.messages if m.role == "tool"]
+    assert len(tool_messages) == 2
+    for message in tool_messages:
+        assert f"Image available at path='{image_path}'." in str(message.content)
+        assert f"type='image' and path='{image_path}'" in str(message.content)
+    previews = [
+        part.image_url
+        for message in runner.run_context.messages
+        if message.role == "user" and isinstance(message.content, list)
+        for part in message.content
+        if isinstance(part, ImageURLPart)
+    ]
+    assert len(previews) == 2
+    for preview in previews:
+        assert preview.id == str(image_path)
+        assert preview.url.startswith("data:image/jpeg;base64,")
+        assert base64.b64decode(preview.url.split(",", 1)[1]).startswith(
+            b"\xff\xd8\xff"
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("image_kind", ["inline", "embedded", "missing_local"])
+async def test_tool_images_without_local_file_are_cached(
+    runner,
+    mock_provider,
+    provider_request,
+    mock_hooks,
+    monkeypatch,
+    tmp_path,
+    image_kind,
+):
+    """Images without a reusable local file retain their cache and model preview."""
+    from mcp.types import (
+        BlobResourceContents,
+        CallToolResult,
+        EmbeddedResource,
+        ImageContent,
+    )
+
+    from astrbot.core.agent.tool import LocalImageContent
+    from astrbot.core.agent.tool_image_cache import tool_image_cache
+
+    cache_dir = tmp_path / "tool_images"
+    monkeypatch.setattr(tool_image_cache, "_cache_dir", str(cache_dir))
+    mock_provider.max_calls_before_normal_response = 1
+    if image_kind == "embedded":
+        content = EmbeddedResource(
+            type="resource",
+            resource=BlobResourceContents(
+                uri="file:///sandbox/image.png", mimeType="image/png", blob="dGVzdA=="
+            ),
+        )
+    elif image_kind == "missing_local":
+        content = LocalImageContent(
+            type="image",
+            data="dGVzdA==",
+            mimeType="image/png",
+            file_path=str(tmp_path / "missing.png"),
+        )
+    else:
+        content = ImageContent(type="image", data="dGVzdA==", mimeType="image/png")
+
+    async def execute(**kwargs):
+        yield CallToolResult(content=[content])
+
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=SimpleNamespace(execute=execute),
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+    async for _ in runner.step_until_done(3):
+        pass
+
+    cached_path = cache_dir / "call_123_0.png"
+    assert cached_path.read_bytes() == b"test"
+    assert any(
+        part.image_url.url == "data:image/png;base64,dGVzdA=="
+        and part.image_url.id == str(cached_path)
+        for message in runner.run_context.messages
+        if message.role == "user" and isinstance(message.content, list)
+        for part in message.content
+        if isinstance(part, ImageURLPart)
+    )
 
 
 @pytest.mark.asyncio
