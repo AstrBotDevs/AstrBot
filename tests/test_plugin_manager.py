@@ -1,4 +1,5 @@
 import asyncio
+import errno
 import functools
 import json
 import os
@@ -387,6 +388,11 @@ def plugin_manager_pm(tmp_path, monkeypatch):
         "astrbot.core.star.star_manager.get_astrbot_plugin_path",
         lambda: str(plugin_dir),
     )
+    monkeypatch.setattr(
+        star_manager_module,
+        "get_astrbot_system_tmp_path",
+        lambda: str(tmp_path / "system_temp"),
+    )
 
     return pm
 
@@ -404,12 +410,19 @@ def local_updater(plugin_manager_pm):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("dependency_install_fails", [False, True])
+@pytest.mark.parametrize("cross_filesystem", [False, True])
 async def test_install_plugin_dependency_install_flow(
-    plugin_manager_pm: PluginManager, monkeypatch, dependency_install_fails: bool
+    plugin_manager_pm: PluginManager, monkeypatch, dependency_install_fails: bool,
+    cross_filesystem: bool,
 ):
     plugin_path = Path(plugin_manager_pm.plugin_store_path) / TEST_PLUGIN_DIR
     events = []
     _mock_missing_requirements(monkeypatch, {"networkx"})
+    if cross_filesystem:
+        def cross_device_rename(*args, **kwargs):
+            raise OSError(errno.EXDEV, "Cross-device move")
+
+        monkeypatch.setattr(star_manager_module.os, "rename", cross_device_rename)
 
     async def mock_install(repo_url: str, proxy="", *, download_url="", target_dir):
         assert repo_url == TEST_PLUGIN_REPO
@@ -553,6 +566,15 @@ async def test_install_updates_existing_plugin_and_restores_on_failure(
     _clear_star_runtime_state()
     if legacy_directory:
         local_updater = local_updater.rename(local_updater.with_name("legacy_plugin"))
+    system_temp = Path(star_manager_module.get_astrbot_system_tmp_path())
+    original_rename = os.rename
+
+    def cross_device_rename(source, destination, *args, **kwargs):
+        if Path(source).is_relative_to(system_temp) != Path(destination).is_relative_to(system_temp):
+            raise OSError(errno.EXDEV, "Cross-device move")
+        return original_rename(source, destination, *args, **kwargs)
+
+    monkeypatch.setattr(star_manager_module.os, "rename", cross_device_rename)
     dir_name = local_updater.name
     module_path = f"data.plugins.{dir_name}.main"
     old_plugin = star_manager_module.StarMetadata(
@@ -630,6 +652,7 @@ async def test_install_updates_existing_plugin_and_restores_on_failure(
         assert plugin_label == dir_name
         assert (local_updater / "obsolete.py").exists()
         assert Path(plugin_dir_path) != local_updater
+        assert Path(plugin_dir_path).is_relative_to(system_temp)
         events.append("dependencies")
         if failure == "dependencies":
             raise RuntimeError("dependency failure")
@@ -648,6 +671,7 @@ async def test_install_updates_existing_plugin_and_restores_on_failure(
         assert current is not None
         events.append(current.version)
         if current.version == "2.0.0":
+            assert list(system_temp.glob(".plugin-backup-*"))
             assert not (local_updater / "obsolete.py").exists()
             if failure == "load":
                 sys.modules[module_path] = ModuleType(module_path)
@@ -707,9 +731,79 @@ async def test_install_updates_existing_plugin_and_restores_on_failure(
             local_updater
         }
         assert plugin_manager_pm.failed_plugin_dict == {}
+        assert list(system_temp.iterdir()) == []
     finally:
         sys.modules.pop(module_path, None)
         _clear_star_runtime_state()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure_stage", ["backup", "install", "restore"])
+async def test_install_copy_failure_preserves_complete_old_code(
+    plugin_manager_pm: PluginManager,
+    local_updater: Path,
+    monkeypatch,
+    tmp_path: Path,
+    failure_stage: str,
+):
+    """A partial copy must never replace a complete recovery copy."""
+    old_files = {path.name: path.read_bytes() for path in local_updater.iterdir()}
+    metadata = yaml.safe_load(old_files["metadata.yaml"])
+    metadata["version"] = "2.0.0"
+    zip_path = tmp_path / "update.zip"
+    with zipfile.ZipFile(zip_path, "w") as archive:
+        archive.writestr("metadata.yaml", yaml.safe_dump(metadata))
+        archive.writestr("main.py", "pass\n")
+
+    original_copytree = star_manager_module.shutil.copytree
+
+    def copytree(source, destination, *args, **kwargs):
+        source, destination = Path(source), Path(destination)
+        is_backup = destination.parent.name.startswith(".plugin-backup-")
+        is_restore = source.parent.name.startswith(".plugin-backup-")
+        if (failure_stage == "backup" and is_backup) or (
+            failure_stage == "restore" and is_restore
+        ):
+            destination.mkdir()
+            (destination / "partial.py").write_text("partial", encoding="utf-8")
+            raise OSError("copy failed")
+        return original_copytree(source, destination, *args, **kwargs)
+
+    original_move = star_manager_module.shutil.move
+
+    def move(source, destination):
+        if failure_stage == "install":
+            destination = Path(destination)
+            destination.mkdir()
+            (destination / "partial.py").write_text("partial", encoding="utf-8")
+            raise OSError("copy failed")
+        return original_move(source, destination)
+
+    versions_loaded = []
+
+    async def load(specified_dir_name=None, ignore_version_check=False):
+        version = plugin_manager_pm._load_plugin_metadata(str(local_updater)).version
+        versions_loaded.append(version)
+        return version == "1.0.0", "new plugin failed to load"
+
+    monkeypatch.setattr(star_manager_module.shutil, "copytree", copytree)
+    monkeypatch.setattr(star_manager_module.shutil, "move", move)
+    monkeypatch.setattr(plugin_manager_pm, "load", load)
+    with pytest.raises(Exception, match="copy failed|new plugin failed to load"):
+        await plugin_manager_pm.install_plugin_from_file(str(zip_path))
+
+    system_temp = Path(star_manager_module.get_astrbot_system_tmp_path())
+    if failure_stage == "restore":
+        backup_dirs = list(system_temp.iterdir())
+        assert len(backup_dirs) == 1
+        assert backup_dirs[0].name.startswith(".plugin-backup-")
+        backup = backup_dirs[0] / TEST_PLUGIN_DIR
+        assert {path.name: path.read_bytes() for path in backup.iterdir()} == old_files
+        assert versions_loaded == ["2.0.0"]
+    else:
+        assert {path.name: path.read_bytes() for path in local_updater.iterdir()} == old_files
+        assert versions_loaded == ["1.0.0"]
+        assert list(system_temp.iterdir()) == []
 
 
 @pytest.mark.asyncio
@@ -755,9 +849,13 @@ async def test_url_install_preparation_failure_preserves_existing_plugin(
     with pytest.raises(asyncio.CancelledError if failure == "cancel" else Exception):
         await plugin_manager_pm.install_plugin(
             repo_url,
-            download_url="https://cdn.example/update.zip" if install_source == "url" else "",
+            download_url="https://cdn.example/update.zip"
+            if install_source == "url"
+            else "",
         )
-    assert {path.name: path.read_bytes() for path in local_updater.iterdir()} == original_files
+    assert {
+        path.name: path.read_bytes() for path in local_updater.iterdir()
+    } == original_files
     assert set(Path(plugin_manager_pm.plugin_store_path).iterdir()) == {local_updater}
     assert plugin_manager_pm.failed_plugin_dict == {}
     load.assert_not_awaited()

@@ -8,6 +8,7 @@ import json
 import keyword
 import logging
 import os
+import shutil
 import sys
 import tempfile
 import traceback
@@ -36,6 +37,7 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_config_path,
     get_astrbot_path,
     get_astrbot_plugin_path,
+    get_astrbot_system_tmp_path,
     get_astrbot_temp_path,
 )
 from astrbot.core.utils.io import remove_dir
@@ -1637,8 +1639,10 @@ class PluginManager:
         """
         asyncio.create_task(Metric.upload(et="install_star", repo=repo_url))
         async with self._pm_lock:
+            temp_root = Path(get_astrbot_system_tmp_path())
+            temp_root.mkdir(parents=True, exist_ok=True)
             with tempfile.TemporaryDirectory(
-                dir=self.plugin_store_path, prefix=".plugin-install-"
+                dir=temp_root, prefix=".plugin-install-"
             ) as staging_dir:
                 plugin_path = await self._updater.install(
                     repo_url,
@@ -2009,8 +2013,10 @@ class PluginManager:
             Exception: If validation, dependency installation, or loading fails.
         """
         async with self._pm_lock:
+            temp_root = Path(get_astrbot_system_tmp_path())
+            temp_root.mkdir(parents=True, exist_ok=True)
             with tempfile.TemporaryDirectory(
-                dir=self.plugin_store_path, prefix=".plugin-upload-"
+                dir=temp_root, prefix=".plugin-upload-"
             ) as staging_dir:
                 plugin_path = Path(staging_dir) / "plugin"
                 self._updater._extract_plugin_archive(zip_file_path, str(plugin_path))
@@ -2087,14 +2093,16 @@ class PluginManager:
                 dir_name = target_plugin_path.name
                 await self._ensure_plugin_requirements(desti_dir, dir_name)
 
-                # Keep the old code outside the plugin discovery level until loading
-                # succeeds. Renames stay on the same filesystem, including on Windows.
+                # Finish copying the backup before removing any installed files.
+                # The system temporary directory may be on a different filesystem.
                 backup_dir = Path(
                     tempfile.mkdtemp(
-                        dir=self.plugin_store_path, prefix=".plugin-backup-"
+                        dir=get_astrbot_system_tmp_path(), prefix=".plugin-backup-"
                     )
                 )
                 backup_path = backup_dir / dir_name
+                backup_complete = False
+                keep_backup = False
                 try:
                     if plugin:
                         try:
@@ -2106,8 +2114,11 @@ class PluginManager:
                                 exc_info=True,
                             )
                     self._cleanup_plugin_state(dir_name)
-                    target_plugin_path.rename(backup_path)
-                    Path(desti_dir).rename(target_plugin_path)
+                    shutil.copytree(target_plugin_path, backup_path, symlinks=True)
+                    backup_complete = True
+                    keep_backup = True
+                    remove_dir(str(target_plugin_path))
+                    shutil.move(desti_dir, str(target_plugin_path))
                     desti_dir = str(target_plugin_path)
                     success, error_message = await self.load(
                         specified_dir_name=dir_name,
@@ -2115,13 +2126,16 @@ class PluginManager:
                     )
                     if not success:
                         raise Exception(error_message or f"更新插件 {dir_name} 失败。")
+                    keep_backup = False
                 except BaseException:
                     try:
                         self._cleanup_plugin_state(dir_name)
-                        if backup_path.exists():
+                        if backup_complete:
                             if target_plugin_path.exists():
                                 remove_dir(str(target_plugin_path))
-                            backup_path.rename(target_plugin_path)
+                            shutil.copytree(
+                                backup_path, target_plugin_path, symlinks=True
+                            )
                         restored, restore_error = await self.load(
                             specified_dir_name=dir_name,
                             ignore_version_check=True,
@@ -2133,6 +2147,7 @@ class PluginManager:
                                 restore_error,
                             )
                         else:
+                            keep_backup = False
                             self.failed_plugin_dict.pop(dir_name, None)
                             self._rebuild_failed_plugin_info()
                     except Exception:
@@ -2142,23 +2157,25 @@ class PluginManager:
                             backup_path,
                         )
                     raise
-                else:
-                    try:
-                        remove_dir(str(backup_path))
-                    except Exception:
-                        logger.warning(
-                            "Failed to remove plugin backup %s",
-                            backup_path,
-                            exc_info=True,
-                        )
                 finally:
-                    if not backup_path.exists():
-                        backup_dir.rmdir()
+                    if not keep_backup:
+                        try:
+                            remove_dir(str(backup_dir))
+                        except Exception:
+                            logger.warning(
+                                "Failed to remove plugin backup %s",
+                                backup_dir,
+                                exc_info=True,
+                            )
+                    else:
+                        logger.warning(
+                            "Retained plugin backup for recovery: %s", backup_path
+                        )
             else:
-                Path(desti_dir).rename(target_plugin_path)
                 track_failed_install = True
                 dir_name = target_plugin_path.name
                 desti_dir = str(target_plugin_path)
+                shutil.move(plugin_path, desti_dir)
                 await self._ensure_plugin_requirements(desti_dir, dir_name)
                 success, error_message = await self.load(
                     specified_dir_name=dir_name,
