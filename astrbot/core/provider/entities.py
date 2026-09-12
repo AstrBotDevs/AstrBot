@@ -312,6 +312,9 @@ class LLMResponse:
     reasoning_signature: str | None = None
     """The signature of the reasoning content, if any."""
 
+    web_search_sources: list[dict[str, Any]] = field(default_factory=list)
+    """Structured web search sources (e.g. xAI url_citation), each with index/url/title."""
+
     raw_completion: (
         ChatCompletion | Response | GenerateContentResponse | AnthropicMessage | None
     ) = None
@@ -339,6 +342,7 @@ class LLMResponse:
         tools_call_extra_content: dict[str, dict[str, Any]] | None = None,
         reasoning_content: str | None = None,
         reasoning_signature: str | None = None,
+        web_search_sources: list[dict[str, Any]] | None = None,
         raw_completion: ChatCompletion
         | Response
         | GenerateContentResponse
@@ -377,6 +381,7 @@ class LLMResponse:
         self.tools_call_extra_content = tools_call_extra_content
         self.reasoning_content = reasoning_content
         self.reasoning_signature = reasoning_signature
+        self.web_search_sources = web_search_sources or []
         self.raw_completion = raw_completion
         self.is_chunk = is_chunk
 
