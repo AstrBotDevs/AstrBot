@@ -9,7 +9,8 @@
     "market": "AstrBot Plugin Market"
   },
   "titles": {
-    "installedAstrBotPlugins": "Installed"
+    "installedAstrBotPlugins": "Installed",
+    "pluginPages": "Plugin Pages"
   },
   "failedPlugins": {
     "title": "Failed to Load Plugins ({count})",
@@ -48,6 +49,8 @@
     "openPages": "Pages",
     "openPage": "Open",
     "openWebui": "Open Plugin UI",
+"expand": "Expand",
+"collapse": "Collapse",
     "close": "Close",
     "save": "Save",
     "saveAndClose": "Save and Close",
@@ -103,7 +106,9 @@
   },
   "empty": {
     "noPlugins": "No Extensions",
-    "noPluginsDesc": "Try installing extensions or adjusting the search"
+    "noPluginsDesc": "Try installing extensions or adjusting the search",
+    "noPluginPages": "No Plugin Pages",
+    "noPluginPagesDesc": "Install plugins that ship web pages and they will show up here"
   },
   "detail": {
     "contents": "Plugin Handlers",
