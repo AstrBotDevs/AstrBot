@@ -11,6 +11,10 @@ from ..star_handler import StarHandlerMetadata
 from . import HandlerFilter
 from .custom_filter import CustomFilter
 
+# Preserve @nickname(ID) as one argument even when the nickname contains spaces.
+# IDs are platform-specific and may be strings (for example Slack/Lark IDs).
+COMMAND_ARGUMENT_PATTERN = re.compile(r"@[^@]*\([^()\s]+\)(?=\s|$)|[^\s]+")
+
 
 class GreedyStr(str):
     """标记指令完成其他参数接收后的所有剩余文本。"""
@@ -205,8 +209,8 @@ class CommandFilter(HandlerFilter):
         if not ok:
             return False
 
-        # 分割为列表
-        ls = message_str.split(" ")
+        # Split into arguments while preserving @nickname(ID) mentions as one token.
+        ls = COMMAND_ARGUMENT_PATTERN.findall(message_str)
         # 去除空字符串
         ls = [param for param in ls if param]
         params = {}
