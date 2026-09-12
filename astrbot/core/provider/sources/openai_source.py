@@ -956,6 +956,7 @@ class ProviderOpenAIOfficial(Provider):
         tool_calls_result: ToolCallsResult | list[ToolCallsResult] | None = None,
         model: str | None = None,
         extra_user_content_parts: list[ContentPart] | None = None,
+        extra_headers: dict[str, str] | None = None,
         **kwargs,
     ) -> tuple:
         """准备聊天所需的有效载荷和上下文"""
@@ -993,6 +994,8 @@ class ProviderOpenAIOfficial(Provider):
         model = model or self.get_model()
 
         payloads = {"messages": context_query, "model": model}
+        if extra_headers:
+            payloads["extra_headers"] = extra_headers
 
         self._finally_convert_payload(payloads)
 
