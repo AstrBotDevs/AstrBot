@@ -1337,7 +1337,7 @@
       },
       "xai_native_search": {
         "description": "Enable native search",
-        "hint": "When enabled, uses xAI Chat Completions native Live Search for web queries (billed on demand). Only applies to xAI providers."
+        "hint": "When enabled, uses xAI's native web search for web queries (billed on demand). Applies to xAI providers using either the Chat Completions or Responses API."
       },
       "rerank_api_base": {
         "description": "Rerank Model API Base URL",

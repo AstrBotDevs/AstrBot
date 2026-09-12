@@ -1490,7 +1490,7 @@
             },
             "xai_native_search": {
                 "description": "Включить нативный поиск",
-                "hint": "Если включено, использует Live Search от xAI для веб-запросов (тарифицируется отдельно). Применимо только к провайдерам xAI."
+                "hint": "Если включено, использует нативный веб-поиск xAI для веб-запросов (тарифицируется отдельно). Применимо к провайдерам xAI с Chat Completions или Responses API."
             },
             "rerank_api_base": {
                 "description": "Base URL API модели Rerank",

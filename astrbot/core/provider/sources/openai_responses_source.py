@@ -294,6 +294,24 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
 
         return payloads, context_query
 
+    def _maybe_inject_xai_native_search(self, payloads: dict) -> None:
+        """Inject xAI's server-side web_search tool into a Responses API payload.
+
+        Only takes effect when ``xai_native_search`` is enabled. The option is
+        shown for xAI providers only (see its ``condition`` in
+        ``CONFIG_METADATA_2``). The Chat Completions adapter injects
+        ``search_parameters`` instead; the Responses API requires the tool to
+        be declared explicitly.
+
+        Args:
+            payloads: Responses API request payload, modified in place.
+        """
+        if not bool(self.provider_config.get("xai_native_search", False)):
+            return
+        tools = payloads.setdefault("tools", [])
+        if not any(self._field(tool, "type") == "web_search" for tool in tools):
+            tools.append({"type": "web_search"})
+
     async def _query(
         self,
         payloads: dict,
@@ -322,6 +340,7 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
             if response_tools:
                 payloads["tools"] = response_tools
                 payloads["tool_choice"] = payloads.get("tool_choice", "auto")
+        self._maybe_inject_xai_native_search(payloads)
 
         extra_body: dict[str, Any] = {}
         custom_extra_body = self.provider_config.get("custom_extra_body", {})
@@ -391,6 +410,7 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
             if response_tools:
                 payloads["tools"] = response_tools
                 payloads["tool_choice"] = payloads.get("tool_choice", "auto")
+        self._maybe_inject_xai_native_search(payloads)
 
         extra_body: dict[str, Any] = {}
         custom_extra_body = self.provider_config.get("custom_extra_body", {})
