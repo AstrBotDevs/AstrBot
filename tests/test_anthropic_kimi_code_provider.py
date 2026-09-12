@@ -778,6 +778,40 @@ async def test_query_handles_none_usage_when_content_filtered(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_query_accumulates_multiple_text_blocks(monkeypatch):
+    """A Message with more than one text content block (e.g. Citations API
+    output) must concatenate every block, not keep only the last one."""
+    provider = _setup_provider_with_mock_client(monkeypatch)
+
+    class _FakeMessageBlock:
+        def __init__(self, text: str):
+            self.type = "text"
+            self.text = text
+
+    class _FakeMessage:
+        def __init__(self):
+            self.id = "msg_multi_block"
+            self.content = [
+                _FakeMessageBlock("First block: the important part."),
+                _FakeMessageBlock("Second block: a trailing citation note."),
+            ]
+            self.stop_reason = "end_turn"
+            self.usage = None
+
+    async def fake_create(**kwargs):
+        return _FakeMessage()
+
+    monkeypatch.setattr(anthropic_source, "Message", _FakeMessage)
+    provider.client.messages.create = fake_create
+
+    llm_response = await provider.text_chat(prompt="test")
+
+    assert llm_response.completion_text == (
+        "First block: the important part.Second block: a trailing citation note."
+    )
+
+
+@pytest.mark.asyncio
 async def test_tool_choice_auto_converts_to_dict(monkeypatch):
     """tool_choice='auto' 应转换为 {'type': 'auto'}"""
     provider = _setup_provider_with_mock_client(monkeypatch)
