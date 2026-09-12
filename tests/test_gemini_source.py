@@ -206,6 +206,69 @@ def test_gemini_extract_usage_without_cache_keeps_full_prompt_tokens():
     assert usage.output == 20
 
 
+def _make_func_toolset() -> SimpleNamespace:
+    func_desc = {
+        "function_declarations": [
+            {
+                "name": "search",
+                "description": "Search the web",
+                "parameters": {"type": "object", "properties": {}},
+            }
+        ]
+    }
+    return SimpleNamespace(get_func_desc_google_genai_style=lambda: func_desc)
+
+
+@pytest.mark.asyncio
+async def test_gemini_server_side_tool_invocations_enabled_with_builtin_and_functions():
+    model = "gemini-3.8-flash"
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    provider.provider_config = {"gm_native_search": True}
+    provider.provider_settings = {}
+    provider.model_name = model
+    provider.safety_settings = []
+
+    config = await provider._prepare_query_config(
+        {"model": model}, tools=_make_func_toolset()
+    )
+
+    assert config.tool_config is not None
+    assert config.tool_config.include_server_side_tool_invocations is True
+
+
+@pytest.mark.asyncio
+async def test_gemini_server_side_tool_invocations_unset_without_builtin_tools():
+    model = "gemini-3.8-flash"
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    provider.provider_config = {}
+    provider.provider_settings = {}
+    provider.model_name = model
+    provider.safety_settings = []
+
+    config = await provider._prepare_query_config(
+        {"model": model}, tools=_make_func_toolset()
+    )
+
+    assert config.tool_config is not None
+    assert config.tool_config.include_server_side_tool_invocations is None
+
+
+@pytest.mark.asyncio
+async def test_gemini_tool_config_absent_with_only_builtin_tools():
+    model = "gemini-3.8-flash"
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    provider.provider_config = {"gm_native_search": True}
+    provider.provider_settings = {}
+    provider.model_name = model
+    provider.safety_settings = []
+
+    config = await provider._prepare_query_config({"model": model})
+
+    assert config.tool_config is None
+    assert config.tools is not None
+    assert any(t.google_search for t in config.tools)
+
+
 @pytest.mark.asyncio
 async def test_gemini_get_models_retries_transient_request_error(monkeypatch):
     monkeypatch.setattr(request_retry, "REQUEST_RETRY_WAIT_MIN_S", 0)
