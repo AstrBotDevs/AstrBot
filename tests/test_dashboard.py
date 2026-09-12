@@ -2553,6 +2553,38 @@ async def test_get_chat_session_rejects_session_owned_by_another_user(
     assert data["message"] == "Permission denied"
 
 
+class _FakeMarketResponse:
+    def __init__(self, url: str, payload):
+        self.url = url
+        self.status = 200
+        self._payload = payload
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        return None
+
+    async def json(self):
+        return self._payload
+
+
+class _FakeMarketSession:
+    def __init__(self, responses: dict):
+        self._responses = responses
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        return None
+
+    def get(self, url: str):
+        payload = self._responses.get(url)
+        assert payload is not None, f"unexpected plugin market request: {url}"
+        return _FakeMarketResponse(url, payload)
+
+
 @pytest.mark.asyncio
 async def test_plugins(
     app: FastAPIAppAdapter,
@@ -2562,6 +2594,27 @@ async def test_plugins(
 ):
     """测试插件 API 端点，使用 Mock 避免真实网络调用。"""
     test_client = app.test_client()
+    market_plugin_key = "test-author/astrbot_plugin_market_fixture"
+    market_source = PluginService.build_registry_source(None)
+    monkeypatch.setattr(
+        "astrbot.dashboard.services.plugin_service.aiohttp.ClientSession",
+        lambda **_kwargs: _FakeMarketSession(
+            {
+                market_source.md5_url: {"md5": "test-market-md5"},
+                market_source.urls[0]: {
+                    "$meta": {"schema_version": 1},
+                    market_plugin_key: {
+                        "author": "test-author",
+                        "name": "astrbot_plugin_market_fixture",
+                        "display_name": "Market Fixture",
+                        "version": "1.0.0",
+                        "repo": "https://github.com/test-author/astrbot_plugin_market_fixture",
+                        "desc": "Plugin market fixture served from the local test suite.",
+                    },
+                },
+            }
+        ),
+    )
 
     # 已经安装的插件
     response = await test_client.get("/api/plugin/get", headers=authenticated_header)
@@ -2577,7 +2630,7 @@ async def test_plugins(
         assert isinstance(installed_at, str)
         datetime.fromisoformat(installed_at)
 
-    # 插件市场
+    # 插件市场：aiohttp 已被 mock，用例结果不再取决于 api.soulter.top 是否可达。
     response = await test_client.get(
         "/api/plugin/market_list",
         headers=authenticated_header,
@@ -2585,6 +2638,7 @@ async def test_plugins(
     assert response.status_code == 200
     data = await response.get_json()
     assert data["status"] == "ok"
+    assert market_plugin_key in data["data"]
 
     # 使用 MockPluginBuilder 创建测试插件
     plugin_store_path = core_lifecycle_td.plugin_manager.plugin_store_path
