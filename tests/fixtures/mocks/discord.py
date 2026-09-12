@@ -135,6 +135,7 @@ class MockDiscordBuilder:
         client.close = AsyncMock()
         client.is_closed = MagicMock(return_value=False)
         client.add_application_command = MagicMock()
+        client.remove_application_command = MagicMock()
         client.sync_commands = AsyncMock()
         client.change_presence = AsyncMock()
         return client
