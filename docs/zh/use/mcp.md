@@ -71,21 +71,22 @@ npx -v
 }
 ```
 
-如果要使用的 MCP 服务器需要通过环境变量配置 Token 等信息，可以使用 `env` 这个工具：
+如果要使用的 MCP 服务器需要通过环境变量配置 Token 等信息，可以使用 `env` 字段：
 
 ```json
 {
-    "command": "env",
+    "command": "uv",
     "args": [
-        "XXX_RESOURCE_FROM=local",
-        "XXX_API_URL=https://xxx.com",
-        "XXX_API_TOKEN=sk-xxxxx",
-        "uv",
         "tool",
         "run",
         "xxx-mcp-server",
         "--storage-path", "data/res"
-    ]
+    ],
+    "env": {
+        "XXX_RESOURCE_FROM": "local",
+        "XXX_API_URL": "https://xxx.com",
+        "XXX_API_TOKEN": "sk-xxxxx"
+    }
 }
 ```
 
