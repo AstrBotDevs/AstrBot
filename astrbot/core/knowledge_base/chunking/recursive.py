@@ -56,6 +56,14 @@ class RecursiveCharacterChunker(BaseChunker):
 
         overlap = kwargs.get("chunk_overlap", self.chunk_overlap)
         chunk_size = kwargs.get("chunk_size", self.chunk_size)
+        # 与 _split_by_character 保持一致的参数防护，保证任何输出块都不超过
+        # chunk_size 上限。
+        if chunk_size <= 0:
+            raise ValueError("chunk_size must be greater than 0")
+        if overlap < 0:
+            raise ValueError("chunk_overlap must be non-negative")
+        if overlap >= chunk_size:
+            raise ValueError("chunk_overlap must be less than chunk_size")
 
         text_length = self.length_function(text)
         if text_length <= chunk_size:
@@ -114,10 +122,16 @@ class RecursiveCharacterChunker(BaseChunker):
                         overlap_start = max(0, len(combined_text) - overlap)
                         if overlap_start > 0:
                             overlap_text = combined_text[overlap_start:]
-                            current_chunk = [overlap_text, split]
-                            current_chunk_length = (
-                                self.length_function(overlap_text) + split_length
-                            )
+                            overlap_length = self.length_function(overlap_text)
+                            if overlap_length + split_length > chunk_size:
+                                # 携带 overlap 会超出 chunk_size，改为将
+                                # overlap 独立成块，避免输出块超限。
+                                final_chunks.append(overlap_text)
+                                current_chunk = [split]
+                                current_chunk_length = split_length
+                            else:
+                                current_chunk = [overlap_text, split]
+                                current_chunk_length = overlap_length + split_length
                         else:
                             current_chunk = [split]
                             current_chunk_length = split_length
