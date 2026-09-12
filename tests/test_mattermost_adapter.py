@@ -188,6 +188,64 @@ async def test_mattermost_attachments_follow_preprocessing_cleanup_rules(
 
 
 @pytest.mark.asyncio
+async def test_mattermost_converted_audio_retains_downloaded_source(
+    tmp_path, monkeypatch
+):
+    import wave
+
+    from astrbot.core.platform.sources.mattermost import client as mattermost_client
+
+    monkeypatch.setattr(
+        mattermost_client, "get_astrbot_temp_path", lambda: str(tmp_path)
+    )
+    monkeypatch.setattr(
+        preprocess_stage, "get_astrbot_temp_path", lambda: str(tmp_path)
+    )
+    wav_path = tmp_path / "converted.wav"
+    with wave.open(str(wav_path), "wb") as audio_file:
+        audio_file.setparams((1, 2, 8000, 0, "NONE", "not compressed"))
+        audio_file.writeframes(b"\x00\x00" * 80)
+    resolver = MagicMock()
+    resolver.return_value.to_path = AsyncMock(return_value=str(wav_path))
+    monkeypatch.setattr(mattermost_client, "MediaResolver", resolver)
+    adapter = _build_adapter()
+    adapter.client.get_file_info = AsyncMock(
+        return_value={"name": "voice.ogg", "mime_type": "audio/ogg"}
+    )
+    adapter.client.download_file = AsyncMock(return_value=b"downloaded ogg bytes")
+    message = await adapter.convert_message(
+        post={
+            "id": "post-1",
+            "channel_id": "channel-1",
+            "user_id": "user-1",
+            "file_ids": ["voice"],
+        },
+        data={"channel_type": "D", "sender_name": "alice"},
+    )
+    source_path = tmp_path / "mattermost_voice.ogg"
+    resolver.assert_called_once_with(
+        str(source_path), media_type="audio", default_suffix=".wav"
+    )
+    resolver.return_value.to_path.assert_awaited_once_with(target_format="wav")
+    assert any(
+        isinstance(comp, Comp.Record) and comp.file == str(wav_path)
+        for comp in message.message
+    )
+    event = adapter.create_event(message)
+    assert event._temporary_local_files == []
+    stage = preprocess_stage.PreProcessStage()
+    stage.config = {}
+    stage.platform_settings = {}
+    stage.stt_settings = {"enable": False}
+
+    await stage.process(event)
+    event.cleanup_temporary_local_files()
+
+    assert source_path.read_bytes() == b"downloaded ogg bytes"
+    assert not wav_path.exists()
+
+
+@pytest.mark.asyncio
 async def test_mattermost_get_group_returns_members_and_channel_admins():
     adapter = _build_adapter()
     adapter.client.get_channel = AsyncMock(
