@@ -101,29 +101,26 @@ class RespondStage(Stage):
     ) -> list[list[BaseMessageComponent]]:
         """Build the bubbles sent by segmented reply.
 
-        Every Plain and every non-inline component starts a new bubble; a
-        Face attaches to the preceding text bubble, or to the following
-        Plain when the chain starts with a Face, so an inline emoji never
-        becomes a bubble of its own while adjacent Plain components keep
-        their deliberate split (#10047, #3959).
+        Plain and non-inline components start a new bubble; a Face attaches
+        to the preceding text bubble and glues the Plain following it back
+        into the same bubble, so an inline emoji never becomes a bubble of
+        its own and never leaves the next clause as a bubble of its own
+        (#10047). Adjacent Plain components without an emoji between them —
+        the output of segmentation-words (#3959) — keep their deliberate
+        split.
         """
         segments: list[list[BaseMessageComponent]] = []
         for comp in chain:
-            if (
-                comp.type == ComponentType.Face
-                and segments
-                and segments[-1][-1].type in (ComponentType.Plain, ComponentType.Face)
+            prev_type = segments[-1][-1].type if segments else None
+            if prev_type == ComponentType.Face and comp.type == ComponentType.Plain:
+                segments[-1].append(comp)
+            elif comp.type == ComponentType.Face and prev_type in (
+                ComponentType.Plain,
+                ComponentType.Face,
             ):
                 segments[-1].append(comp)
-                continue
-            segments.append([comp])
-        if (
-            len(segments) >= 2
-            and segments[0][0].type == ComponentType.Face
-            and segments[1][0].type == ComponentType.Plain
-        ):
-            segments[1][:0] = segments[0]
-            segments.pop(0)
+            else:
+                segments.append([comp])
         return segments
 
     async def _calc_comp_interval(
