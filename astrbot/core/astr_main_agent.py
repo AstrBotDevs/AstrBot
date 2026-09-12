@@ -23,6 +23,7 @@ from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.astr_main_agent_resources import (
     CHATUI_INLINE_GENUI_SYSTEM_PROMPT,
     CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT,
+    DELIMITER_NONCE_SYSTEM_PROMPT,
     LIVE_MODE_SYSTEM_PROMPT,
     LLM_SAFETY_MODE_SYSTEM_PROMPT,
     SANDBOX_MODE_PROMPT,
@@ -740,8 +741,9 @@ async def _ensure_img_caption(
             plugin_context,
         )
         if caption:
+            open_tag, close_tag = _tag("image_caption", req.delimiter_nonce)
             req.extra_user_content_parts.append(
-                TextPart(text=f"<image_caption>{caption}</image_caption>")
+                TextPart(text=f"{open_tag}{caption}{close_tag}")
             )
             req.image_urls = []
     except Exception as exc:  # noqa: BLE001
@@ -970,8 +972,26 @@ async def _process_quote_message(
                         )
 
     quoted_content = "\n".join(content_parts)
-    quoted_text = f"<Quoted Message>\n{quoted_content}\n</Quoted Message>"
+    open_tag, close_tag = _tag("Quoted Message", req.delimiter_nonce)
+    quoted_text = f"{open_tag}\n{quoted_content}\n{close_tag}"
     req.extra_user_content_parts.append(TextPart(text=quoted_text))
+
+
+def _tag(name: str, nonce: str) -> tuple[str, str]:
+    """Return the opening and closing tag for a framework block.
+
+    The nonce is appended to the tag name so that user content cannot close a
+    framework block early: a closing tag without the expected suffix carries no
+    structural meaning.
+
+    Args:
+        name: Tag name, e.g. ``Quoted Message``.
+        nonce: Per-request delimiter suffix from ``ProviderRequest``.
+
+    Returns:
+        A ``(opening_tag, closing_tag)`` tuple.
+    """
+    return f"<{name}_{nonce}>", f"</{name}_{nonce}>"
 
 
 def _append_system_reminders(
@@ -1011,9 +1031,8 @@ def _append_system_reminders(
         system_parts.append(f"Current datetime: {current_time}, Weekday: {weekday}")
 
     if system_parts:
-        system_content = (
-            "<system_reminder>" + "\n".join(system_parts) + "</system_reminder>"
-        )
+        open_tag, close_tag = _tag("system_reminder", req.delimiter_nonce)
+        system_content = open_tag + "\n".join(system_parts) + close_tag
         req.extra_user_content_parts.append(TextPart(text=system_content))
 
 
@@ -1584,12 +1603,13 @@ async def build_main_agent(
         req.contexts = json.loads(req.contexts)
     thread_selected_text = event.get_extra("thread_selected_text")
     if isinstance(thread_selected_text, str) and thread_selected_text.strip():
+        open_tag, close_tag = _tag("selected_excerpt", req.delimiter_nonce)
         req.extra_user_content_parts.append(
             TextPart(
                 text=(
                     "The user is asking in a side thread about this selected "
                     "excerpt from the previous assistant answer:\n"
-                    f"<selected_excerpt>{thread_selected_text.strip()}</selected_excerpt>"
+                    f"{open_tag}{thread_selected_text.strip()}{close_tag}"
                 )
             )
         )
@@ -1611,6 +1631,8 @@ async def build_main_agent(
             return None
 
     await _decorate_llm_request(event, req, plugin_context, config, provider=provider)
+
+    req.system_prompt += DELIMITER_NONCE_SYSTEM_PROMPT
 
     await _apply_kb(event, req, plugin_context, config)
 

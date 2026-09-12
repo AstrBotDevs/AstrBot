@@ -378,6 +378,14 @@ def is_latest_checkpoint(history: list[dict], checkpoint_id: str) -> bool:
     return False
 
 
+_SYSTEM_REMINDER_TAG_RE = re.compile(r"<system_reminder(?:_[0-9a-f]+)?>")
+"""Matches framework reminder tags, with or without the per-request nonce suffix.
+
+History written before the nonce suffix was introduced uses the bare
+``<system_reminder>`` form, so both shapes must be recognised here.
+"""
+
+
 def replace_user_conversation_content(original_content, edited_text: str):
     if isinstance(original_content, str):
         return edited_text
@@ -394,7 +402,7 @@ def replace_user_conversation_content(original_content, edited_text: str):
             result.append(part)
             continue
         text = part.get("text")
-        if isinstance(text, str) and text.startswith("<system_reminder>"):
+        if isinstance(text, str) and _SYSTEM_REMINDER_TAG_RE.match(text):
             result.append(part)
             continue
         if not inserted_text and edited_text:

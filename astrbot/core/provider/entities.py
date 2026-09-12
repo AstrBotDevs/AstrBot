@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import enum
 import json
+import secrets
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -114,6 +115,12 @@ class ProviderRequest:
     """附加的上次请求后工具调用的结果。参考: https://platform.openai.com/docs/guides/function-calling#handling-function-calls"""
     model: str | None = None
     """模型名称，为 None 时使用提供商的默认模型"""
+    delimiter_nonce: str = field(default_factory=lambda: secrets.token_hex(4))
+    """框架标签定界符的随机后缀。
+
+    用于区分框架生成的结构与用户内容：框架标签携带该后缀，用户内容无法构造
+    出匹配的闭合标签。每次请求重新生成，且不作为请求间共享状态使用。
+    """
 
     def __repr__(self) -> str:
         return (
