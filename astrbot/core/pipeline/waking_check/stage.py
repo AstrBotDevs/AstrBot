@@ -84,10 +84,12 @@ class WakingCheckStage(Stage):
         event: AstrMessageEvent,
     ) -> None | AsyncGenerator[None, None]:
         # apply unique session
+        event.set_extra("_session_isolated", False)
         if self.unique_session and event.message_obj.type == MessageType.GROUP_MESSAGE:
             sid = build_unique_session_id(event)
             if sid:
                 event.session_id = sid
+                event.set_extra("_session_isolated", True)
 
         # ignore bot self message
         if (

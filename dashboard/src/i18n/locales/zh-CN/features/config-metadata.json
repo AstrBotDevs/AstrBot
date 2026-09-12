@@ -909,8 +909,8 @@
       },
       "platform_settings": {
         "unique_session": {
-          "description": "隔离会话",
-          "hint": "启用后,群成员的上下文独立。"
+          "description": "隔离对话",
+          "hint": "启用后，支持隔离的渠道会为每位群成员使用独立上下文。指令权限请在「管理行为 → 指令」中设置。"
         },
         "friend_message_needs_wake_prefix": {
           "description": "私聊消息需要唤醒词"

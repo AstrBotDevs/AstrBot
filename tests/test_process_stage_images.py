@@ -4,6 +4,7 @@ import asyncio
 import base64
 import copy
 import inspect
+from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -540,6 +541,9 @@ async def test_localized_reference_lifetime_and_ownership(
         assert image.format == ("JPEG" if enabled else "GIF")
     if not enabled:
         assert path.read_bytes() == source.read_bytes()
+    event.cleanup_temporary_local_files()
+    assert path.exists() == (reference == "file" and not enabled)
+    assert source.is_file()
 
 
 @pytest.mark.asyncio
@@ -637,28 +641,108 @@ async def test_plugin_and_hook_image_list_normalization(harness, tmp_path, monke
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("quoted", [False, True])
-async def test_late_image_component_sources_are_event_owned(
-    harness, tmp_path, monkeypatch, quoted
+@pytest.mark.parametrize("enabled", [False, True])
+@pytest.mark.parametrize("late", [False, True])
+@pytest.mark.parametrize("reference", ["file", "base64", "data", "http"])
+@pytest.mark.parametrize("fmt", ["JPEG", "GIF"])
+async def test_attachment_sources_survive_event_cleanup(
+    harness, monkeypatch, quoted, enabled, late, reference, fmt
 ):
-    source = source_image(tmp_path)
-    ref = "base64://" + base64.b64encode(source.read_bytes()).decode()
-    late_image = Image(file=ref)
+    harness.work.mkdir()
+    source = source_image(harness.work, fmt)
+    original = source.read_bytes()
+    encoded = base64.b64encode(original).decode()
+    ref = {
+        "file": source.as_uri(),
+        "base64": "base64://" + encoded,
+        "data": f"data:image/{fmt.lower()};base64," + encoded,
+        "http": "https://example.com/image",
+    }[reference]
+    image = Image(file=ref)
+    attachment = Reply(id="image", chain=[image]) if quoted else image
+    event = make_event() if late else make_event([attachment])
+    if reference == "file":
+        event.track_temporary_local_file(str(source))
+    unrelated = harness.work / "other.tmp"
+    unrelated.write_bytes(b"temporary")
+    event.track_temporary_local_file(str(unrelated))
+    harness.config["provider_settings"]["image_compress_enabled"] = enabled
+    harness.config["provider_settings"]["image_compress_options"]["max_size"] = 12
+
+    async def download(url, target):
+        Path(target).write_bytes(original)
 
     async def hook(event, kind, *args):
         if kind == EventType.OnWaitingLLMRequestEvent:
-            event.message_obj.message.append(
-                Reply(id="late", chain=[late_image]) if quoted else late_image
-            )
+            event.message_obj.message.append(attachment)
+        return False
+
+    monkeypatch.setattr(media, "download_file", download)
+    if late:
+        monkeypatch.setattr(internal, "call_event_hook", hook)
+    await process_event(harness, event, preprocess_first=True)
+    req = harness.captured[0].req
+    label = "Image Attachment in quoted message" if quoted else "Image Attachment"
+    prefix = f"[{label}: path "
+    text = next(
+        part.text
+        for part in req.extra_user_content_parts
+        if isinstance(part, TextPart) and part.text.startswith(prefix)
+    )
+    attachment_path = Path(text[len(prefix) : -1])
+    visual_path = Path(req.image_urls[0])
+    assert attachment_path.read_bytes() == original
+    assert str(attachment_path) not in event._temporary_local_files
+    assert (visual_path != attachment_path) == enabled
+    with PILImage.open(visual_path) as visual_image:
+        assert visual_image.format == ("JPEG" if enabled else fmt)
+        assert max(visual_image.size) == (12 if enabled else 60)
+
+    owned = [Path(path) for path in event._temporary_local_files]
+    assert len(owned) == 1 + int(enabled)
+    assert unrelated in owned
+    event.cleanup_temporary_local_files()
+    assert attachment_path.read_bytes() == original
+    assert all(not path.exists() for path in owned)
+    assert visual_path.exists() == (not enabled)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", [RuntimeError, asyncio.CancelledError])
+async def test_stage_failure_preserves_sources_and_cleans_working_files(
+    harness, monkeypatch, failure
+):
+    harness.work.mkdir()
+    source = source_image(harness.work)
+    original = source.read_bytes()
+    event = make_event([Image(file=str(source))])
+    preprocess_stage = preprocess.PreProcessStage()
+    await preprocess_stage.initialize(harness.ctx)
+    await preprocess_stage.process(event)
+
+    async def hook(event, kind, *args):
+        if kind == EventType.OnLLMRequestEvent:
+            raise failure("request interrupted")
         return False
 
     monkeypatch.setattr(internal, "call_event_hook", hook)
-    event = make_event()
-    await process_event(harness, event, preprocess_first=True)
+    stage = ProcessStage()
+    await stage.initialize(harness.ctx)
+    expectation = (
+        pytest.raises(asyncio.CancelledError, match="request interrupted")
+        if failure is asyncio.CancelledError
+        else nullcontext()
+    )
+    with expectation:
+        async for _ in stage.process(event):
+            pass
     owned = [Path(path) for path in event._temporary_local_files]
-    assert len(owned) == 2
-    assert sorted(PILImage.open(path).format for path in owned) == ["GIF", "JPEG"]
-    assert late_image.file == ref
-    assert all(path.exists() for path in owned)
+    assert len(owned) == 1 and owned[0].is_file()
+    assert owned[0] != source
+    assert not harness.captured
+    event.cleanup_temporary_local_files()
+    assert not owned[0].exists()
+    assert source.read_bytes() == original
 
 
 @pytest.mark.asyncio
@@ -706,19 +790,33 @@ async def test_direct_build_keeps_raw_images_and_quote_collection(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("quoted", [False, True])
+@pytest.mark.parametrize("failure", [RuntimeError, asyncio.CancelledError])
+@pytest.mark.parametrize("fail_at", ["attachment", "conversation"])
 async def test_materialized_sources_remain_owned_when_collection_fails(
-    harness, tmp_path, monkeypatch
+    harness, tmp_path, monkeypatch, quoted, failure, fail_at
 ):
     source = source_image(tmp_path)
+    attachments = [
+        Image(file="base64://" + base64.b64encode(source.read_bytes()).decode())
+    ]
     event = make_event(
-        [Image(file="base64://" + base64.b64encode(source.read_bytes()).decode())]
+        [Reply(id="failed", chain=attachments)] if quoted else attachments
     )
-    monkeypatch.setattr(
-        main,
-        "_get_session_conv",
-        AsyncMock(side_effect=RuntimeError("conversation unavailable")),
-    )
-    with pytest.raises(RuntimeError, match="conversation unavailable"):
+    if fail_at == "attachment":
+        failing_image = MagicMock(spec=Image)
+        failing_image.convert_to_file_path = AsyncMock(
+            side_effect=failure("unavailable")
+        )
+        chain = event.message_obj.message[0].chain if quoted else event.get_messages()
+        chain.append(failing_image)
+    else:
+        monkeypatch.setattr(
+            main,
+            "_get_session_conv",
+            AsyncMock(side_effect=failure("unavailable")),
+        )
+    with pytest.raises(failure, match="unavailable"):
         await main.collect_initial_request(
             event, harness.context, main.MainAgentBuildConfig(tool_call_timeout=60)
         )

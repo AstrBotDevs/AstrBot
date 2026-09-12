@@ -888,8 +888,8 @@
       },
       "platform_settings": {
         "unique_session": {
-          "description": "Isolate Sessions",
-          "hint": "When enabled, group members have independent contexts."
+          "description": "Isolate Conversation",
+          "hint": "On supported platforms, each group member has a separate conversation context when enabled. Manage command permissions under Handlers → Command."
         },
         "friend_message_needs_wake_prefix": {
           "description": "Private Messages Require Wake Word"

@@ -1276,6 +1276,19 @@ paths:
       x-astrbot-scope: chat
       parameters:
         - $ref: "#/components/parameters/SessionId"
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 1000
       responses:
         "200":
           $ref: "#/components/responses/Ok"
@@ -5547,6 +5560,10 @@ components:
           type: boolean
           default: true
           description: Enable streaming model output for this request. This value takes priority over the legacy top-level enable_streaming field.
+        enable_reasoning:
+          type: boolean
+          default: true
+          description: Display reasoning content for this WebChat request independently of the global display_reasoning_text setting.
       additionalProperties: false
 
     ChatRequest:

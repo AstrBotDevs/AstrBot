@@ -21,7 +21,10 @@
           class="chat-sidebar-brand"
           :class="{ collapsed: isSidebarCollapsed }"
         >
-          <div v-if="!isSidebarCollapsed" class="chat-sidebar-brand-title Outfit">
+          <div
+            v-if="!isSidebarCollapsed"
+            class="chat-sidebar-brand-title Outfit"
+          >
             <ChatUILogo class="chat-sidebar-brand-logo" />
             <span class="chat-sidebar-brand-copy">
               <span class="chat-sidebar-brand-name">AstrBot</span>
@@ -36,11 +39,10 @@
             @click.stop="toggleChatSidebar"
           >
             <span class="chat-sidebar-rail-icon-stack">
-              <ChatUILogo class="chat-sidebar-brand-logo chat-sidebar-brand-logo--collapsed" />
-              <PanelLeft
-                :size="20"
-                class="sidebar-panel-toggle-icon"
+              <ChatUILogo
+                class="chat-sidebar-brand-logo chat-sidebar-brand-logo--collapsed"
               />
+              <PanelLeft :size="20" class="sidebar-panel-toggle-icon" />
             </span>
           </button>
           <v-btn
@@ -51,10 +53,7 @@
             variant="text"
             @click.stop="toggleChatSidebar"
           >
-            <PanelLeft
-              :size="20"
-              class="sidebar-panel-toggle-icon"
-            />
+            <PanelLeft :size="20" class="sidebar-panel-toggle-icon" />
           </v-btn>
         </div>
 
@@ -88,16 +87,10 @@
         >
           <SquarePen :size="18" class="sidebar-action-icon" />
         </button>
-        <v-btn
-          v-else
-          class="new-chat-btn"
-          variant="text"
-          @click="startNewChat"
-        >
+        <v-btn v-else class="new-chat-btn" variant="text" @click="startNewChat">
           <SquarePen :size="18" class="sidebar-action-icon mr-2" />
           <span>{{ tm("actions.newChat") }}</span>
         </v-btn>
-
       </div>
 
       <div v-if="!isSidebarCollapsed" class="sidebar-content">
@@ -127,7 +120,9 @@
             :key="session.session_id"
             class="session-item"
             :class="{
-              active: !isProviderWorkspace && currSessionId === session.session_id,
+              active:
+                !isProviderWorkspace && currSessionId === session.session_id,
+              running: isSessionRunning(session.session_id),
             }"
             role="button"
             tabindex="0"
@@ -170,170 +165,50 @@
       </div>
 
       <div class="sidebar-footer">
-        <StyledMenu
-          location="top start"
-          offset="10"
-          :close-on-content-click="false"
+        <v-btn
+          class="settings-btn"
+          :class="{ 'icon-only': isSidebarCollapsed }"
+          variant="text"
+          :icon="isSidebarCollapsed"
+          :aria-label="t('core.common.settings')"
+          @click="settingsOpen = true"
         >
-          <template #activator="{ props: menuProps }">
-            <v-btn
-              v-bind="menuProps"
-              class="settings-btn"
-              :class="{ 'icon-only': isSidebarCollapsed }"
-              variant="text"
-              :icon="isSidebarCollapsed"
-            >
-              <Settings
-                :size="20"
-                :class="['sidebar-action-icon', { 'mr-2': !isSidebarCollapsed }]"
-              />
-              <span v-if="!isSidebarCollapsed">{{
-                t("core.common.settings")
-              }}</span>
-            </v-btn>
-          </template>
-
-          <div class="settings-menu-content">
-            <v-menu
-              location="end"
-              offset="8"
-              :open-on-hover="!isTouchDevice"
-              :open-on-click="isTouchDevice"
-              :close-on-content-click="true"
-            >
-              <template #activator="{ props: transportMenuProps }">
-                <v-list-item
-                  v-bind="transportMenuProps"
-                  class="styled-menu-item settings-menu-item"
-                  rounded="md"
-                >
-                  <template #prepend>
-                    <Cable :size="18" class="styled-menu-lucide-icon" />
-                  </template>
-                  <v-list-item-title>{{
-                    tm("transport.title")
-                  }}</v-list-item-title>
-                  <template #append>
-                    <span class="settings-menu-value">{{
-                      currentTransportLabel
-                    }}</span>
-                    <ChevronRight :size="18" class="styled-menu-lucide-icon" />
-                  </template>
-                </v-list-item>
-              </template>
-
-              <v-card class="styled-menu-card" elevation="8" rounded="lg">
-                <v-list density="compact" class="styled-menu-list pa-1">
-                  <v-list-item
-                    v-for="item in transportOptions"
-                    :key="item.value"
-                    class="styled-menu-item"
-                    :class="{
-                      'styled-menu-item-active': transportMode === item.value,
-                    }"
-                    rounded="md"
-                    @click="transportMode = item.value"
-                  >
-                    <v-list-item-title>{{
-                      tm(item.labelKey)
-                    }}</v-list-item-title>
-                    <template #append>
-                      <Check
-                        v-if="transportMode === item.value"
-                        :size="18"
-                        class="styled-menu-lucide-icon"
-                      />
-                    </template>
-                  </v-list-item>
-                </v-list>
-              </v-card>
-            </v-menu>
-
-            <v-menu
-              location="end"
-              offset="8"
-              :open-on-hover="!isTouchDevice"
-              :open-on-click="isTouchDevice"
-              :close-on-content-click="true"
-            >
-              <template #activator="{ props: languageMenuProps }">
-                <v-list-item
-                  v-bind="languageMenuProps"
-                  class="styled-menu-item settings-menu-item"
-                  rounded="md"
-                >
-                  <template #prepend>
-                    <Languages :size="18" class="styled-menu-lucide-icon" />
-                  </template>
-                  <v-list-item-title>{{
-                    t("core.common.language")
-                  }}</v-list-item-title>
-                  <template #append>
-                    <span class="settings-menu-value">{{
-                      currentLanguage?.label || locale
-                    }}</span>
-                    <ChevronRight :size="18" class="styled-menu-lucide-icon" />
-                  </template>
-                </v-list-item>
-              </template>
-
-              <v-card class="styled-menu-card" elevation="8" rounded="lg">
-                <v-list density="compact" class="styled-menu-list pa-1">
-                  <v-list-item
-                    v-for="lang in languageOptions"
-                    :key="lang.value"
-                    class="styled-menu-item"
-                    :class="{
-                      'styled-menu-item-active': locale === lang.value,
-                    }"
-                    rounded="md"
-                    @click="switchLanguage(lang.value as Locale)"
-                  >
-                    <template #prepend>
-                      <span class="language-flag">{{ lang.flag }}</span>
-                    </template>
-                    <v-list-item-title>{{ lang.label }}</v-list-item-title>
-                    <template #append>
-                      <Check
-                        v-if="locale === lang.value"
-                        :size="18"
-                        class="styled-menu-lucide-icon"
-                      />
-                    </template>
-                  </v-list-item>
-                </v-list>
-              </v-card>
-            </v-menu>
-
-            <v-list-item
-              class="styled-menu-item settings-menu-item"
-              rounded="md"
-              @click="toggleTheme"
-            >
-              <template #prepend>
-                <Sun
-                  v-if="isDark"
-                  :size="18"
-                  class="styled-menu-lucide-icon"
-                />
-                <Moon v-else :size="18" class="styled-menu-lucide-icon" />
-              </template>
-              <v-list-item-title>{{
-                isDark ? tm("modes.lightMode") : tm("modes.darkMode")
-              }}</v-list-item-title>
-            </v-list-item>
-          </div>
-        </StyledMenu>
+          <Settings
+            :size="20"
+            :class="['sidebar-action-icon', { 'mr-2': !isSidebarCollapsed }]"
+          />
+          <span v-if="!isSidebarCollapsed">{{
+            t("core.common.settings")
+          }}</span>
+        </v-btn>
       </div>
     </v-navigation-drawer>
 
+    <ChatSettingsDialog
+      v-model="settingsOpen"
+      v-model:enable-streaming="enableStreaming"
+      v-model:enable-reasoning="enableReasoning"
+      v-model:send-shortcut="sendShortcut"
+      v-model:transport-mode="transportMode"
+    />
+
     <main
       class="chat-main"
-      :class="{ 'empty-chat': isEmptyChat }"
+      :class="{
+        'empty-chat': isEmptyChat,
+        'has-side-panel':
+          threadPanelOpen ||
+          reasoningPanelOpen ||
+          refsSidebarOpen ||
+          chatHeader.workspaceFilesOpen,
+      }"
       v-on="dragEvents"
     >
       <transition name="drop-fade">
-        <div v-if="isDragging && !isProviderWorkspace" class="chat-drop-overlay">
+        <div
+          v-if="isDragging && !isProviderWorkspace"
+          class="chat-drop-overlay"
+        >
           <div class="chat-drop-overlay-content">
             <v-icon size="48" color="primary">mdi-cloud-upload</v-icon>
             <span class="chat-drop-text">{{ tm("input.dropToUpload") }}</span>
@@ -363,7 +238,6 @@
             :staged-audio-url="stagedAudioUrl"
             :staged-files="stagedNonImageFiles"
             :disabled="sending"
-            :enable-streaming="enableStreaming"
             :is-recording="isRecording"
             :is-running="
               Boolean(currSessionId && isSessionRunning(currSessionId))
@@ -377,7 +251,6 @@
             :placeholder="tm('input.projectPlaceholder')"
             @send="sendCurrentMessage"
             @stop="stopCurrentSession"
-            @toggle-streaming="toggleStreaming"
             @remove-image="removeImage"
             @remove-audio="removeAudio"
             @remove-file="removeFile"
@@ -395,13 +268,40 @@
         class="conversation-stack"
         :class="{ 'is-empty': isEmptyChat }"
       >
+        <v-progress-linear
+          v-if="activeSessionPagination?.loading"
+          class="history-loading"
+          color="primary"
+          height="2"
+          indeterminate
+          absolute
+          location="top"
+          :aria-label="tm('history.loading')"
+        />
         <section
           ref="messagesContainer"
           class="messages-panel"
+          tabindex="0"
           @scroll="handleMessagesScroll"
+          @wheel.passive="handleMessagesInteraction"
+          @touchstart.passive="handleMessagesInteraction"
+          @touchmove.passive="handleMessagesInteraction"
+          @pointerdown="handleMessagesInteraction"
+          @keydown="handleMessagesInteraction"
         >
           <div v-if="loadingMessages" class="center-state">
             <v-progress-circular indeterminate size="32" width="3" />
+          </div>
+
+          <div
+            v-else-if="!activeMessages.length && activeSessionPagination?.error"
+            class="welcome-state"
+          >
+            <ChatLoadError
+              :message="tm('history.loadFailed')"
+              :loading="loadingMessages"
+              @retry="retryCurrentSessionLoad"
+            />
           </div>
 
           <div v-else-if="!activeMessages.length" class="welcome-state">
@@ -410,8 +310,16 @@
 
           <div
             v-if="!loadingMessages && activeMessages.length"
+            ref="messagesContent"
             class="messages-list-shell"
           >
+            <ChatLoadError
+              v-if="activeSessionPagination?.error"
+              class="history-load-error"
+              :message="tm('history.loadEarlierFailed')"
+              :loading="activeSessionPagination.loading"
+              @retry="retryCurrentSessionLoad"
+            />
             <ChatMessageList
               v-model:edit-draft="messageEditDraft"
               :messages="activeMessages"
@@ -441,6 +349,28 @@
         </section>
 
         <section ref="composerShell" class="composer-shell">
+          <button
+            v-if="isAwayFromBottom && !shouldStickToBottom"
+            class="scroll-to-bottom"
+            type="button"
+            :aria-label="tm('actions.scrollToBottom')"
+            :title="tm('actions.scrollToBottom')"
+            @click="scrollToBottom(true)"
+          >
+            <span
+              v-if="currSessionId && isSessionRunning(currSessionId)"
+              class="scroll-running-dots"
+              aria-hidden="true"
+            >
+              <span v-for="dot in 3" :key="dot" />
+            </span>
+            <ArrowDown
+              v-else
+              :size="20"
+              :stroke-width="1.75"
+              aria-hidden="true"
+            />
+          </button>
           <ChatInput
             ref="inputRef"
             v-model:prompt="draft"
@@ -448,7 +378,6 @@
             :staged-audio-url="stagedAudioUrl"
             :staged-files="stagedNonImageFiles"
             :disabled="sending"
-            :enable-streaming="enableStreaming"
             :is-recording="isRecording"
             :is-running="
               Boolean(currSessionId && isSessionRunning(currSessionId))
@@ -464,7 +393,6 @@
             "
             @send="sendCurrentMessage"
             @stop="stopCurrentSession"
-            @toggle-streaming="toggleStreaming"
             @remove-image="removeImage"
             @remove-audio="removeAudio"
             @remove-file="removeFile"
@@ -571,21 +499,16 @@ import { useRoute, useRouter } from "vue-router";
 import { useDisplay } from "vuetify";
 import { isAxiosError } from "axios";
 import {
+  ArrowDown,
   Box,
-  Cable,
-  Check,
-  ChevronRight,
-  Languages,
-  Moon,
   PanelLeft,
   Pencil,
   Settings,
   SquarePen,
-  Sun,
   Trash2,
 } from "@lucide/vue";
 import { chatApi, providerApi } from "@/api/v1";
-import StyledMenu from "@/components/shared/StyledMenu.vue";
+import ChatSettingsDialog from "@/components/chat/ChatSettingsDialog.vue";
 import ProjectDialog, {
   type ProjectFormData,
 } from "@/components/chat/ProjectDialog.vue";
@@ -595,6 +518,7 @@ import ChatInput from "@/components/chat/ChatInput.vue";
 import ChatMessageList from "@/components/chat/ChatMessageList.vue";
 import ChatUILogo from "@/components/chat/ChatUILogo.vue";
 import type { RegenerateModelSelection } from "@/components/chat/RegenerateMenu.vue";
+import ChatLoadError from "@/components/chat/ChatLoadError.vue";
 import ReasoningSidebar from "@/components/chat/ReasoningSidebar.vue";
 import ThreadPanel from "@/components/chat/ThreadPanel.vue";
 import WorkspaceFilesPanel from "@/components/chat/WorkspaceFilesPanel.vue";
@@ -615,12 +539,7 @@ import { useDragUpload } from "@/composables/useDragUpload";
 import { useChatHeaderStore } from "@/stores/chatHeader";
 import { useCustomizerStore } from "@/stores/customizer";
 import ProviderChatCompletionPanel from "@/components/provider/ProviderChatCompletionPanel.vue";
-import {
-  useI18n,
-  useLanguageSwitcher,
-  useModuleI18n,
-} from "@/i18n/composables";
-import type { Locale } from "@/i18n/types";
+import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { askForConfirmation, useConfirmDialog } from "@/utils/confirmDialog";
 import {
   contextLimit,
@@ -630,10 +549,13 @@ import {
 } from "@/utils/providerMetadata";
 import { useToast } from "@/utils/toast";
 
-const props = withDefaults(defineProps<{ chatboxMode?: boolean; active?: boolean }>(), {
-  chatboxMode: false,
-  active: true,
-});
+const props = withDefaults(
+  defineProps<{ chatboxMode?: boolean; active?: boolean }>(),
+  {
+    chatboxMode: false,
+    active: true,
+  },
+);
 
 const route = useRoute();
 const router = useRouter();
@@ -644,8 +566,6 @@ const { t } = useI18n();
 const { tm } = useModuleI18n("features/chat");
 const confirmDialog = useConfirmDialog();
 const toast = useToast();
-const { languageOptions, currentLanguage, switchLanguage, locale } =
-  useLanguageSwitcher();
 const {
   sessions,
   currSessionId,
@@ -715,9 +635,16 @@ const tokenProviderConfigs = ref<TokenProviderConfig[]>([]);
 const tokenModelMetadata = ref<Record<string, ProviderModelMetadata>>({});
 const selectedTokenProviderId = ref("");
 const messagesContainer = ref<HTMLElement | null>(null);
+const messagesContent = ref<HTMLElement | null>(null);
 const composerShell = ref<HTMLElement | null>(null);
 const inputRef = ref<InstanceType<typeof ChatInput> | null>(null);
 const shouldStickToBottom = ref(true);
+const suppressAutoScroll = ref(false);
+const LOAD_EARLIER_SCROLL_THRESHOLD = 120;
+const isAwayFromBottom = ref(false);
+let lastMessagesScrollTop = 0;
+let touchScrollY = 0;
+let scrollIntent = 0;
 const replyTarget = ref<ChatRecord | null>(null);
 const threadPanelOpen = ref(false);
 const activeThread = ref<ChatThread | null>(null);
@@ -742,9 +669,11 @@ const threadSelection = reactive<{
   message: null,
   selectedText: "",
 });
+const settingsOpen = ref(false);
 const enableStreaming = ref(true);
+const enableReasoning = ref(true);
 const sendShortcut = ref<"enter" | "shift_enter">("enter");
-let composerResizeObserver: ResizeObserver | null = null;
+let chatResizeObserver: ResizeObserver | null = null;
 const {
   isRecording,
   startRecording: startRecorder,
@@ -794,10 +723,12 @@ const {
   loadedSessions,
   sessionProjects,
   activeMessages,
+  paginationBySession,
   isSessionRunning,
   isUserMessage,
   messageParts,
   loadSessionMessages,
+  loadEarlierMessages,
   createLocalExchange,
   sendMessageStream,
   editMessage,
@@ -814,31 +745,14 @@ const {
   },
 });
 
+const activeSessionPagination = computed(() =>
+  currSessionId.value ? paginationBySession[currSessionId.value] : undefined,
+);
+
 const transportMode = ref<TransportMode>(
   (localStorage.getItem("chat.transportMode") as TransportMode) === "websocket"
     ? "websocket"
     : "sse",
-);
-
-const pointerMediaQuery = window.matchMedia('(pointer: coarse)');
-const isTouchDevice = ref<boolean>(pointerMediaQuery.matches);
-const handlePointerChange = (e: MediaQueryListEvent) => {
-  isTouchDevice.value = e.matches;
-};
-pointerMediaQuery.addEventListener('change', handlePointerChange);
-onBeforeUnmount(() => {
-  pointerMediaQuery.removeEventListener('change', handlePointerChange);
-});
-
-const transportOptions: Array<{ value: TransportMode; labelKey: string }> = [
-  { value: "sse", labelKey: "transport.sse" },
-  { value: "websocket", labelKey: "transport.websocket" },
-];
-const currentTransportLabel = computed(() =>
-  tm(
-    transportOptions.find((item) => item.value === transportMode.value)
-      ?.labelKey || "transport.sse",
-  ),
 );
 
 watch(transportMode, (mode) => {
@@ -937,7 +851,10 @@ const latestContextTokens = computed(() => {
 });
 const tokenUsageIndicator = computed(() => {
   const used = latestContextTokens.value;
-  const limit = contextLimit(currentTokenProvider.value, currentTokenMetadata.value);
+  const limit = contextLimit(
+    currentTokenProvider.value,
+    currentTokenMetadata.value,
+  );
   if (used <= 0 || limit <= 0) return null;
 
   const percent = (used / limit) * 100;
@@ -999,15 +916,26 @@ watch(
 
 onMounted(async () => {
   if (typeof ResizeObserver !== "undefined") {
-    composerResizeObserver = new ResizeObserver(([entry]) => {
+    chatResizeObserver = new ResizeObserver((entries) => {
       const container = messagesContainer.value;
-      if (!entry || !container) return;
-      const height = Math.ceil(entry.target.getBoundingClientRect().height);
-      container.style.setProperty("--chat-composer-height", `${height}px`);
+      if (!container) return;
+      for (const entry of entries) {
+        if (entry.target === composerShell.value) {
+          const height = Math.ceil(entry.target.getBoundingClientRect().height);
+          container.style.setProperty("--chat-composer-height", `${height}px`);
+        }
+      }
+      isAwayFromBottom.value =
+        container.scrollHeight - container.scrollTop - container.clientHeight >
+        2;
       if (shouldStickToBottom.value) scrollToBottom();
     });
-    if (composerShell.value) {
-      composerResizeObserver.observe(composerShell.value);
+    for (const element of [
+      composerShell.value,
+      messagesContent.value,
+      messagesContainer.value,
+    ]) {
+      if (element) chatResizeObserver.observe(element);
     }
   }
 
@@ -1026,16 +954,24 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
-  composerResizeObserver?.disconnect();
+  chatResizeObserver?.disconnect();
   chatHeader.CLEAR_CONTEXT();
   cleanupMediaCache();
 });
 
-watch(composerShell, (element, previousElement) => {
-  if (!composerResizeObserver) return;
-  if (previousElement) composerResizeObserver.unobserve(previousElement);
-  if (element) composerResizeObserver.observe(element);
-});
+watch(
+  [composerShell, messagesContent, messagesContainer],
+  (elements, previousElements) => {
+    if (!chatResizeObserver) return;
+    for (const element of previousElements) {
+      if (element) chatResizeObserver.unobserve(element);
+    }
+    for (const element of elements) {
+      if (element) chatResizeObserver.observe(element);
+    }
+  },
+  { flush: "post" },
+);
 
 watch(
   () => route.params.conversationId,
@@ -1057,7 +993,7 @@ watch(
 );
 
 watch(activeMessages, () => {
-  if (shouldStickToBottom.value) {
+  if (!suppressAutoScroll.value && shouldStickToBottom.value) {
     scrollToBottom();
   }
 });
@@ -1108,7 +1044,8 @@ function sessionTitle(session: Session) {
 
 function syncSelectedTokenProvider() {
   if (typeof window === "undefined") return;
-  selectedTokenProviderId.value = localStorage.getItem("selectedProvider") || "";
+  selectedTokenProviderId.value =
+    localStorage.getItem("selectedProvider") || "";
 }
 
 async function loadTokenProviders() {
@@ -1116,9 +1053,8 @@ async function loadTokenProviders() {
   try {
     const response = await providerApi.listByProviderType("chat_completion");
     if (response.data.status === "ok") {
-      tokenModelMetadata.value = (
-        (response.data as any).model_metadata || {}
-      ) as Record<string, ProviderModelMetadata>;
+      tokenModelMetadata.value = ((response.data as any).model_metadata ||
+        {}) as Record<string, ProviderModelMetadata>;
       tokenProviderConfigs.value = (
         (response.data.data || []) as unknown as TokenProviderConfig[]
       ).filter((provider) => provider.enable !== false);
@@ -1190,7 +1126,10 @@ async function loadProjectSessions(projectId = selectedProjectId.value) {
 async function handleProjectToggle(projectId: string, expanded: boolean) {
   if (!expanded || projectSessionsById.value[projectId]) return;
   if (loadingProjectSessionIds.value.includes(projectId)) return;
-  loadingProjectSessionIds.value = [...loadingProjectSessionIds.value, projectId];
+  loadingProjectSessionIds.value = [
+    ...loadingProjectSessionIds.value,
+    projectId,
+  ];
   try {
     await loadProjectSessions(projectId);
   } finally {
@@ -1343,11 +1282,13 @@ async function selectSession(sessionId: string, pushRoute = true) {
   replyTarget.value = null;
   if (pushRoute && route.path !== `${basePath()}/${sessionId}`) {
     await router.push(`${basePath()}/${sessionId}`);
+    if (currSessionId.value !== sessionId) return;
   }
   if (!loadedSessions[sessionId]) {
     await loadSessionMessages(sessionId);
+    if (currSessionId.value !== sessionId) return;
   }
-  scrollToBottom();
+  scrollToBottom(true);
   closeMobileSidebar();
   await focusChatInput();
 }
@@ -1392,7 +1333,7 @@ async function sendCurrentMessage() {
     draft.value = "";
     replyTarget.value = null;
     clearStaged({ revokeUrls: false });
-    scrollToBottom();
+    scrollToBottom(true);
 
     sendMessageStream({
       sessionId,
@@ -1400,6 +1341,7 @@ async function sendCurrentMessage() {
       parts: outgoingParts,
       transport: transportMode.value,
       enableStreaming: enableStreaming.value,
+      enableReasoning: enableReasoning.value,
       selectedProvider: selection?.providerId || "",
       selectedModel: selection?.modelName || "",
       userRecord,
@@ -1488,6 +1430,7 @@ function scrollToMessage(messageId?: string | number) {
     (message) => String(message.id) === String(messageId),
   );
   if (index < 0) return;
+  shouldStickToBottom.value = false;
   const rows = messagesContainer.value?.querySelectorAll(".message-row");
   rows?.[index]?.scrollIntoView({ behavior: "smooth", block: "center" });
 }
@@ -1505,26 +1448,31 @@ function cancelMessageEdit() {
 
 async function saveMessageEdit() {
   if (!currSessionId.value || !editingMessage.value) return;
+  const sessionId = currSessionId.value;
+  const target = editingMessage.value;
   savingMessageEdit.value = true;
   try {
-    const target = editingMessage.value;
-    const result = await editMessage(
-      currSessionId.value,
-      target,
-      messageEditDraft.value,
-    );
+    const result = await editMessage(sessionId, target, messageEditDraft.value);
+    if (
+      currSessionId.value !== sessionId ||
+      !activeMessages.value.includes(target)
+    ) {
+      cancelMessageEdit();
+      return;
+    }
     cancelMessageEdit();
 
     if (result.needsRegenerate && result.truncatedAfterMessage) {
       const selection = getSelectedProviderSelection();
       continueEditedMessage({
-        sessionId: currSessionId.value,
+        sessionId,
         sourceRecord: target,
         enableStreaming: enableStreaming.value,
+        enableReasoning: enableReasoning.value,
         selectedProvider: selection?.providerId || "",
         selectedModel: selection?.modelName || "",
       });
-      scrollToBottom();
+      scrollToBottom(true);
     } else if (result.needsRegenerate) {
       const index = activeMessages.value.findIndex(
         (message) => String(message.id) === String(target.id),
@@ -1556,6 +1504,7 @@ async function handleRegenerateMessage(
     effectiveSelection?.providerId || "",
     effectiveSelection?.modelName || "",
     enableStreaming.value,
+    enableReasoning.value,
   );
 }
 
@@ -1592,7 +1541,8 @@ function handleBotTextSelection(event: MouseEvent, message: ChatRecord) {
 
 async function createThreadFromSelection() {
   const message = threadSelection.message;
-  if (!currSessionId.value || !message?.id || !threadSelection.selectedText) return;
+  if (!currSessionId.value || !message?.id || !threadSelection.selectedText)
+    return;
   try {
     const response = await chatApi.createThread({
       session_id: currSessionId.value,
@@ -1659,9 +1609,50 @@ function openReasoningPanel(payload: {
   reasoningPanelOpen.value = true;
 }
 
+async function loadEarlierWithAnchor() {
+  const sessionId = currSessionId.value;
+  if (!sessionId || activeSessionPagination.value?.loading) return;
+  const container = messagesContainer.value;
+  const firstMessage = activeMessages.value[0];
+  const firstId = firstMessage?.id == null ? "" : String(firstMessage.id);
+  const beforeTop = firstId
+    ? container
+        ?.querySelector<HTMLElement>(
+          `[data-message-id="${CSS.escape(firstId)}"]`,
+        )
+        ?.getBoundingClientRect().top
+    : undefined;
+  suppressAutoScroll.value = true;
+  try {
+    await loadEarlierMessages(sessionId);
+    if (currSessionId.value !== sessionId) return;
+    await nextTick();
+    if (beforeTop == null || !container || !firstId) return;
+    const row = container.querySelector<HTMLElement>(
+      `[data-message-id="${CSS.escape(firstId)}"]`,
+    );
+    if (row) {
+      container.scrollTop += row.getBoundingClientRect().top - beforeTop;
+    }
+  } finally {
+    suppressAutoScroll.value = false;
+  }
+}
+
+async function retryCurrentSessionLoad() {
+  const sessionId = currSessionId.value;
+  if (!sessionId || activeSessionPagination.value?.loading) return;
+  if (activeMessages.value.length && activeSessionPagination.value?.has_more) {
+    await loadEarlierWithAnchor();
+    return;
+  }
+  await loadSessionMessages(sessionId, true, true);
+}
+
 async function deleteThread(thread: ChatThread) {
   if (deletingThread.value) return;
-  if (!(await askForConfirmation(tm("thread.confirmDelete"), confirmDialog))) return;
+  if (!(await askForConfirmation(tm("thread.confirmDelete"), confirmDialog)))
+    return;
   deletingThread.value = true;
   try {
     await chatApi.deleteThread(thread.thread_id);
@@ -1697,10 +1688,6 @@ async function handleFilesSelected(files: FileList | File[]) {
   }
 }
 
-function toggleStreaming() {
-  enableStreaming.value = !enableStreaming.value;
-}
-
 async function startRecording() {
   try {
     await startRecorder();
@@ -1723,21 +1710,93 @@ async function stopRecording() {
   }
 }
 
+function handleMessagesInteraction(
+  event: WheelEvent | TouchEvent | PointerEvent | KeyboardEvent,
+) {
+  if (event instanceof WheelEvent) {
+    if (event.ctrlKey || event.deltaY === 0) return;
+    scrollIntent = Math.sign(event.deltaY);
+  } else if (event.type === "touchstart" || event.type === "touchmove") {
+    const touch = (event as TouchEvent).touches[0];
+    if (!touch) return;
+    if (event.type === "touchstart") {
+      touchScrollY = touch.clientY;
+      return;
+    }
+    scrollIntent = Math.sign(touchScrollY - touch.clientY);
+    touchScrollY = touch.clientY;
+  } else if (event instanceof KeyboardEvent) {
+    const target = event.target as HTMLElement;
+    if (
+      target.closest("input, textarea, select, [contenteditable], button, a")
+    ) {
+      return;
+    }
+    if (
+      ["ArrowUp", "PageUp", "Home"].includes(event.key) ||
+      (event.key === " " && event.shiftKey)
+    ) {
+      scrollIntent = -1;
+    } else if (["ArrowDown", "PageDown", "End", " "].includes(event.key)) {
+      scrollIntent = 1;
+    } else {
+      return;
+    }
+  } else {
+    if (event.target !== messagesContainer.value) return;
+    scrollIntent = 0;
+    shouldStickToBottom.value = false;
+  }
+  if (scrollIntent < 0) shouldStickToBottom.value = false;
+}
+
 function handleMessagesScroll() {
   threadSelection.visible = false;
   const container = messagesContainer.value;
   if (!container) return;
-  const distance =
-    container.scrollHeight - container.scrollTop - container.clientHeight;
-  shouldStickToBottom.value = distance < 80;
+  const maxScrollTop = Math.max(
+    0,
+    container.scrollHeight - container.clientHeight,
+  );
+  const scrollTop = Math.max(0, container.scrollTop);
+  const previousTop = Math.min(lastMessagesScrollTop, maxScrollTop);
+  isAwayFromBottom.value = maxScrollTop - scrollTop > 2;
+  if (scrollTop < previousTop) {
+    shouldStickToBottom.value = false;
+  } else if (
+    scrollTop > previousTop &&
+    !isAwayFromBottom.value &&
+    scrollIntent >= 0
+  ) {
+    shouldStickToBottom.value = true;
+  }
+  lastMessagesScrollTop = scrollTop;
+  maybeLoadEarlierOnScroll(container);
 }
 
-function scrollToBottom() {
+function maybeLoadEarlierOnScroll(container: HTMLElement) {
+  const sessionId = currSessionId.value;
+  const pagination = activeSessionPagination.value;
+  if (!sessionId || !pagination) return;
+  if (!pagination.has_more || pagination.loading || pagination.error) return;
+  if (container.scrollHeight <= container.clientHeight) return;
+  if (container.scrollTop > LOAD_EARLIER_SCROLL_THRESHOLD) return;
+  void loadEarlierWithAnchor();
+}
+
+function scrollToBottom(resumeFollowing = false) {
+  if (resumeFollowing) {
+    shouldStickToBottom.value = true;
+    scrollIntent = 0;
+  }
   nextTick(() => {
     const container = messagesContainer.value;
-    if (!container) return;
+    // Recheck after rendering so queued stream updates cannot override user intent.
+    if (!container || suppressAutoScroll.value || !shouldStickToBottom.value)
+      return;
     container.scrollTop = container.scrollHeight;
-    shouldStickToBottom.value = true;
+    lastMessagesScrollTop = Math.max(0, container.scrollTop);
+    isAwayFromBottom.value = false;
   });
 }
 
@@ -1755,10 +1814,6 @@ async function stopCurrentSession() {
   } catch (error) {
     console.error("Failed to stop session:", error);
   }
-}
-
-function toggleTheme() {
-  customizer.SET_UI_THEME(isDark.value ? "PurpleTheme" : "PurpleThemeDark");
 }
 </script>
 
@@ -1794,11 +1849,15 @@ function toggleTheme() {
 }
 
 .chat-ui.is-dark {
-  --chat-sidebar-bg: #2d2d2d;
+  --chat-sidebar-bg: #242424;
   --chat-session-active-bg: rgba(255, 255, 255, 0.08);
   --chat-page-bg: rgb(var(--v-theme-background));
   --chat-border: rgba(255, 255, 255, 0.1);
   --chat-section-label: rgba(255, 255, 255, 0.5);
+}
+
+.chat-ui.is-dark .chat-sidebar {
+  border-right-color: rgba(255, 255, 255, 0.06);
 }
 
 .chat-sidebar {
@@ -2070,7 +2129,7 @@ function toggleTheme() {
   display: flex;
   align-items: center;
   gap: 7px;
-  padding: 4px 56px 4px 10px;
+  padding: 4px 10px;
   position: relative;
   box-sizing: border-box;
   cursor: pointer;
@@ -2080,6 +2139,15 @@ function toggleTheme() {
 .session-item:hover,
 .session-item.active {
   background: var(--chat-session-active-bg);
+}
+
+.session-item.running {
+  padding-right: 27px;
+}
+
+.session-item:hover,
+.session-item:focus-within {
+  padding-right: 56px;
 }
 
 .session-title {
@@ -2147,61 +2215,6 @@ function toggleTheme() {
   width: 56px;
   box-sizing: border-box;
   padding-inline: 10px;
-}
-
-.settings-menu-content {
-  min-width: 270px;
-  padding: 6px;
-}
-
-.settings-menu-item {
-  min-height: 42px;
-}
-
-.settings-menu-content :deep(.settings-menu-item .v-list-item__prepend) {
-  width: 28px;
-  margin-inline-end: 12px;
-  align-self: center;
-}
-
-.settings-menu-content :deep(.settings-menu-item .v-list-item__content) {
-  min-width: 0;
-}
-
-.settings-menu-content :deep(.settings-menu-item .v-list-item-title) {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.settings-menu-content :deep(.settings-menu-item .v-list-item__append) {
-  margin-inline-start: auto;
-  padding-inline-start: 18px;
-  gap: 8px;
-  align-self: center;
-}
-
-.styled-menu-lucide-icon {
-  flex: 0 0 auto;
-  color: currentcolor;
-  stroke-width: 2;
-}
-
-.settings-menu-value {
-  color: var(--chat-muted);
-  font-size: 12px;
-  margin-right: 4px;
-  max-width: 92px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.language-flag {
-  display: inline-block;
-  width: 20px;
-  margin-right: 8px;
 }
 
 .chat-main {
@@ -2285,8 +2298,14 @@ function toggleTheme() {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  overflow-anchor: none;
   padding: 24px 0 calc(var(--chat-composer-height, 82px) + 34px);
   scroll-padding-bottom: calc(var(--chat-composer-height, 82px) + 34px);
+}
+
+.history-loading {
+  z-index: 2;
+  pointer-events: none;
 }
 
 .conversation-stack.is-empty .messages-panel {
@@ -2311,6 +2330,10 @@ function toggleTheme() {
   align-items: center;
   justify-content: center;
   text-align: center;
+}
+
+.history-load-error {
+  margin: 0 auto 12px;
 }
 
 .conversation-stack.is-empty .welcome-state {
@@ -2356,6 +2379,67 @@ function toggleTheme() {
   padding: 0 0 18px;
 }
 
+.scroll-to-bottom {
+  position: absolute;
+  top: -48px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+  border-radius: 50%;
+  background: rgb(var(--v-theme-surface));
+  color: rgb(var(--v-theme-on-surface));
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.scroll-to-bottom:hover {
+  background: rgb(var(--v-theme-surface-variant));
+}
+
+.scroll-running-dots {
+  display: flex;
+  gap: 3px;
+}
+
+.scroll-running-dots span {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: scroll-dot-pulse 1.2s ease-in-out infinite;
+}
+
+.scroll-running-dots span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.scroll-running-dots span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes scroll-dot-pulse {
+  0%,
+  80%,
+  100% {
+    opacity: 0.3;
+  }
+  40% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scroll-running-dots span {
+    animation: none;
+  }
+}
+
 .conversation-stack:not(.is-empty) .composer-shell {
   position: absolute;
   right: 0;
@@ -2379,6 +2463,7 @@ function toggleTheme() {
 .composer-shell :deep(.input-area),
 .project-composer-shell :deep(.input-area) {
   padding-top: 0;
+  padding-inline: 0;
   border-top: 0;
 }
 
@@ -2404,21 +2489,33 @@ kbd {
   font: inherit;
 }
 
-:deep(.hr-node) {
-    margin-top: 1.25rem;
-    margin-bottom: 1.25rem;
-    opacity: 0.5;
-    border-top-width: .3px;
-}
-
 :deep(.paragraph-node) {
-    margin: .5rem 0;
-    line-height: 1.7;
+  margin: 0.5rem 0;
 }
 
 :deep(.list-node) {
-    margin-top: .5rem;
-    margin-bottom: .5rem;
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+@media (min-width: 761px) {
+  .chat-main.has-side-panel {
+    --chat-content-width: calc(100% - 40px);
+  }
+
+  .messages-list-shell,
+  .composer-shell :deep(.input-container) {
+    transition:
+      width 320ms cubic-bezier(0.22, 1, 0.36, 1),
+      max-width 320ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .messages-list-shell,
+  .composer-shell :deep(.input-container) {
+    transition: none;
+  }
 }
 
 @media (max-width: 760px) {

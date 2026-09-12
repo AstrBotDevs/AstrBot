@@ -18,6 +18,8 @@ An unreadable, corrupt or locally undecodable image is skipped with a short warn
 
 Derived bytes are cached by source content, effective size, JPEG quality, still/montage category and algorithm version. Missing or corrupt entries are rebuilt. Each request receives independent event-owned working files, so event cleanup does not remove shared cache files. An unwritable cache can be bypassed; inability to create the working file skips that image.
 
+Successfully localized event attachments and sources adopted during request collection remain available after event cleanup, including quoted images. Attachment text keeps these source paths; model working copies and request-only downloads are still cleaned up. Newly materialized sources stay event-owned if collection fails or is cancelled. Retained files under the temporary directory remain subject to `temp_dir_max_size` cleanup and are not permanent storage.
+
 Existing message serialization stores the visual content the model received, including prepared images, before temporary paths expire. Replay and fallback reuse that content; old history is not rescanned or migrated.
 
 This feature covers only current inputs through the local ProcessStage. Third-party Agent backends, direct plugin calls to Agent/Provider APIs, tool-result images, read_file and CUA retain their existing behavior. Tool-image handling is a separate follow-up and is not required for this feature.

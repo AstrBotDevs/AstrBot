@@ -1341,6 +1341,7 @@ async def collect_initial_request(
         The initial request and the first embedded quote image reference used by
         the dedicated quote caption branch. A rejected wake prefix returns None.
     """
+    attachment_paths: list[str] = []
     if req is None:
         if event.get_extra("provider_request"):
             req = event.get_extra("provider_request")
@@ -1385,6 +1386,7 @@ async def collect_initial_request(
                         )
                         continue
                     req.image_urls.append(image_path)
+                    attachment_paths.append(image_path)
                     # Adopt sources created after PreProcess, before another
                     # attachment or conversation lookup can fail or be cancelled.
                     source_ref = comp.url or comp.file or ""
@@ -1442,6 +1444,7 @@ async def collect_initial_request(
                                 )
                                 continue
                             req.image_urls.append(image_path)
+                            attachment_paths.append(image_path)
                             source_ref = reply_comp.url or reply_comp.file or ""
                             if not is_file_uri(source_ref):
                                 try:
@@ -1532,6 +1535,10 @@ async def collect_initial_request(
         image = next((part for part in quote.chain if isinstance(part, Image)), None)
         if image:
             quote_image_ref = image.url or image.file
+    # Keep adopted source paths usable after cleanup, but retain provisional
+    # ownership until collection succeeds so errors and cancellation can clean up.
+    for image_path in attachment_paths:
+        event.untrack_temporary_local_file(image_path)
     return req, quote_image_ref
 
 

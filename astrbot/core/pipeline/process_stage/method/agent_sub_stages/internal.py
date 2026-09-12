@@ -164,6 +164,10 @@ class InternalAgentSubStage(Stage):
             if (enable_streaming := event.get_extra("enable_streaming")) is not None:
                 streaming_response = bool(enable_streaming)
 
+            show_reasoning = self.show_reasoning
+            if (enable_reasoning := event.get_extra("enable_reasoning")) is not None:
+                show_reasoning = bool(enable_reasoning)
+
             has_provider_request = event.get_extra("provider_request") is not None
             has_valid_message = bool(event.message_str and event.message_str.strip())
             has_media_content = any(
@@ -387,7 +391,7 @@ class InternalAgentSubStage(Stage):
                                     self.max_step,
                                     self.show_tool_use,
                                     self.show_tool_call_result,
-                                    show_reasoning=self.show_reasoning,
+                                    show_reasoning=show_reasoning,
                                     buffer_intermediate_messages=self.buffer_intermediate_messages,
                                 ),
                             ),
@@ -418,7 +422,7 @@ class InternalAgentSubStage(Stage):
                                     self.max_step,
                                     self.show_tool_use,
                                     self.show_tool_call_result,
-                                    show_reasoning=self.show_reasoning,
+                                    show_reasoning=show_reasoning,
                                     buffer_intermediate_messages=self.buffer_intermediate_messages,
                                 ),
                             ),
@@ -449,7 +453,7 @@ class InternalAgentSubStage(Stage):
                             self.show_tool_use,
                             self.show_tool_call_result,
                             stream_to_general,
-                            show_reasoning=self.show_reasoning,
+                            show_reasoning=show_reasoning,
                             buffer_intermediate_messages=self.buffer_intermediate_messages,
                         ):
                             yield

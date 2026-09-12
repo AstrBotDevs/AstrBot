@@ -970,6 +970,26 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         )
 
                     await self._complete_with_assistant_response(llm_resp)
+                    # Re-query uses text_chat(), so its reply has no stream chunks.
+                    # Supply them after hooks without changing llm_result ordering.
+                    if self.streaming:
+                        if llm_resp.reasoning_content:
+                            yield AgentResponse(
+                                type="streaming_delta",
+                                data=AgentResponseData(
+                                    chain=MessageChain(type="reasoning").message(
+                                        llm_resp.reasoning_content,
+                                    ),
+                                ),
+                            )
+                        chain = llm_resp.result_chain
+                        if not chain and llm_resp.completion_text:
+                            chain = MessageChain().message(llm_resp.completion_text)
+                        if chain:
+                            yield AgentResponse(
+                                type="streaming_delta",
+                                data=AgentResponseData(chain=chain),
+                            )
                     return
                 else:
                     llm_resp.tools_call_name = requery_resp.tools_call_name

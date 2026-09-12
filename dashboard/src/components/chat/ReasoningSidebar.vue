@@ -1,6 +1,6 @@
 <template>
-  <transition name="slide-left">
-    <aside v-if="modelValue" class="reasoning-sidebar">
+  <transition name="chat-panel">
+    <aside v-if="modelValue" class="reasoning-sidebar chat-side-panel">
       <div class="reasoning-sidebar-header">
         <div class="reasoning-sidebar-title">{{ reasoningTitle }}</div>
         <v-btn icon="mdi-close" size="small" variant="text" @click="close" />
@@ -22,6 +22,7 @@
 </template>
 
 <script setup lang="ts">
+import "@/components/chat/chatPanelTransition.css";
 import { computed } from "vue";
 import {
   reasoningActivityCounts,
@@ -59,26 +60,17 @@ function close() {
 
 <style scoped>
 .reasoning-sidebar {
-  width: 380px;
+  --chat-side-panel-width: 380px;
+  width: var(--chat-side-panel-width);
   height: calc(100% - var(--chat-panel-top-offset, 0px));
   margin-top: var(--chat-panel-top-offset, 0px);
-  border-left: 1px solid var(--chat-border, rgba(var(--v-theme-on-surface), 0.1));
+  border-left: 1px solid
+    var(--chat-border, rgba(var(--v-theme-on-surface), 0.1));
   background: var(--chat-page-bg, rgb(var(--v-theme-surface)));
   color: rgb(var(--v-theme-on-surface));
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-}
-
-.slide-left-enter-active,
-.slide-left-leave-active {
-  transition: all 0.2s ease;
-}
-
-.slide-left-enter-from,
-.slide-left-leave-to {
-  transform: translateX(100%);
-  opacity: 0;
 }
 
 .reasoning-sidebar-header {
@@ -124,7 +116,8 @@ function close() {
   .reasoning-sidebar-header {
     min-height: 52px;
     padding: calc(10px + env(safe-area-inset-top)) 12px 8px;
-    border-bottom: 1px solid var(--chat-border, rgba(var(--v-border-color), 0.12));
+    border-bottom: 1px solid
+      var(--chat-border, rgba(var(--v-border-color), 0.12));
   }
 
   .reasoning-sidebar-body {

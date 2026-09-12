@@ -129,6 +129,7 @@ class ChatFlags(BaseModel):
     enable_inline_genui: bool = True
     enable_default_system_prompt: bool = True
     enable_streaming: bool = True
+    enable_reasoning: bool = True
 
 
 class ChatMessageRegenerateRequest(OpenModel):
