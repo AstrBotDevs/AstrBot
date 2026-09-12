@@ -7,6 +7,7 @@ import zipfile
 from pathlib import Path
 from types import ModuleType
 from typing import Any, cast
+from unittest.mock import AsyncMock
 
 import pytest
 import yaml
@@ -410,11 +411,12 @@ async def test_install_plugin_dependency_install_flow(
     events = []
     _mock_missing_requirements(monkeypatch, {"networkx"})
 
-    async def mock_install(repo_url: str, proxy=""):
+    async def mock_install(repo_url: str, proxy="", *, download_url="", target_dir):
         assert repo_url == TEST_PLUGIN_REPO
-        _write_local_test_plugin(plugin_path, repo_url)
-        _write_requirements(plugin_path)
-        return str(plugin_path)
+        staged_path = Path(target_dir)
+        _write_local_test_plugin(staged_path, repo_url)
+        _write_requirements(staged_path)
+        return str(staged_path)
 
     monkeypatch.setattr(plugin_manager_pm._updater, "install", mock_install)
     monkeypatch.setattr(
@@ -437,6 +439,8 @@ async def test_install_plugin_dependency_install_flow(
             expected_original_path=plugin_path / "requirements.txt",
             expected_content="networkx\n",
         )
+        assert set(plugin_manager_pm.failed_plugin_dict) == {TEST_PLUGIN_DIR}
+        assert set(Path(plugin_manager_pm.plugin_store_path).iterdir()) == {plugin_path}
     else:
         await plugin_manager_pm.install_plugin(TEST_PLUGIN_REPO)
         assert len(events) == 2
@@ -503,7 +507,7 @@ async def test_install_plugin_from_file_conflict_keeps_failed_plugins_clean(
     zip_file_path = tmp_path / "plugin_upload_helloworld_v2.zip"
     zip_file_path.write_text("placeholder", encoding="utf-8")
     plugin_store_path = Path(plugin_manager_pm.plugin_store_path)
-    existing_upload_dirs = set(plugin_store_path.glob("plugin_upload_*"))
+    existing_dirs = set(plugin_store_path.iterdir())
 
     def mock_unzip_file(zip_path: str, target_dir: str) -> None:
         assert zip_path == str(zip_file_path)
@@ -527,28 +531,25 @@ async def test_install_plugin_from_file_conflict_keeps_failed_plugins_clean(
     with pytest.raises(Exception, match=f"安装失败：目录 {TEST_PLUGIN_DIR} 已存在。"):
         await plugin_manager_pm.install_plugin_from_file(str(zip_file_path))
 
-    new_upload_dirs = [
-        upload_dir
-        for upload_dir in plugin_store_path.glob("plugin_upload_*")
-        if upload_dir not in existing_upload_dirs
-    ]
     assert plugin_manager_pm.failed_plugin_dict == {}
-    assert new_upload_dirs == []
+    assert set(plugin_store_path.iterdir()) == existing_dirs
     assert yaml.safe_load(metadata_path.read_text(encoding="utf-8")) == metadata
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("install_source", ["upload", "github", "url", "git"])
 @pytest.mark.parametrize("legacy_directory", [False, True])
 @pytest.mark.parametrize("failure", [None, "dependencies", "load", "cancel", "version"])
-async def test_upload_updates_existing_plugin_and_restores_on_failure(
+async def test_install_updates_existing_plugin_and_restores_on_failure(
     plugin_manager_pm: PluginManager,
     local_updater: Path,
     monkeypatch,
     tmp_path: Path,
     legacy_directory: bool,
     failure: str | None,
+    install_source: str,
 ):
-    """An uploaded update replaces old code or restores it after a failed load."""
+    """Every install source replaces old code or restores it after a failed load."""
     _clear_star_runtime_state()
     if legacy_directory:
         local_updater = local_updater.rename(local_updater.with_name("legacy_plugin"))
@@ -592,6 +593,37 @@ async def test_upload_updates_existing_plugin_and_restores_on_failure(
         for path in source_path.iterdir():
             archive.write(path, f"release-v2/{path.name}")
 
+    repo_url = f"https://github.com/AstrBotDevs/{TEST_PLUGIN_DIR}"
+    if install_source == "git":
+        repo_url = f"https://gitee.com/AstrBotDevs/{TEST_PLUGIN_DIR}.git"
+    proxy_url = "https://proxy.example"
+    download_url = "https://cdn.example/plugin-v2.zip"
+
+    async def download_repository(plugin_path, url, proxy):
+        assert url == repo_url
+        assert proxy == proxy_url
+        Path(plugin_path + ".zip").write_bytes(zip_path.read_bytes())
+
+    async def download_file(url, path):
+        assert url == download_url
+        Path(path).write_bytes(zip_path.read_bytes())
+
+    async def clone_repository(url, target_path):
+        assert url == repo_url
+        target_path = Path(target_path)
+        assert not target_path.exists()
+        target_path.mkdir()
+        for path in source_path.iterdir():
+            (target_path / path.name).write_bytes(path.read_bytes())
+
+    monkeypatch.setattr(
+        plugin_manager_pm._updater, "_download_repository", download_repository
+    )
+    monkeypatch.setattr(plugin_manager_pm._updater, "_download_file", download_file)
+    monkeypatch.setattr(
+        plugin_manager_pm._updater, "_clone_repository", clone_repository
+    )
+    monkeypatch.setattr(star_manager_module.Metric, "upload", AsyncMock())
     events = []
 
     async def ensure_requirements(plugin_dir_path, plugin_label):
@@ -637,12 +669,20 @@ async def test_upload_updates_existing_plugin_and_restores_on_failure(
     monkeypatch.setattr(plugin_manager_pm, "_terminate_plugin", terminate)
     monkeypatch.setattr(plugin_manager_pm, "load", load)
     try:
+        if install_source == "upload":
+            operation = plugin_manager_pm.install_plugin_from_file(str(zip_path))
+        else:
+            operation = plugin_manager_pm.install_plugin(
+                repo_url,
+                proxy=proxy_url,
+                download_url=download_url if install_source == "url" else "",
+            )
         if failure:
             exception_type = (
                 asyncio.CancelledError if failure == "cancel" else Exception
             )
             with pytest.raises(exception_type):
-                await plugin_manager_pm.install_plugin_from_file(str(zip_path))
+                await operation
             assert (
                 plugin_manager_pm._load_plugin_metadata(str(local_updater)).version
                 == "1.0.0"
@@ -653,14 +693,14 @@ async def test_upload_updates_existing_plugin_and_restores_on_failure(
                 assert "terminate" not in events
                 assert star_manager_module.star_map[module_path] is old_plugin
         else:
-            result = await plugin_manager_pm.install_plugin_from_file(str(zip_path))
+            result = await operation
             assert result == {
                 "name": TEST_PLUGIN_NAME,
                 "repo": None,
                 "readme": "Updated README",
             }
             assert events == ["dependencies", "terminate", "2.0.0"]
-            assert not zip_path.exists()
+            assert zip_path.exists() is (install_source != "upload")
         assert config_path.read_text() == '{"custom": true}'
         assert data_path.read_bytes() == b"saved digest"
         assert set(Path(plugin_manager_pm.plugin_store_path).iterdir()) == {
@@ -673,6 +713,59 @@ async def test_upload_updates_existing_plugin_and_restores_on_failure(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("install_source", ["github", "url", "git"])
+@pytest.mark.parametrize("failure", ["download", "cancel", "metadata"])
+async def test_url_install_preparation_failure_preserves_existing_plugin(
+    plugin_manager_pm: PluginManager,
+    local_updater: Path,
+    monkeypatch,
+    install_source: str,
+    failure: str,
+):
+    """Failed downloads and invalid packages leave the existing plugin untouched."""
+    original_files = {path.name: path.read_bytes() for path in local_updater.iterdir()}
+    load = AsyncMock()
+    terminate = AsyncMock()
+    monkeypatch.setattr(plugin_manager_pm, "load", load)
+    monkeypatch.setattr(plugin_manager_pm, "_terminate_plugin", terminate)
+    monkeypatch.setattr(star_manager_module.Metric, "upload", AsyncMock())
+
+    async def prepare(*args):
+        if install_source == "git":
+            target = Path(args[1])
+            target.mkdir()
+            (target / "main.py").write_text("pass\n", encoding="utf-8")
+        else:
+            target = Path(args[0] + ".zip" if install_source == "github" else args[1])
+            with zipfile.ZipFile(target, "w") as archive:
+                archive.writestr("main.py", "pass\n")
+        if failure == "download":
+            raise RuntimeError("download interrupted")
+        if failure == "cancel":
+            raise asyncio.CancelledError
+
+    monkeypatch.setattr(plugin_manager_pm._updater, "_download_repository", prepare)
+    monkeypatch.setattr(plugin_manager_pm._updater, "_download_file", prepare)
+    monkeypatch.setattr(plugin_manager_pm._updater, "_clone_repository", prepare)
+    repo_url = (
+        f"https://gitee.com/AstrBotDevs/{TEST_PLUGIN_DIR}.git"
+        if install_source == "git"
+        else f"https://github.com/AstrBotDevs/{TEST_PLUGIN_DIR}"
+    )
+    with pytest.raises(asyncio.CancelledError if failure == "cancel" else Exception):
+        await plugin_manager_pm.install_plugin(
+            repo_url,
+            download_url="https://cdn.example/update.zip" if install_source == "url" else "",
+        )
+    assert {path.name: path.read_bytes() for path in local_updater.iterdir()} == original_files
+    assert set(Path(plugin_manager_pm.plugin_store_path).iterdir()) == {local_updater}
+    assert plugin_manager_pm.failed_plugin_dict == {}
+    load.assert_not_awaited()
+    terminate.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("install_source", ["upload", "url"])
 @pytest.mark.parametrize("disabled", [False, True])
 @pytest.mark.parametrize("initialization_fails", [False, True])
 async def test_upload_update_reloads_runtime_and_preserves_activation(
@@ -682,6 +775,7 @@ async def test_upload_update_reloads_runtime_and_preserves_activation(
     tmp_path: Path,
     disabled: bool,
     initialization_fails: bool,
+    install_source: str,
 ):
     """Exercise real loading, registration, disabled state, and rollback."""
     _clear_star_runtime_state()
@@ -758,15 +852,26 @@ async def test_upload_update_reloads_runtime_and_preserves_activation(
             archive.writestr("metadata.yaml", yaml.safe_dump(metadata))
             archive.writestr("main.py", updated_source)
 
-        if initialization_fails and not disabled:
-            with pytest.raises(Exception, match="init failed"):
-                await plugin_manager_pm.install_plugin_from_file(
-                    str(zip_path), ignore_version_check=True
-                )
-        else:
-            await plugin_manager_pm.install_plugin_from_file(
+        async def download_file(url, path):
+            Path(path).write_bytes(zip_path.read_bytes())
+
+        monkeypatch.setattr(plugin_manager_pm._updater, "_download_file", download_file)
+        monkeypatch.setattr(star_manager_module.Metric, "upload", AsyncMock())
+        if install_source == "upload":
+            operation = plugin_manager_pm.install_plugin_from_file(
                 str(zip_path), ignore_version_check=True
             )
+        else:
+            operation = plugin_manager_pm.install_plugin(
+                TEST_PLUGIN_REPO,
+                download_url="https://cdn.example/update.zip",
+                ignore_version_check=True,
+            )
+        if initialization_fails and not disabled:
+            with pytest.raises(Exception, match="init failed"):
+                await operation
+        else:
+            await operation
         current_plugin = star_manager_module.star_map[module_path]
         assert current_plugin is not old_plugin
         assert current_plugin.activated is (not disabled)
@@ -1821,10 +1926,11 @@ async def test_install_plugin_skips_dependency_install_when_no_requirements_miss
     events = []
     _mock_missing_requirements(monkeypatch, set())
 
-    async def mock_install(repo_url: str, proxy=""):
-        _write_local_test_plugin(plugin_path, repo_url)
-        _write_requirements(plugin_path)
-        return str(plugin_path)
+    async def mock_install(repo_url: str, proxy="", *, download_url="", target_dir):
+        staged_path = Path(target_dir)
+        _write_local_test_plugin(staged_path, repo_url)
+        _write_requirements(staged_path)
+        return str(staged_path)
 
     monkeypatch.setattr(plugin_manager_pm._updater, "install", mock_install)
     monkeypatch.setattr(
@@ -1851,10 +1957,11 @@ async def test_install_plugin_runs_dependency_install_when_precheck_fails(
     plugin_path = Path(plugin_manager_pm.plugin_store_path) / TEST_PLUGIN_DIR
     events = []
 
-    async def mock_install(repo_url: str, proxy=""):
-        _write_local_test_plugin(plugin_path, repo_url)
-        _write_requirements(plugin_path)
-        return str(plugin_path)
+    async def mock_install(repo_url: str, proxy="", *, download_url="", target_dir):
+        staged_path = Path(target_dir)
+        _write_local_test_plugin(staged_path, repo_url)
+        _write_requirements(staged_path)
+        return str(staged_path)
 
     _mock_precheck_fails(monkeypatch)
     monkeypatch.setattr(plugin_manager_pm._updater, "install", mock_install)
