@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from openai import NOT_GIVEN
 
 from astrbot.core.provider.sources.whisper_api_source import ProviderOpenAIWhisperAPI
 
@@ -71,5 +72,93 @@ async def test_get_text_converts_opus_files_to_wav_before_transcription(
         assert file_arg[0] == "audio.wav"
         assert file_arg[1].name.endswith(".wav")
         file_arg[1].close()
+    finally:
+        await provider.terminate()
+
+
+def _make_provider_with_config(
+    provider_config: dict,
+) -> ProviderOpenAIWhisperAPI:
+    provider = ProviderOpenAIWhisperAPI(
+        provider_config=provider_config,
+        provider_settings={},
+    )
+    provider.client = SimpleNamespace(
+        audio=SimpleNamespace(
+            transcriptions=SimpleNamespace(
+                create=AsyncMock(return_value=SimpleNamespace(text="transcribed text"))
+            )
+        ),
+        close=AsyncMock(),
+    )
+    return provider
+
+
+def _write_wav(path: Path) -> None:
+    import struct
+
+    data = b"\x00\x00\x00\x00"
+    path.write_bytes(
+        b"RIFF"
+        + struct.pack("<I", 36 + len(data))
+        + b"WAVE"
+        + b"fmt "
+        + struct.pack("<IHHIIHH", 16, 1, 1, 8000, 8000, 1, 8)
+        + b"data"
+        + struct.pack("<I", len(data))
+        + data
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_text_passes_configured_language_and_prompt(tmp_path: Path):
+    provider = _make_provider_with_config(
+        {
+            "id": "test-whisper-api",
+            "type": "openai_whisper_api",
+            "model": "whisper-1",
+            "api_key": "test-key",
+            "language": " de ",
+            "prompt": "Steuer-ID, Aktenschrank",
+        },
+    )
+    wav_path = tmp_path / "voice.wav"
+    _write_wav(wav_path)
+
+    try:
+        result = await provider.get_text(str(wav_path))
+
+        assert result == "transcribed text"
+        create_mock = provider.client.audio.transcriptions.create
+        create_mock.assert_awaited_once()
+        kwargs = create_mock.await_args.kwargs
+        assert kwargs["language"] == "de"
+        assert kwargs["prompt"] == "Steuer-ID, Aktenschrank"
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_get_text_omits_language_and_prompt_when_unset(tmp_path: Path):
+    provider = _make_provider_with_config(
+        {
+            "id": "test-whisper-api",
+            "type": "openai_whisper_api",
+            "model": "whisper-1",
+            "api_key": "test-key",
+        },
+    )
+    wav_path = tmp_path / "voice.wav"
+    _write_wav(wav_path)
+
+    try:
+        result = await provider.get_text(str(wav_path))
+
+        assert result == "transcribed text"
+        create_mock = provider.client.audio.transcriptions.create
+        create_mock.assert_awaited_once()
+        kwargs = create_mock.await_args.kwargs
+        assert kwargs["language"] is NOT_GIVEN
+        assert kwargs["prompt"] is NOT_GIVEN
     finally:
         await provider.terminate()
