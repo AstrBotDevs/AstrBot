@@ -32,6 +32,22 @@ class CommandGroupFilter(HandlerFilter):
     ) -> None:
         self.sub_command_filters.append(sub_command_filter)
 
+    def sync_sub_filters_parent_names(self) -> None:
+        """同步子指令的父级指令名快照与缓存。
+
+        子指令 CommandFilter 的 parent_command_names 是注册时的快照，
+        当指令组的名称或别名发生变更（如 WebUI 重命名）后，需要调用此方法
+        让所有子指令重新使用新的完整前缀，否则子指令仍只能通过旧前缀触发。
+        """
+        parent_names = self.get_complete_command_names()
+        for sub_filter in self.sub_command_filters:
+            if isinstance(sub_filter, CommandGroupFilter):
+                sub_filter._cmpl_cmd_names = None
+                sub_filter.sync_sub_filters_parent_names()
+            else:
+                sub_filter.parent_command_names = list(parent_names)
+                sub_filter._cmpl_cmd_names = None
+
     def add_custom_filter(self, custom_filter: CustomFilter) -> None:
         self.custom_filter_list.append(custom_filter)
 
