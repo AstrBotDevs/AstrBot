@@ -141,7 +141,7 @@ class ProviderGSVTTS(TTSProvider):
         """
         params = self.default_params.copy()
         params["text"] = text
-        # TODO: 在此处添加情绪分析，例如 params["emotion"] = detect_emotion(text)
+        # 注意：情绪分析功能暂未实现，如需添加可接入情绪分析服务
         return params
 
     async def terminate(self) -> None:
