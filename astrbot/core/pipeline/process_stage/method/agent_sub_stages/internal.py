@@ -246,9 +246,10 @@ class InternalAgentSubStage(Stage):
                     settings = self.ctx.astrbot_config["provider_settings"]
                     enabled = settings.get("image_compress_enabled", True) is not False
                     options = settings.get("image_compress_options", {})
-                    max_size = normalize_model_image_max_size(
+                    montage_max_size = normalize_model_image_max_size(
                         options.get("max_size") if isinstance(options, dict) else None
                     )
+                    max_size = montage_max_size
                     sandbox_cfg = settings.get("sandbox")
                     cua_pixel_mode = (
                         settings.get("computer_use_runtime") == "sandbox"
@@ -256,10 +257,11 @@ class InternalAgentSubStage(Stage):
                         and sandbox_cfg.get("booter") == "cua"
                     )
                     if cua_pixel_mode:
-                        # CUA pixel tools read coordinates 1:1, so the long-edge
-                        # resize is lifted; compliant images pass through byte-exact
-                        # since lossy re-encoding would shift colors. Format
-                        # normalization still applies to other formats, and oversized
+                        # CUA pixel tools read coordinates 1:1 on stills, so the
+                        # still-image resize is lifted; compliant images pass through
+                        # byte-exact since lossy re-encoding would shift colors.
+                        # Montages are never used for coordinates and keep the
+                        # configured cap, which bounds the 3x3 canvas. Oversized
                         # passthrough images warn below.
                         max_size = 1_000_000
                     quality = (
@@ -291,6 +293,7 @@ class InternalAgentSubStage(Stage):
                         output_dir=output_dir,
                         prepared=prepared,
                         quote_image_ref=quote_image_ref,
+                        montage_max_size=montage_max_size,
                     )
                     await _process_quote_message(
                         event,
@@ -357,6 +360,7 @@ class InternalAgentSubStage(Stage):
                         quality=quality,
                         output_dir=output_dir,
                         prepared=prepared,
+                        montage_max_size=montage_max_size,
                     )
                     if cua_pixel_mode:
                         oversized = []

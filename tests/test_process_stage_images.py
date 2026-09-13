@@ -310,6 +310,24 @@ async def test_cua_oversize_image_warns(
 
 
 @pytest.mark.asyncio
+async def test_cua_montage_keeps_configured_cap(harness, tmp_path):
+    """Animated inputs keep the configured montage cap under CUA pixel mode."""
+    path = tmp_path / "anim.gif"
+    frames = [PILImage.new("RGB", (600, 400), c) for c in ("red", "green", "blue")]
+    frames[0].save(path, "GIF", save_all=True, append_images=frames[1:])
+    harness.config["provider_settings"]["computer_use_runtime"] = "sandbox"
+    harness.config["provider_settings"]["sandbox"] = {"booter": "cua"}
+    event = make_event([Image(file=str(path))], text="")
+    await process_event(harness, event, preprocess_first=True)
+    assert len(harness.captured) == 1
+    req = harness.captured[0].req
+    with PILImage.open(req.image_urls[0]) as image:
+        # With the configured cap 90, 600x400 frames produce a 90x60 montage;
+        # the CUA still-image passthrough must not unbound the montage canvas.
+        assert max(image.size) <= 90
+
+
+@pytest.mark.asyncio
 async def test_profile_reload_and_concurrent_requests(harness, tmp_path):
     source = source_image(tmp_path)
     before = copy.deepcopy(harness.provider.provider_config)
