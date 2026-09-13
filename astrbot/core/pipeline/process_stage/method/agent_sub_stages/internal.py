@@ -62,6 +62,9 @@ from ...follow_up import (
 )
 from .image_input import prepare_request_images
 
+# Anthropic rejects images above 5 MB; OpenAI and Gemini allow roughly 20 MB.
+_CUA_IMAGE_WARN_BYTES = 5 * 1024 * 1024
+
 
 class InternalAgentSubStage(Stage):
     async def initialize(self, ctx: PipelineContext) -> None:
@@ -247,15 +250,17 @@ class InternalAgentSubStage(Stage):
                         options.get("max_size") if isinstance(options, dict) else None
                     )
                     sandbox_cfg = settings.get("sandbox")
-                    if (
+                    cua_pixel_mode = (
                         settings.get("computer_use_runtime") == "sandbox"
                         and isinstance(sandbox_cfg, dict)
                         and sandbox_cfg.get("booter") == "cua"
-                    ):
-                        # CUA pixel tools read coordinates 1:1, so input images keep
-                        # their geometry: only the long-edge resize is lifted, while
-                        # format normalization, quality and oversized-PNG flattening
-                        # still apply.
+                    )
+                    if cua_pixel_mode:
+                        # CUA pixel tools read coordinates 1:1, so the long-edge
+                        # resize is lifted; compliant images pass through byte-exact
+                        # since lossy re-encoding would shift colors. Format
+                        # normalization still applies to other formats, and oversized
+                        # passthrough images warn below.
                         max_size = 1_000_000
                     quality = (
                         options.get("quality") if isinstance(options, dict) else None
@@ -353,6 +358,24 @@ class InternalAgentSubStage(Stage):
                         output_dir=output_dir,
                         prepared=prepared,
                     )
+                    if cua_pixel_mode:
+                        oversized = []
+                        for path in {p for p in prepared.values() if p}:
+                            try:
+                                size = Path(path).stat().st_size
+                            except OSError:
+                                continue
+                            if size > _CUA_IMAGE_WARN_BYTES:
+                                oversized.append(size)
+                        if oversized:
+                            logger.warning(
+                                "CUA session sends %d image(s) larger than %d MB "
+                                "(largest %.1f MB) without resize; this may exceed "
+                                "provider image upload limits.",
+                                len(oversized),
+                                _CUA_IMAGE_WARN_BYTES // 1048576,
+                                max(oversized) / 1048576,
+                            )
                     # apply reset
                     if reset_coro:
                         await reset_coro

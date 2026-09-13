@@ -12,7 +12,7 @@
 
 
 > [!TIP]
-> When the computer-use runtime is `sandbox` and the sandbox booter is `cua`, input images are not resized, so pixel coordinates read by coordinate-based tools stay 1:1. Format conversion, quality and animation montages still apply. Tool-result images such as CUA screenshots never go through this preparation.
+> When the computer-use runtime is `sandbox` and the sandbox booter is `cua`, input images are not resized, so pixel coordinates read by coordinate-based tools stay 1:1. Compliant images pass through byte-exact (no lossy re-encoding, avoiding JPEG color shifts); format conversion for other formats and animation montages still apply. Images above roughly 5 MB may exceed provider image upload limits and trigger a warning in the logs.
 The Agent receives readable local paths. Original image files and event components keep their original content, and attachment text continues to reference the source image. Providers only read/encode references and assemble their protocols.
 
 ## Errors and lifetime
