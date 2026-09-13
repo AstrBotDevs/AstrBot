@@ -467,6 +467,7 @@
       :thread="activeThread"
       :is-dark="isDark"
       :deleting="deletingThread"
+      :get-provider-selection="getSelectedProviderSelection"
       @delete="deleteThread"
     />
     <ReasoningSidebar
