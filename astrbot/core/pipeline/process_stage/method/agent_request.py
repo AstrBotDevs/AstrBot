@@ -1,6 +1,7 @@
 from collections.abc import AsyncGenerator
 
 from astrbot.core import logger
+from astrbot.core.config.agent_runner import normalize_agent_runner
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.session_llm_manager import SessionServiceManager
 
@@ -26,7 +27,9 @@ class AgentRequestSubStage(Stage):
                 )
                 self.prov_wake_prefix = self.prov_wake_prefix[len(bwp) :]
 
-        agent_runner_type = self.config["provider_settings"]["agent_runner_type"]
+        agent_runner = normalize_agent_runner(self.config.get("agent_runner"))
+        self.config["agent_runner"] = agent_runner
+        agent_runner_type = agent_runner["runner_type"]
         if agent_runner_type == "local":
             self.agent_sub_stage = InternalAgentSubStage()
         else:

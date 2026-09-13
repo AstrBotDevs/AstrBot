@@ -7,17 +7,23 @@ from astrbot.core.knowledge_base.retrieval.rank_fusion import RankFusion
 from astrbot.core.knowledge_base.retrieval.sparse_retriever import SparseResult
 
 
-def make_dense_result(chunk_id: str, similarity: float) -> Result:
+def make_dense_result(
+    chunk_id: str,
+    similarity: float,
+    kb_id: str = "kb",
+    doc_id: str | None = None,
+    content: str | None = None,
+) -> Result:
     return Result(
         similarity=similarity,
         data={
             "doc_id": chunk_id,
-            "text": chunk_id,
+            "text": content if content is not None else chunk_id,
             "metadata": json.dumps(
                 {
                     "chunk_index": 0,
-                    "kb_doc_id": f"doc-{chunk_id}",
-                    "kb_id": "kb",
+                    "kb_doc_id": doc_id or f"doc-{chunk_id}",
+                    "kb_id": kb_id,
                 }
             ),
         },
@@ -30,13 +36,14 @@ def make_sparse_result(
     score: float,
     rank: int,
     doc_id: str | None = None,
+    content: str | None = None,
 ) -> SparseResult:
     return SparseResult(
         chunk_index=0,
         chunk_id=chunk_id,
         doc_id=doc_id or f"doc-{chunk_id}",
         kb_id=kb_id,
-        content=chunk_id,
+        content=content if content is not None else chunk_id,
         score=score,
         rank=rank,
     )
@@ -157,23 +164,95 @@ async def test_rank_fusion_does_not_overvalue_low_rank_source_overlap():
 
 
 @pytest.mark.asyncio
-async def test_rank_fusion_keeps_only_the_best_chunk_per_document():
+async def test_rank_fusion_keeps_distinct_chunks_from_the_same_document():
     dense_results = [
-        make_dense_result("doc-a-best", 0.99),
-        make_dense_result("doc-a-second", 0.98),
+        make_dense_result("doc-a-best", 0.99, doc_id="doc-a"),
+        make_dense_result("doc-a-second", 0.98, doc_id="doc-a"),
+        make_dense_result("doc-a-third", 0.97, doc_id="doc-a"),
         make_dense_result("doc-b", 0.97),
     ]
     sparse_results = [
         make_sparse_result("doc-a-best", "kb", 10.0, 1, doc_id="doc-a"),
         make_sparse_result("doc-a-second", "kb", 9.0, 2, doc_id="doc-a"),
-        make_sparse_result("doc-b", "kb", 8.0, 3, doc_id="doc-b"),
+        make_sparse_result("doc-a-third", "kb", 8.0, 3, doc_id="doc-a"),
+        make_sparse_result("doc-b", "kb", 7.0, 4, doc_id="doc-b"),
     ]
 
     results = await RankFusion(kb_db=None).fuse(
         dense_results=dense_results,
         sparse_results=sparse_results,
-        top_k=2,
+        top_k=4,
     )
 
-    assert [result.chunk_id for result in results] == ["doc-a-best", "doc-b"]
-    assert [result.doc_id for result in results] == ["doc-a", "doc-b"]
+    assert [result.chunk_id for result in results] == [
+        "doc-a-best",
+        "doc-a-second",
+        "doc-a-third",
+        "doc-b",
+    ]
+    assert [result.doc_id for result in results] == [
+        "doc-a",
+        "doc-a",
+        "doc-a",
+        "doc-b",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_rank_fusion_deduplicates_only_exact_chunk_text():
+    dense_results = [
+        make_dense_result("duplicate-best", 0.99, content="same text"),
+        make_dense_result("duplicate-second", 0.98, content="same text"),
+        make_dense_result("near-duplicate", 0.97, content="same text "),
+        make_dense_result("unique", 0.96),
+    ]
+    sparse_results = [
+        make_sparse_result("duplicate-best", "kb", 10.0, 1, content="same text"),
+        make_sparse_result(
+            "duplicate-second",
+            "kb",
+            9.0,
+            2,
+            content="same text",
+        ),
+        make_sparse_result("near-duplicate", "kb", 8.0, 3, content="same text "),
+        make_sparse_result("unique", "kb", 7.0, 4),
+    ]
+
+    results = await RankFusion(kb_db=None).fuse(
+        dense_results=dense_results,
+        sparse_results=sparse_results,
+        top_k=4,
+    )
+
+    assert [result.chunk_id for result in results] == [
+        "duplicate-best",
+        "near-duplicate",
+        "unique",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_rank_fusion_does_not_promote_a_single_low_scoring_kb_result():
+    dense_results = [
+        make_dense_result("strong", 0.99, kb_id="kb-large"),
+        make_dense_result("moderate", 0.80, kb_id="kb-large"),
+        make_dense_result("weak", 0.10, kb_id="kb-small"),
+    ]
+    sparse_results = [
+        make_sparse_result("strong", "kb-large", 10.0, 1),
+        make_sparse_result("moderate", "kb-large", 5.0, 2),
+        make_sparse_result("weak", "kb-small", 0.01, 1),
+    ]
+
+    results = await RankFusion(kb_db=None).fuse(
+        dense_results=dense_results,
+        sparse_results=sparse_results,
+    )
+
+    assert [result.chunk_id for result in results] == [
+        "strong",
+        "moderate",
+        "weak",
+    ]
+    assert results[-1].score == pytest.approx(0.1)

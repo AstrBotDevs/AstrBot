@@ -83,6 +83,10 @@ export type ChatFlags = {
      * Enable streaming model output for this request. This value takes priority over the legacy top-level enable_streaming field.
      */
     enable_streaming?: boolean;
+    /**
+     * Display reasoning content for this WebChat request independently of the global display_reasoning_text setting.
+     */
+    enable_reasoning?: boolean;
 };
 
 export type ChatMessagePatchRequest = {
@@ -1375,6 +1379,10 @@ export type BatchDeleteChatSessionsError = unknown;
 export type GetChatSessionData = {
     path: {
         session_id: string;
+    };
+    query?: {
+        page?: number;
+        page_size?: number;
     };
 };
 
@@ -3151,9 +3159,17 @@ export type ListConversationsData = {
          */
         exclude_platforms?: string;
         /**
+         * Paginate by UMO and return all conversation summaries for each selected session.
+         */
+        group_by_session?: boolean;
+        /**
          * Include full message history in each conversation.
          */
         include_history?: boolean;
+        /**
+         * Match conversation titles or message content.
+         */
+        keyword?: string;
         /**
          * Comma-separated message types.
          */
@@ -3166,6 +3182,12 @@ export type ListConversationsData = {
          */
         platforms?: string;
         search?: string;
+        sort_by?: 'created_at' | 'updated_at';
+        sort_order?: 'asc' | 'desc';
+        /**
+         * Match the unified message origin.
+         */
+        umo?: string;
         user_id?: string;
     };
 };
@@ -3173,6 +3195,10 @@ export type ListConversationsData = {
 export type ListConversationsResponse = (SuccessEnvelope);
 
 export type ListConversationsError = unknown;
+
+export type GetConversationFilterOptionsResponse = (SuccessEnvelope);
+
+export type GetConversationFilterOptionsError = unknown;
 
 export type BatchDeleteConversationsData = {
     body: ConversationBatchDeleteRequest;

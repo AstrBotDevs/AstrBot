@@ -15,7 +15,7 @@ The following commands are shipped with AstrBot and loaded by default:
 - `/help`: View currently enabled commands and AstrBot version information.
 - `/sid`: View current message source information, including UMO, user ID, platform ID, message type, and session ID. This is commonly used when configuring admins, allowlists, or routing rules.
 - `/name`: Set a display alias for the current UMO, which means one concrete group or private-chat message source on a platform, so it is easier to recognize in WebUI. This command requires admin permission.
-- `/reset`: Reset the current conversation's LLM context.
+- `/reset`: Create and switch to a new conversation, just like `/new`.
 - `/stop`: Stop Agent tasks currently running in the current session.
 - `/new`: Create and switch to a new conversation.
 - `/stats`: View token usage statistics for the current conversation.
@@ -71,27 +71,33 @@ Display rules:
 
 `/name` requires admin permission.
 
-### `/reset`
+### `/reset` and `/new`
 
-`/reset` resets the LLM context of the current session.
+`/reset` and `/new` use the same restart flow. Both command entries and their individual command management settings are retained.
 
 For AstrBot's built-in Agent Runner, it:
 
-- Stops running tasks in the current session.
-- Clears the context messages of the current conversation.
-- Notifies long-term memory to clear the current session state.
+- Marks other active events in the current session as stopped, without waiting for every task to exit.
+- Creates and selects an empty conversation, preserving previous history and inheriting the current persona.
+- Clears the current session's group context cache after the reply is sent.
 
 For third-party Agent Runners such as `dify`, `coze`, `dashscope`, and `deerflow`, it:
 
 - Stops running tasks in the current session.
 - Removes the saved third-party conversation ID for this session, so the next turn starts a new conversation.
 
+DeerFlow also attempts to delete the old remote thread. Third-party runners do not guarantee retention of previous history.
+
 Permission notes:
 
 - In private chat, regular users can use it by default.
-- In group chat with `unique_session` enabled, regular users can use it by default.
-- In group chat without `unique_session`, admin permission is required by default.
-- If command permission settings have been customized, the actual configuration takes precedence.
+- Group chats default to **Follow Conversation Isolation**: everyone can use the commands when **Isolate Conversation** is enabled and isolation is applied by the platform; otherwise, only AstrBot administrators can use them. Administrators are configured administrator IDs, not automatically detected group administrators. Platforms without isolation support retain the shared-group restriction.
+- In WebUI, open **Extensions → Handlers → Command** and select **Show System Plugin Commands**. Configure `new` and `reset` individually using **Everyone**, **Administrators Only**, **Administrators Only in Group Chats**, or **Follow Conversation Isolation**. The selected permission applies across all configuration profiles. **Follow Conversation Isolation** evaluates isolation using the incoming message's profile; the other three choices remain fixed when isolation settings change.
+- **Administrators Only** restricts both private and group chats. **Administrators Only in Group Chats** allows everyone in private chats but requires administrator permission in groups.
+- With **Isolate Conversation** disabled, the command switches the conversation for the whole group; with isolation enabled and applied, it affects only the sender's conversation. Select **Everyone** to allow regular members to use the command in shared group conversations.
+- Command disabling and renaming are also managed here.
+
+Upgrade note: commands without explicitly saved permissions default to **Follow Conversation Isolation**. Permissions saved in command management and **Isolate Conversation** settings are preserved. Select **Follow Conversation Isolation** to restore automatic permission checks. If you customized the legacy `group_unique_on`, `group_unique_off`, or `private` values under `alter_cmd.astrbot.reset`, these values are no longer read; select the desired permission in command management instead.
 
 ### `/stop`
 

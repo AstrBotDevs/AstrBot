@@ -50,7 +50,7 @@ def is_local_runtime(context: ContextWrapper[AstrAgentContext]) -> bool:
         umo=context.context.event.unified_msg_origin
     )
     provider_settings = cfg.get("provider_settings", {})
-    runtime = str(provider_settings.get("computer_use_runtime", "local"))
+    runtime = str(provider_settings.get("computer_use_runtime", "none"))
     return runtime == "local"
 
 

@@ -1,5 +1,13 @@
 <template>
-  <div class="standalone-chat">
+  <div class="standalone-chat" v-on="dragEvents">
+    <transition name="drop-fade">
+      <div v-if="isDragging" class="chat-drop-overlay">
+        <div class="chat-drop-overlay-content">
+          <v-icon size="48" color="primary">mdi-cloud-upload</v-icon>
+          <span class="chat-drop-text">{{ tm("input.dropToUpload") }}</span>
+        </div>
+      </div>
+    </transition>
     <section ref="messagesContainer" class="standalone-messages">
       <div v-if="initializing" class="standalone-state">
         <v-progress-circular indeterminate size="28" width="3" />
@@ -21,11 +29,9 @@
               class="message-bubble"
               :class="{ user: isUserMessage(msg), bot: !isUserMessage(msg) }"
             >
-              <div v-if="messageContent(msg).isLoading" class="loading-message">
-                {{ tm("message.loading") }}
-              </div>
-
-              <template v-else>
+              <MessageContentTransition
+                :loading="messageContent(msg).isLoading"
+              >
                 <template
                   v-for="(block, blockIndex) in renderBlocks(msg)"
                   :key="`${msgIndex}-block-${blockIndex}-${block.kind}`"
@@ -153,7 +159,7 @@
                     </template>
                   </template>
                 </template>
-              </template>
+              </MessageContentTransition>
             </div>
           </div>
         </div>
@@ -168,16 +174,16 @@
         :staged-audio-url="stagedAudioUrl"
         :staged-files="stagedNonImageFiles"
         :disabled="sending || initializing"
-        :enable-streaming="enableStreaming"
+        show-settings
         :is-recording="false"
         :is-running="Boolean(currSessionId && isSessionRunning(currSessionId))"
         :session-id="currSessionId || null"
         :current-session="currentSession"
         :config-id="configId || 'default'"
-        send-shortcut="enter"
+        :send-shortcut="sendShortcut"
         @send="sendCurrentMessage"
         @stop="stopCurrentSession"
-        @toggle-streaming="enableStreaming = !enableStreaming"
+        @open-settings="settingsOpen = true"
         @remove-image="removeImage"
         @remove-audio="removeAudio"
         @remove-file="removeFile"
@@ -185,6 +191,14 @@
         @file-select="handleFilesSelected"
       />
     </section>
+
+    <ChatSettingsDialog
+      v-model="settingsOpen"
+      v-model:enable-streaming="enableStreaming"
+      v-model:enable-reasoning="enableReasoning"
+      v-model:send-shortcut="sendShortcut"
+      v-model:transport-mode="transportMode"
+    />
 
     <v-overlay
       v-model="imagePreview.visible"
@@ -198,6 +212,7 @@
 </template>
 
 <script setup lang="ts">
+import MessageContentTransition from "@/components/chat/MessageContentTransition.vue";
 import {
   computed,
   nextTick,
@@ -205,9 +220,12 @@ import {
   onMounted,
   reactive,
   ref,
+  watch,
 } from "vue";
 import { chatApi, configRouteApi, fileApi } from "@/api/v1";
+import ChatSettingsDialog from "@/components/chat/ChatSettingsDialog.vue";
 import ChatInput from "@/components/chat/ChatInput.vue";
+import { useDragUpload } from "@/composables/useDragUpload";
 import {
   CHAT_MARKDOWN_CUSTOM_TAGS,
   registerChatMarkdownComponents,
@@ -248,7 +266,10 @@ const currSessionId = ref("");
 const currentSession = ref<Session | null>(null);
 const draft = ref("");
 const initializing = ref(false);
+const settingsOpen = ref(false);
+const sendShortcut = ref<"enter" | "shift_enter">("enter");
 const enableStreaming = ref(true);
+const enableReasoning = ref(true);
 const shouldStickToBottom = ref(true);
 const messagesContainer = ref<HTMLElement | null>(null);
 const inputRef = ref<InstanceType<typeof ChatInput> | null>(null);
@@ -272,6 +293,8 @@ const {
   cleanupMediaCache,
 } = useMediaHandling();
 
+const { isDragging, dragEvents } = useDragUpload(handleFilesSelected);
+
 const {
   sending,
   activeMessages,
@@ -291,11 +314,15 @@ const {
   },
 });
 
-const transportMode = computed<TransportMode>(() =>
+const transportMode = ref<TransportMode>(
   (localStorage.getItem("chat.transportMode") as TransportMode) === "websocket"
     ? "websocket"
     : "sse",
 );
+
+watch(transportMode, (mode) => {
+  localStorage.setItem("chat.transportMode", mode);
+});
 
 onMounted(async () => {
   await ensureSession();
@@ -351,6 +378,7 @@ async function sendCurrentMessage() {
     parts,
     transport: transportMode.value,
     enableStreaming: enableStreaming.value,
+    enableReasoning: enableReasoning.value,
     selectedProvider: selection?.providerId || "",
     selectedModel: selection?.modelName || "",
     userRecord,
@@ -502,7 +530,48 @@ function closeImage() {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  position: relative;
   background: rgb(var(--v-theme-background));
+}
+
+/* 全区域拖拽上传遮罩 */
+.chat-drop-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 100;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(var(--v-theme-primary), 0.12);
+  border: 2px dashed rgba(var(--v-theme-primary), 0.45);
+  border-radius: 16px;
+}
+
+.chat-drop-overlay-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.chat-drop-text {
+  font-size: 16px;
+  font-weight: 500;
+  color: rgb(var(--v-theme-primary));
+}
+
+.drop-fade-enter-active,
+.drop-fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.drop-fade-enter-from,
+.drop-fade-leave-to {
+  opacity: 0;
 }
 
 .standalone-messages {
@@ -564,8 +633,8 @@ function closeImage() {
 
 .message-bubble.user {
   padding: 12px 18px;
-  border-radius: 1.5rem;
-  background: rgba(var(--v-theme-primary), 0.12);
+  border-radius: 16px;
+  background: rgba(var(--v-theme-primary), 0.16);
 }
 
 .message-bubble.bot {
@@ -577,7 +646,6 @@ function closeImage() {
   white-space: pre-wrap;
 }
 
-.loading-message,
 .tool-call-inline-status {
   color: var(--standalone-muted);
 }

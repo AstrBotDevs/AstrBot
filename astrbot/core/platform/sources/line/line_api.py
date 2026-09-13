@@ -112,6 +112,150 @@ class LineAPIClient:
             logger.error("[LINE] %s message request failed: %s", op_name, e)
             return False
 
+    async def _get_json(
+        self,
+        url: str,
+        *,
+        op_name: str,
+        params: dict[str, str] | None = None,
+    ) -> dict[str, Any] | None:
+        """Fetch a JSON object from a LINE Messaging API endpoint.
+
+        Args:
+            url: Fully qualified LINE API endpoint.
+            op_name: Short operation name used in logs.
+            params: Optional query parameters.
+
+        Returns:
+            Parsed JSON object, or ``None`` when the request fails.
+        """
+        session = await self._get_session()
+        try:
+            async with session.get(
+                url,
+                headers=self._auth_headers,
+                params=params,
+            ) as resp:
+                if resp.status != 200:
+                    body = await resp.text()
+                    logger.debug(
+                        "[LINE] %s failed: status=%s body=%s",
+                        op_name,
+                        resp.status,
+                        body,
+                    )
+                    return None
+                data = await resp.json()
+                if isinstance(data, dict):
+                    return data
+                logger.debug("[LINE] %s returned a non-object response", op_name)
+                return None
+        except Exception as e:
+            logger.debug("[LINE] %s request failed: %s", op_name, e)
+            return None
+
+    async def get_group_summary(self, group_id: str) -> dict[str, Any] | None:
+        """Get a LINE group chat's name and icon.
+
+        Args:
+            group_id: LINE group chat ID.
+
+        Returns:
+            Group summary, or ``None`` when unavailable.
+        """
+        return await self._get_json(
+            f"https://api.line.me/v2/bot/group/{group_id}/summary",
+            op_name="get group summary",
+        )
+
+    async def get_chat_member_count(
+        self,
+        chat_type: str,
+        chat_id: str,
+    ) -> int | None:
+        """Get the user count for a LINE group or multi-person chat.
+
+        Args:
+            chat_type: LINE source type, either ``group`` or ``room``.
+            chat_id: LINE group or room ID.
+
+        Returns:
+            Member count excluding the bot, or ``None`` when unavailable.
+        """
+        data = await self._get_json(
+            f"https://api.line.me/v2/bot/{chat_type}/{chat_id}/members/count",
+            op_name=f"get {chat_type} member count",
+        )
+        if not data:
+            return None
+        count = data.get("count")
+        return count if isinstance(count, int) and count >= 0 else None
+
+    async def get_chat_member_ids(
+        self,
+        chat_type: str,
+        chat_id: str,
+    ) -> list[str] | None:
+        """Get all accessible member IDs for a LINE chat.
+
+        LINE returns at most 100 IDs per response. This follows continuation
+        tokens until all pages are consumed. The endpoint is restricted to
+        verified or premium LINE Official Accounts.
+
+        Args:
+            chat_type: LINE source type, either ``group`` or ``room``.
+            chat_id: LINE group or room ID.
+
+        Returns:
+            Member IDs, or ``None`` when the endpoint is unavailable.
+        """
+        member_ids: list[str] = []
+        start = ""
+        seen_tokens: set[str] = set()
+        while True:
+            data = await self._get_json(
+                f"https://api.line.me/v2/bot/{chat_type}/{chat_id}/members/ids",
+                op_name=f"get {chat_type} member IDs",
+                params={"start": start} if start else None,
+            )
+            if data is None:
+                return None
+
+            page_member_ids = data.get("memberIds")
+            if isinstance(page_member_ids, list):
+                member_ids.extend(
+                    member_id
+                    for item in page_member_ids
+                    if (member_id := str(item).strip())
+                )
+
+            next_token = str(data.get("next", "")).strip()
+            if not next_token or next_token in seen_tokens:
+                return list(dict.fromkeys(member_ids))
+            seen_tokens.add(next_token)
+            start = next_token
+
+    async def get_chat_member_profile(
+        self,
+        chat_type: str,
+        chat_id: str,
+        user_id: str,
+    ) -> dict[str, Any] | None:
+        """Get a member profile within a LINE chat.
+
+        Args:
+            chat_type: LINE source type, either ``group`` or ``room``.
+            chat_id: LINE group or room ID.
+            user_id: LINE member user ID.
+
+        Returns:
+            Member profile, or ``None`` when unavailable.
+        """
+        return await self._get_json(
+            f"https://api.line.me/v2/bot/{chat_type}/{chat_id}/member/{user_id}",
+            op_name=f"get {chat_type} member profile",
+        )
+
     async def get_message_content(
         self,
         message_id: str,

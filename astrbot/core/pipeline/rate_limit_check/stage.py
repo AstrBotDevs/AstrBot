@@ -54,13 +54,13 @@ class RateLimitStage(Stage):
             MessageEventResult: 继续或停止事件处理的结果。
 
         """
-        session_id = event.session_id
+        umo = event.unified_msg_origin
 
-        async with self.locks[session_id]:  # 确保同一会话不会并发修改队列
+        async with self.locks[umo]:  # 确保同一会话不会并发修改队列
             now = datetime.now()
             # 检查并处理限流，可能需要多次检查直到满足条件
             while True:
-                timestamps = self.event_timestamps[session_id]
+                timestamps = self.event_timestamps[umo]
                 self._remove_expired_timestamps(timestamps, now)
 
                 if self.rate_limit_count <= 0:
@@ -74,7 +74,7 @@ class RateLimitStage(Stage):
                 match self.rl_strategy:
                     case RateLimitStrategy.STALL.value:
                         logger.info(
-                            f"Session {session_id} was rate-limited. Processing will "
+                            f"Session {umo} was rate-limited. Processing will "
                             f"pause for {stall_duration:.2f} seconds according to the "
                             "rate-limit policy.",
                         )
@@ -82,7 +82,7 @@ class RateLimitStage(Stage):
                         now = datetime.now()
                     case RateLimitStrategy.DISCARD.value:
                         logger.info(
-                            f"Session {session_id} was rate-limited. This request was "
+                            f"Session {umo} was rate-limited. This request was "
                             "discarded according to the rate-limit policy; the limit "
                             f"resets in {stall_duration:.2f} seconds.",
                         )

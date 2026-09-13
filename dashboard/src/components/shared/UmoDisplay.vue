@@ -2,7 +2,7 @@
   <div class="umo-display" :class="{ 'umo-display--compact': compact }">
     <div class="umo-display__main">
       <div class="umo-display__line">
-        <span class="umo-display__name" :class="{ 'umo-display__name--umo': !hasReadableName }" :title="displayNameTitle">
+        <span class="umo-display__name" :class="{ 'umo-display__name--umo': !hasReadableName }" :title="showRawTitle ? displayNameTitle : displayName">
           {{ displayName }}
         </span>
       </div>
@@ -80,6 +80,10 @@ export default {
       default: true,
     },
     showMeta: {
+      type: Boolean,
+      default: true,
+    },
+    showRawTitle: {
       type: Boolean,
       default: true,
     },

@@ -335,7 +335,15 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                 return f"error: invalid session: {session}"
 
         message_chain = MessageChain(chain=components)
-        await context.context.context.send_message(target_session, message_chain)
+        try:
+            sent = await context.context.context.send_message(
+                target_session,
+                message_chain,
+            )
+        except Exception as exc:
+            return f"error: failed to send message to session {target_session}: {exc}"
+        if not sent:
+            return f"error: failed to find platform for session {target_session}."
         if str(target_session) == current_session:
             context.context.event._has_send_oper = True
             sent_plain_text = message_chain.get_plain_text().strip()

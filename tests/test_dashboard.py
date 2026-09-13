@@ -10,8 +10,10 @@ import zipfile
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 from urllib.parse import parse_qs, urlsplit, urlunsplit
 
+import jwt
 import pyotp
 import pytest
 import pytest_asyncio
@@ -45,6 +47,7 @@ from astrbot.dashboard.server import AstrBotDashboard
 from astrbot.dashboard.services.auth_service import DASHBOARD_JWT_COOKIE_NAME
 from astrbot.dashboard.services.plugin_page_service import PluginPageService
 from astrbot.dashboard.services.plugin_service import PluginService
+from astrbot.dashboard.services.skills_service import SkillsService
 from tests.fixtures.helpers import (
     MockPluginBuilder,
     create_mock_updater_install,
@@ -54,6 +57,70 @@ from tests.fixtures.helpers import (
 _TEST_DASHBOARD_PASSWORD = "AstrbotTest123"
 PLUGIN_PAGE_DEMO_NAME = "astrbot_plugin_page_demo"
 PLUGIN_PAGE_DEMO_PAGE_NAME = "bridge-demo"
+
+
+def test_skills_service_marks_inactive_plugin_skills(monkeypatch):
+    skills = [
+        SimpleNamespace(
+            name="local-skill",
+            source_type="local_only",
+            plugin_name="",
+        ),
+        SimpleNamespace(
+            name="active-plugin-skill",
+            source_type="plugin",
+            plugin_name="astrbot_plugin_active",
+        ),
+        SimpleNamespace(
+            name="inactive-plugin-skill",
+            source_type="plugin",
+            plugin_name="astrbot_plugin_inactive",
+        ),
+    ]
+    skill_manager = SimpleNamespace(
+        list_skills=MagicMock(return_value=skills),
+        get_sandbox_skills_cache_status=lambda: {},
+    )
+    plugins = [
+        StarMetadata(
+            name="active",
+            display_name="Active Plugin",
+            root_dir_name="astrbot_plugin_active",
+            activated=True,
+        ),
+        StarMetadata(
+            name="inactive",
+            display_name="Inactive Plugin",
+            root_dir_name="astrbot_plugin_inactive",
+            activated=False,
+        ),
+    ]
+    core_lifecycle = SimpleNamespace(
+        astrbot_config={"provider_settings": {}},
+        plugin_manager=SimpleNamespace(
+            context=SimpleNamespace(get_all_stars=lambda: plugins)
+        ),
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.services.skills_service.SkillManager",
+        lambda: skill_manager,
+    )
+
+    result = SkillsService(core_lifecycle).get_skills()
+
+    assert result["runtime"] == "none"
+    skill_manager.list_skills.assert_called_once_with(
+        active_only=False, runtime="none", show_sandbox_path=False
+    )
+    assert [skill["name"] for skill in result["skills"]] == [
+        "local-skill",
+        "active-plugin-skill",
+        "inactive-plugin-skill",
+    ]
+    assert result["skills"][1]["plugin_display_name"] == "Active Plugin"
+    assert result["skills"][1]["plugin_active"] is True
+    assert result["skills"][2]["plugin_display_name"] == "Inactive Plugin"
+    assert result["skills"][2]["plugin_active"] is False
 
 
 def _removed_md5_hint_alias_key() -> str:
@@ -276,8 +343,15 @@ def test_dashboard_uses_bundled_dist_when_data_dist_is_stale(
     bundled_dist = tmp_path / "bundled-dist"
     user_dist.mkdir(parents=True)
     bundled_dist.mkdir()
-    (bundled_dist / "index.html").write_text("bundled", encoding="utf-8")
+    (bundled_dist / "index.html").write_text(
+        '<script type="module" src="/assets/app.js"></script>',
+        encoding="utf-8",
+    )
     (bundled_dist / "assets").mkdir()
+    (bundled_dist / "assets" / "app.js").write_text(
+        "export {};",
+        encoding="utf-8",
+    )
     (bundled_dist / "assets" / "version").write_text(
         f"v{VERSION}",
         encoding="utf-8",
@@ -433,6 +507,121 @@ async def test_auth_login(
     assert "HttpOnly" in jwt_cookie_header
     _assert_cookie_samesite_strict(jwt_cookie_header)
     assert "Secure" not in jwt_cookie_header
+
+
+@pytest.mark.asyncio
+async def test_desktop_session_issues_jwt_without_password(
+    app: FastAPIAppAdapter,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    secret = "desktop-session-secret-" * 2
+    monkeypatch.setenv("ASTRBOT_DESKTOP_MANAGED", "1")
+    monkeypatch.setenv("ASTRBOT_DESKTOP_SESSION_SECRET", secret)
+    app._dashboard_server._rate_limiter_registry.clear()
+
+    response = await app.test_client().post(
+        "/api/v1/auth/desktop-session",
+        headers={"X-AstrBot-Desktop-Session": secret},
+        json={},
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 200
+    assert data["status"] == "ok"
+    assert (
+        data["data"]["username"]
+        == core_lifecycle_td.astrbot_config["dashboard"]["username"]
+    )
+    token = data["data"]["token"]
+    payload = jwt.decode(
+        token,
+        core_lifecycle_td.astrbot_config["dashboard"]["jwt_secret"],
+        algorithms=["HS256"],
+    )
+    assert payload["auth_source"] == "desktop"
+
+
+@pytest.mark.asyncio
+async def test_desktop_session_rejects_wrong_secret(
+    app: FastAPIAppAdapter,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("ASTRBOT_DESKTOP_MANAGED", "1")
+    monkeypatch.setenv("ASTRBOT_DESKTOP_SESSION_SECRET", "a" * 64)
+    app._dashboard_server._rate_limiter_registry.clear()
+
+    response = await app.test_client().post(
+        "/api/v1/auth/desktop-session",
+        headers={"X-AstrBot-Desktop-Session": "b" * 64},
+        json={},
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 401
+    assert data["status"] == "error"
+    assert "token" not in (data.get("data") or {})
+
+
+@pytest.mark.asyncio
+async def test_desktop_session_endpoint_is_hidden_when_not_managed(
+    app: FastAPIAppAdapter,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.delenv("ASTRBOT_DESKTOP_MANAGED", raising=False)
+    monkeypatch.delenv("ASTRBOT_DESKTOP_SESSION_SECRET", raising=False)
+    app._dashboard_server._rate_limiter_registry.clear()
+
+    response = await app.test_client().post(
+        "/api/v1/auth/desktop-session",
+        headers={"X-AstrBot-Desktop-Session": "a" * 64},
+        json={},
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 404
+    assert data["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_desktop_session_suppresses_password_setup_and_warnings(
+    app: FastAPIAppAdapter,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    secret = "desktop-session-secret-" * 2
+    monkeypatch.setenv("ASTRBOT_DESKTOP_MANAGED", "1")
+    monkeypatch.setenv("ASTRBOT_DESKTOP_SESSION_SECRET", secret)
+    app._dashboard_server._rate_limiter_registry.clear()
+    await _set_dashboard_password_change_required(core_lifecycle_td, True)
+
+    try:
+        client = app.test_client()
+        setup_response = await client.get("/api/v1/auth/setup-status")
+        setup_data = await setup_response.get_json()
+        assert setup_data["data"] == {
+            "setup_required": False,
+            "skip_default_password_auth": False,
+            "password_upgrade_required": False,
+        }
+
+        session_response = await client.post(
+            "/api/v1/auth/desktop-session",
+            headers={"X-AstrBot-Desktop-Session": secret},
+            json={},
+        )
+        session_data = await session_response.get_json()
+        token = session_data["data"]["token"]
+        version_response = await client.get(
+            "/api/v1/stats/version",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        version_data = await version_response.get_json()
+        assert version_data["data"]["change_pwd_hint"] is False
+        assert version_data["data"]["md5_pwd_hint"] is False
+        assert version_data["data"]["password_upgrade_required"] is False
+    finally:
+        await _set_dashboard_password_change_required(core_lifecycle_td, False)
 
 
 @pytest.mark.asyncio
@@ -3039,6 +3228,183 @@ def test_extract_dashboard_rejects_zip_path_traversal(tmp_path: Path):
     assert not (tmp_path / "evil.txt").exists()
 
 
+def test_extract_dashboard_replaces_dist_only_after_validation(tmp_path: Path):
+    from astrbot.core.dashboard_assets import _extract_package
+
+    archive_path = tmp_path / "dashboard.zip"
+    extract_path = tmp_path / "data"
+    old_dist = extract_path / "dist"
+    (old_dist / "assets").mkdir(parents=True)
+    (old_dist / "index.html").write_text("old", encoding="utf-8")
+    (old_dist / "assets" / "old.js").write_text("old", encoding="utf-8")
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr(
+            "dist/index.html",
+            '<script type="module" src="/assets/new.js"></script>',
+        )
+        archive.writestr("dist/assets/new.js", "export {};")
+        archive.writestr("dist/assets/version", "v9.9.9")
+
+    _extract_package(archive_path, extract_path, expected_version="v9.9.9")
+
+    assert "new.js" in (old_dist / "index.html").read_text(encoding="utf-8")
+    assert (old_dist / "assets" / "new.js").is_file()
+    assert not (old_dist / "assets" / "old.js").exists()
+
+
+@pytest.mark.parametrize(
+    ("index_html", "version", "error"),
+    [
+        (
+            '<script type="module" src="/assets/missing.js"></script>',
+            "v9.9.9",
+            "incomplete",
+        ),
+        (
+            '<script type="module" src="/assets/new.js"></script>',
+            "v9.9.8",
+            "does not match",
+        ),
+    ],
+)
+def test_extract_dashboard_keeps_existing_dist_when_validation_fails(
+    tmp_path: Path,
+    index_html: str,
+    version: str,
+    error: str,
+):
+    from astrbot.core.dashboard_assets import _extract_package
+
+    archive_path = tmp_path / "dashboard.zip"
+    extract_path = tmp_path / "data"
+    old_dist = extract_path / "dist"
+    old_dist.mkdir(parents=True)
+    (old_dist / "index.html").write_text("old", encoding="utf-8")
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr("dist/index.html", index_html)
+        if "new.js" in index_html:
+            archive.writestr("dist/assets/new.js", "export {};")
+        archive.writestr("dist/assets/version", version)
+
+    with pytest.raises(RuntimeError, match=error):
+        _extract_package(archive_path, extract_path, expected_version="v9.9.9")
+
+    assert (old_dist / "index.html").read_text(encoding="utf-8") == "old"
+
+
+def test_extract_dashboard_rolls_back_when_replacement_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    from astrbot.core.dashboard_assets import _extract_package
+
+    archive_path = tmp_path / "dashboard.zip"
+    extract_path = tmp_path / "data"
+    old_dist = extract_path / "dist"
+    old_dist.mkdir(parents=True)
+    (old_dist / "index.html").write_text("old", encoding="utf-8")
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr(
+            "dist/index.html",
+            '<script type="module" src="/assets/new.js"></script>',
+        )
+        archive.writestr("dist/assets/new.js", "export {};")
+        archive.writestr("dist/assets/version", "v9.9.9")
+
+    original_replace = Path.replace
+
+    def fail_staged_replace(path: Path, target: Path):
+        if path.name == "dist" and path.parent.name.startswith(".dashboard-stage-"):
+            raise OSError("simulated replacement failure")
+        return original_replace(path, target)
+
+    monkeypatch.setattr(Path, "replace", fail_staged_replace)
+
+    with pytest.raises(OSError, match="simulated replacement failure"):
+        _extract_package(archive_path, extract_path, expected_version="v9.9.9")
+
+    assert (old_dist / "index.html").read_text(encoding="utf-8") == "old"
+
+
+def test_extract_dashboard_preserves_backup_when_rollback_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    from astrbot.core.dashboard_assets import _extract_package
+
+    archive_path = tmp_path / "dashboard.zip"
+    extract_path = tmp_path / "data"
+    old_dist = extract_path / "dist"
+    old_dist.mkdir(parents=True)
+    (old_dist / "index.html").write_text("old", encoding="utf-8")
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr(
+            "dist/index.html",
+            '<script type="module" src="/assets/new.js"></script>',
+        )
+        archive.writestr("dist/assets/new.js", "export {};")
+        archive.writestr("dist/assets/version", "v9.9.9")
+
+    original_replace = Path.replace
+
+    def fail_replacement_and_rollback(path: Path, target: Path):
+        if path.name == "dist" and path.parent.name.startswith(".dashboard-stage-"):
+            raise OSError("simulated replacement failure")
+        if path.name == "previous-dist":
+            raise OSError("simulated rollback failure")
+        return original_replace(path, target)
+
+    monkeypatch.setattr(Path, "replace", fail_replacement_and_rollback)
+
+    with pytest.raises(RuntimeError, match="must be restored from"):
+        _extract_package(archive_path, extract_path, expected_version="v9.9.9")
+
+    staging_dirs = list(extract_path.glob(".dashboard-stage-*"))
+    assert len(staging_dirs) == 1
+    preserved_backup = staging_dirs[0] / "previous-dist" / "index.html"
+    assert preserved_backup.read_text(encoding="utf-8") == "old"
+
+
+def test_extract_dashboard_preserves_backup_when_target_reappears(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    from astrbot.core.dashboard_assets import _extract_package
+
+    archive_path = tmp_path / "dashboard.zip"
+    extract_path = tmp_path / "data"
+    target_dist = extract_path / "dist"
+    target_dist.mkdir(parents=True)
+    (target_dist / "index.html").write_text("old", encoding="utf-8")
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr(
+            "dist/index.html",
+            '<script type="module" src="/assets/new.js"></script>',
+        )
+        archive.writestr("dist/assets/new.js", "export {};")
+        archive.writestr("dist/assets/version", "v9.9.9")
+
+    original_replace = Path.replace
+
+    def recreate_target_before_failure(path: Path, target: Path):
+        if path.name == "dist" and path.parent.name.startswith(".dashboard-stage-"):
+            target.mkdir(parents=True)
+            (target / "index.html").write_text("concurrent", encoding="utf-8")
+            raise OSError("simulated replacement failure")
+        return original_replace(path, target)
+
+    monkeypatch.setattr(Path, "replace", recreate_target_before_failure)
+
+    with pytest.raises(RuntimeError, match="must be restored from"):
+        _extract_package(archive_path, extract_path, expected_version="v9.9.9")
+
+    staging_dirs = list(extract_path.glob(".dashboard-stage-*"))
+    assert len(staging_dirs) == 1
+    preserved_backup = staging_dirs[0] / "previous-dist" / "index.html"
+    assert preserved_backup.read_text(encoding="utf-8") == "old"
+    assert (target_dist / "index.html").read_text(encoding="utf-8") == "concurrent"
+
+
 @pytest.mark.asyncio
 async def test_do_update_hides_internal_error_message_in_response_and_progress(
     app: FastAPIAppAdapter,
@@ -3517,6 +3883,7 @@ async def test_skill_file_browser_and_editor_security(
     authenticated_header: dict,
     monkeypatch,
     tmp_path,
+    require_symlink,
 ):
     async def _fake_sync_skills_to_active_sandboxes():
         return

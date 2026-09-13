@@ -11,7 +11,10 @@
     "documents": "Documents",
     "chunks": "Chunks",
     "sessionConfig": "Session Config",
-    "initError": "Initialization Failed"
+    "initError": "Initialization Failed",
+    "retry": "Retry",
+    "noDescription": "No description",
+    "switchLegacy": "Switch to legacy knowledge base"
   },
   "card": {
     "edit": "Edit",
@@ -33,7 +36,9 @@
     "rerankProviderInfo": "Provider: {id}",
     "cancel": "Cancel",
     "submit": "Create",
-    "nameRequired": "Please enter knowledge base name"
+    "nameRequired": "Please enter knowledge base name",
+    "nameChangeHint": "If you change the knowledge base name later, update it in the configuration file as well.",
+    "embeddingLockedHint": "The embedding model cannot be changed after selection. Create a new knowledge base to use a different model."
   },
   "edit": {
     "title": "Edit Knowledge Base",

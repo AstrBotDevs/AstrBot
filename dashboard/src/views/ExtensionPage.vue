@@ -6,7 +6,7 @@ import ProxySelector from "@/components/shared/ProxySelector.vue";
 import UninstallConfirmDialog from "@/components/shared/UninstallConfirmDialog.vue";
 import { useExtensionPage } from "./extension/useExtensionPage";
 import { computed, defineAsyncComponent } from "vue";
-import defaultPluginIcon from "@/assets/images/plugin_icon.png";
+import defaultPluginIcon from "/favicon.svg";
 import { usePluginI18n } from "@/utils/pluginI18n";
 
 const props = defineProps({
@@ -103,6 +103,7 @@ const {
   filteredExtensions,
   filteredPlugins,
   filteredMarketPlugins,
+  getMarketPluginKey,
   sortedPlugins,
   RANDOM_PLUGINS_COUNT,
   randomPlugins,
@@ -217,11 +218,18 @@ const selectedMarketPlugin = computed(() => {
     ? pluginMarketData.value
     : [];
   const installedPlugin = selectedInstalledPlugin.value;
+  // Resolve by the unique market plugin key first; the `name` match is a
+  // fallback for legacy deep links, since multiple market entries can share
+  // the same metadata name.
+  const marketKeyMatch =
+    market.find((item) => getMarketPluginKey(item) === selectedPluginId.value) ||
+      null;
   const marketNameMatch =
     market.find((item) => item.name === selectedPluginId.value) || null;
+  const marketMatch = marketKeyMatch || marketNameMatch;
 
   if (selectedDetailTab.value === "market" || !installedPlugin) {
-    return marketNameMatch;
+    return marketMatch;
   }
 
   const repo = normalizeRepoUrl(installedPlugin.repo);
@@ -420,6 +428,7 @@ const updateDialogPluginLogo = computed(() => {
           :metadataKey="curr_namespace"
           :pluginName="curr_namespace"
           :pluginI18n="extension_config.i18n"
+          enable-default-reset
         />
         <p v-else>{{ tm("dialogs.config.noConfig") }}</p>
       </v-card-text>

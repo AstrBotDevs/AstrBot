@@ -1,5 +1,6 @@
 import asyncio
 import ipaddress
+import mimetypes
 import os
 import socket
 import time
@@ -31,6 +32,10 @@ from .api.app import create_dashboard_asgi_app
 from .plugin_page_auth import PluginPageAuth
 from .services.auth_service import DASHBOARD_JWT_COOKIE_NAME
 
+if os.name == "nt":
+    # Windows 的 mimetypes 会把 .svg 映射成非标准的 image/svg,这里强制覆盖为标准类型
+    mimetypes.add_type("image/svg+xml", ".svg", strict=True)
+
 _RATE_LIMITED_ENDPOINTS: frozenset = frozenset(
     {
         "/api/config/astrbot/update",
@@ -38,6 +43,7 @@ _RATE_LIMITED_ENDPOINTS: frozenset = frozenset(
         "/api/v1/auth/totp/setup",
         "/api/auth/login",
         "/api/v1/auth/login",
+        "/api/v1/auth/desktop-session",
     }
 )
 

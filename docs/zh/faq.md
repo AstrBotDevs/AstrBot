@@ -157,7 +157,7 @@ Set dashboard.host in data/cmd_config.json to enable remote access.
 
 解决方法：
 
-结合报错信息，参考插件的 README 手动安装依赖库。你可以在 AstrBot WebUI 的 `平台日志` -> `安装 Pip 库` 中安装依赖库。
+结合报错信息，参考插件的 README 手动安装依赖库。你可以在 AstrBot WebUI 的 `数据` -> `日志` -> `安装 Pip 库` 中安装依赖库。
 
 ![image](https://files.astrbot.app/docs/source/images/faq/image-1.png)
 

@@ -151,7 +151,7 @@ export interface BotListParams {
 }
 
 export interface ProviderListParams {
-  capability?: 'chat' | 'agent' | 'stt' | 'tts' | 'embedding' | 'rerank';
+  capability?: 'chat' | 'stt' | 'tts' | 'embedding' | 'rerank';
   source_id?: string;
   enabled?: boolean;
 }
@@ -159,6 +159,11 @@ export interface ProviderListParams {
 export interface ToolListParams {
   origin?: 'builtin' | 'plugin' | 'mcp';
   enabled?: boolean;
+}
+
+export interface SkillListParams extends Record<string, unknown> {
+  enabled?: boolean;
+  source?: string;
 }
 
 export interface BackupListParams {
@@ -186,6 +191,11 @@ export interface ChatSessionListParams {
   username?: string;
 }
 
+export interface ChatHistoryPageParams {
+  page?: number;
+  page_size?: number;
+}
+
 export interface CronJobListParams {
   type?: string;
 }
@@ -194,7 +204,6 @@ type ProviderCapability = NonNullable<ProviderListParams['capability']>;
 
 const PROVIDER_TYPE_TO_CAPABILITY: Record<string, ProviderCapability> = {
   chat_completion: 'chat',
-  agent_runner: 'agent',
   speech_to_text: 'stt',
   text_to_speech: 'tts',
   embedding: 'embedding',
@@ -818,9 +827,12 @@ export const chatApi = {
       }),
     );
   },
-  getSession(sessionId: string) {
+  getSession(sessionId: string, params?: ChatHistoryPageParams) {
     return typed<any>(
-      openApiV1.getChatSession({ path: { session_id: sessionId } }),
+      openApiV1.getChatSession({
+        path: { session_id: sessionId },
+        query: generatedQuery(params),
+      }),
     );
   },
   updateSession(sessionId: string, payload: ChatSessionPatchRequest) {
@@ -1535,7 +1547,7 @@ export const knowledgeApi = {
 };
 
 export const skillApi = {
-  list(params?: { enabled?: boolean; source?: string }) {
+  list(params?: SkillListParams) {
     return typed<any>(openApiV1.listSkills({ query: params }));
   },
   uploadBatch(files: File[]) {
@@ -1700,6 +1712,11 @@ export const personaApi = {
 };
 
 export const conversationApi = {
+  filterOptions() {
+    return typed<{ bots: Array<{ id: string; type: string }> }>(
+      openApiV1.getConversationFilterOptions(),
+    );
+  },
   list(params?: ListConversationsQuery, requestConfig?: AxiosRequestConfig) {
     return typed<any>(
       openApiV1.listConversations(

@@ -214,7 +214,9 @@ def read_local_text_range_sync(
     lines: list[str] = []
     start = 0 if offset is None else offset
     end = None if limit is None else start + limit
-    with open(path, encoding=encoding, newline="") as file_obj:
+    # Default universal newlines so CRLF files read back with "\n" on every
+    # platform.
+    with open(path, encoding=encoding) as file_obj:
         for index, line in enumerate(file_obj):
             if index < start:
                 continue
