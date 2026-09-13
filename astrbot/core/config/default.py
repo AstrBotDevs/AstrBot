@@ -3033,6 +3033,9 @@ CONFIG_METADATA_2 = {
             "provider_settings": {
                 "type": "object",
                 "items": {
+                    "image_compress_enabled": {
+                        "type": "bool",
+                    },
                     "enable": {
                         "type": "bool",
                     },
@@ -4177,7 +4180,7 @@ CONFIG_METADATA_3 = {
                     "provider_settings.image_compress_enabled": {
                         "description": "启用图片压缩",
                         "type": "bool",
-                        "hint": "启用后，发送给多模态模型前会先压缩本地大图片。",
+                        "hint": "默认开启。发送给多模态模型前按需压缩转换图片：合规的 JPEG/PNG 原样发送，动图生成拼图预览。",
                     },
                     "provider_settings.image_compress_options.max_size": {
                         "description": "最大边长",
@@ -4279,9 +4282,9 @@ CONFIG_METADATA_3 = {
                         "items": {"type": "string"},
                     },
                     "platform_settings.unique_session": {
-                        "description": "隔离会话",
+                        "description": "隔离对话",
                         "type": "bool",
-                        "hint": "启用后，群成员的上下文独立。",
+                        "hint": "启用后，支持隔离的渠道会为每位群成员使用独立上下文。指令权限请在「管理行为 → 指令」中设置。",
                     },
                     "wake_prefix": {
                         "description": "唤醒词",

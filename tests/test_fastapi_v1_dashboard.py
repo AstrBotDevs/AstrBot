@@ -3,7 +3,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import httpx
 import jwt
@@ -105,6 +105,11 @@ class FakeDb:
 
     async def get_conversation_platform_ids(self) -> list[str]:
         return ["webchat-main"]
+
+    async def get_platform_sessions_by_ids(
+        self, _session_ids: list[str]
+    ) -> list[object]:
+        return []
 
     def add_api_key(self, raw_key: str, scopes: list[str]) -> None:
         self.api_keys[ApiKeyService.hash_key(raw_key)] = FakeApiKey(
@@ -3372,6 +3377,28 @@ async def test_v1_command_patch_updates_service(
         "handler_full_name": "plugin.handler",
         "enabled": False,
     }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "permission", ["member", "admin", "group_admin", "shared_group_admin"]
+)
+async def test_v1_command_permission_patch_updates_service(
+    asgi_app: FastAPI,
+    asgi_client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+    permission: str,
+):
+    update = AsyncMock(return_value={"permission": permission})
+    monkeypatch.setattr(asgi_app.state.services.commands, "update_permission", update)
+    response = await asgi_client.patch(
+        "/api/v1/commands/plugin.handler",
+        json={"permission_group": permission},
+        headers=_jwt_headers(),
+    )
+    assert response.status_code == 200
+    assert response.json()["data"]["permission"] == permission
+    update.assert_awaited_once_with("plugin.handler", permission)
 
 
 @pytest.mark.asyncio
