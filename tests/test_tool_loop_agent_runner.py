@@ -840,13 +840,13 @@ async def test_empty_messages_after_on_agent_begin_skip_provider(
     assert runner.done()
     assert not runner.was_aborted()
     assert runner.run_context.messages == []
-    assert responses[-1].type == "err"
+    assert [r for r in responses if "chain" in r.data][-1].type == "err"
     final_response = runner.get_final_llm_resp()
     assert final_response is not None
     assert final_response.role == "err"
     assert final_response.completion_text == "No messages remain for the LLM request."
     assert (
-        responses[-1].data["chain"].get_plain_text()
+        [r for r in responses if "chain" in r.data][-1].data["chain"].get_plain_text()
         == "LLM 响应错误: No messages remain for the LLM request."
     )
 
@@ -871,7 +871,7 @@ async def test_empty_request_after_on_llm_request_skip_provider(
     assert runner.done()
     assert not runner.was_aborted()
     assert runner.run_context.messages == []
-    assert responses[-1].type == "err"
+    assert [r for r in responses if "chain" in r.data][-1].type == "err"
     final_response = runner.get_final_llm_resp()
     assert final_response is not None
     assert final_response.role == "err"
@@ -1371,6 +1371,23 @@ async def test_empty_output_retries_exhausted_then_uses_fallback_provider(
     assert fallback_provider.call_count == 1
 
 
+async def display_responses(source):
+    """Consume protocol events while exposing display responses to UI tests.
+
+    Args:
+        source: Runner response stream.
+
+    Yields:
+        Responses carrying display message chains.
+    """
+    from contextlib import aclosing
+
+    async with aclosing(source):
+        async for response in source:
+            if "chain" in response.data:
+                yield response
+
+
 @pytest.mark.asyncio
 async def test_stop_signal_returns_aborted_and_discards_partial_message(
     runner, provider_request, mock_tool_executor, mock_hooks
@@ -1386,7 +1403,7 @@ async def test_stop_signal_returns_aborted_and_discards_partial_message(
         streaming=True,
     )
 
-    step_iter = runner.step()
+    step_iter = display_responses(runner.step())
     first_resp = await step_iter.__anext__()
     assert first_resp.type == "streaming_delta"
 
@@ -1439,7 +1456,7 @@ async def test_stop_cancels_provider_before_first_response(
         streaming=streaming,
     )
 
-    step_iter = runner.step()
+    step_iter = display_responses(runner.step())
     pending_response = asyncio.create_task(anext(step_iter))
     await asyncio.wait_for(provider.started.wait(), timeout=1)
 
@@ -1495,7 +1512,7 @@ async def test_stop_interrupts_pending_subagent_handoff(mock_hooks):
         streaming=False,
     )
 
-    step_iter = runner.step()
+    step_iter = display_responses(runner.step())
     first_resp = await step_iter.__anext__()
     if first_resp.type == "agent_stats":
         first_resp = await step_iter.__anext__()
@@ -1554,7 +1571,7 @@ async def test_stop_interrupts_pending_regular_tool(mock_hooks):
         streaming=False,
     )
 
-    step_iter = runner.step()
+    step_iter = display_responses(runner.step())
     first_resp = await step_iter.__anext__()
     if first_resp.type == "agent_stats":
         first_resp = await step_iter.__anext__()
@@ -1803,8 +1820,8 @@ async def test_skills_like_requery_reply_reaches_stream_bridge_once(
 
     async def recorded_step():
         async for response in original_step():
-            chain = response.data["chain"]
-            if chain.get_plain_text() in (final_text, reasoning):
+            chain = response.data.get("chain")
+            if chain and chain.get_plain_text() in (final_text, reasoning):
                 final_events.append((response.type, chain.type))
                 hooks_at_emission.append(mock_hooks.agent_done_called)
             yield response
@@ -2274,3 +2291,187 @@ async def test_follow_up_after_stop_not_merged_into_tool_result(
 if __name__ == "__main__":
     # 运行测试
     pytest.main([__file__, "-v"])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+async def test_event_journal_records_requests_tools_and_final_context(
+    tmp_path, runner, provider_request, mock_tool_executor, mock_hooks, streaming
+):
+    from astrbot.core.agent.conversation_events import ConversationEventWriter
+    from astrbot.core.agent.message import dump_messages_with_checkpoints
+    from astrbot.core.db.sqlite import SQLiteDatabase
+
+    db = SQLiteDatabase(str(tmp_path / "runner_events.db"))
+    await db.initialize()
+    try:
+        conv = await db.create_conversation("umo", "p")
+        writer = ConversationEventWriter(db.conversation_store, await db.conversation_store.read(conv.conversation_id))
+        provider = VaryingUsageProvider()
+        await runner.reset(
+            provider=provider, request=provider_request,
+            run_context=ContextWrapper(context=None),
+            tool_executor=mock_tool_executor, agent_hooks=mock_hooks,
+            streaming=streaming,
+        )
+        writer.runtime_context = runner.run_context
+        async for response in runner.step_until_done(3):
+            await writer.consume(response)
+        await writer.save_history(dump_messages_with_checkpoints(runner.run_context.messages))
+        await writer.finish_turn("completed")
+        events = await db.conversation_store.events(conv.conversation_id)
+        types = [e.type for e in events]
+        assert types.count("request.started") == types.count("request.finished") == 2
+        assert types.count("tool.started") == types.count("tool.finished") == 1
+        assert types[-1] == "turn.finished"
+        usage = [e.payload["usage"] for e in events if e.type == "request.finished"]
+        assert sum(item["input_tokens"] for item in usage) == 330
+        assert sum(item["cached_input_tokens"] for item in usage) == 30
+        finished_tool = next(e for e in events if e.type == "tool.finished")
+        assert finished_tool.payload["status"] == "completed"
+        assert finished_tool.payload["result"]["content"][0]["type"] == "text"
+        history = (await db.conversation_store.read(conv.conversation_id)).messages
+        assert [m["role"] for m in history] == ["user", "assistant", "tool", "assistant"]
+        assert history[-1]["content"] == [{"type": "text", "text": "final"}]
+    finally:
+        await db.engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_journal_failure_does_not_retry_a_model_or_fallback(
+    runner, provider_request, mock_tool_executor, mock_hooks
+):
+    from astrbot.core.agent.conversation_events import ConversationPersistenceError
+
+    primary, fallback = MockProvider(), MockProvider()
+    await runner.reset(
+        provider=primary, fallback_providers=[fallback], request=provider_request,
+        run_context=ContextWrapper(context=None), tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks, streaming=False,
+    )
+    from contextlib import aclosing
+
+    async with aclosing(runner.step()) as responses:
+        with pytest.raises(ConversationPersistenceError):
+            async for response in responses:
+                if response.type == "request.started":
+                    raise ConversationPersistenceError("unavailable")
+    assert primary.call_count == fallback.call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_tool_started_is_acknowledged_before_creating_executor(
+    runner, provider_request, mock_hooks
+):
+    from contextlib import aclosing
+    from unittest.mock import Mock
+
+    provider = VaryingUsageProvider()
+    executor = SimpleNamespace(execute=Mock(side_effect=AssertionError("must not run")))
+    await runner.reset(
+        provider=provider, request=provider_request,
+        run_context=ContextWrapper(context=None), tool_executor=executor,
+        agent_hooks=mock_hooks, streaming=False,
+    )
+    seen = []
+    async with aclosing(runner.step_until_done(3)) as responses:
+        async for response in responses:
+            seen.append(response.type)
+            if response.type == "request.started":
+                assert provider.call_count == 0
+            if response.type == "tool.started":
+                assert response.event_id
+                assert response.data["turn_id"] == runner.turn_id
+                executor.execute.assert_not_called()
+                break
+    executor.execute.assert_not_called()
+    assert seen.index("request.finished") < seen.index("tool.started")
+    assert not runner._events.active
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+async def test_cancelled_consumer_joins_provider_work(
+    runner, provider_request, mock_tool_executor, mock_hooks, streaming
+):
+    provider = MockBlockingProvider()
+    await runner.reset(
+        provider=provider, request=provider_request,
+        run_context=ContextWrapper(context=None), tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks, streaming=streaming,
+    )
+    source = runner.step_until_done(3)
+    async for response in source:
+        if response.type == "request.started":
+            break
+    pending = asyncio.create_task(anext(source))
+    await asyncio.wait_for(provider.started.wait(), 1)
+    pending.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(pending, 1)
+    await source.aclose()
+    assert provider.cancelled.is_set()
+    assert not runner._events.active
+
+
+@pytest.mark.asyncio
+async def test_summary_requests_share_the_runner_event_stream(
+    runner, mock_tool_executor, mock_hooks
+):
+    primary = MockProvider()
+    primary.provider_config["max_context_tokens"] = 100
+    summary = MockProvider()
+    request = ProviderRequest(
+        prompt="Continue", contexts=[
+            {"role": "user", "content": "Long history " * 300},
+            {"role": "assistant", "content": "Previous response " * 300},
+        ],
+    )
+    await runner.reset(
+        provider=primary, request=request, run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor, agent_hooks=mock_hooks, streaming=False,
+        llm_compress_provider=summary,
+    )
+    events = [response async for response in runner.step_until_done(1)]
+    starts = [response for response in events if response.type == "request.started"]
+    finishes = [response for response in events if response.type == "request.finished"]
+    assert summary.call_count == primary.call_count == 1
+    assert len(starts) == len(finishes) == 2
+    assert starts[0].data["purpose"] == "compaction"
+    assert [e.data["request_id"] for e in finishes] == [e.event_id for e in starts]
+    assert all(e.data["turn_id"] == runner.turn_id for e in starts)
+
+
+@pytest.mark.asyncio
+async def test_cancelled_consumer_joins_pending_tool(
+    runner, provider_request, mock_hooks
+):
+    started, cancelled = asyncio.Event(), asyncio.Event()
+
+    class BlockingExecutor:
+        async def execute(self, **kwargs):
+            started.set()
+            try:
+                await asyncio.Future()
+            finally:
+                cancelled.set()
+            if False:
+                yield None
+
+    await runner.reset(
+        provider=VaryingUsageProvider(), request=provider_request,
+        run_context=ContextWrapper(context=None), tool_executor=BlockingExecutor(),
+        agent_hooks=mock_hooks, streaming=False,
+    )
+    source = runner.step_until_done(3)
+    async for response in source:
+        if response.type == "tool.started":
+            break
+    pending = asyncio.create_task(anext(source))
+    await asyncio.wait_for(started.wait(), 1)
+    pending.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(pending, 1)
+    await source.aclose()
+    assert cancelled.is_set()
+    assert not runner._events.active

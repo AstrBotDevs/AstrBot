@@ -607,37 +607,22 @@ function isEditingMessage(message: ChatRecord) {
   );
 }
 
-function canEditMessage(message: ChatRecord, messageIndex: number) {
+function canEditMessage(message: ChatRecord, _messageIndex: number) {
   return (
     props.enableEdit &&
     isUserMessage(message) &&
-    messageIndex === latestEditableUserIndex() &&
+    Boolean(message.turn_id) &&
     message.id != null &&
     !String(message.id).startsWith("local-")
   );
-}
-
-function latestEditableUserIndex() {
-  for (let index = props.messages.length - 1; index >= 0; index -= 1) {
-    const message = props.messages[index];
-    if (
-      isUserMessage(message) &&
-      message.id != null &&
-      !String(message.id).startsWith("local-")
-    ) {
-      return index;
-    }
-  }
-  return -1;
 }
 
 function canRegenerateMessage(message: ChatRecord, messageIndex: number) {
   return (
     props.enableRegenerate &&
     !isUserMessage(message) &&
-    messageIndex === props.messages.length - 1 &&
     !isMessageStreaming(message, messageIndex) &&
-    Boolean(message.llm_checkpoint_id)
+    Boolean(message.turn_id)
   );
 }
 

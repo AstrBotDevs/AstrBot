@@ -7201,7 +7201,7 @@
             "type": "boolean",
             "description": "Internal WebUI flag for edit/regenerate flows."
           },
-          "_llm_checkpoint_id": {
+          "_turn_id": {
             "type": "string",
             "description": "Internal WebUI checkpoint override."
           },

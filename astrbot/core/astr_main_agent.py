@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from astrbot.core import logger
+from astrbot.core.agent.conversation_events import ConversationEventWriter
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.message import TextPart
@@ -30,7 +31,7 @@ from astrbot.core.astr_main_agent_resources import (
     TOOL_CALL_PROMPT_SKILLS_LIKE_MODE,
 )
 from astrbot.core.computer.booters.local import resolve_windows_shell
-from astrbot.core.conversation_mgr import Conversation
+from astrbot.core.conversation_mgr import Conversation, ConversationManager
 from astrbot.core.db import BaseDatabase
 from astrbot.core.message.components import File, Image, Record, Reply, Video
 from astrbot.core.persona_error_reply import (
@@ -225,6 +226,7 @@ class MainAgentBuildResult:
     provider_request: ProviderRequest
     provider: Provider
     reset_coro: Coroutine | None = None
+    conversation_events: ConversationEventWriter | None = None
 
 
 def _set_llm_error_message(event: AstrMessageEvent, message: str) -> None:
@@ -1716,7 +1718,20 @@ async def build_main_agent(
 
     _apply_web_search_citation_prompt(event, req)
 
+    event_writer = None
+    if req.conversation and isinstance(
+        plugin_context.conversation_manager, ConversationManager
+    ):
+        event_writer = await plugin_context.conversation_manager.event_writer(
+            event.unified_msg_origin,
+            req.conversation.cid,
+            expected_revision=req.conversation.revision,
+        )
+        event_writer.request = req
+        event.conversation_events = event_writer
+
     reset_coro = agent_runner.reset(
+        turn_id=event.get_extra("turn_id"),
         provider=provider,
         request=req,
         run_context=AgentContextWrapper(
@@ -1756,4 +1771,5 @@ async def build_main_agent(
         provider_request=req,
         provider=provider,
         reset_coro=reset_coro if not apply_reset else None,
+        conversation_events=event_writer,
     )

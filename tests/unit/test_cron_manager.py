@@ -579,13 +579,19 @@ class TestRunActiveAgentJob:
         conv = MagicMock()
         conv.history = json.dumps(history)
 
+        from astrbot.core.agent.response import AgentResponse
+
+        started = AgentResponse("turn.started", {}, "turn")
+        writer = MagicMock(consume=AsyncMock(), finish_turn=AsyncMock())
+
         class FakeRunner:
+            run_context = MagicMock()
+
             state = AgentState.DONE
 
             def step_until_done(self, max_step):
                 async def gen():
-                    if False:
-                        yield None
+                    yield started
 
                 return gen()
 
@@ -597,7 +603,7 @@ class TestRunActiveAgentJob:
         async def fake_build_main_agent(*, event, plugin_context, config, req):
             captured["config"] = config
             captured["req"] = req
-            return MagicMock(agent_runner=FakeRunner())
+            return MagicMock(agent_runner=FakeRunner(), conversation_events=writer)
 
         async def fake_persist_agent_history(*args, **kwargs):
             return None
@@ -630,6 +636,9 @@ class TestRunActiveAgentJob:
         assert "old question" not in request.system_prompt
         assert "old answer" not in request.system_prompt
         assert request.contexts == history
+        writer.consume.assert_awaited_once_with(started)
+        writer.finish_turn.assert_awaited_once_with("failed")
+        assert writer.runtime_context is FakeRunner.run_context
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
@@ -685,7 +694,7 @@ class TestRunActiveAgentJob:
         runner = _StepCapturingRunner()
 
         async def fake_build_main_agent(*, event, plugin_context, config, req):
-            return MagicMock(agent_runner=runner)
+            return MagicMock(agent_runner=runner, conversation_events=None)
 
         with (
             patch(
@@ -739,7 +748,7 @@ class TestRunActiveAgentJob:
                 resp.completion_text = "malformed_function_call"
                 return resp
 
-        fake_result = SimpleNamespace(agent_runner=FakeRunner())
+        fake_result = SimpleNamespace(agent_runner=FakeRunner(), conversation_events=None)
         with (
             patch(
                 "astrbot.core.astr_main_agent.build_main_agent",

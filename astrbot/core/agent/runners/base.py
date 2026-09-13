@@ -20,6 +20,8 @@ class AgentState(Enum):
 
 
 class BaseAgentRunner(T.Generic[TContext]):
+    conversation_event_capabilities: frozenset[str] = frozenset({"turn", "messages"})
+
     @abc.abstractmethod
     async def reset(
         self,

@@ -390,13 +390,24 @@ async def test_background_wakeup_passes_history_and_provider_settings_to_main_ag
         {"role": "assistant", "content": "old answer"},
     ]
     captured: dict = {}
+    writer = SimpleNamespace(consume=AsyncMock(), finish_turn=AsyncMock())
+    from astrbot.core.agent.response import AgentResponse
+
+    started = AgentResponse("turn.started", {}, "turn")
+
+    class EventRunner(_DoneRunner):
+        run_context = SimpleNamespace(messages=[])
+
+        async def step_until_done(self, _max_step):
+            yield started
+
 
     async def _fake_get_session_conv(**_kwargs):
         return SimpleNamespace(history=json.dumps(history))
 
     async def _fake_build_main_agent(**kwargs):
         captured.update(kwargs)
-        return SimpleNamespace(agent_runner=_DoneRunner())
+        return SimpleNamespace(agent_runner=EventRunner(), conversation_events=writer)
 
     monkeypatch.setattr(
         "astrbot.core.astr_main_agent._get_session_conv",
@@ -448,6 +459,11 @@ async def test_background_wakeup_passes_history_and_provider_settings_to_main_ag
     assert "old answer" not in request.system_prompt
     assert request.contexts == history
 
+    writer.consume.assert_awaited_once_with(started)
+    writer.finish_turn.assert_awaited_once_with("completed")
+    assert writer.runtime_context is EventRunner.run_context
+    assert captured["event"].conversation_events is None
+
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
@@ -483,7 +499,7 @@ async def test_background_wakeup_applies_max_agent_step(
         return SimpleNamespace(history="[]")
 
     async def _fake_build_main_agent(**_kwargs):
-        return SimpleNamespace(agent_runner=runner)
+        return SimpleNamespace(agent_runner=runner, conversation_events=None)
 
     monkeypatch.setattr(
         "astrbot.core.astr_main_agent._get_session_conv",

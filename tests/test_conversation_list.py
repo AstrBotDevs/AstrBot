@@ -4,11 +4,30 @@ from pathlib import Path
 
 import pytest
 from sqlalchemy import event, text
-from sqlalchemy import inspect as sqlalchemy_inspect
 
 from astrbot.core.conversation_mgr import ConversationManager
-from astrbot.core.db.po import ConversationV2, PlatformSession
+from astrbot.core.db.po import ConversationV2, ConversationV3, PlatformSession
 from astrbot.core.db.sqlite import SQLiteDatabase
+
+
+async def seed_conversations(db, rows):
+    """Seed current storage through its public API, plus display session fixtures.
+
+    Args:
+        db: Test database.
+        rows: Legacy-shaped conversation or platform session fixtures.
+    """
+    for row in rows:
+        if isinstance(row, ConversationV2):
+            await db.create_conversation(
+                user_id=row.user_id, platform_id=row.platform_id,
+                content=row.content, title=row.title, persona_id=row.persona_id,
+                cid=row.conversation_id, created_at=row.created_at, updated_at=row.updated_at,
+            )
+        else:
+            async with db.get_db() as session:
+                session.add(row)
+                await session.commit()
 
 
 @pytest.mark.asyncio
@@ -61,9 +80,7 @@ async def test_filtered_conversations_summary_skips_content_and_applies_filters(
             updated_at=datetime(2023, 1, 1, tzinfo=timezone.utc),
         ),
     ]
-    async with db.get_db() as session:
-        async with session.begin():
-            session.add_all(conversations)
+    await seed_conversations(db, conversations)
 
     summary, total = await db.get_filtered_conversations(
         page=1,
@@ -80,7 +97,7 @@ async def test_filtered_conversations_summary_skips_content_and_applies_filters(
         "group",
         "other",
     ]
-    assert all("content" in sqlalchemy_inspect(item).unloaded for item in summary)
+    assert all(item.content is None for item in summary)
 
     manager_summary, manager_total = await ConversationManager(
         db,
@@ -120,7 +137,7 @@ async def test_filtered_conversations_summary_skips_content_and_applies_filters(
 
     full, full_total = await db.get_filtered_conversations(page_size=10)
     assert full_total == 5
-    assert all("content" not in sqlalchemy_inspect(item).unloaded for item in full)
+    assert all(item.content is not None for item in full)
 
     umo_matches, _ = await db.get_filtered_conversations(
         umo_query="FriendMessage:2",
@@ -177,17 +194,13 @@ async def test_filtered_conversations_can_paginate_complete_session_groups(
             updated_at=timestamp,
         )
 
-    async with db.get_db() as session:
-        async with session.begin():
-            session.add_all(
-                [
+    await seed_conversations(db, [
                     conversation("a-old", "qq:FriendMessage:a", 1),
                     conversation("a-new", "qq:FriendMessage:a", 2),
                     conversation("b-old", "qq:FriendMessage:b", 3),
                     conversation("b-new", "qq:FriendMessage:b", 4),
                     conversation("c-only", "qq:FriendMessage:c", 5),
-                ]
-            )
+                ])
 
     first_page, total_sessions = await db.get_filtered_conversations(
         page=1,
@@ -213,7 +226,7 @@ async def test_filtered_conversations_can_paginate_complete_session_groups(
         "b-old",
     ]
     assert [item.conversation_id for item in second_page] == ["a-new", "a-old"]
-    assert all("content" in sqlalchemy_inspect(item).unloaded for item in first_page)
+    assert all(item.content is None for item in first_page)
 
 
 @pytest.mark.asyncio
@@ -226,26 +239,26 @@ async def test_conversation_indexes_are_idempotent_and_support_ordered_list(
 
     async with db.get_db() as session:
         index_rows = (
-            await session.execute(text("PRAGMA index_list(conversations)"))
+            await session.execute(text("PRAGMA index_list(conversations_v3)"))
         ).all()
         index_names = {row[1] for row in index_rows}
         plan = (
             await session.execute(
                 text(
                     "EXPLAIN QUERY PLAN "
-                    "SELECT conversation_id FROM conversations "
-                    "ORDER BY created_at DESC, inner_conversation_id DESC LIMIT 20"
+                    "SELECT conversation_id FROM conversations_v3 "
+                    "ORDER BY created_at DESC, id DESC LIMIT 20"
                 )
             )
         ).all()
 
     expected_indexes = {
-        "ix_conversations_created_at_inner_id",
-        "ix_conversations_platform_created_at_inner_id",
+        "ix_conversations_v3_created_id",
+        "ix_conversations_v3_platform_created_id",
     }
     assert expected_indexes.issubset(index_names)
     assert expected_indexes.issubset(
-        {index.name for index in ConversationV2.__table__.indexes}
+        {index.name for index in ConversationV3.__table__.indexes}
     )
     assert "ix_conversations_platform_user_id" not in index_names
     assert not any("TEMP B-TREE" in str(row) for row in plan)
@@ -258,10 +271,7 @@ async def test_multi_platform_summary_uses_global_order_index(
     db = SQLiteDatabase(str(tmp_path / "multi-platform.db"))
     await db.initialize()
 
-    async with db.get_db() as session:
-        async with session.begin():
-            session.add_all(
-                [
+    await seed_conversations(db, [
                     ConversationV2(
                         conversation_id=f"conversation-{index}",
                         platform_id="qq" if index % 2 else "telegram",
@@ -270,8 +280,7 @@ async def test_multi_platform_summary_uses_global_order_index(
                         created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
                     )
                     for index in range(20)
-                ],
-            )
+                ])
 
     statements = []
 
@@ -301,12 +310,12 @@ async def test_multi_platform_summary_uses_global_order_index(
         "conversation-16",
         "conversation-15",
     ]
-    assert all("content" in sqlalchemy_inspect(item).unloaded for item in conversations)
+    assert all(item.content is None for item in conversations)
 
-    ordered_queries = [statement for statement in statements if "ORDER BY" in statement]
+    ordered_queries = [statement for statement in statements if "ORDER BY" in statement and "FROM conversations_v3" in statement]
     assert len(ordered_queries) == 1
     assert (
-        "FROM conversations INDEXED BY ix_conversations_created_at_inner_id"
+        "FROM conversations_v3 INDEXED BY ix_conversations_v3_created_id"
         in ordered_queries[0]
     )
     assert "content" not in ordered_queries[0].split("FROM", 1)[0]
@@ -319,10 +328,7 @@ async def test_webchat_session_title_matches_search_and_keyword(tmp_path: Path):
     await db.initialize()
 
     matched_session_id = "session-with-title"
-    async with db.get_db() as session:
-        async with session.begin():
-            session.add_all(
-                [
+    await seed_conversations(db, [
                     ConversationV2(
                         conversation_id="webchat-titled",
                         platform_id="webchat",
@@ -354,8 +360,7 @@ async def test_webchat_session_title_matches_search_and_keyword(tmp_path: Path):
                         creator="astrbot",
                         display_name="成都旅行三日游计划",
                     ),
-                ]
-            )
+                ])
 
     conversations, total = await db.get_filtered_conversations(
         page=1,

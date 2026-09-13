@@ -342,16 +342,30 @@ def bind_checkpoint_messages(history: list[dict]) -> list[Message]:
     return messages
 
 
-def dump_messages_with_checkpoints(messages: list[Message]) -> list[dict]:
-    """Dump runtime messages and reinsert bound checkpoint segments."""
+def dump_messages_with_checkpoints(
+    messages: list[Message], *, include_temporary: bool = False
+) -> list[dict]:
+    """Dump runtime messages and reinsert bound checkpoint segments.
+
+    Args:
+        messages: Runtime working messages.
+        include_temporary: Preserve exclusion markers for the event journal.
+
+    Returns:
+        Serialized messages with optional temporary-content markers.
+    """
     dumped: list[dict] = []
     for message in messages:
         message_data = message.model_dump()
+        if include_temporary and message._no_save:
+            message_data["_no_save"] = True
         if isinstance(message.content, list):
             message_data["content"] = [
-                part.model_dump()
+                part.model_dump_for_context()
+                if include_temporary
+                else part.model_dump()
                 for part in message.content
-                if not getattr(part, "_no_save", False)
+                if include_temporary or not getattr(part, "_no_save", False)
             ]
         dumped.append(message_data)
         if message._checkpoint_after is not None:

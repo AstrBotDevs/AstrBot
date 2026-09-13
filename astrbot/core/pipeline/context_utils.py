@@ -3,6 +3,10 @@ import traceback
 import typing as T
 
 from astrbot import logger
+from astrbot.core.agent.conversation_events import (
+    active_conversation_writer,
+    active_plugin_id,
+)
 from astrbot.core.message.message_event_result import CommandResult, MessageEventResult
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.star import star_map
@@ -98,7 +102,15 @@ async def call_event_hook(
             logger.debug(
                 f"hook({hook_type.name}) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}",
             )
-            await handler.handler(event, *args, **kwargs)
+            writer_token = active_conversation_writer.set(event.conversation_events)
+            plugin_token = active_plugin_id.set(
+                star_map[handler.handler_module_path].name
+            )
+            try:
+                await handler.handler(event, *args, **kwargs)
+            finally:
+                active_plugin_id.reset(plugin_token)
+                active_conversation_writer.reset(writer_token)
         except BaseException:
             logger.error(traceback.format_exc())
 

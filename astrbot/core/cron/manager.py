@@ -2,6 +2,7 @@ import asyncio
 import json
 import re
 from collections.abc import Awaitable, Callable
+from contextlib import aclosing
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 from zoneinfo import ZoneInfo
@@ -508,40 +509,57 @@ class CronJobManager:
             raise RuntimeError("Failed to build main agent for cron job.")
 
         runner = result.agent_runner
-        async for _ in runner.step_until_done(agent_max_step):
-            # agent will send message to user via using tools
-            pass
-        llm_resp = runner.get_final_llm_resp()
-        if runner.state == AgentState.ERROR:
-            # The run failed (e.g. malformed function call at max steps) but
-            # no exception escapes the runner; without this the job was
-            # recorded as completed with last_error=NULL and the user saw
-            # only intermediate messages (#9980).
-            detail = (
-                f": {llm_resp.completion_text}"
-                if llm_resp and llm_resp.completion_text
-                else ""
+        event_writer = result.conversation_events
+        if event_writer is not None:
+            event_writer.runtime_context = runner.run_context
+        status = "failed"
+        try:
+            async with aclosing(runner.step_until_done(agent_max_step)) as responses:
+                async for response in responses:
+                    if event_writer is not None:
+                        await event_writer.consume(response)
+            llm_resp = runner.get_final_llm_resp()
+            if runner.state == AgentState.ERROR:
+                # The run failed (e.g. malformed function call at max steps) but
+                # no exception escapes the runner; without this the job was
+                # recorded as completed with last_error=NULL and the user saw
+                # only intermediate messages (#9980).
+                detail = (
+                    f": {llm_resp.completion_text}"
+                    if llm_resp and llm_resp.completion_text
+                    else ""
+                )
+                raise RuntimeError(f"Cron agent run ended in ERROR state{detail}")
+            cron_meta = extras.get("cron_job", {}) if extras else {}
+            summary_note = (
+                f"[CronJob] {cron_meta.get('name') or cron_meta.get('id', 'unknown')}: {cron_meta.get('description', '')} "
+                f" triggered at {cron_meta.get('run_started_at', 'unknown time')}, "
             )
-            raise RuntimeError(f"Cron agent run ended in ERROR state{detail}")
-        cron_meta = extras.get("cron_job", {}) if extras else {}
-        summary_note = (
-            f"[CronJob] {cron_meta.get('name') or cron_meta.get('id', 'unknown')}: {cron_meta.get('description', '')} "
-            f" triggered at {cron_meta.get('run_started_at', 'unknown time')}, "
-        )
-        if llm_resp and llm_resp.role == "assistant":
-            summary_note += (
-                f"I finished this job, here is the result: {llm_resp.completion_text}"
-            )
+            if llm_resp and llm_resp.role == "assistant":
+                summary_note += f"I finished this job, here is the result: {llm_resp.completion_text}"
 
-        await persist_agent_history(
-            self.ctx.conversation_manager,
-            event=cron_event,
-            req=req,
-            summary_note=summary_note,
-        )
-        if not llm_resp:
-            logger.warning("Cron job agent got no response")
-            return
+            await persist_agent_history(
+                self.ctx.conversation_manager,
+                event=cron_event,
+                req=req,
+                summary_note=summary_note,
+                conversation_events=event_writer,
+            )
+            status = (
+                "completed" if llm_resp and llm_resp.role == "assistant" else "failed"
+            )
+            if not llm_resp:
+                logger.warning("Cron job agent got no response")
+                return
+        except asyncio.CancelledError:
+            status = "cancelled"
+            raise
+        finally:
+            try:
+                if event_writer is not None:
+                    await event_writer.finish_turn(status)
+            finally:
+                cron_event.conversation_events = None
 
 
 __all__ = ["CronJobManager"]

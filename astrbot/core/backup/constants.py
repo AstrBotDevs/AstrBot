@@ -10,7 +10,8 @@ from astrbot.core.db.po import (
     ChatUIProject,
     CommandConfig,
     CommandConflict,
-    ConversationV2,
+    ConversationEvent,
+    ConversationV3,
     Persona,
     PersonaFolder,
     PlatformMessageHistory,
@@ -42,7 +43,8 @@ from astrbot.core.utils.astrbot_path import (
 # 主数据库模型类映射
 MAIN_DB_MODELS: dict[str, type[SQLModel]] = {
     "platform_stats": PlatformStat,
-    "conversations": ConversationV2,
+    "conversations_v3": ConversationV3,
+    "conversation_events": ConversationEvent,
     "personas": Persona,
     "persona_folders": PersonaFolder,
     "preferences": Preference,

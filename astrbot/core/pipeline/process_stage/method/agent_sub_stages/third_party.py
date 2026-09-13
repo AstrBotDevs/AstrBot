@@ -14,6 +14,7 @@ from astrbot.core.agent.runners.deerflow.deerflow_agent_runner import (
 )
 from astrbot.core.agent.runners.dify.dify_agent_runner import DifyAgentRunner
 from astrbot.core.astr_agent_hooks import MAIN_AGENT_HOOKS
+from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.message.components import Image, Record
 from astrbot.core.message.message_event_result import (
     MessageChain,
@@ -303,6 +304,18 @@ class ThirdPartyAgentSubStage(Stage):
         custom_error_message = await self._resolve_persona_custom_error_message(event)
         set_persona_custom_error_message_on_event(event, custom_error_message)
 
+        event_writer = None
+        manager = self.ctx.plugin_manager.context.conversation_manager
+        if isinstance(manager, ConversationManager):
+            cid = await manager.get_curr_conversation_id(event.unified_msg_origin)
+            if not cid:
+                cid = await manager.new_conversation(
+                    event.unified_msg_origin, event.get_platform_id()
+                )
+            event_writer = await manager.event_writer(event.unified_msg_origin, cid)
+            event_writer.request = req
+            event.conversation_events = event_writer
+
         # call event hook
         if await call_event_hook(event, EventType.OnLLMRequestEvent, req):
             return
@@ -344,7 +357,26 @@ class ThirdPartyAgentSubStage(Stage):
             if runner_closed:
                 return
             runner_closed = True
-            await _close_runner_if_supported(runner)
+            try:
+                if event_writer and event_writer.turn_id:
+                    final = runner.get_final_llm_resp()
+                    status = (
+                        "completed" if final and final.role == "assistant" else "failed"
+                    )
+                    if event.is_stopped() or not runner.done():
+                        status = "cancelled"
+                    if status == "completed":
+                        history = [entry["message"] for entry in event_writer._entries]
+                        history.append(await req.assemble_context())
+                        if final.completion_text:
+                            history.append(
+                                {"role": "assistant", "content": final.completion_text}
+                            )
+                        await event_writer.save_history(history)
+                    await event_writer.finish_turn(status)
+            finally:
+                event.conversation_events = None
+                await _close_runner_if_supported(runner)
 
         def mark_stream_consumed() -> None:
             nonlocal stream_consumed
@@ -353,6 +385,17 @@ class ThirdPartyAgentSubStage(Stage):
                 stream_watchdog_task.cancel()
 
         try:
+            if event_writer:
+                turn_id = event.get_extra("turn_id")
+                await event_writer.start_turn(
+                    {
+                        "kind": "im_wake",
+                        "umo": event.unified_msg_origin,
+                        "runner": self.runner_type,
+                        "context_mode": "transcript_only",
+                    },
+                    event_id=turn_id if isinstance(turn_id, str) else None,
+                )
             await runner.reset(
                 request=req,
                 run_context=AgentContextWrapper(
