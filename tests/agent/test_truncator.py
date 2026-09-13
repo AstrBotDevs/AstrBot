@@ -376,6 +376,29 @@ class TestContextTruncator:
         if len(result) > 0:
             assert all(msg.role == "system" for msg in result)
 
+    def test_split_system_rest_with_only_system_messages(self):
+        """All-system input must land entirely in the system half, not the rest."""
+        truncator = ContextTruncator()
+        messages = [
+            self.create_message("system", "System 1"),
+            self.create_message("system", "System 2"),
+        ]
+
+        system_messages, non_system_messages = truncator._split_system_rest(messages)
+
+        assert len(system_messages) == 2
+        assert non_system_messages == []
+
+    def test_halving_keeps_all_system_messages(self):
+        """Halving must never drop system messages, even with no turns present."""
+        truncator = ContextTruncator()
+        messages = [self.create_message("system", f"System {i}") for i in range(4)]
+
+        result = truncator.truncate_by_halving(messages)
+
+        assert len(result) == 4
+        assert all(msg.role == "system" for msg in result)
+
     # ==================== #6196: 长 tool chain 只有一条 user 消息 ====================
 
     def _build_tool_chain(self, tool_rounds: int = 20) -> list[Message]:
