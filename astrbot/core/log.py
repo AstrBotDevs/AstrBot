@@ -229,7 +229,7 @@ class LogManager:
             colorize=True,
             filter=lambda record: not record["extra"].get("is_trace", False),
             format=(
-                "<green>[{time:HH:mm:ss.SSS}]</green> {extra[plugin_tag]} "
+                "<green>[{time:YYYY-MM-DD HH:mm:ss.SSS}]</green> {extra[plugin_tag]} "
                 "<level>[{extra[short_levelname]}]</level>{extra[astrbot_version_tag]} "
                 "[{extra[source_file]}:{extra[source_line]}]: <level>{message}</level>"
             ),
