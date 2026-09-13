@@ -1,16 +1,18 @@
 import base64
 import inspect
 import json
+import math
 import mimetypes
 import uuid
 from collections.abc import AsyncGenerator
-from contextlib import aclosing, asynccontextmanager
+from contextlib import AsyncExitStack, aclosing, asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote, urlsplit
 
+import aiohttp
 import httpx
 
 from astrbot import logger
@@ -35,8 +37,33 @@ from .request_retry import (
     retry_provider_request,
 )
 
+IMAGE_WEBSOCKET_MAX_MESSAGE_BYTES = 64 * 1024 * 1024
+IMAGE_WEBSOCKET_MAX_TRANSCRIPT_BYTES = 128 * 1024 * 1024
+IMAGE_WEBSOCKET_MAX_EVENTS = 16384
 OAUTH_PLACEHOLDER_KEY = "__openai_oauth__"
 CODEX_CLIENT_VERSION = "0.153.4"
+
+
+class OpenAIOAuthImageStreamError(RuntimeError):
+    """Expose a sanitized image transport failure to plugin callers.
+
+    Args:
+        reason_code: Stable failure category without request content.
+        status_code: Optional HTTP status observed before or after submission.
+        retryable: Whether no image submission occurred and retry is safe.
+    """
+
+    def __init__(
+        self,
+        reason_code: str,
+        *,
+        status_code: int | None = None,
+        retryable: bool = False,
+    ) -> None:
+        super().__init__(f"Codex image WebSocket request ended: {reason_code}.")
+        self.reason_code = reason_code
+        self.status_code = status_code
+        self.retryable = retryable
 
 
 @dataclass
@@ -60,6 +87,7 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
         "reasoning": True,
         "image_generate": True,
         "image_edit": True,
+        "image_websocket": True,
     }
     model_capabilities = {
         "gpt-6-astra": {
@@ -552,6 +580,179 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
                 status_code=status_code,
             )
         return self._parse_backend_response(text)
+
+    async def _request_image_backend_websocket(
+        self,
+        payload: dict[str, Any],
+        *,
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
+        """Execute one image request without an HTTP streaming lifetime limit.
+
+        Args:
+            payload: Existing Responses image request, including tool choice.
+            timeout: Total deadline covering refresh, handshake, send, and receive.
+
+        Returns:
+            The response merged by the existing OAuth stream parser.
+
+        Raises:
+            ValueError: The timeout or backend URL is invalid.
+            OpenAIOAuthImageStreamError: The request fails or its outcome is unknown.
+            asyncio.CancelledError: The caller cancels the request.
+        """
+        deadline_seconds = float(self.timeout if timeout is None else timeout)
+        if (
+            isinstance(timeout, bool)
+            or not math.isfinite(deadline_seconds)
+            or deadline_seconds <= 0
+        ):
+            raise ValueError("Image timeout must be a finite positive number")
+        base = urlsplit(self.base_url)
+        if (
+            base.scheme not in {"https", "http"}
+            or not base.netloc
+            or base.query
+            or base.fragment
+        ):
+            raise ValueError("Image WebSocket backend URL is invalid")
+        scheme = "wss" if base.scheme == "https" else "ws"
+        url = f"{scheme}://{base.netloc}{base.path.rstrip('/')}/responses"
+        submitted = False
+
+        async def reject_redirect(_session, _context, params):
+            raise OpenAIOAuthImageStreamError(
+                "request_rejected",
+                status_code=params.response.status,
+            )
+
+        try:
+            async with asyncio.timeout(deadline_seconds):
+                if getattr(self, "_oauth_media_closed", False):
+                    raise OpenAIOAuthImageStreamError("provider_closed")
+                await self._ensure_fresh_oauth_token()
+                if not hasattr(self, "_oauth_stream_clients"):
+                    self._oauth_stream_clients = set()
+                for auth_attempt in range(2):
+                    if getattr(self, "_oauth_media_closed", False):
+                        raise OpenAIOAuthImageStreamError("provider_closed")
+                    headers, attempted_version = (
+                        self._build_backend_headers_with_version()
+                    )
+                    trace = aiohttp.TraceConfig()
+                    trace.on_request_redirect.append(reject_redirect)
+                    resources = AsyncExitStack()
+                    self._oauth_stream_clients.add(resources)
+                    try:
+                        async with resources:
+                            session = await resources.enter_async_context(
+                                aiohttp.ClientSession(
+                                    timeout=aiohttp.ClientTimeout(total=None),
+                                    trace_configs=[trace],
+                                )
+                            )
+                            if getattr(self, "_oauth_media_closed", False):
+                                raise OpenAIOAuthImageStreamError("provider_closed")
+                            websocket = await resources.enter_async_context(
+                                session.ws_connect(
+                                    url,
+                                    headers=headers,
+                                    proxy=self.provider_config.get("proxy") or None,
+                                    heartbeat=20,
+                                    max_msg_size=IMAGE_WEBSOCKET_MAX_MESSAGE_BYTES,
+                                )
+                            )
+                            if getattr(self, "_oauth_media_closed", False):
+                                raise OpenAIOAuthImageStreamError("provider_closed")
+                            request = {
+                                k: v
+                                for k, v in payload.items()
+                                if k not in {"stream", "background"}
+                            }
+                            # Once sending starts, a lost connection cannot prove no job exists.
+                            submitted = True
+                            await websocket.send_json(
+                                {"type": "response.create", **request}
+                            )
+                            lines: list[str] = []
+                            received_bytes = 0
+                            async for message in websocket:
+                                if message.type != aiohttp.WSMsgType.TEXT:
+                                    raise OpenAIOAuthImageStreamError("outcome_unknown")
+                                received_bytes += len(message.data.encode("utf-8"))
+                                if (
+                                    received_bytes
+                                    > IMAGE_WEBSOCKET_MAX_TRANSCRIPT_BYTES
+                                    or len(lines) >= IMAGE_WEBSOCKET_MAX_EVENTS
+                                ):
+                                    raise OpenAIOAuthImageStreamError("outcome_unknown")
+                                event = json.loads(message.data)
+                                if not isinstance(event, dict):
+                                    raise OpenAIOAuthImageStreamError("outcome_unknown")
+                                lines.append("data: " + message.data)
+                                event_type = event.get("type")
+                                if event_type in {
+                                    "error",
+                                    "response.error",
+                                    "response.failed",
+                                    "response.incomplete",
+                                }:
+                                    status = self._extract_stream_error_status_code(
+                                        event
+                                    )
+                                    reason = (
+                                        "upstream_unavailable"
+                                        if status and status >= 500
+                                        else "request_rejected"
+                                    )
+                                    if status == 429:
+                                        reason = "rate_limited"
+                                    # An explicit terminal failure still must not resubmit this job.
+                                    raise OpenAIOAuthImageStreamError(
+                                        reason, status_code=status
+                                    )
+                                if event_type == "response.completed":
+                                    return self._parse_backend_response(
+                                        "\n".join(lines)
+                                    )
+                            raise OpenAIOAuthImageStreamError("outcome_unknown")
+                    except aiohttp.WSServerHandshakeError as error:
+                        if error.status == 401 and auth_attempt == 0:
+                            if await self._refresh_after_auth_failure(
+                                attempted_version
+                            ):
+                                continue
+                        reason = (
+                            "rate_limited"
+                            if error.status == 429
+                            else "request_rejected"
+                        )
+                        raise OpenAIOAuthImageStreamError(
+                            reason,
+                            status_code=error.status,
+                            retryable=error.status == 429 or error.status >= 500,
+                        ) from None
+                    finally:
+                        self._oauth_stream_clients.discard(resources)
+        except asyncio.CancelledError:
+            raise
+        except OpenAIOAuthImageStreamError:
+            raise
+        except TimeoutError:
+            raise OpenAIOAuthImageStreamError(
+                "outcome_unknown" if submitted else "timeout",
+                retryable=not submitted,
+            ) from None
+        except (aiohttp.ClientError, OSError):
+            raise OpenAIOAuthImageStreamError(
+                "outcome_unknown" if submitted else "connection_failed",
+                retryable=not submitted,
+            ) from None
+        except Exception:
+            raise OpenAIOAuthImageStreamError(
+                "outcome_unknown" if submitted else "provider_failed",
+            ) from None
+        raise OpenAIOAuthImageStreamError("request_rejected")
 
     def _format_backend_error(self, status_code: int, text: str) -> str:
         stripped = text.strip()
@@ -1535,8 +1736,10 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
         n: int = 1,
         reference_images: list[str] | None = None,
         action: str | None = None,
+        transport: str = "http",
+        timeout: float | None = None,
     ) -> list[OpenAIOAuthImageResult]:
-        """Generate images and persist aggregate OAuth token usage.
+        """Generate images through HTTP or a bounded WebSocket session.
 
         Args:
             prompt: Image generation or editing instruction.
@@ -1545,6 +1748,8 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
             n: Number of backend image generations.
             reference_images: Local files, URLs, or data URLs used as references.
             action: Image tool action override.
+            transport: Image transport, either legacy HTTP or WebSocket.
+            timeout: Optional per-image deadline; WebSocket defaults to provider timeout.
 
         Returns:
             Extracted image results from all backend generations.
@@ -1552,8 +1757,18 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
         Raises:
             Exception: Re-raises validation, backend, or extraction failures.
         """
+        if transport not in {"http", "websocket"}:
+            raise ValueError("Image transport must be http or websocket")
+        if timeout is not None:
+            if isinstance(timeout, bool):
+                raise ValueError("Image timeout must be a finite positive number")
+            timeout = float(timeout)
+            if not math.isfinite(timeout) or timeout <= 0:
+                raise ValueError("Image timeout must be a finite positive number")
         references = [
-            str(image).strip() for image in reference_images or [] if str(image).strip()
+            str(image).strip()
+            for image in reference_images or []
+            if str(image).strip()
         ]
         instructions = str(prompt or "").strip()
         if not instructions:
@@ -1580,7 +1795,16 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
                 "stream": True,
                 "store": False,
             }
-            response = await self._request_image_backend(payload)
+            if transport == "websocket":
+                response = await self._request_image_backend_websocket(
+                    payload, timeout=timeout
+                )
+            elif timeout is not None:
+                response = await asyncio.wait_for(
+                    self._request_image_backend(payload), timeout=timeout
+                )
+            else:
+                response = await self._request_image_backend(payload)
             results.extend(await self._extract_generated_images(response))
         return results
 
