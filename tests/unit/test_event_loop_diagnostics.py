@@ -54,7 +54,7 @@ async def test_event_loop_watchdog_stops_worker_thread():
 
 @pytest.mark.asyncio
 async def test_event_loop_watchdog_writes_rotating_log(tmp_path):
-    """The watchdog should write to and rotate its log file."""
+    """The watchdog should dump stalled-loop stacks and rotate oversized log files."""
     # The watchdog must dump the event loop thread's stack while the loop is
     # stalled inside this test. Loaded CI runners can otherwise catch the loop
     # in pytest machinery before the blocking sleep starts or after it ends,
