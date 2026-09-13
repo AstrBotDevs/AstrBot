@@ -21,11 +21,6 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
 
-    # The Windows lane stays best-effort for now: the suite still has
-    # pre-existing Windows-specific failures there. Promote to blocking
-    # once those tests are fixed.
-    continue-on-error: ${{ matrix.os == 'windows-latest' }}
-
     defaults:
       run:
         # Windows runners default to pwsh; use bash so the same steps and
