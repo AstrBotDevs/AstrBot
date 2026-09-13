@@ -246,6 +246,17 @@ class InternalAgentSubStage(Stage):
                     max_size = normalize_model_image_max_size(
                         options.get("max_size") if isinstance(options, dict) else None
                     )
+                    sandbox_cfg = settings.get("sandbox")
+                    if (
+                        settings.get("computer_use_runtime") == "sandbox"
+                        and isinstance(sandbox_cfg, dict)
+                        and sandbox_cfg.get("booter") == "cua"
+                    ):
+                        # CUA pixel tools read coordinates 1:1, so input images keep
+                        # their geometry: only the long-edge resize is lifted, while
+                        # format normalization, quality and oversized-PNG flattening
+                        # still apply.
+                        max_size = 1_000_000
                     quality = (
                         options.get("quality") if isinstance(options, dict) else None
                     )

@@ -236,6 +236,41 @@ async def test_profile_toggle_and_preprocess_to_first_model(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("runtime", "booter", "fmt"),
+    [
+        ("sandbox", "cua", "PNG"),
+        ("sandbox", "cua", "WEBP"),
+        ("sandbox", "shipyard_neo", "PNG"),
+        ("local", "cua", "PNG"),
+    ],
+)
+async def test_cua_runtime_keeps_input_image_geometry(
+    harness, tmp_path, runtime, booter, fmt
+):
+    """CUA pixel tools read coordinates 1:1, so only the resize is lifted."""
+    path = tmp_path / f"big.{fmt.lower()}"
+    PILImage.new("RGB", (200, 100), "red").save(path, fmt)
+    original = path.read_bytes()
+    harness.config["provider_settings"]["computer_use_runtime"] = runtime
+    harness.config["provider_settings"]["sandbox"] = {"booter": booter}
+    event = make_event([Image(file=str(path))], text="")
+    await process_event(harness, event, preprocess_first=True)
+    assert len(harness.captured) == 1
+    req = harness.captured[0].req
+    gated = runtime == "sandbox" and booter == "cua"
+    with PILImage.open(req.image_urls[0]) as image:
+        assert image.size == ((200, 100) if gated else (90, 45))
+        if gated:
+            # A compliant source is reused byte-exact; other formats are still
+            # re-encoded (to JPEG) without any resize.
+            expected = fmt if fmt in {"JPEG", "PNG"} else "JPEG"
+            assert image.format == expected
+    if gated and fmt == "PNG":
+        assert Path(req.image_urls[0]).read_bytes() == original
+
+
+@pytest.mark.asyncio
 async def test_profile_reload_and_concurrent_requests(harness, tmp_path):
     source = source_image(tmp_path)
     before = copy.deepcopy(harness.provider.provider_config)

@@ -4149,7 +4149,7 @@ CONFIG_METADATA_3 = {
                     "provider_settings.image_compress_options.max_size": {
                         "description": "最大边长",
                         "type": "int",
-                        "hint": "压缩后图片的最长边，单位为像素。超过该尺寸时会按比例缩放。",
+                        "hint": "压缩后图片的最长边，单位为像素。超过该尺寸时会按比例缩放。电脑使用（CUA 沙箱）场景下输入图片不缩放，以保持像素坐标一致。",
                         "condition": {
                             "provider_settings.image_compress_enabled": True,
                         },
