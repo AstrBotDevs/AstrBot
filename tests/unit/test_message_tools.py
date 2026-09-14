@@ -472,3 +472,74 @@ async def test_send_message_downloads_trailing_slash_sandbox_file_with_basename(
     sent_chain = ctx.context.context.send_message.await_args.args[1]
     sent_file = sent_chain.chain[0]
     assert sent_file.name == "export"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("session", [None, "test:GroupMessage:other-group"])
+async def test_send_message_quotes_explicit_message_in_target_session(session):
+    """Keep the requested quote before text and mentions in the target session."""
+    from astrbot.core.message.components import At, Plain, Reply
+    from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import (
+        AiocqhttpMessageEvent,
+    )
+
+    ctx = _make_context(current_session="test:GroupMessage:current-group")
+    result = await SendMessageToUserTool().call(
+        ctx,
+        session=session,
+        reply_to_message_id=" -123456789 ",
+        messages=[
+            {"type": "plain", "text": "About that earlier message"},
+            {"type": "mention_user", "mention_user_id": "42"},
+        ],
+    )
+
+    target, chain = ctx.context.context.send_message.await_args.args
+    assert str(target) == (session or ctx.context.event.unified_msg_origin)
+    assert result.startswith("Message sent")
+    assert [type(comp) for comp in chain.chain] == [Reply, Plain, At]
+    assert chain.chain[0].id == "-123456789"
+    segments = await AiocqhttpMessageEvent._parse_onebot_json(chain)
+    assert segments[0] == {"type": "reply", "data": {"id": "-123456789"}}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("reply_id", ["", "  ", 123, True, [], {}])
+async def test_send_message_rejects_invalid_reply_id_before_sending(reply_id):
+    """Invalid quote arguments must not send a partial message."""
+    ctx = _make_context()
+    result = await SendMessageToUserTool().call(
+        ctx,
+        reply_to_message_id=reply_id,
+        messages=[{"type": "plain", "text": "hello"}],
+    )
+    assert result == "error: reply_to_message_id must be a non-empty string."
+    ctx.context.context.send_message.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_send_message_without_reply_id_keeps_plain_chain():
+    """Omitting the quote argument preserves ordinary message sending."""
+    from astrbot.core.message.components import Plain
+
+    ctx = _make_context()
+    await SendMessageToUserTool().call(
+        ctx, messages=[{"type": "plain", "text": "hello"}]
+    )
+    chain = ctx.context.context.send_message.await_args.args[1]
+    assert len(chain.chain) == 1
+    assert isinstance(chain.chain[0], Plain)
+
+
+@pytest.mark.asyncio
+async def test_send_message_reply_does_not_bypass_cross_session_permission():
+    """Quoting a message keeps the existing cross-session permission check."""
+    ctx = _make_context(role="member")
+    result = await SendMessageToUserTool().call(
+        ctx,
+        session="test:GroupMessage:other-group",
+        reply_to_message_id="123",
+        messages=[{"type": "plain", "text": "hello"}],
+    )
+    assert "error" in result.lower()
+    ctx.context.context.send_message.assert_not_awaited()

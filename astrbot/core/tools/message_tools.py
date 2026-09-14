@@ -83,6 +83,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
         "Send message to the user. "
         "Supports various message types including `plain`, `image`, `record`, `video`, `file`, and `mention_user`. "
         "Use this tool to send media files (`image`, `record`, `video`, `file`), "
+        "to reply to a specific earlier message using `reply_to_message_id`, "
         "or when you need to proactively message the user(such as cron job). For other normal text replies, you can output directly and no need to use this tool."
     )
     parameters: dict = Field(
@@ -121,6 +122,15 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                         },
                         "required": ["type"],
                     },
+                },
+                "reply_to_message_id": {
+                    "type": "string",
+                    "description": (
+                        "Optional platform message ID to quote in the target session, "
+                        "on platforms that support replies. Use only a real message ID "
+                        "from that session, never invent one or use a history database row ID. "
+                        "Omit to send without an explicit quote."
+                    ),
                 },
                 "session": {
                     "type": "string",
@@ -221,7 +231,18 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
         if not isinstance(messages, list) or not messages:
             return "error: messages parameter is empty or invalid."
 
+        reply_to_message_id = kwargs.get("reply_to_message_id")
+        if reply_to_message_id is not None:
+            if (
+                not isinstance(reply_to_message_id, str)
+                or not reply_to_message_id.strip()
+            ):
+                return "error: reply_to_message_id must be a non-empty string."
+            reply_to_message_id = reply_to_message_id.strip()
+
         components: list[Comp.BaseMessageComponent] = []
+        if reply_to_message_id is not None:
+            components.append(Comp.Reply(id=reply_to_message_id))
         for idx, msg in enumerate(messages):
             if not isinstance(msg, dict):
                 return f"error: messages[{idx}] should be an object."
