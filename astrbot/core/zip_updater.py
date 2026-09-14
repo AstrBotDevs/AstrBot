@@ -1,3 +1,4 @@
+import asyncio
 import inspect
 import os
 import re
@@ -117,7 +118,8 @@ class _RepoZipUpdater:
             repo_url: Repository URL, optionally with an explicit tree branch.
 
         Returns:
-            Resolved provider adapter and repository branch.
+            Repository with an explicit or resolved branch, or None as its branch
+            when the default reference must be used.
 
         Raises:
             ValueError: If the repository URL is unsupported or invalid.
@@ -127,19 +129,18 @@ class _RepoZipUpdater:
             return repository
 
         default_branch = await self._fetch_repository_default_branch(repository)
-        branch = default_branch or "main"
         if not default_branch:
             logger.info(
-                "Could not get the default %s branch for %s/%s; trying %s.",
+                "Could not resolve the default %s branch for %s/%s; "
+                "using the repository default reference HEAD.",
                 "github",
                 repository.owner,
                 repository.name,
-                branch,
             )
         return GitHubRepository(
             repository.owner,
             repository.name,
-            branch,
+            default_branch,
         )
 
     async def _download_file(
@@ -201,7 +202,7 @@ class _RepoZipUpdater:
                             "speed": 0,
                         },
                     )
-        except Exception as e:
+        except (Exception, asyncio.CancelledError) as e:
             logger.error(f"Failed to download file: {url} -> {target_path}: {e}")
             if self._rm_on_error and target_path.exists():
                 target_path.unlink()
@@ -291,11 +292,12 @@ class _RepoZipUpdater:
 
         logger.info(f"Downloading update for {repository.name} ...")
         logger.info(
-            "Downloading %s/%s from %s branch %s",
+            "Downloading %s/%s from github %s",
             repository.owner,
             repository.name,
-            "github",
-            repository.branch,
+            f"branch {repository.branch}"
+            if repository.branch
+            else "default reference HEAD",
         )
         release_url = repository.archive_url
 
