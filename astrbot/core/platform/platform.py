@@ -126,6 +126,13 @@ class Platform(abc.ABC):
     async def terminate(self) -> None:
         """终止一个平台的运行实例。"""
 
+    async def refresh_registered_commands(self) -> None:
+        """Refresh platform-native commands after runtime command metadata changes.
+
+        Adapters that expose native application/slash commands can override this hook.
+        Other adapters intentionally default to a no-op.
+        """
+
     @abc.abstractmethod
     def meta(self) -> PlatformMetadata:
         """得到一个平台的元数据。"""
