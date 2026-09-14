@@ -3,14 +3,19 @@ import os
 import subprocess
 
 import edge_tts
+from edge_tts.constants import WSS_HEADERS
 
 from astrbot.core import logger
+from astrbot.core.provider.headers import DEFAULT_USER_AGENT
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.datetime_utils import generate_timestamp_id
 
 from ..entities import ProviderType
 from ..provider import TTSProvider
 from ..register import register_provider_adapter
+
+# Edge TTS exposes synthesis headers as a shared SDK default, not a client option.
+WSS_HEADERS["User-Agent"] = DEFAULT_USER_AGENT
 
 """
 edge_tts 方式，能够免费、快速生成语音，使用需要先安装edge-tts库
