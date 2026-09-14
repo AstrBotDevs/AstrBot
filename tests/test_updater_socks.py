@@ -1173,14 +1173,13 @@ async def test_fetch_release_info_uses_httpx_client_with_env_proxy_support(
 
 
 @pytest.mark.asyncio
-async def test_download_from_repo_url_uses_httpx_stream_for_zip_download(
+async def test_download_from_repo_url_uses_head_without_metadata_lookup(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     fake_async_client_state: _FakeAsyncClientState,
 ) -> None:
     import astrbot.core.zip_updater as zip_updater_module
 
-    fake_async_client_state.json_payload = {"default_branch": "trunk"}
     fake_async_client_state.stream_payload = b"zip-data"
     monkeypatch.setattr(
         zip_updater_module,
@@ -1206,11 +1205,9 @@ async def test_download_from_repo_url_uses_httpx_stream_for_zip_download(
     )
 
     assert (tmp_path / "AstrBot.zip").read_bytes() == b"zip-data"
-    assert fake_async_client_state.requested_urls == [
-        "https://api.github.com/repos/AstrBotDevs/AstrBot"
-    ]
+    assert fake_async_client_state.requested_urls == []
     assert fake_async_client_state.stream_urls == [
-        "https://github.com/AstrBotDevs/AstrBot/archive/refs/heads/trunk.zip"
+        "https://github.com/AstrBotDevs/AstrBot/archive/HEAD.zip"
     ]
     assert fake_async_client_state.init_kwargs is not None
     assert fake_async_client_state.init_kwargs["follow_redirects"] is True
@@ -1227,20 +1224,10 @@ async def test_download_from_repo_url_uses_explicit_branch_without_default_branc
     updater = _RepoZipUpdater()
     calls: list[str] = []
 
-    async def fail_fetch_repository_default_branch(
-        repository,
-    ):  # noqa: ARG001
-        raise AssertionError("explicit branch should not fetch the default branch")
-
     async def fake_download_file(url: str, path: str):
         calls.append(url)
         Path(path).write_bytes(b"zip-data")
 
-    monkeypatch.setattr(
-        updater,
-        "_fetch_repository_default_branch",
-        fail_fetch_repository_default_branch,
-    )
     monkeypatch.setattr(updater, "_download_file", fake_download_file)
 
     await updater._download_repository(
@@ -1340,16 +1327,6 @@ async def test_plugin_updater_inspects_github_repository_source(
 ) -> None:
     updater = _PluginUpdater()
     requested_urls: list[str] = []
-    source = SimpleNamespace(
-        raw_file_url=lambda filename: (
-            "https://raw.githubusercontent.com/AstrBotDevs/"
-            f"astrbot-plugin-demo/trunk/{filename}"
-        ),
-    )
-
-    async def fake_resolve_repository_source(repo_url: str):
-        assert repo_url == "https://github.com/AstrBotDevs/astrbot-plugin-demo"
-        return source
 
     def handle_request(request: httpx.Request) -> httpx.Response:
         requested_urls.append(str(request.url))
@@ -1369,11 +1346,6 @@ async def test_plugin_updater_inspects_github_repository_source(
 
     monkeypatch.setattr(
         updater,
-        "_resolve_repository_source",
-        fake_resolve_repository_source,
-    )
-    monkeypatch.setattr(
-        updater,
         "_create_httpx_client",
         lambda timeout=30.0: httpx.AsyncClient(
             transport=httpx.MockTransport(handle_request),
@@ -1388,10 +1360,12 @@ async def test_plugin_updater_inspects_github_repository_source(
 
     assert result["name"] == "astrbot_plugin_demo"
     assert result["desc"] == "Demo plugin"
-    assert requested_urls[-1] == (
+    assert requested_urls == [
         "https://proxy.example/https://raw.githubusercontent.com/AstrBotDevs/"
-        "astrbot-plugin-demo/trunk/metadata.yml"
-    )
+        "astrbot-plugin-demo/HEAD/metadata.yaml",
+        "https://proxy.example/https://raw.githubusercontent.com/AstrBotDevs/"
+        "astrbot-plugin-demo/HEAD/metadata.yml",
+    ]
 
 
 @pytest.mark.asyncio
@@ -1399,12 +1373,6 @@ async def test_plugin_updater_rejects_large_repository_metadata(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     updater = _PluginUpdater()
-    source = SimpleNamespace(
-        raw_file_url=lambda filename: f"https://example.com/{filename}",
-    )
-
-    async def fake_resolve_repository_source(repo_url: str):  # noqa: ARG001
-        return source
 
     def handle_request(request: httpx.Request) -> httpx.Response:  # noqa: ARG001
         return httpx.Response(
@@ -1412,11 +1380,6 @@ async def test_plugin_updater_rejects_large_repository_metadata(
             headers={"Content-Length": str(1024 * 1024 + 1)},
         )
 
-    monkeypatch.setattr(
-        updater,
-        "_resolve_repository_source",
-        fake_resolve_repository_source,
-    )
     monkeypatch.setattr(
         updater,
         "_create_httpx_client",

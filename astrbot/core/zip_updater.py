@@ -76,72 +76,6 @@ class _RepoZipUpdater:
             return body
         return body[:max_len] + "...[truncated]"
 
-    async def _fetch_repository_default_branch(
-        self,
-        repository: GitHubRepository,
-    ) -> str | None:
-        """Fetch the default branch for a repository.
-
-        Args:
-            repository: Parsed GitHub repository.
-
-        Returns:
-            The default branch name, or None if it cannot be resolved.
-        """
-        url = repository.default_branch_api_url
-        try:
-            async with self._create_httpx_client(timeout=10.0) as client:
-                response = await client.get(url)
-                response.raise_for_status()
-                repo_info = response.json()
-        except Exception as exc:
-            logger.debug(
-                "Failed to get the default %s branch for %s/%s: %s",
-                "github",
-                repository.owner,
-                repository.name,
-                exc,
-            )
-            return None
-
-        default_branch = str(repo_info.get("default_branch") or "").strip()
-        return default_branch or None
-
-    async def _resolve_repository_source(
-        self,
-        repo_url: str,
-    ) -> GitHubRepository:
-        """Resolve a repository URL to a downloadable source archive.
-
-        Args:
-            repo_url: Repository URL, optionally with an explicit tree branch.
-
-        Returns:
-            Resolved provider adapter and repository branch.
-
-        Raises:
-            ValueError: If the repository URL is unsupported or invalid.
-        """
-        repository = GitHubRepository.parse(repo_url)
-        if repository.branch:
-            return repository
-
-        default_branch = await self._fetch_repository_default_branch(repository)
-        branch = default_branch or "main"
-        if not default_branch:
-            logger.info(
-                "Could not get the default %s branch for %s/%s; trying %s.",
-                "github",
-                repository.owner,
-                repository.name,
-                branch,
-            )
-        return GitHubRepository(
-            repository.owner,
-            repository.name,
-            branch,
-        )
-
     async def _download_file(
         self,
         url: str,
@@ -287,15 +221,16 @@ class _RepoZipUpdater:
     async def _download_repository(
         self, target_path: str, repo_url: str, proxy=""
     ) -> None:
-        repository = await self._resolve_repository_source(repo_url)
+        repository = GitHubRepository.parse(repo_url)
 
         logger.info(f"Downloading update for {repository.name} ...")
         logger.info(
-            "Downloading %s/%s from %s branch %s",
+            "Downloading %s/%s from github %s",
             repository.owner,
             repository.name,
-            "github",
-            repository.branch,
+            f"branch {repository.branch}"
+            if repository.branch
+            else "default reference HEAD",
         )
         release_url = repository.archive_url
 
