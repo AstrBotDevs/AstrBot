@@ -40,6 +40,7 @@ _LEGACY_AGENT_RUNNER_SETTING_KEYS = (
     "tool_call_timeout",
     "sanitize_context_by_modalities",
     "context_limit_reached_strategy",
+    "enable_manual_context_compression",
     "llm_compress_instruction",
     "llm_compress_keep_recent_ratio",
     "llm_compress_provider_id",
@@ -169,9 +170,18 @@ def _migrate_agent_runner_config(
         "runner_type": "local",
         "config": get_agent_runner_config_default("local"),
     }
+    comparable_agent_runner = copy.deepcopy(existing_agent_runner)
+    if isinstance(comparable_agent_runner, dict):
+        comparable_runner_config = comparable_agent_runner.get("config")
+        if isinstance(comparable_runner_config, dict):
+            comparable_compression = comparable_runner_config.get("compression")
+            if isinstance(comparable_compression, dict):
+                comparable_compression.setdefault(
+                    "enable_manual_context_compression", False
+                )
     default_root_inserted_before_migration = (
         legacy_version
-        and existing_agent_runner == default_local_agent_runner
+        and comparable_agent_runner == default_local_agent_runner
         and any(key in provider_settings for key in _LEGACY_AGENT_RUNNER_SETTING_KEYS)
     )
 
@@ -221,6 +231,9 @@ def _migrate_agent_runner_config(
                 "trim_turns": provider_settings.get("dequeue_context_length", 1),
                 "overflow_strategy": provider_settings.get(
                     "context_limit_reached_strategy", "llm_compress"
+                ),
+                "enable_manual_context_compression": provider_settings.get(
+                    "enable_manual_context_compression", False
                 ),
                 "instruction": provider_settings.get("llm_compress_instruction", ""),
                 "keep_recent_ratio": provider_settings.get(

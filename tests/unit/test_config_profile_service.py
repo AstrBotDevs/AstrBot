@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from astrbot.core.config.agent_runner import get_agent_runner_config_default
 from astrbot.dashboard.services.config_service import ConfigProfileService
 
 
@@ -41,15 +42,21 @@ async def test_profile_mutations_await_config_manager() -> None:
         pipeline_scheduler_mapping={"profile-id": object()},
     )
     service = ConfigProfileService(lifecycle)
+    runner_config = get_agent_runner_config_default("local")
+    runner_config["compression"]["enable_manual_context_compression"] = True
+    profile_config = {
+        "timezone": "UTC",
+        "agent_runner": {"runner_type": "local", "config": runner_config},
+    }
 
-    result = await service.create_profile("Profile", {"timezone": "UTC"})
+    result = await service.create_profile("Profile", profile_config)
     await service.rename_profile("profile-id", "Renamed")
     await service.delete_profile("profile-id")
 
     assert result == {"conf_id": "profile-id"}
     config_manager.create_conf.assert_awaited_once_with(
         name="Profile",
-        config={"timezone": "UTC"},
+        config=profile_config,
     )
     lifecycle.reload_pipeline_scheduler.assert_awaited_once_with("profile-id")
     config_manager.update_conf_info.assert_awaited_once_with(

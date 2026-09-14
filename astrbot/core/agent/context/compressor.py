@@ -130,6 +130,7 @@ class LLMSummaryCompressor:
         instruction_text: str | None = None,
         compression_threshold: float = 0.82,
         token_counter: TokenCounter | None = None,
+        preserve_latest_round: bool = False,
     ) -> None:
         """Initialize the LLM summary compressor.
 
@@ -139,11 +140,15 @@ class LLMSummaryCompressor:
                 exact context. Clamped to 0-0.3.
             instruction_text: Custom instruction for summary generation.
             compression_threshold: The compression trigger threshold (default: 0.82).
+            token_counter: Token counter used to divide old and recent context.
+            preserve_latest_round: Whether to preserve the latest complete
+                user-assistant round as exact context.
         """
         self.provider = provider
         self.keep_recent_ratio = min(max(float(keep_recent_ratio), 0.0), 0.3)
         self.compression_threshold = compression_threshold
         self.token_counter = token_counter or EstimateTokenCounter()
+        self.preserve_latest_round = preserve_latest_round
 
         self.instruction_text = instruction_text or (
             "Based on our full conversation history, produce a concise summary of key takeaways and/or project progress.\n"
@@ -207,8 +212,15 @@ class LLMSummaryCompressor:
         """Use LLM to generate a summary of the conversation history.
 
         Uses round-based splitting to preserve user-assistant turn boundaries.
-        On LLM failure, returns the original messages unchanged (caller should
-        fall back to truncation).
+        On LLM failure, returns the original messages unchanged so the caller
+        can apply its configured fallback policy.
+
+        Args:
+            messages: The original message list.
+
+        Returns:
+            The compressed message list, or the original list when compression
+            cannot be completed safely.
         """
         from .round_utils import split_into_rounds
 
@@ -216,11 +228,39 @@ class LLMSummaryCompressor:
         message_rounds = [
             [seg for seg in rnd if isinstance(seg, Message)] for rnd in rounds
         ]
+        latest_complete_round_index: int | None = None
+        if self.preserve_latest_round:
+            complete_round_indices = []
+            for round_index, rnd in enumerate(message_rounds):
+                user_seen = False
+                for msg in rnd:
+                    if msg.role == "user":
+                        user_seen = True
+                    elif user_seen and msg.role == "assistant":
+                        complete_round_indices.append(round_index)
+                        break
+
+            # A summary would have no older complete round to replace.
+            if len(complete_round_indices) <= 1:
+                return messages
+            latest_complete_round_index = complete_round_indices[-1]
+
         total_tokens = self.token_counter.count_tokens(messages)
         old_rounds, recent_rounds = self._split_recent_rounds_by_token_ratio(
             message_rounds,
             total_tokens,
         )
+
+        if latest_complete_round_index is not None:
+            recent_start = min(len(old_rounds), latest_complete_round_index)
+            if not any(
+                msg.role != "system"
+                for rnd in message_rounds[:recent_start]
+                for msg in rnd
+            ):
+                recent_start = latest_complete_round_index
+            old_rounds = message_rounds[:recent_start]
+            recent_rounds = message_rounds[recent_start:]
 
         # The latest user message is the active request. Keep its whole round
         # exact even when the ratio is 0 or the ratio budget would otherwise
@@ -278,7 +318,7 @@ class LLMSummaryCompressor:
             )
             summary_content = (response.completion_text or "").strip()
         except Exception as e:
-            logger.error(f"Failed to generate summary: {e}")
+            logger.error("Context summary failed: %s.", type(e).__name__)
             return messages
 
         if not summary_content:

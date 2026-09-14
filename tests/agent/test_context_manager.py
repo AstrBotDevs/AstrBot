@@ -70,6 +70,7 @@ class TestContextManager:
         assert manager.token_counter is not None
         assert manager.truncator is not None
         assert manager.compressor is not None
+        assert not config.llm_compress_preserve_latest_round
 
     def test_init_with_llm_compressor(self):
         """Test initialization with LLM-based compression."""
@@ -77,6 +78,7 @@ class TestContextManager:
         config = ContextConfig(
             llm_compress_provider=mock_provider,  # type: ignore
             llm_compress_keep_recent_ratio=0.15,
+            llm_compress_preserve_latest_round=True,
             llm_compress_instruction="Summarize the conversation",
         )
         manager = ContextManager(config)
@@ -84,6 +86,7 @@ class TestContextManager:
         from astrbot.core.agent.context.compressor import LLMSummaryCompressor
 
         assert isinstance(manager.compressor, LLMSummaryCompressor)
+        assert manager.compressor.preserve_latest_round
 
     def test_init_with_truncate_compressor(self):
         """Test initialization with truncate-based compression (default)."""
@@ -111,6 +114,27 @@ class TestContextManager:
         assert result == messages
         mock_logger.warning.assert_called_once_with(
             "LLM context compression returned an empty summary."
+        )
+
+    @pytest.mark.asyncio
+    async def test_llm_compressor_failure_log_omits_exception_details(self):
+        """Provider failures must not log content that could contain history."""
+        from astrbot.core.agent.context.compressor import LLMSummaryCompressor
+
+        provider = MockProvider()
+        provider.text_chat = AsyncMock(
+            side_effect=RuntimeError("secret-history from request body")
+        )
+        compressor = LLMSummaryCompressor(provider=provider)  # type: ignore[arg-type]
+        messages = self.create_messages(6)
+
+        with patch("astrbot.core.agent.context.compressor.logger") as mock_logger:
+            result = await compressor(messages)
+
+        assert result == messages
+        mock_logger.error.assert_called_once_with(
+            "Context summary failed: %s.",
+            "RuntimeError",
         )
 
     @pytest.mark.asyncio
@@ -298,6 +322,87 @@ class TestContextManager:
         assert result[0] is messages[0]
         assert result[1].role == "user"
         assert result[2].role == "assistant"
+
+    @pytest.mark.asyncio
+    async def test_llm_compressor_preserves_only_complete_round_when_enabled(self):
+        """Do not summarize when there is no older complete round to replace."""
+        from astrbot.core.agent.context.compressor import LLMSummaryCompressor
+
+        provider = MockProvider()
+        compressor = LLMSummaryCompressor(
+            provider=provider,
+            keep_recent_ratio=0,
+            preserve_latest_round=True,
+        )  # type: ignore[arg-type]
+        messages = [
+            Message(role="system", content="System prompt"),
+            Message(role="user", content="Question"),
+            Message(role="assistant", content="Answer"),
+            Message(role="user", content="Pending question"),
+        ]
+
+        result = await compressor(messages)
+
+        assert result == messages
+        assert provider.last_text_chat_kwargs is None
+
+    @pytest.mark.asyncio
+    async def test_llm_compressor_preserves_latest_complete_round_when_enabled(self):
+        """Keep the latest completed round and later messages as exact context."""
+        from astrbot.core.agent.context.compressor import LLMSummaryCompressor
+
+        provider = MockProvider()
+        compressor = LLMSummaryCompressor(
+            provider=provider,
+            keep_recent_ratio=0,
+            preserve_latest_round=True,
+        )  # type: ignore[arg-type]
+        messages = [
+            Message(role="user", content="Old question"),
+            Message(role="assistant", content="Old answer"),
+            Message(role="user", content="Latest completed question"),
+            Message(role="assistant", content="Latest completed answer"),
+            Message(role="user", content="Pending question"),
+        ]
+
+        result = await compressor(messages)
+
+        summary_contexts = provider.last_text_chat_kwargs["contexts"]
+        assert summary_contexts[0] == {
+            "role": "user",
+            "content": "Old question",
+        }
+        assert summary_contexts[1] == {
+            "role": "assistant",
+            "content": "Old answer",
+        }
+        assert result[-3:] == messages[-3:]
+
+    @pytest.mark.asyncio
+    async def test_llm_compressor_preserves_zero_token_latest_round(self):
+        """A zero-token estimate cannot move the protected round into the summary."""
+        from astrbot.core.agent.context.compressor import LLMSummaryCompressor
+
+        provider = MockProvider()
+        compressor = LLMSummaryCompressor(
+            provider=provider,
+            keep_recent_ratio=0.15,
+            preserve_latest_round=True,
+        )  # type: ignore[arg-type]
+        messages = [
+            Message(role="user", content="x" * 200),
+            Message(role="assistant", content="y" * 200),
+            Message(role="user", content="?"),
+            Message(role="assistant", content="!"),
+        ]
+
+        result = await compressor(messages)
+
+        summary_contexts = provider.last_text_chat_kwargs["contexts"]
+        assert summary_contexts[0] == {"role": "user", "content": "x" * 200}
+        assert summary_contexts[1] == {"role": "assistant", "content": "y" * 200}
+        assert result[-2] is messages[-2]
+        assert result[-1] is messages[-1]
 
     @pytest.mark.asyncio
     async def test_llm_compressor_sanitizes_context_for_text_only_provider(self):
@@ -530,7 +635,10 @@ class TestContextManager:
         assert len(result) <= len(messages)
 
     @pytest.mark.asyncio
-    async def test_trusted_usage_triggers_compression_before_provider_call(self):
+    async def test_trusted_usage_triggers_compression_before_provider_call(
+        self, caplog
+    ):
+        caplog.set_level("INFO", logger="astrbot")
         config = ContextConfig(max_context_tokens=100, truncate_turns=1)
         manager = ContextManager(config)
         messages = [self.create_message("user", "short")]
@@ -545,6 +653,41 @@ class TestContextManager:
         assert first_check.args == (messages, 83, 100)
         mock_compressor.assert_awaited_once_with(messages)
         assert result == compressed
+        assert "Compress completed." in caplog.text
+        assert " 83 ->" not in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_force_compression_bypasses_automatic_guards(self):
+        """Forced compression ignores limits, trusted usage, and truncation."""
+        config = ContextConfig(max_context_tokens=0, enforce_max_turns=1)
+        manager = ContextManager(config)
+        messages = self.create_messages(6)
+        mock_compressor = AsyncMock(return_value=messages)
+        mock_compressor.should_compress = MagicMock(return_value=True)
+        manager.compressor = mock_compressor
+        manager.token_counter = MagicMock()
+        manager.token_counter.count_tokens.side_effect = [10, 10]
+
+        with (
+            patch.object(manager.truncator, "truncate_by_turns") as mock_turns,
+            patch.object(manager.truncator, "truncate_by_halving") as mock_halving,
+        ):
+            result = await manager.process(
+                messages,
+                trusted_token_usage=999,
+                force_compress=True,
+            )
+
+        assert result == messages
+        mock_compressor.assert_awaited_once_with(messages)
+        mock_compressor.should_compress.assert_not_called()
+        mock_turns.assert_not_called()
+        mock_halving.assert_not_called()
+        assert manager.token_counter.count_tokens.call_count == 2
+        assert all(
+            call.args == (messages,)
+            for call in manager.token_counter.count_tokens.call_args_list
+        )
 
     @pytest.mark.asyncio
     async def test_token_compression_with_zero_max_tokens(self):
@@ -680,8 +823,10 @@ class TestContextManager:
         with patch("astrbot.core.agent.context.manager.logger") as mock_logger:
             result = await manager.process(messages)
 
-            # Logger error method should be called
-            assert mock_logger.error.called
+            mock_logger.error.assert_called_once_with(
+                "Context processing failed: %s.",
+                "Exception",
+            )
             # Should return original messages on error
             assert result == messages
 

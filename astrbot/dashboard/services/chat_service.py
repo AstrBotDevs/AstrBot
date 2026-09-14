@@ -36,6 +36,7 @@ from astrbot.core.utils.media_utils import (
 
 SSE_HEARTBEAT = ": heartbeat\n\n"
 CHAT_RUN_SUBSCRIBER_QUEUE_SIZE = 256
+WEBCHAT_EPHEMERAL_CHAIN_TYPE = "webchat_ephemeral"
 WEBCHAT_IMAGE_MIME_TYPES = {
     ".jpg": "image/jpeg",
     ".jpeg": "image/jpeg",
@@ -971,8 +972,13 @@ class ChatService:
 
                 attachment_saved_payload = None
                 if msg_type == "plain":
-                    for accumulator in (pending_accumulator, display_accumulator):
-                        accumulator.add_plain(
+                    display_accumulator.add_plain(
+                        result_text,
+                        chain_type=chain_type,
+                        streaming=streaming,
+                    )
+                    if chain_type != WEBCHAT_EPHEMERAL_CHAIN_TYPE:
+                        pending_accumulator.add_plain(
                             result_text,
                             chain_type=chain_type,
                             streaming=streaming,
@@ -1020,7 +1026,11 @@ class ChatService:
                         or pending_agent_stats
                     )
                 elif (streaming and msg_type == "complete") or not streaming:
-                    if chain_type not in ("tool_call", "tool_call_result"):
+                    if chain_type not in (
+                        "tool_call",
+                        "tool_call_result",
+                        WEBCHAT_EPHEMERAL_CHAIN_TYPE,
+                    ):
                         should_save = True
 
                 if should_save:
