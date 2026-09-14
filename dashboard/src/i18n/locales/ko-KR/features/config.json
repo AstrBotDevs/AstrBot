@@ -1,0 +1,133 @@
+{
+  "title": "구성",
+  "subtitle": "시스템 구성 및 설정 관리",
+  "editor": {
+    "visual": "비주얼 편집기",
+    "code": "코드 편집기",
+    "revertCode": "이전 코드로 되돌리기",
+    "applyConfig": "이 구성 적용",
+    "applyTip": "\"이 구성 적용\"을 클릭하면 구성이 비주얼 편집기에 반영되어 대기 상태가 됩니다. 저장하려면 우측 하단의 저장 버튼을 클릭해야 합니다."
+  },
+  "actions": {
+    "save": "구성 저장",
+    "delete": "이 항목 삭제",
+    "add": "추가",
+    "reset": "기본값으로 재설정",
+    "export": "구성 내보내기",
+    "import": "구성 가져오기",
+    "validate": "구성 검증"
+  },
+  "help": {
+    "documentation": "공식 문서",
+    "support": "도움말 그룹 참여",
+    "helpText": "구성이 이해되지 않으시나요? {documentation} 또는 {support}를 확인해 주세요.",
+    "helpPrefix": "구성이 이해되지 않으시나요? 다음을 확인해 주세요",
+    "helpMiddle": "또는",
+    "helpSuffix": "."
+  },
+  "messages": {
+    "configApplied": "구성이 성공적으로 적용되었습니다. 저장하려면 우측 하단의 저장 버튼을 클릭해야 합니다.",
+    "configApplyError": "구성이 적용되지 않았습니다. JSON 형식 오류입니다.",
+    "unsavedChangesNotice": "저장되지 않은 구성 변경 사항이 있습니다. 우측 하단의 저장 버튼을 클릭해 적용하세요.",
+    "saveSuccess": "구성이 저장되었습니다",
+    "saveError": "구성 저장 실패",
+    "loadError": "구성 불러오기 실패",
+    "deleteSuccess": "삭제되었습니다",
+    "deleteError": "삭제 실패",
+    "updateSuccess": "업데이트 성공",
+    "updateError": "업데이트 실패"
+  },
+  "sections": {
+    "general": "일반 설정",
+    "advanced": "고급 설정",
+    "security": "보안 설정",
+    "appearance": "화면 설정",
+    "notification": "알림 설정",
+    "moreConfig": "추가 설정"
+  },
+  "general": {
+    "botName": "봇 이름",
+    "language": "인터페이스 언어",
+    "timezone": "시간대",
+    "autoSave": "자동 저장",
+    "debugMode": "디버그 모드"
+  },
+  "advanced": {
+    "logLevel": "로그 수준",
+    "maxConnections": "최대 연결 수",
+    "timeout": "제한 시간",
+    "retryAttempts": "재시도 횟수",
+    "cacheSize": "캐시 크기"
+  },
+  "security": {
+    "apiKey": "API 키",
+    "allowedHosts": "허용된 호스트",
+    "rateLimit": "속도 제한",
+    "encryption": "암호화 설정"
+  },
+  "configSelection": {
+    "selectConfig": "구성 선택",
+    "normalConfig": "기본",
+    "systemConfig": "시스템"
+  },
+  "search": {
+    "placeholder": "구성 항목 검색 (키/설명/힌트)",
+    "noResult": "일치하는 구성 항목이 없습니다"
+  },
+  "configManagement": {
+    "title": "구성 관리",
+    "description": "AstrBot은 봇마다 별도의 구성 파일을 지원합니다. 기본적으로 `default` 구성이 사용됩니다.",
+    "newConfig": "새 구성",
+    "copyConfig": "구성 복사",
+    "editConfig": "구성 편집",
+    "manageConfigs": "구성 관리...",
+    "configName": "이름",
+    "fillConfigName": "구성 이름을 입력하세요",
+    "confirmDelete": "\"{name}\" 구성을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.",
+    "pleaseEnterName": "구성 이름을 입력해 주세요",
+    "nameExists": "이미 존재하는 구성 이름입니다. 다른 이름을 사용해 주세요.",
+    "createFailed": "새 구성 생성 실패",
+    "copyFailed": "구성 복사 실패",
+    "deleteFailed": "구성 삭제 실패",
+    "updateFailed": "구성 업데이트 실패"
+  },
+  "buttons": {
+    "cancel": "취소",
+    "create": "생성",
+    "update": "업데이트"
+  },
+  "codeEditor": {
+    "title": "구성 파일 편집"
+  },
+  "fileUpload": {
+    "button": "파일 관리",
+    "dialogTitle": "업로드된 파일",
+    "dropzone": "새 파일 업로드",
+    "allowedTypes": "허용된 형식: {types}",
+    "empty": "업로드된 파일 없음",
+    "statusMissing": "파일 누락",
+    "statusUnconfigured": "구성에 없음",
+    "uploadSuccess": "파일 {count}개 업로드됨",
+    "uploadFailed": "업로드 실패",
+    "loadFailed": "파일 목록 불러오기 실패",
+    "fileTooLarge": "파일이 너무 큽니다 (최대 {max}MB): {name}",
+    "deleteSuccess": "파일이 삭제되었습니다",
+    "deleteFailed": "삭제 실패",
+    "addToConfig": "구성에 추가됨",
+    "fileCount": "파일: {count}개",
+    "done": "완료"
+  },
+  "unsavedChangesWarning": {
+    "dialogTitle": "저장되지 않은 변경 사항",
+    "leavePage": "저장되지 않은 변경 사항이 있습니다. 나가기 전에 저장하시겠습니까?",
+    "switchConfig": "구성을 전환하면 저장되지 않은 변경 사항이 사라집니다. 먼저 저장하시겠습니까?",
+    "options": {
+      "save": "저장",
+      "saveAndSwitch": "저장 후 전환",
+      "discardAndSwitch": "변경 사항 취소 후 전환",
+      "closeCard": "팝업 창 닫기",
+      "confirm": "확인",
+      "cancel": "취소"
+    }
+  }
+}

@@ -1,0 +1,104 @@
+{
+  "header": {
+    "eyebrow": "대시보드",
+    "title": "시스템 통계",
+    "subtitle": "플랫폼, 메시지, 모델 호출을 한눈에 확인합니다.",
+    "notUpdated": "아직 업데이트되지 않음"
+  },
+  "ranges": {
+    "oneDay": "1일",
+    "threeDays": "3일",
+    "oneWeek": "1주"
+  },
+  "rangeLabels": {
+    "oneDay": "최근 1일",
+    "threeDays": "최근 3일",
+    "oneWeek": "최근 1주"
+  },
+  "overviewCards": {
+    "platformCount": {
+      "label": "플랫폼 인스턴스",
+      "note": "구성되어 있고 현재 실행 중인 플랫폼 인스턴스"
+    },
+    "messageCount": {
+      "label": "메시지",
+      "note": "누적 메시지 총량"
+    },
+    "todayModelCalls": {
+      "label": "오늘의 모델 호출",
+      "note": "토큰"
+    },
+    "cpu": {
+      "label": "CPU",
+      "note": "AstrBot CPU 사용률"
+    },
+    "memory": {
+      "label": "프로세스 메모리",
+      "note": "시스템 메모리 {systemMemory}"
+    },
+    "uptime": {
+      "label": "가동 시간",
+      "note": "{startTime}에 시작됨"
+    }
+  },
+  "messageOverview": {
+    "title": "메시지 개요",
+    "subtitle": "봇 메시지 통계"
+  },
+  "messageTrend": {
+    "title": "메시지 추이",
+    "subtitle": "{range}, 시간별 집계",
+    "totalMessages": "총 메시지"
+  },
+  "platformRanking": {
+    "title": "플랫폼 메시지 순위",
+    "subtitle": "{range}, 집계된 메시지 수 기준 정렬"
+  },
+  "modelCalls": {
+    "title": "모델 호출",
+    "subtitle": "모델 호출 통계"
+  },
+  "modelTrend": {
+    "title": "모델 호출 추이",
+    "subtitle": "모델 호출의 토큰 추이"
+  },
+  "modelTotal": {
+    "title": "{range} 총 모델 호출",
+    "callCount": "{count}회 호출",
+    "avgTtft": "평균 TTFT",
+    "avgDuration": "평균 응답 시간",
+    "avgTpm": "평균 출력 TPM",
+    "successRate": "성공률"
+  },
+  "modelRanking": {
+    "title": "{range} 모델 호출 순위",
+    "subtitle": "모델 호출 토큰 기준 정렬"
+  },
+  "sessionRanking": {
+    "title": "{range} 세션 토큰 사용량 상위 10개",
+    "subtitle": "토큰 사용량 기준으로 정렬된 세션"
+  },
+  "empty": {
+    "platformStats": "사용 가능한 플랫폼 메시지 통계가 없습니다.",
+    "modelCalls": "{range} 동안의 모델 호출 데이터가 없습니다.",
+    "sessionCalls": "{range} 동안의 세션 호출 데이터가 없습니다."
+  },
+  "chart": {
+    "messages": "메시지",
+    "others": "기타"
+  },
+  "units": {
+    "tokens": "토큰",
+    "tpm": "TPM",
+    "gb": "GB",
+    "mb": "MB",
+    "ms": "ms",
+    "hoursShort": "시간",
+    "minutesShort": "분",
+    "secondsShort": "초"
+  },
+  "errors": {
+    "loadFailed": "통계를 불러오지 못했습니다. 잠시 후 다시 시도하세요.",
+    "rangeFailed": "통계 범위를 전환하지 못했습니다. 잠시 후 다시 시도하세요."
+  }
+}

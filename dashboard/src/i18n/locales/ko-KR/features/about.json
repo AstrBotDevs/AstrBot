@@ -1,0 +1,17 @@
+{
+  "hero": {
+    "title": "AstrBot",
+    "subtitle": "관심과 애정으로 만든 프로젝트 ❤️",
+    "starButton": "이 프로젝트에 별을 눌러주세요! 🌟",
+    "issueButton": "이슈 제출"
+  },
+  "contributors": {
+    "title": "기여자",
+    "description": "이 프로젝트는 많은 오픈소스 커뮤니티 구성원들이 함께 관리하고 있습니다. 모든 기여자분들의 헌신에 감사드립니다!",
+    "viewLink": "AstrBot 기여자 보기"
+  },
+  "stats": {
+    "title": "전 세계 배포 현황",
+    "license": "AstrBot은 AGPL v3 라이선스로 공개된 오픈소스 프로젝트입니다"
+  }
+}

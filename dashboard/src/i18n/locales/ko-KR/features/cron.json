@@ -1,0 +1,173 @@
+{
+  "header": {
+    "eyebrow": "자동화",
+    "live": "실시간 동기화"
+  },
+  "page": {
+    "title": "예약 작업 관리",
+    "beta": "실험적 기능",
+    "subtitle": "AstrBot이 예약된 시간에 깨어나 작업을 완료하고 결과를 대상 대화로 전송합니다.",
+    "proactive": {
+      "link": "지원되는 플랫폼",
+      "supported": "능동 전송은 아래에 구성된 플랫폼에서만 사용할 수 있습니다",
+      "unsupported": "활성화된 능동 메시지 플랫폼이 없습니다. 플랫폼 설정에서 켜주세요."
+    }
+  },
+  "actions": {
+    "create": "새 작업",
+    "edit": "편집",
+    "refresh": "새로고침",
+    "delete": "삭제",
+    "cancel": "취소",
+    "close": "닫기",
+    "more": "추가 작업",
+    "runNow": "지금 실행",
+    "save": "저장",
+    "submit": "생성"
+  },
+  "platformDialog": {
+    "title": "지원되는 플랫폼",
+    "description": "다음 플랫폼만 능동 메시지 전송을 지원합니다. AstrBot은 이러한 플랫폼의 대상 대화로만 예약 작업 결과를 전송할 수 있습니다."
+  },
+  "card": {
+    "onceAt": "일회성 · {time}",
+    "runAt": "실행 시각: {time}",
+    "nextRun": "다음 실행: {time}",
+    "dailyAt": "매일 {time}",
+    "weeklyAt": "매주 {day} {time}",
+    "monthlyAt": "매월 {day}일 {time}",
+    "everyMinutes": "{count}분마다",
+    "everyHours": "{count}시간마다",
+    "everyDays": "{count}일마다",
+    "customCron": "사용자 지정 · {cron}",
+    "noDeliveryTarget": "전송 대상 없음"
+  },
+  "filters": {
+    "search": "제목 및 내용 검색",
+    "umo": "전송 대상별 필터",
+    "noUmos": "UMO 없음",
+    "noDeliveryTarget": "전송 대상 없음",
+    "noMatches": "일치하는 예약 작업이 없습니다."
+  },
+  "overview": {
+    "totalTasks": "전체 작업",
+    "totalTasksNote": "등록된 예약 작업",
+    "enabledTasks": "활성화된 작업",
+    "enabledTasksNote": "실행 준비된 작업",
+    "oneOffTasks": "일회성 작업",
+    "recurringTasksNote": "반복 작업 {count}개",
+    "proactivePlatforms": "능동 전송 플랫폼",
+    "proactivePlatformsNote": "결과를 능동적으로 전송할 수 있는 플랫폼"
+  },
+  "section": {
+    "registered": {
+      "title": "작업 목록",
+      "subtitle": "등록된 작업, 실행 시점, 현재 상태를 확인하세요"
+    },
+    "delivery": {
+      "title": "전송 상태",
+      "subtitle": "작업 실행 후 결과는 지원되는 플랫폼을 통해 능동적으로 전송됩니다",
+      "support": "능동 전송",
+      "available": "사용 가능",
+      "unavailable": "사용 불가",
+      "enabledPlatforms": "활성화된 플랫폼"
+    },
+    "quickCreate": {
+      "title": "빠른 생성",
+      "runMode": "작업 모드",
+      "target": "대상 지정"
+    },
+    "platforms": {
+      "title": "지원되는 플랫폼"
+    }
+  },
+  "table": {
+    "title": "등록된 작업",
+    "subtitle": "cron 설정, 세션 대상, 마지막 실행 기록, 활성화 상태를 확인하세요",
+    "empty": "아직 작업이 없습니다.",
+    "headers": {
+      "name": "이름",
+      "type": "유형",
+      "cron": "Cron",
+      "session": "세션 ID",
+      "nextRun": "다음 실행",
+      "lastRun": "마지막 실행",
+      "note": "메모",
+      "actions": "작업"
+    },
+    "type": {
+      "once": "일회성",
+      "recurring": "반복",
+      "activeAgent": "능동 에이전트",
+      "workflow": "워크플로",
+      "unknown": "{type}"
+    },
+    "timezoneLocal": "로컬",
+    "notAvailable": "—"
+  },
+  "form": {
+    "title": "새 작업",
+    "editTitle": "작업 편집",
+    "chatHint": "여기서 추가하지 않고, 채팅에서 AstrBot에게 예약 작업 생성을 요청할 수도 있습니다.",
+    "runOnce": "일회성 작업",
+    "name": "작업 이름 *",
+    "note": "작업 요구 사항 *",
+    "scheduleMode": "실행 시간 *",
+    "scheduleModes": {
+      "once": "일회성",
+      "interval": "간격",
+      "daily": "매일",
+      "weekly": "매주",
+      "monthly": "매월",
+      "cron": "사용자 지정 Cron"
+    },
+    "intervalEvery": "간격 *",
+    "intervalUnit": "단위 *",
+    "intervalUnits": {
+      "minutes": "분",
+      "hours": "시간",
+      "days": "일"
+    },
+    "dailyTime": "시간 *",
+    "weeklyDay": "요일 *",
+    "weeklyTime": "시간 *",
+    "monthlyDay": "일 *",
+    "monthlyTime": "시간 *",
+    "weekdays": {
+      "sunday": "일요일",
+      "monday": "월요일",
+      "tuesday": "화요일",
+      "wednesday": "수요일",
+      "thursday": "목요일",
+      "friday": "금요일",
+      "saturday": "토요일"
+    },
+    "cron": "Cron 표현식 *",
+    "cronPlaceholder": "0 9 * * *",
+    "runAt": "실행 시각 *",
+    "session": "전송 대상",
+    "noUmos": "사용 가능한 세션 없음",
+    "timezone": "시간대 (선택 사항, 예: Asia/Seoul)",
+    "enabled": "활성화"
+  },
+  "messages": {
+    "loadFailed": "작업 불러오기 실패",
+    "updateSuccess": "업데이트 성공",
+    "updateFailed": "업데이트 실패",
+    "deleteSuccess": "삭제되었습니다",
+    "deleteFailed": "삭제 실패",
+    "nameRequired": "작업 이름은 필수입니다",
+    "sessionRequired": "전송 대상은 필수입니다",
+    "noteRequired": "작업 요구 사항은 필수입니다",
+    "cronRequired": "Cron 표현식은 필수입니다",
+    "runAtRequired": "실행 시각을 선택해 주세요",
+    "intervalRequired": "유효한 간격을 입력해 주세요",
+    "dailyTimeRequired": "매일 실행 시간을 선택해 주세요",
+    "weeklyTimeRequired": "매주 요일과 시간을 선택해 주세요",
+    "monthlyTimeRequired": "매월 일자와 시간을 선택해 주세요",
+    "createSuccess": "생성되었습니다",
+    "createFailed": "생성 실패",
+    "runStarted": "시작되었습니다",
+    "runFailed": "실행 실패"
+  }
+}

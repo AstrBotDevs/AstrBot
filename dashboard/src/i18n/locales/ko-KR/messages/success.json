@@ -1,0 +1,23 @@
+{
+  "operation": {
+    "saved": "저장되었습니다",
+    "created": "생성되었습니다",
+    "updated": "수정되었습니다",
+    "deleted": "삭제되었습니다",
+    "uploaded": "업로드되었습니다",
+    "downloaded": "다운로드되었습니다",
+    "imported": "가져오기가 완료되었습니다",
+    "exported": "내보내기가 완료되었습니다",
+    "copied": "복사되었습니다",
+    "sent": "전송되었습니다"
+  },
+  "connection": {
+    "connected": "연결되었습니다",
+    "authenticated": "로그인되었습니다",
+    "synchronized": "동기화되었습니다"
+  },
+  "validation": {
+    "valid": "검증을 통과했습니다",
+    "completed": "작업이 완료되었습니다"
+  }
+}

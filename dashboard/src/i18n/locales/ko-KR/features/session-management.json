@@ -1,0 +1,158 @@
+{
+  "title": "사용자 지정 규칙",
+  "subtitle": "특정 세션에 대한 사용자 지정 규칙을 설정하며, 전역 설정보다 우선 적용됩니다",
+  "buttons": {
+    "refresh": "새로고침",
+    "edit": "편집",
+    "editRule": "규칙 편집",
+    "deleteAllRules": "모든 규칙 삭제",
+    "addRule": "규칙 추가",
+    "save": "저장",
+    "cancel": "취소",
+    "delete": "삭제",
+    "clear": "지우기",
+    "next": "다음",
+    "editCustomName": "메모 편집",
+    "batchDelete": "일괄 삭제"
+  },
+  "customRules": {
+    "title": "사용자 지정 규칙",
+    "rulesCount": "규칙",
+    "hasRules": "구성됨",
+    "noRules": "사용자 지정 규칙 없음",
+    "noRulesDesc": "'규칙 추가'를 클릭해 특정 세션에 대한 사용자 지정 규칙을 구성하세요",
+    "serviceConfig": "서비스 구성",
+    "pluginConfig": "플러그인 구성",
+    "kbConfig": "지식 베이스",
+    "providerConfig": "공급자 구성",
+    "configured": "구성됨",
+    "noCustomName": "설정된 메모 없음"
+  },
+  "quickEditName": {
+    "title": "메모 편집"
+  },
+  "search": {
+    "placeholder": "세션 검색..."
+  },
+  "table": {
+    "headers": {
+      "umoInfo": "통합 메시지 출처",
+      "rulesOverview": "규칙 개요",
+      "actions": "작업"
+    }
+  },
+  "persona": {
+    "none": "구성 따르기"
+  },
+  "provider": {
+    "followConfig": "구성 따르기"
+  },
+  "addRule": {
+    "title": "사용자 지정 규칙 추가",
+    "description": "규칙을 구성할 세션(UMO)을 선택하세요. 사용자 지정 규칙은 전역 설정보다 우선 적용됩니다.",
+    "selectUmo": "세션 선택",
+    "noUmos": "사용 가능한 세션 없음"
+  },
+  "ruleEditor": {
+    "title": "사용자 지정 규칙 편집",
+    "description": "이 세션에 대한 사용자 지정 규칙을 구성하세요. 이 규칙은 전역 설정보다 우선 적용됩니다.",
+    "serviceConfig": {
+      "title": "서비스 구성",
+      "sessionEnabled": "세션 활성화",
+      "llmEnabled": "LLM 활성화",
+      "ttsEnabled": "TTS 활성화",
+      "customName": "사용자 지정 이름"
+    },
+    "providerConfig": {
+      "title": "공급자 구성",
+      "chatProvider": "채팅 공급자",
+      "sttProvider": "STT 공급자",
+      "ttsProvider": "TTS 공급자"
+    },
+    "personaConfig": {
+      "title": "페르소나 구성",
+      "selectPersona": "페르소나 선택",
+      "hint": "페르소나 설정은 LLM의 대화 스타일과 동작 방식에 영향을 줍니다"
+    },
+    "pluginConfig": {
+      "title": "플러그인 구성",
+      "disabledPlugins": "비활성화된 플러그인",
+      "hint": "이 세션에서 비활성화할 플러그인을 선택하세요. 선택하지 않은 플러그인은 계속 활성화된 상태로 유지됩니다."
+    },
+    "kbConfig": {
+      "title": "지식 베이스 구성",
+      "selectKbs": "지식 베이스 선택",
+      "topK": "Top K 결과 수",
+      "enableRerank": "재순위 사용"
+    }
+  },
+  "deleteConfirm": {
+    "title": "삭제 확인",
+    "message": "이 세션의 모든 사용자 지정 규칙을 삭제하시겠습니까? 삭제 후에는 전역 설정이 적용됩니다."
+  },
+  "batchDeleteConfirm": {
+    "title": "일괄 삭제 확인",
+    "message": "선택한 규칙 {count}개를 삭제하시겠습니까? 삭제 후에는 전역 설정이 적용됩니다."
+  },
+  "batchOperations": {
+    "title": "일괄 작업",
+    "hint": "세션 설정을 빠르게 일괄 수정하세요",
+    "scope": "적용 대상",
+    "scopeSelected": "선택한 세션",
+    "scopeAll": "모든 세션",
+    "scopeGroup": "모든 그룹",
+    "scopePrivate": "모든 개인 채팅",
+    "llmStatus": "LLM 상태",
+    "ttsStatus": "TTS 상태",
+    "chatProvider": "채팅 모델",
+    "ttsProvider": "TTS 모델",
+    "apply": "변경 사항 적용"
+  },
+  "groups": {
+    "title": "그룹 관리",
+    "count": "그룹 {count}개",
+    "addToGroup": "그룹에 추가",
+    "create": "그룹 생성",
+    "edit": "그룹 편집",
+    "name": "그룹 이름",
+    "sessionsCount": "세션 {count}개",
+    "empty": "아직 그룹이 없습니다. '그룹 생성'을 클릭해 만들어 보세요.",
+    "availableSessions": "사용 가능한 세션 ({count})",
+    "selectedSessions": "선택한 세션 ({count})",
+    "searchPlaceholder": "검색...",
+    "noMatch": "일치하는 항목 없음",
+    "noMembers": "구성원 없음",
+    "customGroupDivider": "── 사용자 지정 그룹 ──",
+    "customGroupOption": "📁 {name} ({count})",
+    "groupOption": "{name} ({count}개 세션)",
+    "deleteConfirm": "\"{name}\" 그룹을 삭제하시겠습니까?"
+  },
+  "status": {
+    "enabled": "활성화됨",
+    "disabled": "비활성화됨"
+  },
+  "messages": {
+    "refreshSuccess": "데이터가 새로고침되었습니다",
+    "loadError": "데이터 불러오기 실패",
+    "saveSuccess": "저장되었습니다",
+    "saveError": "저장 실패",
+    "clearSuccess": "지워졌습니다",
+    "clearError": "지우기 실패",
+    "deleteSuccess": "삭제되었습니다",
+    "deleteError": "삭제 실패",
+    "noChanges": "저장할 변경 사항 없음",
+    "batchDeleteSuccess": "일괄 삭제 성공",
+    "batchDeleteError": "일괄 삭제 실패",
+    "selectSessionsFirst": "먼저 세션을 선택해 주세요",
+    "selectAtLeastOneConfig": "수정할 설정을 하나 이상 선택해 주세요",
+    "batchUpdateSuccess": "일괄 업데이트 성공",
+    "partialUpdateFailed": "일부 업데이트 실패",
+    "batchUpdateError": "일괄 업데이트 실패",
+    "groupNameRequired": "그룹 이름은 비워둘 수 없습니다",
+    "saveGroupError": "그룹 저장 실패",
+    "deleteGroupError": "그룹 삭제 실패",
+    "selectSessionsToAddFirst": "먼저 추가할 세션을 선택해 주세요",
+    "addToGroupSuccess": "세션 {count}개를 그룹에 추가했습니다",
+    "addToGroupError": "그룹에 추가 실패"
+  }
+}

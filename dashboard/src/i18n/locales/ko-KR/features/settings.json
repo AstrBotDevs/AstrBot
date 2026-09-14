@@ -1,0 +1,268 @@
+{
+  "page": {
+    "title": "설정"
+  },
+  "sections": {
+    "general": {
+      "title": "일반"
+    },
+    "appearance": {
+      "title": "화면"
+    },
+    "network": {
+      "title": "네트워크"
+    },
+    "security": {
+      "title": "보안"
+    },
+    "maintenance": {
+      "title": "유지 관리"
+    },
+    "openapi": {
+      "title": "OpenAPI"
+    }
+  },
+  "systemConfig": {
+    "restartRequired": "시스템 설정이 저장되었습니다. 일부 변경 사항은 AstrBot을 재시작해야 적용됩니다.",
+    "groups": {
+      "runtime": {
+        "title": "런타임 기본 설정",
+        "subtitle": "시간대와 외부에서 접근 가능한 콜백 URL입니다."
+      },
+      "network": {
+        "title": "프록시 및 의존성 소스",
+        "subtitle": "런타임 프록시, Python 의존성 설치 옵션, PyPI 소스입니다."
+      },
+      "webuiSecurity": {
+        "title": "WebUI 보안",
+        "subtitle": "HTTPS, 신뢰할 수 있는 프록시 헤더, 로그인 속도 제한, TOTP입니다."
+      },
+      "logs": {
+        "title": "로그",
+        "subtitle": "콘솔 로그, 파일 로그, Trace 파일 로깅입니다."
+      },
+      "tempStorage": {
+        "title": "캐시",
+        "subtitle": "임시 디렉터리의 자동 정리 임계값입니다."
+      },
+      "t2iRendering": {
+        "title": "텍스트-이미지 변환",
+        "subtitle": "텍스트-이미지 변환의 렌더링 전략, 엔드포인트, 사용자 지정 템플릿입니다."
+      }
+    },
+    "messages": {
+      "loadFailed": "시스템 설정을 불러오지 못했습니다",
+      "saveSuccess": "시스템 설정을 저장했습니다",
+      "saveFailed": "시스템 설정 저장에 실패했습니다"
+    }
+  },
+  "network": {
+    "title": "네트워크",
+    "githubProxy": {
+      "title": "GitHub 프록시 주소",
+      "subtitle": "플러그인을 다운로드하거나 AstrBot을 업데이트할 때 사용할 GitHub 프록시 주소를 설정합니다. 중국 본토 네트워크 환경에서 효과적입니다. 사용자 지정이 가능하며 입력이 실시간으로 적용됩니다. 모든 주소의 안정성은 보장되지 않습니다. 플러그인/프로젝트 업데이트 시 오류가 발생하면 먼저 프록시 주소가 정상 작동하는지 확인하세요.",
+      "label": "GitHub 프록시 주소 선택"
+    },
+    "proxySelector": {
+      "title": "GitHub 프록시",
+      "noProxy": "GitHub 프록시 사용 안 함",
+      "useProxy": "GitHub 프록시 사용",
+      "testConnection": "연결 테스트",
+      "available": "사용 가능",
+      "unavailable": "사용 불가",
+      "custom": "사용자 지정"
+    }
+  },
+  "theme": {
+    "title": "테마",
+    "subtitle": "테마의 주 색상과 보조 색상을 사용자 지정합니다. 변경 사항은 즉시 적용되며 브라우저에 로컬로 저장됩니다.",
+    "customize": {
+      "title": "테마 색상",
+      "primary": "주 색상",
+      "secondary": "보조 색상",
+      "reset": "기본값으로 재설정"
+    }
+  },
+  "system": {
+    "title": "시스템",
+    "restart": {
+      "title": "재시작",
+      "subtitle": "AstrBot 재시작",
+      "confirm": "지금 AstrBot을 재시작하시겠습니까? 재시작하는 동안 WebUI를 일시적으로 사용할 수 없습니다.",
+      "button": "재시작"
+    },
+    "backup": {
+      "title": "백업 및 복원",
+      "subtitle": "새 서버로 손쉽게 마이그레이션할 수 있도록 모든 AstrBot 데이터를 내보내거나 가져옵니다",
+      "button": "백업 관리자"
+    },
+    "cleanup": {
+      "title": "로그 및 캐시 정리",
+      "subtitle": "로그와 캐시의 디스크 사용량을 확인하고, 셸 명령 없이 UI에서 바로 정리하세요.",
+      "refresh": "사용량 새로고침",
+      "clean": "정리",
+      "cleanAll": "전체 정리",
+      "panel": {
+        "title": "정리 상세",
+        "subtitle": "현재 사용량: {size}"
+      },
+      "fileCount": "{count}개 파일",
+      "confirm": "지금 {target}을(를) 정리하시겠습니까?",
+      "targetNames": {
+        "cache": "캐시",
+        "logs": "로그",
+        "all": "로그 및 캐시"
+      },
+      "targets": {
+        "cache": {
+          "title": "캐시",
+          "subtitle": "임시 파일, 플러그인 마켓 캐시, Skill 캐시를 제거합니다.",
+          "button": "캐시 정리"
+        },
+        "logs": {
+          "title": "로그",
+          "subtitle": "순환된 로그를 제거하고 현재 활성 로그 파일을 잘라냅니다.",
+          "button": "로그 정리"
+        }
+      },
+      "messages": {
+        "statusFailed": "저장소 사용량을 불러오지 못했습니다",
+        "cleanupSuccess": "{count}개 파일을 정리하여 {size}를 확보했습니다",
+        "cleanupFailed": "정리에 실패했습니다"
+      }
+    }
+  },
+  "sidebar": {
+    "title": "사이드바",
+    "customize": {
+      "title": "사이드바 사용자 지정",
+      "subtitle": "모듈을 끌어서 순서를 바꾸거나 \"추가 기능\" 그룹 안팎으로 이동하세요. 설정은 브라우저에 로컬로 저장됩니다.",
+      "reset": "기본값으로 재설정",
+      "mainItems": "주요 모듈",
+      "moreItems": "추가 기능"
+    }
+  },
+  "backup": {
+    "dialog": {
+      "title": "백업 관리자"
+    },
+    "tabs": {
+      "export": "백업 내보내기",
+      "import": "백업 가져오기",
+      "list": "백업 목록"
+    },
+    "export": {
+      "title": "백업 생성",
+      "description": "데이터베이스, 지식 베이스, 설정, 첨부 파일, Skills를 포함한 모든 데이터를 ZIP 백업 파일로 내보냅니다.",
+      "includes": "백업 포함 항목: 메인 데이터베이스, 지식 베이스(메타데이터 + 벡터 인덱스 + 문서), 설정 파일, 첨부 파일, Skills",
+      "button": "내보내기 시작",
+      "processing": "내보내는 중...",
+      "wait": "데이터를 패키징하는 중입니다. 잠시 기다려 주세요...",
+      "completed": "내보내기 완료!",
+      "download": "백업 다운로드",
+      "another": "새 백업 생성",
+      "failed": "내보내기 실패",
+      "retry": "재시도"
+    },
+    "import": {
+      "title": "백업 가져오기",
+      "warning": "⚠️ 가져오기를 진행하면 기존 데이터가 삭제되고 덮어써집니다! 현재 데이터를 반드시 백업해 두세요.",
+      "selectFile": "백업 파일 선택 (.zip)",
+      "uploadAndCheck": "업로드 및 확인",
+      "uploading": "업로드 중...",
+      "uploadWait": "백업 파일을 업로드하는 중입니다. 잠시 기다려 주세요...",
+      "uploadInit": "업로드를 초기화하는 중...",
+      "uploadingChunks": "청크를 업로드하는 중...",
+      "uploadComplete": "업로드 완료, 파일을 병합하는 중...",
+      "checking": "백업 파일을 확인하는 중...",
+      "invalidBackup": "유효하지 않은 백업 파일입니다",
+      "backupContents": "백업 내용",
+      "tables": "개 테이블",
+      "knowledgeBases": "지식 베이스",
+      "configFiles": "설정 파일",
+      "confirmImport": "가져오기 확인",
+      "button": "가져오기 시작",
+      "processing": "가져오는 중...",
+      "wait": "데이터를 복원하는 중입니다. 잠시 기다려 주세요...",
+      "completed": "가져오기 완료!",
+      "restartRequired": "데이터를 성공적으로 가져왔습니다. 모든 변경 사항을 적용하려면 지금 바로 AstrBot을 재시작하는 것을 권장합니다.",
+      "restartNow": "지금 재시작",
+      "failed": "가져오기 실패",
+      "retry": "재시도",
+      "version": {
+        "backupVersion": "백업 버전",
+        "currentVersion": "현재 버전",
+        "backupTime": "백업 시각",
+        "matchTitle": "✅ 버전 일치",
+        "matchMessage": "가져오기를 진행하면 다음을 포함한 기존 데이터가 모두 삭제되고 덮어써집니다:\n• 메인 데이터베이스(대화, 설정 등)\n• 지식 베이스\n• 플러그인 및 플러그인 데이터\n• 설정 파일\n• Skills\n\n이 작업은 되돌릴 수 없습니다! 계속하시겠습니까?",
+        "minorDiffTitle": "⚠️ 버전 차이 경고",
+        "minorDiffMessage": "마이너 버전 차이는 일반적으로 가져올 수 있지만, 일부 데이터 구조가 변경될 수 있습니다.\n가져오기를 진행하면 기존 데이터가 모두 삭제되고 덮어써집니다!\n\n계속하시겠습니까?",
+        "majorDiffTitle": "⛔ 가져올 수 없음",
+        "majorDiffMessage": "메이저 버전 번호가 다릅니다. 메이저 버전이 다른 상태로 가져오면 데이터가 손상될 수 있습니다.\n동일한 메이저 버전의 AstrBot을 사용해 가져오세요."
+      }
+    },
+    "list": {
+      "empty": "백업 파일이 없습니다",
+      "refresh": "목록 새로고침",
+      "confirmDelete": "이 백업 파일을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.",
+      "uploaded": "업로드됨",
+      "restore": "이 백업 복원",
+      "rename": "이름 변경",
+      "renameTitle": "백업 파일 이름 변경",
+      "newName": "새 파일 이름",
+      "renameHint": "파일 이름에는 영문자, 숫자, 밑줄, 하이픈, 마침표만 사용할 수 있습니다",
+      "renameRequired": "파일 이름을 입력하세요",
+      "renameInvalidChars": "파일 이름에 유효하지 않은 문자가 포함되어 있습니다",
+      "renameFailed": "이름 변경에 실패했습니다",
+      "ftpHint": "대용량 백업 파일은 FTP/SFTP를 통해 data/backups 디렉터리에 직접 업로드할 수도 있습니다"
+    }
+  },
+  "apiKey": {
+    "title": "API 키",
+    "manageTitle": "개발자 액세스 키",
+    "subtitle": "외부 개발자가 공개 HTTP API를 호출할 수 있도록 API 키를 생성합니다.",
+    "name": "키 이름",
+    "expiresInDays": "만료 기한",
+    "expiryOptions": {
+      "day1": "1일",
+      "day7": "7일",
+      "day30": "30일",
+      "day90": "90일",
+      "permanent": "무제한"
+    },
+    "permanentWarning": "영구 API 키는 위험도가 높습니다. 안전하게 보관하고 꼭 필요한 경우에만 사용하세요.",
+    "scopes": "권한 범위",
+    "create": "API 키 생성",
+    "revoke": "폐기",
+    "delete": "삭제",
+    "copy": "복사",
+    "docsLink": "문서 열기",
+    "plaintextHint": "지금 이 키를 저장해 두세요. 평문 키는 다시 표시되지 않습니다.",
+    "empty": "API 키가 없습니다",
+    "status": {
+      "active": "활성",
+      "inactive": "비활성"
+    },
+    "table": {
+      "name": "이름",
+      "prefix": "접두사",
+      "scopes": "권한 범위",
+      "status": "상태",
+      "lastUsed": "마지막 사용",
+      "createdAt": "생성일",
+      "actions": "작업"
+    },
+    "messages": {
+      "loadFailed": "API 키를 불러오지 못했습니다",
+      "scopeRequired": "권한 범위를 하나 이상 선택하세요",
+      "createSuccess": "API 키가 생성되었습니다",
+      "createFailed": "API 키 생성에 실패했습니다",
+      "revokeSuccess": "API 키가 폐기되었습니다",
+      "revokeFailed": "API 키 폐기에 실패했습니다",
+      "deleteSuccess": "API 키가 삭제되었습니다",
+      "deleteFailed": "API 키 삭제에 실패했습니다",
+      "copySuccess": "API 키가 복사되었습니다",
+      "copyFailed": "API 키 복사에 실패했습니다"
+    }
+  }
+}

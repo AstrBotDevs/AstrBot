@@ -1,0 +1,134 @@
+{
+  "logoTitle": "AstrBot 대시보드",
+  "version": {
+    "hasNewVersion": "AstrBot의 새 버전이 있습니다!",
+    "dashboardHasNewVersion": "WebUI의 새 버전이 있습니다!"
+  },
+  "buttons": {
+    "update": "업데이트",
+    "account": "계정",
+    "theme": {
+      "title": "테마",
+      "light": "라이트 모드",
+      "dark": "다크 모드",
+      "system": "시스템 설정 따르기"
+    }
+  },
+  "updateDialog": {
+    "title": "AstrBot 업데이트",
+    "currentVersion": "현재 버전",
+    "status": {
+      "checking": "업데이트를 확인하는 중...",
+      "switching": "버전을 전환하는 중...",
+      "updating": "업데이트하는 중..."
+    },
+    "tabs": {
+      "release": "😊 릴리스"
+    },
+    "advancedSettings": "고급 설정",
+    "releases": "릴리스",
+    "updateToLatest": "최신 버전으로 업데이트",
+    "showPreReleases": "사전 릴리스 버전 표시",
+    "preRelease": "사전 릴리스",
+    "preReleaseWarning": {
+      "title": "사전 릴리스 버전 안내",
+      "description": "사전 릴리스로 표시된 버전에는 알려지지 않은 문제나 버그가 있을 수 있으므로 프로덕션 환경에서 사용하지 않는 것을 권장합니다. 문제가 발생하면 ",
+      "issueLink": "GitHub Issues"
+    },
+    "tip": "💡 팁:",
+    "tipContinue": "버전을 전환할 때는 기본적으로 해당 버전의 WebUI 파일이 다운로드됩니다. WebUI 코드는 프로젝트의 dashboard 디렉터리에 있으며, npm을 사용해 직접 빌드할 수도 있습니다.",
+    "dockerTip": "버전을 전환하면 봇 본체와 대시보드를 함께 업데이트하려고 시도합니다. Docker로 배포한 경우 이미지를 다시 받거나",
+    "dockerTipLink": "watchtower",
+    "dockerTipContinue": "를 사용해 자동으로 감시하고 받아올 수도 있습니다.",
+    "table": {
+      "tag": "태그",
+      "publishDate": "게시일",
+      "content": "내용",
+      "sourceUrl": "소스 URL",
+      "actions": "작업",
+      "view": "보기",
+      "switch": "전환"
+    },
+    "releaseNotes": {
+      "title": "릴리스 노트",
+      "latestLabel": "최신 버전"
+    },
+    "progress": {
+      "target": "대상 버전: ",
+      "preparing": "업데이트 준비 중...",
+      "dashboard": "WebUI 다운로드 중",
+      "core": "프로젝트 코드 다운로드 중",
+      "dependencies": "의존성을 업데이트하는 중...",
+      "restart": "재시작 준비 중...",
+      "restarting": "AstrBot 재시작 중",
+      "completed": "업데이트 완료",
+      "successReady": "업데이트 성공",
+      "autoReloadIn": "{seconds}초 후 자동으로 새로고침됩니다",
+      "reloadNow": "지금 새로고침",
+      "failed": "업데이트 실패"
+    },
+    "redirectConfirm": {
+      "title": "AstrBot에서 나가기",
+      "message": "GitHub Releases 페이지를 여시겠습니까?",
+      "latestLabel": "최신",
+      "targetVersion": "대상 버전: ",
+      "currentVersion": "현재 버전: ",
+      "guideTitle": "이동 후 권장 사항:",
+      "guideStep1": "사용 중인 OS 및 아키텍처에 맞는 설치 파일을 다운로드하세요.",
+      "guideStep2": "설치 후 AstrBot을 재시작하세요.",
+      "guideStep3": "Docker를 사용 중이라면 이미지 업데이트 방식을 우선적으로 사용하세요."
+    },
+    "desktopApp": {
+      "title": "데스크톱 앱 업데이트",
+      "message": "AstrBot 데스크톱 애플리케이션을 확인하고 업그레이드합니다.",
+      "currentVersion": "현재 버전: ",
+      "latestVersion": "최신 버전: ",
+      "checking": "데스크톱 앱 업데이트를 확인하는 중...",
+      "hasNewVersion": "새 버전을 사용할 수 있습니다. 확인을 클릭해 업그레이드하세요.",
+      "isLatest": "이미 최신 버전입니다",
+      "installing": "업데이트를 다운로드하고 설치하는 중입니다. 앱이 자동으로 재시작됩니다...",
+      "checkFailed": "업데이트 확인에 실패했습니다. 나중에 다시 시도해주세요.",
+      "installFailed": "업그레이드에 실패했습니다. 나중에 다시 시도해주세요."
+    },
+    "dashboardUpdate": {
+      "title": "대시보드만 최신 버전으로 업데이트",
+      "currentVersion": "현재 버전",
+      "hasNewVersion": "새 버전을 사용할 수 있습니다!",
+      "isLatest": "이미 최신 버전입니다.",
+      "fallback": "전체 업데이트가 실패할 경우 이 기능으로 WebUI를 다시 다운로드하세요.",
+      "downloadAndUpdate": "다운로드 및 업데이트"
+    }
+  },
+  "accountDialog": {
+    "title": "계정 수정",
+    "securityWarning": "보안 안내: 계정 보호를 위해 비밀번호를 변경해주세요",
+    "securityWarningMd5": "새 AstrBot 버전에서 보안이 강화되었습니다. 비밀번호를 변경해주세요.",
+    "securityWarningUpgrade": "MD5 방식의 비밀번호 저장이 감지되었습니다. 보안 업그레이드를 완료하려면 비밀번호를 변경해주세요.",
+    "form": {
+      "currentPassword": "현재 비밀번호",
+      "newPassword": "새 비밀번호",
+      "confirmPassword": "새 비밀번호 확인",
+      "newUsername": "새 사용자 이름 (선택)",
+      "passwordHint": "8자 이상, 대문자, 소문자, 숫자를 포함해야 합니다",
+      "confirmPasswordHint": "새 비밀번호를 다시 입력해 확인해주세요",
+      "usernameHint": "비워두면 현재 사용자 이름이 유지됩니다",
+      "defaultCredentials": "기본 사용자 이름은 astrbot입니다. 초기 비밀번호는 최초 시작 시 생성되어 콘솔에 표시됩니다."
+    },
+    "validation": {
+      "passwordRequired": "비밀번호를 입력해주세요",
+      "passwordMinLength": "비밀번호는 8자 이상이어야 합니다",
+      "passwordUppercase": "비밀번호에는 대문자가 하나 이상 포함되어야 합니다",
+      "passwordLowercase": "비밀번호에는 소문자가 하나 이상 포함되어야 합니다",
+      "passwordDigit": "비밀번호에는 숫자가 하나 이상 포함되어야 합니다",
+      "passwordMatch": "비밀번호가 일치하지 않습니다",
+      "usernameMinLength": "사용자 이름은 3자 이상이어야 합니다"
+    },
+    "actions": {
+      "save": "변경 사항 저장",
+      "cancel": "취소"
+    },
+    "messages": {
+      "updateFailed": "업데이트에 실패했습니다. 다시 시도해주세요"
+    }
+  }
+}

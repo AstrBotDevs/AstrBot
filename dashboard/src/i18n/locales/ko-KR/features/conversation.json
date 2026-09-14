@@ -1,0 +1,108 @@
+{
+  "title": "대화 관리",
+  "subtitle": "사용자 대화 기록 관리 및 조회",
+  "filters": {
+    "title": "필터 조건",
+    "platform": "플랫폼",
+    "type": "유형",
+    "search": "검색어",
+    "reset": "초기화"
+  },
+  "history": {
+    "title": "대화 기록",
+    "refresh": "새로고침"
+  },
+  "batch": {
+    "deleteSelected": "선택 항목 삭제 ({count})",
+    "exportSelected": "선택 항목 내보내기 ({count})"
+  },
+  "pagination": {
+    "itemsPerPage": "페이지당 항목 수",
+    "showingItems": "전체 {total}개 중 {start}-{end} 표시"
+  },
+  "table": {
+    "headers": {
+      "title": "대화 제목",
+      "platform": "플랫폼",
+      "type": "유형",
+      "cid": "대화 ID",
+      "umo": "통합 메시지 출처",
+      "sessionId": "세션 ID",
+      "createdAt": "생성 시간",
+      "updatedAt": "수정 시간",
+      "actions": "작업"
+    },
+    "umoDisplay": {
+      "parsed": "해석됨",
+      "raw": "UMO"
+    }
+  },
+  "actions": {
+    "view": "보기",
+    "edit": "편집",
+    "delete": "삭제"
+  },
+  "messageTypes": {
+    "group": "그룹 채팅",
+    "friend": "개인 채팅",
+    "unknown": "알 수 없음"
+  },
+  "status": {
+    "noTitle": "제목 없는 대화",
+    "unknown": "알 수 없음",
+    "noData": "대화 기록이 없습니다",
+    "emptyContent": "대화 내용이 비어 있습니다",
+    "audioNotSupported": "브라우저가 오디오 재생을 지원하지 않습니다."
+  },
+  "dialogs": {
+    "view": {
+      "title": "대화 세부 정보",
+      "editMode": "대화 편집",
+      "previewMode": "미리보기 모드",
+      "saveChanges": "변경 사항 저장",
+      "close": "닫기",
+      "confirmClose": "저장되지 않은 변경 사항이 있습니다. 정말 닫으시겠습니까?"
+    },
+    "edit": {
+      "title": "대화 정보 편집",
+      "titleLabel": "대화 제목",
+      "titlePlaceholder": "대화 제목을 입력하세요",
+      "cancel": "취소",
+      "save": "저장"
+    },
+    "delete": {
+      "title": "삭제 확인",
+      "message": "\"{title}\" 대화를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.",
+      "cancel": "취소",
+      "confirm": "삭제"
+    },
+    "batchDelete": {
+      "title": "일괄 삭제 확인",
+      "message": "선택한 대화 {count}개를 삭제하시겠습니까? 이 작업은 되돌릴 수 없으니 신중하게 진행해 주세요!",
+      "andMore": "외 {count}개",
+      "cancel": "취소",
+      "confirm": "일괄 삭제",
+      "warning": "경고: 이 작업은 되돌릴 수 없습니다!"
+    }
+  },
+  "messages": {
+    "fetchError": "대화 목록 조회 실패",
+    "saveSuccess": "저장되었습니다",
+    "saveError": "저장 실패",
+    "deleteSuccess": "삭제되었습니다",
+    "deleteError": "삭제 실패",
+    "historyError": "대화 기록 조회 실패",
+    "historySaveSuccess": "대화 기록이 저장되었습니다",
+    "historySaveError": "대화 기록 저장 실패",
+    "invalidJson": "잘못된 JSON 형식입니다",
+    "noItemSelected": "먼저 삭제할 대화를 선택해 주세요",
+    "batchDeleteSuccess": "대화 {count}개가 삭제되었습니다",
+    "batchDeleteError": "일괄 삭제 실패",
+    "batchDeletePartial": "삭제 완료: 성공 {deleted}개, 실패 {failed}개",
+    "exportSuccess": "내보내기 성공",
+    "exportError": "내보내기 실패",
+    "noItemSelectedForExport": "먼저 내보낼 대화를 선택해 주세요",
+    "copySuccess": "복사되었습니다",
+    "copyError": "복사 실패"
+  }
+}

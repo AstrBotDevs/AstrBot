@@ -1,0 +1,51 @@
+{
+  "greeting": {
+    "morning": "좋은 아침입니다, AstrBot에 오신 것을 환영합니다",
+    "afternoon": "좋은 오후입니다, AstrBot에 오신 것을 환영합니다",
+    "evening": "좋은 저녁입니다, AstrBot에 오신 것을 환영합니다",
+    "newYear": "새해 복 많이 받으세요!"
+  },
+  "subtitle": "먼저 기본적인 온보딩을 완료할 수 있습니다. 플랫폼과 채팅 공급자 설정은 모두 건너뛸 수 있습니다.",
+  "announcement": {
+    "title": "공지사항"
+  },
+  "onboard": {
+    "title": "빠른 온보딩",
+    "subtitle": "환영 페이지에서 바로 초기 설정을 완료하세요.",
+    "step1Title": "AI 모델 설정",
+    "step1Desc": "AstrBot에서 사용할 AI 모델을 설정합니다.",
+    "step2Title": "플랫폼 봇 설정",
+    "step2Desc": "AstrBot을 QQ, Lark, Slack, Telegram 등 메신저 플랫폼에 연결합니다.",
+    "step3Title": "에이전트의 컴퓨터 사용 허용",
+    "step3Desc": "에이전트가 이 컴퓨터에 접근하고 사용할 수 있는지 설정합니다.",
+    "step3HelpTitle": "접근 권한 상세",
+    "step3HelpItem1": "에이전트는 사용자별로 격리된 워크스페이스 디렉터리에 접근하고 사용할 수 있으며, 더 복잡한 작업을 처리하기 위해 Skills도 사용할 수 있습니다.",
+    "step3HelpItem2": "AstrBot 관리자의 경우, 에이전트가 셸 명령 실행, Python 코드 실행, 이 컴퓨터의 모든 로컬 디렉터리 접근까지 추가로 허용됩니다.",
+    "step3HelpClose": "닫기",
+    "step3SelectLabel": "컴퓨터 접근",
+    "step3Allow": "허용",
+    "step3Deny": "허용 안 함",
+    "configure": "설정",
+    "save": "저장",
+    "skip": "건너뛰기",
+    "pending": "대기 중",
+    "completed": "완료됨",
+    "skipped": "건너뜀",
+    "platformLoadFailed": "플랫폼 설정을 불러오지 못했습니다",
+    "providerLoadFailed": "공급자 설정을 불러오지 못했습니다",
+    "providerUpdateFailed": "설정 파일 \"default\"의 기본 채팅 공급자 업데이트에 실패했습니다",
+    "providerDefaultUpdated": "설정 파일 \"default\"의 기본 채팅 공급자가 {id}(으)로 설정되었습니다",
+    "computerAccessUpdateFailed": "에이전트의 컴퓨터 접근 권한 업데이트에 실패했습니다",
+    "computerAccessAllowed": "이제 에이전트가 이 컴퓨터에 접근하고 사용할 수 있습니다",
+    "computerAccessDenied": "이제 에이전트가 이 컴퓨터에 접근하고 사용할 수 없습니다",
+    "step3HelpItem3": "더 세밀한 제어가 필요하면 설정 -> 일반 -> 컴퓨터 접근에서 컴퓨터 접근 옵션을 구성하세요."
+  },
+  "resources": {
+    "title": "리소스",
+    "githubDesc": "우리에게 별을 눌러주세요!",
+    "docsTitle": "문서",
+    "docsDesc": "AstrBot 공식 문서를 읽어보세요.",
+    "afdianTitle": "Afdian",
+    "afdianDesc": "Afdian에서 AstrBot 팀을 후원하세요."
+  }
+}

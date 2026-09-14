@@ -1,0 +1,97 @@
+{
+  "title": "장기 기억",
+  "subtitle": "AI 어시스턴트의 장기 기억 관리",
+  "memories": {
+    "title": "기억 목록",
+    "content": "기억 내용",
+    "importance": "중요도",
+    "createTime": "생성 시간",
+    "lastAccess": "마지막 접근",
+    "category": "카테고리"
+  },
+  "categories": {
+    "personal": "개인 정보",
+    "preferences": "선호 설정",
+    "conversations": "대화 기록",
+    "facts": "사실 정보",
+    "skills": "스킬 지식"
+  },
+  "importance": {
+    "high": "높음",
+    "medium": "보통",
+    "low": "낮음"
+  },
+  "actions": {
+    "view": "상세 보기",
+    "edit": "편집",
+    "delete": "삭제",
+    "pin": "고정",
+    "unpin": "고정 해제"
+  },
+  "filters": {
+    "all": "전체",
+    "category": "카테고리별",
+    "importance": "중요도별",
+    "dateRange": "날짜 범위별",
+    "title": "필터",
+    "userIdLabel": "사용자 ID로 필터링",
+    "filterButton": "필터",
+    "resetButton": "필터 초기화",
+    "refreshButton": "그래프 새로고침"
+  },
+  "search": {
+    "title": "기억 검색",
+    "userIdLabel": "사용자 ID",
+    "queryLabel": "키워드 입력",
+    "searchButton": "검색",
+    "resultsTitle": "검색 결과",
+    "noResults": "관련된 기억 내용을 찾을 수 없습니다",
+    "similarity": "관련도",
+    "noTextContent": "텍스트 내용 없음"
+  },
+  "addMemory": {
+    "title": "기억 데이터 추가",
+    "textLabel": "텍스트 내용 입력",
+    "userIdLabel": "사용자 ID",
+    "summarizeLabel": "요약 필요",
+    "addButton": "데이터 추가"
+  },
+  "nodeDetails": {
+    "title": "노드 상세 정보",
+    "id": "ID",
+    "type": "유형",
+    "name": "이름",
+    "userId": "사용자 ID",
+    "timestamp": "타임스탬프"
+  },
+  "graphStats": {
+    "title": "그래프 통계",
+    "nodeCount": "노드 수",
+    "edgeCount": "엣지 수"
+  },
+  "factDialog": {
+    "title": "기억 사실",
+    "id": "ID",
+    "docId": "문서 ID",
+    "createdAt": "생성일",
+    "updatedAt": "수정일",
+    "metadata": "메타데이터",
+    "metadataKey": "키",
+    "metadataValue": "값",
+    "loading": "로딩 중...",
+    "close": "닫기",
+    "noValue": "없음",
+    "unknown": "알 수 없음"
+  },
+  "messages": {
+    "searchQueryRequired": "검색할 키워드를 입력해주세요",
+    "searchSuccess": "관련된 기억 {count}개를 찾았습니다",
+    "searchNoResults": "관련된 기억 내용을 찾을 수 없습니다",
+    "searchError": "검색에 실패했습니다",
+    "addSuccess": "기억 데이터가 추가되었습니다!",
+    "addError": "기억 데이터 추가에 실패했습니다",
+    "factDetailsError": "기억 상세 정보를 가져오지 못했습니다",
+    "metadataParseError": "메타데이터를 파싱할 수 없습니다",
+    "relationNoMemoryData": "이 관계에는 연결된 기억 데이터가 없습니다"
+  }
+}

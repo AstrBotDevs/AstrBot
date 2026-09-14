@@ -1,0 +1,147 @@
+{
+  "page": {
+    "description": "챗봇의 페르소나 설정을 관리하고 구성합니다"
+  },
+  "buttons": {
+    "create": "페르소나 생성",
+    "createFirst": "첫 페르소나 생성",
+    "edit": "편집",
+    "delete": "삭제",
+    "cancel": "취소",
+    "save": "저장",
+    "move": "이동",
+    "addDialogPair": "대화 쌍 추가"
+  },
+  "labels": {
+    "presetDialogs": "프리셋 대화 ({count}쌍)",
+    "createdAt": "생성일",
+    "updatedAt": "수정일"
+  },
+  "form": {
+    "personaId": "페르소나 ID",
+    "systemPrompt": "시스템 프롬프트",
+    "customErrorMessage": "사용자 지정 오류 응답 메시지 (선택)",
+    "customErrorMessageHelp": "이 페르소나의 LLM 요청이 실패하면(예: 연결 실패) 이 오류 응답이 먼저 전송됩니다. 비워두면 기본 오류 메시지가 사용됩니다.",
+    "presetDialogs": "프리셋 대화",
+    "presetDialogsHelp": "봇이 역할 설정을 더 잘 이해하도록 프리셋 대화를 추가하세요. 대화 개수는 짝수여야 합니다(사용자와 어시스턴트가 번갈아 발화).",
+    "userMessage": "사용자 메시지",
+    "assistantMessage": "어시스턴트 메시지",
+    "tools": "도구 선택",
+    "toolsHelp": "이 페르소나가 사용할 수 있는 도구를 선택하세요. 도구를 사용하면 봇이 검색, 계산, 정보 조회 등 특정 기능을 수행할 수 있습니다.",
+    "toolsSelection": "도구 선택 작업",
+    "selectAllTools": "모든 도구 선택",
+    "clearAllTools": "선택 해제",
+    "allSelected": "모두 선택됨",
+    "mcpServersQuickSelect": "MCP 서버 빠른 선택",
+    "searchTools": "도구 검색",
+    "selectedTools": "선택한 도구",
+    "builtinToolDisabledHint": "빌트인 도구는 아직 여기서 사용 여부를 전환할 수 없습니다. 설정 파일에서 해당 설정 항목을 사용/사용 안 함으로 변경하세요.",
+    "noToolsAvailable": "사용 가능한 도구 없음",
+    "noToolsFound": "일치하는 도구 없음",
+    "loadingTools": "도구를 불러오는 중...",
+    "allToolsAvailable": "사용 가능한 모든 도구 사용",
+    "noToolsSelected": "선택한 도구 없음",
+    "skills": "Skills 선택",
+    "skillsHelp": "이 페르소나가 사용할 수 있는 Skills를 선택하세요. Skills는 재사용 가능한 워크플로와 가이드를 제공합니다.",
+    "skillsAllAvailable": "사용 가능한 모든 Skills 사용",
+    "skillsSelectSpecific": "특정 Skills 선택",
+    "searchSkills": "Skills 검색",
+    "selectedSkills": "선택한 Skills",
+    "noSkillsAvailable": "사용 가능한 Skills 없음",
+    "noSkillsFound": "일치하는 Skills 없음",
+    "loadingSkills": "Skills를 불러오는 중...",
+    "allSkillsAvailable": "사용 가능한 모든 Skills 사용",
+    "noSkillsSelected": "선택한 Skills 없음",
+    "skillsRuntimeNoneWarning": "Computer Use 런타임이 None으로 설정되어 있습니다. 활성화된 런타임이 없어 Skills가 정상적으로 실행되지 않을 수 있습니다.",
+    "createInFolder": "\"{folder}\"에 생성됩니다",
+    "rootFolder": "전체 페르소나"
+  },
+  "dialog": {
+    "create": {
+      "title": "새 페르소나 생성"
+    },
+    "edit": {
+      "title": "페르소나 편집"
+    }
+  },
+  "empty": {
+    "title": "구성된 페르소나 없음",
+    "description": "첫 페르소나를 생성하여 맞춤형 챗봇 사용을 시작하세요",
+    "folderEmpty": "이 폴더는 비어 있습니다",
+    "folderEmptyDescription": "새 페르소나 또는 폴더를 생성하여 시작하세요"
+  },
+  "validation": {
+    "required": "이 필드는 필수입니다",
+    "minLength": "최소 {min}자 이상 입력해야 합니다",
+    "alphanumeric": "영문자, 숫자, 밑줄, 하이픈만 사용할 수 있습니다",
+    "dialogRequired": "{type}은(는) 비워둘 수 없습니다",
+    "personaIdExists": "이미 존재하는 페르소나 이름입니다"
+  },
+  "messages": {
+    "loadError": "페르소나 목록을 불러오지 못했습니다",
+    "saveSuccess": "저장 성공",
+    "saveError": "저장 실패",
+    "deleteConfirm": "페르소나 \"{id}\"을(를) 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.",
+    "deleteSuccess": "삭제 성공",
+    "deleteError": "삭제 실패"
+  },
+  "persona": {
+    "personasTitle": "페르소나",
+    "toolsCount": "개 도구",
+    "skillsCount": "개 Skills",
+    "contextMenu": {
+      "moveTo": "이동..."
+    },
+    "messages": {
+      "moveSuccess": "페르소나를 이동했습니다",
+      "moveError": "페르소나 이동에 실패했습니다"
+    }
+  },
+  "folder": {
+    "sidebarTitle": "폴더",
+    "rootFolder": "루트",
+    "foldersTitle": "폴더",
+    "noFolders": "아직 폴더가 없습니다",
+    "createButton": "새 폴더",
+    "searchPlaceholder": "폴더 검색...",
+    "form": {
+      "name": "폴더 이름",
+      "description": "설명 (선택)"
+    },
+    "validation": {
+      "nameRequired": "폴더 이름은 필수입니다"
+    },
+    "contextMenu": {
+      "open": "열기",
+      "rename": "이름 변경",
+      "moveTo": "이동...",
+      "delete": "삭제"
+    },
+    "createDialog": {
+      "title": "새 폴더 생성",
+      "createButton": "생성"
+    },
+    "renameDialog": {
+      "title": "폴더 이름 변경"
+    },
+    "deleteDialog": {
+      "title": "폴더 삭제",
+      "message": "폴더 \"{name}\"을(를) 삭제하시겠습니까?",
+      "warning": "폴더 안의 모든 페르소나는 루트 폴더로 이동됩니다."
+    },
+    "messages": {
+      "createSuccess": "폴더를 생성했습니다",
+      "createError": "폴더 생성에 실패했습니다",
+      "renameSuccess": "폴더 이름을 변경했습니다",
+      "renameError": "폴더 이름 변경에 실패했습니다",
+      "deleteSuccess": "폴더를 삭제했습니다",
+      "deleteError": "폴더 삭제에 실패했습니다"
+    }
+  },
+  "moveDialog": {
+    "title": "폴더로 이동",
+    "description": "\"{name}\"의 대상 폴더를 선택하세요",
+    "success": "이동 성공",
+    "error": "이동 실패"
+  }
+}
