@@ -1,4 +1,5 @@
 import asyncio
+import io
 import threading
 import time
 
@@ -53,32 +54,55 @@ async def test_event_loop_watchdog_stops_worker_thread():
 
 @pytest.mark.asyncio
 async def test_event_loop_watchdog_writes_rotating_log(tmp_path):
-    """The watchdog should write to and rotate its log file."""
-    log_path = tmp_path / "logs" / "event_loop_watchdog.log"
-    log_path.parent.mkdir()
-    log_path.write_text("x" * 8, encoding="utf-8")
-
+    """The watchdog should dump stalled-loop stacks and rotate oversized log files."""
+    # The watchdog must dump the event loop thread's stack while the loop is
+    # stalled inside this test. Loaded CI runners can otherwise catch the loop
+    # in pytest machinery before the blocking sleep starts or after it ends,
+    # so the stall is retried until a dump lands inside this test.
+    dump = io.StringIO()
     task = asyncio.create_task(
         diagnostics.event_loop_watchdog(
             timeout=0.02,
             interval=0.005,
-            dump_path=log_path,
-            max_bytes=4,
+            dump_file=dump,
         )
     )
-    await asyncio.sleep(0)
-    time.sleep(0.05)  # noqa: ASYNC251 - Intentionally block the event loop.
-    await asyncio.sleep(0.02)
+    # Let the watchdog task start and refresh its heartbeat before stalling,
+    # so a dump cannot fire before the loop reaches the blocking sleep below.
+    await asyncio.sleep(0.05)
+    for _ in range(5):
+        time.sleep(0.15)  # noqa: ASYNC251 - Intentionally block the event loop.
+        await asyncio.sleep(0.02)
+        if "test_event_loop_diagnostics.py" in dump.getvalue():
+            break
     task.cancel()
     await asyncio.gather(task, return_exceptions=True)
 
-    log_content = log_path.read_text(encoding="utf-8")
-    assert "Event loop stalled for" in log_content
-    assert "test_event_loop_diagnostics.py" in log_content
-    assert (
-        log_path.with_name("event_loop_watchdog.log.1").read_text(encoding="utf-8")
-        == "x" * 8
-    )
+    dump_content = dump.getvalue()
+    assert "Event loop stalled for" in dump_content
+    assert "test_event_loop_diagnostics.py" in dump_content
+
+    # Opening an oversized log rotates it aside first. Test the helper
+    # directly: going through a live watchdog would make rotation timing
+    # depend on thread scheduling.
+    log_path = tmp_path / "logs" / "event_loop_watchdog.log"
+    log_path.parent.mkdir()
+    rotated_path = log_path.with_name("event_loop_watchdog.log.1")
+    for _ in range(5):
+        if rotated_path.exists():
+            rotated_path.unlink()
+        log_path.write_text("x" * 8, encoding="utf-8")
+        # Virus scanners and similar tools briefly hold freshly written files
+        # open on Windows, which makes the rotate below fail with WinError 32.
+        time.sleep(0.2)  # noqa: ASYNC251 - Let transient file locks expire.
+        with diagnostics._open_watchdog_log_file(log_path, max_bytes=4) as output:
+            output.write("new dump\n")
+        if rotated_path.exists() and rotated_path.read_text(
+            encoding="utf-8"
+        ) == "x" * 8:
+            break
+    assert rotated_path.read_text(encoding="utf-8") == "x" * 8
+    assert log_path.read_text(encoding="utf-8") == "new dump\n"
 
 
 @pytest.mark.asyncio
