@@ -31,6 +31,7 @@
         <div class="provider-menu-body">
           <div class="provider-search-row">
             <v-menu
+              v-if="providerSources.length > 1"
               v-model="sourceMenuOpen"
               :close-on-content-click="false"
               offset="6"
@@ -940,7 +941,8 @@ defineExpose({ getCurrentSelection });
   box-shadow: none;
 }
 
-.provider-search :deep(.v-field__outline) {
+.provider-search :deep(.v-field .v-field__outline) {
+  --v-field-border-opacity: 1;
   color: rgba(var(--v-theme-on-surface), 0.16);
 }
 
