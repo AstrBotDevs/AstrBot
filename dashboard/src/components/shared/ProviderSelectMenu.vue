@@ -99,6 +99,7 @@
 
           <v-list
             v-if="!loadingProviders"
+            ref="providerListRef"
             density="compact"
             nav
             class="provider-menu-list"
@@ -127,109 +128,120 @@
               </template>
             </v-list-item>
 
-            <v-list-item
-              v-for="provider in filteredProviders"
-              :key="provider.id"
-              :active="isProviderSelected(provider.id)"
-              rounded="lg"
-              class="provider-menu-item"
-              @click="selectProvider(provider)"
-            >
-              <v-list-item-title class="provider-item-title">
-                {{ provider.id }}
-              </v-list-item-title>
-              <v-list-item-subtitle class="provider-subtitle">
-                <span class="model-name">
-                  {{
-                    provider.model || provider.type || provider.provider_type
-                  }}
-                </span>
-                <span
-                  v-if="
-                    capabilityBadges(provider).length ||
-                    formatContextLimit(provider, metadataForProvider(provider))
-                  "
-                  class="meta-icons"
-                >
-                  <v-tooltip
-                    v-for="item in capabilityBadges(provider)"
-                    :key="item.key"
-                    location="top"
-                    max-width="320"
-                  >
-                    <template #activator="{ props: badgeTooltipProps }">
-                      <span
-                        v-bind="badgeTooltipProps"
-                        class="meta-icon-badge"
-                        :class="{ 'meta-icon-badge--disabled': !item.enabled }"
-                        @click.stop
-                      >
-                        <v-icon size="13">{{ item.icon }}</v-icon>
-                      </span>
-                    </template>
-                    <span>{{ item.tooltip }}</span>
-                  </v-tooltip>
-                  <v-tooltip
+            <template v-for="group in providerGroups" :key="group.id">
+              <v-list-subheader class="provider-source-header">
+                {{ group.id }}
+              </v-list-subheader>
+              <v-list-item
+                v-for="provider in group.providers"
+                :key="provider.id"
+                :data-selected="isProviderSelected(provider.id) || undefined"
+                :active="isProviderSelected(provider.id)"
+                rounded="lg"
+                class="provider-menu-item"
+                @click="selectProvider(provider)"
+              >
+                <v-list-item-title class="provider-item-title">
+                  {{ provider.id }}
+                </v-list-item-title>
+                <v-list-item-subtitle class="provider-subtitle">
+                  <span class="model-name">
+                    {{
+                      provider.model || provider.type || provider.provider_type
+                    }}
+                  </span>
+                  <span
                     v-if="
+                      capabilityBadges(provider).length ||
                       formatContextLimit(
                         provider,
                         metadataForProvider(provider),
                       )
                     "
-                    location="top"
-                    max-width="320"
+                    class="meta-icons"
                   >
-                    <template #activator="{ props: contextTooltipProps }">
-                      <span
-                        v-bind="contextTooltipProps"
-                        class="meta-context-badge"
-                        @click.stop
-                      >
-                        {{
-                          formatContextLimit(
-                            provider,
-                            metadataForProvider(provider),
-                          )
-                        }}
-                      </span>
-                    </template>
-                    <span>{{
-                      providerTm("models.metadata.context", {
-                        tokens: formatContextLimit(
+                    <v-tooltip
+                      v-for="item in capabilityBadges(provider)"
+                      :key="item.key"
+                      location="top"
+                      max-width="320"
+                    >
+                      <template #activator="{ props: badgeTooltipProps }">
+                        <span
+                          v-bind="badgeTooltipProps"
+                          class="meta-icon-badge"
+                          :class="{
+                            'meta-icon-badge--disabled': !item.enabled,
+                          }"
+                          @click.stop
+                        >
+                          <v-icon size="13">{{ item.icon }}</v-icon>
+                        </span>
+                      </template>
+                      <span>{{ item.tooltip }}</span>
+                    </v-tooltip>
+                    <v-tooltip
+                      v-if="
+                        formatContextLimit(
                           provider,
                           metadataForProvider(provider),
-                        ),
-                      })
-                    }}</span>
-                  </v-tooltip>
-                </span>
-              </v-list-item-subtitle>
-              <template #append>
-                <div class="provider-menu-actions" @click.stop>
-                  <v-tooltip location="top">
-                    <template #activator="{ props: testTooltipProps }">
-                      <v-btn
-                        v-bind="testTooltipProps"
-                        icon="mdi-connection"
-                        size="x-small"
-                        variant="text"
-                        :loading="testingProviderIds.includes(provider.id)"
-                        :disabled="testingProviderIds.includes(provider.id)"
-                        @click.stop="testProvider(provider)"
-                      />
-                    </template>
-                    <span>{{ providerTm("models.testButton") }}</span>
-                  </v-tooltip>
-                  <v-icon
-                    v-if="isProviderSelected(provider.id)"
-                    class="provider-selected-icon"
-                    size="18"
-                  >
-                    mdi-check
-                  </v-icon>
-                </div>
-              </template>
-            </v-list-item>
+                        )
+                      "
+                      location="top"
+                      max-width="320"
+                    >
+                      <template #activator="{ props: contextTooltipProps }">
+                        <span
+                          v-bind="contextTooltipProps"
+                          class="meta-context-badge"
+                          @click.stop
+                        >
+                          {{
+                            formatContextLimit(
+                              provider,
+                              metadataForProvider(provider),
+                            )
+                          }}
+                        </span>
+                      </template>
+                      <span>{{
+                        providerTm("models.metadata.context", {
+                          tokens: formatContextLimit(
+                            provider,
+                            metadataForProvider(provider),
+                          ),
+                        })
+                      }}</span>
+                    </v-tooltip>
+                  </span>
+                </v-list-item-subtitle>
+                <template #append>
+                  <div class="provider-menu-actions" @click.stop>
+                    <v-tooltip location="top">
+                      <template #activator="{ props: testTooltipProps }">
+                        <v-btn
+                          v-bind="testTooltipProps"
+                          icon="mdi-connection"
+                          size="x-small"
+                          variant="text"
+                          :loading="testingProviderIds.includes(provider.id)"
+                          :disabled="testingProviderIds.includes(provider.id)"
+                          @click.stop="testProvider(provider)"
+                        />
+                      </template>
+                      <span>{{ providerTm("models.testButton") }}</span>
+                    </v-tooltip>
+                    <v-icon
+                      v-if="isProviderSelected(provider.id)"
+                      class="provider-selected-icon"
+                      size="18"
+                    >
+                      mdi-check
+                    </v-icon>
+                  </div>
+                </template>
+              </v-list-item>
+            </template>
           </v-list>
 
           <div
@@ -279,7 +291,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import { providerApi } from "@/api/v1";
 import ProviderChatCompletionPanel from "@/components/provider/ProviderChatCompletionPanel.vue";
 import ProviderPage from "@/views/ProviderPage.vue";
@@ -297,6 +309,7 @@ interface ProviderConfig extends ProviderMetadataSource {
   model?: string;
   type?: string;
   provider_type?: string;
+  provider_source_id?: string;
   enable?: boolean;
 }
 
@@ -333,6 +346,7 @@ const modelMetadata = ref<Record<string, ProviderModelMetadata>>({});
 const testingProviderIds = ref<string[]>([]);
 const searchQuery = ref("");
 const menuOpen = ref(false);
+const providerListRef = ref<{ $el: HTMLElement } | null>(null);
 const providerDrawer = ref(false);
 const loadingProviders = ref(false);
 const providersLoaded = ref(false);
@@ -381,15 +395,28 @@ const menuLocation = computed(() => {
 });
 
 const filteredProviders = computed(() => {
-  const query = searchQuery.value.trim().toLowerCase();
+  const query = (searchQuery.value || "").trim().toLowerCase();
   if (!query) return providerConfigs.value;
   return providerConfigs.value.filter(
     (provider) =>
       provider.id.toLowerCase().includes(query) ||
+      (provider.provider_source_id || "").toLowerCase().includes(query) ||
       String(provider.model || "")
         .toLowerCase()
         .includes(query),
   );
+});
+
+const providerGroups = computed(() => {
+  const groups = new Map<string, ProviderConfig[]>();
+  for (const provider of filteredProviders.value) {
+    const sourceId =
+      provider.provider_source_id || provider.type || provider.id;
+    const group = groups.get(sourceId);
+    if (group) group.push(provider);
+    else groups.set(sourceId, [provider]);
+  }
+  return Array.from(groups, ([id, providers]) => ({ id, providers }));
 });
 
 async function loadProviderConfigs(force = false) {
@@ -507,8 +534,24 @@ async function testProvider(provider: ProviderConfig) {
 }
 
 function handleMenuToggle(isOpen: boolean) {
-  if (isOpen) loadProviderConfigs(true);
+  if (isOpen) {
+    searchQuery.value = "";
+    loadProviderConfigs(true);
+  }
 }
+
+watch([menuOpen, loadingProviders], async ([isOpen, loading]) => {
+  if (!isOpen || loading) return;
+  await nextTick();
+  const list = providerListRef.value?.$el;
+  const selected = list?.querySelector<HTMLElement>('[data-selected="true"]');
+  if (list && selected) {
+    list.scrollTop +=
+      selected.getBoundingClientRect().top -
+      list.getBoundingClientRect().top -
+      (list.clientHeight - selected.clientHeight) / 2;
+  }
+});
 
 function openProviderDrawer() {
   menuOpen.value = false;
@@ -712,6 +755,12 @@ defineExpose({ getCurrentSelection });
   min-height: 54px !important;
   margin-bottom: 2px;
   border-radius: 10px !important;
+}
+
+.provider-source-header {
+  min-height: 32px;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .provider-menu-item:hover {
