@@ -1972,8 +1972,6 @@ export default {
           ) || null;
         await this.$nextTick();
         if (this.selectedPlatformConfig) {
-          this.selectedPlatformConfig.id = scanPlatform.id;
-          this.scanPlatformIdCustomized = true;
           this.larkCreationMode = "scan";
           this.dingtalkCreationMode = "scan";
           this.qqOfficialCreationMode = "scan";

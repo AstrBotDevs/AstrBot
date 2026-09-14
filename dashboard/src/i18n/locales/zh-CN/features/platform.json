@@ -6,7 +6,7 @@
   "emptyText": "暂无平台适配器，点击 创建机器人 添加",
   "workspace": {
     "rescan": "重新扫码绑定",
-    "rescanConfirm": "确定重新扫码绑定「{id}」？现有连接配置将被删除。",
+    "rescanConfirm": "点击确定后，现有连接配置将被删除，并自动跳转到扫码创建页面。",
     "listTitle": "机器人",
     "selectHint": "选择一个机器人进行配置",
     "empty": "还没有机器人，创建后即可开始配置。",

@@ -6,7 +6,7 @@
   "emptyText": "No platform adapters yet, click Add Adapter to create one",
   "workspace": {
     "rescan": "Rebind via QR code",
-    "rescanConfirm": "Rebind {id} via QR code? Existing connection settings will be deleted.",
+    "rescanConfirm": "After you click Confirm, existing connection settings will be deleted and the QR code creation page will open automatically.",
     "listTitle": "Bots",
     "selectHint": "Select a bot to configure",
     "empty": "No bots yet. Create one to start configuring it.",

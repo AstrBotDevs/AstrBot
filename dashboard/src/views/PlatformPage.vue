@@ -494,7 +494,7 @@ async function rescanPlatform(platform) {
   try {
     if (
       !(await askForConfirmationDialog(
-        tm("workspace.rescanConfirm", { id: platform.id }),
+        tm("workspace.rescanConfirm"),
         confirmDialog,
       ))
     )
@@ -508,7 +508,7 @@ async function rescanPlatform(platform) {
       (item) => item.id !== platform.id,
     );
     selectedPlatformId.value = null;
-    scanPlatform.value = { id: platform.id, type: platform.type };
+    scanPlatform.value = { type: platform.type };
     showAddPlatformDialog.value = true;
     await getConfig();
   } catch (error) {
