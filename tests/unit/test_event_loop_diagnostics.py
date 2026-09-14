@@ -1,6 +1,5 @@
 import asyncio
 import threading
-import time
 
 import pytest
 
@@ -52,11 +51,19 @@ async def test_event_loop_watchdog_stops_worker_thread():
 
 
 @pytest.mark.asyncio
-async def test_event_loop_watchdog_writes_rotating_log(tmp_path):
+async def test_event_loop_watchdog_writes_rotating_log(tmp_path, monkeypatch):
     """The watchdog should write to and rotate its log file."""
     log_path = tmp_path / "logs" / "event_loop_watchdog.log"
     log_path.parent.mkdir()
     log_path.write_text("x" * 8, encoding="utf-8")
+    sampled = threading.Event()
+    print_stack = diagnostics.traceback.print_stack
+
+    def record_stack(*args, **kwargs):
+        print_stack(*args, **kwargs)
+        sampled.set()
+
+    monkeypatch.setattr(diagnostics.traceback, "print_stack", record_stack)
 
     task = asyncio.create_task(
         diagnostics.event_loop_watchdog(
@@ -66,15 +73,20 @@ async def test_event_loop_watchdog_writes_rotating_log(tmp_path):
             max_bytes=4,
         )
     )
-    await asyncio.sleep(0)
-    time.sleep(0.05)  # noqa: ASYNC251 - Intentionally block the event loop.
-    await asyncio.sleep(0.02)
-    task.cancel()
-    await asyncio.gather(task, return_exceptions=True)
+    try:
+        await asyncio.sleep(0)
+        # Keep this coroutine on the event-loop stack until the real dump is
+        # sampled, instead of assuming the worker runs within a fixed 50ms.
+        assert sampled.wait(timeout=5), "Watchdog did not capture a thread stack"
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
 
     log_content = log_path.read_text(encoding="utf-8")
     assert "Event loop stalled for" in log_content
-    assert "test_event_loop_diagnostics.py" in log_content
+    main_thread_dump = log_content.split("\nThread", 2)[1]
+    assert "test_event_loop_diagnostics.py" in main_thread_dump
+    assert "test_event_loop_watchdog_writes_rotating_log" in main_thread_dump
     assert (
         log_path.with_name("event_loop_watchdog.log.1").read_text(encoding="utf-8")
         == "x" * 8
@@ -105,10 +117,12 @@ async def test_event_loop_watchdog_survives_dump_failure(tmp_path, monkeypatch):
             dump_path=log_path,
         )
     )
-    await asyncio.sleep(0)
-    time.sleep(0.06)  # noqa: ASYNC251 - Intentionally block the event loop.
-    assert dumped.is_set()
-    task.cancel()
-    await asyncio.gather(task, return_exceptions=True)
+    try:
+        await asyncio.sleep(0)
+        # The worker must retry while the event loop is still blocked.
+        assert dumped.wait(timeout=5), "Watchdog did not retry the failed dump"
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
 
     assert attempts >= 2
