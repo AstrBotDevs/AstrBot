@@ -13,7 +13,7 @@ Fully compatible with the OpenAI API format — just change the API Base and Key
 
 ## Configure in AstrBot
 
-Open the AstrBot dashboard , click **Providers → Add Provider → OpenAI**.
+Open the AstrBot dashboard, click **Providers → Add Provider → OpenAI**.
 
 Fill in the following:
 

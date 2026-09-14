@@ -27,6 +27,7 @@ AstrBot 在 v4.13.0 之后引入了对 Anthropic Skills 的支持，使得用户
 AstrBot 会从多个位置发现 Skills：
 
 - **本地 Skills**：通过 WebUI 上传或放置在 `data/skills/<skill_name>/SKILL.md`，会显示在 WebUI 的 Skills 管理页面中。
+- **内置预置 Skills**：AstrBot 自带 `skill-creator`、`documents`、`pdf`、`spreadsheets` 等只读预置 Skills（v4.27.0 起），会自动发现并注入请求；同名本地 Skill 可以覆盖它们。
 - **插件内置 Skills**：插件可以在自己的 `skills/` 目录中提供 Skills。它们会显示在 WebUI 中，但由插件管理，因此不能在本地 Skills 页面删除或编辑。
 - **Sandbox 预置 Skills**：使用 sandbox 运行环境时，AstrBot 会读取沙盒中已发现的 Skills，并在请求时提供给 Agent。
 - **工作区 Skills**：当前会话 workspace 下的 `skills/<skill_name>/SKILL.md`。目前仅在 local 运行环境下注入，路径通常是 `data/workspaces/{normalized_umo}/skills/<skill_name>/SKILL.md`。
@@ -40,7 +41,7 @@ AstrBot 会从多个位置发现 Skills：
 1. 如果当前人格明确配置为“不使用任何 Skills”，则不会注入任何 Skills，包括工作区 Skills。
 2. 如果当前人格配置了指定 Skills 列表，该列表不会过滤工作区 Skills。
 3. 当前会话的工作区 Skill 优先级最高。同名时，它会覆盖本地、插件或 sandbox 中的同名 Skill，仅对当前请求生效。
-4. 本地 Skills 优先于插件内置 Skills 和 sandbox-only Skills。
+4. 本地 Skills 优先于内置预置 Skills、插件内置 Skills 和 sandbox-only Skills。
 5. 插件内置 Skills 优先于 sandbox-only Skills。
 6. sandbox-only Skills 只会在没有同名本地、插件或工作区 Skill 时作为可用 Skill 注入。
 

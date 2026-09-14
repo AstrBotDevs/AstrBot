@@ -17,7 +17,7 @@ Platform adapters that support Unified Webhook Mode include:
 1. Have a domain (e.g., example.com) and a server with a public IP
 2. Configure DNS resolution (e.g., astrbot.example.com)
 3. Configure reverse proxy to forward requests from port 80 or 443 of your domain to AstrBot's WebUI port (default is 6185)
-4. Go to AstrBot's `Configuration` page, click `System`, and set the `Externally Reachable Callback URL` to your configured URL (e.g., https://astrbot.example.com). Click save and wait for restart.
+4. Open `Settings` → `General` → `Runtime Basics` at the bottom of the sidebar, and set the `Externally Reachable Callback URL` to your configured URL (e.g., https://astrbot.example.com). Click save and wait for restart. <span style="color: gray">~~Go to AstrBot's `Configuration` page, click `System`, and set the `Externally Reachable Callback URL`.~~ (Archived: since v4.26.0, system configuration has moved to the `Settings` page)</span>
 
 When configuring each platform adapter afterwards, enable `Unified Webhook Mode (unified_webhook_mode)`.
 

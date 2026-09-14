@@ -38,13 +38,15 @@ AstrBot 支持多知识库管理。在聊天时，您可以**自由指定知识�
 
 ## 上传文件
 
-创建好知识库之后，可以为知识库上传文档。支持同时上传最多 10 个文件，单个文件大小不超过 128 MB。
+创建好知识库之后，可以为知识库上传文档，支持批量上传，单个文件大小不超过 128 MB。<span style="color: gray">~~支持同时上传最多 10 个文件~~（已归档：自 v4.27.4 起已移除单次最多上传 10 个文件的数量限制）</span>
 
 ![上传文件](https://files.astrbot.app/docs/zh/use/image-4.png)
 
 ## 使用知识库
 
 在配置文件中，可以为不同的配置文件指定不同的知识库。
+
+知识库检索会将稠密与稀疏召回的分数做归一化融合，并进行来源文档去重，以提升最终召回质量（v4.27.0 起）。
 
 ## 附录：高性价比的嵌入模型申请
 
@@ -54,7 +56,7 @@ AstrBot 支持多知识库管理。在聊天时，您可以**自由指定知识�
 
 1. 打开 [硅基流动官网](https://cloud.siliconflow.cn/i/zMCYMSt2)，注册账户并完成实名认证。
 2. 打开 [API 密钥](https://cloud.siliconflow.cn/me/account/ak)。
-5. 填写 AstrBot OpenAI Embedding 模型提供商配置：
+3. 填写 AstrBot OpenAI Embedding 模型提供商配置：
    1. API Key 为刚刚申请的硅基流动的 API Key
    2. embedding api base 填写 `https://api.siliconflow.cn/v1`
    3. model 填写你选择的模型，此例子中为 `BAAI/bge-m3`。

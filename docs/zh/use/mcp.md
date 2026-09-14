@@ -8,6 +8,11 @@ AstrBot v3.5.0 支持 MCP 协议，可以添加多个 MCP 服务器、使用 MCP
 
 ![image](https://files.astrbot.app/docs/source/images/function-calling/image2.png)
 
+进入 WebUI `插件` 页并切换到 `MCP` 标签页，即可添加和管理 MCP 服务器。
+
+- 支持从 ModelScope 同步 MCP 服务器列表（v4.26.5 起）。同步完成后只会启用被同步的服务器，其余服务器保持禁用，可在列表中手动启用或禁用。
+- 发送给 LLM API 的 MCP 工具名称会被自动清理（sanitize），以满足不同模型的命名限制（v4.27.3 起）。
+
 ## 初始状态配置
 
 MCP 服务器一般使用 `uv` 或者 `npm` 来启动，因此您需要安装这两个工具。

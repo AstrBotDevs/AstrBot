@@ -40,7 +40,7 @@ AstrBot 支持接入所有适配了 OneBotv11 反向 Websockets（AstrBot 做服
 
 一些注意点：
 
-1. 协议实现端需要支持 `反向 WebSocket` 实现，及 AstrBot 端作为服务端，实现端作为客户端。
+1. 协议实现端需要支持 `反向 WebSocket` 实现，即 AstrBot 端作为服务端，实现端作为客户端。
 2. `反向 WebSocket` 的 URL 为 `ws(s)://<your-host>:6199/ws`。
 
 ## 3. 验证
@@ -69,7 +69,7 @@ AstrBot 支持接入所有适配了 OneBotv11 反向 Websockets（AstrBot 做服
 >
 > Docker部署的 NapCat：`docker logs napcat`。
 
-## 通过 Docker Compose 部署
+### 通过 Docker Compose 部署
 
 1. 下载或复制 [astrbot.yml](https://github.com/NapNeko/NapCat-Docker/blob/main/compose/astrbot.yml) 内容
 2. 将刚刚下载的文件重命名为 `astrbot.yml`

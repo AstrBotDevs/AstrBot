@@ -24,7 +24,7 @@
 
 1. 打开 [AstrBot-desktop Releases](https://github.com/AstrBotDevs/AstrBot-desktop/releases)。
 2. 下载与你系统对应的安装包（如 `.exe`、`.dmg`、`.rpm`、`.deb`）。
-3. 安装完成后启动桌面客户端，按向导完成初始化。
+3. 安装完成后启动桌面客户端即可使用（v4.27.3 起桌面端免登录，无需再登录 WebUI）。
 
 ## 与启动器部署的区别
 
