@@ -10,6 +10,7 @@ from astrbot.core.message.message_event_result import MessageChain, ResultConten
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.star_handler import EventType
 from astrbot.core.utils.path_util import path_Mapping
+from astrbot.core.utils.text_utils import calculate_word_count
 
 from ..context import PipelineContext, call_event_hook
 from ..stage import Stage, register_stage
@@ -88,12 +89,7 @@ class RespondStage(Stage):
             logger.info(f"Segmented-reply interval: {self.interval}")
 
     async def _word_cnt(self, text: str) -> int:
-        """分段回复 统计字数"""
-        if all(ord(c) < 128 for c in text):
-            word_count = len(text.split())
-        else:
-            word_count = len([c for c in text if c.isalnum()])
-        return word_count
+        return calculate_word_count(text)
 
     async def _calc_comp_interval(self, comp: BaseMessageComponent) -> float:
         """分段回复 计算间隔时间"""
