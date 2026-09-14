@@ -505,6 +505,51 @@ async def test_convert_audio_format_keeps_missing_target_path():
 
 
 @pytest.mark.asyncio
+async def test_convert_audio_format_offloads_magic_byte_probe(tmp_path, monkeypatch):
+    source_path = tmp_path / "voice.wav"
+    source_path.write_bytes(b"RIFF\x24\x00\x00\x00WAVEfmt " + b"\x00" * 16)
+    probe_calls = []
+
+    async def fake_to_thread(func, *args):
+        probe_calls.append((func, args))
+        return "wav"
+
+    monkeypatch.setattr(media_utils.asyncio, "to_thread", fake_to_thread)
+
+    result = await media_utils.convert_audio_format(
+        str(source_path),
+        output_format="wav",
+    )
+
+    assert result == str(source_path)
+    assert probe_calls == [(media_utils._get_audio_magic_type, (str(source_path),))]
+
+
+@pytest.mark.asyncio
+async def test_convert_audio_format_keeps_ogg_opus_without_reencoding(
+    tmp_path, monkeypatch
+):
+    source_path = tmp_path / "voice.ogg"
+    source_path.write_bytes(b"OggS" + b"\x00" * 20 + b"OpusHead" + b"\x00" * 32)
+
+    async def fail_create_subprocess_exec(*args, **kwargs):
+        raise AssertionError("an Ogg/Opus source should not be re-encoded")
+
+    monkeypatch.setattr(
+        media_utils.asyncio,
+        "create_subprocess_exec",
+        fail_create_subprocess_exec,
+    )
+
+    result = await media_utils.convert_audio_format(
+        str(source_path),
+        output_format="ogg",
+    )
+
+    assert result == str(source_path)
+
+
+@pytest.mark.asyncio
 async def test_media_resolver_cleans_http_target_when_download_fails(
     tmp_path, monkeypatch
 ):
