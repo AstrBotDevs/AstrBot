@@ -5,6 +5,8 @@
   "addAdapter": "Add Adapter",
   "emptyText": "No platform adapters yet, click Add Adapter to create one",
   "workspace": {
+    "rescan": "Scan again",
+    "rescanConfirm": "This will delete platform {id} and open QR code creation for the same platform. Existing connection settings and unsaved changes will be lost. Cancelling creation will not restore the old platform. Continue?",
     "listTitle": "Bots",
     "selectHint": "Select a bot to configure",
     "empty": "No bots yet. Create one to start configuring it.",

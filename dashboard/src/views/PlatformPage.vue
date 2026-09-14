@@ -151,6 +151,8 @@
               :metadata="metadata"
               :runtime-stat="getPlatformStat(selectedPlatform.id)"
               :has-qr-payload="hasQrPayload(selectedPlatform.id)"
+              :rescanning="rescanning"
+              @rescan="rescanPlatform(selectedPlatform)"
               @saved="handlePlatformSaved"
               @show-toast="showToast"
               @show-error="showErrorDetails(selectedPlatform)"
@@ -174,6 +176,12 @@
       :metadata="metadata"
       :config_data="configData"
       :updating-mode="false"
+      :initial-scan-platform="scanPlatform"
+      @update:show="
+        (show) => {
+          if (!show) scanPlatform = null;
+        }
+      "
       @show-toast="showToast"
       @refresh-config="handlePlatformCreated"
     />
@@ -338,6 +346,8 @@ const metadata = ref({});
 const loadingPlatforms = ref(true);
 const selectedPlatformId = ref(null);
 const showAddPlatformDialog = ref(false);
+const scanPlatform = ref(null);
+const rescanning = ref(false);
 const platformStats = ref({});
 const showWebhookDialog = ref(false);
 const currentWebhookUuid = ref("");
@@ -475,6 +485,36 @@ async function deletePlatform(platform) {
     showSuccess(response.data.message || tm("messages.deleteSuccess"));
   } catch (error) {
     showError(error);
+  }
+}
+
+async function rescanPlatform(platform) {
+  if (rescanning.value) return;
+  rescanning.value = true;
+  try {
+    if (
+      !(await askForConfirmationDialog(
+        tm("workspace.rescanConfirm", { id: platform.id }),
+        confirmDialog,
+      ))
+    )
+      return;
+
+    const response = await botApi.delete(platform.id);
+    if (response.data.status !== "ok") {
+      throw new Error(response.data.message || tm("status.error"));
+    }
+    configData.value.platform = platforms.value.filter(
+      (item) => item.id !== platform.id,
+    );
+    selectedPlatformId.value = null;
+    scanPlatform.value = { id: platform.id, type: platform.type };
+    showAddPlatformDialog.value = true;
+    await getConfig();
+  } catch (error) {
+    showError(error);
+  } finally {
+    rescanning.value = false;
   }
 }
 
