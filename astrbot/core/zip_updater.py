@@ -1,3 +1,4 @@
+import asyncio
 import inspect
 import os
 import re
@@ -59,7 +60,6 @@ class _RepoZipUpdater:
         Args:
             verify: TLS certificate verification configuration for HTTPX.
         """
-        self._rm_on_error = on_error
         self._httpx_verify = certifi.where() if verify is None else verify
 
     def _create_httpx_client(self, timeout: float = 30.0) -> httpx.AsyncClient:
@@ -135,10 +135,18 @@ class _RepoZipUpdater:
                             "speed": 0,
                         },
                     )
-        except Exception as e:
-            logger.error(f"Failed to download file: {url} -> {target_path}: {e}")
-            if self._rm_on_error and target_path.exists():
-                target_path.unlink()
+        except (asyncio.CancelledError, Exception) as error:
+            if not isinstance(error, asyncio.CancelledError):
+                logger.error(
+                    f"Failed to download file: {url} -> {target_path}: {error}"
+                )
+            try:
+                target_path.unlink(missing_ok=True)
+            except OSError as cleanup_error:
+                logger.warning(
+                    "Failed to remove partial download: "
+                    f"{url} -> {target_path}: {cleanup_error}"
+                )
             raise
 
     async def _fetch_release_info(self, url: str, latest: bool = True) -> list:

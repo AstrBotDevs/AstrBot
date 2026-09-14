@@ -1,3 +1,4 @@
+import asyncio
 import ntpath
 import posixpath
 import zipfile
@@ -47,6 +48,9 @@ class _FakeStreamResponse:
 
 
 class _FakeFailingStreamResponse:
+    def __init__(self, error: BaseException | None = None):
+        self._error = error if error is not None else RuntimeError("stream interrupted")
+
     async def __aenter__(self):
         return self
 
@@ -58,7 +62,7 @@ class _FakeFailingStreamResponse:
 
     async def aiter_bytes(self, chunk_size: int = 8192):  # noqa: ARG002
         yield b"partial"
-        raise RuntimeError("stream interrupted")
+        raise self._error
 
 
 class _FakeStatusErrorResponse:
@@ -162,6 +166,9 @@ class _FakeStatusErrorAsyncClient:
 
 
 class _FakeFailingStreamAsyncClient:
+    def __init__(self, error: BaseException | None = None):
+        self._error = error
+
     async def __aenter__(self):
         return self
 
@@ -169,7 +176,7 @@ class _FakeFailingStreamAsyncClient:
         return None
 
     def stream(self, method: str, url: str):  # noqa: ARG002
-        return _FakeFailingStreamResponse()
+        return _FakeFailingStreamResponse(self._error)
 
 
 class _FakeZipArchive:
@@ -1472,6 +1479,86 @@ async def test_download_file_removes_partial_file_when_stream_fails(
         )
 
     assert not target_path.exists()
+
+
+@pytest.mark.asyncio
+async def test_download_file_removes_partial_file_when_cancelled(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    cancellation = asyncio.CancelledError("download cancelled")
+    monkeypatch.setattr(
+        _RepoZipUpdater,
+        "_create_httpx_client",
+        staticmethod(
+            lambda timeout=30.0: _FakeFailingStreamAsyncClient(  # noqa: ARG005
+                cancellation
+            )
+        ),
+    )
+
+    target_path = tmp_path / "cancelled.zip"
+
+    with pytest.raises(asyncio.CancelledError) as exc_info:
+        await _RepoZipUpdater()._download_file(
+            "https://example.com/archive.zip",
+            str(target_path),
+        )
+
+    assert exc_info.value is cancellation
+    assert not target_path.exists()
+
+
+@pytest.mark.parametrize(
+    "download_error",
+    [
+        pytest.param(RuntimeError("stream interrupted"), id="stream-error"),
+        pytest.param(asyncio.CancelledError("download cancelled"), id="cancellation"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_download_file_preserves_original_error_when_cleanup_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    download_error: BaseException,
+) -> None:
+    import astrbot.core.zip_updater as zip_updater_module
+
+    target_path = tmp_path / "undeletable.zip"
+    log_messages: list[str] = []
+    original_unlink = Path.unlink
+
+    def fail_target_unlink(path: Path, missing_ok: bool = False) -> None:
+        if path == target_path:
+            raise OSError("permission denied")
+        original_unlink(path, missing_ok=missing_ok)
+
+    monkeypatch.setattr(
+        _RepoZipUpdater,
+        "_create_httpx_client",
+        staticmethod(
+            lambda timeout=30.0: _FakeFailingStreamAsyncClient(  # noqa: ARG005
+                download_error
+            )
+        ),
+    )
+    monkeypatch.setattr(Path, "unlink", fail_target_unlink)
+    monkeypatch.setattr(
+        zip_updater_module.logger,
+        "warning",
+        lambda message: log_messages.append(message),
+    )
+
+    with pytest.raises(type(download_error)) as exc_info:
+        await _RepoZipUpdater()._download_file(
+            "https://example.com/archive.zip",
+            str(target_path),
+        )
+
+    assert exc_info.value is download_error
+    assert target_path.exists()
+    assert any(str(target_path) in message for message in log_messages)
+    assert any("permission denied" in message for message in log_messages)
 
 
 @pytest.mark.asyncio
