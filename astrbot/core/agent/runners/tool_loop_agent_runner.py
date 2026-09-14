@@ -229,12 +229,17 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         request_max_retries: int | None = None,
         tool_result_overflow_dir: str | None = None,
         read_tool: FunctionTool | None = None,
+        # stable identity for plugin-managed conversations when
+        # request.conversation is None (e.g. Context.tool_loop_agent)
+        conversation_id: str | None = None,
         **kwargs: T.Any,
     ) -> None:
         self.req = request
         # Transient agents need one identity across tool calls and summary requests.
         self._conversation_id = (
-            request.conversation.cid if request.conversation else uuid.uuid4().hex
+            request.conversation.cid
+            if request.conversation is not None
+            else (conversation_id or uuid.uuid4().hex)
         )
         self.streaming = streaming
         self.enforce_max_turns = enforce_max_turns
