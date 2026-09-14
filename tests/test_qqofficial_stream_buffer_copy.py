@@ -371,3 +371,40 @@ async def test_group_stream_sends_once_after_all_deltas() -> None:
 
     await event.send_streaming(gen())
     assert calls == 1
+
+
+@pytest.mark.asyncio
+async def test_c2c_stream_closes_when_tail_is_empty_plain() -> None:
+    """#10069 review: 结尾只剩空 Plain("") 的 buffer 也被视为空，照样补
+    state=10 收尾帧；否则 _post_send_one 拒掉空文本，流照样被超时回滚。"""
+    event = _make_c2c_event()
+    frames: list[tuple[int | None, str]] = []
+
+    async def fake_post_send(stream=None):
+        parts = []
+        if event.send_buffer:
+            for c in event.send_buffer.chain:
+                if isinstance(c, Plain) and c.text:
+                    parts.append(c.text)
+        frames.append((stream.get("state") if stream else None, "".join(parts)))
+        event.send_buffer = None
+        return {"id": "stream-1"}
+
+    async def gen():
+        yield MessageChain().message("不")
+        yield MessageChain().message("稀")
+        yield MessageChain(chain=[Plain("")])  # 空 delta 收尾
+
+    from unittest.mock import patch
+
+    with (
+        patch.object(event, "_post_send", side_effect=fake_post_send),
+        patch("asyncio.get_running_loop") as mock_loop,
+    ):
+        # 2.0s 触发中间分片冲掉全文，之后只剩空 delta
+        mock_loop.return_value.time.side_effect = [0.5, 2.0, 2.0, 2.0]
+        await event.send_streaming(gen())
+
+    # 中间分片带走全文，空 Plain 尾也照样补 state=10 最小收尾帧
+    assert frames[0] == (1, "不稀")
+    assert frames[-1] == (10, "\n")

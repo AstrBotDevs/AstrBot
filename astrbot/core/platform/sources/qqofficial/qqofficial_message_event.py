@@ -224,7 +224,13 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         否则客户端等不到结束帧，最终只显示首包几个字。
         """
         stream_payload["state"] = 10
-        if not self.send_buffer or not self.send_buffer.chain:
+        has_content = self.send_buffer is not None and any(
+            (isinstance(c, Plain) and c.text) or not isinstance(c, Plain)
+            for c in self.send_buffer.chain
+        )
+        if not has_content:
+            # 只有空 Plain 的 buffer 也算空：_post_send_one 会拒掉空文本，
+            # 收尾帧照样缺席（#10069 review）
             if stream_payload.get("id") is None:
                 # 从未发出任何分片，无流可收
                 return None
