@@ -29,16 +29,69 @@
 
       <v-card class="provider-menu-card" elevation="0">
         <div class="provider-menu-body">
-          <v-text-field
-            v-model="searchQuery"
-            :placeholder="sharedTm('providerSelector.searchPlaceholder')"
-            hide-details
-            variant="outlined"
-            density="compact"
-            prepend-inner-icon="mdi-magnify"
-            class="provider-search"
-            clearable
-          />
+          <div class="provider-search-row">
+            <v-menu
+              v-model="sourceMenuOpen"
+              :close-on-content-click="false"
+              offset="6"
+              transition="none"
+            >
+              <template #activator="{ props: sourceMenuProps }">
+                <button
+                  v-bind="sourceMenuProps"
+                  type="button"
+                  class="provider-source-trigger"
+                  :title="sharedTm('providerSelector.filterSource')"
+                >
+                  <span>{{
+                    selectedSourceId || sharedTm("providerSelector.allSources")
+                  }}</span>
+                  <v-icon size="16">mdi-chevron-down</v-icon>
+                </button>
+              </template>
+              <v-card class="provider-source-menu" elevation="0">
+                <v-list density="compact" nav>
+                  <v-list-item
+                    :active="!selectedSourceId"
+                    @click="
+                      selectedSourceId = '';
+                      sourceMenuOpen = false;
+                    "
+                  >
+                    <v-list-item-title>{{
+                      sharedTm("providerSelector.allSources")
+                    }}</v-list-item-title>
+                  </v-list-item>
+                  <v-list-item
+                    v-for="source in providerSources"
+                    :key="source.id"
+                    :active="selectedSourceId === source.id"
+                    @click="
+                      selectedSourceId = source.id;
+                      sourceMenuOpen = false;
+                    "
+                  >
+                    <v-list-item-title>{{ source.id }}</v-list-item-title>
+                    <v-list-item-subtitle
+                      v-if="source.apiBase"
+                      :title="source.apiBase"
+                      >{{ source.apiBase }}</v-list-item-subtitle
+                    >
+                  </v-list-item>
+                </v-list>
+              </v-card>
+            </v-menu>
+            <v-text-field
+              v-model="searchQuery"
+              :placeholder="sharedTm('providerSelector.searchPlaceholder')"
+              hide-details
+              variant="outlined"
+              density="compact"
+              prepend-inner-icon="mdi-magnify"
+              class="provider-search"
+              clearable
+            />
+          </div>
 
           <v-progress-linear
             v-if="loadingProviders"
@@ -98,11 +151,12 @@
           </div>
 
           <v-list
-            v-if="!loadingProviders"
+            v-if="providersLoaded || !loadingProviders"
             ref="providerListRef"
             density="compact"
             nav
             class="provider-menu-list"
+            @scroll.passive="providerScrollTop = $event.target.scrollTop"
           >
             <v-list-item
               v-if="!multiple && allowEmpty && !searchQuery"
@@ -128,10 +182,22 @@
               </template>
             </v-list-item>
 
-            <template v-for="group in providerGroups" :key="group.id">
+            <div
+              :style="{ height: `${visibleProviderGroups[0]?.top || 0}px` }"
+              aria-hidden="true"
+            />
+            <div
+              v-for="group in visibleProviderGroups"
+              :key="group.id"
+              class="provider-source-group"
+            >
               <v-list-subheader class="provider-source-header">
                 {{ group.id }}
               </v-list-subheader>
+              <div
+                :style="{ height: `${group.paddingTop}px` }"
+                aria-hidden="true"
+              />
               <v-list-item
                 v-for="provider in group.providers"
                 :key="provider.id"
@@ -241,7 +307,21 @@
                   </div>
                 </template>
               </v-list-item>
-            </template>
+              <div
+                :style="{ height: `${group.paddingBottom}px` }"
+                aria-hidden="true"
+              />
+            </div>
+            <div
+              :style="{
+                height: `${
+                  (providerGroups[providerGroups.length - 1]?.bottom || 0) -
+                  (visibleProviderGroups[visibleProviderGroups.length - 1]
+                    ?.bottom || 0)
+                }px`,
+              }"
+              aria-hidden="true"
+            />
           </v-list>
 
           <div
@@ -291,7 +371,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from "vue";
+import { computed, nextTick, ref, shallowRef, watch } from "vue";
+import { useDisplay } from "vuetify";
 import { providerApi } from "@/api/v1";
 import ProviderChatCompletionPanel from "@/components/provider/ProviderChatCompletionPanel.vue";
 import ProviderPage from "@/views/ProviderPage.vue";
@@ -311,6 +392,10 @@ interface ProviderConfig extends ProviderMetadataSource {
   provider_type?: string;
   provider_source_id?: string;
   enable?: boolean;
+  api_base?: string;
+  embedding_api_base?: string;
+  rerank_api_base?: string;
+  gemini_tts_api_base?: string;
 }
 
 const props = withDefaults(
@@ -341,11 +426,22 @@ const { tm: sharedTm } = useModuleI18n("core.shared");
 const { tm: providerTm } = useModuleI18n("features/provider");
 const { success: toastSuccess, error: toastError } = useToast();
 
-const providerConfigs = ref<ProviderConfig[]>([]);
-const modelMetadata = ref<Record<string, ProviderModelMetadata>>({});
+const providerConfigs = shallowRef<ProviderConfig[]>([]);
+const modelMetadata = shallowRef<Record<string, ProviderModelMetadata>>({});
 const testingProviderIds = ref<string[]>([]);
 const searchQuery = ref("");
 const menuOpen = ref(false);
+const sourceMenuOpen = ref(false);
+const selectedSourceId = ref("");
+const providerScrollTop = ref(0);
+const { height: displayHeight } = useDisplay();
+const providerListHeight = computed(() =>
+  Math.min(360, displayHeight.value * 0.58),
+);
+// Keep these sizes in sync with the model rows and sticky source headers below.
+const PROVIDER_ROW_HEIGHT = 56;
+const SOURCE_HEADER_HEIGHT = 32;
+let scrollToSelectionPending = false;
 const providerListRef = ref<{ $el: HTMLElement } | null>(null);
 const providerDrawer = ref(false);
 const loadingProviders = ref(false);
@@ -396,15 +492,36 @@ const menuLocation = computed(() => {
 
 const filteredProviders = computed(() => {
   const query = (searchQuery.value || "").trim().toLowerCase();
-  if (!query) return providerConfigs.value;
   return providerConfigs.value.filter(
     (provider) =>
-      provider.id.toLowerCase().includes(query) ||
-      (provider.provider_source_id || "").toLowerCase().includes(query) ||
-      String(provider.model || "")
-        .toLowerCase()
-        .includes(query),
+      (!selectedSourceId.value ||
+        (provider.provider_source_id || provider.type || provider.id) ===
+          selectedSourceId.value) &&
+      (!query ||
+        provider.id.toLowerCase().includes(query) ||
+        (provider.provider_source_id || "").toLowerCase().includes(query) ||
+        String(provider.model || "")
+          .toLowerCase()
+          .includes(query)),
   );
+});
+
+const providerSources = computed(() => {
+  const sources = new Map<string, { id: string; apiBase: string }>();
+  for (const provider of providerConfigs.value) {
+    const id = provider.provider_source_id || provider.type || provider.id;
+    if (!sources.has(id))
+      sources.set(id, {
+        id,
+        apiBase:
+          provider.api_base ||
+          provider.embedding_api_base ||
+          provider.rerank_api_base ||
+          provider.gemini_tts_api_base ||
+          "",
+      });
+  }
+  return [...sources.values()];
 });
 
 const providerGroups = computed(() => {
@@ -416,7 +533,51 @@ const providerGroups = computed(() => {
     if (group) group.push(provider);
     else groups.set(sourceId, [provider]);
   }
-  return Array.from(groups, ([id, providers]) => ({ id, providers }));
+  let offset = 0;
+  return Array.from(groups, ([id, providers]) => {
+    const top = offset;
+    offset += SOURCE_HEADER_HEIGHT + providers.length * PROVIDER_ROW_HEIGHT;
+    return { id, providers, top, bottom: offset };
+  });
+});
+
+const visibleProviderGroups = computed(() => {
+  // Spacers preserve full group heights for sticky headers while only nearby rows mount.
+  const clearHeight =
+    !props.multiple && props.allowEmpty && !searchQuery.value
+      ? PROVIDER_ROW_HEIGHT
+      : 0;
+  const scrollTop = providerScrollTop.value - clearHeight;
+  const start = Math.max(0, scrollTop - PROVIDER_ROW_HEIGHT * 3);
+  const end = scrollTop + providerListHeight.value + PROVIDER_ROW_HEIGHT * 3;
+  return providerGroups.value
+    .filter((group) => group.bottom >= start && group.top <= end)
+    .map((group) => {
+      const first = Math.max(
+        0,
+        Math.min(
+          group.providers.length,
+          Math.floor(
+            (start - group.top - SOURCE_HEADER_HEIGHT) / PROVIDER_ROW_HEIGHT,
+          ),
+        ),
+      );
+      const last = Math.max(
+        first,
+        Math.min(
+          group.providers.length,
+          Math.ceil(
+            (end - group.top - SOURCE_HEADER_HEIGHT) / PROVIDER_ROW_HEIGHT,
+          ),
+        ),
+      );
+      return {
+        ...group,
+        providers: group.providers.slice(first, last),
+        paddingTop: first * PROVIDER_ROW_HEIGHT,
+        paddingBottom: (group.providers.length - last) * PROVIDER_ROW_HEIGHT,
+      };
+    });
 });
 
 async function loadProviderConfigs(force = false) {
@@ -433,10 +594,18 @@ async function loadProviderConfigs(force = false) {
         (response.data.data || []) as unknown as ProviderConfig[]
       ).filter((provider) => provider.enable !== false);
       providersLoaded.value = true;
+      if (
+        selectedSourceId.value &&
+        !providerSources.value.some(
+          (source) => source.id === selectedSourceId.value,
+        )
+      ) {
+        selectedSourceId.value = "";
+      }
     }
   } catch (error) {
     console.error("Failed to load provider list:", error);
-    providerConfigs.value = [];
+    if (!providersLoaded.value) providerConfigs.value = [];
   } finally {
     loadingProviders.value = false;
   }
@@ -535,23 +704,50 @@ async function testProvider(provider: ProviderConfig) {
 
 function handleMenuToggle(isOpen: boolean) {
   if (isOpen) {
+    scrollToSelectionPending = true;
     searchQuery.value = "";
+    selectedSourceId.value = "";
     loadProviderConfigs(true);
   }
 }
 
-watch([menuOpen, loadingProviders], async ([isOpen, loading]) => {
-  if (!isOpen || loading) return;
-  await nextTick();
-  const list = providerListRef.value?.$el;
-  const selected = list?.querySelector<HTMLElement>('[data-selected="true"]');
-  if (list && selected) {
-    list.scrollTop +=
-      selected.getBoundingClientRect().top -
-      list.getBoundingClientRect().top -
-      (list.clientHeight - selected.clientHeight) / 2;
-  }
-});
+watch(
+  [menuOpen, loadingProviders, searchQuery, selectedSourceId],
+  async ([isOpen, loading, query, source], [, , oldQuery, oldSource]) => {
+    if (!isOpen || (loading && !providersLoaded.value)) return;
+    await nextTick();
+    const list = providerListRef.value?.$el;
+    if (!list) return;
+    if (scrollToSelectionPending) {
+      scrollToSelectionPending = false;
+      let target = 0;
+      for (const group of providerGroups.value) {
+        const index = group.providers.findIndex((provider) =>
+          isProviderSelected(provider.id),
+        );
+        if (index < 0) continue;
+        const clearHeight =
+          !props.multiple && props.allowEmpty && !query
+            ? PROVIDER_ROW_HEIGHT
+            : 0;
+        target = Math.max(
+          0,
+          clearHeight +
+            group.top +
+            SOURCE_HEADER_HEIGHT +
+            index * PROVIDER_ROW_HEIGHT -
+            (list.clientHeight - PROVIDER_ROW_HEIGHT) / 2,
+        );
+        break;
+      }
+      list.scrollTop = target;
+      providerScrollTop.value = list.scrollTop;
+    } else if (query !== oldQuery || source !== oldSource) {
+      list.scrollTop = 0;
+      providerScrollTop.value = 0;
+    }
+  },
+);
 
 function openProviderDrawer() {
   menuOpen.value = false;
@@ -700,8 +896,43 @@ defineExpose({ getCurrentSelection });
   padding: 10px;
 }
 
-.provider-search {
+.provider-search-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin-bottom: 8px;
+}
+
+.provider-search {
+  flex: 1;
+  min-width: 0;
+}
+
+.provider-source-trigger {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 135px;
+  height: 40px;
+  padding: 0 8px;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.16);
+  border-radius: 10px;
+  color: rgb(var(--v-theme-on-surface));
+  font-size: 12px;
+}
+
+.provider-source-trigger span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.provider-source-menu {
+  width: min(360px, calc(100vw - 24px));
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.09);
+  border-radius: 12px !important;
 }
 
 .provider-search :deep(.v-field) {
@@ -752,13 +983,23 @@ defineExpose({ getCurrentSelection });
 }
 
 .provider-menu-item {
+  height: 54px;
   min-height: 54px !important;
-  margin-bottom: 2px;
+  margin: 0 0 2px !important;
   border-radius: 10px !important;
 }
 
+.provider-source-group {
+  display: flow-root;
+}
+
 .provider-source-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  height: 32px;
   min-height: 32px;
+  background: rgb(var(--v-theme-surface));
   font-size: 12px;
   font-weight: 600;
 }
