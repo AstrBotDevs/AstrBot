@@ -333,6 +333,22 @@ class KBSQLiteDatabase:
         # 在 vec db 中删除相关向量
         await vec_db.delete_documents(metadata_filters={"kb_doc_id": doc_id})
 
+    async def delete_kb_by_id(self, kb_id: str) -> None:
+        """删除知识库及其所有文档与多媒体记录。
+
+        KBDocument / KBMedia 通过 kb_id 关联，但没有 ORM / 外键级联，只删除
+        KnowledgeBase 行会把该库的全部文档和多媒体记录留成孤儿（与 #9120 给
+        单文档删除补的多媒体清理是同一类问题）。向量库由调用方单独清理。
+        """
+        async with self.get_db() as session, session.begin():
+            await session.execute(delete(KBMedia).where(col(KBMedia.kb_id) == kb_id))
+            await session.execute(
+                delete(KBDocument).where(col(KBDocument.kb_id) == kb_id)
+            )
+            await session.execute(
+                delete(KnowledgeBase).where(col(KnowledgeBase.kb_id) == kb_id)
+            )
+
     # ===== 多媒体查询 =====
 
     async def list_media_by_doc(self, doc_id: str) -> list[KBMedia]:
