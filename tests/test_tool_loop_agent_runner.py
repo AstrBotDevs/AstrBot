@@ -5,6 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock
+from uuid import uuid4
 
 import pytest
 
@@ -20,10 +21,13 @@ from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunne
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.astr_agent_run_util import run_agent
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
+from astrbot.core.db.po import Conversation
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest, TokenUsage
 from astrbot.core.provider.provider import Provider
+from astrbot.core.star.context import Context
 
 
 class MockProvider(Provider):
@@ -617,6 +621,130 @@ async def test_tool_loop_next_request_includes_tool_result(
     assert len(tool_messages) == 1
     assert tool_messages[0].tool_call_id == "call_context_refresh"
     assert "工具执行结果" in tool_messages[0].content
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+@pytest.mark.parametrize("persistent", [False, True])
+@pytest.mark.parametrize("tool_schema_mode", ["full", "skills_like"])
+async def test_conversation_identity_is_stable_within_each_run(
+    runner,
+    mock_provider,
+    tool_set,
+    mock_tool_executor,
+    mock_hooks,
+    streaming,
+    persistent,
+    tool_schema_mode,
+):
+    """Keep one identity through tools, requery repair, compression, and reset."""
+    conversation = (
+        Conversation(platform_id="test", user_id="user", cid=str(uuid4()))
+        if persistent
+        else None
+    )
+    identities = []
+    for _ in range(2):
+        tool_response = LLMResponse(
+            role="assistant",
+            tools_call_name=["test_tool"],
+            tools_call_args=[{"query": "test"}],
+            tools_call_ids=["call_identity"],
+        )
+        responses = [tool_response]
+        if tool_schema_mode == "skills_like":
+            responses.extend([LLMResponse(role="assistant"), tool_response])
+        responses.extend(
+            [
+                LLMResponse(role="assistant", completion_text="final"),
+                LLMResponse(role="assistant", completion_text="summary"),
+            ]
+        )
+        mock_provider.text_chat = AsyncMock(side_effect=responses)
+        request = ProviderRequest(
+            prompt="Run the tool",
+            func_tool=tool_set,
+            conversation=conversation,
+        )
+        await runner.reset(
+            provider=mock_provider,
+            request=request,
+            run_context=ContextWrapper(context=None),
+            tool_executor=mock_tool_executor,
+            agent_hooks=mock_hooks,
+            streaming=streaming,
+            tool_schema_mode=tool_schema_mode,
+            llm_compress_provider=mock_provider,
+            llm_compress_keep_recent_ratio=0,
+        )
+        async for _ in runner.step_until_done(3):
+            pass
+        assert runner.done()
+        assert any(message.role == "tool" for message in runner.run_context.messages)
+        await runner.request_context_manager.compressor(runner.run_context.messages)
+
+        calls = mock_provider.text_chat.call_args_list
+        assert len(calls) == (5 if tool_schema_mode == "skills_like" else 3)
+        identity = calls[0].kwargs["conversation_id"]
+        assert identity
+        assert all(call.kwargs["conversation_id"] == identity for call in calls)
+        assert request.conversation is conversation
+        if conversation:
+            assert identity == conversation.cid
+        identities.append(identity)
+
+    assert (identities[0] == identities[1]) is persistent
+
+
+@pytest.mark.asyncio
+async def test_tool_loop_agent_passes_explicit_conversation_id():
+    """Context.tool_loop_agent forwards conversation_id through runner to provider."""
+    provider = MockProvider()
+    context = Context(
+        event_queue=AsyncMock(),
+        config=MagicMock(),
+        db=MagicMock(),
+        provider_manager=SimpleNamespace(
+            get_provider_by_id=AsyncMock(return_value=provider)
+        ),
+        platform_manager=MagicMock(),
+        conversation_manager=MagicMock(),
+        message_history_manager=MagicMock(),
+        persona_manager=MagicMock(),
+        astrbot_config_mgr=MagicMock(),
+        knowledge_base_manager=MagicMock(),
+        cron_manager=MagicMock(),
+    )
+    event = MagicMock(spec=AstrMessageEvent)
+    event.unified_msg_origin = "test_umo"
+    seen: list[str | None] = []
+
+    async def text_chat(**kwargs):
+        seen.append(kwargs.get("conversation_id"))
+        return LLMResponse(role="assistant", completion_text="done")
+
+    provider.text_chat = text_chat
+
+    async def run_once(conversation_id: str | None = None) -> None:
+        kwargs = {"conversation_id": conversation_id} if conversation_id else {}
+        resp = await context.tool_loop_agent(
+            event=event,
+            chat_provider_id="provider-id",
+            prompt="hi",
+            **kwargs,
+        )
+        assert resp.completion_text == "done"
+
+    await run_once("stable-id")
+    await run_once("stable-id")
+    assert seen == ["stable-id", "stable-id"]
+    await run_once("other-id")
+    assert seen[-1] == "other-id"
+    transient = len(seen)
+    await run_once()
+    await run_once()
+    assert seen[transient] and seen[transient + 1]
+    assert seen[transient] != seen[transient + 1]
 
 
 @pytest.mark.asyncio

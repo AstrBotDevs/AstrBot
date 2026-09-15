@@ -245,6 +245,7 @@ class Context:
                 stream: bool - whether to stream the LLM response
                 agent_hooks: BaseAgentRunHooks[AstrAgentContext] - hooks to run during agent execution
                 agent_context: AstrAgentContext - context to use for the agent
+                conversation_id: str - stable identity for a plugin-managed conversation; without it each call gets a random one
 
                 other kwargs will be DIRECTLY passed to the runner.reset() method
 
