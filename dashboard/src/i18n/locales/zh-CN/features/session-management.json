@@ -81,6 +81,7 @@
     },
     "kbConfig": {
       "title": "知识库配置",
+      "inheritGlobal": "继承全局知识库配置",
       "selectKbs": "选择知识库",
       "topK": "返回结果数量 (Top K)",
       "enableRerank": "启用重排序"
