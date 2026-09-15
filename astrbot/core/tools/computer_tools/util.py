@@ -13,6 +13,13 @@ from astrbot.core.workspace import (
     resolve_workspace_root_for_umo,
 )
 
+LOCAL_NETWORK_POLICY_NOTICE = (
+    "Sandbox policy: Network access is disabled for local Shell/Python execution. "
+    "Do not retry the same network operation with another command, Python, "
+    "HTTP/HTTPS, or disabled certificate verification; these do not change the policy. "
+    "Local offline operations are still allowed."
+)
+
 
 @dataclass(frozen=True)
 class LocalPermissionPolicy:

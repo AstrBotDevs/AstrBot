@@ -137,15 +137,25 @@ async def test_local_python_tool_uses_session_workspace(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(os.name == "nt", reason="Restricted execution needs POSIX.")
-async def test_local_member_python_uses_sandbox_backend(
+@pytest.mark.parametrize("role", ["member", "admin"])
+@pytest.mark.parametrize("outcome", ["success", "error", "exception"])
+async def test_local_python_uses_sandbox_backend(
     tmp_path,
     monkeypatch,
+    role,
+    outcome,
 ):
     """Local member Python execution should require an OS sandbox."""
     from astrbot.core.tools.computer_tools import util as computer_util
 
     python_exec = AsyncMock(
-        return_value={"data": {"output": {"text": "ok", "images": []}, "error": ""}}
+        return_value={
+            "data": {
+                "output": {"text": "ok", "images": []},
+                "error": "execution failed" if outcome == "error" else "",
+            }
+        },
+        side_effect=RuntimeError("execution failed") if outcome == "exception" else None,
     )
     local_python = LocalPythonComponent()
     local_python.exec = python_exec
@@ -161,7 +171,7 @@ async def test_local_member_python_uses_sandbox_backend(
 
     event = SimpleNamespace(
         unified_msg_origin="onebot:GroupMessage:12345",
-        role="member",
+        role=role,
         get_platform_name=lambda: "onebot",
     )
     context = ContextWrapper(
@@ -179,7 +189,12 @@ async def test_local_member_python_uses_sandbox_backend(
         tool_call_timeout=60,
     )
 
-    await LocalPythonTool().call(context, code="print('ok')", timeout=30)
+    result = await LocalPythonTool().call(context, code="print('ok')", timeout=30)
+    output = result if isinstance(result, str) else "\n".join(p.text for p in result.content)
+    assert (computer_util.LOCAL_NETWORK_POLICY_NOTICE in output) is (role == "member")
+    assert ("execution failed" in output) is (outcome != "success")
+    if outcome != "exception":
+        assert result.content[-1].text == "ok"
 
     python_exec.assert_awaited_once_with(
         "print('ok')",
@@ -187,7 +202,7 @@ async def test_local_member_python_uses_sandbox_backend(
         silent=False,
         cwd=str(tmp_path.resolve(strict=False)),
         sandboxed=True,
-        allow_network=False,
+        allow_network=role == "admin",
         filesystem_scope="workspace",
         readable_roots=ANY,
         writable_roots=ANY,

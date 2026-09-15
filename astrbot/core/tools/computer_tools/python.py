@@ -14,6 +14,7 @@ from astrbot.core.message.message_event_result import MessageChain
 from ..registry import builtin_tool
 from .fs import _read_allowed_roots, _write_allowed_roots
 from .util import (
+    LOCAL_NETWORK_POLICY_NOTICE,
     check_admin_permission,
     check_local_execution_permission,
     workspace_root_for_context,
@@ -49,7 +50,9 @@ param_schema = {
 }
 
 
-async def handle_result(result: dict, event: AstrMessageEvent) -> ToolExecResult:
+async def handle_result(
+    result: dict, event: AstrMessageEvent
+) -> mcp.types.CallToolResult:
     data = result.get("data", {})
     output = data.get("output", {})
     error = data.get("error", "")
@@ -178,6 +181,19 @@ class LocalPythonTool(FunctionTool):
                 filesystem_scope=local_policy.filesystem_scope,
                 **sandbox_roots,
             )
-            return await handle_result(result, context.context.event)
+            response = await handle_result(result, context.context.event)
+            if not local_policy.allow_network:
+                response.content.insert(
+                    0,
+                    mcp.types.TextContent(
+                        type="text", text=LOCAL_NETWORK_POLICY_NOTICE
+                    ),
+                )
+            return response
         except Exception as e:
-            return f"Error executing code: {str(e)}"
+            policy_notice = (
+                f"{LOCAL_NETWORK_POLICY_NOTICE}\n"
+                if not local_policy.allow_network
+                else ""
+            )
+            return f"{policy_notice}Error executing code: {str(e)}"
