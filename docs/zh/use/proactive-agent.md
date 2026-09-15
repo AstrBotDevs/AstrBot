@@ -14,12 +14,12 @@ AstrBot 引入了主动 Agent（Proactive Agent）系统，使 AstrBot 不仅能
 
 - **自我唤醒**：AstrBot 会在预定时间自动唤醒并执行任务。
 - **任务反馈**：执行完成后，AstrBot 会将结果告知任务布置方。
-- **WebUI 管理**：你可以在 WebUI 的“定时任务”页面查看、编辑或删除已设置的任务。
+- **WebUI 管理**：你可以在 WebUI 的“更多功能 → 未来任务”页面查看、编辑或删除已设置的任务。
 
 ### 如何使用
 
 > [!TIP]
-> 首先，确保配置中 “主动型能力” 已启用。
+> 首先，在 `配置文件` 页面选择对应配置文件，进入 `AI 配置 → 能力 → 主动型能力`，启用后点击右下角的 `保存配置`。
 
 主 Agent 拥有管理定时任务的能力。你可以直接对它说：
 - “明天早上 8 点提醒我开会”
@@ -28,7 +28,7 @@ AstrBot 引入了主动 Agent（Proactive Agent）系统，使 AstrBot 不仅能
 
 主 Agent 会调用内置的定时任务工具来安排这些计划。
 
-你可以在 AstrBot WebUI 左侧导航栏中点击 **未来任务** 来查看和管理所有未来任务。
+你可以在 AstrBot WebUI 左侧导航栏中展开 **更多功能**，点击 **未来任务**（`/cron`） 来查看和管理所有未来任务。
 
 ![](https://files.astrbot.app/docs/source/images/proactive-agent/image-1.png)
 

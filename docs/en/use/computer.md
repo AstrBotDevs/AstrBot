@@ -6,7 +6,7 @@ Computer Use controls whether an Agent can execute code, access files, run Shell
 
 In WebUI, open:
 
-- `Config -> General Config -> Use Computer Capabilities`
+- `Config -> AI -> Capabilities -> Agent Computer Use`
 
 The key option is `Computer Use Runtime`:
 
@@ -90,7 +90,7 @@ If `Require AstrBot admin permission` is disabled, regular users behave much clo
 
 Admin IDs can be configured in:
 
-- `Config -> Other Config -> Admin ID`
+- `Config -> Platform -> General -> Administrator IDs`
 
 Users can get their own ID with `/sid`.
 
