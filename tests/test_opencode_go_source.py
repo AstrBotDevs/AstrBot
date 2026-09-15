@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import hashlib
 import json
 from functools import partial
@@ -9,11 +10,11 @@ import pytest
 from anthropic import _base_client as anthropic_base_client
 from openai import _base_client as openai_base_client
 
-from astrbot import __version__
 from astrbot.core.agent.context.config import ContextConfig
 from astrbot.core.agent.context.manager import ContextManager
 from astrbot.core.agent.message import Message
 from astrbot.core.config.default import CONFIG_METADATA_2
+from astrbot.core.provider.headers import DEFAULT_USER_AGENT
 from astrbot.core.provider.sources.anthropic_source import ProviderAnthropic
 from astrbot.core.provider.sources.openai_source import ProviderOpenAIOfficial
 from astrbot.core.provider.sources.opencode_go_source import (
@@ -171,7 +172,7 @@ async def test_go_http_identity_and_concurrent_sessions(
         {
             "key": ["test-key"],
             "custom_headers": {
-                "user-agent": "wrong",
+                "user-agent": "configured/1.0",
                 "X-OpenCode-Session": "wrong",
                 "X-Custom": "keep",
             },
@@ -183,13 +184,21 @@ async def test_go_http_identity_and_concurrent_sessions(
         hashlib.sha256(conversation_id.encode()).hexdigest()
         for conversation_id in sessions
     ]
+    expected_user_agents = {
+        session_id: f"request/{conversation_id}"
+        for session_id, conversation_id in zip(expected_session_ids, sessions)
+    }
 
     async def send(conversation_id):
         kwargs = {
             "prompt": "Write a Python function",
             "conversation_id": conversation_id,
             "model": f"opencode-go/{model}",
-            "extra_headers": {"X-Request-Test": "request-header"},
+            "extra_headers": {
+                "X-Request-Test": "request-header",
+                "uSeR-aGeNt": f"request/{conversation_id}",
+                "X-OPENCODE-SESSION": "wrong-request-session",
+            },
         }
         if streaming:
             result = [item async for item in provider.text_chat_stream(**kwargs)]
@@ -207,7 +216,10 @@ async def test_go_http_identity_and_concurrent_sessions(
         assert actual_session_ids.count(expected_session_ids[0]) == 2
         for request in go_http:
             assert request.url.path == f"/zen/go/v1/{endpoint}"
-            assert request.headers["user-agent"] == f"AstrBot/{__version__}"
+            assert request.headers.get_list("user-agent") == [
+                expected_user_agents[request.headers["x-opencode-session"]]
+            ]
+            assert len(request.headers.get_list("x-opencode-session")) == 1
             assert request.headers["x-custom"] == "keep"
             assert request.headers["x-request-test"] == "request-header"
             body = json.loads(request.content)
@@ -215,6 +227,100 @@ async def test_go_http_identity_and_concurrent_sessions(
             assert "extra_headers" not in body
             assert "x-opencode-session" not in body
             assert "X-Request-Test" not in body
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+@pytest.mark.parametrize("provider_class,endpoint", GO_PROTOCOL_CASES)
+@pytest.mark.parametrize(
+    "custom_headers,extra_headers,expected_user_agent",
+    [
+        (None, None, DEFAULT_USER_AGENT),
+        ({}, {}, DEFAULT_USER_AGENT),
+        ({"user-agent": "configured/1.0"}, {}, "configured/1.0"),
+        ({"USER-AGENT": " "}, {}, DEFAULT_USER_AGENT),
+        ({}, {"user-agent": "request/1.0"}, "request/1.0"),
+        (
+            {"uSeR-aGeNt": "configured/1.0"},
+            {"User-Agent": "request/1.0"},
+            "request/1.0",
+        ),
+        (
+            {"User-Agent": "configured/1.0"},
+            {"USER-AGENT": "request/1.0"},
+            "request/1.0",
+        ),
+        (
+            {"User-Agent": "configured/1.0"},
+            {"User-Agent": " "},
+            "configured/1.0",
+        ),
+        (
+            {"User-Agent": "configured/1.0"},
+            {"uSeR-aGeNt": ""},
+            "configured/1.0",
+        ),
+        ({"user-agent": " "}, {"USER-AGENT": " "}, DEFAULT_USER_AGENT),
+        (
+            {"user-agent": "configured/1.0", "X-OpenCode-Session": "wrong"},
+            {"X-Request-Test": "keep"},
+            "configured/1.0",
+        ),
+        (
+            {"User-Agent": "first/1.0", "USER-AGENT": "configured/1.0"},
+            {
+                "user-agent": "first/1.0",
+                "User-Agent": "request/1.0",
+                "USER-AGENT": " ",
+            },
+            "request/1.0",
+        ),
+    ],
+)
+async def test_go_user_agent_defaults_and_overrides(
+    go_http,
+    provider_class,
+    endpoint,
+    streaming,
+    custom_headers,
+    extra_headers,
+    expected_user_agent,
+):
+    """Keep one UA per request without changing configuration or client defaults."""
+    config = {"key": ["test-key"], "custom_headers": custom_headers}
+    original_config = copy.deepcopy(config)
+    original_extra_headers = copy.deepcopy(extra_headers)
+    provider = provider_class(config, {})
+    default_headers = dict(provider.delegate.request_headers)
+    try:
+        kwargs = {
+            "prompt": "Write code",
+            "conversation_id": "test-conversation",
+            "extra_headers": extra_headers,
+        }
+        if streaming:
+            result = [item async for item in provider.text_chat_stream(**kwargs)]
+            assert any(item.completion_text == "ok" for item in result)
+        else:
+            assert (await provider.text_chat(**kwargs)).completion_text == "ok"
+        assert len(go_http) == 1
+        request = go_http[0]
+        assert request.url.path == f"/zen/go/v1/{endpoint}"
+        assert request.headers.get_list("user-agent") == [expected_user_agent]
+        assert request.headers.get_list("x-opencode-session") == [
+            hashlib.sha256(b"test-conversation").hexdigest()
+        ]
+        assert "extra_headers" not in json.loads(request.content)
+        await provider.get_models()
+        assert go_http[-1].headers.get_list("user-agent") == [
+            provider.request_headers["User-Agent"]
+        ]
+        assert "x-opencode-session" not in go_http[-1].headers
+        assert provider.delegate.request_headers == default_headers
+        assert config == original_config
+        assert extra_headers == original_extra_headers
     finally:
         await provider.terminate()
 

@@ -17,6 +17,12 @@ Open the AstrBot dashboard and go to **Providers → Add Provider**. Select **Op
 
 Save the provider, then open its card and add the models you want to use.
 
+## Request Headers
+
+The default `User-Agent` is `astrbot/<version>`. Non-blank values in per-request `extra_headers` take priority over provider `custom_headers`, which take priority over the default. User-Agent header names are case-insensitive; blank values fall back to the next level.
+
+`x-opencode-session` is generated automatically from the conversation ID and cannot be overridden. Direct calls without a conversation ID get an independent session.
+
 ## Set as Default
 
 Go to **Settings → Provider Settings**, select the OpenCode Go model you just added as the default chat model, and save the configuration.

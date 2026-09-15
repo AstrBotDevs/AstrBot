@@ -2,7 +2,6 @@ import hashlib
 from collections.abc import AsyncGenerator
 from uuid import uuid4
 
-from astrbot import __version__
 from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.provider.provider import Provider
 
@@ -28,13 +27,11 @@ class ProviderOpenCodeGo(Provider):
         config = dict(provider_config)
         config["api_base"] = config.get("api_base") or OPENCODE_GO_API_BASE
         config["model"] = self.get_model().removeprefix("opencode-go/")
-        headers = config.get("custom_headers") or {}
         config["custom_headers"] = {
             key: value
-            for key, value in headers.items()
-            if key.lower() not in {"user-agent", "x-opencode-session"}
+            for key, value in self.request_headers.items()
+            if key.lower() != "x-opencode-session"
         }
-        config["custom_headers"]["User-Agent"] = f"AstrBot/{__version__}"
         self.delegate = self.ADAPTER(config, provider_settings)
 
     def get_current_key(self) -> str:
@@ -85,10 +82,12 @@ class ProviderOpenCodeGo(Provider):
             The normalized model response.
         """
         model = (model or self.get_model()).removeprefix("opencode-go/")
+        # Normalize UA casing for SDK merging; blank overrides keep client defaults.
         extra_headers = {
-            key: value
+            ("User-Agent" if key.lower() == "user-agent" else key): value
             for key, value in (kwargs.pop("extra_headers", None) or {}).items()
-            if key.lower() not in {"user-agent", "x-opencode-session"}
+            if key.lower() != "x-opencode-session"
+            and (key.lower() != "user-agent" or str(value).strip())
         }
         # Calls without a conversation (such as connection tests) are independent.
         extra_headers["x-opencode-session"] = hashlib.sha256(
@@ -146,10 +145,12 @@ class ProviderOpenCodeGo(Provider):
             Normalized response chunks.
         """
         model = (model or self.get_model()).removeprefix("opencode-go/")
+        # Normalize UA casing for SDK merging; blank overrides keep client defaults.
         extra_headers = {
-            key: value
+            ("User-Agent" if key.lower() == "user-agent" else key): value
             for key, value in (kwargs.pop("extra_headers", None) or {}).items()
-            if key.lower() not in {"user-agent", "x-opencode-session"}
+            if key.lower() != "x-opencode-session"
+            and (key.lower() != "user-agent" or str(value).strip())
         }
         extra_headers["x-opencode-session"] = hashlib.sha256(
             (kwargs.pop("conversation_id", None) or uuid4().hex).encode()
