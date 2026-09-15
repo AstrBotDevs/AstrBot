@@ -132,6 +132,11 @@
       </tbody>
     </v-table>
 
+    <div class="text-caption text-medium-emphasis">
+      <p v-if="!unsupported">{{ tm('scopeHints.workspace') }}</p>
+      <p>{{ tm('scopeHints.host') }}</p>
+    </div>
+
     <v-alert v-if="memberHasElevatedAccess" type="warning" variant="tonal" density="compact">
       {{ tm('memberWarning') }}
     </v-alert>

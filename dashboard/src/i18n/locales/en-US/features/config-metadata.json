@@ -310,6 +310,10 @@
           "workspace": "Workspace",
           "host": "Host files"
         },
+        "scopeHints": {
+          "workspace": "Workspace: restricted access to the session workspace, temporary directories, and skill files.",
+          "host": "Host files: access files permitted by the account running AstrBot. In Docker, this means files inside the container and mounted files, not all files on the Docker host."
+        },
         "roles": {
           "member": "Member",
           "admin": "Administrator"
