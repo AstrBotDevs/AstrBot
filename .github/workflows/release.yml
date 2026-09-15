@@ -234,14 +234,14 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: Dashboard-${{ steps.tag.outputs.tag }}
-          path: dashboard-artifact
+          path: ${{ runner.temp }}/dashboard-artifact
 
       - name: Unpack dashboard dist into package tree
         shell: bash
         run: |
           mkdir -p astrbot/dashboard/dist
-          unzip -q "dashboard-artifact/AstrBot-${{ steps.tag.outputs.tag }}-dashboard.zip" -d dashboard-artifact/unpacked
-          cp -r dashboard-artifact/unpacked/dist/. astrbot/dashboard/dist/
+          unzip -q "${RUNNER_TEMP}/dashboard-artifact/AstrBot-${{ steps.tag.outputs.tag }}-dashboard.zip" -d "${RUNNER_TEMP}/dashboard-artifact/unpacked"
+          cp -r "${RUNNER_TEMP}/dashboard-artifact/unpacked/dist/." astrbot/dashboard/dist/
 
       - name: Set up Python
         uses: actions/setup-python@v7

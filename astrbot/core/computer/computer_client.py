@@ -738,7 +738,7 @@ async def _sync_skills_to_sandbox(
         zip_path = zip_base.with_suffix(".zip")
         bundle_root = temp_dir / f"{zip_base.name}_contents"
         remote_zip_name = f"{zip_base.name}.zip"
-        remote_zip = Path(SANDBOX_SKILLS_ROOT) / remote_zip_name
+        remote_zip = (Path(SANDBOX_SKILLS_ROOT) / remote_zip_name).as_posix()
 
         try:
             if sync_skill_dirs:
@@ -813,7 +813,7 @@ async def get_booter(
 ) -> ComputerBooter:
     config = context.get_config(umo=session_id)
 
-    runtime = config.get("provider_settings", {}).get("computer_use_runtime", "local")
+    runtime = config.get("provider_settings", {}).get("computer_use_runtime", "none")
     if runtime == "local":
         return get_local_booter()
     elif runtime == "none":

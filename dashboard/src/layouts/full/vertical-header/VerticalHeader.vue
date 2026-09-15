@@ -15,6 +15,7 @@ import { router } from "@/router";
 import { useRoute } from "vue-router";
 import { useDisplay, useTheme } from "vuetify";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
+import DesktopUpdateProgress from "@/components/shared/DesktopUpdateProgress.vue";
 import { useLanguageSwitcher } from "@/i18n/composables";
 import type { Locale } from "@/i18n/types";
 import AboutPage from "@/views/AboutPage.vue";
@@ -27,6 +28,7 @@ enableMermaid();
 
 const customizer = useCustomizerStore();
 const commonStore = useCommonStore();
+const authStore = useAuthStore();
 const chatHeader = useChatHeaderStore();
 const theme = useTheme();
 const { lgAndUp } = useDisplay();
@@ -122,6 +124,7 @@ const desktopUpdateHasNewVersion = ref(false);
 const desktopUpdateCurrentVersion = ref("-");
 const desktopUpdateLatestVersion = ref("-");
 const desktopUpdateStatus = ref("");
+const desktopDownloadProgress = ref<AstrBotDesktopAppUpdateProgress | null>(null);
 const isChatPath = computed(
   () => route.path === "/chat" || route.path.startsWith("/chat/"),
 );
@@ -292,6 +295,8 @@ function cancelDesktopUpdate() {
 }
 
 async function openDesktopUpdateDialog() {
+  if (desktopUpdateInstalling.value) return;
+  desktopDownloadProgress.value = null;
   desktopUpdateDialog.value = true;
   desktopUpdateChecking.value = true;
   desktopUpdateInstalling.value = false;
@@ -351,12 +356,20 @@ async function confirmDesktopUpdate() {
   }
 
   desktopUpdateInstalling.value = true;
+  desktopDownloadProgress.value = null;
   desktopUpdateStatus.value = t(
     "core.header.updateDialog.desktopApp.installing",
   );
 
   try {
-    const result = await bridge.installAppUpdate();
+    const result = await bridge.installAppUpdate((progress) => {
+      if (
+        desktopUpdateInstalling.value &&
+        ["downloading", "verifying", "installing"].includes(progress?.phase)
+      ) {
+        desktopDownloadProgress.value = progress;
+      }
+    });
     if (result?.ok) {
       desktopUpdateDialog.value = false;
       return;
@@ -422,7 +435,6 @@ function accountEdit() {
       accountEditStatus.value.message = res.data.message || "";
       setTimeout(() => {
         dialog.value = !dialog.value;
-        const authStore = useAuthStore();
         authStore.logout();
       }, 2000);
     })
@@ -532,7 +544,6 @@ function checkUpdate() {
       }
       if (err.response && err.response.status == 401) {
         console.log("401");
-        const authStore = useAuthStore();
         authStore.logout();
         return;
       }
@@ -1377,6 +1388,19 @@ onMounted(async () => {
           t("core.header.accountDialog.title")
         }}</v-list-item-title>
       </v-list-item>
+
+      <v-divider class="my-1" />
+
+      <v-list-item
+        @click="authStore.logout()"
+        class="styled-menu-item text-error"
+        prepend-icon="mdi-logout"
+        rounded="md"
+      >
+        <v-list-item-title>
+          {{ t("core.header.buttons.logout") }}
+        </v-list-item-title>
+      </v-list-item>
       </StyledMenu>
     </div>
 
@@ -1767,7 +1791,11 @@ onMounted(async () => {
       </v-card>
     </v-dialog>
 
-    <v-dialog v-model="desktopUpdateDialog" max-width="460">
+    <v-dialog
+      v-model="desktopUpdateDialog"
+      :persistent="desktopUpdateInstalling"
+      max-width="460"
+    >
       <v-card>
         <v-card-title class="text-h3 pa-4 pb-0 pl-6">
           {{ t("core.header.updateDialog.desktopApp.title") }}
@@ -1795,7 +1823,11 @@ onMounted(async () => {
               />
             </div>
           </v-alert>
-          <div class="text-caption mt-3">
+          <DesktopUpdateProgress
+            v-if="desktopUpdateInstalling"
+            :progress="desktopDownloadProgress"
+          />
+          <div v-else class="text-caption mt-3" role="status">
             {{ desktopUpdateStatus }}
           </div>
         </v-card-text>

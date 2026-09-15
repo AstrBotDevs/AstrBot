@@ -180,6 +180,7 @@ outline: deep
 | `GET` | `/api/v1/conversations` | — |
 | `POST` | `/api/v1/conversations/batch-delete` | — |
 | `POST` | `/api/v1/conversations/export` | — |
+| `GET` | `/api/v1/conversations/filter-options` | — |
 | `GET` | `/api/v1/conversations/{conversation_id}` | — |
 | `PATCH` | `/api/v1/conversations/{conversation_id}` | — |
 | `DELETE` | `/api/v1/conversations/{conversation_id}` | — |

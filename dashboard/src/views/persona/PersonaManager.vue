@@ -36,7 +36,7 @@
                 </v-list-item-title>
               </v-list-item>
               <v-list-item
-                v-if="!hasFolders"
+                v-if="!hasFolders || $vuetify.display.smAndDown"
                 prepend-icon="mdi-folder-plus"
                 @click="showCreateFolderDialog = true"
               >

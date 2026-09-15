@@ -216,6 +216,8 @@ async def test_kook_event_warp_message(
     assert astrbotMessage.raw_message == raw_event["d"]
     assert astrbotMessage.message_id == raw_event["d"]["msg_id"]
     assert astrbotMessage.message == expected_message_components
+    if event.data.channel_type.value == "GROUP":
+        assert astrbotMessage.group.group_name == event.data.extra.channel_name
     if isinstance(expected_message_str, str):
         assert astrbotMessage.message_str == expected_message_str
     else:

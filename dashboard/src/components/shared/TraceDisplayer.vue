@@ -1,81 +1,124 @@
 <script setup>
-import { logApi } from '@/api/v1';
-import { EventSourcePolyfill } from 'event-source-polyfill';
+import { ChevronDown, ChevronRight } from "@lucide/vue";
+import { logApi } from "@/api/v1";
+import { useModuleI18n } from "@/i18n/composables";
+import { EventSourcePolyfill } from "event-source-polyfill";
+
+const { tm } = useModuleI18n("features/trace");
 </script>
 
 <template>
   <div class="trace-wrapper">
-    <div class="trace-table" ref="scrollEl" :style="{ height: tableHeight }">
+    <div ref="scrollEl" class="trace-table">
       <div class="trace-row trace-header">
-        <div class="trace-cell time">Time</div>
-        <div class="trace-cell span">Event ID</div>
+        <div class="trace-cell time">{{ tm("table.time") }}</div>
+        <div class="trace-cell span">{{ tm("table.eventId") }}</div>
         <div class="trace-cell umo">UMO</div>
-        <!-- <div class="trace-cell count">Records</div> -->
-        <!-- <div class="trace-cell last">Last</div> -->
-        <div class="trace-cell sender">Sender</div>
-        <div class="trace-cell outline">Outline</div>
+        <div class="trace-cell sender">{{ tm("table.sender") }}</div>
+        <div class="trace-cell outline">{{ tm("table.outline") }}</div>
         <div class="trace-cell fields"></div>
       </div>
-      <div class="trace-group" :class="{ highlight: highlightMap[event.span_id] }" v-for="event in events"
-        :key="event.span_id">
+      <div
+        class="trace-group"
+        :class="{ highlight: highlightMap[event.span_id] }"
+        v-for="event in events"
+        :key="event.span_id"
+      >
         <div class="trace-row trace-event">
-          <div class="trace-cell time">{{ formatTime(event.first_time) }}</div>
-          <div class="trace-cell span" :title="event.span_id">
+          <div class="trace-cell time" :data-label="tm('table.time')">
+            {{ formatTime(event.first_time) }}
+          </div>
+          <div
+            class="trace-cell span"
+            :data-label="tm('table.eventId')"
+            :title="event.span_id"
+          >
             <div class="event-title">
               {{ shortSpan(event.span_id) }}
             </div>
           </div>
-          <div class="trace-cell umo">{{ event.umo }}</div>
-          <!-- <div class="trace-cell count">
-            <div class="event-meta">{{ event.records.length }}</div>
-          </div> -->
-          <!-- <div class="trace-cell last">
-            <div class="event-meta">{{ formatTime(event.last_time) }}</div>
-          </div> -->
-          <div class="trace-cell sender">
-            <div class="event-sub" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{
-              event.sender_name || '-' }}</div>
+          <div class="trace-cell umo" data-label="UMO">{{ event.umo }}</div>
+          <div class="trace-cell sender" :data-label="tm('table.sender')">
+            <div
+              class="event-sub"
+              style="
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+              "
+            >
+              {{ event.sender_name || "-" }}
+            </div>
           </div>
-          <div class="trace-cell outline">
-            <div class="event-sub outline">{{ event.message_outline || '-' }}</div>
+          <div class="trace-cell outline" :data-label="tm('table.outline')">
+            <div class="event-sub outline">
+              {{ event.message_outline || "-" }}
+            </div>
           </div>
           <div class="trace-cell fields event-controls">
-            <v-btn size="x-small" variant="text" color="primary" @click="toggleEvent(event.span_id)">
-              {{ event.collapsed ? 'Expand' : 'Collapse' }}
+            <v-btn
+              class="event-toggle"
+              size="x-small"
+              variant="text"
+              color="primary"
+              :aria-label="event.collapsed ? tm('expand') : tm('collapse')"
+              @click="toggleEvent(event.span_id)"
+            >
+              <component
+                :is="event.collapsed ? ChevronRight : ChevronDown"
+                :size="13"
+                :stroke-width="2"
+                aria-hidden="true"
+              />
+              <span>{{ event.collapsed ? tm("expand") : tm("collapse") }}</span>
               <span v-if="event.hasAgentPrepare" class="agent-dot" />
             </v-btn>
           </div>
         </div>
         <div class="trace-records" v-if="!event.collapsed">
-          <div class="trace-record" v-for="record in getVisibleRecords(event)" :key="record.key">
+          <div
+            class="trace-record"
+            v-for="record in getVisibleRecords(event)"
+            :key="record.key"
+          >
             <div class="trace-record-time">{{ record.timeLabel }}</div>
             <div class="trace-record-action">{{ record.action }}</div>
             <pre class="trace-record-fields">{{ record.fieldsText }}</pre>
           </div>
-          <div class="event-more" v-if="event.visibleCount < event.records.length">
-            <v-btn size="x-small" variant="tonal" color="primary" @click="showMore(event.span_id)">
-              Show more
+          <div
+            class="event-more"
+            v-if="event.visibleCount < event.records.length"
+          >
+            <v-btn
+              size="x-small"
+              variant="tonal"
+              color="primary"
+              @click="showMore(event.span_id)"
+            >
+              {{ tm("showMore") }}
             </v-btn>
           </div>
         </div>
       </div>
-      <div v-if="events.length === 0" class="trace-empty">No trace data yet.</div>
+      <div v-if="events.length === 0" class="trace-empty">
+        {{ tm("empty") }}
+      </div>
     </div>
   </div>
 </template>
 
 <script>
 export default {
-  name: 'TraceDisplayer',
+  name: "TraceDisplayer",
   props: {
     autoScroll: {
       type: Boolean,
-      default: true
+      default: true,
     },
     maxItems: {
       type: Number,
-      default: 300
-    }
+      default: 300,
+    },
   },
   data() {
     return {
@@ -89,14 +132,11 @@ export default {
       maxRetryAttempts: 10,
       baseRetryDelay: 1000,
       lastEventId: null,
-      tableHeight: 'auto'
     };
   },
   async mounted() {
     await this.fetchTraceHistory();
     this.connectSSE();
-    this.updateTableHeight();
-    window.addEventListener('resize', this.updateTableHeight);
   },
   beforeUnmount() {
     if (this.eventSource) {
@@ -108,27 +148,16 @@ export default {
       this.retryTimer = null;
     }
     this.retryAttempts = 0;
-    window.removeEventListener('resize', this.updateTableHeight);
   },
   methods: {
-    updateTableHeight() {
-      this.$nextTick(() => {
-        const el = this.$refs.scrollEl;
-        if (!el || typeof window === 'undefined') return;
-        const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
-        const offsetTop = el.getBoundingClientRect().top;
-        const height = Math.max(viewportHeight - offsetTop, 0);
-        this.tableHeight = `${height}px`;
-      });
-    },
     async fetchTraceHistory() {
       try {
         const res = await logApi.history();
         const logs = res.data?.data?.logs || [];
-        const traces = logs.filter((item) => item.type === 'trace');
+        const traces = logs.filter((item) => item.type === "trace");
         this.processNewTraces(traces);
       } catch (err) {
-        console.error('Failed to fetch trace history:', err);
+        console.error("Failed to fetch trace history:", err);
       }
     },
     connectSSE() {
@@ -137,14 +166,14 @@ export default {
         this.eventSource = null;
       }
 
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem("token");
 
       this.eventSource = new EventSourcePolyfill(logApi.liveUrl(), {
         headers: {
-          Authorization: token ? `Bearer ${token}` : ''
+          Authorization: token ? `Bearer ${token}` : "",
         },
         heartbeatTimeout: 300000,
-        withCredentials: true
+        withCredentials: true,
       });
 
       this.eventSource.onopen = () => {
@@ -161,12 +190,12 @@ export default {
           }
 
           const payload = JSON.parse(event.data);
-          if (payload?.type !== 'trace') {
+          if (payload?.type !== "trace") {
             return;
           }
           this.processNewTraces([payload]);
         } catch (e) {
-          console.error('Failed to parse trace payload:', e);
+          console.error("Failed to parse trace payload:", e);
         }
       };
 
@@ -177,13 +206,13 @@ export default {
         }
 
         if (this.retryAttempts >= this.maxRetryAttempts) {
-          console.error('Trace stream reached max retry attempts.');
+          console.error("Trace stream reached max retry attempts.");
           return;
         }
 
         const delay = Math.min(
           this.baseRetryDelay * Math.pow(2, this.retryAttempts),
-          30000
+          30000,
         );
 
         if (this.retryTimer) {
@@ -221,7 +250,7 @@ export default {
             collapsed: true,
             visibleCount: 20,
             records: [],
-            hasAgentPrepare: trace.action === 'astr_agent_prepare'
+            hasAgentPrepare: trace.action === "astr_agent_prepare",
           };
           this.eventIndex[trace.span_id] = event;
           this.events.push(event);
@@ -236,9 +265,9 @@ export default {
           action: trace.action,
           fieldsText: this.formatFields(trace.fields),
           timeLabel: this.formatTime(trace.time),
-          key: recordKey
+          key: recordKey,
         });
-        if (trace.action === 'astr_agent_prepare') {
+        if (trace.action === "astr_agent_prepare") {
           event.hasAgentPrepare = true;
         }
         if (!event.first_time || trace.time < event.first_time) {
@@ -287,7 +316,10 @@ export default {
     showMore(spanId) {
       const event = this.eventIndex[spanId];
       if (!event) return;
-      event.visibleCount = Math.min(event.records.length, event.visibleCount + 20);
+      event.visibleCount = Math.min(
+        event.records.length,
+        event.visibleCount + 20,
+      );
     },
     pulseEvent(spanId) {
       if (!spanId) return;
@@ -310,18 +342,18 @@ export default {
       return event.records.slice(0, event.visibleCount);
     },
     formatTime(ts) {
-      if (!ts) return '';
+      if (!ts) return "";
       const date = new Date(ts * 1000);
       const base = date.toLocaleString();
-      const ms = String(date.getMilliseconds()).padStart(3, '0');
+      const ms = String(date.getMilliseconds()).padStart(3, "0");
       return `${base}.${ms}`;
     },
     shortSpan(spanId) {
-      if (!spanId) return '';
+      if (!spanId) return "";
       return spanId.slice(0, 8);
     },
     formatFields(fields) {
-      if (!fields) return '';
+      if (!fields) return "";
       try {
         const text = JSON.stringify(fields, null, 2);
         if (text.length > 2000) {
@@ -331,36 +363,45 @@ export default {
       } catch (e) {
         return String(fields);
       }
-    }
-  }
+    },
+  },
 };
 </script>
 
 <style scoped>
 .trace-wrapper {
   height: 100%;
+  min-height: 0;
 }
 
 .trace-table {
-  background: transparent;
-  border-radius: 0;
-  padding: 0;
-  height: 100%;
-  overflow-y: auto;
   color: rgba(var(--v-theme-on-surface), 0.88);
-  font-family: 'Fira Code', monospace;
+  font-family: SFMono-Regular, Menlo, Monaco, Consolas,
+    var(--astrbot-font-cjk-mono), monospace;
+  height: 100%;
+  overflow: auto;
+  padding: 0 4px 4px;
+  scrollbar-gutter: stable;
 }
 
 .trace-row {
   display: grid;
-  grid-template-columns: 200px 100px 300px 90px 180px 140px 200px 1fr;
-  gap: 12px;
+  gap: 14px;
+  grid-template-columns:
+    minmax(156px, 1.1fr) 90px minmax(220px, 2fr)
+    minmax(100px, 0.8fr) minmax(180px, 1.5fr) 86px;
+  min-width: 940px;
 }
 
 .trace-group {
   border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
   background: transparent;
-  padding: 8px 0;
+  padding: 9px 8px;
+  transition: background 0.16s ease;
+}
+
+.trace-group:hover {
+  background: rgba(var(--v-theme-on-surface), 0.025);
 }
 
 .trace-group.highlight {
@@ -369,20 +410,25 @@ export default {
 }
 
 .trace-event {
-  align-items: start;
+  align-items: center;
 }
 
 .trace-header {
-  font-weight: 600;
-  color: rgba(var(--v-theme-on-surface), 0.62);
+  background: var(--trace-card, #f5f6f7);
   border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.12);
-  padding-bottom: 10px;
+  color: rgba(var(--v-theme-on-surface), 0.58);
+  font-weight: 650;
+  padding: 8px;
+  position: sticky;
+  top: 0;
+  z-index: 2;
 }
 
 .trace-cell {
+  font-size: 12px;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 12px;
 }
 
 .event-title {
@@ -412,6 +458,10 @@ export default {
   justify-content: flex-end;
 }
 
+.event-toggle :deep(.v-btn__content) {
+  gap: 4px;
+}
+
 .agent-dot {
   display: inline-block;
   width: 8px;
@@ -435,21 +485,14 @@ export default {
   color: rgba(var(--v-theme-on-surface), 0.62);
 }
 
-@media (max-width: 1200px) {
-  .trace-row {
-    grid-template-columns: 140px 160px 300px 70px 140px 180px 1fr;
-  }
-
-  .trace-cell.fields {
-    grid-column: 1 / -1;
-  }
-}
-
 .trace-record {
   display: grid;
-  grid-template-columns: 200px 120px 1fr;
-  gap: 8px;
-  padding: 2px 0;
+  background: rgba(var(--v-theme-on-surface), 0.025);
+  border-radius: 8px;
+  gap: 10px;
+  grid-template-columns: 180px 150px minmax(0, 1fr);
+  margin-top: 4px;
+  padding: 8px 10px;
 }
 
 .trace-record:last-child {
@@ -472,7 +515,8 @@ export default {
   white-space: pre-wrap;
   word-break: break-word;
   color: rgba(var(--v-theme-on-surface), 0.72);
-  font-size: 10px;
+  font-size: 11px;
+  line-height: 1.5;
 }
 
 .event-more {
@@ -482,6 +526,119 @@ export default {
 }
 
 .trace-records {
-  padding: 4px 0 2px 0;
+  padding: 6px 0 2px;
+}
+
+@media (max-width: 768px) {
+  .trace-table {
+    overflow-x: hidden;
+    padding: 0 2px 2px;
+  }
+
+  .trace-row.trace-header {
+    display: none;
+  }
+
+  .trace-group {
+    border-bottom: 0;
+    border-radius: 10px;
+    padding: 10px;
+  }
+
+  .trace-group + .trace-group {
+    margin-top: 6px;
+  }
+
+  .trace-event {
+    align-items: start;
+    display: grid;
+    gap: 6px 10px;
+    grid-template-areas:
+      "outline controls"
+      "sender controls"
+      "umo umo"
+      "time span";
+    grid-template-columns: minmax(0, 1fr) auto;
+    min-width: 0;
+  }
+
+  .trace-cell.time {
+    grid-area: time;
+  }
+
+  .trace-cell.span {
+    grid-area: span;
+    text-align: right;
+  }
+
+  .trace-cell.umo {
+    grid-area: umo;
+  }
+
+  .trace-cell.sender {
+    grid-area: sender;
+  }
+
+  .trace-cell.outline {
+    grid-area: outline;
+  }
+
+  .trace-cell.fields {
+    grid-area: controls;
+  }
+
+  .trace-cell.time,
+  .trace-cell.span {
+    color: rgba(var(--v-theme-on-surface), 0.52);
+    font-size: 10px;
+  }
+
+  .trace-cell.umo {
+    background: rgba(var(--v-theme-on-surface), 0.035);
+    border-radius: 6px;
+    color: rgba(var(--v-theme-on-surface), 0.62);
+    font-size: 10px;
+    overflow-wrap: anywhere;
+    padding: 5px 7px;
+    text-overflow: clip;
+    white-space: normal;
+  }
+
+  .trace-cell.umo::before {
+    content: attr(data-label) " · ";
+    font-weight: 650;
+  }
+
+  .trace-cell.outline .event-sub {
+    color: rgba(var(--v-theme-on-surface), 0.88);
+    font-size: 13px;
+    font-weight: 600;
+    margin: 0;
+  }
+
+  .trace-cell.sender .event-sub {
+    font-size: 11px;
+    margin: 0;
+  }
+
+  .event-toggle {
+    min-width: 30px;
+    padding-inline: 6px;
+  }
+
+  .event-toggle span:not(.agent-dot) {
+    display: none;
+  }
+
+  .trace-record {
+    gap: 5px;
+    grid-template-columns: 1fr;
+    padding: 8px;
+  }
+
+  .trace-record-time,
+  .trace-record-action {
+    font-size: 10px;
+  }
 }
 </style>

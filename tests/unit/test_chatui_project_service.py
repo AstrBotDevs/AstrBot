@@ -509,6 +509,7 @@ async def test_get_workspace_file_rejects_binary_text(tmp_path, workspace_servic
 async def test_workspace_file_rejects_symlink_escape(
     tmp_path,
     workspace_service,
+    require_symlink,
 ):
     """Workspace reads should not follow a symlink outside the project root."""
     outside_file = tmp_path.parent / f"{tmp_path.name}-outside.txt"
@@ -530,6 +531,7 @@ async def test_workspace_file_rejects_symlink_escape(
 async def test_workspace_file_rejects_symlink_directory_escape(
     tmp_path,
     workspace_service,
+    require_symlink,
 ):
     """Workspace reads should reject an escaping symlink in any path segment."""
     outside_dir = tmp_path.parent / f"{tmp_path.name}-outside-dir"

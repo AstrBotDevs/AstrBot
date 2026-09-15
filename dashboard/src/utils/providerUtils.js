@@ -1,3 +1,5 @@
+import mirarouterIcon from '@/assets/images/provider_logos/mirarouter.svg?no-inline';
+
 /**
  * 提供商相关的工具函数
  */
@@ -9,6 +11,7 @@
  */
 export function getProviderIcon(type) {
   const icons = {
+    'mirarouter': mirarouterIcon,
     'openai': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/openai.svg',
     'azure': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/azure.svg',
     'xai': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/xai.svg',
@@ -52,6 +55,41 @@ export function getProviderIcon(type) {
     'huggingface': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/huggingface.svg',
   };
   return icons[type] || '';
+}
+
+/**
+ * Determine whether a provider icon is a monochrome SVG.
+ *
+ * These icons need to be inverted in the dark theme because they are loaded as
+ * external images and cannot inherit the page text color.
+ *
+ * @param {string} type - Provider type
+ * @returns {boolean} Whether the icon should be theme-inverted
+ */
+export function isMonochromeProviderIcon(type) {
+  return [
+    'openai',
+    'azure',
+    'xai',
+    'anthropic',
+    'ollama',
+    'deepseek',
+    'modelscope',
+    'zhipu',
+    'siliconflow',
+    'moonshot',
+    'kimi',
+    'kimi-code',
+    'ppio',
+    'lm_studio',
+    'minimax',
+    'minimax-token-plan',
+    'mimo',
+    'xiaomi',
+    'xiaomi-token-plan',
+    'openrouter',
+    'groq'
+  ].includes(type);
 }
 
 /**

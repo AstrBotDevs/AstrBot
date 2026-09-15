@@ -130,6 +130,7 @@ export default defineConfig({
                 link: "/start",
                 collapsed: true,
                 items: [
+                  { text: "MiraRouter", link: "/mirarouter" },
                   { text: "NewAPI", link: "/newapi" },
                   { text: "胜算云", link: "/shengsuanyun" },
                   { text: "AIHubMix", link: "/aihubmix" },
@@ -391,6 +392,7 @@ export default defineConfig({
                 link: "/start",
                 collapsed: true,
                 items: [
+                  { text: "MiraRouter", link: "/mirarouter" },
                   { text: "NewAPI", link: "/newapi" },
                   { text: "ShengSuanYun", link: "/shengsuanyun" },
                   { text: "AIHubMix", link: "/aihubmix" },

@@ -57,14 +57,14 @@ const sidebarItem: menu[] = [
     to: '/persona'
   },
   {
+    title: 'core.navigation.data',
+    icon: 'mdi-database',
+    to: '/data'
+  },
+  {
     title: 'core.navigation.groups.more',
     icon: 'mdi-dots-horizontal',
     children: [
-      {
-        title: 'core.navigation.conversation',
-        icon: 'mdi-database',
-        to: '/conversation'
-      },
       {
         title: 'core.navigation.sessionManagement',
         icon: 'mdi-pencil-ruler',
@@ -84,21 +84,6 @@ const sidebarItem: menu[] = [
         title: 'core.navigation.sandboxes',
         icon: 'mdi-cube-outline',
         to: '/sandboxes'
-      },
-      {
-        title: 'core.navigation.dashboard',
-        icon: 'mdi-view-dashboard',
-        to: '/dashboard/default'
-      },
-      {
-        title: 'core.navigation.console',
-        icon: 'mdi-console',
-        to: '/console'
-      },
-      {
-        title: 'core.navigation.trace',
-        icon: 'mdi-timeline-text-outline',
-        to: '/trace'
       },
     ]
   }

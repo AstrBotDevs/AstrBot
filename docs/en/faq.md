@@ -139,7 +139,7 @@ This is because the plugin's dependencies were not installed properly. Normally,
 
 Solution:
 
-Based on the error message, refer to the plugin's README to manually install dependencies. You can install dependencies in the AstrBot WebUI under `Console` -> `Install Pip Package`.
+Based on the error message, refer to the plugin's README to manually install dependencies. You can install dependencies in the AstrBot WebUI under `Data` -> `Logs` -> `Install Pip Package`.
 
 ![image](https://files.astrbot.app/docs/source/images/faq/image-1.png)
 
