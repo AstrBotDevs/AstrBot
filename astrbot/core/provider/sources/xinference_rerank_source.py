@@ -44,6 +44,7 @@ class XinferenceRerankProvider(RerankProvider):
         else:
             logger.info("Xinference Rerank: No API key provided.")
             self.client = Client(self.base_url)
+        self.client._headers.update(self.request_headers)
 
         try:
             running_models = await self.client.list_models()

@@ -24,6 +24,7 @@ async def prepare_request_images(
     output_dir: Path,
     prepared: dict[str, str | None],
     quote_image_ref: str | None = None,
+    montage_max_size: int | None = None,
 ) -> None:
     """Replace current images on a working request and track their owned files.
 
@@ -36,6 +37,7 @@ async def prepare_request_images(
         output_dir: Event working file directory, separate from the shared cache.
         prepared: Per-request mapping reused after the request hook.
         quote_image_ref: Optional input for the dedicated quote caption branch.
+        montage_max_size: Optional montage-specific limit; defaults to ``max_size``.
     """
     req.image_urls = normalize_and_dedupe_strings(req.image_urls)
     refs = list(req.image_urls)
@@ -52,7 +54,11 @@ async def prepare_request_images(
             path = None
             if enabled:
                 path = await prepare_model_image(
-                    ref, max_size=max_size, output_dir=output_dir, quality=quality
+                    ref,
+                    max_size=max_size,
+                    output_dir=output_dir,
+                    quality=quality,
+                    montage_max_size=montage_max_size,
                 )
                 if path:
                     event.track_temporary_local_file(path)

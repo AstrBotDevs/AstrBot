@@ -1396,7 +1396,7 @@ CONFIG_METADATA_2 = {
                         "api_base": "https://api.kimi.com/coding",
                         "timeout": 120,
                         "proxy": "",
-                        "custom_headers": {"User-Agent": "claude-code/0.1.0"},
+                        "custom_headers": {},
                         "anth_thinking_config": {"type": "", "budget": 0, "effort": ""},
                     },
                     "Moonshot": {
@@ -1433,7 +1433,7 @@ CONFIG_METADATA_2 = {
                         "api_base": "https://api.minimaxi.com/anthropic",
                         "timeout": 120,
                         "proxy": "",
-                        "custom_headers": {"User-Agent": "claude-code/0.1.0"},
+                        "custom_headers": {},
                         "anth_thinking_config": {"type": "", "budget": 0, "effort": ""},
                     },
                     "Xiaomi": {
@@ -1458,7 +1458,7 @@ CONFIG_METADATA_2 = {
                         "api_base": "https://token-plan-cn.xiaomimimo.com/anthropic",
                         "timeout": 120,
                         "proxy": "",
-                        "custom_headers": {"User-Agent": "claude-code/0.1.0"},
+                        "custom_headers": {},
                         "anth_thinking_config": {"type": "", "budget": 0, "effort": ""},
                     },
                     "xAI": {
@@ -4185,7 +4185,7 @@ CONFIG_METADATA_3 = {
                     "provider_settings.image_compress_options.max_size": {
                         "description": "最大边长",
                         "type": "int",
-                        "hint": "压缩后图片的最长边，单位为像素。超过该尺寸时会按比例缩放。",
+                        "hint": "压缩后图片的最长边，单位为像素，超出则按比例缩放。CUA 沙箱下输入图片不缩放，大图可能超出服务商上传限制。",
                         "condition": {
                             "provider_settings.image_compress_enabled": True,
                         },

@@ -26,6 +26,7 @@ from astrbot.core.utils.network_utils import (
     log_connection_failure,
 )
 
+from ..headers import build_provider_headers
 from ..register import register_provider_adapter
 from .request_retry import retry_provider_request, retry_provider_request_context
 
@@ -71,12 +72,14 @@ class ProviderAnthropic(Provider):
         *,
         required_headers: dict[str, str] | None = None,
     ) -> dict[str, str] | None:
-        merged_headers = cls._normalize_custom_headers(provider_config) or {}
+        merged_headers = build_provider_headers(
+            cls._normalize_custom_headers(provider_config)
+        )
         if required_headers:
             for header_name, header_value in required_headers.items():
                 if not merged_headers.get(header_name, "").strip():
                     merged_headers[header_name] = header_value
-        return merged_headers or None
+        return merged_headers
 
     def __init__(
         self,

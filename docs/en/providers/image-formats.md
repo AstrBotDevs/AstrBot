@@ -10,6 +10,9 @@
 - Stills and montages share `image_compress_options.max_size` (default 1280). Small images are not enlarged.
 - Disabling compression keeps generic localization and reading, without resizing, transcoding, sampling or consulting the derived-image cache.
 
+
+> [!TIP]
+> When the computer-use runtime is `sandbox` and the sandbox booter is `cua`, input images are not resized, so pixel coordinates read by coordinate-based tools stay 1:1. Compliant images pass through byte-exact (no lossy re-encoding, avoiding JPEG color shifts); format conversion for other formats and animation montages still apply. Images above roughly 5 MB may exceed provider image upload limits and trigger a warning in the logs.
 The Agent receives readable local paths. Original image files and event components keep their original content, and attachment text continues to reference the source image. Providers only read/encode references and assemble their protocols.
 
 ## Errors and lifetime

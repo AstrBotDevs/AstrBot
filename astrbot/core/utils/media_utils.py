@@ -1366,14 +1366,20 @@ async def prepare_model_image(
     max_size: int,
     output_dir: Path,
     quality: int = IMAGE_COMPRESS_DEFAULT_QUALITY,
+    montage_max_size: int | None = None,
 ) -> str | None:
     """Prepare a single local model-ready image for the caller to own until consumption.
 
     Args:
         image_ref: Source reference accepted by MediaResolver.
-        max_size: Validated longest-edge limit for stills and animation montages.
+        max_size: Validated longest-edge limit for stills.
         output_dir: Directory for independent request-owned working files.
         quality: JPEG output quality in the range 1-100.
+        montage_max_size: Optional longest-edge limit for animation montages.
+            CUA sessions lift the still-image cap to keep pixel coordinates 1:1,
+            but montages are never used for coordinates, so callers pass the
+            configured limit here to keep the 3x3 canvas bounded. Defaults to
+            ``max_size``.
 
     Returns:
         An existing JPEG or PNG path, or None for a recoverable input or write
@@ -1386,7 +1392,10 @@ async def prepare_model_image(
         frame_count = await asyncio.to_thread(_inspect_image, image_bytes)
         if frame_count > 1:
             converted_bytes, _ = await asyncio.to_thread(
-                _extract_animation_montage_sync, image_bytes, max_size, quality
+                _extract_animation_montage_sync,
+                image_bytes,
+                montage_max_size if montage_max_size is not None else max_size,
+                quality,
             )
         else:
             converted_bytes = await asyncio.to_thread(
