@@ -483,3 +483,80 @@ async def test_future_task_list_ignores_other_sessions_for_the_hidden_note():
     result = await tool.call(_context(cron_mgr, sender_id="user-1"), action="list")
 
     assert result == "No cron jobs found."
+
+
+def _raw_job(
+    job_id: str,
+    *,
+    payload: dict | None = None,
+    job_type: str = "active_agent",
+):
+    """A job row without the convenience defaults of ``_job``."""
+    return SimpleNamespace(
+        job_id=job_id,
+        name=f"name-{job_id}",
+        job_type=job_type,
+        run_once=False,
+        cron_expression="0 8 * * *",
+        enabled=True,
+        next_run_time=None,
+        payload=payload or {},
+    )
+
+
+@pytest.mark.asyncio
+async def test_future_task_list_ignores_basic_jobs_in_the_session():
+    """A basic job in this session is not somebody else's future task."""
+    tool = FutureTaskTool()
+    basic_job = _raw_job(
+        "basic-job",
+        job_type="basic",
+        payload={"session": "test:group:shared", "handler_arg": "x"},
+    )
+    cron_mgr = SimpleNamespace(list_jobs=AsyncMock(return_value=[basic_job]))
+
+    result = await tool.call(_context(cron_mgr, sender_id="user-1"), action="list")
+
+    assert result == "No cron jobs found."
+
+
+@pytest.mark.asyncio
+async def test_future_task_list_ignores_jobs_without_a_creator():
+    """Dashboard/legacy rows have a session but no member as their creator."""
+    tool = FutureTaskTool()
+    orphan_job = _raw_job(
+        "orphan-job",
+        payload={"session": "test:group:shared", "origin": "api"},
+    )
+    cron_mgr = SimpleNamespace(list_jobs=AsyncMock(return_value=[orphan_job]))
+
+    result = await tool.call(_context(cron_mgr, sender_id="user-1"), action="list")
+
+    assert result == "No cron jobs found."
+
+
+@pytest.mark.asyncio
+async def test_future_task_delete_explains_jobs_without_a_creator():
+    """A job with no recorded creator must not be blamed on another member."""
+    tool = FutureTaskTool()
+    orphan_job = _raw_job(
+        "orphan-job",
+        payload={"session": "test:group:shared", "origin": "api"},
+    )
+    cron_mgr = SimpleNamespace(
+        db=SimpleNamespace(get_cron_job=AsyncMock(return_value=orphan_job)),
+        delete_job=AsyncMock(),
+    )
+
+    result = await tool.call(
+        _context(cron_mgr, sender_id="user-1"),
+        action="delete",
+        job_id="orphan-job",
+    )
+
+    assert result == (
+        "error: cron job orphan-job has no chat member as its creator (it was "
+        "created outside this chat, e.g. from the dashboard), so you cannot "
+        "delete it here."
+    )
+    cron_mgr.delete_job.assert_not_awaited()

@@ -44,6 +44,23 @@ def _job_belongs_to_current_sender(
     )
 
 
+def _job_is_foreign_task(job: Any, current_umo: str, current_sender_id: str) -> bool:
+    """Whether ``job`` is another member's task in the current session.
+
+    Only user-created active-agent jobs that recorded a creator count. Basic
+    jobs and rows without a sender id (jobs created through the dashboard or by
+    older versions) are not "somebody else's future task", so counting them
+    would report a wrong number.
+    """
+    if getattr(job, "job_type", None) != "active_agent":
+        return False
+    if _extract_job_session(job) != current_umo:
+        return False
+    if not _extract_job_sender(job):
+        return False
+    return not _job_belongs_to_current_sender(job, current_umo, current_sender_id)
+
+
 def _is_group_event(event: Any) -> bool:
     """Whether the event belongs to a group chat (best effort)."""
     getter = getattr(event, "get_message_type", None)
@@ -70,7 +87,17 @@ def _job_ownership_error(
     if _job_belongs_to_current_sender(job, current_umo, current_sender_id):
         return None
     job_id = getattr(job, "job_id", None) or "unknown"
-    if _extract_job_session(job) == current_umo and is_group:
+    same_session = _extract_job_session(job) == current_umo
+    if same_session and not _extract_job_sender(job):
+        # Dashboard / legacy rows have a session but no chat member as owner.
+        # Claiming "another member" for those would be just as wrong as the
+        # empty list this change set out to fix.
+        return (
+            f"error: cron job {job_id} has no chat member as its creator (it was "
+            f"created outside this chat, e.g. from the dashboard), so you cannot "
+            f"{action} it here."
+        )
+    if same_session and is_group:
         return (
             f"error: cron job {job_id} was created by another member of this "
             f"group chat, so you cannot {action} it. Only the member who created "
@@ -355,18 +382,13 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
                 for job in all_jobs
                 if _job_belongs_to_current_sender(job, current_umo, current_sender_id)
             ]
-            # Tasks in this same session that belong to somebody else. Reporting
-            # the count keeps an agent from reading "No cron jobs found." as "the
-            # task no longer exists" and then inventing what happened to it.
-            own_job_ids = {job.job_id for job in jobs}
-            hidden_count = len(
-                [
-                    job
-                    for job in all_jobs
-                    if _extract_job_session(job) == current_umo
-                    and job.job_id not in own_job_ids
-                ]
-            )
+            # Another member's tasks in this same session. Reporting the count
+            # keeps an agent from reading "No cron jobs found." as "the task no
+            # longer exists" and then inventing what happened to it.
+            hidden_count = 0
+            for job in all_jobs:
+                if _job_is_foreign_task(job, current_umo, current_sender_id):
+                    hidden_count += 1
             hidden_note = _hidden_jobs_note(
                 hidden_count, is_group=_is_group_event(context.context.event)
             )
