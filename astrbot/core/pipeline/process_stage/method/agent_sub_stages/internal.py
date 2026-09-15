@@ -366,6 +366,7 @@ class InternalAgentSubStage(Stage):
                         output_dir=output_dir,
                         prepared=prepared,
                         montage_max_size=montage_max_size,
+                        max_bytes=max_bytes,
                     )
                     if cua_pixel_mode:
                         oversized = []

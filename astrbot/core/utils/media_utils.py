@@ -1029,6 +1029,13 @@ noisy PNG already exceeds 6 MiB, which providers reject before the model ever
 sees it. ``None`` disables the budget and keeps oversized stills byte-exact.
 """
 
+MODEL_IMAGE_SHRINK_ATTEMPTS = 5
+"""Extra encodes allowed while fitting a still into its byte budget.
+
+Embedded metadata survives every quality step and a large canvas survives every
+budget, so a bounded number of retries is needed rather than one quality step.
+"""
+
 
 def normalize_model_image_max_size(value: object) -> int:
     """Normalize the model image longest-edge cap.
@@ -1075,6 +1082,7 @@ def _encode_image_frame_bytes(
     image: PILImage.Image,
     max_size: int | None = None,
     quality: int = IMAGE_COMPRESS_DEFAULT_QUALITY,
+    keep_metadata: bool = True,
 ) -> bytes:
     """Encode a display-oriented frame as JPEG, or PNG when it carries transparency.
 
@@ -1082,6 +1090,9 @@ def _encode_image_frame_bytes(
         image: Opened source frame, which is never mutated.
         max_size: Optional longest-edge limit; smaller images are not enlarged.
         quality: JPEG output quality in the range 1-100.
+        keep_metadata: Whether to carry the source ICC profile into the output.
+            Callers fitting a byte budget drop it, because the profile survives
+            every quality step and can keep a payload over budget on its own.
 
     Returns:
         Encoded single-frame JPEG or PNG bytes. A PNG larger than
@@ -1114,7 +1125,7 @@ def _encode_image_frame_bytes(
         # JPEG saving does not auto-embed the source ICC profile like PNG does;
         # attach it explicitly, but only when the color space survived intact
         # (conversions like CMYK -> RGB invalidate the source profile).
-        icc_profile = image.info.get("icc_profile")
+        icc_profile = image.info.get("icc_profile") if keep_metadata else None
         if image.mode not in {"RGB", "RGBA", "L", "LA", "P", "1", "I", "I;16"}:
             icc_profile = None
         save_kwargs = {"icc_profile": icc_profile} if icc_profile else {}
@@ -1249,8 +1260,8 @@ def _convert_image_bytes_sync(
     Returns:
         Single-frame JPEG or PNG bytes. An oriented JPEG or PNG inside both the
         pixel and the byte limit is reused unchanged; anything else is
-        re-encoded, derating the JPEG quality once when the result is still over
-        budget.
+        re-encoded and shrunk until it fits the byte budget, dropping embedded
+        metadata and finally the canvas when quality alone is not enough.
     """
     with PILImage.open(io.BytesIO(source_bytes)) as image:
         if (
@@ -1270,14 +1281,19 @@ def _convert_image_bytes_sync(
         if cached is not None:
             return cached
         encoded = _encode_image_frame_bytes(image, max_size=max_size, quality=quality)
-        if max_bytes is not None and len(encoded) > max_bytes and quality > 1:
-            # Re-encoding keeps the geometry but not necessarily the payload, so
-            # derate once instead of sending a request the provider rejects.
-            derated = max(1, quality * max_bytes // len(encoded))
-            if derated < quality:
-                encoded = _encode_image_frame_bytes(
-                    image, max_size=max_size, quality=derated
-                )
+        for _ in range(MODEL_IMAGE_SHRINK_ATTEMPTS):
+            if max_bytes is None or len(encoded) <= max_bytes:
+                break
+            # The pixel cap bounds geometry and the quality bounds artefacts, but
+            # neither bounds the payload alone: embedded metadata survives any
+            # quality, and a large canvas survives any budget. Drop the metadata
+            # with the first retry, then derate and finally shrink the canvas.
+            quality = max(1, quality * max_bytes // len(encoded))
+            if quality <= 1:
+                max_size = max(max_size // 2, ANIMATED_MONTAGE_GRID)
+            encoded = _encode_image_frame_bytes(
+                image, max_size=max_size, quality=quality, keep_metadata=False
+            )
     _publish_image_cache_atomic(output_path, encoded)
     return encoded
 

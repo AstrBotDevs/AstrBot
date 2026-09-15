@@ -67,6 +67,21 @@ async def test_compliant_still_over_byte_budget_is_reencoded(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_oversized_metadata_does_not_keep_still_over_budget(tmp_path):
+    source = tmp_path / "profiled.jpg"
+    Image.new("RGB", (200, 100), "red").save(
+        source, icc_profile=b"\x00" * (2 * 1024 * 1024)
+    )
+    original = source.read_bytes()
+    assert len(original) > media.MODEL_IMAGE_MAX_BYTES
+    path = await media.prepare_model_image(
+        str(source), max_size=1280, output_dir=tmp_path
+    )
+    assert path and Path(path).stat().st_size <= media.MODEL_IMAGE_MAX_BYTES
+    assert source.read_bytes() == original
+
+
+@pytest.mark.asyncio
 async def test_disabled_byte_budget_keeps_oversized_still_byte_exact(tmp_path):
     source = tmp_path / "noisy.png"
     Image.frombytes("RGBA", (1280, 1280), os.urandom(1280 * 1280 * 4)).save(source)

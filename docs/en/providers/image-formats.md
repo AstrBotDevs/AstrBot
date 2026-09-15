@@ -5,7 +5,7 @@
 ## Preparation rules
 
 - Compliant still images are sent unchanged: already JPEG or PNG, correctly oriented, inside the pixel limit and inside the 1 MB byte budget.
-- Compliant stills above the byte budget keep their pixel dimensions but are re-encoded to bound the request payload, derating the JPEG quality once when the result is still oversized. The pixel limit bounds dimensions, not compressed size, so without a byte budget such a still can reach tens of megabytes and be rejected by the provider before the model sees it.
+- Compliant stills above the byte budget are re-encoded to bound the request payload: pixel dimensions are preserved first, oversized metadata is dropped, and the JPEG quality is derated; only when the lowest quality is still oversized is the canvas scaled down. The pixel limit bounds dimensions, not compressed size, so without a byte budget such a still can reach tens of megabytes and be rejected by the provider before the model sees it.
 - Other still images are orientation-corrected, resized and re-encoded as needed. Opaque images become JPEG, controlled by `image_compress_options.quality` (default 95), with high-bit-depth samples normalized to 8-bit. Images with transparency become PNG; a PNG larger than 1 MB is flattened onto a white background and re-encoded as JPEG to bound the payload size.
 - Animations are detected from their frames, including GIF, animated WebP and APNG. Up to nine evenly sampled frames, including the first and last, become one white 3×3 grid. Unused cells stay white; an APNG independent cover is excluded.
 - Stills and montages share `image_compress_options.max_size` (default 1280). Small images are not enlarged.
