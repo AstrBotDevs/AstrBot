@@ -380,9 +380,28 @@ async def test_future_task_create_falls_back_to_run_at_when_scheduler_has_no_tim
     assert "2026-02-02 08:00:00+08:00" in result
 
 
+def _raw_job(
+    job_id: str,
+    *,
+    payload: dict | None = None,
+    job_type: str = "active_agent",
+):
+    """A job row without the convenience defaults of ``_job``."""
+    return SimpleNamespace(
+        job_id=job_id,
+        name=f"name-{job_id}",
+        job_type=job_type,
+        run_once=False,
+        cron_expression="0 8 * * *",
+        enabled=True,
+        next_run_time=None,
+        payload=payload or {},
+    )
+
+
 @pytest.mark.asyncio
 async def test_future_task_edit_reports_foreign_job_from_another_session():
-    """A job from a different session is still "not yours", without group wording."""
+    """A job from another session is still "not yours", without group wording."""
     tool = FutureTaskTool()
     existing_job = _job("job-1", umo="test:group:other", sender_id="user-1")
     cron_mgr = SimpleNamespace(
@@ -483,25 +502,6 @@ async def test_future_task_list_ignores_other_sessions_for_the_hidden_note():
     result = await tool.call(_context(cron_mgr, sender_id="user-1"), action="list")
 
     assert result == "No cron jobs found."
-
-
-def _raw_job(
-    job_id: str,
-    *,
-    payload: dict | None = None,
-    job_type: str = "active_agent",
-):
-    """A job row without the convenience defaults of ``_job``."""
-    return SimpleNamespace(
-        job_id=job_id,
-        name=f"name-{job_id}",
-        job_type=job_type,
-        run_once=False,
-        cron_expression="0 8 * * *",
-        enabled=True,
-        next_run_time=None,
-        payload=payload or {},
-    )
 
 
 @pytest.mark.asyncio

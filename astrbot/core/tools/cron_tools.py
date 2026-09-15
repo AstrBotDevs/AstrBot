@@ -44,88 +44,6 @@ def _job_belongs_to_current_sender(
     )
 
 
-def _job_is_foreign_task(job: Any, current_umo: str, current_sender_id: str) -> bool:
-    """Whether ``job`` is another member's task in the current session.
-
-    Only user-created active-agent jobs that recorded a creator count. Basic
-    jobs and rows without a sender id (jobs created through the dashboard or by
-    older versions) are not "somebody else's future task", so counting them
-    would report a wrong number.
-    """
-    if getattr(job, "job_type", None) != "active_agent":
-        return False
-    if _extract_job_session(job) != current_umo:
-        return False
-    if not _extract_job_sender(job):
-        return False
-    return not _job_belongs_to_current_sender(job, current_umo, current_sender_id)
-
-
-def _is_group_event(event: Any) -> bool:
-    """Whether the event belongs to a group chat (best effort)."""
-    getter = getattr(event, "get_message_type", None)
-    if callable(getter):
-        return getter() == MessageType.GROUP_MESSAGE
-    session = getattr(event, "session", None)
-    return getattr(session, "message_type", None) == MessageType.GROUP_MESSAGE
-
-
-def _job_ownership_error(
-    job: Any,
-    *,
-    action: str,
-    current_umo: str,
-    current_sender_id: str,
-    is_group: bool,
-) -> str | None:
-    """Explain why ``job`` cannot be managed by the current sender.
-
-    Returns ``None`` when the job belongs to the current sender. Otherwise the
-    message says explicitly that the job exists and belongs to somebody else,
-    so the agent reports "not yours" instead of guessing that the task is gone.
-    """
-    if _job_belongs_to_current_sender(job, current_umo, current_sender_id):
-        return None
-    job_id = getattr(job, "job_id", None) or "unknown"
-    same_session = _extract_job_session(job) == current_umo
-    if same_session and not _extract_job_sender(job):
-        # Dashboard / legacy rows have a session but no chat member as owner.
-        # Claiming "another member" for those would be just as wrong as the
-        # empty list this change set out to fix.
-        return (
-            f"error: cron job {job_id} has no chat member as its creator (it was "
-            f"created outside this chat, e.g. from the dashboard), so you cannot "
-            f"{action} it here."
-        )
-    if same_session and is_group:
-        return (
-            f"error: cron job {job_id} was created by another member of this "
-            f"group chat, so you cannot {action} it. Only the member who created "
-            f"it can {action} it; tell the user to ask that member."
-        )
-    return (
-        f"error: cron job {job_id} was not created by you, so you cannot "
-        f"{action} it. Only whoever created it can {action} it."
-    )
-
-
-def _hidden_jobs_note(count: int, *, is_group: bool) -> str:
-    """Explain that tasks owned by somebody else were filtered out of a list."""
-    if count <= 0:
-        return ""
-    if is_group:
-        return (
-            f"\n\nNote: {count} task(s) in this group chat were created by other "
-            "members and are filtered out of this list; only tasks created by you "
-            "are listed. Only the member who created a task can edit or delete it."
-        )
-    return (
-        f"\n\nNote: {count} task(s) created by others were filtered out of this "
-        "list; only tasks created by you are listed. Only whoever created a task "
-        "can edit or delete it."
-    )
-
-
 def _parse_run_at(run_at: Any) -> datetime | None:
     if run_at in (None, ""):
         return None
@@ -288,15 +206,30 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
             job = await cron_mgr.db.get_cron_job(str(job_id))
             if not job:
                 return f"error: cron job {job_id} not found."
-            ownership_error = _job_ownership_error(
-                job,
-                action="edit",
-                current_umo=current_umo,
-                current_sender_id=current_sender_id,
-                is_group=_is_group_event(context.context.event),
-            )
-            if ownership_error:
-                return ownership_error
+            if not _job_belongs_to_current_sender(job, current_umo, current_sender_id):
+                same_session = _extract_job_session(job) == current_umo
+                if same_session and not _extract_job_sender(job):
+                    # Dashboard / legacy rows have a session but no member as
+                    # their creator, so blaming another member would be wrong.
+                    return (
+                        f"error: cron job {job_id} has no chat member as its creator "
+                        "(it was created outside this chat, e.g. from the dashboard), "
+                        "so you cannot edit it here."
+                    )
+                if (
+                    same_session
+                    and context.context.event.get_message_type()
+                    == MessageType.GROUP_MESSAGE
+                ):
+                    return (
+                        f"error: cron job {job_id} was created by another member of "
+                        "this group chat, so you cannot edit it. Only the member who "
+                        "created it can edit it; tell the user to ask that member."
+                    )
+                return (
+                    f"error: cron job {job_id} was not created by you, so you cannot "
+                    "edit it. Only whoever created it can edit it."
+                )
 
             payload = dict(job.payload) if isinstance(job.payload, dict) else {}
 
@@ -363,15 +296,30 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
             job = await cron_mgr.db.get_cron_job(str(job_id))
             if not job:
                 return f"error: cron job {job_id} not found."
-            ownership_error = _job_ownership_error(
-                job,
-                action="delete",
-                current_umo=current_umo,
-                current_sender_id=current_sender_id,
-                is_group=_is_group_event(context.context.event),
-            )
-            if ownership_error:
-                return ownership_error
+            if not _job_belongs_to_current_sender(job, current_umo, current_sender_id):
+                same_session = _extract_job_session(job) == current_umo
+                if same_session and not _extract_job_sender(job):
+                    # Dashboard / legacy rows have a session but no member as
+                    # their creator, so blaming another member would be wrong.
+                    return (
+                        f"error: cron job {job_id} has no chat member as its creator "
+                        "(it was created outside this chat, e.g. from the dashboard), "
+                        "so you cannot delete it here."
+                    )
+                if (
+                    same_session
+                    and context.context.event.get_message_type()
+                    == MessageType.GROUP_MESSAGE
+                ):
+                    return (
+                        f"error: cron job {job_id} was created by another member of "
+                        "this group chat, so you cannot delete it. Only the member who "
+                        "created it can delete it; tell the user to ask that member."
+                    )
+                return (
+                    f"error: cron job {job_id} was not created by you, so you cannot "
+                    "delete it. Only whoever created it can delete it."
+                )
             await cron_mgr.delete_job(str(job_id))
             return f"Deleted cron job {job_id}."
 
@@ -382,16 +330,41 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
                 for job in all_jobs
                 if _job_belongs_to_current_sender(job, current_umo, current_sender_id)
             ]
-            # Another member's tasks in this same session. Reporting the count
-            # keeps an agent from reading "No cron jobs found." as "the task no
-            # longer exists" and then inventing what happened to it.
+            # Another member's tasks in this session. Only user-created
+            # active-agent jobs with a recorded creator count: basic jobs and
+            # rows without a sender id (dashboard/legacy) are not somebody
+            # else's future task, so counting them would report a wrong number.
             hidden_count = 0
             for job in all_jobs:
-                if _job_is_foreign_task(job, current_umo, current_sender_id):
+                if (
+                    job.job_type == "active_agent"
+                    and _extract_job_session(job) == current_umo
+                    and _extract_job_sender(job)
+                    and not _job_belongs_to_current_sender(
+                        job, current_umo, current_sender_id
+                    )
+                ):
                     hidden_count += 1
-            hidden_note = _hidden_jobs_note(
-                hidden_count, is_group=_is_group_event(context.context.event)
-            )
+            # Saying how many tasks were hidden stops an agent from reading
+            # "No cron jobs found." as "the task no longer exists".
+            hidden_note = ""
+            if hidden_count:
+                if (
+                    context.context.event.get_message_type()
+                    == MessageType.GROUP_MESSAGE
+                ):
+                    hidden_note = (
+                        f"\n\nNote: {hidden_count} task(s) in this group chat were "
+                        "created by other members and are filtered out of this list; "
+                        "only tasks created by you are listed. Only the member who "
+                        "created a task can edit or delete it."
+                    )
+                else:
+                    hidden_note = (
+                        f"\n\nNote: {hidden_count} task(s) created by others were "
+                        "filtered out of this list; only tasks created by you are "
+                        "listed. Only whoever created a task can edit or delete it."
+                    )
             if not jobs:
                 return "No cron jobs found." + hidden_note
             tz_name = str(
