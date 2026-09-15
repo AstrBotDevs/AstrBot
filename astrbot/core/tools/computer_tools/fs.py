@@ -40,6 +40,8 @@ import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import mcp.types
+
 from astrbot.api import FunctionTool, logger
 from astrbot.api.event import MessageChain
 from astrbot.core.agent.run_context import ContextWrapper
@@ -303,6 +305,124 @@ def _decode_escaped_text(value: str) -> str:
     )
 
 
+async def _provider_supports_image(
+    context: ContextWrapper[AstrAgentContext],
+) -> bool:
+    """Check whether the current chat provider supports image modality.
+
+    Returns True when the provider supports image or when the check cannot
+    be determined (fail-open). Empty/missing modalities is treated as
+    supporting all modalities for backward compatibility.
+    """
+    try:
+        from astrbot.core.provider.entities import ProviderType
+
+        umo = context.context.event.unified_msg_origin
+        pm = context.context.context.provider_manager
+        provider = None
+        # Prefer async resolution to respect session-specific overrides.
+        if hasattr(pm, "get_using_provider_async"):
+            try:
+                provider = await pm.get_using_provider_async(
+                    ProviderType.CHAT_COMPLETION, umo=umo
+                )
+            except Exception:
+                provider = None
+        if provider is None:
+            try:
+                provider = pm.get_using_provider(ProviderType.CHAT_COMPLETION, umo=umo)
+            except Exception:
+                provider = None
+        if provider is None:
+            return True
+        modalities = provider.provider_config.get("modalities")
+        if not modalities:
+            return True
+        if not isinstance(modalities, list):
+            return True
+        return "image" in modalities
+    except Exception:
+        return True
+
+
+async def _caption_image_fallback(
+    context: ContextWrapper[AstrAgentContext],
+    image_ref: str,
+) -> ToolExecResult:
+    """Try to caption an image using the configured image caption provider.
+
+    When the current chat provider lacks image support and a caption
+    provider is configured, the image is described via that provider and
+    returned as text.
+
+    Args:
+        image_ref: Image reference passed to the caption provider. It may be
+            a local file path or a data URI (``data:image/...;base64,``).
+    """
+    try:
+        from astrbot.core.provider.provider import Provider
+    except Exception:  # pragma: no cover - import guard
+        from astrbot.core.provider.provider import Provider  # type: ignore
+
+    umo = context.context.event.unified_msg_origin
+    try:
+        cfg = context.context.context.get_config(umo=umo)
+    except Exception as exc:
+        logger.warning(f"[ImageFallback] Failed to load config for umo={umo}: {exc}")
+        return (
+            "Error: your provider does not support image modality, "
+            "and the caption configuration is unavailable. Unable to read image file."
+        )
+    provider_settings = (
+        cfg.get("provider_settings", {}) if isinstance(cfg, dict) else {}
+    )
+    caption_provider_id = str(
+        provider_settings.get("default_image_caption_provider_id", "") or ""
+    ).strip()
+
+    if not caption_provider_id:
+        return (
+            "Error: your provider does not support image modality, "
+            "and no image caption provider is configured. "
+            "Please set provider_settings.default_image_caption_provider_id."
+        )
+
+    pm = context.context.context.provider_manager
+    caption_provider = None
+    try:
+        caption_provider = await pm.get_provider_by_id(caption_provider_id)
+    except Exception as exc:
+        logger.warning(
+            f"[ImageFallback] Failed to get caption provider {caption_provider_id}: {exc}"
+        )
+        caption_provider = None
+
+    if caption_provider is None or not isinstance(caption_provider, Provider):
+        return (
+            "Error: your provider does not support image modality, "
+            f"and the configured image caption provider `{caption_provider_id}` is not available. "
+            "Unable to read image file."
+        )
+
+    caption_prompt = str(
+        provider_settings.get("image_caption_prompt", "Please describe the image.")
+        or "Please describe the image."
+    ).strip()
+
+    try:
+        llm_resp = await caption_provider.text_chat(
+            prompt=caption_prompt,
+            image_urls=[image_ref],
+        )
+        caption = (getattr(llm_resp, "completion_text", None) or "").strip()
+        if not caption:
+            return "Error: image caption provider returned an empty description."
+        return f"[Image description]: {caption}"
+    except Exception as exc:
+        logger.error(f"[ImageFallback] Image captioning failed for {image_ref}: {exc}")
+        return f"Error: failed to generate image description: {exc}"
+
+
 @builtin_tool(config=_COMPUTER_RUNTIME_TOOL_CONFIG)
 @dataclass
 class FileReadTool(FunctionTool):
@@ -378,7 +498,7 @@ class FileReadTool(FunctionTool):
                 context.context.context,
                 context.context.event.unified_msg_origin,
             )
-            return await read_file_tool_result(
+            result = await read_file_tool_result(
                 sb,
                 local_mode=local_env,
                 path=normalized_path,
@@ -393,6 +513,42 @@ class FileReadTool(FunctionTool):
                     else None
                 ),
             )
+
+            # If the result is an image and the current chat provider does not
+            # support image input, automatically fall back to the configured
+            # vision/caption provider to describe the image as text.
+            if (
+                isinstance(result, mcp.types.CallToolResult)
+                and result.content
+                and any(
+                    isinstance(item, mcp.types.ImageContent) for item in result.content
+                )
+            ):
+                try:
+                    supports_image = await _provider_supports_image(context)
+                except Exception:
+                    supports_image = True
+                if not supports_image:
+                    # Build a data URI from the already-compressed image when
+                    # available so that sandbox runtimes (where the file lives
+                    # inside the container) can still be captioned without
+                    # host filesystem access. Fall back to the normalized path
+                    # for the local runtime.
+                    image_ref = normalized_path
+                    try:
+                        for item in result.content:
+                            if isinstance(item, mcp.types.ImageContent) and getattr(
+                                item, "data", None
+                            ):
+                                mime = getattr(item, "mimeType", None) or "image/jpeg"
+                                # Avoid huge log spam; data URI is passed directly.
+                                image_ref = f"data:{mime};base64,{item.data}"
+                                break
+                    except Exception:
+                        image_ref = normalized_path
+                    return await _caption_image_fallback(context, image_ref)
+
+            return result
         except PermissionError as exc:
             return f"Error: {exc}"
         except Exception as exc:
