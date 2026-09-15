@@ -7,6 +7,7 @@ from astrbot.core.agent.message import ImageURLPart
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.utils.media_utils import (
+    MODEL_IMAGE_MAX_BYTES,
     MediaResolver,
     is_recoverable_image_error,
     prepare_model_image,
@@ -25,6 +26,7 @@ async def prepare_request_images(
     prepared: dict[str, str | None],
     quote_image_ref: str | None = None,
     montage_max_size: int | None = None,
+    max_bytes: int | None = MODEL_IMAGE_MAX_BYTES,
 ) -> None:
     """Replace current images on a working request and track their owned files.
 
@@ -38,6 +40,7 @@ async def prepare_request_images(
         prepared: Per-request mapping reused after the request hook.
         quote_image_ref: Optional input for the dedicated quote caption branch.
         montage_max_size: Optional montage-specific limit; defaults to ``max_size``.
+        max_bytes: Optional byte budget per still; ``None`` keeps them byte-exact.
     """
     req.image_urls = normalize_and_dedupe_strings(req.image_urls)
     refs = list(req.image_urls)
@@ -59,6 +62,7 @@ async def prepare_request_images(
                     output_dir=output_dir,
                     quality=quality,
                     montage_max_size=montage_max_size,
+                    max_bytes=max_bytes,
                 )
                 if path:
                     event.track_temporary_local_file(path)
