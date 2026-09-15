@@ -95,11 +95,52 @@ class RespondStage(Stage):
             word_count = len([c for c in text if c.isalnum()])
         return word_count
 
-    async def _calc_comp_interval(self, comp: BaseMessageComponent) -> float:
-        """分段回复 计算间隔时间"""
+    @staticmethod
+    def _group_segment_chain(
+        chain: list[BaseMessageComponent],
+    ) -> list[list[BaseMessageComponent]]:
+        """Build the bubbles sent by segmented reply.
+
+        Plain and non-inline components start a new bubble; a Face attaches
+        to the preceding text bubble and glues the Plain following it back
+        into the same bubble, so an inline emoji never becomes a bubble of
+        its own and never leaves the next clause as a bubble of its own
+        (#10047). Adjacent Plain components without an emoji between them —
+        the output of segmentation-words (#3959) — keep their deliberate
+        split.
+        """
+        segments: list[list[BaseMessageComponent]] = []
+        for comp in chain:
+            prev_type = segments[-1][-1].type if segments else None
+            if prev_type == ComponentType.Face and comp.type == ComponentType.Plain:
+                segments[-1].append(comp)
+            elif comp.type == ComponentType.Face and prev_type in (
+                ComponentType.Plain,
+                ComponentType.Face,
+            ):
+                segments[-1].append(comp)
+            else:
+                segments.append([comp])
+        return segments
+
+    async def _calc_comp_interval(
+        self,
+        comps: BaseMessageComponent | list[BaseMessageComponent],
+    ) -> float:
+        """分段回复 计算间隔时间
+
+        ``comps`` may also be a sequence of components sharing one bubble;
+        the log-method interval is then computed from the Plain word counts
+        of that bubble, counted per component and summed.
+        """
+        if not isinstance(comps, list):
+            comps = [comps]
         if self.interval_method == "log":
-            if isinstance(comp, Comp.Plain):
-                wc = await self._word_cnt(comp.text)
+            wc = 0
+            for comp in comps:
+                if isinstance(comp, Comp.Plain):
+                    wc += await self._word_cnt(comp.text)
+            if wc:
                 i = math.log(wc + 1, self.log_base)
                 return random.uniform(i, i + 0.5)
             return random.uniform(1, 1.75)
@@ -273,19 +314,22 @@ class RespondStage(Stage):
                         f"actual_chain: {result.chain}",
                     )
                     return
-                for comp in result.chain:
-                    i = await self._calc_comp_interval(comp)
+                segments = self._group_segment_chain(result.chain)
+                for segment in segments:
+                    i = await self._calc_comp_interval(segment)
                     await asyncio.sleep(i)
                     try:
-                        if comp.type in need_separately:
-                            await event.send(result.derive([comp]))
+                        if segment[0].type in need_separately:
+                            await event.send(result.derive(segment))
                         else:
-                            await event.send(result.derive([*header_comps, comp]))
+                            await event.send(
+                                result.derive([*header_comps, *segment]),
+                            )
                             header_comps.clear()
                     except Exception as e:
                         logger.error(
                             "Failed to send the message chain: "
-                            f"chain = {MessageChain([comp])}, error = {e}",
+                            f"chain = {MessageChain(segment)}, error = {e}",
                             exc_info=True,
                         )
             else:
