@@ -969,9 +969,7 @@ async def _decorate_llm_request(
                 img_cap_prov_id,
             )
 
-    tz = config.timezone
-    if tz is None:
-        tz = plugin_context.get_config().get("timezone")
+    tz = plugin_context.get_config().get("timezone")
     _append_system_reminders(event, req, cfg, tz)
     await _apply_workspace_extra_prompt(event, req, plugin_context)
 
