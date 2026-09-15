@@ -11,6 +11,7 @@ from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool, ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.cron.manager import CronJobSchedulingError
+from astrbot.core.platform.message_type import MessageType
 from astrbot.core.tools.registry import builtin_tool
 
 _CRON_TOOL_CONFIG = {
@@ -40,6 +41,61 @@ def _job_belongs_to_current_sender(
     return (
         _extract_job_session(job) == current_umo
         and _extract_job_sender(job) == current_sender_id
+    )
+
+
+def _is_group_event(event: Any) -> bool:
+    """Whether the event belongs to a group chat (best effort)."""
+    getter = getattr(event, "get_message_type", None)
+    if callable(getter):
+        return getter() == MessageType.GROUP_MESSAGE
+    session = getattr(event, "session", None)
+    return getattr(session, "message_type", None) == MessageType.GROUP_MESSAGE
+
+
+def _job_ownership_error(
+    job: Any,
+    *,
+    action: str,
+    current_umo: str,
+    current_sender_id: str,
+    is_group: bool,
+) -> str | None:
+    """Explain why ``job`` cannot be managed by the current sender.
+
+    Returns ``None`` when the job belongs to the current sender. Otherwise the
+    message says explicitly that the job exists and belongs to somebody else,
+    so the agent reports "not yours" instead of guessing that the task is gone.
+    """
+    if _job_belongs_to_current_sender(job, current_umo, current_sender_id):
+        return None
+    job_id = getattr(job, "job_id", None) or "unknown"
+    if _extract_job_session(job) == current_umo and is_group:
+        return (
+            f"error: cron job {job_id} was created by another member of this "
+            f"group chat, so you cannot {action} it. Only the member who created "
+            f"it can {action} it; tell the user to ask that member."
+        )
+    return (
+        f"error: cron job {job_id} was not created by you, so you cannot "
+        f"{action} it. Only whoever created it can {action} it."
+    )
+
+
+def _hidden_jobs_note(count: int, *, is_group: bool) -> str:
+    """Explain that tasks owned by somebody else were filtered out of a list."""
+    if count <= 0:
+        return ""
+    if is_group:
+        return (
+            f"\n\nNote: {count} task(s) in this group chat were created by other "
+            "members and are filtered out of this list; only tasks created by you "
+            "are listed. Only the member who created a task can edit or delete it."
+        )
+    return (
+        f"\n\nNote: {count} task(s) created by others were filtered out of this "
+        "list; only tasks created by you are listed. Only whoever created a task "
+        "can edit or delete it."
     )
 
 
@@ -205,8 +261,15 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
             job = await cron_mgr.db.get_cron_job(str(job_id))
             if not job:
                 return f"error: cron job {job_id} not found."
-            if not _job_belongs_to_current_sender(job, current_umo, current_sender_id):
-                return "error: you can only edit your own future tasks."
+            ownership_error = _job_ownership_error(
+                job,
+                action="edit",
+                current_umo=current_umo,
+                current_sender_id=current_sender_id,
+                is_group=_is_group_event(context.context.event),
+            )
+            if ownership_error:
+                return ownership_error
 
             payload = dict(job.payload) if isinstance(job.payload, dict) else {}
 
@@ -273,19 +336,42 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
             job = await cron_mgr.db.get_cron_job(str(job_id))
             if not job:
                 return f"error: cron job {job_id} not found."
-            if not _job_belongs_to_current_sender(job, current_umo, current_sender_id):
-                return "error: you can only delete your own future tasks."
+            ownership_error = _job_ownership_error(
+                job,
+                action="delete",
+                current_umo=current_umo,
+                current_sender_id=current_sender_id,
+                is_group=_is_group_event(context.context.event),
+            )
+            if ownership_error:
+                return ownership_error
             await cron_mgr.delete_job(str(job_id))
             return f"Deleted cron job {job_id}."
 
         if action == "list":
+            all_jobs = await cron_mgr.list_jobs()
             jobs = [
                 job
-                for job in await cron_mgr.list_jobs()
+                for job in all_jobs
                 if _job_belongs_to_current_sender(job, current_umo, current_sender_id)
             ]
+            # Tasks in this same session that belong to somebody else. Reporting
+            # the count keeps an agent from reading "No cron jobs found." as "the
+            # task no longer exists" and then inventing what happened to it.
+            own_job_ids = {job.job_id for job in jobs}
+            hidden_count = len(
+                [
+                    job
+                    for job in all_jobs
+                    if _extract_job_session(job) == current_umo
+                    and job.job_id not in own_job_ids
+                ]
+            )
+            hidden_note = _hidden_jobs_note(
+                hidden_count, is_group=_is_group_event(context.context.event)
+            )
             if not jobs:
-                return "No cron jobs found."
+                return "No cron jobs found." + hidden_note
             tz_name = str(
                 context.context.context.get_config(
                     umo=context.context.event.unified_msg_origin
@@ -316,7 +402,7 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
                 lines.append(
                     f"{j.job_id} | {j.name} | {j.job_type} | run_once={getattr(j, 'run_once', False)} | enabled={j.enabled} | next={next_run}"
                 )
-            return "\n".join(lines)
+            return "\n".join(lines) + hidden_note
 
         return "error: action must be one of create, edit, delete, or list."
 
