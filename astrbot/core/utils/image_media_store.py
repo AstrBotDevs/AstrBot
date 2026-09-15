@@ -95,7 +95,7 @@ class ImageMediaStore:
             raise OSError("invalid durable media root")
         object_path = self.root / f"{media_id}.bin"
         metadata_path = self.root / f"{media_id}.json"
-        detected_mime = mime_type or "application/octet-stream"
+        detected_mime = "application/octet-stream"
         width: int | None = None
         height: int | None = None
         try:
@@ -151,7 +151,10 @@ class ImageMediaStore:
                 output.write(data)
                 output.flush()
                 os.fsync(output.fileno())
-            os.replace(temporary_paths[0], object_path)
+            try:
+                os.link(temporary_paths[0], object_path)
+            except FileExistsError:
+                pass
             if hashlib.sha256(object_path.read_bytes()).hexdigest() != media_id:
                 raise OSError("media hash verification failed")
             with tempfile.NamedTemporaryFile(
@@ -166,7 +169,10 @@ class ImageMediaStore:
                 metadata_file.write(json.dumps(canonical, sort_keys=True) + "\n")
                 metadata_file.flush()
                 os.fsync(metadata_file.fileno())
-            os.replace(metadata_path_tmp, metadata_path)
+            try:
+                os.link(metadata_path_tmp, metadata_path)
+            except FileExistsError:
+                pass
             if json.loads(metadata_path.read_text()) != canonical:
                 raise OSError("durable media metadata verification failed")
         finally:

@@ -116,6 +116,15 @@ async def test_cancelled_worker_cleans_after_exit(tmp_path, monkeypatch, timeout
     output = tmp_path / "worker-output"
     entered = threading.Event()
     release = threading.Event()
+    cleaned = asyncio.Event()
+    original_unlink = Path.unlink
+
+    def unlink(path, *args, **kwargs):
+        original_unlink(path, *args, **kwargs)
+        if path == output:
+            cleaned.set()
+
+    monkeypatch.setattr(Path, "unlink", unlink)
 
     def blocked_worker(*args, **kwargs):
         entered.set()
@@ -136,15 +145,8 @@ async def test_cancelled_worker_cleans_after_exit(tmp_path, monkeypatch, timeout
                 await task
     finally:
         release.set()
-    # Let the shielded worker and its cleanup callback finish.
-    for _ in range(100):
-        await asyncio.sleep(0.01)
-        if not any(
-            not pending.done()
-            for pending in asyncio.all_tasks()
-            if pending is not asyncio.current_task()
-        ):
-            break
+    # A finished task can still have its cleanup callback queued on the loop.
+    await asyncio.wait_for(cleaned.wait(), timeout=5)
     assert not output.exists()
     assert source.read_bytes() == b"source"
 

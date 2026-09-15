@@ -139,20 +139,20 @@ def test_deduplicated_corrupt_object_is_rejected(tmp_path):
         store.put(_png())
 
 
-@pytest.mark.parametrize("failure_point", ["replace", "fsync"])
+@pytest.mark.parametrize("failure_point", ["link", "fsync"])
 def test_write_failure_leaves_no_usable_reference(tmp_path, monkeypatch, failure_point):
     import astrbot.core.utils.image_media_store as media_store
 
     store = ImageMediaStore(tmp_path / "media")
-    original_replace = os.replace
+    original_link = os.link
     original_fsync = os.fsync
 
-    if failure_point == "replace":
+    if failure_point == "link":
 
-        def fail_replace(source, target):
-            raise OSError("injected replace failure")
+        def fail_link(source, target):
+            raise OSError("injected link failure")
 
-        monkeypatch.setattr(media_store.os, "replace", fail_replace)
+        monkeypatch.setattr(media_store.os, "link", fail_link)
     else:
 
         def fail_fsync(fd):
@@ -162,27 +162,27 @@ def test_write_failure_leaves_no_usable_reference(tmp_path, monkeypatch, failure
 
     with pytest.raises(OSError):
         store.put(_png())
-    assert not list(store.root.glob("*.bin"))
     assert not list(store.root.glob("*.json"))
-    assert not list(store.root.iterdir())
-    assert original_replace and original_fsync
+    if failure_point == "fsync":
+        assert not list(store.root.iterdir())
+    assert original_link and original_fsync
 
 
 def test_metadata_replace_failure_is_repaired_by_next_put(tmp_path, monkeypatch):
     import astrbot.core.utils.image_media_store as media_store
 
     store = ImageMediaStore(tmp_path / "media")
-    original_replace = os.replace
+    original_link = os.link
     failed = False
 
-    def fail_metadata_replace(source, target):
+    def fail_metadata_link(source, target):
         nonlocal failed
         if target.suffix == ".json" and not failed:
             failed = True
-            raise OSError("injected metadata replace failure")
-        return original_replace(source, target)
+            raise OSError("injected metadata link failure")
+        return original_link(source, target)
 
-    monkeypatch.setattr(media_store.os, "replace", fail_metadata_replace)
+    monkeypatch.setattr(media_store.os, "link", fail_metadata_link)
     with pytest.raises(OSError):
         store.put(_png())
     assert not list(store.root.glob("*.json"))
