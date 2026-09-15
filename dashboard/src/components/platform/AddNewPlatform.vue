@@ -9,10 +9,10 @@
       <v-card-title class="text-h3 pa-4 pb-0 pl-6">
         {{
           updatingMode
-            ? `${tm('dialog.edit')} ${updatingPlatformConfig.id} ${tm(
-                'dialog.adapter',
+            ? `${tm("dialog.edit")} ${updatingPlatformConfig.id} ${tm(
+                "dialog.adapter",
               )}`
-            : tm('dialog.addPlatform')
+            : tm("dialog.addPlatform")
         }}
       </v-card-title>
       <v-card-text
@@ -73,7 +73,9 @@
                         activator="parent"
                         :text="
                           tm(
-                            `createDialog.platformTooltips.${platformTemplates[item.raw].type}`,
+                            `createDialog.platformTooltips.${
+                              platformTemplates[item.raw].type
+                            }`,
                           )
                         "
                         location="end"
@@ -734,7 +736,9 @@
 
       <v-card-actions>
         <v-spacer></v-spacer>
-        <v-btn variant="text" @click="closeDialog">{{ tm("dialog.cancel") }}</v-btn>
+        <v-btn variant="text" @click="closeDialog">{{
+          tm("dialog.cancel")
+        }}</v-btn>
         <v-btn
           :disabled="!canSave"
           color="primary"
@@ -850,7 +854,13 @@
 </template>
 
 <script>
-import { botApi, configProfileApi, configRouteApi, fileApi, sessionApi } from "@/api/v1";
+import {
+  botApi,
+  configProfileApi,
+  configRouteApi,
+  fileApi,
+  sessionApi,
+} from "@/api/v1";
 import { useModuleI18n } from "@/i18n/composables";
 import {
   getPlatformIcon,
@@ -891,6 +901,10 @@ export default {
       default: false,
     },
     updatingPlatformConfig: {
+      type: Object,
+      default: null,
+    },
+    initialScanPlatform: {
       type: Object,
       default: null,
     },
@@ -959,6 +973,7 @@ export default {
         return this.show;
       },
       set(value) {
+        if (!value) this.resetForm();
         this.$emit("update:show", value);
       },
     },
@@ -1588,7 +1603,9 @@ export default {
       }
 
       let suffix = "";
-      const explicitSuffix = this.sanitizePlatformIdPart(data.platform_id_suffix);
+      const explicitSuffix = this.sanitizePlatformIdPart(
+        data.platform_id_suffix,
+      );
       if (explicitSuffix) {
         suffix =
           explicitSuffix.startsWith("_") || explicitSuffix.startsWith("-")
@@ -1944,7 +1961,22 @@ export default {
       this.showConfigSection = true;
     },
 
-    prepareData() {
+    async prepareData() {
+      if (!this.updatingMode && this.initialScanPlatform) {
+        const scanPlatform = this.initialScanPlatform;
+        this.resetForm();
+        await this.$nextTick();
+        this.selectedPlatformType =
+          Object.keys(this.platformTemplates).find(
+            (name) => this.platformTemplates[name].type === scanPlatform.type,
+          ) || null;
+        await this.$nextTick();
+        if (this.selectedPlatformConfig) {
+          this.larkCreationMode = "scan";
+          this.dingtalkCreationMode = "scan";
+          this.qqOfficialCreationMode = "scan";
+        }
+      }
       this.getConfigInfoList();
       this.getConfigForPreview(this.selectedAbConfId);
       if (
