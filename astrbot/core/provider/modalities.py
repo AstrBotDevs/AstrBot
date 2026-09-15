@@ -91,7 +91,11 @@ def sanitize_contexts_by_modalities(
                 for part in content:
                     if isinstance(part, dict):
                         part_type = str(part.get("type", "")).lower()
-                        if not supports_image and part_type in {"image_url", "image"}:
+                        if not supports_image and part_type in {
+                            "image_url",
+                            "image",
+                            "image_media_ref",
+                        }:
                             removed_any_multimodal = True
                             stats.fixed_image_blocks += 1
                             filtered_parts.append({"type": "text", "text": "[Image]"})
@@ -132,7 +136,7 @@ def _tool_result_placeholder(content: Any) -> str:
                 part_type = str(part.get("type", "")).lower()
                 if part_type == "text":
                     text_parts.append(str(part.get("text", "")))
-                elif part_type in {"image_url", "image"}:
+                elif part_type in {"image_url", "image", "image_media_ref"}:
                     text_parts.append("[Image]")
                 elif part_type in {"audio_url", "input_audio"}:
                     text_parts.append("[Audio]")

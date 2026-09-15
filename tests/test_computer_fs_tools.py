@@ -562,8 +562,8 @@ async def test_file_read_tool_returns_image_call_tool_result_for_images(
     assert isinstance(result, CallToolResult)
     assert len(result.content) == 1
     assert isinstance(result.content[0], ImageContent)
-    assert result.content[0].mimeType == "image/jpeg"
-    assert base64.b64decode(result.content[0].data).startswith(b"\xff\xd8\xff")
+    assert result.content[0].mimeType == "image/png"
+    assert base64.b64decode(result.content[0].data) == image_path.read_bytes()
 
 
 @pytest.mark.asyncio

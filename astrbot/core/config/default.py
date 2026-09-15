@@ -174,6 +174,7 @@ DEFAULT_CONFIG = {
         "image_compress_options": {
             "max_size": 1280,
             "quality": 95,
+            "max_encoded_bytes": 4194304,
         },
     },
     "agent_runner": {
@@ -4160,6 +4161,15 @@ CONFIG_METADATA_3 = {
                             "provider_settings.image_compress_enabled": True,
                         },
                         "slider": {"min": 1, "max": 100, "step": 1},
+                    },
+                    "provider_settings.image_compress_options.max_encoded_bytes": {
+                        "description": "最大编码大小",
+                        "type": "int",
+                        "hint": "压缩后单张图片的最大 Base64 编码大小，单位为字节。超过限制且无法进一步压缩时会报错。",
+                        "condition": {
+                            "provider_settings.image_compress_enabled": True,
+                        },
+                        "slider": {"min": 262144, "max": 16777216, "step": 262144},
                     },
                     "provider_settings.prompt_prefix": {
                         "description": "用户提示词",

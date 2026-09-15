@@ -184,6 +184,7 @@ outline: deep
 | `GET` | `/api/v1/conversations/{conversation_id}` | — |
 | `PATCH` | `/api/v1/conversations/{conversation_id}` | — |
 | `DELETE` | `/api/v1/conversations/{conversation_id}` | — |
+| `GET` | `/api/v1/conversations/{conversation_id}/media/{media_id}` | — |
 | `PUT` | `/api/v1/conversations/{conversation_id}/messages` | — |
 | `GET` | `/api/v1/session-groups` | — |
 | `POST` | `/api/v1/session-groups` | — |

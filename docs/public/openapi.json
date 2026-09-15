@@ -6438,6 +6438,55 @@
         "description": "**Required scope:** `data`"
       }
     },
+    "/api/v1/conversations/{conversation_id}/media/{media_id}": {
+      "get": {
+        "tags": [
+          "Conversations"
+        ],
+        "summary": "Preview an image referenced by a conversation",
+        "operationId": "previewConversationMedia",
+        "x-astrbot-scope": "data",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ConversationId"
+          },
+          {
+            "name": "media_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Image bytes",
+            "content": {
+              "image/*": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Conversation or media is unavailable"
+          }
+        },
+        "description": "**Required scope:** `data`"
+      }
+    },
     "/api/v1/conversations/export": {
       "post": {
         "tags": [

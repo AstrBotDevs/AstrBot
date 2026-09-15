@@ -407,12 +407,14 @@ class InternalAgentSubStage(Stage):
                         unregister_active_runner(event.unified_msg_origin, agent_runner)
 
         except Exception as e:
-            logger.error(f"Error occurred while processing agent: {e}")
+            logger.error(
+                f"Error occurred while processing agent: {type(e).__name__}: {e}"
+            )
             custom_error_message = extract_persona_custom_error_message_from_event(
                 event
             )
             error_text = custom_error_message or (
-                f"Error occurred while processing agent request: {e}"
+                f"Error occurred while processing agent request: {type(e).__name__}: {e}"
             )
             await event.send(MessageChain().message(error_text))
         finally:

@@ -12,6 +12,7 @@ import mimetypes
 import os
 import shutil
 import subprocess
+import tempfile
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
@@ -21,6 +22,7 @@ from urllib.parse import unquote, urlparse, urlsplit
 from urllib.request import url2pathname
 
 from PIL import Image as PILImage
+from PIL import ImageOps
 
 from astrbot import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
@@ -35,6 +37,24 @@ IMAGE_COMPRESS_DEFAULT_MAX_SIZE = 1280
 IMAGE_COMPRESS_DEFAULT_QUALITY = 95
 IMAGE_COMPRESS_DEFAULT_OPTIMIZE = True
 IMAGE_COMPRESS_DEFAULT_MIN_FILE_SIZE_MB = 1.0
+IMAGE_COMPRESS_DEFAULT_MAX_ENCODED_BYTES = 4 * 1024 * 1024
+
+
+class ImagePayloadTooLargeError(ValueError):
+    """Raised when an encoded image cannot fit the preparation budget."""
+
+
+@dataclass(slots=True)
+class ImagePreparationOptions:
+    """Options for the single provider-facing image preparation boundary."""
+
+    enabled: bool = True
+    max_size: int = IMAGE_COMPRESS_DEFAULT_MAX_SIZE
+    quality: int = IMAGE_COMPRESS_DEFAULT_QUALITY
+    optimize: bool = IMAGE_COMPRESS_DEFAULT_OPTIMIZE
+    max_encoded_bytes: int | None = IMAGE_COMPRESS_DEFAULT_MAX_ENCODED_BYTES
+    preserve_dimensions: bool = False
+
 
 MEDIA_MIME_EXTENSIONS = {
     "audio/wav": ".wav",
@@ -118,6 +138,7 @@ class ResolvedMediaData:
     base64_data: str
     mime_type: str
     format: str | None = None
+    byte_size: int | None = None
 
     def to_bytes(self) -> bytes:
         """Decode the base64 payload, accepting missing padding."""
@@ -1501,128 +1522,271 @@ def _compress_image_sync(
     max_size: int,
     quality: int,
     optimize: bool,
+    max_encoded_bytes: int = IMAGE_COMPRESS_DEFAULT_MAX_ENCODED_BYTES,
+    *,
+    preserve_dimensions: bool = False,
 ) -> str | None:
-    """Run image compression synchronously via ``asyncio.to_thread``.
+    """Prepare one image without allocating base64 for candidate measurements.
 
     Args:
-        source: Encoded image bytes or a local path to open inside the worker.
-        temp_dir: Directory where the compressed image should be written.
-        max_size: Longest edge of the compressed image in pixels.
-        quality: JPEG output quality in the range 1-100.
-        optimize: Whether Pillow should optimize the saved image.
+        source: Encoded bytes or a local file opened inside the worker.
+        temp_dir: Directory for the caller-owned prepared file.
+        max_size: Maximum edge length when resizing is allowed.
+        quality: Initial JPEG quality, between 1 and 100.
+        optimize: Whether to optimize the encoder output.
+        max_encoded_bytes: Maximum base64 payload size, excluding its URI header.
+        preserve_dimensions: Preserve screenshot coordinates, even over max_size.
 
     Returns:
-        The compressed image path, or ``None`` when the image should be kept as-is.
+        A caller-owned output path, or None to preserve the original bytes.
+
+    Raises:
+        ImagePayloadTooLargeError: No candidate meets the encoded-byte budget.
+        ValueError: A size or quality option is invalid.
+        OSError: Reading, decoding or writing the image fails.
     """
+    if max_size < 1 or max_encoded_bytes < 1 or not 1 <= quality <= 100:
+        raise ValueError("Image dimensions, byte budget and quality must be positive")
+    source_bytes = len(source) if isinstance(source, bytes) else source.stat().st_size
+    encoded_size = 4 * ((source_bytes + 2) // 3)
     fp = io.BytesIO(source) if isinstance(source, bytes) else source
-    with PILImage.open(fp) as opened_img:
-        converted_img: PILImage.Image | None = None
+    with PILImage.open(fp) as opened:
+        animated = getattr(opened, "n_frames", 1) > 1
+        # This baseline preserves animation; do not flatten it to fit a budget.
+        if animated:
+            if encoded_size > max_encoded_bytes:
+                raise ImagePayloadTooLargeError(
+                    f"Animated image exceeds the {max_encoded_bytes}-byte encoding limit"
+                )
+            return None
+        if encoded_size <= max_encoded_bytes and (
+            preserve_dimensions or max(opened.size) <= max_size
+        ):
+            return None
 
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        path: Path | None = None
+        success = False
+        # In-place orientation avoids holding a second full oriented image.
+        ImageOps.exif_transpose(opened, in_place=True)
+        has_alpha = opened.mode in {"RGBA", "LA"} or (
+            opened.mode == "P" and "transparency" in opened.info
+        )
+        target_mode = "RGBA" if has_alpha else "RGB"
+        converted = opened.convert(target_mode) if opened.mode != target_mode else None
+        working = converted if converted is not None else opened
         try:
-            if (
-                getattr(opened_img, "is_animated", False)
-                or getattr(opened_img, "n_frames", 1) > 1
-            ):
-                return None
-
-            working_img = opened_img
-            image_has_alpha = opened_img.mode in {"RGBA", "LA"} or (
-                opened_img.mode == "P" and "transparency" in opened_img.info
+            if not preserve_dimensions and max(working.size) > max_size:
+                working.thumbnail((max_size, max_size), PILImage.Resampling.LANCZOS)
+            output_format = "PNG" if has_alpha else "JPEG"
+            suffix = ".png" if has_alpha else ".jpg"
+            with tempfile.NamedTemporaryFile(
+                dir=temp_dir, prefix="compressed_", suffix=suffix, delete=False
+            ) as output:
+                path = Path(output.name)
+            qualities = (
+                [quality]
+                if has_alpha
+                else sorted(
+                    {
+                        quality,
+                        *[value for value in (85, 70, 55, 40) if value < quality],
+                    },
+                    reverse=True,
+                )
             )
-            output_format = "PNG" if image_has_alpha else "JPEG"
-            output_suffix = ".png" if image_has_alpha else ".jpg"
-
-            if image_has_alpha and opened_img.mode != "RGBA":
-                converted_img = opened_img.convert("RGBA")
-                working_img = converted_img
-            elif not image_has_alpha and opened_img.mode != "RGB":
-                converted_img = opened_img.convert("RGB")
-                working_img = converted_img
-            assert working_img is not None
-
-            if max(working_img.size) > max_size:
-                working_img.thumbnail((max_size, max_size), PILImage.Resampling.LANCZOS)
-
-            save_path = (
-                temp_dir / f"compressed_{generate_timestamp_id()}{output_suffix}"
-            )
-            save_kwargs: dict[str, int | bool] = {"optimize": optimize}
-            if output_format == "JPEG":
-                save_kwargs["quality"] = quality
-            working_img.save(save_path, output_format, **save_kwargs)
-            logger.debug(f"Image compressed successfully: {save_path}")
-            return str(save_path)
+            while True:
+                for candidate_quality in qualities:
+                    kwargs = {"optimize": optimize}
+                    if not has_alpha:
+                        kwargs["quality"] = candidate_quality
+                    working.save(path, output_format, **kwargs)
+                    encoded_size = 4 * ((path.stat().st_size + 2) // 3)
+                    if encoded_size <= max_encoded_bytes:
+                        success = True
+                        return str(path)
+                if preserve_dimensions or working.size == (1, 1):
+                    raise ImagePayloadTooLargeError(
+                        f"Image cannot fit the {max_encoded_bytes}-byte encoding limit"
+                    )
+                # One current candidate, replaced on disk; never retain all encodings.
+                working.thumbnail(
+                    (max(1, working.width * 3 // 4), max(1, working.height * 3 // 4)),
+                    PILImage.Resampling.LANCZOS,
+                )
         finally:
-            if converted_img is not None:
-                converted_img.close()
+            if converted is not None:
+                converted.close()
+            if not success and path is not None:
+                path.unlink(missing_ok=True)
 
 
 async def compress_image(
     url_or_path: str,
     max_size: int = IMAGE_COMPRESS_DEFAULT_MAX_SIZE,
     quality: int = IMAGE_COMPRESS_DEFAULT_QUALITY,
+    max_encoded_bytes: int = IMAGE_COMPRESS_DEFAULT_MAX_ENCODED_BYTES,
+    *,
+    optimize: bool = IMAGE_COMPRESS_DEFAULT_OPTIMIZE,
+    preserve_dimensions: bool = False,
 ) -> str:
-    """Compress large user-uploaded images.
+    """Prepare a local image, preserving compliant bytes.
 
     Args:
-        url_or_path: Image path or URL.
-        max_size: Longest edge of the compressed image in pixels.
-        quality: JPEG output quality in the range 1-100.
+        url_or_path: Local path or inline image; remote URLs remain unresolved.
+        max_size: Maximum edge length when resizing is allowed.
+        quality: Initial JPEG quality.
+        max_encoded_bytes: Maximum base64 payload size.
+        preserve_dimensions: Preserve oriented screenshot dimensions.
 
     Returns:
-        The compressed image path. Returns the original path if compression
-        fails or the source does not need compression.
+        The original reference or a caller-owned prepared file path.
+
+    Raises:
+        ImagePayloadTooLargeError: The image cannot meet the byte limit.
+        OSError: Image decoding or filesystem access fails.
     """
-    max_size = max(int(max_size), 1)
-    quality = min(max(int(quality), 1), 100)
-    optimize = IMAGE_COMPRESS_DEFAULT_OPTIMIZE
-    min_file_size_bytes = int(IMAGE_COMPRESS_DEFAULT_MIN_FILE_SIZE_MB * 1024 * 1024)
-    image_source: bytes | Path | None = None
-
-    def _exceeds_max_size(source: bytes | Path) -> bool:
-        try:
-            fp = io.BytesIO(source) if isinstance(source, bytes) else source
-            with PILImage.open(fp) as opened_img:
-                return max(opened_img.size) > max_size
-        except Exception:  # noqa: BLE001
-            return False
-
-    # Skip compression for remote images and return the original value.
-    if url_or_path.startswith("http"):
+    if url_or_path.startswith(("http://", "https://")):
         return url_or_path
-    elif url_or_path.startswith("data:image"):
-        _header, encoded = url_or_path.split(",", 1)
-        image_source = _decode_base64_payload(
-            encoded,
-            error_message="invalid image data URI payload",
+    if url_or_path.startswith("data:image"):
+        _, encoded = url_or_path.split(",", 1)
+        image_source: bytes | Path = _decode_base64_payload(
+            encoded, error_message="invalid image data URI payload"
         )
-        if len(image_source) < min_file_size_bytes and not _exceeds_max_size(
-            image_source
-        ):
-            return url_or_path
     else:
-        local_path = Path(url_or_path)
-        if not local_path.exists():
+        image_source = Path(url_or_path)
+        if not image_source.exists():
             return url_or_path
-        if local_path.stat().st_size < min_file_size_bytes and not _exceeds_max_size(
-            local_path
-        ):
-            return url_or_path
-        image_source = local_path
 
-    if image_source is None:
-        return url_or_path
-
-    temp_dir = Path(get_astrbot_temp_path())
-    temp_dir.mkdir(parents=True, exist_ok=True)
-
-    # Offload the blocking image processing task to a thread.
-    compressed_path = await asyncio.to_thread(
-        _compress_image_sync,
-        image_source,
-        temp_dir,
-        max_size,
-        quality,
-        optimize,
+    worker = asyncio.create_task(
+        asyncio.to_thread(
+            _compress_image_sync,
+            image_source,
+            Path(get_astrbot_temp_path()),
+            max(int(max_size), 1),
+            min(max(int(quality), 1), 100),
+            optimize,
+            max(int(max_encoded_bytes), 1),
+            preserve_dimensions=preserve_dimensions,
+        )
     )
+    try:
+        compressed_path = await asyncio.shield(worker)
+    except asyncio.CancelledError:
+        # Cancellation cannot stop Pillow in a thread. Retain ownership until
+        # the worker finishes, then release its output without deleting inputs.
+        def cleanup_finished(done: asyncio.Task) -> None:
+            try:
+                output = done.result()
+                if output is not None:
+                    Path(output).unlink(missing_ok=True)
+            except Exception:
+                logger.warning("Cancelled image preparation cleanup failed")
+
+        worker.add_done_callback(cleanup_finished)
+        raise
     return compressed_path or url_or_path
+
+
+async def prepare_image_source(
+    image_ref: MediaRefStr | bytes,
+    *,
+    options: ImagePreparationOptions | None = None,
+    default_mime_type: str | None = "image/jpeg",
+) -> ResolvedMediaData:
+    """Resolve and prepare any image reference for a provider request.
+
+    Args:
+        image_ref: Local path, HTTP(S) URL, data URI, base64 reference, or bare
+            base64 payload.
+        options: Optional preparation limits. ``None`` uses the standard budget.
+        default_mime_type: Fallback MIME type for otherwise unidentified images.
+
+    Returns:
+        Provider-ready base64 data and its detected MIME type.
+
+    Raises:
+        ImagePayloadTooLargeError: The image cannot fit the configured budget.
+        OSError: The source cannot be read or decoded.
+        ValueError: The source is not a valid image.
+    """
+    selected = options or ImagePreparationOptions()
+
+    async def _prepare() -> ResolvedMediaData:
+        owned_source: Path | None = None
+        try:
+            source_ref = image_ref
+            if isinstance(image_ref, bytes):
+                owned_source = _temp_media_path("image", ".bin")
+                await asyncio.to_thread(owned_source.write_bytes, image_ref)
+                source_ref = str(owned_source)
+            async with MediaResolver(
+                source_ref, media_type="image", default_suffix=".bin"
+            ).as_path() as resolved:
+                if not selected.enabled:
+                    image_bytes = await asyncio.to_thread(resolved.read_bytes)
+                    if (
+                        selected.max_encoded_bytes is not None
+                        and 4 * ((len(image_bytes) + 2) // 3)
+                        > selected.max_encoded_bytes
+                    ):
+                        raise ImagePayloadTooLargeError(
+                            f"Image exceeds the {selected.max_encoded_bytes}-byte encoding limit"
+                        )
+                    mime_type = await detect_image_mime_type_async(
+                        image_bytes, default_mime_type=None
+                    )
+                    if not mime_type:
+                        raise ValueError(
+                            f"Invalid image file: {describe_media_ref(image_ref)}"
+                        )
+                    return ResolvedMediaData(
+                        base64_data=base64.b64encode(image_bytes).decode("utf-8"),
+                        mime_type=mime_type,
+                        byte_size=len(image_bytes),
+                    )
+                prepared_path = await compress_image(
+                    str(resolved.path),
+                    max_size=selected.max_size,
+                    quality=selected.quality,
+                    max_encoded_bytes=(
+                        selected.max_encoded_bytes
+                        if selected.max_encoded_bytes is not None
+                        else 2**63 - 1
+                    ),
+                    optimize=selected.optimize,
+                    preserve_dimensions=selected.preserve_dimensions,
+                )
+                output_path = Path(prepared_path)
+                try:
+                    image_bytes = await asyncio.to_thread(output_path.read_bytes)
+                finally:
+                    if output_path != resolved.path:
+                        output_path.unlink(missing_ok=True)
+                mime_type = await detect_image_mime_type_async(
+                    image_bytes, default_mime_type=None
+                )
+                if not mime_type:
+                    mime_type = resolved.mime_type or default_mime_type
+                if not mime_type:
+                    raise ValueError(
+                        f"Invalid image file: {describe_media_ref(image_ref)}"
+                    )
+                return ResolvedMediaData(
+                    base64_data=base64.b64encode(image_bytes).decode("utf-8"),
+                    mime_type=mime_type,
+                    byte_size=len(image_bytes),
+                )
+        finally:
+            if owned_source is not None:
+                owned_source.unlink(missing_ok=True)
+
+    worker = asyncio.create_task(_prepare())
+    try:
+        return await asyncio.shield(worker)
+    except asyncio.CancelledError:
+        # The worker owns the resolver context until Pillow and file reads exit.
+        worker.add_done_callback(
+            lambda done: done.exception() if not done.cancelled() else None
+        )
+        raise

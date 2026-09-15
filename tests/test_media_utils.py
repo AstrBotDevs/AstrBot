@@ -325,6 +325,30 @@ async def test_compress_image_preserves_alpha_png(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_compress_image_rejects_oversized_encoded_payload(tmp_path, monkeypatch):
+    from PIL import Image as PILImage
+
+    temp_dir = tmp_path / "temp"
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(temp_dir))
+    image_path = tmp_path / "high_entropy.png"
+    image = PILImage.new("RGBA", (32, 32))
+    image.putdata(
+        [
+            (index % 256, (index * 7) % 256, (index * 13) % 256, 255)
+            for index in range(1024)
+        ]
+    )
+    image.save(image_path, format="PNG")
+
+    with pytest.raises(media_utils.ImagePayloadTooLargeError, match="encoding limit"):
+        await media_utils.compress_image(
+            str(image_path), max_size=128, max_encoded_bytes=1
+        )
+
+    assert not temp_dir.exists() or not list(temp_dir.iterdir())
+
+
+@pytest.mark.asyncio
 async def test_compress_image_keeps_animated_gif(tmp_path, monkeypatch):
     from PIL import Image as PILImage
 
@@ -343,7 +367,7 @@ async def test_compress_image_keeps_animated_gif(tmp_path, monkeypatch):
     compressed_path = await media_utils.compress_image(str(image_path), max_size=2)
 
     assert compressed_path == str(image_path)
-    assert not list(temp_dir.iterdir())
+    assert not temp_dir.exists() or not list(temp_dir.iterdir())
 
 
 @pytest.mark.asyncio

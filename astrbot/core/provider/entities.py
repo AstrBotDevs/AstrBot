@@ -16,6 +16,7 @@ from astrbot import logger
 from astrbot.core.agent.message import (
     AssistantMessageSegment,
     ContentPart,
+    ImageURLPart,
     ToolCall,
     ToolCallMessageSegment,
     is_checkpoint_message,
@@ -23,7 +24,11 @@ from astrbot.core.agent.message import (
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.db.po import Conversation
 from astrbot.core.message.message_event_result import MessageChain
-from astrbot.core.utils.media_utils import MediaResolver
+from astrbot.core.utils.media_utils import (
+    ImagePreparationOptions,
+    MediaResolver,
+    prepare_image_source,
+)
 
 
 class ProviderType(enum.Enum):
@@ -114,6 +119,8 @@ class ProviderRequest:
     """附加的上次请求后工具调用的结果。参考: https://platform.openai.com/docs/guides/function-calling#handling-function-calls"""
     model: str | None = None
     """模型名称，为 None 时使用提供商的默认模型"""
+    image_preparation_options: ImagePreparationOptions | None = None
+    """当前请求的图片准备配置，由上层 Agent 配置注入。"""
 
     def __repr__(self) -> str:
         return (
@@ -203,18 +210,23 @@ class ProviderRequest:
         # 2. 额外的内容块（系统提醒、指令等）
         if self.extra_user_content_parts:
             for part in self.extra_user_content_parts:
-                content_blocks.append(part.model_dump_for_context())
+                if isinstance(part, ImageURLPart):
+                    prepared = await prepare_image_source(
+                        part.image_url.url,
+                        options=self.image_preparation_options,
+                    )
+                    copied_part = part.model_copy(deep=True)
+                    copied_part.image_url.url = prepared.to_data_url()
+                    content_blocks.append(copied_part.model_dump_for_context())
+                else:
+                    content_blocks.append(part.model_dump_for_context())
 
         # 3. 图片内容
         if self.image_urls:
             for image_url in self.image_urls:
-                image_data = await MediaResolver(
-                    image_url,
-                    media_type="image",
-                ).to_base64_data()
-                if not image_data:
-                    logger.warning("图片预处理结果为空，将忽略。")
-                    continue
+                image_data = await prepare_image_source(
+                    image_url, options=self.image_preparation_options
+                )
                 content_blocks.append(
                     {
                         "type": "image_url",

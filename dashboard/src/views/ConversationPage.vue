@@ -1215,6 +1215,13 @@ export default {
                             type: 'image',
                             embedded_url: item.image_url.url
                         });
+                    } else if (item.type === 'image_media_ref' && item.media_id) {
+                        parts.push({
+                            type: 'image',
+                            embedded_url: `/api/v1/conversations/${encodeURIComponent(this.selectedConversation?.cid || '')}/media/${item.media_id}?user_id=${encodeURIComponent(this.selectedConversation?.user_id || '')}`
+                        });
+                    } else if (item.type === 'image_media_ref') {
+                        parts.push({ type: 'plain', text: '[图片暂时不可用]' });
                     }
                 });
             } else if (typeof content === 'object' && content !== null) {

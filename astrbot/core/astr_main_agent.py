@@ -32,6 +32,7 @@ from astrbot.core.astr_main_agent_resources import (
 from astrbot.core.computer.booters.local import resolve_windows_shell
 from astrbot.core.conversation_mgr import Conversation
 from astrbot.core.db import BaseDatabase
+from astrbot.core.exceptions import ProviderRequestTooLargeError
 from astrbot.core.message.components import File, Image, Record, Reply, Video
 from astrbot.core.persona_error_reply import (
     extract_persona_custom_error_message_from_persona,
@@ -109,8 +110,11 @@ from astrbot.core.utils.astrbot_path import (
 from astrbot.core.utils.file_extract import extract_file_moonshotai
 from astrbot.core.utils.llm_metadata import LLM_METADATAS
 from astrbot.core.utils.media_utils import (
+    IMAGE_COMPRESS_DEFAULT_MAX_ENCODED_BYTES,
     IMAGE_COMPRESS_DEFAULT_MAX_SIZE,
     IMAGE_COMPRESS_DEFAULT_QUALITY,
+    ImagePayloadTooLargeError,
+    ImagePreparationOptions,
     compress_image,
 )
 from astrbot.core.utils.quoted_message.settings import (
@@ -744,6 +748,8 @@ async def _ensure_img_caption(
                 TextPart(text=f"<image_caption>{caption}</image_caption>")
             )
             req.image_urls = []
+    except (ImagePayloadTooLargeError, MemoryError, ProviderRequestTooLargeError):
+        raise
     except Exception as exc:  # noqa: BLE001
         logger.error("处理图片描述失败: %s", exc)
         req.extra_user_content_parts.append(TextPart(text="[Image Captioning Failed]"))
@@ -822,9 +828,14 @@ def _get_quoted_message_parser_settings(
 
 def _get_image_compress_args(
     provider_settings: dict[str, object] | None,
-) -> tuple[bool, int, int]:
+) -> tuple[bool, int, int, int]:
     if not isinstance(provider_settings, dict):
-        return True, IMAGE_COMPRESS_DEFAULT_MAX_SIZE, IMAGE_COMPRESS_DEFAULT_QUALITY
+        return (
+            True,
+            IMAGE_COMPRESS_DEFAULT_MAX_SIZE,
+            IMAGE_COMPRESS_DEFAULT_QUALITY,
+            IMAGE_COMPRESS_DEFAULT_MAX_ENCODED_BYTES,
+        )
 
     enabled = provider_settings.get("image_compress_enabled", True)
     if not isinstance(enabled, bool):
@@ -843,7 +854,14 @@ def _get_image_compress_args(
         quality = IMAGE_COMPRESS_DEFAULT_QUALITY
     quality = min(max(quality, 1), 100)
 
-    return enabled, max_size, quality
+    max_encoded_bytes = options.get(
+        "max_encoded_bytes", IMAGE_COMPRESS_DEFAULT_MAX_ENCODED_BYTES
+    )
+    if not isinstance(max_encoded_bytes, int) or isinstance(max_encoded_bytes, bool):
+        max_encoded_bytes = IMAGE_COMPRESS_DEFAULT_MAX_ENCODED_BYTES
+    max_encoded_bytes = max(max_encoded_bytes, 1)
+
+    return enabled, max_size, quality, max_encoded_bytes
 
 
 async def _compress_image_for_provider(
@@ -851,10 +869,19 @@ async def _compress_image_for_provider(
     provider_settings: dict[str, object] | None,
 ) -> str:
     try:
-        enabled, max_size, quality = _get_image_compress_args(provider_settings)
+        enabled, max_size, quality, max_encoded_bytes = _get_image_compress_args(
+            provider_settings
+        )
         if not enabled:
             return url_or_path
-        return await compress_image(url_or_path, max_size=max_size, quality=quality)
+        return await compress_image(
+            url_or_path,
+            max_size=max_size,
+            quality=quality,
+            max_encoded_bytes=max_encoded_bytes,
+        )
+    except (ImagePayloadTooLargeError, MemoryError):
+        raise
     except Exception as exc:  # noqa: BLE001
         logger.error("Image compression failed: %s", exc)
         return url_or_path
@@ -1715,6 +1742,17 @@ async def build_main_agent(
         req.system_prompt += f"\n{LIVE_MODE_SYSTEM_PROMPT}\n"
 
     _apply_web_search_citation_prompt(event, req)
+
+    if req.image_preparation_options is None:
+        enabled, max_size, quality, max_encoded_bytes = _get_image_compress_args(
+            config.provider_settings
+        )
+        req.image_preparation_options = ImagePreparationOptions(
+            enabled=enabled,
+            max_size=max_size,
+            quality=quality,
+            max_encoded_bytes=max_encoded_bytes,
+        )
 
     reset_coro = agent_runner.reset(
         provider=provider,

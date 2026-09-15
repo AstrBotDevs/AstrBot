@@ -28,7 +28,7 @@ from astrbot import logger
 from astrbot.core.agent.message import ImageURLPart, TextPart, ThinkPart
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.agent.tool_image_cache import tool_image_cache
-from astrbot.core.exceptions import EmptyModelOutputError
+from astrbot.core.exceptions import EmptyModelOutputError, ProviderRequestTooLargeError
 from astrbot.core.message.components import Json
 from astrbot.core.message.message_event_result import (
     MessageChain,
@@ -46,9 +46,21 @@ from astrbot.core.provider.modalities import (
     sanitize_contexts_by_modalities,
 )
 from astrbot.core.provider.provider import Provider
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.image_media_store import (
+    ImageMediaStore,
+    materialize_image_media_refs,
+    persist_inline_image_refs,
+)
+from astrbot.core.utils.media_utils import (
+    ImagePayloadTooLargeError,
+    ImagePreparationOptions,
+    prepare_image_source,
+)
 
 from ..context.compressor import ContextCompressor
 from ..context.config import ContextConfig
+from ..context.image_budget import validate_context_image_bytes
 from ..context.manager import ContextManager
 from ..context.token_counter import EstimateTokenCounter, TokenCounter
 from ..hooks import BaseAgentRunHooks
@@ -229,9 +241,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         request_max_retries: int | None = None,
         tool_result_overflow_dir: str | None = None,
         read_tool: FunctionTool | None = None,
+        image_media_store: ImageMediaStore | None = None,
         **kwargs: T.Any,
     ) -> None:
         self.req = request
+        self.image_media_store = image_media_store
         self.streaming = streaming
         self.enforce_max_turns = enforce_max_turns
         self.llm_compress_instruction = llm_compress_instruction
@@ -255,6 +269,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             llm_compress_provider=self.llm_compress_provider,
             custom_token_counter=self.custom_token_counter,
             custom_compressor=self.custom_compressor,
+            image_media_store=image_media_store,
         )
         self.request_context_manager = ContextManager(
             self.request_context_manager_config
@@ -314,6 +329,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             or request.extra_user_content_parts
         ):
             m = await self._assemble_request_context_for_provider(request)
+            if image_media_store is not None:
+                m = (
+                    await asyncio.to_thread(
+                        persist_inline_image_refs, [m], image_media_store
+                    )
+                )[0]
             messages.append(Message.model_validate(m))
         if request.system_prompt:
             messages.insert(
@@ -497,12 +518,46 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 abort_task.cancel()
             await asyncio.gather(abort_task, return_exceptions=True)
 
+    async def _prepare_provider_contexts(
+        self, contexts: list[Message] | list[dict[str, T.Any]]
+    ) -> list[Message] | list[dict[str, T.Any]]:
+        """Prepare a request-local image view for normal and tool-requery calls.
+
+        Args:
+            contexts: Selected history and any request-local instructions.
+
+        Returns:
+            Provider-compatible messages without changing persisted history.
+
+        Raises:
+            ImagePayloadTooLargeError: An image exceeds the encoded-byte limit.
+            MemoryError: Image materialization exhausts available memory.
+        """
+        selected_contexts = self._sanitize_contexts_for_provider(contexts)
+        options = self.provider.provider_settings.get("image_compress_options", {})
+        limit = (
+            options.get("max_encoded_bytes", 4194304)
+            if isinstance(options, dict)
+            else 4194304
+        )
+        if not isinstance(limit, int) or isinstance(limit, bool) or limit < 1:
+            limit = 4194304
+        validate_context_image_bytes(selected_contexts, limit)
+        return await materialize_image_media_refs(
+            selected_contexts,
+            self.image_media_store
+            or ImageMediaStore(Path(get_astrbot_data_path()) / "media"),
+        )
+
     async def _iter_llm_responses(
         self, *, include_model: bool = True
     ) -> T.AsyncGenerator[LLMResponse, None]:
         """Yields chunks *and* a final LLMResponse."""
+        provider_contexts = await self._prepare_provider_contexts(
+            self.run_context.messages
+        )
         payload = {
-            "contexts": self._sanitize_contexts_for_provider(self.run_context.messages),
+            "contexts": provider_contexts,
             "func_tool": self._func_tool_for_provider(),
             "session_id": self.req.session_id,
             "extra_user_content_parts": self.req.extra_user_content_parts,  # list[ContentPart]
@@ -622,7 +677,22 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             raise
                     if self._is_stop_requested():
                         return
+            except (
+                MemoryError,
+                ImagePayloadTooLargeError,
+                ProviderRequestTooLargeError,
+            ):
+                raise
             except Exception as exc:  # noqa: BLE001
+                response = getattr(exc, "response", None)
+                status_code = getattr(exc, "status_code", None) or getattr(
+                    response, "status_code", None
+                )
+                if status_code == 413:
+                    raise ProviderRequestTooLargeError(
+                        "The provider rejected this request because it is too large "
+                        "(HTTP 413). Reduce the active context or image size."
+                    ) from exc
                 last_exception = exc
                 logger.warning(
                     "Chat Model %s request error: %s",
@@ -1040,11 +1110,20 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     # Build user message with images for LLM to review
                     image_parts = []
                     for cached_img in cached_images:
-                        img_data = tool_image_cache.get_image_base64_by_path(
-                            cached_img.file_path, cached_img.mime_type
+                        img_data = await prepare_image_source(
+                            cached_img.file_path,
+                            options=replace(
+                                self.req.image_preparation_options
+                                or ImagePreparationOptions(),
+                                preserve_dimensions=cached_img.tool_name
+                                == "astrbot_cua_screenshot",
+                            ),
                         )
                         if img_data:
-                            base64_data, mime_type = img_data
+                            base64_data, mime_type = (
+                                img_data.base64_data,
+                                img_data.mime_type,
+                            )
                             image_parts.append(
                                 TextPart(
                                     text=f"[Image from tool '{cached_img.tool_name}', path='{cached_img.file_path}']"
@@ -1059,9 +1138,15 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                 )
                             )
                     if image_parts:
-                        self.run_context.messages.append(
-                            Message(role="user", content=image_parts)
-                        )
+                        image_message = Message(role="user", content=image_parts)
+                        if self.image_media_store is not None:
+                            stored = await asyncio.to_thread(
+                                persist_inline_image_refs,
+                                [image_message.model_dump()],
+                                self.image_media_store,
+                            )
+                            image_message = Message.model_validate(stored[0])
+                        self.run_context.messages.append(image_message)
                         logger.debug(
                             f"Appended {len(cached_images)} cached image(s) to context for LLM review"
                         )
@@ -1329,9 +1414,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     )
                 except Exception as e:
                     logger.error(f"Error in on_tool_end hook: {e}", exc_info=True)
+            except (MemoryError, _ToolExecutionInterrupted):
+                raise
             except Exception as e:
-                if isinstance(e, _ToolExecutionInterrupted):
-                    raise
                 logger.warning(traceback.format_exc())
                 _append_tool_call_result(
                     func_tool_id,
@@ -1423,7 +1508,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 contexts = self._build_tool_requery_context(tool_names)
                 requery_resp = await self._await_or_stop(
                     self.provider.text_chat(
-                        contexts=self._sanitize_contexts_for_provider(contexts),
+                        contexts=await self._prepare_provider_contexts(contexts),
                         func_tool=param_subset,
                         model=self.req.model,
                         session_id=self.req.session_id,
@@ -1453,7 +1538,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     )
                     repair_resp = await self._await_or_stop(
                         self.provider.text_chat(
-                            contexts=self._sanitize_contexts_for_provider(
+                            contexts=await self._prepare_provider_contexts(
                                 repair_contexts
                             ),
                             func_tool=param_subset,

@@ -460,10 +460,14 @@
         },
         "image_compress_options": {
           "description": "图片压缩配置",
-          "hint": "用于控制图片压缩的尺寸、质量和触发阈值。",
+          "hint": "控制图片尺寸、JPEG 质量和编码后的大小。",
           "max_size": {
             "description": "最大边长",
             "hint": "压缩后图片的最长边，单位为像素。超过该尺寸时会按比例缩放。"
+          },
+          "max_encoded_bytes": {
+            "description": "图片编码大小上限",
+            "hint": "单张图片转为 Base64 后的大小上限，单位为字节。调整后仍超限时会报错。"
           },
           "quality": {
             "description": "JPEG 质量",

@@ -26,7 +26,7 @@ from astrbot.core.agent.message import (
     TextPart,
 )
 from astrbot.core.agent.tool import ToolSet
-from astrbot.core.exceptions import EmptyModelOutputError
+from astrbot.core.exceptions import EmptyModelOutputError, ProviderRequestTooLargeError
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, TokenUsage, ToolCallsResult
 from astrbot.core.utils.media_utils import (
@@ -1081,6 +1081,14 @@ class ProviderOpenAIOfficial(Provider):
         image_fallback_used: bool = False,
     ) -> tuple:
         """处理API错误并尝试恢复"""
+        status_code = getattr(e, "status_code", None)
+        response = getattr(e, "response", None)
+        if status_code is None and response is not None:
+            status_code = getattr(response, "status_code", None)
+        if status_code == 413:
+            raise ProviderRequestTooLargeError(
+                "The provider rejected the request because its serialized size is too large (HTTP 413)."
+            ) from e
         if "429" in str(e):
             logger.warning(
                 f"API 调用过于频繁，尝试使用其他 Key 重试。当前 Key: {chosen_key[:12]}",

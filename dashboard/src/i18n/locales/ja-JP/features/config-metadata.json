@@ -540,10 +540,14 @@
         },
         "image_compress_options": {
           "description": "画像圧縮設定",
-          "hint": "画像圧縮のサイズ、品質、実行しきい値を設定します。",
+          "hint": "画像サイズ、JPEG 品質、エンコード後のサイズを設定します。",
           "max_size": {
             "description": "最大辺長",
             "hint": "圧縮後の画像の長辺をピクセル単位で指定します。このサイズを超える場合は縦横比を維持して縮小します。"
+          },
+          "max_encoded_bytes": {
+            "description": "画像のエンコードサイズ上限",
+            "hint": "画像1枚の Base64 サイズ上限（バイト）。調整後も上限を超える場合はエラーになります。"
           },
           "quality": {
             "description": "JPEG 品質",

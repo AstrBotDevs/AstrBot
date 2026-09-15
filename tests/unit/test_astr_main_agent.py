@@ -16,6 +16,7 @@ from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.config.agent_runner import resolve_context_compression_config
 from astrbot.core.conversation_mgr import Conversation
 from astrbot.core.cron.manager import CronJobManager
+from astrbot.core.exceptions import ProviderRequestTooLargeError
 from astrbot.core.message.components import File, Image, Plain, Reply, Video
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.platform_metadata import PlatformMetadata
@@ -25,6 +26,7 @@ from astrbot.core.provider.entities import ProviderRequest, ProviderType
 from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.skills.skill_manager import SkillInfo
 from astrbot.core.star.star import StarMetadata
+from astrbot.core.utils.media_utils import ImagePayloadTooLargeError
 
 
 @pytest.fixture
@@ -37,6 +39,27 @@ def mock_provider():
     }
     provider.get_model.return_value = "gpt-4"
     return provider
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "error",
+    [
+        MemoryError("oom"),
+        ImagePayloadTooLargeError("too large"),
+        ProviderRequestTooLargeError("413"),
+    ],
+)
+async def test_image_caption_propagates_resource_errors(monkeypatch, error):
+    req = ProviderRequest(image_urls=["image.png"])
+
+    async def fail(*_args, **_kwargs):
+        raise error
+
+    monkeypatch.setattr(ama, "_compress_image_for_provider", fail)
+    with pytest.raises(type(error)):
+        await ama._ensure_img_caption(None, req, {}, MagicMock(), "caption")
+    assert req.image_urls == []
 
 
 @pytest.fixture
@@ -269,9 +292,12 @@ def test_append_system_reminders_includes_weekday(mock_event):
 
 
 def test_local_mode_prompt_uses_windows_powershell_51():
-    with patch("astrbot.core.astr_main_agent.platform.system", return_value="Windows"), patch(
-        "astrbot.core.astr_main_agent.resolve_windows_shell",
-        return_value="powershell.exe",
+    with (
+        patch("astrbot.core.astr_main_agent.platform.system", return_value="Windows"),
+        patch(
+            "astrbot.core.astr_main_agent.resolve_windows_shell",
+            return_value="powershell.exe",
+        ),
     ):
         prompt = ama._build_local_mode_prompt()
 
@@ -281,9 +307,12 @@ def test_local_mode_prompt_uses_windows_powershell_51():
 
 
 def test_local_mode_prompt_hints_pwsh_when_resolved():
-    with patch("astrbot.core.astr_main_agent.platform.system", return_value="Windows"), patch(
-        "astrbot.core.astr_main_agent.resolve_windows_shell",
-        return_value="pwsh.exe",
+    with (
+        patch("astrbot.core.astr_main_agent.platform.system", return_value="Windows"),
+        patch(
+            "astrbot.core.astr_main_agent.resolve_windows_shell",
+            return_value="pwsh.exe",
+        ),
     ):
         prompt = ama._build_local_mode_prompt()
 
@@ -293,9 +322,12 @@ def test_local_mode_prompt_hints_pwsh_when_resolved():
 
 
 def test_local_mode_prompt_ignores_pwsh_on_non_windows():
-    with patch("astrbot.core.astr_main_agent.platform.system", return_value="Linux"), patch(
-        "astrbot.core.astr_main_agent.resolve_windows_shell",
-        return_value="pwsh.exe",
+    with (
+        patch("astrbot.core.astr_main_agent.platform.system", return_value="Linux"),
+        patch(
+            "astrbot.core.astr_main_agent.resolve_windows_shell",
+            return_value="pwsh.exe",
+        ),
     ):
         prompt = ama._build_local_mode_prompt()
 

@@ -243,6 +243,13 @@ const formattedMessages = computed(() => {
             parts.push({ type: "plain", text: item.text });
           } else if (item?.type === "image_url" && item.image_url?.url) {
             parts.push({ type: "image", embedded_url: item.image_url.url });
+          } else if (item?.type === "image_media_ref" && item.media_id) {
+            parts.push({
+              type: "image",
+              embedded_url: `/api/v1/conversations/${encodeURIComponent(activeConversation.value?.cid || '')}/media/${item.media_id}?user_id=${encodeURIComponent(activeConversation.value?.user_id || '')}`,
+            });
+          } else if (item?.type === "image_media_ref") {
+            parts.push({ type: "plain", text: "[图片暂时不可用]" });
           }
         }
       } else if (content && typeof content === "object") {

@@ -439,10 +439,14 @@
         },
         "image_compress_options": {
           "description": "Image compression settings",
-          "hint": "Control image resize limits, JPEG quality, and the minimum size threshold for compression.",
+          "hint": "Control image dimensions, JPEG quality and encoded image size.",
           "max_size": {
             "description": "Maximum edge length",
             "hint": "Longest edge of the compressed image in pixels. Images larger than this are resized proportionally."
+          },
+          "max_encoded_bytes": {
+            "description": "Maximum encoded image size",
+            "hint": "Maximum Base64 bytes per image. Images that cannot fit this limit cause an error."
           },
           "quality": {
             "description": "JPEG quality",

@@ -15,12 +15,9 @@ import mcp
 from astrbot.core.agent.context.token_counter import EstimateTokenCounter
 from astrbot.core.agent.message import Message
 from astrbot.core.agent.tool import ToolExecResult
-from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path  # noqa: F401
 from astrbot.core.utils.media_utils import (
-    IMAGE_COMPRESS_DEFAULT_MAX_SIZE,
-    IMAGE_COMPRESS_DEFAULT_OPTIMIZE,
-    IMAGE_COMPRESS_DEFAULT_QUALITY,
-    _compress_image_sync,
+    prepare_image_source,
 )
 
 from .booters.base import ComputerBooter
@@ -302,30 +299,12 @@ async def _read_local_file_bytes(path: str) -> bytes:
 
 
 async def _compress_image_bytes_to_base64(data: bytes) -> dict[str, str | int]:
-    def _run() -> dict[str, str | int]:
-        temp_dir = Path(get_astrbot_temp_path())
-        temp_dir.mkdir(parents=True, exist_ok=True)
-        compressed_path = Path(
-            _compress_image_sync(
-                data,
-                temp_dir,
-                IMAGE_COMPRESS_DEFAULT_MAX_SIZE,
-                IMAGE_COMPRESS_DEFAULT_QUALITY,
-                IMAGE_COMPRESS_DEFAULT_OPTIMIZE,
-            )
-        )
-        try:
-            compressed_bytes = compressed_path.read_bytes()
-        finally:
-            compressed_path.unlink(missing_ok=True)
-
-        return {
-            "size_bytes": len(compressed_bytes),
-            "base64": base64.b64encode(compressed_bytes).decode("utf-8"),
-            "mime_type": "image/jpeg",
-        }
-
-    return await to_thread(_run)
+    prepared = await prepare_image_source(data)
+    return {
+        "size_bytes": prepared.byte_size or 0,
+        "base64": prepared.base64_data,
+        "mime_type": prepared.mime_type,
+    }
 
 
 def _detect_image_mime(sample: bytes) -> str | None:

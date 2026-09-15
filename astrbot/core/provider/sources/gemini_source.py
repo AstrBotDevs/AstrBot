@@ -15,7 +15,7 @@ import astrbot.core.message.components as Comp
 from astrbot import logger
 from astrbot.api.provider import Provider
 from astrbot.core.agent.message import AudioURLPart, ContentPart, ImageURLPart, TextPart
-from astrbot.core.exceptions import EmptyModelOutputError
+from astrbot.core.exceptions import EmptyModelOutputError, ProviderRequestTooLargeError
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, TokenUsage
 from astrbot.core.provider.func_tool_manager import ToolSet
@@ -130,6 +130,10 @@ class ProviderGoogleGenAI(Provider):
 
     async def _handle_api_error(self, e: APIError, keys: list[str]) -> bool:
         """处理API错误，返回是否需要重试"""
+        if getattr(e, "code", None) == 413:
+            raise ProviderRequestTooLargeError(
+                "The provider rejected the request because its serialized size is too large (HTTP 413)."
+            ) from e
         if e.message is None:
             e.message = ""
 

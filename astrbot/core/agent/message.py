@@ -120,9 +120,31 @@ class ImageURLPart(ContentPart):
         """The URL of the image, can be data URI scheme like `data:image/png;base64,...`."""
         id: str | None = None
         """The ID of the image, to allow LLMs to distinguish different images."""
+        detail: str | None = None
+
+        @model_serializer(mode="wrap")
+        def serialize(self, handler):
+            data = handler(self)
+            if self.detail is None:
+                data.pop("detail", None)
+            return data
 
     type: str = "image_url"
     image_url: ImageURL
+
+
+class ImageMediaRefPart(ContentPart):
+    """A durable image reference that is resolved only for a provider request."""
+
+    type: str = "image_media_ref"
+    media_id: str
+    mime_type: str
+    width: int | None = None
+    height: int | None = None
+    byte_size: int
+    detail: str | None = None
+    version: int = 1
+    image_id: str | None = None
 
 
 class AudioURLPart(ContentPart):
