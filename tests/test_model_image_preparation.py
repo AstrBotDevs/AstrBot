@@ -2,6 +2,7 @@
 
 import asyncio
 import errno
+import os
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -46,6 +47,33 @@ async def test_compliant_stills_pass_through_byte_identical(tmp_path, fmt):
     original = source.read_bytes()
     path = await media.prepare_model_image(
         str(source), max_size=1280, output_dir=tmp_path
+    )
+    assert path and Path(path).read_bytes() == original
+    assert source.read_bytes() == original
+
+
+@pytest.mark.asyncio
+async def test_compliant_still_over_byte_budget_is_reencoded(tmp_path):
+    source = tmp_path / "noisy.png"
+    Image.frombytes("RGBA", (1280, 1280), os.urandom(1280 * 1280 * 4)).save(source)
+    original = source.read_bytes()
+    assert len(original) > media.MODEL_IMAGE_MAX_BYTES
+    path = await media.prepare_model_image(
+        str(source), max_size=1280, output_dir=tmp_path
+    )
+    assert path and Path(path).read_bytes() != original
+    assert Path(path).stat().st_size <= media.MODEL_IMAGE_MAX_BYTES
+    assert source.read_bytes() == original
+
+
+@pytest.mark.asyncio
+async def test_disabled_byte_budget_keeps_oversized_still_byte_exact(tmp_path):
+    source = tmp_path / "noisy.png"
+    Image.frombytes("RGBA", (1280, 1280), os.urandom(1280 * 1280 * 4)).save(source)
+    original = source.read_bytes()
+    assert len(original) > media.MODEL_IMAGE_MAX_BYTES
+    path = await media.prepare_model_image(
+        str(source), max_size=1280, output_dir=tmp_path, max_bytes=None
     )
     assert path and Path(path).read_bytes() == original
     assert source.read_bytes() == original

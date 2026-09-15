@@ -4,7 +4,8 @@
 
 ## Preparation rules
 
-- Compliant still images are sent unchanged: already JPEG or PNG, correctly oriented, and within the size limit.
+- Compliant still images are sent unchanged: already JPEG or PNG, correctly oriented, inside the pixel limit and inside the 1 MB byte budget.
+- Compliant stills above the byte budget keep their pixel dimensions but are re-encoded to bound the request payload, derating the JPEG quality once when the result is still oversized. The pixel limit bounds dimensions, not compressed size, so without a byte budget such a still can reach tens of megabytes and be rejected by the provider before the model sees it.
 - Other still images are orientation-corrected, resized and re-encoded as needed. Opaque images become JPEG, controlled by `image_compress_options.quality` (default 95), with high-bit-depth samples normalized to 8-bit. Images with transparency become PNG; a PNG larger than 1 MB is flattened onto a white background and re-encoded as JPEG to bound the payload size.
 - Animations are detected from their frames, including GIF, animated WebP and APNG. Up to nine evenly sampled frames, including the first and last, become one white 3×3 grid. Unused cells stay white; an APNG independent cover is excluded.
 - Stills and montages share `image_compress_options.max_size` (default 1280). Small images are not enlarged.
@@ -12,7 +13,7 @@
 
 
 > [!TIP]
-> When the computer-use runtime is `sandbox` and the sandbox booter is `cua`, input images are not resized, so pixel coordinates read by coordinate-based tools stay 1:1. Compliant images pass through byte-exact (no lossy re-encoding, avoiding JPEG color shifts); format conversion for other formats and animation montages still apply. Images above roughly 5 MB may exceed provider image upload limits and trigger a warning in the logs.
+> When the computer-use runtime is `sandbox` and the sandbox booter is `cua`, input images are not resized, so pixel coordinates read by coordinate-based tools stay 1:1. Compliant images pass through byte-exact (no lossy re-encoding, avoiding JPEG color shifts, and no byte budget); format conversion for other formats and animation montages still apply. Images above roughly 5 MB may exceed provider image upload limits and trigger a warning in the logs.
 The Agent receives readable local paths. Original image files and event components keep their original content, and attachment text continues to reference the source image. Providers only read/encode references and assemble their protocols.
 
 ## Errors and lifetime
