@@ -56,6 +56,10 @@ outline: deep
 | `DELETE` | `/api/v1/providers/by-id` | — |
 | `POST` | `/api/v1/providers/embedding-dimension` | — |
 | `PATCH` | `/api/v1/providers/enabled` | — |
+| `POST` | `/api/v1/providers/orcarouter/login` | — |
+| `GET` | `/api/v1/providers/orcarouter/login/{attempt_id}` | — |
+| `DELETE` | `/api/v1/providers/orcarouter/login/{attempt_id}` | — |
+| `POST` | `/api/v1/providers/orcarouter/login/{attempt_id}/complete` | — |
 | `GET` | `/api/v1/providers/schema` | — |
 | `POST` | `/api/v1/providers/test` | — |
 | `GET` | `/api/v1/providers/{provider_id}` | — |

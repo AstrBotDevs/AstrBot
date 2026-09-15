@@ -6,6 +6,7 @@
     provider-type="chat_completion"
     :variant="variant"
     :allow-empty="false"
+    :required-modalities="requiredModalities"
     @update:model-value="updateSelection"
     @select="saveSelection"
   />
@@ -23,9 +24,16 @@ interface ProviderSelection {
 const props = withDefaults(
   defineProps<{
     variant?: "input" | "header";
+    /**
+     * Non-text modalities the composer is currently sending (for example
+     * `["image"]` once a picture is staged). The model list is filtered to
+     * models whose catalog entry declares them.
+     */
+    requiredModalities?: string[];
   }>(),
   {
     variant: "input",
+    requiredModalities: () => [],
   },
 );
 

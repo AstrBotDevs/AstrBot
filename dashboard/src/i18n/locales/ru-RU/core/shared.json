@@ -49,6 +49,8 @@
         "dialogTitle": "Выбор провайдера",
         "loading": "Загрузка...",
         "noProviders": "Доступных провайдеров нет",
+        "incompatibleModel": "{model} не принимает этот тип вложения, выбор снят",
+        "noCompatibleModels": "Нет модели, принимающей этот тип вложения",
         "confirmSelection": "ОК",
         "cancelSelection": "Отмена",
         "clearSelection": "Сбросить выбор",

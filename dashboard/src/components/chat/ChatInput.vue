@@ -185,6 +185,7 @@
           <ProviderModelMenu
             v-if="props.showProviderSelector && providerSelectorAvailable"
             ref="providerModelMenuRef"
+            :required-modalities="stagedInputModalities"
           />
           <v-progress-circular
             v-if="disabled && !mobile"
@@ -517,6 +518,18 @@ const hasStagedAttachments = computed(() => {
     props.stagedAudioUrl ||
     (props.stagedFiles && props.stagedFiles.length > 0)
   );
+});
+
+/**
+ * Non-text modalities the staged attachments will send. Only knowledge the
+ * composer actually has is reported: a staged image is an image, a recording is
+ * audio. Files are not classified by extension here, so they add no claim.
+ */
+const stagedInputModalities = computed(() => {
+  const modalities: string[] = [];
+  if (props.stagedImagesUrl.length > 0) modalities.push("image");
+  if (props.stagedAudioUrl) modalities.push("audio");
+  return modalities;
 });
 
 function filePresentation(file: StagedFileInfo) {

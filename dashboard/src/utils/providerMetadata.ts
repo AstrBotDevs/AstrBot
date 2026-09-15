@@ -18,6 +18,12 @@ export interface ProviderCapabilityBadge {
   tooltip: string
 }
 
+export {
+  filterCompatibleProviders,
+  nonTextModalities,
+  supportsRequiredModalities,
+} from './modelCapabilities.mjs'
+
 export function contextLimit(
   provider: ProviderMetadataSource | null | undefined,
   metadata?: ProviderModelMetadata | null

@@ -49,6 +49,8 @@
     "dialogTitle": "Select Provider",
     "loading": "Loading...",
     "noProviders": "No providers available",
+    "incompatibleModel": "{model} cannot accept the attached file type and was deselected",
+    "noCompatibleModels": "No model here accepts the attached file type",
     "confirmSelection": "Confirm Selection",
     "cancelSelection": "Cancel",
     "clearSelection": "None",

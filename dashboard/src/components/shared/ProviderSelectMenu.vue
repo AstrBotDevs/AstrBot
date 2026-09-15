@@ -329,7 +329,11 @@
             v-if="!loadingProviders && filteredProviders.length === 0"
             class="empty-hint"
           >
-            {{ sharedTm("providerSelector.noProviders") }}
+            {{
+              hasModalityFilter
+                ? sharedTm("providerSelector.noCompatibleModels")
+                : sharedTm("providerSelector.noProviders")
+            }}
           </div>
 
           <v-divider class="provider-menu-divider" />
@@ -380,8 +384,10 @@ import ProviderPage from "@/views/ProviderPage.vue";
 import { useModuleI18n } from "@/i18n/composables";
 import { useToast } from "@/utils/toast";
 import {
+  filterCompatibleProviders,
   formatContextLimit,
   providerCapabilityBadges,
+  supportsRequiredModalities,
   type ProviderModelMetadata,
   type ProviderMetadataSource,
 } from "@/utils/providerMetadata";
@@ -407,6 +413,7 @@ const props = withDefaults(
     variant?: "config" | "input" | "header";
     allowEmpty?: boolean;
     multiple?: boolean;
+    requiredModalities?: string[];
   }>(),
   {
     modelValue: "",
@@ -415,6 +422,7 @@ const props = withDefaults(
     variant: "config",
     allowEmpty: true,
     multiple: false,
+    requiredModalities: () => [],
   },
 );
 
@@ -491,9 +499,34 @@ const menuLocation = computed(() => {
   return props.variant === "header" ? "bottom start" : "bottom end";
 });
 
+/**
+ * True when the entry point currently demands a non-text modality, so an empty
+ * list means "nothing compatible" rather than "nothing configured".
+ */
+const hasModalityFilter = computed(
+  () =>
+    props.providerType === "chat_completion" &&
+    (props.requiredModalities || []).some(
+      (modality) => Boolean(modality) && modality !== "text",
+    ),
+);
+
+/**
+ * The options the picker is actually bound to. Attaching a file re-runs this, so
+ * a model that cannot serve the staged attachment is never offered.
+ */
+const compatibleProviders = computed(() => {
+  if (props.providerType !== "chat_completion") return providerConfigs.value;
+  return filterCompatibleProviders(
+    providerConfigs.value,
+    modelMetadata.value,
+    props.requiredModalities || [],
+  ) as ProviderConfig[];
+});
+
 const filteredProviders = computed(() => {
   const query = (searchQuery.value || "").trim().toLowerCase();
-  return providerConfigs.value.filter(
+  return compatibleProviders.value.filter(
     (provider) =>
       (!selectedSourceId.value ||
         (provider.provider_source_id || provider.type || provider.id) ===
@@ -506,6 +539,30 @@ const filteredProviders = computed(() => {
           .includes(query)),
   );
 });
+
+function metadataForSelection(provider: ProviderConfig) {
+  return modelMetadata.value[String(provider.model || "")] || null;
+}
+
+/**
+ * Report whether a model can serve the modalities the current entry point
+ * sends. With no attachment staged every chat model qualifies; as soon as an
+ * image, audio or video attachment is present, a model whose catalog entry does
+ * not declare that input is dropped from the list instead of being sent and
+ * rejected by the provider.
+ *
+ * @param provider Configured provider entry.
+ * @returns True when the model declares every required non-text modality.
+ */
+function isCompatibleWithRequiredModalities(provider: ProviderConfig): boolean {
+  return supportsRequiredModalities(
+    provider,
+    metadataForSelection(provider),
+    props.providerType === "chat_completion"
+      ? props.requiredModalities || []
+      : [],
+  );
+}
 
 const providerSources = computed(() => {
   const sources = new Map<string, { id: string; apiBase: string }>();
@@ -585,7 +642,13 @@ async function loadProviderConfigs(force = false) {
   if (loadingProviders.value || (providersLoaded.value && !force)) return;
   loadingProviders.value = true;
   try {
-    const response = await providerApi.listByProviderType(props.providerType);
+    // Ask catalog-backed sources to describe the models they listed: this
+    // component only reads this endpoint, so without it the picker would filter
+    // against the shared LLM table and offer a model the gateway does not serve
+    // in the requested modality.
+    const response = await providerApi.listByProviderType(props.providerType, {
+      with_catalog_metadata: true,
+    });
     if (response.data.status === "ok") {
       modelMetadata.value = (response.data.model_metadata || {}) as Record<
         string,
@@ -769,6 +832,28 @@ function getCurrentSelection() {
 watch(providerDrawer, (isOpen, wasOpen) => {
   if (!isOpen && wasOpen) loadProviderConfigs(true);
 });
+
+// Attaching a file changes which models can serve the request, so a selection
+// that is no longer compatible is cleared and reported instead of being kept
+// silently and failing at send time.
+watch(
+  () => (props.requiredModalities || []).join(","),
+  () => {
+    if (props.multiple || !props.modelValue) return;
+    const selected = providerConfigs.value.find(
+      (provider) => provider.id === props.modelValue,
+    );
+    if (!selected) return;
+    if (isCompatibleWithRequiredModalities(selected)) return;
+    emit("update:modelValue", "");
+    emit("select", null);
+    toastError(
+      providerTm("providerSelector.incompatibleModel", {
+        model: String(selected.model || selected.id),
+      }),
+    );
+  },
+);
 
 defineExpose({ getCurrentSelection });
 </script>

@@ -80,6 +80,19 @@
               />
             </section>
 
+            <template v-if="isOrcaRouterSource">
+              <v-divider></v-divider>
+
+              <section class="provider-section" data-testid="orca-auth-section">
+                <OrcaRouterAuthCard
+                  v-if="editableProviderSource"
+                  :key="editableProviderSource.id || 'orcarouter'"
+                  :source="editableProviderSource"
+                  :save-source="saveProviderSource"
+                />
+              </section>
+            </template>
+
             <v-divider></v-divider>
 
             <section class="provider-section provider-section--models">
@@ -192,6 +205,7 @@
 import { computed, ref } from 'vue'
 import { useModuleI18n } from '@/i18n/composables'
 import AstrBotConfig from '@/components/shared/AstrBotConfig.vue'
+import OrcaRouterAuthCard from '@/components/provider/OrcaRouterAuthCard.vue'
 import ProviderModelsPanel from '@/components/provider/ProviderModelsPanel.vue'
 import ProviderSourceSubtitle from '@/components/provider/ProviderSourceSubtitle.vue'
 import ProviderSourcesPanel from '@/components/provider/ProviderSourcesPanel.vue'
@@ -235,6 +249,7 @@ const {
   filteredMergedModelEntries,
   basicSourceConfig,
   advancedSourceConfig,
+  isOrcaRouterSource,
   manualProviderId,
   resolveSourceIcon,
   isMonochromeSourceIcon,

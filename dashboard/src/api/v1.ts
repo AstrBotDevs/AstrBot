@@ -156,6 +156,13 @@ export interface ProviderListParams {
   capability?: 'chat' | 'stt' | 'tts' | 'embedding' | 'rerank';
   source_id?: string;
   enabled?: boolean;
+  /**
+   * Ask catalog-backed provider sources to describe the models they listed, so
+   * a caller that only reads this endpoint sees the same input modalities the
+   * provider reported. Only requests that need it should set this, because it is
+   * the one query here that may make the server reach the provider's gateway.
+   */
+  with_catalog_metadata?: boolean;
 }
 
 export interface ToolListParams {
@@ -528,10 +535,11 @@ export const providerApi = {
   },
   async listByProviderType(
     providerType: string,
+    params?: ProviderListParams,
   ): Promise<AxiosResponse<ProviderByTypeEnvelope>> {
     const capabilities = providerTypeToCapabilities(providerType);
     if (capabilities.length === 0) {
-      const response = await providerApi.list();
+      const response = await providerApi.list(params);
       return {
         ...response,
         data: {
@@ -543,7 +551,9 @@ export const providerApi = {
     }
 
     const responses = await Promise.all(
-      capabilities.map((capability) => providerApi.list({ capability })),
+      capabilities.map((capability) =>
+        providerApi.list({ ...params, capability }),
+      ),
     );
     const first = responses[0];
     const modelMetadata = responses.reduce<Record<string, unknown>>(
@@ -1405,6 +1415,42 @@ export const pluginApi = {
       openApiV1.getPluginPageById({
         query: { plugin_id: pluginId, page_name: pageName },
       }) as any,
+    );
+  },
+};
+
+export const orcaRouterApi = {
+  /**
+   * Begin an OrcaRouter OAuth 2.0 + PKCE login attempt.
+   *
+   * The PKCE verifier is generated and retained server-side; this call only
+   * returns the authorize URL the browser should visit.
+   */
+  startLogin(body: { flow: 'loopback' | 'oob'; app_name?: string }) {
+    return apiV1Client.post<ApiEnvelope<Record<string, any>>>(
+      '/providers/orcarouter/login',
+      body,
+    );
+  },
+  loginStatus(attemptId: string) {
+    return apiV1Client.get<ApiEnvelope<Record<string, any>>>(
+      `/providers/orcarouter/login/${encodeURIComponent(attemptId)}`,
+    );
+  },
+  completeLogin(attemptId: string, code: string) {
+    return apiV1Client.post<ApiEnvelope<Record<string, any>>>(
+      `/providers/orcarouter/login/${encodeURIComponent(attemptId)}/complete`,
+      { code },
+    );
+  },
+  /**
+   * Release a server-side login attempt. `keepalive` lets the pagehide path
+   * finish the request while the page is being discarded.
+   */
+  cancelLogin(attemptId: string, config?: AxiosRequestConfig) {
+    return apiV1Client.delete<ApiEnvelope<Record<string, any>>>(
+      `/providers/orcarouter/login/${encodeURIComponent(attemptId)}`,
+      config,
     );
   },
 };

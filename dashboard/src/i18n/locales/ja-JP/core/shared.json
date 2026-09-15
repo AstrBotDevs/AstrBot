@@ -49,6 +49,8 @@
     "dialogTitle": "プロバイダーを選択",
     "loading": "読み込み中…",
     "noProviders": "利用可能なプロバイダーがありません",
+    "incompatibleModel": "{model} は添付ファイルの種類に対応していないため、選択を解除しました",
+    "noCompatibleModels": "添付ファイルの種類に対応するモデルがありません",
     "confirmSelection": "選択を確定",
     "cancelSelection": "キャンセル",
     "clearSelection": "選択しない",

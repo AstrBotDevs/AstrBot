@@ -1185,6 +1185,7 @@ export type ListProvidersBySourceData = {
     };
     query?: {
         capability?: ProviderCapability;
+        with_catalog_metadata?: boolean;
     };
 };
 
@@ -1207,6 +1208,7 @@ export type ListProvidersData = {
     query?: {
         capability?: ProviderCapability;
         enabled?: boolean;
+        with_catalog_metadata?: boolean;
         source_id?: string;
     };
 };

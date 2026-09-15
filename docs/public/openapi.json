@@ -1301,6 +1301,15 @@
             "schema": {
               "type": "boolean"
             }
+          },
+          {
+            "name": "with_catalog_metadata",
+            "in": "query",
+            "description": "Ask catalog-backed provider sources to describe the models they listed, so the response carries the same input modalities the provider reported. Off by default because it may reach the gateway.",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
           }
         ],
         "responses": {
@@ -1527,6 +1536,125 @@
                   },
                   "provider_config": {
                     "$ref": "#/components/schemas/DynamicConfig"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `provider`"
+      }
+    },
+    "/api/v1/providers/orcarouter/login": {
+      "post": {
+        "tags": [
+          "Providers"
+        ],
+        "summary": "Start an OrcaRouter OAuth 2.0 + PKCE login attempt",
+        "description": "Creates a server-side PKCE attempt and returns the authorization URL the\nuser opens in a browser. The code verifier never leaves the server.\n\n**Required scope:** `provider`",
+        "operationId": "startOrcaRouterLogin",
+        "x-astrbot-scope": "provider",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "flow": {
+                    "type": "string",
+                    "enum": [
+                      "loopback",
+                      "oob"
+                    ]
+                  },
+                  "app_name": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/providers/orcarouter/login/{attempt_id}": {
+      "get": {
+        "tags": [
+          "Providers"
+        ],
+        "summary": "Poll an OrcaRouter login attempt",
+        "operationId": "getOrcaRouterLogin",
+        "x-astrbot-scope": "provider",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrcaRouterAttemptId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `provider`"
+      },
+      "delete": {
+        "tags": [
+          "Providers"
+        ],
+        "summary": "Cancel an OrcaRouter login attempt",
+        "operationId": "cancelOrcaRouterLogin",
+        "x-astrbot-scope": "provider",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrcaRouterAttemptId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `provider`"
+      }
+    },
+    "/api/v1/providers/orcarouter/login/{attempt_id}/complete": {
+      "post": {
+        "tags": [
+          "Providers"
+        ],
+        "summary": "Exchange an OrcaRouter authorization code for an API key",
+        "operationId": "completeOrcaRouterLogin",
+        "x-astrbot-scope": "provider",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrcaRouterAttemptId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "code"
+                ],
+                "properties": {
+                  "code": {
+                    "type": "string"
                   }
                 },
                 "additionalProperties": false
@@ -6866,6 +6994,14 @@
       },
       "ProviderId": {
         "name": "provider_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "OrcaRouterAttemptId": {
+        "name": "attempt_id",
         "in": "path",
         "required": true,
         "schema": {

@@ -4,6 +4,7 @@ import asyncio
 import copy
 import inspect
 import os
+import time
 import traceback
 from datetime import datetime, timezone
 from pathlib import Path
@@ -1523,10 +1524,17 @@ class ProviderConfigService:
         "rerank": "rerank",
     }
 
+    #: How long a provider-discovered catalog may describe configured models
+    #: before it is refreshed. The catalog only describes the input modalities,
+    #: context window and endpoint types of models this source already listed, so
+    #: a stale copy can only be more conservative than the live one.
+    CATALOG_METADATA_TTL_SECONDS = 300.0
+
     def __init__(self, core_lifecycle: AstrBotCoreLifecycle) -> None:
         self.core_lifecycle = core_lifecycle
         self.config = core_lifecycle.astrbot_config
         self.provider_manager = core_lifecycle.provider_manager
+        self._catalog_metadata_cache: dict[str, tuple[float, dict[str, dict]]] = {}
 
     @staticmethod
     def _strip_legacy_reasoning_metadata(provider: dict) -> dict:
@@ -1697,14 +1705,27 @@ class ProviderConfigService:
         try:
             models = await inst.get_models()
             models = models or []
+            # A provider that discovers its own catalog may also describe the
+            # models it listed (context window, input modalities, reasoning
+            # efforts). Those IDs are absent from the shared LLM table, so the
+            # provider's own metadata is merged over it and only for models it
+            # actually returned.
+            model_metadata: dict[str, dict] = {}
+            catalog_metadata = getattr(inst, "catalog_metadata", None)
+            if callable(catalog_metadata):
+                for model_id, entry in (catalog_metadata() or {}).items():
+                    if model_id in models and isinstance(entry, dict):
+                        model_metadata[model_id] = dict(entry)
+            for model_id in models:
+                if model_id in LLM_METADATAS:
+                    model_metadata[model_id] = {
+                        **LLM_METADATAS[model_id],
+                        **model_metadata.get(model_id, {}),
+                    }
             return {
                 "models": models,
                 "provider_source_id": source_id,
-                "model_metadata": {
-                    model_id: LLM_METADATAS[model_id]
-                    for model_id in models
-                    if model_id in LLM_METADATAS
-                },
+                "model_metadata": model_metadata,
             }
         finally:
             terminate_fn = getattr(inst, "terminate", None)
@@ -1820,7 +1841,20 @@ class ProviderConfigService:
         capability: str | None = None,
         source_id: str | None = None,
         enabled: bool | None = None,
+        catalog_metadata: bool = False,
     ) -> dict:
+        """List configured providers, optionally with each source's own catalog.
+
+        Args:
+            capability: Restrict to one capability's provider type.
+            source_id: Restrict to one provider source.
+            enabled: Restrict to enabled (or disabled) providers.
+            catalog_metadata: Ask catalog-backed sources to describe the models
+                they listed, so callers that only read this endpoint (the model
+                selector) see the same modalities the provider reported. Off by
+                default because it is the only path here that may reach the
+                network.
+        """
         from astrbot.core.utils.llm_metadata import LLM_METADATAS
 
         provider_type = self._resolve_provider_type(capability)
@@ -1855,7 +1889,158 @@ class ProviderConfigService:
             if isinstance(model_id, str) and model_id in LLM_METADATAS:
                 model_metadata[model_id] = LLM_METADATAS[model_id]
             providers.append(provider_response)
+        # A provider that discovers its own catalog also describes the models it
+        # listed. Those IDs are absent from the shared LLM table, so without this
+        # the selector cannot tell a text-only model from an image-capable one.
+        if catalog_metadata:
+            self._merge_source_catalog_metadata(providers, model_metadata)
         return {"providers": providers, "model_metadata": model_metadata}
+
+    def _merge_source_catalog_metadata(
+        self,
+        providers: list[dict],
+        model_metadata: dict[str, dict],
+    ) -> None:
+        """Describe configured models from the catalog of their own source.
+
+        The dashboard reaches provider discovery only while a source is being
+        configured, so a catalog-backed provider's modalities would otherwise be
+        unknown to the model selector at chat time. Each distinct source is asked
+        once, its answer is cached briefly, and the result is merged strictly for
+        model IDs that belong to that source — a catalog can never describe
+        another provider's models.
+
+        Args:
+            providers: Configured provider entries being returned to the client.
+            model_metadata: Shared metadata map, updated in place.
+        """
+        by_source: dict[str, set[str]] = {}
+        for provider in providers:
+            source_id = provider.get("provider_source_id")
+            model_id = provider.get("model")
+            if not source_id or not isinstance(model_id, str) or not model_id:
+                continue
+            by_source.setdefault(str(source_id), set()).add(model_id)
+
+        for source_id, model_ids in by_source.items():
+            catalog = self._source_catalog_metadata(source_id)
+            for model_id in model_ids:
+                entry = catalog.get(model_id)
+                if not isinstance(entry, dict):
+                    continue
+                # A source that publishes a catalog is authoritative for the
+                # models it serves: vendor namespaces are shared across gateways,
+                # so the generic table must not claim an input modality this
+                # gateway does not accept.
+                model_metadata[model_id] = {**model_metadata.get(model_id, {}), **entry}
+
+    def _source_catalog_metadata(self, source_id: str) -> dict[str, dict]:
+        """Return the cached catalog of a provider source, or an empty map.
+
+        This is a pure cache read: discovery needs the network, so it happens in
+        :meth:`refresh_source_catalogs` and never on a plain provider listing.
+
+        Args:
+            source_id: Provider source whose catalog should be read.
+
+        Returns:
+            Metadata keyed by model ID, empty when nothing is cached or the entry
+            has expired.
+        """
+        cached = self._catalog_metadata_cache.get(source_id)
+        if cached and time.monotonic() - cached[0] < self.CATALOG_METADATA_TTL_SECONDS:
+            return cached[1]
+        return {}
+
+    async def refresh_source_catalogs(self) -> None:
+        """Discover the model catalog of every catalog-backed provider source.
+
+        A provider instance only describes the models it has listed, so each
+        source is asked for its model list first and its answer is remembered for
+        :attr:`CATALOG_METADATA_TTL_SECONDS`. Sources whose catalog is still fresh
+        are skipped, so the common case costs no request.
+        """
+        seen: set[str] = set()
+        for provider in self.provider_manager.providers_config:
+            source_id = provider.get("provider_source_id")
+            if not source_id:
+                continue
+            source_id = str(source_id)
+            if source_id in seen:
+                continue
+            seen.add(source_id)
+            cached = self._catalog_metadata_cache.get(source_id)
+            if (
+                cached
+                and time.monotonic() - cached[0] < self.CATALOG_METADATA_TTL_SECONDS
+            ):
+                continue
+            await self._discover_source_catalog(source_id)
+
+    async def _discover_source_catalog(self, source_id: str) -> None:
+        """Ask one provider source to list and describe its models.
+
+        Discovery is best effort: an unknown source, a provider without a catalog,
+        an unreachable gateway or a rejected credential must not break listing
+        providers, so every failure leaves the cache unchanged.
+
+        Args:
+            source_id: Provider source to ask.
+        """
+        from astrbot.core.provider import Provider
+        from astrbot.core.provider.register import provider_cls_map
+
+        source = self._find_provider_source(source_id)
+        if source is None:
+            return
+        provider_type = source.get("type")
+        if not provider_type:
+            return
+
+        discovered: object = None
+        try:
+            self.provider_manager.dynamic_import_provider(provider_type)
+            provider_metadata = provider_cls_map.get(provider_type)
+            cls_type = provider_metadata.cls_type if provider_metadata else None
+            if cls_type is None or not issubclass(cls_type, Provider):
+                return
+            instance = cls_type(source, {})
+            if not callable(getattr(instance, "catalog_metadata", None)):
+                return
+            init_fn = getattr(instance, "initialize", None)
+            if callable(init_fn):
+                await run_maybe_async(init_fn)
+            try:
+                # The catalog a provider describes is the one it just listed, and
+                # only a live one: a provider that degrades to its offline seed
+                # would otherwise publish models this gateway never offered.
+                await instance.get_models()
+                if getattr(instance, "catalog_source", None) == "live":
+                    discovered = instance.catalog_metadata()
+            finally:
+                terminate_fn = getattr(instance, "terminate", None)
+                if callable(terminate_fn):
+                    await run_maybe_async(terminate_fn)
+        except Exception as exc:  # noqa: BLE001 - discovery is best effort
+            logger.warning(
+                "Could not read the model catalog of provider source %s: %s",
+                source_id,
+                exc,
+            )
+            return
+
+        if not isinstance(discovered, dict) or not discovered:
+            # An empty answer is not cached, so a gateway that was briefly down is
+            # retried on the next request instead of staying blind for the TTL.
+            return
+        self._catalog_metadata_cache[source_id] = (
+            time.monotonic(),
+            {
+                model_id: dict(metadata)
+                for model_id, metadata in discovered.items()
+                if isinstance(model_id, str) and isinstance(metadata, dict)
+            },
+        )
 
     def list_providers_for_dashboard_types(
         self, provider_type: str | None

@@ -264,6 +264,15 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     return basic
   })
 
+  /**
+   * True when the selected source is OrcaRouter, which offers an API-key entry
+   * and a PKCE account login side by side.
+   */
+  const isOrcaRouterSource = computed(() => {
+    const source = editableProviderSource.value || selectedProviderSource.value
+    return source?.provider === 'orcarouter'
+  })
+
   const advancedSourceConfig = computed(() => {
     if (!editableProviderSource.value) return null
 
@@ -819,6 +828,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     filteredProviders,
     basicSourceConfig,
     advancedSourceConfig,
+    isOrcaRouterSource,
     manualProviderId,
     providerSourceSchema,
 

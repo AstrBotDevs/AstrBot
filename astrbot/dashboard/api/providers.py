@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query, Request
 
+from astrbot.core.provider.orcarouter_auth import OrcaRouterAuthError
 from astrbot.dashboard.responses import error, ok
 from astrbot.dashboard.schemas import (
     EnabledPatch,
@@ -9,6 +10,7 @@ from astrbot.dashboard.schemas import (
     ProviderSourceRequest,
 )
 from astrbot.dashboard.services.config_service import ProviderConfigService
+from astrbot.dashboard.services.orcarouter_service import OrcaRouterLoginService
 
 from .auth import AuthContext, ScopeDependency
 
@@ -25,6 +27,10 @@ require_provider_scope = ScopeDependency("provider")
 
 def get_service(request: Request) -> ProviderConfigService:
     return request.app.state.services.providers
+
+
+def get_orcarouter_login_service(request: Request) -> OrcaRouterLoginService:
+    return request.app.state.services.orcarouter_login
 
 
 async def _json_or_empty(request: Request) -> dict:
@@ -215,6 +221,66 @@ async def create_provider_in_source(
     return ok(message="新增服务提供商配置成功")
 
 
+@router.post("/providers/orcarouter/login")
+async def start_orcarouter_login(
+    body: dict | None = None,
+    _auth: AuthContext = Depends(require_provider_scope),
+    service: OrcaRouterLoginService = Depends(get_orcarouter_login_service),
+):
+    payload = body or {}
+    flow = str(payload.get("flow") or "loopback")
+    if flow not in ("loopback", "oob"):
+        return error("flow must be 'loopback' or 'oob'")
+    try:
+        return ok(
+            service.start(
+                flow=flow,  # type: ignore[arg-type]
+                app_name=str(payload.get("app_name") or "AstrBot"),
+            )
+        )
+    except ValueError as exc:
+        return error(str(exc))
+
+
+@router.get("/providers/orcarouter/login/{attempt_id}")
+async def poll_orcarouter_login(
+    attempt_id: str,
+    _auth: AuthContext = Depends(require_provider_scope),
+    service: OrcaRouterLoginService = Depends(get_orcarouter_login_service),
+):
+    return ok(service.status(attempt_id))
+
+
+@router.post("/providers/orcarouter/login/{attempt_id}/complete")
+async def complete_orcarouter_login(
+    attempt_id: str,
+    body: dict | None = None,
+    _auth: AuthContext = Depends(require_provider_scope),
+    service: OrcaRouterLoginService = Depends(get_orcarouter_login_service),
+):
+    code = str((body or {}).get("code") or "").strip()
+    if not code:
+        return error("Missing authorization code")
+    try:
+        return ok(service.complete(attempt_id, code))
+    except KeyError as exc:
+        return error(str(exc))
+    except OrcaRouterAuthError as exc:
+        return error(str(exc))
+
+
+@router.delete("/providers/orcarouter/login/{attempt_id}")
+async def cancel_orcarouter_login(
+    attempt_id: str,
+    _auth: AuthContext = Depends(require_provider_scope),
+    service: OrcaRouterLoginService = Depends(get_orcarouter_login_service),
+):
+    # Idempotent and never raises: the pagehide path calls this with keepalive
+    # while the page is being discarded, where a thrown error would be lost.
+    service.cancel(attempt_id, reason="cancelled from the dashboard")
+    return ok(message="OrcaRouter login cancelled")
+
+
 @router.get("/provider-sources/{source_id:path}")
 async def get_provider_source(
     source_id: str,
@@ -253,14 +319,21 @@ async def list_providers(
     capability: str | None = Query(default=None),
     source_id: str | None = Query(default=None),
     enabled: bool | None = Query(default=None),
+    with_catalog_metadata: bool = Query(default=False),
     _auth: AuthContext = Depends(require_provider_scope),
     service: ProviderConfigService = Depends(get_service),
 ):
+    if with_catalog_metadata:
+        # A provider describes the models it has listed, so the sources are asked
+        # first; the answer is cached, and a listing asked without this flag never
+        # reaches the network.
+        await service.refresh_source_catalogs()
     return ok(
         service.list_providers(
             capability=capability,
             source_id=source_id,
             enabled=enabled,
+            catalog_metadata=with_catalog_metadata,
         )
     )
 
