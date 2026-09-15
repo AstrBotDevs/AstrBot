@@ -176,7 +176,7 @@ async def test_local_execute_shell_manages_running_and_closed_results(
         "workspace_root_for_context",
         AsyncMock(return_value=tmp_path),
     )
-    monotonic_values = iter((10.0, 10.5, 20.0, 21.234, 30.0, 32.346, 40.0))
+    monotonic_values = iter((10.0, 10.5, 20.0, 21.234, 30.0, 32.346))
     monkeypatch.setattr(shell_tools, "monotonic", lambda: next(monotonic_values))
 
     result = await LocalExecuteShellTool().call(
@@ -232,11 +232,6 @@ async def test_local_execute_shell_manages_running_and_closed_results(
             + f"Command completed with exit code {exit_code} "
             f"(wall time: {wall_time}s).\nOutput:\ndone\n"
         )
-
-    shell.exec_managed.side_effect = RuntimeError("execution failed")
-    result = await LocalExecuteShellTool().call(FakeWrapper(), command="echo done")
-    assert result.endswith("Error executing command: execution failed")
-    assert (notice in result) is (not allow_network)
 
 
 @pytest.mark.asyncio

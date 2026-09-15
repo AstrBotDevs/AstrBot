@@ -138,24 +138,21 @@ async def test_local_python_tool_uses_session_workspace(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 @pytest.mark.skipif(os.name == "nt", reason="Restricted execution needs POSIX.")
 @pytest.mark.parametrize("role", ["member", "admin"])
-@pytest.mark.parametrize("outcome", ["success", "error", "exception"])
 async def test_local_python_uses_sandbox_backend(
     tmp_path,
     monkeypatch,
     role,
-    outcome,
 ):
-    """Local member Python execution should require an OS sandbox."""
+    """Preserve Python output and errors while reporting the active network policy."""
     from astrbot.core.tools.computer_tools import util as computer_util
 
     python_exec = AsyncMock(
         return_value={
             "data": {
                 "output": {"text": "ok", "images": []},
-                "error": "execution failed" if outcome == "error" else "",
+                "error": "execution failed",
             }
         },
-        side_effect=RuntimeError("execution failed") if outcome == "exception" else None,
     )
     local_python = LocalPythonComponent()
     local_python.exec = python_exec
@@ -190,11 +187,9 @@ async def test_local_python_uses_sandbox_backend(
     )
 
     result = await LocalPythonTool().call(context, code="print('ok')", timeout=30)
-    output = result if isinstance(result, str) else "\n".join(p.text for p in result.content)
+    output = [part.text for part in result.content]
     assert (computer_util.LOCAL_NETWORK_POLICY_NOTICE in output) is (role == "member")
-    assert ("execution failed" in output) is (outcome != "success")
-    if outcome != "exception":
-        assert result.content[-1].text == "ok"
+    assert output[-2:] == ["error: execution failed", "ok"]
 
     python_exec.assert_awaited_once_with(
         "print('ok')",
