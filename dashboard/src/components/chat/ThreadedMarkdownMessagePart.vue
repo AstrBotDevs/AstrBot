@@ -1,5 +1,6 @@
 <template>
   <MarkdownRender
+    class="chat-markdown"
     custom-id="chat-message"
     :content="threadedContent"
     :is-dark="isDark"
@@ -9,13 +10,17 @@
     :fade="false"
     :typewriter="false"
     :max-live-nodes="MARKDOWN_RENDER_MAX_LIVE_NODES"
+    :style="CHAT_MARKDOWN_HEADING_STYLE"
   />
 </template>
 
 <script setup lang="ts">
 import { computed, provide } from "vue";
 import { MarkdownRender } from "markstream-vue";
-import { MARKDOWN_RENDER_MAX_LIVE_NODES } from "@/components/chat/markdownRenderConfig";
+import {
+  CHAT_MARKDOWN_HEADING_STYLE,
+  MARKDOWN_RENDER_MAX_LIVE_NODES,
+} from "@/components/chat/markdownRenderConfig";
 import type { ChatThread } from "@/composables/useMessages";
 
 const props = defineProps<{
@@ -33,7 +38,8 @@ const emit = defineEmits<{
 
 const isDarkRef = computed(() => props.isDark);
 const refsByIndex = computed(() => {
-  const refs = props.refs && Array.isArray(props.refs.used) ? props.refs.used : [];
+  const refs =
+    props.refs && Array.isArray(props.refs.used) ? props.refs.used : [];
   return refs.reduce<Record<string, Record<string, unknown>>>((acc, item) => {
     if (item.index != null) {
       acc[String(item.index)] = item;

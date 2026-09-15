@@ -151,23 +151,28 @@
       hide-details
     ></v-text-field>
 
-    <div
-      v-else-if="itemMeta?.type === 'int' || itemMeta?.type === 'float'"
-      class="d-flex align-center gap-3"
-    >
-      <v-slider
-        v-if="itemMeta?.slider"
-        :model-value="toNumber(numericTemp ?? modelValue)"
-        @update:model-value="val => { numericTemp = val; emitUpdate(toNumber(val)) }"
-        @end="numericTemp = null"
-        :min="itemMeta?.slider?.min ?? 0"
-        :max="itemMeta?.slider?.max ?? 100"
-        :step="itemMeta?.slider?.step ?? 1"
-        color="primary"
-        density="compact"
-        hide-details
-        style="flex: 1"
-      ></v-slider>
+    <div v-else-if="itemMeta?.type === 'int' || itemMeta?.type === 'float'" class="d-flex align-center gap-3">
+      <div v-if="itemMeta?.slider" style="flex: 3; display: flex; align-items: center; gap: 8px">
+        <span style="min-width: 5px; text-align: right;">
+          {{ itemMeta?.slider?.min ?? 0 }}
+        </span>
+
+        <v-slider :model-value="toNumber(numericTemp ?? modelValue)"
+          @update:model-value="val => { numericTemp = val; emitUpdate(toNumber(val)) }"
+          @end="numericTemp = null"
+          :min="itemMeta?.slider?.min ?? 0"
+          :max="itemMeta?.slider?.max ?? 100"
+          :step="itemMeta?.slider?.step ?? 1"
+          color="primary"
+          density="compact"
+          hide-details
+          style="flex: 1"></v-slider>
+
+        <span style="min-width: 5px; text-align: left;">
+          {{ itemMeta?.slider?.max ?? 100 }}
+        </span>
+      </div>
+
       <v-text-field
         :model-value="numericTemp ?? modelValue"
         @update:model-value="val => (numericTemp = val)"
@@ -177,7 +182,7 @@
         class="config-field"
         type="number"
         hide-details
-        style="flex: 1"
+        style="flex: 2"
       ></v-text-field>
     </div>
 
@@ -308,6 +313,7 @@ const { getRaw } = useModuleI18n('features/config-metadata')
 const { configText } = usePluginI18n()
 
 async function emitUpdate(val) {
+  val = validateNumericConfig(props.itemMeta?.type, val)
   const enablingLocal = props.configKey === 'provider_settings.computer_use_runtime'
     && (props.modelValue === 'none' || props.modelValue == null) && val === 'local'
   if (
@@ -355,6 +361,34 @@ const secretToggleIcon = computed(() => {
 function toNumber(val) {
   const n = parseFloat(val)
   return isNaN(n) ? 0 : n
+}
+
+function validateNumericConfig(modelType, rawValue) {
+  if (modelType === 'int' || modelType === 'float') {
+    // 如果有滑动条定义，应用边界限制
+    const slider = props.itemMeta?.slider
+    if (slider) {
+      const min = slider.min ?? 0
+      const max = slider.max ?? 100
+      return Math.max(min, Math.min(max, rawValue))
+    } else {
+      return rawValue
+    }
+  } else if (modelType === 'dict') {
+    Object.entries(rawValue).forEach(([key, value]) => {
+      const templatesSchema = props.itemMeta?.template_schema
+      const templateType = templatesSchema?.[key]?.type
+      const templateSlider = templatesSchema?.[key]?.slider
+      if ((templateType === 'int' || templateType === 'float') && templateSlider) {
+        const min = templateSlider.min ?? 0
+        const max = templateSlider.max ?? 100
+        rawValue[key] = Math.max(min, Math.min(max, value))
+      }
+    })
+    return rawValue
+  } else {
+    return rawValue
+  }
 }
 
 function getLabel(itemMeta, index, option) {

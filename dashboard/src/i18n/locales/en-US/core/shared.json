@@ -39,6 +39,8 @@
     "allPluginsLabel": "All Plugins"
   },
   "providerSelector": {
+    "allSources": "All sources",
+    "filterSource": "Filter by provider source",
     "notSelected": "Not selected",
     "defaultModel": "Default model",
     "model": "Model",

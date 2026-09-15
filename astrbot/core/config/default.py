@@ -1388,7 +1388,7 @@ CONFIG_METADATA_2 = {
                         "api_base": "https://api.kimi.com/coding",
                         "timeout": 120,
                         "proxy": "",
-                        "custom_headers": {"User-Agent": "claude-code/0.1.0"},
+                        "custom_headers": {},
                         "anth_thinking_config": {"type": "", "budget": 0, "effort": ""},
                     },
                     "Moonshot": {
@@ -1425,7 +1425,7 @@ CONFIG_METADATA_2 = {
                         "api_base": "https://api.minimaxi.com/anthropic",
                         "timeout": 120,
                         "proxy": "",
-                        "custom_headers": {"User-Agent": "claude-code/0.1.0"},
+                        "custom_headers": {},
                         "anth_thinking_config": {"type": "", "budget": 0, "effort": ""},
                     },
                     "Xiaomi": {
@@ -1450,7 +1450,7 @@ CONFIG_METADATA_2 = {
                         "api_base": "https://token-plan-cn.xiaomimimo.com/anthropic",
                         "timeout": 120,
                         "proxy": "",
-                        "custom_headers": {"User-Agent": "claude-code/0.1.0"},
+                        "custom_headers": {},
                         "anth_thinking_config": {"type": "", "budget": 0, "effort": ""},
                     },
                     "xAI": {
@@ -3025,6 +3025,9 @@ CONFIG_METADATA_2 = {
             "provider_settings": {
                 "type": "object",
                 "items": {
+                    "image_compress_enabled": {
+                        "type": "bool",
+                    },
                     "enable": {
                         "type": "bool",
                     },
@@ -4209,12 +4212,12 @@ CONFIG_METADATA_3 = {
                     "provider_settings.image_compress_enabled": {
                         "description": "启用图片压缩",
                         "type": "bool",
-                        "hint": "启用后，发送给多模态模型前会先压缩本地大图片。",
+                        "hint": "默认开启。发送给多模态模型前按需压缩转换图片：合规的 JPEG/PNG 原样发送，动图生成拼图预览。",
                     },
                     "provider_settings.image_compress_options.max_size": {
                         "description": "最大边长",
                         "type": "int",
-                        "hint": "压缩后图片的最长边，单位为像素。超过该尺寸时会按比例缩放。",
+                        "hint": "压缩后图片的最长边，单位为像素，超出则按比例缩放。CUA 沙箱下输入图片不缩放，大图可能超出服务商上传限制。",
                         "condition": {
                             "provider_settings.image_compress_enabled": True,
                         },
@@ -4311,9 +4314,9 @@ CONFIG_METADATA_3 = {
                         "items": {"type": "string"},
                     },
                     "platform_settings.unique_session": {
-                        "description": "隔离会话",
+                        "description": "隔离对话",
                         "type": "bool",
-                        "hint": "启用后，群成员的上下文独立。",
+                        "hint": "启用后，支持隔离的渠道会为每位群成员使用独立上下文。指令权限请在「管理行为 → 指令」中设置。",
                     },
                     "wake_prefix": {
                         "description": "唤醒词",

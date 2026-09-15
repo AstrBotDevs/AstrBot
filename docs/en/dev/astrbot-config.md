@@ -159,7 +159,7 @@ General settings for message platform adapters.
 
 #### `platform_settings.unique_session`
 
-Whether to enable session isolation. Default is `false`. When enabled, each person's conversation context in groups or channels is independent.
+Whether to enable **Isolate Conversation**. Defaults to `false`. On supported platforms, each group member has a separate conversation context when enabled. Unsupported platforms retain their existing context. Access to `/new` and `/reset` is controlled by [command permissions](../use/command.md), which follow conversation isolation by default.
 
 #### `platform_settings.rate_limit`
 

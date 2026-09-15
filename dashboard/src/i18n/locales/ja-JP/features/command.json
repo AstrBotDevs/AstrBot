@@ -33,8 +33,13 @@
     "conflict": "競合あり"
   },
   "permission": {
+    "groupAdmin": "グループ内のみ管理者に制限",
+    "groupAdminHint": "個人チャットでは全員、グループでは AstrBot 管理者のみ使用できます。",
+    "followIsolation": "会話の分離設定に従う",
+    "followIsolationHint": "会話が分離されたグループと個人チャットでは全員が使用できます。会話を共有するグループでは AstrBot 管理者のみ使用できます。",
     "everyone": "すべてのユーザー",
-    "admin": "管理者"
+    "admin": "管理者のみ",
+    "adminHint": "会話の分離設定にかかわらず、個人チャットでもグループでも AstrBot 管理者のみ使用できます。"
   },
   "tooltips": {
     "enable": "コマンドを有効にする",

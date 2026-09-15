@@ -14,9 +14,17 @@ declare global {
     reason?: string | null;
   }
 
+  interface AstrBotDesktopAppUpdateProgress {
+    phase: "downloading" | "verifying" | "installing";
+    downloadedBytes: number;
+    totalBytes?: number | null;
+  }
+
   interface AstrBotAppUpdaterBridge {
     checkForAppUpdate: () => Promise<AstrBotDesktopAppUpdateCheckResult>;
-    installAppUpdate: () => Promise<AstrBotDesktopAppUpdateResult>;
+    installAppUpdate: (
+      onProgress?: (progress: AstrBotDesktopAppUpdateProgress) => void,
+    ) => Promise<AstrBotDesktopAppUpdateResult>;
   }
 
   interface Window {

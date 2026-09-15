@@ -159,7 +159,7 @@ AstrBot 默认配置如下：
 
 #### `platform_settings.unique_session`
 
-是否启用会话隔离。默认为 `false`。启用后，在群组或者频道中，每个人的对话的上下文都是独立的。
+是否启用「隔离对话」。默认为 `false`。启用后，支持隔离的渠道会为每位群成员使用独立上下文；不支持隔离的渠道仍使用原有上下文。`/new` 和 `/reset` 的权限由[指令管理设置](../use/command.md)决定，默认跟随对话是否隔离。
 
 #### `platform_settings.rate_limit`
 
