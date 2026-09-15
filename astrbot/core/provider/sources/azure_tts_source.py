@@ -214,6 +214,7 @@ class AzureTTSProvider(TTSProvider):
         super().__init__(provider_config, provider_settings)
         key_value = provider_config.get("azure_tts_subscription_key", "")
         self.provider = self._parse_provider(key_value, provider_config)
+        self._synthesis_lock = asyncio.Lock()
 
     def _parse_provider(
         self, key_value: str, config: dict
@@ -245,8 +246,9 @@ class AzureTTSProvider(TTSProvider):
         raise ValueError("订阅密钥格式无效，应为32位或84位字母数字或other[...]格式")
 
     async def get_audio(self, text: str) -> str:
-        if isinstance(self.provider, OTTSProvider):
-            async with self.provider as provider:
+        # Both backends keep one mutable client; protect its entire lifetime.
+        async with self._synthesis_lock, self.provider as provider:
+            if isinstance(provider, OTTSProvider):
                 return await provider.get_audio(
                     text,
                     {
@@ -257,6 +259,5 @@ class AzureTTSProvider(TTSProvider):
                         "volume": self.provider_config.get("azure_tts_volume"),
                     },
                 )
-        else:
-            async with self.provider as provider:
+            else:
                 return await provider.get_audio(text)
