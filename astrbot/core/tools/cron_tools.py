@@ -330,41 +330,21 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
                 for job in all_jobs
                 if _job_belongs_to_current_sender(job, current_umo, current_sender_id)
             ]
-            # Another member's tasks in this session. Only user-created
-            # active-agent jobs with a recorded creator count: basic jobs and
-            # rows without a sender id (dashboard/legacy) are not somebody
-            # else's future task, so counting them would report a wrong number.
-            hidden_count = 0
-            for job in all_jobs:
-                if (
-                    job.job_type == "active_agent"
-                    and _extract_job_session(job) == current_umo
-                    and _extract_job_sender(job)
-                    and not _job_belongs_to_current_sender(
-                        job, current_umo, current_sender_id
-                    )
-                ):
-                    hidden_count += 1
-            # Saying how many tasks were hidden stops an agent from reading
-            # "No cron jobs found." as "the task no longer exists".
+            # Tasks in this session that were created by somebody else stay
+            # out of the result. Saying so stops an agent from reading "No cron
+            # jobs found." as "the task no longer exists".
             hidden_note = ""
-            if hidden_count:
-                if (
-                    context.context.event.get_message_type()
-                    == MessageType.GROUP_MESSAGE
-                ):
-                    hidden_note = (
-                        f"\n\nNote: {hidden_count} task(s) in this group chat were "
-                        "created by other members and are filtered out of this list; "
-                        "only tasks created by you are listed. Only the member who "
-                        "created a task can edit or delete it."
-                    )
-                else:
-                    hidden_note = (
-                        f"\n\nNote: {hidden_count} task(s) created by others were "
-                        "filtered out of this list; only tasks created by you are "
-                        "listed. Only whoever created a task can edit or delete it."
-                    )
+            for job in all_jobs:
+                if _extract_job_session(job) != current_umo:
+                    continue
+                if _job_belongs_to_current_sender(job, current_umo, current_sender_id):
+                    continue
+                hidden_note = (
+                    "\n\nNote: tasks in this chat that were not created by you "
+                    "are not listed here, and can only be edited or deleted by "
+                    "whoever created them."
+                )
+                break
             if not jobs:
                 return "No cron jobs found." + hidden_note
             tz_name = str(

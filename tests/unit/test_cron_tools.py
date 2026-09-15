@@ -438,9 +438,8 @@ async def test_future_task_list_notes_hidden_same_session_group_tasks():
     assert "own-job" in result
     assert "other-member-job" not in result
     assert (
-        "Note: 1 task(s) in this group chat were created by other members and are "
-        "filtered out of this list; only tasks created by you are listed. Only the "
-        "member who created a task can edit or delete it."
+        "Note: tasks in this chat that were not created by you are not listed here, "
+        "and can only be edited or deleted by whoever created them."
     ) in result
 
 
@@ -454,31 +453,7 @@ async def test_future_task_list_explains_hidden_tasks_when_none_are_owned():
     result = await tool.call(_context(cron_mgr, sender_id="user-1"), action="list")
 
     assert result.startswith("No cron jobs found.")
-    assert "1 task(s) in this group chat were created by other members" in result
-
-
-@pytest.mark.asyncio
-async def test_future_task_list_notes_hidden_tasks_in_private_chat():
-    """A private chat gets the same note without the group wording."""
-    tool = FutureTaskTool()
-    other_user_job = _job("other-user-job", umo="test:private:session", sender_id="u2")
-    cron_mgr = SimpleNamespace(list_jobs=AsyncMock(return_value=[other_user_job]))
-
-    result = await tool.call(
-        _context(
-            cron_mgr,
-            umo="test:private:session",
-            sender_id="user-1",
-            message_type=MessageType.FRIEND_MESSAGE,
-        ),
-        action="list",
-    )
-
-    assert result == (
-        "No cron jobs found.\n\nNote: 1 task(s) created by others were filtered "
-        "out of this list; only tasks created by you are listed. Only whoever "
-        "created a task can edit or delete it."
-    )
+    assert "Note: tasks in this chat that were not created by you" in result
 
 
 @pytest.mark.asyncio
@@ -505,8 +480,8 @@ async def test_future_task_list_ignores_other_sessions_for_the_hidden_note():
 
 
 @pytest.mark.asyncio
-async def test_future_task_list_ignores_basic_jobs_in_the_session():
-    """A basic job in this session is not somebody else's future task."""
+async def test_future_task_list_notes_hidden_basic_job_in_the_session():
+    """A basic job in this session is still not a task of the caller."""
     tool = FutureTaskTool()
     basic_job = _raw_job(
         "basic-job",
@@ -517,11 +492,12 @@ async def test_future_task_list_ignores_basic_jobs_in_the_session():
 
     result = await tool.call(_context(cron_mgr, sender_id="user-1"), action="list")
 
-    assert result == "No cron jobs found."
+    assert result.startswith("No cron jobs found.")
+    assert "not created by you are not listed here" in result
 
 
 @pytest.mark.asyncio
-async def test_future_task_list_ignores_jobs_without_a_creator():
+async def test_future_task_list_notes_hidden_jobs_without_a_creator():
     """Dashboard/legacy rows have a session but no member as their creator."""
     tool = FutureTaskTool()
     orphan_job = _raw_job(
@@ -532,7 +508,8 @@ async def test_future_task_list_ignores_jobs_without_a_creator():
 
     result = await tool.call(_context(cron_mgr, sender_id="user-1"), action="list")
 
-    assert result == "No cron jobs found."
+    assert result.startswith("No cron jobs found.")
+    assert "not created by you are not listed here" in result
 
 
 @pytest.mark.asyncio
