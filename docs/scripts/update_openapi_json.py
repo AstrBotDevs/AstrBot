@@ -24,8 +24,12 @@ PUBLIC_OPEN_API_SCOPES = (
     "data",
     "file",
     "plugin",
+    "kb",
     "mcp",
+    "sandbox",
     "skill",
+    "system",
+    "tool",
 )
 PUBLIC_OPEN_API_EXCLUDED_PATHS = {
     "/api/v1/live-chat/ws",
@@ -266,8 +270,6 @@ def render_scope_reference(spec: dict[str, Any], *, language: str) -> str:
             (item for item in operations if item[0] == scope),
             key=lambda item: (item[1], HTTP_METHODS.index(item[2])),
         )
-        if not scoped_operations:
-            continue
         definition = scope_definitions.get(scope, {})
         lines.extend(
             [

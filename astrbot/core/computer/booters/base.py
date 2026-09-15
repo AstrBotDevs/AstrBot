@@ -37,12 +37,10 @@ class ComputerBooter:
     async def boot(self, session_id: str) -> None: ...
 
     async def shutdown(self, **kwargs) -> None:
-        """Shut down the computer sandbox.
+        """Close the current runtime connection without deleting sandbox resources.
 
-        Subclasses may accept extra keyword arguments for
-        type-specific cleanup (e.g. ``delete_sandbox`` for
-        ShipyardNeoBooter).  The default implementation ignores
-        them.
+        Subclasses may accept extra keyword arguments for type-specific cleanup.
+        The default implementation ignores them.
         """
         ...
 
