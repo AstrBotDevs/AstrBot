@@ -151,6 +151,35 @@ async def test_preprocess_image_cleanup_preserves_usable_file(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("quoted", [False, True])
+async def test_preprocess_image_cleanup_removes_invalid_materialized_file(
+    tmp_path, monkeypatch, quoted
+):
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    monkeypatch.setattr(
+        preprocess_stage, "get_astrbot_temp_path", lambda: str(tmp_path)
+    )
+    reference = "data:image/png;base64," + base64.b64encode(b"not an image").decode()
+    image = Image(file=reference)
+    event = FakeEvent([Reply(id="reply-1", chain=[image])] if quoted else [image])
+    stage = PreProcessStage()
+    stage.config = {}
+    stage.platform_settings = {}
+    stage.stt_settings = {"enable": False}
+
+    await stage.process(event)
+
+    materialized = list(tmp_path.glob("media_image_*"))
+    assert materialized
+    assert image.file == reference
+    assert len(event.temporary_local_files) == 1
+    AstrMessageEvent.cleanup_temporary_local_files(
+        SimpleNamespace(_temporary_local_files=event.temporary_local_files)
+    )
+    assert not [path for path in materialized if path.exists()]
+
+
+@pytest.mark.asyncio
 async def test_preprocess_path_mapping_accepts_file_uri(tmp_path):
     from PIL import Image as PILImage
 
