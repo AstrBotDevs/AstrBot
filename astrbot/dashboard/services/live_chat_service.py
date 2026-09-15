@@ -33,6 +33,7 @@ from astrbot.dashboard.services.chat_service import (
     BotMessageAccumulator,
     build_bot_history_content,
     collect_plain_text_from_message_parts,
+    parse_web_search_sources,
 )
 
 SendJson = Callable[[dict], Awaitable[None]]
@@ -630,6 +631,8 @@ class LiveChatService:
                         exc_info=True,
                     )
                     extracted_refs = refs
+                if not extracted_refs and refs:
+                    extracted_refs = refs
 
                 saved_record = await self.save_bot_message(
                     session_id,
@@ -699,6 +702,10 @@ class LiveChatService:
                         )
                     except Exception:
                         pass
+                    continue
+
+                if chain_type == "web_search_sources":
+                    refs = parse_web_search_sources(result_text)
                     continue
 
                 outgoing = {"ct": "chat", **result}

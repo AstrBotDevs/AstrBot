@@ -294,6 +294,21 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
 
         return payloads, context_query
 
+    def _build_response_tools(self, tools: ToolSet | None) -> list[dict]:
+        """Build the Responses tools list, appending xAI's native web_search when enabled."""
+        response_tools: list[dict] = []
+        if tools:
+            for tool in tools.openai_schema():
+                function = tool.get("function", {})
+                response_tools.append({"type": "function", **function})
+
+        if self.provider_config.get("provider") == "xai" and bool(
+            self.provider_config.get("xai_native_search", False)
+        ):
+            response_tools.append({"type": "web_search"})
+
+        return response_tools
+
     async def _query(
         self,
         payloads: dict,
@@ -314,14 +329,10 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         Raises:
             TypeError: If the SDK returns an unexpected response type.
         """
-        if tools:
-            response_tools = []
-            for tool in tools.openai_schema():
-                function = tool.get("function", {})
-                response_tools.append({"type": "function", **function})
-            if response_tools:
-                payloads["tools"] = response_tools
-                payloads["tool_choice"] = payloads.get("tool_choice", "auto")
+        response_tools = self._build_response_tools(tools)
+        if response_tools:
+            payloads["tools"] = response_tools
+            payloads["tool_choice"] = payloads.get("tool_choice", "auto")
 
         extra_body: dict[str, Any] = {}
         custom_extra_body = self.provider_config.get("custom_extra_body", {})
@@ -383,14 +394,10 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         Raises:
             EmptyModelOutputError: If the stream ends without a terminal event.
         """
-        if tools:
-            response_tools = []
-            for tool in tools.openai_schema():
-                function = tool.get("function", {})
-                response_tools.append({"type": "function", **function})
-            if response_tools:
-                payloads["tools"] = response_tools
-                payloads["tool_choice"] = payloads.get("tool_choice", "auto")
+        response_tools = self._build_response_tools(tools)
+        if response_tools:
+            payloads["tools"] = response_tools
+            payloads["tool_choice"] = payloads.get("tool_choice", "auto")
 
         extra_body: dict[str, Any] = {}
         custom_extra_body = self.provider_config.get("custom_extra_body", {})
@@ -523,6 +530,7 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         text_parts: list[str] = []
         reasoning_parts: list[str] = []
         serialized_reasoning_items: list[dict] = []
+        web_search_sources: list[dict[str, Any]] = []
 
         for item in self._field(response, "output", []) or []:
             item_type = self._field(item, "type")
@@ -531,6 +539,20 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
                     content_type = self._field(content, "type")
                     if content_type == "output_text":
                         text_parts.append(str(self._field(content, "text", "")))
+                        for annotation in self._field(content, "annotations", []) or []:
+                            if self._field(annotation, "type") != "url_citation":
+                                continue
+                            url = self._field(annotation, "url")
+                            if not url:
+                                continue
+                            title = self._field(annotation, "title")
+                            web_search_sources.append(
+                                {
+                                    "index": str(len(web_search_sources) + 1),
+                                    "url": url,
+                                    "title": title,
+                                }
+                            )
                     elif content_type == "refusal":
                         text_parts.append(str(self._field(content, "refusal", "")))
                 continue
@@ -590,6 +612,8 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
             )
         if llm_response.tools_call_args:
             llm_response.role = "tool"
+
+        llm_response.web_search_sources = web_search_sources
 
         usage = self._field(response, "usage")
         if usage is not None:
