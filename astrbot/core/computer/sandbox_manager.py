@@ -2003,6 +2003,7 @@ class SandboxManager:
     async def _expire_when_idle(
         self, sandbox_id: str, timeout: float, initial_expires_at: float
     ) -> None:
+        current_task = asyncio.current_task()
         current_expires_at = initial_expires_at
         destroy_attempts = 0
         try:
@@ -2011,7 +2012,11 @@ class SandboxManager:
                 if remaining > 0:
                     await asyncio.sleep(remaining)
                 state = self.idle_state.get(sandbox_id)
-                if state is None or state.expires_at != current_expires_at:
+                if (
+                    state is None
+                    or state.task is not current_task
+                    or state.expires_at != current_expires_at
+                ):
                     return
                 record = self.registry.get_sandbox(sandbox_id)
                 if record is None:
@@ -2081,7 +2086,8 @@ class SandboxManager:
             raise
         finally:
             state = self.idle_state.get(sandbox_id)
-            if state is not None and state.expires_at == current_expires_at:
+            # A replacement timer can have the same deadline on coarse clocks.
+            if state is not None and state.task is current_task:
                 self.idle_state.pop(sandbox_id, None)
 
     @staticmethod

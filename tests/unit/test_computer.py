@@ -6,6 +6,7 @@ filesystem operations, Python execution, shell execution, and security restricti
 
 import os
 import shlex
+import subprocess
 import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -212,13 +213,19 @@ class TestLocalShellComponent:
         assert "test_value" in result["stdout"]
 
     @pytest.mark.asyncio
-    async def test_exec_stream_yields_stdout_and_exit(self):
+    async def test_exec_stream_yields_stdout_and_exit(self, tmp_path):
         """Test streaming shell execution yields output before exit."""
         shell = LocalShellComponent()
         events = []
-
+        script = tmp_path / "stream output.py"
+        script.write_text('print("stream-ok")')
+        command = (
+            f'& "{sys.executable}" "{script}"'
+            if os.name == "nt"
+            else shlex.join([sys.executable, str(script)])
+        )
         async for event in shell.exec_stream(
-            f'{shlex.quote(sys.executable)} -c "print(\\"stream-ok\\")"',
+            command,
             timeout=5,
         ):
             events.append(event)
@@ -229,13 +236,22 @@ class TestLocalShellComponent:
         assert events[-1]["exit_code"] == 0
 
     @pytest.mark.asyncio
-    async def test_exec_stream_yields_partial_stdout_chunk(self):
+    async def test_exec_stream_yields_partial_stdout_chunk(self, tmp_path):
         """Test streaming shell execution yields output without waiting for newline."""
         shell = LocalShellComponent()
         events = []
-
+        script = tmp_path / "partial output.py"
+        script.write_text(
+            'import sys, time; sys.stdout.write("partial"); '
+            "sys.stdout.flush(); time.sleep(0.1)"
+        )
+        command = (
+            f'& "{sys.executable}" "{script}"'
+            if os.name == "nt"
+            else shlex.join([sys.executable, str(script)])
+        )
         async for event in shell.exec_stream(
-            f'{shlex.quote(sys.executable)} -c "import sys, time; sys.stdout.write(\\"partial\\"); sys.stdout.flush(); time.sleep(0.1)"',
+            command,
             timeout=5,
         ):
             events.append(event)
@@ -247,15 +263,23 @@ class TestLocalShellComponent:
         """Test shell=False streaming preserves quoted command arguments."""
         shell = LocalShellComponent()
         events = []
+        args = ["quoted ok", 'say "hello"', "C:\\path with spaces\\", ""]
+        argv = [sys.executable, "-c", "import sys; print(repr(sys.argv[1:]))", *args]
+        command = (
+            f'"{sys.executable}" {subprocess.list2cmdline(argv[1:])}'
+            if os.name == "nt"
+            else shlex.join(argv)
+        )
 
         async for event in shell.exec_stream(
-            f'{shlex.quote(sys.executable)} -c "print(\\"quoted ok\\")"',
+            command,
             shell=False,
             timeout=5,
         ):
             events.append(event)
 
-        assert any(event.get("data") == "quoted ok\n" for event in events)
+        output = "".join(event["data"] for event in events if event["type"] == "stdout")
+        assert output == f"{args!r}\n"
         assert events[-1]["exit_code"] == 0
 
 

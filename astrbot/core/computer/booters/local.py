@@ -347,8 +347,35 @@ class LocalShellComponent(ShellComponent):
                     stderr=asyncio.subprocess.PIPE,
                 )
         else:
+            if os.name == "nt":
+                import ctypes
+
+                if not command.strip():
+                    raise ValueError("Command must not be empty.")
+                # shlex does not implement Windows quoting and backslash rules.
+                split_command = ctypes.WinDLL(
+                    "shell32", use_last_error=True
+                ).CommandLineToArgvW
+                split_command.argtypes = [
+                    ctypes.c_wchar_p,
+                    ctypes.POINTER(ctypes.c_int),
+                ]
+                split_command.restype = ctypes.POINTER(ctypes.c_wchar_p)
+                local_free = ctypes.WinDLL("kernel32").LocalFree
+                local_free.argtypes = [ctypes.c_void_p]
+                local_free.restype = ctypes.c_void_p
+                argc = ctypes.c_int()
+                parsed = split_command(command.lstrip(), ctypes.byref(argc))
+                if not parsed:
+                    raise ctypes.WinError(ctypes.get_last_error())
+                try:
+                    argv = parsed[: argc.value]
+                finally:
+                    local_free(parsed)
+            else:
+                argv = shlex.split(command)
             process = await asyncio.create_subprocess_exec(
-                *shlex.split(command, posix=os.name != "nt"),
+                *argv,
                 cwd=working_dir,
                 env=run_env,
                 stdout=asyncio.subprocess.PIPE,

@@ -1,5 +1,7 @@
 import asyncio
 import time
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -2173,9 +2175,12 @@ async def test_manager_reconcile_on_startup_keeps_valid_persistent_records(
 @pytest.mark.asyncio
 async def test_manager_restore_persistent_sandboxes_times_out_and_keeps_record(
     tmp_path,
+    monkeypatch,
 ):
     provider = FailingReconnectProvider()
     manager, _provider = _manager(tmp_path, provider)
+    # Do not spend the provider timeout waiting for filesystem I/O.
+    monkeypatch.setattr(manager, "save_registry_async", AsyncMock())
     restore_started = asyncio.Event()
 
     async def slow_create_booter(context, session_id, sandbox_id, config):
@@ -2356,6 +2361,27 @@ async def test_manager_stale_idle_cleanup_task_skips_persistent_sandbox(tmp_path
     assert record["status"] == "running"
     assert manager.session_booter["persistent-1"] is booter
     assert provider.destroyed == []
+
+
+@pytest.mark.asyncio
+async def test_rescheduled_idle_cleanup_survives_same_deadline(monkeypatch, tmp_path):
+    """Keep the replacement timer when coarse clocks produce equal deadlines."""
+    from astrbot.core.computer import sandbox_manager as module
+
+    manager, _ = _manager(tmp_path)
+    monkeypatch.setattr(module, "time", SimpleNamespace(monotonic=lambda: 100.0))
+    manager.schedule_idle_cleanup("sandbox", 30)
+    previous = manager.idle_state["sandbox"]
+    await asyncio.sleep(0)
+    manager.schedule_idle_cleanup("sandbox", 30)
+    current = manager.idle_state["sandbox"]
+    try:
+        await asyncio.gather(previous.task, return_exceptions=True)
+        assert current.expires_at == previous.expires_at
+        assert manager.idle_state["sandbox"] is current
+    finally:
+        current.task.cancel()
+        await asyncio.gather(current.task, return_exceptions=True)
 
 
 @pytest.mark.asyncio
