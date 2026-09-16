@@ -149,6 +149,11 @@
     "think": "Thinking",
     "toolUsed": "Using Tool"
   },
+  "history": {
+    "loadFailed": "Could not load messages",
+    "loadEarlierFailed": "Could not load earlier messages",
+    "loading": "Loading earlier messages"
+  },
   "reply": {
     "replyTo": "Reply to",
     "notFound": "Message not found"

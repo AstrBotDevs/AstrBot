@@ -238,6 +238,11 @@ class AstrMessageEvent(abc.ABC):
         if path and path not in self._temporary_local_files:
             self._temporary_local_files.append(path)
 
+    def untrack_temporary_local_file(self, path: str) -> None:
+        """Exclude a retained attachment from event-scoped cleanup."""
+        if path in self._temporary_local_files:
+            self._temporary_local_files.remove(path)
+
     def cleanup_temporary_local_files(self) -> None:
         paths = list(self._temporary_local_files)
         self._temporary_local_files.clear()

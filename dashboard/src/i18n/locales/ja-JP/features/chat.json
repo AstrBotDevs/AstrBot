@@ -149,6 +149,11 @@
     "think": "思考",
     "toolUsed": "ツールを使用"
   },
+  "history": {
+    "loadFailed": "メッセージを読み込めませんでした",
+    "loadEarlierFailed": "以前のメッセージを読み込めませんでした",
+    "loading": "以前のメッセージを読み込み中"
+  },
   "reply": {
     "replyTo": "引用",
     "notFound": "メッセージが見つかりません"

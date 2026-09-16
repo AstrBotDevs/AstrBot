@@ -39,6 +39,8 @@
         "allPluginsLabel": "Все плагины"
     },
     "providerSelector": {
+        "allSources": "Все источники",
+        "filterSource": "Фильтр по источнику провайдера",
         "notSelected": "Не выбрано",
         "defaultModel": "Модель по умолчанию",
         "model": "Модель",

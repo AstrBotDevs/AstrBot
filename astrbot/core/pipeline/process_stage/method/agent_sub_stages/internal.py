@@ -4,6 +4,7 @@ import asyncio
 import base64
 from collections.abc import AsyncGenerator
 from dataclasses import replace
+from pathlib import Path
 
 from astrbot.core import db_helper, logger
 from astrbot.core.agent.message import (
@@ -17,7 +18,12 @@ from astrbot.core.astr_main_agent import (
     LLM_ERROR_MESSAGE_EXTRA_KEY,
     MainAgentBuildConfig,
     MainAgentBuildResult,
+    _get_quoted_message_parser_settings,
+    _process_quote_message,
+    _provider_supports_modality,
+    _select_provider,
     build_main_agent,
+    collect_initial_request,
 )
 from astrbot.core.config.agent_runner import resolve_context_compression_config
 from astrbot.core.message.components import File, Image, Record, Reply, Video
@@ -36,6 +42,11 @@ from astrbot.core.provider.entities import (
     ProviderRequest,
 )
 from astrbot.core.star.star_handler import EventType
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.media_utils import (
+    IMAGE_COMPRESS_DEFAULT_QUALITY,
+    normalize_model_image_max_size,
+)
 from astrbot.core.utils.metrics import Metric
 from astrbot.core.utils.session_lock import session_lock_manager
 
@@ -49,6 +60,10 @@ from ...follow_up import (
     try_capture_follow_up,
     unregister_active_runner,
 )
+from .image_input import prepare_request_images
+
+# Anthropic rejects images above 5 MB; OpenAI and Gemini allow roughly 20 MB.
+_CUA_IMAGE_WARN_BYTES = 5 * 1024 * 1024
 
 
 class InternalAgentSubStage(Stage):
@@ -206,6 +221,7 @@ class InternalAgentSubStage(Stage):
                 logger.debug("acquired session lock for llm request")
                 agent_runner: AgentRunner | None = None
                 runner_registered = False
+                reset_coro = None
                 try:
                     build_cfg = replace(
                         self.main_agent_cfg,
@@ -213,10 +229,92 @@ class InternalAgentSubStage(Stage):
                         streaming_response=streaming_response,
                     )
 
+                    plugin_context = self.ctx.plugin_manager.context
+                    provider = await _select_provider(event, plugin_context)
+                    if provider is None:
+                        await self._send_llm_error_message(
+                            event,
+                            event.get_extra(LLM_ERROR_MESSAGE_EXTRA_KEY)
+                            or "LLM 请求失败：未找到任何可用的对话模型（提供商）。请先在 WebUI 中配置并启用可用模型。",
+                        )
+                        return
+                    req, quote_image_ref = await collect_initial_request(
+                        event, plugin_context, build_cfg
+                    )
+                    if req is None:
+                        return
+                    settings = self.ctx.astrbot_config["provider_settings"]
+                    enabled = settings.get("image_compress_enabled", True) is not False
+                    options = settings.get("image_compress_options", {})
+                    montage_max_size = normalize_model_image_max_size(
+                        options.get("max_size") if isinstance(options, dict) else None
+                    )
+                    max_size = montage_max_size
+                    sandbox_cfg = settings.get("sandbox")
+                    cua_pixel_mode = (
+                        settings.get("computer_use_runtime") == "sandbox"
+                        and isinstance(sandbox_cfg, dict)
+                        and sandbox_cfg.get("booter") == "cua"
+                    )
+                    if cua_pixel_mode:
+                        # CUA pixel tools read coordinates 1:1 on stills, so the
+                        # still-image resize is lifted; compliant images pass through
+                        # byte-exact since lossy re-encoding would shift colors.
+                        # Montages are never used for coordinates and keep the
+                        # configured cap, which bounds the 3x3 canvas. Oversized
+                        # passthrough images warn below.
+                        max_size = 1_000_000
+                    quality = (
+                        options.get("quality") if isinstance(options, dict) else None
+                    )
+                    if isinstance(quality, bool) or not isinstance(quality, int):
+                        quality = IMAGE_COMPRESS_DEFAULT_QUALITY
+                    quality = min(max(quality, 1), 100)
+                    output_dir = Path(get_astrbot_temp_path())
+                    prepared: dict[str, str | None] = {}
+                    supports_image = _provider_supports_modality(provider, "image")
+                    caption_provider_id = (
+                        settings.get("default_image_caption_provider_id") or ""
+                    )
+                    # Plugin requests may replace the event's image inputs. Only
+                    # materialize a separate quote when its caption will be used.
+                    if (
+                        supports_image
+                        or not caption_provider_id
+                        or (req.conversation and req.image_urls)
+                    ):
+                        quote_image_ref = None
+                    await prepare_request_images(
+                        req,
+                        event,
+                        enabled=enabled,
+                        max_size=max_size,
+                        quality=quality,
+                        output_dir=output_dir,
+                        prepared=prepared,
+                        quote_image_ref=quote_image_ref,
+                        montage_max_size=montage_max_size,
+                    )
+                    await _process_quote_message(
+                        event,
+                        req,
+                        caption_provider_id,
+                        plugin_context,
+                        _get_quoted_message_parser_settings(settings),
+                        main_provider_supports_image=supports_image,
+                        skip_quote_image_caption=bool(
+                            req.conversation and req.image_urls
+                        ),
+                        image_ref=prepared.get(quote_image_ref)
+                        if quote_image_ref
+                        else None,
+                    )
                     build_result: MainAgentBuildResult | None = await build_main_agent(
                         event=event,
-                        plugin_context=self.ctx.plugin_manager.context,
+                        plugin_context=plugin_context,
                         config=build_cfg,
+                        req=req,
+                        provider=provider,
                         apply_reset=False,
                     )
 
@@ -252,13 +350,40 @@ class InternalAgentSubStage(Stage):
                     )
 
                     if await call_event_hook(event, EventType.OnLLMRequestEvent, req):
-                        if reset_coro:
-                            reset_coro.close()
                         return
 
+                    await prepare_request_images(
+                        req,
+                        event,
+                        enabled=enabled,
+                        max_size=max_size,
+                        quality=quality,
+                        output_dir=output_dir,
+                        prepared=prepared,
+                        montage_max_size=montage_max_size,
+                    )
+                    if cua_pixel_mode:
+                        oversized = []
+                        for path in {p for p in prepared.values() if p}:
+                            try:
+                                size = Path(path).stat().st_size
+                            except OSError:
+                                continue
+                            if size > _CUA_IMAGE_WARN_BYTES:
+                                oversized.append(size)
+                        if oversized:
+                            logger.warning(
+                                "CUA session sends %d image(s) larger than %d MB "
+                                "(largest %.1f MB) without resize; this may exceed "
+                                "provider image upload limits.",
+                                len(oversized),
+                                _CUA_IMAGE_WARN_BYTES // 1048576,
+                                max(oversized) / 1048576,
+                            )
                     # apply reset
                     if reset_coro:
                         await reset_coro
+                        reset_coro = None
 
                     register_active_runner(event.unified_msg_origin, agent_runner)
                     runner_registered = True
@@ -407,6 +532,8 @@ class InternalAgentSubStage(Stage):
                         ),
                     )
                 finally:
+                    if reset_coro:
+                        reset_coro.close()
                     if runner_registered and agent_runner is not None:
                         unregister_active_runner(event.unified_msg_origin, agent_runner)
 

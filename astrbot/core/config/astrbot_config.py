@@ -89,6 +89,26 @@ class AstrBotConfig(dict):
         config_migrated = False
         if default_config is DEFAULT_CONFIG:
             config_migrated = migrate_config_on_load(conf, Path(config_path))
+        provider_settings = conf.get("provider_settings")
+        default_provider_settings = default_config.get("provider_settings")
+        if (
+            isinstance(provider_settings, dict)
+            and isinstance(default_provider_settings, dict)
+            and "computer_use_local_permissions" in default_provider_settings
+            and "computer_use_local_permissions" not in provider_settings
+        ):
+            # Preserve legacy POSIX access; Windows uses its supported defaults.
+            permissions = copy.deepcopy(
+                default_provider_settings["computer_use_local_permissions"]
+            )
+            permissions["member"]["allow_execution"] = permissions["member"][
+                "filesystem_scope"
+            ] != "none" and not provider_settings.get(
+                "computer_use_require_admin", True
+            )
+            permissions["admin"]["filesystem_scope"] = "host"
+            provider_settings["computer_use_local_permissions"] = permissions
+            config_migrated = True
         # 检查配置完整性，并插入
         has_new = self.check_config_integrity(default_config, conf, schema=schema)
         has_new |= config_migrated

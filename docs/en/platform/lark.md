@@ -26,7 +26,7 @@ Lark supports two setup methods: one-click QR creation in AstrBot, or manually c
 
 AstrBot version requirement: >= 4.25.0.
 
-Open the AstrBot management panel, click `Bots` in the left sidebar, click `+ Create Bot`, and select `lark`.
+Open the AstrBot management panel, click `Platforms` in the left sidebar, click `Add Adapter`, and select `lark`.
 
 Under `Creation Method`, select `One-click QR Creation`, choose the China or international edition as needed, then scan the QR code with the Lark mobile app and confirm. After creation succeeds, AstrBot automatically fills in the app's `app_id`, `app_secret`, and domain configuration.
 
@@ -35,7 +35,7 @@ Under `Creation Method`, select `One-click QR Creation`, choose the China or int
 >
 > Replace `<APP_ID>` in the URL below with your Lark app ID, then open it to jump to the permission enablement page:
 >
-> To find the App ID, go back to AstrBot's `Bots` page, find the Lark bot you just created, click `Edit`, and check the dialog that opens.
+> To find the App ID, go back to AstrBot's `Platforms` page, select the Lark bot you just created, and check `app_id` under `Connection settings`.
 >
 > ```text
 > https://open.feishu.cn/app/<APP_ID>/auth?q=contact:contact.base:readonly,contact:user.base:readonly,im:message.p2p_msg:readonly,im:message.group_at_msg:readonly,im:message:send,im:message,im:message:send_as_bot,im:resource:upload,im:resource,cardkit:card:write,im:message.group_at_msg:readonly,im:message.group_msg&op_from=openapi&token_type=tenant
@@ -60,8 +60,8 @@ Click on "Credentials & Basic Info" to obtain your app_id and app_secret.
 ## Configuring AstrBot
 
 1. Access the AstrBot management panel
-2. Click on `Bots` in the left sidebar
-3. In the right panel, click `+ Create Bot`
+2. Click on `Platforms` in the left sidebar
+3. Click `Add Adapter` above the bot list
 4. Select `lark`
 5. If you want AstrBot to create the app for you, select `One-click QR Creation` and complete the scan. If you already created the app yourself, select `Manual Creation`
 
@@ -95,9 +95,7 @@ Next, click on "Events & Callbacks," select "Receive events using long connectio
 > [!TIP]
 > To make better use of this method, please refer to [Unified Webhook Mode](/en/use/unified-webhook.md#how-to-use-unified-webhook-mode) for the necessary configuration.
 
-After clicking `Save`, the bot card will display "View Webhook URL." Click to view and copy the callback URL.
-
-![](https://files.astrbot.app/docs/source/images/lark/webhook.png)
+After clicking `Save`, select the bot in `Platforms` and click `View Webhook URL` to copy the callback URL.
 
 Next, return to Lark's Events & Callbacks page, click "Event Configuration," select "Send events to developer server," enter the callback URL you just copied as the "Request URL," and click Save. If everything is correct, no errors will appear.
 
