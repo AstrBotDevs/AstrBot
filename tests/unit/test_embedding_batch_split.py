@@ -458,11 +458,7 @@ async def test_embedding_failure_is_reported_as_an_embedding_error(
     tmp_path: Path,
 ) -> None:
     """A provider failure must not be relabelled as a storage failure."""
-    vec_db = FaissVecDB.__new__(FaissVecDB)
-    vec_db.embedding_provider = LimitedEmbeddingProvider(10)
-    vec_db.embedding_provider.get_embeddings_batch = _raising_batch()
-    vec_db.document_storage = None
-    vec_db.embedding_storage = None
+    vec_db = _vec_db_whose_provider_raises("HTTP 401: invalid api key")
 
     with pytest.raises(KnowledgeBaseUploadError) as exc_info:
         await FaissVecDB.insert_batch(
@@ -479,8 +475,42 @@ async def test_embedding_failure_is_reported_as_an_embedding_error(
     assert error.details["cause"] == "HTTP 401: invalid api key"
 
 
-def _raising_batch():
-    async def _call(*args, **kwargs):
-        raise Exception("HTTP 401: invalid api key")
+@pytest.mark.asyncio
+async def test_provider_error_text_is_redacted() -> None:
+    """Provider errors quote the request, so the API key must not be carried on.
 
-    return _call
+    The message reaches the upload log and the dashboard's failure list.
+    """
+    key = "sk-proj-abcdefghijklmnopqrstuvwxyz012345"
+    vec_db = _vec_db_whose_provider_raises(
+        f"HTTP 401: Incorrect API key provided: {key}. You can find your API key "
+        f"at https://platform.openai.com/account/api-keys."
+    )
+
+    with pytest.raises(KnowledgeBaseUploadError) as exc_info:
+        await FaissVecDB.insert_batch(
+            vec_db,
+            contents=["chunk-1"],
+            metadatas=[{}],
+            ids=["doc-1"],
+        )
+
+    error = exc_info.value
+    assert key not in error.user_message
+    assert key not in error.details["cause"]
+    assert "[REDACTED]" in error.user_message
+    # Everything that is not a secret is still reported.
+    assert "Incorrect API key provided" in error.user_message
+
+
+def _vec_db_whose_provider_raises(message: str) -> FaissVecDB:
+    vec_db = FaissVecDB.__new__(FaissVecDB)
+    vec_db.embedding_provider = LimitedEmbeddingProvider(10)
+
+    async def _call(*args, **kwargs):
+        raise Exception(message)
+
+    vec_db.embedding_provider.get_embeddings_batch = _call
+    vec_db.document_storage = None
+    vec_db.embedding_storage = None
+    return vec_db

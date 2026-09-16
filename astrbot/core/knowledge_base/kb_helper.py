@@ -19,6 +19,7 @@ from astrbot.core.provider.provider import (
 from astrbot.core.provider.provider import (
     Provider as LLMProvider,
 )
+from astrbot.core.utils.error_redaction import redact_sensitive_text
 
 from .chunking.base import BaseChunker
 from .chunking.markdown import MarkdownChunker
@@ -432,7 +433,9 @@ class KBHelper:
                     details={
                         "file_name": file_name,
                         "doc_id": doc_id,
-                        "cause": str(exc),
+                        # Redacted: the cause is logged, and a provider error can
+                        # quote the request it failed on, API key included.
+                        "cause": redact_sensitive_text(str(exc)),
                     },
                 ) from exc
 
