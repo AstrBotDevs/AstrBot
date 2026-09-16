@@ -125,13 +125,34 @@ class FaissVecDB(BaseVecDB):
 
         start = time.time()
         logger.debug(f"Generating embeddings for {len(contents)} contents...")
-        vectors = await self.embedding_provider.get_embeddings_batch(
-            embedding_contents,
-            batch_size=batch_size,
-            tasks_limit=tasks_limit,
-            max_retries=max_retries,
-            progress_callback=progress_callback,
-        )
+        try:
+            vectors = await self.embedding_provider.get_embeddings_batch(
+                embedding_contents,
+                batch_size=batch_size,
+                tasks_limit=tasks_limit,
+                max_retries=max_retries,
+                progress_callback=progress_callback,
+            )
+        except KnowledgeBaseUploadError:
+            raise
+        except Exception as exc:
+            # Attach the embedding stage here: otherwise the raw provider error
+            # escapes unlabelled and gets reported downstream as a storage
+            # failure, hiding the real cause (see kb_helper's stage mapping).
+            cause = str(exc).strip() or type(exc).__name__
+            if len(cause) > 300:
+                cause = cause[:300] + "…"
+            raise KnowledgeBaseUploadError(
+                stage="embedding",
+                user_message=f"向量化失败：调用嵌入模型时出错。原因：{cause}",
+                details={
+                    "cause": str(exc),
+                    "error_type": type(exc).__name__,
+                    "provider": type(self.embedding_provider).__name__,
+                    "content_count": content_count,
+                    "batch_size": batch_size,
+                },
+            ) from exc
         end = time.time()
         logger.debug(
             f"Generated embeddings for {len(contents)} contents in {end - start:.2f} seconds.",
