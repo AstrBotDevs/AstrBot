@@ -74,6 +74,31 @@ def test_spreadsheet_skill_converts_inspects_and_validates_csv(tmp_path: Path) -
     assert json.loads(validated.stdout)["valid"] is True
 
 
+def test_spreadsheet_skill_keeps_a_line_break_inside_a_quoted_cell(
+    tmp_path: Path,
+) -> None:
+    """A cell may span lines, and the break is part of the value."""
+    source = tmp_path / "notes.csv"
+    source.write_text('ID,Note\n1,"line one\nline two"\n2,plain\n', encoding="utf-8")
+    output = tmp_path / "notes.xlsx"
+
+    inspected = _run_script(SPREADSHEET_SCRIPTS / "inspect_workbook.py", source)
+    converted = _run_script(SPREADSHEET_SCRIPTS / "csv_to_xlsx.py", source, output)
+
+    assert inspected.returncode == 0, inspected.stderr
+    assert converted.returncode == 0, converted.stderr
+
+    # "line oneline two" before this, in the sample and in the workbook.
+    assert json.loads(inspected.stdout)["sample"] == [
+        ["ID", "Note"],
+        ["1", "line one\nline two"],
+        ["2", "plain"],
+    ]
+    workbook = load_workbook(output)
+    assert workbook.active["B2"].value == "line one\nline two"
+    workbook.close()
+
+
 def test_spreadsheet_skill_rejects_broken_formula_reference(tmp_path: Path) -> None:
     path = tmp_path / "broken.xlsx"
     workbook = Workbook()

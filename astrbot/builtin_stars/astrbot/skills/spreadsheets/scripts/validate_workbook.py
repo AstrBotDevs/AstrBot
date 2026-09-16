@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import io
 import json
 import zipfile
 from pathlib import Path
@@ -42,7 +43,10 @@ def _validate_delimited(path: Path, errors: list[str], warnings: list[str]) -> d
         delimiter = dialect.delimiter
     except csv.Error:
         delimiter = "\t" if path.suffix.lower() == ".tsv" else ","
-    rows = list(csv.reader(text.splitlines(), delimiter=delimiter))
+    # Not text.splitlines(): the reader joins a quoted cell that spans
+    # lines, but the line break itself is gone with the split, so the
+    # words on either side of it are glued together.
+    rows = list(csv.reader(io.StringIO(text, newline=""), delimiter=delimiter))
     if not rows:
         errors.append("The file contains no rows.")
         return {"rows": 0, "columns": 0}
