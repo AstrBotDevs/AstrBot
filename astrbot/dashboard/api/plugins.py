@@ -205,6 +205,37 @@ async def _call_plugin_extension(
 
     view_handler, path_values = matched_api
     plugin_name = plugin_path.strip("/").split("/", 1)[0].strip() or None
+
+    # Gate calls on the owning plugin's activation state, mirroring the
+    # static plugin pages behavior. Ownership is resolved from the handler
+    # module so legacy routes without a plugin name prefix keep working.
+    handler_modules = set()
+    handler_module = getattr(view_handler, "__module__", None)
+    if isinstance(handler_module, str):
+        handler_modules.add(handler_module)
+    handler_owner = getattr(view_handler, "__self__", None)
+    if handler_owner is not None:
+        handler_modules.add(type(handler_owner).__module__)
+
+    plugin = None
+    if handler_modules:
+        for (
+            star
+        ) in request.app.state.core_lifecycle.plugin_manager.context.get_all_stars():
+            if not star.root_dir_name:
+                continue
+            prefix = (
+                "astrbot.builtin_stars" if star.reserved else "data.plugins"
+            ) + f".{star.root_dir_name}"
+            if any(
+                module == prefix or module.startswith(f"{prefix}.")
+                for module in handler_modules
+            ):
+                plugin = star
+                break
+
+    if plugin is not None and not plugin.activated:
+        return {"status": "error", "message": "插件未启用", "data": {}}
     plugin_request = PluginRequest(
         request,
         path_params=path_values,
