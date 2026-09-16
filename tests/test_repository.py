@@ -69,3 +69,18 @@ def test_github_repository_rejects_other_hosts(url: str) -> None:
 def test_repository_parser_rejects_unsafe_or_non_repository_urls(url: str) -> None:
     with pytest.raises(ValueError):
         parse_repository_url(url)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://github.com/owner/x%2F..%2F..%2F.git",
+        "https://github.com/owner/x%5C..%5C..%5C.git",
+        "https://github.com/owner%2F..%2F../plugin.git",
+        "https://example.com/owner/x%2F..%2F..%2F.git",
+        "https://example.com/owner/x%5C..%5C..%5C.git",
+    ],
+)
+def test_repository_parser_rejects_encoded_path_separators(url: str) -> None:
+    with pytest.raises(ValueError):
+        parse_repository_url(url)
