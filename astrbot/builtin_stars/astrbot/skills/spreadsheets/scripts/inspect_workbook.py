@@ -7,7 +7,7 @@ import argparse
 import csv
 import json
 import zipfile
-from datetime import datetime
+from datetime import datetime, time
 from pathlib import Path
 
 import chardet
@@ -72,6 +72,9 @@ def _xls_cell_value(cell: xlrd.sheet.Cell, datemode: int) -> object:
             )
         except (ValueError, xlrd.XLDateError):
             return cell.value
+        if (year, month, day) == (0, 0, 0):
+            # A time-only cell has no date part; openpyxl reads one as a time.
+            return time(hour, minute, second)
         return datetime(year, month, day, hour, minute, second)
     if cell.ctype == xlrd.XL_CELL_BOOLEAN:
         return bool(cell.value)
