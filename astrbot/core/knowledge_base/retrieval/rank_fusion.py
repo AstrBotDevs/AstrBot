@@ -60,6 +60,7 @@ class RankFusion:
         dense_results: list[Result],
         sparse_results: list[SparseResult],
         top_k: int = 20,
+        query: str | None = None,
     ) -> list[FusedResult]:
         """融合稠密和稀疏检索结果。
 
@@ -72,6 +73,9 @@ class RankFusion:
             dense_results: 稠密检索结果
             sparse_results: 稀疏检索结果
             top_k: 返回结果数量
+            query: 原始查询文本。提供时，对 Dense 完全未召回但 Sparse 命中
+                且内容包含查询词（大小写不敏感）的候选给予保底提升，避免
+                Dense embedding 的大小写敏感导致精确词面匹配被挤出 top_k。
 
         Returns:
             List[FusedResult]: 融合后的结果列表
@@ -153,10 +157,32 @@ class RankFusion:
 
             rrf_scores[identifier] = rrf_score
 
-        # 5. 排序
+        # 保护 Dense 漏召回的精确词面匹配：Dense embedding 对大小写敏感，
+        # 当查询词以大小写变体出现时（如查询 "oni" 而文档中是 "Oni"），
+        # 目标 chunk 可能完全不被 Dense 召回。此时若 Sparse 命中了该 chunk
+        # 且其内容仅以大小写变体形式包含查询词，则将其显式排到所有普通
+        # 候选之前，确保它不会被大量纯 Dense 候选挤出 top_k。
+        # 仅保护"大小写变体"匹配（原样查询词未出现、小写形式出现），
+        # 避免改变普通精确命中的既有排序。
+        protected_ids: set[str] = set()
+        if query is not None and query.strip():
+            raw_query = query.strip()
+            lowered_query = raw_query.lower()
+            for identifier in all_chunk_ids:
+                if identifier in vec_doc_id_to_dense:
+                    continue
+                sparse_result = chunk_id_to_sparse.get(identifier)
+                if not sparse_result:
+                    continue
+                content = sparse_result.content or ""
+                if raw_query not in content and lowered_query in content.lower():
+                    protected_ids.add(identifier)
+
+        # 5. 排序。受保护的大小写变体精确匹配优先于所有普通候选。
         sorted_ids = sorted(
             fusion_scores,
             key=lambda cid: (
+                cid not in protected_ids,
                 -fusion_scores[cid],
                 -rrf_scores[cid],
                 dense_ranks.get(cid, float("inf")),
