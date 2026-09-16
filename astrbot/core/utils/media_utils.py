@@ -1014,12 +1014,27 @@ def _inspect_image(image_bytes: bytes) -> int:
     return frame_count
 
 
-_IMAGE_CONVERT_CACHE_VERSION = "v9-icc"
+_IMAGE_CONVERT_CACHE_VERSION = "v10-bytes"
 """Bump when conversion output semantics change (modes, transparency, sizing)
 so stale cache entries produced by older code are never served."""
 
 MODEL_IMAGE_PNG_FALLBACK_MAX_BYTES = 1024 * 1024
 """PNG outputs larger than this are flattened onto white and re-encoded as JPEG."""
+
+MODEL_IMAGE_MAX_BYTES = 1024 * 1024
+"""Byte budget for one prepared still image.
+
+The longest-edge cap bounds pixels, not compressed size: a compliant 1280x1280
+noisy PNG already exceeds 6 MiB, which providers reject before the model ever
+sees it. ``None`` disables the budget and keeps oversized stills byte-exact.
+"""
+
+MODEL_IMAGE_SHRINK_ATTEMPTS = 5
+"""Extra encodes allowed while fitting a still into its byte budget.
+
+Embedded metadata survives every quality step and a large canvas survives every
+budget, so a bounded number of retries is needed rather than one quality step.
+"""
 
 
 def normalize_model_image_max_size(value: object) -> int:
@@ -1067,6 +1082,7 @@ def _encode_image_frame_bytes(
     image: PILImage.Image,
     max_size: int | None = None,
     quality: int = IMAGE_COMPRESS_DEFAULT_QUALITY,
+    keep_metadata: bool = True,
 ) -> bytes:
     """Encode a display-oriented frame as JPEG, or PNG when it carries transparency.
 
@@ -1074,6 +1090,9 @@ def _encode_image_frame_bytes(
         image: Opened source frame, which is never mutated.
         max_size: Optional longest-edge limit; smaller images are not enlarged.
         quality: JPEG output quality in the range 1-100.
+        keep_metadata: Whether to carry the source ICC profile into the output.
+            Callers fitting a byte budget drop it, because the profile survives
+            every quality step and can keep a payload over budget on its own.
 
     Returns:
         Encoded single-frame JPEG or PNG bytes. A PNG larger than
@@ -1106,7 +1125,7 @@ def _encode_image_frame_bytes(
         # JPEG saving does not auto-embed the source ICC profile like PNG does;
         # attach it explicitly, but only when the color space survived intact
         # (conversions like CMYK -> RGB invalidate the source profile).
-        icc_profile = image.info.get("icc_profile")
+        icc_profile = image.info.get("icc_profile") if keep_metadata else None
         if image.mode not in {"RGB", "RGBA", "L", "LA", "P", "1", "I", "I;16"}:
             icc_profile = None
         save_kwargs = {"icc_profile": icc_profile} if icc_profile else {}
@@ -1224,7 +1243,10 @@ def _publish_image_cache_atomic(
 
 
 def _convert_image_bytes_sync(
-    source_bytes: bytes, max_size: int, quality: int
+    source_bytes: bytes,
+    max_size: int,
+    quality: int,
+    max_bytes: int | None = MODEL_IMAGE_MAX_BYTES,
 ) -> bytes:
     """Normalize a validated still image with an optional derived cache.
 
@@ -1232,27 +1254,46 @@ def _convert_image_bytes_sync(
         source_bytes: Encoded source bytes already checked by _inspect_image.
         max_size: Longest-edge limit in pixels.
         quality: JPEG output quality in the range 1-100.
+        max_bytes: Optional byte budget; ``None`` keeps oversized compliant
+            stills byte-exact instead of bounding their payload.
 
     Returns:
-        Single-frame JPEG or PNG bytes. An oriented JPEG or PNG within the size
-        limit is reused unchanged; anything else is re-encoded.
+        Single-frame JPEG or PNG bytes. An oriented JPEG or PNG inside both the
+        pixel and the byte limit is reused unchanged; anything else is
+        re-encoded and shrunk until it fits the byte budget, dropping embedded
+        metadata and finally the canvas when quality alone is not enough.
     """
     with PILImage.open(io.BytesIO(source_bytes)) as image:
         if (
             image.format in {"PNG", "JPEG"}
             and image.getexif().get(274, 1) == 1
             and max(image.size) <= max_size
+            and (max_bytes is None or len(source_bytes) <= max_bytes)
         ):
             return source_bytes
         cache_key = _image_convert_cache_key(
             source_bytes,
-            f"{_IMAGE_CONVERT_CACHE_VERSION}|convert|s={max_size}|q={quality}",
+            f"{_IMAGE_CONVERT_CACHE_VERSION}|convert|s={max_size}"
+            f"|q={quality}|b={max_bytes}",
         )
         output_path = _image_convert_cache_dir() / (cache_key + ".img")
         cached = _read_valid_cached_image_bytes(output_path)
         if cached is not None:
             return cached
         encoded = _encode_image_frame_bytes(image, max_size=max_size, quality=quality)
+        for _ in range(MODEL_IMAGE_SHRINK_ATTEMPTS):
+            if max_bytes is None or len(encoded) <= max_bytes:
+                break
+            # The pixel cap bounds geometry and the quality bounds artefacts, but
+            # neither bounds the payload alone: embedded metadata survives any
+            # quality, and a large canvas survives any budget. Drop the metadata
+            # with the first retry, then derate and finally shrink the canvas.
+            quality = max(1, quality * max_bytes // len(encoded))
+            if quality <= 1:
+                max_size = max(max_size // 2, ANIMATED_MONTAGE_GRID)
+            encoded = _encode_image_frame_bytes(
+                image, max_size=max_size, quality=quality, keep_metadata=False
+            )
     _publish_image_cache_atomic(output_path, encoded)
     return encoded
 
@@ -1367,6 +1408,7 @@ async def prepare_model_image(
     output_dir: Path,
     quality: int = IMAGE_COMPRESS_DEFAULT_QUALITY,
     montage_max_size: int | None = None,
+    max_bytes: int | None = MODEL_IMAGE_MAX_BYTES,
 ) -> str | None:
     """Prepare a single local model-ready image for the caller to own until consumption.
 
@@ -1380,6 +1422,8 @@ async def prepare_model_image(
             but montages are never used for coordinates, so callers pass the
             configured limit here to keep the 3x3 canvas bounded. Defaults to
             ``max_size``.
+        max_bytes: Optional byte budget for stills. CUA sessions pass ``None``
+            because their compliant stills must stay byte-exact.
 
     Returns:
         An existing JPEG or PNG path, or None for a recoverable input or write
@@ -1399,7 +1443,7 @@ async def prepare_model_image(
             )
         else:
             converted_bytes = await asyncio.to_thread(
-                _convert_image_bytes_sync, image_bytes, max_size, quality
+                _convert_image_bytes_sync, image_bytes, max_size, quality, max_bytes
             )
         # Publish the working file synchronously after encoding, so cancellation
         # cannot leave an untracked background write alive after this call.

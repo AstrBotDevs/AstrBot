@@ -45,6 +45,7 @@ from astrbot.core.star.star_handler import EventType
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.media_utils import (
     IMAGE_COMPRESS_DEFAULT_QUALITY,
+    MODEL_IMAGE_MAX_BYTES,
     normalize_model_image_max_size,
 )
 from astrbot.core.utils.metrics import Metric
@@ -264,6 +265,9 @@ class InternalAgentSubStage(Stage):
                         # configured cap, which bounds the 3x3 canvas. Oversized
                         # passthrough images warn below.
                         max_size = 1_000_000
+                    # CUA stills stay byte-exact to avoid JPEG color shifts, so the
+                    # byte budget applies only elsewhere; that path warns instead.
+                    max_bytes = None if cua_pixel_mode else MODEL_IMAGE_MAX_BYTES
                     quality = (
                         options.get("quality") if isinstance(options, dict) else None
                     )
@@ -294,6 +298,7 @@ class InternalAgentSubStage(Stage):
                         prepared=prepared,
                         quote_image_ref=quote_image_ref,
                         montage_max_size=montage_max_size,
+                        max_bytes=max_bytes,
                     )
                     await _process_quote_message(
                         event,
@@ -361,6 +366,7 @@ class InternalAgentSubStage(Stage):
                         output_dir=output_dir,
                         prepared=prepared,
                         montage_max_size=montage_max_size,
+                        max_bytes=max_bytes,
                     )
                     if cua_pixel_mode:
                         oversized = []
