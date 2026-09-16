@@ -46,7 +46,7 @@ In group chats, if `unique_session` is enabled, `/sid` also shows the current gr
 
 Common uses:
 
-- Add an admin: run `/sid` to get the `UID`, then add it in WebUI under `Config -> Other Config -> Admin ID`.
+- Add an admin: run `/sid` to get the `UID`, then add it in WebUI under `Config -> Platform -> General -> Administrator IDs`.
 - Configure allowlists: use `UMO` or group ID to control which sessions can use the bot.
 - Configure routing rules: use `UMO` to distinguish different platforms, groups, or private chats.
 
@@ -137,7 +137,7 @@ With no arguments, `/provider` lists all configured Providers grouped by LLM, TT
 - The currently active Provider is marked with `(currently in use)` at the end.
 
 > [!NOTE]
-> Reachability checks must be enabled in WebUI under `Config -> General Config -> AI Config`, expand the "More Settings" section at the bottom, and enable "Provider Reachability Check". When disabled, reachability markers are not shown and the list loads faster.
+> Reachability checks must be enabled in WebUI by selecting the relevant profile in `Config`, using the search button at the top to search for `reachability_check`, enabling the setting, and saving the configuration. When disabled, reachability markers are not shown and the list loads faster.
 
 **Switching Providers:**
 
@@ -176,4 +176,4 @@ Install or enable the `builtin_commands_extension` plugin if you need these exte
 
 Some commands require AstrBot admin permission, such as `/dashboard_update`, `/name`, `/op`, `/deop`, `/provider`, `/model`, and `/persona`.
 
-You can use `/sid` to get a user ID, then add it in WebUI under `Config -> Other Config -> Admin ID`.
+You can use `/sid` to get a user ID, then add it in WebUI under `Config -> Platform -> General -> Administrator IDs`.

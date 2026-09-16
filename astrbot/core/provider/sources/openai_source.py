@@ -359,15 +359,9 @@ class ProviderOpenAIOfficial(Provider):
         self.api_keys: list = super().get_keys()
         self.chosen_api_key = self.api_keys[0] if len(self.api_keys) > 0 else None
         self.timeout = provider_config.get("timeout", 120)
-        self.custom_headers = provider_config.get("custom_headers", {})
+        self.custom_headers = self.request_headers
         if isinstance(self.timeout, str):
             self.timeout = int(self.timeout)
-
-        if not isinstance(self.custom_headers, dict) or not self.custom_headers:
-            self.custom_headers = None
-        else:
-            for key in self.custom_headers:
-                self.custom_headers[key] = str(self.custom_headers[key])
 
         if "api_version" in provider_config:
             # Using Azure OpenAI API
@@ -375,7 +369,7 @@ class ProviderOpenAIOfficial(Provider):
                 api_key=self.chosen_api_key,
                 api_version=provider_config.get("api_version", None),
                 default_headers=self.custom_headers,
-                base_url=provider_config.get("api_base", ""),
+                base_url=provider_config.get("api_base") or None,
                 timeout=self.timeout,
                 http_client=self._create_http_client(provider_config),
             )
@@ -383,7 +377,7 @@ class ProviderOpenAIOfficial(Provider):
             # Using OpenAI Official API
             self.client = AsyncOpenAI(
                 api_key=self.chosen_api_key,
-                base_url=provider_config.get("api_base", None),
+                base_url=provider_config.get("api_base") or None,
                 default_headers=self.custom_headers,
                 timeout=self.timeout,
                 http_client=self._create_http_client(provider_config),

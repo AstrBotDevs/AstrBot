@@ -43,6 +43,7 @@ import {
   type PluginValidateRepoRequest,
   type PluginConfigFileDeleteRequest,
   type ProviderConfigRequest,
+  type RuntimeInfo,
   type BatchSessionProviderRequest,
   type BatchSessionServiceRequest,
   type SetupAuthRequest,
@@ -120,6 +121,7 @@ export interface VersionData {
   change_pwd_hint?: boolean;
   md5_pwd_hint?: boolean;
   password_upgrade_required?: boolean;
+  runtime?: RuntimeInfo;
   [key: string]: unknown;
 }
 

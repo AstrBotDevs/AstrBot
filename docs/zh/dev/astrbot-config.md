@@ -10,6 +10,8 @@ AstrBot 的配置文件是一个 JSON 格式的文件。AstrBot 会在启动时�
 
 > 在 AstrBot v4.0.0 版本及之后，我们引入了[多配置文件](https://blog.astrbot.app/posts/what-is-changed-in-4.0.0/#%E5%A4%9A%E9%85%8D%E7%BD%AE%E6%96%87%E4%BB%B6)的概念。`data/cmd_config.json` 作为默认配置文件 `default`。其他您在 WebUI 新建的配置文件会存储在 `data/config/` 目录下，以 `abconf_` 开头。
 
+WebUI 中，按机器人或会话使用的行为配置在 `配置文件` 页面管理；全局运行、日志、网络、WebUI 安全和文本转图像服务等配置在 `设置` 页面管理。模型连接和机器人连接分别在 `模型提供商` 和 `机器人` 页面管理。
+
 AstrBot 默认配置如下：
 
 ```jsonc
@@ -548,7 +550,7 @@ AstrBot WebUI 配置。
 
 ### `trace_enable`
 
-是否启用追踪记录。默认为 `false`。启用后，AstrBot 会记录运行追踪信息，可以在管理面板的 `数据` -> `追踪` 页面查看。
+是否启用追踪记录。默认为 `false`。启用后，AstrBot 会记录运行追踪信息，可以在管理面板的 `数据与日志 → 追踪` 页面查看。
 
 ### `pip_install_arg`
 

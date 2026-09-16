@@ -10,6 +10,8 @@ AstrBot's configuration file is a JSON format file. AstrBot reads this file at s
 
 > Since AstrBot v4.0.0, we introduced the concept of [multiple configuration files](https://blog.astrbot.app/posts/what-is-changed-in-4.0.0/#%E5%A4%9A%E9%85%8D%E7%BD%AE%E6%96%87%E4%BB%B6). `data/cmd_config.json` serves as the default configuration `default`. Other configuration files you create in the WebUI are stored in the `data/config/` directory, starting with `abconf_`.
 
+In the WebUI, manage bot and session behavior profiles under `Config`. Global runtime, logging, network, WebUI security, and text-to-image service settings are under `Settings`. Model connections and bot connections are managed under `Providers` and `Platforms`, respectively.
+
 The default AstrBot configuration is as follows:
 
 ```jsonc
@@ -548,7 +550,7 @@ Log level. Default is `INFO`. Can be set to `DEBUG`, `INFO`, `WARNING`, `ERROR`,
 
 ### `trace_enable`
 
-Whether to enable trace recording. Default is `false`. When enabled, AstrBot records execution traces, which can be viewed under `Data` -> `Trace` in the admin panel.
+Whether to enable trace recording. Default is `false`. When enabled, AstrBot records execution traces, which can be viewed under `Data & Logs → Trace` in the admin panel.
 
 ### `pip_install_arg`
 

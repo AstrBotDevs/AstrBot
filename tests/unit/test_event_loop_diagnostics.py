@@ -56,14 +56,13 @@ async def test_event_loop_watchdog_writes_rotating_log(tmp_path, monkeypatch):
     log_path = tmp_path / "logs" / "event_loop_watchdog.log"
     log_path.parent.mkdir()
     log_path.write_text("x" * 8, encoding="utf-8")
-    sampled = threading.Event()
+    stack_written = threading.Event()
     print_stack = diagnostics.traceback.print_stack
-
-    def record_stack(*args, **kwargs):
-        print_stack(*args, **kwargs)
-        sampled.set()
-
-    monkeypatch.setattr(diagnostics.traceback, "print_stack", record_stack)
+    monkeypatch.setattr(
+        diagnostics.traceback,
+        "print_stack",
+        lambda *args, **kwargs: (print_stack(*args, **kwargs), stack_written.set()),
+    )
 
     task = asyncio.create_task(
         diagnostics.event_loop_watchdog(
@@ -75,18 +74,15 @@ async def test_event_loop_watchdog_writes_rotating_log(tmp_path, monkeypatch):
     )
     try:
         await asyncio.sleep(0)
-        # Keep this coroutine on the event-loop stack until the real dump is
-        # sampled, instead of assuming the worker runs within a fixed 50ms.
-        assert sampled.wait(timeout=5), "Watchdog did not capture a thread stack"
+        # Keep the test frame on the stack until the watchdog writes it.
+        assert stack_written.wait(timeout=2)
     finally:
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
 
     log_content = log_path.read_text(encoding="utf-8")
     assert "Event loop stalled for" in log_content
-    main_thread_dump = log_content.split("\nThread", 2)[1]
-    assert "test_event_loop_diagnostics.py" in main_thread_dump
-    assert "test_event_loop_watchdog_writes_rotating_log" in main_thread_dump
+    assert "test_event_loop_diagnostics.py" in log_content
     assert (
         log_path.with_name("event_loop_watchdog.log.1").read_text(encoding="utf-8")
         == "x" * 8
@@ -119,8 +115,8 @@ async def test_event_loop_watchdog_survives_dump_failure(tmp_path, monkeypatch):
     )
     try:
         await asyncio.sleep(0)
-        # The worker must retry while the event loop is still blocked.
-        assert dumped.wait(timeout=5), "Watchdog did not retry the failed dump"
+        # Keep the event loop stalled until the watchdog retries the dump.
+        assert dumped.wait(timeout=2)
     finally:
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)

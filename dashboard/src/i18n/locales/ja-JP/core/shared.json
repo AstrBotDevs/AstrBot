@@ -39,6 +39,8 @@
     "allPluginsLabel": "すべてのプラグイン"
   },
   "providerSelector": {
+    "allSources": "すべてのソース",
+    "filterSource": "プロバイダーソースで絞り込む",
     "notSelected": "未選択",
     "defaultModel": "デフォルトモデル",
     "model": "モデル",
