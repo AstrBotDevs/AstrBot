@@ -328,6 +328,40 @@ async def test_cua_montage_keeps_configured_cap(harness, tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_animation_montage_notice_reaches_model(harness, tmp_path):
+    """Animated inputs tell the model that the image is a frame montage."""
+    animated = tmp_path / "anim.gif"
+    frames = [PILImage.new("RGB", (60, 30), c) for c in ("red", "green", "blue")]
+    frames[0].save(animated, "GIF", save_all=True, append_images=frames[1:])
+
+    still = tmp_path / "still.png"
+    PILImage.new("RGB", (60, 30), "red").save(still)
+    # The second animated request reuses the montage cache.
+    for source, enabled, expected in (
+        (animated, True, True),
+        (animated, True, True),
+        (still, True, False),
+        (animated, False, False),
+    ):
+        harness.config["provider_settings"]["image_compress_enabled"] = enabled
+        await process_event(harness, make_event([Image(file=str(source))]))
+        notices = [
+            part
+            for part in harness.captured[-1].req.extra_user_content_parts
+            if isinstance(part, TextPart)
+            and part.text.startswith("<system_notice>\nThe input includes a GIF")
+        ]
+        assert len(notices) == int(expected)
+        if expected:
+            assert notices[0]._no_save
+            assert notices[0].text.startswith("<system_notice>\n")
+            assert notices[0].text.endswith("\n</system_notice>")
+            assert "converted into a single image with frames" in notices[0].text
+            assert "Treat it as an animation" in notices[0].text
+            assert "do not mention the conversion or frame layout" in notices[0].text
+
+
+@pytest.mark.asyncio
 async def test_profile_reload_and_concurrent_requests(harness, tmp_path):
     source = source_image(tmp_path)
     before = copy.deepcopy(harness.provider.provider_config)

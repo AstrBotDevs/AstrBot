@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from astrbot.core import logger
-from astrbot.core.agent.message import ImageURLPart
+from astrbot.core.agent.message import ImageURLPart, TextPart
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.utils.media_utils import (
@@ -49,19 +49,22 @@ async def prepare_request_images(
     if quote_image_ref:
         refs.append(quote_image_ref)
     failed = False
+    has_montage = False
     for ref in dict.fromkeys(refs):
         if ref not in prepared:
             path = None
             if enabled:
-                path = await prepare_model_image(
+                image = await prepare_model_image(
                     ref,
                     max_size=max_size,
                     output_dir=output_dir,
                     quality=quality,
                     montage_max_size=montage_max_size,
                 )
-                if path:
+                if image:
+                    path, is_montage = image
                     event.track_temporary_local_file(path)
+                    has_montage |= is_montage
             else:
                 try:
                     async with MediaResolver(
@@ -118,3 +121,16 @@ async def prepare_request_images(
             for part in parts
         ):
             req.prompt = "[Image unavailable]"
+
+    if has_montage:
+        # Transient per-request hint; the montage file itself is not persisted.
+        req.extra_user_content_parts = [
+            *req.extra_user_content_parts,
+            TextPart(
+                text="<system_notice>\n"
+                "The input includes a GIF converted into a single image with frames "
+                "in reading order. Treat it as an animation; "
+                "do not mention the conversion or frame layout.\n"
+                "</system_notice>"
+            ).mark_as_temp(),
+        ]

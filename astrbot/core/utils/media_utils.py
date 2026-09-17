@@ -1367,7 +1367,7 @@ async def prepare_model_image(
     output_dir: Path,
     quality: int = IMAGE_COMPRESS_DEFAULT_QUALITY,
     montage_max_size: int | None = None,
-) -> str | None:
+) -> tuple[str, bool] | None:
     """Prepare a single local model-ready image for the caller to own until consumption.
 
     Args:
@@ -1382,15 +1382,17 @@ async def prepare_model_image(
             ``max_size``.
 
     Returns:
-        An existing JPEG or PNG path, or None for a recoverable input or write
-        failure.
+        Tuple of an existing JPEG or PNG path and whether it is an animation
+        frame montage (including cache hits), or None for a recoverable input
+        or write failure.
         The caller owns this file; shared cache entries are never returned.
     """
     try:
         async with MediaResolver(image_ref, media_type="image").as_path() as source:
             image_bytes = await asyncio.to_thread(source.read_bytes)
         frame_count = await asyncio.to_thread(_inspect_image, image_bytes)
-        if frame_count > 1:
+        is_montage = frame_count > 1
+        if is_montage:
             converted_bytes, _ = await asyncio.to_thread(
                 _extract_animation_montage_sync,
                 image_bytes,
@@ -1415,7 +1417,7 @@ async def prepare_model_image(
         except BaseException:
             output_path.unlink(missing_ok=True)
             raise
-        return str(output_path)
+        return str(output_path), is_montage
     except Exception as exc:
         if not is_recoverable_image_error(exc):
             raise
