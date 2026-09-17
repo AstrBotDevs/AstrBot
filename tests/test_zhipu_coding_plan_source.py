@@ -9,6 +9,7 @@ from openai import AsyncOpenAI
 from openai.types.chat.chat_completion import ChatCompletion
 from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
 
+from astrbot.core.provider.headers import DEFAULT_USER_AGENT
 from astrbot.core.provider.register import provider_cls_map
 from astrbot.core.provider.sources import zhipu_coding_plan_source
 
@@ -253,8 +254,11 @@ async def test_non_stream_request_uses_reasoning_policy_without_openclaw_identit
     assert response.completion_text == "ok"
     assert captured["stream"] is False
     assert captured["extra_body"] == {"reasoning_effort": "high"}
-    assert provider.custom_headers == {"X-Test-Header": "test-value"}
-    assert "User-Agent" not in provider.custom_headers
+    assert provider.custom_headers == {
+        "User-Agent": DEFAULT_USER_AGENT,
+        "X-Test-Header": "test-value",
+    }
+    assert "OpenClaw" not in provider.custom_headers["User-Agent"]
 
 
 @pytest.mark.asyncio
