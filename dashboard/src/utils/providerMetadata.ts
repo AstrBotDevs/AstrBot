@@ -9,7 +9,6 @@ export interface ProviderMetadataSource {
   model?: string
   modalities?: string[]
   max_context_tokens?: number
-  reasoning?: boolean
 }
 
 export interface ProviderCapabilityBadge {
@@ -77,7 +76,7 @@ export function providerCapabilityBadges(
       key: 'reasoning',
       icon: 'mdi-brain',
       supported: Boolean(metadata?.reasoning),
-      enabled: Boolean(provider?.reasoning),
+      enabled: Boolean(metadata?.reasoning),
       label: tm('models.metadata.reasoning')
     }
   ]

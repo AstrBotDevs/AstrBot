@@ -28,7 +28,7 @@ from astrbot.core.platform.sources.webchat.request_flags import (
 )
 from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queue_mgr
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_temp_path
-from astrbot.core.utils.datetime_utils import to_utc_isoformat
+from astrbot.core.utils.datetime_utils import generate_timestamp_id, to_utc_isoformat
 from astrbot.dashboard.services.chat_service import (
     BotMessageAccumulator,
     build_bot_history_content,
@@ -90,7 +90,9 @@ class LiveChatSession:
         try:
             temp_dir = get_astrbot_temp_path()
             os.makedirs(temp_dir, exist_ok=True)
-            audio_path = os.path.join(temp_dir, f"live_audio_{uuid.uuid4()}.wav")
+            audio_path = os.path.join(
+                temp_dir, f"live_audio_{generate_timestamp_id()}.wav"
+            )
 
             with wave.open(audio_path, "wb") as wav_file:
                 wav_file.setnchannels(1)

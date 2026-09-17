@@ -14,7 +14,7 @@
 
       <v-row class="px-4">
         <v-col cols="12">
-          <v-card class="welcome-card pa-6" elevation="0" border>
+          <v-card class="welcome-card pa-6" elevation="0">
             <div class="mb-4 text-h3 font-weight-bold">
               {{ tm('onboard.title') }}
             </div>
@@ -97,7 +97,7 @@
 
       <v-row class="px-4 mt-4">
         <v-col cols="12">
-          <v-card class="welcome-card pa-6" elevation="0" border>
+          <v-card class="welcome-card pa-6" elevation="0">
             <div class="mb-4 text-h3 font-weight-bold">
               {{ tm('resources.title') }}
             </div>
@@ -151,7 +151,7 @@
 
       <v-row v-if="showAnnouncement" class="px-4 mb-4">
         <v-col cols="12">
-          <v-card class="welcome-card pa-6" elevation="0" border>
+          <v-card class="welcome-card pa-6" elevation="0">
             <div class="mb-4 text-h3 font-weight-bold">
               {{ tm('announcement.title') }}
             </div>
@@ -380,13 +380,15 @@ async function syncDefaultConfigProviderIfNeeded() {
   if (!targetProviderId) return;
 
   const configData = await fetchDefaultConfig();
-  if (!configData.provider_settings) {
-    configData.provider_settings = {};
+  if (configData?.agent_runner?.runner_type !== 'local') {
+    return;
   }
+  const modelConfig = configData.agent_runner.config?.model;
+  if (!modelConfig) return;
 
-  if (configData.provider_settings.default_provider_id === targetProviderId) return;
+  if (modelConfig.provider_id === targetProviderId) return;
 
-  configData.provider_settings.default_provider_id = targetProviderId;
+  modelConfig.provider_id = targetProviderId;
 
   const updateRes = await configProfileApi.update('default', configData);
   if (updateRes.data.status !== 'ok') {
@@ -557,6 +559,7 @@ watch(computerAccessRuntime, async (value, oldValue) => {
 
 .welcome-card {
   border-radius: 16px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
 }
 
 .welcome-announcement-markdown {

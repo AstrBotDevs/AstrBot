@@ -1,5 +1,6 @@
 """Tests for astrbot.core.star.base module."""
 
+import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -30,6 +31,33 @@ class TestStarBase:
         star = TestStar(context=mock_context)
 
         assert star.context is mock_context
+
+    def test_star_init_logs_plugin_level(self):
+        """Test that Star initialization reports the effective plugin level."""
+        from astrbot.core.star import Star
+
+        mock_context = MagicMock()
+        plugin_logger = MagicMock(spec=logging.Logger)
+        plugin_logger.getEffectiveLevel.return_value = logging.WARNING
+
+        class TestLevelStar(Star):
+            name = "test_level_star"
+            author = "test_author"
+
+        with (
+            patch(
+                "astrbot.core.star.base.LogManager.get_plugin_logger",
+                return_value=plugin_logger,
+            ),
+            patch("astrbot.core.star.base.logger") as core_logger,
+        ):
+            TestLevelStar(context=mock_context)
+
+        core_logger.info.assert_called_once_with(
+            "Plugin %s log level: %s.",
+            "test_level_star",
+            "WARNING",
+        )
 
     @pytest.mark.asyncio
     async def test_text_to_image_with_config(self):

@@ -16,6 +16,8 @@
         "buttons": {
             "refresh": "Обновить",
             "add": "Добавить сервер",
+            "connect": "Подключить",
+            "disconnect": "Отключить",
             "useTemplateStdio": "Шаблон Stdio",
             "useTemplateStreamableHttp": "Шаблон Streamable HTTP",
             "useTemplateSse": "Шаблон SSE",
@@ -25,6 +27,8 @@
         "status": {
             "noTools": "Нет доступных инструментов",
             "availableTools": "Доступные инструменты",
+            "connected": "Подключен",
+            "disconnected": "Не подключен",
             "configSummary": "Конфигурация: {keys}",
             "noConfig": "Конфигурация не задана"
         }
@@ -94,7 +98,7 @@
             "fields": {
                 "name": "Название сервера",
                 "nameRequired": "Название обязательно",
-                "enable": "Включить сервер",
+                "enable": "Подключить после сохранения",
                 "config": "Конфигурация сервера"
             },
             "errors": {

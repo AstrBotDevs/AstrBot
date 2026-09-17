@@ -4,6 +4,10 @@
     "breadcrumb": {
         "list": "Базы знаний"
     },
+    "states": {
+        "loadError": "Не удалось загрузить базу знаний",
+        "retry": "Повторить"
+    },
     "tabs": {
         "overview": "Обзор",
         "documents": "Документы",

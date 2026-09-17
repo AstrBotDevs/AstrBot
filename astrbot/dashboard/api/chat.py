@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from astrbot.dashboard.async_utils import run_maybe_async
@@ -20,7 +20,7 @@ from astrbot.dashboard.services.chat_service import (
     ChatServiceError,
 )
 
-from .auth import AuthContext, require_dashboard_user, require_scope
+from .auth import AuthContext, ScopeDependency, require_dashboard_user
 from .multipart import single_upload
 
 router = APIRouter(tags=["Chat"])
@@ -35,8 +35,7 @@ def get_service(request: Request) -> ChatService:
     return request.app.state.services.chat
 
 
-async def require_chat_scope(request: Request) -> AuthContext:
-    return await require_scope(request, "chat")
+require_chat_scope = ScopeDependency("chat")
 
 
 async def _json_or_empty(request: Request) -> dict[str, Any]:
@@ -138,10 +137,19 @@ async def batch_delete_chat_sessions(
 @router.get("/chat/sessions/{session_id}")
 async def get_chat_session(
     session_id: str,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=1000, ge=1, le=1000),
     auth: AuthContext = Depends(require_chat_scope),
     service: ChatService = Depends(get_service),
 ):
-    return await _run(lambda: service.get_session(auth.username, session_id))
+    return await _run(
+        lambda: service.get_session(
+            auth.username,
+            session_id,
+            page=page,
+            page_size=page_size,
+        )
+    )
 
 
 @router.patch("/chat/sessions/{session_id}")

@@ -7,6 +7,7 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from astrbot.dashboard.responses import ApiError, error, ok
 from astrbot.dashboard.schemas import ImMessageRequest, OpenApiChatRequest
+from astrbot.dashboard.services.auth_service import CHAT_ADMIN_SCOPE
 from astrbot.dashboard.services.chat_service import (
     ChatService,
     ChatServiceError,
@@ -18,26 +19,16 @@ from astrbot.dashboard.services.open_api_service import (
     OpenApiWebSocketChatBridge,
 )
 
-from .auth import AuthContext, require_scope
+from .auth import AuthContext, ScopeDependency
 from .multipart import UploadFileAdapter
 
 router = APIRouter(tags=["Open API"])
 
 
-async def require_im_scope(request: Request) -> AuthContext:
-    return await require_scope(request, "im")
-
-
-async def require_chat_scope(request: Request) -> AuthContext:
-    return await require_scope(request, "chat")
-
-
-async def require_config_scope(request: Request) -> AuthContext:
-    return await require_scope(request, "config")
-
-
-async def require_file_scope(request: Request) -> AuthContext:
-    return await require_scope(request, "file")
+require_im_scope = ScopeDependency("im")
+require_chat_scope = ScopeDependency("chat")
+require_config_scope = ScopeDependency("config")
+require_file_scope = ScopeDependency("file")
 
 
 def get_service(request: Request) -> OpenApiService:
@@ -98,6 +89,7 @@ async def _open_api_chat_response(
             post_data,
         )
 
+    allow_admin_username = "*" in auth.scopes or CHAT_ADMIN_SCOPE in auth.scopes
     try:
         (
             effective_username,
@@ -106,6 +98,7 @@ async def _open_api_chat_response(
         ) = await open_api_service.prepare_chat_send(
             post_data,
             _get_chat_config_list(open_api_service),
+            allow_admin_username=allow_admin_username,
         )
     except OpenApiServiceError as exc:
         return _open_api_error(str(exc))
@@ -118,6 +111,7 @@ async def _open_api_chat_response(
     if config_err:
         return _open_api_error(config_err)
 
+    post_data["_api_key_allow_admin_role"] = allow_admin_username
     return await _build_streaming_chat_response(
         chat_service,
         effective_username,
@@ -176,7 +170,10 @@ def _extract_ws_api_key(websocket: WebSocket) -> str | None:
     return None
 
 
-@router.post("/chat")
+@router.post(
+    "/chat",
+    openapi_extra={"x-astrbot-sensitive-scopes": [CHAT_ADMIN_SCOPE]},
+)
 async def chat(
     payload: OpenApiChatRequest,
     auth: AuthContext = Depends(require_chat_scope),

@@ -295,9 +295,15 @@ async def get_dashboard_backup_progress(
 @router.get("/backups/{filename:path}")
 async def download_backup(
     filename: str,
+    request: Request,
     token: str | None = Query(default=None),
     service: BackupService = Depends(get_service),
 ):
+    if not token:
+        auth_header = request.headers.get("Authorization", "").strip()
+        scheme, separator, credentials = auth_header.partition(" ")
+        if separator and scheme.lower() == "bearer":
+            token = credentials.strip() or None
     return _download_backup(filename=filename, token=token, service=service)
 
 

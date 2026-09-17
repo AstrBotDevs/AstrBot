@@ -19,6 +19,7 @@ from asyncio import Queue
 from astrbot.api import logger, sp
 from astrbot.core import LogBroker, LogManager
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
+from astrbot.core.computer.computer_client import shutdown_local_booter
 from astrbot.core.config.default import VERSION
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.cron import CronJobManager
@@ -28,13 +29,14 @@ from astrbot.core.persona_mgr import PersonaManager
 from astrbot.core.pipeline.scheduler import PipelineContext, PipelineScheduler
 from astrbot.core.platform.manager import PlatformManager
 from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
+from astrbot.core.process_restart import restart_process
 from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.star.context import Context
 from astrbot.core.star.star_handler import EventType, star_handlers_registry, star_map
 from astrbot.core.star.star_manager import PluginManager
 from astrbot.core.subagent_orchestrator import SubAgentOrchestrator
 from astrbot.core.umop_config_router import UmopConfigRouter
-from astrbot.core.updator import AstrBotUpdator
+from astrbot.core.updater import AstrBotUpdater
 from astrbot.core.utils.event_loop_diagnostics import (
     create_event_loop_diagnostic_tasks,
 )
@@ -74,14 +76,25 @@ class AstrBotCoreLifecycle:
             no_proxy_list = self.astrbot_config.get("no_proxy", [])
             os.environ["no_proxy"] = ",".join(no_proxy_list)
         else:
-            # 清空代理环境变量
+            # Clear system proxy variables to avoid interfering with localhost requests.
+            has_system_proxy = "https_proxy" in os.environ or "http_proxy" in os.environ
+            if has_system_proxy:
+                logger.warning(
+                    "System http_proxy/https_proxy environment variables were detected, "
+                    "but AstrBot has no proxy configured. Clearing the proxy variables "
+                    "and setting no_proxy to localhost,127.0.0.1,::1 so local API "
+                    "requests bypass the proxy. Configure http_proxy in AstrBot if a "
+                    "proxy is required."
+                )
             if "https_proxy" in os.environ:
                 del os.environ["https_proxy"]
             if "http_proxy" in os.environ:
                 del os.environ["http_proxy"]
             if "no_proxy" in os.environ:
                 del os.environ["no_proxy"]
-            logger.debug("HTTP proxy cleared")
+            # Always bypass proxies for loopback addresses used by local APIs.
+            os.environ["no_proxy"] = "localhost,127.0.0.1,::1"
+            logger.debug("HTTP proxy cleared, no_proxy set to localhost")
 
     async def _init_or_reload_subagent_orchestrator(self) -> None:
         """Create (if needed) and reload the subagent orchestrator from config.
@@ -113,8 +126,7 @@ class AstrBotCoreLifecycle:
         if len(providers) == 0:
             return
 
-        provider_settings = getattr(pm, "provider_settings", None) or {}
-        default_id = provider_settings.get("default_provider_id")
+        default_id = getattr(pm, "default_chat_provider_id", "")
         fallback = pm.curr_provider_inst or providers[0]
         fallback_id = fallback.provider_config.get("id") or "unknown"
 
@@ -123,7 +135,7 @@ class AstrBotCoreLifecycle:
                 return
             self._default_chat_provider_warning_emitted = True
             logger.warning(
-                "Detected %d enabled chat providers but `provider_settings.default_provider_id` is empty. "
+                "Detected %d enabled chat providers but `agent_runner.config.model.provider_id` is empty. "
                 "AstrBot will use `%s` as the startup fallback chat provider. "
                 "Set a default chat model in the WebUI configuration page to avoid unexpected provider switching.",
                 len(providers),
@@ -135,7 +147,7 @@ class AstrBotCoreLifecycle:
         if not found:
             self._default_chat_provider_warning_emitted = True
             logger.warning(
-                "Configured `default_provider_id` is `%s` but no enabled provider matches that ID. "
+                "Configured Agent Runner model provider ID `%s` does not match an enabled provider. "
                 "AstrBot will use `%s` as the fallback chat provider. "
                 "Please check the WebUI configuration page.",
                 default_id,
@@ -145,7 +157,7 @@ class AstrBotCoreLifecycle:
     async def initialize(self) -> None:
         """初始化 AstrBot 核心生命周期管理类.
 
-        负责初始化各个组件, 包括 ProviderManager、PlatformManager、ConversationManager、PluginManager、PipelineScheduler、EventBus、AstrBotUpdator等。
+        负责初始化各个组件, 包括 ProviderManager、PlatformManager、ConversationManager、PluginManager、PipelineScheduler、EventBus、AstrBotUpdater等。
         """
         # 初始化日志代理
         logger.info("AstrBot v" + VERSION)
@@ -159,6 +171,8 @@ class AstrBotCoreLifecycle:
             LogManager.configure_trace_logger(self.astrbot_config)
 
         await self.db.initialize()
+        if sp.db_helper is self.db:
+            await sp.initialize()
 
         await html_renderer.initialize()
 
@@ -172,6 +186,7 @@ class AstrBotCoreLifecycle:
             ucr=self.umop_config_router,
             sp=sp,
         )
+        await self.astrbot_config_mgr.initialize()
         self.temp_dir_cleaner = TempDirCleaner(
             max_size_getter=lambda: self.astrbot_config_mgr.default_conf.get(
                 TempDirCleaner.CONFIG_KEY,
@@ -256,7 +271,7 @@ class AstrBotCoreLifecycle:
         self.pipeline_scheduler_mapping = await self.load_pipeline_scheduler()
 
         # 初始化更新器
-        self.astrbot_updator = AstrBotUpdator()
+        self.astrbot_updater = AstrBotUpdater()
 
         # 初始化事件总线
         self.event_bus = EventBus(
@@ -376,6 +391,8 @@ class AstrBotCoreLifecycle:
         if self.cron_manager:
             await self.cron_manager.shutdown()
 
+        await shutdown_local_booter()
+
         for plugin in self.plugin_manager.context.get_all_stars():
             try:
                 await self.plugin_manager._terminate_plugin(plugin)
@@ -388,6 +405,8 @@ class AstrBotCoreLifecycle:
         await self.provider_manager.terminate()
         await self.platform_manager.terminate()
         await self.kb_manager.terminate()
+        if sp.db_helper is self.db:
+            await sp.close()
         self.dashboard_shutdown_event.set()
 
         # 再次遍历curr_tasks等待每个任务真正结束
@@ -407,12 +426,15 @@ class AstrBotCoreLifecycle:
 
     async def restart(self) -> None:
         """重启 AstrBot 核心生命周期管理类, 终止各个管理器并重新加载平台实例"""
+        await shutdown_local_booter()
         await self.provider_manager.terminate()
         await self.platform_manager.terminate()
         await self.kb_manager.terminate()
+        if sp.db_helper is self.db:
+            await sp.close()
         self.dashboard_shutdown_event.set()
         threading.Thread(
-            target=self.astrbot_updator._reboot,
+            target=restart_process,
             name="restart",
             daemon=True,
         ).start()
@@ -440,7 +462,7 @@ class AstrBotCoreLifecycle:
         mapping = {}
         for conf_id, ab_config in self.astrbot_config_mgr.confs.items():
             scheduler = PipelineScheduler(
-                PipelineContext(ab_config, self.plugin_manager, conf_id),
+                PipelineContext(ab_config, self.plugin_manager, conf_id, self.db),
             )
             await scheduler.initialize()
             mapping[conf_id] = scheduler
@@ -457,7 +479,7 @@ class AstrBotCoreLifecycle:
         if not ab_config:
             raise ValueError(f"配置文件 {conf_id} 不存在")
         scheduler = PipelineScheduler(
-            PipelineContext(ab_config, self.plugin_manager, conf_id),
+            PipelineContext(ab_config, self.plugin_manager, conf_id, self.db),
         )
         await scheduler.initialize()
         self.pipeline_scheduler_mapping[conf_id] = scheduler

@@ -5,6 +5,15 @@
       <p class="mt-4 text-medium-emphasis">{{ t('list.loading') }}</p>
     </div>
 
+    <div v-else-if="loadError && kbList.length === 0" class="empty-state">
+      <v-icon size="72" color="error">mdi-alert-circle-outline</v-icon>
+      <h2 class="mt-4">{{ t('messages.loadError') }}</h2>
+      <v-btn class="mt-6" prepend-icon="mdi-refresh" color="primary" variant="tonal"
+        @click="loadKnowledgeBases()">
+        {{ t('list.retry') }}
+      </v-btn>
+    </div>
+
     <div v-else-if="kbList.length > 0" class="kb-list">
       <OutlinedActionListItem
         v-for="kb in kbList"
@@ -29,7 +38,7 @@
         </template>
 
         <div v-if="!kb.init_error" class="kb-description text-body-2 text-medium-emphasis">
-          {{ kb.description || '暂无描述' }}
+          {{ kb.description || t('list.noDescription') }}
         </div>
 
         <div v-if="kb.init_error" class="kb-error-panel">
@@ -154,7 +163,7 @@
           <v-form ref="formRef" @submit.prevent="submitForm">
             <v-text-field v-model="formData.kb_name" :label="t('create.nameLabel')"
               :placeholder="t('create.namePlaceholder')" variant="outlined"
-              :rules="[v => !!v || t('create.nameRequired')]" required class="mb-4" hint="后续如修改知识库名称，需重新在配置文件更新。" persistent-hint />
+              :rules="[v => !!v || t('create.nameRequired')]" required class="mb-4" :hint="t('create.nameChangeHint')" persistent-hint />
 
             <v-textarea v-model="formData.description" :label="t('create.descriptionLabel')"
               :placeholder="t('create.descriptionPlaceholder')" variant="outlined" rows="3" class="mb-4" />
@@ -163,7 +172,7 @@
               :item-title="item => item.embedding_model || item.id" :item-value="'id'"
               :label="t('create.embeddingModelLabel')" variant="outlined" class="mb-4" :disabled="editingKB !== null"
               :rules="[v => editingKB !== null || !!v || t('create.embeddingModelRequired')]" required
-              hint="嵌入模型选择后无法修改，如需更换请创建新的知识库。" persistent-hint>
+              :hint="t('create.embeddingLockedHint')" persistent-hint>
               <template #item="{ props, item }">
                 <v-list-item v-bind="props">
                   <template #subtitle>
@@ -259,7 +268,7 @@
     </v-snackbar>
 
     <div class="position-absolute" style="bottom: 0px; right: 16px;">
-      <small @click="router.push('/alkaid/knowledge-base')"><a style="text-decoration: underline; cursor: pointer;">切换到旧版知识库</a></small>
+      <small @click="router.push('/alkaid/knowledge-base')"><a style="text-decoration: underline; cursor: pointer;">{{ t('list.switchLegacy') }}</a></small>
     </div>
 
   </div>
@@ -277,6 +286,7 @@ const router = useRouter()
 
 // 状态
 const loading = ref(false)
+const loadError = ref(false)
 const saving = ref(false)
 const deleting = ref(false)
 const kbList = ref<any[]>([])
@@ -337,6 +347,7 @@ const emojiCategories = [
 // 加载知识库列表
 const loadKnowledgeBases = async (refreshStats = false) => {
   loading.value = true
+  loadError.value = false
   try {
     if (refreshStats) {
       page.value = 1
@@ -350,11 +361,14 @@ const loadKnowledgeBases = async (refreshStats = false) => {
       const data = response.data.data
       kbList.value = data.items || []
       total.value = data.total || 0
+      loadError.value = false
     } else {
+      loadError.value = true
       showSnackbar(response.data.message || t('messages.loadError'), 'error')
     }
   } catch (error) {
     console.error('Failed to load knowledge bases:', error)
+    loadError.value = true
     showSnackbar(t('messages.loadError'), 'error')
   } finally {
     loading.value = false

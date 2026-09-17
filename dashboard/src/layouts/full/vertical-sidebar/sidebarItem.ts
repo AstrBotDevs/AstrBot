@@ -37,41 +37,14 @@ const sidebarItem: menu[] = [
     to: '/providers',
   },
   {
+    title: 'core.navigation.extension',
+    icon: 'mdi-puzzle',
+    to: '/extension',
+  },
+  {
     title: 'core.navigation.config',
     icon: 'mdi-cog',
     to: '/config',
-  },
-  {
-    title: 'core.navigation.extension',
-    icon: 'mdi-puzzle',
-    to: '/extension#installed',
-    children: [
-      {
-        title: 'core.navigation.extensionTabs.installed',
-        icon: 'mdi-puzzle',
-        to: '/extension#installed'
-      },
-      {
-        title: 'core.navigation.extensionTabs.market',
-        icon: 'mdi-store',
-        to: '/extension#market'
-      },
-      {
-        title: 'core.navigation.extensionTabs.mcp',
-        icon: 'mdi-server-network',
-        to: '/extension#mcp'
-      },
-      {
-        title: 'core.navigation.extensionTabs.skills',
-        icon: 'mdi-lightning-bolt',
-        to: '/extension#skills'
-      },
-      {
-        title: 'core.navigation.extensionTabs.components',
-        icon: 'mdi-wrench',
-        to: '/extension#components'
-      }
-    ]
   },
   {
     title: 'core.navigation.knowledgeBase',
@@ -84,14 +57,14 @@ const sidebarItem: menu[] = [
     to: '/persona'
   },
   {
+    title: 'core.navigation.data',
+    icon: 'mdi-database',
+    to: '/data'
+  },
+  {
     title: 'core.navigation.groups.more',
     icon: 'mdi-dots-horizontal',
     children: [
-      {
-        title: 'core.navigation.conversation',
-        icon: 'mdi-database',
-        to: '/conversation'
-      },
       {
         title: 'core.navigation.sessionManagement',
         icon: 'mdi-pencil-ruler',
@@ -106,21 +79,6 @@ const sidebarItem: menu[] = [
         title: 'core.navigation.subagent',
         icon: 'mdi-vector-link',
         to: '/subagent'
-      },
-      {
-        title: 'core.navigation.dashboard',
-        icon: 'mdi-view-dashboard',
-        to: '/dashboard/default'
-      },
-      {
-        title: 'core.navigation.console',
-        icon: 'mdi-console',
-        to: '/console'
-      },
-      {
-        title: 'core.navigation.trace',
-        icon: 'mdi-timeline-text-outline',
-        to: '/trace'
       },
     ]
   }

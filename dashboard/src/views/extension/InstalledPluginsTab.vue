@@ -152,7 +152,6 @@ const openPluginDetail = (extension) => {
   router.push({
     name: "ExtensionDetails",
     params: { pluginId: extension.name },
-    hash: "#installed",
   });
 };
 
@@ -223,10 +222,32 @@ const togglePinnedExtension = (extension) => {
 <template>
   <v-tab-item v-show="activeTab === 'installed'">
     <div class="mb-4 pt-4 pb-4">
-      <div class="d-flex align-center flex-wrap" style="gap: 12px">
-        <h2 class="text-h2 mb-0">{{ tm("titles.installedAstrBotPlugins") }}</h2>
+      <div class="installed-header-row d-flex align-center flex-wrap">
+        <v-tabs
+          model-value="installed"
+          bg-color="transparent"
+          class="plugin-view-tabs"
+          height="42"
+        >
+          <v-tab
+            value="installed"
+            :to="{ name: 'Extensions' }"
+            class="plugin-view-tab text-none"
+            :ripple="false"
+          >
+            {{ tm("titles.installedAstrBotPlugins") }}
+          </v-tab>
+          <v-tab
+            value="market"
+            :to="{ name: 'ExtensionMarketplace' }"
+            class="plugin-view-tab text-none"
+            :ripple="false"
+          >
+            {{ tm("tabs.market") }}
+          </v-tab>
+        </v-tabs>
 
-        <div class="d-flex align-center flex-wrap ml-auto" style="gap: 8px">
+        <div class="installed-search-wrap d-flex align-center ml-auto">
           <v-text-field
             :model-value="pluginSearch"
             @update:model-value="pluginSearch = normalizeTextInput($event)"
@@ -238,7 +259,7 @@ const togglePinnedExtension = (extension) => {
             flat
             hide-details
             single-line
-            style="min-width: 220px; max-width: 340px"
+            class="plugin-search-field"
           >
           </v-text-field>
         </div>
@@ -484,7 +505,7 @@ const togglePinnedExtension = (extension) => {
               sourceBindingDialog.loading ||
               sourceBindingDialog.candidates.length === 0 ||
               !sourceBindingDialog.selectedKey ||
-              (selectedSourceBindingCandidate?.install_method === 'github' &&
+              (selectedSourceBindingCandidate?.install_method === 'repository' &&
                 selectedSourceBindingCandidate?.validation_status !== 'valid')
             "
             @click="confirmPluginSourceBinding"
@@ -545,6 +566,64 @@ const togglePinnedExtension = (extension) => {
 </template>
 
 <style scoped>
+.plugin-view-tabs {
+  background: transparent;
+  flex: 0 0 auto;
+}
+
+.plugin-view-tab {
+  color: rgba(var(--v-theme-on-surface), 0.54);
+  font-size: 1.25rem;
+  font-weight: 650;
+  min-width: 0;
+  padding: 0 10px;
+}
+
+.plugin-view-tab:first-child {
+  padding-left: 0;
+}
+
+.plugin-view-tab.v-tab--selected {
+  color: rgba(var(--v-theme-on-surface), 0.92);
+}
+
+.plugin-view-tabs :deep(.v-tabs-slider) {
+  background: rgba(var(--v-theme-on-surface), 0.5);
+  height: 2px;
+}
+
+.installed-header-row {
+  gap: 12px;
+}
+
+.installed-search-wrap {
+  flex: 0 1 340px;
+  min-width: 220px;
+}
+
+.plugin-search-field {
+  width: 100%;
+}
+
+@media (max-width: 700px) {
+  .installed-header-row {
+    align-items: stretch !important;
+    flex-direction: column;
+  }
+
+  .installed-search-wrap {
+    flex: none;
+    margin-left: 0 !important;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .plugin-view-tab {
+    font-size: 1.125rem;
+    padding-inline: 8px;
+  }
+}
+
 .fab-button {
   transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);

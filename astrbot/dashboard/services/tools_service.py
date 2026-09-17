@@ -76,14 +76,14 @@ class ToolsService:
                     if key != "active":
                         server_info[key] = value
 
-                for name_key, runtime in self.tool_mgr.mcp_server_runtime_view.items():
-                    if name_key == name:
-                        mcp_client = runtime.client
-                        server_info["tools"] = [tool.name for tool in mcp_client.tools]
-                        server_info["errlogs"] = mcp_client.server_errlogs
-                        break
-                else:
+                runtime = self.tool_mgr.mcp_server_runtime_view.get(name)
+                server_info["connected"] = runtime is not None
+                if runtime is None:
                     server_info["tools"] = []
+                else:
+                    mcp_client = runtime.client
+                    server_info["tools"] = [tool.name for tool in mcp_client.tools]
+                    server_info["errlogs"] = mcp_client.server_errlogs
 
                 servers.append(server_info)
 
@@ -247,7 +247,7 @@ class ToolsService:
             logger.error(traceback.format_exc())
             raise ToolsServiceError(f"Failed to test MCP connection: {exc!s}") from exc
 
-    def get_tool_list(self) -> list[dict]:
+    async def get_tool_list(self) -> list[dict]:
         try:
             tools = list(self.tool_mgr.func_list)
             existing_names = {tool.name for tool in tools}
@@ -256,15 +256,22 @@ class ToolsService:
                     tools.append(tool)
 
             config_entries = self._get_config_entries()
+            perms_store = (
+                await sp.global_get("tool_permissions", {})
+                if any(not self.tool_mgr.is_builtin_tool(tool.name) for tool in tools)
+                else {}
+            )
             tools_dict = []
             for tool in tools:
-                tools_dict.append(self._serialize_tool(tool, config_entries))
+                tools_dict.append(
+                    self._serialize_tool(tool, config_entries, perms_store)
+                )
             return tools_dict
         except Exception as exc:
             logger.error(traceback.format_exc())
             raise ToolsServiceError(f"Failed to get tool list: {exc!s}") from exc
 
-    def update_tool_permission(self, data: Any) -> str:
+    async def update_tool_permission(self, data: Any) -> str:
         """Set a tool permission level.
 
         Args:
@@ -294,12 +301,7 @@ class ToolsService:
             if not any(t.name == tool_name for t in self.tool_mgr.func_list):
                 raise ToolsServiceError(f"Tool '{tool_name}' not found")
 
-            perms_store = sp.get(
-                "tool_permissions",
-                {},
-                scope="global",
-                scope_id="global",
-            )
+            perms_store = await sp.global_get("tool_permissions", {})
             if not isinstance(perms_store, dict):
                 perms_store = {}
             defaults = perms_store.get("_default", {})
@@ -307,12 +309,7 @@ class ToolsService:
                 defaults = {}
             defaults[tool_name] = permission
             perms_store["_default"] = defaults
-            sp.put(
-                "tool_permissions",
-                perms_store,
-                scope="global",
-                scope_id="global",
-            )
+            await sp.global_put("tool_permissions", perms_store)
 
             return f"Tool '{tool_name}' permission set to {permission}"
         except ToolsServiceError:
@@ -323,7 +320,18 @@ class ToolsService:
                 f"Failed to update tool permission: {exc!s}"
             ) from exc
 
-    def toggle_tool(self, data: Any) -> str:
+    async def toggle_tool(self, data: Any) -> str:
+        """Toggle a tool and wait for its preference change to persist.
+
+        Args:
+            data: Mapping containing the tool name and activation state.
+
+        Returns:
+            Operation result message.
+
+        Raises:
+            ToolsServiceError: If validation or the tool operation fails.
+        """
         try:
             tool_name = data.get("name")
             action = data.get("activate")
@@ -338,13 +346,16 @@ class ToolsService:
 
             if action:
                 try:
-                    ok = self.tool_mgr.activate_llm_tool(tool_name, star_map=star_map)
+                    ok = await self.tool_mgr.activate_llm_tool_async(
+                        tool_name,
+                        star_map=star_map,
+                    )
                 except ValueError as exc:
                     raise ToolsServiceError(
                         f"Failed to activate tool: {exc!s}"
                     ) from exc
             else:
-                ok = self.tool_mgr.deactivate_llm_tool(tool_name)
+                ok = await self.tool_mgr.deactivate_llm_tool_async(tool_name)
 
             if ok:
                 return "Operation successful."
@@ -403,7 +414,14 @@ class ToolsService:
         only_update_active = True
 
         for key, value in server_data.items():
-            if key in ["name", "active", "tools", "errlogs", "oldName"]:
+            if key in [
+                "name",
+                "active",
+                "connected",
+                "tools",
+                "errlogs",
+                "oldName",
+            ]:
                 continue
             if key == "mcpServers":
                 try:
@@ -523,13 +541,19 @@ class ToolsService:
             )
         return config_entries
 
-    def _serialize_tool(self, tool, config_entries: list[dict]) -> dict:
+    def _serialize_tool(
+        self,
+        tool,
+        config_entries: list[dict],
+        perms_store: object,
+    ) -> dict:
         readonly = False
         builtin_config_statuses = []
         builtin_config_tags = []
         if self.tool_mgr.is_builtin_tool(tool.name):
             origin = "builtin"
             origin_name = "AstrBot Core"
+            origin_display_name = origin_name
             readonly = True
             builtin_config_statuses = get_builtin_tool_config_statuses(
                 tool.name,
@@ -541,13 +565,16 @@ class ToolsService:
         elif isinstance(tool, MCPTool):
             origin = "mcp"
             origin_name = tool.mcp_server_name
+            origin_display_name = origin_name
         elif tool.handler_module_path and star_map.get(tool.handler_module_path):
             star = star_map[tool.handler_module_path]
             origin = "plugin"
             origin_name = star.name
+            origin_display_name = star.display_name or star.name
         else:
             origin = "unknown"
             origin_name = "unknown"
+            origin_display_name = origin_name
 
         tool_info = {
             "name": tool.name,
@@ -556,17 +583,12 @@ class ToolsService:
             "active": tool.active,
             "origin": origin,
             "origin_name": origin_name,
+            "origin_display_name": origin_display_name,
             "readonly": readonly,
             "builtin_config_statuses": builtin_config_statuses,
             "builtin_config_tags": builtin_config_tags,
         }
         if not readonly:
-            perms_store = sp.get(
-                "tool_permissions",
-                {},
-                scope="global",
-                scope_id="global",
-            )
             defaults = (
                 perms_store.get("_default", {}) if isinstance(perms_store, dict) else {}
             )

@@ -1,14 +1,14 @@
-try:
-    import faiss
-except ImportError:
-    raise ImportError(
-        "faiss 未安装。请使用 'pip install faiss-cpu' 或 'pip install faiss-gpu' 安装。",
-    )
+from __future__ import annotations
+
 import os
 import shutil
 import tempfile
+from typing import TYPE_CHECKING
 
 import numpy as np
+
+if TYPE_CHECKING:
+    import faiss
 
 # ── Faiss C++ fopen() 在 Windows 上使用 ANSI codepage ──
 # Python 传给 Faiss 的路径是 UTF-8 字节，但 Windows fopen 期望 ANSI 编码，
@@ -61,18 +61,31 @@ def _make_temp_file(prefix: str) -> str:
 
 class EmbeddingStorage:
     def __init__(self, dimension: int, path: str | None = None) -> None:
+        try:
+            import faiss
+        except ImportError:
+            raise ImportError(
+                "faiss 未安装。请使用 'pip install faiss-cpu' 或 'pip install faiss-gpu' 安装。",
+            )
         self.dimension = dimension
         self.path = path
         self.index = None
         if path and os.path.exists(path):
             self.index = self._read_index(path)
         else:
+            if dimension <= 0:
+                raise ValueError(
+                    f"无效的嵌入向量维度: {dimension}。请检查该知识库使用的 Embedding "
+                    "Provider 是否正确配置了 embedding_dimensions。",
+                )
             base_index = faiss.IndexFlatL2(dimension)
             self.index = faiss.IndexIDMap(base_index)
 
     @staticmethod
-    def _read_index(path: str) -> "faiss.Index":
+    def _read_index(path: str) -> faiss.Index:
         """读取 Faiss 索引，兼容含非 ASCII 字符的 Windows 路径。"""
+        import faiss
+
         try:
             return faiss.read_index(path)
         except RuntimeError:
@@ -91,8 +104,10 @@ class EmbeddingStorage:
                     pass
 
     @staticmethod
-    def _write_index(index: "faiss.Index", path: str) -> None:
+    def _write_index(index: faiss.Index, path: str) -> None:
         """保存 Faiss 索引，兼容含非 ASCII 字符的 Windows 路径。"""
+        import faiss
+
         dirname = os.path.dirname(path)
         if dirname:
             os.makedirs(dirname, exist_ok=True)

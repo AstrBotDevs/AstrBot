@@ -8,7 +8,13 @@ from typing import Any
 from astrbot.core.db import BaseDatabase
 from astrbot.core.utils.datetime_utils import normalize_datetime_utc
 
-from .auth_service import ALL_OPEN_API_SCOPES, OPEN_API_SCOPE_INCLUDES
+from .auth_service import (
+    ALL_OPEN_API_SCOPES,
+    CHAT_ADMIN_SCOPE,
+    CONFIG_EDIT_ADMIN_SCOPE,
+    DEFAULT_OPEN_API_SCOPES,
+    OPEN_API_SCOPE_INCLUDES,
+)
 
 
 class ApiKeyServiceError(Exception):
@@ -60,7 +66,7 @@ class ApiKeyService:
     @staticmethod
     def _normalize_scopes(raw_scopes: Any) -> list[str]:
         if raw_scopes is None:
-            return list(ALL_OPEN_API_SCOPES)
+            return list(DEFAULT_OPEN_API_SCOPES)
         if not isinstance(raw_scopes, list):
             raise ApiKeyServiceError("Invalid scopes")
 
@@ -73,6 +79,12 @@ class ApiKeyService:
                 invalid_scopes.append(str(scope))
         if invalid_scopes:
             raise ApiKeyServiceError(f"Invalid scopes: {', '.join(invalid_scopes)}")
+        if CONFIG_EDIT_ADMIN_SCOPE in scopes and "config" not in scopes:
+            raise ApiKeyServiceError(
+                f"{CONFIG_EDIT_ADMIN_SCOPE} requires the config scope"
+            )
+        if CHAT_ADMIN_SCOPE in scopes and "chat" not in scopes:
+            raise ApiKeyServiceError(f"{CHAT_ADMIN_SCOPE} requires the chat scope")
         for scope in tuple(scopes):
             scopes.extend(OPEN_API_SCOPE_INCLUDES.get(scope, ()))
         normalized_scopes = list(dict.fromkeys(scopes))

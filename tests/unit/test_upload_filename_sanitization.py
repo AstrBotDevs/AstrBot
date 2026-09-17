@@ -1,5 +1,7 @@
 """Tests for upload filename sanitization."""
 
+import re
+
 from astrbot.dashboard.services.chat_service import sanitize_upload_filename
 
 
@@ -18,10 +20,7 @@ def test_sanitize_upload_filename_strips_fakepath():
 def test_sanitize_upload_filename_falls_back_for_empty_values():
     generated = sanitize_upload_filename("")
 
-    assert generated
-    assert generated not in {".", ".."}
-    assert "/" not in generated
-    assert "\\" not in generated
+    assert re.fullmatch(r"\d{17}_[0-9a-f]{4}", generated)
 
 
 def test_sanitize_upload_filename_removes_embedded_null_bytes():

@@ -350,6 +350,76 @@ async def test_upload_document_cleans_up_on_storage_failure(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("file_name", "file_type"),
+    [
+        ("guide.docx", "docx"),
+        ("guide.xlsx", "xlsx"),
+        ("guide.xls", "xls"),
+        ("guide.rst", "rst"),
+        ("guide.adoc", "adoc"),
+        ("guide.epub", "epub"),
+    ],
+)
+async def test_upload_document_preserves_markdown_heading_paths(
+    file_name: str,
+    file_type: str,
+    tmp_path: Path,
+    stub_provider_manager_module,
+) -> None:
+    """Structured parser output should retain parent headings in embeddings."""
+    KBHelper = _import_kb_helper()
+
+    helper = KBHelper.__new__(KBHelper)
+    helper.kb = KnowledgeBase(
+        kb_name="Test KB",
+        description="",
+        embedding_provider_id="emb",
+    )
+    helper.kb_db = MagicMock()
+    helper.kb_db.get_db = _failing_get_db()
+    helper.vec_db = AsyncMock()
+    helper.vec_db.insert_batch.side_effect = RuntimeError("stop after chunking")
+    helper.vec_db.delete_documents = AsyncMock()
+    helper.kb_medias_dir = tmp_path / "medias"
+    helper.chunker = AsyncMock()
+
+    parse_result = MagicMock(
+        text=(
+            "# Handbook\n\nOverview.\n\n"
+            "## Installation\n\nInstall the package.\n\n"
+            "### Linux\n\nRun the command."
+        ),
+        media=[],
+    )
+
+    with (
+        patch(
+            "astrbot.core.knowledge_base.kb_helper.select_parser",
+            new=AsyncMock(
+                return_value=MagicMock(parse=AsyncMock(return_value=parse_result)),
+            ),
+        ),
+        patch.object(helper, "_ensure_vec_db", new=AsyncMock()),
+        pytest.raises(KnowledgeBaseUploadError) as exc_info,
+    ):
+        await helper.upload_document(
+            file_name=file_name,
+            file_content=b"structured document",
+            file_type=file_type,
+        )
+
+    assert exc_info.value.stage == "storage"
+    helper.chunker.chunk.assert_not_awaited()
+    contents = helper.vec_db.insert_batch.await_args.kwargs["contents"]
+    embedding_contents = helper.vec_db.insert_batch.await_args.kwargs[
+        "embedding_contents"
+    ]
+    assert "Handbook > Installation\n\n### Linux" in contents[2]
+    assert embedding_contents[2] == f"guide\n\n{contents[2]}"
+
+
+@pytest.mark.asyncio
 async def test_upload_document_cleans_up_on_metadata_failure(
     stub_provider_manager_module,
 ) -> None:
@@ -384,6 +454,14 @@ async def test_upload_document_cleans_up_on_metadata_failure(
 
     assert exc_info.value.stage == "metadata"
     helper.vec_db.insert_batch.assert_awaited_once()
+    assert helper.vec_db.insert_batch.await_args.kwargs["contents"] == [
+        "chunk a",
+        "chunk b",
+    ]
+    assert helper.vec_db.insert_batch.await_args.kwargs["embedding_contents"] == [
+        "demo\n\nchunk a",
+        "demo\n\nchunk b",
+    ]
     helper.vec_db.delete_documents.assert_awaited()
 
 

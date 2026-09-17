@@ -10,11 +10,12 @@ import { MarkdownRender, enableKatex, enableMermaid } from "markstream-vue";
 import "markstream-vue/index.css";
 import "katex/dist/katex.min.css";
 import "highlight.js/styles/github.css";
-import { useI18n } from "@/i18n/composables";
+import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { router } from "@/router";
 import { useRoute } from "vue-router";
 import { useDisplay, useTheme } from "vuetify";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
+import DesktopUpdateProgress from "@/components/shared/DesktopUpdateProgress.vue";
 import { useLanguageSwitcher } from "@/i18n/composables";
 import type { Locale } from "@/i18n/types";
 import AboutPage from "@/views/AboutPage.vue";
@@ -27,10 +28,12 @@ enableMermaid();
 
 const customizer = useCustomizerStore();
 const commonStore = useCommonStore();
+const authStore = useAuthStore();
 const chatHeader = useChatHeaderStore();
 const theme = useTheme();
 const { lgAndUp } = useDisplay();
 const { t } = useI18n();
+const { tm } = useModuleI18n("features/chat");
 const route = useRoute();
 const LAST_BOT_ROUTE_KEY = "astrbot:last_bot_route";
 const LAST_CHAT_ROUTE_KEY = "astrbot:last_chat_route";
@@ -121,6 +124,7 @@ const desktopUpdateHasNewVersion = ref(false);
 const desktopUpdateCurrentVersion = ref("-");
 const desktopUpdateLatestVersion = ref("-");
 const desktopUpdateStatus = ref("");
+const desktopDownloadProgress = ref<AstrBotDesktopAppUpdateProgress | null>(null);
 const isChatPath = computed(
   () => route.path === "/chat" || route.path.startsWith("/chat/"),
 );
@@ -291,6 +295,8 @@ function cancelDesktopUpdate() {
 }
 
 async function openDesktopUpdateDialog() {
+  if (desktopUpdateInstalling.value) return;
+  desktopDownloadProgress.value = null;
   desktopUpdateDialog.value = true;
   desktopUpdateChecking.value = true;
   desktopUpdateInstalling.value = false;
@@ -350,12 +356,20 @@ async function confirmDesktopUpdate() {
   }
 
   desktopUpdateInstalling.value = true;
+  desktopDownloadProgress.value = null;
   desktopUpdateStatus.value = t(
     "core.header.updateDialog.desktopApp.installing",
   );
 
   try {
-    const result = await bridge.installAppUpdate();
+    const result = await bridge.installAppUpdate((progress) => {
+      if (
+        desktopUpdateInstalling.value &&
+        ["downloading", "verifying", "installing"].includes(progress?.phase)
+      ) {
+        desktopDownloadProgress.value = progress;
+      }
+    });
     if (result?.ok) {
       desktopUpdateDialog.value = false;
       return;
@@ -421,7 +435,6 @@ function accountEdit() {
       accountEditStatus.value.message = res.data.message || "";
       setTimeout(() => {
         dialog.value = !dialog.value;
-        const authStore = useAuthStore();
         authStore.logout();
       }, 2000);
     })
@@ -531,7 +544,6 @@ function checkUpdate() {
       }
       if (err.response && err.response.status == 401) {
         console.log("401");
-        const authStore = useAuthStore();
         authStore.logout();
         return;
       }
@@ -1104,8 +1116,9 @@ onMounted(async () => {
       <span class="version-text hidden-xs">{{ botCurrVersion }}</span>
     </div>
 
+    <!-- Keep the chat drawer accessible whenever it is not permanent. -->
     <v-btn
-      v-if="isChatPath && $vuetify.display.smAndDown"
+      v-if="isChatPath && !lgAndUp"
       class="chat-mobile-sidebar-toggle"
       icon
       size="small"
@@ -1141,6 +1154,28 @@ onMounted(async () => {
     </div>
 
     <div class="header-actions" :class="{ 'chat-header-actions': isChatPath }">
+      <v-btn
+        v-if="isChatPath && chatHeader.projectId"
+        class="chat-action-btn workspace-files-trigger"
+        :class="{
+          'workspace-files-trigger--active': chatHeader.workspaceFilesOpen,
+        }"
+        variant="text"
+        size="small"
+        rounded="sm"
+        icon
+        :title="tm('workspaceFiles.open')"
+        @click="chatHeader.TOGGLE_WORKSPACE_FILES"
+      >
+        <v-icon size="20">
+          {{
+            chatHeader.workspaceFilesOpen
+              ? "mdi-folder-open-outline"
+              : "mdi-folder-outline"
+          }}
+        </v-icon>
+      </v-btn>
+
       <!-- Bot/Chat mode switch - single button, hidden in chat mobile menu -->
       <v-btn
         v-if="!isChatPath || !$vuetify.display.smAndDown"
@@ -1352,6 +1387,19 @@ onMounted(async () => {
         <v-list-item-title>{{
           t("core.header.accountDialog.title")
         }}</v-list-item-title>
+      </v-list-item>
+
+      <v-divider class="my-1" />
+
+      <v-list-item
+        @click="authStore.logout()"
+        class="styled-menu-item text-error"
+        prepend-icon="mdi-logout"
+        rounded="md"
+      >
+        <v-list-item-title>
+          {{ t("core.header.buttons.logout") }}
+        </v-list-item-title>
       </v-list-item>
       </StyledMenu>
     </div>
@@ -1743,7 +1791,11 @@ onMounted(async () => {
       </v-card>
     </v-dialog>
 
-    <v-dialog v-model="desktopUpdateDialog" max-width="460">
+    <v-dialog
+      v-model="desktopUpdateDialog"
+      :persistent="desktopUpdateInstalling"
+      max-width="460"
+    >
       <v-card>
         <v-card-title class="text-h3 pa-4 pb-0 pl-6">
           {{ t("core.header.updateDialog.desktopApp.title") }}
@@ -1771,7 +1823,11 @@ onMounted(async () => {
               />
             </div>
           </v-alert>
-          <div class="text-caption mt-3">
+          <DesktopUpdateProgress
+            v-if="desktopUpdateInstalling"
+            :progress="desktopDownloadProgress"
+          />
+          <div v-else class="text-caption mt-3" role="status">
             {{ desktopUpdateStatus }}
           </div>
         </v-card-text>
@@ -2120,6 +2176,14 @@ onMounted(async () => {
 .chat-header-actions {
   gap: 4px;
   margin-right: 0;
+}
+
+.workspace-files-trigger {
+  color: rgb(var(--v-theme-on-surface));
+}
+
+.workspace-files-trigger--active {
+  background: rgba(var(--v-theme-on-surface), 0.08) !important;
 }
 
 .mode-switch-btn {

@@ -3,8 +3,8 @@ import aiohttp
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
 from astrbot.core.config.default import VERSION
+from astrbot.core.dashboard_assets import get_dashboard_version
 from astrbot.core.star import command_management
-from astrbot.core.utils.io import get_dashboard_version
 
 
 class HelpCommand:

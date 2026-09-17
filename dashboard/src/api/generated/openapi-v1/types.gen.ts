@@ -83,6 +83,10 @@ export type ChatFlags = {
      * Enable streaming model output for this request. This value takes priority over the legacy top-level enable_streaming field.
      */
     enable_streaming?: boolean;
+    /**
+     * Display reasoning content for this WebChat request independently of the global display_reasoning_text setting.
+     */
+    enable_reasoning?: boolean;
 };
 
 export type ChatMessagePatchRequest = {
@@ -106,15 +110,24 @@ export type ChatProjectRequest = {
     title?: string;
     emoji?: string;
     description?: string;
+    /**
+     * Workspace mode. API key callers may use only session or project; project is the default.
+     */
     workspace_type?: 'session' | 'project' | 'custom';
+    /**
+     * Dashboard-only custom workspace path. API key callers cannot set this field.
+     */
     workspace_path?: string;
 };
 
+/**
+ * Workspace mode. API key callers may use only session or project; project is the default.
+ */
 export type workspace_type = 'session' | 'project' | 'custom';
 
 export type ChatRequest = {
     /**
-     * Caller-declared WebChat sender/session owner. This value is used as the message sender identity and may participate in sender-ID-based command permission checks. Treat chat-scoped API keys as trusted backend credentials and map or validate usernames before accepting end-user input.
+     * Caller-declared WebChat sender/session owner. Configured AstrBot administrator IDs require the chat:admin API key sub-scope.
      */
     username?: string;
     session_id?: string;
@@ -231,7 +244,7 @@ export type ConversationRef = {
 
 export type CreateApiKeyRequest = {
     name: string;
-    scopes?: Array<('bot' | 'provider' | 'persona' | 'im' | 'config' | 'chat' | 'data' | 'file' | 'plugin' | 'mcp' | 'skill')>;
+    scopes?: Array<('bot' | 'provider' | 'persona' | 'im' | 'config' | 'config:edit_admin' | 'chat' | 'chat:admin' | 'data' | 'file' | 'plugin' | 'mcp' | 'skill')>;
     expires_at?: string;
     expires_in_days?: number;
 };
@@ -496,14 +509,14 @@ export type PluginConfigFileDeleteRequest = {
     path: string;
 };
 
-export type PluginGithubInstallRequest = {
+export type PluginRepositoryInstallRequest = {
     /**
-     * GitHub URL or owner/repository slug.
+     * GitHub shorthand, HTTP(S), SSH, or SCP-style Git repository locator.
      */
     repository: string;
     ref?: string;
     /**
-     * Optional downloadable ZIP URL to use instead of GitHub archive resolution.
+     * Optional downloadable ZIP URL to use instead of repository archive resolution.
      */
     download_url?: string;
     proxy?: string;
@@ -582,6 +595,41 @@ export type ReorderRequest = {
         sort_order: number;
     }>;
 };
+
+/**
+ * The AstrBot backend runtime, including when running inside a container. Values are captured at application startup.
+ */
+export type RuntimeInfo = {
+    /**
+     * Lowercase platform.system() value, commonly linux, darwin, or windows.
+     */
+    os: string;
+    /**
+     * Unmodified platform.machine() value, such as x86_64, AMD64, arm64, or aarch64. May be empty if unknown.
+     */
+    arch: string;
+    /**
+     * Local process sandbox startup check, captured when AstrBot starts. It does not verify DNS resolution or every permitted operation.
+     */
+    sandbox: {
+        backend: ('bubblewrap' | 'seatbelt') | null;
+        /**
+         * detected means the executable was found and a minimal workspace sandbox launched successfully; missing means the corresponding executable was not found; unavailable means it was found but sandbox startup failed; unsupported means this platform has no Local process sandbox backend. These identifiers are independent of the UI language.
+         */
+        status: 'detected' | 'missing' | 'unavailable' | 'unsupported';
+        /**
+         * Bounded startup error detail, included when status is unavailable. Restart AstrBot after fixing the environment to refresh the check.
+         */
+        error?: string;
+    };
+};
+
+export type backend = 'bubblewrap' | 'seatbelt';
+
+/**
+ * detected means the executable was found and a minimal workspace sandbox launched successfully; missing means the corresponding executable was not found; unavailable means it was found but sandbox startup failed; unsupported means this platform has no Local process sandbox backend. These identifiers are independent of the UI language.
+ */
+export type status = 'detected' | 'missing' | 'unavailable' | 'unsupported';
 
 export type SessionGroupRequest = {
     name?: string;
@@ -1367,6 +1415,10 @@ export type GetChatSessionData = {
     path: {
         session_id: string;
     };
+    query?: {
+        page?: number;
+        page_size?: number;
+    };
 };
 
 export type GetChatSessionResponse = (SuccessEnvelope);
@@ -1533,6 +1585,45 @@ export type ListChatProjectSessionsData = {
 export type ListChatProjectSessionsResponse = (SuccessEnvelope);
 
 export type ListChatProjectSessionsError = unknown;
+
+export type ListChatProjectWorkspaceFilesData = {
+    path: {
+        project_id: string;
+    };
+    query?: {
+        path?: string;
+    };
+};
+
+export type ListChatProjectWorkspaceFilesResponse = (SuccessEnvelope);
+
+export type ListChatProjectWorkspaceFilesError = unknown;
+
+export type GetChatProjectWorkspaceFileData = {
+    path: {
+        project_id: string;
+    };
+    query: {
+        path: string;
+    };
+};
+
+export type GetChatProjectWorkspaceFileResponse = (SuccessEnvelope);
+
+export type GetChatProjectWorkspaceFileError = unknown;
+
+export type DownloadChatProjectWorkspaceFileData = {
+    path: {
+        project_id: string;
+    };
+    query: {
+        path: string;
+    };
+};
+
+export type DownloadChatProjectWorkspaceFileResponse = ((Blob | File));
+
+export type DownloadChatProjectWorkspaceFileError = unknown;
 
 export type AddChatProjectSessionData = {
     path: {
@@ -1871,6 +1962,23 @@ export type UpdatePluginConfigResponse = (SuccessEnvelope);
 
 export type UpdatePluginConfigError = unknown;
 
+export type UpdatePluginLogLevelData = {
+    body: {
+        /**
+         * Log level name, or null to follow the global level.
+         */
+        level?: ('DEBUG' | 'INFO' | 'WARNING' | 'ERROR' | 'CRITICAL') | null;
+        [key: string]: unknown | string;
+    };
+    path: {
+        plugin_id: string;
+    };
+};
+
+export type UpdatePluginLogLevelResponse = (SuccessEnvelope);
+
+export type UpdatePluginLogLevelError = unknown;
+
 export type GetPluginConfigSchemaData = {
     path: {
         plugin_id: string;
@@ -2040,12 +2148,20 @@ export type ReloadFailedPluginResponse = (SuccessEnvelope);
 export type ReloadFailedPluginError = unknown;
 
 export type InstallPluginFromGithubData = {
-    body: PluginGithubInstallRequest;
+    body: PluginRepositoryInstallRequest;
 };
 
 export type InstallPluginFromGithubResponse = (SuccessEnvelope);
 
 export type InstallPluginFromGithubError = unknown;
+
+export type InstallPluginFromGitData = {
+    body: PluginRepositoryInstallRequest;
+};
+
+export type InstallPluginFromGitResponse = (SuccessEnvelope);
+
+export type InstallPluginFromGitError = unknown;
 
 export type InstallPluginFromUrlData = {
     body: PluginUrlInstallRequest;
@@ -3078,6 +3194,18 @@ export type ListConversationsData = {
          */
         exclude_platforms?: string;
         /**
+         * Paginate by UMO and return all conversation summaries for each selected session.
+         */
+        group_by_session?: boolean;
+        /**
+         * Include full message history in each conversation.
+         */
+        include_history?: boolean;
+        /**
+         * Match conversation titles or message content.
+         */
+        keyword?: string;
+        /**
          * Comma-separated message types.
          */
         message_types?: string;
@@ -3089,6 +3217,12 @@ export type ListConversationsData = {
          */
         platforms?: string;
         search?: string;
+        sort_by?: 'created_at' | 'updated_at';
+        sort_order?: 'asc' | 'desc';
+        /**
+         * Match the unified message origin.
+         */
+        umo?: string;
         user_id?: string;
     };
 };
@@ -3096,6 +3230,10 @@ export type ListConversationsData = {
 export type ListConversationsResponse = (SuccessEnvelope);
 
 export type ListConversationsError = unknown;
+
+export type GetConversationFilterOptionsResponse = (SuccessEnvelope);
+
+export type GetConversationFilterOptionsError = unknown;
 
 export type BatchDeleteConversationsData = {
     body: ConversationBatchDeleteRequest;
@@ -3187,7 +3325,11 @@ export type GetProviderTokenStatsResponse = (SuccessEnvelope);
 
 export type GetProviderTokenStatsError = unknown;
 
-export type GetVersionResponse = (SuccessEnvelope);
+export type GetVersionResponse = ((SuccessEnvelope & {
+    data?: {
+        runtime: RuntimeInfo;
+    };
+}));
 
 export type GetVersionError = unknown;
 

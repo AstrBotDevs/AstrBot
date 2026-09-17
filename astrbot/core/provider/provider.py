@@ -12,6 +12,7 @@ from astrbot.core.provider.entities import (
     RerankResult,
     ToolCallsResult,
 )
+from astrbot.core.provider.headers import build_provider_headers
 from astrbot.core.provider.register import provider_cls_map
 from astrbot.core.utils.astrbot_path import get_astrbot_path
 
@@ -31,6 +32,9 @@ class AbstractProvider(abc.ABC):
         super().__init__()
         self.model_name = ""
         self.provider_config = provider_config
+        self.request_headers = build_provider_headers(
+            provider_config.get("custom_headers")
+        )
 
     def set_model(self, model_name: str) -> None:
         """Set the current model name"""
@@ -363,7 +367,7 @@ class EmbeddingProvider(AbstractProvider):
 
         """
         semaphore = asyncio.Semaphore(tasks_limit)
-        all_embeddings: list[list[float]] = []
+        batch_results: dict[int, list[list[float]]] = {}
         failed_batches: list[tuple[int, list[str]]] = []
         completed_count = 0
         total_count = len(texts)
@@ -374,7 +378,7 @@ class EmbeddingProvider(AbstractProvider):
                 for attempt in range(max_retries):
                     try:
                         batch_embeddings = await self.get_embeddings(batch_texts)
-                        all_embeddings.extend(batch_embeddings)
+                        batch_results[batch_idx] = batch_embeddings
                         completed_count += len(batch_texts)
                         if progress_callback:
                             await progress_callback(completed_count, total_count)
@@ -406,6 +410,9 @@ class EmbeddingProvider(AbstractProvider):
             )
             raise Exception(error_msg)
 
+        all_embeddings: list[list[float]] = []
+        for batch_idx in range(len(tasks)):
+            all_embeddings.extend(batch_results[batch_idx])
         return all_embeddings
 
 

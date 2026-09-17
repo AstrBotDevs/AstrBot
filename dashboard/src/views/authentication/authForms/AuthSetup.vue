@@ -101,7 +101,7 @@ async function validate(values: any, { setErrors }: any) {
   .setup-hint {
     display: block;
     margin-top: 8px;
-    color: grey;
+    color: rgba(var(--v-theme-on-surface), 0.62);
   }
 
   .setup-btn {

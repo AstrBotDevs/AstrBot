@@ -6,7 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from astrbot.core import LogBroker
+from astrbot.core import DEMO_MODE, LogBroker
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.log import LogManager
@@ -45,10 +45,7 @@ from astrbot.dashboard.services.subagent_service import SubAgentService
 from astrbot.dashboard.services.t2i_service import T2iService
 from astrbot.dashboard.services.tools_service import ToolsService
 from astrbot.dashboard.services.update_service import (
-    DEMO_MODE,
     UpdateService,
-    call_download_dashboard,
-    call_extract_dashboard,
     call_get_dashboard_version,
     call_pip_install,
 )
@@ -103,8 +100,9 @@ def create_dashboard_asgi_app(
     app.state.jwt_secret = jwt_secret
     app.state.dashboard_static_folder = static_folder
     log_broker = getattr(core_lifecycle, "log_broker", None) or LogBroker()
+    stats = StatService(db, core_lifecycle, core_lifecycle.astrbot_config)
     app.state.services = SimpleNamespace(
-        config_profiles=ConfigProfileService(core_lifecycle, db),
+        config_profiles=ConfigProfileService(core_lifecycle, db, runtime=stats.runtime),
         config_display=ConfigDisplayService(core_lifecycle),
         config_files=ConfigFileService(core_lifecycle),
         config_routes=ConfigRoutingService(core_lifecycle),
@@ -132,15 +130,13 @@ def create_dashboard_asgi_app(
         open_api=OpenApiService(db, core_lifecycle),
         sessions=SessionManagementService(core_lifecycle, db),
         skills=SkillsService(core_lifecycle),
-        stats=StatService(db, core_lifecycle, core_lifecycle.astrbot_config),
+        stats=stats,
         subagents=SubAgentService(core_lifecycle),
         t2i=T2iService(core_lifecycle),
         tools=ToolsService(core_lifecycle),
         updates=UpdateService(
-            core_lifecycle.astrbot_updator,
+            core_lifecycle.astrbot_updater,
             core_lifecycle,
-            download_dashboard_func=call_download_dashboard,
-            extract_dashboard_func=call_extract_dashboard,
             get_dashboard_version_func=call_get_dashboard_version,
             pip_install_func=call_pip_install,
             demo_mode=DEMO_MODE,

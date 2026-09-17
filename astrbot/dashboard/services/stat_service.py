@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import ast
 import asyncio
+import platform
 import re
+import shutil
+import tempfile
 import threading
 import time
 import traceback
@@ -13,24 +16,29 @@ from pathlib import Path
 
 import aiohttp
 import psutil
-from sqlmodel import col, select
+from sqlmodel import col, func, select
 
 from astrbot.core import DEMO_MODE, logger
+from astrbot.core.computer.process_sandbox import SandboxSpec, create_process_sandbox
 from astrbot.core.config import VERSION
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
+from astrbot.core.dashboard_assets import (
+    get_dashboard_version,
+)
 from astrbot.core.db import BaseDatabase
-from astrbot.core.db.po import ProviderStat
+from astrbot.core.db.po import PlatformStat, ProviderStat
 from astrbot.core.desktop_runtime import (
     DESKTOP_MANAGED_RESTART_MESSAGE,
     is_desktop_managed_backend,
+    is_desktop_session_auth_enabled,
 )
-from astrbot.core.utils.astrbot_path import get_astrbot_path
+from astrbot.core.umo_alias import build_umo_alias_map, serialize_umo_alias
+from astrbot.core.utils.astrbot_path import get_astrbot_path, get_astrbot_temp_path
 from astrbot.core.utils.auth_password import (
     is_default_dashboard_password,
     is_md5_dashboard_password,
 )
-from astrbot.core.utils.io import get_dashboard_dist_version, get_dashboard_version
 from astrbot.core.utils.storage_cleaner import StorageCleaner
 from astrbot.core.utils.version_comparator import VersionComparator
 from astrbot.dashboard.password_state import (
@@ -56,6 +64,52 @@ class StatService:
         self.config = config
         self.storage_cleaner = StorageCleaner(config)
 
+        # Probe sandbox startup once; restart AstrBot to refresh this snapshot.
+        system = platform.system().lower()
+        sandbox = {"backend": None, "status": "unsupported"}
+        if system == "linux":
+            sandbox = {
+                "backend": "bubblewrap",
+                "status": "detected" if shutil.which("bwrap") else "missing",
+            }
+        elif system == "darwin":
+            sandbox = {
+                "backend": "seatbelt",
+                "status": (
+                    "detected"
+                    if shutil.which("sandbox-exec", path="/usr/bin")
+                    == "/usr/bin/sandbox-exec"
+                    else "missing"
+                ),
+            }
+        if sandbox["status"] == "detected":
+            try:
+                temp_root = Path(get_astrbot_temp_path())
+                temp_root.mkdir(parents=True, exist_ok=True)
+                with tempfile.TemporaryDirectory(
+                    prefix="sandbox-probe-", dir=temp_root
+                ) as workspace:
+                    result = create_process_sandbox().run(
+                        ["/bin/sh", "-c", ":"],
+                        SandboxSpec(workspace=Path(workspace)),
+                        timeout=5,
+                        output_limit=1024,
+                    )
+                if result.returncode != 0:
+                    raise RuntimeError(
+                        result.stderr.decode("utf-8", errors="replace").strip()
+                        or f"Sandbox probe exited with code {result.returncode}."
+                    )
+            except (OSError, RuntimeError) as exc:
+                sandbox.update(
+                    status="unavailable", error=str(exc)[:1024] or type(exc).__name__
+                )
+        self.runtime = {
+            "os": system,
+            "arch": platform.machine(),
+            "sandbox": sandbox,
+        }
+
     async def restart_core(self) -> None:
         if DEMO_MODE:
             raise StatServiceError(
@@ -73,6 +127,8 @@ class StatService:
         return {"hours": hours, "minutes": minutes, "seconds": seconds}
 
     async def is_default_cred(self):
+        if is_desktop_session_auth_enabled():
+            return False
         password_change_required = await is_password_change_required(
             self.db_helper,
             self.config,
@@ -94,6 +150,15 @@ class StatService:
         ) and not DEMO_MODE
 
     async def get_version(self) -> dict:
+        if is_desktop_session_auth_enabled():
+            return {
+                "version": VERSION,
+                "dashboard_version": await get_dashboard_version(),
+                "change_pwd_hint": False,
+                "md5_pwd_hint": False,
+                "password_upgrade_required": False,
+                "runtime": self.runtime,
+            }
         storage_upgraded = await is_password_storage_upgraded(
             self.db_helper,
             self.config,
@@ -110,6 +175,7 @@ class StatService:
             "change_pwd_hint": await self.is_default_cred(),
             "md5_pwd_hint": md5_pwd_hint,
             "password_upgrade_required": not storage_upgraded,
+            "runtime": self.runtime,
         }
 
     async def get_public_versions(
@@ -154,7 +220,7 @@ class StatService:
         dashboard_version = None
         try:
             if dashboard_static_folder:
-                dashboard_version = get_dashboard_dist_version(
+                dashboard_version = await get_dashboard_version(
                     Path(dashboard_static_folder)
                 )
             if dashboard_version is None:
@@ -197,25 +263,52 @@ class StatService:
 
     async def get_stat(self, offset_sec: int) -> dict:
         try:
-            stat = self.db_helper.get_base_stats(offset_sec)
             now = int(time.time())
             start_time = now - offset_sec
-            message_time_based_stats = []
 
+            async with self.db_helper.get_db() as session:
+                window_start = datetime.now() - timedelta(seconds=offset_sec)
+                result = await session.execute(
+                    select(PlatformStat)
+                    .where(PlatformStat.timestamp >= window_start)
+                    .order_by(col(PlatformStat.timestamp)),
+                )
+                # Convert to (epoch_seconds, count, platform_id) tuples once.
+                rows = [
+                    (int(r.timestamp.timestamp()), r.count, r.platform_id)
+                    for r in result.scalars().all()
+                ]
+                total_messages = (
+                    await session.execute(
+                        select(func.coalesce(func.sum(PlatformStat.count), 0)),
+                    )
+                ).scalar_one()
+
+            # Bucket message counts into hourly slots for the time series chart.
+            message_time_based_stats = []
             idx = 0
             for bucket_end in range(start_time, now, 3600):
                 cnt = 0
-                while (
-                    idx < len(stat.platform)
-                    and stat.platform[idx].timestamp < bucket_end
-                ):
-                    cnt += stat.platform[idx].count
+                while idx < len(rows) and rows[idx][0] < bucket_end:
+                    cnt += rows[idx][1]
                     idx += 1
                 message_time_based_stats.append([bucket_end, cnt])
 
-            stat_dict = stat.__dict__
+            # Aggregate per-platform message counts within the window.
+            per_platform: dict[str, int] = defaultdict(int)
+            for _, count, platform_id in rows:
+                per_platform[platform_id] += count
+            platform_stats = [
+                {
+                    "name": platform_id,
+                    "count": count,
+                    "timestamp": int(window_start.timestamp()),
+                }
+                for platform_id, count in per_platform.items()
+            ]
 
-            cpu_percent = psutil.cpu_percent(interval=0.5)
+            process_cpu = await asyncio.to_thread(psutil.Process().cpu_percent, 0.5)
+            cpu_percent = process_cpu / (psutil.cpu_count() or 1)
             thread_count = threading.active_count()
 
             plugins = self.core_lifecycle.star_context.get_all_stars()
@@ -232,29 +325,24 @@ class StatService:
                 int(time.time()) - self.core_lifecycle.start_time,
             )
 
-            stat_dict.update(
-                {
-                    "platform": self.db_helper.get_grouped_base_stats(
-                        offset_sec,
-                    ).platform,
-                    "message_count": self.db_helper.get_total_message_count() or 0,
-                    "platform_count": len(
-                        self.core_lifecycle.platform_manager.get_insts(),
-                    ),
-                    "plugin_count": len(plugins),
-                    "plugins": plugin_info,
-                    "message_time_series": message_time_based_stats,
-                    "running": running_time,
-                    "memory": {
-                        "process": psutil.Process().memory_info().rss >> 20,
-                        "system": psutil.virtual_memory().total >> 20,
-                    },
-                    "cpu_percent": round(cpu_percent, 1),
-                    "thread_count": thread_count,
-                    "start_time": self.core_lifecycle.start_time,
+            return {
+                "platform": platform_stats,
+                "message_count": total_messages,
+                "platform_count": len(
+                    self.core_lifecycle.platform_manager.get_insts(),
+                ),
+                "plugin_count": len(plugins),
+                "plugins": plugin_info,
+                "message_time_series": message_time_based_stats,
+                "running": running_time,
+                "memory": {
+                    "process": psutil.Process().memory_info().rss >> 20,
+                    "system": psutil.virtual_memory().total >> 20,
                 },
-            )
-            return stat_dict
+                "cpu_percent": round(cpu_percent, 1),
+                "thread_count": thread_count,
+                "start_time": self.core_lifecycle.start_time,
+            }
         except Exception as exc:
             logger.error(traceback.format_exc())
             raise StatServiceError(str(exc)) from exc
@@ -404,14 +492,33 @@ class StatService:
                     reverse=True,
                 )
             ]
-            range_by_umo_data = [
-                {"umo": umo, "tokens": tokens}
-                for umo, tokens in sorted(
-                    total_by_umo.items(),
-                    key=lambda item: item[1],
-                    reverse=True,
+            platform_type_by_id = {"webchat": "webchat"}
+            for platform_config in self.config.get("platform", []):
+                platform_id = platform_config.get("id")
+                platform_type = platform_config.get("type")
+                if platform_id and platform_type:
+                    platform_type_by_id[str(platform_id)] = str(platform_type)
+            alias_map = build_umo_alias_map(
+                await self.db_helper.get_umo_aliases(list(total_by_umo))
+            )
+            range_by_umo_data = []
+            for umo, tokens in sorted(
+                total_by_umo.items(),
+                key=lambda item: item[1],
+                reverse=True,
+            ):
+                alias_info = serialize_umo_alias(alias_map.get(umo), umo)
+                range_by_umo_data.append(
+                    {
+                        "umo": umo,
+                        "display_name": alias_info["display_name"],
+                        "platform_type": platform_type_by_id.get(
+                            umo.split(":", 1)[0],
+                            umo.split(":", 1)[0],
+                        ),
+                        "tokens": tokens,
+                    }
                 )
-            ]
 
             return {
                 "days": days,

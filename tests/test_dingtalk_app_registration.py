@@ -15,8 +15,11 @@ def test_dingtalk_registration_defaults(monkeypatch):
     assert dingtalk_registration_source() == DEFAULT_DINGTALK_REGISTRATION_SOURCE
 
 
-def test_dingtalk_registration_poll_result_maps_waiting_and_success():
+def test_dingtalk_registration_poll_result_maps_pending_states_and_success():
     assert dingtalk_registration_poll_result({"status": "WAITING"}) == {
+        "status": "pending"
+    }
+    assert dingtalk_registration_poll_result({"status": "CREATING"}) == {
         "status": "pending"
     }
 

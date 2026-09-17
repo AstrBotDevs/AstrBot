@@ -6,7 +6,7 @@ from astrbot.dashboard.responses import error, ok
 from astrbot.dashboard.schemas import BotConfigRequest, EnabledPatch
 from astrbot.dashboard.services.config_service import BotConfigService
 
-from .auth import AuthContext, require_scope
+from .auth import AuthContext, ScopeDependency
 
 router = APIRouter(tags=["Bots"])
 legacy_router = APIRouter(
@@ -16,8 +16,7 @@ legacy_router = APIRouter(
 )
 
 
-async def require_bot_scope(request: Request) -> AuthContext:
-    return await require_scope(request, "bot")
+require_bot_scope = ScopeDependency("bot")
 
 
 def get_service(request: Request) -> BotConfigService:
