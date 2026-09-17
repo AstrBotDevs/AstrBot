@@ -16,9 +16,7 @@ And other prompts with search intent to trigger the model to invoke the search t
 
 AstrBot currently supports 7 web search providers: `Tavily`, `BoCha`, `Baidu AI Search`, `Brave`, `Firecrawl`,  `Exa` ,and `AnySearch`.
 
-![image](https://files.astrbot.app/docs/source/images/websearch/image.png)
-
-Go to `Configuration`, scroll down to find Web Search, where you can select `Tavily`, `BoCha`, `Baidu AI Search`, `Brave`, `Firecrawl`,  `Exa` ,or `AnySearch`.
+Open `Config`, select the profile to edit, and enable Web Search under `AI → Capabilities → Web Search`, where you can select `Tavily`, `BoCha`, `Baidu AI Search`, `Brave`, `Firecrawl`,  `Exa` ,or `AnySearch`. Fill in the required settings and click `Save Configuration` at the bottom right.
 
 ### Tavily
 

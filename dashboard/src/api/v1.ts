@@ -43,6 +43,7 @@ import {
   type PluginValidateRepoRequest,
   type PluginConfigFileDeleteRequest,
   type ProviderConfigRequest,
+  type RuntimeInfo,
   type BatchSessionProviderRequest,
   type BatchSessionServiceRequest,
   type SetupAuthRequest,
@@ -120,6 +121,7 @@ export interface VersionData {
   change_pwd_hint?: boolean;
   md5_pwd_hint?: boolean;
   password_upgrade_required?: boolean;
+  runtime?: RuntimeInfo;
   [key: string]: unknown;
 }
 
@@ -189,6 +191,11 @@ export interface ChatSessionListParams {
   page?: number;
   page_size?: number;
   username?: string;
+}
+
+export interface ChatHistoryPageParams {
+  page?: number;
+  page_size?: number;
 }
 
 export interface CronJobListParams {
@@ -822,9 +829,12 @@ export const chatApi = {
       }),
     );
   },
-  getSession(sessionId: string) {
+  getSession(sessionId: string, params?: ChatHistoryPageParams) {
     return typed<any>(
-      openApiV1.getChatSession({ path: { session_id: sessionId } }),
+      openApiV1.getChatSession({
+        path: { session_id: sessionId },
+        query: generatedQuery(params),
+      }),
     );
   },
   updateSession(sessionId: string, payload: ChatSessionPatchRequest) {

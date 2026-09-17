@@ -9,7 +9,10 @@ from astrbot.core import db_helper, logger
 from astrbot.core.db.po import CommandConfig
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
-from astrbot.core.star.filter.permission import PermissionType, PermissionTypeFilter
+from astrbot.core.star.filter.permission import (
+    COMMAND_PERMISSION_TYPES,
+    PermissionTypeFilter,
+)
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import StarHandlerMetadata, star_handlers_registry
 
@@ -148,8 +151,10 @@ async def update_command_permission(
     if not descriptor:
         raise ValueError("指定的处理函数不存在或不是指令。")
 
-    if permission_type not in ["admin", "member"]:
-        raise ValueError("权限类型必须为 admin 或 member。")
+    if permission_type not in COMMAND_PERMISSION_TYPES:
+        raise ValueError(
+            "Permission must be one of: " + ", ".join(COMMAND_PERMISSION_TYPES) + "."
+        )
 
     handler = descriptor.handler
     found_plugin = star_map.get(handler.handler_module_path)
@@ -168,9 +173,7 @@ async def update_command_permission(
 
     # 2. Update Runtime Filter
     found_permission_filter = False
-    target_perm_type = (
-        PermissionType.ADMIN if permission_type == "admin" else PermissionType.MEMBER
-    )
+    target_perm_type = COMMAND_PERMISSION_TYPES[permission_type]
 
     for filter_ in handler.event_filters:
         if isinstance(filter_, PermissionTypeFilter):
@@ -363,10 +366,13 @@ def _locate_primary_filter(
 def _determine_permission(handler: StarHandlerMetadata) -> str:
     for filter_ref in handler.event_filters:
         if isinstance(filter_ref, PermissionTypeFilter):
-            return (
-                "admin"
-                if filter_ref.permission_type == PermissionType.ADMIN
-                else "member"
+            return next(
+                (
+                    name
+                    for name, permission in COMMAND_PERMISSION_TYPES.items()
+                    if filter_ref.permission_type == permission
+                ),
+                "member",
             )
     return "everyone"
 

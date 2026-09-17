@@ -48,18 +48,15 @@ We need to record the `bot_id` for later use.
 
 After completing all the preparation work, we can now configure Coze in AstrBot.
 
-Go to AstrBot Admin Panel -> Service Provider -> Add Service Provider -> Coze to enter the configuration page.
+In the WebUI, open **Config**, select the profile to edit, and open **AI**. Click **More actions** (`…`) beside the heading → **Change Execution Mode**, select **Coze**, read and check the reset acknowledgement, then click **Use This Mode**. Make sure **Enable AI** is on, then enter the connection settings on this page. Switching resets the current mode's configuration; see [Agent Runner](../../use/agent-runner.md).
 
-![Coze Provider](https://files.astrbot.app/docs/source/images/coze/image_8.png)
-
-Fill in the API Key and bot_id you just created, then click Save.
+Fill in the API Key and bot_id you just created, then click **Save Configuration**.
 
 > Other configuration notes:
 >
 > - API Base URL: Generally no modification is needed. If you are using the international version of Coze, change this to: "https://api.coze.com"
 > - Let Coze manage conversation history: As described.
 
-## Select Agent Runner
+## Save the Configuration
 
-Go to the Configuration page in the left sidebar, click "Agent Execution Method", select "Coze", then select the ID of the Coze Agent Runner you just created in the new configuration options that appear below, and click "Save" in the bottom right corner to complete the configuration.
-
+When all fields are complete, click **Save Configuration** at the bottom right. This profile uses the selected execution mode and connection settings directly; no separate runner provider or provider ID selection is needed.
