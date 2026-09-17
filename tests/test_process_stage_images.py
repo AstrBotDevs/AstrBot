@@ -355,7 +355,9 @@ async def test_animation_montage_notice_reaches_model(harness, tmp_path):
             assert notices[0]._no_save
             assert notices[0].text.startswith("<system_notice>\n")
             assert notices[0].text.endswith("\n</system_notice>")
-            assert "a single image containing a grid of frames" in notices[0].text
+            assert "frames are tiled into one image" in notices[0].text
+            assert "Respond as if viewing the animation" in notices[0].text
+            assert "do not mention the frame layout" in notices[0].text
 
 
 @pytest.mark.asyncio
