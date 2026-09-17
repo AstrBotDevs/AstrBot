@@ -70,7 +70,10 @@ async def test_prepare_cancel_keeps_resolver_source_until_worker_exits(
     monkeypatch.setattr(media_utils, "_compress_image_sync", blocked)
     encoded = base64.b64encode(_png()).decode()
     task = asyncio.create_task(
-        media_utils.prepare_image_source(f"data:image/png;base64,{encoded}")
+        media_utils.prepare_image_source(
+            f"data:image/png;base64,{encoded}",
+            options=media_utils.ImagePreparationOptions(max_size=2),
+        )
     )
     assert await asyncio.to_thread(entered.wait, 2)
     assert source_seen["path"] is not None

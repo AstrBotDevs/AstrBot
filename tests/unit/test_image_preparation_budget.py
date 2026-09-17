@@ -338,6 +338,7 @@ async def test_agent_does_not_fall_back_to_original_on_resource_error(
 async def test_cancelled_worker_cleans_after_exit(tmp_path, monkeypatch, timeout):
     source = tmp_path / "source"
     source.write_bytes(b"source")
+    monkeypatch.setattr(media_utils, "IMAGE_COMPRESS_DEFAULT_MIN_FILE_SIZE_BYTES", 1)
     output = tmp_path / "worker-output"
     entered = threading.Event()
     release = threading.Event()

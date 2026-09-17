@@ -13,6 +13,8 @@ from pathlib import Path
 
 from PIL import Image
 
+from astrbot.core.utils.media_utils import validate_image_input_size
+
 
 @dataclass(frozen=True, slots=True)
 class ImageMediaRef:
@@ -252,6 +254,20 @@ def persist_inline_image_refs(
         A new history list. Non-inline URLs remain unchanged for compatibility.
     """
     import copy
+
+    for message in history:
+        parts = message.get("content") if isinstance(message, dict) else None
+        if not isinstance(parts, list):
+            continue
+        for part in parts:
+            if not isinstance(part, dict) or part.get("type") != "image_url":
+                continue
+            if part.get("_no_save"):
+                continue
+            image_url = part.get("image_url")
+            url = image_url.get("url") if isinstance(image_url, dict) else None
+            if isinstance(url, str) and url.startswith("data:image/"):
+                validate_image_input_size(url)
 
     result = copy.deepcopy(history)
     for message in result:

@@ -16,6 +16,10 @@ import mcp
 from astrbot.core.agent.context.token_counter import EstimateTokenCounter
 from astrbot.core.agent.message import Message
 from astrbot.core.agent.tool import ToolExecResult
+from astrbot.core.utils.media_utils import (
+    ImagePayloadTooLargeError,
+    validate_image_input_size,
+)
 
 from .booters.base import ComputerBooter
 from .local_file_security import open_file_in_allowed_roots
@@ -703,6 +707,10 @@ async def read_file_tool_result(
         return "Error reading file: binary files are not supported by this tool."
 
     if probe.kind == "image":
+        try:
+            validate_image_input_size(size_bytes)
+        except ImagePayloadTooLargeError as exc:
+            return f"Error reading file: {exc}"
         if local_mode:
             try:
                 raw_bytes = await _read_local_file_bytes(path, local_file_descriptor)

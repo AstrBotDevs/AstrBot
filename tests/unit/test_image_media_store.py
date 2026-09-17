@@ -1,5 +1,6 @@
 """Tests for durable image object ownership and authorization."""
 
+import base64
 import io
 import json
 import os
@@ -8,6 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 from PIL import Image
 
+from astrbot.core.utils import media_utils
 from astrbot.core.utils.image_media_store import ImageMediaStore
 
 
@@ -65,6 +67,34 @@ def test_store_never_commits_invalid_or_partial_media(tmp_path):
         store.put(b"not an image")
     assert not list((tmp_path / "media").glob("*.bin"))
     assert not list((tmp_path / "media").glob("*.json"))
+
+
+def test_persist_inline_image_refs_rejects_oversized_payload_before_decode(
+    tmp_path, monkeypatch
+):
+    store = ImageMediaStore(tmp_path / "media")
+    monkeypatch.setattr(media_utils, "MODEL_IMAGE_MAX_INPUT_BYTES", 4)
+    encoded = base64.b64encode(b"12345").decode("ascii")
+
+    with pytest.raises(media_utils.ImagePayloadTooLargeError, match="input exceeds"):
+        from astrbot.core.utils.image_media_store import persist_inline_image_refs
+
+        persist_inline_image_refs(
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": f"data:image/png;base64,{encoded}"},
+                        }
+                    ],
+                }
+            ],
+            store,
+        )
+
+    assert not list((tmp_path / "media").glob("*"))
 
 
 @pytest.mark.asyncio
