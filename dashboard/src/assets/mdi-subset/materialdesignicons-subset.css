@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 272 icons */
+/* Auto-generated MDI subset – 270 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -672,6 +672,10 @@
   content: "\F16B2";
 }
 
+.mdi-login-variant::before {
+  content: "\F05FC";
+}
+
 .mdi-logout::before {
   content: "\F0343";
 }
@@ -802,10 +806,6 @@
 
 .mdi-pencil-ruler::before {
   content: "\F1353";
-}
-
-.mdi-phone-in-talk::before {
-  content: "\F03F6";
 }
 
 .mdi-pin::before {
@@ -974,14 +974,6 @@
 
 .mdi-star-outline::before {
   content: "\F04D2";
-}
-
-.mdi-stop::before {
-  content: "\F04DB";
-}
-
-.mdi-stop-circle::before {
-  content: "\F0666";
 }
 
 .mdi-subdirectory-arrow-right::before {

@@ -41,6 +41,10 @@ outline: deep
 | `PUT` | `/api/v1/provider-sources/by-id` | — |
 | `DELETE` | `/api/v1/provider-sources/by-id` | — |
 | `GET` | `/api/v1/provider-sources/models` | — |
+| `POST` | `/api/v1/provider-sources/openai-oauth/complete` | — |
+| `POST` | `/api/v1/provider-sources/openai-oauth/disconnect` | — |
+| `POST` | `/api/v1/provider-sources/openai-oauth/refresh` | — |
+| `POST` | `/api/v1/provider-sources/openai-oauth/start` | — |
 | `GET` | `/api/v1/provider-sources/providers` | — |
 | `POST` | `/api/v1/provider-sources/providers` | — |
 | `GET` | `/api/v1/provider-sources/{source_id}` | — |

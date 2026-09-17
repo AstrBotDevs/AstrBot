@@ -32,6 +32,10 @@ from astrbot.core.provider.provider import (
     STTProvider,
     TTSProvider,
 )
+from astrbot.core.provider.sources.request_retry import (
+    provider_oauth_web_search,
+    provider_retry_rate_limits,
+)
 from astrbot.core.star.filter.platform_adapter_type import (
     ADAPTER_NAME_2_TYPE,
     PlatformAdapterType,
@@ -201,15 +205,25 @@ class Context:
         prov = await self.provider_manager.get_provider_by_id(chat_provider_id)
         if not prov or not isinstance(prov, Provider):
             raise ProviderNotFoundError(f"Provider {chat_provider_id} not found")
-        llm_resp = await prov.text_chat(
-            prompt=prompt,
-            image_urls=image_urls,
-            audio_urls=audio_urls,
-            func_tool=tools,
-            contexts=contexts,
-            system_prompt=system_prompt,
-            **kwargs,
+        retry_token = provider_retry_rate_limits.set(
+            bool(kwargs.get("retry_rate_limits", True))
         )
+        search_token = provider_oauth_web_search.set(
+            str(kwargs.get("oauth_web_search", "inherit"))
+        )
+        try:
+            llm_resp = await prov.text_chat(
+                prompt=prompt,
+                image_urls=image_urls,
+                audio_urls=audio_urls,
+                func_tool=tools,
+                contexts=contexts,
+                system_prompt=system_prompt,
+                **kwargs,
+            )
+        finally:
+            provider_oauth_web_search.reset(search_token)
+            provider_retry_rate_limits.reset(retry_token)
         return llm_resp
 
     async def tool_loop_agent(
@@ -283,6 +297,9 @@ class Context:
             func_tool=tools,
             contexts=context_,
             system_prompt=system_prompt or "",
+            oauth_web_search=kwargs.get("oauth_web_search", "inherit"),
+            retry_rate_limits=bool(kwargs.get("retry_rate_limits", True)),
+            fallback_on_rate_limit=bool(kwargs.get("fallback_on_rate_limit", True)),
         )
         if agent_context is None:
             agent_context = AstrAgentContext(
@@ -297,7 +314,15 @@ class Context:
         other_kwargs = {
             k: v
             for k, v in kwargs.items()
-            if k not in ["stream", "agent_hooks", "agent_context"]
+            if k
+            not in [
+                "stream",
+                "agent_hooks",
+                "agent_context",
+                "oauth_web_search",
+                "retry_rate_limits",
+                "fallback_on_rate_limit",
+            ]
         }
         if request.func_tool and request.func_tool.get_tool("astrbot_file_read_tool"):
             other_kwargs.setdefault(
