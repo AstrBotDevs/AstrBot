@@ -624,6 +624,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                         yield resp
                                         return
                                     last_err_response = resp
+                                    last_exception = None
                                     logger.warning(
                                         "Chat Model %s returns error response, trying fallback to next provider.",
                                         candidate_id,
@@ -654,6 +655,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         return
             except Exception as exc:  # noqa: BLE001
                 last_exception = exc
+                last_err_response = None
                 logger.warning(
                     "Chat Model %s request error: %s",
                     candidate_id,

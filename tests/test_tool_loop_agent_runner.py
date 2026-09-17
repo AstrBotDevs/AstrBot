@@ -2452,6 +2452,53 @@ async def test_rate_limit_error_response_stops_fallback(
 
 
 @pytest.mark.asyncio
+async def test_rate_limit_exception_supersedes_previous_error_response(
+    provider_request, mock_tool_executor, mock_hooks
+):
+    class ErrorResponseProvider(MockProvider):
+        async def text_chat(self, **kwargs) -> LLMResponse:
+            self.call_count += 1
+            return LLMResponse(
+                role="err",
+                completion_text="first provider unavailable",
+                status_code=500,
+            )
+
+    class RateLimitExceptionProvider(MockProvider):
+        async def text_chat(self, **kwargs) -> LLMResponse:
+            self.call_count += 1
+            error = RuntimeError("second provider rate limited")
+            error.status_code = 429  # type: ignore[attr-defined]
+            raise error
+
+    first = ErrorResponseProvider()
+    second = RateLimitExceptionProvider()
+    third = MockProvider()
+    provider_request.retry_rate_limits = False
+    provider_request.fallback_on_rate_limit = False
+    runner = ToolLoopAgentRunner()
+    await runner.reset(
+        provider=first,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        fallback_providers=[second, third],
+    )
+
+    async for _ in runner.step():
+        pass
+
+    assert first.call_count == 1
+    assert second.call_count == 1
+    assert third.call_count == 0
+    response = runner.get_final_llm_resp()
+    assert response.role == "err"
+    assert response.status_code == 429
+    assert "second provider rate limited" in response.completion_text
+
+
+@pytest.mark.asyncio
 async def test_oauth_http_429_is_requested_once_and_does_not_use_fallback(
     mock_tool_executor, mock_hooks
 ):
