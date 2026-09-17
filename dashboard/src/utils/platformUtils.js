@@ -8,7 +8,9 @@
  * @returns {string|undefined} 图标URL
  */
 export function getPlatformIcon(name) {
-  if (name === 'aiocqhttp') {
+  if (name === 'webchat') {
+    return '/favicon.svg'
+  } else if (name === 'aiocqhttp') {
     return new URL('@/assets/images/platform_logos/onebot.png', import.meta.url).href
   } else if (name === 'qq_official' || name === 'qq_official_webhook') {
     return new URL('@/assets/images/platform_logos/qq.png', import.meta.url).href

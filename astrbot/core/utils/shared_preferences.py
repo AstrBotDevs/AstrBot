@@ -38,13 +38,18 @@ class SharedPreferences:
         self.temporary_cache: dict[str, dict[str, Any]] = defaultdict(dict)
         """automatically clear per 24 hours. Might be helpful in some cases XD"""
 
-        # In-memory mirror of persistent preferences. It lets synchronous APIs
-        # read and update values without blocking on the async database, provides
-        # immediate read-after-write visibility, and also serves async point reads.
-        # Unlike temporary_cache, it is preloaded at startup, persisted to the
-        # database, and never periodically cleared by the scheduler.
-        # See https://github.com/AstrBotDevs/AstrBot/pull/9649 for the deadlock
-        # scenario and design rationale.
+        # In-memory overlay of preferences written through this process. It gives
+        # read-after-write visibility for both sync and async APIs while writes
+        # are asynchronously persisted through the FIFO write queue.
+        #
+        # This is intentionally NOT a full mirror of the preferences table: the
+        # table can hold gigabytes of plugin KV data, so preloading it at startup
+        # (as PR #9649 did) can OOM the process. Reads that miss the overlay fall
+        # back to point queries against the database: async reads await the async
+        # engine, while deprecated synchronous reads use a dedicated sync SQLite
+        # connection so they never block on (or deadlock against) the async pool.
+        # See https://github.com/AstrBotDevs/AstrBot/pull/9649 for the original
+        # deadlock scenario and design rationale.
         self._cache: dict[tuple[str, str, str], Any] = {}
         self._cache_lock = threading.RLock()
         self._cache_initialized = False
@@ -54,6 +59,8 @@ class SharedPreferences:
         self._write_queue: asyncio.Queue[_WriteOperation] | None = None
         self._writer_task: asyncio.Task[None] | None = None
         self._pending_writes: list[_WriteOperation] = []
+        self._warned_sync_read_unsupported = False
+        self._warned_sync_range_read_unsupported = False
 
         self._scheduler = BackgroundScheduler()
         self._scheduler.add_job(
@@ -173,7 +180,10 @@ class SharedPreferences:
                 queue.task_done()
 
     async def initialize(self) -> None:
-        """Load persisted preferences and bind writes to the current event loop.
+        """Bind writes to the current event loop and replay pending writes.
+
+        The preferences table is intentionally NOT preloaded here: it can be
+        arbitrarily large, and reads fall back to point queries instead.
 
         Raises:
             RuntimeError: If another running event loop already owns the store.
@@ -205,23 +215,13 @@ class SharedPreferences:
                 self._loop = loop
                 self._write_queue = asyncio.Queue()
                 self._writer_task = None
-                if not self._cache_initialized:
-                    preferences = await self.db_helper.get_preferences()
-                    loaded_cache = {
-                        (item.scope, item.scope_id, item.key): deepcopy(
-                            item.value["val"]
-                        )
-                        for item in preferences
-                    }
 
                 with self._cache_lock:
                     pending_writes = list(self._pending_writes)
                     self._pending_writes.clear()
-                    if not self._cache_initialized:
-                        self._cache = loaded_cache
-                        for operation in pending_writes:
-                            self._apply_cache_operation(operation)
-                        self._cache_initialized = True
+                    for operation in pending_writes:
+                        self._apply_cache_operation(operation)
+                    self._cache_initialized = True
                     self._initializing = False
             except BaseException:
                 with self._cache_lock:
@@ -277,7 +277,12 @@ class SharedPreferences:
             return default
         with self._cache_lock:
             value = self._cache.get((scope, scope_id, key), _MISSING)
-            return default if value is _MISSING else deepcopy(value)
+            if value is not _MISSING:
+                return deepcopy(value)
+        preference = await self.db_helper.get_preference(scope, scope_id, key)
+        if preference is None:
+            return default
+        return deepcopy(preference.value["val"])
 
     async def range_get_async(
         self,
@@ -439,12 +444,41 @@ class SharedPreferences:
             raise ValueError(
                 "scope_id and key cannot be None when getting a specific preference.",
             )
+        resolved_scope = scope or "unknown"
+        resolved_scope_id = scope_id or "unknown"
         with self._cache_lock:
-            value = self._cache.get(
-                (scope or "unknown", scope_id or "unknown", key),
-                _MISSING,
+            value = self._cache.get((resolved_scope, resolved_scope_id, key), _MISSING)
+            if value is not _MISSING:
+                return default if value is None else deepcopy(value)
+        # Overlay miss: fall back to a point query through a dedicated
+        # synchronous database connection. This briefly blocks the calling
+        # thread (unavoidable for a synchronous API), but never touches the
+        # async connection pool, so it cannot deadlock the event loop.
+        get_sync = getattr(self.db_helper, "get_preference_sync", None)
+        if get_sync is None:
+            if not self._warned_sync_read_unsupported:
+                self._warned_sync_read_unsupported = True
+                logger.warning(
+                    "SharedPreferences sync get() is not supported by database "
+                    "backend %s; returning the default. Use get_async() instead.",
+                    type(self.db_helper).__name__,
+                )
+            return default
+        try:
+            stored = get_sync(resolved_scope, resolved_scope_id, key)
+        except Exception as exc:
+            logger.warning(
+                "SharedPreferences sync get() failed for %s/%s/%s: %s",
+                resolved_scope,
+                resolved_scope_id,
+                key,
+                exc,
             )
-            return default if value is _MISSING or value is None else deepcopy(value)
+            return default
+        if stored is None:
+            return default
+        value = stored.get("val")
+        return default if value is None else deepcopy(value)
 
     @deprecated(version="4.0.0", reason="Use range_get_async() instead.")
     def range_get(
@@ -453,28 +487,62 @@ class SharedPreferences:
         scope_id: str | None = None,
         key: str | None = None,
     ) -> list[Preference]:
-        """获取指定范围的偏好设置（已弃用）"""
+        """Synchronously get preferences matching the supplied range.
+
+        Historical values are loaded on demand through a dedicated synchronous
+        database connection, then values written by this process are overlaid to
+        preserve immediate read-after-write visibility without startup preload.
+
+        Args:
+            scope: Preference scope to query.
+            scope_id: Optional identifier within the scope.
+            key: Optional preference key.
+
+        Returns:
+            Preferences matching the supplied filters.
+        """
+        get_sync = getattr(self.db_helper, "get_preferences_sync", None)
+        if get_sync is None:
+            if not self._warned_sync_range_read_unsupported:
+                self._warned_sync_range_read_unsupported = True
+                logger.warning(
+                    "SharedPreferences sync range_get() is not supported by "
+                    "database backend %s; returning process-local values only. "
+                    "Use range_get_async() instead.",
+                    type(self.db_helper).__name__,
+                )
+            persisted: list[Preference] = []
+        else:
+            try:
+                persisted = get_sync(scope, scope_id, key)
+            except Exception as exc:
+                logger.warning(
+                    "SharedPreferences sync range_get() failed for %s/%s/%s: %s",
+                    scope,
+                    scope_id,
+                    key,
+                    exc,
+                )
+                persisted = []
+
+        values = {
+            (preference.scope, preference.scope_id, preference.key): preference
+            for preference in persisted
+        }
         with self._cache_lock:
-            values = [
-                (cache_scope, cache_scope_id, cache_key, deepcopy(value))
-                for (
-                    cache_scope,
-                    cache_scope_id,
-                    cache_key,
-                ), value in self._cache.items()
-                if cache_scope == scope
-                and (scope_id is None or cache_scope_id == scope_id)
-                and (key is None or cache_key == key)
-            ]
-        return [
-            Preference(
-                scope=cache_scope,
-                scope_id=cache_scope_id,
-                key=cache_key,
-                value={"val": value},
-            )
-            for cache_scope, cache_scope_id, cache_key, value in values
-        ]
+            for (cache_scope, cache_scope_id, cache_key), value in self._cache.items():
+                if (
+                    cache_scope == scope
+                    and (scope_id is None or cache_scope_id == scope_id)
+                    and (key is None or cache_key == key)
+                ):
+                    values[(cache_scope, cache_scope_id, cache_key)] = Preference(
+                        scope=cache_scope,
+                        scope_id=cache_scope_id,
+                        key=cache_key,
+                        value={"val": deepcopy(value)},
+                    )
+        return list(values.values())
 
     @deprecated(
         version="4.0.0",

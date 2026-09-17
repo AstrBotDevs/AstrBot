@@ -11,13 +11,16 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.date import DateTrigger
 
 from astrbot import logger
+from astrbot.core.agent.runners.base import AgentState
 from astrbot.core.agent.tool import ToolSet
+from astrbot.core.config.agent_runner import resolve_context_compression_config
 from astrbot.core.cron.events import CronMessageEvent
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import CronJob
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.provider.entites import ProviderRequest
+from astrbot.core.utils.config_number import coerce_int_config
 from astrbot.core.utils.history_saver import persist_agent_history
 
 if TYPE_CHECKING:
@@ -441,28 +444,46 @@ class CronJobManager:
             cron_event.role = "admin"
 
         provider_settings = cfg.get("provider_settings", {}) or {}
-        tool_call_timeout = provider_settings.get("tool_call_timeout", 120)
+        persona_config = (
+            cfg.get("agent_runner", {}).get("config", {}).get("persona", {})
+        )
+        tool_call_timeout = (
+            cfg.get("agent_runner", {})
+            .get("config", {})
+            .get("misc", {})
+            .get("tool_call_timeout", 120)
+        )
+        agent_max_step = coerce_int_config(
+            cfg.get("agent_runner", {})
+            .get("config", {})
+            .get("misc", {})
+            .get("max_steps", 30),
+            default=30,
+            min_value=1,
+            field_name="agent_runner.config.misc.max_steps",
+        )
         config = MainAgentBuildConfig(
             tool_call_timeout=tool_call_timeout,
-            llm_safety_mode=False,
+            fallback_provider_ids=cfg.get("agent_runner", {})
+            .get("config", {})
+            .get("model", {})
+            .get("fallback_provider_ids", []),
+            **resolve_context_compression_config(
+                cfg.get("agent_runner", {}).get("config", {}).get("compression", {})
+            ),
+            llm_safety_mode=persona_config.get("safety_mode", True),
+            safety_mode_strategy=persona_config.get(
+                "safety_mode_strategy", "system_prompt"
+            ),
             streaming_response=False,
+            computer_use_runtime=provider_settings.get("computer_use_runtime", "none"),
+            sandbox_cfg=provider_settings.get("sandbox", {}),
             provider_settings=provider_settings,
         )
         req = ProviderRequest()
         conv = await _get_session_conv(event=cron_event, plugin_context=self.ctx)
         req.conversation = conv
-        # finetine the messages
-        context = json.loads(conv.history)
-        if context:
-            req.contexts = context
-            context_dump = req._print_friendly_context()
-            req.contexts = []
-            req.system_prompt += (
-                "\n\nBellow is you and user previous conversation history:\n"
-                f"---\n"
-                f"{context_dump}\n"
-                f"---\n"
-            )
+        req.contexts = json.loads(conv.history)
         cron_job_str = json.dumps(extras.get("cron_job", {}), ensure_ascii=False)
         req.system_prompt += PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT.format(
             cron_job=cron_job_str
@@ -484,14 +505,24 @@ class CronJobManager:
             event=cron_event, plugin_context=self.ctx, config=config, req=req
         )
         if not result:
-            logger.error("Failed to build main agent for cron job.")
-            return
+            raise RuntimeError("Failed to build main agent for cron job.")
 
         runner = result.agent_runner
-        async for _ in runner.step_until_done(30):
+        async for _ in runner.step_until_done(agent_max_step):
             # agent will send message to user via using tools
             pass
         llm_resp = runner.get_final_llm_resp()
+        if runner.state == AgentState.ERROR:
+            # The run failed (e.g. malformed function call at max steps) but
+            # no exception escapes the runner; without this the job was
+            # recorded as completed with last_error=NULL and the user saw
+            # only intermediate messages (#9980).
+            detail = (
+                f": {llm_resp.completion_text}"
+                if llm_resp and llm_resp.completion_text
+                else ""
+            )
+            raise RuntimeError(f"Cron agent run ended in ERROR state{detail}")
         cron_meta = extras.get("cron_job", {}) if extras else {}
         summary_note = (
             f"[CronJob] {cron_meta.get('name') or cron_meta.get('id', 'unknown')}: {cron_meta.get('description', '')} "

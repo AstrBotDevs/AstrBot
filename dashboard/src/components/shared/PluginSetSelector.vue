@@ -1,5 +1,72 @@
 <template>
-  <div>
+  <div v-if="inline" class="inline-plugin-selector">
+    <v-progress-linear v-if="loading" indeterminate color="primary" />
+
+    <template v-else-if="pluginList.length > 0">
+      <div class="inline-plugin-selector__toolbar">
+        <v-text-field
+          v-model="pluginSearchKeyword"
+          class="inline-plugin-selector__search"
+          :placeholder="tm('pluginSetSelector.searchPlaceholder')"
+          prepend-inner-icon="mdi-magnify"
+          variant="outlined"
+          density="compact"
+          hide-details
+          clearable
+        />
+        <v-checkbox-btn
+          :model-value="allPluginsSelected"
+          :indeterminate="somePluginsSelected"
+          :label="tm('pluginSetSelector.selectAll')"
+          color="primary"
+          density="compact"
+          @update:model-value="toggleAllPlugins"
+        />
+      </div>
+
+      <div v-if="filteredPluginList.length > 0" class="inline-plugin-selector__list">
+        <div
+          v-for="plugin in filteredPluginList"
+          :key="plugin.name"
+          class="inline-plugin-card"
+          @click="toggleInlinePlugin(plugin)"
+        >
+          <div class="inline-plugin-card__body">
+            <div class="inline-plugin-card__title-row">
+              <span class="inline-plugin-card__title">{{ pluginDisplayName(plugin) }}</span>
+              <span v-if="plugin.reserved" class="inline-plugin-card__preset">
+                {{ tm('pluginSetSelector.preset') }}
+              </span>
+            </div>
+            <div class="inline-plugin-card__description" :title="pluginDescription(plugin)">
+              {{ pluginDescription(plugin) || tm('pluginSetSelector.noDescription') }}
+            </div>
+          </div>
+
+          <v-checkbox-btn
+            :model-value="inlinePluginEnabled(plugin)"
+            :aria-label="pluginDisplayName(plugin)"
+            color="primary"
+            density="compact"
+            @click.stop
+            @update:model-value="toggleInlinePlugin(plugin)"
+          />
+        </div>
+      </div>
+
+      <div v-else class="inline-plugin-selector__empty inline-plugin-selector__empty--search">
+        <v-icon size="38">mdi-magnify-close</v-icon>
+        <span>{{ tm('pluginSetSelector.noSearchResults') }}</span>
+      </div>
+    </template>
+
+    <div v-else class="inline-plugin-selector__empty">
+      <v-icon size="38">mdi-puzzle-outline</v-icon>
+      <span>{{ tm('pluginSetSelector.noPlugins') }}</span>
+    </div>
+  </div>
+
+  <div v-else>
     <!-- 顶部操作区域 -->
     <div class="d-flex align-center justify-space-between mb-2">
       <div class="flex-grow-1">
@@ -103,7 +170,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { pluginApi } from '@/api/v1'
 import { useModuleI18n } from '@/i18n/composables'
 import { usePluginI18n } from '@/utils/pluginI18n'
@@ -120,6 +187,14 @@ const props = defineProps({
   maxDisplayItems: {
     type: Number,
     default: 3
+  },
+  inline: {
+    type: Boolean,
+    default: false
+  },
+  searchKeyword: {
+    type: String,
+    default: ''
   }
 })
 
@@ -132,6 +207,7 @@ const pluginList = ref([])
 const loading = ref(false)
 const selectionMode = ref('custom') // 'all', 'none', 'custom'
 const selectedPlugins = ref([])
+const pluginSearchKeyword = ref('')
 
 const pluginDisplayName = (plugin) => pluginName(plugin) || plugin.name
 const pluginDescription = (plugin) => pluginDesc(plugin)
@@ -140,6 +216,35 @@ const pluginDescription = (plugin) => pluginDesc(plugin)
 const isAllPlugins = computed(() => {
   return props.modelValue && props.modelValue.length === 1 && props.modelValue[0] === '*'
 })
+
+const filteredPluginList = computed(() => {
+  const keywords = [props.searchKeyword, pluginSearchKeyword.value]
+    .map(keyword => String(keyword || '').trim().toLowerCase())
+    .filter(Boolean)
+  if (keywords.length === 0) return pluginList.value
+  return pluginList.value.filter((plugin) => {
+    const searchableText = [
+      plugin.name,
+      pluginDisplayName(plugin),
+      pluginDescription(plugin)
+    ].filter(Boolean).join(' ').toLowerCase()
+    return keywords.every(keyword => searchableText.includes(keyword))
+  })
+})
+
+const selectedPluginCount = computed(() => {
+  if (isAllPlugins.value) return pluginList.value.length
+  const selected = new Set(props.modelValue || [])
+  return pluginList.value.filter(plugin => selected.has(plugin.name)).length
+})
+
+const allPluginsSelected = computed(() => (
+  pluginList.value.length > 0 && selectedPluginCount.value === pluginList.value.length
+))
+
+const somePluginsSelected = computed(() => (
+  selectedPluginCount.value > 0 && !allPluginsSelected.value
+))
 
 // 移除插件
 function removePlugin(pluginName) {
@@ -173,14 +278,19 @@ async function loadPlugins() {
   try {
     const response = await pluginApi.list()
     if (response.data.status === 'ok') {
-      // 只显示已激活且非系统的插件，并按名称排序
-      pluginList.value = (response.data.data || [])
-        .filter(plugin => plugin.activated && !plugin.reserved)
+      const activatedPlugins = (response.data.data || [])
+        .filter(plugin => plugin.activated)
         .sort((a, b) => {
-          const nameA = a.name || '';
-          const nameB = b.name || '';
+          if (props.inline && Boolean(a.reserved) !== Boolean(b.reserved)) {
+            return a.reserved ? -1 : 1
+          }
+          const nameA = pluginDisplayName(a) || a.name || '';
+          const nameB = pluginDisplayName(b) || b.name || '';
           return nameA.localeCompare(nameB);
         })
+      pluginList.value = props.inline
+        ? activatedPlugins
+        : activatedPlugins.filter(plugin => !plugin.reserved)
     }
   } catch (error) {
     console.error('加载插件列表失败:', error)
@@ -189,6 +299,42 @@ async function loadPlugins() {
     loading.value = false
   }
 }
+
+function inlinePluginEnabled(plugin) {
+  return isAllPlugins.value || (props.modelValue || []).includes(plugin.name)
+}
+
+function toggleInlinePlugin(plugin) {
+  const selected = new Set(
+    isAllPlugins.value
+      ? pluginList.value.map(item => item.name)
+      : (props.modelValue || [])
+  )
+  if (selected.has(plugin.name)) {
+    selected.delete(plugin.name)
+  } else {
+    selected.add(plugin.name)
+  }
+  const nextSelection = pluginList.value
+    .map(item => item.name)
+    .filter(name => selected.has(name))
+  emit(
+    'update:modelValue',
+    nextSelection.length === pluginList.value.length && pluginList.value.length > 0
+      ? ['*']
+      : nextSelection
+  )
+}
+
+function toggleAllPlugins() {
+  emit('update:modelValue', allPluginsSelected.value ? [] : ['*'])
+}
+
+onMounted(() => {
+  if (props.inline) {
+    loadPlugins()
+  }
+})
 
 function confirmSelection() {
   let newValue = []
@@ -234,5 +380,136 @@ function cancelSelection() {
 
 .v-list-item:hover {
   background-color: rgba(var(--v-theme-primary), 0.04);
+}
+
+.inline-plugin-selector__list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.inline-plugin-selector__toolbar {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+.inline-plugin-selector__search {
+  min-width: 0;
+  max-width: 240px;
+}
+
+.inline-plugin-selector__search :deep(.v-field) {
+  min-height: 36px;
+  border-radius: 9px;
+}
+
+.inline-plugin-selector__search :deep(.v-field__input) {
+  min-height: 36px;
+  padding-top: 6px;
+  padding-bottom: 6px;
+  font-size: 0.78rem;
+}
+
+.inline-plugin-selector__toolbar :deep(.v-label) {
+  color: rgba(var(--v-theme-on-surface), 0.72);
+  font-size: 0.8rem;
+  font-weight: 650;
+}
+
+.inline-plugin-card {
+  display: flex;
+  min-height: 76px;
+  align-items: center;
+  gap: 18px;
+  padding: 13px 14px 13px 16px;
+  border-radius: 12px;
+  background: rgba(var(--v-theme-on-surface), 0.045);
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.inline-plugin-card:hover {
+  background: rgba(var(--v-theme-on-surface), 0.065);
+}
+
+.inline-plugin-card__body {
+  min-width: 0;
+  flex: 1;
+}
+
+.inline-plugin-card__title-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.inline-plugin-card__title {
+  overflow: hidden;
+  color: rgb(var(--v-theme-on-surface));
+  font-size: 0.94rem;
+  font-weight: 740;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inline-plugin-card__preset {
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(var(--v-theme-primary), 0.1);
+  color: rgb(var(--v-theme-primary));
+  font-size: 0.68rem;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.inline-plugin-card__description {
+  overflow: hidden;
+  margin-top: 5px;
+  color: rgba(var(--v-theme-on-surface), 0.54);
+  font-size: 0.76rem;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inline-plugin-card :deep(.v-selection-control) {
+  min-height: 32px;
+}
+
+.inline-plugin-selector__empty {
+  display: flex;
+  min-height: 180px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: rgba(var(--v-theme-on-surface), 0.5);
+  font-size: 0.82rem;
+}
+
+.inline-plugin-selector__empty--search {
+  min-height: 150px;
+}
+
+@media (max-width: 600px) {
+  .inline-plugin-selector__toolbar {
+    gap: 10px;
+  }
+
+  .inline-plugin-selector__search {
+    max-width: none;
+  }
+
+  .inline-plugin-card {
+    min-height: 70px;
+    padding: 11px 10px 11px 13px;
+  }
 }
 </style>

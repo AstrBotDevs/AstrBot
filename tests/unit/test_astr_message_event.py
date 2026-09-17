@@ -16,7 +16,7 @@ from astrbot.core.message.components import (
 )
 from astrbot.core.message.message_event_result import MessageEventResult
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
-from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
+from astrbot.core.platform.astrbot_message import AstrBotMessage, Group, MessageMember
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.platform_metadata import PlatformMetadata
 
@@ -69,6 +69,28 @@ def astr_message_event(platform_meta, astrbot_message):
         platform_meta=platform_meta,
         session_id="session123",
     )
+
+
+def test_retained_attachment_is_excluded_from_event_cleanup(
+    astr_message_event, tmp_path
+):
+    source = tmp_path / "source.jpg"
+    derived = tmp_path / "model_image.jpg"
+    source.write_bytes(b"original")
+    derived.write_bytes(b"prepared")
+    event = astr_message_event
+    event.track_temporary_local_file(str(source))
+    event.track_temporary_local_file(str(source))
+    event.track_temporary_local_file(str(derived))
+    event.untrack_temporary_local_file(str(source))
+    event.untrack_temporary_local_file(str(source))
+    event.untrack_temporary_local_file(str(tmp_path / "untracked"))
+    assert event._temporary_local_files == [str(derived)]
+    event.cleanup_temporary_local_files()
+    event.cleanup_temporary_local_files()
+    assert source.read_bytes() == b"original"
+    assert not derived.exists()
+    assert event._temporary_local_files == []
 
 
 class TestAstrMessageEventInit:
@@ -267,8 +289,7 @@ class TestGetMessageOutline:
             session_id="session123",
         )
         outline = event.get_message_outline()
-        # AtAll format is "[At:all]" in the actual implementation
-        assert "[At:" in outline and "all" in outline.lower()
+        assert outline == "[At:全体成员]"
 
     def test_outline_with_face(self, platform_meta, astrbot_message):
         """Test outline with Face component."""
@@ -691,9 +712,20 @@ class TestGetGroup:
     @pytest.mark.asyncio
     async def test_get_group_with_group_id_param(self, astr_message_event):
         """Test get_group with group_id parameter."""
-        # Default implementation returns None
         result = await astr_message_event.get_group(group_id="group123")
-        assert result is None
+        assert result == Group(group_id="group123")
+
+    @pytest.mark.asyncio
+    async def test_get_group_returns_message_group(self, astr_message_event):
+        """Test get_group returns group data already attached to the message."""
+        astr_message_event.message_obj.group = Group(
+            group_id="group123",
+            group_name="Test Group",
+        )
+
+        result = await astr_message_event.get_group()
+
+        assert result is astr_message_event.message_obj.group
 
 
 class TestMessageTypeHandling:

@@ -3,7 +3,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import httpx
 import jwt
@@ -13,6 +13,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, PlainTextResponse
 
 import astrbot.dashboard.services.config_service as config_service
+import astrbot.dashboard.services.stat_service as stat_service
 from astrbot.core import file_token_service
 from astrbot.core.utils import llm_metadata
 from astrbot.dashboard.api.app import create_dashboard_asgi_app
@@ -101,6 +102,14 @@ class FakeDb:
         return _FakeDbContext(self)
 
     async def get_umo_aliases(self, _umos: list[str] | None = None) -> list[object]:
+        return []
+
+    async def get_conversation_platform_ids(self) -> list[str]:
+        return ["webchat-main"]
+
+    async def get_platform_sessions_by_ids(
+        self, _session_ids: list[str]
+    ) -> list[object]:
         return []
 
     def add_api_key(self, raw_key: str, scopes: list[str]) -> None:
@@ -309,6 +318,10 @@ class FakeConversationManager:
         user_id = "webchat:FriendMessage:webchat!user!session-1"
         self.last_filter_args: dict[str, list[str]] = {}
         self.last_include_history = True
+        self.last_keyword_query = ""
+        self.last_umo_query = ""
+        self.last_sort = ("created_at", "desc")
+        self.last_group_by_session = False
         self.conversations: dict[tuple[str, str], FakeConversation] = {
             (user_id, "conversation/with/slash"): FakeConversation(
                 cid="conversation/with/slash",
@@ -326,9 +339,18 @@ class FakeConversationManager:
         search_query: str,
         exclude_ids: list[str],
         exclude_platforms: list[str],
+        keyword_query: str = "",
+        umo_query: str = "",
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+        group_by_session: bool = False,
         include_history: bool = True,
     ):
         self.last_include_history = include_history
+        self.last_keyword_query = keyword_query
+        self.last_umo_query = umo_query
+        self.last_sort = (sort_by, sort_order)
+        self.last_group_by_session = group_by_session
         self.last_filter_args = {
             "platforms": platforms,
             "message_types": message_types,
@@ -354,12 +376,29 @@ class FakeConversationManager:
                 for conversation in conversations
                 if search_query in conversation.title
             ]
+        if keyword_query:
+            conversations = [
+                conversation
+                for conversation in conversations
+                if keyword_query in conversation.title
+                or keyword_query in conversation.history
+            ]
+        if umo_query:
+            conversations = [
+                conversation
+                for conversation in conversations
+                if umo_query in conversation.user_id
+            ]
         conversations = [
             conversation
             for conversation in conversations
             if conversation.cid not in exclude_ids
             and conversation.platform_id not in exclude_platforms
         ]
+        conversations.sort(
+            key=lambda conversation: getattr(conversation, sort_by),
+            reverse=sort_order == "desc",
+        )
         start = (page - 1) * page_size
         return conversations[start : start + page_size], len(conversations)
 
@@ -1010,6 +1049,84 @@ def _jwt_headers() -> dict[str, str]:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("desktop_auth", [False, True])
+@pytest.mark.parametrize("status", ["missing", "unavailable", "detected"])
+async def test_version_routes_return_startup_runtime_snapshot(
+    monkeypatch, tmp_path, fake_core_lifecycle, fake_db: FakeDb, desktop_auth, status
+):
+    """Both version routes and auth modes expose the same startup snapshot."""
+    platform = SimpleNamespace(
+        system=Mock(return_value="Linux"), machine=Mock(return_value="aarch64")
+    )
+    which = Mock(return_value=None if status == "missing" else "/usr/bin/bwrap")
+    monkeypatch.setattr(stat_service, "platform", platform)
+    monkeypatch.setattr(stat_service, "shutil", SimpleNamespace(which=which))
+    error = "bwrap: setting up uid map: Permission denied"
+    sandbox = Mock()
+    sandbox.run.return_value = SimpleNamespace(
+        returncode=1 if status == "unavailable" else 0, stderr=error.encode()
+    )
+    factory = Mock(return_value=sandbox)
+    monkeypatch.setattr(stat_service, "create_process_sandbox", factory)
+    monkeypatch.setattr(stat_service, "get_astrbot_temp_path", lambda: str(tmp_path))
+    monkeypatch.setattr(
+        stat_service, "is_desktop_session_auth_enabled", lambda: desktop_auth
+    )
+    monkeypatch.setattr(
+        stat_service, "get_dashboard_version", AsyncMock(return_value="v1.2.3")
+    )
+    monkeypatch.setattr(
+        stat_service, "is_password_storage_upgraded", AsyncMock(return_value=True)
+    )
+    monkeypatch.setattr(
+        stat_service,
+        "get_dashboard_password_hash",
+        lambda *args, **kwargs: "stored-hash",
+    )
+    monkeypatch.setattr(
+        stat_service.StatService, "is_default_cred", AsyncMock(return_value=False)
+    )
+    app = create_dashboard_asgi_app(
+        core_lifecycle=fake_core_lifecycle, db=fake_db, jwt_secret=JWT_SECRET
+    )
+
+    # Environment changes take effect in this snapshot after restarting AstrBot.
+    which.return_value = "/usr/bin/bwrap"
+    sandbox.run.return_value.returncode = 0
+    expected_sandbox = {"backend": "bubblewrap", "status": status}
+    if status == "unavailable":
+        expected_sandbox["error"] = error
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(
+        transport=transport, base_url="http://testserver"
+    ) as client:
+        for path in ("/api/v1/stats/version", "/api/stat/version"):
+            response = await client.get(path, headers=_jwt_headers())
+            assert response.status_code == 200
+            payload = response.json()
+            assert payload["status"] == "ok"
+            assert payload["data"]["runtime"] == {
+                "os": "linux",
+                "arch": "aarch64",
+                "sandbox": expected_sandbox,
+            }
+            assert payload["data"]["version"]
+            assert payload["data"]["dashboard_version"] == "v1.2.3"
+            assert payload["data"]["change_pwd_hint"] is False
+            assert payload["data"]["md5_pwd_hint"] is False
+            assert payload["data"]["password_upgrade_required"] is False
+
+        response = await client.get("/api/v1/stats/versions")
+        assert response.status_code == 200
+        assert "runtime" not in response.json()["data"]
+
+    which.assert_called_once_with("bwrap")
+    platform.system.assert_called_once_with()
+    platform.machine.assert_called_once_with()
+    assert factory.call_count == (0 if status == "missing" else 1)
+
+
+@pytest.mark.asyncio
 async def test_public_versions_route_uses_static_folder(
     fake_core_lifecycle,
     fake_db: FakeDb,
@@ -1099,9 +1216,7 @@ async def test_v1_openapi_is_served_by_fastapi(asgi_client: httpx.AsyncClient):
     assert chat_send["x-astrbot-scope"] == "chat"
     assert chat_send["x-astrbot-sensitive-scopes"] == ["chat:admin"]
     assert "**Required scope:** `chat`" in chat_send["description"]
-    assert (
-        "**Conditional sensitive scope:** `chat:admin`" in chat_send["description"]
-    )
+    assert "**Conditional sensitive scope:** `chat:admin`" in chat_send["description"]
 
     public_spec_path = (
         Path(__file__).resolve().parents[1] / "docs" / "public" / "openapi.json"
@@ -1159,6 +1274,18 @@ async def test_dashboard_static_dist_files_are_served(
         "window.__astrbotStaticTest = true;",
         encoding="utf-8",
     )
+    (assets_folder / "index-AbCd1234.js").write_text(
+        "window.__astrbotHashedStaticTest = true;",
+        encoding="utf-8",
+    )
+    (assets_folder / "config-metadata.json").write_text("{}", encoding="utf-8")
+    (assets_folder / "version").write_text("v4.27.4", encoding="utf-8")
+    t2i_folder = static_folder / "t2i"
+    t2i_folder.mkdir()
+    (t2i_folder / "shiki_runtime.iife.js").write_text(
+        "window.__astrbotShikiRuntimeTest = true;",
+        encoding="utf-8",
+    )
     (tmp_path / "secret.txt").write_text("outside static root", encoding="utf-8")
 
     app = create_dashboard_asgi_app(
@@ -1173,7 +1300,13 @@ async def test_dashboard_static_dist_files_are_served(
         base_url="http://testserver",
     ) as client:
         asset_response = await client.get("/assets/index-demo.js")
+        hashed_asset_response = await client.get("/assets/index-AbCd1234.js")
+        word_suffix_asset_response = await client.get("/assets/config-metadata.json")
+        version_response = await client.get("/assets/version")
+        unversioned_asset_response = await client.get("/t2i/shiki_runtime.iife.js")
         favicon_response = await client.get("/favicon.svg")
+        root_response = await client.get("/")
+        index_response = await client.get("/index.html")
         page_response = await client.get("/config")
         missing_response = await client.get("/assets/missing.js")
         traversal_response = await client.get("/assets/%2E%2E/%2E%2E/secret.txt")
@@ -1181,13 +1314,86 @@ async def test_dashboard_static_dist_files_are_served(
 
     assert asset_response.status_code == 200
     assert "window.__astrbotStaticTest" in asset_response.text
+    assert asset_response.headers["cache-control"] == "no-cache"
+    assert hashed_asset_response.status_code == 200
+    assert hashed_asset_response.headers["cache-control"] == "no-cache"
+    assert word_suffix_asset_response.status_code == 200
+    assert word_suffix_asset_response.headers["cache-control"] == "no-cache"
+    assert version_response.status_code == 200
+    assert version_response.headers["cache-control"] == "no-store"
+    assert unversioned_asset_response.status_code == 200
+    assert unversioned_asset_response.headers["cache-control"] == "no-cache"
     assert favicon_response.status_code == 200
     assert favicon_response.text == "<svg></svg>"
+    assert root_response.headers["cache-control"] == "no-store"
+    assert index_response.headers["cache-control"] == "no-store"
     assert page_response.status_code == 200
+    assert page_response.headers["cache-control"] == "no-store"
     assert "/assets/index-demo.js" in page_response.text
     assert missing_response.status_code == 404
+    assert missing_response.headers["content-type"].startswith("text/html")
+    assert "请先尝试重启 AstrBot" in missing_response.text
+    assert "<h2>手动安装</h2>" in missing_response.text
+    assert "WebUI files are missing" in missing_response.text
+    assert "Manual installation" in missing_response.text
+    assert "AstrBot-vx.x.x-dashboard.zip" in missing_response.text
+    assert "index.html" in missing_response.text
     assert traversal_response.status_code == 404
     assert api_response.status_code == 404
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("desktop_managed", "query", "should_clear_cache"),
+    [
+        (True, "?astrbot_bundle=desktop-4.27.5-core-4.27.5-webui-deadbeef", True),
+        (True, "", False),
+        (False, "?astrbot_bundle=desktop-4.27.5-core-4.27.5-webui-deadbeef", False),
+    ],
+)
+async def test_dashboard_index_clears_legacy_cache_only_for_desktop_bundle(
+    fake_core_lifecycle,
+    fake_db: FakeDb,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    desktop_managed: bool,
+    query: str,
+    should_clear_cache: bool,
+):
+    static_folder = tmp_path / "dist"
+    static_folder.mkdir()
+    (static_folder / "index.html").write_text(
+        "<!doctype html>",
+        encoding="utf-8",
+    )
+    if desktop_managed:
+        monkeypatch.setenv("ASTRBOT_DESKTOP_MANAGED", "1")
+    else:
+        monkeypatch.delenv("ASTRBOT_DESKTOP_MANAGED", raising=False)
+
+    app = create_dashboard_asgi_app(
+        core_lifecycle=fake_core_lifecycle,
+        db=fake_db,
+        jwt_secret=JWT_SECRET,
+        static_folder=str(static_folder),
+    )
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://testserver",
+    ) as client:
+        responses = [
+            await client.get(f"/{query}"),
+            await client.get(f"/index.html{query}"),
+        ]
+
+    for response in responses:
+        assert response.status_code == 200
+        assert response.headers["cache-control"] == "no-store"
+        if should_clear_cache:
+            assert response.headers["clear-site-data"] == '"cache"'
+        else:
+            assert "clear-site-data" not in response.headers
 
 
 @pytest.mark.asyncio
@@ -1421,6 +1627,39 @@ async def test_conversation_list_normalizes_comma_separated_filters(
 
 
 @pytest.mark.asyncio
+async def test_conversation_workspace_filters_and_options(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+):
+    options_response = await asgi_client.get(
+        "/api/v1/conversations/filter-options",
+        headers=_jwt_headers(),
+    )
+    assert options_response.status_code == 200
+    assert options_response.json()["data"]["bots"] == [
+        {"id": "webchat-main", "type": "webchat"}
+    ]
+
+    list_response = await asgi_client.get(
+        "/api/v1/conversations",
+        params={
+            "keyword": "Demo",
+            "umo": "session-1",
+            "sort_by": "updated_at",
+            "sort_order": "asc",
+            "group_by_session": "true",
+        },
+        headers=_jwt_headers(),
+    )
+    assert list_response.status_code == 200
+    manager = fake_core_lifecycle.conversation_manager
+    assert manager.last_keyword_query == "Demo"
+    assert manager.last_umo_query == "session-1"
+    assert manager.last_sort == ("updated_at", "asc")
+    assert manager.last_group_by_session is True
+
+
+@pytest.mark.asyncio
 async def test_v1_conversation_detail_requires_user_id(
     asgi_client: httpx.AsyncClient,
 ):
@@ -1532,7 +1771,9 @@ async def test_v1_system_config_update_preserves_independent_bot_provider_sectio
     fake_core_lifecycle,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    def fake_save_config(post_config: dict, config: FakeAstrBotConfig, is_core=False):
+    def fake_save_config(
+        post_config: dict, config: FakeAstrBotConfig, is_core=False, *, runtime=None
+    ):
         config.save_config(post_config)
 
     monkeypatch.setattr(config_service, "save_config", fake_save_config)
@@ -1566,6 +1807,184 @@ async def test_v1_system_config_update_preserves_independent_bot_provider_sectio
         "default_provider_id": "gpt-mini"
     }
     assert fake_core_lifecycle.reloaded_config_ids == ["default"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("change", ["member_execution", "admin_removal"])
+async def test_config_update_revokes_only_affected_shell_sessions(
+    asgi_app, fake_core_lifecycle, monkeypatch, tmp_path, change
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.booters.local import LocalBooter
+    from astrbot.core.tools.computer_tools import shell as shell_tools
+
+    config = fake_core_lifecycle.astrbot_config
+    config["admins_id"] = ["creator", "other-admin"]
+    config["agent_runner"] = {"runner_type": "local"}
+    config["provider_settings"] = {
+        "computer_use_runtime": "local",
+        "computer_use_local_permissions": {
+            role: {
+                "allow_execution": True,
+                "allow_network": True,
+                "filesystem_scope": "host",
+            }
+            for role in ("admin", "member")
+        },
+    }
+    other_config = copy.deepcopy(config)
+    booter = LocalBooter()
+    monkeypatch.setattr(computer_client, "local_booter", booter)
+    monkeypatch.setattr(
+        shell_tools, "workspace_root_for_context", AsyncMock(return_value=tmp_path)
+    )
+    sessions = []
+    try:
+        for role, profile, sender_id in (
+            ("member", config, "member"),
+            ("admin", config, "creator"),
+            ("admin", other_config, "creator"),
+            ("admin", config, "other-admin"),
+        ):
+            context = SimpleNamespace(
+                context=SimpleNamespace(
+                    context=SimpleNamespace(get_config=lambda umo, p=profile: p),
+                    event=SimpleNamespace(
+                        role=role,
+                        unified_msg_origin="test:friend:revocation",
+                        get_sender_id=lambda sender_id=sender_id: sender_id,
+                    ),
+                )
+            )
+            result = json.loads(
+                await shell_tools.LocalExecuteShellTool().call(
+                    context, command='python -u -c "input()"', yield_time_ms=0
+                )
+            )
+            sessions.append(booter.shell._sessions[result["session_id"]])
+            if profile is config and sender_id == "creator":
+                admin_context = context
+
+        service = asgi_app.state.services.config_profiles
+        payload = copy.deepcopy(config)
+        payload["wake_prefix"] = ["changed"]
+        await service.update_profile("default", payload)
+        assert all(session.process.returncode is None for session in sessions)
+
+        payload = copy.deepcopy(config)
+        if change == "admin_removal":
+            payload["admins_id"] = ["other-admin"]
+            revoked_index = 1
+        else:
+            payload["provider_settings"]["computer_use_local_permissions"]["member"][
+                "allow_execution"
+            ] = False
+            revoked_index = 0
+        await service.update_profile("default", payload)
+        assert sessions[revoked_index].process.returncode is not None
+        assert all(
+            session.process.returncode is None
+            for index, session in enumerate(sessions)
+            if index != revoked_index
+        )
+        assert sessions[revoked_index].session_id not in booter.shell._sessions
+        if change == "admin_removal":
+            assert admin_context.context.event.role == "admin"
+            result = await shell_tools.LocalExecuteShellTool().call(
+                admin_context, command="echo unexpected", yield_time_ms=0
+            )
+            assert "permissions changed" in result
+            assert len(booter.shell._sessions) == 3
+
+        # Pre-upgrade sessions must not acquire a grant from the current config.
+        sessions[2].permission_check = None
+        payload = copy.deepcopy(config)
+        payload["provider_settings"]["computer_use_runtime"] = "none"
+        await service.update_profile("default", payload)
+        assert all(session.process.returncode is not None for session in sessions)
+        assert not booter.shell._sessions
+    finally:
+        await booter.shell.shutdown_sessions()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("scope", ["workspace", "host"])
+@pytest.mark.parametrize(
+    ("system", "backend", "status", "reason"),
+    [
+        ("windows", None, "unsupported", "windows"),
+        ("linux", "bubblewrap", "missing", "bwrap"),
+        ("darwin", "seatbelt", "missing", "sandbox-exec"),
+        ("linux", "bubblewrap", "unavailable", "setting up uid map: Permission denied"),
+        ("darwin", "seatbelt", "unavailable", "sandbox_apply: Operation not permitted"),
+    ],
+)
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/v1/system-config",
+        "/api/v1/config-profiles/default",
+        "/api/config/astrbot/update",
+    ],
+)
+async def test_config_api_validates_local_permissions(
+    asgi_app,
+    asgi_client,
+    fake_core_lifecycle,
+    path,
+    scope,
+    system,
+    backend,
+    status,
+    reason,
+):
+    runtime = asgi_app.state.services.stats.runtime
+    assert asgi_app.state.services.config_profiles.runtime is runtime
+    runtime.update({"os": system, "sandbox": {"backend": backend, "status": status}})
+    if status == "unavailable":
+        runtime["sandbox"]["error"] = reason
+    original = copy.deepcopy(fake_core_lifecycle.astrbot_config)
+    payload = copy.deepcopy(original)
+    payload["agent_runner"] = {"runner_type": "local"}
+    payload["provider_settings"] = {
+        "computer_use_runtime": "local",
+        "computer_use_local_permissions": {
+            "member": {
+                "filesystem_scope": scope,
+                "allow_execution": True,
+                "allow_network": True,
+            },
+            "admin": {"filesystem_scope": "none"},
+        },
+    }
+    legacy = path.startswith("/api/config/")
+    response = await asgi_client.request(
+        "POST" if legacy else "PUT",
+        path,
+        headers=_jwt_headers(),
+        json={"conf_id": "default", "config": payload} if legacy else payload,
+    )
+
+    assert response.status_code == (400 if scope == "workspace" and not legacy else 200)
+    if scope == "workspace":
+        assert response.json()["status"] == "error"
+        assert "Local permission member:" in response.json()["message"]
+        assert reason in response.json()["message"]
+        if status == "unavailable":
+            assert "installed but cannot start" in response.json()["message"]
+            assert "Missing" not in response.json()["message"]
+        assert fake_core_lifecycle.astrbot_config == original
+        assert fake_core_lifecycle.reloaded_config_ids == []
+    else:
+        assert response.json()["status"] == "ok"
+        payload["provider_settings"]["computer_use_local_permissions"]["admin"].update(
+            allow_execution=False, allow_network=False
+        )
+        assert (
+            fake_core_lifecycle.astrbot_config["provider_settings"]
+            == payload["provider_settings"]
+        )
+        assert fake_core_lifecycle.reloaded_config_ids == ["default"]
 
 
 @pytest.mark.asyncio
@@ -1851,9 +2270,9 @@ async def test_v1_safe_provider_routes_accept_slash_ids(
     assert get_response.json()["data"]["provider"]["id"] == provider_id
     assert schema_response.status_code == 200
     config_schema = schema_response.json()["data"]["config_schema"]
-    reasoning_effort_preset = config_schema["provider"]["items"][
-        "custom_extra_body"
-    ]["template_schema"]["reasoning_effort"]
+    reasoning_effort_preset = config_schema["provider"]["items"]["custom_extra_body"][
+        "template_schema"
+    ]["reasoning_effort"]
     assert reasoning_effort_preset["type"] == "string"
     assert reasoning_effort_preset["default"] == "high"
     assert path_test_response.status_code == 200
@@ -3220,6 +3639,28 @@ async def test_v1_command_patch_updates_service(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "permission", ["member", "admin", "group_admin", "shared_group_admin"]
+)
+async def test_v1_command_permission_patch_updates_service(
+    asgi_app: FastAPI,
+    asgi_client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+    permission: str,
+):
+    update = AsyncMock(return_value={"permission": permission})
+    monkeypatch.setattr(asgi_app.state.services.commands, "update_permission", update)
+    response = await asgi_client.patch(
+        "/api/v1/commands/plugin.handler",
+        json={"permission_group": permission},
+        headers=_jwt_headers(),
+    )
+    assert response.status_code == 200
+    assert response.json()["data"]["permission"] == permission
+    update.assert_awaited_once_with("plugin.handler", permission)
+
+
+@pytest.mark.asyncio
 async def test_v1_bot_type_registration_uses_platform_service(
     asgi_app: FastAPI,
     asgi_client: httpx.AsyncClient,
@@ -3393,9 +3834,7 @@ async def test_v1_mcp_list_reports_connected_runtime(
 
     assert response.status_code == 200
     demo_server = next(
-        server
-        for server in response.json()["data"]
-        if server["name"] == "demo-server"
+        server for server in response.json()["data"] if server["name"] == "demo-server"
     )
     assert demo_server["connected"] is True
     assert demo_server["tools"] == ["demo_tool"]

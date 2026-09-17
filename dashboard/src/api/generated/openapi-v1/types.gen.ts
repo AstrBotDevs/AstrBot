@@ -83,6 +83,10 @@ export type ChatFlags = {
      * Enable streaming model output for this request. This value takes priority over the legacy top-level enable_streaming field.
      */
     enable_streaming?: boolean;
+    /**
+     * Display reasoning content for this WebChat request independently of the global display_reasoning_text setting.
+     */
+    enable_reasoning?: boolean;
 };
 
 export type ChatMessagePatchRequest = {
@@ -591,6 +595,41 @@ export type ReorderRequest = {
         sort_order: number;
     }>;
 };
+
+/**
+ * The AstrBot backend runtime, including when running inside a container. Values are captured at application startup.
+ */
+export type RuntimeInfo = {
+    /**
+     * Lowercase platform.system() value, commonly linux, darwin, or windows.
+     */
+    os: string;
+    /**
+     * Unmodified platform.machine() value, such as x86_64, AMD64, arm64, or aarch64. May be empty if unknown.
+     */
+    arch: string;
+    /**
+     * Local process sandbox startup check, captured when AstrBot starts. It does not verify DNS resolution or every permitted operation.
+     */
+    sandbox: {
+        backend: ('bubblewrap' | 'seatbelt') | null;
+        /**
+         * detected means the executable was found and a minimal workspace sandbox launched successfully; missing means the corresponding executable was not found; unavailable means it was found but sandbox startup failed; unsupported means this platform has no Local process sandbox backend. These identifiers are independent of the UI language.
+         */
+        status: 'detected' | 'missing' | 'unavailable' | 'unsupported';
+        /**
+         * Bounded startup error detail, included when status is unavailable. Restart AstrBot after fixing the environment to refresh the check.
+         */
+        error?: string;
+    };
+};
+
+export type backend = 'bubblewrap' | 'seatbelt';
+
+/**
+ * detected means the executable was found and a minimal workspace sandbox launched successfully; missing means the corresponding executable was not found; unavailable means it was found but sandbox startup failed; unsupported means this platform has no Local process sandbox backend. These identifiers are independent of the UI language.
+ */
+export type status = 'detected' | 'missing' | 'unavailable' | 'unsupported';
 
 export type SessionGroupRequest = {
     name?: string;
@@ -1375,6 +1414,10 @@ export type BatchDeleteChatSessionsError = unknown;
 export type GetChatSessionData = {
     path: {
         session_id: string;
+    };
+    query?: {
+        page?: number;
+        page_size?: number;
     };
 };
 
@@ -3151,9 +3194,17 @@ export type ListConversationsData = {
          */
         exclude_platforms?: string;
         /**
+         * Paginate by UMO and return all conversation summaries for each selected session.
+         */
+        group_by_session?: boolean;
+        /**
          * Include full message history in each conversation.
          */
         include_history?: boolean;
+        /**
+         * Match conversation titles or message content.
+         */
+        keyword?: string;
         /**
          * Comma-separated message types.
          */
@@ -3166,6 +3217,12 @@ export type ListConversationsData = {
          */
         platforms?: string;
         search?: string;
+        sort_by?: 'created_at' | 'updated_at';
+        sort_order?: 'asc' | 'desc';
+        /**
+         * Match the unified message origin.
+         */
+        umo?: string;
         user_id?: string;
     };
 };
@@ -3173,6 +3230,10 @@ export type ListConversationsData = {
 export type ListConversationsResponse = (SuccessEnvelope);
 
 export type ListConversationsError = unknown;
+
+export type GetConversationFilterOptionsResponse = (SuccessEnvelope);
+
+export type GetConversationFilterOptionsError = unknown;
 
 export type BatchDeleteConversationsData = {
     body: ConversationBatchDeleteRequest;
@@ -3264,7 +3325,11 @@ export type GetProviderTokenStatsResponse = (SuccessEnvelope);
 
 export type GetProviderTokenStatsError = unknown;
 
-export type GetVersionResponse = (SuccessEnvelope);
+export type GetVersionResponse = ((SuccessEnvelope & {
+    data?: {
+        runtime: RuntimeInfo;
+    };
+}));
 
 export type GetVersionError = unknown;
 

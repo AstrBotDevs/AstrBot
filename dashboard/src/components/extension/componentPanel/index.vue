@@ -29,7 +29,7 @@ import RenameDialog from './components/RenameDialog.vue';
 import DetailsDialog from './components/DetailsDialog.vue';
 
 // Types
-import type { CommandItem, ToolItem } from './types';
+import type { CommandPermission, CommandItem, ToolItem } from './types';
 
 defineOptions({ name: 'ComponentPanel' });
 const props = withDefaults(defineProps<{ active?: boolean }>(), {
@@ -96,7 +96,7 @@ const handleToggleCommand = async (cmd: CommandItem) => {
   await toggleCommand(cmd, tm('messages.toggleSuccess'), tm('messages.toggleFailed'));
 };
 
-const handleUpdatePermission = async (cmd: CommandItem, permission: 'admin' | 'member') => {
+const handleUpdatePermission = async (cmd: CommandItem, permission: CommandPermission) => {
   await updatePermission(cmd, permission, tm('messages.updateSuccess'), tm('messages.updateFailed'));
 };
 

@@ -534,6 +534,17 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self,
     ) -> T.AsyncGenerator[LLMResponse, None]:
         """Wrap _iter_llm_responses with provider fallback handling."""
+        if not self.run_context.messages:
+            logger.warning(
+                "Skipping LLM request because no messages remain after agent/request "
+                "hooks and context processing."
+            )
+            yield LLMResponse(
+                role="err",
+                completion_text="No messages remain for the LLM request.",
+            )
+            return
+
         candidates = [self.provider, *self.fallback_providers]
         total_candidates = len(candidates)
         last_exception: Exception | None = None
@@ -959,6 +970,26 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         )
 
                     await self._complete_with_assistant_response(llm_resp)
+                    # Re-query uses text_chat(), so its reply has no stream chunks.
+                    # Supply them after hooks without changing llm_result ordering.
+                    if self.streaming:
+                        if llm_resp.reasoning_content:
+                            yield AgentResponse(
+                                type="streaming_delta",
+                                data=AgentResponseData(
+                                    chain=MessageChain(type="reasoning").message(
+                                        llm_resp.reasoning_content,
+                                    ),
+                                ),
+                            )
+                        chain = llm_resp.result_chain
+                        if not chain and llm_resp.completion_text:
+                            chain = MessageChain().message(llm_resp.completion_text)
+                        if chain:
+                            yield AgentResponse(
+                                type="streaming_delta",
+                                data=AgentResponseData(chain=chain),
+                            )
                     return
                 else:
                     llm_resp.tools_call_name = requery_resp.tools_call_name
@@ -1371,11 +1402,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         )
         if extra_instruction:
             instruction = f"{instruction}\n{extra_instruction}"
-        if contexts and contexts[0].get("role") == "system":
-            content = contexts[0].get("content") or ""
-            contexts[0]["content"] = f"{content}\n{instruction}"
-        else:
-            contexts.insert(0, {"role": "system", "content": instruction})
+        contexts.append({"role": "user", "content": instruction})
         return contexts
 
     @staticmethod

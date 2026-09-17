@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -18,8 +18,10 @@ from astrbot.core.agent.message import ImageURLPart, Message, TextPart
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.agent.tool import FunctionTool, ToolSet
+from astrbot.core.astr_agent_run_util import run_agent
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.exceptions import EmptyModelOutputError
+from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest, TokenUsage
 from astrbot.core.provider.provider import Provider
 
@@ -410,6 +412,12 @@ class MockHooks(BaseAgentRunHooks):
 
     async def on_agent_done(self, run_context, llm_response):
         self.agent_done_called = True
+
+
+class ClearingAgentBeginHooks(MockHooks):
+    async def on_agent_begin(self, run_context):
+        self.agent_begin_called = True
+        run_context.messages.clear()
 
 
 class MockEvent:
@@ -808,6 +816,66 @@ async def test_max_step_with_streaming(
     # 验证最后一条消息是assistant的最终回答
     last_message = runner.run_context.messages[-1]
     assert last_message.role == "assistant", "最后一条消息应该是assistant的最终回答"
+
+
+@pytest.mark.asyncio
+async def test_empty_messages_after_on_agent_begin_skip_provider(
+    runner, mock_provider, provider_request, mock_tool_executor
+):
+    """An agent hook clearing the context must terminate before provider dispatch."""
+    hooks = ClearingAgentBeginHooks()
+
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=hooks,
+        streaming=False,
+    )
+
+    responses = [response async for response in runner.step_until_done(2)]
+
+    assert mock_provider.call_count == 0
+    assert runner.done()
+    assert not runner.was_aborted()
+    assert runner.run_context.messages == []
+    assert responses[-1].type == "err"
+    final_response = runner.get_final_llm_resp()
+    assert final_response is not None
+    assert final_response.role == "err"
+    assert final_response.completion_text == "No messages remain for the LLM request."
+    assert (
+        responses[-1].data["chain"].get_plain_text()
+        == "LLM 响应错误: No messages remain for the LLM request."
+    )
+
+
+@pytest.mark.asyncio
+async def test_empty_request_after_on_llm_request_skip_provider(
+    runner, mock_provider, mock_tool_executor, mock_hooks
+):
+    """An empty request left by on_llm_request uses the same dispatch guard."""
+    await runner.reset(
+        provider=mock_provider,
+        request=ProviderRequest(),
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    responses = [response async for response in runner.step_until_done(2)]
+
+    assert mock_provider.call_count == 0
+    assert runner.done()
+    assert not runner.was_aborted()
+    assert runner.run_context.messages == []
+    assert responses[-1].type == "err"
+    final_response = runner.get_final_llm_resp()
+    assert final_response is not None
+    assert final_response.role == "err"
+    assert final_response.completion_text == "No messages remain for the LLM request."
 
 
 @pytest.mark.asyncio
@@ -1587,7 +1655,8 @@ async def test_follow_up_ticket_not_consumed_when_no_next_tool_call(
 
 
 @pytest.mark.asyncio
-async def test_skills_like_requery_passes_extra_user_content_parts():
+@pytest.mark.parametrize("streaming", [False, True])
+async def test_skills_like_requery_passes_extra_user_content_parts(streaming):
     """skills-like 模式 re-query 时应传递 extra_user_content_parts（如 image_caption）"""
     from astrbot.core.agent.message import TextPart
 
@@ -1653,6 +1722,7 @@ async def test_skills_like_requery_passes_extra_user_content_parts():
         tool_executor=cast(Any, MockToolExecutor()),
         agent_hooks=MockHooks(),
         tool_schema_mode="skills_like",
+        streaming=streaming,
     )
 
     async for _ in runner.step():
@@ -1665,6 +1735,156 @@ async def test_skills_like_requery_passes_extra_user_content_parts():
     parts = captured_kwargs["extra_user_content_parts"]
     assert len(parts) == 1
     assert parts[0].text == "<image_caption>一张猫的照片</image_caption>"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("streaming", "stream_to_general", "show_reasoning"),
+    [
+        (True, False, False),
+        (True, False, True),
+        (True, True, True),
+        (False, False, True),
+    ],
+)
+@pytest.mark.parametrize("use_result_chain", [False, True])
+async def test_skills_like_requery_reply_reaches_stream_bridge_once(
+    runner,
+    provider_request,
+    mock_tool_executor,
+    mock_hooks,
+    streaming,
+    stream_to_general,
+    show_reasoning,
+    use_result_chain,
+):
+    """Deliver a non-streaming re-query reply through the real runner and bridge."""
+    final_text = "The search is complete: two pushes."
+    reasoning = "The existing tool result is sufficient."
+
+    class RequeryReplyProvider(MockProvider):
+        async def text_chat(self, **kwargs) -> LLMResponse:
+            self.call_count += 1
+            if self.call_count == 1:
+                return LLMResponse(
+                    role="assistant",
+                    completion_text="Let me check.",
+                    tools_call_name=["test_tool"],
+                    tools_call_args=[{}],
+                    tools_call_ids=["select_tool"],
+                )
+            assert self.call_count == 2
+            return LLMResponse(
+                role="assistant",
+                completion_text=None if use_result_chain else final_text,
+                result_chain=MessageChain().message(final_text)
+                if use_result_chain
+                else None,
+                reasoning_content=reasoning,
+            )
+
+    provider = RequeryReplyProvider()
+    event = MagicMock()
+    event.is_stopped.return_value = False
+    event.get_extra.return_value = None
+    event.get_platform_name.return_value = "lark"
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=MockAgentContext(event)),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=streaming,
+        tool_schema_mode="skills_like",
+    )
+    original_step = runner.step
+    final_events = []
+    hooks_at_emission = []
+
+    async def recorded_step():
+        async for response in original_step():
+            chain = response.data["chain"]
+            if chain.get_plain_text() in (final_text, reasoning):
+                final_events.append((response.type, chain.type))
+                hooks_at_emission.append(mock_hooks.agent_done_called)
+            yield response
+
+    runner.step = recorded_step
+    chains = [
+        chain
+        async for chain in run_agent(
+            runner,
+            stream_to_general=stream_to_general,
+            show_reasoning=show_reasoning,
+        )
+    ]
+    assert sum(chain.get_plain_text() == final_text for chain in chains) == 1
+    assert sum(chain.get_plain_text() == "Let me check." for chain in chains) == 1
+    assert sum(chain.get_plain_text() == reasoning for chain in chains) == int(
+        streaming and not stream_to_general and show_reasoning
+    )
+    expected_types = ["llm_result", "streaming_delta"] if streaming else ["llm_result"]
+    assert final_events == [
+        (response_type, chain_type)
+        for response_type in expected_types
+        for chain_type in ("reasoning", None)
+    ]
+    # Preserve existing llm_result ordering; only new deltas follow the hooks.
+    assert hooks_at_emission == [False, False] + ([True, True] if streaming else [])
+    assert runner.done()
+    assert runner.get_final_llm_resp().completion_text == final_text
+    assert runner.run_context.messages[-1].content[-1].text == final_text
+    assert not mock_hooks.tool_start_called
+    assert provider.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_normal_streaming_reply_is_not_duplicated_by_stream_bridge(
+    runner,
+    mock_provider,
+    provider_request,
+    mock_tool_executor,
+    mock_hooks,
+):
+    mock_provider.should_call_tools = False
+    event = MagicMock()
+    event.is_stopped.return_value = False
+    event.get_extra.return_value = None
+    event.get_platform_name.return_value = "lark"
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=MockAgentContext(event)),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=True,
+        tool_schema_mode="skills_like",
+    )
+
+    chains = [chain async for chain in run_agent(runner)]
+
+    assert [chain.get_plain_text() for chain in chains] == ["这是我的最终回答"]
+    assert mock_provider.call_count == 1
+    assert runner.done()
+
+
+def test_skills_like_requery_preserves_existing_context_prefix():
+    messages = [
+        Message(role="system", content="stable system prompt"),
+        Message(role="user", content="earlier user message"),
+        Message(role="assistant", content="earlier assistant message"),
+        Message(role="user", content="current request"),
+    ]
+    runner = ToolLoopAgentRunner()
+    runner.run_context = ContextWrapper(context=None, messages=messages)
+    original_contexts = [message.model_dump() for message in messages]
+
+    contexts = runner._build_tool_requery_context(["test_tool"])
+
+    assert contexts[:-1] == original_contexts
+    assert contexts[-1]["role"] == "user"
+    assert "test_tool" in contexts[-1]["content"]
+    assert [message.model_dump() for message in messages] == original_contexts
 
 
 @pytest.mark.asyncio
