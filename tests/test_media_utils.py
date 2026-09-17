@@ -207,6 +207,41 @@ def test_detect_image_mime_type_accepts_path(tmp_path):
     )
 
 
+def test_detect_image_mime_type_sniffs_common_headers():
+    """Header sniffing recognizes common formats from bytes alone."""
+    assert (
+        media_utils.detect_image_mime_type(b"\x89PNG\r\n\x1a\n" + b"\x00" * 24)
+        == "image/png"
+    )
+    assert (
+        media_utils.detect_image_mime_type(b"\xff\xd8\xff\xe0" + b"\x00" * 28)
+        == "image/jpeg"
+    )
+    assert media_utils.detect_image_mime_type(b"GIF89a" + b"\x00" * 26) == "image/gif"
+    assert (
+        media_utils.detect_image_mime_type(b"RIFF\x00\x00\x00\x00WEBPVP8 ")
+        == "image/webp"
+    )
+    assert (
+        media_utils.detect_image_mime_type(b"\x00\x00\x00\x20ftypavif" + b"\x00" * 20)
+        == "image/avif"
+    )
+
+
+def test_detect_image_mime_type_returns_default_for_unknown_input():
+    """Unknown or empty headers fall back to the provided default."""
+    assert (
+        media_utils.detect_image_mime_type(
+            b"definitely not an image", default_mime_type=None
+        )
+        is None
+    )
+    assert (
+        media_utils.detect_image_mime_type(b"", default_mime_type="image/jpeg")
+        == "image/jpeg"
+    )
+
+
 @pytest.mark.asyncio
 async def test_resolve_image_ref_to_base64_data_decodes_data_uri(tmp_path, monkeypatch):
     from PIL import Image as PILImage

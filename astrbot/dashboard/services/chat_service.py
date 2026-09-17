@@ -37,7 +37,7 @@ from astrbot.core.utils.media_utils import (
 SSE_HEARTBEAT = ": heartbeat\n\n"
 CHAT_RUN_SUBSCRIBER_QUEUE_SIZE = 256
 # Uploaded chat attachments larger than this are rejected.
-MAX_UPLOAD_FILE_SIZE_MB = 100
+MAX_UPLOAD_FILE_SIZE_MB = 512
 MAX_UPLOAD_FILE_SIZE_BYTES = MAX_UPLOAD_FILE_SIZE_MB * 1024 * 1024
 WEBCHAT_IMAGE_MIME_TYPES = {
     ".jpg": "image/jpeg",
