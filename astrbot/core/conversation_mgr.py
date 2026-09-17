@@ -101,11 +101,11 @@ class ConversationManager:
     async def fork_conversation(
         self, unified_msg_origin: str, source_event_id: str
     ) -> str:
-        """Create a side conversation sharing immutable context ancestry.
+        """Create a side conversation with an independent context snapshot.
 
         Args:
             unified_msg_origin: Owner UMO.
-            source_event_id: Accessible context node to inherit.
+            source_event_id: Accessible historical position to copy.
 
         Returns:
             Public identity of the new conversation; selection is unchanged.
@@ -113,7 +113,7 @@ class ConversationManager:
         conv = await self.db.conversation_store.create(
             umo=unified_msg_origin,
             platform_id=unified_msg_origin.split(":", 1)[0],
-            parent_event_id=source_event_id,
+            source_event_id=source_event_id,
         )
         return conv.conversation_id
 
@@ -392,7 +392,11 @@ class ConversationManager:
             writer = active_conversation_writer.get()
             if writer and writer.cid == conversation_id:
                 if history is not None:
-                    await writer.save_history(history, token_usage=token_usage)
+                    await writer.save_history(
+                        history,
+                        token_usage=token_usage,
+                        origin="plugin" if active_plugin_id.get() else "unknown",
+                    )
                 changes = {}
                 if title is not None:
                     changes["title"] = title
@@ -404,6 +408,17 @@ class ConversationManager:
                         payload["token_usage"] = token_usage
                     await writer.append("conversation.updated", payload)
                 return
+            if (
+                history is not None
+                and active_plugin_id.get()
+                and isinstance(self.db.conversation_store, ConversationStore)
+            ):
+                # A hook may explicitly update another conversation it owns.
+                target_writer = await self.event_writer(
+                    unified_msg_origin, conversation_id
+                )
+                await target_writer.save_history(history, origin="plugin")
+                history = None
             await self.db.update_conversation(
                 cid=conversation_id,
                 title=title,

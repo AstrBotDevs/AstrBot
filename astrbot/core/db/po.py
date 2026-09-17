@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import TypedDict
 
 from deprecated import deprecated
-from sqlalchemy import BigInteger, CheckConstraint, Index, desc
+from sqlalchemy import BigInteger, CheckConstraint, Column, Index, desc
 from sqlmodel import JSON, Field, SQLModel, Text, UniqueConstraint
 
 
@@ -153,26 +153,26 @@ class ConversationV3(TimestampMixin, SQLModel, table=True):
 
 
 class ConversationEvent(SQLModel, table=True):
-    """An immutable context or execution record; seq is conversation-local."""
+    """A context or execution record with reclaimable plugin rebase bodies."""
 
     __tablename__: str = "conversation_events"
 
     conversation_ref: int = Field(foreign_key="conversations_v3.id", primary_key=True)
     seq: int = Field(primary_key=True, sa_type=BigInteger)
     event_id: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True)
-    parent_event_id: str | None = Field(
-        default=None, foreign_key="conversation_events.event_id"
-    )
+    replay_from_event_id: str | None = None
     type: str
     version: int = Field(default=1)
-    payload: dict = Field(default_factory=dict, sa_type=JSON)
+    payload: dict | None = Field(
+        default_factory=dict, sa_column=Column(JSON(none_as_null=True), nullable=True)
+    )
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         CheckConstraint("seq > 0"),
         CheckConstraint("version > 0"),
         Index("ix_conversation_events_type_seq", "conversation_ref", "type", "seq"),
-        Index("ix_conversation_events_parent", "parent_event_id"),
+        Index("ix_conversation_events_baseline", "replay_from_event_id"),
     )
 
 

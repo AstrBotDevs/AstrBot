@@ -581,6 +581,63 @@ class AstrBotImporter:
         if data.get("conversations") and data.get("conversations_v3"):
             raise ValueError("Backup contains ambiguous V2 and V3 conversations")
 
+        if any("parent_event_id" in row for row in data.get("conversation_events", [])):
+            from astrbot.core.db.conversation import linearize_legacy_events
+
+            conversations, events = linearize_legacy_events(
+                data.get("conversations_v3", []), data["conversation_events"]
+            )
+            data = {
+                **data,
+                "conversations_v3": conversations,
+                "conversation_events": events,
+            }
+
+        # A recycled baseline is valid; a missing baseline or an empty message
+        # payload is not. Validate historical targets as well as the active leaf.
+        event_rows = {
+            row["event_id"]: row for row in data.get("conversation_events", [])
+        }
+        baselines = {}
+        latest_context = {}
+        for event in sorted(
+            event_rows.values(), key=lambda row: (row["conversation_ref"], row["seq"])
+        ):
+            kind = event["type"]
+            owner = event["conversation_ref"]
+            if event.get("payload") is None and kind != "context.rebased":
+                raise ValueError("Only a rebase may have a recycled payload")
+            baseline_id = event.get("replay_from_event_id")
+            if kind == "context.rebased" and baseline_id != event["event_id"]:
+                raise ValueError(
+                    "A rebase must identify itself as its recovery baseline"
+                )
+            if kind == "context.rebased":
+                baselines[owner] = event["event_id"]
+            if kind in {"message.appended", "context.rebased"}:
+                if baseline_id != baselines.get(owner):
+                    raise ValueError("Invalid conversation recovery baseline in backup")
+                latest_context[owner] = event["event_id"]
+            if baseline_id is not None:
+                baseline = event_rows.get(baseline_id)
+                if (
+                    kind not in {"message.appended", "context.rebased"}
+                    or baseline is None
+                    or baseline["type"] != "context.rebased"
+                    or baseline["conversation_ref"] != event["conversation_ref"]
+                    or baseline["seq"] > event["seq"]
+                ):
+                    raise ValueError("Invalid conversation recovery baseline in backup")
+
+        for conv in data.get("conversations_v3", []):
+            baseline_id = baselines.get(conv["id"])
+            if (
+                conv.get("leaf_event_id") != latest_context.get(conv["id"])
+                or conv.get("replay_from_event_id") != baseline_id
+                or (baseline_id and event_rows[baseline_id]["payload"] is None)
+            ):
+                raise ValueError("Invalid current conversation context in backup")
+
         async with self.main_db.get_db() as session:
             async with session.begin():
                 await session.execute(text("BEGIN IMMEDIATE"))

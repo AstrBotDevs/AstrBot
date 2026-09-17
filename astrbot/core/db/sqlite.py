@@ -83,17 +83,18 @@ def _conversation_content_match(keyword: str):
         A correlated, parameterized SQLite expression.
     """
     return text("""EXISTS (
-        WITH RECURSIVE branch(event_id, parent_event_id, type, payload) AS (
-            SELECT event_id, parent_event_id, type, payload FROM conversation_events
-            WHERE event_id = conversations_v3.leaf_event_id
-            UNION ALL
-            SELECT e.event_id, e.parent_event_id, e.type, e.payload
-            FROM conversation_events e JOIN branch b ON e.event_id = b.parent_event_id
-            WHERE b.type != 'context.rebased'
+        WITH branch AS (
+            SELECT e.type, e.payload FROM conversation_events e
+            JOIN conversation_events tip ON tip.event_id = conversations_v3.leaf_event_id
+            WHERE e.conversation_ref = conversations_v3.id
+              AND e.seq <= tip.seq
+              AND e.seq >= coalesce((SELECT seq FROM conversation_events
+                  WHERE event_id = tip.replay_from_event_id), 0)
         )
         SELECT 1 FROM branch WHERE
         (type = 'context.rebased' OR
-         (type = 'message.appended' AND coalesce(json_extract(payload, '$.include_in_context'), 1)))
+         (type = 'message.appended' AND coalesce(json_extract(payload, '$.include_in_context'), 1)
+          AND NOT coalesce(json_extract(payload, '$.message._no_save'), 0)))
         AND (json_extract(payload, '$.message') LIKE :pattern
              OR json_extract(payload, '$.messages') LIKE :pattern
              OR json_extract(payload, '$.message') LIKE :escaped
@@ -853,6 +854,22 @@ class SQLiteDatabase(BaseDatabase):
                             or_(
                                 (ConversationEvent.type == "message.appended")
                                 & (
+                                    func.coalesce(
+                                        ConversationEvent.payload[
+                                            "include_in_context"
+                                        ].as_boolean(),
+                                        True,
+                                    )
+                                )
+                                & (
+                                    ~func.coalesce(
+                                        ConversationEvent.payload["message"][
+                                            "_no_save"
+                                        ].as_boolean(),
+                                        False,
+                                    )
+                                )
+                                & (
                                     ConversationEvent.payload["message"][
                                         "role"
                                     ].as_string()
@@ -878,6 +895,27 @@ class SQLiteDatabase(BaseDatabase):
                     new_history.context_event_id = (
                         await session.execute(query)
                     ).scalar_one_or_none()
+                    if new_history.context_event_id:
+                        # A display row may arrive after its exact source position
+                        # was materialized as a durable automatic snapshot.
+                        snapshot_id = (
+                            await session.execute(
+                                text("""SELECT event_id FROM conversation_events
+                                    WHERE conversation_ref=(SELECT conversation_ref
+                                        FROM conversation_events WHERE event_id=:turn_id)
+                                      AND type='context.rebased'
+                                      AND json_extract(payload,'$.reason')='snapshot'
+                                      AND json_extract(payload,'$.origin')='system'
+                                      AND json_extract(payload,'$.source_event_id')=:source
+                                    ORDER BY seq DESC LIMIT 1"""),
+                                {
+                                    "turn_id": turn_id,
+                                    "source": new_history.context_event_id,
+                                },
+                            )
+                        ).scalar_one_or_none()
+                        if snapshot_id:
+                            new_history.context_event_id = snapshot_id
                 session.add(new_history)
                 await session.flush()
                 if max_messages is not None:

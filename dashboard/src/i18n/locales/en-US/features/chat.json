@@ -1,4 +1,12 @@
 {
+  "history": {
+    "edit": "Edit message",
+    "context_pruned": "Historical context has been cleared. Continuing from this point is unavailable.",
+    "context_unavailable": "Historical context is unavailable at this point.",
+    "inactive_message": "This message belongs to a replaced conversation version.",
+    "run_active": "Stop the current generation first.",
+    "unsupported_message": "This action is not supported for this message."
+  },
   "title": "Let's Chat!",
   "subtitle": "Chat with AI Assistant",
   "settings": {

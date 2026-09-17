@@ -16,7 +16,6 @@ from astrbot.core.db.conversation import (
     ConversationSnapshot,
     persistent_messages,
 )
-from astrbot.core.sentinels import NOT_GIVEN
 
 active_plugin_id: ContextVar[str | None] = ContextVar(
     "active_conversation_plugin", default=None
@@ -50,7 +49,6 @@ class ConversationEventWriter:
         self._lock = asyncio.Lock()
         self._pending: list[dict] = []
         self._entries = deepcopy(snapshot.entries)
-        self._staged_leaf = self.leaf_event_id
         self._excluded_counts: Counter[str] = Counter()
         self.runtime_context = None
         self.request = None
@@ -68,6 +66,7 @@ class ConversationEventWriter:
             self.stage_history(
                 response.data["messages"],
                 reason=response.data.get("reason", "legacy_replace"),
+                origin=response.data.get("origin", "unknown"),
             )
         elif response.type == "turn.started":
             await self.start_turn(
@@ -108,7 +107,6 @@ class ConversationEventWriter:
         payload: dict,
         *,
         event_id=None,
-        parent_event_id=NOT_GIVEN,
         sync_runtime=True,
     ):
         """Commit one common protocol event without exposing database internals.
@@ -117,7 +115,6 @@ class ConversationEventWriter:
             event_type: Core or namespaced plugin event type.
             payload: JSON-serializable event data.
             event_id: Stable identity reused for delivery retries.
-            parent_event_id: Omit to append to the bound branch; None means root.
             sync_runtime: Apply plugin writes to working context; runner events already did so.
 
         Returns:
@@ -130,12 +127,9 @@ class ConversationEventWriter:
             "payload": payload,
             "event_id": event_id or str(uuid.uuid4()),
         }
-        if parent_event_id is not NOT_GIVEN:
-            draft["parent_event_id"] = parent_event_id
         async with self._lock:
             context_change = event_type in CONTEXT_TYPES
             drafts = [*self._pending, draft] if context_change else [draft]
-            previous_staged_leaf = self._staged_leaf
             try:
                 committed = await self.store.append(
                     self.cid,
@@ -173,14 +167,10 @@ class ConversationEventWriter:
                     )
                 self._entries = snapshot.entries
                 self._pending.clear()
-                self._staged_leaf = self.leaf_event_id
                 if sync_runtime and self.runtime_context is not None:
                     from astrbot.core.agent.message import Message
 
-                    if event_type == "message.appended" and (
-                        parent_event_id is NOT_GIVEN
-                        or parent_event_id == previous_staged_leaf
-                    ):
+                    if event_type == "message.appended":
                         message = Message.model_validate(deepcopy(payload["message"]))
                         message._no_save = not payload.get("include_in_context", True)
                         self.runtime_context.messages.append(message)
@@ -208,7 +198,6 @@ class ConversationEventWriter:
         *,
         include_in_context=True,
         event_id=None,
-        parent_event_id=NOT_GIVEN,
     ):
         """Persist a message and synchronize the runner's working context.
 
@@ -216,7 +205,6 @@ class ConversationEventWriter:
             message: AstrBot message dictionary.
             include_in_context: Whether future projections include the message.
             event_id: Stable delivery ID.
-            parent_event_id: Optional explicit branch parent.
 
         Returns:
             Committed message event.
@@ -230,7 +218,6 @@ class ConversationEventWriter:
                 and not message.get("_no_save", False),
             },
             event_id=event_id,
-            parent_event_id=parent_event_id,
         )
 
     async def start_turn(self, trigger: dict, *, event_id=None) -> str:
@@ -273,12 +260,15 @@ class ConversationEventWriter:
             self.closed = True
             self._pending.clear()
 
-    def stage_history(self, history: list[dict], *, reason="legacy_replace") -> None:
+    def stage_history(
+        self, history: list[dict], *, reason="legacy_replace", origin="unknown"
+    ) -> None:
         """Stage legacy mutations until the existing history-save boundary.
 
         Args:
             history: Complete working history, including projection exclusions.
             reason: Reason for a replacement, such as compaction.
+            origin: Trusted mutation source: user, plugin, system, or unknown.
         """
         excluded_counts = Counter()
         for message in history:
@@ -296,7 +286,6 @@ class ConversationEventWriter:
                 {
                     "event_id": identity,
                     "type": "message.appended",
-                    "parent_event_id": self._staged_leaf,
                     "payload": {
                         "turn_id": self.turn_id,
                         "message": deepcopy(message),
@@ -304,7 +293,6 @@ class ConversationEventWriter:
                     },
                 }
             )
-            self._staged_leaf = identity
         self._excluded_counts |= excluded_counts
         history = persistent_messages(history)
         before = [e["message"] for e in self._entries]
@@ -317,7 +305,6 @@ class ConversationEventWriter:
                     {
                         "event_id": identity,
                         "type": "message.appended",
-                        "parent_event_id": self._staged_leaf,
                         "payload": {
                             "turn_id": self.turn_id,
                             "message": deepcopy(message),
@@ -325,7 +312,6 @@ class ConversationEventWriter:
                     }
                 )
                 self._entries.append({"id": identity, "message": deepcopy(message)})
-                self._staged_leaf = identity
         else:
             identity = str(uuid.uuid4())
             retained_ids = defaultdict(deque)
@@ -346,25 +332,27 @@ class ConversationEventWriter:
                 {
                     "event_id": identity,
                     "type": "context.rebased",
-                    "parent_event_id": self._staged_leaf,
                     "payload": {
                         "reason": "reset" if not history else reason,
+                        "origin": origin,
                         "turn_id": self.turn_id,
                         "messages": deepcopy(self._entries),
                     },
                 }
             )
-            self._staged_leaf = identity
 
-    async def save_history(self, history: list[dict], *, token_usage=None) -> None:
+    async def save_history(
+        self, history: list[dict], *, token_usage=None, origin="unknown"
+    ) -> None:
         """Commit staged context at the old save boundary with revision checks.
 
         Args:
             history: Final legacy working history.
             token_usage: Optional legacy current-context estimate.
+            origin: Trusted source of changes since the latest staged snapshot.
         """
         async with self._lock:
-            self.stage_history(history)
+            self.stage_history(history, origin=origin)
             drafts = list(self._pending)
             if token_usage is not None:
                 drafts.append(
@@ -386,7 +374,6 @@ class ConversationEventWriter:
                 self.head_seq = event.seq
                 if event.type in CONTEXT_TYPES:
                     self.leaf_event_id = event.event_id
-            self._staged_leaf = self.leaf_event_id
             self._pending.clear()
             if self.runtime_context is not None:
                 from astrbot.core.agent.message import bind_checkpoint_messages
@@ -430,7 +417,6 @@ class PluginConversationEvents:
         *,
         include_in_context=True,
         event_id=None,
-        parent_event_id=NOT_GIVEN,
     ):
         """Append a core message and synchronize the current working context.
 
@@ -438,7 +424,6 @@ class PluginConversationEvents:
             message: AstrBot message dictionary.
             include_in_context: Whether future projections include the message.
             event_id: Stable delivery identity for retries.
-            parent_event_id: Omit for the current branch; None starts a root.
 
         Returns:
             Committed message event.
@@ -447,7 +432,6 @@ class PluginConversationEvents:
             message,
             include_in_context=include_in_context,
             event_id=event_id,
-            parent_event_id=parent_event_id,
         )
 
     async def append(self, name: str, payload: dict, *, event_id=None):

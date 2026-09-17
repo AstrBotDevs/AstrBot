@@ -14,6 +14,7 @@ from typing import Any
 from astrbot.core import logger, sp
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
+from astrbot.core.db.conversation import ContextUnavailableError
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.sources.webchat.message_parts_helper import (
     build_webchat_message_parts,
@@ -1271,6 +1272,85 @@ class ChatService:
     ) -> list[dict]:
         return await self.get_sessions(username, platform_id)
 
+    async def add_history_capabilities(
+        self, history: list[dict], umo: str | None, *, running: bool
+    ) -> None:
+        """Annotate a page using batched metadata lookups, without replaying history.
+
+        Args:
+            history: Serialized display records to annotate in place.
+            umo: Authorized session owner, or None for unlinked records.
+            running: Whether a request currently prevents editing and retrying.
+        """
+        from sqlalchemy import select
+
+        from astrbot.core.db.po import ConversationEvent, ConversationV3
+
+        cid = await self.conv_mgr.get_curr_conversation_id(umo) if umo else None
+        turns = {}
+        availability = {}
+        if cid:
+            turn_ids = list({row["turn_id"] for row in history if row.get("turn_id")})
+            async with self.db.get_db() as session:
+                for start in range(0, len(turn_ids), 400):
+                    result = await session.execute(
+                        select(ConversationEvent.event_id, ConversationEvent.payload)
+                        .join(
+                            ConversationV3,
+                            ConversationEvent.conversation_ref == ConversationV3.id,
+                        )
+                        .where(
+                            ConversationV3.conversation_id == cid,
+                            ConversationEvent.type == "turn.started",
+                            ConversationEvent.event_id.in_(
+                                turn_ids[start : start + 400]
+                            ),
+                        )
+                    )
+                    turns.update(
+                        (event_id, payload["base_leaf_event_id"])
+                        for event_id, payload in result
+                        if isinstance(payload, dict) and "base_leaf_event_id" in payload
+                    )
+            targets = set(turns.values())
+            targets.update(
+                row["context_event_id"]
+                for row in history
+                if row.get("context_event_id")
+            )
+            availability = await self.db.conversation_store.get_context_availability(
+                cid, list(targets)
+            )
+        for row in history:
+            role = (row.get("content") or {}).get("type")
+            turn_id = row.get("turn_id")
+            for action, eligible, target, linked in (
+                (
+                    "fork",
+                    role == "bot",
+                    row.get("context_event_id"),
+                    bool(row.get("context_event_id")),
+                ),
+                ("edit", role == "user", turns.get(turn_id), turn_id in turns),
+                ("retry", role == "bot", turns.get(turn_id), turn_id in turns),
+            ):
+                reason = None
+                status = availability.get(target, "missing") if linked else "missing"
+                if not eligible:
+                    reason = "unsupported_message"
+                elif action != "fork" and not row.get("is_active", True):
+                    reason = "inactive_message"
+                elif action != "fork" and running:
+                    reason = "run_active"
+                elif status != "available":
+                    reason = (
+                        "context_pruned"
+                        if status == "pruned"
+                        else "context_unavailable"
+                    )
+                row[f"can_{action}"] = reason is None
+                row[f"{action}_unavailable_reason"] = reason
+
     async def get_session(
         self,
         username: str,
@@ -1321,8 +1401,17 @@ class ChatService:
             creator=username,
         )
 
+        history = [serialize_history_entry(record) for record in history_ls]
+        linked = any(
+            row.get("turn_id") or row.get("context_event_id") for row in history
+        )
+        await self.add_history_capabilities(
+            history,
+            build_webchat_unified_msg_origin(session) if linked else None,
+            running=self.running_convs.get(session_id, False),
+        )
         response_data = {
-            "history": [serialize_history_entry(history) for history in history_ls],
+            "history": history,
             "total": total,
             "page": page,
             "page_size": page_size,
@@ -1408,6 +1497,11 @@ class ChatService:
         try:
             cid = await self.conv_mgr.fork_conversation(thread_umo, source_event_id)
             await self.conv_mgr.switch_conversation(thread_umo, cid)
+        except ContextUnavailableError as exc:
+            await self.db.delete_webchat_thread(thread.thread_id)
+            raise ChatServiceError(
+                "Historical context has been cleared; this action is unavailable."
+            ) from exc
         except Exception:
             await self.db.delete_webchat_thread(thread.thread_id)
             raise
@@ -1433,9 +1527,18 @@ class ChatService:
             page=1,
             page_size=1000,
         )
+        history = [serialize_history_entry(record) for record in history_ls]
+        linked = any(
+            row.get("turn_id") or row.get("context_event_id") for row in history
+        )
+        await self.add_history_capabilities(
+            history,
+            build_thread_unified_msg_origin(username, thread_id) if linked else None,
+            running=self.running_convs.get(thread_id, False),
+        )
         return {
             "thread": serialize_thread(thread),
-            "history": [serialize_history_entry(history) for history in history_ls],
+            "history": history,
             "is_running": self.running_convs.get(thread_id, False),
             "active_runs": self.get_active_chat_runs(username, thread_id),
         }
@@ -1556,6 +1659,10 @@ class ChatService:
                 expected_head=snapshot.conversation.head_seq,
                 expected_leaf=snapshot.conversation.leaf_event_id,
             )
+        except ContextUnavailableError as exc:
+            raise ChatServiceError(
+                "Historical context has been cleared; this action is unavailable."
+            ) from exc
         except ValueError as exc:
             raise ChatServiceError(str(exc)) from exc
         await self.db.update_platform_session(session_id=session_id)
@@ -1626,6 +1733,10 @@ class ChatService:
                 expected_head=snapshot.conversation.head_seq,
                 expected_leaf=snapshot.conversation.leaf_event_id,
             )
+        except ContextUnavailableError as exc:
+            raise ChatServiceError(
+                "Historical context has been cleared; this action is unavailable."
+            ) from exc
         except ValueError as exc:
             raise ChatServiceError(str(exc)) from exc
         return {

@@ -1,4 +1,12 @@
 {
+  "history": {
+    "edit": "编辑消息",
+    "context_pruned": "此处的历史上下文已清理，无法从原位置继续。",
+    "context_unavailable": "此处的历史上下文不可用。",
+    "inactive_message": "此消息属于已替换的对话版本。",
+    "run_active": "请先停止当前生成。",
+    "unsupported_message": "此消息不支持该操作。"
+  },
   "title": "聊天吧!",
   "subtitle": "与AI助手进行对话",
   "settings": {

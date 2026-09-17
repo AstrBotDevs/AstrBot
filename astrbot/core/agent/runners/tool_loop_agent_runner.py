@@ -887,11 +887,14 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             for tool_name in llm_resp.tools_call_name
         ]
 
-    def _context_response(self, reason="legacy_replace") -> AgentResponse:
+    def _context_response(
+        self, reason="legacy_replace", origin="unknown"
+    ) -> AgentResponse:
         """Capture working context for the host's legacy mutation adapter.
 
         Args:
             reason: Why context may have changed, including compaction.
+            origin: Source of the mutation; custom or unobserved changes stay unknown.
 
         Returns:
             A runtime snapshot; the host stages immutable context events from it.
@@ -908,6 +911,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     include_temporary=True,
                 ),
                 "reason": reason,
+                "origin": origin,
             },
         )
 
@@ -971,7 +975,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             yield await self._finalize_aborted_step()
             return
         self.run_context.messages = processed_messages
-        yield self._context_response(reason="compaction")
+        yield self._context_response(reason="compaction", origin="system")
         self._simple_print_message_role("[AftCompact]", self.run_context.messages)
 
         async for llm_response in self._iter_llm_responses_with_fallback():

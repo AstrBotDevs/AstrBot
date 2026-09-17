@@ -304,17 +304,49 @@
             <span v-if="isUserMessage(msg) && msg.created_at">{{
               formatTime(msg.created_at)
             }}</span>
-            <v-btn
+            <span
               v-if="canEditMessage(msg, msgIndex)"
-              icon
-              size="x-small"
-              variant="text"
-              @click="emit('openEdit', msg)"
+              :title="
+                msg.can_edit === false
+                  ? tm(
+                      `history.${
+                        msg.edit_unavailable_reason || 'context_unavailable'
+                      }`,
+                    )
+                  : tm('history.edit')
+              "
             >
-              <SquarePen :size="14" :stroke-width="2" />
-            </v-btn>
+              <v-btn
+                icon
+                size="x-small"
+                variant="text"
+                :disabled="msg.can_edit === false"
+                :aria-label="
+                  msg.can_edit === false
+                    ? tm(
+                        `history.${
+                          msg.edit_unavailable_reason || 'context_unavailable'
+                        }`,
+                      )
+                    : tm('history.edit')
+                "
+                @click="emit('openEdit', msg)"
+              >
+                <SquarePen :size="14" :stroke-width="2" />
+              </v-btn>
+            </span>
             <RegenerateMenu
               v-if="canRegenerateMessage(msg, msgIndex)"
+              :disabled="msg.can_retry === false"
+              :unavailable-reason="
+                msg.can_retry === false
+                  ? tm(
+                      `history.${
+                        msg.retry_unavailable_reason || 'context_unavailable'
+                      }`,
+                    )
+                  : ''
+              "
               @retry="emit('regenerate', msg)"
               @retry-with-model="emit('regenerateWithModel', msg, $event)"
             />

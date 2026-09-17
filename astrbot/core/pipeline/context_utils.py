@@ -7,6 +7,7 @@ from astrbot.core.agent.conversation_events import (
     active_conversation_writer,
     active_plugin_id,
 )
+from astrbot.core.agent.message import dump_messages_with_checkpoints
 from astrbot.core.message.message_event_result import CommandResult, MessageEventResult
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.star import star_map
@@ -96,29 +97,72 @@ async def call_event_hook(
         hook_type,
         plugins_name=event.plugins_name,
     )
-    for handler in handlers:
-        try:
-            assert inspect.iscoroutinefunction(handler.handler)
-            logger.debug(
-                f"hook({hook_type.name}) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}",
+    # Snapshot once around the hook group: only mutations during plugin execution
+    # get plugin retention. Earlier framework/custom-runner mutations stay unknown.
+    writer = event.conversation_events
+    if handlers and writer is not None and not writer.closed:
+        if writer.runtime_context is not None:
+            history = dump_messages_with_checkpoints(
+                [
+                    m
+                    for i, m in enumerate(writer.runtime_context.messages)
+                    if not (i == 0 and m.role == "system")
+                ],
+                include_temporary=True,
             )
-            writer_token = active_conversation_writer.set(event.conversation_events)
-            plugin_token = active_plugin_id.set(
-                star_map[handler.handler_module_path].name
+        else:
+            history = (
+                writer.request.contexts
+                if writer.request is not None
+                and writer.request.conversation is not None
+                else None
             )
+        if history is not None:
+            writer.stage_history(history, origin="unknown")
+    try:
+        for handler in handlers:
             try:
-                await handler.handler(event, *args, **kwargs)
-            finally:
-                active_plugin_id.reset(plugin_token)
-                active_conversation_writer.reset(writer_token)
-        except BaseException:
-            logger.error(traceback.format_exc())
+                assert inspect.iscoroutinefunction(handler.handler)
+                logger.debug(
+                    f"hook({hook_type.name}) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}",
+                )
+                writer_token = active_conversation_writer.set(event.conversation_events)
+                plugin_token = active_plugin_id.set(
+                    star_map[handler.handler_module_path].name
+                )
+                try:
+                    await handler.handler(event, *args, **kwargs)
+                finally:
+                    active_plugin_id.reset(plugin_token)
+                    active_conversation_writer.reset(writer_token)
+            except BaseException:
+                logger.error(traceback.format_exc())
 
-        if event.is_stopped():
-            logger.info(
-                f"{star_map[handler.handler_module_path].name} - "
-                f"{handler.handler_name} stopped event propagation.",
-            )
-            return True
+            if event.is_stopped():
+                logger.info(
+                    f"{star_map[handler.handler_module_path].name} - "
+                    f"{handler.handler_name} stopped event propagation.",
+                )
+                return True
 
-    return event.is_stopped()
+        return event.is_stopped()
+    finally:
+        if handlers and writer is not None and not writer.closed:
+            if writer.runtime_context is not None:
+                history = dump_messages_with_checkpoints(
+                    [
+                        m
+                        for i, m in enumerate(writer.runtime_context.messages)
+                        if not (i == 0 and m.role == "system")
+                    ],
+                    include_temporary=True,
+                )
+            else:
+                history = (
+                    writer.request.contexts
+                    if writer.request is not None
+                    and writer.request.conversation is not None
+                    else None
+                )
+            if history is not None:
+                writer.stage_history(history, origin="plugin")

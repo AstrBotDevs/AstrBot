@@ -11,7 +11,12 @@ from sqlmodel import select
 
 from astrbot.core.agent.conversation_events import ConversationEventWriter
 from astrbot.core.db.conversation import ConversationConflictError
-from astrbot.core.db.po import ConversationEvent, ConversationV2, ConversationV3, PlatformMessageHistory
+from astrbot.core.db.po import (
+    ConversationEvent,
+    ConversationV2,
+    ConversationV3,
+    PlatformMessageHistory,
+)
 from astrbot.core.db.sqlite import SQLiteDatabase
 
 
@@ -44,19 +49,75 @@ async def test_legacy_api_appends_and_rebases_without_losing_old_events(database
 async def test_branches_null_parent_and_excluded_messages(database):
     conv = await database.create_conversation("umo", "p")
     store = database.conversation_store
-    first = (await store.append(conv.conversation_id, [{"event_id": "root", "type": "message.appended", "payload": {"message": {"role": "user", "content": "root"}}}]))[0]
-    await store.append(conv.conversation_id, [{"type": "message.appended", "payload": {"include_in_context": False, "message": {"role": "user", "content": "temporary"}}}])
-    await store.append(conv.conversation_id, [{"type": "message.appended", "payload": {"message": {"role": "assistant", "content": "reply"}}}])
-    assert [m["content"] for m in (await store.read(conv.conversation_id)).messages] == ["root", "reply"]
-    branch = await store.create(umo="umo", platform_id="p", parent_event_id=first.event_id)
-    await store.append(branch.conversation_id, [{"type": "message.appended", "payload": {"message": {"role": "assistant", "content": "branch"}}}])
-    assert [m["content"] for m in (await store.read(branch.conversation_id)).messages] == ["root", "branch"]
-    with pytest.raises(ValueError, match="referenced"):
-        await store.delete(cid=conv.conversation_id)
-    await store.append(branch.conversation_id, [{"type": "message.appended", "parent_event_id": None, "payload": {"message": {"role": "user", "content": "new root"}}}])
-    assert (await store.read(branch.conversation_id)).messages == [{"role": "user", "content": "new root"}]
+    first = (
+        await store.append(
+            conv.conversation_id,
+            [
+                {
+                    "event_id": "root",
+                    "type": "message.appended",
+                    "payload": {"message": {"role": "user", "content": "root"}},
+                }
+            ],
+        )
+    )[0]
+    await store.append(
+        conv.conversation_id,
+        [
+            {
+                "type": "message.appended",
+                "payload": {
+                    "include_in_context": False,
+                    "message": {"role": "user", "content": "temporary"},
+                },
+            }
+        ],
+    )
+    await store.append(
+        conv.conversation_id,
+        [
+            {
+                "type": "message.appended",
+                "payload": {"message": {"role": "assistant", "content": "reply"}},
+            }
+        ],
+    )
+    assert [
+        m["content"] for m in (await store.read(conv.conversation_id)).messages
+    ] == ["root", "reply"]
+    branch = await store.create(
+        umo="umo", platform_id="p", source_event_id=first.event_id
+    )
+    await store.append(
+        branch.conversation_id,
+        [
+            {
+                "type": "message.appended",
+                "payload": {"message": {"role": "assistant", "content": "branch"}},
+            }
+        ],
+    )
+    assert [
+        m["content"] for m in (await store.read(branch.conversation_id)).messages
+    ] == ["root", "branch"]
+    await store.append(
+        branch.conversation_id,
+        [
+            {
+                "type": "context.rebased",
+                "payload": {"reason": "reset", "origin": "user", "messages": []},
+            },
+            {
+                "type": "message.appended",
+                "payload": {"message": {"role": "user", "content": "new root"}},
+            },
+        ],
+    )
+    assert (await store.read(branch.conversation_id)).messages == [
+        {"role": "user", "content": "new root"}
+    ]
     with pytest.raises(ValueError, match="accessible"):
-        await store.create(umo="other", platform_id="p", parent_event_id=first.event_id)
+        await store.create(umo="other", platform_id="p", source_event_id=first.event_id)
 
 
 @pytest.mark.asyncio
@@ -206,19 +267,39 @@ async def test_webchat_edit_preserves_original_branch_and_side_thread(database):
     conv = await store.create(umo=umo, platform_id="webchat")
     writer = ConversationEventWriter(store, await store.read(conv.conversation_id))
     await writer.start_turn({"kind": "im_wake"}, event_id="t1")
-    user = await database.insert_platform_message_history("webchat", "session1", {"type": "user", "message": []}, turn_id="t1")
-    await writer.save_history([{"role": "user", "content": "old"}, {"role": "assistant", "content": "answer"}])
-    bot = await database.insert_platform_message_history("webchat", "session1", {"type": "bot", "message": []}, turn_id="t1")
+    user = await database.insert_platform_message_history(
+        "webchat", "session1", {"type": "user", "message": []}, turn_id="t1"
+    )
+    await writer.save_history(
+        [{"role": "user", "content": "old"}, {"role": "assistant", "content": "answer"}]
+    )
+    bot = await database.insert_platform_message_history(
+        "webchat", "session1", {"type": "bot", "message": []}, turn_id="t1"
+    )
     await writer.finish_turn("completed")
-    side = await store.create(umo="webchat:FriendMessage:webchat!alice!side", platform_id="webchat", parent_event_id=bot.context_event_id)
+    side = await store.create(
+        umo="webchat:FriendMessage:webchat!alice!side",
+        platform_id="webchat",
+        source_event_id=bot.context_event_id,
+    )
     snapshot = await store.read(conv.conversation_id)
-    replacement = await store.rewind_webchat(conv.conversation_id, user.id, content={"type": "user", "message": [{"type": "plain", "text": "edited"}]}, expected_head=snapshot.conversation.head_seq, expected_leaf=snapshot.conversation.leaf_event_id)
+    replacement = await store.rewind_webchat(
+        conv.conversation_id,
+        user.id,
+        content={"type": "user", "message": [{"type": "plain", "text": "edited"}]},
+        expected_head=snapshot.conversation.head_seq,
+        expected_leaf=snapshot.conversation.leaf_event_id,
+    )
     assert replacement.id != user.id
     assert (await store.read(conv.conversation_id)).messages == []
-    assert [m["content"] for m in (await store.read(side.conversation_id)).messages] == ["old", "answer"]
+    assert [
+        m["content"] for m in (await store.read(side.conversation_id)).messages
+    ] == ["old", "answer"]
     visible = await database.get_platform_message_history("webchat", "session1")
     assert [r.id for r in visible] == [replacement.id]
-    assert (await database.get_platform_message_history_by_id(user.id)).is_active is False
+    assert (
+        await database.get_platform_message_history_by_id(user.id)
+    ).is_active is False
 
 
 @pytest.mark.asyncio
@@ -394,14 +475,27 @@ async def test_idempotent_batch_includes_its_automatic_rebase(database):
 @pytest.mark.asyncio
 async def test_webchat_links_plugin_replacement_without_an_appended_reply(database):
     store = database.conversation_store
-    conv = await database.create_conversation("umo", "p", [{"role": "user", "content": "old"}])
+    conv = await database.create_conversation(
+        "umo", "p", [{"role": "user", "content": "old"}]
+    )
     writer = ConversationEventWriter(store, await store.read(conv.conversation_id))
     await writer.start_turn({"kind": "agent"})
-    await writer.save_history([{"role": "user", "content": "rewritten"}, {"role": "assistant", "content": "new answer"}])
-    record = await database.insert_platform_message_history("webchat", "s1", {"type": "bot", "message": []}, turn_id=writer.turn_id)
+    await writer.save_history(
+        [
+            {"role": "user", "content": "rewritten"},
+            {"role": "assistant", "content": "new answer"},
+        ]
+    )
+    record = await database.insert_platform_message_history(
+        "webchat", "s1", {"type": "bot", "message": []}, turn_id=writer.turn_id
+    )
     assert record.context_event_id == writer.leaf_event_id
-    fork = await store.create(umo="umo", platform_id="p", parent_event_id=record.context_event_id)
-    assert (await store.read(fork.conversation_id)).messages[-1]["content"] == "new answer"
+    fork = await store.create(
+        umo="umo", platform_id="p", source_event_id=record.context_event_id
+    )
+    assert (await store.read(fork.conversation_id)).messages[-1][
+        "content"
+    ] == "new answer"
 
 
 @pytest.mark.asyncio
@@ -522,34 +616,48 @@ async def test_display_context_lookup_holds_the_write_transaction(database, monk
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("display_first", [False, True])
-async def test_edited_turn_reply_can_fork_without_original_or_later_messages(database, display_first):
+async def test_edited_turn_reply_can_fork_without_original_or_later_messages(
+    database, display_first
+):
     store = database.conversation_store
     umo = "webchat:FriendMessage:webchat!alice!edited-session"
     conv = await store.create(umo=umo, platform_id="webchat")
     writer = ConversationEventWriter(store, await store.read(conv.conversation_id))
     await writer.start_turn({"kind": "agent"})
     user = await database.insert_platform_message_history(
-        "webchat", "edited-session", {"type": "user", "message": []}, turn_id=writer.turn_id,
+        "webchat",
+        "edited-session",
+        {"type": "user", "message": []},
+        turn_id=writer.turn_id,
     )
-    await writer.save_history([
-        {"role": "user", "content": "original"},
-        {"role": "assistant", "content": "original answer"},
-    ])
+    await writer.save_history(
+        [
+            {"role": "user", "content": "original"},
+            {"role": "assistant", "content": "original answer"},
+        ]
+    )
     await writer.finish_turn("completed")
     snapshot = await store.read(conv.conversation_id)
     replacement = await store.rewind_webchat(
-        conv.conversation_id, user.id,
+        conv.conversation_id,
+        user.id,
         content={"type": "user", "message": [{"type": "plain", "text": "edited"}]},
         expected_head=snapshot.conversation.head_seq,
         expected_leaf=snapshot.conversation.leaf_event_id,
     )
     writer = ConversationEventWriter(store, await store.read(conv.conversation_id))
     await writer.start_turn({"kind": "agent"}, event_id=replacement.turn_id)
-    messages = [{"role": "user", "content": "edited"}, {"role": "assistant", "content": "edited answer"}]
+    messages = [
+        {"role": "user", "content": "edited"},
+        {"role": "assistant", "content": "edited answer"},
+    ]
     if not display_first:
         await writer.save_history(messages)
     bot = await database.insert_platform_message_history(
-        "webchat", "edited-session", {"type": "bot", "message": []}, turn_id=replacement.turn_id,
+        "webchat",
+        "edited-session",
+        {"type": "bot", "message": []},
+        turn_id=replacement.turn_id,
     )
     if display_first:
         await writer.save_history(messages)
@@ -558,5 +666,7 @@ async def test_edited_turn_reply_can_fork_without_original_or_later_messages(dat
     assert linked.context_event_id
     later = ConversationEventWriter(store, await store.read(conv.conversation_id))
     await later.append_message({"role": "user", "content": "later message"})
-    branch = await store.create(umo=umo, platform_id="webchat", parent_event_id=linked.context_event_id)
+    branch = await store.create(
+        umo=umo, platform_id="webchat", source_event_id=linked.context_event_id
+    )
     assert (await store.read(branch.conversation_id)).messages == messages

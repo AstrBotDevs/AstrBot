@@ -63,6 +63,12 @@ export interface ChatRecord {
   sender_name?: string;
   turn_id?: string | null;
   context_event_id?: string | null;
+  can_fork?: boolean;
+  can_edit?: boolean;
+  can_retry?: boolean;
+  fork_unavailable_reason?: string | null;
+  edit_unavailable_reason?: string | null;
+  retry_unavailable_reason?: string | null;
   threads?: ChatThread[];
 }
 
