@@ -67,7 +67,13 @@ def _make_groq_provider(overrides: dict | None = None) -> ProviderGroq:
     ("overrides", "expected_client"),
     [
         ({}, AsyncOpenAI),
-        ({"api_version": "2024-02-01"}, AsyncAzureOpenAI),
+        (
+            {
+                "api_version": "2024-02-01",
+                "api_base": "https://example.openai.azure.com/openai",
+            },
+            AsyncAzureOpenAI,
+        ),
     ],
 )
 @pytest.mark.asyncio

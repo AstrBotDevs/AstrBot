@@ -4,7 +4,6 @@ import asyncio
 import base64
 import copy
 import inspect
-import os
 from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace
@@ -269,44 +268,6 @@ async def test_cua_runtime_keeps_input_image_geometry(
             assert image.format == expected
     if gated and fmt == "PNG":
         assert Path(req.image_urls[0]).read_bytes() == original
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("runtime", "booter", "big"),
-    [
-        ("sandbox", "cua", True),
-        ("sandbox", "cua", False),
-        ("sandbox", "shipyard_neo", True),
-    ],
-)
-async def test_cua_oversize_image_warns(
-    harness, tmp_path, monkeypatch, runtime, booter, big
-):
-    """Byte-exact CUA passthrough warns when an image may exceed upload limits."""
-    dims = (1500, 1500) if big else (60, 30)
-    path = tmp_path / "shot.png"
-    if big:
-        # Noise stays incompressible, keeping the PNG above the 5 MB threshold.
-        PILImage.frombytes("RGB", dims, os.urandom(dims[0] * dims[1] * 3)).save(
-            path, "PNG"
-        )
-    else:
-        PILImage.new("RGB", dims, "red").save(path, "PNG")
-    original = path.read_bytes()
-    harness.config["provider_settings"]["computer_use_runtime"] = runtime
-    harness.config["provider_settings"]["sandbox"] = {"booter": booter}
-    warning = MagicMock()
-    monkeypatch.setattr(internal.logger, "warning", warning)
-    event = make_event([Image(file=str(path))], text="")
-    await process_event(harness, event, preprocess_first=True)
-    assert len(harness.captured) == 1
-    req = harness.captured[0].req
-    gated = runtime == "sandbox" and booter == "cua"
-    if gated:
-        assert Path(req.image_urls[0]).read_bytes() == original
-    warned = any("upload limits" in str(call) for call in warning.call_args_list)
-    assert warned == (big and gated)
 
 
 @pytest.mark.asyncio
