@@ -16,6 +16,10 @@ from astrbot.core.provider.entities import (
     ProviderRequest,
 )
 from astrbot.core.utils.config_number import coerce_int_config
+from astrbot.core.utils.media_utils import (
+    ImagePayloadTooLargeError,
+    ImagePreparationOptions,
+)
 
 from ...hooks import BaseAgentRunHooks
 from ...response import AgentResponseData
@@ -298,6 +302,11 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         except asyncio.CancelledError:
             # Let caller manage cancellation semantics.
             raise
+        except (ImagePayloadTooLargeError, MemoryError, OSError):
+            # Keep resource failures visible to the caller; do not turn them into
+            # a normal agent response that could trigger an unrelated retry.
+            self._transition_state(AgentState.ERROR)
+            raise
         except Exception as e:
             err_msg = self._format_exception(e)
             logger.error(f"DeerFlow request failed: {err_msg}", exc_info=True)
@@ -416,6 +425,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         prompt: str,
         image_urls: list[str],
         system_prompt: str | None,
+        image_options: ImagePreparationOptions | None = None,
     ) -> list[dict[str, T.Any]]:
         """Build DeerFlow messages after materializing image references.
 
@@ -423,6 +433,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
             prompt: User prompt text.
             image_urls: Image references accepted by MediaResolver.
             system_prompt: Optional system prompt prepended to the request.
+            image_options: Preparation limits for the active provider request.
 
         Returns:
             Messages payload for DeerFlow.
@@ -434,7 +445,11 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         messages.append(
             {
                 "role": "user",
-                "content": await build_user_content_resolved(prompt, image_urls),
+                "content": await build_user_content_resolved(
+                    prompt,
+                    image_urls,
+                    image_options=image_options,
+                ),
             },
         )
         return messages
@@ -497,6 +512,9 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         """
 
         runtime_configurable = self._build_runtime_configurable(thread_id)
+        image_options = getattr(
+            getattr(self, "req", None), "image_preparation_options", None
+        )
         return {
             "assistant_id": self.assistant_id,
             "input": {
@@ -504,6 +522,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
                     prompt,
                     image_urls,
                     system_prompt,
+                    image_options=image_options,
                 ),
             },
             "stream_mode": ["values", "messages-tuple", "custom"],

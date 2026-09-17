@@ -11,6 +11,7 @@ from tenacity import (
 )
 
 from astrbot import logger
+from astrbot.core.exceptions import ProviderRequestTooLargeError
 from astrbot.core.utils.config_number import coerce_int_config
 from astrbot.core.utils.network_utils import is_connection_error
 
@@ -42,6 +43,8 @@ def _is_retryable_provider_request_error(
     *,
     retry_rate_limits: bool,
 ) -> bool:
+    if isinstance(error, (MemoryError, ProviderRequestTooLargeError)):
+        return False
     if is_connection_error(error):
         return True
 
@@ -123,7 +126,16 @@ async def retry_provider_request(
 
     async for attempt in retrying:
         with attempt:
-            return await request_factory()
+            try:
+                return await request_factory()
+            except (MemoryError, ProviderRequestTooLargeError):
+                raise
+            except Exception as error:
+                if _get_status_code(error) == 413:
+                    raise ProviderRequestTooLargeError(
+                        "The provider rejected the request because its serialized size is too large (HTTP 413)."
+                    ) from error
+                raise
 
     raise RuntimeError("Provider request retry loop exited unexpectedly.")
 

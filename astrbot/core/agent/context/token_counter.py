@@ -1,7 +1,14 @@
 import json
 from typing import Protocol, runtime_checkable
 
-from ..message import AudioURLPart, ImageURLPart, Message, TextPart, ThinkPart
+from ..message import (
+    AudioURLPart,
+    ImageMediaRefPart,
+    ImageURLPart,
+    Message,
+    TextPart,
+    ThinkPart,
+)
 
 
 @runtime_checkable
@@ -60,7 +67,7 @@ class EstimateTokenCounter:
                         total += self._estimate_tokens(part.text)
                     elif isinstance(part, ThinkPart):
                         total += self._estimate_tokens(part.think)
-                    elif isinstance(part, ImageURLPart):
+                    elif isinstance(part, (ImageURLPart, ImageMediaRefPart)):
                         total += IMAGE_TOKEN_ESTIMATE
                     elif isinstance(part, AudioURLPart):
                         total += AUDIO_TOKEN_ESTIMATE

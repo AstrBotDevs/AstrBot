@@ -20,6 +20,7 @@ from astrbot.core.agent.message import (
     TextPart,
     dump_messages_with_checkpoints,
 )
+from astrbot.core.agent.runners import tool_loop_agent_runner
 from astrbot.core.config.default import DEFAULT_CONFIG
 from astrbot.core.message.components import Image, Plain, Reply
 from astrbot.core.pipeline.preprocess_stage import stage as preprocess
@@ -36,6 +37,10 @@ from astrbot.core.provider.provider import Provider
 from astrbot.core.star.star_handler import EventType
 from astrbot.core.utils import image_input
 from astrbot.core.utils import media_utils as media
+from astrbot.core.utils.image_media_store import (
+    ImageMediaStore,
+    materialize_image_media_refs,
+)
 
 
 def make_event(parts=None, text="hello", session="images"):
@@ -393,6 +398,11 @@ async def test_profile_reload_and_concurrent_requests(harness, tmp_path):
 async def test_plugin_request_extra_metadata_hook_and_history(
     harness, tmp_path, monkeypatch
 ):
+    monkeypatch.setattr(
+        tool_loop_agent_runner,
+        "get_astrbot_data_path",
+        lambda: str(tmp_path / "data"),
+    )
     source = source_image(tmp_path)
     replacement = source_image(tmp_path, "BMP")
     extra = ImageURLPart(
@@ -465,7 +475,14 @@ async def test_plugin_request_extra_metadata_hook_and_history(
         == historical[0]["content"][0]["image_url"]["url"]
     )
     assert req.contexts == historical
-    images = [p for p in saved[-1]["content"] if p["type"] == "image_url"]
+    refs = [p for p in saved[-1]["content"] if p["type"] == "image_media_ref"]
+    assert refs and all(len(p["media_id"]) == 64 for p in refs)
+    materialized = await materialize_image_media_refs(
+        [saved[-1]], ImageMediaStore(tmp_path / "data" / "media")
+    )
+    images = [
+        p for p in materialized[0]["content"] if p["type"] == "image_url"
+    ]
     assert images and all(
         p["image_url"]["url"].startswith("data:image/jpeg;base64,") for p in images
     )
@@ -481,7 +498,7 @@ async def test_plugin_request_extra_metadata_hook_and_history(
     from astrbot.core.provider.sources.anthropic_source import ProviderAnthropic
 
     anthropic = object.__new__(ProviderAnthropic)
-    _, payload = anthropic._prepare_payload([saved[-1]])
+    _, payload = anthropic._prepare_payload(materialized)
     visual = [part for part in payload[0]["content"] if part["type"] == "image"]
     assert len(visual) == len(images)
     assert all(part["source"]["media_type"] == "image/jpeg" for part in visual)

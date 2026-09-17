@@ -1,16 +1,29 @@
 import json
 import sys
 import typing as T
+from dataclasses import replace
+from pathlib import Path
 
 import astrbot.core.message.components as Comp
 from astrbot import logger
 from astrbot.core import sp
+from astrbot.core.agent.context.image_budget import validate_context_image_bytes
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import (
     LLMResponse,
     ProviderRequest,
 )
-from astrbot.core.utils.media_utils import MediaResolver, describe_media_ref
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.image_media_store import (
+    ImageMediaStore,
+    materialize_image_media_refs,
+)
+from astrbot.core.utils.media_utils import (
+    ImagePayloadTooLargeError,
+    ImagePreparationOptions,
+    describe_media_ref,
+    resolve_media_ref_to_base64_data,
+)
 
 from ...hooks import BaseAgentRunHooks
 from ...message import is_checkpoint_message
@@ -91,6 +104,11 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
             # 执行 Coze 请求并处理结果
             async for response in self._execute_coze_request():
                 yield response
+        except (ImagePayloadTooLargeError, MemoryError, OSError):
+            # Keep resource failures visible to the caller; do not turn them into
+            # a normal agent response that could trigger an unrelated retry.
+            self._transition_state(AgentState.ERROR)
+            raise
         except Exception as e:
             logger.error(f"Coze 请求失败：{str(e)}")
             self._transition_state(AgentState.ERROR)
@@ -148,6 +166,21 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
 
         # 处理历史上下文
         if not self.auto_save_history and contexts:
+            image_options = (
+                self.req.image_preparation_options or ImagePreparationOptions()
+            )
+            image_limit = image_options.max_encoded_bytes
+            if image_limit is None:
+                image_limit = ImagePreparationOptions().max_encoded_bytes
+            validate_context_image_bytes(
+                contexts,
+                image_limit,
+            )
+            contexts = await materialize_image_media_refs(
+                contexts,
+                ImageMediaStore(Path(get_astrbot_data_path()) / "media"),
+            )
+            history_image_options = replace(image_options, enabled=False)
             for ctx in contexts:
                 if is_checkpoint_message(ctx):
                     continue
@@ -169,7 +202,9 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
                                         if url:
                                             file_id = (
                                                 await self._download_and_upload_image(
-                                                    url, session_id
+                                                    url,
+                                                    session_id,
+                                                    image_options=history_image_options,
                                                 )
                                             )
                                             processed_content.append(
@@ -179,6 +214,12 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
                                                     "file_url": url,
                                                 }
                                             )
+                                    except (
+                                        ImagePayloadTooLargeError,
+                                        MemoryError,
+                                        OSError,
+                                    ):
+                                        raise
                                     except Exception as e:
                                         logger.warning(f"处理上下文图片失败: {e}")
                                         continue
@@ -221,6 +262,8 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
                                 "file_id": file_id,
                             }
                         )
+                    except (ImagePayloadTooLargeError, MemoryError, OSError):
+                        raise
                     except Exception as e:
                         logger.warning(
                             "处理图片失败 %s: %s",
@@ -335,12 +378,19 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
         self,
         image_url: str,
         session_id: str | None = None,
+        *,
+        image_options: ImagePreparationOptions | None = None,
     ) -> str:
         """下载图片并上传到 Coze，返回 file_id"""
         import hashlib
 
-        # 计算哈希实现缓存
-        cache_key = hashlib.md5(image_url.encode("utf-8")).hexdigest()
+        image_options = image_options or getattr(
+            getattr(self, "req", None), "image_preparation_options", None
+        )
+        # Include preparation options so a changed byte budget cannot reuse an old upload.
+        cache_key = hashlib.sha256(
+            f"{image_url}\0{image_options!r}".encode()
+        ).hexdigest()
 
         if session_id:
             if session_id not in self.file_id_cache:
@@ -352,10 +402,15 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
                 return file_id
 
         try:
-            image_bytes = await MediaResolver(
+            image_data = await resolve_media_ref_to_base64_data(
                 image_url,
                 media_type="image",
-            ).to_bytes()
+                strict=True,
+                image_options=image_options,
+            )
+            if image_data is None:
+                raise ValueError("Image preprocessing returned no data")
+            image_bytes = image_data.to_bytes()
             file_id = await self.api_client.upload_file(image_bytes)
 
             if session_id:
@@ -364,6 +419,8 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
 
             return file_id
 
+        except (ImagePayloadTooLargeError, MemoryError, OSError):
+            raise
         except Exception as e:
             logger.error("处理图片失败 %s: %s", describe_media_ref(image_url), e)
             raise Exception(f"处理图片失败: {e!s}") from e

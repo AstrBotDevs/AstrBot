@@ -5,6 +5,8 @@ import json
 import random
 import re
 from collections.abc import AsyncGenerator
+from dataclasses import replace
+from pathlib import Path
 from typing import Any, Literal
 
 import httpx
@@ -18,6 +20,10 @@ from openai.types.completion_usage import CompletionUsage
 import astrbot.core.message.components as Comp
 from astrbot import logger
 from astrbot.api.provider import Provider
+from astrbot.core.agent.context.image_budget import (
+    get_image_encoded_byte_limit,
+    validate_context_image_bytes,
+)
 from astrbot.core.agent.message import (
     AudioURLPart,
     ContentPart,
@@ -26,11 +32,20 @@ from astrbot.core.agent.message import (
     TextPart,
 )
 from astrbot.core.agent.tool import ToolSet
-from astrbot.core.exceptions import EmptyModelOutputError
+from astrbot.core.exceptions import EmptyModelOutputError, ProviderRequestTooLargeError
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, TokenUsage, ToolCallsResult
+from astrbot.core.provider.modalities import sanitize_contexts_by_modalities
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.image_media_store import (
+    ImageMediaStore,
+    materialize_image_media_refs,
+)
 from astrbot.core.utils.media_utils import (
+    ImagePayloadTooLargeError,
+    ImagePreparationOptions,
     describe_media_ref,
+    get_image_preparation_options,
     resolve_media_ref_to_base64_data,
 )
 from astrbot.core.utils.network_utils import (
@@ -181,11 +196,14 @@ class ProviderOpenAIOfficial(Provider):
         image_ref: str,
         *,
         mode: Literal["safe", "strict"] = "safe",
+        options: ImagePreparationOptions | None = None,
     ) -> str | None:
         image_data = await resolve_media_ref_to_base64_data(
             image_ref,
             media_type="image",
             strict=mode == "strict",
+            image_options=options
+            or get_image_preparation_options(self.provider_settings),
         )
         return image_data.to_data_url() if image_data else None
 
@@ -194,8 +212,13 @@ class ProviderOpenAIOfficial(Provider):
         image_url: str,
         *,
         image_detail: str | None = None,
+        options: ImagePreparationOptions | None = None,
     ) -> dict | None:
-        image_data = await self._image_ref_to_data_url(image_url, mode="safe")
+        image_data = await self._image_ref_to_data_url(
+            image_url,
+            mode="safe",
+            options=options,
+        )
         if not image_data:
             logger.warning("图片预处理结果为空，将忽略。")
             return None
@@ -266,7 +289,12 @@ class ProviderOpenAIOfficial(Provider):
             },
         }
 
-    async def _transform_content_part(self, part: dict) -> dict:
+    async def _transform_content_part(
+        self,
+        part: dict,
+        *,
+        options: ImagePreparationOptions | None = None,
+    ) -> dict:
         if not isinstance(part, dict):
             return part
 
@@ -275,10 +303,20 @@ class ProviderOpenAIOfficial(Provider):
             if not url:
                 return part
 
+            # ProviderRequest.assemble_context() already materializes current
+            # images into a data URL. Keep that request-local representation
+            # unchanged so the adapter does not decode and encode it again.
+            if url.startswith("data:image/"):
+                return part
+
             try:
                 resolved_part = await self._resolve_image_part(
-                    url, image_detail=image_detail
+                    url,
+                    image_detail=image_detail,
+                    options=options,
                 )
+            except (ImagePayloadTooLargeError, MemoryError):
+                raise
             except Exception as exc:
                 logger.warning(
                     "图片 %s 预处理失败，将保留原始内容。错误: %s",
@@ -298,19 +336,30 @@ class ProviderOpenAIOfficial(Provider):
 
         return part
 
-    async def _materialize_message_image_parts(self, message: dict) -> dict:
+    async def _materialize_message_image_parts(
+        self,
+        message: dict,
+        *,
+        options: ImagePreparationOptions | None = None,
+    ) -> dict:
         content = message.get("content")
         if not isinstance(content, list):
             return {**message}
 
-        new_content = [await self._transform_content_part(part) for part in content]
+        new_content = [
+            await self._transform_content_part(part, options=options)
+            for part in content
+        ]
         return {**message, "content": new_content}
 
     async def _materialize_context_image_parts(
         self, context_query: list[dict]
     ) -> list[dict]:
+        options = replace(
+            get_image_preparation_options(self.provider_settings), enabled=False
+        )
         return [
-            await self._materialize_message_image_parts(message)
+            await self._materialize_message_image_parts(message, options=options)
             for message in context_query
         ]
 
@@ -963,6 +1012,15 @@ class ProviderOpenAIOfficial(Provider):
         """准备聊天所需的有效载荷和上下文"""
         if contexts is None:
             contexts = []
+        contexts, _ = sanitize_contexts_by_modalities(
+            contexts, self.provider_config.get("modalities")
+        )
+        validate_context_image_bytes(
+            contexts, get_image_encoded_byte_limit(self.provider_settings)
+        )
+        contexts = await materialize_image_media_refs(
+            contexts, ImageMediaStore(Path(get_astrbot_data_path()) / "media")
+        )
         new_record = None
         if prompt is not None:
             new_record = await self.assemble_context(
@@ -1083,6 +1141,16 @@ class ProviderOpenAIOfficial(Provider):
         image_fallback_used: bool = False,
     ) -> tuple:
         """处理API错误并尝试恢复"""
+        if isinstance(e, MemoryError):
+            raise e
+        status_code = getattr(e, "status_code", None)
+        response = getattr(e, "response", None)
+        if status_code is None and response is not None:
+            status_code = getattr(response, "status_code", None)
+        if status_code == 413:
+            raise ProviderRequestTooLargeError(
+                "The provider rejected the request because its serialized size is too large (HTTP 413)."
+            ) from e
         if "429" in str(e):
             logger.warning(
                 f"API 调用过于频繁，尝试使用其他 Key 重试。当前 Key: {chosen_key[:12]}",

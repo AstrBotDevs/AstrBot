@@ -16,13 +16,6 @@ import mcp
 from astrbot.core.agent.context.token_counter import EstimateTokenCounter
 from astrbot.core.agent.message import Message
 from astrbot.core.agent.tool import ToolExecResult
-from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-from astrbot.core.utils.media_utils import (
-    IMAGE_COMPRESS_DEFAULT_MAX_SIZE,
-    IMAGE_COMPRESS_DEFAULT_OPTIMIZE,
-    IMAGE_COMPRESS_DEFAULT_QUALITY,
-    _compress_image_sync,
-)
 
 from .booters.base import ComputerBooter
 from .local_file_security import open_file_in_allowed_roots
@@ -309,25 +302,6 @@ async def _probe_local_file(
     return await to_thread(_run)
 
 
-async def _read_local_image_base64(
-    path: str,
-    file_descriptor: int | None = None,
-) -> dict[str, str | int]:
-    def _run() -> dict[str, str | int]:
-        if file_descriptor is None:
-            data = Path(path).read_bytes()
-        else:
-            with os.fdopen(os.dup(file_descriptor), "rb") as file_obj:
-                file_obj.seek(0)
-                data = file_obj.read()
-        return {
-            "size_bytes": len(data),
-            "base64": base64.b64encode(data).decode("utf-8"),
-        }
-
-    return await to_thread(_run)
-
-
 async def _read_local_file_bytes(
     path: str,
     file_descriptor: int | None = None,
@@ -339,33 +313,6 @@ async def _read_local_file_bytes(
         with os.fdopen(os.dup(file_descriptor), "rb") as file_obj:
             file_obj.seek(0)
             return file_obj.read()
-
-    return await to_thread(_run)
-
-
-async def _compress_image_bytes_to_base64(data: bytes) -> dict[str, str | int]:
-    def _run() -> dict[str, str | int]:
-        temp_dir = Path(get_astrbot_temp_path())
-        temp_dir.mkdir(parents=True, exist_ok=True)
-        compressed_path = Path(
-            _compress_image_sync(
-                data,
-                temp_dir,
-                IMAGE_COMPRESS_DEFAULT_MAX_SIZE,
-                IMAGE_COMPRESS_DEFAULT_QUALITY,
-                IMAGE_COMPRESS_DEFAULT_OPTIMIZE,
-            )
-        )
-        try:
-            compressed_bytes = compressed_path.read_bytes()
-        finally:
-            compressed_path.unlink(missing_ok=True)
-
-        return {
-            "size_bytes": len(compressed_bytes),
-            "base64": base64.b64encode(compressed_bytes).decode("utf-8"),
-            "mime_type": "image/jpeg",
-        }
 
     return await to_thread(_run)
 
@@ -757,32 +704,29 @@ async def read_file_tool_result(
 
     if probe.kind == "image":
         if local_mode:
-            image_payload = await _read_local_image_base64(
-                path,
-                local_file_descriptor,
-            )
+            try:
+                raw_bytes = await _read_local_file_bytes(path, local_file_descriptor)
+            except OSError as exc:
+                return f"Error reading file: failed to read image: {exc}"
+            image_base64_data = base64.b64encode(raw_bytes).decode("utf-8")
+            mime_type = probe.mime_type or "image/jpeg"
         else:
             image_payload = await _exec_python_json(
                 booter,
                 _build_image_read_script(path),
                 action="image read",
             )
-        raw_base64_data = str(image_payload.get("base64", "") or "")
-        if not raw_base64_data:
-            return "Error reading file: image payload is empty."
-        raw_bytes = base64.b64decode(raw_base64_data)
-        compressed_payload = await _compress_image_bytes_to_base64(raw_bytes)
-        compressed_base64_data = str(compressed_payload.get("base64", "") or "")
-        if not compressed_base64_data:
-            return "Error reading file: compressed image payload is empty."
+            raw_base64_data = str(image_payload.get("base64", "") or "")
+            if not raw_base64_data:
+                return "Error reading file: image payload is empty."
+            image_base64_data = raw_base64_data
+            mime_type = probe.mime_type or "image/jpeg"
         return mcp.types.CallToolResult(
             content=[
                 mcp.types.ImageContent(
                     type="image",
-                    data=compressed_base64_data,
-                    mimeType=str(
-                        compressed_payload.get("mime_type", "") or "image/jpeg"
-                    ),
+                    data=image_base64_data,
+                    mimeType=mime_type,
                 )
             ]
         )

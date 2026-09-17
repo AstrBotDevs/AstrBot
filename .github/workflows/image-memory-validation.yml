@@ -1,0 +1,215 @@
+name: Image Memory Lifecycle Validation
+
+on:
+  push:
+    branches:
+      - feat/optimize-image-memory-lifecycle
+  workflow_dispatch:
+
+jobs:
+  validate:
+    name: Image and memory validation (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install uv
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run repository ruff checks
+        run: |
+          uv run ruff format --check .
+          uv run ruff check .
+
+      - name: Run focused tests
+        run: |
+          mkdir -p "$RUNNER_TEMP/image-memory-validation/results"
+          uv run pytest -q \
+            tests/unit/test_image_preparation_budget.py \
+            tests/unit/test_image_media_store.py \
+            tests/test_media_utils.py \
+            tests/test_computer_fs_tools.py \
+            tests/test_tool_loop_agent_runner.py \
+            tests/agent/test_context_manager.py \
+            tests/unit/test_astr_main_agent.py \
+            tests/unit/test_context_image_budget.py \
+            tests/unit/test_image_source_preparation.py \
+            tests/unit/test_image_memory_benchmark.py \
+            tests/unit/test_image_lifecycle_workloads.py \
+            tests/unit/test_image_screenshot_encoding.py \
+            tests/unit/test_image_source_integration.py \
+            tests/unit/test_provider_image_references.py \
+            tests/test_agent_runner_media_resolver.py \
+            tests/unit/test_provider_request_retry.py \
+            tests/unit/test_manage_image_history.py \
+            tests/unit/test_conversation_media_api.py \
+            tests/test_openai_source.py \
+            tests/test_openai_responses_source.py \
+            tests/test_gemini_source.py \
+            tests/test_anthropic_source.py \
+            tests/test_anthropic_kimi_code_provider.py \
+            tests/test_deerflow_agent_runner.py \
+            tests/unit/test_cron_context_compression.py \
+            tests/unit/test_group_chat_context_wiring.py \
+            tests/test_platform_image_format_preservation.py \
+            tests/test_webchat_queue_lifecycle.py \
+            tests/test_webchat_upload_image_format.py \
+            --junitxml="$RUNNER_TEMP/image-memory-validation/results/tests.xml"
+
+      - name: Generate reproducible fixtures outside measured processes
+        run: |
+          mkdir -p "$RUNNER_TEMP/image-memory-validation/fixtures"
+          uv run python scripts/image_memory_bench/generate_fixtures.py \
+            "$RUNNER_TEMP/image-memory-validation/fixtures" \
+            --seeds 7 19 43
+
+      - name: Record versions and fixture manifest
+        run: |
+          mkdir -p "$RUNNER_TEMP/image-memory-validation/results"
+          uv run python scripts/image_memory_bench/baseline_manifest.py \
+            "$RUNNER_TEMP/image-memory-validation/results/manifest.json" \
+            --fixtures "$RUNNER_TEMP/image-memory-validation/fixtures"
+
+      - name: Run single-image memory workloads for every paired seed
+        run: |
+          set +e
+          result="$RUNNER_TEMP/image-memory-validation/results/measurements.jsonl"
+          failures=0
+          for seed in 7 19 43; do
+            while IFS= read -r image; do
+              uv run python scripts/image_memory_bench/measure.py \
+                "$image" "$result" \
+                --repo "$GITHUB_WORKSPACE" \
+                --csv "$RUNNER_TEMP/image-memory-validation/results/measurements.csv" \
+                --workload "$seed-$(basename "$image")"
+              code=$?
+              if [ "$code" -ne 0 ]; then
+                failures=$((failures + 1))
+              fi
+            done < <(find "$RUNNER_TEMP/image-memory-validation/fixtures/$seed" \
+              -type f \( -name '*ordinary*' -o -name '*stress*' \) | sort)
+          done
+          printf '{"measurement_failures":%s}\n' "$failures" \
+            > "$RUNNER_TEMP/image-memory-validation/results/measurement-summary.json"
+
+      - name: Run Python allocation diagnostic workload
+        run: |
+          uv run python scripts/image_memory_bench/measure.py \
+            "$RUNNER_TEMP/image-memory-validation/fixtures/7/png-stress.png" \
+            "$RUNNER_TEMP/image-memory-validation/results/trace-python.jsonl" \
+            --repo "$GITHUB_WORKSPACE" \
+            --trace-python \
+            --csv "$RUNNER_TEMP/image-memory-validation/results/trace-python.csv" \
+            --workload trace-python-png-stress
+
+      - name: Run paired history loading workloads
+        run: |
+          mkdir -p "$RUNNER_TEMP/image-memory-validation/results/history"
+          for seed in 7 19 43; do
+            uv run python scripts/image_memory_bench/history_benchmark.py \
+              "$RUNNER_TEMP/image-memory-validation/fixtures/$seed/manifest.json" \
+              "$RUNNER_TEMP/image-memory-validation/results/history/$seed.jsonl" \
+              --repo "$GITHUB_WORKSPACE" \
+              --images 50 \
+              --keep-turns 25 \
+              --repeats 10 \
+              --cold-repeats 10 \
+              --warm-repeats 10 \
+              --distinct \
+              --csv "$RUNNER_TEMP/image-memory-validation/results/history/$seed.csv" \
+              --rss-jsonl "$RUNNER_TEMP/image-memory-validation/results/history/$seed.rss.jsonl"
+          done
+
+      - name: Run fixed-window concurrent lifecycle and restart workload
+        run: |
+          lifecycle_root="$RUNNER_TEMP/image-memory-validation/lifecycle"
+          mkdir -p "$lifecycle_root"
+          uv run python scripts/image_memory_bench/prepare_lifecycle_fixture.py \
+            "$RUNNER_TEMP/image-memory-validation/fixtures/7/manifest.json" \
+            "$lifecycle_root/input" \
+            --session-count 4 \
+            --history-turns 50
+          lifecycle_manifest="$lifecycle_root/input/lifecycle-manifest.json"
+          database=$(uv run python -c \
+            'import json,sys; print(json.load(open(sys.argv[1]))["database"])' \
+            "$lifecycle_manifest")
+          media_root=$(uv run python -c \
+            'import json,sys; print(json.load(open(sys.argv[1]))["media_root"])' \
+            "$lifecycle_manifest")
+          conversation_ids=$(uv run python -c \
+            'import json,sys; print(" ".join(json.load(open(sys.argv[1]))["conversation_ids"]))' \
+            "$lifecycle_manifest")
+          command=(
+            uv run python scripts/image_memory_bench/lifecycle_workloads.py
+            "$lifecycle_root/result.json"
+            --repo "$GITHUB_WORKSPACE"
+            --database "$database"
+            --media-root "$media_root"
+            --session-count 4
+            --request-count 200
+            --window-turns 25
+            --rss-jsonl "$lifecycle_root/result.rss.jsonl"
+          )
+          for conversation_id in $conversation_ids; do
+            command+=(--conversation-id "$conversation_id")
+          done
+          "${command[@]}"
+
+      - name: Record ablation contract status without fabricating factors
+        run: |
+          uv run python scripts/image_memory_bench/ablation_runner.py \
+            "$RUNNER_TEMP/image-memory-validation/results/ablation-plan.json" \
+            --baseline-repo "$GITHUB_WORKSPACE" \
+            --candidate-repo "$GITHUB_WORKSPACE"
+
+      - name: Upload raw validation artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-memory-validation-${{ matrix.os }}
+          path: ${{ runner.temp }}/image-memory-validation
+          if-no-files-found: error
+
+  dashboard:
+    name: Dashboard typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: dashboard
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: dashboard/pnpm-lock.yaml
+      - name: Enable pnpm
+        run: corepack enable
+      - name: Install dashboard dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Run dashboard typecheck
+        run: pnpm typecheck

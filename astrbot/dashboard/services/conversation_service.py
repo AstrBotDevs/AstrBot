@@ -1,15 +1,23 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import traceback
 from dataclasses import dataclass
 from datetime import datetime
 from io import BytesIO
+from pathlib import Path
 
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.umo_alias import build_umo_alias_map, parse_umo, serialize_umo_alias
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.image_media_store import (
+    ImageMediaRef,
+    ImageMediaStore,
+    materialize_image_media_refs,
+)
 
 
 class ConversationServiceError(Exception):
@@ -23,6 +31,12 @@ class ConversationExport:
     mimetype: str = "application/jsonl"
 
 
+@dataclass
+class ConversationMedia:
+    data: bytes
+    mime_type: str
+
+
 class ConversationService:
     def __init__(
         self,
@@ -32,6 +46,7 @@ class ConversationService:
         self.db_helper = db_helper
         self.conv_mgr = core_lifecycle.conversation_manager
         self.core_lifecycle = core_lifecycle
+        self.media_store = ImageMediaStore(Path(get_astrbot_data_path()) / "media")
 
     async def list_conversations(
         self,
@@ -256,7 +271,9 @@ class ConversationService:
                     continue
 
                 webchat_titles = await self._get_webchat_titles([conversation])
-                content = json.loads(conversation.history)
+                content = await materialize_image_media_refs(
+                    json.loads(conversation.history), self.media_store, strict=True
+                )
                 export_record = {
                     "cid": cid,
                     "user_id": user_id,
@@ -271,6 +288,8 @@ class ConversationService:
                 }
                 jsonl_lines.append(json.dumps(export_record, ensure_ascii=False))
                 exported_count += 1
+            except MemoryError:
+                raise
             except Exception as exc:
                 failed_items.append(f"user_id:{user_id}, cid:{cid} - {exc!s}")
                 logger.error(
@@ -289,6 +308,70 @@ class ConversationService:
             file_obj=file_obj,
             filename=f"astrbot_conversations_export_{timestamp}.jsonl",
         )
+
+    async def get_conversation_media(
+        self, user_id: str, cid: str, media_id: str
+    ) -> ConversationMedia:
+        """Return one image referenced by an authorized conversation.
+
+        Args:
+            user_id: Conversation owner and unified message origin.
+            cid: Conversation identifier.
+            media_id: Content hash from the persisted media reference.
+
+        Returns:
+            Image bytes and their persisted MIME type.
+
+        Raises:
+            ConversationServiceError: If ownership, reference, or media access fails.
+        """
+        conversation = await self.db_helper.get_conversation_by_id(cid)
+        if not conversation:
+            raise ConversationServiceError("对话不存在")
+        if conversation.user_id != user_id:
+            raise ConversationServiceError("对话不存在")
+        try:
+            history = json.loads(conversation.history)
+        except (TypeError, json.JSONDecodeError) as exc:
+            raise ConversationServiceError("对话历史无效") from exc
+        refs = self._media_refs(history)
+        ref = refs.get(media_id)
+        if ref is None:
+            raise ConversationServiceError("媒体不存在")
+        try:
+            return ConversationMedia(
+                await asyncio.to_thread(self.media_store.read, ref, set(refs)),
+                ref.mime_type,
+            )
+        except (OSError, PermissionError, FileNotFoundError) as exc:
+            raise ConversationServiceError("媒体暂时不可用，请从原始来源恢复") from exc
+
+    @staticmethod
+    def _media_refs(value) -> dict[str, ImageMediaRef]:
+        found = {}
+        if isinstance(value, list):
+            for item in value:
+                found.update(ConversationService._media_refs(item))
+        elif isinstance(value, dict):
+            if value.get("type") == "image_media_ref":
+                try:
+                    ref = ImageMediaRef(
+                        value["media_id"],
+                        value["mime_type"],
+                        value.get("width"),
+                        value.get("height"),
+                        value["byte_size"],
+                        value.get("detail"),
+                        value.get("version", 1),
+                        value.get("image_id"),
+                    )
+                    found[ref.media_id] = ref
+                except (KeyError, TypeError, ValueError):
+                    pass
+            else:
+                for item in value.values():
+                    found.update(ConversationService._media_refs(item))
+        return found
 
     async def _delete_conversations(self, conversations: object) -> dict:
         if not isinstance(conversations, list) or not conversations:

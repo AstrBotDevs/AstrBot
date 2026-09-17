@@ -1,10 +1,20 @@
+from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
+
+from astrbot.core.exceptions import ProviderRequestTooLargeError
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.image_media_store import (
+    ImageMediaStore,
+    materialize_image_media_refs,
+)
+from astrbot.core.utils.media_utils import ImagePayloadTooLargeError
 
 from ...provider.modalities import (
     log_context_sanitize_stats,
     sanitize_contexts_by_modalities,
 )
 from ..message import Message
+from .image_budget import get_image_encoded_byte_limit, validate_context_image_bytes
 from .token_counter import EstimateTokenCounter, TokenCounter
 
 if TYPE_CHECKING:
@@ -130,6 +140,7 @@ class LLMSummaryCompressor:
         instruction_text: str | None = None,
         compression_threshold: float = 0.82,
         token_counter: TokenCounter | None = None,
+        image_media_store: ImageMediaStore | None = None,
     ) -> None:
         """Initialize the LLM summary compressor.
 
@@ -139,8 +150,10 @@ class LLMSummaryCompressor:
                 exact context. Clamped to 0-0.3.
             instruction_text: Custom instruction for summary generation.
             compression_threshold: The compression trigger threshold (default: 0.82).
+            image_media_store: Store shared with the main request.
         """
         self.provider = provider
+        self.image_media_store = image_media_store
         self.keep_recent_ratio = min(max(float(keep_recent_ratio), 0.0), 0.3)
         self.compression_threshold = compression_threshold
         self.token_counter = token_counter or EstimateTokenCounter()
@@ -273,11 +286,29 @@ class LLMSummaryCompressor:
 
         # Generate summary
         try:
+            limit = get_image_encoded_byte_limit(
+                getattr(self.provider, "provider_settings", {})
+            )
+            validate_context_image_bytes(sanitized_summary_contexts, limit)
+            sanitized_summary_contexts = await materialize_image_media_refs(
+                sanitized_summary_contexts,
+                self.image_media_store
+                or ImageMediaStore(Path(get_astrbot_data_path()) / "media"),
+            )
             response = await self.provider.text_chat(
                 contexts=sanitized_summary_contexts,
             )
             summary_content = (response.completion_text or "").strip()
+        except (MemoryError, ImagePayloadTooLargeError, ProviderRequestTooLargeError):
+            raise
         except Exception as e:
+            status_code = getattr(e, "status_code", None) or getattr(
+                getattr(e, "response", None), "status_code", None
+            )
+            if status_code == 413:
+                raise ProviderRequestTooLargeError(
+                    "The summary provider rejected the request size (HTTP 413)."
+                ) from e
             logger.error(f"Failed to generate summary: {e}")
             return messages
 

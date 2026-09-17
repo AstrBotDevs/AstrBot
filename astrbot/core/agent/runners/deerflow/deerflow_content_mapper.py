@@ -6,6 +6,8 @@ import astrbot.core.message.components as Comp
 from astrbot import logger
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.utils.media_utils import (
+    ImagePayloadTooLargeError,
+    ImagePreparationOptions,
     describe_media_ref,
     resolve_media_ref_to_base64_data,
 )
@@ -98,13 +100,18 @@ def build_user_content(prompt: str, image_urls: list[str]) -> Any:
     return content
 
 
-async def build_user_content_resolved(prompt: str, image_urls: list[str]) -> Any:
+async def build_user_content_resolved(
+    prompt: str,
+    image_urls: list[str],
+    image_options: ImagePreparationOptions | None = None,
+) -> Any:
     """Build DeerFlow user content after resolving all supported image refs.
 
     Args:
         prompt: User text to include before image blocks.
         image_urls: Image references from plugins or message attachments. Supports
             local paths, HTTP(S), file URIs, base64://, data URIs, and bare base64.
+        image_options: Preparation limits for the active provider request.
 
     Returns:
         Plain text when no images are present; otherwise a multimodal content list.
@@ -136,7 +143,10 @@ async def build_user_content_resolved(prompt: str, image_urls: list[str]) -> Any
             image_data = await resolve_media_ref_to_base64_data(
                 image_ref,
                 media_type="image",
+                image_options=image_options,
             )
+        except (ImagePayloadTooLargeError, MemoryError, OSError):
+            raise
         except Exception as exc:
             skipped_invalid_images += 1
             logger.debug(

@@ -3353,6 +3353,20 @@ export type ReplaceConversationMessagesResponse = (SuccessEnvelope);
 
 export type ReplaceConversationMessagesError = unknown;
 
+export type PreviewConversationMediaData = {
+    path: {
+        conversation_id: string;
+        media_id: string;
+    };
+    query: {
+        user_id: string;
+    };
+};
+
+export type PreviewConversationMediaResponse = ((Blob | File));
+
+export type PreviewConversationMediaError = (unknown);
+
 export type ExportConversationsData = {
     body: ConversationExportRequest;
 };

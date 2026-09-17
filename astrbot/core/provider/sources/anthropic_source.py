@@ -1,6 +1,7 @@
 import base64
 import json
 from collections.abc import AsyncGenerator
+from pathlib import Path
 from typing import Any, Literal
 
 import anthropic
@@ -12,12 +13,23 @@ from anthropic.types.usage import Usage
 
 from astrbot import logger
 from astrbot.api.provider import Provider
+from astrbot.core.agent.context.image_budget import (
+    get_image_encoded_byte_limit,
+    validate_context_image_bytes,
+)
 from astrbot.core.agent.message import AudioURLPart, ContentPart, ImageURLPart, TextPart
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse, TokenUsage
 from astrbot.core.provider.func_tool_manager import ToolSet
+from astrbot.core.provider.modalities import sanitize_contexts_by_modalities
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.image_media_store import (
+    ImageMediaStore,
+    materialize_image_media_refs,
+)
 from astrbot.core.utils.media_utils import (
     describe_media_ref,
+    get_image_preparation_options,
     resolve_media_ref_to_base64_data,
 )
 from astrbot.core.utils.network_utils import (
@@ -274,11 +286,14 @@ class ProviderAnthropic(Provider):
                             if url.startswith("data:"):
                                 try:
                                     _, base64_data = url.split(",", 1)
-                                    # Detect actual image format from binary data
-                                    image_bytes = base64.b64decode(base64_data)
-                                    media_type = self._detect_image_mime_type(
-                                        image_bytes
+                                    # Decode only the header-sized prefix. The
+                                    # complete payload remains the provider's
+                                    # wire data and must not be copied merely
+                                    # to detect its MIME type.
+                                    prefix = base64.b64decode(
+                                        "".join(base64_data.split())[:64]
                                     )
+                                    media_type = self._detect_image_mime_type(prefix)
                                     converted_content.append(
                                         {
                                             "type": "image",
@@ -780,6 +795,15 @@ class ProviderAnthropic(Provider):
     ) -> LLMResponse:
         if contexts is None:
             contexts = []
+        contexts, _ = sanitize_contexts_by_modalities(
+            contexts, self.provider_config.get("modalities")
+        )
+        validate_context_image_bytes(
+            contexts, get_image_encoded_byte_limit(self.provider_settings)
+        )
+        contexts = await materialize_image_media_refs(
+            contexts, ImageMediaStore(Path(get_astrbot_data_path()) / "media")
+        )
         new_record = None
         if prompt is not None:
             new_record = await self.assemble_context(
@@ -853,6 +877,15 @@ class ProviderAnthropic(Provider):
     ):
         if contexts is None:
             contexts = []
+        contexts, _ = sanitize_contexts_by_modalities(
+            contexts, self.provider_config.get("modalities")
+        )
+        validate_context_image_bytes(
+            contexts, get_image_encoded_byte_limit(self.provider_settings)
+        )
+        contexts = await materialize_image_media_refs(
+            contexts, ImageMediaStore(Path(get_astrbot_data_path()) / "media")
+        )
         new_record = None
         if prompt is not None:
             new_record = await self.assemble_context(
@@ -927,6 +960,7 @@ class ProviderAnthropic(Provider):
             image_data = await resolve_media_ref_to_base64_data(
                 image_url,
                 media_type="image",
+                image_options=get_image_preparation_options(self.provider_settings),
             )
             if not image_data:
                 logger.warning("图片预处理结果为空，将忽略。")
@@ -999,6 +1033,7 @@ class ProviderAnthropic(Provider):
             image_url,
             media_type="image",
             strict=True,
+            image_options=get_image_preparation_options(self.provider_settings),
         )
         if image_data is None:
             raise RuntimeError(

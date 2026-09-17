@@ -779,10 +779,12 @@ async def test_prepare_chat_payload_materializes_context_http_image_urls(monkeyp
             *,
             media_type: str,
             strict: bool = False,
+            image_options=None,
         ) -> ResolvedMediaData:
             assert media_ref == "https://example.com/quoted.png"
             assert media_type == "image"
             assert strict is False
+            assert image_options is not None
             return ResolvedMediaData(base64_data="abcd", mime_type="image/png")
 
         monkeypatch.setattr(
@@ -1049,9 +1051,15 @@ async def test_materialize_context_image_parts_returns_new_messages(monkeypatch)
             {"role": "assistant", "content": "plain text"},
         ]
 
-        async def fake_resolve(image_url: str, *, image_detail: str | None = None):
+        async def fake_resolve(
+            image_url: str,
+            *,
+            image_detail: str | None = None,
+            options=None,
+        ):
             assert image_url == "https://example.com/quoted.png"
             assert image_detail == "high"
+            assert options is not None
             return {
                 "type": "image_url",
                 "image_url": {
@@ -1078,6 +1086,35 @@ async def test_materialize_context_image_parts_returns_new_messages(monkeypatch)
         )
         assert materialized[1] is not context_query[1]
         assert materialized[1]["content"] == "plain text"
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_materialize_context_keeps_existing_data_image_without_reencoding(
+    monkeypatch,
+):
+    provider = _make_provider()
+    try:
+        image_part = {
+            "type": "image_url",
+            "image_url": {
+                "url": "data:image/png;base64,already-prepared",
+                "detail": "high",
+                "id": "request-image",
+            },
+        }
+
+        async def fail_if_resolved(*_args, **_kwargs):
+            raise AssertionError("an existing data URL must not be re-encoded")
+
+        monkeypatch.setattr(provider, "_resolve_image_part", fail_if_resolved)
+
+        materialized = await provider._materialize_context_image_parts(
+            [{"role": "user", "content": [image_part]}]
+        )
+
+        assert materialized[0]["content"][0] == image_part
     finally:
         await provider.terminate()
 

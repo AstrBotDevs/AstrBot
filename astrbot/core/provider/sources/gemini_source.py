@@ -4,6 +4,8 @@ import json
 import logging
 import random
 from collections.abc import AsyncGenerator
+from dataclasses import replace
+from pathlib import Path
 from typing import Literal, cast
 
 import httpx
@@ -14,13 +16,25 @@ from google.genai.errors import APIError
 import astrbot.core.message.components as Comp
 from astrbot import logger
 from astrbot.api.provider import Provider
+from astrbot.core.agent.context.image_budget import (
+    get_image_encoded_byte_limit,
+    validate_context_image_bytes,
+)
 from astrbot.core.agent.message import AudioURLPart, ContentPart, ImageURLPart, TextPart
-from astrbot.core.exceptions import EmptyModelOutputError
+from astrbot.core.exceptions import EmptyModelOutputError, ProviderRequestTooLargeError
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, TokenUsage
 from astrbot.core.provider.func_tool_manager import ToolSet
+from astrbot.core.provider.modalities import sanitize_contexts_by_modalities
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.image_media_store import (
+    ImageMediaStore,
+    materialize_image_media_refs,
+)
 from astrbot.core.utils.media_utils import (
     describe_media_ref,
+    detect_image_mime_type,
+    get_image_preparation_options,
     resolve_media_ref_to_base64_data,
 )
 from astrbot.core.utils.network_utils import is_connection_error, log_connection_failure
@@ -133,6 +147,10 @@ class ProviderGoogleGenAI(Provider):
 
     async def _handle_api_error(self, e: APIError, keys: list[str]) -> bool:
         """处理API错误，返回是否需要重试"""
+        if getattr(e, "code", None) == 413:
+            raise ProviderRequestTooLargeError(
+                "The provider rejected the request because its serialized size is too large (HTTP 413)."
+            ) from e
         if e.message is None:
             e.message = ""
 
@@ -299,6 +317,20 @@ class ProviderGoogleGenAI(Provider):
 
     async def _prepare_conversation(self, payloads: dict) -> list[types.Content]:
         """准备 Gemini SDK 的 Content 列表"""
+        payloads = dict(payloads)
+        provider_config = getattr(self, "provider_config", {})
+        provider_settings = getattr(self, "provider_settings", {})
+        messages, _ = sanitize_contexts_by_modalities(
+            payloads.get("messages", []), provider_config.get("modalities")
+        )
+        validate_context_image_bytes(
+            messages, get_image_encoded_byte_limit(provider_settings)
+        )
+        payloads["messages"] = messages
+        payloads["messages"] = await materialize_image_media_refs(
+            payloads.get("messages", []),
+            ImageMediaStore(Path(get_astrbot_data_path()) / "media"),
+        )
 
         def create_text_part(text: str) -> types.Part:
             content_a = text if text else " "
@@ -308,10 +340,30 @@ class ProviderGoogleGenAI(Provider):
 
         async def process_image_url(image_url_dict: dict) -> types.Part:
             url = image_url_dict["url"]
+            if url.startswith("data:"):
+                header, separator, encoded = url.partition(",")
+                if separator and ";base64" in header.lower():
+                    image_bytes = base64.b64decode(encoded)
+                    declared_mime = header[5:].split(";", 1)[0].strip()
+                    detected_mime = await asyncio.to_thread(
+                        detect_image_mime_type,
+                        image_bytes,
+                        default_mime_type=None,
+                    )
+                    mime_type = detected_mime or declared_mime
+                    if mime_type:
+                        return types.Part.from_bytes(
+                            data=image_bytes,
+                            mime_type=mime_type,
+                        )
             image_data = await resolve_media_ref_to_base64_data(
                 url,
                 media_type="image",
                 strict=True,
+                image_options=replace(
+                    get_image_preparation_options(provider_settings),
+                    enabled=False,
+                ),
             )
             if image_data is None:
                 raise ValueError(
@@ -1023,6 +1075,7 @@ class ProviderGoogleGenAI(Provider):
             image_data = await resolve_media_ref_to_base64_data(
                 image_url,
                 media_type="image",
+                image_options=get_image_preparation_options(self.provider_settings),
             )
             if not image_data:
                 logger.warning("Image preprocessing returned no data; ignoring it.")
@@ -1119,6 +1172,7 @@ class ProviderGoogleGenAI(Provider):
             image_url,
             media_type="image",
             strict=True,
+            image_options=get_image_preparation_options(self.provider_settings),
         )
         if image_data is None:
             raise RuntimeError(

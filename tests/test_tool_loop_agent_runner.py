@@ -133,7 +133,10 @@ class MockMixedContentToolExecutor:
                 content=[
                     ImageContent(
                         type="image",
-                        data="dGVzdA==",
+                        data=(
+                            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk"
+                            "+A8AAQUBAScY42YAAAAASUVORK5CYII="
+                        ),
                         mimeType="image/png",
                     ),
                     TextContent(type="text", text="直播间标题：新游首发：零~红蝶~"),
@@ -938,10 +941,26 @@ async def test_tool_result_includes_all_calltoolresult_content(
             }
         )
         return SimpleNamespace(
-            file_path=f"/tmp/{tool_call_id}_{index}.png", mime_type=mime_type
+            file_path=f"/tmp/{tool_call_id}_{index}.png",
+            mime_type=mime_type,
+            tool_name=tool_name,
         )
 
     monkeypatch.setattr(tool_image_cache, "save_image", fake_save_image)
+    from astrbot.core.utils.media_utils import ResolvedMediaData
+
+    monkeypatch.setattr(
+        "astrbot.core.agent.runners.tool_loop_agent_runner.prepare_image_source",
+        AsyncMock(
+            return_value=ResolvedMediaData(
+                base64_data=(
+                    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk"
+                    "+A8AAQUBAScY42YAAAAASUVORK5CYII="
+                ),
+                mime_type="image/png",
+            )
+        ),
+    )
 
     await runner.reset(
         provider=mock_provider,
@@ -965,7 +984,10 @@ async def test_tool_result_includes_all_calltoolresult_content(
     assert "直播间标题：新游首发：零~红蝶~" in content
     assert saved_images == [
         {
-            "base64_data": "dGVzdA==",
+            "base64_data": (
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk"
+                "+A8AAQUBAScY42YAAAAASUVORK5CYII="
+            ),
             "tool_call_id": "call_123",
             "tool_name": "test_tool",
             "index": 0,
@@ -1250,6 +1272,297 @@ async def test_same_tool_streak_resets_after_switching_tools(
         else:
             assert level_1_notice not in content
             assert level_2_notice in content
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("error_type", [MemoryError])
+async def test_resource_exhaustion_does_not_try_fallback(
+    runner, provider_request, mock_tool_executor, mock_hooks, error_type
+):
+    primary = MockProvider()
+    fallback = MockProvider()
+    primary.text_chat = AsyncMock(side_effect=error_type("resource exhausted"))
+    await runner.reset(
+        provider=primary,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+        fallback_providers=[fallback],
+    )
+    with pytest.raises(error_type):
+        async for _ in runner._iter_llm_responses_with_fallback():
+            pass
+    assert fallback.call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_http_413_is_readable_and_not_retried(
+    runner, provider_request, mock_tool_executor, mock_hooks
+):
+    import httpx
+
+    from astrbot.core.exceptions import ProviderRequestTooLargeError
+
+    primary = MockProvider()
+    fallback = MockProvider()
+    request = httpx.Request("POST", "https://invalid.test/chat")
+    response = httpx.Response(413, request=request)
+    error = httpx.HTTPStatusError("too large", request=request, response=response)
+    primary.text_chat = AsyncMock(side_effect=error)
+    await runner.reset(
+        provider=primary,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        fallback_providers=[fallback],
+    )
+    with pytest.raises(ProviderRequestTooLargeError, match="HTTP 413"):
+        async for _ in runner._iter_llm_responses_with_fallback():
+            pass
+    assert primary.text_chat.await_count == 1
+    assert fallback.call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_tool_memory_failure_is_not_returned_as_empty_tool_error(
+    runner, provider_request, mock_hooks
+):
+    failure = MemoryError()
+
+    class FailedExecutor:
+        @classmethod
+        def execute(cls, *args, **kwargs):
+            async def results():
+                raise failure
+                yield  # pragma: no cover
+
+            return results()
+
+    provider = MockProvider()
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=FailedExecutor,
+        agent_hooks=mock_hooks,
+    )
+    with pytest.raises(MemoryError) as caught:
+        async for _ in runner.step_until_done(3):
+            pass
+    assert caught.value is failure
+    assert provider.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_real_tool_image_uses_preparation_and_reference_storage(
+    runner, provider_request, mock_hooks, tmp_path, monkeypatch
+):
+    import base64
+    import io
+
+    from mcp.types import CallToolResult, ImageContent
+    from PIL import Image
+
+    import astrbot.core.agent.runners.tool_loop_agent_runner as runner_module
+    from astrbot.core.agent.message import ImageMediaRefPart
+    from astrbot.core.agent.tool_image_cache import tool_image_cache
+    from astrbot.core.utils.image_media_store import ImageMediaStore
+
+    output = io.BytesIO()
+    with Image.new("RGBA", (24, 16), (60, 20, 30, 128)) as image:
+        image.save(output, "WEBP", lossless=True)
+    encoded = base64.b64encode(output.getvalue()).decode()
+
+    class ImageExecutor:
+        @classmethod
+        def execute(cls, *args, **kwargs):
+            async def results():
+                yield CallToolResult(
+                    content=[
+                        ImageContent(type="image", data=encoded, mimeType="image/webp")
+                    ]
+                )
+
+            return results()
+
+    monkeypatch.setattr(tool_image_cache, "_cache_dir", str(tmp_path / "tool-cache"))
+    original_prepare = runner_module.prepare_image_source
+    captured_options = []
+
+    async def capture_prepare(image_ref, **kwargs):
+        captured_options.append(kwargs["options"])
+        return await original_prepare(image_ref, **kwargs)
+
+    monkeypatch.setattr(runner_module, "prepare_image_source", capture_prepare)
+    provider = MockProvider()
+    provider.provider_settings = {
+        "image_compress_options": {
+            "max_size": 512,
+            "quality": 42,
+            "max_encoded_bytes": 2 * 1024 * 1024,
+        }
+    }
+    provider.max_calls_before_normal_response = 1
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=ImageExecutor,
+        agent_hooks=mock_hooks,
+        image_media_store=ImageMediaStore(tmp_path / "media"),
+    )
+    async for _ in runner.step_until_done(3):
+        pass
+    images = [
+        part
+        for message in runner.run_context.messages
+        if isinstance(message.content, list)
+        for part in message.content
+        if isinstance(part, ImageMediaRefPart)
+    ]
+    assert len(images) == 1
+    assert images[0].mime_type == "image/webp"
+    assert images[0].image_id.endswith("call_123_0.webp")
+    assert captured_options[0].max_size == 512
+    assert captured_options[0].quality == 42
+    assert captured_options[0].max_encoded_bytes == 2 * 1024 * 1024
+    assert provider.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_new_media_refs_do_not_rewrite_existing_inline_history(
+    runner, mock_tool_executor, mock_hooks, tmp_path
+):
+    import base64
+    import io
+
+    from PIL import Image
+
+    from astrbot.core.agent.message import ImageMediaRefPart
+    from astrbot.core.utils.image_media_store import ImageMediaStore
+
+    output = io.BytesIO()
+    with Image.new("RGB", (10, 8), (10, 20, 30)) as image:
+        image.save(output, "PNG")
+    uri = "data:image/png;base64," + base64.b64encode(output.getvalue()).decode()
+    old_history = [
+        {"role": "user", "content": [{"type": "image_url", "image_url": {"url": uri}}]},
+        {"role": "assistant", "content": "Old image"},
+    ]
+    request = ProviderRequest(
+        prompt="new image", image_urls=[uri], contexts=old_history
+    )
+    provider = MockProvider()
+    provider.text_chat = AsyncMock(
+        return_value=LLMResponse(role="assistant", completion_text="ok")
+    )
+    await runner.reset(
+        provider=provider,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        image_media_store=ImageMediaStore(tmp_path / "media"),
+    )
+    assert runner.run_context.messages[0].content[0].image_url.url == uri
+    assert isinstance(runner.run_context.messages[-1].content[-1], ImageMediaRefPart)
+    async for _ in runner._iter_llm_responses():
+        pass
+    sent = provider.text_chat.await_args.kwargs["contexts"]
+    assert sent[0].content[0].image_url.url == uri
+    assert sent[-1].content[-1].image_url.url == uri
+    assert isinstance(runner.run_context.messages[-1].content[-1], ImageMediaRefPart)
+    assert old_history[0]["content"][0]["image_url"]["url"] == uri
+
+
+@pytest.mark.asyncio
+async def test_runner_uses_default_durable_media_store_for_new_images(
+    runner, mock_tool_executor, mock_hooks, tmp_path, monkeypatch
+):
+    import base64
+    import io
+
+    from PIL import Image
+
+    from astrbot.core.agent.message import ImageMediaRefPart
+
+    output = io.BytesIO()
+    with Image.new("RGB", (10, 8), (10, 20, 30)) as image:
+        image.save(output, "PNG")
+    uri = "data:image/png;base64," + base64.b64encode(output.getvalue()).decode()
+    monkeypatch.setattr(
+        "astrbot.core.agent.runners.tool_loop_agent_runner.get_astrbot_data_path",
+        lambda: str(tmp_path),
+    )
+    request = ProviderRequest(prompt="new image", image_urls=[uri])
+
+    await runner.reset(
+        provider=MockProvider(),
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+    )
+
+    image_part = runner.run_context.messages[-1].content[-1]
+    assert isinstance(image_part, ImageMediaRefPart)
+    assert image_part.image_id is None
+    assert (tmp_path / "media" / f"{image_part.media_id}.bin").exists()
+
+
+@pytest.mark.asyncio
+async def test_context_selection_does_not_open_out_of_window_images(
+    runner, mock_tool_executor, mock_hooks, tmp_path, monkeypatch
+):
+    from PIL import Image
+
+    from astrbot.core.utils.image_media_store import ImageMediaStore
+
+    image_path = tmp_path / "image.png"
+    Image.new("RGB", (8, 8), "green").save(image_path)
+    store = ImageMediaStore(tmp_path / "media")
+    ref = store.put(image_path.read_bytes())
+    missing = {**ref.model_dump(), "media_id": "f" * 64, "byte_size": 100_000_000}
+    request = ProviderRequest(
+        prompt="current question",
+        contexts=[
+            {"role": "user", "content": [missing]},
+            {"role": "assistant", "content": "old answer"},
+            {"role": "user", "content": "another old question"},
+            {"role": "assistant", "content": "another old answer"},
+            {"role": "user", "content": [ref.model_dump()]},
+            {"role": "assistant", "content": "recent answer"},
+        ],
+    )
+    provider = MockProvider()
+    provider.text_chat = AsyncMock(
+        return_value=LLMResponse(role="assistant", completion_text="ok")
+    )
+    opened = []
+    original_read = store.read
+
+    def read(reference, allowed_ids):
+        opened.append(reference.media_id)
+        return original_read(reference, allowed_ids)
+
+    monkeypatch.setattr(store, "read", read)
+    await runner.reset(
+        provider=provider,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        image_media_store=store,
+        enforce_max_turns=2,
+    )
+    async for _ in runner.step():
+        pass
+    assert opened == [ref.media_id]
+    assert provider.text_chat.await_count == 1
+    assert request.contexts[0]["content"][0] == missing
 
 
 @pytest.mark.asyncio
@@ -1656,9 +1969,19 @@ async def test_follow_up_ticket_not_consumed_when_no_next_tool_call(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("streaming", [False, True])
-async def test_skills_like_requery_passes_extra_user_content_parts(streaming):
+async def test_skills_like_requery_passes_extra_user_content_parts(streaming, tmp_path):
     """skills-like 模式 re-query 时应传递 extra_user_content_parts（如 image_caption）"""
+    from PIL import Image
+
     from astrbot.core.agent.message import TextPart
+    from astrbot.core.utils.image_media_store import ImageMediaStore
+
+    image_path = tmp_path / "image.png"
+    Image.new("RGB", (8, 8), "red").save(image_path)
+    image_bytes = image_path.read_bytes()
+    store = ImageMediaStore(tmp_path / "media")
+    ref = store.put(image_bytes, detail="high", image_id="requery-image")
+    historical_image = {"role": "user", "content": [ref.model_dump()]}
 
     captured_kwargs = {}
 
@@ -1706,7 +2029,7 @@ async def test_skills_like_requery_passes_extra_user_content_parts(streaming):
     req = ProviderRequest(
         prompt="看看这张图",
         func_tool=tool_set,
-        contexts=[],
+        contexts=[historical_image, {"role": "assistant", "content": "ack"}],
         extra_user_content_parts=[caption_part],
     )
 
@@ -1723,6 +2046,7 @@ async def test_skills_like_requery_passes_extra_user_content_parts(streaming):
         agent_hooks=MockHooks(),
         tool_schema_mode="skills_like",
         streaming=streaming,
+        image_media_store=store,
     )
 
     async for _ in runner.step():
@@ -1735,6 +2059,13 @@ async def test_skills_like_requery_passes_extra_user_content_parts(streaming):
     parts = captured_kwargs["extra_user_content_parts"]
     assert len(parts) == 1
     assert parts[0].text == "<image_caption>一张猫的照片</image_caption>"
+    import base64
+
+    sent_image = captured_kwargs["contexts"][0]["content"][0]["image_url"]
+    assert base64.b64decode(sent_image["url"].split(",", 1)[1]) == image_bytes
+    assert sent_image["detail"] == "high"
+    assert sent_image["id"] == "requery-image"
+    assert historical_image["content"][0] == ref.model_dump()
 
 
 @pytest.mark.asyncio

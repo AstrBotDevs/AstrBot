@@ -184,12 +184,6 @@ def _setup_local_fs_tools(
         "get_astrbot_temp_path",
         lambda: str(temp_root),
     )
-    monkeypatch.setattr(
-        file_read_utils,
-        "get_astrbot_temp_path",
-        lambda: str(temp_root),
-    )
-
     booter = LocalBooter()
 
     async def _fake_get_booter(_ctx, _umo):
@@ -861,8 +855,47 @@ async def test_file_read_tool_returns_image_call_tool_result_for_images(
     assert isinstance(result, CallToolResult)
     assert len(result.content) == 1
     assert isinstance(result.content[0], ImageContent)
-    assert result.content[0].mimeType == "image/jpeg"
-    assert base64.b64decode(result.content[0].data).startswith(b"\xff\xd8\xff")
+    assert result.content[0].mimeType == "image/png"
+    assert base64.b64decode(result.content[0].data) == image_path.read_bytes()
+
+
+@pytest.mark.asyncio
+async def test_local_file_read_defers_image_preparation_to_tool_loop(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    workspace = _setup_local_fs_tools(monkeypatch, tmp_path)
+    image_path = workspace / "sample.png"
+    Image.new("RGB", (32, 16), color=(255, 0, 0)).save(image_path, format="PNG")
+    result = await fs_tools.FileReadTool().call(
+        _make_context(),
+        path="sample.png",
+    )
+
+    assert isinstance(result, CallToolResult)
+    assert result.content[0].data
+    assert base64.b64decode(result.content[0].data) == image_path.read_bytes()
+
+
+@pytest.mark.asyncio
+async def test_file_read_propagates_image_memory_error(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    workspace = _setup_local_fs_tools(monkeypatch, tmp_path)
+    image_path = workspace / "sample.png"
+    Image.new("RGB", (32, 16), color=(255, 0, 0)).save(image_path, format="PNG")
+
+    async def fail_read(*_args, **_kwargs):
+        raise MemoryError("image preparation exhausted memory")
+
+    monkeypatch.setattr(file_read_utils, "_read_local_file_bytes", fail_read)
+
+    with pytest.raises(MemoryError, match="exhausted memory"):
+        await fs_tools.FileReadTool().call(
+            _make_context(),
+            path="sample.png",
+        )
 
 
 @pytest.mark.asyncio
