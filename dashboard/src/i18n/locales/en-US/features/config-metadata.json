@@ -229,11 +229,15 @@
       "provider_settings": {
         "computer_use_runtime": {
           "description": "Computer Use Runtime",
-          "hint": "Environment allowed for Agent usage. `local` means the local machine environment, `sandbox` means the sandbox environment, and `none` means no environment is allowed."
+          "hint": "Environment the Agent is allowed to access.",
+          "labels": ["No environment", "Local machine", "Third-party sandbox"]
+        },
+        "computer_use_local_permissions": {
+          "description": "Local Permission Policies"
         },
         "computer_use_require_admin": {
-          "description": "Require AstrBot Admin Permission",
-          "hint": "When enabled, AstrBot admin permission is required to use computer capabilities. Admins can be added in Platform Config. Use the /sid command to view admin IDs."
+          "description": "Require Admin Permission for Sandbox",
+          "hint": "When enabled, AstrBot admin permission is required to use remote sandbox capabilities. Admins can be added in Platform Config. Use the /sid command to view admin IDs."
         },
         "sandbox": {
           "booter": {
@@ -294,6 +298,50 @@
           "shipyard_max_sessions": {
             "description": "Shipyard Max Sessions",
             "hint": "Maximum number of Shipyard sessions an instance can handle."
+          }
+        }
+      },
+      "local_permissions": {
+        "role": "Role",
+        "execution": "Allow code execution",
+        "network": "Allow execution network access",
+        "filesystem": "File access scope",
+        "scopes": {
+          "workspace": "Workspace",
+          "host": "Entire environment"
+        },
+        "scopeHints": {
+          "none": "No file access allowed",
+          "workspace": "Restricted workspace, temporary directories, and skill files.",
+          "host": "All files in the environment where AstrBot runs."
+        },
+        "scopeDetails": {
+          "account": "1. Access is limited to files permitted by the account running AstrBot.",
+          "docker": "2. If deployed through Docker, only files inside the container and mounted files are accessible, not all files on the Docker host."
+        },
+        "roles": {
+          "member": "Member",
+          "admin": "Administrator"
+        },
+        "accessMode": "Local computer access",
+        "modes": {
+          "none": "Disabled",
+          "files": "File access only",
+          "full": "Unrestricted access"
+        },
+        "unsupportedSelection": "Current policy is unsupported",
+        "runtimeUnknown": "Runtime information is unavailable.",
+        "memberWarning": "Members have network access or file access across the entire environment.",
+        "runtime": {
+          "os": "OS",
+          "arch": "Architecture",
+          "sandbox": "Local isolation",
+          "unavailableHint": "Sandbox startup failed, affecting restricted Shell/Python execution and workspace file search. Use the error below to check system security policies (such as Linux AppArmor and user namespace restrictions) or container restrictions, then restart AstrBot to check again.",
+          "status": {
+            "detected": "{backend} · Startup check passed",
+            "missing": "Missing {dependency}",
+            "unavailable": "{backend} · Installed but cannot start",
+            "unsupported": "Unsupported"
           }
         }
       }
@@ -433,20 +481,12 @@
           "description": "User Prompt",
           "hint": "You can use {{prompt}} as a placeholder for user input. If no placeholder is provided, it will be added before the user input."
         },
-        "image_compress_enabled": {
-          "description": "Enable image compression",
-          "hint": "When enabled, large local images are compressed before being sent to multimodal models."
-        },
         "image_compress_options": {
-          "description": "Image compression settings",
-          "hint": "Control image resize limits, JPEG quality, and the minimum size threshold for compression.",
+          "description": "Model input image settings",
+          "hint": "Images are always prepared as JPEG/PNG below 512 KiB. Original attachments are preserved.",
           "max_size": {
-            "description": "Maximum edge length",
-            "hint": "Longest edge of the compressed image in pixels. Images larger than this are resized proportionally."
-          },
-          "quality": {
-            "description": "JPEG quality",
-            "hint": "JPEG output quality from 1 to 100. Higher values preserve more detail but produce larger files."
+            "description": "Input image maximum edge length",
+            "hint": "Longest edge sent to the model, in pixels. Images may be reduced further to stay below 512 KiB; original attachment paths are unchanged."
           }
         },
         "reachability_check": {
@@ -741,6 +781,10 @@
         "description": "Unified Webhook Mode",
         "hint": "When enabled, use AstrBot unified webhook entry without opening a separate port. Callback URL is /api/v1/webhooks/platforms/{webhook_uuid}."
       },
+      "use_markdown": {
+        "description": "Use Markdown for Proactive Messages",
+        "hint": "When enabled, proactive messages are sent in Markdown mode by default; an explicit use_markdown() call from a plugin takes precedence over this option."
+      },
       "webhook_uuid": {
         "description": "Webhook UUID",
         "hint": "Unique identifier for unified webhook mode; generated when creating the platform."
@@ -884,8 +928,8 @@
       },
       "platform_settings": {
         "unique_session": {
-          "description": "Isolate Sessions",
-          "hint": "When enabled, group members have independent contexts."
+          "description": "Isolate Conversation",
+          "hint": "On supported platforms, each group member has a separate conversation context when enabled. Manage command permissions under Handlers → Command."
         },
         "friend_message_needs_wake_prefix": {
           "description": "Private Messages Require Wake Word"
@@ -1406,6 +1450,7 @@
           "Tool use"
         ]
       },
+
       "custom_headers": {
         "description": "Custom request headers",
         "hint": "Key/value pairs added here are merged into the OpenAI SDK default_headers for custom HTTP headers. Values must be strings."

@@ -197,11 +197,33 @@ class _PluginUpdater(_RepoZipUpdater):
             "repo": str(normalized_metadata.get("repo") or normalized_url),
         }
 
-    async def install(self, repo_url: str, proxy="", download_url: str = "") -> str:
+    async def install(
+        self,
+        repo_url: str,
+        proxy="",
+        download_url: str = "",
+        *,
+        target_dir: Path | None = None,
+    ) -> str:
+        """Download or clone a plugin into a new directory.
+
+        Args:
+            repo_url: Plugin repository URL.
+            proxy: Optional proxy prefix for repository downloads.
+            download_url: Optional archive URL to use instead of the repository.
+            target_dir: Staging destination supplied by the plugin manager. Defaults
+                to the repository directory under the plugin store.
+
+        Returns:
+            Path to the extracted or cloned plugin.
+
+        Raises:
+            Exception: If the destination exists or downloading or validation fails.
+        """
         normalized_url = normalize_repository_url(repo_url)
         repository = parse_repository_url(normalized_url)
         repo_name = self._format_name(repository.name)
-        plugin_path = os.path.join(self.plugin_store_path, repo_name)
+        plugin_path = str(target_dir or Path(self.plugin_store_path) / repo_name)
         if os.path.exists(plugin_path):
             raise Exception(f"安装失败：目录 {repo_name} 已存在。")
         if download_url:
