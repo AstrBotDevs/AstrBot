@@ -873,3 +873,53 @@ async def test_wav_to_tencent_silk_skips_resample_for_supported_rate(
 
     assert len(fake.calls) == 1
     assert fake.calls[0]["sample_rate"] == 24000
+
+
+@pytest.mark.asyncio
+async def test_prepare_model_image_skips_oversized_input(tmp_path, monkeypatch):
+    """Inputs above the model-image byte cap must be skipped before decoding."""
+    from PIL import Image as PILImage
+
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    image_path = tmp_path / "oversized.png"
+    PILImage.new("RGB", (4, 4)).save(image_path, format="PNG")
+    with image_path.open("ab") as f:
+        f.truncate(media_utils.MODEL_IMAGE_MAX_INPUT_BYTES + 1)
+
+    result = await media_utils.prepare_model_image(
+        str(image_path), max_size=1280, output_dir=tmp_path
+    )
+
+    assert result is None
+
+
+def test_convert_image_bytes_reuses_small_in_range_input():
+    """A small oriented in-range PNG keeps its original bytes."""
+    from PIL import Image as PILImage
+
+    buffer = BytesIO()
+    PILImage.new("RGB", (10, 10), (255, 0, 0)).save(buffer, format="PNG")
+    source = buffer.getvalue()
+
+    result = media_utils._convert_image_bytes_sync(source, 1280, 95)
+
+    assert result is source
+
+
+def test_convert_image_bytes_reencodes_large_in_range_input(tmp_path, monkeypatch):
+    """An in-range but byte-heavy PNG is re-encoded instead of reused."""
+    from PIL import Image as PILImage
+
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    img = PILImage.new("RGB", (1024, 1024))
+    img.frombytes(os.urandom(1024 * 1024 * 3))
+    buffer = BytesIO()
+    img.save(buffer, format="PNG")
+    source = buffer.getvalue()
+    assert len(source) > media_utils.MODEL_IMAGE_REUSE_MAX_BYTES
+
+    result = media_utils._convert_image_bytes_sync(source, 1280, 95)
+
+    assert result is not source
+    assert result[:2] == b"\xff\xd8"
+    assert len(result) < len(source)

@@ -42,6 +42,11 @@ IMAGE_COMPRESS_DEFAULT_MAX_SIZE = 1280
 IMAGE_COMPRESS_DEFAULT_QUALITY = 95
 IMAGE_COMPRESS_DEFAULT_OPTIMIZE = True
 IMAGE_COMPRESS_DEFAULT_MIN_FILE_SIZE_MB = 1.0
+# Model image inputs larger than this are skipped before decoding.
+MODEL_IMAGE_MAX_INPUT_BYTES = 32 * 1024 * 1024
+# Original encoded bytes are reused only for small stills; larger inputs are
+# re-encoded so the output stays bounded by pixel size and quality.
+MODEL_IMAGE_REUSE_MAX_BYTES = 2 * 1024 * 1024
 
 MEDIA_MIME_EXTENSIONS = {
     "audio/wav": ".wav",
@@ -1235,13 +1240,14 @@ def _convert_image_bytes_sync(
 
     Returns:
         Single-frame JPEG or PNG bytes. An oriented JPEG or PNG within the size
-        limit is reused unchanged; anything else is re-encoded.
+        and reuse-byte limits is reused unchanged; anything else is re-encoded.
     """
     with PILImage.open(io.BytesIO(source_bytes)) as image:
         if (
             image.format in {"PNG", "JPEG"}
             and image.getexif().get(274, 1) == 1
             and max(image.size) <= max_size
+            and len(source_bytes) <= MODEL_IMAGE_REUSE_MAX_BYTES
         ):
             return source_bytes
         cache_key = _image_convert_cache_key(
@@ -1388,6 +1394,14 @@ async def prepare_model_image(
     """
     try:
         async with MediaResolver(image_ref, media_type="image").as_path() as source:
+            input_size = source.path.stat().st_size
+            if input_size > MODEL_IMAGE_MAX_INPUT_BYTES:
+                logger.warning(
+                    "Skipping oversized image input (%d bytes): %s",
+                    input_size,
+                    source.path,
+                )
+                return None
             image_bytes = await asyncio.to_thread(source.read_bytes)
         frame_count = await asyncio.to_thread(_inspect_image, image_bytes)
         if frame_count > 1:
