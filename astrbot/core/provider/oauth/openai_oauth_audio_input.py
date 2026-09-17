@@ -19,8 +19,8 @@ import httpx
 
 _LIMITED_EXEC_SCRIPT = (
     "import os,resource,sys\n"
-    "for name,kind,requested in ((\"RLIMIT_FSIZE\",resource.RLIMIT_FSIZE,int(sys.argv[1])),"
-    "(\"RLIMIT_AS\",resource.RLIMIT_AS,int(sys.argv[2]))):\n"
+    'for name,kind,requested in (("RLIMIT_FSIZE",resource.RLIMIT_FSIZE,int(sys.argv[1])),'
+    '("RLIMIT_AS",resource.RLIMIT_AS,int(sys.argv[2]))):\n'
     " soft,hard=resource.getrlimit(kind)\n"
     " target=min([requested]+[limit for limit in (soft,hard) if limit!=resource.RLIM_INFINITY])\n"
     " try:\n"

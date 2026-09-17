@@ -76,6 +76,47 @@ jobs:
         if: runner.os == 'macOS'
         run: test -x /usr/bin/sandbox-exec
 
+      - name: Diagnose macOS converter address space
+        if: runner.os == 'macOS'
+        run: |
+          for mode in default nano-off; do
+            if [ "$mode" = nano-off ]; then
+              export MallocNanoZone=0
+            fi
+            DIAG_MODE="$mode" python - <<'PY'
+          import os
+          import resource
+          import subprocess
+
+          requested = 512 * 1024 * 1024
+          soft, hard = resource.getrlimit(resource.RLIMIT_AS)
+          target = min(
+              [requested]
+              + [limit for limit in (soft, hard) if limit != resource.RLIM_INFINITY]
+          )
+          try:
+              vsize_kib = subprocess.run(
+                  ("ps", "-o", "vsz=", "-p", str(os.getpid())),
+                  capture_output=True,
+                  text=True,
+                  timeout=1,
+                  check=False,
+              ).stdout.strip() or "unavailable"
+          except Exception:
+              vsize_kib = "unavailable"
+          try:
+              resource.setrlimit(resource.RLIMIT_AS, (target, target))
+              result = "accepted"
+          except (OSError, ValueError) as exc:
+              result = f"{type(exc).__name__}: {exc}"
+          print(
+              f"{os.environ['DIAG_MODE']} RLIMIT_AS soft={soft} hard={hard} "
+              f"requested={requested} target={target} vsize_kib={vsize_kib} "
+              f"result={result}"
+          )
+          PY
+          done
+
       - name: Run tests
         run: |
           chmod +x scripts/run_pytests_ci.sh
