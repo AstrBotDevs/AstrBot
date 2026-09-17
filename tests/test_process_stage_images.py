@@ -225,6 +225,11 @@ async def test_legacy_toggle_does_not_disable_preparation(
     )
     assert harness.provider.text_chat.await_count == 1
     assert "image_settings" not in harness.provider.text_chat.await_args.kwargs
+    visual_path = Path(req.image_urls[0])
+    assert (visual_path == source) == (fmt in {"JPEG", "PNG"})
+    event.cleanup_temporary_local_files()
+    assert source.read_bytes() == original
+    assert visual_path.exists() == (fmt in {"JPEG", "PNG"})
 
 
 @pytest.mark.asyncio
@@ -743,6 +748,44 @@ async def test_localized_reference_lifetime_and_ownership(
     event.cleanup_temporary_local_files()
     assert not path.exists()
     assert source.is_file()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("fmt", ["JPEG", "PNG"])
+@pytest.mark.parametrize("reference", ["data", "base64", "http", "file", "path"])
+async def test_compliant_plugin_images_reuse_localized_file_with_correct_ownership(
+    harness, tmp_path, monkeypatch, fmt, reference
+):
+    source = source_image(tmp_path, fmt)
+    original = source.read_bytes()
+    encoded = base64.b64encode(original).decode()
+    refs = {
+        "data": f"data:image/{fmt.lower()};base64," + encoded,
+        "base64": "base64://" + encoded,
+        "http": "https://example.com/source",
+        "file": source.as_uri(),
+        "path": str(source),
+    }
+
+    async def download(url, target):
+        Path(target).write_bytes(original)
+
+    monkeypatch.setattr(media, "download_file", download)
+    event = make_event()
+    event.set_extra(
+        "provider_request",
+        ProviderRequest(prompt="image", image_urls=[refs[reference]]),
+    )
+    await process_event(harness, event)
+    path = Path(harness.captured[0].req.image_urls[0])
+    assert path.read_bytes() == original
+    borrowed = reference in {"file", "path"}
+    assert (path == source) == borrowed
+    assert event._temporary_local_files == ([] if borrowed else [str(path)])
+    assert set(harness.work.rglob("*")) == (set() if borrowed else {path})
+    event.cleanup_temporary_local_files()
+    assert path.exists() == borrowed
+    assert source.read_bytes() == original
 
 
 @pytest.mark.asyncio

@@ -44,12 +44,17 @@ async def test_oversized_opaque_stills_become_jpeg_without_mutating_source(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("fmt", ["JPEG", "PNG"])
-async def test_compliant_stills_pass_through_byte_identical(tmp_path, fmt):
+@pytest.mark.parametrize("file_uri", [False, True])
+async def test_compliant_stills_reuse_source_without_copying(tmp_path, fmt, file_uri):
     source = tmp_path / f"ok.{fmt.lower()}"
     Image.new("RGB", (200, 100), "red").save(source, fmt)
     original = source.read_bytes()
-    path = await _prepare_image_path(str(source), max_size=1280, output_dir=tmp_path)
-    assert path and Path(path).read_bytes() == original
+    output = tmp_path / "output"
+    prepared = await media.prepare_model_image(
+        source.as_uri() if file_uri else str(source), max_size=1280, output_dir=output
+    )
+    assert prepared == (str(source), False, False)
+    assert not output.exists()
     assert source.read_bytes() == original
 
 

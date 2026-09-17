@@ -24,7 +24,7 @@ Values of the removed settings in existing configuration files no longer affect 
 
 ## Original files and preview lifetime
 
-`image_urls` and image content parts use the prepared preview files. The attachment paths shown to the model for file access continue to point to the **original images**, so tools can read the originals. Original files and event image components are not overwritten.
+`image_urls` and image content parts reuse compliant local JPEG/PNG files directly; no working copy is created. Images requiring conversion use prepared preview files. The attachment paths shown to the model for file access continue to point to the **original images**, so tools can read the originals. Original files and event image components are not overwritten.
 
 Preview files are owned by the current event and deleted when the event finishes, including failure or cancellation. There is no shared image-conversion cache. Repeated references within one request reuse the same preview, including the preparation pass after the request hook.
 

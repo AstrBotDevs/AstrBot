@@ -1197,8 +1197,8 @@ async def prepare_model_image(
     *,
     max_size: int,
     output_dir: Path,
-) -> tuple[str, bool] | None:
-    """Prepare a single local model-ready image for the caller to own until consumption.
+) -> tuple[str, bool, bool] | None:
+    """Prepare an image, reusing compliant local files without copying them.
 
     Args:
         image_ref: Source reference accepted by MediaResolver.
@@ -1206,16 +1206,23 @@ async def prepare_model_image(
         output_dir: Directory for event-owned working files.
 
     Returns:
-        A preview path and whether it is an animation montage, or None for a
-        recoverable input or write failure. The caller must delete the preview
-        after use. The original image is never overwritten.
+        The image path, whether it is an animation montage, and whether the caller
+        must delete the file after use. Existing compliant local files are borrowed;
+        newly materialized sources and encoded previews are owned by the caller.
+        Returns None for a recoverable input or write failure.
     """
     try:
         async with MediaResolver(image_ref, media_type="image").as_path() as source:
             image_bytes = await asyncio.to_thread(source.read_bytes)
-        converted_bytes, is_montage = await asyncio.to_thread(
-            _prepare_model_image_sync, image_bytes, max_size
-        )
+            converted_bytes, is_montage = await asyncio.to_thread(
+                _prepare_model_image_sync, image_bytes, max_size
+            )
+            if converted_bytes is image_bytes:
+                # The encoder returns the original bytes object for passthroughs.
+                # Transfer ownership only if the resolver materialized this file.
+                needs_cleanup = bool(source.cleanup_paths)
+                source.detach()
+                return str(source.path), is_montage, needs_cleanup
         # Publish the working file synchronously after encoding, so cancellation
         # cannot leave an untracked background write alive after this call.
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -1230,7 +1237,7 @@ async def prepare_model_image(
         except BaseException:
             output_path.unlink(missing_ok=True)
             raise
-        return str(output_path), is_montage
+        return str(output_path), is_montage, True
     except Exception as exc:
         if not is_recoverable_image_error(exc):
             raise

@@ -48,8 +48,9 @@ async def prepare_request_images(
                 output_dir=output_dir,
             )
             if image:
-                path, is_montage = image
-                event.track_temporary_local_file(path)
+                path, is_montage, needs_cleanup = image
+                if needs_cleanup:
+                    event.track_temporary_local_file(path)
                 has_montage |= is_montage
             prepared[ref] = path
             if path:
