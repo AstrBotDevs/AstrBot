@@ -71,6 +71,28 @@ def astr_message_event(platform_meta, astrbot_message):
     )
 
 
+def test_retained_attachment_is_excluded_from_event_cleanup(
+    astr_message_event, tmp_path
+):
+    source = tmp_path / "source.jpg"
+    derived = tmp_path / "model_image.jpg"
+    source.write_bytes(b"original")
+    derived.write_bytes(b"prepared")
+    event = astr_message_event
+    event.track_temporary_local_file(str(source))
+    event.track_temporary_local_file(str(source))
+    event.track_temporary_local_file(str(derived))
+    event.untrack_temporary_local_file(str(source))
+    event.untrack_temporary_local_file(str(source))
+    event.untrack_temporary_local_file(str(tmp_path / "untracked"))
+    assert event._temporary_local_files == [str(derived)]
+    event.cleanup_temporary_local_files()
+    event.cleanup_temporary_local_files()
+    assert source.read_bytes() == b"original"
+    assert not derived.exists()
+    assert event._temporary_local_files == []
+
+
 class TestAstrMessageEventInit:
     """Tests for AstrMessageEvent initialization."""
 
@@ -267,8 +289,7 @@ class TestGetMessageOutline:
             session_id="session123",
         )
         outline = event.get_message_outline()
-        # AtAll format is "[At:all]" in the actual implementation
-        assert "[At:" in outline and "all" in outline.lower()
+        assert outline == "[At:全体成员]"
 
     def test_outline_with_face(self, platform_meta, astrbot_message):
         """Test outline with Face component."""

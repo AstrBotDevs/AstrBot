@@ -13,9 +13,24 @@ on:
 
 jobs:
   unit-tests:
-    name: Run pytest suite
-    runs-on: ubuntu-latest
+    name: Run pytest suite (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    # The Windows lane stays best-effort for now: the suite still has
+    # pre-existing Windows-specific failures there. Promote to blocking
+    # once those tests are fixed.
+    continue-on-error: ${{ matrix.os == 'windows-latest' }}
+
+    defaults:
+      run:
+        # Windows runners default to pwsh; use bash so the same steps and
+        # test script work on all three platforms.
+        shell: bash
 
     steps:
       - name: Checkout
@@ -31,8 +46,25 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install uv
 
-      - name: Install audio test dependencies
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Install Linux sandbox and audio test dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap ffmpeg
+
+      - name: Enable and verify Linux sandbox execution
+        if: runner.os == 'Linux'
+        run: |
+          # Ubuntu's AppArmor policy blocks user-namespace capabilities by default.
+          # Allow them on this ephemeral runner so the real sandbox tests can run.
+          if [ -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+          bwrap --unshare-all --ro-bind / / /bin/true
+
+      - name: Verify macOS sandbox dependency
+        if: runner.os == 'macOS'
+        run: test -x /usr/bin/sandbox-exec
 
       - name: Run tests
         run: |

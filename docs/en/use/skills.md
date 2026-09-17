@@ -12,9 +12,7 @@ Support for Anthropic Skills was introduced in AstrBot starting from v4.13.0, al
 
 ## Uploading Skills to AstrBot
 
-Open the AstrBot admin panel, navigate to the `Plugins` page, and find `Skills`.
-
-![Skills](https://files.astrbot.app/docs/source/images/skills/image.png)
+Open the AstrBot admin panel, go to `Extensions → Skills` (`/extension/skills`), and click `Upload Skills`.
 
 You can upload Skills with the following requirements:
 
@@ -55,7 +53,7 @@ Currently, AstrBot provides two execution environments:
 - Local — The Agent runs in your AstrBot runtime environment. **Use with caution: this allows the Agent to execute arbitrary code in your environment, which may pose security risks.**
 - Sandbox — The Agent runs inside an isolated sandbox environment. **You must enable AstrBot sandbox mode first.** See: /use/astrbot-agent-sandbox. If sandbox mode is not enabled, Skills will not be passed to the Agent.
 
-You can select the default execution environment on the `Config` page under "Computer Use".
+On the `Config` page, select the profile to edit, open `AI → Capabilities → Agent Computer Use`, choose the execution environment, and click `Save Configuration` at the bottom right.
 
 > [!NOTE]
 > Please note: if you select `Local` as the execution environment, AstrBot currently only allows **AstrBot administrators** to request that the Agent operate on your local environment. Regular users are prohibited from doing so. The Agent will be prevented from executing code locally via Shell, Python, or other tools and will receive a permission restriction message such as `Sorry, I cannot execute code on your local environment due to permission restrictions.`.
