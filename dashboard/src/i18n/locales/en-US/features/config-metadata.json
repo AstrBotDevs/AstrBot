@@ -485,7 +485,7 @@
           "description": "Model input image settings",
           "hint": "Images are always prepared as JPEG/PNG below 512 KiB. Original attachments are preserved.",
           "max_size": {
-            "description": "Maximum edge length",
+            "description": "Input image maximum edge length",
             "hint": "Longest edge sent to the model, in pixels. Images may be reduced further to stay below 512 KiB; original attachment paths are unchanged."
           }
         },

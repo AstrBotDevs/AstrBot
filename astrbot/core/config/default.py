@@ -4205,7 +4205,7 @@ CONFIG_METADATA_3 = {
                         "hint": "如果唤醒前缀为 /, 额外聊天唤醒前缀为 chat，则需要 /chat 才会触发 LLM 请求",
                     },
                     "provider_settings.image_compress_options.max_size": {
-                        "description": "最大边长",
+                        "description": "输入图片最大边长",
                         "type": "int",
                         "hint": "发送给模型的图片最长边（像素），系统会在必要时进一步压缩。",
                         "slider": {"min": 256, "max": 4096, "step": 64},
