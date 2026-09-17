@@ -1,0 +1,6 @@
+{
+  "metadata": {
+    "display_name": "組み込みコマンド",
+    "desc": "AstrBot の組み込みプラグインで、/reset、/help、/sid などの組み込みコマンドを提供します。"
+  }
+}

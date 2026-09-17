@@ -10,6 +10,7 @@ import pytest
 from sqlmodel import select
 
 from astrbot.core.agent.response import AgentStats
+from astrbot.core.agent.runners.base import AgentState
 from astrbot.core.cron.manager import (
     CronJobManager,
     CronJobSchedulingError,
@@ -552,40 +553,6 @@ class TestRunJob:
         mock_db.update_cron_job.assert_not_called()
 
 
-class TestRunBasicJob:
-    """Tests for _run_basic_job method."""
-
-    @pytest.mark.asyncio
-    async def test_run_basic_job_sync_handler(self, cron_manager, sample_cron_job):
-        """Test running a basic job with sync handler."""
-        handler = MagicMock(return_value=None)
-        cron_manager._basic_handlers["test-job-id"] = handler
-        sample_cron_job.payload = {"arg1": "value1"}
-
-        await cron_manager._run_basic_job(sample_cron_job)
-
-        handler.assert_called_once_with(arg1="value1")
-
-    @pytest.mark.asyncio
-    async def test_run_basic_job_async_handler(self, cron_manager, sample_cron_job):
-        """Test running a basic job with async handler."""
-        async_handler = AsyncMock()
-        cron_manager._basic_handlers["test-job-id"] = async_handler
-        sample_cron_job.payload = {}
-
-        await cron_manager._run_basic_job(sample_cron_job)
-
-        async_handler.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_run_basic_job_no_handler(self, cron_manager, sample_cron_job):
-        """Test running a basic job without handler."""
-        sample_cron_job.job_id = "no-handler-job"
-
-        with pytest.raises(RuntimeError, match="handler not found"):
-            await cron_manager._run_basic_job(sample_cron_job)
-
-
 class TestRunActiveAgentJob:
     """Tests for active agent cron job execution."""
 
@@ -616,6 +583,8 @@ class TestRunActiveAgentJob:
         conv.history = json.dumps(history)
 
         class FakeRunner:
+            state = AgentState.DONE
+
             def step_until_done(self, max_step):
                 async def gen():
                     if False:
@@ -684,6 +653,8 @@ class TestRunActiveAgentJob:
         """Test the cron agent runner receives max_agent_step from provider settings."""
 
         class _StepCapturingRunner:
+            state = AgentState.DONE
+
             def __init__(self):
                 self.captured_max_step = None
 
@@ -901,6 +872,116 @@ class TestRunActiveAgentJob:
         assert records[0].status == "error"
         assert records[0].token_input_other == 6
         assert records[0].token_output == 3
+    @pytest.mark.asyncio
+    async def test_agent_error_state_marks_job_failed(
+        self, cron_manager, mock_db, mock_context
+    ):
+        """A runner ending in AgentState.ERROR must not record 'completed'."""
+
+        job = CronJob(
+            job_id="active-job",
+            name="Active",
+            job_type="active_agent",
+            cron_expression="0 9 * * *",
+            enabled=True,
+            persistent=True,
+            payload={"note": "check something"},
+        )
+        mock_db.get_cron_job.return_value = job
+        cron_manager.ctx = mock_context
+
+        class FakeRunner:
+            state = AgentState.ERROR
+
+            async def step_until_done(self, max_step):
+                return
+                yield  # pragma: no cover
+
+            def get_final_llm_resp(self):
+                resp = MagicMock()
+                resp.completion_text = "malformed_function_call"
+                return resp
+
+        fake_result = SimpleNamespace(agent_runner=FakeRunner())
+        with (
+            patch(
+                "astrbot.core.astr_main_agent.build_main_agent",
+                new=AsyncMock(return_value=fake_result),
+            ),
+            patch(
+                "astrbot.core.astr_main_agent._get_session_conv",
+                new=AsyncMock(return_value=SimpleNamespace(history="[]")),
+            ),
+            patch(
+                "astrbot.core.cron.manager.record_agent_runner_stats",
+                new=AsyncMock(),
+            ) as record_stats,
+        ):
+            await cron_manager._run_job("active-job")
+        record_stats.assert_awaited_once()
+        status_calls = [c.kwargs for c in mock_db.update_cron_job.call_args_list]
+        final = status_calls[-1]
+        assert final["status"] == "failed"
+        assert "malformed_function_call" in final["last_error"]
+
+    @pytest.mark.asyncio
+    async def test_agent_build_failure_marks_job_failed(
+        self, cron_manager, mock_db, mock_context
+    ):
+        """A main-agent build failure must not record 'completed' either."""
+        job = CronJob(
+            job_id="active-job",
+            name="Active",
+            job_type="active_agent",
+            cron_expression="0 9 * * *",
+            enabled=True,
+            persistent=True,
+            payload={"note": "check something"},
+        )
+        mock_db.get_cron_job.return_value = job
+        cron_manager.ctx = mock_context
+        with (
+            patch(
+                "astrbot.core.astr_main_agent.build_main_agent",
+                new=AsyncMock(return_value=None),
+            ),
+            patch(
+                "astrbot.core.astr_main_agent._get_session_conv",
+                new=AsyncMock(return_value=SimpleNamespace(history="[]")),
+            ),
+        ):
+            await cron_manager._run_job("active-job")
+        status_calls = [c.kwargs for c in mock_db.update_cron_job.call_args_list]
+        final = status_calls[-1]
+        assert final["status"] == "failed"
+        assert "build main agent" in final["last_error"]
+
+    """Tests for _run_basic_job method."""
+
+    @pytest.mark.asyncio
+    async def test_run_basic_job_sync_handler(self, cron_manager, sample_cron_job):
+        """Test running a basic job with sync handler."""
+        handler = MagicMock(return_value=None)
+        cron_manager._basic_handlers["test-job-id"] = handler
+        sample_cron_job.payload = {"arg1": "value1"}
+        await cron_manager._run_basic_job(sample_cron_job)
+        handler.assert_called_once_with(arg1="value1")
+
+    @pytest.mark.asyncio
+    async def test_run_basic_job_async_handler(self, cron_manager, sample_cron_job):
+        """Test running a basic job with async handler."""
+        async_handler = AsyncMock()
+        cron_manager._basic_handlers["test-job-id"] = async_handler
+        sample_cron_job.payload = {}
+        await cron_manager._run_basic_job(sample_cron_job)
+        async_handler.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_run_basic_job_no_handler(self, cron_manager, sample_cron_job):
+        """Test running a basic job without handler."""
+        sample_cron_job.job_id = "no-handler-job"
+        with pytest.raises(RuntimeError, match="handler not found"):
+            await cron_manager._run_basic_job(sample_cron_job)
 
 
 class TestGetNextRunTime:

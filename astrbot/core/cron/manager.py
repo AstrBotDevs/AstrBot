@@ -11,7 +11,9 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.date import DateTrigger
 
 from astrbot import logger
+from astrbot.core.agent.runners.base import AgentState
 from astrbot.core.agent.tool import ToolSet
+from astrbot.core.config.agent_runner import resolve_context_compression_config
 from astrbot.core.cron.events import CronMessageEvent
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import CronJob
@@ -443,6 +445,9 @@ class CronJobManager:
             cron_event.role = "admin"
 
         provider_settings = cfg.get("provider_settings", {}) or {}
+        persona_config = (
+            cfg.get("agent_runner", {}).get("config", {}).get("persona", {})
+        )
         tool_call_timeout = (
             cfg.get("agent_runner", {})
             .get("config", {})
@@ -460,8 +465,20 @@ class CronJobManager:
         )
         config = MainAgentBuildConfig(
             tool_call_timeout=tool_call_timeout,
-            llm_safety_mode=False,
+            fallback_provider_ids=cfg.get("agent_runner", {})
+            .get("config", {})
+            .get("model", {})
+            .get("fallback_provider_ids", []),
+            **resolve_context_compression_config(
+                cfg.get("agent_runner", {}).get("config", {}).get("compression", {})
+            ),
+            llm_safety_mode=persona_config.get("safety_mode", True),
+            safety_mode_strategy=persona_config.get(
+                "safety_mode_strategy", "system_prompt"
+            ),
             streaming_response=False,
+            computer_use_runtime=provider_settings.get("computer_use_runtime", "none"),
+            sandbox_cfg=provider_settings.get("sandbox", {}),
             provider_settings=provider_settings,
         )
         req = ProviderRequest()
@@ -489,8 +506,7 @@ class CronJobManager:
             event=cron_event, plugin_context=self.ctx, config=config, req=req
         )
         if not result:
-            logger.error("Failed to build main agent for cron job.")
-            return
+            raise RuntimeError("Failed to build main agent for cron job.")
 
         runner = result.agent_runner
         llm_resp = None
@@ -499,6 +515,13 @@ class CronJobManager:
                 # agent will send message to user via using tools
                 pass
             llm_resp = runner.get_final_llm_resp()
+            if getattr(runner, "state", None) == AgentState.ERROR:
+                detail = (
+                    f": {llm_resp.completion_text}"
+                    if llm_resp and llm_resp.completion_text
+                    else ""
+                )
+                raise RuntimeError(f"Cron agent run ended in ERROR state{detail}")
         finally:
             await record_agent_runner_stats(
                 self.db,

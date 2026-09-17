@@ -6,6 +6,7 @@ import pytest
 from sqlmodel import select
 
 from astrbot.core.agent.response import AgentStats
+from astrbot.core.agent.runners.base import AgentState
 from astrbot.core.db.po import ProviderStat
 from astrbot.core.pipeline.process_stage.method.agent_sub_stages import internal
 from astrbot.core.provider.entities import ProviderRequest, TokenUsage
@@ -111,6 +112,42 @@ async def test_record_agent_runner_stats_only_passes_public_segment_token_fields
 
     segment_stats = db.insert_provider_stat.await_args_list[0].kwargs["stats"]
     assert_public_token_usage(segment_stats["token_usage"])
+
+
+@pytest.mark.asyncio
+async def test_error_state_overrides_assistant_response_status():
+    db = SimpleNamespace(insert_provider_stat=AsyncMock())
+    provider = SimpleNamespace(
+        provider_config={"id": "provider-1"},
+        meta=lambda: SimpleNamespace(id="provider-1"),
+        get_model=lambda: "test-model",
+    )
+    runner = SimpleNamespace(
+        provider=provider,
+        stats=AgentStats(
+            token_usage=TokenUsage(input_other=5, output=3),
+            start_time=100.0,
+            end_time=101.0,
+        ),
+        provider_stat_segments=[],
+        state=AgentState.ERROR,
+        was_aborted=lambda: False,
+    )
+
+    await record_agent_runner_stats(
+        db,
+        umo="test:failed-max-steps",
+        request=None,
+        agent_runner=runner,
+        final_response=SimpleNamespace(role="assistant"),
+    )
+
+    assert db.insert_provider_stat.await_args.kwargs["status"] == "error"
+    assert db.insert_provider_stat.await_args.kwargs["stats"]["token_usage"] == {
+        "input_other": 5,
+        "input_cached": 0,
+        "output": 3,
+    }
 
 
 @pytest.mark.asyncio

@@ -18,6 +18,7 @@ async def test_webchat_upload_uses_detected_image_type(tmp_path):
     class FakeUploadFile:
         filename = "pasted.png"
         content_type = "image/png"
+        content_length = None
 
         async def save(self, destination):
             with open(destination, "wb") as output:

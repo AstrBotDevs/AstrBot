@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from astrbot import logger
+from astrbot.core.agent.runners.base import AgentState
 from astrbot.core.db import BaseDatabase
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest, TokenUsage
 
@@ -29,9 +30,13 @@ def _response_status(response: LLMResponse | None) -> str:
     return "completed"
 
 
-def _runner_status(response: LLMResponse | None, aborted: bool) -> str:
+def _runner_status(
+    response: LLMResponse | None, aborted: bool, state: AgentState | None
+) -> str:
     if aborted:
         return "aborted"
+    if state == AgentState.ERROR:
+        return "error"
     if response is None or response.role == "err":
         return "error"
     return "completed"
@@ -126,6 +131,7 @@ async def record_agent_runner_stats(
             status=_runner_status(
                 final_response,
                 agent_runner.was_aborted(),
+                getattr(agent_runner, "state", None),
             ),
             stats=aggregate_stats,
             agent_type=agent_type,
