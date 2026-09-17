@@ -30,9 +30,7 @@ Generate `Token` and `EncodingAESKey` using random generation, but do not click 
 
 ## Configure AstrBot
 
-1. Open AstrBot Dashboard, click `Messaging Platforms`, then click `+ Add Adapter`, choose `WeCom AI Bot`.
-
-![Add Adapter](https://files.astrbot.app/docs/source/images/wecom_ai_bot/image-2.png)
+1. Open AstrBot Dashboard, click `Platforms`, then click `+ Add Adapter`, choose `WeCom AI Bot`.
 
 2. Fill AstrBot fields with values from the WeCom AI Bot create page:
 
@@ -46,10 +44,8 @@ Keep `Unified Webhook Mode (unified_webhook_mode)` enabled and click `Save`.
 
 3. Return to WeCom AI Bot create page and set `URL`:
 
-- If unified mode is enabled, AstrBot generates a unique callback URL after save. Copy it from logs or bot card in WebUI.
+- If unified mode is enabled, AstrBot generates a unique callback URL after save. Copy it from `Data & Logs → Logs`, or select the bot in `Platforms` and click `View Webhook URL`.
 - If unified mode is disabled, use `http://IP:port/webhook/wecom-ai-bot`.
-
-![unified_webhook](https://files.astrbot.app/docs/source/images/use/unified-webhook.png)
 
 > It is recommended to use a domain + reverse proxy + HTTPS. You can also use [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/tunnel-guide/).
 
