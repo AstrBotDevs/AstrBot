@@ -130,6 +130,7 @@ class LLMSummaryCompressor:
         instruction_text: str | None = None,
         compression_threshold: float = 0.82,
         token_counter: TokenCounter | None = None,
+        conversation_id: str | None = None,
     ) -> None:
         """Initialize the LLM summary compressor.
 
@@ -139,8 +140,11 @@ class LLMSummaryCompressor:
                 exact context. Clamped to 0-0.3.
             instruction_text: Custom instruction for summary generation.
             compression_threshold: The compression trigger threshold (default: 0.82).
+            token_counter: Token counter used to preserve recent context.
+            conversation_id: Conversation UUID for the summary request.
         """
         self.provider = provider
+        self.conversation_id = conversation_id
         self.keep_recent_ratio = min(max(float(keep_recent_ratio), 0.0), 0.3)
         self.compression_threshold = compression_threshold
         self.token_counter = token_counter or EstimateTokenCounter()
@@ -275,6 +279,7 @@ class LLMSummaryCompressor:
         try:
             response = await self.provider.text_chat(
                 contexts=sanitized_summary_contexts,
+                conversation_id=self.conversation_id,
             )
             summary_content = (response.completion_text or "").strip()
         except Exception as e:
