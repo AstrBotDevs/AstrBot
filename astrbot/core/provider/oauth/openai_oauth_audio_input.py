@@ -18,11 +18,26 @@ from urllib.parse import unquote, urlparse
 import httpx
 
 _LIMITED_EXEC_SCRIPT = (
-    "import os,resource,sys;"
-    "file_limit=int(sys.argv[1]);memory_limit=int(sys.argv[2]);"
-    "resource.setrlimit(resource.RLIMIT_FSIZE,(file_limit,file_limit));"
-    "resource.setrlimit(resource.RLIMIT_AS,(memory_limit,memory_limit));"
-    "os.execvp(sys.argv[3],sys.argv[3:])"
+    "import os,resource,sys\n"
+    "for name,kind,requested in ((\"RLIMIT_FSIZE\",resource.RLIMIT_FSIZE,int(sys.argv[1])),"
+    "(\"RLIMIT_AS\",resource.RLIMIT_AS,int(sys.argv[2]))):\n"
+    " soft,hard=resource.getrlimit(kind)\n"
+    " target=min([requested]+[limit for limit in (soft,hard) if limit!=resource.RLIM_INFINITY])\n"
+    " try:\n"
+    "  resource.setrlimit(kind,(target,target))\n"
+    " except (OSError,ValueError):\n"
+    "  vsize_kib='unavailable'\n"
+    "  if sys.platform=='darwin':\n"
+    "   try:\n"
+    "    import subprocess\n"
+    "    vsize_kib=subprocess.run(('ps','-o','vsz=','-p',str(os.getpid())),"
+    "capture_output=True,text=True,timeout=1).stdout.strip() or 'unavailable'\n"
+    "   except Exception:\n"
+    "    pass\n"
+    "  print(f'{name} soft={soft} hard={hard} requested={requested} target={target} "
+    "vsize_kib={vsize_kib}',file=sys.stderr)\n"
+    "  raise\n"
+    "os.execvp(sys.argv[3],sys.argv[3:])\n"
 )
 
 

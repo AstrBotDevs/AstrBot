@@ -2,6 +2,8 @@ import asyncio
 import base64
 import io
 import shutil
+import subprocess
+import sys
 import tempfile
 import wave
 from pathlib import Path
@@ -325,6 +327,40 @@ async def test_converter_failure_keeps_bounded_diagnostic_cause(monkeypatch):
     assert isinstance(exc.value.__cause__, RuntimeError)
     assert "converter exit code 1: decoder failed" in str(exc.value.__cause__)
     assert len(str(exc.value.__cause__)) <= 535
+
+
+@pytest.mark.skipif(audio_input.os.name != "posix", reason="POSIX resource limits")
+@pytest.mark.parametrize(
+    ("soft_limit", "hard_limit"),
+    [(1024 * 1024, 1024 * 1024), (512 * 1024, 1024 * 1024)],
+)
+def test_converter_respects_existing_resource_limits(soft_limit, hard_limit):
+    outer_script = (
+        "import resource,sys;"
+        f"resource.setrlimit(resource.RLIMIT_FSIZE,({soft_limit},{hard_limit}));"
+        "sys.argv=sys.argv[1:];exec(sys.argv[0])"
+    )
+    probe_script = "import resource;print(resource.getrlimit(resource.RLIMIT_FSIZE))"
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            outer_script,
+            audio_input._LIMITED_EXEC_SCRIPT,
+            str(2 * 1024 * 1024),
+            str(512 * 1024 * 1024),
+            sys.executable,
+            "-c",
+            probe_script,
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=5,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == f"({soft_limit}, {soft_limit})"
 
 
 @pytest.mark.asyncio
