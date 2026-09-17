@@ -481,20 +481,12 @@
           "description": "User Prompt",
           "hint": "You can use {{prompt}} as a placeholder for user input. If no placeholder is provided, it will be added before the user input."
         },
-        "image_compress_enabled": {
-          "description": "Enable image compression",
-          "hint": "Enabled by default. Images are resized or converted as needed before being sent to multimodal models; compliant JPEG/PNG images are sent unchanged, and animations become a preview grid."
-        },
         "image_compress_options": {
-          "description": "Image compression settings",
-          "hint": "Control the size limit and JPEG output quality for model input images.",
+          "description": "Model input image settings",
+          "hint": "Images are always prepared as JPEG/PNG below 512 KiB. Original attachments are preserved.",
           "max_size": {
-            "description": "Maximum edge length",
-            "hint": "Longest edge of the compressed image in pixels. Images larger than this are resized proportionally."
-          },
-          "quality": {
-            "description": "JPEG quality",
-            "hint": "JPEG output quality from 1 to 100. Higher values preserve more detail but produce larger files."
+            "description": "Input image maximum edge length",
+            "hint": "Longest edge sent to the model, in pixels. Images may be reduced further to stay below 512 KiB; original attachment paths are unchanged."
           }
         },
         "reachability_check": {

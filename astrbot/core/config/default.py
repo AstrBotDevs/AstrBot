@@ -198,10 +198,8 @@ DEFAULT_CONFIG = {
             "cua_local": CUA_DEFAULT_CONFIG["local"],
             "cua_api_key": CUA_DEFAULT_CONFIG["api_key"],
         },
-        "image_compress_enabled": True,
         "image_compress_options": {
             "max_size": 1280,
-            "quality": 95,
         },
     },
     "agent_runner": {
@@ -3025,9 +3023,6 @@ CONFIG_METADATA_2 = {
             "provider_settings": {
                 "type": "object",
                 "items": {
-                    "image_compress_enabled": {
-                        "type": "bool",
-                    },
                     "enable": {
                         "type": "bool",
                     },
@@ -4209,28 +4204,11 @@ CONFIG_METADATA_3 = {
                         "type": "string",
                         "hint": "如果唤醒前缀为 /, 额外聊天唤醒前缀为 chat，则需要 /chat 才会触发 LLM 请求",
                     },
-                    "provider_settings.image_compress_enabled": {
-                        "description": "启用图片压缩",
-                        "type": "bool",
-                        "hint": "默认开启。发送给多模态模型前按需压缩转换图片：合规的 JPEG/PNG 原样发送，动图生成拼图预览。",
-                    },
                     "provider_settings.image_compress_options.max_size": {
-                        "description": "最大边长",
+                        "description": "输入图片最大边长",
                         "type": "int",
-                        "hint": "压缩后图片的最长边，单位为像素，超出则按比例缩放。CUA 沙箱下输入图片不缩放，大图可能超出服务商上传限制。",
-                        "condition": {
-                            "provider_settings.image_compress_enabled": True,
-                        },
+                        "hint": "发送给模型的图片最长边（像素），系统会在必要时进一步压缩。",
                         "slider": {"min": 256, "max": 4096, "step": 64},
-                    },
-                    "provider_settings.image_compress_options.quality": {
-                        "description": "压缩质量",
-                        "type": "int",
-                        "hint": "JPEG 输出质量，范围为 1-100。值越高，画质越好，文件也越大。",
-                        "condition": {
-                            "provider_settings.image_compress_enabled": True,
-                        },
-                        "slider": {"min": 1, "max": 100, "step": 1},
                     },
                     "provider_settings.prompt_prefix": {
                         "description": "用户提示词",

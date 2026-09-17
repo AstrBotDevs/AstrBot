@@ -921,11 +921,40 @@ async def test_prepare_model_image_skips_oversized_input(tmp_path, monkeypatch):
     with image_path.open("ab") as f:
         f.truncate(media_utils.MODEL_IMAGE_MAX_INPUT_BYTES + 1)
 
+    def fail_read(self):
+        pytest.fail("Oversized inputs must be rejected before reading image bytes")
+
+    monkeypatch.setattr(media_utils.ResolvedMediaFile, "read_bytes", fail_read)
+    with pytest.raises(media_utils.ImageInputTooLargeError) as error:
+        await media_utils.prepare_model_image(
+            str(image_path), max_size=1280, output_dir=tmp_path
+        )
+
+    assert str(error.value) == str(image_path)
+    assert image_path.is_file()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("input_size", [33 * 1024 * 1024, 64 * 1024 * 1024])
+async def test_prepare_model_image_accepts_inputs_up_to_64_mib(tmp_path, input_size):
+    """The input cap includes 64 MiB; accepted inputs still obey the output cap."""
+    from PIL import Image as PILImage
+
+    image_path = tmp_path / "large.png"
+    PILImage.new("RGB", (4, 4)).save(image_path, format="PNG")
+    with image_path.open("ab") as file:
+        file.truncate(input_size)
+
     result = await media_utils.prepare_model_image(
-        str(image_path), max_size=1280, output_dir=tmp_path
+        str(image_path), max_size=1280, output_dir=tmp_path / "previews"
     )
 
-    assert result is None
+    assert result is not None
+    output_path, is_montage, needs_cleanup, original_path = result
+    assert original_path == str(image_path)
+    assert not is_montage and needs_cleanup
+    assert Path(output_path).stat().st_size < 512 * 1024
+    assert image_path.stat().st_size == input_size
 
 
 def test_convert_image_bytes_reuses_small_in_range_input():
@@ -936,9 +965,10 @@ def test_convert_image_bytes_reuses_small_in_range_input():
     PILImage.new("RGB", (10, 10), (255, 0, 0)).save(buffer, format="PNG")
     source = buffer.getvalue()
 
-    result = media_utils._convert_image_bytes_sync(source, 1280, 95)
+    result, is_montage = media_utils._prepare_model_image_sync(source, 1280)
 
     assert result is source
+    assert not is_montage
 
 
 def test_convert_image_bytes_reencodes_large_in_range_input(tmp_path, monkeypatch):
@@ -951,10 +981,11 @@ def test_convert_image_bytes_reencodes_large_in_range_input(tmp_path, monkeypatc
     buffer = BytesIO()
     img.save(buffer, format="PNG")
     source = buffer.getvalue()
-    assert len(source) > media_utils.MODEL_IMAGE_REUSE_MAX_BYTES
+    assert len(source) >= media_utils.MODEL_IMAGE_MAX_BYTES
 
-    result = media_utils._convert_image_bytes_sync(source, 1280, 95)
+    result, is_montage = media_utils._prepare_model_image_sync(source, 1280)
 
+    assert not is_montage
     assert result is not source
     assert result[:2] == b"\xff\xd8"
-    assert len(result) < len(source)
+    assert len(result) < media_utils.MODEL_IMAGE_MAX_BYTES
