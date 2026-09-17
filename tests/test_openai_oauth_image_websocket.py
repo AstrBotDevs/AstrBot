@@ -125,10 +125,7 @@ class Session:
 
 
 @pytest_asyncio.fixture
-async def provider(monkeypatch, tmp_path):
-    monkeypatch.setattr(
-        source, "db_helper", SimpleNamespace(insert_provider_stat=AsyncMock())
-    )
+async def provider(tmp_path):
     provider = source.ProviderOpenAIOAuth(
         {
             "id": "test-openai-oauth",

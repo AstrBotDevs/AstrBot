@@ -1767,9 +1767,7 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
             if not math.isfinite(timeout) or timeout <= 0:
                 raise ValueError("Image timeout must be a finite positive number")
         references = [
-            str(image).strip()
-            for image in reference_images or []
-            if str(image).strip()
+            str(image).strip() for image in reference_images or [] if str(image).strip()
         ]
         instructions = str(prompt or "").strip()
         if not instructions:
