@@ -1198,12 +1198,16 @@ def _extract_animation_montage_sync(image: PILImage.Image, max_size: int) -> byt
     return encoded
 
 
+class ImageInputTooLargeError(ValueError):
+    """Raised with the retained source path when an image exceeds the input cap."""
+
+
 async def prepare_model_image(
     image_ref: str,
     *,
     max_size: int,
     output_dir: Path,
-) -> tuple[str, bool, bool] | None:
+) -> tuple[str, bool, bool, str] | None:
     """Prepare an image, reusing compliant local files without copying them.
 
     Args:
@@ -1212,10 +1216,13 @@ async def prepare_model_image(
         output_dir: Directory for event-owned working files.
 
     Returns:
-        The image path, whether it is an animation montage, and whether the caller
-        must delete the file after use. Existing compliant local files are borrowed;
-        newly materialized sources and encoded previews are owned by the caller.
-        Returns None for a recoverable input or write failure.
+        The image path, whether it is an animation montage, whether the caller must
+        delete the preview after use, and the retained original path. Compliant
+        originals are reused directly. Returns None for a recoverable failure.
+
+    Raises:
+        ImageInputTooLargeError: The input exceeds the size cap. Its original path
+            is retained for file-tool access and returned as the error message.
     """
     try:
         async with MediaResolver(image_ref, media_type="image").as_path() as source:
@@ -1226,17 +1233,17 @@ async def prepare_model_image(
                     input_size,
                     source.path,
                 )
-                return None
+                source.detach()
+                raise ImageInputTooLargeError(str(source.path))
             image_bytes = await asyncio.to_thread(source.read_bytes)
             converted_bytes, is_montage = await asyncio.to_thread(
                 _prepare_model_image_sync, image_bytes, max_size
             )
+            original_path = str(source.path)
+            # Final image labels expose this original for later file-tool access.
+            source.detach()
             if converted_bytes is image_bytes:
-                # The encoder returns the original bytes object for passthroughs.
-                # Transfer ownership only if the resolver materialized this file.
-                needs_cleanup = bool(source.cleanup_paths)
-                source.detach()
-                return str(source.path), is_montage, needs_cleanup
+                return original_path, is_montage, False, original_path
         # Publish the working file synchronously after encoding, so cancellation
         # cannot leave an untracked background write alive after this call.
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -1251,7 +1258,9 @@ async def prepare_model_image(
         except BaseException:
             output_path.unlink(missing_ok=True)
             raise
-        return str(output_path), is_montage, True
+        return str(output_path), is_montage, True, original_path
+    except ImageInputTooLargeError:
+        raise
     except Exception as exc:
         if not is_recoverable_image_error(exc):
             raise

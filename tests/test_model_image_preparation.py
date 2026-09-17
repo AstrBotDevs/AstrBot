@@ -53,7 +53,7 @@ async def test_compliant_stills_reuse_source_without_copying(tmp_path, fmt, file
     prepared = await media.prepare_model_image(
         source.as_uri() if file_uri else str(source), max_size=1280, output_dir=output
     )
-    assert prepared == (str(source), False, False)
+    assert prepared == (str(source), False, False, str(source))
     assert not output.exists()
     assert source.read_bytes() == original
 

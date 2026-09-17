@@ -33,6 +33,16 @@ from astrbot.core.star.star import StarMetadata
 
 
 @pytest.fixture
+def valid_image_path(tmp_path):
+    """Create a real image for builder tests that exercise provider selection."""
+    from PIL import Image as PILImage
+
+    path = tmp_path / "input.jpg"
+    PILImage.new("RGB", (8, 8), "red").save(path)
+    return str(path)
+
+
+@pytest.fixture
 def mock_provider():
     """Create a mock provider."""
     provider = MagicMock(spec=Provider)
@@ -1885,14 +1895,14 @@ class TestBuildMainAgent:
         quoted,
         compression_enabled,
     ):
-        """Direct builders keep raw attachments regardless of pipeline settings."""
+        """Direct builders prepare both ordinary and quoted images before reset."""
 
         from PIL import Image as PILImage
 
-        from astrbot.core.utils import media_utils
+        from astrbot.core.utils import image_input
 
         module = ama
-        monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+        monkeypatch.setattr(image_input, "get_astrbot_temp_path", lambda: str(tmp_path))
         source_path = tmp_path / "image.jpg"
         PILImage.new("RGB", (8, 8), (255, 0, 0)).save(source_path)
         original = source_path.read_bytes()
@@ -1923,23 +1933,23 @@ class TestBuildMainAgent:
                     tool_call_timeout=60,
                     provider_settings={
                         "image_compress_enabled": compression_enabled,
-                        "image_compress_options": {"max_size": 2},
+                        "image_compress_options": {"max_size": 4},
                     },
                 ),
             )
 
         assert result is not None
         request = result.provider_request
-        label = "Image Attachment in quoted message" if quoted else "Image Attachment"
-        assert f"[{label}: path {source_path}]" in [
+        label = "Image 1 in quoted message" if quoted else "Image 1"
+        assert f"[{label}: original path {source_path}]" in [
             part.text for part in request.extra_user_content_parts
         ]
         assert len(request.image_urls) == 1
         visual_path = Path(request.image_urls[0])
-        assert visual_path == source_path
+        assert visual_path != source_path
         with PILImage.open(visual_path) as visual_image:
-            assert visual_image.size == (8, 8)
-        mock_event.track_temporary_local_file.assert_not_called()
+            assert visual_image.size == (4, 4)
+        mock_event.track_temporary_local_file.assert_called_once_with(str(visual_path))
         mock_event.untrack_temporary_local_file.assert_called_once_with(
             str(source_path)
         )
@@ -1955,11 +1965,11 @@ class TestBuildMainAgent:
 
     @pytest.mark.asyncio
     async def test_build_main_agent_skips_caption_when_main_provider_supports_images(
-        self, mock_event, mock_context, mock_provider
+        self, mock_event, mock_context, mock_provider, valid_image_path
     ):
         """Test image-capable chat providers receive quoted images directly."""
         module = ama
-        mock_image = Image(file="file:///tmp/quoted.jpg")
+        mock_image = Image(file=Path(valid_image_path).as_uri())
         mock_reply = Reply(
             id="reply-1",
             chain=[Plain(text="quoted text"), mock_image],
@@ -1981,7 +1991,7 @@ class TestBuildMainAgent:
             patch.object(
                 Image,
                 "convert_to_file_path",
-                AsyncMock(return_value="/tmp/quoted.jpg"),
+                AsyncMock(return_value=valid_image_path),
             ),
         ):
             mock_runner = MagicMock()
@@ -2001,7 +2011,7 @@ class TestBuildMainAgent:
             )
 
         assert result is not None
-        assert result.provider_request.image_urls == ["/tmp/quoted.jpg"]
+        assert result.provider_request.image_urls == [valid_image_path]
         assert not any(
             "Image Caption" in part.text or "<image_caption>" in part.text
             for part in result.provider_request.extra_user_content_parts
@@ -2010,7 +2020,7 @@ class TestBuildMainAgent:
 
     @pytest.mark.asyncio
     async def test_build_main_agent_does_not_caption_quoted_image_twice(
-        self, mock_event, mock_context
+        self, mock_event, mock_context, valid_image_path
     ):
         """Quoted images should not be captioned again after request image captioning."""
         module = ama
@@ -2028,7 +2038,10 @@ class TestBuildMainAgent:
 
         mock_reply = Reply(
             id="reply-1",
-            chain=[Plain(text="quoted text"), Image(file="file:///tmp/quoted.jpg")],
+            chain=[
+                Plain(text="quoted text"),
+                Image(file=Path(valid_image_path).as_uri()),
+            ],
             sender_nickname="Alice",
             message_str="quoted text",
         )
@@ -2047,7 +2060,7 @@ class TestBuildMainAgent:
             patch.object(
                 Image,
                 "convert_to_file_path",
-                AsyncMock(return_value="/tmp/quoted.jpg"),
+                AsyncMock(return_value=valid_image_path),
             ),
         ):
             mock_runner = MagicMock()
@@ -2077,7 +2090,7 @@ class TestBuildMainAgent:
 
     @pytest.mark.asyncio
     async def test_build_main_agent_does_not_retry_quoted_image_caption_when_empty(
-        self, mock_event, mock_context
+        self, mock_event, mock_context, valid_image_path
     ):
         """Quoted images already sent to image captioning should not be retried."""
         module = ama
@@ -2095,7 +2108,10 @@ class TestBuildMainAgent:
 
         mock_reply = Reply(
             id="reply-1",
-            chain=[Plain(text="quoted text"), Image(file="file:///tmp/quoted.jpg")],
+            chain=[
+                Plain(text="quoted text"),
+                Image(file=Path(valid_image_path).as_uri()),
+            ],
             sender_nickname="Alice",
             message_str="quoted text",
         )
@@ -2114,7 +2130,7 @@ class TestBuildMainAgent:
             patch.object(
                 Image,
                 "convert_to_file_path",
-                AsyncMock(return_value="/tmp/quoted.jpg"),
+                AsyncMock(return_value=valid_image_path),
             ),
         ):
             mock_runner = MagicMock()
@@ -2144,7 +2160,7 @@ class TestBuildMainAgent:
 
     @pytest.mark.asyncio
     async def test_build_main_agent_uses_image_fallback_provider(
-        self, mock_event, mock_context
+        self, mock_event, mock_context, valid_image_path
     ):
         """Test image requests use a fallback provider that supports images."""
         module = ama
@@ -2166,7 +2182,7 @@ class TestBuildMainAgent:
 
         req = ProviderRequest(
             prompt="describe this",
-            image_urls=["/tmp/image.jpg"],
+            image_urls=[valid_image_path],
             model="text-model",
         )
         mock_context.get_provider_by_id.side_effect = lambda provider_id: (
@@ -2198,14 +2214,14 @@ class TestBuildMainAgent:
 
         assert result is not None
         assert result.provider is image_provider
-        assert result.provider_request.image_urls == ["/tmp/image.jpg"]
+        assert result.provider_request.image_urls == [valid_image_path]
         assert result.provider_request.model is None
         assert mock_runner.reset.call_args.kwargs["provider"] is image_provider
         assert mock_runner.reset.call_args.kwargs["fallback_providers"] == []
 
     @pytest.mark.asyncio
     async def test_build_main_agent_keeps_text_provider_without_image_fallback(
-        self, mock_event, mock_context
+        self, mock_event, mock_context, valid_image_path
     ):
         """Test image requests fall back to existing sanitizing when no image provider exists."""
         module = ama
@@ -2219,7 +2235,7 @@ class TestBuildMainAgent:
 
         req = ProviderRequest(
             prompt="describe this",
-            image_urls=["/tmp/image.jpg"],
+            image_urls=[valid_image_path],
         )
         mock_context.get_provider_by_id.return_value = None
         mock_context.get_config.return_value = {}
@@ -2250,7 +2266,7 @@ class TestBuildMainAgent:
 
         assert result is not None
         assert result.provider is text_provider
-        assert result.provider_request.image_urls == ["/tmp/image.jpg"]
+        assert result.provider_request.image_urls == [valid_image_path]
         assert mock_runner.reset.call_args.kwargs["provider"] is text_provider
 
     @pytest.mark.asyncio

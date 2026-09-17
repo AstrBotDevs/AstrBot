@@ -925,11 +925,12 @@ async def test_prepare_model_image_skips_oversized_input(tmp_path, monkeypatch):
         pytest.fail("Oversized inputs must be rejected before reading image bytes")
 
     monkeypatch.setattr(media_utils.ResolvedMediaFile, "read_bytes", fail_read)
-    result = await media_utils.prepare_model_image(
-        str(image_path), max_size=1280, output_dir=tmp_path
-    )
+    with pytest.raises(media_utils.ImageInputTooLargeError) as error:
+        await media_utils.prepare_model_image(
+            str(image_path), max_size=1280, output_dir=tmp_path
+        )
 
-    assert result is None
+    assert str(error.value) == str(image_path)
     assert image_path.is_file()
 
 
@@ -949,7 +950,8 @@ async def test_prepare_model_image_accepts_inputs_up_to_64_mib(tmp_path, input_s
     )
 
     assert result is not None
-    output_path, is_montage, needs_cleanup = result
+    output_path, is_montage, needs_cleanup, original_path = result
+    assert original_path == str(image_path)
     assert not is_montage and needs_cleanup
     assert Path(output_path).stat().st_size < 512 * 1024
     assert image_path.stat().st_size == input_size

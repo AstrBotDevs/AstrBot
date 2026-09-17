@@ -107,8 +107,13 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_workspaces_path,
 )
 from astrbot.core.utils.file_extract import extract_file_moonshotai
+from astrbot.core.utils.image_input import prepare_request_images
 from astrbot.core.utils.llm_metadata import LLM_METADATAS
-from astrbot.core.utils.media_utils import is_file_uri, is_recoverable_image_error
+from astrbot.core.utils.media_utils import (
+    is_file_uri,
+    is_recoverable_image_error,
+    normalize_model_image_max_size,
+)
 from astrbot.core.utils.quoted_message.settings import (
     SETTINGS as DEFAULT_QUOTED_MESSAGE_SETTINGS,
 )
@@ -126,6 +131,14 @@ from astrbot.core.workspace import (
 )
 
 LLM_ERROR_MESSAGE_EXTRA_KEY = "_llm_error_message"
+ANIMATION_CAPTION_NOTICE = (
+    "\n<system_notice>\n"
+    "Input images at positions {indices} (1-based) are animations (e.g. GIFs), "
+    "each converted to a single image of frames in reading order. "
+    "Describe them as animations, including motion or changes; "
+    "do not mention the conversion or frame layout.\n"
+    "</system_notice>"
+)
 WEEKDAY_NAMES = (
     "Monday",
     "Tuesday",
@@ -692,7 +705,23 @@ async def _request_img_caption(
     cfg: dict,
     image_urls: list[str],
     plugin_context: Context,
+    montage_refs: set[str] | None = None,
 ) -> str:
+    """Describe prepared images, preserving animation semantics.
+
+    Args:
+        provider_id: Caption provider ID.
+        cfg: Provider settings containing the caption prompt.
+        image_urls: Prepared images in their input order.
+        plugin_context: Services used to resolve the caption provider.
+        montage_refs: Prepared paths containing animation frame montages.
+
+    Returns:
+        The generated image description.
+
+    Raises:
+        ValueError: If the caption provider is missing or invalid.
+    """
     prov = plugin_context.get_provider_by_id(provider_id)
     if prov is None:
         raise ValueError(
@@ -707,6 +736,15 @@ async def _request_img_caption(
         "image_caption_prompt",
         "Please describe the image.",
     )
+    montage_indices = [
+        str(index)
+        for index, ref in enumerate(image_urls, start=1)
+        if ref in (montage_refs or ())
+    ]
+    if montage_indices:
+        img_cap_prompt += ANIMATION_CAPTION_NOTICE.format(
+            indices=", ".join(montage_indices)
+        )
     logger.debug("Processing image caption with provider: %s", provider_id)
     llm_resp = await prov.text_chat(
         prompt=img_cap_prompt,
@@ -721,30 +759,41 @@ async def _ensure_img_caption(
     cfg: dict,
     plugin_context: Context,
     image_caption_provider: str,
-) -> None:
+    montage_refs: set[str] | None = None,
+) -> set[str]:
+    """Append a caption and return the references actually described.
+
+    Args:
+        event: Current event.
+        req: Request whose image_urls will be replaced with a text description.
+        cfg: Provider settings for caption generation.
+        plugin_context: Services used to resolve the caption provider.
+        image_caption_provider: Configured caption provider ID.
+        montage_refs: Prepared paths containing animation frame montages.
+
+    Returns:
+        Successfully described image references, or an empty set on failure.
+    """
+    image_refs = set(req.image_urls)
     try:
         caption = await _request_img_caption(
             image_caption_provider,
             cfg,
             req.image_urls,
             plugin_context,
+            montage_refs=montage_refs,
         )
         if caption:
             req.extra_user_content_parts.append(
                 TextPart(text=f"<image_caption>{caption}</image_caption>")
             )
-            req.image_urls = []
+            return image_refs
     except Exception as exc:  # noqa: BLE001
         logger.error("处理图片描述失败: %s", exc)
         req.extra_user_content_parts.append(TextPart(text="[Image Captioning Failed]"))
     finally:
         req.image_urls = []
-
-
-def _append_quoted_image_attachment(req: ProviderRequest, image_path: str) -> None:
-    req.extra_user_content_parts.append(
-        TextPart(text=f"[Image Attachment in quoted message: path {image_path}]")
-    )
+    return set()
 
 
 def _append_audio_attachment(req: ProviderRequest, audio_path: str) -> None:
@@ -819,7 +868,8 @@ async def _process_quote_message(
     main_provider_supports_image: bool = False,
     skip_quote_image_caption: bool = False,
     image_ref: str | None = None,
-) -> None:
+    image_is_montage: bool = False,
+) -> str | None:
     """Append quoted text and optionally describe an explicitly supplied image.
 
     Args:
@@ -830,8 +880,11 @@ async def _process_quote_message(
         quoted_message_settings: Existing quote extraction limits and options.
         main_provider_supports_image: Whether the main model can see images.
         skip_quote_image_caption: Whether the main caption branch handles it.
-        image_ref: Already collected image reference; the local stage supplies
-            a prepared path. No image is re-read from the event here.
+        image_ref: Prepared image path supplied by the builder.
+        image_is_montage: Whether the prepared image represents an animation.
+
+    Returns:
+        The successfully described image reference, or None if no caption was produced.
     """
     quote = None
     for comp in event.message_obj.message:
@@ -841,6 +894,7 @@ async def _process_quote_message(
     if not quote:
         return
 
+    captioned_ref = None
     content_parts = []
     sender_info = f"({quote.sender_nickname}): " if quote.sender_nickname else ""
     message_str = (
@@ -878,11 +932,15 @@ async def _process_quote_message(
                     )
 
                 if prov and isinstance(prov, Provider):
+                    caption_prompt = "Please describe the image content."
+                    if image_is_montage:
+                        caption_prompt += ANIMATION_CAPTION_NOTICE.format(indices="1")
                     llm_resp = await prov.text_chat(
-                        prompt="Please describe the image content.",
+                        prompt=caption_prompt,
                         image_urls=[image_ref],
                     )
                     if llm_resp.completion_text:
+                        captioned_ref = image_ref
                         content_parts.append(
                             f"[Image Caption in quoted message]: {llm_resp.completion_text}"
                         )
@@ -894,6 +952,7 @@ async def _process_quote_message(
     quoted_content = "\n".join(content_parts)
     quoted_text = f"<Quoted Message>\n{quoted_content}\n</Quoted Message>"
     req.extra_user_content_parts.append(TextPart(text=quoted_text))
+    return captioned_ref
 
 
 def _append_system_reminders(
@@ -945,7 +1004,21 @@ async def _decorate_llm_request(
     plugin_context: Context,
     config: MainAgentBuildConfig,
     provider: Provider | None = None,
-) -> None:
+    montage_refs: set[str] | None = None,
+) -> set[str]:
+    """Decorate the request and return image references successfully captioned.
+
+    Args:
+        event: Current event.
+        req: Working request receiving prompts and any image description.
+        plugin_context: Services used to resolve configuration and providers.
+        config: Main-agent build configuration.
+        provider: Main chat provider, used to determine vision support.
+        montage_refs: Prepared paths containing animation frame montages.
+
+    Returns:
+        References successfully described by the image-captioning provider.
+    """
     cfg = config.provider_settings or plugin_context.get_config(
         umo=event.unified_msg_origin
     ).get("provider_settings", {})
@@ -959,14 +1032,16 @@ async def _decorate_llm_request(
 
     await _ensure_persona_and_skills(req, cfg, plugin_context, event)
 
+    captioned_refs = set()
     if req.conversation:
         if img_cap_prov_id and req.image_urls and not main_provider_supports_image:
-            await _ensure_img_caption(
+            captioned_refs = await _ensure_img_caption(
                 event,
                 req,
                 cfg,
                 plugin_context,
                 img_cap_prov_id,
+                montage_refs=montage_refs,
             )
 
     tz = config.timezone
@@ -974,6 +1049,7 @@ async def _decorate_llm_request(
         tz = plugin_context.get_config().get("timezone")
     _append_system_reminders(event, req, cfg, tz)
     await _apply_workspace_extra_prompt(event, req, plugin_context)
+    return captioned_refs
 
 
 def _plugin_tool_fix(event: AstrMessageEvent, req: ProviderRequest) -> None:
@@ -1327,6 +1403,8 @@ async def collect_initial_request(
     plugin_context: Context,
     config: MainAgentBuildConfig,
     req: ProviderRequest | None = None,
+    *,
+    quoted_image_refs: set[str] | None = None,
 ) -> tuple[ProviderRequest | None, str | None]:
     """Collect raw attachments without applying model image policy.
 
@@ -1336,11 +1414,14 @@ async def collect_initial_request(
         config: Existing request collection settings.
         req: Explicit request for direct callers; its attachments are already
             collected, so only its quote reference needs to be resolved.
+        quoted_image_refs: Optional output set populated from quoted image components.
 
     Returns:
         The initial request and the first embedded quote image reference used by
         the dedicated quote caption branch. A rejected wake prefix returns None.
     """
+    if quoted_image_refs is None:
+        quoted_image_refs = set()
     attachment_paths: list[str] = []
     if req is None:
         if event.get_extra("provider_request"):
@@ -1399,9 +1480,6 @@ async def collect_initial_request(
                             source_is_local = False
                         if not source_is_local and Path(image_path).is_file():
                             event.track_temporary_local_file(image_path)
-                    req.extra_user_content_parts.append(
-                        TextPart(text=f"[Image Attachment: path {image_path}]")
-                    )
                 elif isinstance(comp, Record):
                     audio_path = await comp.convert_to_file_path()
                     req.audio_urls.append(audio_path)
@@ -1455,7 +1533,7 @@ async def collect_initial_request(
                                     source_is_local = False
                                 if not source_is_local and Path(image_path).is_file():
                                     event.track_temporary_local_file(image_path)
-                            _append_quoted_image_attachment(req, image_path)
+                            quoted_image_refs.add(image_path)
                         elif isinstance(reply_comp, Record):
                             audio_path = await reply_comp.convert_to_file_path()
                             req.audio_urls.append(audio_path)
@@ -1511,7 +1589,7 @@ async def collect_initial_request(
                                 continue
                             req.image_urls.append(image_ref)
                             fallback_quoted_image_count += 1
-                            _append_quoted_image_attachment(req, image_ref)
+                            quoted_image_refs.add(image_ref)
                     except Exception as exc:  # noqa: BLE001
                         logger.warning(
                             "Failed to resolve fallback quoted images for umo=%s, reply_id=%s: %s",
@@ -1550,10 +1628,22 @@ async def build_main_agent(
     provider: Provider | None = None,
     req: ProviderRequest | None = None,
     apply_reset: bool = True,
+    prepared_images: dict[str, dict] | None = None,
 ) -> MainAgentBuildResult | None:
-    """构建主对话代理（Main Agent），并且自动 reset。
+    """Collect and prepare input, configure the main agent, and optionally reset it.
 
-    If apply_reset is False, will not call reset on the agent runner.
+    Args:
+        event: Incoming platform event.
+        plugin_context: Services used to build the request and agent.
+        config: Main-agent configuration for this session.
+        provider: Selected provider, or None to select one for the event.
+        req: Existing request, or None to collect one from the event.
+        apply_reset: Whether to initialize the runner before returning.
+        prepared_images: Optional request-local cache reused to process only new
+            image references after the request hook.
+
+    Returns:
+        The configured agent and request, or None when the request is rejected.
     """
     provider = provider or await _select_provider(event, plugin_context)
     if provider is None:
@@ -1573,12 +1663,40 @@ async def build_main_agent(
         )
     )
     quote_image_ref = None
+    quoted_image_refs: set[str] = set()
     if collected_request:
         req, quote_image_ref = await collect_initial_request(
-            event, plugin_context, config, req=req
+            event, plugin_context, config, req=req, quoted_image_refs=quoted_image_refs
         )
         if req is None:
             return None
+
+    cfg = config.provider_settings or plugin_context.get_config(
+        umo=event.unified_msg_origin
+    ).get("provider_settings", {})
+    options = cfg.get("image_compress_options", {})
+    max_size = normalize_model_image_max_size(
+        options.get("max_size") if isinstance(options, dict) else None
+    )
+    if prepared_images is None:
+        prepared_images = {}
+    supports_image = _provider_supports_modality(provider, "image")
+    caption_provider_id = cfg.get("default_image_caption_provider_id") or ""
+    if (
+        supports_image
+        or not caption_provider_id
+        or (req.conversation and req.image_urls)
+    ):
+        quote_image_ref = None
+    await prepare_request_images(
+        req,
+        event,
+        max_size=max_size,
+        prepared=prepared_images,
+        quote_image_ref=quote_image_ref,
+        quoted_refs=quoted_image_refs,
+        finalize=False,
+    )
 
     if isinstance(req.contexts, str):
         req.contexts = json.loads(req.contexts)
@@ -1610,11 +1728,14 @@ async def build_main_agent(
         else:
             return None
 
+    captioned_refs: set[str] = set()
+    montage_refs = {
+        result["path"]
+        for result in prepared_images.values()
+        if result["path"] and result["montage"]
+    }
     if collected_request:
-        cfg = config.provider_settings or plugin_context.get_config(
-            umo=event.unified_msg_origin
-        ).get("provider_settings", {})
-        await _process_quote_message(
+        captioned_ref = await _process_quote_message(
             event,
             req,
             cfg.get("default_image_caption_provider_id") or "",
@@ -1622,9 +1743,25 @@ async def build_main_agent(
             _get_quoted_message_parser_settings(cfg),
             main_provider_supports_image=_provider_supports_modality(provider, "image"),
             skip_quote_image_caption=bool(req.conversation and req.image_urls),
-            image_ref=quote_image_ref,
+            image_ref=prepared_images[quote_image_ref]["path"]
+            if quote_image_ref
+            else None,
+            image_is_montage=bool(
+                quote_image_ref and prepared_images[quote_image_ref]["montage"]
+            ),
         )
-    await _decorate_llm_request(event, req, plugin_context, config, provider=provider)
+        if captioned_ref:
+            captioned_refs.add(captioned_ref)
+    captioned_refs.update(
+        await _decorate_llm_request(
+            event,
+            req,
+            plugin_context,
+            config,
+            provider=provider,
+            montage_refs=montage_refs,
+        )
+    )
 
     await _apply_kb(event, req, plugin_context, config)
 
@@ -1729,6 +1866,15 @@ async def build_main_agent(
         req.system_prompt += f"\n{LIVE_MODE_SYSTEM_PROMPT}\n"
 
     _apply_web_search_citation_prompt(event, req)
+
+    await prepare_request_images(
+        req,
+        event,
+        max_size=max_size,
+        prepared=prepared_images,
+        captioned_refs=captioned_refs,
+        supports_image=_provider_supports_modality(provider, "image"),
+    )
 
     reset_coro = agent_runner.reset(
         provider=provider,
