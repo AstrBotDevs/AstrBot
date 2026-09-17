@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query, Request
 
-from astrbot.dashboard.responses import error, ok
+from astrbot.dashboard.responses import ApiError, error, ok
 from astrbot.dashboard.schemas import (
     EnabledPatch,
     ProviderConfigRequest,
@@ -158,12 +158,15 @@ async def start_provider_source_openai_oauth(
 ):
     body = await _json_or_empty(request)
     source_id = _required_text(body.get("source_id"), "source_id")
-    return ok(
-        await service.start_provider_source_openai_oauth(
-            source_id,
-            body.get("config") if isinstance(body.get("config"), dict) else None,
+    try:
+        return ok(
+            await service.start_provider_source_openai_oauth(
+                source_id,
+                body.get("config") if isinstance(body.get("config"), dict) else None,
+            )
         )
-    )
+    except ValueError:
+        raise ApiError("OpenAI OAuth authorization could not be started") from None
 
 
 @router.post("/provider-sources/openai-oauth/complete")
@@ -174,13 +177,18 @@ async def complete_provider_source_openai_oauth(
 ):
     body = await _json_or_empty(request)
     source_id = _required_text(body.get("source_id"), "source_id")
-    return ok(
-        await service.complete_provider_source_openai_oauth(
-            source_id,
-            str(body.get("input") or ""),
-        ),
-        message="OpenAI OAuth binding completed",
-    )
+    try:
+        return ok(
+            await service.complete_provider_source_openai_oauth(
+                source_id,
+                str(body.get("input") or ""),
+            ),
+            message="OpenAI OAuth binding completed",
+        )
+    except ValueError:
+        raise ApiError(
+            "OpenAI OAuth binding failed; check the authorization input"
+        ) from None
 
 
 @router.post("/provider-sources/openai-oauth/refresh")
@@ -191,10 +199,13 @@ async def refresh_provider_source_openai_oauth(
 ):
     body = await _json_or_empty(request)
     source_id = _required_text(body.get("source_id"), "source_id")
-    return ok(
-        await service.refresh_provider_source_openai_oauth(source_id),
-        message="OpenAI OAuth token refreshed",
-    )
+    try:
+        return ok(
+            await service.refresh_provider_source_openai_oauth(source_id),
+            message="OpenAI OAuth token refreshed",
+        )
+    except ValueError:
+        raise ApiError("OpenAI OAuth token refresh failed") from None
 
 
 @router.post("/provider-sources/openai-oauth/disconnect")
@@ -205,10 +216,13 @@ async def disconnect_provider_source_openai_oauth(
 ):
     body = await _json_or_empty(request)
     source_id = _required_text(body.get("source_id"), "source_id")
-    return ok(
-        await service.disconnect_provider_source_openai_oauth(source_id),
-        message="OpenAI OAuth disconnected",
-    )
+    try:
+        return ok(
+            await service.disconnect_provider_source_openai_oauth(source_id),
+            message="OpenAI OAuth disconnected",
+        )
+    except ValueError:
+        raise ApiError("OpenAI OAuth disconnect failed") from None
 
 
 @router.get("/provider-sources/models")
@@ -670,8 +684,8 @@ async def start_dashboard_alias_provider_source_openai_oauth(
                 body.get("config") if isinstance(body.get("config"), dict) else None,
             )
         )
-    except ValueError as exc:
-        return _alias_error(str(exc))
+    except ValueError:
+        return _alias_error("OpenAI OAuth authorization could not be started")
 
 
 @legacy_router.post("/provider_sources/openai_oauth/complete")
@@ -692,8 +706,10 @@ async def complete_dashboard_alias_provider_source_openai_oauth(
             ),
             message="OpenAI OAuth binding completed",
         )
-    except ValueError as exc:
-        return _alias_error(str(exc))
+    except ValueError:
+        return _alias_error(
+            "OpenAI OAuth binding failed; check the authorization input"
+        )
 
 
 @legacy_router.post("/provider_sources/openai_oauth/refresh")
@@ -711,8 +727,8 @@ async def refresh_dashboard_alias_provider_source_openai_oauth(
             await service.refresh_provider_source_openai_oauth(str(source_id)),
             message="OpenAI OAuth token refreshed",
         )
-    except ValueError as exc:
-        return _alias_error(str(exc))
+    except ValueError:
+        return _alias_error("OpenAI OAuth token refresh failed")
 
 
 @legacy_router.post("/provider_sources/openai_oauth/disconnect")
@@ -730,5 +746,5 @@ async def disconnect_dashboard_alias_provider_source_openai_oauth(
             await service.disconnect_provider_source_openai_oauth(str(source_id)),
             message="OpenAI OAuth disconnected",
         )
-    except ValueError as exc:
-        return _alias_error(str(exc))
+    except ValueError:
+        return _alias_error("OpenAI OAuth disconnect failed")
