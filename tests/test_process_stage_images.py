@@ -348,16 +348,17 @@ async def test_animation_montage_notice_reaches_model(harness, tmp_path):
         notices = [
             part
             for part in harness.captured[-1].req.extra_user_content_parts
-            if isinstance(part, TextPart) and "[Animated image]" in part.text
+            if isinstance(part, TextPart)
+            and part.text.startswith("<system_notice>\nThe input includes a GIF")
         ]
         assert len(notices) == int(expected)
         if expected:
             assert notices[0]._no_save
             assert notices[0].text.startswith("<system_notice>\n")
             assert notices[0].text.endswith("\n</system_notice>")
-            assert "frames are tiled into one image" in notices[0].text
-            assert "Respond as if viewing the animation" in notices[0].text
-            assert "do not mention the frame layout" in notices[0].text
+            assert "converted into a single image with frames" in notices[0].text
+            assert "Treat it as an animation" in notices[0].text
+            assert "do not mention the conversion or frame layout" in notices[0].text
 
 
 @pytest.mark.asyncio

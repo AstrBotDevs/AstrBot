@@ -128,9 +128,9 @@ async def prepare_request_images(
             *req.extra_user_content_parts,
             TextPart(
                 text="<system_notice>\n"
-                "[Animated image] Each animation's frames are tiled into one image "
-                "in reading order. Respond as if viewing the animation; "
-                "do not mention the frame layout.\n"
+                "The input includes a GIF converted into a single image with frames "
+                "in reading order. Treat it as an animation; "
+                "do not mention the conversion or frame layout.\n"
                 "</system_notice>"
             ).mark_as_temp(),
         ]
