@@ -2,15 +2,10 @@
 
 from pathlib import Path
 
-from astrbot.core import logger
 from astrbot.core.agent.message import ImageURLPart, TextPart
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider.entities import ProviderRequest
-from astrbot.core.utils.media_utils import (
-    MediaResolver,
-    is_recoverable_image_error,
-    prepare_model_image,
-)
+from astrbot.core.utils.media_utils import prepare_model_image
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
 
@@ -18,26 +13,20 @@ async def prepare_request_images(
     req: ProviderRequest,
     event: AstrMessageEvent,
     *,
-    enabled: bool,
     max_size: int,
-    quality: int,
     output_dir: Path,
     prepared: dict[str, str | None],
     quote_image_ref: str | None = None,
-    montage_max_size: int | None = None,
 ) -> None:
     """Replace current images on a working request and track their owned files.
 
     Args:
         req: Working request; shared lists and image blocks are copied on write.
         event: Owner of downloaded source files and prepared working files.
-        enabled: Whether the current pipeline profile enables model image preparation.
         max_size: Normalized longest-edge limit for this request.
-        quality: JPEG output quality in the range 1-100.
-        output_dir: Event working file directory, separate from the shared cache.
+        output_dir: Event working file directory.
         prepared: Per-request mapping reused after the request hook.
         quote_image_ref: Optional input for the dedicated quote caption branch.
-        montage_max_size: Optional montage-specific limit; defaults to ``max_size``.
     """
     req.image_urls = normalize_and_dedupe_strings(req.image_urls)
     refs = list(req.image_urls)
@@ -53,37 +42,15 @@ async def prepare_request_images(
     for ref in dict.fromkeys(refs):
         if ref not in prepared:
             path = None
-            if enabled:
-                image = await prepare_model_image(
-                    ref,
-                    max_size=max_size,
-                    output_dir=output_dir,
-                    quality=quality,
-                    montage_max_size=montage_max_size,
-                )
-                if image:
-                    path, is_montage = image
-                    event.track_temporary_local_file(path)
-                    has_montage |= is_montage
-            else:
-                try:
-                    async with MediaResolver(
-                        ref, media_type="image"
-                    ).as_path() as source:
-                        # Transfer only resolver-owned downloads, never user files.
-                        if not source.path.is_file():
-                            raise FileNotFoundError("Image source is unavailable")
-                        path = str(source.path.resolve())
-                        for owned_path in source.cleanup_paths:
-                            event.track_temporary_local_file(str(owned_path))
-                        source.detach()
-                except Exception as exc:
-                    if not is_recoverable_image_error(exc):
-                        raise
-                    logger.warning(
-                        "Image localization failed; skipping image (%s).",
-                        type(exc).__name__,
-                    )
+            image = await prepare_model_image(
+                ref,
+                max_size=max_size,
+                output_dir=output_dir,
+            )
+            if image:
+                path, is_montage = image
+                event.track_temporary_local_file(path)
+                has_montage |= is_montage
             prepared[ref] = path
             if path:
                 prepared[path] = path

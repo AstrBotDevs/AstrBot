@@ -43,10 +43,7 @@ from astrbot.core.provider.entities import (
 )
 from astrbot.core.star.star_handler import EventType
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-from astrbot.core.utils.media_utils import (
-    IMAGE_COMPRESS_DEFAULT_QUALITY,
-    normalize_model_image_max_size,
-)
+from astrbot.core.utils.media_utils import normalize_model_image_max_size
 from astrbot.core.utils.metrics import Metric
 from astrbot.core.utils.session_lock import session_lock_manager
 
@@ -61,9 +58,6 @@ from ...follow_up import (
     unregister_active_runner,
 )
 from .image_input import prepare_request_images
-
-# Anthropic rejects images above 5 MB; OpenAI and Gemini allow roughly 20 MB.
-_CUA_IMAGE_WARN_BYTES = 5 * 1024 * 1024
 
 
 class InternalAgentSubStage(Stage):
@@ -244,32 +238,10 @@ class InternalAgentSubStage(Stage):
                     if req is None:
                         return
                     settings = self.ctx.astrbot_config["provider_settings"]
-                    enabled = settings.get("image_compress_enabled", True) is not False
                     options = settings.get("image_compress_options", {})
-                    montage_max_size = normalize_model_image_max_size(
+                    max_size = normalize_model_image_max_size(
                         options.get("max_size") if isinstance(options, dict) else None
                     )
-                    max_size = montage_max_size
-                    sandbox_cfg = settings.get("sandbox")
-                    cua_pixel_mode = (
-                        settings.get("computer_use_runtime") == "sandbox"
-                        and isinstance(sandbox_cfg, dict)
-                        and sandbox_cfg.get("booter") == "cua"
-                    )
-                    if cua_pixel_mode:
-                        # CUA pixel tools read coordinates 1:1 on stills, so the
-                        # still-image resize is lifted; compliant images pass through
-                        # byte-exact since lossy re-encoding would shift colors.
-                        # Montages are never used for coordinates and keep the
-                        # configured cap, which bounds the 3x3 canvas. Oversized
-                        # passthrough images warn below.
-                        max_size = 1_000_000
-                    quality = (
-                        options.get("quality") if isinstance(options, dict) else None
-                    )
-                    if isinstance(quality, bool) or not isinstance(quality, int):
-                        quality = IMAGE_COMPRESS_DEFAULT_QUALITY
-                    quality = min(max(quality, 1), 100)
                     output_dir = Path(get_astrbot_temp_path())
                     prepared: dict[str, str | None] = {}
                     supports_image = _provider_supports_modality(provider, "image")
@@ -287,13 +259,10 @@ class InternalAgentSubStage(Stage):
                     await prepare_request_images(
                         req,
                         event,
-                        enabled=enabled,
                         max_size=max_size,
-                        quality=quality,
                         output_dir=output_dir,
                         prepared=prepared,
                         quote_image_ref=quote_image_ref,
-                        montage_max_size=montage_max_size,
                     )
                     await _process_quote_message(
                         event,
@@ -355,31 +324,10 @@ class InternalAgentSubStage(Stage):
                     await prepare_request_images(
                         req,
                         event,
-                        enabled=enabled,
                         max_size=max_size,
-                        quality=quality,
                         output_dir=output_dir,
                         prepared=prepared,
-                        montage_max_size=montage_max_size,
                     )
-                    if cua_pixel_mode:
-                        oversized = []
-                        for path in {p for p in prepared.values() if p}:
-                            try:
-                                size = Path(path).stat().st_size
-                            except OSError:
-                                continue
-                            if size > _CUA_IMAGE_WARN_BYTES:
-                                oversized.append(size)
-                        if oversized:
-                            logger.warning(
-                                "CUA session sends %d image(s) larger than %d MB "
-                                "(largest %.1f MB) without resize; this may exceed "
-                                "provider image upload limits.",
-                                len(oversized),
-                                _CUA_IMAGE_WARN_BYTES // 1048576,
-                                max(oversized) / 1048576,
-                            )
                     # apply reset
                     if reset_coro:
                         await reset_coro

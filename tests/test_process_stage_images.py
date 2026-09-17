@@ -5,6 +5,7 @@ import base64
 import copy
 import inspect
 import os
+import random
 from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace
@@ -195,7 +196,7 @@ async def process_event(harness, event, *, preprocess_first=False, stage=None):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("enabled", [None, True, False])
 @pytest.mark.parametrize("fmt", ["JPEG", "PNG", "BMP", "WEBP", "GIF"])
-async def test_profile_toggle_and_preprocess_to_first_model(
+async def test_legacy_toggle_does_not_disable_preparation(
     harness, tmp_path, monkeypatch, enabled, fmt
 ):
     source = source_image(tmp_path, fmt)
@@ -205,23 +206,13 @@ async def test_profile_toggle_and_preprocess_to_first_model(
         harness.config["provider_settings"].pop("image_compress_enabled", None)
     else:
         harness.config["provider_settings"]["image_compress_enabled"] = enabled
-    if enabled is False:
-        monkeypatch.setattr(
-            media,
-            "_read_valid_cached_image_bytes",
-            lambda *args: pytest.fail("disabled must not query derived cache"),
-        )
     await process_event(harness, event, preprocess_first=True)
     assert len(harness.captured) == 1
     req = harness.captured[0].req
     with PILImage.open(req.image_urls[0]) as image:
-        expected = (
-            fmt if enabled is False else (fmt if fmt in {"JPEG", "PNG"} else "JPEG")
-        )
+        expected = fmt if fmt in {"JPEG", "PNG"} else "JPEG"
         assert image.format == expected
-        assert image.size == (
-            (90, 45) if enabled is not False and fmt == "GIF" else (60, 30)
-        )
+        assert image.size == ((90, 45) if fmt == "GIF" else (60, 30))
         if fmt == "PNG":
             assert image.getpixel((0, 0))[3] == 128
     assert source.read_bytes() == original
@@ -246,10 +237,10 @@ async def test_profile_toggle_and_preprocess_to_first_model(
         ("local", "cua", "PNG"),
     ],
 )
-async def test_cua_runtime_keeps_input_image_geometry(
+async def test_all_runtimes_apply_configured_image_limit(
     harness, tmp_path, runtime, booter, fmt
 ):
-    """CUA pixel tools read coordinates 1:1, so only the resize is lifted."""
+    """User attachments obey the image limit for every computer runtime."""
     path = tmp_path / f"big.{fmt.lower()}"
     PILImage.new("RGB", (200, 100), "red").save(path, fmt)
     original = path.read_bytes()
@@ -259,16 +250,10 @@ async def test_cua_runtime_keeps_input_image_geometry(
     await process_event(harness, event, preprocess_first=True)
     assert len(harness.captured) == 1
     req = harness.captured[0].req
-    gated = runtime == "sandbox" and booter == "cua"
     with PILImage.open(req.image_urls[0]) as image:
-        assert image.size == ((200, 100) if gated else (90, 45))
-        if gated:
-            # A compliant source is reused byte-exact; other formats are still
-            # re-encoded (to JPEG) without any resize.
-            expected = fmt if fmt in {"JPEG", "PNG"} else "JPEG"
-            assert image.format == expected
-    if gated and fmt == "PNG":
-        assert Path(req.image_urls[0]).read_bytes() == original
+        assert image.size == (90, 45)
+        assert image.format == "JPEG"
+    assert path.read_bytes() == original
 
 
 @pytest.mark.asyncio
@@ -280,10 +265,10 @@ async def test_cua_runtime_keeps_input_image_geometry(
         ("sandbox", "shipyard_neo", True),
     ],
 )
-async def test_cua_oversize_image_warns(
+async def test_cua_inputs_obey_byte_limit(
     harness, tmp_path, monkeypatch, runtime, booter, big
 ):
-    """Byte-exact CUA passthrough warns when an image may exceed upload limits."""
+    """Large user inputs are bounded even in CUA sessions."""
     dims = (1500, 1500) if big else (60, 30)
     path = tmp_path / "shot.png"
     if big:
@@ -302,11 +287,11 @@ async def test_cua_oversize_image_warns(
     await process_event(harness, event, preprocess_first=True)
     assert len(harness.captured) == 1
     req = harness.captured[0].req
-    gated = runtime == "sandbox" and booter == "cua"
-    if gated:
-        assert Path(req.image_urls[0]).read_bytes() == original
-    warned = any("upload limits" in str(call) for call in warning.call_args_list)
-    assert warned == (big and gated)
+    assert Path(req.image_urls[0]).stat().st_size < 512 * 1024
+    with PILImage.open(req.image_urls[0]) as image:
+        assert max(image.size) <= 90
+    assert path.read_bytes() == original
+    assert not any("upload limits" in str(call) for call in warning.call_args_list)
 
 
 @pytest.mark.asyncio
@@ -336,12 +321,12 @@ async def test_animation_montage_notice_reaches_model(harness, tmp_path):
 
     still = tmp_path / "still.png"
     PILImage.new("RGB", (60, 30), "red").save(still)
-    # The second animated request reuses the montage cache.
+    # Legacy settings cannot disable animation preparation.
     for source, enabled, expected in (
         (animated, True, True),
         (animated, True, True),
         (still, True, False),
-        (animated, False, False),
+        (animated, False, True),
     ):
         harness.config["provider_settings"]["image_compress_enabled"] = enabled
         await process_event(harness, make_event([Image(file=str(source))]))
@@ -369,7 +354,7 @@ async def test_profile_reload_and_concurrent_requests(harness, tmp_path):
         harness, make_event([Image(file=str(source))], session="first")
     )
     other_config = copy.deepcopy(harness.config)
-    other_config["provider_settings"]["image_compress_enabled"] = False
+    other_config["provider_settings"]["image_compress_options"]["max_size"] = 60
     other_ctx = SimpleNamespace(
         astrbot_config=other_config, plugin_manager=harness.ctx.plugin_manager
     )
@@ -383,7 +368,7 @@ async def test_profile_reload_and_concurrent_requests(harness, tmp_path):
         ),
         process_event(
             harness,
-            make_event([Image(file=str(source))], session="off"),
+            make_event([Image(file=str(source))], session="other"),
             stage=other_stage,
         ),
     )
@@ -392,7 +377,8 @@ async def test_profile_reload_and_concurrent_requests(harness, tmp_path):
     }
     with PILImage.open(results["small"].image_urls[0]) as image:
         assert max(image.size) == 30
-    assert Path(results["off"].image_urls[0]).read_bytes() == source.read_bytes()
+    with PILImage.open(results["other"].image_urls[0]) as image:
+        assert max(image.size) == 60
     assert harness.provider.provider_config == before
 
 
@@ -479,9 +465,8 @@ async def test_plugin_request_extra_metadata_hook_and_history(
     assert all(p["image_url"].get("id") != "dict-id" for p in images)
     paths = list(event._temporary_local_files)
     event.cleanup_temporary_local_files()
-    cache_files = list((harness.work / media.CONVERT_CACHE_DIR_NAME).glob("*.img"))
     assert all(not Path(path).exists() for path in paths)
-    assert cache_files and all(path.exists() for path in cache_files)
+    assert not list(harness.work.rglob("model_image_*"))
     assert all(
         base64.b64decode(p["image_url"]["url"].split(",", 1)[1]).startswith(b"\xff\xd8")
         for p in images
@@ -493,6 +478,98 @@ async def test_plugin_request_extra_metadata_hook_and_history(
     visual = [part for part in payload[0]["content"] if part["type"] == "image"]
     assert len(visual) == len(images)
     assert all(part["source"]["media_type"] == "image/jpeg" for part in visual)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("entry", ["attachment", "quote", "plugin", "hook"])
+@pytest.mark.parametrize("fmt", ["JPEG", "PNG", "GIF"])
+async def test_provider_and_history_keep_bounded_previews_and_original_paths(
+    harness, tmp_path, monkeypatch, entry, fmt
+):
+    source = tmp_path / f"original.{fmt.lower()}"
+    pixels = random.Random(9703).randbytes(1280 * 960 * 3)
+    image = PILImage.frombytes("RGB", (1280, 960), pixels)
+    if fmt == "PNG":
+        image.putalpha(128)
+    if fmt == "GIF":
+        image.save(
+            source,
+            fmt,
+            save_all=True,
+            append_images=[image.transpose(PILImage.Transpose.FLIP_LEFT_RIGHT)],
+        )
+    else:
+        image.save(source, fmt, quality=100)
+    original = source.read_bytes()
+    assert len(original) >= 512 * 1024
+    harness.config["provider_settings"]["image_compress_options"] = {
+        "max_size": 1280,
+        "quality": 100,
+    }
+    harness.config["provider_settings"]["image_compress_enabled"] = False
+    part = Image(file=str(source))
+    event = make_event(
+        [Reply(id="quoted", chain=[part])] if entry == "quote" else [part]
+    )
+    if entry in {"plugin", "hook"}:
+        event = make_event()
+        original_request = ProviderRequest(
+            prompt="describe",
+            image_urls=[str(source)],
+            conversation=harness.context.conversation_manager.get_conversation.return_value,
+            extra_user_content_parts=[
+                TextPart(text=f"[Image Attachment: path {source}]")
+            ],
+        )
+        if entry == "plugin":
+            event.set_extra("provider_request", original_request)
+        else:
+
+            async def hook(event, kind, *args):
+                if kind == EventType.OnLLMRequestEvent:
+                    request = args[0]
+                    request.image_urls = original_request.image_urls
+                    request.extra_user_content_parts = (
+                        original_request.extra_user_content_parts
+                    )
+                return False
+
+            monkeypatch.setattr(internal, "call_event_hook", hook)
+    await process_event(harness, event, preprocess_first=True)
+    req = harness.captured[0].req
+    preview = Path(req.image_urls[0])
+    assert preview != source and preview.stat().st_size < 512 * 1024
+    texts = [
+        part.text for part in req.extra_user_content_parts if isinstance(part, TextPart)
+    ]
+    assert any(str(source) in text for text in texts)
+    assert all(str(preview) not in text for text in texts)
+    provider_messages = harness.provider.text_chat.await_args.kwargs["contexts"]
+    history = (
+        harness.context.conversation_manager.update_conversation.await_args.kwargs[
+            "history"
+        ]
+    )
+    for messages in (provider_messages, history):
+        images = [
+            part
+            for message in messages
+            if isinstance(message.get("content"), list)
+            for part in message["content"]
+            if part["type"] == "image_url"
+        ]
+        assert images
+        for part in images:
+            data_uri = part["image_url"]["url"]
+            data = base64.b64decode(data_uri.split(",", 1)[1])
+            assert len(data) < 512 * 1024
+            assert data == preview.read_bytes()
+            assert data_uri.startswith(
+                "data:image/png;" if fmt == "PNG" else "data:image/jpeg;"
+            )
+    event.cleanup_temporary_local_files()
+    assert not preview.exists()
+    assert source.read_bytes() == original
 
 
 @pytest.mark.asyncio
@@ -660,15 +737,11 @@ async def test_localized_reference_lifetime_and_ownership(
     path = Path(harness.captured[0].req.image_urls[0])
     assert path.is_file()
     assert str(source) not in event._temporary_local_files
-    assert (str(path) in event._temporary_local_files) == (
-        enabled or reference != "file"
-    )
+    assert str(path) in event._temporary_local_files
     with PILImage.open(path) as image:
-        assert image.format == ("JPEG" if enabled else "GIF")
-    if not enabled:
-        assert path.read_bytes() == source.read_bytes()
+        assert image.format == "JPEG"
     event.cleanup_temporary_local_files()
-    assert path.exists() == (reference == "file" and not enabled)
+    assert not path.exists()
     assert source.is_file()
 
 
@@ -819,18 +892,18 @@ async def test_attachment_sources_survive_event_cleanup(
     visual_path = Path(req.image_urls[0])
     assert attachment_path.read_bytes() == original
     assert str(attachment_path) not in event._temporary_local_files
-    assert (visual_path != attachment_path) == enabled
+    assert visual_path != attachment_path
     with PILImage.open(visual_path) as visual_image:
-        assert visual_image.format == ("JPEG" if enabled else fmt)
-        assert max(visual_image.size) == (12 if enabled else 60)
+        assert visual_image.format == "JPEG"
+        assert max(visual_image.size) == 12
 
     owned = [Path(path) for path in event._temporary_local_files]
-    assert len(owned) == 1 + int(enabled)
+    assert len(owned) == 2
     assert unrelated in owned
     event.cleanup_temporary_local_files()
     assert attachment_path.read_bytes() == original
     assert all(not path.exists() for path in owned)
-    assert visual_path.exists() == (not enabled)
+    assert not visual_path.exists()
 
 
 @pytest.mark.asyncio
