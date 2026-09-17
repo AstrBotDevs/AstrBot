@@ -231,6 +231,7 @@ async def test_transcribe_audio_timeout_cancels_request_and_cleans_resolved_file
     resolved = tmp_path / "resolved.wav"
     resolved.write_bytes(b"audio")
     cleaned = False
+    request_started = asyncio.Event()
     request_cancelled = asyncio.Event()
 
     class FakeResolver:
@@ -249,6 +250,7 @@ async def test_transcribe_audio_timeout_cancels_request_and_cleans_resolved_file
 
     class BlockingClient(FakeAsyncClient):
         async def post(self, url: str, **kwargs) -> httpx.Response:
+            request_started.set()
             try:
                 await asyncio.Event().wait()
             except asyncio.CancelledError:
@@ -269,10 +271,17 @@ async def test_transcribe_audio_timeout_cancels_request_and_cleans_resolved_file
         "astrbot.core.provider.oauth.openai_oauth_transcription.httpx.AsyncClient",
         factory,
     )
-    client = OpenAIOAuthTranscriptionClient(provider, timeout=0.01)
+    client = OpenAIOAuthTranscriptionClient(provider, timeout=3)
 
-    with pytest.raises(TimeoutError, match="超时"):
-        await client.transcribe_audio("input")
+    task = asyncio.create_task(client.transcribe_audio("input"))
+    try:
+        await asyncio.wait_for(request_started.wait(), timeout=2)
+        with pytest.raises(TimeoutError, match="超时"):
+            await task
+    finally:
+        if not task.done():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
 
     assert request_cancelled.is_set()
     assert cleaned is True

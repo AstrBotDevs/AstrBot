@@ -52,6 +52,16 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y bubblewrap ffmpeg
 
+      - name: Install FFmpeg for audio tests
+        if: runner.os == 'Windows' || runner.os == 'macOS'
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            choco install ffmpeg -y --no-progress
+          else
+            brew install ffmpeg
+          fi
+          ffmpeg -version
+
       - name: Enable and verify Linux sandbox execution
         if: runner.os == 'Linux'
         run: |

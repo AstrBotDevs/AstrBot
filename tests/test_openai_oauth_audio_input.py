@@ -306,6 +306,28 @@ async def test_decoded_output_expansion_is_rejected(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_converter_failure_keeps_bounded_diagnostic_cause(monkeypatch):
+    class FailedProcess:
+        returncode = 1
+
+        async def communicate(self):
+            return b"", b"decoder failed: " + b"x" * 600
+
+    async def create_process(*args, **kwargs):
+        return FailedProcess()
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", create_process)
+    resolver = BoundedOAuthAudioResolver("input", max_bytes=4096, timeout=2)
+
+    with pytest.raises(ValueError, match="OAuth 转录音频解码或格式转换失败") as exc:
+        await resolver._run_converter("decoder")
+
+    assert isinstance(exc.value.__cause__, RuntimeError)
+    assert "converter exit code 1: decoder failed" in str(exc.value.__cause__)
+    assert len(str(exc.value.__cause__)) <= 535
+
+
+@pytest.mark.asyncio
 async def test_real_ffmpeg_ogg_conversion_produces_bounded_wav(tmp_path):
     ffmpeg = shutil.which("ffmpeg")
     assert ffmpeg is not None

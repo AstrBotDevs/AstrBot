@@ -320,4 +320,6 @@ class BoundedOAuthAudioResolver:
                 raise ValueError(
                     f"OAuth 转录解码后音频超过文件大小上限 {self.max_bytes} 字节。"
                 )
-            raise ValueError("OAuth 转录音频解码或格式转换失败。")
+            raise ValueError("OAuth 转录音频解码或格式转换失败。") from RuntimeError(
+                f"converter exit code {process.returncode}: {detail[:512]}"
+            )
