@@ -66,6 +66,24 @@ These controls stay attached to every model call in the agent run, including
 function-result rounds, schema repair calls and fallback providers. A 429 error
 retains `status_code=429` on the final `LLMResponse` when fallback is disabled.
 
+## Image tool transport
+
+`provider.generate_image()` uses the Responses image tool and defaults to HTTP.
+Plugins may opt into a bounded WebSocket session for a long image generation:
+
+```python
+images = await provider.generate_image(
+    "Draw a labeled circuit diagram.",
+    transport="websocket",
+    timeout=120,
+)
+```
+
+The deadline covers authentication, connection, request and result collection.
+The same image extraction and error handling apply to HTTP and WebSocket. The
+`model` argument selects the outer Responses model; it does not verify the
+identity of the image tool's underlying model.
+
 ## Ordinary voice messages
 
 Existing AstrBot STT and TTS providers remain usable with the Codex text model.
