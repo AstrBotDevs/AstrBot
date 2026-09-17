@@ -290,12 +290,19 @@ class TelegramPlatformAdapter(Platform):
                 await asyncio.sleep(self._polling_restart_delay)
 
     def _on_polling_error(self, error: Exception) -> None:
+        # Non-network errors (e.g. Conflict when two bot instances poll the
+        # same token) have a clear cause; log a concise message instead of a
+        # full traceback to avoid filling the log.
+        if not isinstance(error, NetworkError):
+            logger.error(
+                f"Telegram polling request failed: {type(error).__name__}: {error!s}"
+            )
+            return
+
         logger.error(
             f"Telegram polling request failed: {type(error).__name__}: {error!s}",
             exc_info=error,
         )
-        if not isinstance(error, NetworkError):
-            return
 
         if self._loop is None:
             return

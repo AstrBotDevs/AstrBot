@@ -36,6 +36,9 @@ from astrbot.core.utils.media_utils import (
 
 SSE_HEARTBEAT = ": heartbeat\n\n"
 CHAT_RUN_SUBSCRIBER_QUEUE_SIZE = 256
+# Uploaded chat attachments larger than this are rejected.
+MAX_UPLOAD_FILE_SIZE_MB = 512
+MAX_UPLOAD_FILE_SIZE_BYTES = MAX_UPLOAD_FILE_SIZE_MB * 1024 * 1024
 WEBCHAT_IMAGE_MIME_TYPES = {
     ".jpg": "image/jpeg",
     ".jpeg": "image/jpeg",
@@ -596,6 +599,10 @@ class ChatService:
         return await self.resolve_attachment_file(attachment_id)
 
     async def save_uploaded_file(self, file) -> dict:
+        if (file.content_length or 0) > MAX_UPLOAD_FILE_SIZE_BYTES:
+            raise ChatServiceError(
+                f"File too large (limit {MAX_UPLOAD_FILE_SIZE_MB} MB)"
+            )
         filename = sanitize_upload_filename(file.filename)
         content_type = file.content_type or "application/octet-stream"
 
@@ -614,6 +621,11 @@ class ChatService:
             raise ChatServiceError("Invalid filename")
 
         await file.save(str(file_path))
+        if file_path.stat().st_size > MAX_UPLOAD_FILE_SIZE_BYTES:
+            file_path.unlink(missing_ok=True)
+            raise ChatServiceError(
+                f"File too large (limit {MAX_UPLOAD_FILE_SIZE_MB} MB)"
+            )
         if attach_type == "image":
             detected_mime_type = await detect_image_mime_type_async(
                 file_path,
@@ -1411,7 +1423,31 @@ class ChatService:
     ) -> list[dict]:
         return await self.get_sessions(username, platform_id)
 
-    async def get_session(self, username: str, session_id: str) -> dict:
+    async def get_session(
+        self,
+        username: str,
+        session_id: str,
+        page: int = 1,
+        page_size: int = 1000,
+    ) -> dict:
+        """Get one WebChat session and a page of its history.
+
+        Args:
+            username: Authenticated dashboard username.
+            session_id: WebChat session identifier.
+            page: One-based history page, with page one containing the newest rows.
+            page_size: Number of history records to return (at most 1000).
+
+        Returns:
+            Session metadata, history page, and pagination metadata.
+
+        Raises:
+            ChatServiceError: If pagination is invalid or the session is inaccessible.
+        """
+        if page < 1:
+            raise ChatServiceError("page must be at least 1")
+        if page_size < 1 or page_size > 1000:
+            raise ChatServiceError("page_size must be between 1 and 1000")
         session = await self.db.get_platform_session_by_id(session_id)
         if not session:
             raise ChatServiceError(f"Session {session_id} not found")
@@ -1425,8 +1461,12 @@ class ChatService:
         history_ls = await self.platform_history_mgr.get(
             platform_id=platform_id,
             user_id=session_id,
-            page=1,
-            page_size=1000,
+            page=page,
+            page_size=page_size,
+        )
+        total = await self.platform_history_mgr.count(
+            platform_id=platform_id,
+            user_id=session_id,
         )
         threads = await self.db.get_webchat_threads_by_parent_session(
             parent_session_id=session_id,
@@ -1435,6 +1475,10 @@ class ChatService:
 
         response_data = {
             "history": [serialize_history_entry(history) for history in history_ls],
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "has_more": (page - 1) * page_size + len(history_ls) < total,
             "threads": [serialize_thread(thread) for thread in threads],
             "is_running": self.running_convs.get(session_id, False),
             "active_runs": self.get_active_chat_runs(username, session_id),

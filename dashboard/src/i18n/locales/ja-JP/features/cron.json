@@ -1,0 +1,173 @@
+{
+  "header": {
+    "eyebrow": "自動化",
+    "live": "リアルタイム同期"
+  },
+  "page": {
+    "title": "スケジュールタスク",
+    "beta": "実験的機能",
+    "subtitle": "指定時刻にタスクを自動実行し、完了後に結果を対象の会話へ配信します。",
+    "proactive": {
+      "link": "対応メッセージプラットフォーム",
+      "supported": "結果の自動配信に対応している設定済みプラットフォームは次のとおりです",
+      "unsupported": "自動メッセージに対応するプラットフォームがありません。プラットフォーム設定で有効にしてください。"
+    }
+  },
+  "actions": {
+    "create": "新規作成",
+    "edit": "編集",
+    "refresh": "再読み込み",
+    "delete": "削除",
+    "cancel": "キャンセル",
+    "close": "閉じる",
+    "more": "その他の操作",
+    "runNow": "今すぐ実行",
+    "save": "保存",
+    "submit": "作成"
+  },
+  "platformDialog": {
+    "title": "対応メッセージプラットフォーム",
+    "description": "自動メッセージ配信に対応しているのは次のプラットフォームのみです。スケジュールタスクの完了後、これらのプラットフォーム上の対象会話にのみ結果を配信できます。"
+  },
+  "card": {
+    "onceAt": "1 回のみ · {time}",
+    "runAt": "実行時刻：{time}",
+    "nextRun": "次回実行：{time}",
+    "dailyAt": "毎日 {time}",
+    "weeklyAt": "毎週{day} {time}",
+    "monthlyAt": "毎月 {day} 日 {time}",
+    "everyMinutes": "{count} 分ごと",
+    "everyHours": "{count} 時間ごと",
+    "everyDays": "{count} 日ごと",
+    "customCron": "カスタム · {cron}",
+    "noDeliveryTarget": "配信先が未設定です"
+  },
+  "filters": {
+    "search": "タスク名と内容を検索",
+    "umo": "配信先で絞り込み",
+    "noUmos": "UMO がありません",
+    "noDeliveryTarget": "配信先が未設定です",
+    "noMatches": "条件に一致するスケジュールタスクがありません。"
+  },
+  "overview": {
+    "totalTasks": "タスク総数",
+    "totalTasksNote": "登録済みのスケジュールタスク",
+    "enabledTasks": "有効なタスク",
+    "enabledTasksNote": "スケジュールどおりに実行されるタスク",
+    "oneOffTasks": "1 回限りのタスク",
+    "recurringTasksNote": "繰り返しタスク {count} 件",
+    "proactivePlatforms": "自動配信プラットフォーム",
+    "proactivePlatformsNote": "自動メッセージが有効なプラットフォーム数"
+  },
+  "section": {
+    "registered": {
+      "title": "タスク一覧",
+      "subtitle": "登録済みタスク、実行時刻、有効状態をまとめて確認します"
+    },
+    "delivery": {
+      "title": "配信状態",
+      "subtitle": "スケジュールタスクの実行結果は、自動メッセージに対応するプラットフォームから返信されます。",
+      "support": "自動配信",
+      "available": "利用可能",
+      "unavailable": "利用不可",
+      "enabledPlatforms": "有効なプラットフォーム"
+    },
+    "quickCreate": {
+      "title": "クイック作成",
+      "runMode": "タスクモード",
+      "target": "対象"
+    },
+    "platforms": {
+      "title": "対応プラットフォーム"
+    }
+  },
+  "table": {
+    "title": "登録済みタスク",
+    "subtitle": "Cron、セッション、直近の実行履歴、有効状態を確認できます",
+    "empty": "タスクがありません。",
+    "headers": {
+      "name": "名前",
+      "type": "種類",
+      "cron": "Cron",
+      "session": "セッション ID",
+      "nextRun": "次回実行",
+      "lastRun": "前回実行",
+      "note": "説明",
+      "actions": "操作"
+    },
+    "type": {
+      "once": "1 回のみ",
+      "recurring": "繰り返し",
+      "activeAgent": "アクティブエージェント",
+      "workflow": "ワークフロー",
+      "unknown": "{type}"
+    },
+    "timezoneLocal": "ローカルタイムゾーン",
+    "notAvailable": "—"
+  },
+  "form": {
+    "title": "タスクを新規作成",
+    "editTitle": "タスクを編集",
+    "chatHint": "ここで追加しなくても、チャットから AstrBot にスケジュールタスクの作成を依頼できます。",
+    "runOnce": "1 回限りのタスク",
+    "name": "タスク名 *",
+    "note": "タスク要件 *",
+    "scheduleMode": "実行時刻 *",
+    "scheduleModes": {
+      "once": "1 回のみ",
+      "interval": "間隔",
+      "daily": "毎日",
+      "weekly": "毎週",
+      "monthly": "毎月",
+      "cron": "カスタム"
+    },
+    "intervalEvery": "間隔 *",
+    "intervalUnit": "単位 *",
+    "intervalUnits": {
+      "minutes": "分",
+      "hours": "時間",
+      "days": "日"
+    },
+    "dailyTime": "時刻 *",
+    "weeklyDay": "曜日 *",
+    "weeklyTime": "時刻 *",
+    "monthlyDay": "日付 *",
+    "monthlyTime": "時刻 *",
+    "weekdays": {
+      "sunday": "日曜日",
+      "monday": "月曜日",
+      "tuesday": "火曜日",
+      "wednesday": "水曜日",
+      "thursday": "木曜日",
+      "friday": "金曜日",
+      "saturday": "土曜日"
+    },
+    "cron": "Cron 式 *",
+    "cronPlaceholder": "0 9 * * *",
+    "runAt": "実行時刻 *",
+    "session": "配信先（任意）",
+    "noUmos": "利用可能なセッションがありません",
+    "timezone": "タイムゾーン（任意、例：Asia/Shanghai）",
+    "enabled": "有効"
+  },
+  "messages": {
+    "loadFailed": "タスクの読み込みに失敗しました",
+    "updateSuccess": "更新しました",
+    "updateFailed": "更新に失敗しました",
+    "deleteSuccess": "削除しました",
+    "deleteFailed": "削除に失敗しました",
+    "nameRequired": "タスク名を入力してください",
+    "sessionRequired": "配信先を選択してください",
+    "noteRequired": "タスク要件を入力してください",
+    "cronRequired": "Cron 式を入力してください",
+    "runAtRequired": "実行時刻を選択してください",
+    "intervalRequired": "有効な間隔を入力してください",
+    "dailyTimeRequired": "毎日の実行時刻を選択してください",
+    "weeklyTimeRequired": "毎週の実行曜日と時刻を選択してください",
+    "monthlyTimeRequired": "毎月の実行日と時刻を選択してください",
+    "createSuccess": "作成しました",
+    "createFailed": "作成に失敗しました",
+    "runStarted": "実行を開始しました",
+    "runFailed": "実行に失敗しました"
+  }
+}

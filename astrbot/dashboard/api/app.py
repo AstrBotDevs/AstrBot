@@ -100,8 +100,9 @@ def create_dashboard_asgi_app(
     app.state.jwt_secret = jwt_secret
     app.state.dashboard_static_folder = static_folder
     log_broker = getattr(core_lifecycle, "log_broker", None) or LogBroker()
+    stats = StatService(db, core_lifecycle, core_lifecycle.astrbot_config)
     app.state.services = SimpleNamespace(
-        config_profiles=ConfigProfileService(core_lifecycle, db),
+        config_profiles=ConfigProfileService(core_lifecycle, db, runtime=stats.runtime),
         config_display=ConfigDisplayService(core_lifecycle),
         config_files=ConfigFileService(core_lifecycle),
         config_routes=ConfigRoutingService(core_lifecycle),
@@ -129,7 +130,7 @@ def create_dashboard_asgi_app(
         open_api=OpenApiService(db, core_lifecycle),
         sessions=SessionManagementService(core_lifecycle, db),
         skills=SkillsService(core_lifecycle),
-        stats=StatService(db, core_lifecycle, core_lifecycle.astrbot_config),
+        stats=stats,
         subagents=SubAgentService(core_lifecycle),
         t2i=T2iService(core_lifecycle),
         tools=ToolsService(core_lifecycle),
