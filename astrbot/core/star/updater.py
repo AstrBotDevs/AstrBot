@@ -31,6 +31,36 @@ PLUGIN_GIT_CLONE_TIMEOUT_SECONDS = 180
 __all__ = ["PLUGIN_METADATA_FILENAMES"]
 
 
+class _StringScalarSafeLoader(yaml.SafeLoader):
+    """SafeLoader that keeps every scalar as its original source text.
+
+    Prevents lossy YAML numeric coercion such as `version: 2.10` being
+    parsed as the float 2.1 and later stringified as "2.1".
+    """
+
+
+# Clear inherited implicit resolvers so plain scalars (e.g. 2.10, true, null)
+# are not re-typed by YAML and instead keep their original string form.
+_StringScalarSafeLoader.yaml_implicit_resolvers = {}
+
+_StringScalarSafeLoader.add_constructor(
+    yaml.resolver.BaseResolver.DEFAULT_SCALAR_TAG,
+    lambda loader, node: loader.construct_scalar(node),
+)
+
+
+def load_plugin_yaml(stream):
+    """Parse plugin YAML while preserving each scalar's original text.
+
+    Args:
+        stream: YAML source as str, bytes, or a file object.
+
+    Returns:
+        Parsed Python object; scalar values keep their source representation.
+    """
+    return yaml.load(stream, Loader=_StringScalarSafeLoader)
+
+
 class _PluginUpdater(_RepoZipUpdater):
     """Install and update plugins from repository source archives."""
 
@@ -174,7 +204,7 @@ class _PluginUpdater(_RepoZipUpdater):
                     except UnicodeDecodeError as exc:
                         raise ValueError(f"{filename} 必须使用 UTF-8 编码。") from exc
                     try:
-                        metadata = yaml.safe_load(metadata_text)
+                        metadata = load_plugin_yaml(metadata_text)
                     except yaml.YAMLError as exc:
                         raise ValueError(f"{filename} 格式错误。") from exc
                     try:
@@ -371,6 +401,15 @@ class _PluginUpdater(_RepoZipUpdater):
         if "desc" not in normalized_metadata and "description" in normalized_metadata:
             normalized_metadata["desc"] = normalized_metadata["description"]
 
+        # YAML parses unquoted versions like `version: 2.4` as floats. Coerce
+        # scalar numbers to strings in the caller's dict as well, so callers
+        # reading the original metadata (e.g. StarMetadata loading) see a str.
+        for field in PLUGIN_METADATA_REQUIRED_FIELDS:
+            value = normalized_metadata.get(field)
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                normalized_metadata[field] = str(value)
+                metadata[field] = str(value)
+
         missing_fields = [
             field
             for field in PLUGIN_METADATA_REQUIRED_FIELDS
@@ -413,7 +452,7 @@ class _PluginUpdater(_RepoZipUpdater):
             if metadata_path.stat().st_size > PLUGIN_METADATA_MAX_BYTES:
                 raise ValueError(f"{filename} 超过 1MB。")
             try:
-                metadata = yaml.safe_load(metadata_path.read_text(encoding="utf-8"))
+                metadata = load_plugin_yaml(metadata_path.read_text(encoding="utf-8"))
             except UnicodeDecodeError as exc:
                 raise ValueError(f"{filename} 必须使用 UTF-8 编码。") from exc
             except yaml.YAMLError as exc:
@@ -445,7 +484,7 @@ class _PluginUpdater(_RepoZipUpdater):
 
                 try:
                     metadata_text = z.read(metadata_entry).decode("utf-8")
-                    metadata = yaml.safe_load(metadata_text)
+                    metadata = load_plugin_yaml(metadata_text)
                 except UnicodeDecodeError as exc:
                     raise ValueError(f"{metadata_entry} 必须使用 UTF-8 编码。") from exc
                 except yaml.YAMLError as exc:
