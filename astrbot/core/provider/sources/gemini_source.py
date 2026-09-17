@@ -640,6 +640,8 @@ class ProviderGoogleGenAI(Provider):
                         config=config,
                     ),
                     max_attempts=request_max_retries,
+                    provider_id=self.provider_config.get("id"),
+                    model=model,
                 )
                 logger.debug(f"genai result: {result}")
 
@@ -732,6 +734,8 @@ class ProviderGoogleGenAI(Provider):
                         config=config,
                     ),
                     max_attempts=request_max_retries,
+                    provider_id=self.provider_config.get("id"),
+                    model=model,
                 )
                 break
             except APIError as e:
@@ -973,6 +977,7 @@ class ProviderGoogleGenAI(Provider):
             models = await retry_provider_request(
                 "Gemini",
                 lambda: self.client.models.list(),
+                provider_id=self.provider_config.get("id"),
             )
             return [
                 m.name.replace("models/", "")
