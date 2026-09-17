@@ -327,14 +327,6 @@ async def test_cua_montage_keeps_configured_cap(harness, tmp_path):
         assert max(image.size) <= 90
 
 
-def _montage_notices(req):
-    return [
-        part
-        for part in req.extra_user_content_parts
-        if isinstance(part, TextPart) and part.text.startswith("[Animated image]")
-    ]
-
-
 @pytest.mark.asyncio
 async def test_animation_montage_notice_reaches_model(harness, tmp_path):
     """Animated inputs tell the model that the image is a frame montage."""
@@ -342,15 +334,25 @@ async def test_animation_montage_notice_reaches_model(harness, tmp_path):
     frames = [PILImage.new("RGB", (60, 30), c) for c in ("red", "green", "blue")]
     frames[0].save(animated, "GIF", save_all=True, append_images=frames[1:])
 
-    await process_event(harness, make_event([Image(file=str(animated))]))
-    notices = _montage_notices(harness.captured[-1].req)
-    assert len(notices) == 1
-    assert notices[0]._no_save and "3x3" in notices[0].text
-
     still = tmp_path / "still.png"
     PILImage.new("RGB", (60, 30), "red").save(still)
-    await process_event(harness, make_event([Image(file=str(still))]))
-    assert _montage_notices(harness.captured[-1].req) == []
+    # The second animated request reuses the montage cache.
+    for source, enabled, expected in (
+        (animated, True, True),
+        (animated, True, True),
+        (still, True, False),
+        (animated, False, False),
+    ):
+        harness.config["provider_settings"]["image_compress_enabled"] = enabled
+        await process_event(harness, make_event([Image(file=str(source))]))
+        notices = [
+            part
+            for part in harness.captured[-1].req.extra_user_content_parts
+            if isinstance(part, TextPart) and part.text.startswith("[Animated image]")
+        ]
+        assert len(notices) == int(expected)
+        if expected:
+            assert notices[0]._no_save and "frame montages" in notices[0].text
 
 
 @pytest.mark.asyncio

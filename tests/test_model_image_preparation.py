@@ -21,7 +21,7 @@ def isolated_cache(tmp_path, monkeypatch):
 async def _prepare_image_path(*args, **kwargs):
     """Path-only view of prepare_model_image for pixel-focused assertions."""
     prepared = await media.prepare_model_image(*args, **kwargs)
-    return None if prepared is None else prepared.path
+    return None if prepared is None else prepared[0]
 
 
 @pytest.mark.asyncio
@@ -386,9 +386,9 @@ async def test_real_download_status_failure_is_skipped_without_secret_logs(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("count,expected", [(2, 2), (12, 9)])
-async def test_animation_reports_tiled_frame_count(tmp_path, count, expected):
-    """Animated inputs report how many frames were tiled into the montage."""
+@pytest.mark.parametrize("count", [2, 12])
+async def test_animation_reports_montage_including_cache_hits(tmp_path, count):
+    """Animated inputs report a montage even when its bytes are cached."""
     frames = [Image.new("RGB", (12, 8), (index * 20, 0, 0)) for index in range(count)]
     source = tmp_path / "animation.gif"
     frames[0].save(
@@ -398,19 +398,19 @@ async def test_animation_reports_tiled_frame_count(tmp_path, count, expected):
     prepared = await media.prepare_model_image(
         str(source), max_size=1280, output_dir=tmp_path
     )
-    assert prepared and prepared.is_montage and prepared.montage_frames == expected
-    assert Path(prepared.path).is_file()
+    assert prepared and prepared[1] is True
+    assert Path(prepared[0]).is_file()
 
     cached = await media.prepare_model_image(
         str(source), max_size=1280, output_dir=tmp_path
     )
-    assert cached and cached.montage_frames == expected
-    assert Path(cached.path).read_bytes() == Path(prepared.path).read_bytes()
+    assert cached and cached[1] is True
+    assert Path(cached[0]).read_bytes() == Path(prepared[0]).read_bytes()
 
 
 @pytest.mark.asyncio
-async def test_apng_cover_is_not_counted_as_tiled_frame(tmp_path):
-    """An APNG cover shifts sampling but is not reported as a tiled frame."""
+async def test_apng_with_cover_reports_montage(tmp_path):
+    """An APNG with a cover still reports an animation montage."""
     frames = [Image.new("RGB", (12, 8), (index * 20, 0, 0)) for index in range(3)]
     # An APNG cover frame precedes the animation frames it is not part of.
     frames.insert(0, Image.new("RGB", (12, 8), "blue"))
@@ -427,26 +427,16 @@ async def test_apng_cover_is_not_counted_as_tiled_frame(tmp_path):
     prepared = await media.prepare_model_image(
         str(source), max_size=1280, output_dir=tmp_path
     )
-    assert prepared and prepared.montage_frames == 3
+    assert prepared and prepared[1] is True
 
 
 @pytest.mark.asyncio
 async def test_still_image_reports_no_montage(tmp_path):
-    """Still images never report tiled frames, so no montage notice is built."""
+    """Still images do not report a montage, so no notice is built."""
     source = tmp_path / "still.png"
     Image.new("RGB", (32, 16), "red").save(source)
     prepared = await media.prepare_model_image(
         str(source), max_size=1280, output_dir=tmp_path
     )
     assert prepared is not None
-    assert not prepared.is_montage and prepared.montage_frames is None
-
-
-def test_animation_montage_notice_describes_frames_only_when_present():
-    """The notice describes montages and stays empty for still-only requests."""
-    assert media.format_animation_montage_notice([]) == ""
-    single = media.format_animation_montage_notice([4])
-    assert "1 attached image" in single and "4" in single
-    assert "3x3" in single and "blank" in single
-    multi = media.format_animation_montage_notice([9, 2])
-    assert "2 attached images" in multi and "9, 2" in multi
+    assert prepared[1] is False

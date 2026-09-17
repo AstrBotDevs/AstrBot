@@ -8,8 +8,6 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.utils.media_utils import (
     MediaResolver,
-    PreparedModelImage,
-    format_animation_montage_notice,
     is_recoverable_image_error,
     prepare_model_image,
 )
@@ -51,12 +49,12 @@ async def prepare_request_images(
     if quote_image_ref:
         refs.append(quote_image_ref)
     failed = False
-    montage_frames: list[int] = []
+    has_montage = False
     for ref in dict.fromkeys(refs):
         if ref not in prepared:
             path = None
             if enabled:
-                image: PreparedModelImage | None = await prepare_model_image(
+                image = await prepare_model_image(
                     ref,
                     max_size=max_size,
                     output_dir=output_dir,
@@ -64,10 +62,9 @@ async def prepare_request_images(
                     montage_max_size=montage_max_size,
                 )
                 if image:
-                    path = image.path
+                    path, is_montage = image
                     event.track_temporary_local_file(path)
-                    if image.montage_frames is not None:
-                        montage_frames.append(image.montage_frames)
+                    has_montage |= is_montage
             else:
                 try:
                     async with MediaResolver(
@@ -125,10 +122,13 @@ async def prepare_request_images(
         ):
             req.prompt = "[Image unavailable]"
 
-    notice = format_animation_montage_notice(montage_frames)
-    if notice:
+    if has_montage:
         # Transient per-request hint; the montage file itself is not persisted.
         req.extra_user_content_parts = [
             *req.extra_user_content_parts,
-            TextPart(text=notice).mark_as_temp(),
+            TextPart(
+                text="[Animated image] Animated inputs (e.g. GIF) have been converted "
+                "to frame montages. Read each montage left to right, top to bottom "
+                "as frames of the same animation; unused cells are blank."
+            ).mark_as_temp(),
         ]
