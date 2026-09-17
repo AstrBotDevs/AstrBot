@@ -41,6 +41,8 @@ IMAGE_COMPRESS_DEFAULT_MAX_SIZE = 1280
 IMAGE_COMPRESS_DEFAULT_QUALITY = 95
 IMAGE_COMPRESS_DEFAULT_OPTIMIZE = True
 IMAGE_COMPRESS_DEFAULT_MIN_FILE_SIZE_MB = 1.0
+# Model image inputs larger than this are skipped before decoding.
+MODEL_IMAGE_MAX_INPUT_BYTES = 64 * 1024 * 1024
 
 MEDIA_MIME_EXTENSIONS = {
     "audio/wav": ".wav",
@@ -66,15 +68,17 @@ MEDIA_MIME_EXTENSIONS = {
     "video/quicktime": ".mov",
 }
 
-IMAGE_FORMAT_MIME_TYPES = {
-    "JPEG": "image/jpeg",
-    "PNG": "image/png",
-    "GIF": "image/gif",
-    "WEBP": "image/webp",
-    "BMP": "image/bmp",
-    "TIFF": "image/tiff",
-    "AVIF": "image/avif",
-}
+# Magic-byte prefixes for O(1) image MIME sniffing; unknown headers fall
+# back to the caller-provided default instead of decoding the file.
+_IMAGE_MAGIC_MIME_TYPES = (
+    (b"\x89PNG\r\n\x1a\n", "image/png"),
+    (b"\xff\xd8\xff", "image/jpeg"),
+    (b"GIF87a", "image/gif"),
+    (b"GIF89a", "image/gif"),
+    (b"BM", "image/bmp"),
+    (b"II*\x00", "image/tiff"),
+    (b"MM\x00*", "image/tiff"),
+)
 
 ANIMATED_MONTAGE_GRID = 3
 """Animated images become a grid x grid frame montage (contact sheet)."""
@@ -381,36 +385,38 @@ def detect_image_mime_type(
     *,
     default_mime_type: str | None = "image/jpeg",
 ) -> str | None:
-    """Detect an image MIME type from encoded bytes or a local path.
+    """Detect an image MIME type by sniffing the file header.
+
+    Only the first bytes of the input are read, so detection cost and memory
+    stay constant regardless of file size.
 
     Args:
         image_source: Encoded image bytes or a local image path to inspect.
         default_mime_type: MIME type to return when detection fails.
 
     Returns:
-        The detected MIME type, ``application/octet-stream`` for a recognized
-        format without a registered MIME, or ``default_mime_type`` when detection
-        fails.
+        The detected MIME type, or ``default_mime_type`` when the header does
+        not match a known image format.
     """
 
     try:
-        image_file = (
-            io.BytesIO(image_source)
-            if isinstance(image_source, bytes)
-            else image_source
-        )
-        with PILImage.open(image_file) as image:
-            image.verify()
-            image_format = str(image.format or "").upper()
-    except Exception as exc:
-        if not is_recoverable_image_error(exc):
-            raise
+        if isinstance(image_source, bytes):
+            header = image_source[:32]
+        else:
+            with open(image_source, "rb") as image_file:
+                header = image_file.read(32)
+    except OSError:
         return default_mime_type
 
-    # A decoded format must never inherit an unverified input MIME hint.
-    return IMAGE_FORMAT_MIME_TYPES.get(
-        image_format, PILImage.MIME.get(image_format, "application/octet-stream")
-    )
+    if len(header) >= 12:
+        if header[:4] == b"RIFF" and header[8:12] == b"WEBP":
+            return "image/webp"
+        if header[4:8] == b"ftyp" and (b"avif" in header[8:] or b"avis" in header[8:]):
+            return "image/avif"
+    for magic, mime_type in _IMAGE_MAGIC_MIME_TYPES:
+        if header.startswith(magic):
+            return mime_type
+    return default_mime_type
 
 
 async def detect_image_mime_type_async(
@@ -1213,6 +1219,14 @@ async def prepare_model_image(
     """
     try:
         async with MediaResolver(image_ref, media_type="image").as_path() as source:
+            input_size = source.path.stat().st_size
+            if input_size > MODEL_IMAGE_MAX_INPUT_BYTES:
+                logger.warning(
+                    "Skipping oversized image input (%d bytes): %s",
+                    input_size,
+                    source.path,
+                )
+                return None
             image_bytes = await asyncio.to_thread(source.read_bytes)
             converted_bytes, is_montage = await asyncio.to_thread(
                 _prepare_model_image_sync, image_bytes, max_size

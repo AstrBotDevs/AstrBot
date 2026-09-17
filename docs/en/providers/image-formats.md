@@ -4,6 +4,7 @@ The local Agent always prepares current input images before sending them to the 
 
 ## Limits and formats
 
+- Original image files larger than **64 MiB** are skipped before reading their contents or decoding pixels. Files up to and including 64 MiB are processed normally.
 - Each prepared image file is **strictly smaller than 512 KiB** (524,288 bytes). This limit applies to image bytes before Base64 encoding, not the entire request.
 - **Maximum edge length**, under **Configuration**, remains configurable through `provider_settings.image_compress_options.max_size` (default 1280 pixels). Images keep their aspect ratio and are never enlarged. They may be reduced further to meet the byte limit.
 - Correctly oriented JPEG/PNG images already within both limits retain their original bytes. Other still images are orientation-corrected and encoded as JPEG, or PNG when they have transparency. Transparent images retain their alpha channel even when further reduction is necessary.
