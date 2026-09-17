@@ -50,9 +50,7 @@ async def test_prepare_audio_input_cleans_partial_download_after_failure(
     monkeypatch.setattr(stepfun_asr_source, "download_file", failing_download)
 
     with pytest.raises(RuntimeError, match="download failed"):
-        await stepfun_asr_source.prepare_audio_input(
-            "https://example.test/audio.wav"
-        )
+        await stepfun_asr_source.prepare_audio_input("https://example.test/audio.wav")
 
     assert list(tmp_path.glob("stepfun_asr_*")) == []
 
@@ -73,9 +71,7 @@ async def test_prepare_audio_input_cleans_partial_download_after_cancellation(
     monkeypatch.setattr(stepfun_asr_source, "download_file", cancelled_download)
 
     with pytest.raises(asyncio.CancelledError):
-        await stepfun_asr_source.prepare_audio_input(
-            "https://example.test/audio.wav"
-        )
+        await stepfun_asr_source.prepare_audio_input("https://example.test/audio.wav")
 
     assert list(tmp_path.glob("stepfun_asr_*")) == []
 
