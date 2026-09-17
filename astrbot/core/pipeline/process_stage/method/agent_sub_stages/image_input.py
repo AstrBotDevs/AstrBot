@@ -127,8 +127,11 @@ async def prepare_request_images(
         req.extra_user_content_parts = [
             *req.extra_user_content_parts,
             TextPart(
-                text="[Animated image] Animated inputs (e.g. GIF) have been converted "
-                "to frame montages. Read each montage left to right, top to bottom "
-                "as frames of the same animation; unused cells are blank."
+                text="<system_notice>\n"
+                "[Animated image] Each animated input (e.g. GIF) has been converted "
+                "into a frame montage: a single image containing a grid of frames "
+                "from the same animation. Read the frames left to right, then "
+                "top to bottom; unused cells are blank.\n"
+                "</system_notice>"
             ).mark_as_temp(),
         ]

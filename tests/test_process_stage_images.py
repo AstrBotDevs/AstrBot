@@ -348,11 +348,14 @@ async def test_animation_montage_notice_reaches_model(harness, tmp_path):
         notices = [
             part
             for part in harness.captured[-1].req.extra_user_content_parts
-            if isinstance(part, TextPart) and part.text.startswith("[Animated image]")
+            if isinstance(part, TextPart) and "[Animated image]" in part.text
         ]
         assert len(notices) == int(expected)
         if expected:
-            assert notices[0]._no_save and "frame montages" in notices[0].text
+            assert notices[0]._no_save
+            assert notices[0].text.startswith("<system_notice>\n")
+            assert notices[0].text.endswith("\n</system_notice>")
+            assert "a single image containing a grid of frames" in notices[0].text
 
 
 @pytest.mark.asyncio
