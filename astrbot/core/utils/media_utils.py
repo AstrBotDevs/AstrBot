@@ -195,6 +195,27 @@ class ResolvedMediaFile:
         _cleanup_paths(self.cleanup_paths)
 
 
+@dataclass(slots=True)
+class PreparedModelImage:
+    """A prepared model-ready image file produced for one request.
+
+    Attributes:
+        path: Local working file the caller owns and attaches to the request.
+        montage_frames: Number of animation frames tiled into a grid montage
+            when the input was animated; ``None`` for still images. Callers
+            describe this to the model so a contact sheet is not misread as a
+            single picture.
+    """
+
+    path: str
+    montage_frames: int | None = None
+
+    @property
+    def is_montage(self) -> bool:
+        """Whether this file is a tiled animation frame montage."""
+        return self.montage_frames is not None
+
+
 def is_file_uri(value: object) -> bool:
     """Return whether a value is a ``file:`` URI.
 
@@ -1273,11 +1294,33 @@ def _even_frame_indices(total_frames: int, max_frames: int) -> list[int]:
     return sorted({round(i * (total_frames - 1) / (count - 1)) for i in range(count)})
 
 
+def _animation_frame_indices(image: PILImage.Image) -> list[int]:
+    """Frame indices tiled into the montage for an opened animated image.
+
+    APNG's independent default image is a cover, not an animation frame, so
+    sampling starts after it.
+
+    Args:
+        image: Opened animated source image.
+
+    Returns:
+        Ascending, unique frame indices to tile, capped at the grid size.
+    """
+    total_frames = getattr(image, "n_frames", 1)
+    first_frame = 1 if image.info.get("default_image", False) else 0
+    return [
+        first_frame + index
+        for index in _even_frame_indices(
+            total_frames - first_frame, ANIMATED_MONTAGE_FRAME_COUNT
+        )
+    ]
+
+
 def _extract_animation_montage_sync(
     source_bytes: bytes,
     max_size: int,
     quality: int,
-) -> tuple[bytes, bool]:
+) -> tuple[bytes, int]:
     """Tile evenly spaced frames of an animated image into one grid montage.
 
     Frame sampling includes the first and last frames; grid cells beyond the
@@ -1289,8 +1332,8 @@ def _extract_animation_montage_sync(
         max_size: Longest edge of the montage in pixels.
 
     Returns:
-        Tuple of the montage bytes and whether extraction actually ran
-        (``False`` when a valid cached montage was served).
+        Tuple of the montage bytes and the number of frames tiled into it, so
+        callers can describe the contact sheet without decoding it again.
     """
     cache_key = _image_convert_cache_key(
         source_bytes,
@@ -1299,18 +1342,12 @@ def _extract_animation_montage_sync(
     output_path = _image_convert_cache_dir() / (cache_key + ".img")
     cached = _read_valid_cached_image_bytes(output_path)
     if cached is not None:
-        return cached, False
+        # Only Sampling metadata is needed here, never the cached pixels.
+        with PILImage.open(io.BytesIO(source_bytes)) as cached_source:
+            return cached, len(_animation_frame_indices(cached_source))
     with PILImage.open(io.BytesIO(source_bytes)) as image:
-        total_frames = getattr(image, "n_frames", 1)
-        # APNG's independent default image is a cover, not an animation frame.
-        first_frame = 1 if image.info.get("default_image", False) else 0
-        frame_indices = [
-            first_frame + index
-            for index in _even_frame_indices(
-                total_frames - first_frame, ANIMATED_MONTAGE_FRAME_COUNT
-            )
-        ]
-        image.seek(first_frame)
+        frame_indices = _animation_frame_indices(image)
+        image.seek(frame_indices[0])
         with ImageOps.exif_transpose(image) as oriented:
             display_size = oriented.size
         # Floor the per-cell scale so the montage never exceeds max_size.
@@ -1357,7 +1394,38 @@ def _extract_animation_montage_sync(
         finally:
             canvas.close()
     _publish_image_cache_atomic(output_path, encoded)
-    return encoded, True
+    return encoded, len(frame_indices)
+
+
+def format_animation_montage_notice(frame_counts: list[int]) -> str:
+    """Describe tiled animation frames to the model in one user-content notice.
+
+    A montage replaces the animation with a contact sheet, so without a notice
+    the model reads the grid as a single picture. Only montages are described;
+    still images never produce a notice.
+
+    Args:
+        frame_counts: Number of tiled frames, one entry per montage image.
+
+    Returns:
+        A notice block, or an empty string when no montage was built.
+    """
+    if not frame_counts:
+        return ""
+    grid = f"{ANIMATED_MONTAGE_GRID}x{ANIMATED_MONTAGE_GRID}"
+    subject = (
+        "1 attached image is an animated image"
+        if len(frame_counts) == 1
+        else f"{len(frame_counts)} attached images are animated images"
+    )
+    counts = ", ".join(str(count) for count in frame_counts)
+    return (
+        f"[Animated image] {subject} (e.g. GIF) rendered as a {grid} contact "
+        f"sheet of evenly spaced frames (frames per sheet: {counts}). Cells are "
+        "laid out in reading order, left to right then top to bottom, and any "
+        "remaining cells are blank. Treat each cell as one frame of the same "
+        "animation, not as a separate picture."
+    )
 
 
 async def prepare_model_image(
@@ -1367,7 +1435,7 @@ async def prepare_model_image(
     output_dir: Path,
     quality: int = IMAGE_COMPRESS_DEFAULT_QUALITY,
     montage_max_size: int | None = None,
-) -> str | None:
+) -> PreparedModelImage | None:
     """Prepare a single local model-ready image for the caller to own until consumption.
 
     Args:
@@ -1382,16 +1450,18 @@ async def prepare_model_image(
             ``max_size``.
 
     Returns:
-        An existing JPEG or PNG path, or None for a recoverable input or write
-        failure.
+        An existing JPEG or PNG working file, or None for a recoverable input
+        or write failure. ``montage_frames`` reports how many animation frames
+        were tiled when the input was animated, and is ``None`` otherwise.
         The caller owns this file; shared cache entries are never returned.
     """
     try:
         async with MediaResolver(image_ref, media_type="image").as_path() as source:
             image_bytes = await asyncio.to_thread(source.read_bytes)
         frame_count = await asyncio.to_thread(_inspect_image, image_bytes)
+        montage_frames: int | None = None
         if frame_count > 1:
-            converted_bytes, _ = await asyncio.to_thread(
+            converted_bytes, montage_frames = await asyncio.to_thread(
                 _extract_animation_montage_sync,
                 image_bytes,
                 montage_max_size if montage_max_size is not None else max_size,
@@ -1415,7 +1485,7 @@ async def prepare_model_image(
         except BaseException:
             output_path.unlink(missing_ok=True)
             raise
-        return str(output_path)
+        return PreparedModelImage(path=str(output_path), montage_frames=montage_frames)
     except Exception as exc:
         if not is_recoverable_image_error(exc):
             raise

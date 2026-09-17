@@ -327,6 +327,32 @@ async def test_cua_montage_keeps_configured_cap(harness, tmp_path):
         assert max(image.size) <= 90
 
 
+def _montage_notices(req):
+    return [
+        part
+        for part in req.extra_user_content_parts
+        if isinstance(part, TextPart) and part.text.startswith("[Animated image]")
+    ]
+
+
+@pytest.mark.asyncio
+async def test_animation_montage_notice_reaches_model(harness, tmp_path):
+    """Animated inputs tell the model that the image is a frame montage."""
+    animated = tmp_path / "anim.gif"
+    frames = [PILImage.new("RGB", (60, 30), c) for c in ("red", "green", "blue")]
+    frames[0].save(animated, "GIF", save_all=True, append_images=frames[1:])
+
+    await process_event(harness, make_event([Image(file=str(animated))]))
+    notices = _montage_notices(harness.captured[-1].req)
+    assert len(notices) == 1
+    assert notices[0]._no_save and "3x3" in notices[0].text
+
+    still = tmp_path / "still.png"
+    PILImage.new("RGB", (60, 30), "red").save(still)
+    await process_event(harness, make_event([Image(file=str(still))]))
+    assert _montage_notices(harness.captured[-1].req) == []
+
+
 @pytest.mark.asyncio
 async def test_profile_reload_and_concurrent_requests(harness, tmp_path):
     source = source_image(tmp_path)
