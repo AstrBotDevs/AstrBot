@@ -4207,7 +4207,7 @@ CONFIG_METADATA_3 = {
                     "provider_settings.image_compress_options.max_size": {
                         "description": "最大边长",
                         "type": "int",
-                        "hint": "发送给模型的图片最长边，单位为像素。图片始终自动处理，单张文件严格小于 512 KiB；必要时会进一步缩小。原始附件及其路径保持不变。",
+                        "hint": "发送给模型的图片最长边（像素），系统会在必要时进一步压缩。",
                         "slider": {"min": 256, "max": 4096, "step": 64},
                     },
                     "provider_settings.prompt_prefix": {
