@@ -28,7 +28,9 @@ async def test_unreset_runner_skips_stats_and_preserves_early_exit(
     event.platform_meta.support_streaming_message = True
 
     stage = internal.InternalAgentSubStage()
-    stage.ctx = SimpleNamespace(plugin_manager=SimpleNamespace(context=SimpleNamespace()))
+    stage.ctx = SimpleNamespace(
+        plugin_manager=SimpleNamespace(context=SimpleNamespace())
+    )
     stage.main_agent_cfg = MainAgentBuildConfig(tool_call_timeout=60)
     stage.streaming_response = False
     stage.show_reasoning = False

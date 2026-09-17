@@ -872,6 +872,7 @@ class TestRunActiveAgentJob:
         assert records[0].status == "error"
         assert records[0].token_input_other == 6
         assert records[0].token_output == 3
+
     @pytest.mark.asyncio
     async def test_agent_error_state_marks_job_failed(
         self, cron_manager, mock_db, mock_context
