@@ -36,6 +36,9 @@ from astrbot.core.utils.media_utils import (
 
 SSE_HEARTBEAT = ": heartbeat\n\n"
 CHAT_RUN_SUBSCRIBER_QUEUE_SIZE = 256
+# Uploaded chat attachments larger than this are rejected.
+MAX_UPLOAD_FILE_SIZE_MB = 512
+MAX_UPLOAD_FILE_SIZE_BYTES = MAX_UPLOAD_FILE_SIZE_MB * 1024 * 1024
 WEBCHAT_IMAGE_MIME_TYPES = {
     ".jpg": "image/jpeg",
     ".jpeg": "image/jpeg",
@@ -596,6 +599,10 @@ class ChatService:
         return await self.resolve_attachment_file(attachment_id)
 
     async def save_uploaded_file(self, file) -> dict:
+        if (file.content_length or 0) > MAX_UPLOAD_FILE_SIZE_BYTES:
+            raise ChatServiceError(
+                f"File too large (limit {MAX_UPLOAD_FILE_SIZE_MB} MB)"
+            )
         filename = sanitize_upload_filename(file.filename)
         content_type = file.content_type or "application/octet-stream"
 
@@ -614,6 +621,11 @@ class ChatService:
             raise ChatServiceError("Invalid filename")
 
         await file.save(str(file_path))
+        if file_path.stat().st_size > MAX_UPLOAD_FILE_SIZE_BYTES:
+            file_path.unlink(missing_ok=True)
+            raise ChatServiceError(
+                f"File too large (limit {MAX_UPLOAD_FILE_SIZE_MB} MB)"
+            )
         if attach_type == "image":
             detected_mime_type = await detect_image_mime_type_async(
                 file_path,

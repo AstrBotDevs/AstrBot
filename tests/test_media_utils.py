@@ -207,6 +207,41 @@ def test_detect_image_mime_type_accepts_path(tmp_path):
     )
 
 
+def test_detect_image_mime_type_sniffs_common_headers():
+    """Header sniffing recognizes common formats from bytes alone."""
+    assert (
+        media_utils.detect_image_mime_type(b"\x89PNG\r\n\x1a\n" + b"\x00" * 24)
+        == "image/png"
+    )
+    assert (
+        media_utils.detect_image_mime_type(b"\xff\xd8\xff\xe0" + b"\x00" * 28)
+        == "image/jpeg"
+    )
+    assert media_utils.detect_image_mime_type(b"GIF89a" + b"\x00" * 26) == "image/gif"
+    assert (
+        media_utils.detect_image_mime_type(b"RIFF\x00\x00\x00\x00WEBPVP8 ")
+        == "image/webp"
+    )
+    assert (
+        media_utils.detect_image_mime_type(b"\x00\x00\x00\x20ftypavif" + b"\x00" * 20)
+        == "image/avif"
+    )
+
+
+def test_detect_image_mime_type_returns_default_for_unknown_input():
+    """Unknown or empty headers fall back to the provided default."""
+    assert (
+        media_utils.detect_image_mime_type(
+            b"definitely not an image", default_mime_type=None
+        )
+        is None
+    )
+    assert (
+        media_utils.detect_image_mime_type(b"", default_mime_type="image/jpeg")
+        == "image/jpeg"
+    )
+
+
 @pytest.mark.asyncio
 async def test_resolve_image_ref_to_base64_data_decodes_data_uri(tmp_path, monkeypatch):
     from PIL import Image as PILImage
@@ -873,3 +908,53 @@ async def test_wav_to_tencent_silk_skips_resample_for_supported_rate(
 
     assert len(fake.calls) == 1
     assert fake.calls[0]["sample_rate"] == 24000
+
+
+@pytest.mark.asyncio
+async def test_prepare_model_image_skips_oversized_input(tmp_path, monkeypatch):
+    """Inputs above the model-image byte cap must be skipped before decoding."""
+    from PIL import Image as PILImage
+
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    image_path = tmp_path / "oversized.png"
+    PILImage.new("RGB", (4, 4)).save(image_path, format="PNG")
+    with image_path.open("ab") as f:
+        f.truncate(media_utils.MODEL_IMAGE_MAX_INPUT_BYTES + 1)
+
+    result = await media_utils.prepare_model_image(
+        str(image_path), max_size=1280, output_dir=tmp_path
+    )
+
+    assert result is None
+
+
+def test_convert_image_bytes_reuses_small_in_range_input():
+    """A small oriented in-range PNG keeps its original bytes."""
+    from PIL import Image as PILImage
+
+    buffer = BytesIO()
+    PILImage.new("RGB", (10, 10), (255, 0, 0)).save(buffer, format="PNG")
+    source = buffer.getvalue()
+
+    result = media_utils._convert_image_bytes_sync(source, 1280, 95)
+
+    assert result is source
+
+
+def test_convert_image_bytes_reencodes_large_in_range_input(tmp_path, monkeypatch):
+    """An in-range but byte-heavy PNG is re-encoded instead of reused."""
+    from PIL import Image as PILImage
+
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    img = PILImage.new("RGB", (1024, 1024))
+    img.frombytes(os.urandom(1024 * 1024 * 3))
+    buffer = BytesIO()
+    img.save(buffer, format="PNG")
+    source = buffer.getvalue()
+    assert len(source) > media_utils.MODEL_IMAGE_REUSE_MAX_BYTES
+
+    result = media_utils._convert_image_bytes_sync(source, 1280, 95)
+
+    assert result is not source
+    assert result[:2] == b"\xff\xd8"
+    assert len(result) < len(source)
