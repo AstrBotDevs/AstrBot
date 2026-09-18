@@ -183,7 +183,11 @@ class ChunkedUploadService:
                 f"Chunk size mismatch: got {written} bytes, expected {expected}"
             )
 
-        await asyncio.to_thread(os.replace, temp_path, chunk_path)
+        try:
+            await asyncio.to_thread(os.replace, temp_path, chunk_path)
+        except BaseException:
+            temp_path.unlink(missing_ok=True)
+            raise
         session.received_chunks.add(chunk_index)
         session.last_activity = time.time()
 

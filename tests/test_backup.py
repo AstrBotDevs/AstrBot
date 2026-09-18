@@ -1326,6 +1326,43 @@ class TestBackupUploadLimits:
         assert merged.read_bytes() == good
 
     @pytest.mark.asyncio
+    async def test_chunk_publish_failure_cleans_temp(self, backup_service, monkeypatch):
+        """原子改名失败时临时文件必须清理，已收分片不受影响"""
+        session = backup_service.upload_init(
+            {"filename": "b.zip", "total_size": CHUNK_SIZE + 100}, owner="alice"
+        )
+        upload_id = session["upload_id"]
+        await backup_service.upload_chunk(
+            upload_id=upload_id,
+            chunk_index_str="0",
+            chunk_file=_StubUploadFile(b"x" * CHUNK_SIZE),
+            owner="alice",
+        )
+
+        def _boom(*args, **kwargs):
+            raise OSError("simulated rename failure")
+
+        monkeypatch.setattr(
+            "astrbot.dashboard.services.chunked_upload_service.os.replace", _boom
+        )
+        with pytest.raises(OSError, match="simulated rename failure"):
+            await backup_service.upload_chunk(
+                upload_id=upload_id,
+                chunk_index_str="1",
+                chunk_file=_StubUploadFile(b"y" * 100),
+                owner="alice",
+            )
+
+        chunk_dir = backup_service.chunked_uploads.chunks_root / upload_id
+        assert not list(chunk_dir.glob("*.tmp"))
+        # 改名失败的分片未登记，已收到的第 0 片完好
+        status = backup_service.upload_status({"upload_id": upload_id}, owner="alice")
+        assert status["received_chunks"] == [0]
+        assert (chunk_dir / "0.part").read_bytes() == b"x" * CHUNK_SIZE
+
+        await backup_service.cleanup_upload_session(upload_id)
+
+    @pytest.mark.asyncio
     async def test_short_write_chunk_is_rejected(self, backup_service):
         """save() 落盘字节数不足时不得发布分片，且不留临时文件"""
         session = backup_service.upload_init(

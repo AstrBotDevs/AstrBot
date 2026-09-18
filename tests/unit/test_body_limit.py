@@ -22,6 +22,18 @@ class TestCheckBodyLimit:
         assert result is not None
         assert result[0] == 411
 
+    def test_leading_space_content_type_still_rejected(self):
+        # The form parser strips surrounding whitespace, so a padded
+        # Content-Type is still multipart; detection must match the parser.
+        result = _check_body_limit(
+            "/api/v1/files",
+            None,
+            " multipart/form-data; boundary=----test",
+            default_limit=DEFAULT_LIMIT,
+        )
+        assert result is not None
+        assert result[0] == 411
+
     def test_json_without_content_length_passes(self):
         # Stopgap scope: only multipart is bounded pre-parse (disk spool);
         # other lengthless bodies pass and are bounded at save time.

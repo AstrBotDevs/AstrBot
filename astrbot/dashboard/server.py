@@ -35,6 +35,14 @@ from .api.app import create_dashboard_asgi_app
 from .plugin_page_auth import PluginPageAuth
 from .services.auth_service import DASHBOARD_JWT_COOKIE_NAME
 
+try:  # Mirror starlette.requests so media type detection matches the parser.
+    from python_multipart.multipart import parse_options_header
+except ImportError:  # pragma: no cover
+    try:
+        from multipart.multipart import parse_options_header
+    except ImportError:
+        parse_options_header = None
+
 if os.name == "nt":
     # Windows 的 mimetypes 会把 .svg 映射成非标准的 image/svg,这里强制覆盖为标准类型
     mimetypes.add_type("image/svg+xml", ".svg", strict=True)
@@ -88,7 +96,13 @@ def _check_body_limit(
     if not path.startswith("/api"):
         return None
     if content_length is None:
-        if content_type.startswith("multipart/form-data"):
+        # Identify the media type by the same rule the form parser uses:
+        # parse_options_header strips surrounding whitespace, so a leading-
+        # space Content-Type that startswith() would miss is still caught.
+        media_type = (
+            parse_options_header(content_type)[0] if parse_options_header else b""
+        )
+        if media_type == b"multipart/form-data":
             return 411, "Content-Length header is required for uploads"
         return None
     limit = default_limit
