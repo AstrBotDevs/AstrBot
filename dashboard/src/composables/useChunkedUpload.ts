@@ -43,6 +43,9 @@ export function useChunkedUpload(api: ChunkedUploadApi) {
     let totalChunks = 0;
     let chunkSizes: number[] = [];
     let cancelled = false;
+    // Bumped on every start/resume/cancel; stale completions from a
+    // previous run must not count toward the current run's progress.
+    let runGeneration = 0;
 
     function envelopeData(response: any): any {
         if (response.data?.status !== 'ok') {
@@ -63,7 +66,9 @@ export function useChunkedUpload(api: ChunkedUploadApi) {
         }
     }
 
-    async function uploadOneChunk(chunkIndex: number) {
+    // sessionId is pinned per run: retries must keep writing to the
+    // session they started in, even if a newer run re-initialized one.
+    async function uploadOneChunk(chunkIndex: number, sessionId: string, generation: number) {
         const start = chunkIndex * chunkSize;
         const chunk = file!.slice(start, start + chunkSize);
         let lastError: any;
@@ -72,12 +77,14 @@ export function useChunkedUpload(api: ChunkedUploadApi) {
             try {
                 envelopeData(
                     await api.uploadChunk({
-                        upload_id: uploadId,
+                        upload_id: sessionId,
                         chunk_index: chunkIndex,
                         chunk,
                     }),
                 );
-                uploadedBytes.value += chunkSizes[chunkIndex];
+                if (generation === runGeneration) {
+                    uploadedBytes.value += chunkSizes[chunkIndex];
+                }
                 return;
             } catch (err) {
                 lastError = err;
@@ -86,21 +93,32 @@ export function useChunkedUpload(api: ChunkedUploadApi) {
         throw lastError;
     }
 
-    async function runPool(indexes: number[]) {
+    async function runPool(indexes: number[], sessionId: string, generation: number) {
         const pending = [...indexes];
         const active: Promise<void>[] = [];
-        while (pending.length > 0 || active.length > 0) {
-            while (!cancelled && pending.length > 0 && active.length < CONCURRENT_UPLOADS) {
+        let failure: any = null;
+        while (!failure && !cancelled && (pending.length > 0 || active.length > 0)) {
+            while (pending.length > 0 && active.length < CONCURRENT_UPLOADS) {
                 const chunkIndex = pending.shift()!;
-                const promise = uploadOneChunk(chunkIndex).then(() => {
+                const promise = uploadOneChunk(chunkIndex, sessionId, generation).finally(() => {
                     const idx = active.indexOf(promise);
                     if (idx > -1) active.splice(idx, 1);
                 });
                 active.push(promise);
             }
-            if (active.length > 0) await Promise.race(active);
-            if (cancelled) throw new Error('cancelled');
+            if (active.length > 0) {
+                try {
+                    await Promise.race(active);
+                } catch (err) {
+                    // Stop scheduling; already-issued requests are drained
+                    // below so a later resume never races them on a chunk.
+                    failure = err;
+                }
+            }
         }
+        if (active.length > 0) await Promise.allSettled(active);
+        if (cancelled) throw new Error('cancelled');
+        if (failure) throw failure;
     }
 
     async function initSession() {
@@ -129,7 +147,11 @@ export function useChunkedUpload(api: ChunkedUploadApi) {
         try {
             await initSession();
             phase.value = 'chunks';
-            await runPool(Array.from({ length: totalChunks }, (_, i) => i));
+            await runPool(
+                Array.from({ length: totalChunks }, (_, i) => i),
+                uploadId,
+                ++runGeneration,
+            );
             const result = await completeSession();
             status.value = 'done';
             return result;
@@ -163,7 +185,7 @@ export function useChunkedUpload(api: ChunkedUploadApi) {
             const missing = Array.from({ length: totalChunks }, (_, i) => i).filter(
                 i => !received.includes(i),
             );
-            await runPool(missing);
+            await runPool(missing, uploadId, ++runGeneration);
             const result = await completeSession();
             status.value = 'done';
             return result;
@@ -188,6 +210,7 @@ export function useChunkedUpload(api: ChunkedUploadApi) {
 
     async function cancel() {
         cancelled = true;
+        runGeneration++;
         const id = uploadId;
         reset();
         if (id) {
