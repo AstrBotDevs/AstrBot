@@ -29,6 +29,7 @@ from .shipyard_neo import (
     RunBrowserSkillTool,
     SyncSkillReleaseTool,
 )
+from .skill_tools import CreateSkillZipTool, InstallSkillFromZipTool
 from .util import check_admin_permission, normalize_umo_for_workspace
 
 __all__ = [
@@ -36,12 +37,14 @@ __all__ = [
     "BrowserBatchExecTool",
     "BrowserExecTool",
     "CreateSkillCandidateTool",
+    "CreateSkillZipTool",
     "CreateSkillPayloadTool",
     "CuaKeyboardTypeTool",
     "CuaMouseClickTool",
     "CuaScreenshotTool",
     "EvaluateSkillCandidateTool",
     "ExecuteShellTool",
+    "InstallSkillFromZipTool",
     "FileDownloadTool",
     "FileEditTool",
     "FileReadTool",
