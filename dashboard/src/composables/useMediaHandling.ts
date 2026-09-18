@@ -180,9 +180,18 @@ export function useMediaHandling() {
     async function retryFailedUpload(index: number): Promise<StagedFileInfo | undefined> {
         const entry = failedUploads.value[index];
         if (!entry) return undefined;
-        const result = await entry.uploader.resume();
-        if (!result) return undefined;
+        // Move to active: blocks a second click from running resume()
+        // concurrently on the same session and shows live progress.
         failedUploads.value = failedUploads.value.filter(e => e !== entry);
+        activeUploads.value = [...activeUploads.value, entry];
+        const result = await entry.uploader.resume();
+        activeUploads.value = activeUploads.value.filter(e => e !== entry);
+        if (!result) {
+            if (entry.uploader.status.value === 'error') {
+                failedUploads.value = [...failedUploads.value, entry];
+            }
+            return undefined;
+        }
         return stageUploaded(entry.file, result, entry.signature);
     }
 
