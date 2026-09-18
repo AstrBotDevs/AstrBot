@@ -27,6 +27,15 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
     """OpenAI-compatible stateless Responses API provider adapter."""
 
     _REASONING_STATE_TYPE = "openai_responses_reasoning"
+    _REASONING_REPLAY_SAFE_KEYS = frozenset(
+        {
+            "type",
+            "id",
+            "summary",
+            "content",
+            "encrypted_content",
+        }
+    )
 
     def __init__(self, provider_config: dict, provider_settings: dict) -> None:
         """Initialize the Responses API client.
@@ -129,7 +138,11 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
                                 and isinstance(state.get("items"), list)
                             ):
                                 restored_items = [
-                                    item
+                                    {
+                                        key: value
+                                        for key, value in item.items()
+                                        if key in self._REASONING_REPLAY_SAFE_KEYS
+                                    }
                                     for item in state["items"]
                                     if isinstance(item, dict)
                                 ]
