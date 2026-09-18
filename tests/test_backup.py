@@ -1363,6 +1363,70 @@ class TestBackupUploadLimits:
         await backup_service.cleanup_upload_session(upload_id)
 
     @pytest.mark.asyncio
+    async def test_expired_session_is_rejected_and_abortable(self, backup_service):
+        """过期会话不可用（get_session 强制过期），但 abort 清理仍有效"""
+        session = backup_service.upload_init(
+            {"filename": "b.zip", "total_size": 100}, owner="alice"
+        )
+        upload_id = session["upload_id"]
+        inner = backup_service.chunked_uploads.get_session(upload_id, owner="alice")
+        inner.last_activity -= 7200  # 闲置两小时，已过 1 小时过期线
+
+        with pytest.raises(BackupServiceError, match="not found or expired"):
+            backup_service.upload_status({"upload_id": upload_id}, owner="alice")
+        with pytest.raises(BackupServiceError, match="not found or expired"):
+            await backup_service.upload_chunk(
+                upload_id=upload_id,
+                chunk_index_str="0",
+                chunk_file=_StubUploadFile(b"x" * 100),
+                owner="alice",
+            )
+
+        # abort 是清理路径，对过期会话仍然有效
+        await backup_service.upload_abort({"upload_id": upload_id}, owner="alice")
+        assert upload_id not in backup_service.chunked_uploads.sessions
+
+    @pytest.mark.asyncio
+    async def test_upload_init_starts_cleanup_task(self, backup_service):
+        """备份上传初始化必须启动过期清理任务"""
+        backup_service.upload_init(
+            {"filename": "b.zip", "total_size": 100}, owner="alice"
+        )
+        task = backup_service.chunked_uploads._cleanup_task
+        assert task is not None and not task.done()
+        task.cancel()
+
+    @pytest.mark.asyncio
+    async def test_cleanup_failure_keeps_session_for_retry(
+        self, backup_service, monkeypatch
+    ):
+        """目录删除失败时会话保持注册，看门狗可重试，成功后正常摘除"""
+        import shutil
+
+        session = backup_service.upload_init(
+            {"filename": "b.zip", "total_size": 100}, owner="alice"
+        )
+        upload_id = session["upload_id"]
+
+        calls = {"n": 0}
+        real_rmtree = shutil.rmtree
+
+        def _flaky(path, *args, **kwargs):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise OSError("transient fs error")
+            return real_rmtree(path, *args, **kwargs)
+
+        monkeypatch.setattr(
+            "astrbot.dashboard.services.chunked_upload_service.shutil.rmtree", _flaky
+        )
+        await backup_service.chunked_uploads.cleanup_session(upload_id)
+        assert upload_id in backup_service.chunked_uploads.sessions
+
+        await backup_service.chunked_uploads.cleanup_session(upload_id)
+        assert upload_id not in backup_service.chunked_uploads.sessions
+
+    @pytest.mark.asyncio
     async def test_short_write_chunk_is_rejected(self, backup_service):
         """save() 落盘字节数不足时不得发布分片，且不留临时文件"""
         session = backup_service.upload_init(

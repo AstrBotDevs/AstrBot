@@ -124,14 +124,20 @@ class ChunkedUploadService:
     def get_session(self, upload_id: str, *, owner: str | None = None) -> UploadSession:
         """Look up a session, optionally enforcing its owner.
 
-        Missing sessions and owner mismatches raise the same error so callers
-        cannot probe which sessions exist.
+        Missing sessions, expired sessions and owner mismatches raise the
+        same error so callers cannot probe which sessions exist. The janitor
+        reaps expired chunk directories; this check keeps expired sessions
+        from staying usable in the meantime.
 
         Raises:
             ChunkedUploadError: Session unknown, expired or owned by someone else.
         """
         session = self.sessions.get(upload_id)
-        if session is None or (owner is not None and session.owner != owner):
+        if (
+            session is None
+            or (owner is not None and session.owner != owner)
+            or time.time() - session.last_activity > self.expire_seconds
+        ):
             raise ChunkedUploadError("Upload session not found or expired")
         return session
 
@@ -262,26 +268,36 @@ class ChunkedUploadService:
     async def abort(self, upload_id: str, *, owner: str | None = None) -> bool:
         """Abort and clean up a session. Unknown sessions abort silently.
 
+        Works on expired sessions too — cleanup is the point — but never on
+        sessions owned by someone else.
+
         Returns:
             True when a session existed and was removed.
 
         Raises:
             ChunkedUploadError: The session exists but belongs to another owner.
         """
-        if upload_id not in self.sessions:
+        session = self.sessions.get(upload_id)
+        if session is None:
             return False
-        self.get_session(upload_id, owner=owner)
+        if owner is not None and session.owner != owner:
+            raise ChunkedUploadError("Upload session not found or expired")
         await self.cleanup_session(upload_id)
         return True
 
     async def cleanup_session(self, upload_id: str) -> None:
-        session = self.sessions.pop(upload_id, None)
-        if session is None or not session.chunk_dir.exists():
+        session = self.sessions.get(upload_id)
+        if session is None:
             return
-        try:
-            shutil.rmtree(session.chunk_dir)
-        except Exception as exc:
-            logger.warning(f"Failed to remove chunk dir {session.chunk_dir}: {exc}")
+        if session.chunk_dir.exists():
+            try:
+                shutil.rmtree(session.chunk_dir)
+            except Exception as exc:
+                logger.warning(f"Failed to remove chunk dir {session.chunk_dir}: {exc}")
+                # Keep the session registered so the janitor can retry the
+                # leftover directory instead of forgetting it permanently.
+                return
+        self.sessions.pop(upload_id, None)
 
     def ensure_cleanup_task_started(self) -> None:
         if self._cleanup_task is None or self._cleanup_task.done():

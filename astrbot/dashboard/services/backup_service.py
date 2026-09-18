@@ -304,6 +304,7 @@ class BackupService:
             )
 
         unique_filename = generate_unique_filename(secure_filename(filename))
+        self.chunked_uploads.ensure_cleanup_task_started()
         try:
             session = self.chunked_uploads.init_session(
                 owner=owner,
