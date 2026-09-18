@@ -308,7 +308,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             # 如需兜底，应该只发送未发送 delta（后续可继续优化）
             self.send_buffer = None
 
-        return None
+        return True
 
     def _append_stream_delta(self, chain: MessageChain) -> None:
         """Append stream delta into an owned buffer (copy components).

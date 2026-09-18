@@ -233,10 +233,11 @@ class RespondStage(Stage):
                 == "realtime_segmenting"
             )
             logger.info(f"Applying streaming output ({event.get_platform_id()}).")
-            await event.send_streaming(result.async_stream, realtime_segmenting)
-            if await self._after_sent_cleanup(event):
+            delivered = await event.send_streaming(result.async_stream, realtime_segmenting)
+            if delivered:
+                if await self._after_sent_cleanup(event):
+                    return
                 return
-            return
         if len(result.chain) > 0:
             # 检查路径映射
             if mappings := self.platform_settings.get("path_mapping", []):
