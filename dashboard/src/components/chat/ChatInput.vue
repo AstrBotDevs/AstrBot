@@ -88,8 +88,14 @@
             :key="'active-' + index"
             class="attachment-card file-preview attachment-card--active"
           >
-            <div class="attachment-icon">
-              <v-icon icon="mdi-cloud-upload-outline" size="24"></v-icon>
+            <div
+              class="attachment-icon"
+              :style="{ '--attachment-color': activePresentation(active).color }"
+            >
+              <v-icon :icon="activePresentation(active).icon" size="24"></v-icon>
+              <span class="attachment-ext">{{
+                activePresentation(active).label
+              }}</span>
             </div>
             <span class="attachment-name">{{ active.name }}</span>
             <span class="attachment-progress-text">{{ active.percent }}%</span>
@@ -587,6 +593,12 @@ const hasStagedAttachments = computed(() => {
 
 function filePresentation(file: StagedFileInfo) {
   return attachmentPresentation(file);
+}
+
+// In-flight uploads are typed by their local filename already; no need to
+// wait for the server-side classification.
+function activePresentation(active: ActiveUploadView) {
+  return attachmentPresentation({ original_name: active.name });
 }
 
 // Ctrl+B 长按录音相关
@@ -1350,7 +1362,8 @@ defineExpose({
 
 .attachment-progress-bar {
   position: absolute;
-  left: 10px;
+  /* Align with the filename text: card padding + icon width + gap. */
+  left: 52px;
   right: 10px;
   bottom: 3px;
 }
