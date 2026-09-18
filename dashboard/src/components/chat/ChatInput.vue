@@ -84,6 +84,33 @@
           </div>
 
           <div
+            v-for="(active, index) in activeUploads"
+            :key="'active-' + index"
+            class="attachment-card file-preview attachment-card--active"
+          >
+            <div class="attachment-icon">
+              <v-icon icon="mdi-cloud-upload-outline" size="24"></v-icon>
+            </div>
+            <span class="attachment-name">{{ active.name }}</span>
+            <span class="attachment-progress-text">{{ active.percent }}%</span>
+            <v-btn
+              @click="$emit('cancelActiveUpload', index)"
+              class="remove-attachment-btn"
+              icon="mdi-close"
+              size="x-small"
+              color="grey-darken-1"
+              variant="tonal"
+            />
+            <v-progress-linear
+              class="attachment-progress-bar"
+              :model-value="active.percent"
+              color="primary"
+              height="3"
+              rounded
+            />
+          </div>
+
+          <div
             v-for="(failed, index) in failedUploads"
             :key="'failed-' + index"
             class="attachment-card file-preview attachment-card--failed"
@@ -306,7 +333,7 @@ import StyledMenu from "@/components/shared/StyledMenu.vue";
 import CommandSuggestion from "./CommandSuggestion.vue";
 import { attachmentPresentation } from "./attachmentPresentation";
 import type { Session } from "@/composables/useSessions";
-import type { FailedUploadView } from "@/composables/useMediaHandling";
+import type { FailedUploadView, ActiveUploadView } from "@/composables/useMediaHandling";
 import type { SuggestionCommand } from "./CommandSuggestion.vue";
 
 interface StagedFileInfo {
@@ -335,6 +362,7 @@ interface Props {
   stagedAudioUrl: string;
   stagedFiles?: StagedFileInfo[];
   failedUploads?: FailedUploadView[];
+  activeUploads?: ActiveUploadView[];
   disabled: boolean;
   showSettings?: boolean;
   isRecording: boolean;
@@ -355,6 +383,7 @@ const props = withDefaults(defineProps<Props>(), {
   configId: null,
   stagedFiles: () => [],
   failedUploads: () => [],
+  activeUploads: () => [],
   replyTo: null,
   sendShortcut: "shift_enter",
   showProviderSelector: true,
@@ -372,6 +401,7 @@ const emit = defineEmits<{
   removeFile: [index: number];
   retryFailedUpload: [index: number];
   discardFailedUpload: [index: number];
+  cancelActiveUpload: [index: number];
   startRecording: [];
   stopRecording: [];
   pasteImage: [event: ClipboardEvent];
@@ -550,7 +580,8 @@ const hasStagedAttachments = computed(() => {
     props.stagedImagesUrl.length > 0 ||
     props.stagedAudioUrl ||
     (props.stagedFiles && props.stagedFiles.length > 0) ||
-    (props.failedUploads && props.failedUploads.length > 0)
+    (props.failedUploads && props.failedUploads.length > 0) ||
+    (props.activeUploads && props.activeUploads.length > 0)
   );
 });
 
@@ -1304,6 +1335,24 @@ defineExpose({
 
 .retry-attachment-btn {
   right: 30px;
+}
+
+.attachment-card--active {
+  padding-right: 56px;
+}
+
+.attachment-progress-text {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgb(var(--v-theme-primary));
+}
+
+.attachment-progress-bar {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 3px;
 }
 
 .fade-in {

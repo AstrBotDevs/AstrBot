@@ -21,7 +21,13 @@ export interface FailedUploadView {
     error: string;
 }
 
-interface FailedUploadEntry {
+export interface ActiveUploadView {
+    name: string;
+    size: number;
+    percent: number;
+}
+
+interface UploadEntry {
     file: File;
     signature: string;
     uploader: ReturnType<typeof useChunkedUpload>;
@@ -33,7 +39,8 @@ export function useMediaHandling() {
     const pendingFileSignatures = new Set<string>();
     // shallowRef: entries hold uploader instances whose internal refs must
     // stay intact (a deep ref() would unwrap them), so updates reassign.
-    const failedUploads = shallowRef<FailedUploadEntry[]>([]);
+    const failedUploads = shallowRef<UploadEntry[]>([]);
+    const activeUploads = shallowRef<UploadEntry[]>([]);
 
     // Display-only projection of failed uploads for the input area.
     const failedUploadViews = computed<FailedUploadView[]>(() =>
@@ -41,6 +48,15 @@ export function useMediaHandling() {
             name: entry.file.name,
             size: entry.file.size,
             error: entry.uploader.errorMessage.value
+        }))
+    );
+
+    // Display-only projection of in-flight uploads (progress chips).
+    const activeUploadViews = computed<ActiveUploadView[]>(() =>
+        activeUploads.value.map(entry => ({
+            name: entry.file.name,
+            size: entry.file.size,
+            percent: entry.uploader.percent.value
         }))
     );
 
@@ -140,14 +156,25 @@ export function useMediaHandling() {
             abortUpload: fileApi.abortUpload,
             statusUpload: fileApi.statusUpload
         });
+        const entry: UploadEntry = { file, signature, uploader };
+        activeUploads.value = [...activeUploads.value, entry];
         const result = await uploader.start(file);
+        activeUploads.value = activeUploads.value.filter(e => e !== entry);
         if (result) {
             return stageUploaded(file, result, signature);
         }
         if (uploader.status.value === 'error') {
-            failedUploads.value = [...failedUploads.value, { file, signature, uploader }];
+            failedUploads.value = [...failedUploads.value, entry];
         }
         return undefined;
+    }
+
+    function cancelActiveUpload(index: number) {
+        const entry = activeUploads.value[index];
+        if (!entry) return;
+        // The start() promise settles as cancelled; the entry is removed by
+        // the settle path in uploadChunkedStagedFile.
+        void entry.uploader.cancel();
     }
 
     async function retryFailedUpload(index: number): Promise<StagedFileInfo | undefined> {
@@ -281,6 +308,7 @@ export function useMediaHandling() {
         stagedFiles,
         stagedNonImageFiles,
         failedUploadViews,
+        activeUploadViews,
         getMediaFile,
         processAndUploadImage,
         processAndUploadFile,
@@ -290,6 +318,7 @@ export function useMediaHandling() {
         removeFile,
         retryFailedUpload,
         discardFailedUpload,
+        cancelActiveUpload,
         clearStaged,
         cleanupMediaCache
     };

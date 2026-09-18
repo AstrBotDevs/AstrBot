@@ -249,6 +249,7 @@
             :send-shortcut="sendShortcut"
             :show-provider-selector="false"
             :failed-uploads="failedUploadViews"
+            :active-uploads="activeUploadViews"
             :placeholder="tm('input.projectPlaceholder')"
             @send="sendCurrentMessage"
             @stop="stopCurrentSession"
@@ -257,6 +258,7 @@
             @remove-file="removeFile"
             @retry-failed-upload="retryFailedUpload"
             @discard-failed-upload="discardFailedUpload"
+            @cancel-active-upload="cancelActiveUpload"
             @start-recording="startRecording"
             @stop-recording="stopRecording"
             @paste-image="handlePaste"
@@ -392,6 +394,7 @@
             :send-shortcut="sendShortcut"
             :show-provider-selector="false"
             :failed-uploads="failedUploadViews"
+            :active-uploads="activeUploadViews"
             :placeholder="
               activeProject ? tm('input.projectPlaceholder') : undefined
             "
@@ -402,6 +405,7 @@
             @remove-file="removeFile"
             @retry-failed-upload="retryFailedUpload"
             @discard-failed-upload="discardFailedUpload"
+            @cancel-active-upload="cancelActiveUpload"
             @start-recording="startRecording"
             @stop-recording="stopRecording"
             @paste-image="handlePaste"
@@ -599,6 +603,7 @@ const {
   stagedAudioUrl,
   stagedNonImageFiles,
   failedUploadViews,
+  activeUploadViews,
   processAndUploadImage,
   processAndUploadFile,
   handlePaste,
@@ -607,6 +612,7 @@ const {
   removeFile,
   retryFailedUpload,
   discardFailedUpload,
+  cancelActiveUpload,
   clearStaged,
   cleanupMediaCache,
 } = useMediaHandling();
