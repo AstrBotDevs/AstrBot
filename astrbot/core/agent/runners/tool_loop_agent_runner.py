@@ -947,6 +947,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     logger.warning(
                         "skills_like tool re-query returned no tool calls; fallback to assistant response."
                     )
+                    # Complete the assistant response (including hooks) BEFORE
+                    # yielding llm_result so response hooks run before the
+                    # result is sent to the user (#9788).
+                    await self._complete_with_assistant_response(llm_resp)
                     if llm_resp.reasoning_content:
                         yield AgentResponse(
                             type="llm_result",
@@ -969,7 +973,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             ),
                         )
 
-                    await self._complete_with_assistant_response(llm_resp)
                     # Re-query uses text_chat(), so its reply has no stream chunks.
                     # Supply them after hooks without changing llm_result ordering.
                     if self.streaming:
