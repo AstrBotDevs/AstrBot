@@ -33,6 +33,7 @@ from astrbot.core.utils.media_utils import (
     MEDIA_MIME_EXTENSIONS,
     detect_image_mime_type_async,
 )
+from astrbot.core.utils.upload import UploadTooLargeError
 
 SSE_HEARTBEAT = ": heartbeat\n\n"
 CHAT_RUN_SUBSCRIBER_QUEUE_SIZE = 256
@@ -620,12 +621,12 @@ class ChatService:
         if not file_path.is_relative_to(attachments_dir):
             raise ChatServiceError("Invalid filename")
 
-        await file.save(str(file_path))
-        if file_path.stat().st_size > MAX_UPLOAD_FILE_SIZE_BYTES:
-            file_path.unlink(missing_ok=True)
+        try:
+            await file.save(str(file_path), max_bytes=MAX_UPLOAD_FILE_SIZE_BYTES)
+        except UploadTooLargeError as exc:
             raise ChatServiceError(
                 f"File too large (limit {MAX_UPLOAD_FILE_SIZE_MB} MB)"
-            )
+            ) from exc
         if attach_type == "image":
             detected_mime_type = await detect_image_mime_type_async(
                 file_path,
