@@ -195,8 +195,17 @@ export function useChunkedUpload(api: ChunkedUploadApi) {
     }
 
     function handleFailure(err: any): undefined {
-        if (err?.message === 'cancelled') {
+        // Cancel wins over any late resolution: a run cancelled while its
+        // init request was still in flight lands here once init returns,
+        // and its freshly created session must not leak server-side.
+        if (cancelled || err?.message === 'cancelled') {
+            const id = uploadId;
             reset();
+            if (id) {
+                void api.abortUpload({ upload_id: id }).catch(e =>
+                    console.error('Failed to abort upload:', e),
+                );
+            }
             return undefined;
         }
         // A failed complete() means the merged result was rejected; the
