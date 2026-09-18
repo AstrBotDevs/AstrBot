@@ -135,7 +135,11 @@ export function useChunkedUpload(api: ChunkedUploadApi) {
 
     async function completeSession() {
         phase.value = 'complete';
-        return envelopeData(await api.completeUpload({ upload_id: uploadId }));
+        const result = envelopeData(await api.completeUpload({ upload_id: uploadId }));
+        // The request was in flight when the user cancelled; a late success
+        // must not flip the state back to done or hand a result to the caller.
+        if (cancelled) throw new Error('cancelled');
+        return result;
     }
 
     async function start(f: File): Promise<any> {
