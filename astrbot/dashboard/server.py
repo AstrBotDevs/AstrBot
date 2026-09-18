@@ -27,6 +27,9 @@ from astrbot.dashboard.asgi_runtime import (
     FastAPIAppAdapter,
 )
 from astrbot.dashboard.responses import error
+from astrbot.dashboard.services.backup_service import CHUNK_SIZE
+from astrbot.dashboard.services.chat_service import MAX_UPLOAD_FILE_SIZE_BYTES
+from astrbot.dashboard.services.config_service import MAX_FILE_BYTES
 
 from .api.app import create_dashboard_asgi_app
 from .plugin_page_auth import PluginPageAuth
@@ -35,6 +38,19 @@ from .services.auth_service import DASHBOARD_JWT_COOKIE_NAME
 if os.name == "nt":
     # Windows 的 mimetypes 会把 .svg 映射成非标准的 image/svg,这里强制覆盖为标准类型
     mimetypes.add_type("image/svg+xml", ".svg", strict=True)
+
+# Per-route request body limits overriding the default MAX_CONTENT_LENGTH.
+# More specific prefixes must come first. Routes not listed here fall back
+# to the default; requests without a Content-Length header pass through and
+# are bounded by the per-endpoint max_bytes checks at save time.
+_BODY_LIMIT_OVERRIDES: tuple[tuple[str, int], ...] = (
+    ("/api/v1/backups/upload/chunk", CHUNK_SIZE * 2),
+    ("/api/backup/upload/chunk", CHUNK_SIZE * 2),
+    ("/api/v1/files", MAX_UPLOAD_FILE_SIZE_BYTES),
+    ("/api/chat/post_file", MAX_UPLOAD_FILE_SIZE_BYTES),
+    ("/api/v1/plugins/config-files", MAX_FILE_BYTES),
+    ("/api/v1/knowledge-bases/", MAX_UPLOAD_FILE_SIZE_BYTES),
+)
 
 _RATE_LIMITED_ENDPOINTS: frozenset = frozenset(
     {
@@ -208,6 +224,32 @@ class AstrBotDashboard:
             auth_response = await self.auth_middleware(request_)
             if auth_response is not None:
                 return auth_response
+            return await call_next(request_)
+
+        @self.asgi_app.middleware("http")
+        async def dashboard_body_limit_middleware(request_, call_next):
+            # Registered after the auth middleware so it runs outermost and
+            # can reject oversized bodies before any parsing happens.
+            path = request_.url.path
+            if not path.startswith("/api"):
+                return await call_next(request_)
+            raw_length = request_.headers.get("content-length")
+            if not raw_length:
+                return await call_next(request_)
+            try:
+                content_length = int(raw_length)
+            except ValueError:
+                content_length = 0
+            limit = self.app.config["MAX_CONTENT_LENGTH"]
+            for prefix, route_limit in _BODY_LIMIT_OVERRIDES:
+                if path.startswith(prefix):
+                    limit = route_limit
+                    break
+            if content_length > limit:
+                return JSONResponse(
+                    error(f"Request body exceeds the {limit} bytes limit"),
+                    status_code=413,
+                )
             return await call_next(request_)
 
         self.shutdown_event = shutdown_event
