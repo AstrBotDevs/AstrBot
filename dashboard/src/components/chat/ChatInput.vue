@@ -82,6 +82,35 @@
               variant="tonal"
             />
           </div>
+
+          <div
+            v-for="(failed, index) in failedUploads"
+            :key="'failed-' + index"
+            class="attachment-card file-preview attachment-card--failed"
+          >
+            <div class="attachment-icon attachment-icon--failed">
+              <v-icon icon="mdi-alert-circle-outline" size="24"></v-icon>
+            </div>
+            <span class="attachment-name" :title="failed.error">{{
+              failed.name
+            }}</span>
+            <v-btn
+              @click="$emit('retryFailedUpload', index)"
+              class="remove-attachment-btn retry-attachment-btn"
+              icon="mdi-refresh"
+              size="x-small"
+              color="primary"
+              variant="tonal"
+            />
+            <v-btn
+              @click="$emit('discardFailedUpload', index)"
+              class="remove-attachment-btn"
+              icon="mdi-close"
+              size="x-small"
+              color="error"
+              variant="tonal"
+            />
+          </div>
         </div>
       </transition>
 
@@ -277,6 +306,7 @@ import StyledMenu from "@/components/shared/StyledMenu.vue";
 import CommandSuggestion from "./CommandSuggestion.vue";
 import { attachmentPresentation } from "./attachmentPresentation";
 import type { Session } from "@/composables/useSessions";
+import type { FailedUploadView } from "@/composables/useMediaHandling";
 import type { SuggestionCommand } from "./CommandSuggestion.vue";
 
 interface StagedFileInfo {
@@ -304,6 +334,7 @@ interface Props {
   stagedImagesUrl: string[];
   stagedAudioUrl: string;
   stagedFiles?: StagedFileInfo[];
+  failedUploads?: FailedUploadView[];
   disabled: boolean;
   showSettings?: boolean;
   isRecording: boolean;
@@ -323,6 +354,7 @@ const props = withDefaults(defineProps<Props>(), {
   currentSession: null,
   configId: null,
   stagedFiles: () => [],
+  failedUploads: () => [],
   replyTo: null,
   sendShortcut: "shift_enter",
   showProviderSelector: true,
@@ -338,6 +370,8 @@ const emit = defineEmits<{
   removeImage: [index: number];
   removeAudio: [];
   removeFile: [index: number];
+  retryFailedUpload: [index: number];
+  discardFailedUpload: [index: number];
   startRecording: [];
   stopRecording: [];
   pasteImage: [event: ClipboardEvent];
@@ -515,7 +549,8 @@ const hasStagedAttachments = computed(() => {
   return (
     props.stagedImagesUrl.length > 0 ||
     props.stagedAudioUrl ||
-    (props.stagedFiles && props.stagedFiles.length > 0)
+    (props.stagedFiles && props.stagedFiles.length > 0) ||
+    (props.failedUploads && props.failedUploads.length > 0)
   );
 });
 
@@ -1256,6 +1291,19 @@ defineExpose({
 
 .remove-attachment-btn:hover {
   opacity: 1;
+}
+
+.attachment-card--failed {
+  --attachment-color: rgb(var(--v-theme-error));
+  padding-right: 56px;
+}
+
+.attachment-icon--failed {
+  color: rgb(var(--v-theme-error));
+}
+
+.retry-attachment-btn {
+  right: 30px;
 }
 
 .fade-in {

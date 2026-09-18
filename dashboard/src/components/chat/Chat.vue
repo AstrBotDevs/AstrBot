@@ -248,12 +248,15 @@
             :reply-to="chatInputReplyTarget"
             :send-shortcut="sendShortcut"
             :show-provider-selector="false"
+            :failed-uploads="failedUploadViews"
             :placeholder="tm('input.projectPlaceholder')"
             @send="sendCurrentMessage"
             @stop="stopCurrentSession"
             @remove-image="removeImage"
             @remove-audio="removeAudio"
             @remove-file="removeFile"
+            @retry-failed-upload="retryFailedUpload"
+            @discard-failed-upload="discardFailedUpload"
             @start-recording="startRecording"
             @stop-recording="stopRecording"
             @paste-image="handlePaste"
@@ -388,6 +391,7 @@
             :reply-to="chatInputReplyTarget"
             :send-shortcut="sendShortcut"
             :show-provider-selector="false"
+            :failed-uploads="failedUploadViews"
             :placeholder="
               activeProject ? tm('input.projectPlaceholder') : undefined
             "
@@ -396,6 +400,8 @@
             @remove-image="removeImage"
             @remove-audio="removeAudio"
             @remove-file="removeFile"
+            @retry-failed-upload="retryFailedUpload"
+            @discard-failed-upload="discardFailedUpload"
             @start-recording="startRecording"
             @stop-recording="stopRecording"
             @paste-image="handlePaste"
@@ -592,12 +598,15 @@ const {
   stagedImagesUrl,
   stagedAudioUrl,
   stagedNonImageFiles,
+  failedUploadViews,
   processAndUploadImage,
   processAndUploadFile,
   handlePaste,
   removeImage,
   removeAudio,
   removeFile,
+  retryFailedUpload,
+  discardFailedUpload,
   clearStaged,
   cleanupMediaCache,
 } = useMediaHandling();
