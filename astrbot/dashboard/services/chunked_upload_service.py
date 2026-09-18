@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import math
+import os
 import shutil
 import time
 import uuid
@@ -157,11 +158,32 @@ class ChunkedUploadService:
         if chunk_index < 0 or chunk_index >= session.total_chunks:
             raise ChunkedUploadError("Chunk index out of range")
 
+        # Save to a uniquely named temp file and publish it atomically:
+        # a failed or concurrent retry for the same index must not clobber
+        # the chunk that was already received.
         chunk_path = session.chunk_dir / f"{chunk_index}.part"
+        temp_path = session.chunk_dir / f"{chunk_index}.{uuid.uuid4().hex}.tmp"
         try:
-            await file.save(chunk_path, max_bytes=session.chunk_size)
-        except UploadTooLargeError as exc:
-            raise ChunkedUploadError("Chunk exceeds the size limit") from exc
+            written = await file.save(temp_path, max_bytes=session.chunk_size)
+        except BaseException as exc:
+            temp_path.unlink(missing_ok=True)
+            if isinstance(exc, UploadTooLargeError):
+                raise ChunkedUploadError("Chunk exceeds the size limit") from exc
+            raise
+
+        # The save contract returns the byte count; a short or absent write
+        # means the chunk is unusable and must not be published.
+        expected = min(
+            session.total_size - chunk_index * session.chunk_size,
+            session.chunk_size,
+        )
+        if written != expected:
+            temp_path.unlink(missing_ok=True)
+            raise ChunkedUploadError(
+                f"Chunk size mismatch: got {written} bytes, expected {expected}"
+            )
+
+        await asyncio.to_thread(os.replace, temp_path, chunk_path)
         session.received_chunks.add(chunk_index)
         session.last_activity = time.time()
 

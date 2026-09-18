@@ -39,6 +39,11 @@ if os.name == "nt":
     # Windows 的 mimetypes 会把 .svg 映射成非标准的 image/svg,这里强制覆盖为标准类型
     mimetypes.add_type("image/svg+xml", ".svg", strict=True)
 
+# Multipart framing (boundaries, part headers) rides on top of the file
+# payload, so whole-file upload routes get slack beyond the file size limit;
+# otherwise a file exactly at the limit would be rejected with 413.
+_MULTIPART_OVERHEAD_BYTES = 1024 * 1024
+
 # Per-route request body limits overriding the default MAX_CONTENT_LENGTH.
 # More specific prefixes must come first. Routes not listed here fall back
 # to the default; requests without a Content-Length header pass through and
@@ -47,11 +52,54 @@ _BODY_LIMIT_OVERRIDES: tuple[tuple[str, int], ...] = (
     ("/api/v1/backups/upload/chunk", CHUNK_SIZE * 2),
     ("/api/backup/upload/chunk", CHUNK_SIZE * 2),
     ("/api/v1/files/upload/chunk", CHUNK_SIZE * 2),
-    ("/api/v1/files", MAX_UPLOAD_FILE_SIZE_BYTES),
-    ("/api/chat/post_file", MAX_UPLOAD_FILE_SIZE_BYTES),
-    ("/api/v1/plugins/config-files", MAX_FILE_BYTES),
-    ("/api/v1/knowledge-bases/", MAX_UPLOAD_FILE_SIZE_BYTES),
+    ("/api/v1/files", MAX_UPLOAD_FILE_SIZE_BYTES + _MULTIPART_OVERHEAD_BYTES),
+    (
+        "/api/chat/post_file",
+        MAX_UPLOAD_FILE_SIZE_BYTES + _MULTIPART_OVERHEAD_BYTES,
+    ),
+    ("/api/v1/plugins/config-files", MAX_FILE_BYTES + _MULTIPART_OVERHEAD_BYTES),
+    (
+        "/api/v1/knowledge-bases/",
+        MAX_UPLOAD_FILE_SIZE_BYTES + _MULTIPART_OVERHEAD_BYTES,
+    ),
 )
+
+
+def _check_body_limit(
+    path: str,
+    content_length: int | None,
+    content_type: str,
+    *,
+    default_limit: int,
+) -> tuple[int, str] | None:
+    """Decide whether an /api request body must be rejected up front.
+
+    Returns:
+        A (status_code, message) rejection, or None to pass through.
+
+    Note:
+        The 411 rule is a stopgap scoped to multipart uploads: their form
+        parsing spools large bodies to disk before any per-file size check
+        can run, so they must declare a length that can be bounded before
+        parsing. Other body types without Content-Length still pass and
+        are bounded only at save time; closing that gap fully requires
+        counting bytes as they arrive, which is out of scope here.
+    """
+    if not path.startswith("/api"):
+        return None
+    if content_length is None:
+        if content_type.startswith("multipart/form-data"):
+            return 411, "Content-Length header is required for uploads"
+        return None
+    limit = default_limit
+    for prefix, route_limit in _BODY_LIMIT_OVERRIDES:
+        if path.startswith(prefix):
+            limit = route_limit
+            break
+    if content_length > limit:
+        return 413, f"Request body exceeds the {limit} bytes limit"
+    return None
+
 
 _RATE_LIMITED_ENDPOINTS: frozenset = frozenset(
     {
@@ -231,26 +279,20 @@ class AstrBotDashboard:
         async def dashboard_body_limit_middleware(request_, call_next):
             # Registered after the auth middleware so it runs outermost and
             # can reject oversized bodies before any parsing happens.
-            path = request_.url.path
-            if not path.startswith("/api"):
-                return await call_next(request_)
             raw_length = request_.headers.get("content-length")
-            if not raw_length:
-                return await call_next(request_)
             try:
-                content_length = int(raw_length)
+                content_length = int(raw_length) if raw_length else None
             except ValueError:
-                content_length = 0
-            limit = self.app.config["MAX_CONTENT_LENGTH"]
-            for prefix, route_limit in _BODY_LIMIT_OVERRIDES:
-                if path.startswith(prefix):
-                    limit = route_limit
-                    break
-            if content_length > limit:
-                return JSONResponse(
-                    error(f"Request body exceeds the {limit} bytes limit"),
-                    status_code=413,
-                )
+                content_length = None
+            rejection = _check_body_limit(
+                request_.url.path,
+                content_length,
+                request_.headers.get("content-type", ""),
+                default_limit=self.app.config["MAX_CONTENT_LENGTH"],
+            )
+            if rejection is not None:
+                status_code, message = rejection
+                return JSONResponse(error(message), status_code=status_code)
             return await call_next(request_)
 
         self.shutdown_event = shutdown_event

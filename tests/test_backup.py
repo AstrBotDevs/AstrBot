@@ -1171,12 +1171,11 @@ class TestBackupUploadLimits:
 
     @pytest.mark.asyncio
     async def test_upload_complete_rejects_size_mismatch(self, backup_service):
-        """合并后大小与声明大小不一致时拒绝完成"""
+        """合并后大小与声明大小不一致时拒绝完成（分片带外损坏的兜底）"""
         declared = CHUNK_SIZE + 100
         session = backup_service.upload_init(
             {"filename": "b.zip", "total_size": declared}, owner="tester"
         )
-        # 第二片故意少写 50 字节
         await backup_service.upload_chunk(
             upload_id=session["upload_id"],
             chunk_index_str="0",
@@ -1186,9 +1185,15 @@ class TestBackupUploadLimits:
         await backup_service.upload_chunk(
             upload_id=session["upload_id"],
             chunk_index_str="1",
-            chunk_file=_StubUploadFile(b"x" * 50),
+            chunk_file=_StubUploadFile(b"x" * 100),
             owner="tester",
         )
+        # 传片时的字节数校验已拦截短写；此处绕过保存路径直接篡改磁盘上的
+        # 分片（模拟带外损坏），验证合并时的大小复核仍然兜底
+        chunk_path = (
+            backup_service.chunked_uploads.chunks_root / session["upload_id"] / "1.part"
+        )
+        chunk_path.write_bytes(b"x" * 50)
 
         with pytest.raises(BackupServiceError, match="does not match"):
             await backup_service.upload_complete(
@@ -1288,3 +1293,67 @@ class TestBackupUploadLimits:
             ).last_activity
             == inner.last_activity
         )
+
+    @pytest.mark.asyncio
+    async def test_failed_chunk_retry_preserves_received_chunk(self, backup_service):
+        """同索引重传失败不得破坏已收到的分片"""
+        session = backup_service.upload_init(
+            {"filename": "b.zip", "total_size": 100}, owner="alice"
+        )
+        upload_id = session["upload_id"]
+        good = b"x" * 100
+        await backup_service.upload_chunk(
+            upload_id=upload_id,
+            chunk_index_str="0",
+            chunk_file=_StubUploadFile(good),
+            owner="alice",
+        )
+
+        # 同索引用超大分片重试：必须报错，且已收到的分片原样保留
+        with pytest.raises(BackupServiceError, match="size limit"):
+            await backup_service.upload_chunk(
+                upload_id=upload_id,
+                chunk_index_str="0",
+                chunk_file=_StubUploadFile(b"y" * (CHUNK_SIZE + 1)),
+                owner="alice",
+            )
+
+        result = await backup_service.upload_complete(
+            {"upload_id": upload_id}, owner="alice"
+        )
+        assert result["size"] == 100
+        merged = Path(backup_service.backup_dir) / result["filename"]
+        assert merged.read_bytes() == good
+
+    @pytest.mark.asyncio
+    async def test_short_write_chunk_is_rejected(self, backup_service):
+        """save() 落盘字节数不足时不得发布分片，且不留临时文件"""
+        session = backup_service.upload_init(
+            {"filename": "b.zip", "total_size": 100}, owner="alice"
+        )
+        upload_id = session["upload_id"]
+
+        with pytest.raises(BackupServiceError, match="size mismatch"):
+            await backup_service.upload_chunk(
+                upload_id=upload_id,
+                chunk_index_str="0",
+                chunk_file=_StubUploadFile(b"x" * 50),
+                owner="alice",
+            )
+
+        # 分片未发布、无临时文件残留；补传完整数据后正常完成
+        chunk_dir = backup_service.chunked_uploads.chunks_root / upload_id
+        assert not list(chunk_dir.glob("*.tmp"))
+        status = backup_service.upload_status({"upload_id": upload_id}, owner="alice")
+        assert status["received_chunks"] == []
+
+        await backup_service.upload_chunk(
+            upload_id=upload_id,
+            chunk_index_str="0",
+            chunk_file=_StubUploadFile(b"y" * 100),
+            owner="alice",
+        )
+        result = await backup_service.upload_complete(
+            {"upload_id": upload_id}, owner="alice"
+        )
+        assert result["size"] == 100
