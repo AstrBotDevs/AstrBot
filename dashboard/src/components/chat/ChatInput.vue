@@ -101,19 +101,20 @@
             <span class="attachment-progress-text">{{ active.percent }}%</span>
             <v-btn
               @click="$emit('cancelActiveUpload', index)"
-              class="remove-attachment-btn"
+              class="cancel-active-btn"
               icon="mdi-close"
               size="x-small"
               color="grey-darken-1"
-              variant="tonal"
+              variant="text"
             />
-            <v-progress-linear
-              class="attachment-progress-bar"
-              :model-value="active.percent"
-              color="primary"
-              height="3"
-              rounded
-            />
+            <div class="attachment-progress-track">
+              <v-progress-linear
+                :model-value="active.percent"
+                color="primary"
+                height="3"
+                rounded
+              />
+            </div>
           </div>
 
           <div
@@ -1350,7 +1351,7 @@ defineExpose({
 }
 
 .attachment-card--active {
-  padding-right: 56px;
+  padding-right: 10px;
 }
 
 .attachment-progress-text {
@@ -1360,15 +1361,24 @@ defineExpose({
   color: rgb(var(--v-theme-primary));
 }
 
-.attachment-progress-bar {
+.cancel-active-btn {
+  flex-shrink: 0;
+  width: 22px !important;
+  height: 22px !important;
+  min-width: 22px !important;
+  opacity: 0.7;
+}
+
+.cancel-active-btn:hover {
+  opacity: 1;
+}
+
+.attachment-progress-track {
   position: absolute;
   /* Align with the filename text: card padding + icon width + gap. */
   left: 52px;
   right: 10px;
   bottom: 3px;
-  /* v-progress-linear ships width:100%, which would override the right
-     offset in absolute positioning and clip the bar at the card edge. */
-  width: auto;
 }
 
 .fade-in {
