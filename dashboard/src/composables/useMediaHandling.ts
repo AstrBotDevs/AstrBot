@@ -17,12 +17,24 @@ export function useMediaHandling() {
 
     async function getFileSignature(file: File): Promise<string> {
         if (crypto?.subtle) {
-            const buffer = await file.arrayBuffer();
-            const digest = await crypto.subtle.digest('SHA-256', buffer);
+            // Digest per block, then digest the concatenated block digests.
+            // The signature is only used for in-session dedup and never
+            // leaves the browser, so it does not need to be the canonical
+            // SHA-256 of the whole file — only stable per file. This keeps
+            // memory bounded at BLOCK bytes regardless of file size.
+            const BLOCK = 8 * 1024 * 1024;
+            const blockHashes: Uint8Array[] = [];
+            for (let offset = 0; offset < file.size; offset += BLOCK) {
+                const buf = await file.slice(offset, offset + BLOCK).arrayBuffer();
+                blockHashes.push(new Uint8Array(await crypto.subtle.digest('SHA-256', buf)));
+            }
+            const combined = new Uint8Array(blockHashes.length * 32);
+            blockHashes.forEach((h, i) => combined.set(h, i * 32));
+            const digest = await crypto.subtle.digest('SHA-256', combined);
             const hash = Array.from(new Uint8Array(digest))
                 .map(byte => byte.toString(16).padStart(2, '0'))
                 .join('');
-            return `sha256:${hash}`;
+            return `sha256m:${hash}`;
         }
 
         return `meta:${file.name}:${file.size}:${file.type}:${file.lastModified}`;
