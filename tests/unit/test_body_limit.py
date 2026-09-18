@@ -34,6 +34,21 @@ class TestCheckBodyLimit:
         assert result is not None
         assert result[0] == 411
 
+    def test_get_with_junk_multipart_content_type_passes(self):
+        # Body-less methods never trigger form parsing, so a bogus
+        # multipart Content-Type on a GET (seen in the wild from the SSE
+        # log client) must not be rejected with 411.
+        assert (
+            _check_body_limit(
+                "/api/v1/logs/live",
+                None,
+                MULTIPART,
+                method="GET",
+                default_limit=DEFAULT_LIMIT,
+            )
+            is None
+        )
+
     def test_json_without_content_length_passes(self):
         # Stopgap scope: only multipart is bounded pre-parse (disk spool);
         # other lengthless bodies pass and are bounded at save time.

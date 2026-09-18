@@ -73,11 +73,18 @@ _BODY_LIMIT_OVERRIDES: tuple[tuple[str, int], ...] = (
 )
 
 
+# Methods with request-body semantics; the 411 stopgap only applies to
+# these, since form parsing (and its disk spooling) cannot trigger
+# for body-less methods like GET.
+_BODY_METHODS = frozenset({"POST", "PUT", "PATCH"})
+
+
 def _check_body_limit(
     path: str,
     content_length: int | None,
     content_type: str,
     *,
+    method: str = "POST",
     default_limit: int,
 ) -> tuple[int, str] | None:
     """Decide whether an /api request body must be rejected up front.
@@ -86,16 +93,20 @@ def _check_body_limit(
         A (status_code, message) rejection, or None to pass through.
 
     Note:
-        The 411 rule is a stopgap scoped to multipart uploads: their form
-        parsing spools large bodies to disk before any per-file size check
-        can run, so they must declare a length that can be bounded before
-        parsing. Other body types without Content-Length still pass and
-        are bounded only at save time; closing that gap fully requires
+        The 411 rule is a stopgap scoped to multipart uploads on methods
+        with body semantics: their form parsing spools large bodies to
+        disk before any per-file size check can run, so they must declare
+        a length that can be bounded before parsing. Body-less methods
+        (GET etc.) never trigger form parsing and pass even with a bogus
+        multipart Content-Type header. Other lengthless bodies are still
+        bounded only at save time; closing that gap fully requires
         counting bytes as they arrive, which is out of scope here.
     """
     if not path.startswith("/api"):
         return None
     if content_length is None:
+        if method not in _BODY_METHODS:
+            return None
         # Identify the media type by the same rule the form parser uses:
         # parse_options_header strips surrounding whitespace, so a leading-
         # space Content-Type that startswith() would miss is still caught.
@@ -302,6 +313,7 @@ class AstrBotDashboard:
                 request_.url.path,
                 content_length,
                 request_.headers.get("content-type", ""),
+                method=request_.method,
                 default_limit=self.app.config["MAX_CONTENT_LENGTH"],
             )
             if rejection is not None:
