@@ -1123,20 +1123,22 @@ class TestBackupUploadLimits:
         service = BackupService(db=MagicMock(), core_lifecycle=MagicMock())
         service.backup_dir = str(tmp_path / "backups")
         service.chunks_dir = str(tmp_path / "backups" / ".chunks")
+        service.chunked_uploads.chunks_root = Path(service.chunks_dir)
         return service
 
     def test_upload_init_rejects_oversized_total(self, backup_service):
         """声明总大小超过上限时拒绝初始化"""
         with pytest.raises(BackupServiceError, match="size limit"):
             backup_service.upload_init(
-                {"filename": "b.zip", "total_size": MAX_BACKUP_TOTAL_BYTES + 1}
+                {"filename": "b.zip", "total_size": MAX_BACKUP_TOTAL_BYTES + 1},
+                owner="tester",
             )
 
     @pytest.mark.asyncio
     async def test_upload_chunk_rejects_oversized_chunk(self, backup_service):
         """超过 CHUNK_SIZE 的分片被拒绝且不产生残留文件"""
         session = backup_service.upload_init(
-            {"filename": "b.zip", "total_size": CHUNK_SIZE}
+            {"filename": "b.zip", "total_size": CHUNK_SIZE}, owner="tester"
         )
         big_chunk = _StubUploadFile(b"x" * (CHUNK_SIZE + 1))
 
@@ -1145,6 +1147,7 @@ class TestBackupUploadLimits:
                 upload_id=session["upload_id"],
                 chunk_index_str="0",
                 chunk_file=big_chunk,
+                owner="tester",
             )
 
         await backup_service.cleanup_upload_session(session["upload_id"])
@@ -1152,11 +1155,14 @@ class TestBackupUploadLimits:
     @pytest.mark.asyncio
     async def test_upload_chunk_accepts_small_chunk(self, backup_service):
         """正常大小的分片可以上传"""
-        session = backup_service.upload_init({"filename": "b.zip", "total_size": 100})
+        session = backup_service.upload_init(
+            {"filename": "b.zip", "total_size": 100}, owner="tester"
+        )
         result = await backup_service.upload_chunk(
             upload_id=session["upload_id"],
             chunk_index_str="0",
             chunk_file=_StubUploadFile(b"x" * 100),
+            owner="tester",
         )
         assert result["received"] == 1
         assert result["total"] == 1
@@ -1168,21 +1174,59 @@ class TestBackupUploadLimits:
         """合并后大小与声明大小不一致时拒绝完成"""
         declared = CHUNK_SIZE + 100
         session = backup_service.upload_init(
-            {"filename": "b.zip", "total_size": declared}
+            {"filename": "b.zip", "total_size": declared}, owner="tester"
         )
         # 第二片故意少写 50 字节
         await backup_service.upload_chunk(
             upload_id=session["upload_id"],
             chunk_index_str="0",
             chunk_file=_StubUploadFile(b"x" * CHUNK_SIZE),
+            owner="tester",
         )
         await backup_service.upload_chunk(
             upload_id=session["upload_id"],
             chunk_index_str="1",
             chunk_file=_StubUploadFile(b"x" * 50),
+            owner="tester",
         )
 
         with pytest.raises(BackupServiceError, match="does not match"):
-            await backup_service.upload_complete({"upload_id": session["upload_id"]})
+            await backup_service.upload_complete(
+                {"upload_id": session["upload_id"]}, owner="tester"
+            )
+
+        await backup_service.cleanup_upload_session(session["upload_id"])
+
+    @pytest.mark.asyncio
+    async def test_session_rejects_other_owner(self, backup_service):
+        """会话绑定创建者，其他用户无法传片、合并或取消"""
+        session = backup_service.upload_init(
+            {"filename": "b.zip", "total_size": 100}, owner="alice"
+        )
+
+        with pytest.raises(BackupServiceError, match="not found or expired"):
+            await backup_service.upload_chunk(
+                upload_id=session["upload_id"],
+                chunk_index_str="0",
+                chunk_file=_StubUploadFile(b"x" * 100),
+                owner="mallory",
+            )
+        with pytest.raises(BackupServiceError, match="not found or expired"):
+            await backup_service.upload_complete(
+                {"upload_id": session["upload_id"]}, owner="mallory"
+            )
+        with pytest.raises(BackupServiceError, match="not found or expired"):
+            await backup_service.upload_abort(
+                {"upload_id": session["upload_id"]}, owner="mallory"
+            )
+
+        # 会话在攻击后仍然存活，真正的主人可以正常使用
+        result = await backup_service.upload_chunk(
+            upload_id=session["upload_id"],
+            chunk_index_str="0",
+            chunk_file=_StubUploadFile(b"x" * 100),
+            owner="alice",
+        )
+        assert result["received"] == 1
 
         await backup_service.cleanup_upload_session(session["upload_id"])

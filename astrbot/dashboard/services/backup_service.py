@@ -2,11 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import json
-import math
 import os
 import re
-import shutil
-import time
 import traceback
 import uuid
 import zipfile
@@ -27,9 +24,12 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_data_path,
 )
 from astrbot.core.utils.upload import UploadTooLargeError
+from astrbot.dashboard.services.chunked_upload_service import (
+    ChunkedUploadError,
+    ChunkedUploadService,
+)
 
 CHUNK_SIZE = 1024 * 1024
-UPLOAD_EXPIRE_SECONDS = 3600
 # Hard caps against disk exhaustion: a backup is never legitimately larger
 # than this, and the whole-file endpoint is only for small backups (large
 # ones must use the chunked flow).
@@ -78,8 +78,7 @@ class BackupService:
         self.chunks_dir = os.path.join(self.backup_dir, ".chunks")
         self.backup_tasks: dict[str, dict] = {}
         self.backup_progress: dict[str, dict] = {}
-        self.upload_sessions: dict[str, dict] = {}
-        self._cleanup_task: asyncio.Task | None = None
+        self.chunked_uploads = ChunkedUploadService(self.chunks_dir)
 
     @staticmethod
     def _payload(data: object) -> dict[str, Any]:
@@ -165,45 +164,10 @@ class BackupService:
         return _callback
 
     def ensure_cleanup_task_started(self) -> None:
-        if self._cleanup_task is None or self._cleanup_task.done():
-            try:
-                self._cleanup_task = asyncio.create_task(
-                    self._cleanup_expired_uploads()
-                )
-            except RuntimeError:
-                pass
-
-    async def _cleanup_expired_uploads(self) -> None:
-        while True:
-            try:
-                await asyncio.sleep(300)
-                current_time = time.time()
-                expired_sessions = []
-
-                for upload_id, session in self.upload_sessions.items():
-                    last_activity = session.get("last_activity", session["created_at"])
-                    if current_time - last_activity > UPLOAD_EXPIRE_SECONDS:
-                        expired_sessions.append(upload_id)
-
-                for upload_id in expired_sessions:
-                    await self.cleanup_upload_session(upload_id)
-                    logger.info(f"清理过期的上传会话: {upload_id}")
-
-            except asyncio.CancelledError:
-                break
-            except Exception as exc:
-                logger.error(f"清理过期上传会话失败: {exc}")
+        self.chunked_uploads.ensure_cleanup_task_started()
 
     async def cleanup_upload_session(self, upload_id: str) -> None:
-        if upload_id in self.upload_sessions:
-            session = self.upload_sessions[upload_id]
-            chunk_dir = session.get("chunk_dir")
-            if chunk_dir and os.path.exists(chunk_dir):
-                try:
-                    shutil.rmtree(chunk_dir)
-                except Exception as exc:
-                    logger.warning(f"清理分片目录失败: {exc}")
-            del self.upload_sessions[upload_id]
+        await self.chunked_uploads.cleanup_session(upload_id)
 
     def get_backup_manifest(self, zip_path: str) -> dict | None:
         try:
@@ -321,7 +285,7 @@ class BackupService:
             "size": os.path.getsize(zip_path),
         }
 
-    def upload_init(self, data: object) -> dict:
+    def upload_init(self, data: object, *, owner: str = "") -> dict:
         payload = self._payload(data)
         filename = payload.get("filename")
         total_size = payload.get("total_size", 0)
@@ -339,34 +303,22 @@ class BackupService:
                 "via FTP/SFTP and restore it from the backup list."
             )
 
-        total_chunks = math.ceil(total_size / CHUNK_SIZE)
-        upload_id = str(uuid.uuid4())
-        chunk_dir = os.path.join(self.chunks_dir, upload_id)
-        Path(chunk_dir).mkdir(parents=True, exist_ok=True)
-
-        safe_filename = secure_filename(filename)
-        unique_filename = generate_unique_filename(safe_filename)
-        current_time = time.time()
-        self.upload_sessions[upload_id] = {
-            "filename": unique_filename,
-            "original_filename": filename,
-            "total_size": total_size,
-            "total_chunks": total_chunks,
-            "received_chunks": set(),
-            "created_at": current_time,
-            "last_activity": current_time,
-            "chunk_dir": chunk_dir,
-        }
-
-        logger.info(
-            f"初始化分片上传: upload_id={upload_id}, "
-            f"filename={unique_filename}, total_chunks={total_chunks}"
-        )
+        unique_filename = generate_unique_filename(secure_filename(filename))
+        try:
+            session = self.chunked_uploads.init_session(
+                owner=owner,
+                purpose="backup",
+                filename=unique_filename,
+                original_filename=filename,
+                total_size=total_size,
+            )
+        except ChunkedUploadError as exc:
+            raise BackupServiceError(str(exc)) from exc
 
         return {
-            "upload_id": upload_id,
-            "chunk_size": CHUNK_SIZE,
-            "total_chunks": total_chunks,
+            "upload_id": session.id,
+            "chunk_size": session.chunk_size,
+            "total_chunks": session.total_chunks,
             "filename": unique_filename,
         }
 
@@ -376,6 +328,7 @@ class BackupService:
         upload_id: str | None,
         chunk_index_str: str | None,
         chunk_file: Any | None,
+        owner: str = "",
     ) -> dict:
         if not upload_id or chunk_index_str is None:
             raise BackupServiceError("缺少必要参数")
@@ -387,32 +340,13 @@ class BackupService:
 
         if not chunk_file:
             raise BackupServiceError("缺少分片数据")
-        if upload_id not in self.upload_sessions:
-            raise BackupServiceError("上传会话不存在或已过期")
 
-        session = self.upload_sessions[upload_id]
-        if chunk_index < 0 or chunk_index >= session["total_chunks"]:
-            raise BackupServiceError("分片索引超出范围")
-
-        chunk_path = os.path.join(session["chunk_dir"], f"{chunk_index}.part")
         try:
-            await chunk_file.save(chunk_path, max_bytes=CHUNK_SIZE)
-        except UploadTooLargeError as exc:
-            raise BackupServiceError("Chunk exceeds the size limit") from exc
-        session["received_chunks"].add(chunk_index)
-        session["last_activity"] = time.time()
-
-        received_count = len(session["received_chunks"])
-        total_chunks = session["total_chunks"]
-        logger.debug(
-            f"接收分片: upload_id={upload_id}, chunk={chunk_index + 1}/{total_chunks}"
-        )
-
-        return {
-            "received": received_count,
-            "total": total_chunks,
-            "chunk_index": chunk_index,
-        }
+            return await self.chunked_uploads.save_chunk(
+                upload_id, chunk_index, chunk_file, owner=owner
+            )
+        except ChunkedUploadError as exc:
+            raise BackupServiceError(str(exc)) from exc
 
     def mark_backup_as_uploaded(self, zip_path: str) -> None:
         try:
@@ -432,69 +366,48 @@ class BackupService:
         except Exception as exc:
             logger.warning(f"标记备份来源失败: {exc}")
 
-    async def upload_complete(self, data: object) -> dict:
+    async def upload_complete(self, data: object, *, owner: str = "") -> dict:
         payload = self._payload(data)
         upload_id = payload.get("upload_id")
 
         if not upload_id:
             raise BackupServiceError("缺少 upload_id 参数")
-        if upload_id not in self.upload_sessions:
-            raise BackupServiceError("上传会话不存在或已过期")
-
-        session = self.upload_sessions[upload_id]
-        received = session["received_chunks"]
-        total = session["total_chunks"]
-
-        if len(received) != total:
-            missing = set(range(total)) - received
-            raise BackupServiceError(f"分片不完整，缺少: {sorted(missing)[:10]}...")
-
-        chunk_dir = session["chunk_dir"]
-        filename = session["filename"]
-
-        Path(self.backup_dir).mkdir(parents=True, exist_ok=True)
-        output_path = os.path.join(self.backup_dir, filename)
 
         try:
-            with open(output_path, "wb") as outfile:
-                for i in range(total):
-                    chunk_path = os.path.join(chunk_dir, f"{i}.part")
-                    with open(chunk_path, "rb") as chunk_file:
-                        while True:
-                            data_block = chunk_file.read(8192)
-                            if not data_block:
-                                break
-                            outfile.write(data_block)
+            session = self.chunked_uploads.get_session(upload_id, owner=owner)
+            Path(self.backup_dir).mkdir(parents=True, exist_ok=True)
+            output_path = os.path.join(self.backup_dir, session.filename)
+            file_size = await self.chunked_uploads.assemble(
+                upload_id, output_path, owner=owner
+            )
+        except ChunkedUploadError as exc:
+            raise BackupServiceError(str(exc)) from exc
 
-            file_size = os.path.getsize(output_path)
-            if file_size != session["total_size"]:
-                raise BackupServiceError(
-                    f"Merged size ({file_size}) does not match the declared size "
-                    f"({session['total_size']})"
-                )
-            self.mark_backup_as_uploaded(output_path)
-            logger.info(f"分片上传完成: {filename}, size={file_size}, chunks={total}")
-            await self.cleanup_upload_session(upload_id)
+        self.mark_backup_as_uploaded(output_path)
+        logger.info(
+            f"分片上传完成: {session.filename}, size={file_size}, "
+            f"chunks={session.total_chunks}"
+        )
 
-            return {
-                "filename": filename,
-                "original_filename": session["original_filename"],
-                "size": file_size,
-            }
-        except Exception:
-            if os.path.exists(output_path):
-                os.remove(output_path)
-            raise
+        return {
+            "filename": session.filename,
+            "original_filename": session.original_filename,
+            "size": file_size,
+        }
 
-    async def upload_abort(self, data: object) -> tuple[dict | None, str | None]:
+    async def upload_abort(
+        self, data: object, *, owner: str = ""
+    ) -> tuple[dict | None, str | None]:
         payload = self._payload(data)
         upload_id = payload.get("upload_id")
         if not upload_id:
             raise BackupServiceError("缺少 upload_id 参数")
 
-        if upload_id in self.upload_sessions:
-            await self.cleanup_upload_session(upload_id)
-            logger.info(f"取消分片上传: {upload_id}")
+        try:
+            if await self.chunked_uploads.abort(upload_id, owner=owner):
+                logger.info(f"取消分片上传: {upload_id}")
+        except ChunkedUploadError as exc:
+            raise BackupServiceError(str(exc)) from exc
 
         return None, "上传已取消"
 
