@@ -26,9 +26,15 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_backups_path,
     get_astrbot_data_path,
 )
+from astrbot.core.utils.upload import UploadTooLargeError
 
 CHUNK_SIZE = 1024 * 1024
 UPLOAD_EXPIRE_SECONDS = 3600
+# Hard caps against disk exhaustion: a backup is never legitimately larger
+# than this, and the whole-file endpoint is only for small backups (large
+# ones must use the chunked flow).
+MAX_BACKUP_TOTAL_BYTES = 8 * 1024 * 1024 * 1024
+MAX_DIRECT_UPLOAD_BYTES = 128 * 1024 * 1024
 
 
 class BackupServiceError(Exception):
@@ -78,23 +84,6 @@ class BackupService:
     @staticmethod
     def _payload(data: object) -> dict[str, Any]:
         return data if isinstance(data, dict) else {}
-
-    @staticmethod
-    async def _save_upload(file: Any, target_path: str) -> None:
-        if hasattr(file, "save"):
-            result = file.save(target_path)
-            if hasattr(result, "__await__"):
-                await result
-            return
-
-        if hasattr(file, "read"):
-            data = file.read()
-            if hasattr(data, "__await__"):
-                data = await data
-            Path(target_path).write_bytes(data)
-            return
-
-        raise BackupServiceError("无效的上传文件")
 
     @staticmethod
     def _validate_backup_filename(filename: str | None, *, missing: str) -> str:
@@ -315,7 +304,13 @@ class BackupService:
 
         Path(self.backup_dir).mkdir(parents=True, exist_ok=True)
         zip_path = os.path.join(self.backup_dir, unique_filename)
-        await self._save_upload(file, zip_path)
+        try:
+            await file.save(zip_path, max_bytes=MAX_DIRECT_UPLOAD_BYTES)
+        except UploadTooLargeError as exc:
+            raise BackupServiceError(
+                f"Backup file exceeds the size limit ({MAX_DIRECT_UPLOAD_BYTES // (1024**2)} MB); "
+                "use chunked upload instead."
+            ) from exc
 
         logger.info(
             f"上传的备份文件已保存: {unique_filename} (原始名称: {file.filename})"
@@ -337,6 +332,12 @@ class BackupService:
             raise BackupServiceError("请上传 ZIP 格式的备份文件")
         if total_size <= 0:
             raise BackupServiceError("无效的文件大小")
+        if total_size > MAX_BACKUP_TOTAL_BYTES:
+            raise BackupServiceError(
+                f"Backup file exceeds the size limit ({MAX_BACKUP_TOTAL_BYTES // (1024**3)} GB). "
+                "You can copy it into the backups folder of the data directory "
+                "via FTP/SFTP and restore it from the backup list."
+            )
 
         total_chunks = math.ceil(total_size / CHUNK_SIZE)
         upload_id = str(uuid.uuid4())
@@ -394,7 +395,10 @@ class BackupService:
             raise BackupServiceError("分片索引超出范围")
 
         chunk_path = os.path.join(session["chunk_dir"], f"{chunk_index}.part")
-        await self._save_upload(chunk_file, chunk_path)
+        try:
+            await chunk_file.save(chunk_path, max_bytes=CHUNK_SIZE)
+        except UploadTooLargeError as exc:
+            raise BackupServiceError("Chunk exceeds the size limit") from exc
         session["received_chunks"].add(chunk_index)
         session["last_activity"] = time.time()
 
@@ -463,6 +467,11 @@ class BackupService:
                             outfile.write(data_block)
 
             file_size = os.path.getsize(output_path)
+            if file_size != session["total_size"]:
+                raise BackupServiceError(
+                    f"Merged size ({file_size}) does not match the declared size "
+                    f"({session['total_size']})"
+                )
             self.mark_backup_as_uploaded(output_path)
             logger.info(f"分片上传完成: {filename}, size={file_size}, chunks={total}")
             await self.cleanup_upload_session(upload_id)

@@ -5,6 +5,7 @@ import os
 import re
 import zipfile
 from datetime import datetime
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -27,8 +28,13 @@ from astrbot.core.config.default import VERSION
 from astrbot.core.db.po import (
     ConversationV2,
 )
+from astrbot.core.utils.upload import UploadTooLargeError
 from astrbot.core.utils.version_comparator import VersionComparator
 from astrbot.dashboard.services.backup_service import (
+    CHUNK_SIZE,
+    MAX_BACKUP_TOTAL_BYTES,
+    BackupService,
+    BackupServiceError,
     generate_unique_filename,
     secure_filename,
 )
@@ -1093,3 +1099,90 @@ class TestBackupIntegration:
             # 读取主数据库
             main_db = json.loads(zf.read("databases/main_db.json"))
             assert "platform_stats" in main_db
+
+
+class _StubUploadFile:
+    """模拟 adapter 风格 save() 契约的上传文件对象"""
+
+    def __init__(self, data: bytes):
+        self._data = data
+
+    async def save(self, destination, *, max_bytes=None) -> int:
+        if max_bytes is not None and len(self._data) > max_bytes:
+            raise UploadTooLargeError(max_bytes)
+        Path(destination).write_bytes(self._data)
+        return len(self._data)
+
+
+class TestBackupUploadLimits:
+    """备份上传大小限制测试"""
+
+    @pytest.fixture
+    def backup_service(self, tmp_path):
+        """创建使用临时目录的 BackupService"""
+        service = BackupService(db=MagicMock(), core_lifecycle=MagicMock())
+        service.backup_dir = str(tmp_path / "backups")
+        service.chunks_dir = str(tmp_path / "backups" / ".chunks")
+        return service
+
+    def test_upload_init_rejects_oversized_total(self, backup_service):
+        """声明总大小超过上限时拒绝初始化"""
+        with pytest.raises(BackupServiceError, match="size limit"):
+            backup_service.upload_init(
+                {"filename": "b.zip", "total_size": MAX_BACKUP_TOTAL_BYTES + 1}
+            )
+
+    @pytest.mark.asyncio
+    async def test_upload_chunk_rejects_oversized_chunk(self, backup_service):
+        """超过 CHUNK_SIZE 的分片被拒绝且不产生残留文件"""
+        session = backup_service.upload_init(
+            {"filename": "b.zip", "total_size": CHUNK_SIZE}
+        )
+        big_chunk = _StubUploadFile(b"x" * (CHUNK_SIZE + 1))
+
+        with pytest.raises(BackupServiceError, match="Chunk exceeds the size limit"):
+            await backup_service.upload_chunk(
+                upload_id=session["upload_id"],
+                chunk_index_str="0",
+                chunk_file=big_chunk,
+            )
+
+        await backup_service.cleanup_upload_session(session["upload_id"])
+
+    @pytest.mark.asyncio
+    async def test_upload_chunk_accepts_small_chunk(self, backup_service):
+        """正常大小的分片可以上传"""
+        session = backup_service.upload_init({"filename": "b.zip", "total_size": 100})
+        result = await backup_service.upload_chunk(
+            upload_id=session["upload_id"],
+            chunk_index_str="0",
+            chunk_file=_StubUploadFile(b"x" * 100),
+        )
+        assert result["received"] == 1
+        assert result["total"] == 1
+
+        await backup_service.cleanup_upload_session(session["upload_id"])
+
+    @pytest.mark.asyncio
+    async def test_upload_complete_rejects_size_mismatch(self, backup_service):
+        """合并后大小与声明大小不一致时拒绝完成"""
+        declared = CHUNK_SIZE + 100
+        session = backup_service.upload_init(
+            {"filename": "b.zip", "total_size": declared}
+        )
+        # 第二片故意少写 50 字节
+        await backup_service.upload_chunk(
+            upload_id=session["upload_id"],
+            chunk_index_str="0",
+            chunk_file=_StubUploadFile(b"x" * CHUNK_SIZE),
+        )
+        await backup_service.upload_chunk(
+            upload_id=session["upload_id"],
+            chunk_index_str="1",
+            chunk_file=_StubUploadFile(b"x" * 50),
+        )
+
+        with pytest.raises(BackupServiceError, match="does not match"):
+            await backup_service.upload_complete({"upload_id": session["upload_id"]})
+
+        await backup_service.cleanup_upload_session(session["upload_id"])

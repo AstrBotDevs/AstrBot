@@ -18,6 +18,7 @@ from astrbot.dashboard.services.backup_service import (
 )
 
 from .auth import AuthContext, require_dashboard_user, require_scope
+from .multipart import UploadFileAdapter
 
 router = APIRouter(tags=["Backups"])
 legacy_router = APIRouter(
@@ -151,7 +152,10 @@ async def upload_backup(
     _auth: AuthContext = Depends(require_system_scope),
     service: BackupService = Depends(get_service),
 ):
-    return await _run(lambda: service.upload_backup(file), prefix="上传备份文件失败")
+    return await _run(
+        lambda: service.upload_backup(UploadFileAdapter(file)),
+        prefix="上传备份文件失败",
+    )
 
 
 @legacy_router.post("/upload")
@@ -160,7 +164,10 @@ async def upload_dashboard_backup(
     _username: str = Depends(require_dashboard_user),
     service: BackupService = Depends(get_service),
 ):
-    return await _run(lambda: service.upload_backup(file), prefix="上传备份文件失败")
+    return await _run(
+        lambda: service.upload_backup(UploadFileAdapter(file)),
+        prefix="上传备份文件失败",
+    )
 
 
 @router.post("/backups/upload/init")
@@ -199,7 +206,7 @@ async def upload_backup_chunk(
         lambda: service.upload_chunk(
             upload_id=upload_id,
             chunk_index_str=chunk_index,
-            chunk_file=chunk,
+            chunk_file=UploadFileAdapter(chunk),
         ),
         prefix="上传分片失败",
     )
@@ -217,7 +224,7 @@ async def upload_dashboard_backup_chunk(
         lambda: service.upload_chunk(
             upload_id=upload_id,
             chunk_index_str=chunk_index,
-            chunk_file=chunk,
+            chunk_file=UploadFileAdapter(chunk),
         ),
         prefix="上传分片失败",
     )
