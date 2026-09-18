@@ -4645,6 +4645,22 @@ paths:
         "200":
           $ref: "#/components/responses/Ok"
 
+  /api/v1/backups/upload/status:
+    post:
+      tags: [Backups]
+      summary: Query chunked backup upload status
+      operationId: statusBackupUpload
+      x-astrbot-scope: system
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BackupUploadSessionRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
   /api/v1/backups/tasks/{task_id}:
     get:
       tags: [Backups]

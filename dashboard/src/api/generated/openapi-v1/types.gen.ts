@@ -3448,6 +3448,14 @@ export type AbortBackupUploadResponse = (SuccessEnvelope);
 
 export type AbortBackupUploadError = unknown;
 
+export type StatusBackupUploadData = {
+    body: BackupUploadSessionRequest;
+};
+
+export type StatusBackupUploadResponse = (SuccessEnvelope);
+
+export type StatusBackupUploadError = unknown;
+
 export type GetBackupProgressData = {
     path: {
         task_id: string;
