@@ -79,7 +79,11 @@ def test_spreadsheet_skill_keeps_a_line_break_inside_a_quoted_cell(
 ) -> None:
     """A cell may span lines, and the break is part of the value."""
     source = tmp_path / "notes.csv"
-    source.write_text('ID,Note\n1,"line one\nline two"\n2,plain\n', encoding="utf-8")
+    # newline="" so the file holds the bytes written on every platform: the default
+    # translation would make this CRLF on Windows, and the reader preserves what it finds.
+    source.write_text(
+        'ID,Note\n1,"line one\nline two"\n2,plain\n', encoding="utf-8", newline=""
+    )
     output = tmp_path / "notes.xlsx"
 
     inspected = _run_script(SPREADSHEET_SCRIPTS / "inspect_workbook.py", source)
@@ -96,6 +100,31 @@ def test_spreadsheet_skill_keeps_a_line_break_inside_a_quoted_cell(
     ]
     workbook = load_workbook(output)
     assert workbook.active["B2"].value == "line one\nline two"
+    workbook.close()
+
+
+def test_spreadsheet_skill_keeps_a_crlf_line_break_inside_a_quoted_cell(
+    tmp_path: Path,
+) -> None:
+    """A CRLF break inside a cell is part of the value too, and is not translated."""
+    source = tmp_path / "crlf.csv"
+    source.write_text(
+        'ID,Note\r\n1,"line one\r\nline two"\r\n2,plain\r\n', encoding="utf-8", newline=""
+    )
+    output = tmp_path / "crlf.xlsx"
+
+    inspected = _run_script(SPREADSHEET_SCRIPTS / "inspect_workbook.py", source)
+    converted = _run_script(SPREADSHEET_SCRIPTS / "csv_to_xlsx.py", source, output)
+
+    assert inspected.returncode == 0, inspected.stderr
+    assert converted.returncode == 0, converted.stderr
+    assert json.loads(inspected.stdout)["sample"] == [
+        ["ID", "Note"],
+        ["1", "line one\r\nline two"],
+        ["2", "plain"],
+    ]
+    workbook = load_workbook(output)
+    assert workbook.active["B2"].value == "line one\r\nline two"
     workbook.close()
 
 
