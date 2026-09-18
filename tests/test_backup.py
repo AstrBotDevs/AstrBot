@@ -1230,3 +1230,61 @@ class TestBackupUploadLimits:
         assert result["received"] == 1
 
         await backup_service.cleanup_upload_session(session["upload_id"])
+
+    @pytest.mark.asyncio
+    async def test_upload_status_reports_progress(self, backup_service):
+        """状态查询返回已收分片，支持乱序后的续传定位"""
+        session = backup_service.upload_init(
+            {"filename": "b.zip", "total_size": CHUNK_SIZE * 2}, owner="tester"
+        )
+        # 故意乱序：只传第 1 片（索引 1）
+        await backup_service.upload_chunk(
+            upload_id=session["upload_id"],
+            chunk_index_str="1",
+            chunk_file=_StubUploadFile(b"x" * CHUNK_SIZE),
+            owner="tester",
+        )
+
+        status = backup_service.upload_status(
+            {"upload_id": session["upload_id"]}, owner="tester"
+        )
+        assert status["received_chunks"] == [1]
+        assert status["total_chunks"] == 2
+        assert status["chunk_size"] == CHUNK_SIZE
+        assert 0 < status["expires_in"] <= 3600
+
+        await backup_service.cleanup_upload_session(session["upload_id"])
+
+    def test_upload_status_bound_to_owner(self, backup_service):
+        """状态查询同样绑定 owner，且不能探测他人会话"""
+        session = backup_service.upload_init(
+            {"filename": "b.zip", "total_size": 100}, owner="alice"
+        )
+
+        with pytest.raises(BackupServiceError, match="not found or expired"):
+            backup_service.upload_status(
+                {"upload_id": session["upload_id"]}, owner="mallory"
+            )
+        with pytest.raises(BackupServiceError, match="not found or expired"):
+            backup_service.upload_status({"upload_id": "no-such-id"}, owner="alice")
+
+    def test_upload_status_does_not_extend_lifetime(self, backup_service):
+        """查询状态不得刷新 last_activity，否则轮询会让会话永不过期"""
+        session = backup_service.upload_init(
+            {"filename": "b.zip", "total_size": 100}, owner="alice"
+        )
+        inner = backup_service.chunked_uploads.get_session(
+            session["upload_id"], owner="alice"
+        )
+        inner.last_activity -= 100  # 模拟会话已经闲置了 100 秒
+
+        status = backup_service.upload_status(
+            {"upload_id": session["upload_id"]}, owner="alice"
+        )
+        assert status["expires_in"] <= 3600 - 100 + 1
+        assert (
+            backup_service.chunked_uploads.get_session(
+                session["upload_id"], owner="alice"
+            ).last_activity
+            == inner.last_activity
+        )

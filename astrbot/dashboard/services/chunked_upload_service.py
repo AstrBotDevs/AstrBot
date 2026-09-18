@@ -170,6 +170,25 @@ class ChunkedUploadService:
             "chunk_index": chunk_index,
         }
 
+    def session_status(self, upload_id: str, *, owner: str | None = None) -> dict:
+        """Return resumable progress for a session.
+
+        Read-only on purpose: it must not refresh ``last_activity``, or
+        polling this endpoint would anchor a session (and its on-disk
+        chunks) alive forever, defeating the expiry mechanism.
+
+        Raises:
+            ChunkedUploadError: Session unknown, expired or owned by someone else.
+        """
+        session = self.get_session(upload_id, owner=owner)
+        remaining = self.expire_seconds - (time.time() - session.last_activity)
+        return {
+            "received_chunks": sorted(session.received_chunks),
+            "total_chunks": session.total_chunks,
+            "chunk_size": session.chunk_size,
+            "expires_in": max(0, int(remaining)),
+        }
+
     async def assemble(
         self,
         upload_id: str,

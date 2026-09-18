@@ -411,6 +411,17 @@ class BackupService:
 
         return None, "上传已取消"
 
+    def upload_status(self, data: object, *, owner: str = "") -> dict:
+        payload = self._payload(data)
+        upload_id = payload.get("upload_id")
+        if not upload_id:
+            raise BackupServiceError("缺少 upload_id 参数")
+
+        try:
+            return self.chunked_uploads.session_status(upload_id, owner=owner)
+        except ChunkedUploadError as exc:
+            raise BackupServiceError(str(exc)) from exc
+
     def check_backup(self, data: object) -> dict:
         payload = self._payload(data)
         filename = self._validate_backup_filename(

@@ -280,6 +280,30 @@ async def abort_dashboard_backup_upload(
     )
 
 
+@router.post("/backups/upload/status")
+async def status_backup_upload(
+    payload: BackupUploadSessionRequest,
+    auth: AuthContext = Depends(require_system_scope),
+    service: BackupService = Depends(get_service),
+):
+    return await _run(
+        lambda: service.upload_status(_model_dict(payload), owner=auth.username),
+        prefix="查询上传状态失败",
+    )
+
+
+@legacy_router.post("/upload/status")
+async def status_dashboard_backup_upload(
+    payload: BackupUploadSessionRequest,
+    username: str = Depends(require_dashboard_user),
+    service: BackupService = Depends(get_service),
+):
+    return await _run(
+        lambda: service.upload_status(_model_dict(payload), owner=username),
+        prefix="查询上传状态失败",
+    )
+
+
 @router.get("/backups/tasks/{task_id}")
 async def get_backup_progress(
     task_id: str,
