@@ -7,6 +7,8 @@ from typing import Any
 from fastapi import Request
 from starlette.datastructures import UploadFile as StarletteUploadFile
 
+from astrbot.core.utils.upload import save_upload_stream
+
 
 class UploadFileAdapter:
     def __init__(self, upload_file: StarletteUploadFile) -> None:
@@ -23,18 +25,12 @@ class UploadFileAdapter:
         except (TypeError, ValueError):
             return None
 
-    async def save(self, destination: str | Path) -> None:
-        path = Path(destination)
-        try:
-            await self._upload_file.seek(0)
-        except Exception:
-            pass
-        with path.open("wb") as output:
-            while True:
-                chunk = await self._upload_file.read(1024 * 1024)
-                if not chunk:
-                    break
-                output.write(chunk)
+    async def save(
+        self, destination: str | Path, *, max_bytes: int | None = None
+    ) -> int:
+        return await save_upload_stream(
+            self._upload_file, destination, max_bytes=max_bytes
+        )
 
 
 class MultiDict:

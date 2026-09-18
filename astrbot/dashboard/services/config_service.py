@@ -36,6 +36,7 @@ from astrbot.core.utils.totp import (
     set_pending_totp_secret,
     verify_configured_2fa_code,
 )
+from astrbot.core.utils.upload import UploadTooLargeError
 from astrbot.core.utils.webhook_utils import ensure_platform_webhook_config
 from astrbot.dashboard.async_utils import run_maybe_async
 from astrbot.dashboard.responses import ApiError
@@ -1238,9 +1239,9 @@ class ConfigFileService:
                 continue
 
             save_path.parent.mkdir(parents=True, exist_ok=True)
-            await file.save(str(save_path))
-            if save_path.is_file() and save_path.stat().st_size > MAX_FILE_BYTES:
-                save_path.unlink()
+            try:
+                await file.save(str(save_path), max_bytes=MAX_FILE_BYTES)
+            except UploadTooLargeError:
                 errors.append(f"File too large: {filename}")
                 continue
             uploaded.append(rel_path)

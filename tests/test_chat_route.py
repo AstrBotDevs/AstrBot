@@ -534,11 +534,16 @@ async def test_save_uploaded_file_rejects_oversized_saved_file(
         content_type = "application/octet-stream"
         content_length = None
 
-        async def save(self, path):
+        async def save(self, path, *, max_bytes=None):
             saved = Path(path)
             saved.write_bytes(b"x")
             with saved.open("rb+") as f:
                 f.truncate(chat_service.MAX_UPLOAD_FILE_SIZE_BYTES + 1)
+            # Mirror save_upload_stream: enforce the cap mid-write and
+            # remove the partial file on overflow.
+            if max_bytes is not None and saved.stat().st_size > max_bytes:
+                saved.unlink()
+                raise chat_service.UploadTooLargeError(max_bytes)
 
     with pytest.raises(ChatServiceError, match="File too large"):
         await chat_service_instance.save_uploaded_file(FakeUpload())

@@ -27,14 +27,104 @@ from astrbot.dashboard.asgi_runtime import (
     FastAPIAppAdapter,
 )
 from astrbot.dashboard.responses import error
+from astrbot.dashboard.services.backup_service import CHUNK_SIZE
+from astrbot.dashboard.services.chat_service import MAX_UPLOAD_FILE_SIZE_BYTES
+from astrbot.dashboard.services.config_service import MAX_FILE_BYTES
 
 from .api.app import create_dashboard_asgi_app
 from .plugin_page_auth import PluginPageAuth
 from .services.auth_service import DASHBOARD_JWT_COOKIE_NAME
 
+try:  # Mirror starlette.requests so media type detection matches the parser.
+    from python_multipart.multipart import parse_options_header
+except ImportError:  # pragma: no cover
+    try:
+        from multipart.multipart import parse_options_header
+    except ImportError:
+        parse_options_header = None
+
 if os.name == "nt":
     # Windows 的 mimetypes 会把 .svg 映射成非标准的 image/svg,这里强制覆盖为标准类型
     mimetypes.add_type("image/svg+xml", ".svg", strict=True)
+
+# Multipart framing (boundaries, part headers) rides on top of the file
+# payload, so whole-file upload routes get slack beyond the file size limit;
+# otherwise a file exactly at the limit would be rejected with 413.
+_MULTIPART_OVERHEAD_BYTES = 1024 * 1024
+
+# Per-route request body limits overriding the default MAX_CONTENT_LENGTH.
+# More specific prefixes must come first. Routes not listed here fall back
+# to the default; requests without a Content-Length header pass through and
+# are bounded by the per-endpoint max_bytes checks at save time.
+_BODY_LIMIT_OVERRIDES: tuple[tuple[str, int], ...] = (
+    ("/api/v1/backups/upload/chunk", CHUNK_SIZE * 2),
+    ("/api/backup/upload/chunk", CHUNK_SIZE * 2),
+    ("/api/v1/files/upload/chunk", CHUNK_SIZE * 2),
+    ("/api/v1/files", MAX_UPLOAD_FILE_SIZE_BYTES + _MULTIPART_OVERHEAD_BYTES),
+    (
+        "/api/chat/post_file",
+        MAX_UPLOAD_FILE_SIZE_BYTES + _MULTIPART_OVERHEAD_BYTES,
+    ),
+    ("/api/v1/plugins/config-files", MAX_FILE_BYTES + _MULTIPART_OVERHEAD_BYTES),
+    (
+        "/api/v1/knowledge-bases/",
+        MAX_UPLOAD_FILE_SIZE_BYTES + _MULTIPART_OVERHEAD_BYTES,
+    ),
+)
+
+
+# Methods with request-body semantics; the 411 stopgap only applies to
+# these, since form parsing (and its disk spooling) cannot trigger
+# for body-less methods like GET.
+_BODY_METHODS = frozenset({"POST", "PUT", "PATCH"})
+
+
+def _check_body_limit(
+    path: str,
+    content_length: int | None,
+    content_type: str,
+    *,
+    method: str = "POST",
+    default_limit: int,
+) -> tuple[int, str] | None:
+    """Decide whether an /api request body must be rejected up front.
+
+    Returns:
+        A (status_code, message) rejection, or None to pass through.
+
+    Note:
+        The 411 rule is a stopgap scoped to multipart uploads on methods
+        with body semantics: their form parsing spools large bodies to
+        disk before any per-file size check can run, so they must declare
+        a length that can be bounded before parsing. Body-less methods
+        (GET etc.) never trigger form parsing and pass even with a bogus
+        multipart Content-Type header. Other lengthless bodies are still
+        bounded only at save time; closing that gap fully requires
+        counting bytes as they arrive, which is out of scope here.
+    """
+    if not path.startswith("/api"):
+        return None
+    if content_length is None:
+        if method not in _BODY_METHODS:
+            return None
+        # Identify the media type by the same rule the form parser uses:
+        # parse_options_header strips surrounding whitespace, so a leading-
+        # space Content-Type that startswith() would miss is still caught.
+        media_type = (
+            parse_options_header(content_type)[0] if parse_options_header else b""
+        )
+        if media_type == b"multipart/form-data":
+            return 411, "Content-Length header is required for uploads"
+        return None
+    limit = default_limit
+    for prefix, route_limit in _BODY_LIMIT_OVERRIDES:
+        if path.startswith(prefix):
+            limit = route_limit
+            break
+    if content_length > limit:
+        return 413, f"Request body exceeds the {limit} bytes limit"
+    return None
+
 
 _RATE_LIMITED_ENDPOINTS: frozenset = frozenset(
     {
@@ -208,6 +298,27 @@ class AstrBotDashboard:
             auth_response = await self.auth_middleware(request_)
             if auth_response is not None:
                 return auth_response
+            return await call_next(request_)
+
+        @self.asgi_app.middleware("http")
+        async def dashboard_body_limit_middleware(request_, call_next):
+            # Registered after the auth middleware so it runs outermost and
+            # can reject oversized bodies before any parsing happens.
+            raw_length = request_.headers.get("content-length")
+            try:
+                content_length = int(raw_length) if raw_length else None
+            except ValueError:
+                content_length = None
+            rejection = _check_body_limit(
+                request_.url.path,
+                content_length,
+                request_.headers.get("content-type", ""),
+                method=request_.method,
+                default_limit=self.app.config["MAX_CONTENT_LENGTH"],
+            )
+            if rejection is not None:
+                status_code, message = rejection
+                return JSONResponse(error(message), status_code=status_code)
             return await call_next(request_)
 
         self.shutdown_event = shutdown_event

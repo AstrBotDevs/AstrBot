@@ -209,6 +209,7 @@
       "restartNow": "立即重启",
       "failed": "导入失败",
       "retry": "重试",
+      "resumeUpload": "继续上传",
       "version": {
         "backupVersion": "备份版本",
         "currentVersion": "当前版本",
