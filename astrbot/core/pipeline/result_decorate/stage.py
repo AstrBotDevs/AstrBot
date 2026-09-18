@@ -37,6 +37,7 @@ class ResultDecorateStage(Stage):
             self.t2i_word_threshold = 150
         self.t2i_strategy = ctx.astrbot_config["t2i_strategy"]
         self.t2i_use_network = self.t2i_strategy == "remote"
+        self.t2i_endpoint = ctx.astrbot_config.get("t2i_endpoint", "")
         self.t2i_active_template = ctx.astrbot_config["t2i_active_template"]
 
         self.forward_threshold = ctx.astrbot_config["platform_settings"][
@@ -381,7 +382,9 @@ class ResultDecorateStage(Stage):
                     try:
                         url = await html_renderer.render_t2i(
                             plain_str,
-                            return_url=True,
+                            # Materialize configured self-hosted renderers before
+                            # passing the result to the generic media pipeline.
+                            return_url=not bool(self.t2i_endpoint),
                             use_network=self.t2i_use_network,
                             template_name=self.t2i_active_template,
                         )
@@ -402,10 +405,16 @@ class ResultDecorateStage(Stage):
                             self.ctx.astrbot_config["t2i_use_file_service"]
                             and self.ctx.astrbot_config["callback_api_base"]
                         ):
-                            token = await file_token_service.register_file(url)
-                            url = f"{self.ctx.astrbot_config['callback_api_base']}/api/file/{token}"
-                            logger.debug(f"Registered: {url}")
-                            result.chain = [Image.fromURL(url)]
+                            local_path = url
+                            token = await file_token_service.register_file(local_path)
+                            file_service_url = f"{self.ctx.astrbot_config['callback_api_base']}/api/file/{token}"
+                            logger.debug(f"Registered: {file_service_url}")
+                            result.chain = [
+                                Image.fromFileSystem(
+                                    local_path,
+                                    url=file_service_url,
+                                ),
+                            ]
                         else:
                             result.chain = [Image.fromFileSystem(url)]
 

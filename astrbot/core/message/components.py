@@ -539,7 +539,7 @@ class Image(BaseMessageComponent):
             str: 图片的本地路径，以绝对路径表示。
 
         """
-        url = self.url or self.file
+        url = self.path or self.url or self.file
         if not url:
             raise ValueError("No valid file or URL provided")
         return await MediaResolver(url, media_type="image").to_path()
@@ -552,7 +552,7 @@ class Image(BaseMessageComponent):
 
         """
         # convert to base64
-        url = self.url or self.file
+        url = self.path or self.url or self.file
         if not url:
             raise ValueError("No valid file or URL provided")
         return await MediaResolver(url, media_type="image").to_base64()
