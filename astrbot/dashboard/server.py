@@ -46,6 +46,7 @@ if os.name == "nt":
 _BODY_LIMIT_OVERRIDES: tuple[tuple[str, int], ...] = (
     ("/api/v1/backups/upload/chunk", CHUNK_SIZE * 2),
     ("/api/backup/upload/chunk", CHUNK_SIZE * 2),
+    ("/api/v1/files/upload/chunk", CHUNK_SIZE * 2),
     ("/api/v1/files", MAX_UPLOAD_FILE_SIZE_BYTES),
     ("/api/chat/post_file", MAX_UPLOAD_FILE_SIZE_BYTES),
     ("/api/v1/plugins/config-files", MAX_FILE_BYTES),

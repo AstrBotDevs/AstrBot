@@ -42,6 +42,7 @@ class UploadSession:
     total_chunks: int
     chunk_size: int
     chunk_dir: Path
+    meta: dict = field(default_factory=dict)
     received_chunks: set[int] = field(default_factory=set)
     created_at: float = 0.0
     last_activity: float = 0.0
@@ -71,6 +72,7 @@ class ChunkedUploadService:
         filename: str,
         original_filename: str,
         total_size: int,
+        meta: dict | None = None,
     ) -> UploadSession:
         """Create a session and its chunk directory.
 
@@ -81,6 +83,8 @@ class ChunkedUploadService:
             original_filename: Name as reported by the client.
             total_size: Declared total size in bytes; the business validates
                 any upper bound before calling, so only sanity is checked here.
+            meta: Opaque business metadata carried with the session (e.g. the
+                client-reported content type) and read back at assembly time.
 
         Returns:
             The created session.
@@ -105,6 +109,7 @@ class ChunkedUploadService:
             total_chunks=math.ceil(total_size / self.chunk_size),
             chunk_size=self.chunk_size,
             chunk_dir=chunk_dir,
+            meta=meta or {},
             created_at=now,
             last_activity=now,
         )
