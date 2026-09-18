@@ -192,7 +192,7 @@ class _FakeZipArchive:
             )
         return b""
 
-    def extractall(self, target_dir: str) -> None:  # noqa: ARG002
+    def extractall(self, target_dir: str, filter=None) -> None:  # noqa: ARG002
         return None
 
 

@@ -17,6 +17,28 @@ from astrbot.core.utils.version_comparator import VersionComparator
 __all__ = ["ReleaseInfo"]
 
 
+def _zip_slip_filter(member: zipfile.ZipInfo, path: str | bytes) -> zipfile.ZipInfo:
+    """Reject zip members that would escape the destination directory (CWE-22).
+
+    Mirrors the behaviour of ``zipfile.ZipFile.extractall(filter="data")`` but is
+    written explicitly so the safety check stays consistent across Python 3.12
+    and newer minor releases and is easy to unit test.
+    """
+
+    base = os.path.abspath(path)
+    target = os.path.abspath(os.path.join(base, member.filename))
+    try:
+        common = os.path.commonpath([base, target])
+    except ValueError:
+        # Raised when paths live on different drives on Windows.
+        common = ""
+    if common != base:
+        raise ValueError(
+            f"Refusing zip member that escapes destination: {member.filename!r}"
+        )
+    return member
+
+
 class ReleaseInfo:
     """Describe a repository release exposed by an updater.
 
@@ -315,7 +337,7 @@ class _RepoZipUpdater:
         ensure_dir(target_dir)
         with zipfile.ZipFile(zip_path, "r") as z:
             update_dir = self._resolve_archive_root_dir(z.namelist())
-            z.extractall(target_dir)
+            z.extractall(target_dir, filter=_zip_slip_filter)
         logger.debug(f"Finished extracting archive: {zip_path}")
 
         self._finalize_extracted_archive(zip_path, target_dir, update_dir)
