@@ -1366,6 +1366,9 @@ defineExpose({
   left: 52px;
   right: 10px;
   bottom: 3px;
+  /* v-progress-linear ships width:100%, which would override the right
+     offset in absolute positioning and clip the bar at the card edge. */
+  width: auto;
 }
 
 .fade-in {
