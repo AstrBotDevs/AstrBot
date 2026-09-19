@@ -146,6 +146,79 @@ class ResolvedMediaData:
         return f"data:{self.mime_type};base64,{self.base64_data}"
 
 
+IMAGE_PROVIDER_SUPPORTED_MIME_TYPES = frozenset(
+    {
+        "image/gif",
+        "image/jpeg",
+        "image/png",
+    }
+)
+
+
+def normalize_image_for_provider(
+    image_data: ResolvedMediaData | None,
+    supported_mimes: set[str] | frozenset[str] | None = None,
+) -> ResolvedMediaData | None:
+    """Normalize image bytes to a MIME type accepted by a vision provider.
+
+    Args:
+        image_data: Resolved image bytes and metadata.
+        supported_mimes: MIME types accepted by the provider. Defaults to JPEG,
+            PNG, and GIF.
+
+    Returns:
+        Validated image data with corrected MIME metadata, or converted image data
+        when the source format is not supported.
+    """
+    if image_data is None:
+        return None
+
+    supported = supported_mimes or IMAGE_PROVIDER_SUPPORTED_MIME_TYPES
+    if image_data.mime_type in supported:
+        return image_data
+
+    raw = image_data.to_bytes()
+    with PILImage.open(io.BytesIO(raw)) as image:
+        actual_mime = {
+            "GIF": "image/gif",
+            "JPEG": "image/jpeg",
+            "PNG": "image/png",
+            "WEBP": "image/webp",
+        }.get(str(image.format or "").upper())
+        if actual_mime in supported:
+            return ResolvedMediaData(
+                base64_data=image_data.base64_data,
+                mime_type=actual_mime,
+                format=image_data.format,
+            )
+
+        has_alpha = image.mode in {"RGBA", "LA", "PA"} or "transparency" in image.info
+        if has_alpha and "image/png" in supported:
+            output_format = "PNG"
+            output_mime = "image/png"
+            converted = image.convert("RGBA")
+        elif "image/jpeg" in supported:
+            output_format = "JPEG"
+            output_mime = "image/jpeg"
+            converted = image.convert("RGB")
+        elif "image/png" in supported:
+            output_format = "PNG"
+            output_mime = "image/png"
+            converted = image.convert("RGB")
+        else:
+            return None
+
+        try:
+            output = io.BytesIO()
+            converted.save(output, format=output_format)
+            return ResolvedMediaData(
+                base64_data=base64.b64encode(output.getvalue()).decode("utf-8"),
+                mime_type=output_mime,
+            )
+        finally:
+            converted.close()
+
+
 @dataclass(slots=True)
 class _LocalMediaFile:
     path: Path

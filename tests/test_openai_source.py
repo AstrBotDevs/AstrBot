@@ -1165,6 +1165,30 @@ async def test_resolve_image_part_preserves_base64_png_mime_type():
 
 
 @pytest.mark.asyncio
+async def test_resolve_image_part_normalizes_webp_to_jpeg():
+    provider = _make_provider()
+    try:
+        image_buffer = BytesIO()
+        PILImage.new("RGB", (2, 2), (255, 0, 0)).save(
+            image_buffer,
+            format="WEBP",
+        )
+        image_base64 = base64.b64encode(image_buffer.getvalue()).decode("ascii")
+
+        image_part = await provider._resolve_image_part(f"base64://{image_base64}")
+
+        assert image_part is not None
+        image_url = image_part["image_url"]["url"]
+        assert image_url.startswith("data:image/jpeg;base64,")
+        with PILImage.open(
+            BytesIO(base64.b64decode(image_url.split(",", 1)[1]))
+        ) as image:
+            assert image.format == "JPEG"
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
 async def test_prepare_chat_payload_materializes_context_localhost_file_uri_image_urls(
     tmp_path,
 ):

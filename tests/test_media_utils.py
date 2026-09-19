@@ -228,6 +228,41 @@ def test_detect_image_mime_type_sniffs_common_headers():
     )
 
 
+def test_normalize_image_for_provider_converts_webp_bytes():
+    from PIL import Image as PILImage
+
+    image_buffer = BytesIO()
+    PILImage.new("RGB", (2, 2), (255, 0, 0)).save(image_buffer, format="WEBP")
+    image_data = media_utils.ResolvedMediaData(
+        base64_data=base64.b64encode(image_buffer.getvalue()).decode("ascii"),
+        mime_type="image/webp",
+    )
+
+    normalized = media_utils.normalize_image_for_provider(image_data)
+
+    assert normalized is not None
+    assert normalized.mime_type == "image/jpeg"
+    with PILImage.open(BytesIO(normalized.to_bytes())) as image:
+        assert image.format == "JPEG"
+
+
+def test_normalize_image_for_provider_preserves_png_bytes():
+    from PIL import Image as PILImage
+
+    image_buffer = BytesIO()
+    PILImage.new("RGB", (2, 2), (255, 0, 0)).save(image_buffer, format="PNG")
+    image_data = media_utils.ResolvedMediaData(
+        base64_data=base64.b64encode(image_buffer.getvalue()).decode("ascii"),
+        mime_type="image/png",
+    )
+
+    normalized = media_utils.normalize_image_for_provider(image_data)
+
+    assert normalized is not None
+    assert normalized.mime_type == "image/png"
+    assert normalized.base64_data == image_data.base64_data
+
+
 def test_detect_image_mime_type_returns_default_for_unknown_input():
     """Unknown or empty headers fall back to the provided default."""
     assert (
