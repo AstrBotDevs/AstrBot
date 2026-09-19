@@ -33,7 +33,9 @@ class ProviderGSVTTS(TTSProvider):
 
         # TTS 请求的默认参数，移除前缀gsv_
         self.default_params: dict = {
-            key.removeprefix("gsv_"): str(value).lower()
+            key.removeprefix("gsv_"): (
+                str(value).lower() if isinstance(value, bool) else str(value)
+            )
             for key, value in provider_config.get("gsv_default_parms", {}).items()
         }
         self.timeout = provider_config.get("timeout", 60)
