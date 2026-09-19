@@ -92,6 +92,19 @@
     "title": "プロバイダータイプ"
   },
   "providerSources": {
+    "website": "公式サイト",
+    "setupGuide": "接続ガイド",
+    "selector": {
+      "ssycloud": "SSYCloud",
+      "title": "モデルプロバイダーを追加",
+      "sponsors": "スポンサー",
+      "sponsorInfoTitle": "AstrBot のスポンサー",
+      "sponsorInfoBody": "AstrBot は無料のオープンソースプロジェクトで、スポンサーの支援によって運営を維持しています。スポンサーが提供するサービスを通じてモデルを利用すると、私たちが少額の収益を得る場合があります。これらのサービスの利用を通じて、私たちの活動を応援していただけると幸いです。",
+      "providers": "プロバイダー",
+      "search": "検索",
+      "clearSearch": "検索をクリア",
+      "noResults": "一致するプロバイダーがありません"
+    },
     "title": "プロバイダーソース",
     "add": "追加",
     "delete": "プロバイダーソースを削除",

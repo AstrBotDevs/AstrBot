@@ -1,3 +1,5 @@
+import mirarouterIcon from '@/assets/images/provider_logos/mirarouter.svg?no-inline';
+
 /**
  * 提供商相关的工具函数
  */
@@ -9,6 +11,7 @@
  */
 export function getProviderIcon(type) {
   const icons = {
+    'mirarouter': mirarouterIcon,
     'openai': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/openai.svg',
     'azure': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/azure.svg',
     'xai': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/xai.svg',
@@ -84,7 +87,8 @@ export function isMonochromeProviderIcon(type) {
     'mimo',
     'xiaomi',
     'xiaomi-token-plan',
-    'openrouter'
+    'openrouter',
+    'groq'
   ].includes(type);
 }
 

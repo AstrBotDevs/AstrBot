@@ -4,6 +4,7 @@ WEBCHAT_REQUEST_FLAG_DEFAULTS = {
     "enable_inline_genui": True,
     "enable_default_system_prompt": True,
     "enable_streaming": True,
+    "enable_reasoning": True,
 }
 
 

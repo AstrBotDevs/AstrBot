@@ -13,7 +13,6 @@ from astrbot.core.db.po import ProviderStat
 from astrbot.core.utils.active_event_registry import active_event_registry
 
 from .utils.i18n import t
-from .utils.rst_scene import RstScene
 
 THIRD_PARTY_AGENT_RUNNER_KEY = {
     "dify": "dify_conversation_id",
@@ -110,85 +109,6 @@ class ConversationCommands:
             return None
         return conv.persona_id
 
-    async def reset(self, message: AstrMessageEvent) -> None:
-        """重置 LLM 会话"""
-        umo = message.unified_msg_origin
-        cfg = self.context.get_config(umo=message.unified_msg_origin)
-        is_unique_session = cfg["platform_settings"]["unique_session"]
-        is_group = bool(message.get_group_id())
-
-        scene = RstScene.get_scene(is_group, is_unique_session)
-
-        alter_cmd_cfg = await sp.get_async("global", "global", "alter_cmd", {})
-        plugin_config = alter_cmd_cfg.get("astrbot", {})
-        reset_cfg = plugin_config.get("reset", {})
-
-        required_perm = reset_cfg.get(
-            scene.key,
-            "admin" if is_group and not is_unique_session else "member",
-        )
-
-        if required_perm == "admin" and message.role != "admin":
-            message.set_result(
-                MessageEventResult().message(
-                    await t(
-                        self.context,
-                        umo,
-                        "reset.perm_denied",
-                        scene=scene.name,
-                        sender=message.get_sender_id(),
-                    ),
-                ),
-            )
-            return
-
-        agent_runner_type = cfg["agent_runner"]["runner_type"]
-        if agent_runner_type in THIRD_PARTY_AGENT_RUNNER_KEY:
-            active_event_registry.stop_all(umo, exclude=message)
-            await _clear_third_party_agent_runner_state(
-                self.context,
-                umo,
-                agent_runner_type,
-            )
-            message.set_result(
-                MessageEventResult().message(
-                    await t(self.context, umo, "reset.success")
-                )
-            )
-            return
-
-        if not await self.context.get_using_provider_async(umo):
-            message.set_result(
-                MessageEventResult().message(
-                    await t(self.context, umo, "reset.no_provider")
-                ),
-            )
-            return
-
-        cid = await self.context.conversation_manager.get_curr_conversation_id(umo)
-
-        if not cid:
-            message.set_result(
-                MessageEventResult().message(
-                    await t(self.context, umo, "reset.no_conv")
-                ),
-            )
-            return
-
-        active_event_registry.stop_all(umo, exclude=message)
-
-        await self.context.conversation_manager.update_conversation(
-            umo,
-            cid,
-            [],
-        )
-
-        ret = await t(self.context, umo, "reset.success")
-
-        message.set_extra("_clean_group_context_session", True)
-
-        message.set_result(MessageEventResult().message(ret))
-
     async def stop(self, message: AstrMessageEvent) -> None:
         """停止当前会话正在运行的 Agent"""
         cfg = self.context.get_config(umo=message.unified_msg_origin)
@@ -216,7 +136,11 @@ class ConversationCommands:
         )
 
     async def new_conv(self, message: AstrMessageEvent) -> None:
-        """创建新对话"""
+        """Start a new conversation without clearing the previous history.
+
+        Args:
+            message: Command event identifying the session and sender.
+        """
         cfg = self.context.get_config(umo=message.unified_msg_origin)
         agent_runner_type = cfg["agent_runner"]["runner_type"]
         if agent_runner_type in THIRD_PARTY_AGENT_RUNNER_KEY:

@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
-import type { CommandItem, TypeInfo, StatusInfo } from '../types';
+import { commandPermissions, commandPermissionOptions } from '../permissions';
+import type { CommandPermission, CommandItem, TypeInfo, StatusInfo } from '../types';
 
 const { tm } = useModuleI18n('features/command');
 const { locale } = useI18n();
@@ -21,7 +22,7 @@ const emit = defineEmits<{
   (e: 'toggle-command', cmd: CommandItem): void;
   (e: 'rename', cmd: CommandItem): void;
   (e: 'view-details', cmd: CommandItem): void;
-  (e: 'update-permission', cmd: CommandItem, permission: 'admin' | 'member'): void;
+  (e: 'update-permission', cmd: CommandItem, permission: CommandPermission): void;
 }>();
 
 // 按 WebUI 当前语言解析指令描述:descriptions[locale] -> description 原文
@@ -63,22 +64,6 @@ const getTypeInfo = (type: string): TypeInfo => {
       return { text: tm('type.subCommand'), color: 'secondary', icon: 'mdi-subdirectory-arrow-right' };
     default:
       return { text: tm('type.command'), color: 'primary', icon: 'mdi-console-line' };
-  }
-};
-
-// 获取权限颜色
-const getPermissionColor = (permission: string): string => {
-  switch (permission) {
-    case 'admin': return 'error';
-    default: return 'success';
-  }
-};
-
-// 获取权限标签
-const getPermissionLabel = (permission: string): string => {
-  switch (permission) {
-    case 'admin': return tm('permission.admin');
-    default: return tm('permission.everyone');
   }
 };
 
@@ -176,30 +161,26 @@ const getRowProps = ({ item }: { item: CommandItem }) => {
           <template v-slot:activator="{ props }">
             <v-chip
               v-bind="props"
-              :color="getPermissionColor(item.permission)"
+              :color="commandPermissions[item.permission].color"
               size="small"
               class="font-weight-medium cursor-pointer"
               :disabled="isPluginInactive(item)"
               link
             >
-              {{ getPermissionLabel(item.permission) }}
+              {{ tm(commandPermissions[item.permission].label) }}
               <v-icon end size="14">mdi-chevron-down</v-icon>
             </v-chip>
           </template>
           <v-list density="compact">
             <v-list-item
-              :value="'member'"
-              @click="$emit('update-permission', item, 'member')"
-              :active="item.permission !== 'admin'"
+              v-for="permission in commandPermissionOptions"
+              :key="permission"
+              :value="permission"
+              @click="$emit('update-permission', item, permission)"
+              :active="(item.permission === 'everyone' ? 'member' : item.permission) === permission"
             >
-              <v-list-item-title>{{ tm('permission.everyone') }}</v-list-item-title>
-            </v-list-item>
-            <v-list-item
-              :value="'admin'"
-              @click="$emit('update-permission', item, 'admin')"
-              :active="item.permission === 'admin'"
-            >
-              <v-list-item-title>{{ tm('permission.admin') }}</v-list-item-title>
+              <v-list-item-title>{{ tm(commandPermissions[permission].label) }}</v-list-item-title>
+              <v-list-item-subtitle v-if="commandPermissions[permission].hint">{{ tm(commandPermissions[permission].hint!) }}</v-list-item-subtitle>
             </v-list-item>
           </v-list>
         </v-menu>

@@ -11,7 +11,9 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.date import DateTrigger
 
 from astrbot import logger
+from astrbot.core.agent.runners.base import AgentState
 from astrbot.core.agent.tool import ToolSet
+from astrbot.core.config.agent_runner import resolve_context_compression_config
 from astrbot.core.cron.events import CronMessageEvent
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import CronJob
@@ -202,6 +204,14 @@ class CronJobManager:
         return job
 
     async def update_job(self, job_id: str, **kwargs) -> CronJob | None:
+        current_job = await self.db.get_cron_job(job_id)
+        if not current_job:
+            return None
+        candidate = current_job.model_copy(update=kwargs)
+        if candidate.enabled:
+            # Invalid edits must not overwrite the durable job or remove its
+            # working schedule. Disabled legacy jobs can still be corrected.
+            self._build_trigger(candidate)
         job = await self.db.update_cron_job(job_id, **kwargs)
         if not job:
             return None
@@ -222,10 +232,18 @@ class CronJobManager:
         if self.scheduler.get_job(job_id):
             self.scheduler.remove_job(job_id)
 
-    def _schedule_job(self, job: CronJob) -> None:
-        if not self._started:
-            self.scheduler.start()
-            self._started = True
+    def _build_trigger(self, job: CronJob) -> CronTrigger | DateTrigger:
+        """Validate a job's timing without modifying stored or scheduled jobs.
+
+        Args:
+            job: Candidate job definition, including one-shot payload fields.
+
+        Returns:
+            A trigger using the same timezone and weekday rules as scheduling.
+
+        Raises:
+            CronJobSchedulingError: If the schedule cannot be parsed.
+        """
         try:
             tzinfo = None
             if job.timezone:
@@ -264,6 +282,17 @@ class CronJobManager:
                 trigger = CronTrigger.from_crontab(
                     normalized_cron_expression, timezone=tzinfo
                 )
+            return trigger
+        except (ValueError, TypeError) as e:
+            logger.exception("Failed to build trigger for cron job %s", job.job_id)
+            raise CronJobSchedulingError(str(e)) from e
+
+    def _schedule_job(self, job: CronJob) -> None:
+        if not self._started:
+            self.scheduler.start()
+            self._started = True
+        try:
+            trigger = self._build_trigger(job)
             self.scheduler.add_job(
                 self._run_job,
                 id=job.job_id,
@@ -455,13 +484,20 @@ class CronJobManager:
             cfg.get("agent_runner", {})
             .get("config", {})
             .get("misc", {})
-            .get("max_steps", 30),
-            default=30,
+            .get("max_steps", 128),
+            default=128,
             min_value=1,
             field_name="agent_runner.config.misc.max_steps",
         )
         config = MainAgentBuildConfig(
             tool_call_timeout=tool_call_timeout,
+            fallback_provider_ids=cfg.get("agent_runner", {})
+            .get("config", {})
+            .get("model", {})
+            .get("fallback_provider_ids", []),
+            **resolve_context_compression_config(
+                cfg.get("agent_runner", {}).get("config", {}).get("compression", {})
+            ),
             llm_safety_mode=persona_config.get("safety_mode", True),
             safety_mode_strategy=persona_config.get(
                 "safety_mode_strategy", "system_prompt"
@@ -496,14 +532,24 @@ class CronJobManager:
             event=cron_event, plugin_context=self.ctx, config=config, req=req
         )
         if not result:
-            logger.error("Failed to build main agent for cron job.")
-            return
+            raise RuntimeError("Failed to build main agent for cron job.")
 
         runner = result.agent_runner
         async for _ in runner.step_until_done(agent_max_step):
             # agent will send message to user via using tools
             pass
         llm_resp = runner.get_final_llm_resp()
+        if runner.state == AgentState.ERROR:
+            # The run failed (e.g. malformed function call at max steps) but
+            # no exception escapes the runner; without this the job was
+            # recorded as completed with last_error=NULL and the user saw
+            # only intermediate messages (#9980).
+            detail = (
+                f": {llm_resp.completion_text}"
+                if llm_resp and llm_resp.completion_text
+                else ""
+            )
+            raise RuntimeError(f"Cron agent run ended in ERROR state{detail}")
         cron_meta = extras.get("cron_job", {}) if extras else {}
         summary_note = (
             f"[CronJob] {cron_meta.get('name') or cron_meta.get('id', 'unknown')}: {cron_meta.get('description', '')} "

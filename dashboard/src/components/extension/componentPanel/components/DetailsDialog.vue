@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useI18n, useModuleI18n } from '@/i18n/composables';
+import { commandPermissions } from '../permissions';
 import type { CommandItem, TypeInfo } from '../types';
 
 const { t } = useI18n();
@@ -25,22 +26,6 @@ const getTypeInfo = (type: string): TypeInfo => {
       return { text: tm('type.subCommand'), color: 'secondary', icon: 'mdi-subdirectory-arrow-right' };
     default:
       return { text: tm('type.command'), color: 'primary', icon: 'mdi-console-line' };
-  }
-};
-
-// 获取权限颜色
-const getPermissionColor = (permission: string): string => {
-  switch (permission) {
-    case 'admin': return 'error';
-    default: return 'success';
-  }
-};
-
-// 获取权限标签
-const getPermissionLabel = (permission: string): string => {
-  switch (permission) {
-    case 'admin': return tm('permission.admin');
-    default: return tm('permission.everyone');
   }
 };
 </script>
@@ -110,8 +95,8 @@ const getPermissionLabel = (permission: string): string => {
           <v-list-item>
             <v-list-item-title class="font-weight-bold">{{ tm('dialogs.details.permission') }}</v-list-item-title>
             <v-list-item-subtitle>
-              <v-chip :color="getPermissionColor(command.permission)" size="small">
-                {{ getPermissionLabel(command.permission) }}
+              <v-chip :color="commandPermissions[command.permission].color" size="small">
+                {{ tm(commandPermissions[command.permission].label) }}
               </v-chip>
             </v-list-item-subtitle>
           </v-list-item>

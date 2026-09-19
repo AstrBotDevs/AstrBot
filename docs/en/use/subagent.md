@@ -13,11 +13,11 @@ In traditional architectures, all tools are directly mounted on the Main Agent. 
 2. **Execution Errors**: With a large number of tools, the LLM may confuse tool purposes or generate incorrect parameters.
 3. **Complexity**: The Main Agent is overburdened with both conversation and the organization/invocation of numerous tools.
 
-With SubAgent Orchestration, the Main Agent is only responsible for user interaction and **task delegation**. Actual tool execution is handled by specialized SubAgents.
+With SubAgent Orchestration, the Main Agent can interact with users, use its own tools, and delegate tasks to specialized SubAgents.
 
 ## How It Works
 
-1. **Main Agent Delegation**: When SubAgent mode is enabled, the Main Agent only sees a series of delegation tools named `transfer_to_<subagent_name>`.
+1. **Main Agent Delegation**: When SubAgent mode is enabled, the Main Agent gains delegation tools named `transfer_to_<subagent_name>` alongside its own tools. Enabling the option to deduplicate Main LLM tools hides tools that overlap with those of SubAgents.
 2. **Task Handoff**: When the Main Agent determines a task needs execution, it calls the corresponding delegation tool, passing the task description to the SubAgent.
 3. **SubAgent Execution**: The SubAgent receives the task, performs operations using its assigned tools, and returns the organized results to the Main Agent.
 4. **Feedback**: The Main Agent receives the results and continues the conversation with the user.
@@ -26,7 +26,7 @@ With SubAgent Orchestration, the Main Agent is only responsible for user interac
 
 ## Configuration
 
-In the AstrBot WebUI, click **SubAgents** in the left navigation bar.
+In the AstrBot WebUI, expand **More Features** in the left navigation bar and click **SubAgents** (`/subagent`).
 
 ### 1. Enable SubAgent Mode
 
@@ -37,10 +37,12 @@ Toggle "Enable SubAgent Orchestration" at the top of the page.
 Click the "Add SubAgent" button:
 
 - **Agent Name**: Used to generate the delegation tool name (e.g., `transfer_to_weather`). Use lowercase and underscores.
-- **Select Persona**: Choose a preset Persona, which defines the SubAgent's basic character, behavioral guidance, and the Tools collection it can use. You can create and manage Personas on the "Persona Settings" page.
+- **Select Persona**: Choose a preset Persona, which defines the SubAgent's basic character, behavioral guidance, and the Tools collection it can use. You can create and manage Personas on the "Persona" page.
 - **Description for Main LLM**: This description tells the Main Agent what this SubAgent is good at, ensuring accurate delegation.
-- **Assign Tools**: Select the tools this SubAgent can invoke.
+- **Tools**: The SubAgent inherits its selected Persona’s tools. Edit the Persona’s tool selection on the **Persona** page.
 - **Provider Override (Optional)**: You can specify different model providers for specific SubAgents. For example, the Main Agent could use GPT-4o, while a simple query SubAgent uses GPT-4o-mini to save costs.
+
+After configuring the agents, click `Save` on the page.
 
 ## Best Practices
 
