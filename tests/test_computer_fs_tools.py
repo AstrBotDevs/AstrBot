@@ -1080,3 +1080,101 @@ async def test_file_read_tool_rejects_directory_with_clear_message(
     assert "is a directory, not a file" in result
     assert "my-directory" in result
     assert "'astrbot_execute_shell'" in result
+
+
+@pytest.mark.asyncio
+async def test_file_edit_matches_source_that_contains_a_literal_escape(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    """A backslash-n inside source code is content, not a line break."""
+    workspace = _setup_local_fs_tools(monkeypatch, tmp_path)
+    source = 'def greet():\n    print("hello\\n")\n'
+    write_result = await fs_tools.FileWriteTool().call(
+        _make_context(),
+        path="greet.py",
+        content=source,
+    )
+
+    edit_result = await fs_tools.FileEditTool().call(
+        _make_context(),
+        path="greet.py",
+        old='print("hello\\n")',
+        new='print("goodbye\\n")',
+    )
+
+    assert "File written successfully" in write_result
+    assert "Replaced 1 occurrence" in edit_result
+    assert (workspace / "greet.py").read_text(encoding="utf-8") == (
+        'def greet():\n    print("goodbye\\n")\n'
+    )
+
+
+@pytest.mark.asyncio
+async def test_file_edit_inserts_a_literal_escape_unchanged(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    """The replacement keeps the escape the model wrote when `old` matched as given."""
+    workspace = _setup_local_fs_tools(monkeypatch, tmp_path)
+    (workspace / "paths.py").write_text('LOG = "PLACEHOLDER"\n', encoding="utf-8")
+
+    result = await fs_tools.FileEditTool().call(
+        _make_context(
+            local_permissions={"admin": {"filesystem_scope": "host"}},
+        ),
+        path=str(workspace / "paths.py"),
+        old="PLACEHOLDER",
+        new="C:\\new\\temp\\report.txt",
+    )
+
+    assert "Replaced 1 occurrence" in result
+    assert (workspace / "paths.py").read_text(encoding="utf-8") == (
+        'LOG = "C:\\new\\temp\\report.txt"\n'
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(os.name == "nt", reason="Restricted file access needs POSIX.")
+async def test_restricted_file_edit_matches_a_literal_escape(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    """The descriptor-based edit path keeps the same matching rules."""
+    workspace = _setup_local_fs_tools(monkeypatch, tmp_path)
+    (workspace / "rules.py").write_text(
+        'PATTERN = r"\\number\\t(\\d+)"\n',
+        encoding="utf-8",
+    )
+
+    result = await fs_tools.FileEditTool().call(
+        _make_context(role="member"),
+        path="rules.py",
+        old='r"\\number\\t(\\d+)"',
+        new='r"\\nitem\\t(\\d+)"',
+    )
+
+    assert "Replaced 1 occurrence" in result
+    assert (workspace / "rules.py").read_text(encoding="utf-8") == (
+        'PATTERN = r"\\nitem\\t(\\d+)"\n'
+    )
+
+
+@pytest.mark.asyncio
+async def test_file_edit_still_decodes_escapes_when_the_text_does_not_match(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    """A model that escapes its arguments keeps working: the decode is a fallback."""
+    workspace = _setup_local_fs_tools(monkeypatch, tmp_path)
+    (workspace / "notes.txt").write_text("alpha\nbeta\n", encoding="utf-8")
+
+    result = await fs_tools.FileEditTool().call(
+        _make_context(),
+        path="notes.txt",
+        old="alpha\\nbeta",
+        new="alpha\\ngamma",
+    )
+
+    assert "Replaced 1 occurrence" in result
+    assert (workspace / "notes.txt").read_text(encoding="utf-8") == "alpha\ngamma\n"
