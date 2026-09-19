@@ -44,9 +44,10 @@ class AiocqhttpAdapter(Platform):
         self.settings = platform_settings
         self.host = platform_config["ws_reverse_host"]
         self.port = platform_config["ws_reverse_port"]
-        # session_id -> self_id：记录每个会话最近一次事件的 bot 账号，
-        # 供 send_by_session（主动发送，无 event）在多连接/多账号时路由
-        self._session_self_id: dict[str, str] = {}
+        # (message_type, session_id) -> self_id：记录每个会话最近一次事件的
+        # bot 账号，供 send_by_session（主动发送，无 event）在多连接/多账号时
+        # 路由。key 带 message_type，避免群号与私聊 QQ 号数值相同时互相覆盖。
+        self._session_self_id: dict[tuple[MessageType, str], str] = {}
 
         self.metadata = PlatformMetadata(
             name="aiocqhttp",
@@ -120,10 +121,11 @@ class AiocqhttpAdapter(Platform):
         else:
             session_id = session.session_id
         # 主动发送没有 event，无法从调用上下文推断 self_id；用该会话最近
-        # 一次事件记录的 self_id 显式路由，避免多连接时抛 ApiNotAvailable
+        # 一次事件记录的 self_id 显式路由，避免多连接时抛 ApiNotAvailable。
+        # key 带 message_type，避免群号与私聊 QQ 号数值相同时互相覆盖。
         self_id = self._session_self_id.get(
-            session.session_id,
-        ) or self._session_self_id.get(session_id)
+            (session.message_type, session.session_id),
+        ) or self._session_self_id.get((session.message_type, session_id))
         await AiocqhttpMessageEvent.send_message(
             bot=self.bot,
             message_chain=message_chain,
@@ -148,7 +150,7 @@ class AiocqhttpAdapter(Platform):
             abm = await self._convert_handle_request_event(event)
 
         if abm is not None and getattr(abm, "self_id", None):
-            self._session_self_id[abm.session_id] = str(abm.self_id)
+            self._session_self_id[(abm.type, abm.session_id)] = str(abm.self_id)
 
         return abm
 
