@@ -33,7 +33,15 @@ def test_minimax_stt_defaults():
 
 @pytest.mark.asyncio
 async def test_minimax_stt_uploads_audio_as_multipart(tmp_path: Path):
-    provider = _make_provider()
+    provider = _make_provider(
+        {
+            "custom_headers": {
+                "X-Gateway": "edge",
+                "Authorization": "overridden",
+                "language": "en",
+            },
+        }
+    )
     audio_path = tmp_path / "voice.ogg"
     audio_path.write_bytes(b"OggSfake-audio")
     captured: dict = {}
@@ -56,10 +64,9 @@ async def test_minimax_stt_uploads_audio_as_multipart(tmp_path: Path):
 
     assert await provider.get_text(str(audio_path)) == "transcribed text"
     assert captured["url"] == "https://api.minimax.cn/v1/speech_to_text"
-    assert captured["headers"] == {
-        "Authorization": "Bearer test-key",
-        "language": "zh",
-    }
+    assert captured["headers"]["Authorization"] == "Bearer test-key"
+    assert captured["headers"]["language"] == "zh"
+    assert captured["headers"]["X-Gateway"] == "edge"
     assert captured["data"] == {"model": "asr-1.0", "response_format": "json"}
     assert captured["files"]["file"][0] == "voice.ogg"
     assert captured["files"]["file"][2] == "audio/ogg"
@@ -194,6 +201,34 @@ async def test_minimax_stt_cleans_downloaded_audio_when_conversion_fails(
     try:
         with pytest.raises(RuntimeError, match="conversion failed"):
             await provider.get_text("https://multimedia.nt.qq.com.cn/download/record")
+        assert not list(tmp_path.iterdir())
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_minimax_stt_cleans_partial_download_on_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    provider = _make_provider()
+
+    async def partial_download(_url: str, path: str):
+        Path(path).write_bytes(b"partial")
+        raise RuntimeError("download failed")
+
+    monkeypatch.setattr(
+        "astrbot.core.provider.sources.minimax_stt_api_source.get_astrbot_temp_path",
+        lambda: str(tmp_path),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.provider.sources.minimax_stt_api_source.download_file",
+        partial_download,
+    )
+
+    try:
+        with pytest.raises(RuntimeError, match="download failed"):
+            await provider.get_text("https://example.com/audio.wav")
         assert not list(tmp_path.iterdir())
     finally:
         await provider.terminate()

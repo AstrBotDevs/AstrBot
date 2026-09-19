@@ -58,8 +58,8 @@ class ProviderMiniMaxSTTAPI(STTProvider):
                 temp_dir = Path(get_astrbot_temp_path())
                 temp_dir.mkdir(parents=True, exist_ok=True)
                 source_path = temp_dir / f"minimax_stt_{uuid.uuid4().hex[:8]}{suffix}"
-                await download_file(audio_source, str(source_path))
                 cleanup_paths.append(source_path)
+                await download_file(audio_source, str(source_path))
 
             if not source_path.exists():
                 raise FileNotFoundError(f"File does not exist: {source_path}")
@@ -103,7 +103,10 @@ class ProviderMiniMaxSTTAPI(STTProvider):
 
     async def get_text(self, audio_url: str) -> str:
         audio_path, cleanup_paths = await self._prepare_audio_file(audio_url)
-        headers = {"Authorization": f"Bearer {self.chosen_api_key}"}
+        headers = {
+            **self.request_headers,
+            "Authorization": f"Bearer {self.chosen_api_key}",
+        }
         if self.language:
             headers["language"] = self.language
 
