@@ -1472,6 +1472,16 @@ export type StopChatSessionResponse = (SuccessEnvelope);
 
 export type StopChatSessionError = unknown;
 
+export type SubscribeChatSessionHistoryData = {
+    path: {
+        session_id: string;
+    };
+};
+
+export type SubscribeChatSessionHistoryResponse = (string);
+
+export type SubscribeChatSessionHistoryError = (unknown);
+
 export type ResumeChatRunData = {
     path: {
         run_id: string;
