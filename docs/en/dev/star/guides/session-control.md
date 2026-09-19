@@ -107,7 +107,7 @@ Used by developers to control whether a session should end, and to retrieve mess
 
 ## Custom Session ID Filter
 
-By default, the AstrBot session controller uses `sender_id` (the sender's ID) as the identifier for distinguishing different sessions. If you want to treat an entire group as one session, you need to customize the session ID filter.
+By default, the AstrBot session controller uses unified_msg_origin (the session ID) as the identifier for distinguishing different sessions. If you want to treat one or several users in a group, or different users from different groups, as a single session, you need to customize the session ID filter.
 
 ```py
 import astrbot.api.message_components as Comp
@@ -122,9 +122,7 @@ from astrbot.core.utils.session_waiter import (
 # ...
 class CustomFilter(SessionFilter):
     def filter(self, event: AstrMessageEvent) -> str:
-        return (
-            event.get_group_id() if event.get_group_id() else event.unified_msg_origin
-        )
+        return f"{event.unified_msg_origin}:{event.get_sender_id()}"
 
 
 await empty_mention_waiter(
@@ -133,6 +131,6 @@ await empty_mention_waiter(
 # ...
 ```
 
-After this setup, when a user in a group sends a message, the session controller will treat the entire group as one session, and messages from other users in the group will also be considered part of the same session.
+After this, when a user in a group sends a message, the session controller will treat only that user in that group as one session. Messages sent by other users in the group will not be considered part of the same session.
 
-You can even use this feature to enable team-based activities within groups!
+You can even use this feature to implement team formation via private chats!
