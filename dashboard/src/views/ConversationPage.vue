@@ -802,7 +802,6 @@ export default {
                     params.search = search;
                 }
 
-                params.exclude_ids = 'astrbot';
                 params.include_history = false;
 
                 const response = await conversationApi.list(params, {
