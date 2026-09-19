@@ -355,11 +355,7 @@ async function fetchConversations() {
     group_by_session: groupBySession.value,
   };
   if (keyword.value.trim()) params.keyword = keyword.value.trim();
-  if (umoQuery.value.trim()) {
-    params.umo = umoQuery.value.trim();
-  } else {
-    params.exclude_ids = "astrbot";
-  }
+  if (umoQuery.value.trim()) params.umo = umoQuery.value.trim();
   if (selectedBotIds.value.length) {
     params.platforms = selectedBotIds.value.join(",");
   }
