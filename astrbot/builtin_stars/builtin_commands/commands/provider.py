@@ -8,6 +8,8 @@ from astrbot.api.event import AstrMessageEvent, MessageEventResult
 from astrbot.core.provider.entities import ProviderType
 from astrbot.core.utils.error_redaction import safe_error
 
+from .utils.i18n import t
+
 
 class ProviderCommands:
     def __init__(self, context: star.Context) -> None:
@@ -120,7 +122,7 @@ class ProviderCommands:
         reachability_check_enabled = cfg.get("reachability_check", True)
 
         if idx is None:
-            parts = ["## LLM Providers\n"]
+            parts = [await t(self.context, umo, "provider.title_llm") + "\n"]
 
             llms = list(self.context.get_all_providers())
             ttss = self.context.get_all_tts_providers()
@@ -128,7 +130,9 @@ class ProviderCommands:
 
             if reachability_check_enabled and (llms or ttss or stts):
                 await event.send(
-                    MessageEventResult().message("👀 Testing provider reachability...")
+                    MessageEventResult().message(
+                        await t(self.context, umo, "provider.testing")
+                    )
                 )
 
             llm_data, tts_data, stt_data = await asyncio.gather(
@@ -160,7 +164,9 @@ class ProviderCommands:
                 parts.append(line + "\n")
 
             if tts_data:
-                parts.append("\n## TTS Providers\n")
+                parts.append(
+                    "\n" + await t(self.context, umo, "provider.title_tts") + "\n"
+                )
                 tts_using = await self.context.get_using_tts_provider_async(umo=umo)
                 for i, d in enumerate(tts_data):
                     line = f"{i + 1}. {d['info']}{d['mark']}"
@@ -169,7 +175,9 @@ class ProviderCommands:
                     parts.append(line + "\n")
 
             if stt_data:
-                parts.append("\n## STT Providers\n")
+                parts.append(
+                    "\n" + await t(self.context, umo, "provider.title_stt") + "\n"
+                )
                 stt_using = await self.context.get_using_stt_provider_async(umo=umo)
                 for i, d in enumerate(stt_data):
                     line = f"{i + 1}. {d['info']}{d['mark']}"
@@ -177,24 +185,28 @@ class ProviderCommands:
                         line += " 👈"
                     parts.append(line + "\n")
 
-            parts.append("\nUse /provider <idx> to switch LLM providers.")
+            parts.append("\n" + await t(self.context, umo, "provider.switch_hint"))
             ret = "".join(parts)
 
             if ttss:
-                ret += "\nUse /provider tts <idx> to switch TTS providers."
+                ret += "\n" + await t(self.context, umo, "provider.switch_hint_tts")
             if stts:
-                ret += "\nUse /provider stt <idx> to switch STT providers."
+                ret += "\n" + await t(self.context, umo, "provider.switch_hint_stt")
 
             event.set_result(MessageEventResult().message(ret))
         elif idx == "tts":
             if idx2 is None:
                 event.set_result(
-                    MessageEventResult().message("Please enter the index.")
+                    MessageEventResult().message(
+                        await t(self.context, umo, "provider.enter_index")
+                    )
                 )
                 return
             if idx2 > len(self.context.get_all_tts_providers()) or idx2 < 1:
                 event.set_result(
-                    MessageEventResult().message("❌ Invalid provider index.")
+                    MessageEventResult().message(
+                        await t(self.context, umo, "provider.invalid_idx")
+                    )
                 )
                 return
             provider = self.context.get_all_tts_providers()[idx2 - 1]
@@ -205,17 +217,23 @@ class ProviderCommands:
                 umo=umo,
             )
             event.set_result(
-                MessageEventResult().message(f"✅ Successfully switched to {id_}.")
+                MessageEventResult().message(
+                    await t(self.context, umo, "provider.switched", id=id_)
+                )
             )
         elif idx == "stt":
             if idx2 is None:
                 event.set_result(
-                    MessageEventResult().message("Please enter the index.")
+                    MessageEventResult().message(
+                        await t(self.context, umo, "provider.enter_index")
+                    )
                 )
                 return
             if idx2 > len(self.context.get_all_stt_providers()) or idx2 < 1:
                 event.set_result(
-                    MessageEventResult().message("❌ Invalid provider index.")
+                    MessageEventResult().message(
+                        await t(self.context, umo, "provider.invalid_idx")
+                    )
                 )
                 return
             provider = self.context.get_all_stt_providers()[idx2 - 1]
@@ -226,12 +244,16 @@ class ProviderCommands:
                 umo=umo,
             )
             event.set_result(
-                MessageEventResult().message(f"✅ Successfully switched to {id_}.")
+                MessageEventResult().message(
+                    await t(self.context, umo, "provider.switched", id=id_)
+                )
             )
         elif isinstance(idx, int):
             if idx > len(self.context.get_all_providers()) or idx < 1:
                 event.set_result(
-                    MessageEventResult().message("❌ Invalid provider index.")
+                    MessageEventResult().message(
+                        await t(self.context, umo, "provider.invalid_idx")
+                    )
                 )
                 return
             provider = self.context.get_all_providers()[idx - 1]
@@ -242,7 +264,13 @@ class ProviderCommands:
                 umo=umo,
             )
             event.set_result(
-                MessageEventResult().message(f"✅ Successfully switched to {id_}.")
+                MessageEventResult().message(
+                    await t(self.context, umo, "provider.switched", id=id_)
+                )
             )
         else:
-            event.set_result(MessageEventResult().message("❌ Invalid parameter."))
+            event.set_result(
+                MessageEventResult().message(
+                    await t(self.context, umo, "provider.invalid_param")
+                )
+            )
