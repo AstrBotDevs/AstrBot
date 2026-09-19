@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from astrbot.core.agent.context.config import ContextConfig
 from astrbot.core.agent.context.manager import ContextManager
+from astrbot.core.agent.context.token_counter import EstimateTokenCounter
 from astrbot.core.agent.message import AudioURLPart, ImageURLPart, Message, TextPart
 from astrbot.core.provider.entities import LLMResponse
 
@@ -635,11 +636,22 @@ class TestContextManager:
         assert len(result) <= len(messages)
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("use_legacy_counter", [False, True])
     async def test_trusted_usage_triggers_compression_before_provider_call(
-        self, caplog
+        self, caplog, use_legacy_counter
     ):
+        class LegacyTokenCounter:
+            def count_tokens(self, messages, trusted_token_usage=0):
+                if trusted_token_usage > 0:
+                    return trusted_token_usage
+                return EstimateTokenCounter().count_tokens(messages)
+
         caplog.set_level("INFO", logger="astrbot")
-        config = ContextConfig(max_context_tokens=100, truncate_turns=1)
+        config = ContextConfig(
+            max_context_tokens=100,
+            truncate_turns=1,
+            custom_token_counter=LegacyTokenCounter() if use_legacy_counter else None,
+        )
         manager = ContextManager(config)
         messages = [self.create_message("user", "short")]
         compressed = [self.create_message("user", "compressed")]
@@ -655,6 +667,8 @@ class TestContextManager:
         assert result == compressed
         assert "Compress completed." in caplog.text
         assert " 83 ->" not in caplog.text
+        assert " 1 -> 3 tokens" in caplog.text
+        assert "Context processing failed" not in caplog.text
 
     @pytest.mark.asyncio
     async def test_force_compression_bypasses_automatic_guards(self):
