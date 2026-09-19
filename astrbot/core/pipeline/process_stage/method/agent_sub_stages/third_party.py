@@ -341,9 +341,14 @@ class ThirdPartyAgentSubStage(Stage):
         # where text is converted into voice messages). Roll the dice once here
         # so a fraction of replies controlled by
         # provider_tts_settings.trigger_probability are fully generated first
-        # and then voiced, while the rest keep the streaming behavior.
+        # and then voiced, while the rest keep the streaming behavior. Live
+        # mode has its own streaming TTS pipeline and is excluded.
         tts_cfg = self.ctx.astrbot_config.get("provider_tts_settings", {})
-        if streaming_used and tts_cfg.get("enable"):
+        if (
+            streaming_used
+            and tts_cfg.get("enable")
+            and event.get_extra("action_type") != "live"
+        ):
             try:
                 tts_prob = float(tts_cfg.get("trigger_probability", 1.0))
             except (TypeError, ValueError):
