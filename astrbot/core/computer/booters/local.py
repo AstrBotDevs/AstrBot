@@ -567,7 +567,8 @@ class LocalShellComponent(ShellComponent):
             requester_is_admin: Whether the requester is an administrator.
             session_id: Managed shell session identifier.
             cursor: Byte offset to read from. Defaults to the last returned offset.
-            yield_time_ms: Maximum wait for new output or process completion.
+            yield_time_ms: Maximum wait for new output or process completion, up to
+                300000 milliseconds.
             max_output_chars: Maximum output bytes returned in this call.
 
         Returns:
@@ -576,8 +577,8 @@ class LocalShellComponent(ShellComponent):
         Raises:
             ValueError: If the session is unavailable or an argument is invalid.
         """
-        if yield_time_ms < 0 or yield_time_ms > 30_000:
-            raise ValueError("`yield_time_ms` must be between 0 and 30000.")
+        if yield_time_ms < 0 or yield_time_ms > 300_000:
+            raise ValueError("`yield_time_ms` must be between 0 and 300000.")
         if max_output_chars < 1:
             raise ValueError("`max_output_chars` must be greater than 0.")
 

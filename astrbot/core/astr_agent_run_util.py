@@ -114,7 +114,7 @@ def _merge_buffered_llm_chains(
 
 async def run_agent(
     agent_runner: AgentRunner,
-    max_step: int = 30,
+    max_step: int = 128,
     show_tool_use: bool = True,
     show_tool_call_result: bool = False,
     stream_to_general: bool = False,
@@ -364,7 +364,7 @@ async def _watch_agent_stop_signal(agent_runner: AgentRunner, astr_event) -> Non
 async def run_live_agent(
     agent_runner: AgentRunner,
     tts_provider: TTSProvider | None = None,
-    max_step: int = 30,
+    max_step: int = 128,
     show_tool_use: bool = True,
     show_tool_call_result: bool = False,
     show_reasoning: bool = False,

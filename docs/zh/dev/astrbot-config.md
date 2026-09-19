@@ -77,7 +77,7 @@ AstrBot 默认配置如下：
         "streaming_response": False,
         "show_tool_use_status": False,
         "streaming_segmented": False,
-        "max_agent_step": 30,
+        "max_agent_step": 128,
         "tool_call_timeout": 120,
     },
     "provider_stt_settings": {
@@ -368,7 +368,7 @@ Firecrawl 搜索引擎的 API Key 列表。使用 `firecrawl` 作为网页搜索
 
 #### `provider_settings.max_agent_step`
 
-Agent 最大步骤数限制。默认为 `30`。模型的每次工具调用算作一步。
+Agent 最大步骤数限制。默认为 `128`。模型的每次工具调用算作一步。
 
 #### `provider_settings.tool_call_timeout`
 

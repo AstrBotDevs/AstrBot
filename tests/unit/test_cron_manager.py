@@ -636,9 +636,9 @@ class TestRunActiveAgentJob:
         ("provider_settings", "expected_max_step"),
         [
             pytest.param({"max_agent_step": 50}, 50, id="configured"),
-            pytest.param({}, 30, id="missing_falls_back_to_default"),
+            pytest.param({}, 128, id="missing_falls_back_to_default"),
             pytest.param(
-                {"max_agent_step": True}, 30, id="boolean_falls_back_to_default"
+                {"max_agent_step": True}, 128, id="boolean_falls_back_to_default"
             ),
             pytest.param({"max_agent_step": "50"}, 50, id="numeric_string_coerced"),
             pytest.param({"max_agent_step": 0}, 1, id="zero_clamped_to_min"),
@@ -674,7 +674,7 @@ class TestRunActiveAgentJob:
             "agent_runner": {
                 "runner_type": "local",
                 "config": {
-                    "misc": {"max_steps": provider_settings.get("max_agent_step", 30)}
+                    "misc": {"max_steps": provider_settings.get("max_agent_step", 128)}
                 },
             },
         }

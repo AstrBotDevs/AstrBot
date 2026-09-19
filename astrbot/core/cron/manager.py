@@ -457,8 +457,8 @@ class CronJobManager:
             cfg.get("agent_runner", {})
             .get("config", {})
             .get("misc", {})
-            .get("max_steps", 30),
-            default=30,
+            .get("max_steps", 128),
+            default=128,
             min_value=1,
             field_name="agent_runner.config.misc.max_steps",
         )

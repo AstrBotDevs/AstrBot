@@ -223,7 +223,7 @@ class Context:
         tools: ToolSet | None = None,
         system_prompt: str | None = None,
         contexts: list[Message] | None = None,
-        max_steps: int = 30,
+        max_steps: int = 128,
         tool_call_timeout: int = 120,
         **kwargs: Any,
     ) -> LLMResponse:
