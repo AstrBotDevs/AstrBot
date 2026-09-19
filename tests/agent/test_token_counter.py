@@ -104,28 +104,21 @@ class TestMultimodalCounting:
         assert tokens == IMAGE_TOKEN_ESTIMATE * 3
 
 
-class TestReportedUsage:
+class TestTrustedUsage:
     @pytest.mark.parametrize(
         ("args", "usage", "expected"),
         [
             ((42,), {}, 42),
-            ((), {"reported_token_usage": 42}, 42),
             ((), {"trusted_token_usage": 42}, 42),
-            ((), {"reported_token_usage": 42, "trusted_token_usage": 99}, 42),
-            ((), {"reported_token_usage": 0, "trusted_token_usage": 42}, 42),
-            ((), {"reported_token_usage": -1, "trusted_token_usage": 42}, 42),
             ((), {}, None),
             ((0,), {}, None),
             ((-1,), {}, None),
-            ((), {"reported_token_usage": 0}, None),
-            ((), {"reported_token_usage": -1}, None),
             ((), {"trusted_token_usage": 0}, None),
             ((), {"trusted_token_usage": -1}, None),
-            ((), {"reported_token_usage": -1, "trusted_token_usage": 0}, None),
         ],
     )
-    def test_reported_overrides(self, args, usage, expected):
-        """Positive usage overrides estimates through both supported names."""
+    def test_usage_overrides(self, args, usage, expected):
+        """Positive usage overrides estimates for keyword and positional calls."""
         msg = _msg(
             "user",
             [
@@ -137,15 +130,6 @@ class TestReportedUsage:
         )
         tokens = counter.count_tokens([msg], *args, **usage)
         assert tokens == (counter.count_tokens([msg]) if expected is None else expected)
-
-    @pytest.mark.parametrize("reported_token_usage", [0, 42])
-    def test_unknown_keyword_rejected(self, reported_token_usage):
-        with pytest.raises(
-            TypeError, match="unexpected keyword argument 'token_usage'"
-        ):
-            counter.count_tokens(
-                [], reported_token_usage=reported_token_usage, token_usage=42
-            )
 
 
 class TestToolCalls:

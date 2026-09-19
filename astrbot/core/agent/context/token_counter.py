@@ -44,37 +44,10 @@ class EstimateTokenCounter:
     """
 
     def count_tokens(
-        self,
-        messages: list[Message],
-        reported_token_usage: int = 0,
-        **legacy_usage: int,
+        self, messages: list[Message], trusted_token_usage: int = 0
     ) -> int:
-        """Use positive provider usage or estimate tokens from the messages.
-
-        Args:
-            messages: The message list to estimate when usage is unavailable.
-            reported_token_usage: Provider usage, preferred when positive.
-            **legacy_usage: Accepts only the legacy ``trusted_token_usage`` keyword,
-                used when ``reported_token_usage`` is nonpositive.
-
-        Returns:
-            Positive provider usage, or the estimated message token count.
-
-        Raises:
-            TypeError: An unsupported keyword argument was supplied.
-        """
-        unexpected = legacy_usage.keys() - {"trusted_token_usage"}
-        if unexpected:
-            name = next(iter(unexpected))
-            raise TypeError(
-                f"count_tokens() got an unexpected keyword argument '{name}'"
-            )
-        if reported_token_usage <= 0:
-            reported_token_usage = legacy_usage.get(
-                "trusted_token_usage", reported_token_usage
-            )
-        if reported_token_usage > 0:
-            return reported_token_usage
+        if trusted_token_usage > 0:
+            return trusted_token_usage
 
         total = 0
         for msg in messages:
