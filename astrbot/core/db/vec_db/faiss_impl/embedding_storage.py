@@ -144,6 +144,14 @@ class EmbeddingStorage:
             raise ValueError(
                 f"向量必须是二维数组, 当前维度: {len(vectors.shape)}",
             )
+        # Validate vector values before FAISS write; non-finite values cause
+        # C++ segfaults or silent index corruption.
+        if not np.all(np.isfinite(vectors)):
+            nan_count = int(np.sum(~np.isfinite(vectors)))
+            await self.save_index()
+            raise RuntimeError(
+                f"向量包含 {nan_count} 个非有限值 (NaN/Inf)，无法写入 FAISS 索引。请检查嵌入模型配置。"
+            )
         if vectors.shape[1] != self.dimension:
             raise ValueError(
                 f"向量维度不匹配, 期望: {self.dimension}, 实际: {vectors.shape[1]}",
