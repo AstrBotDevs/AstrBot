@@ -10,6 +10,8 @@ AstrBot's configuration file is a JSON format file. AstrBot reads this file at s
 
 > Since AstrBot v4.0.0, we introduced the concept of [multiple configuration files](https://blog.astrbot.app/posts/what-is-changed-in-4.0.0/#%E5%A4%9A%E9%85%8D%E7%BD%AE%E6%96%87%E4%BB%B6). `data/cmd_config.json` serves as the default configuration `default`. Other configuration files you create in the WebUI are stored in the `data/config/` directory, starting with `abconf_`.
 
+In the WebUI, manage bot and session behavior profiles under `Config`. Global runtime, logging, network, WebUI security, and text-to-image service settings are under `Settings`. Model connections and bot connections are managed under `Providers` and `Platforms`, respectively.
+
 The default AstrBot configuration is as follows:
 
 ```jsonc
@@ -75,7 +77,7 @@ The default AstrBot configuration is as follows:
         "streaming_response": False,
         "show_tool_use_status": False,
         "streaming_segmented": False,
-        "max_agent_step": 30,
+        "max_agent_step": 128,
         "tool_call_timeout": 120,
     },
     "provider_stt_settings": {
@@ -159,7 +161,7 @@ General settings for message platform adapters.
 
 #### `platform_settings.unique_session`
 
-Whether to enable session isolation. Default is `false`. When enabled, each person's conversation context in groups or channels is independent.
+Whether to enable **Isolate Conversation**. Defaults to `false`. On supported platforms, each group member has a separate conversation context when enabled. Unsupported platforms retain their existing context. Access to `/new` and `/reset` is controlled by [command permissions](../use/command.md), which follow conversation isolation by default.
 
 #### `platform_settings.rate_limit`
 
@@ -366,7 +368,7 @@ Whether platforms that don't support streaming responses should fall back to seg
 
 #### `provider_settings.max_agent_step`
 
-Limit on the maximum number of Agent steps. Default is `30`. Each tool call by the model counts as one step.
+Limit on the maximum number of Agent steps. Default is `128`. Each tool call by the model counts as one step.
 
 #### `provider_settings.tool_call_timeout`
 
@@ -548,7 +550,7 @@ Log level. Default is `INFO`. Can be set to `DEBUG`, `INFO`, `WARNING`, `ERROR`,
 
 ### `trace_enable`
 
-Whether to enable trace recording. Default is `false`. When enabled, AstrBot records execution traces, which can be viewed under `Data` -> `Trace` in the admin panel.
+Whether to enable trace recording. Default is `false`. When enabled, AstrBot records execution traces, which can be viewed under `Data & Logs → Trace` in the admin panel.
 
 ### `pip_install_arg`
 

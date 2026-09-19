@@ -286,9 +286,13 @@ class ResultDecorateStage(Stage):
                     "provider configured.",
                 )
 
+            show_reasoning = self.show_reasoning
+            if (enable_reasoning := event.get_extra("enable_reasoning")) is not None:
+                show_reasoning = bool(enable_reasoning)
+
             if (
                 not should_tts
-                and self.show_reasoning
+                and show_reasoning
                 and event.get_extra("_llm_reasoning_content")
             ):
                 # inject reasoning content to chain

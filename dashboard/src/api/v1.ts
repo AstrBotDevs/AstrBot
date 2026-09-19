@@ -11,6 +11,7 @@ import {
   type BackupUploadSessionRequest,
   type BotConfigRequest,
   type BotRegistrationRequest,
+  type ChatChunkUploadRequest,
   type ChatMessagePatchRequest,
   type ChatMessageRegenerateRequest,
   type ChatProjectRequest,
@@ -19,6 +20,8 @@ import {
   type ChatSessionPatchRequest,
   type ChatThreadCreateRequest,
   type ChatThreadMessageRequest,
+  type ChatUploadInitRequest,
+  type ChatUploadSessionRequest,
   type CommandPatchRequest,
   type ConfigRouteUpsertRequest,
   type ConfigRoutesReplaceRequest,
@@ -43,6 +46,7 @@ import {
   type PluginValidateRepoRequest,
   type PluginConfigFileDeleteRequest,
   type ProviderConfigRequest,
+  type RuntimeInfo,
   type BatchSessionProviderRequest,
   type BatchSessionServiceRequest,
   type SetupAuthRequest,
@@ -120,6 +124,7 @@ export interface VersionData {
   change_pwd_hint?: boolean;
   md5_pwd_hint?: boolean;
   password_upgrade_required?: boolean;
+  runtime?: RuntimeInfo;
   [key: string]: unknown;
 }
 
@@ -189,6 +194,11 @@ export interface ChatSessionListParams {
   page?: number;
   page_size?: number;
   username?: string;
+}
+
+export interface ChatHistoryPageParams {
+  page?: number;
+  page_size?: number;
 }
 
 export interface CronJobListParams {
@@ -764,6 +774,9 @@ export const backupApi = {
   abortUpload(payload: BackupUploadSessionRequest) {
     return typed<OpenConfig>(openApiV1.abortBackupUpload({ body: payload }));
   },
+  statusUpload(payload: BackupUploadSessionRequest) {
+    return typed<any>(openApiV1.statusBackupUpload({ body: payload }));
+  },
   check(filename: string) {
     return typed<any>(
       openApiV1.checkBackup({ path: { filename } }),
@@ -822,9 +835,12 @@ export const chatApi = {
       }),
     );
   },
-  getSession(sessionId: string) {
+  getSession(sessionId: string, params?: ChatHistoryPageParams) {
     return typed<any>(
-      openApiV1.getChatSession({ path: { session_id: sessionId } }),
+      openApiV1.getChatSession({
+        path: { session_id: sessionId },
+        query: generatedQuery(params),
+      }),
     );
   },
   updateSession(sessionId: string, payload: ChatSessionPatchRequest) {
@@ -970,6 +986,23 @@ export const fileApi = {
     return typed<any>(
       openApiV1.uploadFile({ body: generatedFormData(formData) }),
     );
+  },
+  initUpload(payload: ChatUploadInitRequest) {
+    return typed<any>(openApiV1.initFileUpload({ body: payload }));
+  },
+  uploadChunk(formData: FormData | ChatChunkUploadRequest) {
+    return typed<any>(
+      openApiV1.uploadFileChunk({ body: generatedFormData(formData) }),
+    );
+  },
+  completeUpload(payload: ChatUploadSessionRequest) {
+    return typed<any>(openApiV1.completeFileUpload({ body: payload }));
+  },
+  abortUpload(payload: ChatUploadSessionRequest) {
+    return typed<any>(openApiV1.abortFileUpload({ body: payload }));
+  },
+  statusUpload(payload: ChatUploadSessionRequest) {
+    return typed<any>(openApiV1.statusFileUpload({ body: payload }));
   },
   getByName(filename: string) {
     return openApiV1.getFileByName({

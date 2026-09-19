@@ -230,12 +230,10 @@ class MattermostPlatformAdapter(Platform):
             )
 
         if file_ids:
-            (
-                attachment_components,
-                temp_paths,
-            ) = await self.client.parse_post_attachments(file_ids)
+            attachment_components, _ = await self.client.parse_post_attachments(
+                file_ids
+            )
             abm.message.extend(attachment_components)
-            setattr(abm, "temporary_file_paths", temp_paths)
 
         abm.message_str = self._build_message_str(
             abm.message,

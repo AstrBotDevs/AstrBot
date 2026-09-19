@@ -7,7 +7,7 @@ from sqlalchemy import event, text
 from sqlalchemy import inspect as sqlalchemy_inspect
 
 from astrbot.core.conversation_mgr import ConversationManager
-from astrbot.core.db.po import ConversationV2
+from astrbot.core.db.po import ConversationV2, PlatformSession
 from astrbot.core.db.sqlite import SQLiteDatabase
 
 
@@ -60,6 +60,22 @@ async def test_filtered_conversations_summary_skips_content_and_applies_filters(
             created_at=datetime(2023, 1, 1, tzinfo=timezone.utc),
             updated_at=datetime(2023, 1, 1, tzinfo=timezone.utc),
         ),
+        ConversationV2(
+            conversation_id="astrbotweb",
+            platform_id="astrbotweb",
+            user_id="astrbotweb:GroupMessage:9",
+            content=[{"role": "assistant", "content": "kept"}],
+            created_at=datetime(2025, 6, 1, tzinfo=timezone.utc),
+            updated_at=datetime(2025, 6, 1, tzinfo=timezone.utc),
+        ),
+        ConversationV2(
+            conversation_id="astrbot-legacy",
+            platform_id="astrbot",
+            user_id="astrbot",
+            content=[{"role": "assistant", "content": "excluded"}],
+            created_at=datetime(2022, 1, 1, tzinfo=timezone.utc),
+            updated_at=datetime(2022, 1, 1, tzinfo=timezone.utc),
+        ),
     ]
     async with db.get_db() as session:
         async with session.begin():
@@ -74,10 +90,11 @@ async def test_filtered_conversations_summary_skips_content_and_applies_filters(
         exclude_platforms=["webchat"],
     )
 
-    assert total == 3
+    assert total == 4
     assert [item.conversation_id for item in summary] == [
         "friend",
         "group",
+        "astrbotweb",
         "other",
     ]
     assert all("content" in sqlalchemy_inspect(item).unloaded for item in summary)
@@ -95,6 +112,33 @@ async def test_filtered_conversations_summary_skips_content_and_applies_filters(
     assert manager_total == total
     assert all(item.history == "[]" for item in manager_summary)
     assert all(json.loads(item.history) == [] for item in manager_summary)
+
+    # exclude_ids must match only the exact user_id or its platform segment,
+    # so "astrbot" does not swallow "astrbotweb", while a colon-less legacy
+    # user_id "astrbot" is still matched exactly.
+    segment_matches, segment_total = await db.get_filtered_conversations(
+        page=1,
+        page_size=10,
+        include_history=False,
+        exclude_ids=["astrbot"],
+    )
+    assert segment_total == 5
+    assert [item.conversation_id for item in segment_matches] == [
+        "friend",
+        "group",
+        "astrbotweb",
+        "other",
+        "webchat",
+    ]
+
+    # LIKE wildcards inside an exclude id must stay literal.
+    _, wildcard_total = await db.get_filtered_conversations(
+        page=1,
+        page_size=10,
+        include_history=False,
+        exclude_ids=["%"],
+    )
+    assert wildcard_total == 7
 
     title_matches, _ = await db.get_filtered_conversations(
         search_query="中文标题",
@@ -119,7 +163,7 @@ async def test_filtered_conversations_summary_skips_content_and_applies_filters(
     assert keyword_does_not_match_umo == []
 
     full, full_total = await db.get_filtered_conversations(page_size=10)
-    assert full_total == 5
+    assert full_total == 7
     assert all("content" not in sqlalchemy_inspect(item).unloaded for item in full)
 
     umo_matches, _ = await db.get_filtered_conversations(
@@ -135,14 +179,18 @@ async def test_filtered_conversations_summary_skips_content_and_applies_filters(
         include_history=False,
     )
     assert [item.conversation_id for item in updated_ascending] == [
+        "astrbot-legacy",
         "astrbot",
         "webchat",
         "other",
+        "astrbotweb",
         "group",
         "friend",
     ]
 
     assert await db.get_conversation_platform_ids() == [
+        "astrbot",
+        "astrbotweb",
         "qq",
         "telegram",
         "webchat",
@@ -310,3 +358,76 @@ async def test_multi_platform_summary_uses_global_order_index(
         in ordered_queries[0]
     )
     assert "content" not in ordered_queries[0].split("FROM", 1)[0]
+
+
+@pytest.mark.asyncio
+async def test_webchat_session_title_matches_search_and_keyword(tmp_path: Path):
+    """WebChat session titles participate in both search paths."""
+    db = SQLiteDatabase(str(tmp_path / "webchat_titles.db"))
+    await db.initialize()
+
+    matched_session_id = "session-with-title"
+    async with db.get_db() as session:
+        async with session.begin():
+            session.add_all(
+                [
+                    ConversationV2(
+                        conversation_id="webchat-titled",
+                        platform_id="webchat",
+                        user_id=(
+                            "webchat:FriendMessage:"
+                            f"webchat!astrbot!{matched_session_id}"
+                        ),
+                        content=[{"role": "user", "content": "hello"}],
+                        created_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
+                        updated_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
+                    ),
+                    ConversationV2(
+                        conversation_id="webchat-other",
+                        platform_id="webchat",
+                        user_id="webchat:FriendMessage:webchat!astrbot!other-session",
+                        content=[{"role": "user", "content": "hello"}],
+                        created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                        updated_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                    ),
+                    PlatformSession(
+                        session_id=matched_session_id,
+                        platform_id="webchat",
+                        creator="astrbot",
+                        display_name="美食推荐晚餐食谱",
+                    ),
+                    PlatformSession(
+                        session_id="other-session",
+                        platform_id="webchat",
+                        creator="astrbot",
+                        display_name="成都旅行三日游计划",
+                    ),
+                ]
+            )
+
+    conversations, total = await db.get_filtered_conversations(
+        page=1,
+        page_size=10,
+        search_query="美食",
+        include_history=False,
+    )
+    assert total == 1
+    assert [item.conversation_id for item in conversations] == ["webchat-titled"]
+
+    conversations, total = await db.get_filtered_conversations(
+        page=1,
+        page_size=10,
+        keyword_query="成都",
+        include_history=False,
+    )
+    assert total == 1
+    assert [item.conversation_id for item in conversations] == ["webchat-other"]
+
+    conversations, total = await db.get_filtered_conversations(
+        page=1,
+        page_size=10,
+        search_query="不存在的会话标题",
+        include_history=False,
+    )
+    assert total == 0
+    assert conversations == []

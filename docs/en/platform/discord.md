@@ -2,12 +2,7 @@
 
 ## Create AstrBot Discord Platform Adapter
 
-Navigate to the messaging platform, click to add a new adapter, find Discord and click to enter the Discord configuration page.
-
-![Click to create bot, select discord type](https://files.astrbot.app/docs/source/images/discord/image.png)
-
-![Options from top to bottom: 1. Bot name 2. Enable 3. Bot token 4. Discord proxy address 5. Auto-register plugin commands as Discord slash commands 6. discord_guild_id_for_debug 7. Discord activity name](https://files.astrbot.app/docs/source/images/discord/image-3.png)
-> For this tutorial, you only need to configure items 1, 2, 3, and 5
+Open `Platforms` in the WebUI, click `Add Adapter`, and select `Discord`. Fill in the following settings, then click `Save` after obtaining the token.
 
 - Bot Name: Customize this to easily distinguish between different adapters
 - Enable: Check to enable this adapter
@@ -64,7 +59,7 @@ If you find this tedious, you can directly use administrator permissions, but it
 
 Discord supports the pre-acknowledgment emoji feature. When enabled, the bot will add an emoji reaction when processing a message, letting users know the bot is working on their request.
 
-In the admin panel's "Configuration" page, find `Platform Specific -> Discord -> Pre-acknowledgment Emoji`:
+Open `Config`, select the configuration profile used by the bot, click the search button, and search for `platform_specific.discord.pre_ack_emoji`. Click `Save Configuration` after editing:
 
 - **Enable Pre-acknowledgment Emoji**: When enabled, the bot will automatically add an emoji reaction upon receiving a message
 - **Emoji List**: Enter Unicode emoji symbols, e.g., 👍, 🤔, ⏳. You can add multiple emojis, and the bot will randomly select one to use

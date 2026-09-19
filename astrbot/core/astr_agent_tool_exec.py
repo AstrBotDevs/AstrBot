@@ -20,6 +20,7 @@ from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.astr_main_agent_resources import (
     BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT,
 )
+from astrbot.core.config.agent_runner import resolve_context_compression_config
 from astrbot.core.cron.events import CronMessageEvent
 from astrbot.core.message.components import Image
 from astrbot.core.message.message_event_result import (
@@ -255,7 +256,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         event = run_context.context.event
         cfg = ctx.get_config(umo=event.unified_msg_origin)
         provider_settings = cfg.get("provider_settings", {})
-        runtime = str(provider_settings.get("computer_use_runtime", "local"))
+        runtime = str(provider_settings.get("computer_use_runtime", "none"))
         tool_mgr = (
             ctx.get_llm_tool_manager()
             if hasattr(ctx, "get_llm_tool_manager")
@@ -364,7 +365,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             config.get("agent_runner", {})
             .get("config", {})
             .get("misc", {})
-            .get("max_steps", 30)
+            .get("max_steps", 128)
         )
         stream = prov_settings.get("streaming_response", False)
         llm_resp = await ctx.tool_loop_agent(
@@ -556,18 +557,34 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         cron_event.role = event.role
         cfg = ctx.get_config(umo=event.unified_msg_origin) or {}
         provider_settings = cfg.get("provider_settings") or {}
+        persona_config = (
+            cfg.get("agent_runner", {}).get("config", {}).get("persona", {})
+        )
         agent_max_step = coerce_int_config(
             cfg.get("agent_runner", {})
             .get("config", {})
             .get("misc", {})
-            .get("max_steps", 30),
-            default=30,
+            .get("max_steps", 128),
+            default=128,
             min_value=1,
             field_name="agent_runner.config.misc.max_steps",
         )
         config = MainAgentBuildConfig(
             tool_call_timeout=run_context.tool_call_timeout,
+            fallback_provider_ids=cfg.get("agent_runner", {})
+            .get("config", {})
+            .get("model", {})
+            .get("fallback_provider_ids", []),
+            **resolve_context_compression_config(
+                cfg.get("agent_runner", {}).get("config", {}).get("compression", {})
+            ),
             streaming_response=provider_settings.get("stream", False),
+            llm_safety_mode=persona_config.get("safety_mode", True),
+            safety_mode_strategy=persona_config.get(
+                "safety_mode_strategy", "system_prompt"
+            ),
+            computer_use_runtime=provider_settings.get("computer_use_runtime", "none"),
+            sandbox_cfg=provider_settings.get("sandbox", {}),
             provider_settings=provider_settings,
         )
 
@@ -663,6 +680,18 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         if awaitable is None:
             raise ValueError("Tool must have a valid handler or override 'run' method.")
 
+        effective_timeout = tool_call_timeout or run_context.tool_call_timeout
+        if isinstance(tool, ShellSessionTool) and tool_args.get("action") in {
+            "poll",
+            "write",
+            "write_line",
+            "interrupt",
+        }:
+            yield_time_ms = tool_args.get("yield_time_ms", 5_000)
+            if isinstance(yield_time_ms, int) and 0 <= yield_time_ms <= 300_000:
+                # Allow the requested wait plus time to write input and collect output.
+                effective_timeout = max(effective_timeout, yield_time_ms / 1000 + 5)
+
         wrapper = call_local_llm_tool(
             context=run_context,
             handler=awaitable,
@@ -673,7 +702,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             try:
                 resp = await asyncio.wait_for(
                     anext(wrapper),
-                    timeout=tool_call_timeout or run_context.tool_call_timeout,
+                    timeout=effective_timeout,
                 )
                 if resp is not None:
                     if isinstance(resp, mcp.types.CallToolResult):
@@ -705,7 +734,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                     yield None
             except asyncio.TimeoutError:
                 raise Exception(
-                    f"tool {tool.name} execution timeout after {tool_call_timeout or run_context.tool_call_timeout} seconds.",
+                    f"tool {tool.name} execution timeout after {effective_timeout} seconds.",
                 )
             except StopAsyncIteration:
                 break

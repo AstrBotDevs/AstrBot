@@ -802,8 +802,6 @@ export default {
                     params.search = search;
                 }
 
-                params.exclude_ids = 'astrbot';
-                params.exclude_platforms = 'webchat';
                 params.include_history = false;
 
                 const response = await conversationApi.list(params, {

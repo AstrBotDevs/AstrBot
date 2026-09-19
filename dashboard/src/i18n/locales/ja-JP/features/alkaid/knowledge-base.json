@@ -1,0 +1,155 @@
+{
+  "title": "ナレッジベース",
+  "subtitle": "ナレッジベースの内容を管理・検索",
+  "documents": {
+    "title": "ドキュメント一覧",
+    "name": "ドキュメント名",
+    "size": "サイズ",
+    "uploadTime": "アップロード日時",
+    "status": "ステータス",
+    "actions": "操作"
+  },
+  "management": {
+    "delete": "削除",
+    "preview": "プレビュー",
+    "download": "ダウンロード",
+    "reindex": "再インデックス化"
+  },
+  "notInstalled": {
+    "title": "ナレッジベースプラグインがまだインストールされていません",
+    "install": "今すぐインストール"
+  },
+  "empty": {
+    "title": "ナレッジベースがありません。作成してみましょう！🙂",
+    "create": "ナレッジベースを作成"
+  },
+  "list": {
+    "title": "ナレッジベース一覧",
+    "create": "ナレッジベースを作成",
+    "config": "設定",
+    "checkUpdate": "プラグインの更新を確認",
+    "updatePlugin": "プラグインを {version} に更新",
+    "knowledgeCount": "件のナレッジ",
+    "tips": "ヒント：チャットページで /kb コマンドを使用すると、使い方を確認できます。"
+  },
+  "createDialog": {
+    "title": "新しいナレッジベースを作成",
+    "nameLabel": "ナレッジベース名",
+    "descriptionLabel": "説明",
+    "descriptionPlaceholder": "ナレッジベースの簡単な説明…",
+    "embeddingModelLabel": "埋め込みモデル（Embedding Model）",
+    "rerankModelLabel": "リランキングモデル（Rerank Model）",
+    "providerInfo": "プロバイダー ID：{id}、埋め込みモデルの次元数：{dimensions}",
+    "rerankProviderInfo": "プロバイダー ID：{id}",
+    "tips": "ヒント：ナレッジベースの埋め込みモデルを選択した後は、そのプロバイダーのモデルやベクトル次元情報を変更しないでください。変更すると、ナレッジベースの再現率（リコール率）が大幅に低下したり、エラーが発生したりする可能性があります。",
+    "cancel": "キャンセル",
+    "create": "作成"
+  },
+  "emojiPicker": {
+    "title": "絵文字を選択",
+    "close": "閉じる",
+    "categories": {
+      "emotions": "スマイリーと感情",
+      "animals": "動物と自然",
+      "food": "食べ物と飲み物",
+      "activities": "アクティビティとオブジェクト",
+      "travel": "旅行と場所",
+      "symbols": "記号と旗"
+    }
+  },
+  "contentDialog": {
+    "title": "ナレッジベース管理",
+    "embeddingModel": "埋め込みモデル",
+    "vectorDimension": "ベクトル次元",
+    "usage": "使用方法：チャットページで「/kb use {name}」と入力",
+    "tabs": {
+      "upload": "ファイルをアップロード",
+      "search": "内容を検索",
+      "fromURL": "URL からインポート"
+    }
+  },
+  "upload": {
+    "title": "ナレッジベースにファイルをアップロード",
+    "subtitle": "txt、pdf、epub、word、excel などの各種形式に対応",
+    "dropzone": "ここにファイルをドラッグ＆ドロップするか、クリックしてアップロード",
+    "chunkSettings": {
+      "title": "チャンク設定",
+      "tooltip": "チャンクサイズは各テキストブロックの大きさを、オーバーラップ長は隣接するテキストブロック間の重なりを決定します。\n小さいチャンクほど精度は高くなりますが数が増えます。適切なオーバーラップを設定すると検索精度を高められます。",
+      "chunkSizeLabel": "チャンクサイズ",
+      "chunkSizeHint": "各テキストブロックのサイズを指定します。空欄の場合はデフォルト値を使用します。",
+      "overlapLabel": "オーバーラップ長",
+      "overlapHint": "隣接するテキストブロック間の重なりを指定します。空欄の場合はデフォルト値を使用します。"
+    },
+    "upload": "ファイルをアップロード",
+    "uploading": "アップロード中…"
+  },
+  "search": {
+    "queryLabel": "ナレッジベースの内容を検索",
+    "queryPlaceholder": "キーワードを入力してナレッジベースの内容を検索…",
+    "resultCountLabel": "結果件数",
+    "searching": "検索中…",
+    "resultsTitle": "検索結果",
+    "relevance": "関連度",
+    "noResults": "一致する内容が見つかりませんでした"
+  },
+  "deleteDialog": {
+    "title": "削除の確認",
+    "confirmText": "ナレッジベース {name} を削除してもよろしいですか？",
+    "warning": "この操作は元に戻せません。ナレッジベースの内容はすべて完全に削除されます。",
+    "cancel": "キャンセル",
+    "delete": "削除"
+  },
+  "messages": {
+    "pluginNotAvailable": "プラグインがインストールされていないか、利用できません",
+    "pluginNotActivated": "astrbot_plugin_knowledge_base プラグインが有効になっていません。プラグイン管理ページで有効にしてから AstrBot を再起動してください。",
+    "checkPluginFailed": "プラグインの確認に失敗しました",
+    "installFailed": "インストールに失敗しました",
+    "installPluginFailed": "プラグインのインストールに失敗しました",
+    "getKnowledgeBaseListFailed": "ナレッジベース一覧の取得に失敗しました",
+    "knowledgeBaseCreated": "ナレッジベースを作成しました",
+    "createFailed": "作成に失敗しました",
+    "createKnowledgeBaseFailed": "ナレッジベースの作成に失敗しました",
+    "pleaseEnterKnowledgeBaseName": "ナレッジベース名を入力してください",
+    "pleaseSelectFile": "先にファイルを選択してください",
+    "operationSuccess": "操作が完了しました：{message}",
+    "uploadFailed": "アップロードに失敗しました",
+    "fileUploadFailed": "ファイルのアップロードに失敗しました",
+    "pleaseEnterSearchContent": "検索内容を入力してください",
+    "noMatchingContent": "一致する内容が見つかりませんでした",
+    "searchFailed": "検索に失敗しました",
+    "searchKnowledgeBaseFailed": "ナレッジベースの検索に失敗しました",
+    "deleteTargetNotExists": "削除対象が存在しません",
+    "knowledgeBaseDeleted": "ナレッジベースを削除しました",
+    "deleteFailed": "削除に失敗しました",
+    "deleteKnowledgeBaseFailed": "ナレッジベースの削除に失敗しました",
+    "getEmbeddingModelListFailed": "埋め込みモデル一覧の取得に失敗しました",
+    "updateAvailable": "新しいバージョンがあります: {current} -> {latest}",
+    "pluginUpToDate": "プラグインは最新です",
+    "pluginNotFoundInMarket": "プラグインマーケットにこのプラグインが見つかりませんでした",
+    "checkUpdateFailed": "更新の確認に失敗しました",
+    "updateSuccess": "プラグインを更新しました",
+    "updateFailed": "更新に失敗しました",
+    "updatePluginFailed": "プラグインの更新に失敗しました"
+  },
+  "importFromUrl": {
+    "title": "URL からインポート",
+    "urlLabel": "Web ページの URL",
+    "urlPlaceholder": "ナレッジを抽出する Web ページの URL を入力してください",
+    "optionsTitle": "インポートオプション",
+    "tooltip": "これらのオプションでは、URL の内容からテキストを抽出・処理する方法を指定します。\n空欄の場合はプラグインのデフォルト設定を使用します。\nLLM によるテキスト修復と要約を有効にすると、処理に時間がかかる場合があります。",
+    "useLlmRepairLabel": "LLM テキスト修復を有効化",
+    "useClusteringSummaryLabel": "クラスタリング要約を有効化",
+    "repairLlmProviderIdLabel": "テキスト修復モデル",
+    "summarizeLlmProviderIdLabel": "要約モデル",
+    "embeddingProviderIdLabel": "埋め込みモデル",
+    "chunkSizeLabel": "チャンクサイズ",
+    "chunkOverlapLabel": "チャンクのオーバーラップ",
+    "startImport": "インポートを開始",
+    "importing": "インポート中…",
+    "importSuccess": "インポートしました",
+    "importFailed": "インポートに失敗しました",
+    "uploadingChunks": "内容を抽出しました。チャンクをアップロードしています…",
+    "preRequisite": "ヒント：この機能を使用する前に、プラグインマーケットで astrbot_plugin_url_2_knowledge_base をインストールし、プラグインのドキュメントに従って Playwright をインストールしてください。",
+    "allChunksUploaded": "すべてのチャンクをアップロードしました"
+  }
+}

@@ -1,0 +1,56 @@
+.chat-markdown.markstream-vue {
+  --ms-text-body: 1rem;
+  --ms-leading-body: 1.7;
+}
+
+@media (min-width: 761px) {
+  .chat-markdown.markstream-vue {
+    --ms-text-body: 0.9375rem;
+    --ms-leading-body: 1.75;
+  }
+}
+
+.chat-markdown .markstream-vue {
+  --ms-text-body: inherit;
+  --ms-leading-body: inherit;
+}
+
+.chat-markdown table.table-node {
+  --ms-text-body: 0.875rem;
+  --ms-leading-body: 1.5;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.chat-markdown li.list-item {
+  font-size: var(--ms-text-body);
+  line-height: var(--ms-leading-body);
+}
+
+.chat-markdown li.list-item > p.paragraph-node {
+  margin: 0;
+}
+
+.chat-markdown li.list-item .paragraph-node:first-child {
+  margin-top: 0;
+}
+
+.chat-markdown .list-item::marker {
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.chat-markdown blockquote.blockquote {
+  padding-block: 0;
+}
+
+.chat-markdown blockquote.blockquote p.paragraph-node {
+  margin-block: 0;
+}
+
+.chat-markdown hr.hr-node {
+  margin: 1rem 0;
+  border: 0;
+  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+  opacity: 1;
+}

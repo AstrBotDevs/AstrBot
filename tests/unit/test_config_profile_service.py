@@ -15,7 +15,8 @@ def test_get_system_config_includes_effective_server_time() -> None:
             astrbot_config_mgr=SimpleNamespace(
                 confs={"default": {"timezone": "Asia/Shanghai"}}
             )
-        )
+        ),
+        runtime={"os": "windows", "sandbox": {"status": "unsupported"}},
     )
 
     with patch("astrbot.dashboard.services.config_service.datetime") as mock_datetime:
@@ -40,16 +41,37 @@ async def test_profile_mutations_await_config_manager() -> None:
         reload_pipeline_scheduler=AsyncMock(),
         pipeline_scheduler_mapping={"profile-id": object()},
     )
-    service = ConfigProfileService(lifecycle)
+    service = ConfigProfileService(
+        lifecycle, runtime={"os": "windows", "sandbox": {"status": "unsupported"}}
+    )
 
-    result = await service.create_profile("Profile", {"timezone": "UTC"})
+    with pytest.raises(ValueError, match="Local permission member:") as exc:
+        await service.create_profile(
+            "Invalid",
+            {
+                "provider_settings": {
+                    "computer_use_runtime": "local",
+                    "computer_use_local_permissions": {
+                        role: {"filesystem_scope": "workspace"}
+                        for role in ("member", "admin")
+                    },
+                }
+            },
+        )
+    assert "Local permission admin:" in str(exc.value)
+    config_manager.create_conf.assert_not_awaited()
+    lifecycle.reload_pipeline_scheduler.assert_not_awaited()
+
+    result = await service.create_profile(
+        "Profile", {"provider_settings": {"computer_use_runtime": "local"}}
+    )
     await service.rename_profile("profile-id", "Renamed")
     await service.delete_profile("profile-id")
 
     assert result == {"conf_id": "profile-id"}
     config_manager.create_conf.assert_awaited_once_with(
         name="Profile",
-        config={"timezone": "UTC"},
+        config={"provider_settings": {"computer_use_runtime": "local"}},
     )
     lifecycle.reload_pipeline_scheduler.assert_awaited_once_with("profile-id")
     config_manager.update_conf_info.assert_awaited_once_with(
