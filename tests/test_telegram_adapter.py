@@ -855,7 +855,7 @@ async def test_telegram_run_rebuilds_application_after_repeated_polling_errors()
 
     assert builder.build.call_count == 2
     app_one.updater.stop.assert_awaited()
-    app_one.bot.delete_my_commands.assert_not_awaited()
+    app_one.bot.delete_my_commands.assert_awaited_once()
     app_one.stop.assert_awaited()
     app_one.shutdown.assert_awaited()
     app_two.initialize.assert_awaited()
