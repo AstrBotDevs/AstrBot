@@ -368,7 +368,11 @@ Whether platforms that don't support streaming responses should fall back to seg
 
 #### `provider_settings.max_agent_step`
 
-Limit on the maximum number of Agent steps. Default is `128`. Each tool call by the model counts as one step.
+This legacy setting is now `agent_runner.config.misc.max_steps`, the maximum number of Agent loop iterations per user request (default: `128`). One iteration can execute multiple tool calls; those calls count together as one step.
+
+For limits of at least 16 steps, the agent receives one reminder at each of 80%, 90%, and 95% usage, rounded up, with the remaining step count appended to the current round's last tool result. Context compression does not reset the budget or these reminders. At the limit, tools are disabled and one final response is allowed. Users can ask the agent to continue with a fresh budget without changing configuration, or optionally increase the limit for longer individual runs.
+
+On upgrade to configuration version 4, existing local-agent limits of `30` become `128` once. Other values are preserved, and subsequent manual changes, including changing back to `30`, are kept.
 
 #### `provider_settings.tool_call_timeout`
 
