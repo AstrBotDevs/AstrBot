@@ -11,6 +11,7 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.media_utils import (
     describe_media_ref,
+    detect_image_mime_type_async,
     ensure_wav,
     file_uri_to_path,
     is_file_uri,
@@ -46,6 +47,54 @@ class PreProcessStage(Stage):
         except (OSError, ValueError):
             return
         event.track_temporary_local_file(str(path))
+
+    @staticmethod
+    def _is_existing_local_image_ref(media_ref: str | None) -> bool:
+        """Return whether an image reference already points at a local file."""
+        if not media_ref:
+            return False
+        if is_file_uri(media_ref):
+            return True
+        if media_ref.startswith(("http://", "https://", "data:", "base64://")):
+            return False
+        try:
+            return Path(media_ref).exists()
+        except OSError:
+            return False
+
+    async def _normalize_image_component(
+        self,
+        event: AstrMessageEvent,
+        component: Image,
+    ) -> None:
+        """Resolve and validate an image while preserving cleanup ownership."""
+        media_ref = component.url or component.file
+        image_path: str | None = None
+        materialized = False
+        try:
+            image_path = await component.convert_to_file_path()
+            materialized = (
+                not self._is_existing_local_image_ref(media_ref)
+                and Path(image_path).is_file()
+            )
+            if materialized:
+                self._track_temp_media(event, image_path)
+                detected_mime_type = await detect_image_mime_type_async(
+                    image_path,
+                    default_mime_type=None,
+                )
+                if detected_mime_type is None:
+                    raise ValueError("image content could not be identified")
+        except Exception:
+            if image_path and not materialized:
+                event.untrack_temporary_local_file(image_path)
+            raise
+
+        component.file = image_path
+        component.path = image_path
+        # Image.convert_to_file_path() prefers url, so keep it aligned.
+        component.url = image_path
+        event.untrack_temporary_local_file(image_path)
 
     async def process(
         self,
@@ -129,14 +178,8 @@ class PreProcessStage(Stage):
                     logger.warning(f"Voice processing failed: {e}")
             elif isinstance(component, Image):
                 try:
-                    image_path = await component.convert_to_file_path()
-                    component.file = image_path
-                    component.path = image_path
-                    # Image.convert_to_file_path() prefers url, so keep it aligned.
-                    component.url = image_path
+                    await self._normalize_image_component(event, component)
                     message_chain[idx] = component
-                    # Attachment references outlive the event; model copies do not.
-                    event.untrack_temporary_local_file(image_path)
                 except Exception as e:
                     media_ref = component.url or component.file
                     logger.warning(
@@ -164,13 +207,8 @@ class PreProcessStage(Stage):
                             )
                     elif isinstance(reply_comp, Image):
                         try:
-                            image_path = await reply_comp.convert_to_file_path()
-                            reply_comp.file = image_path
-                            reply_comp.path = image_path
-                            # Image.convert_to_file_path() prefers url, so keep it aligned.
-                            reply_comp.url = image_path
+                            await self._normalize_image_component(event, reply_comp)
                             component.chain[idx] = reply_comp
-                            event.untrack_temporary_local_file(image_path)
                         except Exception as e:
                             media_ref = reply_comp.url or reply_comp.file
                             logger.warning(
