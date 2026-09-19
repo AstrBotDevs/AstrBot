@@ -1,5 +1,7 @@
 """Tests for EstimateTokenCounter multimodal support."""
 
+import pytest
+
 from astrbot.core.agent.context.token_counter import (
     AUDIO_TOKEN_ESTIMATE,
     IMAGE_TOKEN_ESTIMATE,
@@ -103,8 +105,27 @@ class TestMultimodalCounting:
 
 
 class TestReportedUsage:
-    def test_reported_overrides(self):
-        """如果 API 返回了 token 数，直接用它不做估算。"""
+    @pytest.mark.parametrize(
+        ("args", "usage", "expected"),
+        [
+            ((42,), {}, 42),
+            ((), {"reported_token_usage": 42}, 42),
+            ((), {"trusted_token_usage": 42}, 42),
+            ((), {"reported_token_usage": 42, "trusted_token_usage": 99}, 42),
+            ((), {"reported_token_usage": 0, "trusted_token_usage": 42}, 42),
+            ((), {"reported_token_usage": -1, "trusted_token_usage": 42}, 42),
+            ((), {}, None),
+            ((0,), {}, None),
+            ((-1,), {}, None),
+            ((), {"reported_token_usage": 0}, None),
+            ((), {"reported_token_usage": -1}, None),
+            ((), {"trusted_token_usage": 0}, None),
+            ((), {"trusted_token_usage": -1}, None),
+            ((), {"reported_token_usage": -1, "trusted_token_usage": 0}, None),
+        ],
+    )
+    def test_reported_overrides(self, args, usage, expected):
+        """Positive usage overrides estimates through both supported names."""
         msg = _msg(
             "user",
             [
@@ -114,8 +135,17 @@ class TestReportedUsage:
                 ),
             ],
         )
-        tokens = counter.count_tokens([msg], reported_token_usage=42)
-        assert tokens == 42
+        tokens = counter.count_tokens([msg], *args, **usage)
+        assert tokens == (counter.count_tokens([msg]) if expected is None else expected)
+
+    @pytest.mark.parametrize("reported_token_usage", [0, 42])
+    def test_unknown_keyword_rejected(self, reported_token_usage):
+        with pytest.raises(
+            TypeError, match="unexpected keyword argument 'token_usage'"
+        ):
+            counter.count_tokens(
+                [], reported_token_usage=reported_token_usage, token_usage=42
+            )
 
 
 class TestToolCalls:
