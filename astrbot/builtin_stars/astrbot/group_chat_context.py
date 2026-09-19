@@ -31,12 +31,11 @@ Group chat context awareness.
 """
 
 GROUP_HISTORY_HEADER = (
-    "<system_reminder>"
     "You are in a group chat. "
     "Belows are group chat context after your last reply:\n"
     "--- BEGIN CONTEXT---\n"
 )
-GROUP_HISTORY_FOOTER = "\n--- END CONTEXT ---\n</system_reminder>"
+GROUP_HISTORY_FOOTER = "\n--- END CONTEXT ---"
 DEFAULT_GROUP_MESSAGE_MAX_CNT = 1000
 
 
@@ -193,7 +192,12 @@ class GroupChatContext:
 
         if records_to_inject:
             req.extra_user_content_parts.append(
-                TextPart(text=_format_group_history_block(records_to_inject))
+                TextPart(
+                    text=_format_group_history_block(
+                        records_to_inject,
+                        req.delimiter_nonce,
+                    )
+                )
             )
 
     async def _format_message(self, event: AstrMessageEvent, cfg: dict) -> str:
@@ -331,5 +335,22 @@ def _trim_left(
             record_ids.popleft()
 
 
-def _format_group_history_block(records: list[str]) -> str:
-    return GROUP_HISTORY_HEADER + "\n".join(records) + GROUP_HISTORY_FOOTER
+def _format_group_history_block(records: list[str], nonce: str) -> str:
+    """Build the group history block wrapped in a nonce-suffixed reminder tag.
+
+    Args:
+        records: Formatted group message records to inject.
+        nonce: Per-request delimiter suffix from ``ProviderRequest``.
+
+    Returns:
+        The formatted block, including its enclosing reminder tag.
+    """
+    open_tag = f"<system_reminder_{nonce}>"
+    close_tag = f"</system_reminder_{nonce}>"
+    return (
+        open_tag
+        + GROUP_HISTORY_HEADER
+        + "\n".join(records)
+        + GROUP_HISTORY_FOOTER
+        + close_tag
+    )
