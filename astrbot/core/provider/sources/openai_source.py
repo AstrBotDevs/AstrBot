@@ -854,17 +854,19 @@ class ProviderOpenAIOfficial(Provider):
         # parse the text completion
         if choice.message.content is not None:
             completion_text = self._normalize_content(choice.message.content)
-            # specially, some providers may set <think> tags around reasoning content in the completion text,
+            # Some compatible providers wrap reasoning in <think> or <thinking> tags.
             # we use regex to remove them, and store then in reasoning_content field
-            reasoning_pattern = re.compile(r"<think>(.*?)</think>", re.DOTALL)
+            reasoning_pattern = re.compile(r"<(think|thinking)>(.*?)</\1>", re.DOTALL)
             matches = reasoning_pattern.findall(completion_text)
             if matches:
                 llm_response.reasoning_content = "\n".join(
-                    [match.strip() for match in matches],
+                    [match[1].strip() for match in matches],
                 )
                 completion_text = reasoning_pattern.sub("", completion_text).strip()
-            # Also clean up orphan </think> tags that may leak from some models
-            completion_text = re.sub(r"</think>\s*$", "", completion_text).strip()
+            # Also clean up trailing reasoning closing tags from some models.
+            completion_text = re.sub(
+                r"</(?:think|thinking)>\s*$", "", completion_text
+            ).strip()
             llm_response.result_chain = MessageChain().message(completion_text)
         elif refusal := getattr(choice.message, "refusal", None):
             refusal_text = self._normalize_content(refusal)
