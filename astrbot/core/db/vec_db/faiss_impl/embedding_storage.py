@@ -130,6 +130,11 @@ class EmbeddingStorage:
     async def insert(self, vector: np.ndarray, id: int) -> None:
         """插入向量"""
         assert self.index is not None, "FAISS index is not initialized."
+        if not np.all(np.isfinite(vector)):
+            nan_count = int(np.sum(~np.isfinite(vector)))
+            raise RuntimeError(
+                f"向量包含 {nan_count} 个非有限值 (NaN/Inf)，无法写入 FAISS 索引。"
+            )
         if vector.shape[0] != self.dimension:
             raise ValueError(
                 f"向量维度不匹配, 期望: {self.dimension}, 实际: {vector.shape[0]}",
@@ -166,6 +171,11 @@ class EmbeddingStorage:
         """
         assert self.index is not None, "FAISS index is not initialized."
         vector = np.asarray(vector, dtype=np.float32).ravel()
+        if not np.all(np.isfinite(vector)):
+            nan_count = int(np.sum(~np.isfinite(vector)))
+            raise RuntimeError(
+                f"查询向量包含 {nan_count} 个非有限值 (NaN/Inf)。"
+            )
         if vector.shape[0] != self.dimension:
             raise ValueError(
                 f"向量维度不匹配, 期望: {self.dimension}, 实际: {vector.shape[0]}",

@@ -218,6 +218,9 @@ class FaissVecDB(BaseVecDB):
                 )
             await self.embedding_storage.insert_batch(vectors_array, int_ids)
         except KnowledgeBaseUploadError:
+            # Roll back partial inserts before re-raising to prevent orphaned
+            # document rows when DocumentStorage returns mismatched ID count.
+            await self._rollback_partial_insert(ids=ids, int_ids=int_ids)
             raise
         except Exception as _faiss_err:
             # Low-level FAISS errors (index corruption, resource exhaustion,
