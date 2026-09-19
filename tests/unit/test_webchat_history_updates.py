@@ -8,8 +8,25 @@ from astrbot.api.event import MessageChain
 from astrbot.api.message_components import Plain
 from astrbot.core.platform.sources.webchat import webchat_adapter
 from astrbot.core.platform.sources.webchat.webchat_queue_mgr import WebChatQueueMgr
+from astrbot.dashboard.api.chat import subscribe_chat_session_history
 from astrbot.dashboard.services import chat_service
 from astrbot.dashboard.services.chat_service import ChatService, ChatServiceError
+
+
+@pytest.mark.asyncio
+async def test_history_route_does_not_expose_exception_details():
+    service = SimpleNamespace(
+        subscribe_session_history=AsyncMock(
+            side_effect=ChatServiceError("Internal session details")
+        )
+    )
+    response = await subscribe_chat_session_history(
+        "session", auth=SimpleNamespace(username="alice"), service=service
+    )
+    service.subscribe_session_history.assert_awaited_once_with("alice", "session")
+    assert response.status_code == 403
+    assert b"Session unavailable" in response.body
+    assert b"Internal session details" not in response.body
 
 
 @pytest.mark.asyncio

@@ -162,8 +162,8 @@ async def subscribe_chat_session_history(
 ):
     try:
         stream = await service.subscribe_session_history(auth.username, session_id)
-    except ChatServiceError as exc:
-        return JSONResponse(error(str(exc)), status_code=403)
+    except ChatServiceError:
+        return JSONResponse(error("Session unavailable"), status_code=403)
     return StreamingResponse(
         stream,
         media_type="text/event-stream",
