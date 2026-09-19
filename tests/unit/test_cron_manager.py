@@ -284,6 +284,7 @@ class TestUpdateJob:
             enabled=False,  # Disabled to avoid scheduling
         )
         mock_db.update_cron_job.return_value = updated_job
+        mock_db.get_cron_job.return_value = sample_cron_job
 
         result = await cron_manager.update_job("test-job-id", name="Updated Job")
 
@@ -293,6 +294,7 @@ class TestUpdateJob:
     @pytest.mark.asyncio
     async def test_update_job_not_found(self, cron_manager, mock_db):
         """Test updating a non-existent job."""
+        mock_db.get_cron_job.return_value = None
         mock_db.update_cron_job.return_value = None
 
         result = await cron_manager.update_job("non-existent", name="Updated")
