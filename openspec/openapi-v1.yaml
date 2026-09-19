@@ -1331,6 +1331,28 @@ paths:
         "200":
           $ref: "#/components/responses/Ok"
 
+  /api/v1/chat/sessions/{session_id}/events:
+    get:
+      tags: [Chat]
+      summary: Subscribe to proactive WebChat history updates
+      operationId: subscribeChatSessionHistory
+      x-astrbot-scope: chat
+      description: |
+        SSE stream for an owned WebChat session. Emits a history_updated data event
+        on connection and after proactive messages are persisted. Clients should
+        reload history on notification. Events are coalesced for slow readers.
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "200":
+          description: Server-sent history invalidations and keepalive comments
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        "403":
+          description: Session is missing, inaccessible, or not a WebChat session
+
   /api/v1/chat/runs/{run_id}/stream:
     get:
       tags: [Chat]

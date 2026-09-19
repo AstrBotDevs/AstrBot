@@ -18,6 +18,33 @@ class WebChatQueueMgr:
         self._listener_callback: Callable[[tuple], Awaitable[None]] | None = None
         self.queue_maxsize = queue_maxsize
         self.back_queue_maxsize = back_queue_maxsize
+        self._history_subscribers: dict[str, set[asyncio.Queue]] = {}
+
+    async def subscribe_history(self, conversation_id: str):
+        """Yield bounded history invalidations independently of generation queues."""
+        queue: asyncio.Queue = asyncio.Queue(maxsize=1)
+        subscribers = self._history_subscribers.setdefault(conversation_id, set())
+        subscribers.add(queue)
+        try:
+            # Refresh on connection/reconnection to recover notifications missed offline.
+            yield 'data: {"type":"history_updated"}\n\n'
+            while True:
+                try:
+                    await asyncio.wait_for(queue.get(), timeout=15)
+                except asyncio.TimeoutError:
+                    yield ": keepalive\n\n"
+                else:
+                    yield 'data: {"type":"history_updated"}\n\n'
+        finally:
+            subscribers.discard(queue)
+            if not subscribers:
+                self._history_subscribers.pop(conversation_id, None)
+
+    def notify_history_updated(self, conversation_id: str) -> None:
+        """Notify each viewer without blocking message persistence on slow clients."""
+        for queue in self._history_subscribers.get(conversation_id, ()):
+            if not queue.full():
+                queue.put_nowait(None)
 
     def get_or_create_queue(self, conversation_id: str) -> asyncio.Queue:
         """Get or create a queue for the given conversation ID"""
