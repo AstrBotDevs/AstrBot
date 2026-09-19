@@ -283,8 +283,17 @@ def _migrate_agent_runner_config(
             provider_settings.pop(key, None)
         changed = True
 
-    if config.get("config_version") != 3:
-        config["config_version"] = 3
+    if not isinstance(config_version, int) or config_version < 4:
+        # Apply the step-limit upgrade once so later user edits remain authoritative.
+        agent_runner = config["agent_runner"]
+        runner_config = agent_runner.get("config")
+        if agent_runner.get("runner_type") == "local" and isinstance(
+            runner_config, dict
+        ):
+            misc_config = runner_config.get("misc")
+            if isinstance(misc_config, dict) and misc_config.get("max_steps") == 30:
+                misc_config["max_steps"] = 128
+        config["config_version"] = 4
         changed = True
     return changed
 
