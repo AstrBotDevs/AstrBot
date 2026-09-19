@@ -1,10 +1,13 @@
 import asyncio
+import base64
+import binascii
 import inspect
 import itertools
 import logging
 import time
 import uuid
 from collections.abc import Awaitable
+from pathlib import Path
 from typing import Any, cast
 
 from aiocqhttp import CQHttp, Event
@@ -21,6 +24,7 @@ from astrbot.api.platform import (
     PlatformMetadata,
 )
 from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.utils.media_utils import file_uri_to_path, is_file_uri
 
 from ...register import register_platform_adapter
 from .aiocqhttp_message_event import *
@@ -139,6 +143,113 @@ class AiocqhttpAdapter(Platform):
             abm = await self._convert_handle_request_event(event)
 
         return abm
+
+    async def _resolve_record_data(
+        self,
+        data: dict[str, Any],
+        routing_params: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Resolve a file-only OneBot record segment through ``get_record``.
+
+        Args:
+            data: Raw record segment data from the OneBot event.
+            routing_params: Account routing parameters for the OneBot action.
+
+        Returns:
+            A copy of the segment data with an accessible media source when the
+            OneBot implementation can provide one. Otherwise, the original data.
+        """
+        normalized = dict(data)
+        for key in ("file", "url", "path"):
+            if isinstance(normalized.get(key), str):
+                normalized[key] = normalized[key].strip()
+        file_ref = normalized.get("file")
+        if not isinstance(file_ref, str) or not file_ref:
+            return normalized
+
+        has_direct_source = bool(
+            normalized.get("url") or normalized.get("path")
+        ) or is_file_uri(file_ref)
+        has_direct_source = has_direct_source or file_ref.startswith(
+            ("http://", "https://", "base64://", "data:")
+        )
+        try:
+            has_direct_source = has_direct_source or Path(file_ref).is_file()
+        except (OSError, ValueError):
+            pass
+        if not has_direct_source:
+            compact = "".join(file_ref.split())
+            padding = len(compact) % 4
+            if padding:
+                compact += "=" * (4 - padding)
+            try:
+                decoded = base64.b64decode(compact, validate=True)
+                has_direct_source = (
+                    (
+                        len(decoded) >= 12
+                        and decoded[:4] == b"RIFF"
+                        and decoded[8:12] == b"WAVE"
+                    )
+                    or (len(decoded) >= 12 and decoded[4:8] == b"ftyp")
+                    or decoded.startswith(
+                        (
+                            b"#!AMR\n",
+                            b"#!AMR-WB\n",
+                            b"OggS",
+                            b"fLaC",
+                            b"ID3",
+                            b"\xff\xfb",
+                            b"\xff\xfa",
+                            b"\xff\xf3",
+                            b"\xff\xf2",
+                            b"\xff\xe3",
+                            b"\xff\xe2",
+                            b"#!SILK_V3",
+                            b"\x02#!SILK_V3",
+                        )
+                    )
+                )
+            except (binascii.Error, ValueError):
+                pass
+        if has_direct_source:
+            return normalized
+
+        try:
+            result = await self.bot.call_action(
+                action="get_record",
+                file=file_ref,
+                out_format="wav",
+                **routing_params,
+            )
+        except Exception as exc:
+            logger.warning(
+                "OneBot get_record failed; preserving the original record segment: %s",
+                exc,
+            )
+            return normalized
+
+        if not isinstance(result, dict):
+            logger.warning(
+                "OneBot get_record returned no file path; preserving the original "
+                "record segment."
+            )
+            return normalized
+
+        converted_file = result.get("file")
+        if isinstance(converted_file, str) and converted_file.strip():
+            converted_file = converted_file.strip()
+            try:
+                if Path(file_uri_to_path(converted_file)).is_file():
+                    normalized["file"] = converted_file
+                    return normalized
+            except (OSError, ValueError):
+                pass
+
+        logger.warning(
+            "OneBot get_record returned no accessible media source; "
+            "preserving the original record segment."
+        )
+        return normalized
 
     async def _convert_handle_request_event(self, event: Event) -> AstrBotMessage:
         """OneBot V11 请求类事件"""
@@ -410,7 +521,12 @@ class AiocqhttpAdapter(Platform):
                                 f"不支持的消息段类型，已忽略: {t}, data={m['data']}"
                             )
                             continue
-                        a = ComponentTypes[t](**m["data"])
+                        component_data = m["data"]
+                        if t == "record":
+                            component_data = await self._resolve_record_data(
+                                component_data, routing_params
+                            )
+                        a = ComponentTypes[t](**component_data)
                         abm.message.append(a)
                     except Exception as e:
                         logger.exception(
