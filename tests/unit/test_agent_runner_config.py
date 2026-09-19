@@ -200,9 +200,14 @@ def test_local_legacy_fields_are_fully_migrated():
     }.intersection(config["provider_settings"])
 
 
-def test_local_migration_replaces_default_root_inserted_before_version_bump():
+@pytest.mark.parametrize("default_max_steps", [30, 128])
+@pytest.mark.parametrize("manual_compression", [None, False, True])
+def test_local_migration_replaces_default_root_inserted_before_version_bump(
+    default_max_steps, manual_compression
+):
     legacy_default_config = get_agent_runner_config_default("local")
     legacy_default_config["compression"].pop("enable_manual_context_compression")
+    legacy_default_config["misc"]["max_steps"] = default_max_steps
     config = {
         "config_version": 2,
         "provider": [
@@ -230,6 +235,10 @@ def test_local_migration_replaces_default_root_inserted_before_version_bump():
             "config": legacy_default_config,
         },
     }
+    if manual_compression is not None:
+        config["provider_settings"]["enable_manual_context_compression"] = (
+            manual_compression
+        )
 
     default_config = {
         "provider": [
@@ -239,6 +248,7 @@ def test_local_migration_replaces_default_root_inserted_before_version_bump():
         ]
     }
     assert _migrate_agent_runner_config(config, default_config)
+    assert config["config_version"] == 4
 
     assert config["agent_runner"] == {
         "runner_type": "local",
@@ -257,7 +267,7 @@ def test_local_migration_replaces_default_root_inserted_before_version_bump():
                 "max_turns": 24,
                 "trim_turns": 4,
                 "overflow_strategy": "llm_compress",
-                "enable_manual_context_compression": False,
+                "enable_manual_context_compression": manual_compression is True,
                 "instruction": "Keep decisions",
                 "keep_recent_ratio": 0.15,
                 "provider_id": "compressor",
@@ -280,8 +290,10 @@ def test_local_migration_replaces_default_root_inserted_before_version_bump():
             "llm_compress_provider_id",
             "tool_call_timeout",
             "sanitize_context_by_modalities",
+            "enable_manual_context_compression",
         }
     )
+    assert not _migrate_agent_runner_config(config, default_config)
 
 
 def test_missing_local_provider_references_are_removed():
@@ -571,8 +583,12 @@ def test_agent_step_limit_upgrade_is_persisted_once(
     if config_version == 2:
         config.pop("agent_runner")
         config["provider_settings"]["max_agent_step"] = max_steps
+        config["provider_settings"]["enable_manual_context_compression"] = True
     else:
         config["agent_runner"]["config"]["misc"]["max_steps"] = max_steps
+        config["agent_runner"]["config"]["compression"][
+            "enable_manual_context_compression"
+        ] = True
     config_path.write_text(json.dumps(config), encoding="utf-8")
 
     loaded = AstrBotConfig(config_path=str(config_path))
@@ -581,12 +597,24 @@ def test_agent_step_limit_upgrade_is_persisted_once(
     persisted = json.loads(config_path.read_text(encoding="utf-8-sig"))
     assert persisted["config_version"] == max(config_version, 4)
     assert persisted["agent_runner"]["config"]["misc"]["max_steps"] == expected_steps
+    assert (
+        persisted["agent_runner"]["config"]["compression"][
+            "enable_manual_context_compression"
+        ]
+        is True
+    )
 
     loaded["agent_runner"]["config"]["misc"]["max_steps"] = 30
     loaded.save_config()
     for _ in range(2):
         reloaded = AstrBotConfig(config_path=str(config_path))
         assert reloaded["agent_runner"]["config"]["misc"]["max_steps"] == 30
+        assert (
+            reloaded["agent_runner"]["config"]["compression"][
+                "enable_manual_context_compression"
+            ]
+            is True
+        )
         assert not _migrate_agent_runner_config(reloaded)
 
 

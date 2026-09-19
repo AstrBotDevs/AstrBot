@@ -998,7 +998,7 @@ class TestConfigSchemaToDefault:
 class TestConfigMetadataI18n:
     """Tests for i18n utils."""
 
-    @pytest.mark.parametrize("locale", ["en-US", "zh-CN", "ru-RU"])
+    @pytest.mark.parametrize("locale", ["en-US", "zh-CN", "ru-RU", "ja-JP"])
     def test_manual_compression_metadata_uses_translated_runner_config_keys(
         self,
         locale: str,

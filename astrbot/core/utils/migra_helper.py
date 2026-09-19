@@ -171,7 +171,7 @@ def _migrate_agent_runner_config(
         "config": get_agent_runner_config_default("local"),
     }
     comparable_agent_runner = copy.deepcopy(existing_agent_runner)
-    if isinstance(comparable_agent_runner, dict):
+    if legacy_version and isinstance(comparable_agent_runner, dict):
         comparable_runner_config = comparable_agent_runner.get("config")
         if isinstance(comparable_runner_config, dict):
             comparable_compression = comparable_runner_config.get("compression")
@@ -179,6 +179,15 @@ def _migrate_agent_runner_config(
                 comparable_compression.setdefault(
                     "enable_manual_context_compression", False
                 )
+            comparable_misc = comparable_runner_config.get("misc")
+            if (
+                isinstance(comparable_misc, dict)
+                and comparable_misc.get("max_steps") == 30
+            ):
+                # Recognize defaults inserted before the v4 step-limit upgrade.
+                comparable_misc["max_steps"] = default_local_agent_runner["config"][
+                    "misc"
+                ]["max_steps"]
     default_root_inserted_before_migration = (
         legacy_version
         and comparable_agent_runner == default_local_agent_runner
