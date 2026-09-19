@@ -301,7 +301,7 @@ class Context:
         if (
             tools
             and any(
-                tools.get_tool(name)
+                (tool := tools.get_tool(name)) is not None and tool.active
                 for name in (
                     "astrbot_execute_shell",
                     "astrbot_shell_session",
