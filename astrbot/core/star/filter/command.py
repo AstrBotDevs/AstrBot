@@ -6,6 +6,7 @@ from typing import Any
 
 from astrbot.core.config import AstrBotConfig
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.utils.lang_utils import DEFAULT_LANG, normalize_lang
 
 from ..star_handler import StarHandlerMetadata
 from . import HandlerFilter
@@ -200,7 +201,8 @@ class CommandFilter(HandlerFilter):
           (旧式 ``alias={"帮助"}``)视为全语言别名,始终有效。
 
         Args:
-            event: 消息事件,语言可来自 ``_astrbot_lang`` extra(会话级)。
+            event: 消息事件;语言优先取自 ``_astrbot_lang`` extra(由唤醒阶段
+                按全局配置注入)。
             cfg: AstrBot 配置,包含 ``platform_settings.full_lang_aliases``
                 与根字段 ``language``。
 
@@ -222,7 +224,8 @@ class CommandFilter(HandlerFilter):
         else:
             lang = event.get_extra("_astrbot_lang", None) if event else None
             if not lang and cfg:
-                lang = cfg.get("language", "")
+                # 回退到全局配置时同样需要归一化,否则 "zh" 之类的缩写无法命中
+                lang = normalize_lang(cfg.get("language")) or DEFAULT_LANG
             for alias in self.alias:
                 alias_lang = self.alias_lang_map.get(alias)
                 if alias_lang is None:

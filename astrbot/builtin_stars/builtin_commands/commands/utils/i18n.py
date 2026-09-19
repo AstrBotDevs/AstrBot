@@ -12,29 +12,11 @@ from astrbot.core.utils.lang_utils import DEFAULT_LANG
 # 内置指令固定回复文案表(四语言)
 MSGS: dict[str, dict[str, str]] = {
     # conversation.py
-    "reset.success": {
-        "zh-CN": "✅ 会话已重置。",
-        "en-US": "✅ Conversation reset successfully.",
-        "ru-RU": "✅ Диалог сброшен.",
-        "ja-JP": "✅ 会話をリセットしました。",
-    },
-    "reset.no_provider": {
-        "zh-CN": "😕 未找到 LLM 服务,请先配置。",
-        "en-US": "😕 Cannot find any LLM provider. Configure one first.",
-        "ru-RU": "😕 Не найден LLM-провайдер. Настройте его.",
-        "ja-JP": "😕 LLMプロバイダが見つかりません。先に設定してください。",
-    },
-    "reset.no_conv": {
+    "no_conv": {
         "zh-CN": "😕 当前不在会话中,请用 /new 创建。",
         "en-US": "😕 You are not in a conversation. Use /new to create one.",
         "ru-RU": "😕 Вы не в диалоге. Используйте /new.",
         "ja-JP": "😕 会話がありません。/new で作成してください。",
-    },
-    "reset.perm_denied": {
-        "zh-CN": "❌ 在{scene}场景下需要管理员权限,您(ID {sender})不是管理员。",
-        "en-US": "❌ Reset requires admin in {scene} scenario; ID {sender} is not admin.",
-        "ru-RU": "❌ В сценарии {scene} требуется админ; ID {sender} не админ.",
-        "ja-JP": "❌ {scene}では管理者権限が必要です(ID {sender} は管理者ではありません)。",
     },
     "stop.done": {
         "zh-CN": "✅ 已请求停止 {count} 个任务。",
@@ -225,13 +207,8 @@ MSGS: dict[str, dict[str, str]] = {
 }
 
 # 内置指令描述(用于 /help 列表;键与命令名一致,四语言)
+# 仅包含 /help 会展示的指令(set/unset/help/dashboard_update 在 help.py 中被排除)
 CMD_DESCS: dict[str, dict[str, str]] = {
-    "help": {
-        "zh-CN": "查看帮助",
-        "en-US": "Show help message",
-        "ru-RU": "Показать справку",
-        "ja-JP": "ヘルプを表示",
-    },
     "lang": {
         "zh-CN": "查看或设置全局语言(仅管理员)",
         "en-US": "View or set the global language (admin)",
@@ -280,24 +257,6 @@ CMD_DESCS: dict[str, dict[str, str]] = {
         "ru-RU": "Остановить выполнение агента",
         "ja-JP": "エージェントの実行を停止",
     },
-    "set": {
-        "zh-CN": "设置会话变量",
-        "en-US": "Set session variable",
-        "ru-RU": "Задать переменную сессии",
-        "ja-JP": "セッション変数を設定",
-    },
-    "unset": {
-        "zh-CN": "移除会话变量",
-        "en-US": "Unset session variable",
-        "ru-RU": "Удалить переменную сессии",
-        "ja-JP": "セッション変数を削除",
-    },
-    "dashboard_update": {
-        "zh-CN": "更新 AstrBot WebUI",
-        "en-US": "Update AstrBot WebUI",
-        "ru-RU": "Обновить WebUI AstrBot",
-        "ja-JP": "AstrBot WebUI を更新",
-    },
 }
 
 
@@ -343,5 +302,6 @@ async def _resolve_lang(context: Context, session_umo: str) -> str:
         return DEFAULT_LANG
     try:
         return await get_lang(session_umo)
-    except BaseException:
+    except Exception:
+        # 单独的语言解析失败不应影响指令执行(CancelledError 仍会向上传播)
         return DEFAULT_LANG

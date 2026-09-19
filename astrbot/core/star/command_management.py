@@ -555,8 +555,8 @@ def _is_command_in_use(
 def _localized_command_names(desc: CommandDescriptor) -> dict[str, str]:
     """返回 ``语言代码 -> 该语言下的指令名``(来自多语言别名)。
 
-    仅包含通过 ``multi_alias`` 注册了语言映射的别名;无映射时返回空字典,
-    调用方回退到 ``effective_command``(主命令名)。
+    仅包含通过 ``multi_alias`` 注册了语言映射、且当前仍生效的别名;
+    无映射时返回空字典,调用方回退到 ``effective_command``(主命令名)。
 
     Args:
         desc: 指令描述符。
@@ -564,9 +564,11 @@ def _localized_command_names(desc: CommandDescriptor) -> dict[str, str]:
     Returns:
         语言代码到指令显示名的映射,如 ``{"zh-CN": "天气", "ja-JP": "天気"}``。
     """
+    # desc.aliases 可能已被 WebUI 重命名/覆盖,取交集避免展示已失效的名称
+    current_aliases = set(desc.aliases)
     names: dict[str, str] = {}
     for alias, lang in desc.alias_lang_map.items():
-        if alias and lang:
+        if alias and lang and alias in current_aliases:
             names.setdefault(lang, alias)
     return names
 

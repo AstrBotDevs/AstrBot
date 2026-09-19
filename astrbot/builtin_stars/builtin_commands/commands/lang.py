@@ -31,7 +31,6 @@ class LangCommand:
                     umo,
                     "lang.current",
                     lang=global_value or DEFAULT_LANG,
-                    source="global",
                 )
             ]
             if global_value and normalize_lang(global_value) is None:
@@ -52,7 +51,7 @@ class LangCommand:
         # reset:恢复默认语言
         if value.strip().lower() == "reset":
             cfg["language"] = DEFAULT_LANG
-            cfg.save_config()
+            await cfg.save_config_async()
             ret = await t(self.context, umo, "lang.reset", lang=DEFAULT_LANG)
             event.set_result(MessageEventResult().message(ret).use_t2i(False))
             return
@@ -71,6 +70,6 @@ class LangCommand:
             return
 
         cfg["language"] = norm
-        cfg.save_config()
+        await cfg.save_config_async()
         ret = await t(self.context, umo, "lang.set", lang=norm)
         event.set_result(MessageEventResult().message(ret).use_t2i(False))

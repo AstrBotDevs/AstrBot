@@ -35,8 +35,12 @@ const resolveDescription = (cmd: CommandItem): string => {
 // 按全局语言配置解析指令名:names[globalLanguage] -> 主命令名
 const resolveCommandName = (cmd: CommandItem): string => {
   const lang = props.globalLanguage || 'en-US';
-  const names = cmd.names || {};
-  return names[lang] || cmd.effective_command;
+  const localized = (cmd.names || {})[lang];
+  if (!localized) return cmd.effective_command;
+  // 子指令的 effective_command 形如 "parent child",本地化名仅含片段,
+  // 这里补回父级前缀以保持同一列展示一致
+  const prefix = cmd.parent_signature ? `${cmd.parent_signature} ` : '';
+  return `${prefix}${localized}`;
 };
 
 // 表格表头

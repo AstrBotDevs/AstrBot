@@ -1,7 +1,7 @@
 """多语言指令(国际化)工具。
 
 提供:
-- 语言代码归一化与解析(会话级 -> 全局配置 -> 默认)。
+- 语言代码归一化与解析(全局配置 -> 默认)。
 - ``multi_alias``:为插件指令注册多语言别名的便捷 helper。
 """
 
@@ -98,13 +98,13 @@ def multi_alias(**langs: str | list[str]) -> MultiLangAlias:
 
 
 async def get_lang(context: Any, umo: str | None = None) -> str:
-    """获取当前会话/全局的语言(插件便捷 API)。
+    """获取全局语言配置(插件便捷 API)。
 
     等价于 ``await context.get_lang(umo)``。
 
     Args:
         context: ``star.Context`` 实例。
-        umo: unified_message_origin,为 ``None`` 时只使用全局配置。
+        umo: 保留参数(兼容插件调用),不影响结果。
 
     Returns:
         规范语言代码,如 ``"zh-CN"`` / ``"en-US"`` / ``"ru-RU"`` / ``"ja-JP"``。

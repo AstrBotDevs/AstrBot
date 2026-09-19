@@ -185,9 +185,7 @@ class ConversationCommands:
 
         if not cid:
             message.set_result(
-                MessageEventResult().message(
-                    await t(self.context, umo, "reset.no_conv")
-                ),
+                MessageEventResult().message(await t(self.context, umo, "no_conv")),
             )
             return
 
