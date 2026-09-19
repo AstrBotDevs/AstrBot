@@ -2,6 +2,7 @@ import copy
 import inspect
 import json
 from collections.abc import AsyncGenerator
+from pathlib import Path
 from typing import Any
 
 from openai.types.responses import Response
@@ -13,6 +14,13 @@ from astrbot.core.agent.tool import ToolSet
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, TokenUsage, ToolCallsResult
+from astrbot.core.provider.modalities import sanitize_contexts_by_modalities
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.image_media_store import (
+    ImageMediaStore,
+    materialize_image_media_refs,
+)
+from astrbot.core.utils.media_utils import get_image_preparation_options
 
 from ..register import register_provider_adapter
 from .openai_source import ProviderOpenAIOfficial
@@ -259,6 +267,15 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         Returns:
             The Responses payload and its chat-format source context.
         """
+        contexts = contexts or []
+        contexts, _ = sanitize_contexts_by_modalities(
+            contexts, self.provider_config.get("modalities")
+        )
+        contexts = await materialize_image_media_refs(
+            contexts,
+            ImageMediaStore(Path(get_astrbot_data_path()) / "media"),
+            options=get_image_preparation_options(self.provider_settings),
+        )
         context_query = copy.deepcopy(self._ensure_message_to_dicts(contexts))
         if prompt is not None:
             context_query.append(

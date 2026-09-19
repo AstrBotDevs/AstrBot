@@ -1,7 +1,10 @@
 import base64
 from pathlib import Path
 
+import pytest
+
 from astrbot.core.agent.tool_image_cache import tool_image_cache
+from astrbot.core.utils import media_utils
 from astrbot.core.utils.storage_cleaner import StorageCleaner
 
 
@@ -111,3 +114,14 @@ def test_tool_image_cache_recovers_after_storage_cleanup(tmp_path, monkeypatch):
 
     assert cached_path == cache_dir / "call-test_0.jpg"
     assert cached_path.read_bytes() == image_bytes
+
+
+def test_tool_image_cache_rejects_oversized_image_before_decode(monkeypatch):
+    monkeypatch.setattr(media_utils, "MODEL_IMAGE_MAX_INPUT_BYTES", 4)
+
+    with pytest.raises(media_utils.ImagePayloadTooLargeError, match="input exceeds"):
+        tool_image_cache.save_image(
+            base64_data=base64.b64encode(b"12345").decode("ascii"),
+            tool_call_id="call-too-large",
+            tool_name="test-tool",
+        )

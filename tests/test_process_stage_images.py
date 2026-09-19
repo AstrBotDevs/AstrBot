@@ -20,6 +20,7 @@ from astrbot.core.agent.message import (
     TextPart,
     dump_messages_with_checkpoints,
 )
+from astrbot.core.agent.runners import tool_loop_agent_runner
 from astrbot.core.config.default import DEFAULT_CONFIG
 from astrbot.core.message.components import Image, Plain, Reply
 from astrbot.core.pipeline.preprocess_stage import stage as preprocess
@@ -36,6 +37,10 @@ from astrbot.core.provider.provider import Provider
 from astrbot.core.star.star_handler import EventType
 from astrbot.core.utils import image_input
 from astrbot.core.utils import media_utils as media
+from astrbot.core.utils.image_media_store import (
+    ImageMediaStore,
+    materialize_image_media_refs,
+)
 
 
 def make_event(parts=None, text="hello", session="images"):
@@ -194,18 +199,13 @@ async def process_event(harness, event, *, preprocess_first=False, stage=None):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("enabled", [None, True, False])
 @pytest.mark.parametrize("fmt", ["JPEG", "PNG", "BMP", "WEBP", "GIF"])
-async def test_legacy_toggle_does_not_disable_preparation(
-    harness, tmp_path, monkeypatch, enabled, fmt
+async def test_image_formats_are_prepared_for_provider(
+    harness, tmp_path, monkeypatch, fmt
 ):
     source = source_image(tmp_path, fmt)
     original = source.read_bytes()
     event = make_event([Image(file=str(source))], text="")
-    if enabled is None:
-        harness.config["provider_settings"].pop("image_compress_enabled", None)
-    else:
-        harness.config["provider_settings"]["image_compress_enabled"] = enabled
     await process_event(harness, event, preprocess_first=True)
     assert len(harness.captured) == 1
     req = harness.captured[0].req
@@ -326,14 +326,7 @@ async def test_animation_montage_notice_reaches_model(harness, tmp_path):
 
     still = tmp_path / "still.png"
     PILImage.new("RGB", (60, 30), "red").save(still)
-    # Legacy settings cannot disable animation preparation.
-    for source, enabled, expected in (
-        (animated, True, True),
-        (animated, True, True),
-        (still, True, False),
-        (animated, False, True),
-    ):
-        harness.config["provider_settings"]["image_compress_enabled"] = enabled
+    for source, expected in ((animated, True), (still, False)):
         await process_event(harness, make_event([Image(file=str(source))]))
         notices = [
             part
@@ -393,6 +386,11 @@ async def test_profile_reload_and_concurrent_requests(harness, tmp_path):
 async def test_plugin_request_extra_metadata_hook_and_history(
     harness, tmp_path, monkeypatch
 ):
+    monkeypatch.setattr(
+        tool_loop_agent_runner,
+        "get_astrbot_data_path",
+        lambda: str(tmp_path / "data"),
+    )
     source = source_image(tmp_path)
     replacement = source_image(tmp_path, "BMP")
     extra = ImageURLPart(
@@ -465,7 +463,12 @@ async def test_plugin_request_extra_metadata_hook_and_history(
         == historical[0]["content"][0]["image_url"]["url"]
     )
     assert req.contexts == historical
-    images = [p for p in saved[-1]["content"] if p["type"] == "image_url"]
+    refs = [p for p in saved[-1]["content"] if p["type"] == "image_media_ref"]
+    assert refs and all(len(p["media_id"]) == 64 for p in refs)
+    materialized = await materialize_image_media_refs(
+        [saved[-1]], ImageMediaStore(tmp_path / "data" / "media")
+    )
+    images = [p for p in materialized[0]["content"] if p["type"] == "image_url"]
     assert images and all(
         p["image_url"]["url"].startswith("data:image/jpeg;base64,") for p in images
     )
@@ -481,7 +484,7 @@ async def test_plugin_request_extra_metadata_hook_and_history(
     from astrbot.core.provider.sources.anthropic_source import ProviderAnthropic
 
     anthropic = object.__new__(ProviderAnthropic)
-    _, payload = anthropic._prepare_payload([saved[-1]])
+    _, payload = anthropic._prepare_payload(materialized)
     visual = [part for part in payload[0]["content"] if part["type"] == "image"]
     assert len(visual) == len(images)
     assert all(part["source"]["media_type"] == "image/jpeg" for part in visual)
@@ -493,6 +496,11 @@ async def test_plugin_request_extra_metadata_hook_and_history(
 async def test_provider_and_history_keep_bounded_previews_and_original_paths(
     harness, tmp_path, monkeypatch, entry, fmt
 ):
+    monkeypatch.setattr(
+        tool_loop_agent_runner,
+        "get_astrbot_data_path",
+        lambda: str(tmp_path / "data"),
+    )
     source = tmp_path / f"original.{fmt.lower()}"
     pixels = random.Random(9703).randbytes(1280 * 960 * 3)
     image = PILImage.frombytes("RGB", (1280, 960), pixels)
@@ -511,9 +519,7 @@ async def test_provider_and_history_keep_bounded_previews_and_original_paths(
     assert len(original) >= 512 * 1024
     harness.config["provider_settings"]["image_compress_options"] = {
         "max_size": 1280,
-        "quality": 100,
     }
-    harness.config["provider_settings"]["image_compress_enabled"] = False
     part = Image(file=str(source))
     event = make_event(
         [Reply(id="quoted", chain=[part])] if entry == "quote" else [part]
@@ -558,6 +564,18 @@ async def test_provider_and_history_keep_bounded_previews_and_original_paths(
         ]
     )
     for messages in (provider_messages, history):
+        if any(
+            part.get("type") == "image_media_ref"
+            for message in messages
+            if isinstance(message.get("content"), list)
+            for part in message["content"]
+            if isinstance(part, dict)
+        ):
+            messages = await materialize_image_media_refs(
+                messages,
+                ImageMediaStore(tmp_path / "data" / "media"),
+                options=media.ImagePreparationOptions(max_size=1280),
+            )
         images = [
             part
             for message in messages
@@ -864,10 +882,9 @@ def test_image_preparation_stays_outside_agent_runner_and_providers():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("enabled", [True, False])
 @pytest.mark.parametrize("reference", ["data", "base64", "http", "file"])
 async def test_localized_reference_lifetime_and_ownership(
-    harness, tmp_path, monkeypatch, enabled, reference
+    harness, tmp_path, monkeypatch, reference
 ):
     source = source_image(tmp_path)
     encoded = base64.b64encode(source.read_bytes()).decode()
@@ -882,7 +899,6 @@ async def test_localized_reference_lifetime_and_ownership(
         Path(target).write_bytes(source.read_bytes())
 
     monkeypatch.setattr(media, "download_file", download)
-    harness.config["provider_settings"]["image_compress_enabled"] = enabled
     event = make_event()
     event.set_extra(
         "provider_request", ProviderRequest(prompt="", image_urls=[refs[reference]])
@@ -930,10 +946,10 @@ async def test_compliant_plugin_images_reuse_localized_file_with_correct_ownersh
     assert path.read_bytes() == original
     borrowed = reference in {"file", "path"}
     assert (path == source) == borrowed
-    assert event._temporary_local_files == []
+    assert event._temporary_local_files == ([] if borrowed else [str(path)])
     assert set(harness.work.rglob("*")) == (set() if borrowed else {path})
     event.cleanup_temporary_local_files()
-    assert path.exists()
+    assert path.exists() == borrowed
     assert source.read_bytes() == original
 
 
@@ -1032,12 +1048,11 @@ async def test_plugin_and_hook_image_list_normalization(harness, tmp_path, monke
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("quoted", [False, True])
-@pytest.mark.parametrize("enabled", [False, True])
 @pytest.mark.parametrize("late", [False, True])
 @pytest.mark.parametrize("reference", ["file", "base64", "data", "http"])
 @pytest.mark.parametrize("fmt", ["JPEG", "GIF"])
 async def test_attachment_sources_survive_event_cleanup(
-    harness, monkeypatch, quoted, enabled, late, reference, fmt
+    harness, monkeypatch, quoted, late, reference, fmt
 ):
     harness.work.mkdir()
     source = source_image(harness.work, fmt)
@@ -1057,7 +1072,6 @@ async def test_attachment_sources_survive_event_cleanup(
     unrelated = harness.work / "other.tmp"
     unrelated.write_bytes(b"temporary")
     event.track_temporary_local_file(str(unrelated))
-    harness.config["provider_settings"]["image_compress_enabled"] = enabled
     harness.config["provider_settings"]["image_compress_options"]["max_size"] = 12
 
     async def download(url, target):

@@ -8,7 +8,12 @@ from astrbot.core.provider.entities import (
     LLMResponse,
     ProviderRequest,
 )
-from astrbot.core.utils.media_utils import MediaResolver
+from astrbot.core.utils.media_utils import (
+    ImagePayloadTooLargeError,
+    ImagePreparationOptions,
+    MediaResolver,
+    resolve_media_ref_to_base64_data,
+)
 
 from ...hooks import BaseAgentRunHooks
 from ...response import AgentResponseData
@@ -80,6 +85,11 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
             # 执行 Dify 请求并处理结果
             async for response in self._execute_dify_request():
                 yield response
+        except (ImagePayloadTooLargeError, MemoryError, OSError):
+            # Keep resource failures visible to the caller; do not turn them into
+            # a normal agent response that could trigger an unrelated retry.
+            self._transition_state(AgentState.ERROR)
+            raise
         except Exception as e:
             logger.error(f"Dify 请求失败：{str(e)}")
             self._transition_state(AgentState.ERROR)
@@ -108,10 +118,16 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
         image_url: str,
         session_id: str,
     ) -> dict[str, str] | None:
-        image_data = await MediaResolver(
+        image_options = (
+            getattr(getattr(self, "req", None), "image_preparation_options", None)
+            or ImagePreparationOptions()
+        )
+        image_data = await resolve_media_ref_to_base64_data(
             image_url,
             media_type="image",
-        ).to_base64_data(strict=True)
+            strict=True,
+            image_options=image_options,
+        )
         if image_data is None:
             logger.warning("Dify 图片预处理结果为空，将忽略。")
             return None
@@ -159,6 +175,8 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
         for image_url in image_urls:
             try:
                 image_payload = await self._upload_image_for_dify(image_url, session_id)
+            except (ImagePayloadTooLargeError, MemoryError, OSError):
+                raise
             except Exception as e:
                 logger.warning(f"上传图片失败：{e}")
                 continue

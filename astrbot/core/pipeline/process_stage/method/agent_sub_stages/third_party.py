@@ -36,6 +36,7 @@ from astrbot.core.provider.entities import (
 )
 from astrbot.core.star.star_handler import EventType
 from astrbot.core.utils.config_number import coerce_int_config
+from astrbot.core.utils.media_utils import get_image_preparation_options
 from astrbot.core.utils.metrics import Metric
 
 from .....astr_agent_context import AgentContextWrapper, AstrAgentContext
@@ -289,10 +290,21 @@ class ThirdPartyAgentSubStage(Stage):
         req = ProviderRequest()
         req.session_id = event.unified_msg_origin
         req.prompt = event.message_str[len(provider_wake_prefix) :]
+        req.image_preparation_options = get_image_preparation_options(
+            self.conf.get("provider_settings")
+        )
         for comp in event.message_obj.message:
             if isinstance(comp, Image):
-                image_path = await comp.convert_to_base64()
-                req.image_urls.append(image_path)
+                image_ref = (
+                    getattr(comp, "path", None)
+                    or getattr(comp, "url", None)
+                    or getattr(comp, "file", None)
+                )
+                if not isinstance(image_ref, str):
+                    image_ref = await comp.convert_to_file_path()
+                if not image_ref:
+                    raise ValueError("Image attachment has no usable reference")
+                req.image_urls.append(image_ref)
             elif isinstance(comp, Record):
                 audio_path = await comp.convert_to_file_path()
                 req.audio_urls.append(audio_path)

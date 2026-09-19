@@ -20,6 +20,7 @@ from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.config.agent_runner import resolve_context_compression_config
 from astrbot.core.conversation_mgr import Conversation
 from astrbot.core.cron.manager import CronJobManager
+from astrbot.core.exceptions import ProviderRequestTooLargeError
 from astrbot.core.message.components import File, Image, Plain, Reply, Video
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.platform_metadata import PlatformMetadata
@@ -30,6 +31,7 @@ from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.skills.skill_manager import SkillInfo
 from astrbot.core.star.context import Context
 from astrbot.core.star.star import StarMetadata
+from astrbot.core.utils.media_utils import ImagePayloadTooLargeError
 
 
 @pytest.fixture
@@ -52,6 +54,27 @@ def mock_provider():
     }
     provider.get_model.return_value = "gpt-4"
     return provider
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "error",
+    [
+        MemoryError("oom"),
+        ImagePayloadTooLargeError("too large"),
+        ProviderRequestTooLargeError("413"),
+    ],
+)
+async def test_image_caption_propagates_resource_errors(monkeypatch, error):
+    req = ProviderRequest(image_urls=["image.png"])
+
+    async def fail(*_args, **_kwargs):
+        raise error
+
+    monkeypatch.setattr(ama, "_request_img_caption", fail)
+    with pytest.raises(type(error)):
+        await ama._ensure_img_caption(None, req, {}, MagicMock(), "caption")
+    assert req.image_urls == []
 
 
 @pytest.fixture
@@ -1884,7 +1907,6 @@ class TestBuildMainAgent:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("quoted", [False, True])
-    @pytest.mark.parametrize("compression_enabled", [False, True])
     async def test_build_main_agent_with_images(
         self,
         mock_event,
@@ -1893,7 +1915,6 @@ class TestBuildMainAgent:
         tmp_path,
         monkeypatch,
         quoted,
-        compression_enabled,
     ):
         """Direct builders prepare both ordinary and quoted images before reset."""
 
@@ -1932,7 +1953,6 @@ class TestBuildMainAgent:
                 config=module.MainAgentBuildConfig(
                     tool_call_timeout=60,
                     provider_settings={
-                        "image_compress_enabled": compression_enabled,
                         "image_compress_options": {"max_size": 4},
                     },
                 ),

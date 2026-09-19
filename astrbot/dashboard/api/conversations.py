@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Query, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 
 from astrbot.dashboard.async_utils import run_maybe_async
 from astrbot.dashboard.responses import ApiError, ok
@@ -171,6 +171,21 @@ async def export_conversations(
     service: ConversationService = Depends(get_service),
 ):
     return await _export_conversations(_model_dict(payload), service)
+
+
+@router.get("/conversations/{conversation_id:path}/media/{media_id}")
+async def preview_conversation_media(
+    conversation_id: str,
+    media_id: str,
+    user_id: str = Query(...),
+    _auth: AuthContext = Depends(require_data_scope),
+    service: ConversationService = Depends(get_service),
+):
+    try:
+        media = await service.get_conversation_media(user_id, conversation_id, media_id)
+        return Response(content=media.data, media_type=media.mime_type)
+    except ConversationServiceError as exc:
+        _raise_conversation_error(exc)
 
 
 @router.post("/conversations/batch-delete")

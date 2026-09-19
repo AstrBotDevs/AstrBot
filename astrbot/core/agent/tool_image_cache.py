@@ -11,6 +11,7 @@ from typing import ClassVar
 
 from astrbot import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.media_utils import validate_image_input_size
 
 
 @dataclass
@@ -91,6 +92,7 @@ class ToolImageCache:
         try:
             # Runtime cache cleanup may remove empty subdirectories.
             os.makedirs(self._cache_dir, exist_ok=True)
+            validate_image_input_size(base64_data)
             image_bytes = base64.b64decode(base64_data)
             with open(file_path, "wb") as f:
                 f.write(image_bytes)

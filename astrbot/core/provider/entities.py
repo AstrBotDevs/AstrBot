@@ -24,9 +24,12 @@ from astrbot.core.agent.tool import ToolSet
 from astrbot.core.db.po import Conversation
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.utils.media_utils import (
+    ImagePayloadTooLargeError,
+    ImagePreparationInput,
+    ImagePreparationOptions,
     MediaResolver,
     is_recoverable_image_error,
-    resolve_image_ref_to_base64_data,
+    prepare_image_source,
 )
 
 
@@ -118,6 +121,8 @@ class ProviderRequest:
     """附加的上次请求后工具调用的结果。参考: https://platform.openai.com/docs/guides/function-calling#handling-function-calls"""
     model: str | None = None
     """模型名称，为 None 时使用提供商的默认模型"""
+    image_preparation_options: ImagePreparationOptions | None = None
+    """当前请求的图片准备配置，由上层 Agent 配置注入。"""
 
     def __repr__(self) -> str:
         return (
@@ -215,14 +220,20 @@ class ProviderRequest:
                 dumped = (
                     part if isinstance(part, dict) else part.model_dump_for_context()
                 )
-                # Capture bytes before event cleanup. Extra image paths must also
-                # reach providers and persisted history as portable data URIs.
                 if isinstance(dumped, dict) and dumped.get("type") == "image_url":
                     image_url = dumped.get("image_url")
                     url = image_url.get("url") if isinstance(image_url, dict) else None
                     if isinstance(url, str) and url:
                         try:
-                            resolved = await resolve_image_ref_to_base64_data(url)
+                            prepared = await prepare_image_source(
+                                ImagePreparationInput(
+                                    url,
+                                    source_kind="extra_user_content",
+                                ),
+                                options=self.image_preparation_options,
+                            )
+                        except (ImagePayloadTooLargeError, MemoryError):
+                            raise
                         except Exception as exc:
                             if not is_recoverable_image_error(exc):
                                 raise
@@ -232,38 +243,31 @@ class ProviderRequest:
                             )
                             image_capture_failed = True
                             continue
-                        if resolved is None:
-                            logger.warning(
-                                "Image source capture returned no data; skipping image."
-                            )
-                            image_capture_failed = True
-                            continue
                         dumped = {
                             **dumped,
                             "image_url": {
                                 **image_url,
-                                "url": resolved.to_data_url(),
+                                "url": prepared.to_data_url(),
                             },
                         }
                 content_blocks.append(dumped)
 
-        # 3. Read image references without resizing or transcoding.
+        # 3. 图片内容
         if self.image_urls:
             for image_url in self.image_urls:
                 try:
-                    image_data = await resolve_image_ref_to_base64_data(image_url)
+                    image_data = await prepare_image_source(
+                        ImagePreparationInput(image_url, source_kind="request_image"),
+                        options=self.image_preparation_options,
+                    )
+                except (ImagePayloadTooLargeError, MemoryError):
+                    raise
                 except Exception as exc:
                     if not is_recoverable_image_error(exc):
                         raise
                     logger.warning(
                         "Image source capture failed; skipping image (%s).",
                         type(exc).__name__,
-                    )
-                    image_capture_failed = True
-                    continue
-                if image_data is None:
-                    logger.warning(
-                        "Image source capture returned no data; skipping image."
                     )
                     image_capture_failed = True
                     continue

@@ -378,7 +378,7 @@ async def test_compress_image_keeps_animated_gif(tmp_path, monkeypatch):
     compressed_path = await media_utils.compress_image(str(image_path), max_size=2)
 
     assert compressed_path == str(image_path)
-    assert not list(temp_dir.iterdir())
+    assert not temp_dir.exists() or not list(temp_dir.iterdir())
 
 
 @pytest.mark.asyncio

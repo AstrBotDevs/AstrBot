@@ -157,6 +157,8 @@
       "toolCall": "工具调用",
       "reasoning": "思考过程",
       "image": "消息图片",
+      "mediaLoading": "正在加载图片",
+      "mediaUnavailable": "图片暂时不可用",
       "roles": {
         "user": "用户",
         "assistant": "助手",

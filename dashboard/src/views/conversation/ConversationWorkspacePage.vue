@@ -1276,6 +1276,8 @@ function changePage(nextPage: number) {
           v-else
           :key="conversationKey(activeConversation)"
           :messages="conversationHistory"
+          :conversation-id="activeConversation.cid"
+          :user-id="activeConversation.user_id"
         />
       </section>
     </main>

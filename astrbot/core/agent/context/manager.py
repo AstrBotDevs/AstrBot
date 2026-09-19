@@ -1,4 +1,6 @@
 from astrbot import logger
+from astrbot.core.exceptions import ProviderRequestTooLargeError
+from astrbot.core.utils.media_utils import ImagePayloadTooLargeError
 
 from ..message import Message
 from .compressor import LLMSummaryCompressor, TruncateByTurnsCompressor
@@ -36,6 +38,7 @@ class ContextManager:
                 keep_recent_ratio=config.llm_compress_keep_recent_ratio,
                 instruction_text=config.llm_compress_instruction,
                 token_counter=self.token_counter,
+                image_media_store=config.image_media_store,
             )
         else:
             self.compressor = TruncateByTurnsCompressor(
@@ -76,6 +79,8 @@ class ContextManager:
                     result = await self._run_compression(result, total_tokens)
 
             return result
+        except (MemoryError, ImagePayloadTooLargeError, ProviderRequestTooLargeError):
+            raise
         except Exception as e:
             logger.error(f"Error during context processing: {e}", exc_info=True)
             return messages

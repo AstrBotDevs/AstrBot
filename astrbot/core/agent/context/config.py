@@ -6,6 +6,7 @@ from .token_counter import TokenCounter
 
 if TYPE_CHECKING:
     from astrbot.core.provider.provider import Provider
+    from astrbot.core.utils.image_media_store import ImageMediaStore
 
 
 @dataclass
@@ -33,3 +34,5 @@ class ContextConfig:
     """Custom token counting method. If None, the default method is used."""
     custom_compressor: ContextCompressor | None = None
     """Custom context compression method. If None, the default method is used."""
+    image_media_store: "ImageMediaStore | None" = None
+    """Application media store shared by main and summary requests."""
