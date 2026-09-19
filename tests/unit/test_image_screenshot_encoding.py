@@ -1,11 +1,13 @@
 from pathlib import Path
 
+import pytest
 from PIL import Image, ImageDraw
 
 from astrbot.core.utils import media_utils
 
 
-def test_prefers_smaller_lossless_encoding_for_ui_screenshot(tmp_path):
+@pytest.mark.asyncio
+async def test_model_preparation_bounds_ui_screenshot(tmp_path):
     source = tmp_path / "screenshot-ordinary.png"
     with Image.new("RGB", (1920, 1080), "white") as image:
         draw = ImageDraw.Draw(image)
@@ -21,23 +23,15 @@ def test_prefers_smaller_lossless_encoding_for_ui_screenshot(tmp_path):
             )
         image.save(source, "PNG", optimize=True)
 
-    output = media_utils._compress_image_sync(
-        source, tmp_path, 1280, 95, True, 4 * 1024 * 1024
+    prepared = await media_utils.prepare_model_image(
+        str(source), max_size=1280, output_dir=tmp_path
     )
 
-    assert output is not None
-    with Image.open(source) as original:
-        resized = original.copy()
-        resized.thumbnail((1280, 1280), Image.Resampling.LANCZOS)
-        png_candidate = tmp_path / "expected.png"
-        jpeg_candidate = tmp_path / "expected.jpg"
-        resized.save(png_candidate, "PNG", optimize=True)
-        resized.save(jpeg_candidate, "JPEG", quality=95, optimize=True)
-        # The old implementation always selected JPEG for opaque PNG input,
-        # even when the same resized pixels have a smaller PNG encoding.
-        assert png_candidate.stat().st_size < jpeg_candidate.stat().st_size
-        assert max(resized.size) <= 1280
-    assert Path(output).suffix == ".png"
-    assert Path(output).stat().st_size == png_candidate.stat().st_size
+    assert prepared is not None
+    output, is_montage, needs_cleanup, _ = prepared
+    assert not is_montage and needs_cleanup
+    assert Path(output).suffix == ".jpg"
+    assert Path(output).stat().st_size < 512 * 1024
     with Image.open(output) as image:
         assert max(image.size) <= 1280
+    Path(output).unlink()

@@ -4,6 +4,7 @@ import base64
 import io
 import json
 import os
+import random
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
@@ -16,6 +17,14 @@ from astrbot.core.utils.image_media_store import ImageMediaStore
 def _png() -> bytes:
     output = io.BytesIO()
     with Image.new("RGBA", (9, 7), (20, 40, 60, 100)) as image:
+        image.save(output, "PNG")
+    return output.getvalue()
+
+
+def _noisy_png() -> bytes:
+    output = io.BytesIO()
+    pixels = random.Random(9703).randbytes(1280 * 960 * 3)
+    with Image.frombytes("RGB", (1280, 960), pixels) as image:
         image.save(output, "PNG")
     return output.getvalue()
 
@@ -124,6 +133,69 @@ async def test_reference_materialization_preserves_history_and_bytes(
     assert history[0]["content"][0]["type"] == "image_media_ref"
     if runtime_message:
         assert messages[0].content[0].type == "image_media_ref"
+
+
+@pytest.mark.asyncio
+async def test_model_materialization_bounds_selected_reference_without_rewriting_history(
+    tmp_path,
+):
+    from astrbot.core.utils.image_media_store import materialize_image_media_refs
+    from astrbot.core.utils.media_utils import ImagePreparationOptions
+
+    data = _noisy_png()
+    assert len(data) > 512 * 1024
+    store = ImageMediaStore(tmp_path / "media")
+    ref = store.put(data)
+    history = [{"role": "user", "content": [ref.model_dump()]}]
+
+    result = await materialize_image_media_refs(
+        history,
+        store,
+        options=ImagePreparationOptions(max_size=1280),
+    )
+
+    image_url = result[0]["content"][0]["image_url"]["url"]
+    prepared = base64.b64decode(image_url.split(",", 1)[1])
+    assert len(prepared) < 512 * 1024
+    assert image_url.startswith("data:image/jpeg;base64,")
+    assert history[0]["content"][0]["type"] == "image_media_ref"
+    assert store.read(ref, {ref.media_id}) == data
+
+
+@pytest.mark.asyncio
+async def test_model_materialization_bounds_legacy_inline_image_without_rewriting_history(
+    tmp_path,
+):
+    from astrbot.core.utils.image_media_store import materialize_image_media_refs
+    from astrbot.core.utils.media_utils import ImagePreparationOptions
+
+    data = _noisy_png()
+    encoded = base64.b64encode(data).decode("ascii")
+    history = [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/png;base64,{encoded}"},
+                }
+            ],
+        }
+    ]
+
+    result = await materialize_image_media_refs(
+        history,
+        ImageMediaStore(tmp_path / "media"),
+        options=ImagePreparationOptions(max_size=1280),
+    )
+
+    image_url = result[0]["content"][0]["image_url"]["url"]
+    prepared = base64.b64decode(image_url.split(",", 1)[1])
+    assert len(prepared) < 512 * 1024
+    assert image_url.startswith("data:image/jpeg;base64,")
+    assert history[0]["content"][0]["image_url"]["url"] == (
+        f"data:image/png;base64,{encoded}"
+    )
 
 
 @pytest.mark.asyncio

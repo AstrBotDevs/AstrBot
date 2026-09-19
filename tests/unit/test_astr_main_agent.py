@@ -1907,7 +1907,6 @@ class TestBuildMainAgent:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("quoted", [False, True])
-    @pytest.mark.parametrize("compression_enabled", [False, True])
     async def test_build_main_agent_with_images(
         self,
         mock_event,
@@ -1916,7 +1915,6 @@ class TestBuildMainAgent:
         tmp_path,
         monkeypatch,
         quoted,
-        compression_enabled,
     ):
         """Direct builders prepare both ordinary and quoted images before reset."""
 
@@ -1955,7 +1953,6 @@ class TestBuildMainAgent:
                 config=module.MainAgentBuildConfig(
                     tool_call_timeout=60,
                     provider_settings={
-                        "image_compress_enabled": compression_enabled,
                         "image_compress_options": {"max_size": 4},
                     },
                 ),

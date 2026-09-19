@@ -13,10 +13,6 @@ from anthropic.types.usage import Usage
 
 from astrbot import logger
 from astrbot.api.provider import Provider
-from astrbot.core.agent.context.image_budget import (
-    get_image_encoded_byte_limit,
-    validate_context_image_bytes,
-)
 from astrbot.core.agent.message import AudioURLPart, ContentPart, ImageURLPart, TextPart
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse, TokenUsage
@@ -798,11 +794,10 @@ class ProviderAnthropic(Provider):
         contexts, _ = sanitize_contexts_by_modalities(
             contexts, self.provider_config.get("modalities")
         )
-        validate_context_image_bytes(
-            contexts, get_image_encoded_byte_limit(self.provider_settings)
-        )
         contexts = await materialize_image_media_refs(
-            contexts, ImageMediaStore(Path(get_astrbot_data_path()) / "media")
+            contexts,
+            ImageMediaStore(Path(get_astrbot_data_path()) / "media"),
+            options=get_image_preparation_options(self.provider_settings),
         )
         new_record = None
         if prompt is not None:
@@ -880,11 +875,10 @@ class ProviderAnthropic(Provider):
         contexts, _ = sanitize_contexts_by_modalities(
             contexts, self.provider_config.get("modalities")
         )
-        validate_context_image_bytes(
-            contexts, get_image_encoded_byte_limit(self.provider_settings)
-        )
         contexts = await materialize_image_media_refs(
-            contexts, ImageMediaStore(Path(get_astrbot_data_path()) / "media")
+            contexts,
+            ImageMediaStore(Path(get_astrbot_data_path()) / "media"),
+            options=get_image_preparation_options(self.provider_settings),
         )
         new_record = None
         if prompt is not None:

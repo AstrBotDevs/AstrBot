@@ -774,23 +774,44 @@ async def test_prepare_chat_payload_materializes_context_http_image_urls(monkeyp
     provider = _make_provider()
     try:
 
-        async def fake_resolve_media_ref_to_base64_data(
+        async def fake_prepare_image_source(
             media_ref: str,
             *,
-            media_type: str,
-            strict: bool = False,
             image_options=None,
+            default_mime_type=None,
         ) -> ResolvedMediaData:
             assert media_ref == "https://example.com/quoted.png"
-            assert media_type == "image"
-            assert strict is False
             assert image_options is not None
             return ResolvedMediaData(base64_data="abcd", mime_type="image/png")
 
+        async def fake_materialize_image_media_refs(contexts, _store, *, options=None):
+            assert options is not None
+            return [
+                {
+                    **contexts[0],
+                    "content": [
+                        contexts[0]["content"][0],
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": (
+                                    await fake_prepare_image_source(
+                                        "https://example.com/quoted.png",
+                                        image_options=options,
+                                    )
+                                ).to_data_url(),
+                                "id": "ctx-img",
+                                "detail": "high",
+                            },
+                        },
+                    ],
+                }
+            ]
+
         monkeypatch.setattr(
             openai_source_module,
-            "resolve_media_ref_to_base64_data",
-            fake_resolve_media_ref_to_base64_data,
+            "materialize_image_media_refs",
+            fake_materialize_image_media_refs,
         )
 
         contexts = [
@@ -822,11 +843,12 @@ async def test_prepare_chat_payload_materializes_context_http_image_urls(monkeyp
                 "type": "image_url",
                 "image_url": {
                     "url": "data:image/png;base64,abcd",
+                    "id": "ctx-img",
                     "detail": "high",
                 },
             },
         ]
-        assert payloads["messages"][0]["content"][1]["image_url"].get("id") is None
+        assert payloads["messages"][0]["content"][1]["image_url"]["id"] == "ctx-img"
         assert contexts[0]["content"][1]["image_url"] == {
             "url": "https://example.com/quoted.png",
             "id": "ctx-img",
@@ -1320,27 +1342,31 @@ async def test_audio_preprocess_failure_does_not_log_media_ref(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_prepare_chat_payload_keeps_original_context_image_when_materialization_fails(
+async def test_prepare_chat_payload_replaces_unavailable_context_image(
     monkeypatch,
 ):
     provider = _make_provider()
     try:
 
-        async def fake_resolve_media_ref_to_base64_data(
-            media_ref: str,
-            *,
-            media_type: str,
-            strict: bool = False,
-        ) -> None:
-            assert media_ref == "https://example.com/expired.png"
-            assert media_type == "image"
-            assert strict is False
-            return None
+        async def fake_prepare_image_source(*_args, **_kwargs):
+            raise ValueError("expired image")
+
+        async def fake_materialize_image_media_refs(contexts, _store, *, options=None):
+            assert options is not None
+            return [
+                {
+                    **contexts[0],
+                    "content": [
+                        contexts[0]["content"][0],
+                        {"type": "text", "text": "[Image unavailable]"},
+                    ],
+                }
+            ]
 
         monkeypatch.setattr(
             openai_source_module,
-            "resolve_media_ref_to_base64_data",
-            fake_resolve_media_ref_to_base64_data,
+            "materialize_image_media_refs",
+            fake_materialize_image_media_refs,
         )
 
         payloads, _ = await provider._prepare_chat_payload(
@@ -1363,12 +1389,7 @@ async def test_prepare_chat_payload_keeps_original_context_image_when_materializ
 
         assert payloads["messages"][0]["content"] == [
             {"type": "text", "text": "look"},
-            {
-                "type": "image_url",
-                "image_url": {
-                    "url": "https://example.com/expired.png",
-                },
-            },
+            {"type": "text", "text": "[Image unavailable]"},
         ]
     finally:
         await provider.terminate()

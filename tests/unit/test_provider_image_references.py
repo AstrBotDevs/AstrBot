@@ -8,7 +8,10 @@ from astrbot.core.provider.sources.anthropic_source import ProviderAnthropic
 from astrbot.core.provider.sources.gemini_source import ProviderGoogleGenAI
 from astrbot.core.provider.sources.openai_source import ProviderOpenAIOfficial
 from astrbot.core.utils.image_media_store import ImageMediaStore
-from astrbot.core.utils.media_utils import ImagePayloadTooLargeError
+from astrbot.core.utils.media_utils import (
+    MODEL_IMAGE_MAX_INPUT_BYTES,
+    ImagePayloadTooLargeError,
+)
 
 
 @pytest.fixture
@@ -50,32 +53,10 @@ async def test_openai_payload_materializes_reference_without_mutating(image_cont
 @pytest.mark.asyncio
 async def test_oversized_reference_fails_before_materialization(image_context):
     oversized = deepcopy(image_context)
-    oversized[0]["content"][0]["byte_size"] = 10_000_000
+    oversized[0]["content"][0]["byte_size"] = MODEL_IMAGE_MAX_INPUT_BYTES + 1
     adapter = _bare(ProviderOpenAIOfficial)
     with pytest.raises(ImagePayloadTooLargeError):
         await adapter._prepare_chat_payload(None, contexts=oversized)
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("adapter_type", [ProviderOpenAIOfficial, ProviderGoogleGenAI])
-async def test_provider_settings_control_reference_budget(adapter_type, image_context):
-    adapter = _bare(adapter_type)
-    adapter.provider_settings = {"image_compress_options": {"max_encoded_bytes": 1}}
-    with pytest.raises(ImagePayloadTooLargeError):
-        if adapter_type is ProviderOpenAIOfficial:
-            await adapter._prepare_chat_payload(None, contexts=image_context)
-        else:
-            await adapter._prepare_conversation({"messages": image_context})
-
-    adapter.provider_settings = {
-        "image_compress_options": {"max_encoded_bytes": 1024 * 1024}
-    }
-    if adapter_type is ProviderOpenAIOfficial:
-        payload, _ = await adapter._prepare_chat_payload(None, contexts=image_context)
-        assert payload["messages"][0]["content"][0]["image_url"]
-    else:
-        contents = await adapter._prepare_conversation({"messages": image_context})
-        assert contents[0].parts[0].inline_data is not None
 
 
 @pytest.mark.asyncio
@@ -108,14 +89,6 @@ async def test_anthropic_text_chat_materializes_reference_without_mutating(
     image = captured["messages"][0]["content"][0]
     assert image["source"]["type"] == "base64"
     assert image_context[0]["content"][0]["type"] == "image_media_ref"
-
-
-@pytest.mark.asyncio
-async def test_anthropic_provider_settings_control_reference_budget(image_context):
-    adapter = _bare(ProviderAnthropic)
-    adapter.provider_settings = {"image_compress_options": {"max_encoded_bytes": 1}}
-    with pytest.raises(ImagePayloadTooLargeError):
-        await adapter.text_chat(contexts=image_context)
 
 
 @pytest.mark.asyncio

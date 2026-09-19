@@ -1401,8 +1401,6 @@ async def test_real_tool_image_uses_preparation_and_reference_storage(
     provider.provider_settings = {
         "image_compress_options": {
             "max_size": 512,
-            "quality": 42,
-            "max_encoded_bytes": 2 * 1024 * 1024,
         }
     }
     provider.max_calls_before_normal_response = 1
@@ -1424,11 +1422,10 @@ async def test_real_tool_image_uses_preparation_and_reference_storage(
         if isinstance(part, ImageMediaRefPart)
     ]
     assert len(images) == 1
-    assert images[0].mime_type == "image/webp"
+    # The mainline preparation keeps alpha-safe images losslessly as PNG.
+    assert images[0].mime_type == "image/png"
     assert images[0].image_id.endswith("call_123_0.webp")
     assert captured_options[0].max_size == 512
-    assert captured_options[0].quality == 42
-    assert captured_options[0].max_encoded_bytes == 2 * 1024 * 1024
     assert provider.call_count == 2
 
 

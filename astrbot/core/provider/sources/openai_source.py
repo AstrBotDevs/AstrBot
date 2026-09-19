@@ -5,7 +5,6 @@ import json
 import random
 import re
 from collections.abc import AsyncGenerator
-from dataclasses import replace
 from pathlib import Path
 from typing import Any, Literal
 
@@ -20,10 +19,6 @@ from openai.types.completion_usage import CompletionUsage
 import astrbot.core.message.components as Comp
 from astrbot import logger
 from astrbot.api.provider import Provider
-from astrbot.core.agent.context.image_budget import (
-    get_image_encoded_byte_limit,
-    validate_context_image_bytes,
-)
 from astrbot.core.agent.message import (
     AudioURLPart,
     ContentPart,
@@ -355,9 +350,7 @@ class ProviderOpenAIOfficial(Provider):
     async def _materialize_context_image_parts(
         self, context_query: list[dict]
     ) -> list[dict]:
-        options = replace(
-            get_image_preparation_options(self.provider_settings), enabled=False
-        )
+        options = get_image_preparation_options(self.provider_settings)
         return [
             await self._materialize_message_image_parts(message, options=options)
             for message in context_query
@@ -1015,11 +1008,10 @@ class ProviderOpenAIOfficial(Provider):
         contexts, _ = sanitize_contexts_by_modalities(
             contexts, self.provider_config.get("modalities")
         )
-        validate_context_image_bytes(
-            contexts, get_image_encoded_byte_limit(self.provider_settings)
-        )
         contexts = await materialize_image_media_refs(
-            contexts, ImageMediaStore(Path(get_astrbot_data_path()) / "media")
+            contexts,
+            ImageMediaStore(Path(get_astrbot_data_path()) / "media"),
+            options=get_image_preparation_options(self.provider_settings),
         )
         new_record = None
         if prompt is not None:

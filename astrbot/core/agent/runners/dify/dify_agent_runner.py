@@ -10,6 +10,7 @@ from astrbot.core.provider.entities import (
 )
 from astrbot.core.utils.media_utils import (
     ImagePayloadTooLargeError,
+    ImagePreparationOptions,
     MediaResolver,
     resolve_media_ref_to_base64_data,
 )
@@ -117,8 +118,9 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
         image_url: str,
         session_id: str,
     ) -> dict[str, str] | None:
-        image_options = getattr(
-            getattr(self, "req", None), "image_preparation_options", None
+        image_options = (
+            getattr(getattr(self, "req", None), "image_preparation_options", None)
+            or ImagePreparationOptions()
         )
         image_data = await resolve_media_ref_to_base64_data(
             image_url,

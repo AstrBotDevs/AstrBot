@@ -75,7 +75,7 @@ async def prepare_request_images(
             )
         except ImageInputTooLargeError as exc:
             image = None
-            original_path = str(exc)
+            original_path = exc.path
             status = "oversized"
         if image:
             path, is_montage, needs_cleanup, original_path = image

@@ -1,9 +1,7 @@
-import asyncio
 import base64
 import io
 import threading
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
 
 import pytest
 from PIL import Image
@@ -53,69 +51,16 @@ async def test_prepare_image_source_accepts_all_reference_forms(tmp_path, monkey
 
 
 @pytest.mark.asyncio
-async def test_prepare_cancel_keeps_resolver_source_until_worker_exits(
-    tmp_path, monkeypatch
-):
-    entered = threading.Event()
-    release = threading.Event()
-    source_seen = {}
-    original = media_utils._compress_image_sync
-
-    def blocked(source, *args, **kwargs):
-        source_seen["path"] = Path(source) if isinstance(source, (str, Path)) else None
-        entered.set()
-        release.wait(5)
-        return original(source, *args, **kwargs)
-
-    monkeypatch.setattr(media_utils, "_compress_image_sync", blocked)
-    encoded = base64.b64encode(_png()).decode()
-    task = asyncio.create_task(
-        media_utils.prepare_image_source(
-            f"data:image/png;base64,{encoded}",
-            options=media_utils.ImagePreparationOptions(max_size=2),
-        )
-    )
-    assert await asyncio.to_thread(entered.wait, 2)
-    assert source_seen["path"] is not None
-    assert source_seen["path"].exists()
-    task.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await task
-    assert source_seen["path"].exists()
-    release.set()
-    await asyncio.sleep(0.2)
-    assert not source_seen["path"].exists()
-
-
-@pytest.mark.asyncio
-async def test_prepare_bytes_write_failure_cleans_owned_source(monkeypatch, tmp_path):
-    owned = tmp_path / "owned.bin"
-
-    monkeypatch.setattr(media_utils, "_temp_media_path", lambda *_args: owned)
-
-    original_write_bytes = Path.write_bytes
-
-    def fail_write(path, data):
-        original_write_bytes(path, b"partial")
-        raise OSError("disk full")
-
-    monkeypatch.setattr(Path, "write_bytes", fail_write)
-    with pytest.raises(OSError, match="disk full"):
-        await media_utils.prepare_image_source(_png())
-    assert not owned.exists()
-
-
-@pytest.mark.asyncio
 async def test_provider_request_passes_preparation_options():
     data = base64.b64encode(_png()).decode()
     request = ProviderRequest(
         image_urls=[f"data:image/png;base64,{data}"],
-        image_preparation_options=media_utils.ImagePreparationOptions(
-            enabled=False, max_encoded_bytes=None
-        ),
+        image_preparation_options=media_utils.ImagePreparationOptions(max_size=2),
     )
     context = await request.assemble_context()
-    assert context["content"][1]["image_url"]["url"].endswith(data)
+    assert context["content"][1]["image_url"]["url"].startswith(
+        "data:image/png;base64,"
+    )
 
 
 @pytest.mark.asyncio

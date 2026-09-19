@@ -1,13 +1,11 @@
 import json
 import sys
 import typing as T
-from dataclasses import replace
 from pathlib import Path
 
 import astrbot.core.message.components as Comp
 from astrbot import logger
 from astrbot.core import sp
-from astrbot.core.agent.context.image_budget import validate_context_image_bytes
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import (
     LLMResponse,
@@ -169,18 +167,12 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
             image_options = (
                 self.req.image_preparation_options or ImagePreparationOptions()
             )
-            image_limit = image_options.max_encoded_bytes
-            if image_limit is None:
-                image_limit = ImagePreparationOptions().max_encoded_bytes
-            validate_context_image_bytes(
-                contexts,
-                image_limit,
-            )
             contexts = await materialize_image_media_refs(
                 contexts,
                 ImageMediaStore(Path(get_astrbot_data_path()) / "media"),
+                options=image_options,
             )
-            history_image_options = replace(image_options, enabled=False)
+            history_image_options = image_options
             for ctx in contexts:
                 if is_checkpoint_message(ctx):
                     continue
@@ -255,6 +247,10 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
                         file_id = await self._download_and_upload_image(
                             url,
                             session_id,
+                            image_options=(
+                                self.req.image_preparation_options
+                                or ImagePreparationOptions()
+                            ),
                         )
                         object_string_content.append(
                             {

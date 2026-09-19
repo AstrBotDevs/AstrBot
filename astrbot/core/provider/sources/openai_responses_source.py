@@ -9,10 +9,6 @@ from openai.types.responses import Response
 
 import astrbot.core.message.components as Comp
 from astrbot import logger
-from astrbot.core.agent.context.image_budget import (
-    get_image_encoded_byte_limit,
-    validate_context_image_bytes,
-)
 from astrbot.core.agent.message import ContentPart, Message
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.exceptions import EmptyModelOutputError
@@ -24,6 +20,7 @@ from astrbot.core.utils.image_media_store import (
     ImageMediaStore,
     materialize_image_media_refs,
 )
+from astrbot.core.utils.media_utils import get_image_preparation_options
 
 from ..register import register_provider_adapter
 from .openai_source import ProviderOpenAIOfficial
@@ -274,12 +271,10 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         contexts, _ = sanitize_contexts_by_modalities(
             contexts, self.provider_config.get("modalities")
         )
-        validate_context_image_bytes(
-            contexts, get_image_encoded_byte_limit(self.provider_settings)
-        )
         contexts = await materialize_image_media_refs(
             contexts,
             ImageMediaStore(Path(get_astrbot_data_path()) / "media"),
+            options=get_image_preparation_options(self.provider_settings),
         )
         context_query = copy.deepcopy(self._ensure_message_to_dicts(contexts))
         if prompt is not None:

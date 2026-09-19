@@ -512,8 +512,9 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         """
 
         runtime_configurable = self._build_runtime_configurable(thread_id)
-        image_options = getattr(
-            getattr(self, "req", None), "image_preparation_options", None
+        image_options = (
+            getattr(getattr(self, "req", None), "image_preparation_options", None)
+            or ImagePreparationOptions()
         )
         return {
             "assistant_id": self.assistant_id,

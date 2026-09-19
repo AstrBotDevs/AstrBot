@@ -4,7 +4,6 @@ import json
 import logging
 import random
 from collections.abc import AsyncGenerator
-from dataclasses import replace
 from pathlib import Path
 from typing import Literal, cast
 
@@ -16,10 +15,6 @@ from google.genai.errors import APIError
 import astrbot.core.message.components as Comp
 from astrbot import logger
 from astrbot.api.provider import Provider
-from astrbot.core.agent.context.image_budget import (
-    get_image_encoded_byte_limit,
-    validate_context_image_bytes,
-)
 from astrbot.core.agent.message import AudioURLPart, ContentPart, ImageURLPart, TextPart
 from astrbot.core.exceptions import EmptyModelOutputError, ProviderRequestTooLargeError
 from astrbot.core.message.message_event_result import MessageChain
@@ -323,13 +318,11 @@ class ProviderGoogleGenAI(Provider):
         messages, _ = sanitize_contexts_by_modalities(
             payloads.get("messages", []), provider_config.get("modalities")
         )
-        validate_context_image_bytes(
-            messages, get_image_encoded_byte_limit(provider_settings)
-        )
         payloads["messages"] = messages
         payloads["messages"] = await materialize_image_media_refs(
             payloads.get("messages", []),
             ImageMediaStore(Path(get_astrbot_data_path()) / "media"),
+            options=get_image_preparation_options(provider_settings),
         )
 
         def create_text_part(text: str) -> types.Part:
@@ -360,10 +353,7 @@ class ProviderGoogleGenAI(Provider):
                 url,
                 media_type="image",
                 strict=True,
-                image_options=replace(
-                    get_image_preparation_options(provider_settings),
-                    enabled=False,
-                ),
+                image_options=get_image_preparation_options(provider_settings),
             )
             if image_data is None:
                 raise ValueError(

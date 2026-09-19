@@ -13,7 +13,12 @@ from pathlib import Path
 
 from PIL import Image
 
-from astrbot.core.utils.media_utils import validate_image_input_size
+from astrbot.core.utils.media_utils import (
+    ImagePayloadTooLargeError,
+    ImagePreparationOptions,
+    prepare_image_source,
+    validate_image_input_size,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,6 +96,7 @@ class ImageMediaStore:
             OSError: The object or metadata cannot be committed atomically.
             ValueError: The stored bytes are not a readable image.
         """
+        validate_image_input_size(data)
         media_id = hashlib.sha256(data).hexdigest()
         self.root.mkdir(parents=True, exist_ok=True)
         if self.root.is_symlink() or not self.root.is_dir():
@@ -301,6 +307,7 @@ async def materialize_image_media_refs(
     store: ImageMediaStore,
     *,
     strict: bool = False,
+    options: ImagePreparationOptions | None = None,
 ) -> list:
     """Resolve only the selected references into a request-local view.
 
@@ -308,6 +315,8 @@ async def materialize_image_media_refs(
         contexts: Messages selected by the context manager.
         store: Store for the application's configured data root.
         strict: Fail on missing media when preparing a rollback export.
+        options: Mainline model-image preparation options. When omitted, return
+            the exact stored bytes for exports and dashboard previews.
 
     Returns:
         Request-local messages with images, or the original list if no refs exist.
@@ -326,14 +335,54 @@ async def materialize_image_media_refs(
         serialized = message.model_dump() if isinstance(message, Message) else message
         parts = serialized.get("content")
         if not isinstance(parts, list) or not any(
-            isinstance(part, dict) and part.get("type") == "image_media_ref"
+            isinstance(part, dict)
+            and (
+                part.get("type") == "image_media_ref"
+                or (options is not None and part.get("type") == "image_url")
+            )
             for part in parts
         ):
             output.append(message)
             continue
         resolved = []
         for part in parts:
-            if not isinstance(part, dict) or part.get("type") != "image_media_ref":
+            if not isinstance(part, dict):
+                resolved.append(part)
+                continue
+            if part.get("type") == "image_url" and options is not None:
+                image_url = part.get("image_url")
+                url = image_url.get("url") if isinstance(image_url, dict) else None
+                if not isinstance(url, str) or not url:
+                    resolved.append(part)
+                    continue
+                try:
+                    image_data = await prepare_image_source(
+                        url,
+                        options=options,
+                        default_mime_type=(
+                            image_url.get("mime_type")
+                            if isinstance(image_url, dict)
+                            else None
+                        ),
+                    )
+                    resolved.append(
+                        {
+                            **part,
+                            "image_url": {
+                                **image_url,
+                                "url": image_data.to_data_url(),
+                            },
+                        }
+                    )
+                except (ImagePayloadTooLargeError, MemoryError):
+                    raise
+                except (TypeError, ValueError, OSError):
+                    if strict:
+                        raise
+                    logger.warning("A selected conversation image is unavailable")
+                    resolved.append({"type": "text", "text": "[Image unavailable]"})
+                continue
+            if part.get("type") != "image_media_ref":
                 resolved.append(part)
                 continue
             try:
@@ -347,16 +396,27 @@ async def materialize_image_media_refs(
                     part.get("version", 1),
                     part.get("image_id"),
                 )
+                validate_image_input_size(ref.byte_size)
                 payload = await asyncio.to_thread(store.read, ref, {ref.media_id})
-                image_url = {
-                    "url": f"data:{ref.mime_type};base64,{base64.b64encode(payload).decode('ascii')}",
-                }
+                if options is None:
+                    image_url = {
+                        "url": f"data:{ref.mime_type};base64,{base64.b64encode(payload).decode('ascii')}",
+                    }
+                else:
+                    image_data = await prepare_image_source(
+                        payload,
+                        options=options,
+                        default_mime_type=ref.mime_type,
+                    )
+                    image_url = {"url": image_data.to_data_url()}
                 del payload
                 if ref.detail is not None:
                     image_url["detail"] = ref.detail
                 if ref.image_id is not None:
                     image_url["id"] = ref.image_id
                 resolved.append({"type": "image_url", "image_url": image_url})
+            except (ImagePayloadTooLargeError, MemoryError):
+                raise
             except (KeyError, TypeError, ValueError, OSError):
                 if strict:
                     raise

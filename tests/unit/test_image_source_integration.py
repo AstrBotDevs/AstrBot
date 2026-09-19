@@ -11,7 +11,6 @@ from astrbot.core.utils.image_media_store import (
     persist_inline_image_refs,
 )
 from astrbot.core.utils.media_utils import (
-    ImagePayloadTooLargeError,
     ImagePreparationInput,
     ImagePreparationOptions,
     prepare_image_source,
@@ -47,31 +46,15 @@ async def test_current_plugin_image_part_is_prepared_without_mutating_caller(tmp
 
 
 @pytest.mark.asyncio
-async def test_quoted_user_path_uses_configured_encoded_limit(tmp_path):
-    source = tmp_path / "quoted.png"
-    source.write_bytes(_image())
-    options = ImagePreparationOptions(max_encoded_bytes=1)
-
-    with pytest.raises(ImagePayloadTooLargeError):
-        await prepare_image_source(str(source), options=options)
-
-
-@pytest.mark.asyncio
-async def test_cua_dimensions_are_explicit_and_normal_tool_can_resize(tmp_path):
+async def test_tool_images_use_the_mainline_dimension_limit(tmp_path):
     source = tmp_path / "tool.png"
     source.write_bytes(_image((80, 40)))
     normal = await prepare_image_source(
         str(source), options=ImagePreparationOptions(max_size=20)
     )
-    cua = await prepare_image_source(
-        str(source),
-        options=ImagePreparationOptions(max_size=20, preserve_dimensions=True),
-    )
 
     with Image.open(io.BytesIO(normal.to_bytes())) as image:
         assert max(image.size) <= 20
-    with Image.open(io.BytesIO(cua.to_bytes())) as image:
-        assert image.size == (80, 40)
 
 
 def test_temporary_image_part_is_not_persisted(tmp_path):

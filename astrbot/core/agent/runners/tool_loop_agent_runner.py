@@ -61,10 +61,6 @@ from astrbot.core.utils.media_utils import (
 
 from ..context.compressor import ContextCompressor
 from ..context.config import ContextConfig
-from ..context.image_budget import (
-    get_image_encoded_byte_limit,
-    validate_context_image_bytes,
-)
 from ..context.manager import ContextManager
 from ..context.token_counter import EstimateTokenCounter, TokenCounter
 from ..hooks import BaseAgentRunHooks
@@ -550,18 +546,21 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             Provider-compatible messages without changing persisted history.
 
         Raises:
-            ImagePayloadTooLargeError: An image exceeds the encoded-byte limit.
+            ImagePayloadTooLargeError: An image exceeds the model input limit.
             MemoryError: Image materialization exhausts available memory.
         """
         selected_contexts = self._sanitize_contexts_for_provider(contexts)
-        limit = get_image_encoded_byte_limit(
-            getattr(self.provider, "provider_settings", {})
+        image_options = (
+            self.req.image_preparation_options
+            or get_image_preparation_options(
+                getattr(self.provider, "provider_settings", {})
+            )
         )
-        validate_context_image_bytes(selected_contexts, limit)
         return await materialize_image_media_refs(
             selected_contexts,
             self.image_media_store
             or ImageMediaStore(Path(get_astrbot_data_path()) / "media"),
+            options=image_options,
         )
 
     async def _iter_llm_responses(
@@ -1200,13 +1199,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                     else "tool_image"
                                 ),
                             ),
-                            options=replace(
-                                self.req.image_preparation_options
-                                or get_image_preparation_options(
-                                    getattr(self.provider, "provider_settings", {})
-                                ),
-                                preserve_dimensions=cached_img.tool_name
-                                == "astrbot_cua_screenshot",
+                            options=self.req.image_preparation_options
+                            or get_image_preparation_options(
+                                getattr(self.provider, "provider_settings", {})
                             ),
                         )
                         if img_data:

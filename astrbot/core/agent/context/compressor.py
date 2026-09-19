@@ -7,14 +7,16 @@ from astrbot.core.utils.image_media_store import (
     ImageMediaStore,
     materialize_image_media_refs,
 )
-from astrbot.core.utils.media_utils import ImagePayloadTooLargeError
+from astrbot.core.utils.media_utils import (
+    ImagePayloadTooLargeError,
+    get_image_preparation_options,
+)
 
 from ...provider.modalities import (
     log_context_sanitize_stats,
     sanitize_contexts_by_modalities,
 )
 from ..message import Message
-from .image_budget import get_image_encoded_byte_limit, validate_context_image_bytes
 from .token_counter import EstimateTokenCounter, TokenCounter
 
 if TYPE_CHECKING:
@@ -286,14 +288,13 @@ class LLMSummaryCompressor:
 
         # Generate summary
         try:
-            limit = get_image_encoded_byte_limit(
-                getattr(self.provider, "provider_settings", {})
-            )
-            validate_context_image_bytes(sanitized_summary_contexts, limit)
             sanitized_summary_contexts = await materialize_image_media_refs(
                 sanitized_summary_contexts,
                 self.image_media_store
                 or ImageMediaStore(Path(get_astrbot_data_path()) / "media"),
+                options=get_image_preparation_options(
+                    getattr(self.provider, "provider_settings", {})
+                ),
             )
             response = await self.provider.text_chat(
                 contexts=sanitized_summary_contexts,

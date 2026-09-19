@@ -134,7 +134,7 @@ async def test_coze_history_reference_is_materialized_before_upload(
 
     assert len(responses) == 1
     assert len(uploaded) == 1
-    assert upload_options[0].enabled is False
+    assert upload_options[0].max_size == 1280
     assert base64.b64decode(uploaded[0].split(",", 1)[1]) == image_bytes
     assert captured["additional_messages"][0]["content"][0] == {
         "type": "file",
