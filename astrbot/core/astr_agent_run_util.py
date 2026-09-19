@@ -187,6 +187,11 @@ async def run_agent(
                         await astr_event.send(resp.data["chain"])
                     continue
 
+                if resp.type == "web_search_sources":
+                    if astr_event.get_platform_name() == "webchat":
+                        await astr_event.send(resp.data["chain"])
+                    continue
+
                 if resp.type == "tool_call_result":
                     msg_chain = resp.data["chain"]
 
