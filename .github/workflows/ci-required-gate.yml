@@ -1,0 +1,242 @@
+name: CI Required Gate
+
+on:
+  pull_request:
+    branches: [master, dev]
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-required-gate-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  changes:
+    name: Detect Change Scope
+    runs-on: ubuntu-latest
+    outputs:
+      docs_only: ${{ steps.detect.outputs.docs_only }}
+      dashboard_changed: ${{ steps.detect.outputs.dashboard_changed }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed files
+        id: detect
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            base_sha="${{ github.event.pull_request.base.sha }}"
+            head_sha="${{ github.event.pull_request.head.sha }}"
+          else
+            base_sha="${{ github.event.before }}"
+            head_sha="${{ github.sha }}"
+          fi
+
+          if [[ -z "$base_sha" || "$base_sha" == "0000000000000000000000000000000000000000" ]]; then
+            base_sha="$(git rev-parse "${head_sha}^" 2>/dev/null || true)"
+          fi
+
+          if [[ -z "$base_sha" ]]; then
+            changed_files="$(git ls-tree -r --name-only "$head_sha")"
+          else
+            changed_files="$(git diff --name-only "$base_sha" "$head_sha")"
+          fi
+
+          docs_only=true
+          dashboard_changed=false
+          has_changed_files=false
+
+          while IFS= read -r f; do
+            [[ -z "$f" ]] && continue
+            has_changed_files=true
+
+            if [[ "$f" == dashboard/* ]]; then
+              dashboard_changed=true
+            fi
+
+            if [[ ! "$f" =~ ^docs/ && ! "$f" =~ ^docs-[^/]+/ && ! "$f" =~ ^README.*\.md$ && ! "$f" =~ ^changelogs/ ]]; then
+              docs_only=false
+            fi
+          done <<< "$changed_files"
+
+          # Empty diff can happen in edge cases; fail closed to avoid skipping core checks.
+          if [[ "$has_changed_files" == "false" ]]; then
+            docs_only=false
+          fi
+
+          echo "docs_only=$docs_only" >> "$GITHUB_OUTPUT"
+          echo "dashboard_changed=$dashboard_changed" >> "$GITHUB_OUTPUT"
+
+  lint:
+    name: Lint (Ruff)
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python and uv
+        uses: ./.github/actions/setup-python-uv
+        with:
+          python-version: '3.12'
+          sync-deps: 'true'
+          sync-args: '--group dev'
+
+      - name: Ruff format check
+        run: uv run ruff format --check .
+
+      - name: Ruff lint check
+        run: uv run ruff check .
+
+  test:
+    name: Unit Tests
+    needs: [changes, lint]
+    if: needs.changes.outputs.docs_only != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python and uv
+        uses: ./.github/actions/setup-python-uv
+        with:
+          python-version: '3.12'
+
+      - name: Run pytest suite (script performs uv sync --dev)
+        run: |
+          # scripts/run_pytests_ci.sh includes dependency sync (`uv sync --dev`) before pytest.
+          bash ./scripts/run_pytests_ci.sh ./tests
+
+  smoke:
+    name: Smoke Test
+    needs: [changes, lint]
+    if: needs.changes.outputs.docs_only != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python and uv
+        uses: ./.github/actions/setup-python-uv
+        with:
+          python-version: '3.12'
+          sync-deps: 'true'
+          sync-args: '--group dev'
+
+      - name: Startup smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv run main.py &
+          app_pid=$!
+
+          cleanup() {
+            kill "$app_pid" 2>/dev/null || true
+            wait "$app_pid" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+
+          for _ in {1..60}; do
+            if ! kill -0 "$app_pid" 2>/dev/null; then
+              app_exit=0
+              wait "$app_pid" || app_exit=$?
+              if [[ "$app_exit" -eq 0 ]]; then
+                app_exit=1
+              fi
+              echo "Application exited early with status $app_exit"
+              exit "$app_exit"
+            fi
+
+            if curl -sf http://localhost:6185 >/dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 1
+          done
+
+          echo "Application failed to start within 60 seconds"
+          exit 1
+
+  dashboard:
+    name: Dashboard Build
+    needs: changes
+    if: needs.changes.outputs.dashboard_changed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4.4.0
+        with:
+          version: 10.28.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: 'pnpm'
+          cache-dependency-path: dashboard/pnpm-lock.yaml
+
+      - name: Build dashboard
+        run: |
+          pnpm --dir dashboard install --frozen-lockfile
+          pnpm --dir dashboard run build
+
+  gate:
+    name: CI Required Gate
+    if: always()
+    needs: [changes, lint, test, smoke, dashboard]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check upstream job results
+        shell: bash
+        run: |
+          set -euo pipefail
+          declare -A results=(
+            [changes]="${{ needs.changes.result }}"
+            [lint]="${{ needs.lint.result }}"
+            [test]="${{ needs.test.result }}"
+            [smoke]="${{ needs.smoke.result }}"
+            [dashboard]="${{ needs.dashboard.result }}"
+          )
+
+          has_blocking=false
+          for job in "${!results[@]}"; do
+            case "${results[$job]}" in
+              failure|cancelled)
+                echo "::error::${job}=${results[$job]} (blocking)"
+                has_blocking=true
+                ;;
+              skipped)
+                echo "::notice::${job}=skipped (expected for conditional paths)"
+                ;;
+            esac
+          done
+
+          if [[ "$has_blocking" == "true" ]]; then
+            echo "One or more required jobs failed or were cancelled."
+            exit 1
+          fi
+
+      - name: Print job summary
+        run: |
+          echo "skipped results are expected for docs-only/dashboard-unchanged paths."
+          echo "changes=${{ needs.changes.result }}"
+          echo "lint=${{ needs.lint.result }}"
+          echo "test=${{ needs.test.result }}"
+          echo "smoke=${{ needs.smoke.result }}"
+          echo "dashboard=${{ needs.dashboard.result }}"
