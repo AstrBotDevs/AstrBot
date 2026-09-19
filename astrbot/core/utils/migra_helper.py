@@ -232,7 +232,7 @@ def _migrate_agent_runner_config(
                 ),
             }
             runner_config["misc"] = {
-                "max_steps": provider_settings.get("max_agent_step", 30),
+                "max_steps": provider_settings.get("max_agent_step", 128),
                 "tool_schema_mode": provider_settings.get("tool_schema_mode", "full"),
                 "tool_call_timeout": provider_settings.get("tool_call_timeout", 120),
                 "sanitize_context_by_modalities": provider_settings.get(

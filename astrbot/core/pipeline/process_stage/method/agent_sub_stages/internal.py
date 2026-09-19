@@ -68,7 +68,7 @@ class InternalAgentSubStage(Stage):
         self.unsupported_streaming_strategy: str = settings[
             "unsupported_streaming_strategy"
         ]
-        self.max_step: int = misc_config.get("max_steps", 30)
+        self.max_step: int = misc_config.get("max_steps", 128)
         self.tool_call_timeout: int = misc_config.get("tool_call_timeout", 120)
         self.tool_schema_mode: str = misc_config.get("tool_schema_mode", "full")
         if self.tool_schema_mode not in ("skills_like", "full"):
@@ -78,7 +78,7 @@ class InternalAgentSubStage(Stage):
             )
             self.tool_schema_mode = "full"
         if isinstance(self.max_step, bool):  # workaround: #2622
-            self.max_step = 30
+            self.max_step = 128
         self.show_tool_use: bool = settings.get("show_tool_use_status", True)
         self.show_tool_call_result: bool = settings.get("show_tool_call_result", False)
         self.buffer_intermediate_messages: bool = settings.get(

@@ -108,6 +108,7 @@ def test_shell_session_schema_supports_line_writes():
     tool = ShellSessionTool()
 
     assert "write_line" in tool.parameters["properties"]["action"]["enum"]
+    assert tool.parameters["properties"]["yield_time_ms"]["maximum"] == 300_000
     assert (
         "LF is appended automatically"
         in tool.parameters["properties"]["chars"]["description"]
@@ -470,6 +471,7 @@ async def test_shell_session_tool_lists_sessions_for_current_owner(monkeypatch):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("yield_time_ms", [0, 5_000, 300_000])
 @pytest.mark.parametrize(
     ("action", "component_action"),
     [
@@ -485,12 +487,20 @@ async def test_shell_session_tool_passes_member_identity_to_session_actions(
     monkeypatch,
     action,
     component_action,
+    yield_time_ms,
 ):
     from astrbot.core.tools.computer_tools import shell as shell_tools
 
     shell = LocalShellComponent()
     operation = AsyncMock(return_value={"session_id": "sh_test", "status": "running"})
     setattr(shell, f"{component_action}_session", operation)
+    if component_action == "write":
+        operation.return_value["written_chars"] = len("input") + (
+            action == "write_line"
+        )
+        shell.poll_session = AsyncMock(
+            return_value={"session_id": "sh_test", "stdout": "reply", "status": "running"}
+        )
 
     class FakeBooter:
         pass
@@ -529,6 +539,9 @@ async def test_shell_session_tool_passes_member_identity_to_session_actions(
         action=action,
         session_id="sh_test",
         chars="input",
+        yield_time_ms=yield_time_ms,
+        cursor=7,
+        max_output_chars=42,
     )
 
     assert json.loads(result)["session_id"] == "sh_test"
@@ -538,6 +551,36 @@ async def test_shell_session_tool_passes_member_identity_to_session_actions(
     if component_action == "write":
         expected_chars = "input\n" if action == "write_line" else "input"
         assert operation.await_args.kwargs["chars"] == expected_chars
+        assert json.loads(result)["written_chars"] == len(expected_chars)
+        assert json.loads(result)["stdout"] == "reply"
+    if component_action in {"poll", "write"}:
+        shell.poll_session.assert_awaited_once_with(
+            owner_id="group-umo",
+            requester_id="member-user",
+            requester_is_admin=False,
+            session_id="sh_test",
+            cursor=7,
+            yield_time_ms=yield_time_ms,
+            max_output_chars=42,
+        )
+
+    if component_action == "write":
+        operation.reset_mock()
+        for invalid_args in (
+            {"yield_time_ms": -1},
+            {"yield_time_ms": 300_001},
+            {"max_output_chars": 0},
+            {"cursor": -1},
+        ):
+            result = await ShellSessionTool().call(
+                FakeWrapper(),
+                action=action,
+                session_id="sh_test",
+                chars="input",
+                **invalid_args,
+            )
+            assert result.startswith("Error managing shell session:")
+        operation.assert_not_awaited()
 
 
 @pytest.mark.asyncio
