@@ -15,7 +15,7 @@ The following commands are shipped with AstrBot and loaded by default:
 - `/help`: View currently enabled commands and AstrBot version information.
 - `/sid`: View current message source information, including UMO, user ID, platform ID, message type, and session ID. This is commonly used when configuring admins, allowlists, or routing rules.
 - `/name`: Set a display alias for the current UMO, which means one concrete group or private-chat message source on a platform, so it is easier to recognize in WebUI. This command requires admin permission.
-- `/reset`: Create and switch to a new conversation, just like `/new`.
+- `/reset`: Clear the context of the current conversation.
 - `/stop`: Stop Agent tasks currently running in the current session.
 - `/new`: Create and switch to a new conversation.
 - `/stats`: View token usage statistics for the current conversation.
@@ -73,20 +73,20 @@ Display rules:
 
 ### `/reset` and `/new`
 
-`/reset` and `/new` use the same restart flow. Both command entries and their individual command management settings are retained.
+Both commands stop running tasks in the current session and clear the session's temporary group context after the reply is sent. Their conversation behavior is different:
 
-For AstrBot's built-in Agent Runner, it:
+`/reset`:
 
-- Marks other active events in the current session as stopped, without waiting for every task to exit.
-- Creates and selects an empty conversation, preserving previous history and inheriting the current persona.
-- Clears the current session's group context cache after the reply is sent.
+- For AstrBot's built-in Agent Runner, clears the current conversation's context messages while preserving its conversation ID, title, persona, and token usage statistics.
+- For third-party Agent Runners such as `dify`, `coze`, `dashscope`, and `deerflow`, clears the remote runner context while preserving the local conversation ID.
+- If there is no current conversation, returns a success message without creating a local conversation.
 
-For third-party Agent Runners such as `dify`, `coze`, `dashscope`, and `deerflow`, it:
+`/new`:
 
-- Stops running tasks in the current session.
-- Removes the saved third-party conversation ID for this session, so the next turn starts a new conversation.
+- For AstrBot's built-in Agent Runner, preserves the old conversation record, creates and selects a new local conversation, and inherits the current persona.
+- For third-party Agent Runners, clears the remote runner context first, then creates and selects a new local conversation; old local conversation records remain available.
 
-DeerFlow also attempts to delete the old remote thread. Third-party runners do not guarantee retention of previous history.
+DeerFlow also attempts to delete the old remote thread.
 
 Permission notes:
 
