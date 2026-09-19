@@ -1,4 +1,5 @@
 import time
+import traceback
 import uuid
 
 import numpy as np
@@ -164,6 +165,15 @@ class FaissVecDB(BaseVecDB):
                 ),
                 details={"vector_count": len(vectors)},
             ) from exc
+        # Clamp non-finite values (NaN/Inf) which can arise from embedding providers
+        # that return malformed results; prevent downstream FAISS/C++ crashes.
+        if not np.all(np.isfinite(vectors_array)):
+            nan_count = int(np.sum(~np.isfinite(vectors_array)))
+            logger.warning(
+                f"Embedding vectors contain {nan_count} non-finite values "
+                "(NaN/Inf). These will be clamped to prevent FAISS write failure."
+            )
+            vectors_array = np.nan_to_num(vectors_array, nan=0.0, posinf=0.0, neginf=0.0)
         if vectors_array.ndim != 2:
             raise KnowledgeBaseUploadError(
                 stage="embedding",
@@ -198,7 +208,7 @@ class FaissVecDB(BaseVecDB):
                 raise KnowledgeBaseUploadError(
                     stage="storage",
                     user_message=(
-                        f"存储失败：写入文档索引后返回的内部 ID 数量与文本分块数量不一致"
+                        f"存储失败：写入文档索引后返回的内部 ID 不匹配"
                         f"（期望 {content_count}，实际 {len(int_ids)}）。"
                     ),
                     details={
@@ -207,9 +217,26 @@ class FaissVecDB(BaseVecDB):
                     },
                 )
             await self.embedding_storage.insert_batch(vectors_array, int_ids)
-        except Exception:
-            await self._rollback_partial_insert(ids=ids, int_ids=int_ids)
+        except KnowledgeBaseUploadError:
             raise
+        except Exception as _faiss_err:
+            # Low-level FAISS errors (index corruption, resource exhaustion,
+            # I/O failure, etc.) bubble up here. Roll back partial writes and
+            # surface structured diagnostics so the upload caller can report
+            # the exact cause rather than the opaque "write index error".
+            await self._rollback_partial_insert(ids=ids, int_ids=int_ids)
+            raise KnowledgeBaseUploadError(
+                stage="storage",
+                user_message=(
+                    "存储失败：嵌入向量已成功生成，但在写入 FAISS 向量索引时发生错误。"
+                    "这可能是索引文件损坏、磁盘空间不足或嵌入维度变更导致的。"
+                    "请查看日志中的详细原因。"
+                ),
+                details={
+                    "cause": str(_faiss_err),
+                    "traceback": traceback.format_exc(),
+                },
+            ) from _faiss_err
         return int_ids
 
     async def retrieve(
