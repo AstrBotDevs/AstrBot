@@ -6,6 +6,11 @@ from openai import AsyncOpenAI
 
 from astrbot import logger
 
+from ..embedding_batch_limits import (
+    combine_caps,
+    dashscope_max_batch_items,
+    is_dashscope_host,
+)
 from ..entities import ProviderType
 from ..provider import EmbeddingProvider
 from ..register import register_provider_adapter
@@ -121,6 +126,34 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
                     f"embedding_dimensions in embedding configs is not a valid integer: '{self.provider_config['embedding_dimensions']}', ignored."
                 )
         return 0
+
+    def get_max_batch_size(self) -> int | None:
+        """Declared per-request input limit, when the endpoint reveals one.
+
+        Some services reached through this generic adapter cap the number of
+        inputs per request (DashScope returns HTTP 400 for more than 10 inputs
+        on text-embedding-v3/v4). The adapter cannot know that from its own
+        identity, so, like ``embedding_dimensions``, the limit is inferred from
+        the configured base URL host; anything else falls back to the
+        ``embedding_max_batch_items`` config key.
+        """
+        detected = None
+        try:
+            api_base = _normalize_api_base(
+                self.provider_config.get(
+                    "embedding_api_base", "https://api.openai.com/v1"
+                )
+                or "https://api.openai.com/v1"
+            )
+            hostname = urlparse(api_base).hostname
+        except (ValueError, AttributeError):
+            hostname = None
+        if is_dashscope_host(hostname):
+            detected = dashscope_max_batch_items(
+                getattr(self, "model", None)
+                or self.provider_config.get("embedding_model")
+            )
+        return combine_caps(detected, super().get_max_batch_size())
 
     async def terminate(self):
         if self.client:
