@@ -665,13 +665,14 @@ async def test_telegram_voice_message_creates_record_component(tmp_path):
     )
     wav_path = tmp_path / "voice.oga.wav"
     convert_message_globals = adapter.convert_message.__func__.__globals__
+    download_file = AsyncMock()
 
     with (
         patch.dict(
             convert_message_globals,
             {
                 "get_astrbot_temp_path": MagicMock(return_value=str(tmp_path)),
-                "download_file": AsyncMock(),
+                "download_file": download_file,
             },
         ),
         patch(
@@ -687,6 +688,12 @@ async def test_telegram_voice_message_creates_record_component(tmp_path):
     assert result.message[0].file == str(wav_path)
     assert result.message[0].path == str(wav_path)
     assert result.message[0].url == str(wav_path)
+    download_file.assert_awaited_once_with(
+        "https://api.telegram.org/file/test/voice.oga",
+        path=str(tmp_path / "voice.oga"),
+        allow_private_network=False,
+        allowed_origin="https://api.telegram.org/file/bot",
+    )
 
 
 @pytest.mark.asyncio
@@ -730,6 +737,46 @@ async def test_telegram_audio_caption_populates_message_text_and_plain(tmp_path)
     assert result.message[0].url == str(wav_path)
     assert isinstance(result.message[1], Comp.Plain)
     assert result.message[1].text == "这首歌是什么"
+
+
+@pytest.mark.asyncio
+async def test_telegram_custom_file_base_url_allows_private_file_download(tmp_path):
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config(
+            "telegram",
+            telegram_file_base_url="http://telegram.internal/file/bot",
+        ),
+        {},
+        asyncio.Queue(),
+    )
+    voice = create_mock_file("http://telegram.internal/file/test/voice.oga")
+    update = create_mock_update(message_text=None, voice=voice)
+    wav_path = tmp_path / "voice.oga.wav"
+    convert_message_globals = adapter.convert_message.__func__.__globals__
+    download_file = AsyncMock()
+
+    with (
+        patch.dict(
+            convert_message_globals,
+            {
+                "get_astrbot_temp_path": MagicMock(return_value=str(tmp_path)),
+                "download_file": download_file,
+            },
+        ),
+        patch(
+            "astrbot.core.utils.media_utils.ensure_wav",
+            AsyncMock(return_value=str(wav_path)),
+        ),
+    ):
+        await adapter.convert_message(update, _build_context())
+
+    download_file.assert_awaited_once_with(
+        "http://telegram.internal/file/test/voice.oga",
+        path=str(tmp_path / "voice.oga"),
+        allow_private_network=True,
+        allowed_origin="http://telegram.internal/file/bot",
+    )
 
 
 @pytest.mark.asyncio

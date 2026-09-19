@@ -43,6 +43,9 @@ else:
     from typing_extensions import override
 
 
+_DEFAULT_TELEGRAM_FILE_BASE_URL = "https://api.telegram.org/file/bot"
+
+
 @register_platform_adapter("telegram", "telegram 适配器")
 class TelegramPlatformAdapter(Platform):
     _FORUM_TOPIC_NAME_CACHE_MAX_SIZE = 1000
@@ -65,13 +68,16 @@ class TelegramPlatformAdapter(Platform):
 
         file_base_url = self.config.get(
             "telegram_file_base_url",
-            "https://api.telegram.org/file/bot",
+            _DEFAULT_TELEGRAM_FILE_BASE_URL,
         )
         if not file_base_url:
-            file_base_url = "https://api.telegram.org/file/bot"
+            file_base_url = _DEFAULT_TELEGRAM_FILE_BASE_URL
 
         self.base_url = base_url
         self.file_base_url = file_base_url
+        self._allow_private_file_network = file_base_url.rstrip(
+            "/"
+        ) != _DEFAULT_TELEGRAM_FILE_BASE_URL.rstrip("/")
 
         self.enable_command_register = self.config.get(
             "telegram_command_register",
@@ -646,7 +652,12 @@ class TelegramPlatformAdapter(Platform):
             file_basename = os.path.basename(cast(str, file.file_path))
             temp_dir = get_astrbot_temp_path()
             temp_path = os.path.join(temp_dir, file_basename)
-            await download_file(cast(str, file.file_path), path=temp_path)
+            await download_file(
+                cast(str, file.file_path),
+                path=temp_path,
+                allow_private_network=self._allow_private_file_network,
+                allowed_origin=self.file_base_url,
+            )
             path_wav = await MediaResolver(
                 temp_path,
                 media_type="audio",
@@ -664,7 +675,12 @@ class TelegramPlatformAdapter(Platform):
             file_basename = os.path.basename(cast(str, file.file_path))
             temp_dir = get_astrbot_temp_path()
             temp_path = os.path.join(temp_dir, file_basename)
-            await download_file(cast(str, file.file_path), path=temp_path)
+            await download_file(
+                cast(str, file.file_path),
+                path=temp_path,
+                allow_private_network=self._allow_private_file_network,
+                allowed_origin=self.file_base_url,
+            )
             path_wav = await MediaResolver(
                 temp_path,
                 media_type="audio",
