@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Any
 
 from astrbot import logger
@@ -123,6 +124,30 @@ def resolve_lang(config: dict[str, Any] | None) -> str:
     """
     norm = normalize_lang((config or {}).get("language"))
     return norm or DEFAULT_LANG
+
+
+def localized_names(
+    alias_lang_map: dict[str, str],
+    effective_aliases: Iterable[str],
+) -> dict[str, str]:
+    """按当前生效的别名过滤出 ``语言代码 -> 本地化指令名``。
+
+    别名可能被用户在 WebUI 中重命名或删除,因此展示用的本地化名称必须与当前
+    生效的别名取交集,避免展示已经失效的名称。
+
+    Args:
+        alias_lang_map: ``multi_alias`` 注册的 ``别名 -> 语言`` 映射。
+        effective_aliases: 当前生效的别名集合。
+
+    Returns:
+        语言代码到指令显示名的映射;同一语言存在多个别名时取先出现的。
+    """
+    aliases = set(effective_aliases)
+    names: dict[str, str] = {}
+    for alias, lang in alias_lang_map.items():
+        if alias and lang and alias in aliases:
+            names.setdefault(str(lang), str(alias))
+    return names
 
 
 def validate_global_language(config: dict[str, Any] | None) -> None:

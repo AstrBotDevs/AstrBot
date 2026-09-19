@@ -34,7 +34,7 @@ from astrbot.core.star.star_manager import (
     PluginVersionUnsupportedError,
 )
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_temp_path
-from astrbot.core.utils.lang_utils import normalize_lang
+from astrbot.core.utils.lang_utils import localized_names, normalize_lang
 
 PLUGIN_UPDATE_CONCURRENCY = 3
 PLUGIN_OPERATION_FAILED_MESSAGE = "插件操作失败，请查看服务端日志。"
@@ -863,13 +863,13 @@ class PluginService:
     def _get_command_i18n_names(
         command_filter: CommandFilter | CommandGroupFilter,
     ) -> dict[str, str]:
-        """取指令的分语言名称(来自 multi_alias 的别名映射),键为语言代码。"""
+        """取指令的分语言名称(来自 multi_alias 的别名映射),键为语言代码。
+
+        仅保留当前仍生效的别名:别名可能已被 WebUI 重命名或删除。
+        """
         alias_lang_map = getattr(command_filter, "alias_lang_map", None) or {}
-        names: dict[str, str] = {}
-        for alias, lang in alias_lang_map.items():
-            if alias and lang:
-                names.setdefault(str(lang), str(alias))
-        return names
+        effective_aliases = getattr(command_filter, "alias", None) or set()
+        return localized_names(alias_lang_map, effective_aliases)
 
     def _build_command_filter_component(
         self,

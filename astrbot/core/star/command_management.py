@@ -15,6 +15,7 @@ from astrbot.core.star.filter.permission import (
 )
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import StarHandlerMetadata, star_handlers_registry
+from astrbot.core.utils.lang_utils import localized_names
 
 
 @dataclass
@@ -564,13 +565,7 @@ def _localized_command_names(desc: CommandDescriptor) -> dict[str, str]:
     Returns:
         语言代码到指令显示名的映射,如 ``{"zh-CN": "天气", "ja-JP": "天気"}``。
     """
-    # desc.aliases 可能已被 WebUI 重命名/覆盖,取交集避免展示已失效的名称
-    current_aliases = set(desc.aliases)
-    names: dict[str, str] = {}
-    for alias, lang in desc.alias_lang_map.items():
-        if alias and lang and alias in current_aliases:
-            names.setdefault(lang, alias)
-    return names
+    return localized_names(desc.alias_lang_map, desc.aliases)
 
 
 def _descriptor_to_dict(desc: CommandDescriptor) -> dict[str, Any]:

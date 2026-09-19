@@ -48,6 +48,28 @@ def test_localized_command_names_from_multi_alias():
     }
 
 
+def test_localized_command_names_skips_overridden_aliases():
+    # 别名被用户在 WebUI 覆盖后,不应再作为本地化名称展示
+    desc = _desc(
+        "m_a",
+        "weather",
+        ["天气"],
+        alias_lang_map={"天气": "zh-CN", "天気": "ja-JP"},
+    )
+    assert _localized_command_names(desc) == {"zh-CN": "天气"}
+    assert _descriptor_to_dict(desc)["names"] == {"zh-CN": "天气"}
+
+
+def test_plugin_service_names_filter_stale_aliases():
+    from astrbot.dashboard.services.plugin_service import PluginService
+
+    command_filter = SimpleNamespace(
+        alias={"天气"},
+        alias_lang_map={"天气": "zh-CN", "天気": "ja-JP"},
+    )
+    assert PluginService._get_command_i18n_names(command_filter) == {"zh-CN": "天气"}
+
+
 def test_localized_command_names_empty_without_mapping():
     desc = _desc("m_a", "weather", ["天气"])
     assert _localized_command_names(desc) == {}

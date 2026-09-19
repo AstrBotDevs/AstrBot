@@ -8,6 +8,7 @@ from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.utils.lang_utils import (
     DEFAULT_LANG,
     MultiLangAlias,
+    localized_names,
     multi_alias,
     normalize_lang,
     resolve_lang,
@@ -75,6 +76,19 @@ class TestLangUtils:
             "说明": "zh-CN",
             "help": "en-US",
         }
+
+    def test_localized_names_filters_stale_aliases(self):
+        # 用户重命名/删除别名后,不应再展示已失效的本地化名称
+        alias_lang_map = {"天气": "zh-CN", "天気": "ja-JP"}
+        assert localized_names(alias_lang_map, ["天气", "天気"]) == {
+            "zh-CN": "天气",
+            "ja-JP": "天気",
+        }
+        assert localized_names(alias_lang_map, ["天气"]) == {"zh-CN": "天气"}
+        assert localized_names(alias_lang_map, []) == {}
+
+    def test_localized_names_ignores_empty_values(self):
+        assert localized_names({"": "zh-CN", "天气": ""}, ["", "天气"]) == {}
 
 
 class TestLangFilteredAliases:
