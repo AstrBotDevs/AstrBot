@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import os
 import sys
 from pathlib import Path
@@ -20,10 +21,12 @@ from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunne
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.astr_agent_run_util import run_agent
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
+from astrbot.core.computer.booters.local import LocalShellComponent
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest, TokenUsage
 from astrbot.core.provider.provider import Provider
+from astrbot.core.tools.computer_tools import shell as shell_tools
 
 
 class MockProvider(Provider):
@@ -585,6 +588,192 @@ async def test_max_step_final_request_includes_limit_prompt(
     final_contexts = provider.received_contexts[-1]
     assert final_contexts[-1].role == "user"
     assert final_contexts[-1].content == runner.MAX_STEPS_REACHED_PROMPT
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+@pytest.mark.parametrize("wrapper_depth", [0, 1, 2])
+@pytest.mark.parametrize("role", ["admin", "member"])
+async def test_local_shell_accepts_wrapped_tool_arguments(
+    runner, monkeypatch, tmp_path, streaming, wrapper_depth, role
+):
+    command = "echo SUCCESS-WITHOUT-ARGS-WRAPPER"
+    expected_args = {"command": command, "yield_time_ms": 10000}
+    tool_args = expected_args.copy()
+    for _ in range(wrapper_depth):
+        tool_args = {"arguments": tool_args}
+    original_args = copy.deepcopy(tool_args)
+    tool = shell_tools.LocalExecuteShellTool()
+    provider = SingleToolThenFinalProvider(tool.name, tool_args)
+    event = MockEvent("webchat:FriendMessage:wrapped-shell", "user")
+    event.role = role
+    context = SimpleNamespace(
+        get_config=lambda **kwargs: {
+            "provider_settings": {"computer_use_runtime": "local"}
+        }
+    )
+    monkeypatch.setattr(
+        shell_tools,
+        "get_booter",
+        AsyncMock(return_value=SimpleNamespace(shell=LocalShellComponent())),
+    )
+    monkeypatch.setattr(
+        shell_tools, "workspace_root_for_context", AsyncMock(return_value=tmp_path)
+    )
+    hooks = BaseAgentRunHooks()
+    hooks.on_tool_start = AsyncMock()
+    hooks.on_tool_end = AsyncMock()
+    await runner.reset(
+        provider=provider,
+        request=ProviderRequest(
+            prompt="Run the test command", func_tool=ToolSet(tools=[tool]), contexts=[]
+        ),
+        run_context=ContextWrapper(
+            context=SimpleNamespace(event=event, context=context)
+        ),
+        tool_executor=FunctionToolExecutor(),
+        agent_hooks=hooks,
+        streaming=streaming,
+    )
+
+    async for _ in runner.step_until_done(3):
+        pass
+
+    results = [
+        message.content
+        for message in runner.run_context.messages
+        if message.role == "tool"
+    ]
+    assert len(results) == 1
+    if role == "admin":
+        assert "Command completed with exit code 0" in results[0]
+        assert "SUCCESS-WITHOUT-ARGS-WRAPPER" in results[0]
+        shell_tools.get_booter.assert_awaited_once()
+    else:
+        assert "Permission denied" in results[0]
+        shell_tools.get_booter.assert_not_awaited()
+    hooks.on_tool_start.assert_awaited_once_with(
+        runner.run_context, tool, expected_args
+    )
+    assert hooks.on_tool_end.await_args.args[2] == expected_args
+    assert provider.tool_args == original_args
+    assert provider.call_count == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("wrapper_depth", [1, 2])
+async def test_handler_tool_unwraps_arguments_before_parameter_filtering(
+    runner, wrapper_depth
+):
+    event = MockEvent("webchat:FriendMessage:wrapped-handler", "user")
+    received_args = []
+
+    async def handler(event, query: str):
+        received_args.append((event, query))
+        return query
+
+    tool = FunctionTool(
+        name="query_tool",
+        description="Return a query",
+        parameters={"type": "object", "properties": {"query": {"type": "string"}}},
+        handler=handler,
+    )
+    tool_args = {"query": "test query"}
+    for _ in range(wrapper_depth):
+        tool_args = {"arguments": tool_args}
+    await runner.reset(
+        provider=SingleToolThenFinalProvider(tool.name, tool_args),
+        request=ProviderRequest(
+            prompt="Query", func_tool=ToolSet(tools=[tool]), contexts=[]
+        ),
+        run_context=ContextWrapper(context=SimpleNamespace(event=event)),
+        tool_executor=FunctionToolExecutor(),
+        agent_hooks=BaseAgentRunHooks(),
+        streaming=False,
+    )
+
+    async for _ in runner.step_until_done(3):
+        pass
+
+    assert received_args == [(event, "test query")]
+    results = [
+        message.content
+        for message in runner.run_context.messages
+        if message.role == "tool"
+    ]
+    assert results == ["test query"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("properties", "tool_args"),
+    [
+        pytest.param(
+            {"arguments": {"type": "object"}},
+            {"arguments": {"arguments": {"query": "test"}}},
+            id="declared-arguments",
+        ),
+        pytest.param(
+            {"query": {"type": "string"}},
+            {"query": "outer", "arguments": {"query": "inner"}},
+            id="mixed-top-level-keys",
+        ),
+        pytest.param(
+            {"query": {"type": "string"}},
+            {"arguments": '{"query": "test"}'},
+            id="string-wrapper",
+        ),
+        pytest.param(
+            {"query": {"type": "string"}},
+            {"arguments": None},
+            id="null-wrapper",
+        ),
+        pytest.param(
+            {"query": {"type": "string"}},
+            {"arguments": [{"query": "test"}]},
+            id="list-wrapper",
+        ),
+        pytest.param(
+            {},
+            {"arguments": {"query": "test"}},
+            id="no-declared-properties",
+        ),
+        pytest.param(
+            {"query": {"type": "object"}},
+            {"query": {"arguments": {"value": "test"}}},
+            id="nested-parameter-value",
+        ),
+    ],
+)
+async def test_tool_arguments_preserve_non_wrapper_inputs(
+    runner, mock_tool_executor, monkeypatch, properties, tool_args
+):
+    original_args = copy.deepcopy(tool_args)
+    tool = FunctionTool(
+        name="test_tool",
+        description="Test tool argument handling",
+        parameters={"type": "object", "properties": properties},
+    )
+    execute = MagicMock(wraps=mock_tool_executor.execute)
+    monkeypatch.setattr(mock_tool_executor, "execute", execute)
+    await runner.reset(
+        provider=SingleToolThenFinalProvider(tool.name, tool_args),
+        request=ProviderRequest(
+            prompt="Run tool", func_tool=ToolSet(tools=[tool]), contexts=[]
+        ),
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=BaseAgentRunHooks(),
+        streaming=False,
+    )
+
+    async for _ in runner.step_until_done(3):
+        pass
+
+    execute.assert_called_once_with(
+        tool=tool, run_context=runner.run_context, **original_args
+    )
+    assert tool_args == original_args
 
 
 @pytest.mark.asyncio
