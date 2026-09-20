@@ -77,7 +77,7 @@ def get_backup_directories() -> dict[str, str]:
         "plugin_data": get_astrbot_plugin_data_path(),  # 插件数据
         "config": get_astrbot_config_path(),  # 配置目录
         "t2i_templates": get_astrbot_t2i_templates_path(),  # T2I 模板
-        "webchat": get_astrbot_webchat_path(),  # WebChat 数据
+        "webchat": get_astrbot_webchat_path(),  # Legacy images within attachments.
         "temp": get_astrbot_temp_path(),  # 临时文件
         "skills": get_astrbot_skills_path(),  # Skills
     }
@@ -114,12 +114,14 @@ _REQUIRED_ENTRIES: dict[str, tuple[str, ...]] = {
 
 
 def get_backup_components() -> list[str]:
-    """Return all selectable backup component ids.
+    """Return selectable component ids, including legacy images under attachments.
 
-    The four special components come first, followed by every directory key
-    from get_backup_directories() (which doubles as the component id).
+    Returns:
+        Special components followed by independently selectable data directories.
     """
-    return SPECIAL_COMPONENTS + list(get_backup_directories().keys())
+    return SPECIAL_COMPONENTS + [
+        name for name in get_backup_directories() if name != "webchat"
+    ]
 
 
 def component_of_entry(name: str) -> str | None:
@@ -138,11 +140,15 @@ def component_of_entry(name: str) -> str | None:
         return "cmd_config"
     if name.startswith("databases/kb_") or name.startswith("files/kb_media/"):
         return "knowledge_base"
-    if name.startswith("files/attachments/"):
+    if name.startswith(("files/attachments/", "directories/webchat/imgs/")):
         return "attachments"
     if name.startswith("directories/"):
         parts = name.split("/")
-        if len(parts) >= 3 and parts[1] in get_backup_directories():
+        if (
+            len(parts) >= 3
+            and parts[1] != "webchat"
+            and parts[1] in get_backup_directories()
+        ):
             return parts[1]
     return None
 
@@ -153,9 +159,10 @@ def _component_has_entries(component: str, names: set[str], manifest: dict) -> b
     if required is not None:
         return all(entry in names for entry in required)
     if component == "attachments":
-        return any(
-            n.startswith("files/attachments/") and not n.endswith("/") for n in names
-        )
+        prefixes = ("files/attachments/",)
+        if "webchat" in manifest.get("directories", []):
+            prefixes += ("directories/webchat/imgs/",)
+        return any(n.startswith(prefixes) and not n.endswith("/") for n in names)
     # Directory component: declared in the manifest and has at least one entry.
     return component in manifest.get("directories", []) and any(
         n.startswith(f"directories/{component}/") for n in names

@@ -245,20 +245,10 @@ class DatabaseClearError(RuntimeError):
 
 
 class AstrBotImporter:
-    """AstrBot 数据导入器
+    """Restore selected database, configuration, attachment, and extension data.
 
-    导入备份文件中的所有数据，包括：
-    - 主数据库所有表
-    - 知识库元数据和文档
-    - 配置文件
-    - 附件文件
-    - 知识库多媒体文件
-    - 插件目录（data/plugins）
-    - 插件数据目录（data/plugin_data）
-    - 配置目录（data/config）
-    - T2I 模板目录（data/t2i_templates）
-    - WebChat 数据目录（data/webchat）
-    - 临时文件目录（data/temp）
+    Attachments include legacy WebChat images in data/webchat/imgs; upload
+    fragments in data/webchat/.chunks are excluded.
     """
 
     def __init__(
@@ -322,6 +312,12 @@ class AstrBotImporter:
                 available, broken = derive_component_states(manifest, namelist)
                 result.available_components = available
                 result.broken_components = broken
+                if any(n.startswith("directories/webchat/.chunks/") for n in namelist):
+                    result.warnings.append(
+                        "WebChat upload fragments cannot restore upload sessions and will be ignored."
+                    )
+                if not available and not broken:
+                    result.warnings.append("This backup contains no restorable data.")
 
                 # 检查版本兼容性
                 version_check = self._check_version_compatibility(result.backup_version)
@@ -565,6 +561,7 @@ class AstrBotImporter:
                     # 路径提示读取（路径仍强制校验在附件目录内）。
                     if (
                         "database" not in selected
+                        and attachment_paths
                         and "databases/main_db.json" in namelist
                     ):
                         try:
@@ -587,7 +584,8 @@ class AstrBotImporter:
                 selected_dirs = [
                     d
                     for d in get_backup_directories()
-                    if d in selected and d not in skip_components
+                    if ("attachments" if d == "webchat" else d) in selected
+                    and ("attachments" if d == "webchat" else d) not in skip_components
                 ]
                 if selected_dirs:
                     if progress_callback:
@@ -657,6 +655,9 @@ class AstrBotImporter:
                     f"Declared components have missing entries: {sorted(broken)}. "
                     "Default restoration cannot skip broken components; explicitly select available components to restore."
                 )
+                return None
+            if not available:
+                result.add_error("This backup contains no restorable data")
                 return None
             return set(available)
 
@@ -1577,7 +1578,6 @@ class AstrBotImporter:
         count = 0
 
         attachments_dir = Path(self.config_path).parent / "attachments"
-        attachments_dir.mkdir(parents=True, exist_ok=True)
 
         attachment_prefix = "files/attachments/"
         attachment_ids = {
@@ -1585,6 +1585,9 @@ class AstrBotImporter:
             for name in zf.namelist()
             if name.startswith(attachment_prefix) and not name.endswith("/")
         }
+        if not attachment_ids:
+            return 0
+        attachments_dir.mkdir(parents=True, exist_ok=True)
         attachment_paths = {}
         hint_bytes = 0
         try:
@@ -1683,7 +1686,13 @@ class AstrBotImporter:
 
             target_dir = Path(backup_directories[dir_name])
             archive_prefix = f"directories/{dir_name}/"
-            bad_files = bad_entries.get(dir_name, [])
+            if dir_name == "webchat":
+                # Preserve legacy filenames without replacing active upload data.
+                target_dir = target_dir / "imgs"
+                archive_prefix += "imgs/"
+            bad_files = bad_entries.get(
+                "attachments" if dir_name == "webchat" else dir_name, []
+            )
 
             file_count = 0
 
@@ -1696,6 +1705,14 @@ class AstrBotImporter:
                 ]
 
                 if not dir_files:
+                    continue
+                if dir_name == "webchat" and not any(
+                    not name.endswith("/") and name not in bad_files
+                    for name in dir_files
+                ):
+                    result.add_warning(
+                        "No valid legacy WebChat images to restore; existing images were preserved."
+                    )
                     continue
 
                 # 备份现有目录（如果存在）

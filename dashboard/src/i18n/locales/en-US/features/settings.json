@@ -180,7 +180,6 @@
       "plugin_data": "Plugin Data",
       "config": "Config Directory",
       "t2i_templates": "T2I Templates",
-      "webchat": "WebChat Data",
       "temp": "Temporary Files",
       "skills": "Skills"
     },
@@ -275,8 +274,7 @@
       "knowledge_base": "Knowledge base documents, metadata, vector indexes and media files.",
       "cmd_config": "The main bot configuration file.",
       "config": "Configuration profiles, plugin settings and other configuration files.",
-      "attachments": "Files referenced by main database records; select together with the main database.",
-      "webchat": "Files saved by the built-in WebChat; conversation records are in the main database.",
+      "attachments": "Images, audio and other chat files, including legacy WebChat attachments. Back up and restore together with the main database.",
       "plugins": "Program files of installed plugins.",
       "plugin_data": "Persistent data saved by plugins.",
       "skills": "Installed skill files.",

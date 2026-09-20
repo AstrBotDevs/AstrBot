@@ -53,21 +53,10 @@ CMD_CONFIG_FILE_PATH = os.path.join(get_astrbot_data_path(), "cmd_config.json")
 
 
 class AstrBotExporter:
-    """AstrBot 数据导出器
+    """Export selected database, configuration, attachment, and extension data.
 
-    导出内容：
-    - 主数据库所有表（data/data_v4.db）
-    - 知识库元数据（data/knowledge_base/kb.db）
-    - 每个知识库的向量文档数据
-    - 配置文件（data/cmd_config.json）
-    - 附件文件
-    - 知识库多媒体文件
-    - 插件目录（data/plugins）
-    - 插件数据目录（data/plugin_data）
-    - 配置目录（data/config）
-    - T2I 模板目录（data/t2i_templates）
-    - WebChat 数据目录（data/webchat）
-    - 临时文件目录（data/temp）
+    Attachments include legacy WebChat images in data/webchat/imgs; upload
+    fragments in data/webchat/.chunks are excluded.
     """
 
     def __init__(
@@ -233,15 +222,15 @@ class AstrBotExporter:
                             await attachment_rows.aclose()
                     if attachment_count > 0:
                         included.append("attachments")
-                    else:
-                        self._record_skip(
-                            "files/attachments/", "no attachment files to export"
-                        )
                     if progress_callback:
                         await progress_callback("attachments", 100, 100, "附件导出完成")
 
                 # 5. 导出插件和其他目录
-                dir_names = [d for d in get_backup_directories() if d in selected]
+                dir_names = [
+                    d
+                    for d in get_backup_directories()
+                    if d in selected or (d == "webchat" and "attachments" in selected)
+                ]
                 dir_stats: dict[str, dict[str, int]] = {}
                 if dir_names:
                     if progress_callback:
@@ -251,9 +240,19 @@ class AstrBotExporter:
                     dir_stats = await self._run_io(
                         self._export_directories, zf, dir_names
                     )
-                    included.extend(d for d, s in dir_stats.items() if s["files"] > 0)
+                    for directory, stats in dir_stats.items():
+                        component = (
+                            "attachments" if directory == "webchat" else directory
+                        )
+                        if stats["files"] > 0 and component not in included:
+                            included.append(component)
                     if progress_callback:
                         await progress_callback("directories", 100, 100, "目录导出完成")
+
+                if "attachments" in selected and "attachments" not in included:
+                    self._record_skip(
+                        "files/attachments/", "no attachment files to export"
+                    )
 
                 # 6. 生成 manifest
                 if progress_callback:
@@ -751,15 +750,16 @@ class AstrBotExporter:
 
         for dir_name in dir_names:
             full_path = Path(backup_directories[dir_name])
-            if not full_path.exists():
-                logger.debug(f"Skipping missing directory: {full_path}")
+            scan_path = full_path / "imgs" if dir_name == "webchat" else full_path
+            if not scan_path.exists():
+                logger.debug(f"Skipping missing directory: {scan_path}")
                 continue
 
             file_count = 0
             total_size = 0
 
             try:
-                for root, dirs, files in os.walk(full_path):
+                for root, dirs, files in os.walk(scan_path):
                     # 跳过 __pycache__ 目录
                     dirs[:] = [d for d in dirs if d != "__pycache__"]
 

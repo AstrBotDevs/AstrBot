@@ -463,7 +463,7 @@ const checkResult = ref(null)     // 预检查结果
 
 // Grouping affects presentation only; the API still receives individual components.
 const BACKUP_GROUPS = [
-    { id: 'main', components: ['database', 'knowledge_base', 'cmd_config', 'config', 'attachments', 'webchat'] },
+    { id: 'main', components: ['database', 'knowledge_base', 'cmd_config', 'config', 'attachments'] },
     { id: 'extensions', components: ['plugins', 'plugin_data', 'skills', 't2i_templates'] },
     { id: 'temporary', components: ['temp'] },
 ]

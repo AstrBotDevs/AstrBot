@@ -180,7 +180,6 @@
       "plugin_data": "插件数据",
       "config": "配置目录",
       "t2i_templates": "T2I 模板",
-      "webchat": "WebChat 数据",
       "temp": "临时文件",
       "skills": "Skills"
     },
@@ -275,8 +274,7 @@
       "knowledge_base": "知识库文档、元数据、向量索引和媒体文件。",
       "cmd_config": "机器人的主配置文件。",
       "config": "配置档案、插件配置等配置文件。",
-      "attachments": "主数据库记录所引用的附件文件，建议与主数据库一起选择。",
-      "webchat": "内置 WebChat 保存的文件；对话记录包含在主数据库中。",
+      "attachments": "聊天中使用的图片、音频和其他文件，包含旧版 WebChat 附件。建议与主数据库一起备份和恢复。",
       "plugins": "已安装插件的程序文件。",
       "plugin_data": "插件保存的持久化数据。",
       "skills": "已安装的技能文件。",

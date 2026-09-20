@@ -2230,3 +2230,228 @@ class TestPreVerifyEdgeCases:
         assert result.success, result.errors
         validate_msgs = [m for s, m in calls if s == "validate"]
         assert any("正在校验组件" in m for m in validate_msgs)
+
+
+def _write_webchat_backup(path, entries, *, version="1.2", checksums=None):
+    """Write a legacy WebChat archive for restoration tests.
+
+    Args:
+        path: Destination ZIP path.
+        entries: Archive entry names mapped to file bytes.
+        version: Backup manifest format version.
+        checksums: Optional expected hashes, including missing or corrupt entries.
+    """
+    manifest = {
+        "version": version,
+        "astrbot_version": VERSION,
+        "directories": ["webchat"],
+    }
+    if version == "1.2":
+        hashes = (
+            checksums
+            if checksums is not None
+            else {name: _sha256(data) for name, data in entries.items()}
+        )
+        manifest.update(
+            components=["attachments"],
+            checksums=hashes,
+            component_checksums={
+                "attachments": _component_checksum(
+                    {
+                        name: value
+                        for name, value in hashes.items()
+                        if name.startswith(
+                            ("files/attachments/", "directories/webchat/imgs/")
+                        )
+                    }
+                )
+            },
+        )
+    with zipfile.ZipFile(path, "w") as zf:
+        zf.writestr("manifest.json", json.dumps(manifest))
+        for name, data in entries.items():
+            zf.writestr(name, data)
+
+
+class TestLegacyWebChatAttachments:
+    """Keep legacy images restorable without copying upload sessions."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("with_regular_attachment", [False, True])
+    async def test_export_and_restore_images_without_upload_fragments(
+        self,
+        tmp_path,
+        temp_data_dir,
+        temp_backup_dir,
+        monkeypatch,
+        with_regular_attachment,
+    ):
+        """Export both file sources while keeping fragments out of the archive."""
+        webchat = temp_data_dir / "webchat"
+        (webchat / "imgs").mkdir(parents=True)
+        image = webchat / "imgs" / "legacy.png"
+        image.write_bytes(b"legacy-image")
+        (webchat / ".chunks").mkdir()
+        fragment = webchat / ".chunks" / "live.part"
+        fragment.write_bytes(b"active-upload")
+        (webchat / "other.txt").write_bytes(b"unrelated-data")
+        monkeypatch.setattr(
+            "astrbot.core.backup.constants.get_astrbot_webchat_path",
+            lambda: str(webchat),
+        )
+        regular = temp_data_dir / "attachments" / "regular.txt"
+        regular.write_bytes(b"regular-file")
+        rows = (
+            [{"attachment_id": "regular", "path": str(regular)}]
+            if with_regular_attachment
+            else []
+        )
+        exporter = AstrBotExporter(
+            MagicMock(), config_path=str(temp_data_dir / "cmd_config.json")
+        )
+        exporter._export_attachment_records = AsyncMock(return_value=rows)
+        archive = await exporter.export_all(
+            output_dir=str(temp_backup_dir), components=["attachments"]
+        )
+        with zipfile.ZipFile(archive) as zf:
+            names = set(zf.namelist())
+            assert "directories/webchat/imgs/legacy.png" in names
+            assert not any(".chunks/" in name for name in names)
+            assert "directories/webchat/other.txt" not in names
+            assert ("files/attachments/regular.txt" in names) == with_regular_attachment
+        importer = AstrBotImporter(
+            MagicMock(), config_path=str(temp_data_dir / "cmd_config.json")
+        )
+        check = importer.pre_check(archive)
+        assert check.available_components == ["attachments"]
+        image.write_bytes(b"current-image")
+        regular.unlink()
+        result = await importer.import_all(
+            archive, components=check.available_components
+        )
+        assert result.success, result.errors
+        assert image.read_bytes() == b"legacy-image"
+        assert fragment.read_bytes() == b"active-upload"
+        assert (webchat / "other.txt").read_bytes() == b"unrelated-data"
+        if with_regular_attachment:
+            assert regular.read_bytes() == b"regular-file"
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("version", ["1.1", "1.2"])
+    async def test_restore_images_ignores_upload_fragments(
+        self, tmp_path, monkeypatch, version
+    ):
+        """Published legacy and current formats restore images without upload state."""
+        webchat = tmp_path / "webchat"
+        (webchat / "imgs").mkdir(parents=True)
+        (webchat / "imgs" / "previous.png").write_bytes(b"previous")
+        (webchat / ".chunks").mkdir()
+        (webchat / ".chunks" / "active.part").write_bytes(b"active")
+        monkeypatch.setattr(
+            "astrbot.core.backup.constants.get_astrbot_webchat_path",
+            lambda: str(webchat),
+        )
+        archive = tmp_path / "old.zip"
+        _write_webchat_backup(
+            archive,
+            {
+                "directories/webchat/imgs/old.png": b"old-image",
+                "directories/webchat/.chunks/saved.part": b"obsolete-upload",
+            },
+            version=version,
+        )
+        importer = AstrBotImporter(MagicMock())
+        check = importer.pre_check(str(archive))
+        assert check.available_components == ["attachments"]
+        assert any("upload fragments" in warning for warning in check.warnings)
+        result = await importer.import_all(str(archive), components=["attachments"])
+        assert result.success, result.errors
+        assert (webchat / "imgs" / "old.png").read_bytes() == b"old-image"
+        assert (webchat / "imgs.bak" / "previous.png").read_bytes() == b"previous"
+        assert (webchat / ".chunks" / "active.part").read_bytes() == b"active"
+        assert not (webchat / ".chunks" / "saved.part").exists()
+        assert not webchat.with_suffix(".bak").exists()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("selection", [None, ["attachments"]])
+    async def test_fragments_only_never_clear_images(
+        self, tmp_path, monkeypatch, selection
+    ):
+        """An upload-only backup has no restorable component and changes no files."""
+        webchat = tmp_path / "webchat"
+        (webchat / "imgs").mkdir(parents=True)
+        image = webchat / "imgs" / "keep.png"
+        image.write_bytes(b"keep")
+        monkeypatch.setattr(
+            "astrbot.core.backup.constants.get_astrbot_webchat_path",
+            lambda: str(webchat),
+        )
+        archive = tmp_path / "fragments.zip"
+        _write_webchat_backup(
+            archive,
+            {
+                "directories/webchat/.chunks/saved.part": b"obsolete-upload",
+            },
+            version="1.1",
+        )
+        importer = AstrBotImporter(MagicMock())
+        check = importer.pre_check(str(archive))
+        assert check.available_components == []
+        assert check.broken_components == []
+        assert any("no restorable data" in warning for warning in check.warnings)
+        result = await importer.import_all(str(archive), components=selection)
+        assert not result.success
+        assert image.read_bytes() == b"keep"
+        assert not (webchat / "imgs.bak").exists()
+
+    @pytest.mark.asyncio
+    async def test_missing_declared_image_is_still_broken(self, tmp_path, monkeypatch):
+        """Fragments cannot disguise an image removed from a declared component."""
+        webchat = tmp_path / "webchat"
+        monkeypatch.setattr(
+            "astrbot.core.backup.constants.get_astrbot_webchat_path",
+            lambda: str(webchat),
+        )
+        archive = tmp_path / "missing.zip"
+        fragment = "directories/webchat/.chunks/saved.part"
+        _write_webchat_backup(
+            archive,
+            {fragment: b"fragment"},
+            checksums={
+                fragment: _sha256(b"fragment"),
+                "directories/webchat/imgs/missing.png": _sha256(b"missing"),
+            },
+        )
+        importer = AstrBotImporter(MagicMock())
+        check = importer.pre_check(str(archive))
+        assert check.available_components == []
+        assert check.broken_components == ["attachments"]
+        result = await importer.import_all(str(archive))
+        assert not result.success
+        assert not webchat.exists()
+
+    @pytest.mark.asyncio
+    async def test_corrupt_images_preserve_existing_directory(
+        self, tmp_path, monkeypatch
+    ):
+        """A wholly corrupt image set does not replace existing legacy images."""
+        webchat = tmp_path / "webchat"
+        (webchat / "imgs").mkdir(parents=True)
+        image = webchat / "imgs" / "keep.png"
+        image.write_bytes(b"keep")
+        monkeypatch.setattr(
+            "astrbot.core.backup.constants.get_astrbot_webchat_path",
+            lambda: str(webchat),
+        )
+        archive = tmp_path / "corrupt.zip"
+        name = "directories/webchat/imgs/keep.png"
+        _write_webchat_backup(
+            archive, {name: b"tampered"}, checksums={name: _sha256(b"expected")}
+        )
+        result = await AstrBotImporter(MagicMock()).import_all(str(archive))
+        assert any("verification failed" in warning for warning in result.warnings)
+        assert any(
+            "existing images were preserved" in warning for warning in result.warnings
+        )
+        assert image.read_bytes() == b"keep"
+        assert not (webchat / "imgs.bak").exists()
