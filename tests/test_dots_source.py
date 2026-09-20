@@ -418,6 +418,208 @@ async def test_stream_output_and_parse_failure(
                 text_chunks.append(response.completion_text)
             else:
                 finals.append(response)
-        assert text_chunks == (["Hello world"] if tool_enabled else ["Hello", " world"])
+        assert text_chunks == ["Hello", " world"]
         assert len(finals) == 1
         assert finals[0].completion_text == "Hello world"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "parts,finish_reason,expected_events",
+    [
+        (["Hello", " world"], "stop", [("Hello", 1), (" world", 2)]),
+        (
+            ["Searching. <dots_func", NATIVE_CALL[len("<dots_func") :], " Done."],
+            "tool_calls",
+            [("Searching. ", 1), (" Done.", 4)],
+        ),
+        (
+            ["Before.", NATIVE_CALL, "Between.", NATIVE_CALL, "After."],
+            "tool_calls",
+            [("Before.", 1), ("Between.After.", 6)],
+        ),
+        (
+            ["Example:\n", NATIVE_CALL, "\nThis is literal XML."],
+            "stop",
+            [("Example:\n", 1), (NATIVE_CALL + "\nThis is literal XML.", 4)],
+        ),
+        (
+            ["Math: <", " 2; <do", "g>tail"],
+            "stop",
+            [("Math: ", 1), ("< 2; ", 2), ("<dog>tail", 3)],
+        ),
+        (["Tail <", "dots_func"], "stop", [("Tail ", 1), ("<dots_func", 3)]),
+        (["  Hello", " world  "], "stop", [("  Hello", 1), (" world  ", 2)]),
+        *[
+            (
+                ["Before." + NATIVE_CALL[:cut], NATIVE_CALL[cut:] + "After."],
+                "tool_calls",
+                [("Before.", 1), ("After.", 3)],
+            )
+            for cut in range(1, len(NATIVE_CALL))
+        ],
+    ],
+)
+async def test_tool_enabled_stream_releases_safe_text_before_finish(
+    provider, tools, parts, finish_reason, expected_events
+):
+    consumed = 0
+
+    async def chunks():
+        nonlocal consumed
+        for index, text in enumerate([*parts, None]):
+            consumed += 1
+            yield ChatCompletionChunk.model_validate(
+                {
+                    "id": "stream-test",
+                    "object": "chat.completion.chunk",
+                    "created": 0,
+                    "model": "dots3-note-prev",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {
+                                "content": text,
+                                **({"role": "assistant"} if index == 0 else {}),
+                            },
+                            "finish_reason": finish_reason
+                            if index == len(parts)
+                            else None,
+                        }
+                    ],
+                }
+            )
+
+    provider.client.chat.completions.create = AsyncMock(return_value=chunks())
+    events = []
+    finals = []
+    async for response in provider._query_stream({}, tools):
+        if response.is_chunk:
+            events.append((response.completion_text, consumed))
+        else:
+            finals.append(response)
+    assert events == expected_events
+    assert len(finals) == 1
+    assert bool(finals[0].tools_call_name) == (finish_reason == "tool_calls")
+    assert "".join(text for text, _ in events).strip() == finals[0].completion_text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("native_content", ["", NATIVE_CALL])
+async def test_stream_preserves_standard_calls_reasoning_and_usage(
+    provider, tools, native_content
+):
+    deltas = [
+        {"role": "assistant", "reasoning_content": "Thinking."},
+        {"content": "Searching. "},
+        {
+            "content": native_content,
+            "tool_calls": [
+                {
+                    "index": 0,
+                    "id": "standard-call",
+                    "type": "function",
+                    "function": {"name": "web_search_tavily", "arguments": '{"query":'},
+                }
+            ],
+        },
+        {
+            "reasoning_content": " Ready.",
+            "tool_calls": [
+                {"index": 0, "function": {"arguments": '"weather","max_results":2}'}}
+            ],
+        },
+        {},
+    ]
+    consumed = 0
+
+    async def chunks():
+        nonlocal consumed
+        for index, delta in enumerate(deltas):
+            consumed += 1
+            yield ChatCompletionChunk.model_validate(
+                {
+                    "id": "stream-test",
+                    "object": "chat.completion.chunk",
+                    "created": 0,
+                    "model": "dots3-note-prev",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": delta,
+                            "finish_reason": "tool_calls"
+                            if index == len(deltas) - 1
+                            else None,
+                        }
+                    ],
+                }
+            )
+        yield ChatCompletionChunk.model_validate(
+            {
+                "id": "stream-test",
+                "object": "chat.completion.chunk",
+                "created": 0,
+                "model": "dots3-note-prev",
+                "choices": [],
+                "usage": {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 20,
+                    "total_tokens": 30,
+                },
+            }
+        )
+
+    provider.client.chat.completions.create = AsyncMock(return_value=chunks())
+    text = []
+    reasoning = []
+    finals = []
+    async for response in provider._query_stream({}, tools):
+        if response.is_chunk:
+            if response.completion_text:
+                text.append((response.completion_text, consumed))
+            if response.reasoning_content:
+                reasoning.append((response.reasoning_content, consumed))
+        else:
+            finals.append(response)
+    assert text == [("Searching. ", 2)]
+    assert reasoning == [("Thinking.", 1), (" Ready.", 4)]
+    assert len(finals) == 1
+    assert finals[0].tools_call_ids == ["standard-call"]
+    assert finals[0].tools_call_args == [{"query": "weather", "max_results": 2}]
+    assert finals[0].reasoning_content == "Thinking. Ready."
+    assert finals[0].usage.total == 30
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", ["tool_calls", "length", "disconnect"])
+async def test_failed_stream_keeps_native_suffix_private(provider, tools, failure):
+    async def chunks():
+        for index, text in enumerate(["Safe text.", NATIVE_CALL[:-10], None]):
+            if index == 2 and failure == "disconnect":
+                raise httpx.ReadError("Stream disconnected")
+            yield ChatCompletionChunk.model_validate(
+                {
+                    "id": "stream-test",
+                    "object": "chat.completion.chunk",
+                    "created": 0,
+                    "model": "dots3-note-prev",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {
+                                "content": text,
+                                **({"role": "assistant"} if index == 0 else {}),
+                            },
+                            "finish_reason": failure if index == 2 else None,
+                        }
+                    ],
+                }
+            )
+
+    provider.client.chat.completions.create = AsyncMock(return_value=chunks())
+    responses = provider._query_stream({}, tools)
+    first = await anext(responses)
+    assert first.completion_text == "Safe text."
+    error = httpx.ReadError if failure == "disconnect" else ValueError
+    with pytest.raises(error):
+        await anext(responses)

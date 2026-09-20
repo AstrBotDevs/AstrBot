@@ -214,7 +214,7 @@ class ProviderDots(ProviderOpenAIOfficial):
         *,
         request_max_retries: int | None = None,
     ) -> AsyncGenerator[LLMResponse, None]:
-        """Buffer tool-enabled turns until native call normalization is complete.
+        """Stream safe text while buffering ambiguous native call markup.
 
         Args:
             payloads: Chat Completions request parameters.
@@ -225,27 +225,71 @@ class ProviderDots(ProviderOpenAIOfficial):
             Clean text chunks followed by the complete response.
 
         Raises:
-            ValueError: A buffered stream ends without a valid final response.
+            ValueError: A tool-enabled stream ends without a valid final response.
         """
-        buffer_output = tools is not None and not tools.empty()
+        filter_calls = tools is not None and not tools.empty()
+        markers = ("<dots_function_call", "</dots_function_call>")
+        pending = ""
+        found_marker = False
         received_final = False
         async for response in super()._query_stream(
             payloads, tools, request_max_retries=request_max_retries
         ):
-            if not buffer_output:
+            if not filter_calls:
                 yield response
                 continue
             if response.is_chunk:
+                pending += response.completion_text or ""
+                text = ""
+                if not found_marker:
+                    marker_positions = [
+                        pos for marker in markers if (pos := pending.find(marker)) >= 0
+                    ]
+                    if marker_positions:
+                        boundary = min(marker_positions)
+                        found_marker = True
+                    else:
+                        # Retain only a suffix that could become a split marker.
+                        boundary = len(pending)
+                        for size in range(
+                            min(len(pending), max(map(len, markers)) - 1), 0, -1
+                        ):
+                            if any(
+                                marker.startswith(pending[-size:]) for marker in markers
+                            ):
+                                boundary -= size
+                                break
+                    text, pending = pending[:boundary], pending[boundary:]
+                if text or response.reasoning_content:
+                    # The parent reuses its chunk object; do not mutate or retain it.
+                    yield LLMResponse(
+                        "assistant",
+                        completion_text=text,
+                        reasoning_content=response.reasoning_content,
+                        reasoning_signature=response.reasoning_signature,
+                        is_chunk=True,
+                        id=response.id,
+                        usage=response.usage,
+                    )
                 continue
             received_final = True
-            if response.completion_text or response.reasoning_content:
+            if response.tools_call_name:
+                # Final parsing validated every block and chose standard calls, if
+                # present. Until then, keep the suffix in order for XML examples.
+                pending = re.sub(
+                    r"<dots_function_call>(.*?)</dots_function_call>",
+                    "",
+                    pending,
+                    flags=re.DOTALL,
+                )
+            if pending:
                 yield LLMResponse(
                     "assistant",
-                    completion_text=response.completion_text,
-                    reasoning_content=response.reasoning_content,
+                    completion_text=pending,
                     is_chunk=True,
                     id=response.id,
+                    usage=response.usage,
                 )
             yield response
-        if buffer_output and not received_final:
+        if filter_calls and not received_final:
             raise ValueError("Dots stream ended without a valid final response")
