@@ -207,7 +207,7 @@ async def test_json_fallback_and_standard_call_precedence(provider, tools):
             },
         }
     ]
-    for content in ("Searching", NATIVE_CALL):
+    for content in ("Searching", NATIVE_CALL, NATIVE_CALL[:-10], "<dots_function_call"):
         result = await provider._parse_openai_completion(
             completion(content, tool_calls=standard), tools
         )
@@ -342,7 +342,9 @@ async def test_native_calls_require_available_tools(provider, available_tools):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("streaming", [False, True])
-@pytest.mark.parametrize("call_format", ["native", "mixed", "standard", "openai"])
+@pytest.mark.parametrize(
+    "call_format", ["native", "mixed", "mixed_truncated", "standard", "openai"]
+)
 @pytest.mark.parametrize("scenario", ["success", "repeated", "rate_limit"])
 async def test_native_call_round_trip_through_agent(
     monkeypatch, tools, streaming, call_format, scenario
@@ -375,7 +377,11 @@ async def test_native_call_round_trip_through_agent(
         ]
         result = (
             completion(
-                NATIVE_CALL if call_format in ("native", "mixed") else "",
+                NATIVE_CALL[:-10]
+                if call_format == "mixed_truncated"
+                else NATIVE_CALL
+                if call_format in ("native", "mixed")
+                else "",
                 tool_calls=None if call_format == "native" else standard_calls,
             )
             if len(requests) <= call_rounds
@@ -625,7 +631,9 @@ async def test_tool_enabled_stream_releases_safe_text_before_finish(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("native_content", ["", NATIVE_CALL])
+@pytest.mark.parametrize(
+    "native_content", ["", NATIVE_CALL, NATIVE_CALL[:-10], "<dots_function_call"]
+)
 async def test_stream_preserves_standard_calls_reasoning_and_usage(
     provider, tools, native_content
 ):

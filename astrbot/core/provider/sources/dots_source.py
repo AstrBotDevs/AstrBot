@@ -199,10 +199,24 @@ class ProviderDots(ProviderOpenAIOfficial):
         # Do not execute XML examples in ordinary assistant answers.
         if choice.finish_reason != "tool_calls":
             return await super()._parse_openai_completion(completion, tools)
+        if choice.message.tool_calls:
+            # A malformed duplicate must not invalidate authoritative standard calls.
+            normalized = completion.model_dump()
+            normalized["choices"][0]["message"]["content"] = (
+                re.sub(
+                    r"<dots_function_call>.*?</dots_function_call>"
+                    r"|<dots_function_call.*\Z|</dots_function_call>",
+                    "",
+                    content,
+                    flags=re.DOTALL,
+                ).strip()
+                or None
+            )
+            return await super()._parse_openai_completion(
+                ChatCompletion.model_validate(normalized), tools
+            )
         if "<dots_function_call>" not in content:
-            if not choice.message.tool_calls:
-                raise ValueError("Dots requested tools without a usable tool call")
-            return await super()._parse_openai_completion(completion, tools)
+            raise ValueError("Dots requested tools without a usable tool call")
         if tools is None or tools.empty():
             raise ValueError("Dots requested tools when no tools were provided")
 
@@ -219,12 +233,10 @@ class ProviderDots(ProviderOpenAIOfficial):
             raise ValueError("Incomplete Dots tool call block")
         normalized = completion.model_dump()
         message = normalized["choices"][0]["message"]
-        if not message.get("tool_calls"):
-            calls = []
-            for block in blocks:
-                calls.extend(self._parse_dots_block(block.group(1), tools))
-            message["tool_calls"] = calls
-        # Standard calls are authoritative if both representations are present.
+        calls = []
+        for block in blocks:
+            calls.extend(self._parse_dots_block(block.group(1), tools))
+        message["tool_calls"] = calls
         message["content"] = clean_content or None
         return await super()._parse_openai_completion(
             ChatCompletion.model_validate(normalized), tools
@@ -323,10 +335,11 @@ class ProviderDots(ProviderOpenAIOfficial):
                         is_chunk=True,
                         id=response.id,
                     )
-                # Final parsing validated every block and chose standard calls, if
-                # present. Until then, keep the suffix in order for XML examples.
+                # Native calls have been validated; standard calls may have a
+                # malformed duplicate whose buffered suffix must also be hidden.
                 pending = re.sub(
-                    r"<dots_function_call>(.*?)</dots_function_call>",
+                    r"<dots_function_call>.*?</dots_function_call>"
+                    r"|<dots_function_call.*\Z|</dots_function_call>",
                     "",
                     pending,
                     flags=re.DOTALL,
