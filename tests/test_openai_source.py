@@ -344,10 +344,21 @@ async def test_query_stream_drops_repeated_tool_call_metadata(
 
 
 @pytest.mark.asyncio
-async def test_query_stream_preserves_changed_metadata_in_compatibility_mode(
-    monkeypatch,
+@pytest.mark.parametrize(
+    ("middle_id", "middle_name"),
+    [
+        ("first", "value"),
+        ("first", None),
+        (None, "value"),
+        ("", ""),
+        ("", None),
+        (None, ""),
+    ],
+)
+async def test_query_stream_disables_deduplication_after_partial_or_changed_metadata(
+    monkeypatch, middle_id, middle_name
 ):
-    """A changed ID can be a fragment, not necessarily a new logical call."""
+    """Partial or changed metadata must disable suppression for the whole slot."""
     provider = _make_provider({"deduplicate_streaming_tool_metadata": True})
 
     def make_chunk(tool_call: dict | None, finish_reason: str | None = None):
@@ -382,9 +393,17 @@ async def test_query_stream_preserves_changed_metadata_in_compatibility_mode(
         make_chunk(
             {
                 "index": 0,
-                "id": "first",
+                "id": middle_id,
                 "type": "function",
-                "function": {"name": "value", "arguments": "2}"},
+                "function": {"name": middle_name, "arguments": "2"},
+            }
+        ),
+        make_chunk(
+            {
+                "index": 0,
+                "id": "call_",
+                "type": "function",
+                "function": {"name": "get_", "arguments": "}"},
             }
         ),
         make_chunk(None, finish_reason="tool_calls"),
@@ -411,8 +430,8 @@ async def test_query_stream_preserves_changed_metadata_in_compatibility_mode(
         ]
 
         final_response = responses[-1]
-        assert final_response.tools_call_ids == ["call_first"]
-        assert final_response.tools_call_name == ["get_value"]
+        assert final_response.tools_call_ids == [f"call_{middle_id or ''}call_"]
+        assert final_response.tools_call_name == [f"get_{middle_name or ''}get_"]
         assert final_response.tools_call_args == [{"value": 2}]
     finally:
         await provider.terminate()

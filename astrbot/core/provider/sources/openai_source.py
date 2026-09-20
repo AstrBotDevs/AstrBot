@@ -675,7 +675,7 @@ class ProviderOpenAIOfficial(Provider):
                         elif metadata and metadata == tool_call_metadata[tc.index]:
                             tc.id = None
                             tc.function.name = None
-                        elif raw_id or raw_name:
+                        elif raw_id is not None or raw_name is not None:
                             # Partial or changing metadata is not an exact replay.
                             # Keep SDK delta semantics for the rest of this slot.
                             tool_call_metadata[tc.index] = None
