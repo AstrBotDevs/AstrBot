@@ -1,0 +1,36 @@
+# 接入 Dots
+
+AstrBot 提供独立的 **Dots** 模型服务商，复用 OpenAI Chat Completions 协议，并兼容 Dots 原生工具调用格式。
+
+## 配置步骤
+
+1. 在 [Dots API 开放平台](https://dots.ai/platform/apikeys)创建 API Key。
+2. 打开 **模型提供商 → 对话**，点击 **新增模型提供商**，选择 **Dots**。
+3. 填写服务商名称和 API Key。默认 API Base URL 为 `https://note3-prev-api.askdiandian.com/v1`。适配器自动发送 `api-key` 请求头，无需在自定义请求头中重复填写密钥。
+4. 点击 **保存并获取模型**，在 `dots3-note-prev` 旁点击 `+`，并确保模型已启用。也可以保存配置后，通过 **自定义模型** 输入模型 ID。
+5. 点击模型旁的 **测试模型** 检查连通性。
+6. 打开 **配置文件**，选择需要使用的配置文件，在 **AI → 模型** 中将 **对话模型** 设为刚刚添加的模型，点击右下角 **保存配置**。
+
+API Key 支持 AstrBot 的环境变量写法，例如 `$DOTS_API_KEY`。配置多个 Key 时，鉴权请求头随本次请求选中的 Key 更新。
+
+## 从 OpenAI Compatible 配置迁移
+
+| 原配置 | 新配置 |
+| --- | --- |
+| 使用 OpenAI Compatible 接入 Dots | 新增 Dots 服务商，填入相同的端点与 Key |
+| 配置文件选用旧服务商下的模型 | 添加新服务商下的模型后，重新选择对话模型 |
+| 自定义请求头手动填写 `api-key` | 使用服务商的 API Key 字段，由适配器处理鉴权 |
+
+旧配置不会自动迁移。只有选择 Dots 服务商，才会启用专用的工具调用兼容处理。
+
+## 工具调用与流式输出
+
+- 标准 `tool_calls` 响应直接使用现有工具执行流程。
+- 当响应明确以 `finish_reason: tool_calls` 请求调用工具、但调用内容位于 `<dots_function_call>` 中时，适配器将其转换为标准工具调用，校验工具名称和参数，并从回复正文中移除调用块。
+- 同时返回标准调用和原生调用块时，以标准调用为准，避免执行两次。普通回答中的 XML 示例不会被解释为调用。
+- 请求携带工具时，仍使用流式 API，但本轮输出会等待完整响应解析完毕后再展示，避免调用标记提前进入聊天。未携带工具的纯聊天保留实时流式输出。
+- 不完整或非法的原生工具调用会报错，不会作为正常回复发送。此兼容处理不能保证模型不会重复调用工具；AstrBot 现有的工具调用轮数限制仍然生效。
+
+自建 vLLM 服务时，建议按 [vLLM Dots 部署文档](https://recipes.vllm.ai/dots-studio/dots3-note-prev)启用 `--enable-auto-tool-choice --tool-call-parser dots`，让服务端返回标准工具调用。
+
+模型名称、能力和可用端点以 [Dots 官方接口文档](https://dots.ai/platform/docs)为准。
