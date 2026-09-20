@@ -1499,6 +1499,18 @@ CONFIG_METADATA_2 = {
                         "proxy": "",
                         "custom_headers": {},
                     },
+                    "Dots": {
+                        "id": "dots",
+                        "provider": "dots",
+                        "type": "dots_chat_completion",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "api_base": "https://note3-prev-api.askdiandian.com/v1",
+                        "timeout": 120,
+                        "proxy": "",
+                        "custom_headers": {},
+                    },
                     "LongCat": {
                         "id": "longcat",
                         "provider": "longcat",
