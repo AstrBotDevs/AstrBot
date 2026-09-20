@@ -566,10 +566,10 @@ class TestRunActiveAgentJob:
         ],
         ids=["whitelist", "empty", "wildcard", "default"],
     )
-    async def test_woke_main_agent_passes_history_and_session_config(
+    async def test_woke_main_agent_filters_plugin_hooks_and_tools(
         self, cron_manager, monkeypatch, session_config, expected_plugins
     ):
-        """Preserve cron history, provider settings, and plugin filtering."""
+        """Apply the session plugin policy to cron response hooks and tools."""
         from astrbot.core.agent.tool import FunctionTool, ToolSet
         from astrbot.core.astr_agent_hooks import MAIN_AGENT_HOOKS
         from astrbot.core.astr_main_agent import _plugin_tool_fix
@@ -581,6 +581,9 @@ class TestRunActiveAgentJob:
             StarHandlerRegistry,
         )
 
+        ctx = MagicMock()
+        ctx.get_config.return_value = session_config
+        cron_manager.ctx = ctx
         registry = StarHandlerRegistry()
         monkeypatch.setattr(context_utils, "star_handlers_registry", registry)
         hooks = {}
@@ -614,12 +617,50 @@ class TestRunActiveAgentJob:
                     )
                 )
 
+        runner = MagicMock(state=AgentState.DONE)
+        runner.step_until_done.return_value.__aiter__.return_value = []
+        runner.get_final_llm_resp.return_value = None
+        with (
+            patch(
+                "astrbot.core.astr_main_agent._get_session_conv",
+                AsyncMock(return_value=SimpleNamespace(history="[]")),
+            ),
+            patch(
+                "astrbot.core.astr_main_agent.build_main_agent",
+                AsyncMock(return_value=SimpleNamespace(agent_runner=runner)),
+            ) as build_agent,
+            patch("astrbot.core.cron.manager.persist_agent_history", AsyncMock()),
+        ):
+            await cron_manager._woke_main_agent(
+                message="run scheduled task",
+                session_str="test:GroupMessage:group123",
+                extras={"cron_job": {"id": "job-1"}, "cron_payload": {}},
+            )
+
+        ctx.get_config.assert_called_once_with(umo="test:GroupMessage:group123")
+        event = build_agent.call_args.kwargs["event"]
+        req = build_agent.call_args.kwargs["req"]
+        req.func_tool = tools
+        _plugin_tool_fix(event, req)
+        await MAIN_AGENT_HOOKS.on_agent_done(
+            SimpleNamespace(context=SimpleNamespace(event=event)),
+            SimpleNamespace(reasoning_content=""),
+        )
+
+        assert set(req.func_tool.names()) == expected_plugins
+        for (name, _), hook in hooks.items():
+            assert hook.await_count == int(name in expected_plugins)
+
+    @pytest.mark.asyncio
+    async def test_woke_main_agent_passes_history_and_provider_settings(
+        self, cron_manager
+    ):
+        """Test active cron agent keeps structured history and provider settings."""
         provider_settings = {
             "fallback_chat_models": ["fallback-provider"],
         }
         ctx = MagicMock()
         ctx.get_config.return_value = {
-            **session_config,
             "admins_id": [],
             "provider_settings": provider_settings,
             "agent_runner": {
@@ -636,9 +677,28 @@ class TestRunActiveAgentJob:
         conv = MagicMock()
         conv.history = json.dumps(history)
 
-        runner = MagicMock(state=AgentState.DONE)
-        runner.step_until_done.return_value.__aiter__.return_value = []
-        runner.get_final_llm_resp.return_value = None
+        class FakeRunner:
+            state = AgentState.DONE
+
+            def step_until_done(self, max_step):
+                async def gen():
+                    if False:
+                        yield None
+
+                return gen()
+
+            def get_final_llm_resp(self):
+                return None
+
+        captured = {}
+
+        async def fake_build_main_agent(*, event, plugin_context, config, req):
+            captured["config"] = config
+            captured["req"] = req
+            return MagicMock(agent_runner=FakeRunner())
+
+        async def fake_persist_agent_history(*args, **kwargs):
+            return None
 
         with (
             patch(
@@ -647,9 +707,12 @@ class TestRunActiveAgentJob:
             ),
             patch(
                 "astrbot.core.astr_main_agent.build_main_agent",
-                AsyncMock(return_value=SimpleNamespace(agent_runner=runner)),
-            ) as build_agent,
-            patch("astrbot.core.cron.manager.persist_agent_history", AsyncMock()),
+                side_effect=fake_build_main_agent,
+            ),
+            patch(
+                "astrbot.core.cron.manager.persist_agent_history",
+                side_effect=fake_persist_agent_history,
+            ),
         ):
             await cron_manager._woke_main_agent(
                 message="run scheduled task",
@@ -657,8 +720,6 @@ class TestRunActiveAgentJob:
                 extras={"cron_job": {"id": "job-1"}, "cron_payload": {}},
             )
 
-        ctx.get_config.assert_called_once_with(umo="test:FriendMessage:user123")
-        captured = build_agent.call_args.kwargs
         config = captured["config"]
         assert config.tool_call_timeout == 77
         assert config.provider_settings is provider_settings
@@ -667,18 +728,6 @@ class TestRunActiveAgentJob:
         assert "old question" not in request.system_prompt
         assert "old answer" not in request.system_prompt
         assert request.contexts == history
-
-        event = captured["event"]
-        request.func_tool = tools
-        _plugin_tool_fix(event, request)
-        await MAIN_AGENT_HOOKS.on_agent_done(
-            SimpleNamespace(context=SimpleNamespace(event=event)),
-            SimpleNamespace(reasoning_content=""),
-        )
-
-        assert set(request.func_tool.names()) == expected_plugins
-        for (name, _), hook in hooks.items():
-            assert hook.await_count == int(name in expected_plugins)
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
