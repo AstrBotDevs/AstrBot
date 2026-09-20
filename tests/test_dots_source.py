@@ -217,6 +217,16 @@ async def test_json_fallback_and_standard_call_precedence(provider, tools):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("value", ["    return 1\n", "\t\n", "", " text "])
+async def test_native_string_parameters_preserve_whitespace(provider, tools, value):
+    native = NATIVE_CALL.replace("123 & weather", value).replace(
+        ">5<", "> \n5\t <"
+    )
+    result = await provider._parse_openai_completion(completion(native), tools)
+    assert result.tools_call_args == [{"query": value, "max_results": 5}]
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "content", [NATIVE_CALL, f"Example:\n```xml\n{NATIVE_CALL}\n```"]
 )

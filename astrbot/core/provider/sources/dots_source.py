@@ -108,8 +108,7 @@ class ProviderDots(ProviderOpenAIOfficial):
                         raise ValueError("Duplicate Dots tool parameter")
                     schema = tool.parameters.get("properties", {}).get(param_name, {})
                     field_validator = validator.evolve(schema=schema)
-                    value = value.strip()
-                    if value == "null" and field_validator.is_valid(None):
+                    if value.strip() == "null" and field_validator.is_valid(None):
                         args[param_name] = None
                     elif field_validator.is_valid(value):
                         args[param_name] = value
