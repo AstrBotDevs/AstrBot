@@ -264,17 +264,43 @@ async def test_native_calls_require_available_tools(provider, available_tools):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("streaming", [False, True])
-async def test_native_call_round_trip_through_agent(monkeypatch, tools, streaming):
+@pytest.mark.parametrize("call_format", ["native", "mixed", "standard", "openai"])
+@pytest.mark.parametrize("scenario", ["success", "repeated", "rate_limit"])
+async def test_native_call_round_trip_through_agent(
+    monkeypatch, tools, streaming, call_format, scenario
+):
     requests = []
     executed = []
+    call_rounds = 3 if scenario == "repeated" else 1
+    expected_result = (
+        "error: Search service rate limit reached, status: 429"
+        if scenario == "rate_limit"
+        else "A deterministic search result."
+    )
 
     def handle(request):
         payload = json.loads(request.content)
         requests.append(payload)
-        assert request.headers["api-key"] == "test-key"
+        if call_format != "openai":
+            assert request.headers["api-key"] == "test-key"
+        standard_calls = [
+            {
+                "id": f"search-{len(requests)}",
+                "type": "function",
+                "function": {
+                    "name": "web_search_tavily",
+                    "arguments": json.dumps(
+                        {"query": "123 & weather", "max_results": 5}
+                    ),
+                },
+            }
+        ]
         result = (
-            completion(NATIVE_CALL)
-            if len(requests) == 1
+            completion(
+                NATIVE_CALL if call_format in ("native", "mixed") else "",
+                tool_calls=None if call_format == "native" else standard_calls,
+            )
+            if len(requests) <= call_rounds
             else completion("The result is ready.", "stop")
         )
         if not payload["stream"]:
@@ -283,6 +309,8 @@ async def test_native_call_round_trip_through_agent(monkeypatch, tools, streamin
         chunks = (
             [{"role": "assistant"}] + [{"content": char} for char in content] + [{}]
         )
+        if result.choices[0].message.tool_calls:
+            chunks.insert(-1, {"tool_calls": [{"index": 0, **standard_calls[0]}]})
         events = []
         for index, delta in enumerate(chunks):
             chunk = {
@@ -312,6 +340,8 @@ async def test_native_call_round_trip_through_agent(monkeypatch, tools, streamin
     class Executor:
         async def execute(self, tool, run_context, **kwargs):
             executed.append(kwargs)
+            if scenario == "rate_limit":
+                raise RuntimeError("Search service rate limit reached, status: 429")
             yield CallToolResult(
                 content=[
                     TextContent(type="text", text="A deterministic search result.")
@@ -323,7 +353,8 @@ async def test_native_call_round_trip_through_agent(monkeypatch, tools, streamin
         "_create_http_client",
         lambda self, config: httpx.AsyncClient(transport=httpx.MockTransport(handle)),
     )
-    instance = ProviderDots({"id": "dots-test", "key": ["test-key"]}, {})
+    provider_class = ProviderOpenAIOfficial if call_format == "openai" else ProviderDots
+    instance = provider_class({"id": "dots-test", "key": ["test-key"]}, {})
     runner = ToolLoopAgentRunner()
     try:
         await runner.reset(
@@ -334,25 +365,36 @@ async def test_native_call_round_trip_through_agent(monkeypatch, tools, streamin
             agent_hooks=BaseAgentRunHooks(),
             streaming=streaming,
         )
-        responses = [response async for response in runner.step_until_done(3)]
+        responses = []
+        streamed_text = []
+        async for response in runner.step_until_done(5):
+            responses.append(response)
+            if response.type == "streaming_delta" and response.data.get("chain"):
+                streamed_text.append(response.data["chain"].get_plain_text())
         assert runner.done()
-        assert len(requests) == 2
-        assert executed == [{"query": "123 & weather", "max_results": 5}]
-        history = requests[1]["messages"]
-        assistant = next(message for message in history if message.get("tool_calls"))
-        tool_result = next(message for message in history if message["role"] == "tool")
-        assert tool_result["tool_call_id"] == assistant["tool_calls"][0]["id"]
-        assert "deterministic search result" in tool_result["content"]
-        assert "dots_function_call" not in json.dumps(history)
+        assert len(requests) == call_rounds + 1
+        assert executed == [{"query": "123 & weather", "max_results": 5}] * call_rounds
+        for round_index, request in enumerate(requests[1:], start=1):
+            history = request["messages"]
+            assistants = [message for message in history if message.get("tool_calls")]
+            results = [message for message in history if message["role"] == "tool"]
+            assert len(assistants) == len(results) == round_index
+            ids = []
+            for assistant, tool_result in zip(assistants, results):
+                assert len(assistant["tool_calls"]) == 1
+                call = assistant["tool_calls"][0]
+                assert tool_result["tool_call_id"] == call["id"]
+                assert json.loads(call["function"]["arguments"]) == executed[0]
+                assert tool_result["content"].startswith(expected_result)
+                ids.append(call["id"])
+            assert len(set(ids)) == round_index
+            assert "dots_function_call" not in json.dumps(history)
+        if scenario == "repeated":
+            assert "3 times consecutively" in results[-1]["content"]
         assert "dots_function_call" not in str(responses)
         assert runner.get_final_llm_resp().completion_text == "The result is ready."
         if streaming:
-            text = "".join(
-                r.data["chain"].get_plain_text()
-                for r in responses
-                if r.type == "streaming_delta" and r.data.get("chain")
-            )
-            assert text == "The result is ready."
+            assert "".join(streamed_text) == "The result is ready."
     finally:
         await instance.terminate()
 
