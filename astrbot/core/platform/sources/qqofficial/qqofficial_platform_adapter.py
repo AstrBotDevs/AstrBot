@@ -587,12 +587,11 @@ class QQOfficialPlatformAdapter(Platform):
                     scene,
                 )
             except Exception:
-                # Leave the cache unchanged so the next event retries persistence.
                 logger.exception(
                     "[QQOfficial] Failed to persist delivery scene for session %s",
                     session_id,
                 )
-                return
+                raise
         self._session_scene[session_id] = scene
 
     def _extract_message_id(self, ret: Any) -> str | None:
