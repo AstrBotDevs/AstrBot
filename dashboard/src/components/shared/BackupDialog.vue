@@ -26,20 +26,47 @@
                 <v-window v-model="activeTab">
                     <!-- 导出标签页 -->
                     <v-window-item value="export">
-                        <div v-if="exportStatus === 'idle'" class="text-center py-8">
-                            <v-icon size="64" color="primary" class="mb-4">mdi-cloud-upload</v-icon>
-                            <h3 class="mb-4">{{ t('features.settings.backup.export.title') }}</h3>
-                            <p class="mb-4 text-grey">{{ t('features.settings.backup.export.description') }}</p>
-                            <v-alert type="info" variant="tonal" class="mb-4 text-left">
-                                <template v-slot:prepend>
-                                    <v-icon>mdi-information</v-icon>
-                                </template>
-                                {{ t('features.settings.backup.export.includes') }}
+                        <div v-if="exportStatus === 'idle'" class="py-8">
+                            <div class="text-center">
+                                <v-icon size="64" color="primary" class="mb-4">mdi-cloud-upload</v-icon>
+                                <h3 class="mb-4">{{ t('features.settings.backup.export.title') }}</h3>
+                                <p class="mb-4 text-grey">{{ t('features.settings.backup.export.description') }}</p>
+                            </div>
+                            <v-card variant="outlined" class="mb-4">
+                                <v-card-title class="text-subtitle-1 d-flex align-center">
+                                    <v-icon class="mr-2">mdi-checkbox-multiple-marked</v-icon>
+                                    {{ t('features.settings.backup.export.selectComponents') }}
+                                    <v-spacer></v-spacer>
+                                    <v-btn size="small" variant="text" @click="exportComponents = [...BACKUP_COMPONENTS]">
+                                        {{ t('features.settings.backup.export.selectAll') }}
+                                    </v-btn>
+                                    <v-btn size="small" variant="text" @click="exportComponents = []">
+                                        {{ t('features.settings.backup.export.clearAll') }}
+                                    </v-btn>
+                                </v-card-title>
+                                <v-card-text>
+                                    <v-row dense>
+                                        <v-col v-for="comp in BACKUP_COMPONENTS" :key="comp" cols="6" sm="4">
+                                            <v-checkbox
+                                                v-model="exportComponents"
+                                                :value="comp"
+                                                :label="t(`features.settings.backup.components.${comp}`)"
+                                                density="compact"
+                                                hide-details
+                                            ></v-checkbox>
+                                        </v-col>
+                                    </v-row>
+                                </v-card-text>
+                            </v-card>
+                            <v-alert v-if="exportLinkWarnings.length" type="warning" variant="tonal" class="mb-4 text-left">
+                                <div v-for="(w, i) in exportLinkWarnings" :key="i">{{ w }}</div>
                             </v-alert>
-                            <v-btn color="primary" variant="tonal" size="large" @click="startExport" :loading="exportStatus === 'processing'">
-                                <v-icon class="mr-2">mdi-export</v-icon>
-                                {{ t('features.settings.backup.export.button') }}
-                            </v-btn>
+                            <div class="text-center">
+                                <v-btn color="primary" variant="tonal" size="large" @click="startExport" :loading="exportStatus === 'processing'" :disabled="exportComponents.length === 0">
+                                    <v-icon class="mr-2">mdi-export</v-icon>
+                                    {{ t('features.settings.backup.export.button') }}
+                                </v-btn>
+                            </div>
                         </div>
 
                         <div v-else-if="exportStatus === 'processing'" class="text-center py-8">
@@ -53,6 +80,14 @@
                             <v-icon size="64" color="success" class="mb-4">mdi-check-circle</v-icon>
                             <h3 class="mb-4">{{ t('features.settings.backup.export.completed') }}</h3>
                             <p class="mb-4">{{ exportResult?.filename }}</p>
+                            <div v-if="exportResult?.components?.length" class="d-flex flex-wrap justify-center ga-2 mb-4">
+                                <v-chip v-for="comp in exportResult.components" :key="comp" size="small" color="success" variant="tonal" :ripple="false" class="non-interactive-chip">
+                                    {{ t(`features.settings.backup.components.${comp}`) }}
+                                </v-chip>
+                            </div>
+                            <v-alert v-if="exportResult?.skipped?.length" type="warning" variant="tonal" class="mb-4 text-left">
+                                <div v-for="(s, i) in exportResult.skipped" :key="i">{{ s.entry }}: {{ s.reason }}</div>
+                            </v-alert>
                             <v-btn color="primary" variant="tonal" @click="downloadBackup(exportResult?.filename)" class="mr-2">
                                 <v-icon class="mr-2">mdi-download</v-icon>
                                 {{ t('features.settings.backup.export.download') }}
@@ -177,6 +212,41 @@
                                 </v-card-text>
                             </v-card>
 
+                            <!-- 恢复范围勾选 -->
+                            <v-card variant="outlined" class="mb-4" v-if="checkResult?.available_components">
+                                <v-card-title class="text-subtitle-1">
+                                    <v-icon class="mr-2">mdi-restore</v-icon>
+                                    {{ t('features.settings.backup.import.restoreScope') }}
+                                </v-card-title>
+                                <v-card-text>
+                                    <v-row dense>
+                                        <v-col v-for="comp in checkResult.available_components" :key="comp" cols="6" sm="4">
+                                            <v-checkbox
+                                                v-model="importComponents"
+                                                :value="comp"
+                                                :label="t(`features.settings.backup.components.${comp}`)"
+                                                density="compact"
+                                                hide-details
+                                            ></v-checkbox>
+                                        </v-col>
+                                    </v-row>
+                                    <div v-if="checkResult?.broken_components?.length" class="mt-3">
+                                        <div class="d-flex flex-wrap ga-2">
+                                            <v-chip v-for="comp in checkResult.broken_components" :key="comp" size="small" color="error" variant="tonal" :ripple="false" class="non-interactive-chip">
+                                                {{ t(`features.settings.backup.components.${comp}`) }}
+                                            </v-chip>
+                                        </div>
+                                        <p class="text-caption text-error mt-1 mb-0">
+                                            {{ t('features.settings.backup.import.brokenHint') }}
+                                        </p>
+                                    </div>
+                                </v-card-text>
+                            </v-card>
+
+                            <v-alert v-if="importLinkWarnings.length" type="warning" variant="tonal" class="mb-4">
+                                <div v-for="(w, i) in importLinkWarnings" :key="i">{{ w }}</div>
+                            </v-alert>
+
                             <!-- 警告信息 -->
                             <v-alert v-if="checkResult?.warnings?.length" type="warning" variant="tonal" class="mb-4">
                                 <div v-for="(warning, idx) in checkResult.warnings" :key="idx">{{ warning }}</div>
@@ -211,11 +281,20 @@
                             <h3 class="mb-4">{{ t('features.settings.backup.import.processing') }}</h3>
                             <p class="text-grey">{{ importProgress.message || t('features.settings.backup.import.wait') }}</p>
                             <v-progress-linear :model-value="importProgress.current" :max="importProgress.total" class="mt-4" color="primary"></v-progress-linear>
+                            <div v-if="importProgress.stages?.length" class="mt-4 text-left mx-auto" style="max-width: 420px;">
+                                <div v-for="(s, i) in importProgress.stages" :key="i" class="text-caption text-grey d-flex align-center">
+                                    <v-icon size="x-small" color="success" class="mr-1">mdi-check-circle</v-icon>
+                                    <span>{{ s.message }}</span>
+                                </div>
+                            </div>
                         </div>
 
                         <div v-else-if="importStatus === 'completed'" class="text-center py-8">
                             <v-icon size="64" color="success" class="mb-4">mdi-check-circle</v-icon>
                             <h3 class="mb-4">{{ t('features.settings.backup.import.completed') }}</h3>
+                            <v-alert v-if="importResult?.warnings?.length" type="warning" variant="tonal" class="mb-4 text-left">
+                                <div v-for="(w, i) in importResult.warnings" :key="i">{{ w }}</div>
+                            </v-alert>
                             <v-alert type="info" variant="tonal" class="mb-4">
                                 {{ t('features.settings.backup.import.restartRequired') }}
                             </v-alert>
@@ -234,6 +313,18 @@
                             <v-alert type="error" variant="tonal" class="mb-4">
                                 {{ importError }}
                             </v-alert>
+                            <v-alert v-if="importResult?.warnings?.length" type="warning" variant="tonal" class="mb-4 text-left">
+                                <div v-for="(w, i) in importResult.warnings" :key="i">{{ w }}</div>
+                            </v-alert>
+                            <v-card v-if="importRestoredStats.length" variant="outlined" class="mb-4 text-left">
+                                <v-card-title class="text-subtitle-1">
+                                    <v-icon class="mr-2">mdi-database-refresh</v-icon>
+                                    {{ t('features.settings.backup.import.restoredBeforeFailure') }}
+                                </v-card-title>
+                                <v-card-text>
+                                    <div v-for="(s, i) in importRestoredStats" :key="i" class="text-body-2">{{ s }}</div>
+                                </v-card-text>
+                            </v-card>
                             <v-btn
                                 v-if="canResume"
                                 color="primary"
@@ -410,6 +501,18 @@ const importError = ref('')
 const uploadedFilename = ref('')  // 已上传的文件名
 const checkResult = ref(null)     // 预检查结果
 
+// 备份组件清单（与后端 get_backup_components 保持一致）
+const BACKUP_COMPONENTS = [
+    'database', 'knowledge_base', 'cmd_config', 'attachments',
+    'plugins', 'plugin_data', 'config', 't2i_templates', 'webchat', 'temp', 'skills',
+]
+// 导出勾选（默认全选）
+const exportComponents = ref([...BACKUP_COMPONENTS])
+// 恢复勾选（预检查后由 available_components 初始化）
+const importComponents = ref([])
+// 导入结果（完成页展示 warnings）
+const importResult = ref(null)
+
 // 分片上传状态（调度由 useChunkedUpload 管理）
 const uploader = useChunkedUpload(backupApi)
 const { canResume } = uploader
@@ -472,6 +575,49 @@ const versionAlertMessage = computed(() => {
     return t('features.settings.backup.import.version.matchMessage')
 })
 
+// 导出侧连锁警告：附件依赖主库；非全量备份旧版不可恢复
+const exportLinkWarnings = computed(() => {
+    const warnings = []
+    const selected = exportComponents.value
+    if (!selected.includes('database') && selected.includes('attachments')) {
+        warnings.push(t('features.settings.backup.export.warningAttachmentsWithoutDb'))
+    }
+    if (selected.length > 0 && selected.length < BACKUP_COMPONENTS.length) {
+        warnings.push(t('features.settings.backup.export.warningSelectiveOldVersion'))
+    }
+    return warnings
+})
+
+// 恢复侧连锁警告：单独恢复附件可能成为孤儿文件
+const importLinkWarnings = computed(() => {
+    if (!importComponents.value.includes('database') && importComponents.value.includes('attachments')) {
+        return [t('features.settings.backup.import.warningAttachmentsWithoutDb')]
+    }
+    return []
+})
+
+// 失败前已恢复的内容统计（失败页展示，让用户判断哪些数据已被修改）
+// 零计数项同样展示并标注"已清空"——恢复空表意味着旧数据已被清除
+const importRestoredStats = computed(() => {
+    const r = importResult.value
+    if (!r) return []
+    const annotate = (key, count) =>
+        count > 0
+            ? `${key}: ${count}`
+            : `${key}: ${t('features.settings.backup.import.restoredEmpty')}`
+    const stats = []
+    for (const [table, count] of Object.entries(r.imported_tables || {})) {
+        stats.push(annotate(table, count))
+    }
+    for (const [key, count] of Object.entries(r.imported_files || {})) {
+        stats.push(annotate(key, count))
+    }
+    for (const [key, count] of Object.entries(r.imported_directories || {})) {
+        stats.push(annotate(key, count))
+    }
+    return stats
+})
+
 // 监听对话框打开
 watch(isOpen, (newVal) => {
     if (newVal) {
@@ -509,7 +655,7 @@ const startExport = async () => {
     exportProgress.value = { current: 0, total: 100, message: '' }
 
     try {
-        const response = await backupApi.create()
+        const response = await backupApi.create({ components: [...exportComponents.value] })
         if (response.data.status === 'ok') {
             exportTaskId.value = response.data.data.task_id
             pollExportProgress()
@@ -624,6 +770,9 @@ const checkUploadedBackup = async () => {
             return
         }
 
+        // 恢复范围默认全选可用组件（broken 组件不可勾选）
+        importComponents.value = [...(checkResult.value.available_components || [])]
+
         // 显示确认对话框
         importStatus.value = 'confirm'
 
@@ -641,7 +790,11 @@ const confirmImport = async () => {
     importProgress.value = { current: 0, total: 100, message: '' }
 
     try {
-        const response = await backupApi.import(uploadedFilename.value, true)
+        const response = await backupApi.import(
+            uploadedFilename.value,
+            true,
+            [...importComponents.value]
+        )
 
         if (response.data.status === 'ok') {
             importTaskId.value = response.data.data.task_id
@@ -669,13 +822,16 @@ const pollImportProgress = async () => {
                 importProgress.value = {
                     current: data.progress.current || 0,
                     total: data.progress.total || 100,
-                    message: data.progress.message || ''
+                    message: data.progress.message || '',
+                    stages: data.progress.stages || []
                 }
                 setTimeout(pollImportProgress, 1000)
             } else if (data.status === 'completed') {
                 importStatus.value = 'completed'
+                importResult.value = data.result
             } else if (data.status === 'failed') {
                 importStatus.value = 'failed'
+                importResult.value = data.result
                 importError.value = data.error || 'Import failed'
             } else {
                 setTimeout(pollImportProgress, 1000)
@@ -699,6 +855,8 @@ const resetImport = async () => {
     importError.value = ''
     uploadedFilename.value = ''
     checkResult.value = null
+    importComponents.value = []
+    importResult.value = null
     uploadMessageOverride.value = ''
 }
 
@@ -738,11 +896,14 @@ const restoreFromList = async (filename) => {
         }
 
         checkResult.value = checkResponse.data.data
-        
+
         if (!checkResult.value.valid) {
             alert(checkResult.value.error || t('features.settings.backup.import.invalidBackup'))
             return
         }
+
+        // 恢复范围默认全选可用组件（broken 组件不可勾选）
+        importComponents.value = [...(checkResult.value.available_components || [])]
 
         // 切换到导入标签页并显示确认
         activeTab.value = 'import'
