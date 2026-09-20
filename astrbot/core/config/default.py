@@ -375,6 +375,7 @@ CONFIG_METADATA_2 = {
                         "ws_reverse_host": "0.0.0.0",
                         "ws_reverse_port": 6199,
                         "ws_reverse_token": "",
+                        "strip_self_mention": True,
                     },
                     "个人微信": {
                         "id": "weixin_personal",
@@ -965,6 +966,11 @@ CONFIG_METADATA_2 = {
                     "ws_reverse_port": {
                         "description": "反向 Websocket 端口",
                         "type": "int",
+                    },
+                    "strip_self_mention": {
+                        "description": "移除消息正文中的自身 @",
+                        "type": "bool",
+                        "hint": "默认开启，沿用将自身 @ 作为唤醒前缀移除的行为。关闭后，消息正文会保留自身 @ 的昵称和 ID，便于模型识别多人点名；这也会影响依赖消息正文匹配的命令。结构化 @ 组件始终保留。",
                     },
                     "ws_reverse_token": {
                         "description": "反向 Websocket Token",

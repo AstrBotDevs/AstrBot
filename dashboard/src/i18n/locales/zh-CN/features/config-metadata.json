@@ -865,6 +865,10 @@
       "ws_reverse_port": {
         "description": "反向 Websocket 端口"
       },
+      "strip_self_mention": {
+        "description": "移除消息正文中的自身 @",
+        "hint": "默认开启，沿用将自身 @ 作为唤醒前缀移除的行为。关闭后，消息正文会保留自身 @ 的昵称和 ID，便于模型识别多人点名；这也会影响依赖消息正文匹配的命令。结构化 @ 组件始终保留。"
+      },
       "ws_reverse_token": {
         "description": "反向 Websocket Token",
         "hint": "反向 Websocket Token。未设置则不启用 Token 验证。"
