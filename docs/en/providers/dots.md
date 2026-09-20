@@ -1,6 +1,6 @@
 # Connect Dots
 
-AstrBot provides a dedicated **Dots** provider that reuses OpenAI Chat Completions and handles native Dots tool calls.
+AstrBot provides a dedicated **Dots** provider that reuses OpenAI Chat Completions and handles native Dots tool calls. This adapter focuses on text, tool calls, and streaming; audio and video have not been specifically verified.
 
 ## Setup
 
@@ -10,6 +10,7 @@ AstrBot provides a dedicated **Dots** provider that reuses OpenAI Chat Completio
 4. Click **Save and Fetch Models**, click `+` beside `dots3-note-prev`, and ensure the model is enabled. Alternatively, save the configuration and enter the model ID through **Custom Model**.
 5. Use **Test Model** beside the model to check connectivity.
 6. Open **Config**, select the relevant profile, and go to **AI → Model**. Set **Chat Model** to the newly added model, then click **Save Configuration** at the bottom right.
+7. Send a message in a conversation using this profile and confirm that it replies normally.
 
 The API key field supports AstrBot environment variable references, such as `$DOTS_API_KEY`. When multiple keys are configured, the authentication header follows the key selected for each request.
 
@@ -25,13 +26,14 @@ Existing configurations are not migrated automatically. Dots-specific tool handl
 
 ## Tool calls and streaming
 
-- Standard `tool_calls` responses use the existing tool execution flow.
-- When a response explicitly requests tools with `finish_reason: tool_calls`, but puts the calls inside `<dots_function_call>`, the adapter converts them to standard calls, validates tool names and arguments, and removes the call blocks from assistant text.
-- If both representations are present, standard calls take precedence to prevent duplicate execution, even when the redundant native block is incomplete. The redundant block is removed from assistant text. XML examples in ordinary answers are not interpreted as calls.
-- Inline `<think>` and `<thinking>` sections are buffered and kept as reasoning; call examples inside them are not executed. String arguments retain their original whitespace.
-- Requests containing tools stream ordinary text immediately, retaining only suffixes that could be split call markers. Once a native call marker is detected, the marker and subsequent text are buffered until the complete response distinguishes a tool call from an XML example. Call blocks are removed; examples are released in their original order. Requests without tools retain their existing streaming behavior.
-- Tools execute only after the complete response has been parsed and validated. If the stream disconnects or call parsing fails, ordinary text already displayed cannot be retracted, but buffered call content is not exposed as assistant text.
-- Without standard calls, incomplete or invalid native calls raise an error instead of being sent as normal replies. This compatibility layer does not guarantee that the model will avoid repeated tool calls; AstrBot's existing tool-call round limit still applies.
+Ensure the model capabilities include **Tool use** before using tools. Web search requires [separate configuration](/en/use/websearch); once configured, send a search request to verify tool execution and the reply based on its results.
+
+Streaming is off by default. Enable **Config → AI → General Settings → Streaming Output** and save the configuration.
+
+- Standard `tool_calls` take precedence. Native `<dots_function_call>` blocks are converted and validated only with `finish_reason: tool_calls`, preventing duplicate execution of both formats in one response.
+- Call examples in ordinary answers and reasoning are not executed. String arguments retain their original whitespace. Invalid or incomplete native calls raise an error when no standard calls are present.
+- With streaming enabled, ordinary text appears immediately. For requests containing tools, native call markers, inline reasoning markers, and subsequent content are buffered until the response ends, then separated into text, reasoning, and tool calls.
+- Tools execute after the complete response is validated; text already displayed cannot be retracted if the stream disconnects or parsing fails. The adapter does not deduplicate calls across rounds; AstrBot's tool-call round limit still applies.
 
 For self-hosted vLLM, enable `--enable-auto-tool-choice --tool-call-parser dots` as described in the [vLLM Dots deployment guide](https://recipes.vllm.ai/dots-studio/dots3-note-prev), so the server returns standard calls.
 
