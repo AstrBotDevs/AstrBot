@@ -6,9 +6,9 @@
                 {{ t('features.settings.backup.dialog.title') }}
             </v-card-title>
 
-            <v-card-text class="pa-6">
+            <v-card-text class="backup-content pa-4 pa-sm-6">
                 <!-- 选项卡 -->
-                <v-tabs v-model="activeTab" color="primary" class="mb-4">
+                <v-tabs v-model="activeTab" color="primary" class="backup-tabs mb-5">
                     <v-tab value="export">
                         <v-icon class="mr-2">mdi-export</v-icon>
                         {{ t('features.settings.backup.tabs.export') }}
@@ -26,42 +26,38 @@
                 <v-window v-model="activeTab">
                     <!-- 导出标签页 -->
                     <v-window-item value="export">
-                        <div v-if="exportStatus === 'idle'" class="py-8">
-                            <div class="text-center">
-                                <v-icon size="64" color="primary" class="mb-4">mdi-cloud-upload</v-icon>
-                                <h3 class="mb-4">{{ t('features.settings.backup.export.title') }}</h3>
-                                <p class="mb-4 text-grey">{{ t('features.settings.backup.export.description') }}</p>
+                        <div v-if="exportStatus === 'idle'" class="py-2">
+                            <div class="d-flex align-start ga-3 mb-5">
+                                <v-avatar color="primary" variant="tonal" rounded="lg" size="44">
+                                    <v-icon size="26">mdi-cloud-upload</v-icon>
+                                </v-avatar>
+                                <div>
+                                    <h3 class="text-h4 mb-1">{{ t('features.settings.backup.export.title') }}</h3>
+                                    <p class="backup-description text-medium-emphasis mb-0">{{ t('features.settings.backup.export.description') }}</p>
+                                </div>
                             </div>
-                            <v-card variant="outlined" class="mb-4">
-                                <v-card-title class="text-subtitle-1 d-flex align-center">
-                                    <v-icon class="mr-2">mdi-checkbox-multiple-marked</v-icon>
-                                    {{ t('features.settings.backup.export.selectComponents') }}
-                                    <v-spacer></v-spacer>
-                                    <v-btn size="small" variant="text" @click="exportComponents = [...BACKUP_COMPONENTS]">
+                            <div class="d-flex align-center flex-wrap ga-2 mb-3">
+                                <span class="backup-section-title">{{ t('features.settings.backup.export.selectComponents') }}</span>
+                                <v-spacer />
+                                <div class="d-flex ga-1">
+                                    <v-btn size="small" color="primary" variant="text" @click="exportComponents = [...BACKUP_COMPONENTS]">
                                         {{ t('features.settings.backup.export.selectAll') }}
                                     </v-btn>
                                     <v-btn size="small" variant="text" @click="exportComponents = []">
                                         {{ t('features.settings.backup.export.clearAll') }}
                                     </v-btn>
-                                </v-card-title>
-                                <v-card-text>
-                                    <v-row dense>
-                                        <v-col v-for="comp in BACKUP_COMPONENTS" :key="comp" cols="6" sm="4">
-                                            <v-checkbox
-                                                v-model="exportComponents"
-                                                :value="comp"
-                                                :label="t(`features.settings.backup.components.${comp}`)"
-                                                density="compact"
-                                                hide-details
-                                            ></v-checkbox>
-                                        </v-col>
-                                    </v-row>
-                                </v-card-text>
-                            </v-card>
+                                </div>
+                            </div>
+                            <BackupScopeSelector
+                                v-model="exportComponents"
+                                :groups="BACKUP_GROUPS"
+                                :available-components="BACKUP_COMPONENTS"
+                                class="mb-4"
+                            />
                             <v-alert v-if="exportLinkWarnings.length" type="warning" variant="tonal" class="mb-4 text-left">
                                 <div v-for="(w, i) in exportLinkWarnings" :key="i">{{ w }}</div>
                             </v-alert>
-                            <div class="text-center">
+                            <div class="d-flex justify-end mt-5">
                                 <v-btn color="primary" variant="tonal" size="large" @click="startExport" :loading="exportStatus === 'processing'" :disabled="exportComponents.length === 0">
                                     <v-icon class="mr-2">mdi-export</v-icon>
                                     {{ t('features.settings.backup.export.button') }}
@@ -188,60 +184,22 @@
                                 </div>
                             </v-alert>
 
-                            <!-- 备份摘要 -->
-                            <v-card variant="outlined" class="mb-4" v-if="checkResult?.backup_summary">
-                                <v-card-title class="text-subtitle-1">
-                                    <v-icon class="mr-2">mdi-package-variant</v-icon>
-                                    {{ t('features.settings.backup.import.backupContents') }}
-                                </v-card-title>
-                                <v-card-text>
-                                    <div class="d-flex flex-wrap ga-2">
-                                        <v-chip v-if="checkResult.backup_summary.tables?.length" size="small" color="primary" variant="tonal" :ripple="false" class="non-interactive-chip">
-                                            {{ checkResult.backup_summary.tables.length }} {{ t('features.settings.backup.import.tables') }}
-                                        </v-chip>
-                                        <v-chip v-if="checkResult.backup_summary.has_knowledge_bases" size="small" color="success" variant="tonal" :ripple="false" class="non-interactive-chip">
-                                            {{ t('features.settings.backup.import.knowledgeBases') }}
-                                        </v-chip>
-                                        <v-chip v-if="checkResult.backup_summary.has_config" size="small" color="info" variant="tonal" :ripple="false" class="non-interactive-chip">
-                                            {{ t('features.settings.backup.import.configFiles') }}
-                                        </v-chip>
-                                        <v-chip v-for="dir in (checkResult.backup_summary.directories || [])" :key="dir" size="small" color="warning" variant="tonal" :ripple="false" class="non-interactive-chip">
-                                            {{ dir }}
-                                        </v-chip>
-                                    </div>
-                                </v-card-text>
-                            </v-card>
-
-                            <!-- 恢复范围勾选 -->
-                            <v-card variant="outlined" class="mb-4" v-if="checkResult?.available_components">
-                                <v-card-title class="text-subtitle-1">
-                                    <v-icon class="mr-2">mdi-restore</v-icon>
-                                    {{ t('features.settings.backup.import.restoreScope') }}
-                                </v-card-title>
-                                <v-card-text>
-                                    <v-row dense>
-                                        <v-col v-for="comp in checkResult.available_components" :key="comp" cols="6" sm="4">
-                                            <v-checkbox
-                                                v-model="importComponents"
-                                                :value="comp"
-                                                :label="t(`features.settings.backup.components.${comp}`)"
-                                                density="compact"
-                                                hide-details
-                                            ></v-checkbox>
-                                        </v-col>
-                                    </v-row>
-                                    <div v-if="checkResult?.broken_components?.length" class="mt-3">
-                                        <div class="d-flex flex-wrap ga-2">
-                                            <v-chip v-for="comp in checkResult.broken_components" :key="comp" size="small" color="error" variant="tonal" :ripple="false" class="non-interactive-chip">
-                                                {{ t(`features.settings.backup.components.${comp}`) }}
-                                            </v-chip>
-                                        </div>
-                                        <p class="text-caption text-error mt-1 mb-0">
-                                            {{ t('features.settings.backup.import.brokenHint') }}
-                                        </p>
-                                    </div>
-                                </v-card-text>
-                            </v-card>
+                            <h3 class="backup-section-title mb-3">{{ t('features.settings.backup.import.restoreScope') }}</h3>
+                            <BackupScopeSelector
+                                v-model="importComponents"
+                                :groups="BACKUP_GROUPS"
+                                :available-components="checkResult?.available_components || []"
+                                :broken-components="checkResult?.broken_components || []"
+                                :disabled="!checkResult?.can_import"
+                                class="mb-4"
+                            />
+                            <v-alert v-if="checkResult?.can_import" type="warning" variant="tonal" class="mb-4" aria-live="polite">
+                                <template v-if="importComponents.length">
+                                    <div class="font-weight-medium">{{ t('features.settings.backup.import.replacementSummary') }}</div>
+                                    <div>{{ importComponents.map(comp => t(`features.settings.backup.components.${comp}`)).join(', ') }}</div>
+                                </template>
+                                <template v-else>{{ t('features.settings.backup.scope.selectAtLeastOne') }}</template>
+                            </v-alert>
 
                             <v-alert v-if="importLinkWarnings.length" type="warning" variant="tonal" class="mb-4">
                                 <div v-for="(w, i) in importLinkWarnings" :key="i">{{ w }}</div>
@@ -267,6 +225,7 @@
                                     color="error"
                                     size="large"
                                     variant="tonal"
+                                    :disabled="importComponents.length === 0"
                                     @click="confirmImport"
                                 >
                                     <v-icon class="mr-2">mdi-alert</v-icon>
@@ -476,6 +435,7 @@ import { useI18n } from '@/i18n/composables'
 import { askForConfirmation, useConfirmDialog } from '@/utils/confirmDialog'
 import { restartAstrBot as restartAstrBotRuntime } from '@/utils/restartAstrBot'
 import WaitingForRestart from './WaitingForRestart.vue'
+import BackupScopeSelector from './BackupScopeSelector.vue'
 
 const { t } = useI18n()
 
@@ -501,14 +461,15 @@ const importError = ref('')
 const uploadedFilename = ref('')  // 已上传的文件名
 const checkResult = ref(null)     // 预检查结果
 
-// 备份组件清单（与后端 get_backup_components 保持一致）
-const BACKUP_COMPONENTS = [
-    'database', 'knowledge_base', 'cmd_config', 'attachments',
-    'plugins', 'plugin_data', 'config', 't2i_templates', 'webchat', 'temp', 'skills',
+// Grouping affects presentation only; the API still receives individual components.
+const BACKUP_GROUPS = [
+    { id: 'main', components: ['database', 'knowledge_base', 'cmd_config', 'config', 'attachments', 'webchat'] },
+    { id: 'extensions', components: ['plugins', 'plugin_data', 'skills', 't2i_templates'] },
+    { id: 'temporary', components: ['temp'] },
 ]
-// 导出勾选（默认全选）
-const exportComponents = ref([...BACKUP_COMPONENTS])
-// 恢复勾选（预检查后由 available_components 初始化）
+const BACKUP_COMPONENTS = BACKUP_GROUPS.flatMap(group => group.components)
+const exportComponents = ref(BACKUP_COMPONENTS.filter(component => component !== 'temp'))
+// Restore all available components by default after checking the backup.
 const importComponents = ref([])
 // 导入结果（完成页展示 warnings）
 const importResult = ref(null)
@@ -784,7 +745,7 @@ const checkUploadedBackup = async () => {
 
 // 确认导入
 const confirmImport = async () => {
-    if (!uploadedFilename.value) return
+    if (!uploadedFilename.value || !checkResult.value?.can_import || !importComponents.value.length) return
 
     importStatus.value = 'processing'
     importProgress.value = { current: 0, total: 100, message: '' }
@@ -1027,6 +988,7 @@ const restartAstrBot = async () => {
 // 重置所有状态
 const resetAll = async () => {
     resetExport()
+    exportComponents.value = BACKUP_COMPONENTS.filter(component => component !== 'temp')
     await resetImport()
     activeTab.value = 'export'
 }
@@ -1046,6 +1008,30 @@ defineExpose({ open })
 </script>
 
 <style scoped>
+.backup-description,
+.backup-content :deep(.v-alert__content) {
+    font-size: 0.875rem;
+    line-height: 1.65;
+}
+
+.backup-section-title {
+    font-size: 0.875rem;
+    font-weight: 600;
+    line-height: 1.5;
+}
+
+@media (max-width: 599px) {
+    .backup-tabs :deep(.v-tab) {
+        min-width: 0;
+        padding-inline: 12px;
+        font-size: 0.8125rem;
+    }
+
+    .backup-tabs :deep(.v-tab .v-icon) {
+        display: none;
+    }
+}
+
 .v-list-item {
     border-bottom: 1px solid rgba(0, 0, 0, 0.08);
 }
