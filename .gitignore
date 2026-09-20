@@ -71,3 +71,8 @@ _pr.md
 _msg.txt
 _s.json
 _r*.json
+
+# 临时提交信息文件（不要提交）
+_m*.txt
+_pr.md
+_body*.md
