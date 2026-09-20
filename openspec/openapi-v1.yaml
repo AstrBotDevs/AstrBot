@@ -4456,9 +4456,16 @@ paths:
       parameters:
         - name: offset_sec
           in: query
+          description: >-
+            Window length in seconds. 0 means the full window since deployment.
           schema:
             type: integer
             default: 86400
+        - name: end_ts
+          in: query
+          description: Window end time as Unix seconds. Defaults to now.
+          schema:
+            type: integer
       responses:
         "200":
           $ref: "#/components/responses/Ok"
@@ -4472,9 +4479,22 @@ paths:
       parameters:
         - name: days
           in: query
+          description: >-
+            Preset window in days (1/3/7/30). 0 means the full window since
+            deployment.
           schema:
             type: integer
-            minimum: 1
+            minimum: 0
+        - name: start_ts
+          in: query
+          description: Custom range start as Unix seconds.
+          schema:
+            type: integer
+        - name: end_ts
+          in: query
+          description: Custom range end as Unix seconds. Defaults to now.
+          schema:
+            type: integer
       responses:
         "200":
           $ref: "#/components/responses/Ok"

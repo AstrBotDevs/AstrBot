@@ -261,13 +261,31 @@ class StatService:
             logger.error("清理存储失败", exc_info=True)
             raise StatServiceError("清理存储失败，请查看后端日志了解详情。") from exc
 
-    async def get_stat(self, offset_sec: int) -> dict:
+    async def get_stat(self, offset_sec: int, end_ts: int | None = None) -> dict:
         try:
-            now = int(time.time())
-            start_time = now - offset_sec
+            now = int(end_ts) if end_ts else int(time.time())
+            if offset_sec and offset_sec > 0:
+                start_time = now - offset_sec
+            else:
+                # offset_sec <= 0 means the full window since deployment:
+                # the start is the earliest record in the platform stats table.
+                async with self.db_helper.get_db() as session:
+                    earliest = (
+                        await session.execute(
+                            select(func.min(PlatformStat.timestamp)),
+                        )
+                    ).scalar_one_or_none()
+                if isinstance(earliest, datetime):
+                    start_time = int(earliest.timestamp())
+                elif earliest is not None:
+                    start_time = int(earliest)
+                else:
+                    start_time = now - 86400
+                start_time = min(start_time, now)
+
+            window_start = datetime.fromtimestamp(start_time)
 
             async with self.db_helper.get_db() as session:
-                window_start = datetime.now() - timedelta(seconds=offset_sec)
                 result = await session.execute(
                     select(PlatformStat)
                     .where(PlatformStat.timestamp >= window_start)
@@ -283,16 +301,36 @@ class StatService:
                         select(func.coalesce(func.sum(PlatformStat.count), 0)),
                     )
                 ).scalar_one()
+                # Messages within the current window (follows the selected
+                # range), kept separate from the global total above.
+                window_message_count = sum(count for _, count, _ in rows)
 
-            # Bucket message counts into hourly slots for the time series chart.
+            # Bucket message counts for the time series chart.
+            # Short windows use hourly buckets; longer windows (> 7 days,
+            # e.g. 1 month or all-time) use daily buckets to avoid returning
+            # thousands of data points that would overwhelm the frontend chart.
+            span_seconds = max(0, now - start_time)
+            bucket_step = 3600 if span_seconds <= 7 * 86400 else 86400
+            bucket_start = start_time
+
             message_time_based_stats = []
             idx = 0
-            for bucket_end in range(start_time, now, 3600):
+            for bucket_end in range(bucket_start, now, bucket_step):
                 cnt = 0
                 while idx < len(rows) and rows[idx][0] < bucket_end:
                     cnt += rows[idx][1]
                     idx += 1
                 message_time_based_stats.append([bucket_end, cnt])
+
+            # Merge the records left after the last bucket into the final
+            # bucket so the window tail is not dropped (at most one day with
+            # daily buckets, one hour with hourly buckets).
+            if idx < len(rows):
+                tail_count = sum(row[1] for row in rows[idx:])
+                if message_time_based_stats:
+                    message_time_based_stats[-1][1] += tail_count
+                else:
+                    message_time_based_stats.append([now, tail_count])
 
             # Aggregate per-platform message counts within the window.
             per_platform: dict[str, int] = defaultdict(int)
@@ -328,12 +366,16 @@ class StatService:
             return {
                 "platform": platform_stats,
                 "message_count": total_messages,
+                "range_message_count": window_message_count,
                 "platform_count": len(
                     self.core_lifecycle.platform_manager.get_insts(),
                 ),
                 "plugin_count": len(plugins),
                 "plugins": plugin_info,
                 "message_time_series": message_time_based_stats,
+                "range_start": start_time,
+                "range_end": now,
+                "bucket_seconds": bucket_step,
                 "running": running_time,
                 "memory": {
                     "process": psutil.Process().memory_info().rss >> 20,
@@ -353,16 +395,61 @@ class StatService:
             return value.replace(tzinfo=timezone.utc)
         return value.astimezone(timezone.utc)
 
-    async def get_provider_token_stats(self, days: int) -> dict:
+    async def get_provider_token_stats(
+        self,
+        days: int = 1,
+        start_ts: int | None = None,
+        end_ts: int | None = None,
+    ) -> dict:
         try:
-            if days not in (1, 3, 7):
-                days = 1
-
             local_tz = datetime.now().astimezone().tzinfo or timezone.utc
-            now_local = datetime.now(local_tz)
-            range_start_local = (now_local - timedelta(days=days)).replace(
+            now_local = (
+                datetime.fromtimestamp(int(end_ts), local_tz)
+                if end_ts
+                else datetime.now(local_tz)
+            )
+
+            # Three modes are supported:
+            # 1. start_ts/end_ts for a custom range;
+            # 2. days > 0 for preset ranges (1/3/7/30 days);
+            # 3. days <= 0 for all-time since deployment, starting from the
+            #    earliest internal stats record.
+            if start_ts:
+                range_start_local = datetime.fromtimestamp(int(start_ts), local_tz)
+            elif days and days > 0:
+                range_start_local = now_local - timedelta(days=days)
+            else:
+                async with self.db_helper.get_db() as session:
+                    earliest = (
+                        await session.execute(
+                            select(func.min(ProviderStat.created_at)).where(
+                                ProviderStat.agent_type == "internal",
+                            ),
+                        )
+                    ).scalar_one_or_none()
+                if isinstance(earliest, datetime):
+                    range_start_local = self._ensure_aware_utc(earliest).astimezone(
+                        local_tz
+                    )
+                elif earliest is not None:
+                    range_start_local = datetime.fromtimestamp(int(earliest), local_tz)
+                else:
+                    range_start_local = now_local - timedelta(days=1)
+
+            range_start_local = min(range_start_local, now_local)
+
+            # Short windows (<= 7 days, covering the original 1/3/7-day
+            # presets) use hourly buckets; longer windows (1 month / all-time)
+            # use daily buckets to keep the number of data points bounded.
+            if now_local - range_start_local <= timedelta(days=7):
+                bucket_step = timedelta(hours=1)
+            else:
+                bucket_step = timedelta(days=1)
+            # Keep the existing convention of aligning the start to the minute
+            range_start_local = range_start_local.replace(
                 minute=0, second=0, microsecond=0
             )
+
             today_start_local = now_local.replace(
                 hour=0, minute=0, second=0, microsecond=0
             )
@@ -384,7 +471,9 @@ class StatService:
             bucket_cursor = range_start_local
             while bucket_cursor <= now_local:
                 bucket_timestamps.append(int(bucket_cursor.timestamp() * 1000))
-                bucket_cursor += timedelta(hours=1)
+                bucket_cursor += bucket_step
+            if not bucket_timestamps:
+                bucket_timestamps.append(int(range_start_local.timestamp() * 1000))
 
             trend_by_provider: dict[str, dict[int, int]] = defaultdict(
                 lambda: defaultdict(int)
@@ -522,6 +611,9 @@ class StatService:
 
             return {
                 "days": days,
+                "range_start": int(range_start_local.timestamp()),
+                "range_end": int(now_local.timestamp()),
+                "bucket_seconds": int(bucket_step.total_seconds()),
                 "trend": {
                     "series": series,
                     "total_series": total_series,

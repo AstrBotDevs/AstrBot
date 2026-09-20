@@ -8,12 +8,24 @@
   "ranges": {
     "oneDay": "1 Day",
     "threeDays": "3 Days",
-    "oneWeek": "1 Week"
+    "oneWeek": "1 Week",
+    "oneMonth": "1 Month",
+    "all": "All",
+    "custom": "Custom"
   },
   "rangeLabels": {
     "oneDay": "Last 1 day",
     "threeDays": "Last 3 days",
-    "oneWeek": "Last 1 week"
+    "oneWeek": "Last 1 week",
+    "oneMonth": "Last 1 month",
+    "all": "Since deployment",
+    "custom": "Custom range"
+  },
+  "customRange": {
+    "start": "Start date",
+    "end": "End date",
+    "apply": "Apply",
+    "invalid": "Please select a valid date range"
   },
   "overviewCards": {
     "platformCount": {
@@ -24,8 +36,8 @@
       "label": "Messages",
       "note": "Total accumulated messages"
     },
-    "todayModelCalls": {
-      "label": "Today's Model Calls",
+    "rangeModelCalls": {
+      "label": "{range} model calls",
       "note": "Tokens"
     },
     "cpu": {
@@ -46,7 +58,7 @@
   },
   "messageTrend": {
     "title": "Message Trend",
-    "totalMessages": "Total Messages"
+    "totalMessages": "{range} messages"
   },
   "platformRanking": {
     "title": "Platform Message Ranking"

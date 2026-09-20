@@ -8,12 +8,24 @@
   "ranges": {
     "oneDay": "1 день",
     "threeDays": "3 дня",
-    "oneWeek": "1 неделя"
+    "oneWeek": "1 неделя",
+    "oneMonth": "1 месяц",
+    "all": "Всё",
+    "custom": "Период"
   },
   "rangeLabels": {
     "oneDay": "За 1 день",
     "threeDays": "За 3 дня",
-    "oneWeek": "За 1 неделю"
+    "oneWeek": "За 1 неделю",
+    "oneMonth": "За 1 месяц",
+    "all": "С момента развёртывания",
+    "custom": "Произвольный период"
+  },
+  "customRange": {
+    "start": "Дата начала",
+    "end": "Дата окончания",
+    "apply": "Применить",
+    "invalid": "Выберите корректный период"
   },
   "overviewCards": {
     "platformCount": {
@@ -24,8 +36,8 @@
       "label": "Сообщения",
       "note": "Общее число сообщений"
     },
-    "todayModelCalls": {
-      "label": "Вызовы моделей сегодня",
+    "rangeModelCalls": {
+      "label": "Вызовы моделей ({range})",
       "note": "Tokens"
     },
     "cpu": {
@@ -46,7 +58,7 @@
   },
   "messageTrend": {
     "title": "Динамика сообщений",
-    "totalMessages": "Всего сообщений"
+    "totalMessages": "Сообщения за {range}"
   },
   "platformRanking": {
     "title": "Рейтинг платформ по сообщениям"

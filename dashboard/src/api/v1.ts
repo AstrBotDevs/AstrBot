@@ -1802,17 +1802,24 @@ export const conversationApi = {
 };
 
 export const statsApi = {
-  get(offsetSec?: number) {
+  get(offsetSec?: number, endTs?: number) {
+    const query: { offset_sec?: number; end_ts?: number } = {};
+    if (offsetSec !== undefined) query.offset_sec = offsetSec;
+    if (endTs !== undefined) query.end_ts = endTs;
     return typed<any>(
       openApiV1.getStats({
-        query: offsetSec === undefined ? undefined : { offset_sec: offsetSec },
+        query: Object.keys(query).length ? query : undefined,
       }),
     );
   },
-  providerTokens(days?: number) {
+  providerTokens(days?: number, startTs?: number, endTs?: number) {
+    const query: { days?: number; start_ts?: number; end_ts?: number } = {};
+    if (days !== undefined) query.days = days;
+    if (startTs !== undefined) query.start_ts = startTs;
+    if (endTs !== undefined) query.end_ts = endTs;
     return typed<any>(
       openApiV1.getProviderTokenStats({
-        query: days === undefined ? undefined : { days },
+        query: Object.keys(query).length ? query : undefined,
       }),
     );
   },

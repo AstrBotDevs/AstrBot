@@ -3363,6 +3363,13 @@ export type ExportConversationsError = unknown;
 
 export type GetStatsData = {
     query?: {
+        /**
+         * Window end time as Unix seconds. Defaults to now.
+         */
+        end_ts?: number;
+        /**
+         * Window length in seconds. 0 means the full window since deployment.
+         */
         offset_sec?: number;
     };
 };
@@ -3373,7 +3380,18 @@ export type GetStatsError = unknown;
 
 export type GetProviderTokenStatsData = {
     query?: {
+        /**
+         * Preset window in days (1/3/7/30). 0 means the full window since deployment.
+         */
         days?: number;
+        /**
+         * Custom range end as Unix seconds. Defaults to now.
+         */
+        end_ts?: number;
+        /**
+         * Custom range start as Unix seconds.
+         */
+        start_ts?: number;
     };
 };
 
