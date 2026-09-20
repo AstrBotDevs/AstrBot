@@ -1174,11 +1174,11 @@ def _apply_prompt_injection_guard(
     config: MainAgentBuildConfig,
     req: ProviderRequest,
 ) -> None:
-    """Apply the configured strategy to detected prompt injection attempts.
+    """按 prompt_injection_guard_strategy 处理检出的提示词注入。
 
     Args:
-        config: Build config holding the guard settings.
-        req: Request whose prompt is blocked, sanitized or annotated.
+        config: 携带注入防护配置的构建配置。
+        req: 将被拦截、清洗或追加提醒的请求。
     """
     original = req.prompt or ""
     if not original.strip():
@@ -1188,8 +1188,8 @@ def _apply_prompt_injection_guard(
         guard = PromptInjectionGuard(
             extra_patterns=config.prompt_injection_guard_extra_patterns,
         )
-        # Quoted messages and plugin-injected parts are untrusted as well, but
-        # they are sanitized in place and must never replace the user's prompt.
+        # 引用消息、插件塞进来的内容块同样不可信，但它们只就地清洗，
+        # 绝不能覆盖用户自己的提问。
         extra_parts: list[tuple[object, str]] = []
         suspects = [original]
         for part in getattr(req, "extra_user_content_parts", []) or []:
@@ -1249,12 +1249,12 @@ def _apply_persona_anchor(
     req: ProviderRequest,
     event: AstrMessageEvent,
 ) -> None:
-    """Append persona and language anchors to the system prompt.
+    """向系统提示追加人格锚定与语言规则。
 
     Args:
-        config: Build config holding the anchor settings.
-        req: Request whose system prompt receives the anchors.
-        event: Event carrying the persona resolved for this message.
+        config: 携带锚定配置的构建配置。
+        req: 系统提示将被追加锚定的请求。
+        event: 携带本条消息所解析人格的事件。
     """
     try:
         try:
@@ -1264,9 +1264,8 @@ def _apply_persona_anchor(
 
         parts: list[str] = []
 
-        # Persona anchoring only makes sense when the feature is enabled and a
-        # persona was actually resolved, otherwise the prompt gains "stay in
-        # character" text without any character to stay in.
+        # 只有在开关打开、且确实解析到人格时才注入锚定，
+        # 否则会往没有角色的提示里塞进「保持以上身份设定」这类无指向文本。
         if config.persona_anchor and persona_name.strip():
             hardening = build_persona_hardening(persona_name)
             if hardening:

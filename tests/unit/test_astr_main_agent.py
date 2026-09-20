@@ -2872,7 +2872,7 @@ class TestApplyPromptInjectionGuard:
 
         module._apply_prompt_injection_guard(config, req)
 
-        assert "Blocked by Prompt Injection Guard" in req.prompt
+        assert "已被提示词注入防护拦截" in req.prompt
         assert req.image_urls == []
         assert req.audio_urls == []
 
@@ -2924,7 +2924,7 @@ class TestApplyPromptInjectionGuard:
         module._apply_prompt_injection_guard(config, req)
 
         assert req.prompt == self.ATTACK
-        assert "Prompt Injection Guard" in req.system_prompt
+        assert "提示词注入防护" in req.system_prompt
         assert "Original" in req.system_prompt
 
     def test_log_strategy_changes_nothing(self):

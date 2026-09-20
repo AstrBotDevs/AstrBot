@@ -176,8 +176,8 @@ class InjectionGuardResult:
 
 
 _ZERO_WIDTH = re.compile(r"[\u200b-\u200f\u202a-\u202e\ufeff]")
-# The lookarounds must not consume the '=' padding: a trailing \b backtracks the
-# padding out of the match, which then fails the strict base64 length check.
+# 边界断言必须把 '=' 补位留在匹配内：用 \b 收尾时正则会把补位回溯掉，
+# 匹配串长度不再是 4 的倍数，严格解码随即失败。
 _BASE64_BLOB = re.compile(
     r"(?<![A-Za-z0-9+/=])[A-Za-z0-9+/]{40,}={0,2}(?![A-Za-z0-9+/=])"
 )
@@ -189,18 +189,17 @@ def _strip_zero_width(text: str) -> tuple[str, bool]:
 
 
 def _find_base64_payloads(text: str) -> list[str]:
-    """Collect base64-looking substrings that decode to printable payloads.
+    """收集能解码成可打印内容的疑似 base64 片段。
 
     Args:
-        text: Text to inspect, normally already NFKC-normalised.
+        text: 待检查文本，通常已经过 NFKC 归一化。
 
     Returns:
-        The matching substrings, in order of appearance.
+        按出现顺序排列的匹配片段。
     """
     found: list[str] = []
     for blob in _BASE64_BLOB.findall(text):
-        # Blobs pasted without their '=' padding are still valid once the
-        # padding is restored, so try that form before discarding a candidate.
+        # 粘贴时丢掉 '=' 补位的串补齐后依然合法，所以先补再试，不要直接丢弃。
         padding = "=" * (-len(blob) % 4)
         decoded: bytes | None = None
         for candidate in (blob, blob + padding) if padding else (blob,):
@@ -307,17 +306,16 @@ class PromptInjectionGuard:
         return result
 
     def sanitize(self, text: str) -> str:
-        """Remove detected injection payloads from text.
+        """抹掉文本中被检出的注入载荷。
 
-        The input is NFKC-normalised and stripped of zero-width characters
-        before the rules run, so a payload that ``check`` detected in an
-        obfuscated form is actually removed here too instead of surviving.
+        输入先做 NFKC 归一化并去除零宽字符，再套用规则，这样 ``check`` 在
+        混淆形态下检出的载荷在这里也能真正删掉，而不是原样留下。
 
         Args:
-            text: Raw input as received.
+            text: 收到的原始输入。
 
         Returns:
-            The input with every matched payload replaced by a placeholder.
+            所有命中载荷都被替换为占位符后的文本。
         """
         out = unicodedata.normalize("NFKC", text)
         if self.enable_encoding_check:

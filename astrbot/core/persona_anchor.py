@@ -155,19 +155,17 @@ _LATIN_WHITELIST = {
 
 
 def detect_mixed_language(text: str, *, max_ratio: float = 0.35) -> bool:
-    """Heuristically detect text that mixes Chinese with non-whitelisted Latin.
+    """粗略判断文本是否中英混排（白名单内的专有名词不计）。
 
-    Standalone utility exposed for callers and tests. The request path does not
-    call it, so on its own it changes no behaviour.
+    独立工具函数，供调用方与测试使用；请求路径不会调用它，
+    因此它本身不改变任何行为。
 
     Args:
-        text: Text to inspect.
-        max_ratio: Ratio of meaningful Latin words above which the text counts
-            as mixed.
+        text: 待检查的文本。
+        max_ratio: 有效英文词占比超过该阈值即视为混排。
 
     Returns:
-        True when the text mixes CJK characters with Latin words that are not
-        covered by the proper-noun whitelist.
+        文本同时含中日韩字符与白名单之外的英文词时返回 True。
     """
     body = text or ""
     if not _CJK_RE.search(body):
