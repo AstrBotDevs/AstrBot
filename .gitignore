@@ -65,3 +65,9 @@ GenieData/
 .worktrees/
 
 dashboard/bun.lock
+
+_m.txt
+_pr.md
+_msg.txt
+_s.json
+_r*.json

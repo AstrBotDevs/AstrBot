@@ -3635,10 +3635,27 @@ CONFIG_METADATA_3 = {
                             "agent_runner.config.persona.prompt_injection_guard": True,
                         },
                     },
+                    "agent_runner.config.persona.prompt_injection_guard_extra_patterns": {
+                        "description": "额外注入检测规则",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "自定义正则，写错会自动忽略。",
+                        "condition": {
+                            "agent_runner.config.persona.prompt_injection_guard": True,
+                        },
+                    },
                     "agent_runner.config.persona.persona_anchor": {
                         "description": "人格锚定",
                         "type": "bool",
                         "hint": "在模型调用工具 / 处理数据后重申人设，避免它跳回「作为一个 AI 助手」的语气。默认关闭。",
+                    },
+                    "agent_runner.config.persona.persona_anchor_template": {
+                        "description": "人格锚定模板",
+                        "type": "text",
+                        "hint": "留空用默认。需包含 {persona} 占位符。",
+                        "condition": {
+                            "agent_runner.config.persona.persona_anchor": True,
+                        },
                     },
                     "agent_runner.config.persona.language_anchor": {
                         "description": "语言锚定",
@@ -3649,6 +3666,14 @@ CONFIG_METADATA_3 = {
                         "description": "目标语言",
                         "type": "string",
                         "hint": "填语言代码（zh / en / ja …）或语言名（中文 / English）。",
+                        "condition": {
+                            "agent_runner.config.persona.language_anchor": True,
+                        },
+                    },
+                    "agent_runner.config.persona.language_anchor_template": {
+                        "description": "语言规则模板",
+                        "type": "text",
+                        "hint": "留空用默认。需包含 {lang} 占位符。",
                         "condition": {
                             "agent_runner.config.persona.language_anchor": True,
                         },

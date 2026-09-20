@@ -1183,10 +1183,18 @@ def _apply_prompt_injection_guard(
         guard = PromptInjectionGuard(
             extra_patterns=config.prompt_injection_guard_extra_patterns,
         )
-        result = guard.check(
-            original,
-            strategy=config.prompt_injection_guard_strategy,
-        )
+        # 引用的消息、插件塞进来的内容块同样不可信，一并扫
+        suspects = [original]
+        for part in getattr(req, "extra_user_content_parts", []) or []:
+            text = getattr(part, "text", None)
+            if isinstance(text, str) and text.strip():
+                suspects.append(text)
+
+        results = [
+            (src, guard.check(src, strategy=config.prompt_injection_guard_strategy))
+            for src in suspects
+        ]
+        result = max(results, key=lambda kv: len(kv[1].matches))[1]
     except Exception as exc:  # noqa: BLE001 - never break message handling
         logger.warning("Prompt injection guard failed, skipping: %s", exc)
         return

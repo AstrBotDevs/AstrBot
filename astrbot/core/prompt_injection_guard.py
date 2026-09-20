@@ -205,11 +205,13 @@ class PromptInjectionGuard:
         self.rules: list[Rule] = [r for r in DEFAULT_RULES if r.name not in ignored]
 
         for idx, pat in enumerate(extra_patterns or ()):
+            if not isinstance(pat, str):
+                continue
             try:
                 self.rules.append(
                     _rule(f"pi_custom_{idx}", pat, "medium", "用户自定义规则")
                 )
-            except re.error:
+            except (re.error, TypeError):
                 continue
 
         self.enable_encoding_check = enable_encoding_check

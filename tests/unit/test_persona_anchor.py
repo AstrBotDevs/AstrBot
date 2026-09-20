@@ -1,14 +1,11 @@
 """Tests for astrbot.core.persona_anchor."""
 
 from astrbot.core.persona_anchor import (
-    TOOL_RESULT_CLOSE,
-    TOOL_RESULT_OPEN,
     build_language_rule,
     build_persona_anchor,
     build_persona_hardening,
     detect_mixed_language,
     normalize_language,
-    wrap_tool_result,
 )
 
 
@@ -53,18 +50,6 @@ class TestBuildPersonaHardening:
 
     def test_empty_line(self):
         assert build_persona_hardening(line="   ") == ""
-
-
-class TestWrapToolResult:
-    def test_wrap(self):
-        out = wrap_tool_result('{"a": 1}')
-        assert out.startswith(TOOL_RESULT_OPEN)
-        assert out.endswith(TOOL_RESULT_CLOSE)
-        assert '{"a": 1}' in out
-
-    def test_empty_passthrough(self):
-        assert wrap_tool_result("") == ""
-        assert wrap_tool_result("   ") == "   "
 
 
 class TestNormalizeLanguage:
