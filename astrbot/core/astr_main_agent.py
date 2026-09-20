@@ -1174,7 +1174,12 @@ def _apply_prompt_injection_guard(
     config: MainAgentBuildConfig,
     req: ProviderRequest,
 ) -> None:
-    """按 prompt_injection_guard_strategy 处理用户输入中的注入尝试。"""
+    """Apply the configured strategy to detected prompt injection attempts.
+
+    Args:
+        config: Build config holding the guard settings.
+        req: Request whose prompt is blocked, sanitized or annotated.
+    """
     original = req.prompt or ""
     if not original.strip():
         return
@@ -1183,18 +1188,21 @@ def _apply_prompt_injection_guard(
         guard = PromptInjectionGuard(
             extra_patterns=config.prompt_injection_guard_extra_patterns,
         )
-        # 引用的消息、插件塞进来的内容块同样不可信，一并扫
+        # Quoted messages and plugin-injected parts are untrusted as well, but
+        # they are sanitized in place and must never replace the user's prompt.
+        extra_parts: list[tuple[object, str]] = []
         suspects = [original]
         for part in getattr(req, "extra_user_content_parts", []) or []:
             text = getattr(part, "text", None)
             if isinstance(text, str) and text.strip():
+                extra_parts.append((part, text))
                 suspects.append(text)
 
         results = [
-            (src, guard.check(src, strategy=config.prompt_injection_guard_strategy))
+            guard.check(src, strategy=config.prompt_injection_guard_strategy)
             for src in suspects
         ]
-        result = max(results, key=lambda kv: len(kv[1].matches))[1]
+        result = max(results, key=lambda r: len(r.matches))
     except Exception as exc:  # noqa: BLE001 - never break message handling
         logger.warning("Prompt injection guard failed, skipping: %s", exc)
         return
@@ -1215,7 +1223,17 @@ def _apply_prompt_injection_guard(
         return
 
     if result.action == "sanitized":
-        req.prompt = result.text
+        cleaned = guard.sanitize(original)
+        if cleaned != original:
+            req.prompt = cleaned
+        for part, text in extra_parts:
+            cleaned_part = guard.sanitize(text)
+            if cleaned_part == text:
+                continue
+            try:
+                setattr(part, "text", cleaned_part)
+            except Exception:  # noqa: BLE001 - best effort on foreign objects
+                logger.debug("Could not sanitize an extra user content part.")
         return
 
     if result.action == "warned":
@@ -1231,7 +1249,13 @@ def _apply_persona_anchor(
     req: ProviderRequest,
     event: AstrMessageEvent,
 ) -> None:
-    """追加人格锚定与语言规则，抑制模型跳出角色或中英混排。"""
+    """Append persona and language anchors to the system prompt.
+
+    Args:
+        config: Build config holding the anchor settings.
+        req: Request whose system prompt receives the anchors.
+        event: Event carrying the persona resolved for this message.
+    """
     try:
         try:
             persona_name = str(event.get_extra("_persona_name") or "")
@@ -1240,16 +1264,20 @@ def _apply_persona_anchor(
 
         parts: list[str] = []
 
-        hardening = build_persona_hardening(persona_name)
-        if hardening:
-            parts.append(hardening)
+        # Persona anchoring only makes sense when the feature is enabled and a
+        # persona was actually resolved, otherwise the prompt gains "stay in
+        # character" text without any character to stay in.
+        if config.persona_anchor and persona_name.strip():
+            hardening = build_persona_hardening(persona_name)
+            if hardening:
+                parts.append(hardening)
 
-        anchor = build_persona_anchor(
-            persona_name,
-            template=config.persona_anchor_template or None,
-        )
-        if anchor:
-            parts.append(anchor)
+            anchor = build_persona_anchor(
+                persona_name,
+                template=config.persona_anchor_template or None,
+            )
+            if anchor:
+                parts.append(anchor)
 
         if config.language_anchor and config.language_anchor_language:
             language_rule = build_language_rule(

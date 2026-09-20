@@ -53,7 +53,7 @@ def _rule(name: str, pattern: str, severity: str, description: str) -> Rule:
 DEFAULT_RULES: tuple[Rule, ...] = (
     _rule(
         "pi_ignore_instructions",
-        r"(忽略|无视|忘记|抛弃|不要理会|请忽略|请无视)[^。\n]{0,12}"
+        r"(?<![我俺咱])(忽略|无视|忘记|抛弃|不要理会|请忽略|请无视)[^。\n]{0,12}"
         r"(以上|上面|之前|前面|所有|全部|先前)[^。\n]{0,12}"
         r"(指令|指示|命令|要求|设定|规则|提示|prompt|instruction)",
         "high",
@@ -85,8 +85,11 @@ DEFAULT_RULES: tuple[Rule, ...] = (
     ),
     _rule(
         "pi_role_hijack",
-        r"(从现在起|现在开始|接下来|之后)[^。\n]{0,10}(你|你要|请你)?[^。\n]{0,6}"
-        r"(扮演|充当|假装|成为|是)[^。\n]{0,20}",
+        r"(?:从现在起|从现在开始|现在开始|接下来|之后)[^。\n]{0,6}"
+        r"(?:扮演|充当|假装|成为)"
+        r"|"
+        r"(?:从现在起|从现在开始|现在开始|接下来|之后)[^。\n]{0,4}"
+        r"(?:你|您)[^。\n]{0,4}(?:就是|是|变成|化身)",
         "medium",
         "中文：要求改变角色身份",
     ),
@@ -173,7 +176,11 @@ class InjectionGuardResult:
 
 
 _ZERO_WIDTH = re.compile(r"[\u200b-\u200f\u202a-\u202e\ufeff]")
-_BASE64_BLOB = re.compile(r"\b[A-Za-z0-9+/]{40,}={0,2}\b")
+# The lookarounds must not consume the '=' padding: a trailing \b backtracks the
+# padding out of the match, which then fails the strict base64 length check.
+_BASE64_BLOB = re.compile(
+    r"(?<![A-Za-z0-9+/=])[A-Za-z0-9+/]{40,}={0,2}(?![A-Za-z0-9+/=])"
+)
 
 
 def _strip_zero_width(text: str) -> tuple[str, bool]:
@@ -181,16 +188,33 @@ def _strip_zero_width(text: str) -> tuple[str, bool]:
     return _ZERO_WIDTH.sub("", text), had
 
 
-def _looks_like_base64_payload(text: str) -> bool:
+def _find_base64_payloads(text: str) -> list[str]:
+    """Collect base64-looking substrings that decode to printable payloads.
+
+    Args:
+        text: Text to inspect, normally already NFKC-normalised.
+
+    Returns:
+        The matching substrings, in order of appearance.
+    """
+    found: list[str] = []
     for blob in _BASE64_BLOB.findall(text):
-        try:
-            decoded = base64.b64decode(blob, validate=True)
-        except (binascii.Error, ValueError):
+        # Blobs pasted without their '=' padding are still valid once the
+        # padding is restored, so try that form before discarding a candidate.
+        padding = "=" * (-len(blob) % 4)
+        decoded: bytes | None = None
+        for candidate in (blob, blob + padding) if padding else (blob,):
+            try:
+                decoded = base64.b64decode(candidate, validate=True)
+                break
+            except (binascii.Error, ValueError):
+                continue
+        if decoded is None:
             continue
         printable = sum(1 for b in decoded if 32 <= b < 127) / max(len(decoded), 1)
         if printable > 0.85 and len(decoded) >= 30:
-            return True
-    return False
+            found.append(blob)
+    return found
 
 
 class PromptInjectionGuard:
@@ -238,7 +262,7 @@ class PromptInjectionGuard:
                 )
                 normalized = cleaned
 
-            if _looks_like_base64_payload(normalized):
+            if _find_base64_payloads(normalized):
                 result.matches.append(
                     InjectionMatch(
                         rule="pi_base64_payload",
@@ -283,11 +307,26 @@ class PromptInjectionGuard:
         return result
 
     def sanitize(self, text: str) -> str:
-        out = text
+        """Remove detected injection payloads from text.
+
+        The input is NFKC-normalised and stripped of zero-width characters
+        before the rules run, so a payload that ``check`` detected in an
+        obfuscated form is actually removed here too instead of surviving.
+
+        Args:
+            text: Raw input as received.
+
+        Returns:
+            The input with every matched payload replaced by a placeholder.
+        """
+        out = unicodedata.normalize("NFKC", text)
+        if self.enable_encoding_check:
+            out = _ZERO_WIDTH.sub("", out)
         for rule in self.rules:
             out = rule.pattern.sub("[已移除可疑内容]", out)
         if self.enable_encoding_check:
-            out = _ZERO_WIDTH.sub("", out)
+            for blob in _find_base64_payloads(out):
+                out = out.replace(blob, "[已移除可疑内容]")
         return out
 
     def rule_names(self) -> list[str]:
