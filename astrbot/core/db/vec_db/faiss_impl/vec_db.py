@@ -165,15 +165,19 @@ class FaissVecDB(BaseVecDB):
                 ),
                 details={"vector_count": len(vectors)},
             ) from exc
-        # Clamp non-finite values (NaN/Inf) which can arise from embedding providers
-        # that return malformed results; prevent downstream FAISS/C++ crashes.
+        # Reject non-finite values before they can reach FAISS. Replacing them
+        # with zero would silently persist a corrupted embedding and degrade
+        # retrieval quality.
         if not np.all(np.isfinite(vectors_array)):
             nan_count = int(np.sum(~np.isfinite(vectors_array)))
-            logger.warning(
-                f"Embedding vectors contain {nan_count} non-finite values "
-                "(NaN/Inf). These will be clamped to prevent FAISS write failure."
+            raise KnowledgeBaseUploadError(
+                stage="embedding",
+                user_message=(
+                    f"向量化失败：嵌入模型返回的向量包含 {nan_count} 个非有限值"
+                    "（NaN/Inf），无法写入知识库。请检查嵌入模型配置。"
+                ),
+                details={"non_finite_values": nan_count},
             )
-            vectors_array = np.nan_to_num(vectors_array, nan=0.0, posinf=0.0, neginf=0.0)
         if vectors_array.ndim != 2:
             raise KnowledgeBaseUploadError(
                 stage="embedding",
@@ -208,7 +212,7 @@ class FaissVecDB(BaseVecDB):
                 raise KnowledgeBaseUploadError(
                     stage="storage",
                     user_message=(
-                        f"存储失败：写入文档索引后返回的内部 ID 不匹配"
+                        f"存储失败：写入文档索引后返回的内部 ID 数量不一致"
                         f"（期望 {content_count}，实际 {len(int_ids)}）。"
                     ),
                     details={

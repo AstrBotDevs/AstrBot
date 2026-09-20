@@ -153,7 +153,6 @@ class EmbeddingStorage:
         # C++ segfaults or silent index corruption.
         if not np.all(np.isfinite(vectors)):
             nan_count = int(np.sum(~np.isfinite(vectors)))
-            await self.save_index()
             raise RuntimeError(
                 f"向量包含 {nan_count} 个非有限值 (NaN/Inf)，无法写入 FAISS 索引。请检查嵌入模型配置。"
             )
