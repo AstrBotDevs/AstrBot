@@ -80,6 +80,10 @@ from astrbot.core.tools.computer_tools import (
     ShellSessionTool,
     SyncSkillReleaseTool,
 )
+from astrbot.core.tools.computer_tools.util import (
+    LOCAL_NETWORK_POLICY_NOTICE,
+    get_local_permission_policy,
+)
 from astrbot.core.tools.cron_tools import FutureTaskTool
 from astrbot.core.tools.knowledge_base_tools import (
     KnowledgeBaseQueryTool,
@@ -1784,6 +1788,18 @@ async def build_main_agent(
         context=plugin_context,
         event=event,
     )
+    if config.computer_use_runtime == "local":
+        local_policy = get_local_permission_policy(
+            AgentContextWrapper(context=astr_agent_ctx)
+        )
+        if (
+            local_policy.allow_execution
+            and not local_policy.allow_network
+            and LOCAL_NETWORK_POLICY_NOTICE not in (req.system_prompt or "")
+        ):
+            req.system_prompt = (
+                f"{req.system_prompt or ''}\n{LOCAL_NETWORK_POLICY_NOTICE}\n"
+            )
 
     if config.add_cron_tools:
         _proactive_cron_job_tools(req, plugin_context)
