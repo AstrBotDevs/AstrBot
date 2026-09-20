@@ -839,9 +839,13 @@ const providerChartOptions = computed<ApexOptions>(() => ({
 }))
 
 watch(selectedRange, async (value) => {
-  // When switching to "Custom", wait until the dates are picked and
-  // applied before sending a request
-  if (value === 'custom' && !hasAppliedCustomRange.value) return
+  // When switching to "Custom", clear the previously applied range and
+  // wait until the dates are picked and applied before sending a request
+  if (value === 'custom') {
+    appliedCustomStart.value = null
+    appliedCustomEnd.value = null
+    return
+  }
   try {
     await Promise.all([fetchBaseStats(), fetchProviderStats()])
   } catch (error) {

@@ -284,11 +284,17 @@ class StatService:
                 start_time = min(start_time, now)
 
             window_start = datetime.fromtimestamp(start_time)
+            # Exclusive upper bound: records written in the same second as
+            # `now` (they carry microseconds) stay inside the window.
+            window_end = datetime.fromtimestamp(now + 1)
 
             async with self.db_helper.get_db() as session:
                 result = await session.execute(
                     select(PlatformStat)
-                    .where(PlatformStat.timestamp >= window_start)
+                    .where(
+                        PlatformStat.timestamp >= window_start,
+                        PlatformStat.timestamp < window_end,
+                    )
                     .order_by(col(PlatformStat.timestamp)),
                 )
                 # Convert to (epoch_seconds, count, platform_id) tuples once.
@@ -408,6 +414,10 @@ class StatService:
                 if end_ts
                 else datetime.now(local_tz)
             )
+            # Exclusive, next-second upper bound: records written in the same
+            # second as `now_local` (they carry microseconds) stay inside the
+            # window.
+            window_end_local = now_local + timedelta(seconds=1)
 
             # Three modes are supported:
             # 1. start_ts/end_ts for a custom range;
@@ -455,6 +465,7 @@ class StatService:
             )
             query_start_local = min(range_start_local, today_start_local)
             query_start_utc = query_start_local.astimezone(timezone.utc)
+            query_end_utc = window_end_local.astimezone(timezone.utc)
 
             async with self.db_helper.get_db() as session:
                 result = await session.execute(
@@ -462,13 +473,22 @@ class StatService:
                     .where(
                         ProviderStat.agent_type == "internal",
                         ProviderStat.created_at >= query_start_utc,
+                        ProviderStat.created_at < query_end_utc,
                     )
                     .order_by(col(ProviderStat.created_at).asc())
                 )
                 records = result.scalars().all()
 
+            # Daily buckets are aligned to local midnight so records can be
+            # matched by their day.
+            bucket_start_local = range_start_local
+            if bucket_step >= timedelta(days=1):
+                bucket_start_local = range_start_local.replace(
+                    hour=0, minute=0, second=0, microsecond=0
+                )
+
             bucket_timestamps: list[int] = []
-            bucket_cursor = range_start_local
+            bucket_cursor = bucket_start_local
             while bucket_cursor <= now_local:
                 bucket_timestamps.append(int(bucket_cursor.timestamp() * 1000))
                 bucket_cursor += bucket_step
@@ -505,10 +525,15 @@ class StatService:
                 provider_id = record.provider_id or "unknown"
                 provider_model = record.provider_model or "Unknown"
 
-                if created_at_local >= range_start_local:
-                    bucket_local = created_at_local.replace(
-                        minute=0, second=0, microsecond=0
-                    )
+                if range_start_local <= created_at_local < window_end_local:
+                    if bucket_step >= timedelta(days=1):
+                        bucket_local = created_at_local.replace(
+                            hour=0, minute=0, second=0, microsecond=0
+                        )
+                    else:
+                        bucket_local = created_at_local.replace(
+                            minute=0, second=0, microsecond=0
+                        )
                     bucket_ts = int(bucket_local.timestamp() * 1000)
                     trend_by_provider[provider_id][bucket_ts] += token_total
                     total_by_provider[provider_id] += token_total
@@ -528,7 +553,7 @@ class StatService:
                         range_duration_samples += 1
                         range_total_output_tokens += record.token_output
 
-                if created_at_local >= today_start_local:
+                if today_start_local <= created_at_local < window_end_local:
                     today_total_calls += 1
                     today_total_tokens += token_total
                     today_by_model[provider_model] += token_total
