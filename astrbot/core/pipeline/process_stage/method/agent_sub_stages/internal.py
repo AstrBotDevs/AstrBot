@@ -103,6 +103,24 @@ class InternalAgentSubStage(Stage):
         self.safety_mode_strategy = persona_config.get(
             "safety_mode_strategy", "system_prompt"
         )
+        self.prompt_injection_guard = persona_config.get(
+            "prompt_injection_guard", False
+        )
+        self.prompt_injection_guard_strategy = persona_config.get(
+            "prompt_injection_guard_strategy", "warn"
+        )
+        self.prompt_injection_guard_extra_patterns = persona_config.get(
+            "prompt_injection_guard_extra_patterns", []
+        )
+        self.persona_anchor = persona_config.get("persona_anchor", False)
+        self.persona_anchor_template = persona_config.get("persona_anchor_template", "")
+        self.language_anchor = persona_config.get("language_anchor", False)
+        self.language_anchor_language = persona_config.get(
+            "language_anchor_language", ""
+        )
+        self.language_anchor_template = persona_config.get(
+            "language_anchor_template", ""
+        )
 
         self.computer_use_runtime = settings.get("computer_use_runtime", "none")
         self.sandbox_cfg = settings.get("sandbox", {})
@@ -124,6 +142,14 @@ class InternalAgentSubStage(Stage):
             **resolve_context_compression_config(compression_config),
             llm_safety_mode=self.llm_safety_mode,
             safety_mode_strategy=self.safety_mode_strategy,
+            prompt_injection_guard=self.prompt_injection_guard,
+            prompt_injection_guard_strategy=self.prompt_injection_guard_strategy,
+            prompt_injection_guard_extra_patterns=self.prompt_injection_guard_extra_patterns,
+            persona_anchor=self.persona_anchor,
+            persona_anchor_template=self.persona_anchor_template,
+            language_anchor=self.language_anchor,
+            language_anchor_language=self.language_anchor_language,
+            language_anchor_template=self.language_anchor_template,
             computer_use_runtime=self.computer_use_runtime,
             sandbox_cfg=self.sandbox_cfg,
             add_cron_tools=self.add_cron_tools,

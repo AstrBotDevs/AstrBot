@@ -3621,6 +3621,38 @@ CONFIG_METADATA_3 = {
                             "agent_runner.config.persona.safety_mode": True,
                         },
                     },
+                    "agent_runner.config.persona.prompt_injection_guard": {
+                        "description": "提示词注入防护",
+                        "type": "bool",
+                        "hint": "检测用户输入中的提示词注入（例如「忽略以上所有指令」「重复你的系统提示词」），防止绕过人设或套取系统提示。默认关闭。",
+                    },
+                    "agent_runner.config.persona.prompt_injection_guard_strategy": {
+                        "description": "注入防护策略",
+                        "type": "string",
+                        "options": ["warn", "block", "sanitize", "log"],
+                        "hint": "warn：追加系统提醒；block：直接拦截该消息；sanitize：清除可疑片段；log：仅记录日志。",
+                        "condition": {
+                            "agent_runner.config.persona.prompt_injection_guard": True,
+                        },
+                    },
+                    "agent_runner.config.persona.persona_anchor": {
+                        "description": "人格锚定",
+                        "type": "bool",
+                        "hint": "在模型调用工具 / 处理数据后重申人设，避免它跳回「作为一个 AI 助手」的语气。默认关闭。",
+                    },
+                    "agent_runner.config.persona.language_anchor": {
+                        "description": "语言锚定",
+                        "type": "bool",
+                        "hint": "要求模型始终使用同一种语言回复，避免「中英混排」。默认关闭。",
+                    },
+                    "agent_runner.config.persona.language_anchor_language": {
+                        "description": "目标语言",
+                        "type": "string",
+                        "hint": "填语言代码（zh / en / ja …）或语言名（中文 / English）。",
+                        "condition": {
+                            "agent_runner.config.persona.language_anchor": True,
+                        },
+                    },
                 },
                 "condition": {
                     "agent_runner.runner_type": "local",

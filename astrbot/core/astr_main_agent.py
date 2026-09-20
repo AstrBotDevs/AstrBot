@@ -23,6 +23,8 @@ from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.astr_main_agent_resources import (
     CHATUI_INLINE_GENUI_SYSTEM_PROMPT,
     CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT,
+    INJECTION_GUARD_BLOCK_MESSAGE,
+    INJECTION_GUARD_SYSTEM_PROMPT,
     LIVE_MODE_SYSTEM_PROMPT,
     LLM_SAFETY_MODE_SYSTEM_PROMPT,
     SANDBOX_MODE_PROMPT,
@@ -33,12 +35,20 @@ from astrbot.core.computer.booters.local import resolve_windows_shell
 from astrbot.core.conversation_mgr import Conversation
 from astrbot.core.db import BaseDatabase
 from astrbot.core.message.components import File, Image, Record, Reply, Video
+from astrbot.core.persona_anchor import (
+    build_language_rule,
+    build_persona_anchor,
+    build_persona_hardening,
+)
 from astrbot.core.persona_error_reply import (
     extract_persona_custom_error_message_from_persona,
     set_persona_custom_error_message_on_event,
 )
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.message_type import MessageType
+from astrbot.core.prompt_injection_guard import (
+    PromptInjectionGuard,
+)
 from astrbot.core.provider import Provider
 from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.provider.register import llm_tools
@@ -218,6 +228,22 @@ class MainAgentBuildConfig:
     """This will inject healthy and safe system prompt into the main agent,
     to prevent LLM output harmful information"""
     safety_mode_strategy: str = "system_prompt"
+    prompt_injection_guard: bool = False
+    """检测并处理用户输入中的提示词注入尝试。"""
+    prompt_injection_guard_strategy: str = "warn"
+    """block / sanitize / warn / log。"""
+    prompt_injection_guard_extra_patterns: list[str] = field(default_factory=list)
+    """额外的自定义正则。"""
+    persona_anchor: bool = False
+    """工具调用后重申人设，避免模型自称 AI 助手。"""
+    persona_anchor_template: str = ""
+    """自定义模板，需含 {persona}。"""
+    language_anchor: bool = False
+    """要求模型使用单一语言，避免中英混排。"""
+    language_anchor_language: str = ""
+    """语言代码（zh / en）或语言名（中文 / English）。"""
+    language_anchor_template: str = ""
+    """自定义模板，需含 {lang}。"""
     computer_use_runtime: str = "none"
     """The runtime for agent computer use: none, local, or sandbox."""
     sandbox_cfg: dict = field(default_factory=dict)
@@ -569,6 +595,11 @@ async def _ensure_persona_and_skills(
     )
 
     if persona:
+        try:
+            event.set_extra("_persona_name", persona.get("name") or persona_id or "")
+        except Exception:  # noqa: BLE001 - purely informational
+            pass
+
         # Inject persona system prompt
         if prompt := persona["prompt"]:
             req.system_prompt += f"\n# Persona Instructions\n\n{prompt}\n"
@@ -1137,6 +1168,99 @@ def _apply_llm_safety_mode(config: MainAgentBuildConfig, req: ProviderRequest) -
             "Unsupported llm_safety_mode strategy: %s.",
             config.safety_mode_strategy,
         )
+
+
+def _apply_prompt_injection_guard(
+    config: MainAgentBuildConfig,
+    req: ProviderRequest,
+) -> None:
+    """按 prompt_injection_guard_strategy 处理用户输入中的注入尝试。"""
+    original = req.prompt or ""
+    if not original.strip():
+        return
+
+    try:
+        guard = PromptInjectionGuard(
+            extra_patterns=config.prompt_injection_guard_extra_patterns,
+        )
+        result = guard.check(
+            original,
+            strategy=config.prompt_injection_guard_strategy,
+        )
+    except Exception as exc:  # noqa: BLE001 - never break message handling
+        logger.warning("Prompt injection guard failed, skipping: %s", exc)
+        return
+
+    if not result.detected:
+        return
+
+    logger.info(
+        "Prompt injection guard: %s (strategy=%s)",
+        result.summary(),
+        config.prompt_injection_guard_strategy,
+    )
+
+    if result.action == "blocked":
+        req.prompt = INJECTION_GUARD_BLOCK_MESSAGE
+        req.image_urls = []
+        req.audio_urls = []
+        return
+
+    if result.action == "sanitized":
+        req.prompt = result.text
+        return
+
+    if result.action == "warned":
+        guard_notice = INJECTION_GUARD_SYSTEM_PROMPT
+        if req.system_prompt:
+            req.system_prompt = f"{req.system_prompt}\n\n{guard_notice}"
+        else:
+            req.system_prompt = guard_notice
+
+
+def _apply_persona_anchor(
+    config: MainAgentBuildConfig,
+    req: ProviderRequest,
+    event: AstrMessageEvent,
+) -> None:
+    """追加人格锚定与语言规则，抑制模型跳出角色或中英混排。"""
+    try:
+        try:
+            persona_name = str(event.get_extra("_persona_name") or "")
+        except Exception:  # noqa: BLE001
+            persona_name = ""
+
+        parts: list[str] = []
+
+        hardening = build_persona_hardening(persona_name)
+        if hardening:
+            parts.append(hardening)
+
+        anchor = build_persona_anchor(
+            persona_name,
+            template=config.persona_anchor_template or None,
+        )
+        if anchor:
+            parts.append(anchor)
+
+        if config.language_anchor and config.language_anchor_language:
+            language_rule = build_language_rule(
+                config.language_anchor_language,
+                template=config.language_anchor_template or None,
+            )
+            if language_rule:
+                parts.append(language_rule)
+
+        if not parts:
+            return
+
+        addition = "\n\n".join(parts)
+        if req.system_prompt:
+            req.system_prompt = f"{req.system_prompt}\n\n{addition}"
+        else:
+            req.system_prompt = addition
+    except Exception as exc:  # noqa: BLE001 - never break message handling
+        logger.warning("Persona anchor failed, skipping: %s", exc)
 
 
 def _apply_sandbox_tools(
@@ -1777,6 +1901,12 @@ async def build_main_agent(
 
     if config.llm_safety_mode:
         _apply_llm_safety_mode(config, req)
+
+    if config.prompt_injection_guard:
+        _apply_prompt_injection_guard(config, req)
+
+    if config.persona_anchor or config.language_anchor:
+        _apply_persona_anchor(config, req, event)
 
     if config.computer_use_runtime == "sandbox":
         _apply_sandbox_tools(config, req, req.session_id)

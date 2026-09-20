@@ -502,6 +502,18 @@ class CronJobManager:
             safety_mode_strategy=persona_config.get(
                 "safety_mode_strategy", "system_prompt"
             ),
+            prompt_injection_guard=persona_config.get("prompt_injection_guard", False),
+            prompt_injection_guard_strategy=persona_config.get(
+                "prompt_injection_guard_strategy", "warn"
+            ),
+            prompt_injection_guard_extra_patterns=persona_config.get(
+                "prompt_injection_guard_extra_patterns", []
+            ),
+            persona_anchor=persona_config.get("persona_anchor", False),
+            persona_anchor_template=persona_config.get("persona_anchor_template", ""),
+            language_anchor=persona_config.get("language_anchor", False),
+            language_anchor_language=persona_config.get("language_anchor_language", ""),
+            language_anchor_template=persona_config.get("language_anchor_template", ""),
             streaming_response=False,
             computer_use_runtime=provider_settings.get("computer_use_runtime", "none"),
             sandbox_cfg=provider_settings.get("sandbox", {}),
