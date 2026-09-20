@@ -1,0 +1,31 @@
+name: "🎉 功能建议"
+title: "[Feature] "
+description: 向我们提交一个新的功能想法或建议。
+labels: ["enhancement"]
+body:
+  - type: textarea
+    attributes:
+      label: 功能描述
+      placeholder: 详细描述您希望添加的功能。
+
+  - type: textarea
+    attributes:
+      label: 使用场景
+      placeholder: 描述您建议的功能的使用场景。
+
+  - type: checkboxes
+    attributes:
+      label: 检查清单
+      options:
+        - label: 我已在 [Issue 列表](https://github.com/AstrBotDevs/AstrBot/issues)中搜索过相关功能，确认该功能想法从未被提出过。
+          required: true
+        - label: 我建议的功能与 AstrBot 本体相关，而非在建议某一插件的功能。
+          required: true
+        - label: 我已阅读并同意本项目的[贡献者行为准则](https://github.com/AstrBotDevs/AstrBot/blob/master/CODE_OF_CONDUCT.md)。
+          required: true
+        - label: (可选)我愿意提交 PR 以帮助实现该功能。
+          required: false
+
+  - type: markdown
+    attributes:
+      value: "感谢您向我们提交您宝贵的想法！"

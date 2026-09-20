@@ -16,13 +16,7 @@
         :class="isUserMessage(msg) ? 'from-user' : 'from-bot'"
       >
         <v-avatar v-if="!isUserMessage(msg)" class="bot-avatar" size="48">
-          <v-progress-circular
-            v-if="isMessageStreaming(msgIndex)"
-            indeterminate
-            size="22"
-            width="2"
-          />
-          <span v-else class="bot-avatar-symbol" aria-hidden="true">✦</span>
+          <span class="bot-avatar-symbol" aria-hidden="true">✦</span>
         </v-avatar>
 
         <div class="message-stack">
@@ -30,131 +24,162 @@
             class="message-bubble"
             :class="{ user: isUserMessage(msg), bot: !isUserMessage(msg) }"
           >
-            <div v-if="messageContent(msg).isLoading" class="loading-message">
-              <span>{{ tm("message.loading") }}</span>
-            </div>
-
-            <template v-else>
-              <ReasoningBlock
-                v-if="messageContent(msg).reasoning"
-                :reasoning="messageContent(msg).reasoning || ''"
-                :is-dark="isDark"
-                :initial-expanded="false"
-                :is-streaming="isMessageStreaming(msgIndex)"
-                :has-non-reasoning-content="hasNonReasoningContent(msg)"
-              />
-
+            <MessageContentTransition :loading="messageContent(msg).isLoading">
               <template
-                v-for="(part, partIndex) in messageParts(msg)"
-                :key="`${msgIndex}-${partIndex}-${part.type}`"
+                v-for="(block, blockIndex) in renderBlocks(msg)"
+                :key="`${msgIndex}-block-${blockIndex}-${block.kind}`"
               >
-                <button
-                  v-if="part.type === 'reply'"
-                  class="reply-quote"
-                  type="button"
-                  @click="scrollToMessage(part.message_id)"
-                >
-                  <v-icon size="15">mdi-reply</v-icon>
-                  <span>{{
-                    replyPreview(part.message_id, part.selected_text)
-                  }}</span>
-                </button>
-
-                <div
-                  v-else-if="part.type === 'plain' && isUserMessage(msg)"
-                  class="plain-content"
-                >
-                  {{ part.text || "" }}
-                </div>
-
-                <MarkdownMessagePart
-                  v-else-if="part.type === 'plain'"
-                  :content="part.text || ''"
-                  :refs="resolvedMessageRefs(msg)"
+                <ReasoningBlock
+                  v-if="block.kind === 'thinking'"
+                  :parts="block.parts"
                   :is-dark="isDark"
-                  :custom-html-tags="customMarkdownTags"
+                  :initial-expanded="false"
+                  :is-streaming="isMessageStreaming(msgIndex)"
+                  :has-non-reasoning-content="
+                    hasFollowingContentBlock(msg, blockIndex)
+                  "
                 />
 
-                <button
-                  v-else-if="part.type === 'image'"
-                  class="image-part"
-                  type="button"
-                  @click="openImage(partUrl(part))"
-                >
-                  <img :src="partUrl(part)" :alt="part.filename || 'image'" />
-                </button>
-
-                <audio
-                  v-else-if="part.type === 'record'"
-                  class="audio-part"
-                  controls
-                  :src="partUrl(part)"
-                />
-
-                <video
-                  v-else-if="part.type === 'video'"
-                  class="video-part"
-                  controls
-                  :src="partUrl(part)"
-                />
-
-                <div v-else-if="part.type === 'file'" class="file-part">
-                  <v-icon size="20">mdi-file-document-outline</v-icon>
-                  <span>{{ part.filename || "file" }}</span>
-                  <v-btn
-                    icon="mdi-download"
-                    size="x-small"
-                    variant="text"
-                    :loading="
-                      downloadingFiles.has(
-                        part.attachment_id || part.filename || '',
-                      )
-                    "
-                    @click="downloadPart(part)"
-                  />
-                </div>
-
-                <div
-                  v-else-if="part.type === 'tool_call'"
-                  class="tool-call-block"
-                >
+                <template v-else>
                   <template
-                    v-for="tool in part.tool_calls || []"
-                    :key="tool.id || tool.name"
+                    v-for="(part, partIndex) in block.parts"
+                    :key="`${msgIndex}-${blockIndex}-${partIndex}-${part.type}`"
                   >
-                    <ToolCallItem
-                      v-if="isIPythonToolCall(tool)"
-                      :is-dark="isDark"
+                    <button
+                      v-if="part.type === 'reply'"
+                      class="reply-quote"
+                      type="button"
+                      @click="scrollToMessage(part.message_id)"
                     >
-                      <template #label>
-                        <v-icon size="16">mdi-code-json</v-icon>
-                        <span>{{ tool.name || "python" }}</span>
-                        <span class="tool-call-inline-status">
-                          {{ toolCallStatusText(tool) }}
+                      <v-icon size="15">mdi-reply</v-icon>
+                      <span>{{
+                        replyPreview(part.message_id, part.selected_text)
+                      }}</span>
+                    </button>
+
+                    <div
+                      v-else-if="part.type === 'plain' && isUserMessage(msg)"
+                      class="plain-content"
+                    >
+                      {{ part.text || "" }}
+                    </div>
+
+                    <MarkdownMessagePart
+                      v-else-if="part.type === 'plain'"
+                      :content="part.text || ''"
+                      :refs="resolvedMessageRefs(msg)"
+                      :is-dark="isDark"
+                      :custom-html-tags="customMarkdownTags"
+                      :is-streaming="isMessageStreaming(msgIndex)"
+                    />
+
+                    <button
+                      v-else-if="part.type === 'image'"
+                      class="image-part"
+                      type="button"
+                      @click="openImage(partUrl(part))"
+                    >
+                      <img
+                        :src="partUrl(part)"
+                        :alt="part.filename || 'image'"
+                      />
+                    </button>
+
+                    <audio
+                      v-else-if="part.type === 'record'"
+                      class="audio-part"
+                      controls
+                      :src="partUrl(part)"
+                    />
+
+                    <video
+                      v-else-if="part.type === 'video'"
+                      class="video-part"
+                      controls
+                      :src="partUrl(part)"
+                    />
+
+                    <div
+                      v-else-if="part.type === 'file'"
+                      class="file-part"
+                      :style="{
+                        '--attachment-color':
+                          attachmentPresentation(part).color,
+                      }"
+                    >
+                      <v-icon
+                        class="file-part-icon"
+                        :icon="attachmentPresentation(part).icon"
+                        size="24"
+                      />
+                      <div class="file-part-meta">
+                        <span class="file-part-name">
+                          {{ attachmentName(part) }}
                         </span>
-                      </template>
-                      <template #details>
-                        <IPythonToolBlock
+                        <span class="file-part-kind">
+                          {{ attachmentPresentation(part).label }}
+                        </span>
+                      </div>
+                      <v-btn
+                        class="file-part-action"
+                        icon="mdi-download"
+                        size="x-small"
+                        variant="text"
+                        :loading="
+                          downloadingFiles.has(
+                            part.attachment_id ||
+                              part.stored_filename ||
+                              part.filename ||
+                              '',
+                          )
+                        "
+                        @click="downloadPart(part)"
+                      />
+                    </div>
+
+                    <div
+                      v-else-if="part.type === 'tool_call'"
+                      class="tool-call-block"
+                    >
+                      <template
+                        v-for="tool in part.tool_calls || []"
+                        :key="tool.id || tool.name"
+                      >
+                        <ToolCallItem
+                          v-if="isIPythonToolCall(tool)"
+                          :is-dark="isDark"
+                        >
+                          <template #label>
+                            <v-icon size="16">mdi-code-json</v-icon>
+                            <span>{{ tool.name || "python" }}</span>
+                            <span class="tool-call-inline-status">
+                              {{ toolCallStatusText(tool) }}
+                            </span>
+                          </template>
+                          <template #details>
+                            <IPythonToolBlock
+                              :tool-call="normalizeToolCall(tool)"
+                              :is-dark="isDark"
+                              :show-header="false"
+                              :force-expanded="true"
+                            />
+                          </template>
+                        </ToolCallItem>
+                        <ToolCallCard
+                          v-else
                           :tool-call="normalizeToolCall(tool)"
                           :is-dark="isDark"
-                          :show-header="false"
-                          :force-expanded="true"
                         />
                       </template>
-                    </ToolCallItem>
-                    <ToolCallCard
-                      v-else
-                      :tool-call="normalizeToolCall(tool)"
-                      :is-dark="isDark"
-                    />
-                  </template>
-                </div>
+                    </div>
 
-                <div v-else class="unknown-part">
-                  {{ formatJson(part) }}
-                </div>
+                    <div v-else class="unknown-part">
+                      {{ formatJson(part) }}
+                    </div>
+                  </template>
+                </template>
               </template>
-            </template>
+            </MessageContentTransition>
           </div>
 
           <div v-if="showMessageMeta(msg, msgIndex)" class="message-meta">
@@ -176,6 +201,15 @@
                 />
               </template>
               <v-card class="stats-card" elevation="4">
+                <div
+                  v-if="cachedInputTokens(messageContent(msg).agentStats) > 0"
+                  class="stats-row"
+                >
+                  <span>{{ tm("stats.cachedTokens") }}</span>
+                  <strong>{{
+                    cachedInputTokens(messageContent(msg).agentStats)
+                  }}</strong>
+                </div>
                 <div class="stats-row">
                   <span>{{ tm("stats.inputTokens") }}</span>
                   <strong>{{
@@ -235,25 +269,37 @@
 </template>
 
 <script setup lang="ts">
+import MessageContentTransition from "@/components/chat/MessageContentTransition.vue";
 import { computed, nextTick, reactive, ref } from "vue";
 import axios from "axios";
-import { setCustomComponents } from "markstream-vue";
-import "markstream-vue/index.css";
+import {
+  CHAT_MARKDOWN_CUSTOM_TAGS,
+  registerChatMarkdownComponents,
+} from "@/components/chat/chatMarkdownComponents";
+import { fileApi } from "@/api/v1";
 import IPythonToolBlock from "@/components/chat/message_list_comps/IPythonToolBlock.vue";
 import MarkdownMessagePart from "@/components/chat/message_list_comps/MarkdownMessagePart.vue";
 import ReasoningBlock from "@/components/chat/message_list_comps/ReasoningBlock.vue";
-import RefNode from "@/components/chat/message_list_comps/RefNode.vue";
 import RefsSidebar from "@/components/chat/message_list_comps/RefsSidebar.vue";
 import ToolCallCard from "@/components/chat/message_list_comps/ToolCallCard.vue";
 import ToolCallItem from "@/components/chat/message_list_comps/ToolCallItem.vue";
 import ActionRef from "@/components/chat/message_list_comps/ActionRef.vue";
-import ThemeAwareMarkdownCodeBlock from "@/components/shared/ThemeAwareMarkdownCodeBlock.vue";
+import {
+  attachmentName,
+  attachmentPresentation,
+} from "@/components/chat/attachmentPresentation";
+import {
+  displayParts as displayMessageParts,
+  messageBlocks as buildMessageBlocks,
+  type MessageDisplayBlock,
+} from "@/composables/useMessages";
 import type {
   ChatContent,
   ChatRecord,
   MessagePart,
 } from "@/composables/useMessages";
 import { useModuleI18n } from "@/i18n/composables";
+import { copyToClipboard } from "@/utils/clipboard";
 
 const props = withDefaults(
   defineProps<{
@@ -269,13 +315,10 @@ const props = withDefaults(
   },
 );
 
-setCustomComponents("chat-message", {
-  ref: RefNode,
-  code_block: ThemeAwareMarkdownCodeBlock,
-});
+registerChatMarkdownComponents();
 
 const { tm } = useModuleI18n("features/chat");
-const customMarkdownTags = ["ref"];
+const customMarkdownTags = CHAT_MARKDOWN_CUSTOM_TAGS;
 const downloadingFiles = ref(new Set<string>());
 const messageListRoot = ref<HTMLElement | null>(null);
 const imagePreview = reactive({ visible: false, url: "" });
@@ -293,10 +336,7 @@ function messageContent(message: ChatRecord): ChatContent {
 }
 
 function messageParts(message: ChatRecord): MessagePart[] {
-  const parts = messageContent(message).message;
-  if (Array.isArray(parts)) return parts;
-  if (typeof parts === "string") return [{ type: "plain", text: parts }];
-  return [];
+  return displayMessageParts(messageContent(message));
 }
 
 function isMessageStreaming(messageIndex: number) {
@@ -304,23 +344,32 @@ function isMessageStreaming(messageIndex: number) {
 }
 
 function hasNonReasoningContent(message: ChatRecord) {
-  return messageParts(message).some((part) => {
-    if (part.type === "reply") return false;
-    if (part.type === "plain") return Boolean(String(part.text || "").trim());
-    return true;
-  });
+  return renderBlocks(message).some((block) => block.kind === "content");
+}
+
+function renderBlocks(message: ChatRecord): MessageDisplayBlock[] {
+  if (isUserMessage(message)) {
+    const parts = messageParts(message);
+    return parts.length ? [{ kind: "content", parts }] : [];
+  }
+  return buildMessageBlocks(messageContent(message));
+}
+
+function hasFollowingContentBlock(message: ChatRecord, blockIndex: number) {
+  return renderBlocks(message)
+    .slice(blockIndex + 1)
+    .some((block) => block.kind === "content");
 }
 
 function partUrl(part: MessagePart) {
   if (part.embedded_url) return part.embedded_url;
   if (part.embedded_file?.url) return part.embedded_file.url;
   if (part.attachment_id) {
-    return `/api/chat/get_attachment?attachment_id=${encodeURIComponent(
-      part.attachment_id,
-    )}`;
+    return fileApi.contentUrl(part.attachment_id);
   }
-  if (part.filename) {
-    return `/api/chat/get_file?filename=${encodeURIComponent(part.filename)}`;
+  const lookupFilename = part.stored_filename || part.filename;
+  if (lookupFilename) {
+    return fileApi.byNameUrl(lookupFilename);
   }
   return "";
 }
@@ -449,11 +498,11 @@ function parseJsonSafe(value: unknown) {
 async function copyMessage(message: ChatRecord) {
   const text = plainTextFromMessage(message);
   if (!text) return;
-  await navigator.clipboard?.writeText(text);
+  await copyToClipboard(text, { container: messageListRoot.value });
 }
 
 async function downloadPart(part: MessagePart) {
-  const key = part.attachment_id || part.filename || "";
+  const key = part.attachment_id || part.stored_filename || part.filename || "";
   if (!key) return;
   downloadingFiles.value = new Set(downloadingFiles.value).add(key);
   try {
@@ -490,11 +539,15 @@ function formatTime(value: string) {
 
 function inputTokens(stats: any) {
   const usage = stats?.token_usage || {};
-  return (usage.input_other || 0) + (usage.input_cached || 0);
+  return usage.input_other || 0;
 }
 
 function outputTokens(stats: any) {
   return stats?.token_usage?.output || 0;
+}
+
+function cachedInputTokens(stats: any) {
+  return stats?.token_usage?.input_cached || 0;
 }
 
 function agentDuration(stats: any) {
@@ -539,6 +592,7 @@ function formatDuration(seconds: number) {
 
 <style scoped>
 .message-list-root {
+  container: chat-messages / inline-size;
   --chat-border: rgba(var(--v-border-color), 0.16);
   --chat-muted: rgba(var(--v-theme-on-surface), 0.62);
   width: 100%;
@@ -575,6 +629,12 @@ function formatDuration(seconds: number) {
 
 .message-stack {
   max-width: min(760px, 82%);
+}
+
+.from-bot .message-stack {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 760px;
 }
 
 .from-user .message-stack {
@@ -624,14 +684,6 @@ function formatDuration(seconds: number) {
   white-space: pre-wrap;
 }
 
-.loading-message {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 4px;
-  color: var(--chat-muted);
-}
-
 .reply-quote {
   width: 100%;
   display: flex;
@@ -650,11 +702,14 @@ function formatDuration(seconds: number) {
 
 .image-part {
   display: block;
+  width: fit-content;
+  max-width: 100%;
   border: 0;
   padding: 0;
   margin-top: 8px;
   background: transparent;
   cursor: zoom-in;
+  text-align: left;
 }
 
 .image-part img {
@@ -677,21 +732,61 @@ function formatDuration(seconds: number) {
 }
 
 .file-part {
-  display: flex;
+  --attachment-color: #607d8b;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  width: min(420px, 100%);
   margin-top: 8px;
-  padding: 8px 10px;
-  border: 1px solid var(--chat-border);
+  padding: 9px 8px 9px 10px;
+  border: 0;
   border-radius: 8px;
+  background: rgba(var(--v-theme-on-surface), 0.055);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--attachment-color) 13%, transparent),
+    rgba(var(--v-theme-on-surface), 0.055) 58%
+  );
 }
 
-.file-part span {
+.file-part-icon {
+  color: var(--attachment-color);
+}
+
+.file-part-meta {
   min-width: 0;
-  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.file-part-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.file-part-kind {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--attachment-color);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 14px;
+}
+
+.file-part-action {
+  color: rgb(var(--v-theme-on-surface));
+  opacity: 0.72;
+}
+
+.file-part:hover .file-part-action {
+  opacity: 1;
 }
 
 .tool-call-block {
@@ -769,6 +864,16 @@ function formatDuration(seconds: number) {
   max-height: 88vh;
   border-radius: 8px;
   object-fit: contain;
+}
+
+@container chat-messages (max-width: 600px) {
+  .message-row.from-bot .bot-avatar {
+    display: none;
+  }
+
+  .message-bubble.bot {
+    padding-inline: 0;
+  }
 }
 
 @media (max-width: 760px) {

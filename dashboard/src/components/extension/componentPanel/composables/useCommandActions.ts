@@ -2,8 +2,8 @@
  * 指令操作方法 Composable
  */
 import { reactive } from 'vue';
-import axios from 'axios';
-import type { CommandItem, RenameDialogState, DetailsDialogState, TypeInfo, StatusInfo } from '../types';
+import { commandApi } from '@/api/v1';
+import type { CommandPermission, CommandItem, RenameDialogState, DetailsDialogState, TypeInfo, StatusInfo } from '../types';
 
 export function useCommandActions(
   toast: (message: string, color?: string) => void,
@@ -33,8 +33,7 @@ export function useCommandActions(
     errorMessage: string
   ) => {
     try {
-      const res = await axios.post('/api/commands/toggle', {
-        handler_full_name: cmd.handler_full_name,
+      const res = await commandApi.update(cmd.handler_full_name, {
         enabled: !cmd.enabled
       });
       if (res.data.status === 'ok') {
@@ -66,9 +65,8 @@ export function useCommandActions(
 
     renameDialog.loading = true;
     try {
-      const res = await axios.post('/api/commands/rename', {
-        handler_full_name: renameDialog.command.handler_full_name,
-        new_name: renameDialog.newName.trim(),
+      const res = await commandApi.update(renameDialog.command.handler_full_name, {
+        alias: renameDialog.newName.trim(),
         aliases: renameDialog.aliases.filter(a => a.trim())
       });
       if (res.data.status === 'ok') {
@@ -104,26 +102,6 @@ export function useCommandActions(
         return { text: translations.subCommand, color: 'secondary', icon: 'mdi-subdirectory-arrow-right' };
       default:
         return { text: translations.command, color: 'primary', icon: 'mdi-console-line' };
-    }
-  };
-
-  /**
-   * 获取权限颜色
-   */
-  const getPermissionColor = (permission: string): string => {
-    switch (permission) {
-      case 'admin': return 'error';
-      default: return 'success';
-    }
-  };
-
-  /**
-   * 获取权限标签
-   */
-  const getPermissionLabel = (permission: string, translations: { admin: string; everyone: string }): string => {
-    switch (permission) {
-      case 'admin': return translations.admin;
-      default: return translations.everyone;
     }
   };
 
@@ -165,14 +143,13 @@ export function useCommandActions(
    */
   const updatePermission = async (
     cmd: CommandItem,
-    permission: 'admin' | 'member',
+    permission: CommandPermission,
     successMessage: string,
     errorMessage: string
   ) => {
     try {
-      const res = await axios.post('/api/commands/permission', {
-        handler_full_name: cmd.handler_full_name,
-        permission: permission
+      const res = await commandApi.update(cmd.handler_full_name, {
+        permission_group: permission
       });
       if (res.data.status === 'ok') {
         toast(successMessage, 'success');
@@ -197,10 +174,7 @@ export function useCommandActions(
     confirmRename,
     openDetailsDialog,
     getTypeInfo,
-    getPermissionColor,
-    getPermissionLabel,
     getStatusInfo,
     getRowProps
   };
 }
-

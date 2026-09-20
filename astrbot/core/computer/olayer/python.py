@@ -14,6 +14,7 @@ class PythonComponent(Protocol):
         kernel_id: str | None = None,
         timeout: int = 30,
         silent: bool = False,
+        cwd: str | None = None,
     ) -> dict[str, Any]:
         """Execute Python code"""
         ...

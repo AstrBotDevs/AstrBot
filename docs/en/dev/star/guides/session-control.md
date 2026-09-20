@@ -31,6 +31,7 @@ Code within the handler can be written as follows:
 ```python
 from astrbot.api.event import filter, AstrMessageEvent
 
+
 @filter.command("idiom-chain")
 async def handle_empty_mention(self, event: AstrMessageEvent):
     """Idiom chain game implementation"""
@@ -38,36 +39,54 @@ async def handle_empty_mention(self, event: AstrMessageEvent):
         yield event.plain_result("Please send an idiom~")
 
         # How to use the session controller
-        @session_waiter(timeout=60, record_history_chains=False) # Register a session controller with a 60-second timeout, without recording message history
-        async def empty_mention_waiter(controller: SessionController, event: AstrMessageEvent):
-            idiom = event.message_str # The idiom sent by the user, e.g., "one horse takes the lead"
+        @session_waiter(
+            timeout=60, record_history_chains=False
+        )  # Register a session controller with a 60-second timeout, without recording message history
+        async def empty_mention_waiter(
+            controller: SessionController, event: AstrMessageEvent
+        ):
+            idiom = (
+                event.message_str
+            )  # The idiom sent by the user, e.g., "one horse takes the lead"
 
-            if idiom == "exit":   # If the user wants to exit the idiom chain game by typing "exit"
+            if (
+                idiom == "exit"
+            ):  # If the user wants to exit the idiom chain game by typing "exit"
                 await event.send(event.plain_result("Exited the idiom chain game~"))
-                controller.stop()    # Stop the session controller, which will end immediately.
+                controller.stop()  # Stop the session controller, which will end immediately.
                 return
 
-            if len(idiom) != 4:   # If the user's input is not a 4-character idiom
-                await event.send(event.plain_result("The idiom must be four characters~"))  # Send a reply, cannot use yield
+            if len(idiom) != 4:  # If the user's input is not a 4-character idiom
+                await event.send(
+                    event.plain_result("The idiom must be four characters~")
+                )  # Send a reply, cannot use yield
                 return
                 # Exit the current method without executing subsequent logic, but the session is not interrupted; subsequent user input will still enter the current session
 
             # ...
             message_result = event.make_result()
-            message_result.chain = [Comp.Plain("Foresight")] # import astrbot.api.message_components as Comp
-            await event.send(message_result) # Send a reply, cannot use yield
+            message_result.chain = [
+                Comp.Plain("Foresight")
+            ]  # import astrbot.api.message_components as Comp
+            await event.send(message_result)  # Send a reply, cannot use yield
 
-            controller.keep(timeout=60, reset_timeout=True) # Reset timeout to 60s. If not reset, it will continue the previous timeout countdown.
+            controller.keep(
+                timeout=60, reset_timeout=True
+            )  # Reset timeout to 60s. If not reset, it will continue the previous timeout countdown.
 
             # controller.stop() # Stop the session controller, which will end immediately.
             # If history chains are recorded, you can retrieve them via controller.get_history_chains()
 
         try:
             await empty_mention_waiter(event)
-        except TimeoutError as _: # When timeout occurs, the session controller will raise TimeoutError
+        except (
+            TimeoutError
+        ) as _:  # When timeout occurs, the session controller will raise TimeoutError
             yield event.plain_result("You timed out!")
         except Exception as e:
-            yield event.plain_result("An error occurred, please contact the administrator: " + str(e))
+            yield event.plain_result(
+                "An error occurred, please contact the administrator: " + str(e)
+            )
         finally:
             event.stop_event()
     except Exception as e:
@@ -98,13 +117,19 @@ from astrbot.core.utils.session_waiter import (
     SessionController,
 )
 
+
 # Using the handler from above
 # ...
 class CustomFilter(SessionFilter):
     def filter(self, event: AstrMessageEvent) -> str:
-        return event.get_group_id() if event.get_group_id() else event.unified_msg_origin
+        return (
+            event.get_group_id() if event.get_group_id() else event.unified_msg_origin
+        )
 
-await empty_mention_waiter(event, session_filter=CustomFilter()) # Pass in session_filter here
+
+await empty_mention_waiter(
+    event, session_filter=CustomFilter()
+)  # Pass in session_filter here
 # ...
 ```
 

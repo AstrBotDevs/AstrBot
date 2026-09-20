@@ -2,10 +2,12 @@
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
 import { ref, computed } from 'vue'
 import ConfigItemRenderer from './ConfigItemRenderer.vue'
+import ConfigDefaultReset from './ConfigDefaultReset.vue'
 import TemplateListEditor from './TemplateListEditor.vue'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
-import axios from 'axios'
+import { useConfigTextResolver } from '@/composables/useConfigTextResolver'
 import { useToast } from '@/utils/toast'
+import { providerApi } from '@/api/v1'
 
 const props = defineProps({
   metadata: {
@@ -24,6 +26,10 @@ const props = defineProps({
     type: String,
     default: ''
   },
+  pluginI18n: {
+    type: Object,
+    default: () => ({})
+  },
   pathPrefix: {
     type: String,
     default: ''
@@ -31,16 +37,21 @@ const props = defineProps({
   isEditing: {
     type: Boolean,
     default: false
+  },
+  enableDefaultReset: {
+    type: Boolean,
+    default: false
+  },
+  fieldLinks: {
+    type: Object,
+    default: () => ({})
   }
 })
 
 const { t } = useI18n()
-const { tm, getRaw } = useModuleI18n('features/config-metadata')
-
-const translateIfKey = (value) => {
-  if (!value || typeof value !== 'string') return value
-  return getRaw(value) ? tm(value) : value
-}
+const { getRaw } = useModuleI18n('features/config-metadata')
+const { translateIfKey, resolveConfigText } = useConfigTextResolver(props)
+const currentConfigPath = computed(() => props.pathPrefix || props.metadataKey)
 
 const filteredIterable = computed(() => {
   if (!props.iterable) return {}
@@ -107,9 +118,12 @@ async function getEmbeddingDimensions(providerConfig) {
   
   loadingEmbeddingDim.value = true
   try {
-    const response = await axios.post('/api/config/provider/get_embedding_dim', {
-      provider_config: providerConfig
-    })
+    const providerId = String(providerConfig?.id || '')
+    if (!providerId) {
+      useToast().error('缺少提供商 ID')
+      return
+    }
+    const response = await providerApi.embeddingDimension(providerId, providerConfig)
     
     if (response.data.status != "error" && response.data.data?.embedding_dimensions) {
       console.log(response.data.data.embedding_dimensions)
@@ -174,11 +188,12 @@ function hasVisibleItemsAfter(items, currentIndex) {
 <template>
   <div class="config-section" v-if="iterable && metadata[metadataKey]?.type === 'object'">
     <v-list-item-title class="config-title">
-      {{ translateIfKey(metadata[metadataKey]?.description) }} <span class="metadata-key">({{ metadataKey }})</span>
+      {{ resolveConfigText(currentConfigPath, 'description', metadata[metadataKey]?.description) }}
+      <span v-if="metadata[metadataKey]?.show_key" class="metadata-key">({{ metadataKey }})</span>
     </v-list-item-title>
     <v-list-item-subtitle class="config-hint">
       <span v-if="metadata[metadataKey]?.obvious_hint && metadata[metadataKey]?.hint" class="important-hint">‼️</span>
-      {{ translateIfKey(metadata[metadataKey]?.hint) }}
+      {{ resolveConfigText(currentConfigPath, 'hint', metadata[metadataKey]?.hint) }}
     </v-list-item-subtitle>
   </div>
 
@@ -207,7 +222,9 @@ function hasVisibleItemsAfter(items, currentIndex) {
                 :iterable="iterable[key]"
                 :metadataKey="key"
                 :pluginName="pluginName"
+                :pluginI18n="pluginI18n"
                 :pathPrefix="getItemPath(key)"
+                :enable-default-reset="enableDefaultReset"
               >
               </AstrBotConfig>
             </v-expand-transition>
@@ -220,21 +237,31 @@ function hasVisibleItemsAfter(items, currentIndex) {
             <div class="config-section mb-2">
               <v-list-item-title class="config-title">
                 <span v-if="metadata[metadataKey].items[key]?.description">
-                  {{ translateIfKey(metadata[metadataKey].items[key]?.description) }}
-                  <span class="property-key">({{ key }})</span>
+                  {{ resolveConfigText(getItemPath(key), 'description', metadata[metadataKey].items[key]?.description) }}
+                  <span v-if="metadata[metadataKey].items[key]?.show_key" class="property-key">({{ key }})</span>
                 </span>
                 <span v-else>{{ key }}</span>
               </v-list-item-title>
               <v-list-item-subtitle class="config-hint">
                 <span v-if="metadata[metadataKey].items[key]?.obvious_hint && metadata[metadataKey].items[key]?.hint" class="important-hint">‼️</span>
-                {{ translateIfKey(metadata[metadataKey].items[key]?.hint) }}
+                {{ resolveConfigText(getItemPath(key), 'hint', metadata[metadataKey].items[key]?.hint) }}
               </v-list-item-subtitle>
             </div>
-            <TemplateListEditor
-              v-model="iterable[key]"
-              :templates="metadata[metadataKey].items[key]?.templates || {}"
-              class="config-field"
-            />
+            <ConfigDefaultReset
+              :model-value="iterable[key]"
+              :item-meta="metadata[metadataKey].items[key]"
+              :enabled="enableDefaultReset"
+              @reset="iterable[key] = $event"
+            >
+              <TemplateListEditor
+                v-model="iterable[key]"
+                :templates="metadata[metadataKey].items[key]?.templates || {}"
+                :plugin-name="pluginName"
+                :plugin-i18n="pluginI18n"
+                :config-path="getItemPath(key)"
+                class="config-field"
+              />
+            </ConfigDefaultReset>
           </div>
         </div>
 
@@ -245,31 +272,49 @@ function hasVisibleItemsAfter(items, currentIndex) {
               <v-list-item density="compact">
                 <v-list-item-title class="property-name">
                   <span v-if="metadata[metadataKey].items[key]?.description">
-                    {{ translateIfKey(metadata[metadataKey].items[key]?.description) }}
-                    <span class="property-key">({{ key }})</span>
+                    {{ resolveConfigText(getItemPath(key), 'description', metadata[metadataKey].items[key]?.description) }}
+                    <span v-if="metadata[metadataKey].items[key]?.show_key" class="property-key">({{ key }})</span>
                   </span>
                   <span v-else>{{ key }}</span>
                 </v-list-item-title>
 
                 <v-list-item-subtitle class="property-hint">
-                  <span v-if="metadata[metadataKey].items[key]?.obvious_hint && getItemHint(key, metadata[metadataKey].items[key])"
-                        class="important-hint">‼️</span>
-                  {{ translateIfKey(getItemHint(key, metadata[metadataKey].items[key])) }}
+                  <span :class="{ 'property-hint__content--linked': fieldLinks[key] }">
+                    <span v-if="metadata[metadataKey].items[key]?.obvious_hint && getItemHint(key, metadata[metadataKey].items[key])"
+                          class="important-hint">‼️</span>
+                    <span>{{ resolveConfigText(getItemPath(key), 'hint', getItemHint(key, metadata[metadataKey].items[key])) }}</span>
+                    <a
+                      v-if="fieldLinks[key]"
+                      class="property-link"
+                      :href="fieldLinks[key].href"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      @click.stop
+                    >{{ fieldLinks[key].label }}</a>
+                  </span>
                 </v-list-item-subtitle>
               </v-list-item>
             </v-col>
 
             <v-col cols="12" sm="6" class="config-input">
-              <ConfigItemRenderer
-                v-model="iterable[key]"
-                :item-meta="metadata[metadataKey].items[key] || null"
-                :plugin-name="pluginName"
-                :config-key="getItemPath(key)"
-                :loading="loadingEmbeddingDim"
-                :show-fullscreen-btn="!!metadata[metadataKey].items[key]?.editor_mode"
-                @get-embedding-dim="getEmbeddingDimensions(iterable)"
-                @open-fullscreen="openEditorDialog(key, iterable, metadata[metadataKey].items[key]?.editor_theme, metadata[metadataKey].items[key]?.editor_language)"
-              />
+              <ConfigDefaultReset
+                :model-value="iterable[key]"
+                :item-meta="metadata[metadataKey].items[key]"
+                :enabled="enableDefaultReset"
+                @reset="iterable[key] = $event"
+              >
+                <ConfigItemRenderer
+                  v-model="iterable[key]"
+                  :item-meta="metadata[metadataKey].items[key] || null"
+                  :plugin-name="pluginName"
+                  :plugin-i18n="pluginI18n"
+                  :config-key="getItemPath(key)"
+                  :loading="loadingEmbeddingDim"
+                  :show-fullscreen-btn="!!metadata[metadataKey].items[key]?.editor_mode"
+                  @get-embedding-dim="getEmbeddingDimensions(iterable)"
+                  @open-fullscreen="openEditorDialog(key, iterable, metadata[metadataKey].items[key]?.editor_theme, metadata[metadataKey].items[key]?.editor_language)"
+                />
+              </ConfigDefaultReset>
             </v-col>
           </v-row>
 
@@ -287,31 +332,42 @@ function hasVisibleItemsAfter(items, currentIndex) {
         <v-col cols="12" sm="7" class="property-info">
           <v-list-item density="compact">
             <v-list-item-title class="property-name">
-              {{ metadata[metadataKey]?.description }}
-              <span class="property-key">({{ metadataKey }})</span>
+              {{ resolveConfigText(getItemPath(metadataKey), 'description', metadata[metadataKey]?.description) }}
+              <span v-if="metadata[metadataKey]?.show_key" class="property-key">({{ metadataKey }})</span>
             </v-list-item-title>
 
             <v-list-item-subtitle class="property-hint">
               <span v-if="metadata[metadataKey]?.obvious_hint && metadata[metadataKey]?.hint" class="important-hint">‼️</span>
-              {{ metadata[metadataKey]?.hint }}
+              {{ resolveConfigText(getItemPath(metadataKey), 'hint', metadata[metadataKey]?.hint) }}
             </v-list-item-subtitle>
           </v-list-item>
         </v-col>
 
         <v-col cols="12" sm="5" class="config-input">
-          <TemplateListEditor
-            v-if="metadata[metadataKey]?.type === 'template_list' && !metadata[metadataKey]?.invisible"
-            v-model="iterable[metadataKey]"
-            :templates="metadata[metadataKey]?.templates || {}"
-            class="config-field"
-          />
-          <ConfigItemRenderer
-            v-else
-            v-model="iterable[metadataKey]"
+          <ConfigDefaultReset
+            :model-value="iterable[metadataKey]"
             :item-meta="metadata[metadataKey]"
-            :plugin-name="pluginName"
-            :config-key="getItemPath(metadataKey)"
-          />
+            :enabled="enableDefaultReset"
+            @reset="iterable[metadataKey] = $event"
+          >
+            <TemplateListEditor
+              v-if="metadata[metadataKey]?.type === 'template_list' && !metadata[metadataKey]?.invisible"
+              v-model="iterable[metadataKey]"
+              :templates="metadata[metadataKey]?.templates || {}"
+              :plugin-name="pluginName"
+              :plugin-i18n="pluginI18n"
+              :config-path="getItemPath(metadataKey)"
+              class="config-field"
+            />
+            <ConfigItemRenderer
+              v-else
+              v-model="iterable[metadataKey]"
+              :item-meta="metadata[metadataKey]"
+              :plugin-name="pluginName"
+              :plugin-i18n="pluginI18n"
+              :config-key="getItemPath(metadataKey)"
+            />
+          </ConfigDefaultReset>
         </v-col>
       </v-row>
 
@@ -365,10 +421,10 @@ function hasVisibleItemsAfter(items, currentIndex) {
 }
 
 .metadata-key, .property-key {
-  font-size: 0.85em;
-  opacity: 0.7;
+  color: rgba(var(--v-theme-on-surface), 0.45);
+  font-size: 0.82em;
   font-weight: normal;
-  display: none;
+  margin-left: 4px;
 }
 
 .important-hint {
@@ -418,10 +474,29 @@ function hasVisibleItemsAfter(items, currentIndex) {
   color: var(--v-theme-primaryText);
 }
 
+.property-link {
+  color: rgb(var(--v-theme-primary));
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.property-link:hover {
+  text-decoration: underline;
+}
+
 .property-hint {
   font-size: 0.75rem;
   color: var(--v-theme-secondaryText);
   margin-top: 2px;
+}
+
+.property-hint__content--linked {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
 }
 
 .type-indicator {

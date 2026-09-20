@@ -219,25 +219,45 @@ class KBSQLiteDatabase:
         kb_id: str,
         offset: int = 0,
         limit: int = 100,
+        search: str | None = None,
     ) -> list[KBDocument]:
-        """列出知识库的所有文档"""
+        """List documents in a knowledge base.
+
+        Args:
+            kb_id: Knowledge base ID.
+            offset: Number of documents to skip.
+            limit: Maximum number of documents to return.
+            search: Optional partial match on document name; disabled when None or empty.
+
+        Returns:
+            List of matching KBDocument rows.
+        """
         async with self.get_db() as session:
+            stmt = select(KBDocument).where(col(KBDocument.kb_id) == kb_id)
+            if search:
+                stmt = stmt.where(col(KBDocument.doc_name).contains(search))
             stmt = (
-                select(KBDocument)
-                .where(col(KBDocument.kb_id) == kb_id)
-                .offset(offset)
-                .limit(limit)
-                .order_by(desc(KBDocument.created_at))
+                stmt.offset(offset).limit(limit).order_by(desc(KBDocument.created_at))
             )
             result = await session.execute(stmt)
             return list(result.scalars().all())
 
-    async def count_documents_by_kb(self, kb_id: str) -> int:
-        """统计知识库的文档数量"""
+    async def count_documents_by_kb(self, kb_id: str, search: str | None = None) -> int:
+        """Count documents in a knowledge base.
+
+        Args:
+            kb_id: Knowledge base ID.
+            search: Optional partial match on document name; disabled when None or empty.
+
+        Returns:
+            Total number of matching documents.
+        """
         async with self.get_db() as session:
             stmt = select(func.count(col(KBDocument.id))).where(
                 col(KBDocument.kb_id) == kb_id,
             )
+            if search:
+                stmt = stmt.where(col(KBDocument.doc_name).contains(search))
             result = await session.execute(stmt)
             return result.scalar() or 0
 
@@ -300,13 +320,15 @@ class KBSQLiteDatabase:
         return metadata_map
 
     async def delete_document_by_id(self, doc_id: str, vec_db: "FaissVecDB") -> None:
-        """删除单个文档及其相关数据"""
-        # 在知识库表中删除
+        """删除单个文档及其相关数据（包括多媒体记录）"""
         async with self.get_db() as session, session.begin():
+            # 删除多媒体记录
+            delete_media_stmt = delete(KBMedia).where(col(KBMedia.doc_id) == doc_id)
+            await session.execute(delete_media_stmt)
+
             # 删除文档记录
             delete_stmt = delete(KBDocument).where(col(KBDocument.doc_id) == doc_id)
             await session.execute(delete_stmt)
-            await session.commit()
 
         # 在 vec db 中删除相关向量
         await vec_db.delete_documents(metadata_filters={"kb_doc_id": doc_id})
@@ -329,7 +351,7 @@ class KBSQLiteDatabase:
 
     async def update_kb_stats(self, kb_id: str, vec_db: "FaissVecDB") -> None:
         """更新知识库统计信息"""
-        chunk_cnt = await vec_db.count_documents()
+        chunk_cnt = await vec_db.count_documents(metadata_filter={"kb_id": kb_id})
 
         async with self.get_db() as session, session.begin():
             update_stmt = (

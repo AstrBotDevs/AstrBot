@@ -114,7 +114,7 @@ def _merge_buffered_llm_chains(
 
 async def run_agent(
     agent_runner: AgentRunner,
-    max_step: int = 30,
+    max_step: int = 128,
     show_tool_use: bool = True,
     show_tool_call_result: bool = False,
     stream_to_general: bool = False,
@@ -122,6 +122,9 @@ async def run_agent(
     buffer_intermediate_messages: bool = False,
 ) -> AsyncGenerator[MessageChain | None, None]:
     step_idx = 0
+    agent_runner._step_budget_max = max_step
+    agent_runner._step_budget_used = 0
+    agent_runner._step_budget_notified = set()
     astr_event = agent_runner.run_context.context.event
     tool_name_by_call_id: dict[str, str] = {}
     buffered_llm_chains: list[MessageChain] = []
@@ -145,7 +148,7 @@ async def run_agent(
                 agent_runner.run_context.messages.append(
                     Message(
                         role="user",
-                        content="工具调用次数已达到上限，请停止使用工具，并根据已经收集到的信息，对你的任务和发现进行总结，然后直接回复用户。",
+                        content=ToolLoopAgentRunner.MAX_STEPS_REACHED_PROMPT,
                     )
                 )
 
@@ -180,6 +183,11 @@ async def run_agent(
                     return
 
                 if _should_stop_agent(astr_event):
+                    continue
+
+                if resp.type == "agent_stats":
+                    if astr_event.get_platform_name() == "webchat":
+                        await astr_event.send(resp.data["chain"])
                     continue
 
                 if resp.type == "tool_call_result":
@@ -235,8 +243,32 @@ async def run_agent(
                         )
                         await astr_event.send(chain)
                     continue
+                elif resp.type == "llm_result":
+                    chain = resp.data["chain"]
+                    if chain.type == "reasoning":
+                        # For non-streaming mode, we handle reasoning in astrbot/core/astr_agent_hooks.py.
+                        # For streaming mode, we yield content immediately when received a reasoning chunk but not in here, see below.
+                        continue
 
                 if stream_to_general and resp.type == "streaming_delta":
+                    continue
+
+                if (
+                    resp.type == "err"
+                    and agent_runner.streaming
+                    and not stream_to_general
+                ):
+                    chain = (
+                        resp.data.get("chain") if isinstance(resp.data, dict) else None
+                    )
+                    if not isinstance(chain, MessageChain):
+                        logger.error(
+                            "Agent runner returned an error response without a message chain."
+                        )
+                        chain = MessageChain().message(
+                            "Error occurred during AI execution."
+                        )
+                    yield chain
                     continue
 
                 if stream_to_general or not agent_runner.streaming:
@@ -283,15 +315,6 @@ async def run_agent(
                 except asyncio.CancelledError:
                     pass
             if agent_runner.done():
-                # send agent stats to webchat
-                if astr_event.get_platform_name() == "webchat":
-                    await astr_event.send(
-                        MessageChain(
-                            type="agent_stats",
-                            chain=[Json(data=agent_runner.stats.to_dict())],
-                        )
-                    )
-
                 break
 
         except Exception as e:
@@ -344,7 +367,7 @@ async def _watch_agent_stop_signal(agent_runner: AgentRunner, astr_event) -> Non
 async def run_live_agent(
     agent_runner: AgentRunner,
     tts_provider: TTSProvider | None = None,
-    max_step: int = 30,
+    max_step: int = 128,
     show_tool_use: bool = True,
     show_tool_call_result: bool = False,
     show_reasoning: bool = False,
@@ -416,7 +439,11 @@ async def run_live_agent(
         )
     else:
         tts_task = asyncio.create_task(
-            _simulated_stream_tts(tts_provider, text_queue, audio_queue)
+            _simulated_stream_tts(
+                tts_provider,
+                text_queue,
+                audio_queue,
+            )
         )
 
     # 3. 主循环：从 audio_queue 读取音频并 yield
@@ -568,7 +595,14 @@ async def _simulated_stream_tts(
     text_queue: asyncio.Queue[str | None],
     audio_queue: "asyncio.Queue[bytes | tuple[str, bytes] | None]",
 ) -> None:
-    """模拟流式 TTS 分句生成音频"""
+    """模拟流式 TTS 分句生成音频.
+
+    Args:
+        tts_provider: Provider used to synthesize audio files.
+        text_queue: Text chunks to synthesize. ``None`` ends the worker.
+        audio_queue: Synthesized audio bytes output queue.
+    """
+
     try:
         while True:
             text = await text_queue.get()

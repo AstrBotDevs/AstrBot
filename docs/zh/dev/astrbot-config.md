@@ -10,6 +10,8 @@ AstrBot 的配置文件是一个 JSON 格式的文件。AstrBot 会在启动时�
 
 > 在 AstrBot v4.0.0 版本及之后，我们引入了[多配置文件](https://blog.astrbot.app/posts/what-is-changed-in-4.0.0/#%E5%A4%9A%E9%85%8D%E7%BD%AE%E6%96%87%E4%BB%B6)的概念。`data/cmd_config.json` 作为默认配置文件 `default`。其他您在 WebUI 新建的配置文件会存储在 `data/config/` 目录下，以 `abconf_` 开头。
 
+WebUI 中，按机器人或会话使用的行为配置在 `配置文件` 页面管理；全局运行、日志、网络、WebUI 安全和文本转图像服务等配置在 `设置` 页面管理。模型连接和机器人连接分别在 `模型提供商` 和 `机器人` 页面管理。
+
 AstrBot 默认配置如下：
 
 ```jsonc
@@ -75,7 +77,7 @@ AstrBot 默认配置如下：
         "streaming_response": False,
         "show_tool_use_status": False,
         "streaming_segmented": False,
-        "max_agent_step": 30,
+        "max_agent_step": 128,
         "tool_call_timeout": 120,
     },
     "provider_stt_settings": {
@@ -90,7 +92,7 @@ AstrBot 默认配置如下：
     },
     "provider_ltm_settings": {
         "group_icl_enable": False,
-        "group_message_max_cnt": 300,
+        "group_message_max_cnt": 1000,
         "image_caption": False,
         "active_reply": {
             "enable": False,
@@ -116,7 +118,7 @@ AstrBot 默认配置如下：
     "dashboard": {
         "enable": True,
         "username": "astrbot",
-        "password": "77b90590a8945a7d36c963981a307dc9",
+        "password": "<your_password_md5>",
         "jwt_secret": "",
         "host": "0.0.0.0",
         "port": 6185,
@@ -159,7 +161,7 @@ AstrBot 默认配置如下：
 
 #### `platform_settings.unique_session`
 
-是否启用会话隔离。默认为 `false`。启用后，在群组或者频道中，每个人的对话的上下文都是独立的。
+是否启用「隔离对话」。默认为 `false`。启用后，支持隔离的渠道会为每位群成员使用独立上下文；不支持隔离的渠道仍使用原有上下文。`/new` 和 `/reset` 的权限由[指令管理设置](../use/command.md)决定，默认跟随对话是否隔离。
 
 #### `platform_settings.rate_limit`
 
@@ -288,12 +290,13 @@ ID 白名单。填写后，将只处理所填写的 ID 发来的消息事件。�
 
 #### `provider_settings.websearch_provider`
 
-网页搜索提供商类型。默认为 `tavily`。目前支持 `tavily`、`bocha`、`baidu_ai_search`、`brave`。
+网页搜索提供商类型。默认为 `tavily`。目前支持 `tavily`、`bocha`、`baidu_ai_search`、`brave`、`firecrawl`。
 
 - `tavily`：使用 Tavily 搜索引擎。
 - `bocha`：使用 BoCha 搜索引擎。
 - `baidu_ai_search`：使用百度 AI Search（MCP）。
 - `brave`：使用 Brave Search API。
+- `firecrawl`：使用 Firecrawl Search API。
 
 #### `provider_settings.websearch_tavily_key`
 
@@ -306,6 +309,10 @@ BoCha 搜索引擎的 API Key 列表。使用 `bocha` 作为网页搜索提供�
 #### `provider_settings.websearch_brave_key`
 
 Brave 搜索引擎的 API Key 列表。使用 `brave` 作为网页搜索提供商时需要填写。
+
+#### `provider_settings.websearch_firecrawl_key`
+
+Firecrawl 搜索引擎的 API Key 列表。使用 `firecrawl` 作为网页搜索提供商时需要填写。
 
 #### `provider_settings.web_search_link`
 
@@ -361,7 +368,7 @@ Brave 搜索引擎的 API Key 列表。使用 `brave` 作为网页搜索提供�
 
 #### `provider_settings.max_agent_step`
 
-Agent 最大步骤数限制。默认为 `30`。模型的每次工具调用算作一步。
+Agent 最大步骤数限制。默认为 `128`。模型的每次工具调用算作一步。
 
 #### `provider_settings.tool_call_timeout`
 
@@ -407,17 +414,17 @@ Added in `v4.3.5`
 
 #### `provider_ltm_settings.group_icl_enable`
 
-是否启用群聊上下文感知。默认为 `false`。启用后，机器人会记录群聊中的对话内容，以便更好地理解群聊的上下文。
+是否将群聊记录注入模型上下文。默认为 `false`。启用后，机器人会暂存群聊中的对话内容，并在下一次回复时注入模型上下文。
 
 上下文的内容会被放在对话的系统提示词中。
 
 #### `provider_ltm_settings.group_message_max_cnt`
 
-群聊消息的最大记录数量。默认为 `100`。超过此数量的消息将被丢弃。
+注入上下文所保留的最大群聊消息数量。默认为 `1000`。超过此数量的消息将被丢弃。仅在群聊记录注入上下文开启时生效。
 
 #### `provider_ltm_settings.image_caption`
 
-是否记录群聊中的图片，并自动使用图像描述模型生成图片的描述文本。默认为 `false`。此配置项依赖于 `provider_settings.default_image_caption_provider_id` 的配置。请谨慎使用，因为这可能会增加大量的 API 调用和 token 开销。
+是否自动使用群聊图片转述模型生成图片描述并注入上下文。默认为 `false`。仅在群聊记录注入上下文开启时生效。请谨慎使用，因为这可能会增加大量的 API 调用和 token 开销。
 
 #### `provider_ltm_settings.active_reply`
 
@@ -492,11 +499,11 @@ HTTP 代理。如 `http://localhost:7890`。
 
 AstrBot WebUI 配置。
 
-请不要随意修改 `password` 的值。它是一个经过 `md5` 编码的密码。请在控制面板修改密码。
+请不要随意修改 `password` 的值。它是随机初始密码经过 `md5` 编码后的值。首次启动时请在日志中获取初始密码，并在控制面板中修改。
 
 - `enable`: 是否启用 AstrBot WebUI。默认为 `true`。
-- `username`: AstrBot WebUI 的用户名。默认为 `astrbot`。
-- `password`: AstrBot WebUI 的密码。默认为 `astrbot` 的 `md5` 编码值。请勿直接修改，除非您知道自己在做什么。
+- `username`: AstrBot WebUI 的用户名。
+- `password`: AstrBot WebUI 的密码。首次启动会随机生成初始密码（已在日志中打印），这里保存的是该密码的 `md5` 值。请勿直接修改，除非您知道自己在做什么。
 - `jwt_secret`: JWT 的密钥。AstrBot 会在初始化时随机生成。请勿修改，除非您知道自己在做什么。
 - `host`: AstrBot WebUI 监听的地址。默认为 `0.0.0.0`。
 - `port`: AstrBot WebUI 监听的端口。默认为 `6185`。
@@ -543,7 +550,7 @@ AstrBot WebUI 配置。
 
 ### `trace_enable`
 
-是否启用追踪记录。默认为 `false`。启用后，AstrBot 会记录运行追踪信息，可以在管理面板的 Trace 页面查看。
+是否启用追踪记录。默认为 `false`。启用后，AstrBot 会记录运行追踪信息，可以在管理面板的 `数据与日志 → 追踪` 页面查看。
 
 ### `pip_install_arg`
 

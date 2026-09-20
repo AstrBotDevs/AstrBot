@@ -1,11 +1,14 @@
 import asyncio
 import importlib
 import sys
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 import astrbot.api.message_components as Comp
+from astrbot.api.platform import Group
+from astrbot.core.platform.register import unregister_platform_adapters_by_module
 from tests.fixtures.helpers import (
     NoopAwaitable,
     create_mock_file,
@@ -44,6 +47,8 @@ def _load_telegram_module(module_name: str):
         return module
 
     with patch.dict(sys.modules, _build_telegram_patched_modules()):
+        if module_name == "astrbot.core.platform.sources.telegram.tg_adapter":
+            unregister_platform_adapters_by_module(module_name)
         sys.modules.pop(module_name, None)
         module = importlib.import_module(module_name)
 
@@ -77,6 +82,417 @@ def _build_context() -> MagicMock:
     context.bot.username = "test_bot"
     context.bot.id = 12345678
     return context
+
+
+@pytest.mark.asyncio
+async def test_telegram_topic_with_missing_name_falls_back_to_group_name():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    update = create_mock_update(
+        chat_type="supergroup",
+        chat_id=-100123,
+        message_thread_id=42,
+        is_topic_message=True,
+    )
+    update.message.chat.title = "Engineering"
+
+    result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    assert result.group is not None
+    assert result.group.group_id == "-100123#42"
+    assert result.group.group_name == "Engineering"
+
+
+@pytest.mark.asyncio
+async def test_telegram_regular_supergroup_message_uses_group_name():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    update = create_mock_update(chat_type="supergroup", chat_id=-100123)
+    update.message.chat.title = "Engineering"
+    update.message.chat.is_forum = False
+
+    result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    assert result.group is not None
+    assert result.group.group_id == "-100123"
+    assert result.group.group_name == "Engineering"
+
+
+@pytest.mark.asyncio
+async def test_telegram_forum_topic_name_is_learned_and_updated_from_events():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    created_update = create_mock_update(
+        chat_type="supergroup",
+        chat_id=-100123,
+        message_thread_id=42,
+        is_topic_message=True,
+    )
+    created_update.message.chat.title = "Engineering"
+    created_update.message.chat.is_forum = True
+    created_update.message.forum_topic_created = SimpleNamespace(name="Backend")
+
+    created = await adapter.convert_message(created_update, _build_context())
+
+    assert created is not None
+    assert created.group is not None
+    assert created.group.group_name == "Engineering-Backend"
+
+    regular_update = create_mock_update(
+        chat_type="supergroup",
+        chat_id=-100123,
+        message_thread_id=42,
+        is_topic_message=True,
+    )
+    regular_update.message.chat.title = "Engineering"
+    regular_update.message.chat.is_forum = True
+
+    regular = await adapter.convert_message(regular_update, _build_context())
+
+    assert regular is not None
+    assert regular.group is not None
+    assert regular.group.group_name == "Engineering-Backend"
+
+    empty_edit_update = create_mock_update(
+        chat_type="supergroup",
+        chat_id=-100123,
+        message_thread_id=42,
+        is_topic_message=True,
+    )
+    empty_edit_update.message.chat.title = "Engineering"
+    empty_edit_update.message.chat.is_forum = True
+    empty_edit_update.message.forum_topic_edited = SimpleNamespace(name="   ")
+
+    empty_edit = await adapter.convert_message(empty_edit_update, _build_context())
+
+    assert empty_edit is not None
+    assert empty_edit.group is not None
+    assert empty_edit.group.group_name == "Engineering-Backend"
+
+    edited_update = create_mock_update(
+        chat_type="supergroup",
+        chat_id=-100123,
+        message_thread_id=42,
+        is_topic_message=True,
+    )
+    edited_update.message.chat.title = "Engineering"
+    edited_update.message.chat.is_forum = True
+    edited_update.message.forum_topic_edited = SimpleNamespace(name="Platform")
+
+    edited = await adapter.convert_message(edited_update, _build_context())
+
+    assert edited is not None
+    assert edited.group is not None
+    assert edited.group.group_name == "Engineering-Platform"
+
+
+@pytest.mark.asyncio
+async def test_telegram_forum_topic_cache_evicts_oldest_entry():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    assert TelegramPlatformAdapter._FORUM_TOPIC_NAME_CACHE_MAX_SIZE == 1000
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    adapter._FORUM_TOPIC_NAME_CACHE_MAX_SIZE = 2
+
+    for thread_id, topic_name in [(41, "One"), (42, "Two"), (43, "Three")]:
+        update = create_mock_update(
+            chat_type="supergroup",
+            chat_id=-100123,
+            message_thread_id=thread_id,
+            is_topic_message=True,
+        )
+        update.message.chat.title = "Engineering"
+        update.message.chat.is_forum = True
+        update.message.forum_topic_created = SimpleNamespace(name=topic_name)
+        await adapter.convert_message(update, _build_context())
+
+    assert list(adapter._forum_topic_names) == [("-100123", 42), ("-100123", 43)]
+
+
+@pytest.mark.asyncio
+async def test_telegram_forum_topic_name_is_read_from_topic_root_reply():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    topic_root = create_mock_update(
+        chat_type="supergroup",
+        chat_id=-100123,
+        message_id=42,
+    ).message
+    topic_root.forum_topic_created = SimpleNamespace(name="Backend")
+    update = create_mock_update(
+        chat_type="supergroup",
+        chat_id=-100123,
+        message_thread_id=42,
+        is_topic_message=True,
+        reply_to_message=topic_root,
+    )
+    update.message.chat.title = "Engineering"
+    update.message.chat.is_forum = True
+
+    result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    assert result.group is not None
+    assert result.group.group_name == "Engineering-Backend"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("message_thread_id", "is_topic_message"),
+    [(None, False), (1, True)],
+)
+async def test_telegram_general_forum_topic_without_known_name_uses_group_name(
+    message_thread_id, is_topic_message
+):
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    update = create_mock_update(
+        chat_type="supergroup",
+        chat_id=-100123,
+        message_thread_id=message_thread_id,
+        is_topic_message=is_topic_message,
+    )
+    update.message.chat.title = "Engineering"
+    update.message.chat.is_forum = True
+
+    result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    assert result.group is not None
+    assert result.group.group_id == "-100123"
+    assert result.group.group_name == "Engineering"
+
+
+@pytest.mark.asyncio
+async def test_telegram_general_forum_topic_uses_observed_custom_name():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    edited_update = create_mock_update(chat_type="supergroup", chat_id=-100123)
+    edited_update.message.chat.title = "Engineering"
+    edited_update.message.chat.is_forum = True
+    edited_update.message.forum_topic_edited = SimpleNamespace(name="Lobby")
+
+    edited = await adapter.convert_message(edited_update, _build_context())
+
+    assert edited is not None
+    assert edited.group is not None
+    assert edited.group.group_name == "Engineering-Lobby"
+
+    regular_update = create_mock_update(chat_type="supergroup", chat_id=-100123)
+    regular_update.message.chat.title = "Engineering"
+    regular_update.message.chat.is_forum = True
+
+    regular = await adapter.convert_message(regular_update, _build_context())
+
+    assert regular is not None
+    assert regular.group is not None
+    assert regular.group.group_name == "Engineering-Lobby"
+
+
+@pytest.mark.asyncio
+async def test_telegram_get_group_keeps_forum_topic_name():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    TelegramPlatformEvent = _load_telegram_platform_event()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    update = create_mock_update(
+        chat_type="supergroup",
+        chat_id=-100123,
+        message_thread_id=42,
+        is_topic_message=True,
+    )
+    update.message.chat.title = "Engineering"
+    update.message.chat.is_forum = True
+    update.message.forum_topic_created = SimpleNamespace(name="Backend")
+    message = await adapter.convert_message(update, _build_context())
+    assert message is not None
+
+    event = TelegramPlatformEvent.__new__(TelegramPlatformEvent)
+    event.message_obj = message
+    event.client = SimpleNamespace(
+        get_chat=AsyncMock(
+            return_value=SimpleNamespace(title="Engineering 2", photo=None)
+        ),
+        get_chat_member_count=AsyncMock(return_value=24),
+        get_chat_administrators=AsyncMock(return_value=[]),
+    )
+
+    group = await event.get_group()
+
+    assert group is not None
+    assert group.group_name == "Engineering 2-Backend"
+
+
+@pytest.mark.asyncio
+async def test_telegram_get_group_enriches_available_metadata():
+    TelegramPlatformEvent = _load_telegram_platform_event()
+    client = SimpleNamespace(
+        get_chat=AsyncMock(
+            return_value=SimpleNamespace(
+                title="Engineering",
+                photo=SimpleNamespace(big_file_id="photo-1"),
+            )
+        ),
+        get_file=AsyncMock(
+            return_value=SimpleNamespace(
+                file_path="https://api.telegram.org/file/group.jpg"
+            )
+        ),
+        get_chat_member_count=AsyncMock(return_value=24),
+        get_chat_administrators=AsyncMock(
+            return_value=[
+                SimpleNamespace(status="creator", user=SimpleNamespace(id=1)),
+                SimpleNamespace(status="administrator", user=SimpleNamespace(id=2)),
+            ]
+        ),
+    )
+    event = TelegramPlatformEvent.__new__(TelegramPlatformEvent)
+    event.message_obj = SimpleNamespace(
+        group=Group(group_id="-100123#42", group_name="Cached title"),
+        group_id="-100123#42",
+    )
+    event.client = client
+
+    group = await event.get_group()
+
+    assert group is not None
+    assert group.group_id == "-100123#42"
+    assert group.group_name == "Engineering"
+    assert group.group_avatar == "https://api.telegram.org/file/group.jpg"
+    assert group.member_count == 24
+    assert group.group_owner == "1"
+    assert group.group_admins == ["2"]
+    assert group.members is None
+    client.get_chat.assert_awaited_once_with(chat_id=-100123)
+    client.get_chat_member_count.assert_awaited_once_with(chat_id=-100123)
+    client.get_chat_administrators.assert_awaited_once_with(chat_id=-100123)
+
+
+@pytest.mark.asyncio
+async def test_telegram_get_group_keeps_basic_metadata_when_apis_fail():
+    TelegramPlatformEvent = _load_telegram_platform_event()
+    client = SimpleNamespace(
+        get_chat=AsyncMock(side_effect=RuntimeError("chat unavailable")),
+        get_chat_member_count=AsyncMock(side_effect=RuntimeError("count unavailable")),
+        get_chat_administrators=AsyncMock(
+            side_effect=RuntimeError("administrators unavailable")
+        ),
+    )
+    event = TelegramPlatformEvent.__new__(TelegramPlatformEvent)
+    event.message_obj = SimpleNamespace(
+        group=Group(group_id="-100123#42", group_name="Cached title"),
+        group_id="-100123#42",
+    )
+    event.client = client
+
+    group = await event.get_group()
+
+    assert group == Group(group_id="-100123#42", group_name="Cached title")
+
+
+@pytest.mark.asyncio
+async def test_telegram_partial_quote_uses_exact_quote_text():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    original_text = "😀 prefix target suffix"
+    quoted_text = "target"
+    reply_update = create_mock_update(
+        message_text=original_text,
+        message_id=42,
+        user_id=1001,
+        username="original_sender",
+    )
+    quote = MagicMock(text=quoted_text, position=10)
+    update = create_mock_update(
+        message_text="What does this mean?",
+        reply_to_message=reply_update.message,
+        quote=quote,
+    )
+
+    result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    reply = result.message[0]
+    assert isinstance(reply, Comp.Reply)
+    assert reply.id == "42"
+    assert reply.message_str == quoted_text
+    assert reply.text == quoted_text
+    assert reply.chain is not None
+    assert len(reply.chain) == 1
+    assert isinstance(reply.chain[0], Comp.Plain)
+    assert reply.chain[0].text == quoted_text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("quote_text", [None, ""])
+async def test_telegram_reply_without_quote_text_uses_full_message(quote_text):
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    original_text = "Use the complete replied message"
+    reply_update = create_mock_update(
+        message_text=original_text,
+        message_id=43,
+        user_id=1002,
+        username="original_sender",
+    )
+    quote = MagicMock(text=quote_text) if quote_text is not None else None
+    update = create_mock_update(
+        message_text="Follow-up question",
+        reply_to_message=reply_update.message,
+        quote=quote,
+    )
+
+    result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    reply = result.message[0]
+    assert isinstance(reply, Comp.Reply)
+    assert reply.message_str == original_text
+    assert reply.text == original_text
+    assert reply.chain is not None
+    assert len(reply.chain) == 1
+    assert isinstance(reply.chain[0], Comp.Plain)
+    assert reply.chain[0].text == original_text
 
 
 @pytest.mark.asyncio
@@ -139,6 +555,101 @@ async def test_telegram_video_caption_populates_message_text_and_plain():
     )
 
 
+_STICKER_URL = "https://api.telegram.org/file/test/sticker_1.webp"
+_ANIMATED_URL = "https://api.telegram.org/file/test/sticker_1.tgs"
+_VIDEO_URL = "https://api.telegram.org/file/test/sticker_1.webm"
+_THUMBNAIL_URL = "https://api.telegram.org/file/test/thumb_1.webp"
+
+
+def _make_sticker(
+    file_path: str,
+    *,
+    is_animated: bool = False,
+    is_video: bool = False,
+    thumbnail_path: str | None = None,
+):
+    sticker = create_mock_file(file_path)
+    sticker.emoji = "🙄"
+    sticker.is_animated = is_animated
+    sticker.is_video = is_video
+    sticker.thumbnail = (
+        create_mock_file(thumbnail_path) if thumbnail_path is not None else None
+    )
+    return sticker
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("file_path", "flags", "expected_url"),
+    [
+        (_STICKER_URL, {}, _STICKER_URL),
+        (_ANIMATED_URL, {"is_animated": True}, _THUMBNAIL_URL),
+        (_VIDEO_URL, {"is_video": True}, _THUMBNAIL_URL),
+    ],
+    ids=["static", "animated", "video"],
+)
+async def test_telegram_sticker_uses_thumbnail_only_when_animated(
+    file_path, flags, expected_url
+):
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    sticker = _make_sticker(file_path, thumbnail_path=_THUMBNAIL_URL, **flags)
+    update = create_mock_update(message_text=None, sticker=sticker)
+
+    result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    images = [c for c in result.message if isinstance(c, Comp.Image)]
+    assert len(images) == 1
+    assert images[0].url == expected_url
+    assert result.message_str == "Sticker: 🙄"
+
+
+@pytest.mark.asyncio
+async def test_telegram_animated_sticker_without_thumbnail_skips_image():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    sticker = _make_sticker(_ANIMATED_URL, is_animated=True, thumbnail_path=None)
+    update = create_mock_update(message_text=None, sticker=sticker)
+
+    result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    assert not any(isinstance(c, Comp.Image) for c in result.message)
+    assert result.message_str == "Sticker: 🙄"
+
+
+@pytest.mark.asyncio
+async def test_telegram_video_note_becomes_video_component():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    file_path = "https://api.telegram.org/file/test/note.mp4"
+    update = create_mock_update(
+        message_text=None,
+        video_note=create_mock_file(file_path),
+    )
+
+    result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    assert len(result.message) == 1
+    assert isinstance(result.message[0], Comp.Video)
+    assert result.message[0].file == file_path
+    assert result.message[0].path == file_path
+
+
 @pytest.mark.asyncio
 async def test_telegram_voice_message_creates_record_component(tmp_path):
     TelegramPlatformAdapter = _load_telegram_adapter()
@@ -155,13 +666,18 @@ async def test_telegram_voice_message_creates_record_component(tmp_path):
     wav_path = tmp_path / "voice.oga.wav"
     convert_message_globals = adapter.convert_message.__func__.__globals__
 
-    with patch.dict(
-        convert_message_globals,
-        {
-            "get_astrbot_temp_path": MagicMock(return_value=str(tmp_path)),
-            "download_file": AsyncMock(),
-            "convert_audio_to_wav": AsyncMock(return_value=str(wav_path)),
-        },
+    with (
+        patch.dict(
+            convert_message_globals,
+            {
+                "get_astrbot_temp_path": MagicMock(return_value=str(tmp_path)),
+                "download_file": AsyncMock(),
+            },
+        ),
+        patch(
+            "astrbot.core.utils.media_utils.ensure_wav",
+            AsyncMock(return_value=str(wav_path)),
+        ),
     ):
         result = await adapter.convert_message(update, _build_context())
 
@@ -171,6 +687,49 @@ async def test_telegram_voice_message_creates_record_component(tmp_path):
     assert result.message[0].file == str(wav_path)
     assert result.message[0].path == str(wav_path)
     assert result.message[0].url == str(wav_path)
+
+
+@pytest.mark.asyncio
+async def test_telegram_audio_caption_populates_message_text_and_plain(tmp_path):
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    audio = create_mock_file("https://api.telegram.org/file/test/song.mp3")
+    update = create_mock_update(
+        message_text=None,
+        audio=audio,
+        caption="这首歌是什么",
+    )
+    wav_path = tmp_path / "song.mp3.wav"
+    convert_message_globals = adapter.convert_message.__func__.__globals__
+
+    with (
+        patch.dict(
+            convert_message_globals,
+            {
+                "get_astrbot_temp_path": MagicMock(return_value=str(tmp_path)),
+                "download_file": AsyncMock(),
+            },
+        ),
+        patch(
+            "astrbot.core.utils.media_utils.ensure_wav",
+            AsyncMock(return_value=str(wav_path)),
+        ),
+    ):
+        result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    assert result.message_str == "这首歌是什么"
+    assert len(result.message) == 2
+    assert isinstance(result.message[0], Comp.Record)
+    assert result.message[0].file == str(wav_path)
+    assert result.message[0].path == str(wav_path)
+    assert result.message[0].url == str(wav_path)
+    assert isinstance(result.message[1], Comp.Plain)
+    assert result.message[1].text == "这首歌是什么"
 
 
 @pytest.mark.asyncio

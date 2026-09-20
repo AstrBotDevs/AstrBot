@@ -4,9 +4,10 @@
 """
 
 import shutil
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 from astrbot.core.message.components import BaseMessageComponent
@@ -97,8 +98,11 @@ def create_mock_update(
     video: MagicMock | None = None,
     document: MagicMock | None = None,
     voice: MagicMock | None = None,
+    audio: MagicMock | None = None,
     sticker: MagicMock | None = None,
+    video_note: MagicMock | None = None,
     reply_to_message: MagicMock | None = None,
+    quote: MagicMock | None = None,
     caption: str | None = None,
     entities: list | None = None,
     caption_entities: list | None = None,
@@ -119,8 +123,11 @@ def create_mock_update(
         video: 视频对象
         document: 文档对象
         voice: 语音对象
+        audio: 音频文件对象
         sticker: 贴纸对象
+        video_note: 圆形视频消息对象
         reply_to_message: 回复的消息
+        quote: 回复消息中的部分引用
         caption: 说明文字
         entities: 实体列表
         caption_entities: 说明实体列表
@@ -155,8 +162,11 @@ def create_mock_update(
     message.video = video
     message.document = document
     message.voice = voice
+    message.audio = audio
     message.sticker = sticker
+    message.video_note = video_note
     message.reply_to_message = reply_to_message
+    message.quote = quote
     message.caption = caption
     message.entities = entities
     message.caption_entities = caption_entities
@@ -424,12 +434,15 @@ class MockPluginBuilder:
     def create(
         self,
         plugin_config: str | MockPluginConfig | None = None,
+        *,
+        target_dir: Path | None = None,
         **kwargs,
     ) -> Path:
         """创建模拟插件。
 
         Args:
             plugin_config: 插件名称字符串、MockPluginConfig 对象或 None
+            target_dir: Optional staging directory instead of the installed path.
             **kwargs: 如果 plugin_config 是字符串或 None，这些参数用于构建 MockPluginConfig
 
         Returns:
@@ -446,7 +459,11 @@ class MockPluginBuilder:
             raise TypeError(f"Invalid plugin_config type: {type(plugin_config)}")
 
         # 创建插件目录
-        plugin_dir = self.plugin_store_path / config.name
+        plugin_dir = (
+            target_dir
+            if target_dir is not None
+            else self.plugin_store_path / config.name
+        )
         plugin_dir.mkdir(parents=True, exist_ok=True)
 
         # 创建 metadata.yaml
@@ -538,8 +555,25 @@ def create_mock_updater_install(
         Callable: 异步函数，可用于 monkeypatch.setattr
     """
 
-    async def mock_install(repo_url: str, proxy: str = "") -> str:
-        """Mock updater.install 方法。"""
+    async def mock_install(
+        repo_url: str,
+        proxy: str = "",
+        download_url: str = "",
+        *,
+        target_dir: Path | None = None,
+    ) -> str:
+        """Create a plugin at the updater's requested destination.
+
+        Args:
+            repo_url: Repository URL used for plugin identity and metadata.
+            proxy: Unused download proxy.
+            download_url: Unused archive URL.
+            target_dir: Optional staging directory supplied by the manager.
+
+        Returns:
+            Path to the prepared plugin directory.
+        """
+        del proxy, download_url
         # 查找插件名称
         plugin_name = None
         if repo_to_plugin:
@@ -553,7 +587,7 @@ def create_mock_updater_install(
 
         # 创建插件目录
         config = MockPluginConfig(name=plugin_name, repo=repo_url)
-        plugin_dir = plugin_builder.create(config)
+        plugin_dir = plugin_builder.create(config, target_dir=target_dir)
         return str(plugin_dir)
 
     return mock_install
@@ -573,8 +607,14 @@ def create_mock_updater_update(
         Callable: 异步函数，可用于 monkeypatch.setattr
     """
 
-    async def mock_update(plugin, proxy: str = "") -> None:
+    async def mock_update(
+        plugin,
+        proxy: str = "",
+        download_url: str = "",
+        repo_url: str = "",
+    ) -> None:
         """Mock updater.update 方法。"""
+        del proxy, download_url, repo_url
         plugin_dir = plugin_builder.get_plugin_path(plugin.name)
 
         # 创建更新标记文件

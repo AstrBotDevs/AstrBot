@@ -1,3 +1,8 @@
+from .cua import (
+    CuaKeyboardTypeTool,
+    CuaMouseClickTool,
+    CuaScreenshotTool,
+)
 from .fs import (
     FileDownloadTool,
     FileEditTool,
@@ -7,7 +12,7 @@ from .fs import (
     GrepTool,
 )
 from .python import LocalPythonTool, PythonTool
-from .shell import ExecuteShellTool
+from .shell import ExecuteShellTool, LocalExecuteShellTool, ShellSessionTool
 from .shipyard_neo import (
     AnnotateExecutionTool,
     BrowserBatchExecTool,
@@ -32,6 +37,9 @@ __all__ = [
     "BrowserExecTool",
     "CreateSkillCandidateTool",
     "CreateSkillPayloadTool",
+    "CuaKeyboardTypeTool",
+    "CuaMouseClickTool",
+    "CuaScreenshotTool",
     "EvaluateSkillCandidateTool",
     "ExecuteShellTool",
     "FileDownloadTool",
@@ -44,11 +52,13 @@ __all__ = [
     "GrepTool",
     "ListSkillCandidatesTool",
     "ListSkillReleasesTool",
+    "LocalExecuteShellTool",
     "LocalPythonTool",
     "PromoteSkillCandidateTool",
     "PythonTool",
     "RollbackSkillReleaseTool",
     "RunBrowserSkillTool",
+    "ShellSessionTool",
     "SyncSkillReleaseTool",
     "normalize_umo_for_workspace",
     "check_admin_permission",

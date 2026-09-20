@@ -4,23 +4,61 @@
   "adapters": "平台适配器",
   "addAdapter": "创建机器人",
   "emptyText": "暂无平台适配器，点击 创建机器人 添加",
+  "workspace": {
+    "listTitle": "机器人",
+    "selectHint": "选择一个机器人进行配置",
+    "empty": "还没有机器人，创建后即可开始配置。",
+    "enabled": "启用机器人",
+    "disabled": "已停用",
+    "delete": "删除机器人",
+    "save": "保存更改",
+    "configTitle": "接入设置",
+    "configDescription": "配置机器人与消息平台的连接方式。",
+    "routes": {
+      "title": "会话配置",
+      "description": "让不同会话使用不同的配置文件。没有单独绑定的会话会使用下方的默认配置。",
+      "loadFailed": "会话配置加载失败。接入设置仍可编辑，但本次不会修改会话配置。",
+      "defaultTitle": "此机器人的默认配置",
+      "defaultDescription": "所有没有单独设置的会话都会使用它。",
+      "systemDefault": "系统默认配置（default）",
+      "bindTitle": "为特定会话选择配置",
+      "bindDescription": "先选择一个已有会话，再指定它要使用的配置文件。",
+      "sessionLabel": "选择会话",
+      "configLabel": "配置文件",
+      "bind": "添加绑定",
+      "noSessions": "暂无会话。请先在对应的消息平台与这个机器人产生一次对话。",
+      "boundTitle": "已绑定的会话",
+      "boundCount": "{count} 个",
+      "remove": "移除绑定",
+      "noBindings": "暂未单独绑定会话，所有会话将使用默认配置。",
+      "advanced": "高级路由规则",
+      "advancedDescription": "使用 UMO pattern 批量匹配会话。规则按从上到下的顺序匹配，适合熟悉 AstrBot 会话来源格式的用户。",
+      "patternLabel": "UMO pattern",
+      "patternPlaceholder": "例如 bot-id:GroupMessage:*",
+      "addPattern": "添加规则",
+      "patternRequired": "请输入 UMO pattern",
+      "patternInvalid": "格式应为 平台:消息类型:会话 ID",
+      "patternPlatformMismatch": "规则的平台部分必须是当前机器人的 ID",
+      "duplicatePattern": "存在重复的配置路由，请检查后重试。",
+      "sessionTypes": {
+        "group": "群聊",
+        "friend": "私聊",
+        "other": "会话"
+      }
+    }
+  },
   "viewWebhook": "查看 Webhook 链接",
   "webhookCopied": "Webhook URL 已复制到剪贴板",
   "webhookCopyFailed": "复制失败，请手动复制",
   "webhookDialog": {
     "title": "Webhook 回调地址",
-    "description": "回调地址如下，请确保网络环境可以公网访问。也可以在日志中查看回调地址信息。建议填写 配置文件 -> 系统 中的「对外可达的回调接口地址」配置项。",
+    "description": "回调地址如下，请确保网络环境可以公网访问。也可以在日志中查看回调地址信息。建议填写 设置 -> 常规 中的「对外可达的回调接口地址」配置项。",
     "close": "关闭"
   },
   "details": {
     "adapterType": "适配器类型",
     "token": "Token",
     "description": "描述"
-  },
-  "logs": {
-    "title": "平台日志",
-    "expand": "展开",
-    "collapse": "收起"
   },
   "dialog": {
     "add": "新增",
@@ -49,6 +87,12 @@
     "step1Title": "选择消息平台类别",
     "step1Hint": "想把机器人接入到哪里？如 QQ、企业微信、飞书、Discord、Telegram 等。",
     "platformTypeLabel": "消息平台类别",
+    "platformTooltips": {
+      "qq_official": "QQ 官方机器人平台，支持私聊、拉入 QQ 群聊（只需要群主身份），支持 QQ 内 Markdown 渲染。一键扫码创建。",
+      "qq_official_webhook": "QQ 官方机器人平台，支持私聊、拉入 QQ 群聊（只需要群主身份），支持 QQ 内 Markdown 渲染。一键扫码创建。该 Webhook 方法需要您的环境拥有公网 IP 地址，因此推荐使用上面的 WebSocket 方法。",
+      "aiocqhttp": "知名的即时聊天软件协议。可接入 NapCat 等第三方服务来对接即时聊天软件。",
+      "weixin_oc": "微信官方提供的微信机器人接入方式，仅支持私聊。一键扫码创建。"
+    },
     "configFileTitle": "配置文件",
     "optional": "可选",
     "configHint": "想如何配置机器人？配置文件包含了聊天模型、人格、知识库、插件范围等丰富的机器人配置项。",
@@ -64,6 +108,12 @@
     "editMode": "编辑",
     "noRouteRules": "该平台暂无路由规则，将使用默认配置文件",
     "sessionIdPlaceholder": "会话ID或*",
+    "routeSource": {
+      "selectPlaceholder": "选择会话来源",
+      "noData": "暂无与该机器人的统一会话来源，在对应的消息平台与该机器人产生一次对话后才会显示在这里。",
+      "switchToKnown": "切换为从已有来源选择",
+      "switchToManual": "切换为手动输入"
+    },
     "allSessions": "全部会话",
     "configMissing": "配置文件不存在",
     "routeHint": "*消息下发时，根据会话来源按顺序从上到下匹配首个符合条件的配置文件。使用 * 表示匹配所有。使用 /sid 指令获取会话 ID。全部不匹配时将使用默认配置文件。",
@@ -130,6 +180,72 @@
     "waiting": "等待二维码",
     "close": "关闭"
   },
+  "registrationAction": {
+    "lark": {
+      "title": "一键扫码创建",
+      "show": "一键扫码创建",
+      "scanTitle": "请使用手机飞书扫码",
+      "feishu": "飞书国内版",
+      "lark": "Lark 海外版"
+    },
+    "weixinOc": {
+      "title": "个人微信扫码登录",
+      "scanTitle": "请使用手机微信扫码",
+      "created": "登录成功",
+      "status": {
+        "idle": "未开始",
+        "starting": "正在获取二维码",
+        "pending": "等待扫码确认",
+        "created": "登录成功，记得点击下方保存按钮！",
+        "denied": "用户取消",
+        "expired": "已过期",
+        "error": "登录失败"
+      }
+    },
+    "dingtalk": {
+      "title": "钉钉扫码创建",
+      "scanTitle": "请使用手机钉钉扫码",
+      "created": "创建成功"
+    },
+    "qqOfficial": {
+      "title": "QQ 官方机器人扫码绑定",
+      "scanTitle": "请使用手机 QQ 扫码",
+      "created": "绑定成功",
+      "status": {
+        "idle": "未开始",
+        "starting": "正在获取二维码",
+        "pending": "等待扫码确认",
+        "created": "绑定成功，记得点击下方保存按钮！",
+        "denied": "用户取消",
+        "expired": "已过期",
+        "error": "绑定失败"
+      }
+    },
+    "start": "开始创建",
+    "created": "创建成功",
+    "startFailed": "发起扫码创建失败",
+    "pollFailed": "获取扫码创建状态失败",
+    "platformIdLabel": "机器人 ID",
+    "platformIdRequired": "机器人 ID 不能为空",
+    "platformIdInvalid": "机器人 ID 不能包含空格、':' 或 '!'",
+    "mode": {
+      "title": "选择创建方式",
+      "scan": "扫码一键创建",
+      "manual": "手动创建",
+      "larkManual": "手动创建（支持企业自部署飞书平台）"
+    },
+    "scanTitle": "请使用手机飞书扫码",
+    "status": {
+      "idle": "未开始",
+      "starting": "正在发起",
+      "pending": "等待扫码确认",
+      "slow_down": "轮询降速",
+      "created": "创建成功，记得点击下方保存按钮！",
+      "denied": "用户取消",
+      "expired": "已过期",
+      "error": "创建失败"
+    }
+  },
   "errorDialog": {
     "title": "错误详情",
     "platformId": "平台 ID",
@@ -139,4 +255,4 @@
     "traceback": "错误堆栈",
     "close": "关闭"
   }
-} 
+}

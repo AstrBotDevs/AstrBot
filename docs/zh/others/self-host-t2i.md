@@ -18,10 +18,8 @@ https://t2i.rcfortress.site/text2img
 docker run -itd -p 8999:8999 soulter/astrbot-t2i-service:latest
 ```
 
-在部署完成后，前往 AstrBot 仪表盘 -> 配置文件 -> 系统，修改 `文本转图像服务 API 地址` 为你部署好的 url（如下图所示）
+部署完成后，前往 AstrBot 仪表盘 -> 设置 -> 外观。在“文本转图像”中，将 `文本转图像策略` 设为 `remote`；随后会显示 `文本转图像服务 API 地址`，将其修改为你部署好的 URL。
 
->如果你是使用本文档的 Docker教程 部署的 AstrBot ，url应为  `http://文转图服务容器名:8999`。
+> 如果你是使用本文档的 Docker 教程部署的 AstrBot，URL 应为 `http://文转图服务容器名:8999`。
 
->如果部署在与 AstrBot 相同的机器上，url 应为 `http://localhost:8999`。
-
-<img width="591" height="228" alt="image" src="https://github.com/user-attachments/assets/f3564b46-11a4-402a-85e3-5f44a82713fe" />
+> 如果部署在与 AstrBot 相同的机器上，URL 应为 `http://localhost:8999`。

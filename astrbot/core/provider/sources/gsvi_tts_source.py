@@ -1,9 +1,9 @@
-import uuid
 from pathlib import Path
 
 import aiohttp
 
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.datetime_utils import generate_timestamp_id
 
 from ..entities import ProviderType
 from ..provider import TTSProvider
@@ -33,7 +33,7 @@ class ProviderGSVITTS(TTSProvider):
 
     async def get_audio(self, text: str) -> str:
         temp_dir = get_astrbot_temp_path()
-        path = Path(temp_dir) / f"gsvi_tts_{uuid.uuid4()}.wav"
+        path = Path(temp_dir) / f"gsvi_tts_{generate_timestamp_id()}.wav"
         url = f"{self.api_base}/infer_single"
 
         headers = {"Content-Type": "application/json"}
@@ -50,7 +50,7 @@ class ProviderGSVITTS(TTSProvider):
             "text_lang": self.text_lang,
         }
 
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(headers=self.request_headers) as session:
             async with session.post(url, json=data, headers=headers) as response:
                 if response.status == 200:
                     resp_json = await response.json()

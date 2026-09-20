@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Community Channels
+    url: https://docs.astrbot.app/en/community.html
+    about: Join our community, share your experience, and get support.
+  - name: 社区渠道
+    url: https://docs.astrbot.app/community.html
+    about: 加入我们的社区，与其他用户交流经验、获取支持。

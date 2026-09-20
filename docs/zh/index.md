@@ -4,7 +4,7 @@ layout: home
 
 hero:
   name: >-
-    <a href="https://trendshift.io/repositories/12875" target="_blank"><img src="https://trendshift.io/api/badge/repositories/12875" alt="Soulter%2FAstrBot | Trendshift" style="width: 250px; height: 55px; margin-bottom: 16px;" width="250" height="55"/></a>
+    <a href="https://trendshift.io/repositories/21369" target="_blank"><img src="https://trendshift.io/api/badge/repositories/21369" alt="AstrBotDevs%2FAstrBot | Trendshift" style="width: 250px; height: 55px; margin-bottom: 16px;" width="250" height="55"/></a>
   text: "Agentic AI 助手，服务个人与群聊"
   tagline: 连接 IM / 1000+ 插件扩展 / 通用 Agent 能力编排
   actions:

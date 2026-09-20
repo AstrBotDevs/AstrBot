@@ -1,7 +1,7 @@
 <template>
   <v-dialog v-model="dialog" max-width="500px" persistent>
     <v-card>
-      <v-card-title class="text-h5">
+      <v-card-title class="text-h3 pa-4 pb-0 pl-6">
         配置 Tavily API Key
       </v-card-title>
       <v-card-text>
@@ -24,7 +24,7 @@
         <v-btn variant="text" @click="closeDialog" :disabled="saving">
           取消
         </v-btn>
-        <v-btn color="primary" variant="elevated" @click="saveKey" :loading="saving">
+        <v-btn color="primary" variant="tonal" @click="saveKey" :loading="saving">
           保存
         </v-btn>
       </v-card-actions>
@@ -34,7 +34,7 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import axios from 'axios'
+import { configProfileApi } from '@/api/v1'
 
 const props = defineProps<{
   modelValue: boolean
@@ -70,15 +70,13 @@ const saveKey = async () => {
   saving.value = true
   try {
     // 1. 获取当前配置
-    const configResponse = await axios.get('/api/config/abconf', {
-      params: { id: 'default' }
-    })
+    const configResponse = await configProfileApi.get('default')
 
     if (configResponse.data.status !== 'ok') {
       throw new Error('获取当前配置失败')
     }
 
-    const currentConfig = configResponse.data.data.config
+    const currentConfig = ((configResponse.data.data as any).config || {}) as any
 
     // 2. 更新配置
     if (!currentConfig.provider_settings) {
@@ -89,10 +87,7 @@ const saveKey = async () => {
     currentConfig.provider_settings.websearch_provider = 'tavily'
 
     // 3. 保存整个配置
-    const saveResponse = await axios.post('/api/config/astrbot/update', {
-      conf_id: 'default',
-      config: currentConfig
-    })
+    const saveResponse = await configProfileApi.update('default', currentConfig)
 
     if (saveResponse.data.status === 'ok') {
       emit('success')

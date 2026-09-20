@@ -1,7 +1,7 @@
 <template>
     <v-dialog v-model="isOpen" persistent max-width="700" scrollable>
         <v-card>
-            <v-card-title class="d-flex align-center">
+            <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex align-center">
                 <v-icon class="mr-2">mdi-backup-restore</v-icon>
                 {{ t('features.settings.backup.dialog.title') }}
             </v-card-title>
@@ -36,7 +36,7 @@
                                 </template>
                                 {{ t('features.settings.backup.export.includes') }}
                             </v-alert>
-                            <v-btn color="primary" size="large" @click="startExport" :loading="exportStatus === 'processing'">
+                            <v-btn color="primary" variant="tonal" size="large" @click="startExport" :loading="exportStatus === 'processing'">
                                 <v-icon class="mr-2">mdi-export</v-icon>
                                 {{ t('features.settings.backup.export.button') }}
                             </v-btn>
@@ -53,7 +53,7 @@
                             <v-icon size="64" color="success" class="mb-4">mdi-check-circle</v-icon>
                             <h3 class="mb-4">{{ t('features.settings.backup.export.completed') }}</h3>
                             <p class="mb-4">{{ exportResult?.filename }}</p>
-                            <v-btn color="primary" @click="downloadBackup(exportResult?.filename)" class="mr-2">
+                            <v-btn color="primary" variant="tonal" @click="downloadBackup(exportResult?.filename)" class="mr-2">
                                 <v-icon class="mr-2">mdi-download</v-icon>
                                 {{ t('features.settings.backup.export.download') }}
                             </v-btn>
@@ -68,7 +68,7 @@
                             <v-alert type="error" variant="tonal" class="mb-4">
                                 {{ exportError }}
                             </v-alert>
-                            <v-btn color="primary" @click="resetExport">
+                            <v-btn color="primary" variant="tonal" @click="resetExport">
                                 {{ t('features.settings.backup.export.retry') }}
                             </v-btn>
                         </div>
@@ -97,6 +97,7 @@
                             <div class="d-flex justify-center">
                                 <v-btn
                                     color="primary"
+                                    variant="tonal"
                                     size="large"
                                     @click="uploadAndCheck"
                                     :disabled="!importFile"
@@ -184,7 +185,7 @@
                             <div class="d-flex justify-center align-center mt-4" style="gap: 16px;">
                                 <v-btn
                                     color="grey-darken-1"
-                                    variant="outlined"
+                                    variant="text"
                                     size="large"
                                     @click="resetImport"
                                 >
@@ -195,7 +196,7 @@
                                     v-if="checkResult?.can_import"
                                     color="error"
                                     size="large"
-                                    variant="flat"
+                                    variant="tonal"
                                     @click="confirmImport"
                                 >
                                     <v-icon class="mr-2">mdi-alert</v-icon>
@@ -218,7 +219,7 @@
                             <v-alert type="info" variant="tonal" class="mb-4">
                                 {{ t('features.settings.backup.import.restartRequired') }}
                             </v-alert>
-                            <v-btn color="primary" @click="restartAstrBot" class="mr-2">
+                            <v-btn color="primary" variant="tonal" @click="restartAstrBot" class="mr-2">
                                 <v-icon class="mr-2">mdi-restart</v-icon>
                                 {{ t('features.settings.backup.import.restartNow') }}
                             </v-btn>
@@ -233,7 +234,17 @@
                             <v-alert type="error" variant="tonal" class="mb-4">
                                 {{ importError }}
                             </v-alert>
-                            <v-btn color="primary" @click="resetImport">
+                            <v-btn
+                                v-if="canResume"
+                                color="primary"
+                                variant="tonal"
+                                class="mr-2"
+                                @click="resumeAndCheck"
+                            >
+                                <v-icon class="mr-2">mdi-play</v-icon>
+                                {{ t('features.settings.backup.import.resumeUpload') }}
+                            </v-btn>
+                            <v-btn color="grey-darken-1" variant="text" @click="resetImport">
                                 {{ t('features.settings.backup.import.retry') }}
                             </v-btn>
                         </div>
@@ -322,7 +333,7 @@
     <!-- 重命名对话框 -->
     <v-dialog v-model="renameDialogOpen" max-width="450" persistent>
         <v-card>
-            <v-card-title>
+            <v-card-title class="text-h3 pa-4 pb-0 pl-6">
                 <v-icon class="mr-2">mdi-pencil</v-icon>
                 {{ t('features.settings.backup.list.renameTitle') }}
             </v-card-title>
@@ -352,7 +363,7 @@
                 </v-btn>
                 <v-btn
                     color="primary"
-                    variant="flat"
+                    variant="tonal"
                     @click="confirmRename"
                     :loading="renameLoading"
                     :disabled="!renameNewName || !!renameError"
@@ -368,7 +379,8 @@
 
 <script setup>
 import { ref, computed, watch } from 'vue'
-import axios from 'axios'
+import { backupApi } from '@/api/v1'
+import { useChunkedUpload } from '@/composables/useChunkedUpload'
 import { useI18n } from '@/i18n/composables'
 import { askForConfirmation, useConfirmDialog } from '@/utils/confirmDialog'
 import { restartAstrBot as restartAstrBotRuntime } from '@/utils/restartAstrBot'
@@ -398,16 +410,20 @@ const importError = ref('')
 const uploadedFilename = ref('')  // 已上传的文件名
 const checkResult = ref(null)     // 预检查结果
 
-// 分片上传状态
-const CONCURRENT_UPLOADS = 5     // 并发上传数
-const uploadId = ref('')
-const chunkSize = ref(0)         // 分片大小（从后端获取）
-const uploadProgress = ref({
-    uploaded: 0,
-    total: 0,
-    percent: 0,
-    message: ''
-})
+// 分片上传状态（调度由 useChunkedUpload 管理）
+const uploader = useChunkedUpload(backupApi)
+const { canResume } = uploader
+const uploadMessageOverride = ref('')  // 预检查阶段覆盖上传进度文案
+const uploadProgress = computed(() => ({
+    uploaded: uploader.uploadedBytes.value,
+    total: uploader.totalBytes.value,
+    percent: uploader.percent.value,
+    message: uploadMessageOverride.value || {
+        init: t('features.settings.backup.import.uploadInit'),
+        chunks: t('features.settings.backup.import.uploadingChunks'),
+        complete: t('features.settings.backup.import.uploadComplete')
+    }[uploader.phase.value]
+}))
 
 // 备份列表
 const loadingList = ref(false)
@@ -476,7 +492,7 @@ watch(activeTab, (newVal) => {
 const loadBackupList = async () => {
     loadingList.value = true
     try {
-        const response = await axios.get('/api/backup/list')
+        const response = await backupApi.list()
         if (response.data.status === 'ok') {
             backupList.value = response.data.data.items || []
         }
@@ -493,7 +509,7 @@ const startExport = async () => {
     exportProgress.value = { current: 0, total: 100, message: '' }
 
     try {
-        const response = await axios.post('/api/backup/export')
+        const response = await backupApi.create()
         if (response.data.status === 'ok') {
             exportTaskId.value = response.data.data.task_id
             pollExportProgress()
@@ -511,9 +527,7 @@ const pollExportProgress = async () => {
     if (!exportTaskId.value) return
 
     try {
-        const response = await axios.get('/api/backup/progress', {
-            params: { task_id: exportTaskId.value }
-        })
+        const response = await backupApi.progress(exportTaskId.value)
 
         if (response.data.status === 'ok') {
             const data = response.data.data
@@ -551,137 +565,58 @@ const resetExport = () => {
     exportError.value = ''
 }
 
-/**
- * 并发上传分片
- *
- * 使用并发控制同时上传多个分片，提升上传速度。
- * 后端按分片索引命名文件（如 0.part, 1.part），合并时按顺序读取，
- * 因此分片到达顺序不影响最终结果。
- */
-const uploadChunksInParallel = async (file, totalChunks, currentUploadId, currentChunkSize) => {
-    // 跟踪已完成的字节数（使用原子操作避免并发问题）
-    let completedBytes = 0
-    const chunkSizes = []
-    
-    // 预计算每个分片的大小（使用后端返回的 chunk_size）
-    for (let i = 0; i < totalChunks; i++) {
-        const start = i * currentChunkSize
-        const end = Math.min(start + currentChunkSize, file.size)
-        chunkSizes[i] = end - start
-    }
-
-    // 上传单个分片的函数
-    const uploadSingleChunk = async (chunkIndex) => {
-        const start = chunkIndex * currentChunkSize
-        const end = Math.min(start + currentChunkSize, file.size)
-        const chunk = file.slice(start, end)
-
-        const formData = new FormData()
-        formData.append('upload_id', currentUploadId)
-        formData.append('chunk_index', chunkIndex.toString())
-        formData.append('chunk', chunk)
-
-        const response = await axios.post('/api/backup/upload/chunk', formData, {
-            headers: { 'Content-Type': 'multipart/form-data' }
-        })
-
-        if (response.data.status !== 'ok') {
-            throw new Error(response.data.message)
-        }
-
-        // 更新进度（累加已完成字节）
-        completedBytes += chunkSizes[chunkIndex]
-        uploadProgress.value.uploaded = completedBytes
-        uploadProgress.value.percent = Math.round((completedBytes / file.size) * 100)
-
-        return response
-    }
-
-    // 创建分片索引队列
-    const pendingChunks = Array.from({ length: totalChunks }, (_, i) => i)
-    const activePromises = []
-
-    // 处理队列中的分片
-    while (pendingChunks.length > 0 || activePromises.length > 0) {
-        // 填充并发槽位
-        while (pendingChunks.length > 0 && activePromises.length < CONCURRENT_UPLOADS) {
-            const chunkIndex = pendingChunks.shift()
-            const promise = uploadSingleChunk(chunkIndex).then(() => {
-                // 完成后从活动列表移除
-                const idx = activePromises.indexOf(promise)
-                if (idx > -1) activePromises.splice(idx, 1)
-            })
-            activePromises.push(promise)
-        }
-
-        // 等待至少一个完成
-        if (activePromises.length > 0) {
-            await Promise.race(activePromises)
-        }
-    }
-}
-
 // 上传并检查
 const uploadAndCheck = async () => {
     if (!importFile.value) return
 
     importStatus.value = 'uploading'
-    const file = importFile.value
+    uploadMessageOverride.value = ''
+
+    const result = await uploader.start(importFile.value)
+    if (!result) {
+        if (uploader.status.value === 'error') {
+            importStatus.value = 'failed'
+            importError.value = uploader.errorMessage.value
+        }
+        return
+    }
+
+    uploadedFilename.value = result.filename
+    await checkUploadedBackup()
+}
+
+// 断点续传：补传缺失分片后接着预检查
+const resumeAndCheck = async () => {
+    importStatus.value = 'uploading'
+    importError.value = ''
+    uploadMessageOverride.value = ''
+
+    const result = await uploader.resume()
+    if (!result) {
+        if (uploader.status.value === 'error') {
+            importStatus.value = 'failed'
+            importError.value = uploader.errorMessage.value
+        }
+        return
+    }
+
+    uploadedFilename.value = result.filename
+    await checkUploadedBackup()
+}
+
+// 上传完成后的预检查
+const checkUploadedBackup = async () => {
+    uploadMessageOverride.value = t('features.settings.backup.import.checking')
 
     try {
-        // 初始化上传进度
-        uploadProgress.value = {
-            uploaded: 0,
-            total: file.size,
-            percent: 0,
-            message: t('features.settings.backup.import.uploadInit')
-        }
-
-        // 步骤1: 初始化分片上传（后端计算并返回 chunk_size 和 total_chunks）
-        const initResponse = await axios.post('/api/backup/upload/init', {
-            filename: file.name,
-            total_size: file.size
-        })
-
-        if (initResponse.data.status !== 'ok') {
-            throw new Error(initResponse.data.message)
-        }
-
-        uploadId.value = initResponse.data.data.upload_id
-        chunkSize.value = initResponse.data.data.chunk_size
-        const totalChunks = initResponse.data.data.total_chunks
-
-        // 步骤2: 并行分片上传（5个并发连接）
-        uploadProgress.value.message = t('features.settings.backup.import.uploadingChunks')
-        
-        await uploadChunksInParallel(file, totalChunks, uploadId.value, chunkSize.value)
-
-        // 步骤3: 完成上传
-        uploadProgress.value.message = t('features.settings.backup.import.uploadComplete')
-
-        const completeResponse = await axios.post('/api/backup/upload/complete', {
-            upload_id: uploadId.value
-        })
-
-        if (completeResponse.data.status !== 'ok') {
-            throw new Error(completeResponse.data.message)
-        }
-
-        uploadedFilename.value = completeResponse.data.data.filename
-
-        // 步骤4: 预检查
-        uploadProgress.value.message = t('features.settings.backup.import.checking')
-
-        const checkResponse = await axios.post('/api/backup/check', {
-            filename: uploadedFilename.value
-        })
+        const checkResponse = await backupApi.check(uploadedFilename.value)
 
         if (checkResponse.data.status !== 'ok') {
             throw new Error(checkResponse.data.message)
         }
 
         checkResult.value = checkResponse.data.data
-        
+
         // 检查是否有效
         if (!checkResult.value.valid) {
             importStatus.value = 'failed'
@@ -693,17 +628,6 @@ const uploadAndCheck = async () => {
         importStatus.value = 'confirm'
 
     } catch (error) {
-        // 上传失败时尝试清理已上传的分片
-        if (uploadId.value) {
-            try {
-                await axios.post('/api/backup/upload/abort', {
-                    upload_id: uploadId.value
-                })
-            } catch (abortError) {
-                console.error('Failed to abort upload:', abortError)
-            }
-        }
-        
         importStatus.value = 'failed'
         importError.value = error.response?.data?.message || error.message || 'Upload failed'
     }
@@ -717,10 +641,7 @@ const confirmImport = async () => {
     importProgress.value = { current: 0, total: 100, message: '' }
 
     try {
-        const response = await axios.post('/api/backup/import', {
-            filename: uploadedFilename.value,
-            confirmed: true
-        })
+        const response = await backupApi.import(uploadedFilename.value, true)
 
         if (response.data.status === 'ok') {
             importTaskId.value = response.data.data.task_id
@@ -739,9 +660,7 @@ const pollImportProgress = async () => {
     if (!importTaskId.value) return
 
     try {
-        const response = await axios.get('/api/backup/progress', {
-            params: { task_id: importTaskId.value }
-        })
+        const response = await backupApi.progress(importTaskId.value)
 
         if (response.data.status === 'ok') {
             const data = response.data.data
@@ -770,17 +689,9 @@ const pollImportProgress = async () => {
 
 // 重置导入状态
 const resetImport = async () => {
-    // 如果有进行中的上传，先取消
-    if (uploadId.value && importStatus.value === 'uploading') {
-        try {
-            await axios.post('/api/backup/upload/abort', {
-                upload_id: uploadId.value
-            })
-        } catch (error) {
-            console.error('Failed to abort upload:', error)
-        }
-    }
-    
+    // 取消并清理可能存在的上传会话（包括失败后可续传的会话）
+    await uploader.cancel()
+
     importStatus.value = 'idle'
     importFile.value = null
     importTaskId.value = null
@@ -788,9 +699,7 @@ const resetImport = async () => {
     importError.value = ''
     uploadedFilename.value = ''
     checkResult.value = null
-    uploadId.value = ''
-    chunkSize.value = 0
-    uploadProgress.value = { uploaded: 0, total: 0, percent: 0, message: '' }
+    uploadMessageOverride.value = ''
 }
 
 // 下载备份（使用浏览器原生下载，可显示下载进度）
@@ -803,7 +712,7 @@ const downloadBackup = (filename) => {
     }
     
     // 直接使用浏览器下载，这样可以看到原生下载进度条
-    const downloadUrl = `/api/backup/download?filename=${encodeURIComponent(filename)}&token=${encodeURIComponent(token)}`
+    const downloadUrl = backupApi.downloadUrl(filename, token)
     
     // 创建隐藏的 a 标签触发下载
     const link = document.createElement('a')
@@ -822,9 +731,7 @@ const restoreFromList = async (filename) => {
     
     // 预检查
     try {
-        const checkResponse = await axios.post('/api/backup/check', {
-            filename: filename
-        })
+        const checkResponse = await backupApi.check(filename)
 
         if (checkResponse.data.status !== 'ok') {
             throw new Error(checkResponse.data.message)
@@ -851,7 +758,7 @@ const deleteBackup = async (filename) => {
     if (!(await askForConfirmation(t('features.settings.backup.list.confirmDelete'), confirmDialog))) return
 
     try {
-        const response = await axios.post('/api/backup/delete', { filename })
+        const response = await backupApi.delete(filename)
         if (response.data.status === 'ok') {
             loadBackupList()
         } else {
@@ -906,8 +813,7 @@ const confirmRename = async () => {
     renameError.value = ''
 
     try {
-        const response = await axios.post('/api/backup/rename', {
-            filename: renameOldFilename.value,
+        const response = await backupApi.rename(renameOldFilename.value, {
             new_name: renameNewName.value
         })
 

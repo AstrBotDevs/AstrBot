@@ -8,8 +8,6 @@ import os
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from rank_bm25 import BM25Okapi
-
 from astrbot.core.knowledge_base.kb_db_sqlite import KBSQLiteDatabase
 from astrbot.core.knowledge_base.retrieval.tokenizer import (
     load_stopwords,
@@ -30,6 +28,7 @@ class SparseResult:
     kb_id: str
     content: str
     score: float
+    rank: int | None = None
 
 
 class SparseRetriever:
@@ -87,7 +86,9 @@ class SparseRetriever:
                 fallback_kb_ids.append(kb_id)
                 continue
 
-            for doc in result:
+            # BM25 scores from independent FTS5 indexes are not comparable.
+            # Preserve each index's local rank for the later RRF stage.
+            for rank, doc in enumerate(result, start=1):
                 chunk_md = json.loads(doc["metadata"])
                 fts_results.append(
                     SparseResult(
@@ -97,6 +98,7 @@ class SparseRetriever:
                         kb_id=kb_id,
                         content=doc["text"],
                         score=-float(doc["score"]),
+                        rank=rank,
                     ),
                 )
 
@@ -150,6 +152,8 @@ class SparseRetriever:
         tokenized_corpus = [tokenize_text(doc, self.hit_stopwords) for doc in corpus]
 
         # 3. 构建 BM25 索引
+        from rank_bm25 import BM25Okapi
+
         bm25 = BM25Okapi(tokenized_corpus)
 
         # 4. 执行检索
@@ -172,5 +176,7 @@ class SparseRetriever:
             )
 
         results.sort(key=lambda x: x.score, reverse=True)
+        for rank, result in enumerate(results, start=1):
+            result.rank = rank
         # return results[: len(results) // len(kb_ids)]
         return results[:top_k_sparse]

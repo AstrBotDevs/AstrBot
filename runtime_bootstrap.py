@@ -30,7 +30,6 @@ def _try_patch_aiohttp_ssl_context(
         return False
 
     setattr(aiohttp_connector, attr_name, ssl_context)
-    log.info("Configured aiohttp verified SSL context with system+certifi trust chain.")
     return True
 
 
@@ -38,7 +37,6 @@ def configure_runtime_ca_bundle(log_obj: Any | None = None) -> bool:
     log = log_obj or logger
 
     try:
-        log.info("Bootstrapping runtime CA bundle.")
         ssl_context = build_ssl_context_with_certifi(log_obj=log)
         return _try_patch_aiohttp_ssl_context(ssl_context, log_obj=log)
     except Exception as exc:

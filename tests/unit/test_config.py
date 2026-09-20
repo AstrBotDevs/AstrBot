@@ -1,13 +1,23 @@
 """Tests for config module."""
 
+import asyncio
 import json
 import os
+import threading
+from pathlib import Path
 
 import pytest
 
 from astrbot.core.config.astrbot_config import AstrBotConfig, RateLimitStrategy
-from astrbot.core.config.default import DEFAULT_VALUE_MAP
+from astrbot.core.config.default import DEFAULT_VALUE_MAP, get_local_permission_defaults
 from astrbot.core.config.i18n_utils import ConfigMetadataI18n
+from astrbot.core.utils.auth_password import (
+    DEFAULT_DASHBOARD_PASSWORD,
+    hash_dashboard_password,
+    hash_md5_dashboard_password,
+    validate_dashboard_password,
+    verify_dashboard_password,
+)
 
 
 @pytest.fixture
@@ -81,6 +91,86 @@ class TestAstrBotConfigLoad:
 
         assert config.platform_settings["unique_session"] is True
         assert config.provider_settings["enable"] is False
+
+    @pytest.mark.parametrize("require_admin", [True, False])
+    @pytest.mark.parametrize("system", ["Windows", "Linux", "Darwin"])
+    def test_migrates_legacy_local_computer_permissions(
+        self,
+        temp_config_path,
+        require_admin,
+        system,
+    ):
+        """Legacy admin switches should become explicit Local role policies."""
+        default_config = {
+            "provider_settings": {
+                "computer_use_require_admin": True,
+                "computer_use_local_permissions": get_local_permission_defaults(system),
+            }
+        }
+        with open(temp_config_path, "w", encoding="utf-8-sig") as file:
+            json.dump(
+                {
+                    "provider_settings": {
+                        "computer_use_require_admin": require_admin,
+                    }
+                },
+                file,
+            )
+
+        config = AstrBotConfig(
+            config_path=temp_config_path,
+            default_config=default_config,
+        )
+
+        permissions = config["provider_settings"]["computer_use_local_permissions"]
+        assert permissions["member"] == {
+            "allow_execution": system != "Windows" and not require_admin,
+            "allow_network": False,
+            "filesystem_scope": "none" if system == "Windows" else "workspace",
+        }
+        assert permissions["admin"] == {
+            "allow_execution": True,
+            "allow_network": True,
+            "filesystem_scope": "host",
+        }
+        assert (
+            json.loads(Path(temp_config_path).read_text(encoding="utf-8-sig"))[
+                "provider_settings"
+            ]["computer_use_local_permissions"]
+            == permissions
+        )
+
+    @pytest.mark.parametrize("system", ["Windows", "Linux", "Darwin"])
+    @pytest.mark.parametrize("scope", [None, "none", "workspace", "host"])
+    def test_local_defaults_preserve_existing_policies(
+        self, temp_config_path, system, scope
+    ):
+        defaults = get_local_permission_defaults(system)
+        existing = {"member": {"filesystem_scope": scope}} if scope else {}
+        if scope:
+            Path(temp_config_path).write_text(
+                json.dumps(
+                    {"provider_settings": {"computer_use_local_permissions": existing}}
+                )
+            )
+        config = AstrBotConfig(
+            temp_config_path,
+            default_config={
+                "provider_settings": {"computer_use_local_permissions": defaults}
+            },
+        )
+        expected = {
+            role: {**policy, **existing.get(role, {})}
+            for role, policy in defaults.items()
+        }
+        assert config["provider_settings"]["computer_use_local_permissions"] == expected
+        assert (
+            json.loads(Path(temp_config_path).read_text(encoding="utf-8-sig"))[
+                "provider_settings"
+            ]["computer_use_local_permissions"]
+            == expected
+        )
+        assert defaults == get_local_permission_defaults(system)
 
     def test_first_deploy_flag(self, temp_config_path, minimal_default_config):
         """Test first_deploy flag is set for new config."""
@@ -184,6 +274,263 @@ class TestAstrBotConfigLoad:
         # Now it exists
         assert config2.check_exist() is True
         assert os.path.exists(non_existent_path)
+
+    def test_empty_dashboard_password_generates_random_password(self, temp_config_path):
+        """Test that an empty dashboard password is replaced with a random password."""
+        default_config = {
+            "dashboard": {
+                "username": "astrbot",
+                "password": "",
+            },
+        }
+
+        config = AstrBotConfig(
+            config_path=temp_config_path,
+            default_config=default_config,
+        )
+
+        generated_password = getattr(config, "_generated_dashboard_password", None)
+        assert isinstance(generated_password, str)
+        validate_dashboard_password(generated_password)
+        assert verify_dashboard_password(
+            config["dashboard"]["pbkdf2_password"],
+            generated_password,
+        )
+        assert config["dashboard"]["pbkdf2_password"].startswith(
+            "pbkdf2_sha256$600000$"
+        )
+        assert config["dashboard"]["password_change_required"] is True
+        assert config["dashboard"]["password_storage_upgraded"] is True
+        assert (
+            getattr(config, "_generated_dashboard_password_change_required", False)
+            is True
+        )
+        assert not verify_dashboard_password(
+            config["dashboard"]["pbkdf2_password"],
+            DEFAULT_DASHBOARD_PASSWORD,
+        )
+        assert verify_dashboard_password(
+            config["dashboard"]["password"],
+            generated_password,
+        )
+
+    def test_empty_dashboard_password_uses_initial_password_env(
+        self, temp_config_path, monkeypatch
+    ):
+        """Test that the generated dashboard password can be provided by env."""
+        env_password = "CustomInitial123"
+        monkeypatch.setenv("ASTRBOT_DASHBOARD_INITIAL_PASSWORD", env_password)
+        default_config = {
+            "dashboard": {
+                "username": "astrbot",
+                "password": "",
+            },
+        }
+
+        config = AstrBotConfig(
+            config_path=temp_config_path,
+            default_config=default_config,
+        )
+
+        assert getattr(config, "_generated_dashboard_password", None) == env_password
+        assert verify_dashboard_password(
+            config["dashboard"]["pbkdf2_password"],
+            env_password,
+        )
+        assert verify_dashboard_password(
+            config["dashboard"]["password"],
+            env_password,
+        )
+        assert config["dashboard"]["password_change_required"] is True
+
+    def test_initial_dashboard_password_env_must_be_valid(
+        self, temp_config_path, monkeypatch
+    ):
+        """Test that weak env-provided initial passwords fail fast."""
+        monkeypatch.setenv("ASTRBOT_DASHBOARD_INITIAL_PASSWORD", "weak")
+        default_config = {
+            "dashboard": {
+                "username": "astrbot",
+                "password": "",
+            },
+        }
+
+        with pytest.raises(ValueError, match="Password must be at least"):
+            AstrBotConfig(
+                config_path=temp_config_path,
+                default_config=default_config,
+            )
+
+    def test_password_change_required_does_not_rotate_existing_password(
+        self, temp_config_path
+    ):
+        """A pending password change must not silently rotate the stored password."""
+        default_config = {
+            "dashboard": {
+                "username": "astrbot",
+                "password": "",
+                "pbkdf2_password": "",
+                "password_storage_upgraded": False,
+                "password_change_required": False,
+            },
+        }
+        stored_pbkdf2 = "pbkdf2_sha256$600000$00$00"
+        with open(temp_config_path, "w", encoding="utf-8") as f:
+            json.dump(
+                {
+                    "dashboard": {
+                        "username": "astrbot",
+                        "password": "",
+                        "pbkdf2_password": stored_pbkdf2,
+                        "password_storage_upgraded": True,
+                        "password_change_required": True,
+                    }
+                },
+                f,
+            )
+
+        config = AstrBotConfig(
+            config_path=temp_config_path,
+            default_config=default_config,
+        )
+
+        assert getattr(config, "_generated_dashboard_password", None) is None
+        assert config["dashboard"]["pbkdf2_password"] == stored_pbkdf2
+        assert config["dashboard"]["password_change_required"] is True
+        assert config["dashboard"]["password_storage_upgraded"] is True
+        assert (
+            getattr(config, "_dashboard_password_change_required_from_config", False)
+            is True
+        )
+
+    def test_password_change_required_is_stable_across_reloads(self, temp_config_path):
+        """Repeated constructions must not rotate a pending generated password (issue #9662)."""
+        default_config = {
+            "dashboard": {
+                "username": "astrbot",
+                "password": "",
+                "pbkdf2_password": "",
+                "password_storage_upgraded": False,
+                "password_change_required": False,
+            },
+        }
+        with open(temp_config_path, "w", encoding="utf-8") as f:
+            json.dump(
+                {
+                    "dashboard": {
+                        "username": "astrbot",
+                        "password": "",
+                        "pbkdf2_password": "pbkdf2_sha256$600000$00$00",
+                        "password_storage_upgraded": True,
+                        "password_change_required": True,
+                    }
+                },
+                f,
+            )
+
+        first = AstrBotConfig(
+            config_path=temp_config_path,
+            default_config=default_config,
+        )
+        second = AstrBotConfig(
+            config_path=temp_config_path,
+            default_config=default_config,
+        )
+
+        assert getattr(first, "_generated_dashboard_password", None) is None
+        assert getattr(second, "_generated_dashboard_password", None) is None
+        assert (
+            first["dashboard"]["pbkdf2_password"]
+            == second["dashboard"]["pbkdf2_password"]
+        )
+
+    def test_reset_dashboard_password_env_rotates_existing_password(
+        self, temp_config_path, monkeypatch
+    ):
+        """Test startup reset flag rotates an already configured dashboard password."""
+        old_password = "OldPassword123"
+        default_config = {
+            "dashboard": {
+                "username": "astrbot",
+                "password": "",
+                "pbkdf2_password": "",
+            },
+        }
+        with open(temp_config_path, "w", encoding="utf-8") as f:
+            json.dump(
+                {
+                    "dashboard": {
+                        "username": "astrbot",
+                        "password": hash_md5_dashboard_password(old_password),
+                        "pbkdf2_password": hash_dashboard_password(old_password),
+                        "password_change_required": False,
+                        "password_storage_upgraded": True,
+                    }
+                },
+                f,
+            )
+
+        monkeypatch.setenv("ASTRBOT_RESET_DASHBOARD_PASSWORD", "1")
+        config = AstrBotConfig(
+            config_path=temp_config_path,
+            default_config=default_config,
+        )
+        generated_password = getattr(config, "_generated_dashboard_password", None)
+
+        assert isinstance(generated_password, str)
+        assert config["dashboard"]["password_change_required"] is True
+        assert config["dashboard"]["password_storage_upgraded"] is True
+        assert "ASTRBOT_RESET_DASHBOARD_PASSWORD" not in os.environ
+        assert verify_dashboard_password(
+            config["dashboard"]["pbkdf2_password"], generated_password
+        )
+        assert not verify_dashboard_password(
+            config["dashboard"]["pbkdf2_password"], old_password
+        )
+        assert verify_dashboard_password(
+            config["dashboard"]["password"], generated_password
+        )
+
+    def test_legacy_astrbot_user_without_change_flag_keeps_legacy_password(
+        self, temp_config_path
+    ):
+        """Test old MD5 configs keep legacy auth until the manual upgrade."""
+        default_config = {
+            "dashboard": {
+                "username": "astrbot",
+                "password": "",
+                "pbkdf2_password": "",
+            },
+        }
+        with open(temp_config_path, "w", encoding="utf-8") as f:
+            json.dump(
+                {
+                    "dashboard": {
+                        "username": "astrbot",
+                        "password": "77b90590a8945a7d36c963981a307dc9",
+                    }
+                },
+                f,
+            )
+
+        config = AstrBotConfig(
+            config_path=temp_config_path,
+            default_config=default_config,
+        )
+        generated_password = getattr(config, "_generated_dashboard_password", None)
+
+        assert generated_password is None
+        assert config["dashboard"]["pbkdf2_password"] == ""
+        assert verify_dashboard_password(
+            config["dashboard"]["password"], DEFAULT_DASHBOARD_PASSWORD
+        )
+
+    def test_legacy_md5_password_requires_plain_password(self):
+        """Test that a leaked legacy MD5 hash cannot be used as the login password."""
+        legacy_hash = "77b90590a8945a7d36c963981a307dc9"
+
+        assert verify_dashboard_password(legacy_hash, DEFAULT_DASHBOARD_PASSWORD)
+        assert not verify_dashboard_password(legacy_hash, legacy_hash)
 
 
 class TestConfigValidation:
@@ -291,6 +638,30 @@ class TestConfigValidation:
         assert "level2" in config.nested["level1"]
         assert config.nested["level1"]["level2"]["value"] == 42
 
+    def test_integrity_log_does_not_include_inserted_secret_value(
+        self, temp_config_path, monkeypatch
+    ):
+        """Default values may contain secrets and should not be logged."""
+        from astrbot.core.config import astrbot_config
+
+        existing_config = {}
+        default_config = {"api_key": "secret-value"}
+        messages = []
+        with open(temp_config_path, "w", encoding="utf-8-sig") as f:
+            json.dump(existing_config, f)
+
+        def capture_info(message, *args):
+            messages.append(message % args if args else message)
+
+        monkeypatch.setattr(astrbot_config.logger, "info", capture_info)
+
+        AstrBotConfig(config_path=temp_config_path, default_config=default_config)
+
+        assert messages
+        assert all("secret-value" not in message for message in messages)
+        assert all("api_key" not in message for message in messages)
+        assert any("Config key missing" in message for message in messages)
+
 
 class TestConfigHotReload:
     """Tests for config hot reload functionality."""
@@ -307,6 +678,180 @@ class TestConfigHotReload:
             loaded_config = json.load(f)
 
         assert loaded_config["new_field"] == "new_value"
+
+    @pytest.mark.asyncio
+    async def test_save_config_async_keeps_event_loop_responsive(
+        self, temp_config_path, minimal_default_config, monkeypatch
+    ):
+        config = AstrBotConfig(
+            config_path=temp_config_path, default_config=minimal_default_config
+        )
+        write_started = threading.Event()
+        finish_write = threading.Event()
+        original_fsync = os.fsync
+
+        def blocking_fsync(fd):
+            write_started.set()
+            assert finish_write.wait(timeout=5)
+            original_fsync(fd)
+
+        monkeypatch.setattr(os, "fsync", blocking_fsync)
+        config["async_field"] = "saved"
+
+        save_task = asyncio.create_task(config.save_config_async())
+        assert await asyncio.to_thread(write_started.wait, 5)
+        await asyncio.sleep(0)
+        assert not save_task.done()
+
+        finish_write.set()
+        await save_task
+
+        with open(temp_config_path, encoding="utf-8-sig") as f:
+            assert json.load(f)["async_field"] == "saved"
+
+    @pytest.mark.asyncio
+    async def test_save_config_async_writes_stable_snapshot(
+        self, temp_config_path, minimal_default_config, monkeypatch
+    ):
+        config = AstrBotConfig(
+            config_path=temp_config_path, default_config=minimal_default_config
+        )
+        dump_started = threading.Event()
+        finish_dump = threading.Event()
+        original_dump = json.dump
+
+        def blocking_dump(snapshot, file_obj, **kwargs):
+            dump_started.set()
+            assert finish_dump.wait(timeout=5)
+            original_dump(snapshot, file_obj, **kwargs)
+
+        monkeypatch.setattr(json, "dump", blocking_dump)
+        config["snapshot_field"] = "captured"
+
+        save_task = asyncio.create_task(config.save_config_async())
+        assert await asyncio.to_thread(dump_started.wait, 5)
+        config["snapshot_field"] = "changed-after-save-started"
+        finish_dump.set()
+        await save_task
+
+        with open(temp_config_path, encoding="utf-8-sig") as f:
+            assert json.load(f)["snapshot_field"] == "captured"
+
+    @pytest.mark.asyncio
+    async def test_save_config_async_does_not_block_next_snapshot_during_replace(
+        self, temp_config_path, minimal_default_config, monkeypatch
+    ):
+        config = AstrBotConfig(
+            config_path=temp_config_path, default_config=minimal_default_config
+        )
+        first_replace_started = threading.Event()
+        finish_first_replace = threading.Event()
+        replace_call_count = 0
+        replace_call_lock = threading.Lock()
+        original_replace = os.replace
+
+        def blocking_replace(source, destination):
+            nonlocal replace_call_count
+            with replace_call_lock:
+                replace_call_count += 1
+                call_number = replace_call_count
+            if call_number == 1:
+                first_replace_started.set()
+                if not finish_first_replace.wait(timeout=2):
+                    raise TimeoutError("event loop could not prepare the next snapshot")
+            original_replace(source, destination)
+
+        monkeypatch.setattr(os, "replace", blocking_replace)
+        config["replace_order"] = "older"
+        older_save = asyncio.create_task(config.save_config_async())
+        assert await asyncio.to_thread(first_replace_started.wait, 5)
+
+        config["replace_order"] = "newer"
+        newer_save = asyncio.create_task(config.save_config_async())
+        await asyncio.sleep(0)
+        finish_first_replace.set()
+        await asyncio.gather(older_save, newer_save)
+
+        with open(temp_config_path, encoding="utf-8-sig") as f:
+            assert json.load(f)["replace_order"] == "newer"
+
+    @pytest.mark.asyncio
+    async def test_save_config_async_discards_older_late_write(
+        self, temp_config_path, minimal_default_config, monkeypatch
+    ):
+        config = AstrBotConfig(
+            config_path=temp_config_path, default_config=minimal_default_config
+        )
+        first_write_started = threading.Event()
+        finish_first_write = threading.Event()
+        fsync_call_count = 0
+        fsync_call_lock = threading.Lock()
+        original_fsync = os.fsync
+
+        def reorder_fsync(fd):
+            nonlocal fsync_call_count
+            with fsync_call_lock:
+                fsync_call_count += 1
+                call_number = fsync_call_count
+            if call_number == 1:
+                first_write_started.set()
+                assert finish_first_write.wait(timeout=5)
+            original_fsync(fd)
+
+        monkeypatch.setattr(os, "fsync", reorder_fsync)
+        config["save_order"] = "older"
+        older_save = asyncio.create_task(config.save_config_async())
+        assert await asyncio.to_thread(first_write_started.wait, 5)
+
+        config["save_order"] = "newer"
+        newer_save_committed = await config.save_config_async()
+        finish_first_write.set()
+        older_save_committed = await older_save
+
+        assert newer_save_committed is True
+        assert older_save_committed is False
+        with open(temp_config_path, encoding="utf-8-sig") as f:
+            assert json.load(f)["save_order"] == "newer"
+
+    @pytest.mark.asyncio
+    async def test_save_config_commits_older_snapshot_when_newer_write_fails(
+        self, temp_config_path, minimal_default_config, monkeypatch
+    ):
+        config = AstrBotConfig(
+            config_path=temp_config_path, default_config=minimal_default_config
+        )
+        first_write_started = threading.Event()
+        finish_first_write = threading.Event()
+        fsync_call_count = 0
+        fsync_call_lock = threading.Lock()
+        original_fsync = os.fsync
+
+        def fail_newer_fsync(fd):
+            nonlocal fsync_call_count
+            with fsync_call_lock:
+                fsync_call_count += 1
+                call_number = fsync_call_count
+            if call_number == 1:
+                first_write_started.set()
+                assert finish_first_write.wait(timeout=5)
+                original_fsync(fd)
+                return
+            raise OSError("simulated newer fsync failure")
+
+        monkeypatch.setattr(os, "fsync", fail_newer_fsync)
+        config["save_order"] = "older-valid"
+        older_save = asyncio.create_task(asyncio.to_thread(config.save_config))
+        assert await asyncio.to_thread(first_write_started.wait, 5)
+
+        config["save_order"] = "newer-failed"
+        with pytest.raises(OSError, match="simulated newer fsync failure"):
+            await config.save_config_async()
+
+        finish_first_write.set()
+        await older_save
+
+        with open(temp_config_path, encoding="utf-8-sig") as f:
+            assert json.load(f)["save_order"] == "older-valid"
 
     def test_save_config_with_replace(self, temp_config_path, minimal_default_config):
         """Test saving config with replacement."""
@@ -328,6 +873,38 @@ class TestConfigHotReload:
         assert loaded_config["extra_field"] == "value"
         # Original fields are preserved because update merges
         assert "platform_settings" in loaded_config
+
+    def test_save_config_preserves_existing_file_when_write_fails(
+        self, temp_config_path, minimal_default_config, monkeypatch
+    ):
+        """Config saves should not corrupt the existing file on write failure."""
+        config = AstrBotConfig(
+            config_path=temp_config_path, default_config=minimal_default_config
+        )
+        with open(temp_config_path, encoding="utf-8-sig") as f:
+            original_content = f.read()
+
+        def failing_dump(*args, **kwargs):
+            file_obj = args[1]
+            file_obj.write("{")
+            raise RuntimeError("simulated interrupted write")
+
+        config.new_field = "new_value"
+        monkeypatch.setattr(
+            "astrbot.core.config.astrbot_config.json.dump",
+            failing_dump,
+        )
+
+        with pytest.raises(RuntimeError, match="simulated interrupted write"):
+            config.save_config()
+
+        with open(temp_config_path, encoding="utf-8-sig") as f:
+            assert f.read() == original_content
+        assert [
+            entry.name
+            for entry in os.scandir(os.path.dirname(temp_config_path))
+            if entry.name != os.path.basename(temp_config_path)
+        ] == []
 
     def test_modification_persists_after_reload(
         self, temp_config_path, minimal_default_config
@@ -605,3 +1182,113 @@ class TestConfigMetadataI18n:
             result["group"]["metadata"]["section"]["items"]["field"]["name"]
             == "group.section.field.name"
         )
+
+
+class TestDictTypeConfigIntegrity:
+    """Tests for preserving user content in dict-type ("type": "dict") config items.
+
+    See https://github.com/AstrBotDevs/AstrBot/issues/9512.
+    """
+
+    def test_dict_type_config_preserved_on_reload(self, temp_config_path):
+        """Test that user key-value pairs survive a plugin reload."""
+        schema = {
+            "user_map": {
+                "type": "dict",
+                "default": {},
+                "description": "free-form key-value pairs",
+            },
+        }
+
+        config = AstrBotConfig(config_path=temp_config_path, schema=schema)
+        config["user_map"] = {"group_a": "123", "group_b": "456"}
+        config.save_config()
+
+        reloaded = AstrBotConfig(config_path=temp_config_path, schema=schema)
+
+        assert reloaded["user_map"] == {"group_a": "123", "group_b": "456"}
+
+        with open(temp_config_path, encoding="utf-8-sig") as f:
+            assert json.load(f)["user_map"] == {
+                "group_a": "123",
+                "group_b": "456",
+            }
+
+    def test_nested_dict_type_config_preserved_on_reload(self, temp_config_path):
+        """Test that dict items nested inside objects are preserved."""
+        schema = {
+            "section": {
+                "type": "object",
+                "items": {
+                    "enabled": {"type": "bool"},
+                    "mapping": {"type": "dict"},
+                },
+            },
+        }
+
+        config = AstrBotConfig(config_path=temp_config_path, schema=schema)
+        config["section"]["mapping"] = {"key1": "value1"}
+        config.save_config()
+
+        reloaded = AstrBotConfig(config_path=temp_config_path, schema=schema)
+
+        assert reloaded["section"]["enabled"] is False
+        assert reloaded["section"]["mapping"] == {"key1": "value1"}
+
+    def test_dict_type_config_with_non_empty_default_preserved_on_reload(
+        self, temp_config_path
+    ):
+        """Test that user keys survive reload when the dict default is non-empty."""
+        schema = {
+            "user_map": {
+                "type": "dict",
+                "default": {"preset_a": "1"},
+            },
+        }
+
+        config = AstrBotConfig(config_path=temp_config_path, schema=schema)
+        config["user_map"] = {"preset_a": "2", "user_added": "3"}
+        config.save_config()
+
+        reloaded = AstrBotConfig(config_path=temp_config_path, schema=schema)
+
+        assert reloaded["user_map"] == {"preset_a": "2", "user_added": "3"}
+
+    def test_object_with_empty_items_still_removes_stale_keys(self, temp_config_path):
+        """Test that object entries with empty items still drop unknown keys."""
+        schema = {
+            "section": {"type": "object", "items": {}},
+        }
+
+        config = AstrBotConfig(config_path=temp_config_path, schema=schema)
+        config["section"] = {"user_key": "value"}
+        config.save_config()
+
+        reloaded = AstrBotConfig(config_path=temp_config_path, schema=schema)
+
+        assert reloaded["section"] == {}
+
+    def test_stale_keys_in_structured_dict_still_removed(self):
+        """Test that non-empty reference dicts still drop unknown keys."""
+        refer_conf = {"structured": {"keep": 1}}
+        conf = {"structured": {"keep": 2, "stale": 3}}
+
+        config = AstrBotConfig.__new__(AstrBotConfig)
+        has_new = config.check_config_integrity(refer_conf, conf)
+
+        assert has_new is True
+        assert conf["structured"] == {"keep": 2}
+
+    def test_dict_type_config_non_dict_value_reset_to_default(self, temp_config_path):
+        """Test that a non-dict value stored in a dict item is reset to default."""
+        schema = {
+            "user_map": {"type": "dict"},
+        }
+
+        existing_config = {"user_map": "corrupted"}
+        with open(temp_config_path, "w", encoding="utf-8-sig") as f:
+            json.dump(existing_config, f)
+
+        config = AstrBotConfig(config_path=temp_config_path, schema=schema)
+
+        assert config["user_map"] == {}

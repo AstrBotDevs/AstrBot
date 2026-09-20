@@ -6,7 +6,7 @@ Computer Use controls whether an Agent can execute code, access files, run Shell
 
 In WebUI, open:
 
-- `Config -> General Config -> Use Computer Capabilities`
+- `Config -> AI -> Capabilities -> Agent Computer Use`
 
 The key option is `Computer Use Runtime`:
 
@@ -66,6 +66,8 @@ The local Shell tool includes basic blocking for dangerous commands such as `rm 
 
 ### Permission Model
 
+In the local permission table, open the **File access scope** menu to read each option's description. **Workspace** restricts access to the session workspace, temporary directories, and skill files. **Entire environment** (formerly **Host files**) allows access to files permitted by the account running AstrBot. In Docker, this means files inside the container and mounted files, not all files on the Docker host. **Disabled** prevents file access through local Computer Use tools. These descriptions now appear under the corresponding menu options instead of below the table. Hover over or tap the question mark after “All files in the environment where AstrBot runs.” for details about account permissions and Docker file access.
+
 Computer Use has a separate option:
 
 - `Require AstrBot admin permission`
@@ -76,11 +78,12 @@ When enabled:
 
 - Admin users can use Shell, Python, file read, file write, file edit, and Grep search in `local` mode.
 - Non-admin users cannot use Shell or Python.
-- Non-admin users can only use file read, write, edit, and search inside restricted directories.
+- Non-admin users can only use file read, write, edit, and search inside restricted directories. Plugin-provided Skills are read/search-only and cannot be written or edited.
 
 Allowed directories for non-admin users in `local` mode include:
 
 - `data/skills`
+- `data/plugins/*/skills` (read-only, for plugin-provided Skills)
 - Current session's `data/workspaces/{normalized_umo}`
 - AstrBot temporary directories
 - `.astrbot` under the system temporary directory
@@ -89,7 +92,7 @@ If `Require AstrBot admin permission` is disabled, regular users behave much clo
 
 Admin IDs can be configured in:
 
-- `Config -> Other Config -> Admin ID`
+- `Config -> Platform -> General -> Administrator IDs`
 
 Users can get their own ID with `/sid`.
 

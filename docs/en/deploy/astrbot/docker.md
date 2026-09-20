@@ -75,6 +75,41 @@ View AstrBot logs with the following command:
 sudo docker logs -f astrbot
 ```
 
+
+## Deploy via Docker Desktop on Windows
+
+### For Windows CMD
+
+Set `TZ` to the standard IANA time zone format (Region/City). Use `Asia/Shanghai` for China.
+
+```bash
+docker run -itd -p 6185:6185 -p 6199:6199 -e TZ=Asia/Shanghai -v "%cd%\data:/AstrBot/data" --name astrbot soulter/astrbot:latest
+```
+> [!TIP]
+> If your network environment is in mainland China, the above command will not pull properly. Please use the following command to pull the image:
+>
+> ```bash
+> docker run -itd -p 6185:6185 -p 6199:6199 -e TZ=Asia/Shanghai -v "%cd%\data:/AstrBot/data" --name astrbot m.daocloud.io/docker.io/soulter/astrbot:latest
+> ```
+>
+> (Thanks to DaoCloud ❤️)
+
+### For PowerShell
+
+Set `TZ` to the standard IANA time zone format (Region/City). Use `Asia/Shanghai` for China.
+
+```powershell
+docker run -itd -p 6185:6185 -p 6199:6199 -e TZ=Asia/Shanghai -v "${PWD}\data:/AstrBot/data" --name astrbot soulter/astrbot:latest
+```
+> [!TIP]
+> If your network environment is in mainland China, the above command will not pull properly. Please use the following command to pull the image:
+>
+> ```powershell
+> docker run -itd -p 6185:6185 -p 6199:6199 -e TZ=Asia/Shanghai -v "${PWD}\data:/AstrBot/data" --name astrbot m.daocloud.io/docker.io/soulter/astrbot:latest
+> ```
+>
+> (Thanks to DaoCloud ❤️)
+
 ## 🎉 All Done
 
 If everything goes well, you will see logs printed by AstrBot.
@@ -84,7 +119,7 @@ If there are no errors, you will see a log message similar to `🌈 Dashboard st
 > [!TIP]
 > Since Docker isolates the network environment, you cannot use `localhost` to access the dashboard.
 >
-> The default username and password are `astrbot` and `astrbot`.
+> New users must use the random password printed in the startup logs to log in for the first time. Use the username shown in the logs (usually `astrbot`) and change the password after first login.
 >
 > If deployed on a cloud server, you need to open ports `6180-6200` and `11451` in the cloud provider's console.
 

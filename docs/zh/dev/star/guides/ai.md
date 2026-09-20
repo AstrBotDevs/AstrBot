@@ -1,4 +1,3 @@
-
 # AI
 
 AstrBot 内置了对多种大语言模型（LLM）提供商的支持，并且提供了统一的接口，方便插件开发者调用各种 LLM 服务。
@@ -24,7 +23,7 @@ provider_id = await self.context.get_current_chat_provider_id(umo=umo)
 
 ```py
 llm_resp = await self.context.llm_generate(
-    chat_provider_id=provider_id, # 聊天模型 ID
+    chat_provider_id=provider_id,  # 聊天模型 ID
     prompt="Hello, world!",
 )
 # print(llm_resp.completion_text) # 获取返回的文本
@@ -82,18 +81,29 @@ class MyPlugin(Star):
         tool_mgr.func_list.append(BilibiliTool())
 ```
 
+> [!WARNING]
+> `context.register_llm_tool()` 已被弃用，请勿在新插件中使用。
+>
+> 如需通过该方法注册（旧插件兼容），`func_args` 必须是 **字典列表**，格式为：
+> ```py
+> func_args = [{"type": "string", "name": "arg_name", "description": "参数描述"}, ...]
+> ```
+> 传入字符串列表或其他格式会导致 `AttributeError: 'str' object has no attribute 'pop'`。
+
 ### 通过装饰器定义 Tool 和注册 Tool
 
-除了上述的通过 `@dataclass` 定义 Tool 的方式之外，你也可以使用装饰器的方式注册 tool 到 AstrBot。如果请务必按照以下格式编写一个工具（包括函数注释，AstrBot 会解析该函数注释，请务必将注释格式写对）
+除了上述的通过 `@dataclass` 定义 Tool 的方式之外，你也可以使用装饰器的方式注册 tool 到 AstrBot。请务必按照以下格式编写一个工具（包括函数注释，AstrBot 会解析该函数注释，请务必将注释格式写对）：
 
 ```py{3,4,5,6,7}
-@filter.llm_tool(name="get_weather") # 如果 name 不填，将使用函数名
-async def get_weather(self, event: AstrMessageEvent, location: str) -> MessageEventResult:
-    '''获取天气信息。
+@filter.llm_tool(name="get_weather")  # 如果 name 不填，将使用函数名
+async def get_weather(
+    self, event: AstrMessageEvent, location: str
+) -> MessageEventResult:
+    """获取天气信息。
 
     Args:
         location(string): 地点
-    '''
+    """
     resp = self.get_weather_from_api(location)
     yield event.plain_result("天气信息: " + resp)
 ```
@@ -101,6 +111,13 @@ async def get_weather(self, event: AstrMessageEvent, location: str) -> MessageEv
 在 `location(string): 地点` 中，`location` 是参数名，`string` 是参数类型，`地点` 是参数描述。
 
 支持的参数类型有 `string`, `number`, `object`, `boolean`, `array`。在 v4.5.7 之后，支持对 `array` 类型参数指定子类型，例如 `array[string]`。
+
+> [!WARNING]
+> **`Args:` 段是必须的，且格式不能写错。**
+>
+> `@filter.llm_tool` 装饰器通过解析函数的 docstring 来生成工具的参数 schema，**不会**读取函数签名中的类型注解。如果 docstring 缺少 `Args:` 段，或格式不符合 `参数名(类型): 描述` 的规范，框架生成的参数 schema 将为空，LLM 传入的参数会被静默丢弃，最终导致函数因缺少参数而报错。
+>
+> 此外，装饰器**不支持**通过 `parameters=...` 显式传入参数 schema，该写法会被忽略。如需手动控制 schema，请使用上方的 `@dataclass` + `add_llm_tools()` 方式。
 
 ## 调用 Agent
 
@@ -117,8 +134,8 @@ llm_resp = await self.context.tool_loop_agent(
     chat_provider_id=prov_id,
     prompt="搜索一下 bilibili 上关于 AstrBot 的相关视频。",
     tools=ToolSet([BilibiliTool()]),
-    max_steps=30, # Agent 最大执行步骤
-    tool_call_timeout=60, # 工具调用超时时间
+    max_steps=30,  # Agent 最大执行步骤
+    tool_call_timeout=60,  # 工具调用超时时间
 )
 # print(llm_resp.completion_text) # 获取返回的文本
 ```
@@ -142,9 +159,11 @@ Multi-Agent（多智能体）系统将复杂应用分解为多个专业化智能
 from pydantic import Field
 from pydantic.dataclasses import dataclass
 
+from astrbot.api import logger
 from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.agent.tool import FunctionTool, ToolExecResult
+from astrbot.core.agent.tool import FunctionTool, ToolExecResult, ToolSet
 from astrbot.core.astr_agent_context import AstrAgentContext
+
 
 @dataclass
 class AssignAgentTool(FunctionTool[AstrAgentContext]):
@@ -333,11 +352,15 @@ from astrbot.core.agent.message import (
     TextPart,
 )
 
+conv_mgr = self.context.conversation_manager
+provider_id = await self.context.get_current_chat_provider_id(event.unified_msg_origin)
 curr_cid = await conv_mgr.get_curr_conversation_id(event.unified_msg_origin)
 user_msg = UserMessageSegment(content=[TextPart(text="hi")])
 llm_resp = await self.context.llm_generate(
-    chat_provider_id=provider_id, # 聊天模型 ID
-    contexts=[user_msg], # 当未指定 prompt 时，使用 contexts 作为输入；同时指定 prompt 和 contexts 时，prompt 会被添加到 LLM 输入的最后
+    chat_provider_id=provider_id,  # 聊天模型 ID
+    contexts=[
+        user_msg
+    ],  # 当未指定 prompt 时，使用 contexts 作为输入；同时指定 prompt 和 contexts 时，prompt 会被添加到 LLM 输入的最后
 )
 await conv_mgr.add_message_pair(
     cid=curr_cid,
@@ -490,7 +513,7 @@ persona_mgr = self.context.persona_manager
 - __Arguments__  
   - `persona_id: str` – 待删除的人格 ID
 - __Raises__  
-  `Valueable` – 若 `persona_id` 不存在
+  `ValueError` – 若 `persona_id` 不存在
 
 #### `get_default_persona_v3`
 
@@ -505,7 +528,6 @@ persona_mgr = self.context.persona_manager
 ::: details Persona / Personality 类型定义
 
 ```py
-
 class Persona(SQLModel, table=True):
     """Persona is a set of instructions for LLMs to follow.
 

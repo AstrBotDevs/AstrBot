@@ -7,17 +7,13 @@ MCP (Model Context Protocol) is a new open standard protocol for establishing se
 
 AstrBot v3.5.0 supports the MCP protocol, enabling you to add multiple MCP servers and use function tools from MCP servers.
 
-![image](https://files.astrbot.app/docs/source/images/function-calling/image2.png)
+Manage MCP servers in WebUI under `Extensions → MCP Servers` (`/extension/mcp`).
 
 ## Initial Configuration
 
 MCP servers are typically launched using `uv` or `npm`, so you need to install these two tools.
 
-For `uv`, you can install it directly via pip. Quick installation via AstrBot WebUI:
-
-![image](https://files.astrbot.app/docs/en/use/image.png)
-
-Just enter `uv`.
+For `uv`, you can install it directly via pip. In AstrBot WebUI, open `Data & Logs → Logs` (`/data/logs`), click `Install pip Package`, enter `uv`, and install it.
 
 If you're deploying AstrBot with Docker, you can also execute the following command for quick installation:
 
@@ -90,13 +86,9 @@ If the MCP server you need requires environment variables to configure something
 }
 ```
 
-Configure it in the AstrBot WebUI:
-
-![image](https://files.astrbot.app/docs/en/use/image-2.png)
-
-That's it.
+In AstrBot WebUI, open `Extensions → MCP Servers` and click `Add Server`. Enter a server name and paste the JSON above into `Server Configuration`. You can test the connection first; enable the option to connect after saving and click `Save` to connect.
 
 Reference links:
 
 1. Learn how to use MCP here: [Model Context Protocol](https://modelcontextprotocol.io/introduction)
-2. Get commonly used MCP servers here: [awesome-mcp-servers](https://github.com/punkpeye/awesome-mcp-servers/blob/main/README-zh.md#what-is-mcp), [Model Context Protocol servers](https://github.com/modelcontextprotocol/servers), [MCP.so](https://mcp.so)
+2. Get commonly used MCP servers here: [awesome-mcp-servers](https://github.com/punkpeye/awesome-mcp-servers/blob/main/README.md#what-is-mcp), [Model Context Protocol servers](https://github.com/modelcontextprotocol/servers), [MCP.so](https://mcp.so)

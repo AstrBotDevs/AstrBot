@@ -5,6 +5,13 @@
   "providers": "Providers",
   "commands": "Commands",
   "persona": "Persona",
+  "data": "Data & Logs",
+  "dataTabs": {
+    "statistics": "Statistics",
+    "conversations": "Conversations",
+    "logs": "Logs",
+    "trace": "Trace"
+  },
   "subagent": "SubAgents",
   "toolUse": "MCP Tools",
   "config": "Config",
@@ -12,7 +19,7 @@
   "cron": "Future Tasks",
   "extension": "Extensions",
   "extensionTabs": {
-    "installed": "AstrBot Plugins",
+    "installed": "Plugins",
     "market": "Plugin Market",
     "mcp": "MCP Servers",
     "skills": "Skills",
@@ -45,5 +52,6 @@
   "configTabs": {
     "normal": "Normal Config",
     "system": "System Config"
-  }
+  },
+  "pluginWebui": "Plugin Pages"
 }

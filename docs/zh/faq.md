@@ -4,27 +4,95 @@
 
 ### 当管理面板打开时遇到 404 错误
 
-在 [release](https://github.com/AstrBotDevs/AstrBot/releases) 页面下载 `dist.zip`，解压拖到 `AstrBot/data` 下。还不行请重启电脑（来自群里的反馈）
+在 [release](https://github.com/AstrBotDevs/AstrBot/releases) 页面下载 `AstrBot-vxxxxx-dashboard.zip`，解压拖到 `AstrBot/data` 下。还不行请重启电脑（来自群里的反馈）
+
+
+### 首次登录的默认账号和随机密码
+
+首次启动时，WebUI 的默认账号为 `astrbot`，默认密码会随机生成，不会写死为固定值。请在启动日志中查找以下内容并使用日志中的随机初始密码登录：
+
+```text
+[00:27:40.590] [Core] [INFO] [dashboard.server:523]:
+ ✨✨✨
+  AstrBot v4.24.3 WebUI is ready
+
+   ➜  Local: http://localhost:6185
+   ➜  Initial username: astrbot
+   ➜  Initial password: UiYVpZxnW8k22IWqf0ru5pOy
+   ➜  Change it after logging in
+ ✨✨✨
+Set dashboard.host in data/cmd_config.json to enable remote access.
+```
+
+其中的 `UiYVpZxnW8k22IWqf0ru5pOy` 就是默认密码。在使用默认密码登录后，会自动进入设置账户环节。
 
 ### 管理面板的密码忘记了
 
-如果你忘记了 AstrBot 管理面板的密码，你可以在 `AstrBot/data/cmd_config.json` 配置文件中找到 `"dashboard"` 字段进行修改，其中 `"username"` 是你的用户名，`"password"` 是你的密码（经过 MD5 加密）。
+如果你忘记了 AstrBot 管理面板的密码，你可以直接使用CLI工具`astrbot password`来更改密码
 
-如果想要修改账号密码，你可以这样做：
+另外，你也可以在 `AstrBot/data/cmd_config.json` 配置文件中找到 `"dashboard"` 字段，如下：
 
-1. 修改 `"username"` 字段，注意保留 `""`；如果不想修改用户名，可以不修改
-2. 进入网站：[在线 MD5 生成](https://www.metools.info/code/c26.html)
-3. 在转换前文本框输入你的新密码
-4. 选择 MD5 加密（32 位），请确认选择 32 位选项
-5. 将转换后的字符粘贴至配置文件，注意保留 `""`, 且字母使用小写
+```json
+  "dashboard": {
+    "enable": true,
+    "username": "astrbot",
+    "password": "81e0c3dxxxxxxxxxxx78862e78",
+    "pbkdf2_password": "pbkdf2_sha256$600000$1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "password_storage_upgraded": true,
+    "password_change_required": true,
+    "jwt_secret": "5e1b0280bcxxxxxxxxxxxxxxxxf4a",
+    "host": "127.0.0.1",
+    "port": 6185,
+    "disable_access_log": true,
+    "ssl": {
+      "enable": false,
+      "cert_file": "",
+      "key_file": "",
+      "ca_certs": ""
+    }
+  },
+```
+
+删除 `username`, `password`, `pbkdf2_password`, `password_storage_upgraded`, `password_change_required`, `jwt_secret` 六个字段（连同值一起），然后保存。上述片段修改类似如下：
+
+
+```json
+  "dashboard": {
+    "enable": true,
+    "host": "127.0.0.1",
+    "port": 6185,
+    "disable_access_log": true,
+    "ssl": {
+      "enable": false,
+      "cert_file": "",
+      "key_file": "",
+      "ca_certs": ""
+    }
+  },
+```
+
+重启后 AstrBot 将会自动生成随机的密码以及固定的用户名 `astrbot`，请在日志查看。
+
+### 升级 AstrBot 后密码正确但无法登录
+
+如果你确认管理面板密码正确，但升级 AstrBot 后仍然无法登录，可能是旧版 WebUI 静态文件缓存与新版后端不兼容。
+
+解决方案：
+
+1. 停止 AstrBot。
+2. 删除 AstrBot 的 `data` 目录下的 `dist` 文件夹，即 `AstrBot/data/dist`。
+3. 重新启动 AstrBot。
+4. 访问管理面板后按 `Ctrl+Shift+R` 或 `Ctrl+F5`（macOS 用户请按 `Cmd+Shift+R`）强制刷新页面。
+
+重启后，AstrBot 会重新加载或下载匹配当前版本的 WebUI 文件。
 
 ## AstrBot 使用相关
 
 ### 如何让 AstrBot 控制我的 Mac / Windows / Linux 电脑？
 
-1. 在 AstrBot WebUI 的 `配置 -> 普通配置` 中，找到 `使用电脑能力`，运行环境选择 `local`。
-2. 在 `配置 -> 其他配置` 中，找到 `管理员 ID 列表`，添加你的用户 ID（可以通过 `/sid` 指令获取）。
-3. 右下角保存配置
+1. 在 AstrBot WebUI 的 `配置文件` 中选择机器人使用的配置文件，进入 `AI 配置 → 能力 → 使用电脑能力`，将 `运行环境` 设为 `local`。此处需要使用 AstrBot 内置 AI。
+2. 在同一配置文件的 `平台配置 → 基本 → 管理员 ID` 中添加你的用户 ID（可以通过 `/sid` 指令获取）。
+3. 点击右下角的 `保存配置` 按钮。
 
 > [!TIP]
 > AstrBot 为了安全起见，运行环境选择 `local` 时，默认仅允许 AstrBot 管理员使用电脑能力。
@@ -52,7 +120,7 @@
 
 ### 没有权限操作管理员指令
 
-1. `/reset, /persona, /dashboard_update, /op, /deop, /wl, /dewl` 是默认的管理员指令。可以通过 `/sid` 指令得到用户的 ID，然后在 `配置` -> `其他配置` 中添加到管理员 ID 名单中。
+1. `/name, /provider, /dashboard_update, /op, /deop, /persona, /llm, /plugin, /model, /groupnew` 等是默认的管理员指令。可以通过 `/sid` 指令得到用户的 ID，然后在 `配置文件` 中选择机器人使用的配置文件，在 `平台配置 → 基本 → 管理员 ID` 中添加该 ID，并点击右下角的 `保存配置`。
 
 ### 本地渲染 Markdown 图片（t2i）时中文乱码
 
@@ -75,7 +143,7 @@
 
 ### 插件安装不上
 
-1. 插件通过 GitHub 安装，在国内访问 GitHub 确实有时候连不上。可以挂代理，然后进入 `其他配置` -> `HTTP 代理` 设置代理，或者直接下载插件压缩包后上传。
+1. 插件通过 GitHub 安装，在国内访问 GitHub 确实有时候连不上。可以在 `设置 → 网络 → 代理与依赖源 → HTTP 代理` 中配置代理并保存；也可以在同一页面设置 `GitHub 加速地址`，或直接下载插件压缩包后在插件页安装。
 
 ### 安装插件后报错 `No module named 'xxx'`
 
@@ -89,9 +157,9 @@
 
 解决方法：
 
-结合报错信息，参考插件的 README 手动安装依赖库。你可以在 AstrBot WebUI 的 `平台日志` -> `安装 Pip 库` 中安装依赖库。
+结合报错信息，参考插件的 README 手动安装依赖库。你可以在 AstrBot WebUI 的 `数据与日志 → 日志 → 安装 pip 库` 中安装依赖库。
 
-![image](https://files.astrbot.app/docs/source/images/faq/image-1.png)
+在弹窗中填写库名，按需填写 PyPI 软件仓库链接，然后点击 `安装`。
 
 如果发现插件作者没有填写 `requirements.txt` 文件，请在插件仓库提交 Issue，提醒作者补充。
 

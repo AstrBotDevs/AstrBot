@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from sqlalchemy.exc import IntegrityError  # type: ignore
+
 from astrbot.core import logger
 from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.utils.astrbot_path import get_astrbot_knowledge_base_path
@@ -36,8 +38,6 @@ class KnowledgeBaseManager:
     async def initialize(self) -> None:
         """初始化知识库模块"""
         try:
-            logger.info("正在初始化知识库模块...")
-
             # 初始化数据库
             await self._init_kb_database()
 
@@ -100,6 +100,11 @@ class KnowledgeBaseManager:
         """创建新的知识库实例"""
         if embedding_provider_id is None:
             raise ValueError("创建知识库时必须提供embedding_provider_id")
+        # 预先检查名称是否已存在，避免依赖异常字符串匹配
+        existing = await self.kb_db.get_kb_by_name(kb_name)
+        if existing:
+            raise ValueError(f"知识库名称 '{kb_name}' 已存在")
+
         kb = KnowledgeBase(
             kb_name=kb_name,
             description=description,
@@ -128,9 +133,11 @@ class KnowledgeBaseManager:
                 await session.commit()
                 self.kb_insts[kb.kb_id] = kb_helper
                 return kb_helper
-        except Exception as e:
-            if "kb_name" in str(e):
-                raise ValueError(f"知识库名称 '{kb_name}' 已存在")
+        except IntegrityError as e:
+            logger.exception("创建知识库失败：唯一约束冲突")
+            raise ValueError(f"知识库名称 '{kb_name}' 已存在") from e
+        except Exception:
+            logger.exception("创建知识库失败")
             raise
 
     async def get_kb(self, kb_id: str) -> KBHelper | None:
@@ -139,10 +146,23 @@ class KnowledgeBaseManager:
             return self.kb_insts[kb_id]
 
     async def get_kb_by_name(self, kb_name: str) -> KBHelper | None:
-        """通过名称获取知识库实例"""
+        """通过名称获取知识库实例
+
+        Args:
+            kb_name: 知识库名称或 UUID
+
+        Returns:
+            KBHelper | None: 知识库实例，未找到返回 None
+        """
+        # 首先按名称匹配
         for kb_helper in self.kb_insts.values():
             if kb_helper.kb.kb_name == kb_name:
                 return kb_helper
+
+        # 如果没找到，尝试按 UUID 匹配（兼容旧配置）
+        if kb_name in self.kb_insts:
+            return self.kb_insts[kb_name]
+
         return None
 
     async def delete_kb(self, kb_id: str) -> bool:

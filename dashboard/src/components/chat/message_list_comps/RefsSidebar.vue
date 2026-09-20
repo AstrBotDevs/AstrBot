@@ -1,6 +1,6 @@
 <template>
-  <transition name="slide-left">
-    <div v-if="isOpen" class="refs-sidebar">
+  <transition name="chat-panel">
+    <div v-if="isOpen" class="refs-sidebar chat-side-panel">
       <div class="sidebar-header">
         <h3 class="sidebar-title">{{ tm("refs.title") }}</h3>
         <v-btn
@@ -44,6 +44,7 @@
 </template>
 
 <script>
+import "@/components/chat/chatPanelTransition.css";
 import { useModuleI18n } from "@/i18n/composables";
 
 export default {
@@ -122,43 +123,32 @@ export default {
 
 <style scoped>
 .refs-sidebar {
-  width: 360px;
-  height: 100%;
-  background-color: rgb(var(--v-theme-surface));
-  border-left: 1px solid rgba(var(--v-border-color), 0.16);
+  --chat-side-panel-width: 360px;
+  width: var(--chat-side-panel-width);
+  height: calc(100% - var(--chat-panel-top-offset, 0px));
+  margin-top: var(--chat-panel-top-offset, 0px);
+  background: var(--chat-page-bg, rgb(var(--v-theme-surface)));
+  border-left: 1px solid var(--chat-border, rgba(var(--v-border-color), 0.16));
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
   color: rgb(var(--v-theme-on-surface));
 }
 
-.slide-left-enter-active,
-.slide-left-leave-active {
-  transition: all 0.3s ease;
-}
-
-.slide-left-enter-from {
-  transform: translateX(100%);
-  opacity: 0;
-}
-
-.slide-left-leave-to {
-  transform: translateX(100%);
-  opacity: 0;
-}
-
 .sidebar-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 20px;
+  padding: 14px 16px 8px;
   flex-shrink: 0;
 }
 
 .sidebar-title {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
-  color: var(--v-theme-primaryText);
+  color: rgb(var(--v-theme-on-surface));
+  line-height: 1.4;
+  margin: 0;
 }
 
 .refs-list {
@@ -194,7 +184,6 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 }
 
 .ref-item-favicon {
@@ -258,5 +247,17 @@ export default {
 
 .ref-item:hover .ref-item-arrow {
   opacity: 1;
+}
+
+@media (max-width: 760px) {
+  .refs-sidebar {
+    position: fixed;
+    inset: 0;
+    z-index: 1300;
+    width: 100vw;
+    height: 100dvh;
+    margin-top: 0;
+    border-left: 0;
+  }
 }
 </style>

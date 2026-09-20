@@ -4,8 +4,6 @@ This module tests the fix for issue #5821: when an MCP external tool shares a na
 with a disabled built-in tool, the MCP tool should not be removed as collateral damage.
 """
 
-import pytest
-
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.provider.func_tool_manager import FunctionToolManager
 
@@ -180,16 +178,20 @@ class TestFunctionToolManagerGetFullToolSet:
         assert web_search is not None
         assert web_search.active is True
 
-    def test_no_deepcopy_preserves_identity(self):
-        """Should not deep copy tools, preserving object identity."""
+    def test_wrapping_preserves_tool_name_and_description(self):
+        """_PermissionGuardedTool wrapping should preserve name and description."""
+        from astrbot.core.provider.func_tool_manager import _PermissionGuardedTool
+
         manager = FunctionToolManager()
         tool = make_tool("web_search")
         manager.func_list = [tool]
 
         toolset = manager.get_full_tool_set()
 
-        # Same object reference (no deepcopy)
-        assert toolset.tools[0] is tool
+        wrapped = toolset.tools[0]
+        assert wrapped.name == "web_search"
+        assert wrapped.description == "Test tool web_search"
+        assert isinstance(wrapped, _PermissionGuardedTool)
 
     def test_mcp_tool_overrides_disabled_builtin(self):
         """

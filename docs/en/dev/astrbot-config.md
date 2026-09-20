@@ -10,6 +10,8 @@ AstrBot's configuration file is a JSON format file. AstrBot reads this file at s
 
 > Since AstrBot v4.0.0, we introduced the concept of [multiple configuration files](https://blog.astrbot.app/posts/what-is-changed-in-4.0.0/#%E5%A4%9A%E9%85%8D%E7%BD%AE%E6%96%87%E4%BB%B6). `data/cmd_config.json` serves as the default configuration `default`. Other configuration files you create in the WebUI are stored in the `data/config/` directory, starting with `abconf_`.
 
+In the WebUI, manage bot and session behavior profiles under `Config`. Global runtime, logging, network, WebUI security, and text-to-image service settings are under `Settings`. Model connections and bot connections are managed under `Providers` and `Platforms`, respectively.
+
 The default AstrBot configuration is as follows:
 
 ```jsonc
@@ -75,7 +77,7 @@ The default AstrBot configuration is as follows:
         "streaming_response": False,
         "show_tool_use_status": False,
         "streaming_segmented": False,
-        "max_agent_step": 30,
+        "max_agent_step": 128,
         "tool_call_timeout": 120,
     },
     "provider_stt_settings": {
@@ -90,7 +92,7 @@ The default AstrBot configuration is as follows:
     },
     "provider_ltm_settings": {
         "group_icl_enable": False,
-        "group_message_max_cnt": 300,
+        "group_message_max_cnt": 1000,
         "image_caption": False,
         "active_reply": {
             "enable": False,
@@ -116,7 +118,7 @@ The default AstrBot configuration is as follows:
     "dashboard": {
         "enable": True,
         "username": "astrbot",
-        "password": "77b90590a8945a7d36c963981a307dc9",
+        "password": "<your_password_md5>",
         "jwt_secret": "",
         "host": "0.0.0.0",
         "port": 6185,
@@ -159,7 +161,7 @@ General settings for message platform adapters.
 
 #### `platform_settings.unique_session`
 
-Whether to enable session isolation. Default is `false`. When enabled, each person's conversation context in groups or channels is independent.
+Whether to enable **Isolate Conversation**. Defaults to `false`. On supported platforms, each group member has a separate conversation context when enabled. Unsupported platforms retain their existing context. Access to `/new` and `/reset` is controlled by [command permissions](../use/command.md), which follow conversation isolation by default.
 
 #### `platform_settings.rate_limit`
 
@@ -288,12 +290,13 @@ Whether to enable AstrBot's built-in web search capability. Default is `false`. 
 
 #### `provider_settings.websearch_provider`
 
-Web search provider type. Default is `tavily`. Currently supports `tavily`, `bocha`, `baidu_ai_search`, and `brave`.
+Web search provider type. Default is `tavily`. Currently supports `tavily`, `bocha`, `baidu_ai_search`, `brave`, and `firecrawl`.
 
 - `tavily`: Uses the Tavily search engine.
 - `bocha`: Uses the BoCha search engine.
 - `baidu_ai_search`: Uses Baidu AI Search (MCP).
 - `brave`: Uses Brave Search API.
+- `firecrawl`: Uses the Firecrawl Search API.
 
 #### `provider_settings.websearch_tavily_key`
 
@@ -306,6 +309,10 @@ API Key list for the BoCha search engine. Required when using `bocha` as the web
 #### `provider_settings.websearch_brave_key`
 
 API Key list for the Brave search engine. Required when using `brave` as the web search provider.
+
+#### `provider_settings.websearch_firecrawl_key`
+
+API Key list for the Firecrawl search engine. Required when using `firecrawl` as the web search provider.
 
 #### `provider_settings.web_search_link`
 
@@ -361,7 +368,7 @@ Whether platforms that don't support streaming responses should fall back to seg
 
 #### `provider_settings.max_agent_step`
 
-Limit on the maximum number of Agent steps. Default is `30`. Each tool call by the model counts as one step.
+Limit on the maximum number of Agent steps. Default is `128`. Each tool call by the model counts as one step.
 
 #### `provider_settings.tool_call_timeout`
 
@@ -407,17 +414,17 @@ General settings for group chat context awareness providers.
 
 #### `provider_ltm_settings.group_icl_enable`
 
-Whether to enable group chat context awareness. Default is `false`. When enabled, the bot records group chat conversations to better understand context.
+Whether to inject group chat records into the model context. Default is `false`. When enabled, the bot temporarily records group chat messages and injects them into the context for the next response.
 
 The context content is placed in the conversation's system prompt.
 
 #### `provider_ltm_settings.group_message_max_cnt`
 
-Maximum number of group chat messages to record. Default is `100`. Messages exceeding this count are discarded.
+Maximum number of group chat messages retained for context injection. Default is `1000`. Messages exceeding this count are discarded. This only applies when group chat record injection is enabled.
 
 #### `provider_ltm_settings.image_caption`
 
-Whether to record images in group chats and automatically generate text descriptions using an image captioning model. Default is `false`. This depends on the `provider_settings.default_image_caption_provider_id` configuration. Use with caution as it can significantly increase API calls and token usage.
+Whether to automatically describe group chat images and inject the descriptions into context. Default is `false`. This only applies when group chat record injection is enabled. Use with caution as it can significantly increase API calls and token usage.
 
 #### `provider_ltm_settings.active_reply`
 
@@ -492,11 +499,11 @@ List of addresses that bypass the proxy. E.g., `["localhost", "127.0.0.1"]`.
 
 AstrBot WebUI configuration.
 
-Please do not change the `password` value arbitrarily. It is an `md5` encoded password. Change the password in the control panel.
+Please do not change the `password` value arbitrarily. It is an `md5` encoded password generated from the random initial password. Check the startup logs for that initial password on first run, then change it in the control panel.
 
 - `enable`: Whether to enable the AstrBot WebUI. Default is `true`.
-- `username`: Username for the AstrBot WebUI. Default is `astrbot`.
-- `password`: Password for the AstrBot WebUI. Default is the `md5` encoded value of `astrbot`. Do not modify directly unless you know what you are doing.
+- `username`: Username for the AstrBot WebUI.
+- `password`: Password for the AstrBot WebUI. It is initialized from a random password generated on first startup (logged at startup). Do not modify directly unless you know what you are doing.
 - `jwt_secret`: JWT secret key. AstrBot generates this randomly at initialization. Do not modify unless you know what you are doing.
 - `host`: Address the AstrBot WebUI listens on. Default is `0.0.0.0`.
 - `port`: Port the AstrBot WebUI listens on. Default is `6185`.
@@ -543,7 +550,7 @@ Log level. Default is `INFO`. Can be set to `DEBUG`, `INFO`, `WARNING`, `ERROR`,
 
 ### `trace_enable`
 
-Whether to enable trace recording. Default is `false`. When enabled, AstrBot records execution traces, which can be viewed on the Trace page of the admin panel.
+Whether to enable trace recording. Default is `false`. When enabled, AstrBot records execution traces, which can be viewed under `Data & Logs → Trace` in the admin panel.
 
 ### `pip_install_arg`
 

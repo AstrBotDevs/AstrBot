@@ -12,15 +12,37 @@ AstrBot 在 v4.13.0 之后引入了对 Anthropic Skills 的支持，使得用户
 
 ## 上传 Skills 到 AstrBot
 
-进入 AstrBot 管理面板，导航到 `插件` 页面，找到 `Skills`。
-
-![Skills](https://files.astrbot.app/docs/source/images/skills/image.png)
+进入 AstrBot 管理面板，打开 `插件 → 技能`（`/extension/skills`），点击 `上传技能`。
 
 你可以上传 Skills，上传格式要求如下：
 
 1. 是一个 .zip 压缩包
-2. **解压后是一个 Skill 文件夹，Skill 文件夹的名字即为这个 Skill 在 AstrBot 中的标识，请用英文命名**。
-3. Skill 文件夹内必须包含一个名为 `SKILL.md` 的文件，且该文件内容最好符合 Anthropic Skills 规范。你可以参考 [Anthropic 技能](https://code.claude.com/docs/zh-CN/skills)
+2. 解压后可以是一个或多个 Skill 文件夹，Skill 文件夹的名字即为这个 Skill 在 AstrBot 中的标识，请用英文、数字、点、下划线或短横线命名。
+3. Skill 文件夹内必须包含一个名为 `SKILL.md` 的文件，且文件名大小写需要完全一致。该文件内容最好符合 Anthropic Skills 规范。你可以参考 [Anthropic 技能](https://code.claude.com/docs/zh-CN/skills)
+
+## Skill 来源与优先级
+
+AstrBot 会从多个位置发现 Skills：
+
+- **本地 Skills**：通过 WebUI 上传或放置在 `data/skills/<skill_name>/SKILL.md`，会显示在 WebUI 的 Skills 管理页面中。
+- **插件内置 Skills**：插件可以在自己的 `skills/` 目录中提供 Skills。它们会显示在 WebUI 中，但由插件管理，因此不能在本地 Skills 页面删除或编辑。
+- **Sandbox 预置 Skills**：使用 sandbox 运行环境时，AstrBot 会读取沙盒中已发现的 Skills，并在请求时提供给 Agent。
+- **工作区 Skills**：当前会话 workspace 下的 `skills/<skill_name>/SKILL.md`。目前仅在 local 运行环境下注入，路径通常是 `data/workspaces/{normalized_umo}/skills/<skill_name>/SKILL.md`。
+
+工作区 Skills 是**请求级**能力：local 运行环境下，AstrBot 会在每次构建请求时检测当前会话 workspace 下的 `skills/` 目录，并把合法的 Skills 拼进本次请求的 Skills 清单。它们暂时不会显示在 WebUI 的 Skills 管理页面，也不会写入全局 Skills 配置。
+
+如果人格配置为“选择指定 Skills”，该列表只用于筛选本地、插件内置和 sandbox Skills；工作区 Skills 仍会作为当前请求的一部分被检测并注入。只有人格明确配置为“不使用任何 Skills”时，才会同时禁用工作区 Skills。
+
+当不同来源出现同名 Skill 时，请求中的优先级如下：
+
+1. 如果当前人格明确配置为“不使用任何 Skills”，则不会注入任何 Skills，包括工作区 Skills。
+2. 如果当前人格配置了指定 Skills 列表，该列表不会过滤工作区 Skills。
+3. 当前会话的工作区 Skill 优先级最高。同名时，它会覆盖本地、插件或 sandbox 中的同名 Skill，仅对当前请求生效。
+4. 本地 Skills 优先于插件内置 Skills 和 sandbox-only Skills。
+5. 插件内置 Skills 优先于 sandbox-only Skills。
+6. sandbox-only Skills 只会在没有同名本地、插件或工作区 Skill 时作为可用 Skill 注入。
+
+如果本地 Skill 已同步到 sandbox，AstrBot 会把它视为同一个 Skill；在 sandbox 运行环境下，请求中会优先使用 sandbox 内可读取的路径。工作区 Skills 暂不会自动同步到 sandbox。
 
 ## 在 AstrBot 使用 Skills
 
@@ -31,8 +53,7 @@ Skills 提供了 Agent 操作说明书，并且内容通常包含 Python 代码�
 - Local（Agent 将在你的 AstrBot 运行环境中运行。**请谨慎使用，因为这会允许 Agent 在你的环境执行任意代码，可能带来安全风险**）
 - Sandbox (Agent 在隔离化的沙盒环境中运行。**需要先启动 AstrBot 沙盒模式**，请参考：[沙盒模式](/use/astrbot-agent-sandbox)，如果这个模式下不启动沙盒模式，将不会将 Skills 传给 Agent)
 
-你可以在 `配置` 页面 - 使用电脑能力 中选择默认的执行环境。
+在 `配置文件` 页面选择要修改的配置文件，进入 `AI 配置 → 能力 → 使用电脑能力`，设置执行环境后点击右下角的 `保存配置`。
 
 > [!NOTE]
 > 需要说明的是，如果您使用 Local 作为执行环境，AstrBot 目前仅允许 **AstrBot 管理员**请求时才真正让 Agent 操作你的本地环境，普通用户将会被禁止，Agent 将无法通过 Shell、Python 等 Tool 在本地环境执行代码，会收到相应的权限限制提示，如 `Sorry, I cannot execute code on your local environment due to permission restrictions.`。
-

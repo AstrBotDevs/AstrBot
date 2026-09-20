@@ -194,7 +194,9 @@ class TestConcurrency:
                 loop.close()
                 asyncio.set_event_loop(None)
 
-        threads = [threading.Thread(target=create_loop_and_get_manager) for _ in range(10)]
+        threads = [
+            threading.Thread(target=create_loop_and_get_manager) for _ in range(10)
+        ]
         for t in threads:
             t.start()
         for t in threads:
@@ -417,7 +419,9 @@ class TestIssue5464:
                 asyncio.set_event_loop(None)
 
         # Start 3 threads nearly simultaneously
-        threads = [threading.Thread(target=acquire_lock_in_loop, args=(i,)) for i in range(3)]
+        threads = [
+            threading.Thread(target=acquire_lock_in_loop, args=(i,)) for i in range(3)
+        ]
 
         start_time = time.time()
         for t in threads:

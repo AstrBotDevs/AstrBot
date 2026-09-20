@@ -9,7 +9,10 @@ from astrbot.core import db_helper, logger
 from astrbot.core.db.po import CommandConfig
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
-from astrbot.core.star.filter.permission import PermissionType, PermissionTypeFilter
+from astrbot.core.star.filter.permission import (
+    COMMAND_PERMISSION_TYPES,
+    PermissionTypeFilter,
+)
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import StarHandlerMetadata, star_handlers_registry
 
@@ -148,8 +151,10 @@ async def update_command_permission(
     if not descriptor:
         raise ValueError("指定的处理函数不存在或不是指令。")
 
-    if permission_type not in ["admin", "member"]:
-        raise ValueError("权限类型必须为 admin 或 member。")
+    if permission_type not in COMMAND_PERMISSION_TYPES:
+        raise ValueError(
+            "Permission must be one of: " + ", ".join(COMMAND_PERMISSION_TYPES) + "."
+        )
 
     handler = descriptor.handler
     found_plugin = star_map.get(handler.handler_module_path)
@@ -168,9 +173,7 @@ async def update_command_permission(
 
     # 2. Update Runtime Filter
     found_permission_filter = False
-    target_perm_type = (
-        PermissionType.ADMIN if permission_type == "admin" else PermissionType.MEMBER
-    )
+    target_perm_type = COMMAND_PERMISSION_TYPES[permission_type]
 
     for filter_ in handler.event_filters:
         if isinstance(filter_, PermissionTypeFilter):
@@ -250,6 +253,11 @@ async def list_command_conflicts() -> list[dict[str, Any]]:
 # Internal helpers ----------------------------------------------------------
 
 
+def _is_plugin_activated(desc: CommandDescriptor) -> bool:
+    plugin_meta = star_map.get(desc.module_path)
+    return bool(plugin_meta.activated) if plugin_meta else True
+
+
 def _collect_descriptors(include_sub_commands: bool) -> list[CommandDescriptor]:
     """收集指令，按需包含子指令。"""
     descriptors: list[CommandDescriptor] = []
@@ -263,7 +271,8 @@ def _collect_descriptors(include_sub_commands: bool) -> list[CommandDescriptor]:
             descriptors.append(desc)
         except Exception as e:
             logger.warning(
-                f"解析指令处理函数 {handler.handler_full_name} 失败，跳过该指令。原因: {e!s}"
+                f"Failed to parse command handler {handler.handler_full_name}; "
+                f"skipping the command: {e!s}"
             )
             continue
     return descriptors
@@ -357,10 +366,13 @@ def _locate_primary_filter(
 def _determine_permission(handler: StarHandlerMetadata) -> str:
     for filter_ref in handler.event_filters:
         if isinstance(filter_ref, PermissionTypeFilter):
-            return (
-                "admin"
-                if filter_ref.permission_type == PermissionType.ADMIN
-                else "member"
+            return next(
+                (
+                    name
+                    for name, permission in COMMAND_PERMISSION_TYPES.items()
+                    if filter_ref.permission_type == permission
+                ),
+                "member",
             )
     return "everyone"
 
@@ -464,7 +476,7 @@ def _group_conflicts(
 ) -> dict[str, list[CommandDescriptor]]:
     conflicts: dict[str, list[CommandDescriptor]] = defaultdict(list)
     for desc in descriptors:
-        if desc.effective_command and desc.enabled:
+        if desc.effective_command and desc.enabled and _is_plugin_activated(desc):
             conflicts[desc.effective_command].append(desc)
     return {k: v for k, v in conflicts.items() if len(v) > 1}
 
@@ -530,6 +542,7 @@ def _descriptor_to_dict(desc: CommandDescriptor) -> dict[str, Any]:
         "aliases": desc.aliases,
         "permission": desc.permission,
         "enabled": desc.enabled,
+        "plugin_activated": _is_plugin_activated(desc),
         "is_group": desc.is_group,
         "has_conflict": desc.has_conflict,
         "reserved": desc.reserved,

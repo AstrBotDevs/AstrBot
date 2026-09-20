@@ -34,7 +34,7 @@ class Document(BaseDocModel, table=True):
         primary_key=True,
         sa_column_kwargs={"autoincrement": True},
     )
-    doc_id: str = Field(nullable=False)
+    doc_id: str = Field(nullable=False, unique=True)
     text: str = Field(nullable=False)
     metadata_: str | None = Field(default=None, sa_column=Column("metadata", Text))
     created_at: datetime | None = Field(default=None)
@@ -90,6 +90,12 @@ class DocumentStorage:
                 )
             except BaseException:
                 pass
+
+            await conn.execute(
+                text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS idx_documents_doc_id_unique ON documents(doc_id)",
+                ),
+            )
 
             await self._initialize_fts5(conn)
             await conn.commit()

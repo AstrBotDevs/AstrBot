@@ -33,8 +33,9 @@ class ContextManager:
         elif config.llm_compress_provider:
             self.compressor = LLMSummaryCompressor(
                 provider=config.llm_compress_provider,
-                keep_recent=config.llm_compress_keep_recent,
+                keep_recent_ratio=config.llm_compress_keep_recent_ratio,
                 instruction_text=config.llm_compress_instruction,
+                token_counter=self.token_counter,
             )
         else:
             self.compressor = TruncateByTurnsCompressor(

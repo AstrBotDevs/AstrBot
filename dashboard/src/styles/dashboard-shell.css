@@ -38,27 +38,18 @@
   min-width: 0;
 }
 
-.dashboard-eyebrow {
-  margin-bottom: 8px;
-  color: var(--dashboard-subtle);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
 .dashboard-title {
   margin: 0;
-  font-size: clamp(32px, 4vw, 44px);
-  line-height: 1.04;
+  font-size: 1.5rem;
+  line-height: 1.2;
   font-weight: 700;
-  letter-spacing: -0.04em;
+  letter-spacing: 0;
 }
 
 .dashboard-subtitle {
-  margin: 10px 0 0;
+  margin: 4px 0 0;
   color: var(--dashboard-muted);
-  font-size: 15px;
+  font-size: 0.875rem;
   line-height: 1.6;
   max-width: 860px;
 }

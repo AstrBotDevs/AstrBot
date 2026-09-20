@@ -1,8 +1,10 @@
 import { ref, computed, onMounted, nextTick, watch } from 'vue'
-import axios from 'axios'
-import { getProviderIcon } from '@/utils/providerUtils'
+import { providerApi } from '@/api/v1'
+import { getProviderIcon, isMonochromeProviderIcon } from '@/utils/providerUtils'
 import { askForConfirmation as askForConfirmationDialog, useConfirmDialog } from '@/utils/confirmDialog'
 import { normalizeTextInput } from '@/utils/inputValue'
+import { sponsorCatalog, loadSponsorCatalog } from '@/utils/sponsorCatalog'
+import { useI18n } from '@/i18n/composables'
 
 export interface UseProviderSourcesOptions {
   defaultTab?: string
@@ -10,12 +12,22 @@ export interface UseProviderSourcesOptions {
   showMessage: (message: string, color?: string) => void
 }
 
+interface ProviderSourceType {
+  value: string
+  label: string
+  icon: string
+  isMonochrome: boolean
+  isSponsor?: boolean
+  subtitle?: string
+  website_url?: string
+}
+
+interface ProviderIconSource {
+  provider?: string
+}
+
 export function resolveDefaultTab(value?: string) {
   const normalized = (value || '').toLowerCase()
-
-  if (normalized.startsWith('select_agent_runner_provider') || normalized === 'agent_runner') {
-    return 'agent_runner'
-  }
 
   if (normalized === 'select_provider_stt' || normalized === 'speech_to_text' || normalized.includes('stt')) {
     return 'speech_to_text'
@@ -38,6 +50,7 @@ export function resolveDefaultTab(value?: string) {
 
 export function useProviderSources(options: UseProviderSourcesOptions) {
   const { tm, showMessage } = options
+  const { locale } = useI18n()
 
   const confirmDialog = useConfirmDialog()
 
@@ -56,8 +69,10 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   const editableProviderSource = ref<any | null>(null)
   const availableModels = ref<any[]>([])
   const modelMetadata = ref<Record<string, any>>({})
+  const loadingSources = ref(true)
   const loadingModels = ref(false)
   const savingSource = ref(false)
+  const savingProviderToggles = ref<string[]>([])
   const testingProviders = ref<string[]>([])
   const isSourceModified = ref(false)
   const configSchema = ref<Record<string, any>>({})
@@ -66,10 +81,10 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   const modelSearch = ref('')
 
   let suppressSourceWatch = false
+  const unsavedProviderSourceMarker = Symbol('unsavedProviderSource')
 
   const providerTypes = computed(() => [
     { value: 'chat_completion', label: tm('providers.tabs.chatCompletion'), icon: 'mdi-message-text' },
-    { value: 'agent_runner', label: tm('providers.tabs.agentRunner'), icon: 'mdi-robot' },
     { value: 'speech_to_text', label: tm('providers.tabs.speechToText'), icon: 'mdi-microphone-message' },
     { value: 'text_to_speech', label: tm('providers.tabs.textToSpeech'), icon: 'mdi-volume-high' },
     { value: 'embedding', label: tm('providers.tabs.embedding'), icon: 'mdi-code-json' },
@@ -82,18 +97,47 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       return []
     }
 
-    const types: Array<{ value: string; label: string; icon: string }> = []
+    const types: ProviderSourceType[] = []
+    const builtInSponsors = ['MiraRouter', 'SSYCloud(胜算云)']
+    if (selectedProviderType.value === 'chat_completion' && sponsorCatalog.value) {
+      for (const sponsor of sponsorCatalog.value.sponsors) {
+        if (providerTemplates.value[sponsor.template]?.provider_type !== 'chat_completion') continue
+        const translation = sponsor.i18n?.[locale.value]
+        types.push({
+          value: `sponsor:${sponsor.id}`,
+          label: translation?.title || sponsor.title,
+          icon: sponsor.logo,
+          website_url: sponsor.website_url,
+          subtitle: translation?.subtitle || sponsor.subtitle,
+          isMonochrome: false,
+          isSponsor: true
+        })
+      }
+    }
     for (const [templateName, template] of Object.entries(providerTemplates.value)) {
+      if (templateName === 'AIHubMix') continue
+      if (sponsorCatalog.value && builtInSponsors.includes(templateName)) continue
       if (template.provider_type === selectedProviderType.value) {
         types.push({
           value: templateName,
           label: templateName,
-          icon: getProviderIcon(template.provider)
+          icon: getProviderIcon(template.provider),
+          isMonochrome: isMonochromeProviderIcon(template.provider),
+          isSponsor: builtInSponsors.includes(templateName)
         })
       }
     }
 
     return types
+  })
+
+  const selectedSponsor = computed(() => {
+    const source = selectedProviderSource.value
+    if (!source?.api_base) return undefined
+    return sponsorCatalog.value?.sponsors.find(sponsor =>
+      sponsor.api_base.replace(/\/+$/, '') === source.api_base.replace(/\/+$/, '') &&
+      providerTemplates.value[sponsor.template]?.type === source.type
+    )
   })
 
   const filteredProviderSources = computed(() => {
@@ -133,12 +177,30 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     })
   })
 
+  function buildMetadataFromProvider(provider: any) {
+    if (!provider) return null
+    const mods = provider.modalities || []
+    if (!mods.length && !provider.max_context_tokens) return null
+    const input: string[] = []
+    if (mods.includes('image')) input.push('image')
+    if (mods.includes('audio')) input.push('audio')
+    return {
+      modalities: { input },
+      tool_call: mods.includes('tool_use'),
+      limit: { context: provider.max_context_tokens || 0 }
+    }
+  }
+
   const mergedModelEntries = computed(() => {
-    const configuredEntries = (sourceProviders.value || []).map((provider: any) => ({
-      type: 'configured',
-      provider,
-      metadata: getModelMetadata(provider.model)
-    }))
+    const configuredEntries = (sourceProviders.value || []).map((provider: any) => {
+      const metadata = getModelMetadata(provider.model)
+      return {
+        type: 'configured',
+        provider,
+        metadata: metadata || buildMetadataFromProvider(provider),
+        hasModelMetadata: Boolean(metadata)
+      }
+    })
 
     const availableEntries = (sortedAvailableModels.value || [])
       .filter((item: any) => {
@@ -150,7 +212,8 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
         return {
           type: 'available',
           model: name,
-          metadata: typeof item === 'object' ? item?.metadata : getModelMetadata(name)
+          metadata: typeof item === 'object' ? item?.metadata : getModelMetadata(name),
+          hasModelMetadata: Boolean(typeof item === 'object' ? item?.metadata : getModelMetadata(name))
         }
       })
 
@@ -269,14 +332,19 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     return type.includes(providerType)
   }
 
-  function resolveSourceIcon(source: any) {
+  function resolveSourceIcon(source: ProviderIconSource | null | undefined) {
     if (!source) return ''
-    return getProviderIcon(source.provider) || ''
+    return getProviderIcon(source.provider || '') || ''
+  }
+
+  function isMonochromeSourceIcon(source: ProviderIconSource | null | undefined) {
+    return Boolean(source && isMonochromeProviderIcon(source.provider || ''))
   }
 
   function getSourceDisplayName(source: any) {
     if (!source) return ''
     if (source.isPlaceholder) return source.templateKey || source.id || ''
+    if (source.id === 'ssycloud') return 'ssycloud(胜算云)'
     return source.id
   }
 
@@ -322,8 +390,6 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       anthropic_chat_completion: 'chat_completion',
       googlegenai_chat_completion: 'chat_completion',
       zhipu_chat_completion: 'chat_completion',
-      dify: 'agent_runner',
-      coze: 'agent_runner',
       dashscope: 'chat_completion',
       openai_whisper_api: 'speech_to_text',
       mimo_stt_api: 'speech_to_text',
@@ -401,8 +467,35 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     return candidate
   }
 
+  function removeProviderSourceFromLocalState(sourceId: string) {
+    providers.value = providers.value.filter(
+      (p) => p.provider_source_id == null || String(p.provider_source_id) !== sourceId
+    )
+    providerSources.value = providerSources.value.filter(
+      (s) => s.id == null || String(s.id) !== sourceId
+    )
+
+    if (
+      selectedProviderSource.value?.id != null &&
+      String(selectedProviderSource.value.id) === sourceId
+    ) {
+      selectedProviderSource.value = null
+      selectedProviderSourceOriginalId.value = null
+      editableProviderSource.value = null
+      availableModels.value = []
+      modelMetadata.value = {}
+      isSourceModified.value = false
+    }
+  }
+
   function addProviderSource(templateKey: string) {
-    const template = providerTemplates.value[templateKey]
+    const sponsor = templateKey.startsWith('sponsor:')
+      ? sponsorCatalog.value?.sponsors.find(item => `sponsor:${item.id}` === templateKey)
+      : null
+    const baseTemplate = providerTemplates.value[sponsor?.template || templateKey]
+    const template = sponsor && baseTemplate
+      ? { ...baseTemplate, id: sponsor.id, api_base: sponsor.api_base }
+      : baseTemplate
     if (!template) {
       showMessage('未找到对应的模板配置', 'error')
       return
@@ -418,6 +511,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       enable: true
     })
 
+    newSource[unsavedProviderSourceMarker] = true
     providerSources.value.push(newSource)
     selectedProviderSource.value = newSource
     selectedProviderSourceOriginalId.value = newId
@@ -433,18 +527,16 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     )
     if (!confirmed) return
 
+    const sourceId = String(source.id)
+    if (source[unsavedProviderSourceMarker]) {
+      removeProviderSourceFromLocalState(sourceId)
+      showMessage(tm('providerSources.deleteSuccess'))
+      return
+    }
+
     try {
-      await axios.post('/api/config/provider_sources/delete', { id: source.id })
-
-      providers.value = providers.value.filter((p) => p.provider_source_id !== source.id)
-      providerSources.value = providerSources.value.filter((s) => s.id !== source.id)
-
-      if (selectedProviderSource.value?.id === source.id) {
-        selectedProviderSource.value = null
-        selectedProviderSourceOriginalId.value = null
-        editableProviderSource.value = null
-      }
-
+      await providerApi.deleteSource(sourceId)
+      removeProviderSourceFromLocalState(sourceId)
       showMessage(tm('providerSources.deleteSuccess'))
     } catch (error: any) {
       showMessage(error.message || tm('providerSources.deleteError'), 'error')
@@ -457,15 +549,13 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     if (!selectedProviderSource.value) return
 
     savingSource.value = true
-    const originalId = selectedProviderSourceOriginalId.value || selectedProviderSource.value.id
+    const sourceBeingSaved = selectedProviderSource.value
+    const originalId = String(selectedProviderSourceOriginalId.value || sourceBeingSaved.id || '')
     try {
-      const response = await axios.post('/api/config/provider_sources/update', {
-        config: editableProviderSource.value,
-        original_id: originalId
-      })
+      const response = await providerApi.upsertSource(originalId, editableProviderSource.value)
 
       if (response.data.status !== 'ok') {
-        throw new Error(response.data.message)
+        throw new Error(response.data.message || tm('providerSources.saveError'))
       }
 
       if (editableProviderSource.value!.id !== originalId) {
@@ -489,6 +579,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
         suppressSourceWatch = false
       })
 
+      delete sourceBeingSaved[unsavedProviderSourceMarker]
       isSourceModified.value = false
       showMessage(response.data.message || tm('providerSources.saveSuccess'))
       return true
@@ -513,12 +604,10 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
 
     loadingModels.value = true
     try {
-      const sourceId = editableProviderSource.value?.id || selectedProviderSource.value.id
-      const response = await axios.get('/api/config/provider_sources/models', {
-        params: { source_id: sourceId }
-      })
+      const sourceId = String(editableProviderSource.value?.id || selectedProviderSource.value.id || '')
+      const response = await providerApi.sourceModels(sourceId)
       if (response.data.status === 'ok') {
-        const metadataMap = response.data.data.model_metadata || {}
+        const metadataMap = (response.data.data.model_metadata || {}) as Record<string, any>
         modelMetadata.value = metadataMap
         availableModels.value = (response.data.data.models || []).map((model: string) => ({
           name: model,
@@ -528,7 +617,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
           showMessage(tm('models.noModelsFound'), 'info')
         }
       } else {
-        throw new Error(response.data.message)
+        throw new Error(response.data.message || tm('models.fetchError'))
       }
     } catch (error: any) {
       modelMetadata.value = {}
@@ -538,7 +627,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     }
   }
 
-  async function addModelProvider(modelName: string) {
+  function buildModelProviderConfig(modelName: string) {
     if (!selectedProviderSource.value) return
 
     const sourceId = editableProviderSource.value?.id || selectedProviderSource.value.id
@@ -567,20 +656,28 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       max_context_tokens = metadata.limit.context
     }
 
-    const newProvider = {
+    return {
       id: newId,
-      enable: false,
+      enable: true,
       provider_source_id: sourceId,
       model: modelName,
       modalities,
       custom_extra_body: {},
       max_context_tokens: max_context_tokens
     }
+  }
+
+  async function addModelProvider(modelName: string) {
+    const newProvider = buildModelProviderConfig(modelName)
+    if (!newProvider) return
 
     try {
-      const res = await axios.post('/api/config/provider/new', newProvider)
+      const res = await providerApi.createInSource(
+        String(newProvider.provider_source_id),
+        newProvider
+      )
       if (res.data.status === 'error') {
-        throw new Error(res.data.message)
+        throw new Error(res.data.message || tm('providerSources.saveError'))
       }
       providers.value.push(newProvider)
       showMessage(res.data.message || tm('models.addSuccess', { model: modelName }))
@@ -597,16 +694,43 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
 
   async function deleteProvider(provider: any) {
     const confirmed = await askForConfirmation(tm('models.deleteConfirm', { id: provider.id }))
-    if (!confirmed) return
+    if (!confirmed) return false
 
     try {
-      await axios.post('/api/config/provider/delete', { id: provider.id })
+      await providerApi.delete(String(provider.id))
       providers.value = providers.value.filter((p) => p.id !== provider.id)
       showMessage(tm('models.deleteSuccess'))
+      return true
     } catch (error: any) {
       showMessage(error.message || tm('models.deleteError'), 'error')
+      return false
     } finally {
       await loadConfig()
+    }
+  }
+
+  async function toggleProviderEnable(provider: any, value: boolean) {
+    if (!provider?.id || savingProviderToggles.value.includes(provider.id)) {
+      return false
+    }
+
+    savingProviderToggles.value.push(provider.id)
+    try {
+      const response = await providerApi.setEnabled(String(provider.id), {
+        enabled: Boolean(value)
+      })
+      if (response.data.status === 'error') {
+        throw new Error(response.data.message || tm('providerSources.saveError'))
+      }
+      provider.enable = Boolean(value)
+      showMessage(response.data.message || tm('messages.success.statusUpdate'))
+      return true
+    } catch (error: any) {
+      showMessage(error.response?.data?.message || error.message || tm('providerSources.saveError'), 'error')
+      return false
+    } finally {
+      await loadConfig()
+      savingProviderToggles.value = savingProviderToggles.value.filter((id) => id !== provider.id)
     }
   }
 
@@ -614,7 +738,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     testingProviders.value.push(provider.id)
     try {
       const startTime = performance.now()
-      const response = await axios.get('/api/config/provider/check_one', { params: { id: provider.id } })
+      const response = await providerApi.test(String(provider.id))
       if (response.data.status === 'ok' && response.data.data.error === null) {
         const latency = Math.max(0, Math.round(performance.now() - startTime))
         showMessage(tm('models.testSuccessWithLatency', { id: provider.id, latency }))
@@ -629,22 +753,26 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   }
 
   async function loadConfig() {
-    loadProviderTemplate()
+    await loadProviderTemplate()
   }
 
   async function loadProviderTemplate() {
+    loadingSources.value = true
     try {
-      const response = await axios.get('/api/config/provider/template')
+      const response = await providerApi.schema()
       if (response.data.status === 'ok') {
         configSchema.value = response.data.data.config_schema || {}
         if (configSchema.value.provider?.config_template) {
           providerTemplates.value = configSchema.value.provider.config_template
         }
         providerSources.value = response.data.data.provider_sources || []
+        modelMetadata.value = (response.data.data.model_metadata || {}) as Record<string, any>
         providers.value = response.data.data.providers || []
       }
     } catch (error) {
       console.error('Failed to load provider template:', error)
+    } finally {
+      loadingSources.value = false
     }
   }
 
@@ -653,6 +781,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   }
 
   onMounted(async () => {
+    void loadSponsorCatalog()
     await loadProviderTemplate()
   })
 
@@ -668,8 +797,10 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     editableProviderSource,
     availableModels,
     modelMetadata,
+    loadingSources,
     loadingModels,
     savingSource,
+    savingProviderToggles,
     testingProviders,
     isSourceModified,
     configSchema,
@@ -680,6 +811,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     // computed
     providerTypes,
     availableSourceTypes,
+    selectedSponsor,
     displayedProviderSources,
     sourceProviders,
     mergedModelEntries,
@@ -692,6 +824,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
 
     // helpers
     resolveSourceIcon,
+    isMonochromeSourceIcon,
     getSourceDisplayName,
     getModelMetadata,
     supportsImageInput,
@@ -708,9 +841,11 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     deleteProviderSource,
     saveProviderSource,
     fetchAvailableModels,
+    buildModelProviderConfig,
     addModelProvider,
     deleteProvider,
     modelAlreadyConfigured,
+    toggleProviderEnable,
     testProvider,
     loadConfig,
     loadProviderTemplate

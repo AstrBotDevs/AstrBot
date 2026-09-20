@@ -1,5 +1,12 @@
+import os
 import platform
+from types import SimpleNamespace
+from unittest.mock import ANY, AsyncMock, MagicMock
 
+import pytest
+
+from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.computer.booters.local import LocalPythonComponent
 from astrbot.core.tools.computer_tools.python import LocalPythonTool, PythonTool
 
 
@@ -18,3 +25,225 @@ def test_local_python_tool_description_contains_os():
     assert current_os in tool.description
     assert "Python environment" in tool.description
     assert "system-compatible" in tool.description
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "runtime_settings",
+    [
+        {},
+        {"computer_use_runtime": "none"},
+        {"computer_use_runtime": "sandbox"},
+        {"computer_use_runtime": "invalid"},
+        {"computer_use_runtime": None},
+    ],
+)
+@pytest.mark.parametrize("role", ["member", "admin"])
+async def test_local_python_tool_rejects_nonlocal_runtime(
+    runtime_settings, role, monkeypatch
+):
+    """Reject retained local tools before accessing the host, regardless of role."""
+    get_local_booter = MagicMock()
+    workspace_root = AsyncMock()
+    monkeypatch.setattr(
+        "astrbot.core.tools.computer_tools.python.get_local_booter", get_local_booter
+    )
+    monkeypatch.setattr(
+        "astrbot.core.tools.computer_tools.python.workspace_root_for_context",
+        workspace_root,
+    )
+    context = ContextWrapper(
+        context=SimpleNamespace(
+            event=SimpleNamespace(
+                unified_msg_origin="onebot:FriendMessage:user123", role=role
+            ),
+            context=SimpleNamespace(
+                get_config=lambda **_kwargs: {
+                    "provider_settings": {
+                        **runtime_settings,
+                        "computer_use_require_admin": False,
+                    }
+                }
+            ),
+        )
+    )
+
+    result = await LocalPythonTool().call(context, code="print('ok')")
+
+    get_local_booter.assert_not_called()
+    workspace_root.assert_not_awaited()
+    assert result == "Error executing code: only local runtime is supported."
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(os.name == "nt", reason="Restricted execution needs POSIX.")
+async def test_local_python_tool_uses_session_workspace(tmp_path, monkeypatch):
+    """Local Python execution should use the same workspace as local shell."""
+    tool = LocalPythonTool()
+    python_exec = AsyncMock(
+        return_value={"data": {"output": {"text": "ok", "images": []}, "error": ""}}
+    )
+    local_python = LocalPythonComponent()
+    local_python.exec = python_exec
+    monkeypatch.setattr(
+        "astrbot.core.tools.computer_tools.python.get_local_booter",
+        lambda: SimpleNamespace(python=local_python),
+    )
+
+    async def fake_workspace_root_for_context(context):
+        return tmp_path / context.context.event.unified_msg_origin.replace(":", "_")
+
+    monkeypatch.setattr(
+        "astrbot.core.tools.computer_tools.python.workspace_root_for_context",
+        fake_workspace_root_for_context,
+    )
+
+    event = SimpleNamespace(
+        unified_msg_origin="onebot:GroupMessage:12345",
+        role="admin",
+        get_platform_name=lambda: "onebot",
+    )
+    context = ContextWrapper(
+        context=SimpleNamespace(
+            event=event,
+            context=SimpleNamespace(
+                get_config=lambda **_kwargs: {
+                    "provider_settings": {
+                        "computer_use_runtime": "local",
+                        "computer_use_require_admin": True,
+                    }
+                }
+            ),
+        ),
+        tool_call_timeout=60,
+    )
+
+    await tool.call(context, code="print('ok')", timeout=30)
+
+    workspace = tmp_path / "onebot_GroupMessage_12345"
+    assert workspace.is_dir()
+    python_exec.assert_awaited_once_with(
+        "print('ok')",
+        timeout=30,
+        silent=False,
+        cwd=str(workspace.resolve(strict=False)),
+        sandboxed=True,
+        allow_network=True,
+        filesystem_scope="workspace",
+        readable_roots=ANY,
+        writable_roots=ANY,
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(os.name == "nt", reason="Restricted execution needs POSIX.")
+@pytest.mark.parametrize("role", ["member", "admin"])
+async def test_local_python_uses_sandbox_backend(
+    tmp_path,
+    monkeypatch,
+    role,
+):
+    """Preserve Python output and errors without repeating the network policy."""
+    from astrbot.core.tools.computer_tools import util as computer_util
+
+    python_exec = AsyncMock(
+        return_value={
+            "data": {
+                "output": {"text": "ok", "images": []},
+                "error": "execution failed",
+            }
+        },
+    )
+    local_python = LocalPythonComponent()
+    local_python.exec = python_exec
+    monkeypatch.setattr(
+        "astrbot.core.tools.computer_tools.python.get_local_booter",
+        lambda: SimpleNamespace(python=local_python),
+    )
+    monkeypatch.setattr(computer_util, "create_process_sandbox", object)
+    monkeypatch.setattr(
+        "astrbot.core.tools.computer_tools.python.workspace_root_for_context",
+        AsyncMock(return_value=tmp_path),
+    )
+
+    event = SimpleNamespace(
+        unified_msg_origin="onebot:GroupMessage:12345",
+        role=role,
+        get_platform_name=lambda: "onebot",
+    )
+    context = ContextWrapper(
+        context=SimpleNamespace(
+            event=event,
+            context=SimpleNamespace(
+                get_config=lambda **_kwargs: {
+                    "provider_settings": {
+                        "computer_use_runtime": "local",
+                        "computer_use_require_admin": False,
+                    }
+                }
+            ),
+        ),
+        tool_call_timeout=60,
+    )
+
+    result = await LocalPythonTool().call(context, code="print('ok')", timeout=30)
+    output = [part.text for part in result.content]
+    assert output == ["error: execution failed", "ok"]
+
+    python_exec.assert_awaited_once_with(
+        "print('ok')",
+        timeout=30,
+        silent=False,
+        cwd=str(tmp_path.resolve(strict=False)),
+        sandboxed=True,
+        allow_network=role == "admin",
+        filesystem_scope="workspace",
+        readable_roots=ANY,
+        writable_roots=ANY,
+    )
+
+    python_exec.side_effect = RuntimeError("execution failed")
+    result = await LocalPythonTool().call(context, code="print('ok')")
+    assert result == "Error executing code: execution failed"
+
+
+@pytest.mark.asyncio
+async def test_local_member_python_is_denied_without_supported_sandbox(monkeypatch):
+    """Local member Python execution should fail without a sandbox backend."""
+    from astrbot.core.tools.computer_tools import util as computer_util
+
+    def unavailable_sandbox():
+        raise RuntimeError("No Local process sandbox backend is available.")
+
+    monkeypatch.setattr(computer_util, "create_process_sandbox", unavailable_sandbox)
+    monkeypatch.setattr(
+        "astrbot.core.tools.computer_tools.python.get_local_booter",
+        lambda: pytest.fail("Local Python must not start without an OS sandbox"),
+    )
+    event = SimpleNamespace(
+        unified_msg_origin="onebot:GroupMessage:12345",
+        role="member",
+    )
+    context = ContextWrapper(
+        context=SimpleNamespace(
+            event=event,
+            context=SimpleNamespace(
+                get_config=lambda **_kwargs: {
+                    "provider_settings": {
+                        "computer_use_runtime": "local",
+                        "computer_use_local_permissions": {
+                            "member": {
+                                "filesystem_scope": "workspace",
+                                "allow_execution": True,
+                            }
+                        },
+                    }
+                }
+            ),
+        ),
+        tool_call_timeout=60,
+    )
+
+    result = await LocalPythonTool().call(context, code="print('ok')")
+
+    assert "No Local process sandbox backend" in result

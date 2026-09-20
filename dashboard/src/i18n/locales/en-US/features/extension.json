@@ -9,11 +9,11 @@
     "market": "AstrBot Plugin Market"
   },
   "titles": {
-    "installedAstrBotPlugins": "Installed AstrBot Plugins"
+    "installedAstrBotPlugins": "Installed"
   },
   "failedPlugins": {
     "title": "Failed to Load Plugins ({count})",
-    "hint": "These plugins failed to load. You can try reload or uninstall them directly.",
+    "hint": "These plugins failed to load. You can try reloading or deleting them directly.",
     "columns": {
       "plugin": "Plugin",
       "error": "Error"
@@ -34,34 +34,46 @@
     "showSystemPlugins": "Show System Extensions",
     "hideSystemPlugins": "Hide System Extensions",
     "install": "Install",
-    "uninstall": "Uninstall",
+    "uninstall": "Delete",
     "update": "Update",
     "reload": "Reload",
     "enable": "Enable",
     "disable": "Disable",
+    "load": "Open plugin",
+    "stop": "Close plugin",
     "configure": "Configure",
     "viewInfo": "Handlers",
     "viewDocs": "Documentation",
     "viewRepo": "Repository",
+    "openPages": "Pages",
+    "openPage": "Open",
+    "openWebui": "Open Plugin UI",
     "close": "Close",
     "save": "Save",
     "saveAndClose": "Save and Close",
     "cancel": "Cancel",
+    "next": "Next",
     "actions": "Actions",
     "back": "Back",
     "selectFile": "Select File",
     "refresh": "Refresh",
     "updateAll": "Update All",
+    "pin": "Pin",
+    "unpin": "Unpin",
     "deleteSource": "Delete Source",
     "reshuffle": "Shuffle Again"
   },
   "status": {
     "enabled": "Enabled",
     "disabled": "Disabled",
+    "loaded": "Open",
+    "stopped": "Closed",
     "system": "System",
     "loading": "Loading...",
     "installed": "Installed",
-    "unknown": "Unknown"
+    "preset": "Preset",
+    "unknown": "Unknown",
+    "unsupported": "Unsupported"
   },
   "tooltips": {
     "enable": "Click to Enable",
@@ -71,7 +83,7 @@
     "viewInfo": "Handlers",
     "viewDocs": "Documentation",
     "update": "Update",
-    "uninstall": "Uninstall"
+    "uninstall": "Delete plugin"
   },
   "table": {
     "headers": {
@@ -91,7 +103,42 @@
   },
   "empty": {
     "noPlugins": "No Extensions",
-    "noPluginsDesc": "Try installing extensions or showing system extensions"
+    "noPluginsDesc": "Try installing extensions or adjusting the search"
+  },
+  "detail": {
+    "contents": "Plugin Handlers",
+    "noContents": "No handlers",
+    "notFound": "Plugin not found",
+    "docsTitle": "Documentation",
+    "docsEmpty": "No documentation",
+    "changelogTitle": "Changelog",
+    "changelogEmpty": "No changelog",
+    "subCommandsCount": "{count} sub-commands",
+    "handlerGroups": {
+      "page": "Pages",
+      "skill": "Skills",
+      "command": "Commands / Command Groups",
+      "llm_tool": "LLM Tools",
+      "listener": "Event Listeners",
+      "hook": "Hooks",
+      "commands": "Commands / Command Groups",
+      "hooks": "Hooks",
+      "functionTools": "Function Tools",
+      "eventListeners": "Event Listeners"
+    },
+    "info": {
+      "title": "Info",
+      "version": "Version",
+      "author": "Author",
+      "category": "Category",
+      "stars": "Stars",
+      "updatedAt": "Updated At",
+      "tags": "Tags",
+      "astrbotVersion": "AstrBot Version Requirement",
+      "supportPlatforms": "Supported Platforms",
+      "authorWebsite": "Author Website",
+      "repository": "Repository"
+    }
   },
   "market": {
     "recommended": "🥳 Recommended",
@@ -128,10 +175,9 @@
     "sourceUpdated": "Source updated successfully",
     "defaultOfficialSource": "Default Official Source",
     "sourceExists": "This source already exists",
+    "sourceResolved": "Source resolved successfully",
     "installPlugin": "Install Plugin",
     "randomPlugins": "🎲 Random Plugins",
-    "showRandomPlugins": "Show Random Plugins",
-    "hideRandomPlugins": "Hide Random Plugins",
     "sourceSafetyWarning": "Even with the default source, plugin stability and security cannot be fully guaranteed. Please verify carefully before use."
   },
   "sort": {
@@ -140,12 +186,12 @@
     "installTime": "Last Modified",
     "name": "Name",
     "stars": "Stars",
+    "downloads": "Downloads",
     "author": "Author",
     "updated": "Last Updated",
     "updateStatus": "Update Status",
     "ascending": "Ascending",
-    "descending": "Descending",
-    "pinUpdatesOnTop": "Pin Updates on Top"
+    "descending": "Descending"
   },
   "tags": {
     "danger": "Danger"
@@ -157,25 +203,39 @@
     },
     "config": {
       "title": "Extension Configuration",
-      "noConfig": "This extension has no configuration"
+      "noConfig": "This extension has no additional configuration",
+      "coreSettings": {
+        "logLevel": "Log Level",
+        "logLevelHint": "Only affects this plugin's log output. Takes effect immediately, no restart required.",
+        "followGlobal": "Follow Global"
+      }
     },
     "loading": {
       "title": "Loading...",
       "logs": "Logs"
     },
     "uninstall": {
-      "title": "Confirm Deletion",
-      "message": "Are you sure you want to delete this extension?",
+      "title": "Delete Plugin",
+      "message": "Are you sure you want to delete this plugin?",
       "deleteConfig": "Also delete plugin configuration file",
       "deleteData": "Also delete plugin persistent data",
       "configHint": "Configuration file located in data/config directory",
-      "dataHint": "Deletes data in data/plugin_data and data/plugins_data"
+      "dataHint": "Deletes data in data/plugin_data and data/plugins_data, as well as KV preference data in the database"
     },
     "install": {
       "title": "Install Extension",
       "fromFile": "Install from File",
       "fromUrl": "Install from URL",
-      "supportPlatformsCount": "Supports {count} Platforms"
+      "supportPlatformsCount": "Supports {count} Platforms",
+      "sectionTitle": "Install",
+      "downloadSource": "The plugin package will be installed from:",
+      "repositorySecurityWarning": "AstrBot cannot guarantee the safety of plugins downloaded from a code repository. Install only if you trust the plugin source."
+    },
+    "update": {
+      "title": "Update Extension",
+      "sectionTitle": "Update",
+      "downloadSource": "The update package will be installed from:",
+      "confirm": "Confirm Update"
     },
     "danger_warning": {
       "title": "Dangerous Plugin Warning",
@@ -183,8 +243,8 @@
       "confirm": "Continue",
       "cancel": "Cancel"
     },
-    "versionCompatibility": {
-      "title": "Version Compatibility Warning",
+    "versionSupport": {
+      "title": "Version Support Warning",
       "message": "This plugin declares an AstrBot version range that does not match your current version. You can ignore this warning and continue installation, but it may not work correctly.",
       "confirm": "Ignore Warning and Install",
       "cancel": "Cancel Installation"
@@ -198,14 +258,25 @@
       "title": "Confirm Update All Plugins",
       "message": "Are you sure you want to update all {count} plugins? This operation may take some time.",
       "confirm": "Confirm Update"
+    },
+    "sourceBinding": {
+      "title": "Change Plugin Source",
+      "selectTitle": "Select Plugin Install Source",
+      "noCandidates": "No configured plugin source contains a matching record, and this plugin has no usable repository URL.",
+      "repoOption": "Use Repository URL Directly",
+      "repoOptionId": "Reinstall via repo",
+      "installDestination": "Install destination",
+      "confirm": "Use This Source",
+      "confirmAndContinue": "Use and Continue"
     }
   },
   "messages": {
-    "uninstalling": "Uninstalling",
+    "uninstalling": "Deleting",
     "refreshing": "Refreshing extension list...",
     "refreshSuccess": "Extension list refreshed!",
     "refreshFailed": "Error occurred while refreshing extension list",
     "operationFailed": "Operation failed",
+    "logLevelUpdated": "Log level updated and applied immediately",
     "reloadSuccess": "Reload successful",
     "reloadFailed": "Reload failed",
     "updateSuccess": "Update successful!",
@@ -223,9 +294,25 @@
     "supportedFormats": "Supports .zip extension files",
     "updateAllSuccess": "All upgradable extensions have been updated!",
     "updateAllFailed": "{failed} of {total} extensions failed to update:",
-    "fillSourceNameAndUrl": "Please fill in the complete source name and URL",
+    "noUpdatesAvailable": "No extensions have updates available",
+    "updateDisabled": "This plugin has no usable install source or repository URL, so it cannot be updated or reinstalled",
+    "changeSourceDisabled": "This plugin has no usable repository URL, so its source cannot be changed",
+    "fillSourceUrl": "Please enter the source URL",
+    "fillSourceName": "Please enter the source name",
+    "resolveSourceFirst": "Resolve and validate the source URL first",
+    "sourceResolveFailed": "Failed to resolve source",
     "invalidUrl": "Please enter a valid URL",
-    "enterJsonUrl": "Please enter a URL that returns plugin list JSON data"
+    "invalidRepositoryUrl": "Please enter a valid Git repository URL",
+    "enterJsonUrl": "Please enter a URL that returns plugin list JSON data",
+    "pluginNotFound": "Plugin not found",
+    "pluginDisabled": "This plugin is closed. Open it before accessing its page.",
+    "pluginPageNotFound": "Plugin page not found",
+    "pluginPageLoadFailed": "Failed to load the plugin page",
+    "missingMarketPluginId": "This source record is missing legal plugin identifiers, so it cannot be installed from the market",
+    "sourceBindSuccess": "Plugin source updated",
+    "validatingPlugin": "Validating plugin...",
+    "pluginValidateSuccess": "Plugin validation passed",
+    "pluginValidateFailed": "Plugin validation failed"
   },
   "upload": {
     "fromFile": "Install from File",
@@ -237,6 +324,8 @@
     "modeLocal": "Local Skills",
     "modeNeo": "Neo Skills",
     "actions": "Actions",
+    "enable": "Enable Skill",
+    "disable": "Disable Skill",
     "upload": "Upload Skills",
     "refresh": "Refresh",
     "empty": "No Skills found",
@@ -293,6 +382,16 @@
     "deleteMessage": "Are you sure you want to delete this Skill?",
     "deleteSuccess": "Deleted successfully",
     "deleteFailed": "Delete failed",
+    "select": "Select",
+    "selectSkill": "Select Skill {name}",
+    "selectAll": "Select all",
+    "clearSelection": "Clear selection",
+    "deleteSelected": "Delete selected ({count})",
+    "batchDeleteTitle": "Delete selected Skills",
+    "batchDeleteMessage": "Are you sure you want to delete these {count} Skills? This action cannot be undone.",
+    "batchDeleteConfirm": "Delete {count}",
+    "batchDeleteSuccess": "All {count} skill(s) deleted successfully.",
+    "batchDeletePartial": "Deleted {succeeded}; failed to delete {failed}",
     "neoSkillKey": "Filter by skill_key",
     "neoStatus": "Candidate Status",
     "neoStage": "Release Stage",
@@ -322,27 +421,41 @@
     "neoPayloadTitle": "Neo Payload",
     "neoPayloadFailed": "Failed to load payload",
     "runtimeNoneWarning": "Computer Use runtime is set to None; Skills may not run correctly because no runtime is enabled.",
-    "runtimeHint": "Set the Computer Use runtime to Local or Sandbox in settings so AstrBot can use your Skills.",
+    "runtimeHint": "Set the Computer Use runtime to Local or Sandbox in settings so AstrBot can use your Skills. Workspace Skills are not shown on this page yet.",
     "neoRuntimeRequired": "Neo Skills are available only when runtime is sandbox and sandbox booter is shipyard_neo.",
     "sourceLocalOnly": "Local Skill",
     "sourceSandboxOnly": "Sandbox Preset Skill",
     "sourceBoth": "Local + Sandbox",
+    "sourcePlugin": "Plugin: {plugin}",
     "sandboxDiscoveryPending": "Sandbox preset skills have not been discovered yet. Start at least one sandbox session to populate this list.",
-    "sandboxPresetReadonly": "Sandbox preset skills are read-only here. You cannot delete or enable/disable them from Local Skills."
+    "sandboxPresetReadonly": "Sandbox preset skills are read-only here. You cannot delete or enable/disable them from Local Skills.",
+    "pluginReadonly": "Plugin-provided skills are managed by their plugin. They cannot be deleted or downloaded from Local Skills.",
+    "pluginDisabled": "Plugin disabled",
+    "openEditor": "View/Edit",
+    "editorTitle": "Edit Skill",
+    "editorLoadFailed": "Failed to load Skill file",
+    "editorSaveFailed": "Failed to save Skill file",
+    "editorSaveSuccess": "Saved successfully",
+    "saveFile": "Save file",
+    "readonly": "Read-only",
+    "unsaved": "Unsaved",
+    "noFileSelected": "No file selected",
+    "discardChanges": "This file has unsaved changes. Discard them?"
   },
   "card": {
     "actions": {
       "pluginConfig": "Extension Config",
-      "uninstallPlugin": "Uninstall Extension",
+      "uninstallPlugin": "Delete Plugin",
       "reloadPlugin": "Reload Extension",
       "togglePlugin": "Extension",
       "viewHandlers": "View Handlers",
       "updateTo": "Update to",
-      "reinstall": "Reinstall"
+      "reinstall": "Reinstall",
+      "changeSource": "Change Plugin Source"
     },
     "status": {
       "hasUpdate": "New version available",
-      "disabled": "This extension is disabled",
+      "disabled": "This plugin is closed",
       "handlersCount": " handlers",
       "supportPlatform": "Supported Platform",
       "supportPlatformsCount": "Supports {count} Platforms",

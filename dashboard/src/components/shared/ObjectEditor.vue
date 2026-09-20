@@ -21,7 +21,7 @@
   <!-- Key-Value Management Dialog -->
   <v-dialog v-model="dialog" max-width="600px">
     <v-card>
-      <v-card-title class="text-h3 py-4" style="font-weight: normal;">
+      <v-card-title class="text-h3 pa-4 pb-0 pl-6">
         {{ resolveDialogTitle }}
       </v-card-title>
 
@@ -51,18 +51,28 @@
                   :placeholder="t('core.common.objectEditor.placeholders.stringValue')"
                 ></v-text-field>
                 <div v-else-if="pair.type === 'number' || pair.type === 'float' || pair.type === 'int'" class="d-flex align-center gap-2 flex-grow-1">
-                  <v-slider
-                    v-if="pair.slider"
-                    :model-value="Number(pair.value) || 0"
-                    @update:model-value="pair.value = $event"
-                    :min="pair.slider.min"
-                    :max="pair.slider.max"
-                    :step="pair.slider.step"
-                    color="primary"
-                    density="compact"
-                    hide-details
-                    class="flex-grow-1"
-                  ></v-slider>
+                  <template v-if="pair.slider">
+                    <span style="min-width: 5px; text-align: right;">
+                      {{ pair.slider.min }}
+                    </span>
+
+                    <v-slider
+                      :model-value="Number(pair.value) || 0"
+                      @update:model-value="pair.value = $event"
+                      :min="pair.slider.min"
+                      :max="pair.slider.max"
+                      :step="pair.slider.step"
+                      color="primary"
+                      density="compact"
+                      hide-details
+                      class="flex-grow-1"
+                    ></v-slider>
+
+                    <span style="min-width: 5px; text-align: left;">
+                      {{ pair.slider.max }}
+                    </span>
+                  </template>
+                  
                   <v-text-field
                     v-model.number="pair.value"
                     type="number"
@@ -115,7 +125,7 @@
               <v-col cols="4">
                 <div class="d-flex flex-column">
                   <span class="text-caption font-weight-medium">{{ getTemplateTitle(template, templateKey) }}</span>
-                  <span v-if="template.hint" class="text-caption text-grey" style="font-size: 0.7rem;">{{ translateIfKey(template.hint) }}</span>
+                  <span v-if="template.hint" class="text-caption text-grey" style="font-size: 0.7rem;">{{ resolveTemplateText(templateKey, 'hint', template.hint) }}</span>
                 </div>
               </v-col>
               <v-col cols="7" class="pl-2 d-flex align-center justify-end">
@@ -129,18 +139,29 @@
                   :placeholder="t('core.common.objectEditor.placeholders.stringValue')"
                 ></v-text-field>
                 <div v-else-if="template.type === 'number' || template.type === 'float' || template.type === 'int'" class="d-flex align-center ga-4 flex-grow-1">
-                  <v-slider
-                    v-if="template.slider"
-                    :model-value="Number(getTemplateValue(templateKey)) || 0"
-                    @update:model-value="updateTemplateValue(templateKey, $event)"
-                    :min="template.slider.min"
-                    :max="template.slider.max"
-                    :step="template.slider.step"
-                    color="primary"
-                    density="compact"
-                    hide-details
-                    class="flex-grow-1"
-                  ></v-slider>
+                  <template v-if="template.slider">
+                    <span style="min-width: 5px; text-align: right;">
+                      {{ template.slider.min }}
+                    </span>
+
+                    <v-slider
+                      :model-value="Number(getTemplateValue(templateKey)) || 0"
+                      @update:model-value="updateTemplateValue(templateKey, $event)"
+                      :min="template.slider.min"
+                      :max="template.slider.max"
+                      :step="template.slider.step"
+                      color="primary"
+                      density="compact"
+                      hide-details
+                      class="flex-grow-1"
+                    ></v-slider>
+
+                    <span style="min-width: 5px; text-align: left;">
+                      {{ template.slider.max }}
+                    </span>
+                  </template>
+                  
+
                   <v-text-field
                     :model-value="getTemplateValue(templateKey)"
                     @update:model-value="updateTemplateValue(templateKey, $event)"
@@ -213,7 +234,7 @@
       <v-card-actions class="pa-4">
         <v-spacer></v-spacer>
         <v-btn variant="text" @click="cancelDialog">{{ t('core.common.cancel') }}</v-btn>
-        <v-btn color="primary" @click="confirmDialog">{{ t('core.common.confirm') }}</v-btn>
+        <v-btn color="primary" variant="tonal" @click="confirmDialog">{{ t('core.common.confirm') }}</v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
@@ -221,11 +242,11 @@
 
 <script setup>
 import { ref, computed, watch } from 'vue'
-import { useI18n, useModuleI18n } from '@/i18n/composables'
+import { useI18n } from '@/i18n/composables'
 import { useToast } from '@/utils/toast'
+import { useConfigTextResolver } from '@/composables/useConfigTextResolver'
 
 const { t } = useI18n()
-const { tm, getRaw } = useModuleI18n('features/config-metadata')
 const { warning: toastWarning } = useToast()
 
 const props = defineProps({
@@ -236,6 +257,18 @@ const props = defineProps({
   itemMeta: {
     type: Object,
     default: null
+  },
+  pluginName: {
+    type: String,
+    default: ''
+  },
+  pluginI18n: {
+    type: Object,
+    default: () => ({})
+  },
+  configKey: {
+    type: String,
+    default: ''
   },
   buttonText: {
     type: String,
@@ -250,6 +283,8 @@ const props = defineProps({
     default: 1
   }
 })
+
+const { translateIfKey, resolveConfigText } = useConfigTextResolver(props)
 
 const emit = defineEmits(['update:modelValue'])
 
@@ -515,13 +550,15 @@ function cancelDialog() {
   dialog.value = false
 }
 
-function translateIfKey(value) {
-  if (!value || typeof value !== 'string') return value
-  return getRaw(value) ? tm(value) : value
+function getTemplateTitle(template, templateKey) {
+  return resolveTemplateText(templateKey, 'name', template?.name || template?.description || templateKey)
 }
 
-function getTemplateTitle(template, templateKey) {
-  return translateIfKey(template?.name || template?.description || templateKey)
+function resolveTemplateText(templateKey, attr, fallback) {
+  if (!props.configKey) {
+    return translateIfKey(fallback) || ''
+  }
+  return resolveConfigText(`${props.configKey}.template_schema.${templateKey}`, attr, fallback)
 }
 </script>
 
@@ -538,4 +575,3 @@ function getTemplateTitle(template, templateKey) {
   opacity: 0.8;
 }
 </style>
-

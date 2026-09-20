@@ -34,7 +34,6 @@ import zhCNKnowledgeBaseIndex from './locales/zh-CN/features/knowledge-base/inde
 import zhCNKnowledgeBaseDetail from './locales/zh-CN/features/knowledge-base/detail.json';
 import zhCNKnowledgeBaseDocument from './locales/zh-CN/features/knowledge-base/document.json';
 import zhCNPersona from './locales/zh-CN/features/persona.json';
-import zhCNMigration from './locales/zh-CN/features/migration.json';
 import zhCNCommand from './locales/zh-CN/features/command.json';
 import zhCNSubagent from './locales/zh-CN/features/subagent.json';
 import zhCNWelcome from './locales/zh-CN/features/welcome.json';
@@ -76,7 +75,6 @@ import enUSKnowledgeBaseIndex from './locales/en-US/features/knowledge-base/inde
 import enUSKnowledgeBaseDetail from './locales/en-US/features/knowledge-base/detail.json';
 import enUSKnowledgeBaseDocument from './locales/en-US/features/knowledge-base/document.json';
 import enUSPersona from './locales/en-US/features/persona.json';
-import enUSMigration from './locales/en-US/features/migration.json';
 import enUSCommand from './locales/en-US/features/command.json';
 import enUSSubagent from './locales/en-US/features/subagent.json';
 import enUSWelcome from './locales/en-US/features/welcome.json';
@@ -118,7 +116,6 @@ import ruRUKnowledgeBaseIndex from './locales/ru-RU/features/knowledge-base/inde
 import ruRUKnowledgeBaseDetail from './locales/ru-RU/features/knowledge-base/detail.json';
 import ruRUKnowledgeBaseDocument from './locales/ru-RU/features/knowledge-base/document.json';
 import ruRUPersona from './locales/ru-RU/features/persona.json';
-import ruRUMigration from './locales/ru-RU/features/migration.json';
 import ruRUCommand from './locales/ru-RU/features/command.json';
 import ruRUSubagent from './locales/ru-RU/features/subagent.json';
 import ruRUWelcome from './locales/ru-RU/features/welcome.json';
@@ -126,6 +123,47 @@ import ruRUWelcome from './locales/ru-RU/features/welcome.json';
 import ruRUErrors from './locales/ru-RU/messages/errors.json';
 import ruRUSuccess from './locales/ru-RU/messages/success.json';
 import ruRUValidation from './locales/ru-RU/messages/validation.json';
+
+// Japanese translation
+import jaJPCommon from './locales/ja-JP/core/common.json';
+import jaJPActions from './locales/ja-JP/core/actions.json';
+import jaJPStatus from './locales/ja-JP/core/status.json';
+import jaJPNavigation from './locales/ja-JP/core/navigation.json';
+import jaJPHeader from './locales/ja-JP/core/header.json';
+import jaJPShared from './locales/ja-JP/core/shared.json';
+
+import jaJPChat from './locales/ja-JP/features/chat.json';
+import jaJPExtension from './locales/ja-JP/features/extension.json';
+import jaJPConversation from './locales/ja-JP/features/conversation.json';
+import jaJPSessionManagement from './locales/ja-JP/features/session-management.json';
+import jaJPToolUse from './locales/ja-JP/features/tool-use.json';
+import jaJPProvider from './locales/ja-JP/features/provider.json';
+import jaJPPlatform from './locales/ja-JP/features/platform.json';
+import jaJPConfig from './locales/ja-JP/features/config.json';
+import jaJPConfigMetadata from './locales/ja-JP/features/config-metadata.json';
+import jaJPConsole from './locales/ja-JP/features/console.json';
+import jaJPTrace from './locales/ja-JP/features/trace.json';
+import jaJPAbout from './locales/ja-JP/features/about.json';
+import jaJPSettings from './locales/ja-JP/features/settings.json';
+import jaJPAuth from './locales/ja-JP/features/auth.json';
+import jaJPChart from './locales/ja-JP/features/chart.json';
+import jaJPDashboard from './locales/ja-JP/features/dashboard.json';
+import jaJPCron from './locales/ja-JP/features/cron.json';
+import jaJPStats from './locales/ja-JP/features/stats.json';
+import jaJPAlkaidIndex from './locales/ja-JP/features/alkaid/index.json';
+import jaJPAlkaidKnowledgeBase from './locales/ja-JP/features/alkaid/knowledge-base.json';
+import jaJPAlkaidMemory from './locales/ja-JP/features/alkaid/memory.json';
+import jaJPKnowledgeBaseIndex from './locales/ja-JP/features/knowledge-base/index.json';
+import jaJPKnowledgeBaseDetail from './locales/ja-JP/features/knowledge-base/detail.json';
+import jaJPKnowledgeBaseDocument from './locales/ja-JP/features/knowledge-base/document.json';
+import jaJPPersona from './locales/ja-JP/features/persona.json';
+import jaJPCommand from './locales/ja-JP/features/command.json';
+import jaJPSubagent from './locales/ja-JP/features/subagent.json';
+import jaJPWelcome from './locales/ja-JP/features/welcome.json';
+
+import jaJPErrors from './locales/ja-JP/messages/errors.json';
+import jaJPSuccess from './locales/ja-JP/messages/success.json';
+import jaJPValidation from './locales/ja-JP/messages/validation.json';
 
 // 组装翻译对象
 export const translations = {
@@ -168,7 +206,6 @@ export const translations = {
         document: zhCNKnowledgeBaseDocument
       },
       persona: zhCNPersona,
-      migration: zhCNMigration,
       command: zhCNCommand,
       subagent: zhCNSubagent,
       welcome: zhCNWelcome
@@ -218,7 +255,6 @@ export const translations = {
         document: enUSKnowledgeBaseDocument
       },
       persona: enUSPersona,
-      migration: enUSMigration,
       command: enUSCommand,
       subagent: enUSSubagent,
       welcome: enUSWelcome
@@ -268,7 +304,6 @@ export const translations = {
         document: ruRUKnowledgeBaseDocument
       },
       persona: ruRUPersona,
-      migration: ruRUMigration,
       command: ruRUCommand,
       subagent: ruRUSubagent,
       welcome: ruRUWelcome
@@ -277,6 +312,55 @@ export const translations = {
       errors: ruRUErrors,
       success: ruRUSuccess,
       validation: ruRUValidation
+    }
+  },
+  'ja-JP': {
+    core: {
+      common: jaJPCommon,
+      actions: jaJPActions,
+      status: jaJPStatus,
+      navigation: jaJPNavigation,
+      header: jaJPHeader,
+      shared: jaJPShared
+    },
+    features: {
+      chat: jaJPChat,
+      extension: jaJPExtension,
+      conversation: jaJPConversation,
+      'session-management': jaJPSessionManagement,
+      tooluse: jaJPToolUse,
+      provider: jaJPProvider,
+      platform: jaJPPlatform,
+      config: jaJPConfig,
+      'config-metadata': jaJPConfigMetadata,
+      console: jaJPConsole,
+      trace: jaJPTrace,
+      about: jaJPAbout,
+      settings: jaJPSettings,
+      auth: jaJPAuth,
+      chart: jaJPChart,
+      dashboard: jaJPDashboard,
+      cron: jaJPCron,
+      stats: jaJPStats,
+      alkaid: {
+        index: jaJPAlkaidIndex,
+        'knowledge-base': jaJPAlkaidKnowledgeBase,
+        memory: jaJPAlkaidMemory
+      },
+      'knowledge-base': {
+        index: jaJPKnowledgeBaseIndex,
+        detail: jaJPKnowledgeBaseDetail,
+        document: jaJPKnowledgeBaseDocument
+      },
+      persona: jaJPPersona,
+      command: jaJPCommand,
+      subagent: jaJPSubagent,
+      welcome: jaJPWelcome
+    },
+    messages: {
+      errors: jaJPErrors,
+      success: jaJPSuccess,
+      validation: jaJPValidation
     }
   }
 };

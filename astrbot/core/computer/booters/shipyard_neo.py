@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 import shlex
 from typing import Any, cast
@@ -13,6 +14,7 @@ from ..olayer import (
     ShellComponent,
 )
 from .base import ComputerBooter
+from .shell_background import build_detached_shell_command
 from .shipyard_search_file_util import search_files_via_shell
 
 try:
@@ -96,7 +98,7 @@ class NeoShellComponent(ShellComponent):
         command: str,
         cwd: str | None = None,
         env: dict[str, str] | None = None,
-        timeout: int | None = 30,
+        timeout: int | None = 300,
         shell: bool = True,
         background: bool = False,
     ) -> dict[str, Any]:
@@ -116,11 +118,11 @@ class NeoShellComponent(ShellComponent):
             run_command = f"{env_prefix} {run_command}"
 
         if background:
-            run_command = f"nohup sh -lc {shlex.quote(run_command)} >/tmp/astrbot_bg.log 2>&1 & echo $!"
+            run_command = build_detached_shell_command(run_command)
 
         result = await self._sandbox.shell.exec(
             run_command,
-            timeout=timeout or 30,
+            timeout=timeout or 300,
             cwd=cwd,
         )
         payload = _maybe_model_dump(result)
@@ -136,7 +138,11 @@ class NeoShellComponent(ShellComponent):
                 pid = None
             return {
                 "pid": pid,
-                "stdout": stdout,
+                "stdout": (
+                    f"Command is running in the background. pid={pid}"
+                    if pid is not None
+                    else "Command was submitted in the background."
+                ),
                 "stderr": stderr,
                 "exit_code": exit_code,
                 "success": bool(payload.get("success", not stderr)),
@@ -347,12 +353,12 @@ class ShipyardNeoBooter(ComputerBooter):
         self,
         endpoint_url: str,
         access_token: str,
-        profile: str = DEFAULT_PROFILE,
+        profile: str = "",
         ttl: int = 3600,
     ) -> None:
         self._endpoint_url = endpoint_url
         self._access_token = access_token
-        self._profile = profile
+        self._profile = profile.strip() if profile else ""
         self._ttl = ttl
         self._client: BayClient | None = None
         self._sandbox: Sandbox | None = None
@@ -425,13 +431,18 @@ class ShipyardNeoBooter(ComputerBooter):
         )
         await self._client.__aenter__()
 
-        # Resolve profile: user-specified > smart selection > default
+        # Resolve profile: user-specified > smart selection > default.
+        # An empty profile means auto-select; any non-empty profile must be
+        # honoured as an explicit choice, including "python-default".
         resolved_profile = await self._resolve_profile(self._client)
 
         self._sandbox = await self._client.create_sandbox(
             profile=resolved_profile,
             ttl=self._ttl,
         )
+
+        # --- Readiness gate: wait until sandbox session is READY ---
+        await self._wait_until_ready(self._sandbox)
 
         self._shell = NeoShellComponent(self._sandbox)
         self._fs = NeoFileSystemComponent(self._sandbox, self._shell)
@@ -450,11 +461,83 @@ class ShipyardNeoBooter(ComputerBooter):
             bool(self._bay_manager),
         )
 
+    async def _wait_until_ready(self, sandbox: Sandbox) -> None:
+        """Poll sandbox status until READY, or raise on FAILED / timeout.
+
+        Covers both warm-pool hits (near-instant) and cold starts (up to 180s).
+        On FAILED, EXPIRED, or timeout the sandbox is deleted before raising
+        so no orphan resources leak on Bay.
+        """
+        READINESS_TIMEOUT = 180  # seconds
+        POLL_INTERVAL = 2  # seconds
+
+        sandbox_id = sandbox.id
+        deadline = asyncio.get_running_loop().time() + READINESS_TIMEOUT
+
+        while True:
+            await sandbox.refresh()
+            status = getattr(sandbox.status, "value", str(sandbox.status))
+
+            if status == "ready":
+                logger.info(
+                    "[Computer] Sandbox %s is ready (profile=%s)",
+                    sandbox_id,
+                    sandbox.profile,
+                )
+                return
+
+            if status in {"failed", "expired"}:
+                logger.error(
+                    "[Computer] Sandbox %s reached terminal state: %s",
+                    sandbox_id,
+                    status,
+                )
+                try:
+                    await sandbox.delete()
+                except Exception as del_err:
+                    logger.warning(
+                        "[Computer] Failed to delete failed sandbox %s: %s",
+                        sandbox_id,
+                        del_err,
+                    )
+                raise RuntimeError(
+                    f"Sandbox {sandbox_id} is in terminal state: {status}"
+                )
+
+            remaining = deadline - asyncio.get_running_loop().time()
+            if remaining <= 0:
+                logger.error(
+                    "[Computer] Sandbox %s did not become ready within %ds "
+                    "(last status: %s)",
+                    sandbox_id,
+                    READINESS_TIMEOUT,
+                    status,
+                )
+                try:
+                    await sandbox.delete()
+                except Exception as del_err:
+                    logger.warning(
+                        "[Computer] Failed to delete timed-out sandbox %s: %s",
+                        sandbox_id,
+                        del_err,
+                    )
+                raise TimeoutError(
+                    f"Sandbox {sandbox_id} did not become ready within "
+                    f"{READINESS_TIMEOUT}s (last status: {status})"
+                )
+
+            logger.debug(
+                "[Computer] Sandbox %s status=%s, waiting...",
+                sandbox_id,
+                status,
+            )
+            await asyncio.sleep(POLL_INTERVAL)
+
     async def _resolve_profile(self, client: Any) -> str:
         """Pick the best profile for this session.
 
         Resolution order:
-        1. User-specified profile (non-empty, non-default) → use as-is.
+        1. User-specified profile (non-empty) → use as-is.
         2. Query ``GET /v1/profiles`` and pick the profile with the most
            capabilities, preferring profiles that include ``"browser"``.
         3. Fall back to :attr:`DEFAULT_PROFILE`.
@@ -463,8 +546,8 @@ class ShipyardNeoBooter(ComputerBooter):
         misconfigured token, and silently falling back would just delay the
         real failure to ``create_sandbox``.
         """
-        # User explicitly set a profile → honour it
-        if self._profile and self._profile != self.DEFAULT_PROFILE:
+        # User explicitly set a profile → honour it.
+        if self._profile:
             logger.info("[Computer] Using user-specified profile: %s", self._profile)
             return self._profile
 
@@ -505,16 +588,41 @@ class ShipyardNeoBooter(ComputerBooter):
 
         return chosen
 
-    async def shutdown(self) -> None:
+    async def shutdown(self, *, delete_sandbox: bool = False) -> None:
         if self._client is not None:
             sandbox_id = getattr(self._sandbox, "id", "unknown")
+
+            # Delete sandbox on Bay BEFORE closing the HTTP client.
+            # This is critical for cleanup — calling delete after
+            # __aexit__ would fail because the httpx session is already
+            # torn down.
+            if delete_sandbox and self._sandbox is not None:
+                try:
+                    logger.info(
+                        "[Computer] Deleting Shipyard Neo sandbox: id=%s", sandbox_id
+                    )
+                    await self._sandbox.delete()
+                    logger.info(
+                        "[Computer] Shipyard Neo sandbox deleted: id=%s", sandbox_id
+                    )
+                except Exception as e:
+                    logger.warning(
+                        "[Computer] Failed to delete sandbox %s (may already be "
+                        "cleaned up by Bay GC): %s",
+                        sandbox_id,
+                        e,
+                    )
+
             logger.info(
-                "[Computer] Shutting down Shipyard Neo sandbox: id=%s", sandbox_id
+                "[Computer] Shutting down Shipyard Neo sandbox client: id=%s",
+                sandbox_id,
             )
             await self._client.__aexit__(None, None, None)
             self._client = None
             self._sandbox = None
-            logger.info("[Computer] Shipyard Neo sandbox shut down: id=%s", sandbox_id)
+            logger.info(
+                "[Computer] Shipyard Neo sandbox client shut down: id=%s", sandbox_id
+            )
 
         # NOTE: We intentionally do NOT stop the Bay container here.
         # It stays running for reuse by future sessions.  The user can

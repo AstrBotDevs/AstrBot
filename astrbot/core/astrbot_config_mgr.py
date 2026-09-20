@@ -1,3 +1,4 @@
+import asyncio
 import os
 import uuid
 from typing import TypedDict, TypeVar
@@ -42,17 +43,44 @@ class AstrBotConfigManager:
         self.confs: dict[str, AstrBotConfig] = {}
         """uuid / "default" -> AstrBotConfig"""
         self.confs["default"] = default_config
-        self.abconf_data = None
+        self.abconf_data: dict | None = None
+        self._abconf_lock = asyncio.Lock()
+
+    async def initialize(self) -> None:
+        """Load configuration profile metadata and profile files."""
+        self.abconf_data = await self._load_abconf_mapping()
         self._load_all_configs()
 
+    async def _load_abconf_mapping(self) -> dict:
+        """Load configuration profile metadata from persistent storage.
+
+        Returns:
+            The persisted mapping, or an empty mapping when no value exists.
+        """
+        abconf_data = await self.sp.global_get("abconf_mapping", {})
+        return abconf_data if abconf_data is not None else {}
+
+    async def _persist_abconf_mapping(self, abconf_data: dict) -> None:
+        """Persist configuration profile metadata and refresh memory.
+
+        Args:
+            abconf_data: Complete configuration profile metadata mapping.
+        """
+        await self.sp.global_put("abconf_mapping", abconf_data)
+        self.abconf_data = abconf_data
+
     def _get_abconf_data(self) -> dict:
-        """获取所有的 abconf 数据"""
+        """Return configuration profile metadata loaded during initialization.
+
+        Returns:
+            The configuration profile metadata mapping.
+
+        Raises:
+            RuntimeError: If the manager has not been initialized.
+        """
         if self.abconf_data is None:
-            self.abconf_data = self.sp.get(
-                "abconf_mapping",
-                {},
-                scope="global",
-                scope_id="global",
+            raise RuntimeError(
+                "AstrBotConfigManager must be initialized before use.",
             )
         return self.abconf_data
 
@@ -100,26 +128,26 @@ class AstrBotConfigManager:
 
         return DEFAULT_CONFIG_CONF_INFO
 
-    def _save_conf_mapping(
+    async def _save_conf_mapping(
         self,
         abconf_path: str,
         abconf_id: str,
         abconf_name: str | None = None,
     ) -> None:
-        """保存配置文件的映射关系"""
-        abconf_data = self.sp.get(
-            "abconf_mapping",
-            {},
-            scope="global",
-            scope_id="global",
-        )
+        """Persist a new configuration profile mapping.
+
+        Args:
+            abconf_path: Profile configuration file name.
+            abconf_id: Generated profile ID.
+            abconf_name: Optional profile display name.
+        """
+        abconf_data = await self._load_abconf_mapping()
         random_word = abconf_name or uuid.uuid4().hex[:8]
         abconf_data[abconf_id] = {
             "path": abconf_path,
             "name": random_word,
         }
-        self.sp.put("abconf_mapping", abconf_data, scope="global", scope_id="global")
-        self.abconf_data = abconf_data
+        await self._persist_abconf_mapping(abconf_data)
 
     def get_conf(self, umo: str | MessageSession | None) -> AstrBotConfig:
         """获取指定 umo 的配置文件。如果不存在，则 fallback 到默认配置文件。"""
@@ -160,107 +188,113 @@ class AstrBotConfigManager:
         conf_list.append(DEFAULT_CONFIG_CONF_INFO)
         return conf_list
 
-    def create_conf(
+    async def create_conf(
         self,
         config: dict = DEFAULT_CONFIG,
         name: str | None = None,
     ) -> str:
-        conf_uuid = str(uuid.uuid4())
-        conf_file_name = f"abconf_{conf_uuid}.json"
-        conf_path = os.path.join(get_astrbot_config_path(), conf_file_name)
-        conf = AstrBotConfig(config_path=conf_path, default_config=config)
-        conf.save_config()
-        self._save_conf_mapping(conf_file_name, conf_uuid, abconf_name=name)
-        self.confs[conf_uuid] = conf
-        return conf_uuid
-
-    def delete_conf(self, conf_id: str) -> bool:
-        """删除指定配置文件
+        """Create and persist a configuration profile.
 
         Args:
-            conf_id: 配置文件的 UUID
+            config: Initial profile configuration.
+            name: Optional display name.
 
         Returns:
-            bool: 删除是否成功
+            The generated configuration profile ID.
+        """
+        async with self._abconf_lock:
+            conf_uuid = str(uuid.uuid4())
+            conf_file_name = f"abconf_{conf_uuid}.json"
+            conf_path = os.path.join(get_astrbot_config_path(), conf_file_name)
+            conf = AstrBotConfig(config_path=conf_path, default_config=config)
+            conf.save_config()
+            await self._save_conf_mapping(
+                conf_file_name,
+                conf_uuid,
+                abconf_name=name,
+            )
+            self.confs[conf_uuid] = conf
+            return conf_uuid
+
+    async def delete_conf(self, conf_id: str) -> bool:
+        """Delete a configuration profile.
+
+        Args:
+            conf_id: Configuration profile ID.
+
+        Returns:
+            Whether the profile was deleted.
 
         Raises:
-            ValueError: 如果试图删除默认配置文件
-
+            ValueError: If the default profile is requested.
         """
         if conf_id == "default":
             raise ValueError("不能删除默认配置文件")
 
-        # 从映射中移除
-        abconf_data = self.sp.get(
-            "abconf_mapping",
-            {},
-            scope="global",
-            scope_id="global",
-        )
-        if conf_id not in abconf_data:
-            logger.warning(f"配置文件 {conf_id} 不存在于映射中")
-            return False
+        async with self._abconf_lock:
+            # 从映射中移除
+            abconf_data = await self._load_abconf_mapping()
+            if conf_id not in abconf_data:
+                logger.warning(f"配置文件 {conf_id} 不存在于映射中")
+                return False
 
-        # 获取配置文件路径
-        conf_path = os.path.join(
-            get_astrbot_config_path(),
-            abconf_data[conf_id]["path"],
-        )
+            # 获取配置文件路径
+            conf_path = os.path.join(
+                get_astrbot_config_path(),
+                abconf_data[conf_id]["path"],
+            )
 
-        # 删除配置文件
-        try:
-            if os.path.exists(conf_path):
-                os.remove(conf_path)
-                logger.info(f"已删除配置文件: {conf_path}")
-        except Exception as e:
-            logger.error(f"删除配置文件 {conf_path} 失败: {e}")
-            return False
+            # 删除配置文件
+            try:
+                if os.path.exists(conf_path):
+                    os.remove(conf_path)
+                    logger.info(f"已删除配置文件: {conf_path}")
+            except Exception as e:
+                logger.error(f"删除配置文件 {conf_path} 失败: {e}")
+                return False
 
-        # 从内存中移除
-        if conf_id in self.confs:
-            del self.confs[conf_id]
+            # 从内存中移除
+            if conf_id in self.confs:
+                del self.confs[conf_id]
 
-        # 从映射中移除
-        del abconf_data[conf_id]
-        self.sp.put("abconf_mapping", abconf_data, scope="global", scope_id="global")
-        self.abconf_data = abconf_data
+            # 从映射中移除
+            del abconf_data[conf_id]
+            await self._persist_abconf_mapping(abconf_data)
 
-        logger.info(f"成功删除配置文件 {conf_id}")
-        return True
+            logger.info(f"成功删除配置文件 {conf_id}")
+            return True
 
-    def update_conf_info(self, conf_id: str, name: str | None = None) -> bool:
-        """更新配置文件信息
+    async def update_conf_info(
+        self,
+        conf_id: str,
+        name: str | None = None,
+    ) -> bool:
+        """Update configuration profile metadata.
 
         Args:
-            conf_id: 配置文件的 UUID
-            name: 新的配置文件名称 (可选)
+            conf_id: Configuration profile ID.
+            name: Optional new display name.
 
         Returns:
-            bool: 更新是否成功
-
+            Whether the profile metadata was updated.
         """
         if conf_id == "default":
             raise ValueError("不能更新默认配置文件的信息")
 
-        abconf_data = self.sp.get(
-            "abconf_mapping",
-            {},
-            scope="global",
-            scope_id="global",
-        )
-        if conf_id not in abconf_data:
-            logger.warning(f"配置文件 {conf_id} 不存在于映射中")
-            return False
+        async with self._abconf_lock:
+            abconf_data = await self._load_abconf_mapping()
+            if conf_id not in abconf_data:
+                logger.warning(f"配置文件 {conf_id} 不存在于映射中")
+                return False
 
-        # 更新名称
-        if name is not None:
-            abconf_data[conf_id]["name"] = name
+            # 更新名称
+            if name is not None:
+                abconf_data[conf_id]["name"] = name
 
-        # 保存更新
-        self.sp.put("abconf_mapping", abconf_data, scope="global", scope_id="global")
-        self.abconf_data = abconf_data
-        logger.info(f"成功更新配置文件 {conf_id} 的信息")
-        return True
+            # 保存更新
+            await self._persist_abconf_mapping(abconf_data)
+            logger.info(f"成功更新配置文件 {conf_id} 的信息")
+            return True
 
     def g(
         self,

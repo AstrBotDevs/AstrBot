@@ -8,7 +8,9 @@
  * @returns {string|undefined} 图标URL
  */
 export function getPlatformIcon(name) {
-  if (name === 'aiocqhttp') {
+  if (name === 'webchat') {
+    return '/favicon.svg'
+  } else if (name === 'aiocqhttp') {
     return new URL('@/assets/images/platform_logos/onebot.png', import.meta.url).href
   } else if (name === 'qq_official' || name === 'qq_official_webhook') {
     return new URL('@/assets/images/platform_logos/qq.png', import.meta.url).href
@@ -66,10 +68,11 @@ export function getTutorialLink(platformType) {
     "slack": "https://docs.astrbot.app/platform/slack.html",
     "kook": "https://docs.astrbot.app/platform/kook.html",
     "vocechat": "https://docs.astrbot.app/platform/vocechat.html",
-    "satori": "https://docs.astrbot.app/platform/satori/llonebot.html",
+    "satori": "https://docs.astrbot.app/platform/satori/guide.html",
     "misskey": "https://docs.astrbot.app/platform/misskey.html",
     "line": "https://docs.astrbot.app/platform/line.html",
     "matrix": "https://docs.astrbot.app/platform/matrix.html",
+    "mattermost": "https://docs.astrbot.app/platform/mattermost.html",
   }
   return tutorialMap[platformType] || "https://docs.astrbot.app";
 }

@@ -4,23 +4,61 @@
   "adapters": "Platform Adapters",
   "addAdapter": "Add Adapter",
   "emptyText": "No platform adapters yet, click Add Adapter to create one",
+  "workspace": {
+    "listTitle": "Bots",
+    "selectHint": "Select a bot to configure",
+    "empty": "No bots yet. Create one to start configuring it.",
+    "enabled": "Enable bot",
+    "disabled": "Disabled",
+    "delete": "Delete bot",
+    "save": "Save changes",
+    "configTitle": "Connection settings",
+    "configDescription": "Configure how this bot connects to its messaging platform.",
+    "routes": {
+      "title": "Conversation configuration",
+      "description": "Use different configuration profiles for different conversations. Unbound conversations use the default below.",
+      "loadFailed": "Conversation configuration could not be loaded. Connection settings remain editable, but conversation assignments will not be changed this time.",
+      "defaultTitle": "Default configuration for this bot",
+      "defaultDescription": "Every conversation without its own binding uses this configuration.",
+      "systemDefault": "System default configuration (default)",
+      "bindTitle": "Choose a configuration for a conversation",
+      "bindDescription": "Select a known conversation, then choose the configuration profile it should use.",
+      "sessionLabel": "Select conversation",
+      "configLabel": "Configuration profile",
+      "bind": "Add binding",
+      "noSessions": "No conversations yet. Send this bot a message on its messaging platform first.",
+      "boundTitle": "Bound conversations",
+      "boundCount": "{count}",
+      "remove": "Remove binding",
+      "noBindings": "No conversations are bound separately. All conversations use the default configuration.",
+      "advanced": "Advanced routing rules",
+      "advancedDescription": "Use UMO patterns to match multiple conversations. Rules are matched from top to bottom and are intended for users familiar with AstrBot message origins.",
+      "patternLabel": "UMO pattern",
+      "patternPlaceholder": "For example, bot-id:GroupMessage:*",
+      "addPattern": "Add rule",
+      "patternRequired": "Enter a UMO pattern",
+      "patternInvalid": "Use the format platform:message type:conversation ID",
+      "patternPlatformMismatch": "The platform part must match the current bot ID",
+      "duplicatePattern": "Duplicate configuration routes were found. Review them and try again.",
+      "sessionTypes": {
+        "group": "Group",
+        "friend": "Direct message",
+        "other": "Conversation"
+      }
+    }
+  },
   "viewWebhook": "View Webhook URL",
   "webhookCopied": "Webhook URL copied to clipboard",
   "webhookCopyFailed": "Copy failed, please copy manually",
   "webhookDialog": {
     "title": "Webhook Callback URL",
-    "description": "The callback address is as follows, please ensure that the network environment can be accessed. You can also view the callback address information in the logs.",
+    "description": "The callback address is as follows, please ensure that the network environment can be publicly accessible. You can also view the callback address information in the logs. It is recommended to fill in the \"Externally Accessible Callback API Address\" in Settings -> General.",
     "close": "Close"
   },
   "details": {
     "adapterType": "Adapter Type",
     "token": "Token",
     "description": "Description"
-  },
-  "logs": {
-    "title": "Platform Logs",
-    "expand": "Expand",
-    "collapse": "Collapse"
   },
   "dialog": {
     "add": "Add",
@@ -49,6 +87,12 @@
     "step1Title": "Choose Platform Category",
     "step1Hint": "Where do you want to connect the bot? e.g. QQ, WeCom, Feishu, Discord, Telegram.",
     "platformTypeLabel": "Platform Category",
+    "platformTooltips": {
+      "qq_official": "QQ's official bot platform. Supports private chats, joining QQ group chats (you only need to be the group owner), Markdown rendering in QQ, and one-click QR setup.",
+      "qq_official_webhook": "QQ's official bot platform. Supports private chats, joining QQ group chats (you only need to be the group owner), Markdown rendering in QQ, and one-click QR setup. This Webhook method requires a public IP address, so the WebSocket method above is recommended.",
+      "aiocqhttp": "A well-known instant messaging protocol. Connect through third-party services such as NapCat to integrate instant messaging apps.",
+      "weixin_oc": "WeChat's official bot integration. Supports private chats only and one-click QR setup."
+    },
     "configFileTitle": "Config File",
     "optional": "Optional",
     "configHint": "How do you want to configure the bot? The config file includes model, persona, knowledge base, plugins, and more.",
@@ -64,6 +108,12 @@
     "editMode": "Edit",
     "noRouteRules": "No route rules for this platform. The default config file will be used.",
     "sessionIdPlaceholder": "Session ID or *",
+    "routeSource": {
+      "selectPlaceholder": "Select session source",
+      "noData": "No unified message source for this bot is available yet. It will appear here after this bot receives at least one message from the corresponding messaging platform.",
+      "switchToKnown": "Switch to existing source selection",
+      "switchToManual": "Switch to manual input"
+    },
     "allSessions": "All sessions",
     "configMissing": "Config file not found",
     "routeHint": "When delivering messages, the first matching config file from top to bottom is used based on session source. Use * to match all. Use /sid to get the session ID. If none match, the default config file is used.",
@@ -130,6 +180,72 @@
     "waiting": "Waiting for QR",
     "close": "Close"
   },
+  "registrationAction": {
+    "lark": {
+      "title": "One-click QR Setup",
+      "show": "One-click QR Setup",
+      "scanTitle": "Scan with Feishu on your phone",
+      "feishu": "Feishu China",
+      "lark": "Lark Global"
+    },
+    "weixinOc": {
+      "title": "Personal WeChat QR Login",
+      "scanTitle": "Scan with WeChat on your phone",
+      "created": "Login Complete",
+      "status": {
+        "idle": "Not Started",
+        "starting": "Getting QR Code",
+        "pending": "Waiting for Scan",
+        "created": "Login Complete - remember to click the save button!",
+        "denied": "Canceled",
+        "expired": "Expired",
+        "error": "Login Failed"
+      }
+    },
+    "dingtalk": {
+      "title": "DingTalk QR Setup",
+      "scanTitle": "Scan with DingTalk on your phone",
+      "created": "Setup Complete"
+    },
+    "qqOfficial": {
+      "title": "QQ Official Bot QR Binding",
+      "scanTitle": "Scan with QQ on your phone",
+      "created": "Binding Complete",
+      "status": {
+        "idle": "Not Started",
+        "starting": "Getting QR Code",
+        "pending": "Waiting for Scan",
+        "created": "Binding Complete - remember to click the save button!",
+        "denied": "Canceled",
+        "expired": "Expired",
+        "error": "Binding Failed"
+      }
+    },
+    "start": "Start Setup",
+    "created": "Setup Complete",
+    "startFailed": "Failed to start QR setup",
+    "pollFailed": "Failed to poll QR setup status",
+    "platformIdLabel": "Bot ID",
+    "platformIdRequired": "Bot ID is required",
+    "platformIdInvalid": "Bot ID cannot contain spaces, ':' or '!'",
+    "mode": {
+      "title": "Choose setup method",
+      "scan": "One-click QR setup",
+      "manual": "Manual setup",
+      "larkManual": "Manual setup (supports self-hosted Feishu)"
+    },
+    "scanTitle": "Scan with Feishu on your phone",
+    "status": {
+      "idle": "Not Started",
+      "starting": "Starting",
+      "pending": "Waiting for Scan",
+      "slow_down": "Polling Slowed",
+      "created": "Setup Complete - remember to click the save button!",
+      "denied": "Canceled",
+      "expired": "Expired",
+      "error": "Setup Failed"
+    }
+  },
   "errorDialog": {
     "title": "Error Details",
     "platformId": "Platform ID",
@@ -139,4 +255,4 @@
     "traceback": "Traceback",
     "close": "Close"
   }
-} 
+}

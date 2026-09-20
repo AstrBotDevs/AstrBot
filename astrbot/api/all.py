@@ -1,3 +1,4 @@
+# ruff: noqa: F401, F403, F811, I001
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot import logger
 from astrbot.core import html_renderer

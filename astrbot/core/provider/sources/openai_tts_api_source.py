@@ -1,11 +1,11 @@
 import os
-import uuid
 
 import httpx
 from openai import NOT_GIVEN, AsyncOpenAI
 
 from astrbot import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.datetime_utils import generate_timestamp_id
 
 from ..entities import ProviderType
 from ..provider import TTSProvider
@@ -37,6 +37,7 @@ class ProviderOpenAITTSAPI(TTSProvider):
             logger.info(f"[OpenAI TTS] 使用代理: {proxy}")
             http_client = httpx.AsyncClient(proxy=proxy)
         self.client = AsyncOpenAI(
+            default_headers=self.request_headers,
             api_key=self.chosen_api_key,
             base_url=provider_config.get("api_base"),
             timeout=timeout,
@@ -47,7 +48,7 @@ class ProviderOpenAITTSAPI(TTSProvider):
 
     async def get_audio(self, text: str) -> str:
         temp_dir = get_astrbot_temp_path()
-        path = os.path.join(temp_dir, f"openai_tts_api_{uuid.uuid4()}.wav")
+        path = os.path.join(temp_dir, f"openai_tts_api_{generate_timestamp_id()}.wav")
         async with self.client.audio.speech.with_streaming_response.create(
             model=self.model_name,
             voice=self.voice,

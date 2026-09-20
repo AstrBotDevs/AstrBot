@@ -1,5 +1,13 @@
 <template>
-  <div class="standalone-chat">
+  <div class="standalone-chat" v-on="dragEvents">
+    <transition name="drop-fade">
+      <div v-if="isDragging" class="chat-drop-overlay">
+        <div class="chat-drop-overlay-content">
+          <v-icon size="48" color="primary">mdi-cloud-upload</v-icon>
+          <span class="chat-drop-text">{{ tm("input.dropToUpload") }}</span>
+        </div>
+      </div>
+    </transition>
     <section ref="messagesContainer" class="standalone-messages">
       <div v-if="initializing" class="standalone-state">
         <v-progress-circular indeterminate size="28" width="3" />
@@ -21,106 +29,137 @@
               class="message-bubble"
               :class="{ user: isUserMessage(msg), bot: !isUserMessage(msg) }"
             >
-              <div v-if="messageContent(msg).isLoading" class="loading-message">
-                {{ tm("message.loading") }}
-              </div>
-
-              <template v-else>
-                <ReasoningBlock
-                  v-if="messageContent(msg).reasoning"
-                  :reasoning="messageContent(msg).reasoning || ''"
-                  :is-dark="isDark"
-                  :initial-expanded="false"
-                  :is-streaming="isMessageStreaming(msg, msgIndex)"
-                  :has-non-reasoning-content="hasNonReasoningContent(msg)"
-                />
-
+              <MessageContentTransition
+                :loading="messageContent(msg).isLoading"
+              >
                 <template
-                  v-for="(part, partIndex) in messageParts(msg)"
-                  :key="`${msgIndex}-${partIndex}-${part.type}`"
+                  v-for="(block, blockIndex) in renderBlocks(msg)"
+                  :key="`${msgIndex}-block-${blockIndex}-${block.kind}`"
                 >
-                  <div
-                    v-if="part.type === 'plain' && isUserMessage(msg)"
-                    class="plain-content"
-                  >
-                    {{ part.text || "" }}
-                  </div>
-
-                  <MarkdownMessagePart
-                    v-else-if="part.type === 'plain'"
-                    :content="part.text || ''"
-                    :refs="messageRefs(msg)"
+                  <ReasoningBlock
+                    v-if="block.kind === 'thinking'"
+                    :parts="block.parts"
                     :is-dark="isDark"
-                    :custom-html-tags="customMarkdownTags"
+                    :initial-expanded="false"
+                    :is-streaming="isMessageStreaming(msg, msgIndex)"
+                    :has-non-reasoning-content="
+                      hasFollowingContentBlock(msg, blockIndex)
+                    "
                   />
 
-                  <button
-                    v-else-if="part.type === 'image'"
-                    class="image-part"
-                    type="button"
-                    @click="openImage(partUrl(part))"
-                  >
-                    <img :src="partUrl(part)" :alt="part.filename || 'image'" />
-                  </button>
-
-                  <audio
-                    v-else-if="part.type === 'record'"
-                    class="audio-part"
-                    controls
-                    :src="partUrl(part)"
-                  />
-
-                  <video
-                    v-else-if="part.type === 'video'"
-                    class="video-part"
-                    controls
-                    :src="partUrl(part)"
-                  />
-
-                  <div v-else-if="part.type === 'file'" class="file-part">
-                    <v-icon size="20">mdi-file-document-outline</v-icon>
-                    <span>{{ part.filename || "file" }}</span>
-                  </div>
-
-                  <div
-                    v-else-if="part.type === 'tool_call'"
-                    class="tool-call-block"
-                  >
+                  <template v-else>
                     <template
-                      v-for="tool in part.tool_calls || []"
-                      :key="tool.id || tool.name"
+                      v-for="(part, partIndex) in block.parts"
+                      :key="`${msgIndex}-${blockIndex}-${partIndex}-${part.type}`"
                     >
-                      <ToolCallItem
-                        v-if="isIPythonToolCall(tool)"
-                        :is-dark="isDark"
+                      <div
+                        v-if="part.type === 'plain' && isUserMessage(msg)"
+                        class="plain-content"
                       >
-                        <template #label>
-                          <v-icon size="16">mdi-code-json</v-icon>
-                          <span>{{ tool.name || "python" }}</span>
-                          <span class="tool-call-inline-status">
-                            {{ toolCallStatusText(tool) }}
+                        {{ part.text || "" }}
+                      </div>
+
+                      <MarkdownMessagePart
+                        v-else-if="part.type === 'plain'"
+                        :content="part.text || ''"
+                        :refs="messageRefs(msg)"
+                        :is-dark="isDark"
+                        :custom-html-tags="customMarkdownTags"
+                        :is-streaming="isMessageStreaming(msg, msgIndex)"
+                      />
+
+                      <button
+                        v-else-if="part.type === 'image'"
+                        class="image-part"
+                        type="button"
+                        @click="openImage(partUrl(part))"
+                      >
+                        <img
+                          :src="partUrl(part)"
+                          :alt="part.filename || 'image'"
+                        />
+                      </button>
+
+                      <audio
+                        v-else-if="part.type === 'record'"
+                        class="audio-part"
+                        controls
+                        :src="partUrl(part)"
+                      />
+
+                      <video
+                        v-else-if="part.type === 'video'"
+                        class="video-part"
+                        controls
+                        :src="partUrl(part)"
+                      />
+
+                      <div
+                        v-else-if="part.type === 'file'"
+                        class="file-part"
+                        :style="{
+                          '--attachment-color':
+                            attachmentPresentation(part).color,
+                        }"
+                      >
+                        <v-icon
+                          class="file-part-icon"
+                          :icon="attachmentPresentation(part).icon"
+                          size="24"
+                        />
+                        <div class="file-part-meta">
+                          <span class="file-part-name">
+                            {{ attachmentName(part) }}
                           </span>
-                        </template>
-                        <template #details>
-                          <IPythonToolBlock
+                          <span class="file-part-kind">
+                            {{ attachmentPresentation(part).label }}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div
+                        v-else-if="part.type === 'tool_call'"
+                        class="tool-call-block"
+                      >
+                        <template
+                          v-for="tool in part.tool_calls || []"
+                          :key="tool.id || tool.name"
+                        >
+                          <ToolCallItem
+                            v-if="isIPythonToolCall(tool)"
+                            :is-dark="isDark"
+                          >
+                            <template #label>
+                              <v-icon size="16">mdi-code-json</v-icon>
+                              <span>{{ tool.name || "python" }}</span>
+                              <span class="tool-call-inline-status">
+                                {{ toolCallStatusText(tool) }}
+                              </span>
+                            </template>
+                            <template #details>
+                              <IPythonToolBlock
+                                :tool-call="normalizeToolCall(tool)"
+                                :is-dark="isDark"
+                                :show-header="false"
+                                :force-expanded="true"
+                              />
+                            </template>
+                          </ToolCallItem>
+                          <ToolCallCard
+                            v-else
                             :tool-call="normalizeToolCall(tool)"
                             :is-dark="isDark"
-                            :show-header="false"
-                            :force-expanded="true"
                           />
                         </template>
-                      </ToolCallItem>
-                      <ToolCallCard
-                        v-else
-                        :tool-call="normalizeToolCall(tool)"
-                        :is-dark="isDark"
-                      />
-                    </template>
-                  </div>
+                      </div>
 
-                  <pre v-else class="unknown-part">{{ formatJson(part) }}</pre>
+                      <pre v-else class="unknown-part">{{
+                        formatJson(part)
+                      }}</pre>
+                    </template>
+                  </template>
                 </template>
-              </template>
+              </MessageContentTransition>
             </div>
           </div>
         </div>
@@ -135,16 +174,16 @@
         :staged-audio-url="stagedAudioUrl"
         :staged-files="stagedNonImageFiles"
         :disabled="sending || initializing"
-        :enable-streaming="enableStreaming"
+        show-settings
         :is-recording="false"
         :is-running="Boolean(currSessionId && isSessionRunning(currSessionId))"
         :session-id="currSessionId || null"
         :current-session="currentSession"
         :config-id="configId || 'default'"
-        send-shortcut="enter"
+        :send-shortcut="sendShortcut"
         @send="sendCurrentMessage"
         @stop="stopCurrentSession"
-        @toggle-streaming="enableStreaming = !enableStreaming"
+        @open-settings="settingsOpen = true"
         @remove-image="removeImage"
         @remove-audio="removeAudio"
         @remove-file="removeFile"
@@ -152,6 +191,14 @@
         @file-select="handleFilesSelected"
       />
     </section>
+
+    <ChatSettingsDialog
+      v-model="settingsOpen"
+      v-model:enable-streaming="enableStreaming"
+      v-model:enable-reasoning="enableReasoning"
+      v-model:send-shortcut="sendShortcut"
+      v-model:transport-mode="transportMode"
+    />
 
     <v-overlay
       v-model="imagePreview.visible"
@@ -165,6 +212,7 @@
 </template>
 
 <script setup lang="ts">
+import MessageContentTransition from "@/components/chat/MessageContentTransition.vue";
 import {
   computed,
   nextTick,
@@ -172,20 +220,30 @@ import {
   onMounted,
   reactive,
   ref,
+  watch,
 } from "vue";
-import axios from "axios";
-import { setCustomComponents } from "markstream-vue";
-import "markstream-vue/index.css";
+import { chatApi, configRouteApi, fileApi } from "@/api/v1";
+import ChatSettingsDialog from "@/components/chat/ChatSettingsDialog.vue";
 import ChatInput from "@/components/chat/ChatInput.vue";
+import { useDragUpload } from "@/composables/useDragUpload";
+import {
+  CHAT_MARKDOWN_CUSTOM_TAGS,
+  registerChatMarkdownComponents,
+} from "@/components/chat/chatMarkdownComponents";
 import IPythonToolBlock from "@/components/chat/message_list_comps/IPythonToolBlock.vue";
 import MarkdownMessagePart from "@/components/chat/message_list_comps/MarkdownMessagePart.vue";
 import ReasoningBlock from "@/components/chat/message_list_comps/ReasoningBlock.vue";
-import RefNode from "@/components/chat/message_list_comps/RefNode.vue";
 import ToolCallCard from "@/components/chat/message_list_comps/ToolCallCard.vue";
 import ToolCallItem from "@/components/chat/message_list_comps/ToolCallItem.vue";
-import ThemeAwareMarkdownCodeBlock from "@/components/shared/ThemeAwareMarkdownCodeBlock.vue";
+import {
+  attachmentName,
+  attachmentPresentation,
+} from "@/components/chat/attachmentPresentation";
 import { useMediaHandling } from "@/composables/useMediaHandling";
 import {
+  displayParts as displayMessageParts,
+  messageBlocks as buildMessageBlocks,
+  type MessageDisplayBlock,
   useMessages,
   type ChatRecord,
   type MessagePart,
@@ -200,10 +258,7 @@ const props = withDefaults(defineProps<{ configId?: string | null }>(), {
   configId: "default",
 });
 
-setCustomComponents("chat-message", {
-  ref: RefNode,
-  code_block: ThemeAwareMarkdownCodeBlock,
-});
+registerChatMarkdownComponents();
 
 const { tm } = useModuleI18n("features/chat");
 const customizer = useCustomizerStore();
@@ -211,14 +266,17 @@ const currSessionId = ref("");
 const currentSession = ref<Session | null>(null);
 const draft = ref("");
 const initializing = ref(false);
+const settingsOpen = ref(false);
+const sendShortcut = ref<"enter" | "shift_enter">("enter");
 const enableStreaming = ref(true);
+const enableReasoning = ref(true);
 const shouldStickToBottom = ref(true);
 const messagesContainer = ref<HTMLElement | null>(null);
 const inputRef = ref<InstanceType<typeof ChatInput> | null>(null);
 const imagePreview = reactive({ visible: false, url: "" });
 
 const isDark = computed(() => customizer.uiTheme === "PurpleThemeDark");
-const customMarkdownTags = ["ref"];
+const customMarkdownTags = CHAT_MARKDOWN_CUSTOM_TAGS;
 
 const {
   stagedFiles,
@@ -235,6 +293,8 @@ const {
   cleanupMediaCache,
 } = useMediaHandling();
 
+const { isDragging, dragEvents } = useDragUpload(handleFilesSelected);
+
 const {
   sending,
   activeMessages,
@@ -242,7 +302,6 @@ const {
   isMessageStreaming,
   isUserMessage,
   messageContent,
-  messageParts,
   createLocalExchange,
   sendMessageStream,
   stopSession,
@@ -255,11 +314,15 @@ const {
   },
 });
 
-const transportMode = computed<TransportMode>(() =>
+const transportMode = ref<TransportMode>(
   (localStorage.getItem("chat.transportMode") as TransportMode) === "websocket"
     ? "websocket"
     : "sse",
 );
+
+watch(transportMode, (mode) => {
+  localStorage.setItem("chat.transportMode", mode);
+});
 
 onMounted(async () => {
   await ensureSession();
@@ -274,7 +337,7 @@ async function ensureSession() {
   if (currSessionId.value) return currSessionId.value;
   initializing.value = true;
   try {
-    const response = await axios.get("/api/chat/new_session");
+    const response = await chatApi.createSession();
     const session = response.data?.data as Session;
     currSessionId.value = session.session_id;
     currentSession.value = session;
@@ -288,10 +351,7 @@ async function ensureSession() {
 async function bindConfigToSession(sessionId: string) {
   const confId = props.configId || "default";
   const umo = buildWebchatUmoDetails(sessionId, false).umo;
-  await axios.post("/api/config/umo_abconf_route/update", {
-    umo,
-    conf_id: confId,
-  });
+  await configRouteApi.upsert(umo, { config_id: confId });
 }
 
 async function sendCurrentMessage() {
@@ -301,11 +361,16 @@ async function sendCurrentMessage() {
   const parts = buildOutgoingParts(text);
   const messageId = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
   const selection = inputRef.value?.getCurrentSelection();
-  const { botRecord } = createLocalExchange({ sessionId, messageId, parts });
+  const { userRecord, botRecord } = createLocalExchange({
+    sessionId,
+    messageId,
+    parts,
+  });
 
   draft.value = "";
-  clearStaged();
+  clearStaged({ revokeUrls: false });
   scrollToBottom();
+  await focusChatInput();
 
   sendMessageStream({
     sessionId,
@@ -313,8 +378,10 @@ async function sendCurrentMessage() {
     parts,
     transport: transportMode.value,
     enableStreaming: enableStreaming.value,
+    enableReasoning: enableReasoning.value,
     selectedProvider: selection?.providerId || "",
     selectedModel: selection?.modelName || "",
+    userRecord,
     botRecord,
   });
 }
@@ -336,11 +403,25 @@ function buildOutgoingParts(text: string): MessagePart[] {
 }
 
 function hasNonReasoningContent(message: ChatRecord) {
-  return messageParts(message).some((part) => {
-    if (part.type === "reply") return false;
-    if (part.type === "plain") return Boolean(String(part.text || "").trim());
-    return true;
-  });
+  return renderBlocks(message).some((block) => block.kind === "content");
+}
+
+function bubbleParts(message: ChatRecord) {
+  return displayMessageParts(messageContent(message));
+}
+
+function renderBlocks(message: ChatRecord): MessageDisplayBlock[] {
+  if (isUserMessage(message)) {
+    const parts = bubbleParts(message);
+    return parts.length ? [{ kind: "content", parts }] : [];
+  }
+  return buildMessageBlocks(messageContent(message));
+}
+
+function hasFollowingContentBlock(message: ChatRecord, blockIndex: number) {
+  return renderBlocks(message)
+    .slice(blockIndex + 1)
+    .some((block) => block.kind === "content");
 }
 
 async function stopCurrentSession() {
@@ -348,7 +429,7 @@ async function stopCurrentSession() {
   await stopSession(currSessionId.value);
 }
 
-async function handleFilesSelected(files: FileList) {
+async function handleFilesSelected(files: FileList | File[]) {
   const selectedFiles = Array.from(files || []);
   for (const file of selectedFiles) {
     if (file.type.startsWith("image/")) {
@@ -368,6 +449,13 @@ function scrollToBottom() {
   });
 }
 
+async function focusChatInput() {
+  await nextTick();
+  window.requestAnimationFrame(() => {
+    inputRef.value?.focusInput();
+  });
+}
+
 function messageRefs(message: ChatRecord) {
   const refs = messageContent(message).refs;
   if (refs && typeof refs === "object" && Array.isArray(refs.used)) {
@@ -379,12 +467,9 @@ function messageRefs(message: ChatRecord) {
 function partUrl(part: MessagePart) {
   if (part.embedded_url) return part.embedded_url;
   if (part.embedded_file?.url) return part.embedded_file.url;
-  if (part.attachment_id)
-    return `/api/chat/get_attachment?attachment_id=${encodeURIComponent(
-      part.attachment_id,
-    )}`;
-  if (part.filename)
-    return `/api/chat/get_file?filename=${encodeURIComponent(part.filename)}`;
+  if (part.attachment_id) return fileApi.contentUrl(part.attachment_id);
+  const lookupFilename = part.stored_filename || part.filename;
+  if (lookupFilename) return fileApi.byNameUrl(lookupFilename);
   return "";
 }
 
@@ -445,7 +530,48 @@ function closeImage() {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  position: relative;
   background: rgb(var(--v-theme-background));
+}
+
+/* 全区域拖拽上传遮罩 */
+.chat-drop-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 100;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(var(--v-theme-primary), 0.12);
+  border: 2px dashed rgba(var(--v-theme-primary), 0.45);
+  border-radius: 16px;
+}
+
+.chat-drop-overlay-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.chat-drop-text {
+  font-size: 16px;
+  font-weight: 500;
+  color: rgb(var(--v-theme-primary));
+}
+
+.drop-fade-enter-active,
+.drop-fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.drop-fade-enter-from,
+.drop-fade-leave-to {
+  opacity: 0;
 }
 
 .standalone-messages {
@@ -464,6 +590,7 @@ function closeImage() {
 }
 
 .welcome-title {
+  font-family: "Outfit", "Noto Sans", sans-serif;
   font-size: 24px;
   font-weight: 700;
 }
@@ -472,6 +599,7 @@ function closeImage() {
   display: flex;
   flex-direction: column;
   gap: 18px;
+  font-weight: 410;
 }
 
 .message-row {
@@ -484,6 +612,12 @@ function closeImage() {
 
 .message-stack {
   max-width: 88%;
+}
+
+.from-bot .message-stack {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 760px;
 }
 
 .from-user .message-stack {
@@ -499,8 +633,8 @@ function closeImage() {
 
 .message-bubble.user {
   padding: 12px 18px;
-  border-radius: 1.5rem;
-  background: rgba(var(--v-theme-primary), 0.12);
+  border-radius: 16px;
+  background: rgba(var(--v-theme-primary), 0.16);
 }
 
 .message-bubble.bot {
@@ -512,18 +646,20 @@ function closeImage() {
   white-space: pre-wrap;
 }
 
-.loading-message,
 .tool-call-inline-status {
   color: var(--standalone-muted);
 }
 
 .image-part {
   display: block;
+  width: fit-content;
+  max-width: 100%;
   border: 0;
   padding: 0;
   margin-top: 8px;
   background: transparent;
   cursor: zoom-in;
+  text-align: left;
 }
 
 .image-part img {
@@ -546,10 +682,51 @@ function closeImage() {
 }
 
 .file-part {
-  display: flex;
+  --attachment-color: #607d8b;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  width: min(420px, 100%);
   margin-top: 8px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  background: rgba(var(--v-theme-on-surface), 0.055);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--attachment-color) 13%, transparent),
+    rgba(var(--v-theme-on-surface), 0.055) 58%
+  );
+}
+
+.file-part-icon {
+  color: var(--attachment-color);
+}
+
+.file-part-meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.file-part-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.file-part-kind {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--attachment-color);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 14px;
 }
 
 .tool-call-block {
@@ -580,22 +757,6 @@ function closeImage() {
   z-index: 1;
   padding-bottom: 10px;
   background: rgb(var(--v-theme-background));
-}
-
-.standalone-composer::before {
-  content: "";
-  position: absolute;
-  z-index: -1;
-  left: 0;
-  right: 0;
-  top: -32px;
-  height: 32px;
-  pointer-events: none;
-  background: linear-gradient(
-    to bottom,
-    rgba(var(--v-theme-background), 0),
-    rgb(var(--v-theme-background))
-  );
 }
 
 .standalone-composer :deep(.input-area) {

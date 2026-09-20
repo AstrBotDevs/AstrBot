@@ -1,10 +1,12 @@
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, filter
+from astrbot.core.star.filter.command import GreedyStr
 
 from .commands import (
     AdminCommands,
     ConversationCommands,
     HelpCommand,
+    NameCommand,
     ProviderCommands,
     SetUnsetCommands,
     SIDCommand,
@@ -18,6 +20,7 @@ class Main(star.Star):
         self.admin_c = AdminCommands(self.context)
         self.conversation_c = ConversationCommands(self.context)
         self.help_c = HelpCommand(self.context)
+        self.name_c = NameCommand(self.context)
         self.provider_c = ProviderCommands(self.context)
         self.setunset_c = SetUnsetCommands(self.context)
         self.sid_c = SIDCommand(self.context)
@@ -32,10 +35,21 @@ class Main(star.Star):
         """Get session ID and other related information"""
         await self.sid_c.sid(event)
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.command("name")
+    async def name(self, event: AstrMessageEvent, alias: GreedyStr) -> None:
+        """Set display name for current UMO"""
+        await self.name_c.name(event, alias)
+
     @filter.command("reset")
+    @filter.permission_type(filter.PermissionType.SHARED_GROUP_ADMIN)
     async def reset(self, message: AstrMessageEvent) -> None:
-        """Reset conversation history"""
-        await self.conversation_c.reset(message)
+        """Start a new conversation, keeping previous history.
+
+        Args:
+            message: Command event identifying the session and sender.
+        """
+        await self.conversation_c.new_conv(message)
 
     @filter.command("stop")
     async def stop(self, message: AstrMessageEvent) -> None:
@@ -43,9 +57,19 @@ class Main(star.Star):
         await self.conversation_c.stop(message)
 
     @filter.command("new")
+    @filter.permission_type(filter.PermissionType.SHARED_GROUP_ADMIN)
     async def new_conv(self, message: AstrMessageEvent) -> None:
-        """Create new conversation"""
+        """Start a new conversation, keeping previous history.
+
+        Args:
+            message: Command event identifying the session and sender.
+        """
         await self.conversation_c.new_conv(message)
+
+    @filter.command("stats")
+    async def stats(self, message: AstrMessageEvent) -> None:
+        """Show token usage statistics for the current conversation"""
+        await self.conversation_c.stats(message)
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("provider")

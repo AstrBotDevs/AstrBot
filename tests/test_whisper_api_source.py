@@ -38,18 +38,21 @@ async def test_get_text_converts_opus_files_to_wav_before_transcription(
 
     conversions: list[tuple[str, str]] = []
 
-    async def fake_convert_audio_to_wav(audio_path: str, output_path: str | None = None):
-        assert output_path is not None
+    async def fake_convert_audio_to_wav(
+        audio_path: str, output_path: str | None = None
+    ):
+        if output_path is None:
+            output_path = str(tmp_path / "converted.wav")
         conversions.append((audio_path, output_path))
         Path(output_path).write_bytes(b"fake wav data")
         return output_path
 
     monkeypatch.setattr(
-        "astrbot.core.provider.sources.whisper_api_source.get_astrbot_temp_path",
+        "astrbot.core.utils.media_utils.get_astrbot_temp_path",
         lambda: str(tmp_path),
     )
     monkeypatch.setattr(
-        "astrbot.core.provider.sources.whisper_api_source.convert_audio_to_wav",
+        "astrbot.core.utils.media_utils.convert_audio_to_wav",
         fake_convert_audio_to_wav,
     )
 

@@ -55,6 +55,7 @@ class TestGroup:
         assert group.group_owner is None
         assert group.group_admins is None
         assert group.members is None
+        assert group.member_count is None
 
     def test_group_creation_with_all_fields(self):
         """Test creating a Group with all fields."""
@@ -66,6 +67,7 @@ class TestGroup:
             group_owner="owner123",
             group_admins=["admin1", "admin2"],
             members=members,
+            member_count=2,
         )
 
         assert group.group_id == "group123"
@@ -74,6 +76,7 @@ class TestGroup:
         assert group.group_owner == "owner123"
         assert group.group_admins == ["admin1", "admin2"]
         assert group.members == members
+        assert group.member_count == 2
 
     def test_group_str_with_all_fields(self):
         """Test __str__ method with all fields."""
@@ -85,6 +88,7 @@ class TestGroup:
             group_owner="owner123",
             group_admins=["admin1"],
             members=members,
+            member_count=1,
         )
         result = str(group)
 
@@ -93,6 +97,7 @@ class TestGroup:
         assert "Avatar: http://example.com/avatar.jpg" in result
         assert "Owner ID: owner123" in result
         assert "Admin IDs: ['admin1']" in result
+        assert "Member Count: 1" in result
         assert "Members Len: 1" in result
 
     def test_group_str_with_minimal_fields(self):
@@ -105,6 +110,7 @@ class TestGroup:
         assert "Avatar: N/A" in result
         assert "Owner ID: N/A" in result
         assert "Admin IDs: N/A" in result
+        assert "Member Count: N/A" in result
         assert "Members Len: 0" in result
         assert "First Member: N/A" in result
 
