@@ -725,7 +725,7 @@ class AstrBotExporter:
             for file in files:
                 file_path = Path(root) / file
                 # 计算相对路径
-                rel_path = file_path.relative_to(kb_helper.kb_dir)
+                rel_path = file_path.relative_to(kb_helper.kb_dir).as_posix()
                 archive_path = f"files/kb_media/{kb_id}/{rel_path}"
                 try:
                     self._write_entry(zf, archive_path, file_path)
@@ -770,7 +770,7 @@ class AstrBotExporter:
 
                         file_path = Path(root) / file
                         # 计算相对路径
-                        rel_path = file_path.relative_to(full_path)
+                        rel_path = file_path.relative_to(full_path).as_posix()
                         archive_path = f"directories/{dir_name}/{rel_path}"
                         try:
                             self._write_entry(zf, archive_path, file_path)

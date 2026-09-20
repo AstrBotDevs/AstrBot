@@ -8,7 +8,7 @@ import struct
 import zipfile
 import zlib
 from datetime import datetime
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -1535,6 +1535,47 @@ def _component_checksum(entries: dict[str, str]) -> str:
 
 class TestSelectiveExport:
     """选择性导出测试"""
+
+    @pytest.mark.parametrize(
+        ("source", "relative_name", "archive_prefix"),
+        [
+            ("webchat", "imgs/legacy.png", "directories/webchat"),
+            ("plugins", "example/main.py", "directories/plugins"),
+            ("kb_media", "media/image.png", "files/kb_media/kb1"),
+        ],
+    )
+    def test_windows_archive_paths_match_checksums(
+        self, tmp_path, monkeypatch, source, relative_name, archive_prefix
+    ):
+        """Keep ZIP names and checksum keys portable for Windows source paths."""
+        root = tmp_path / source
+        file_path = root / relative_name
+        file_path.parent.mkdir(parents=True)
+        file_path.write_bytes(b"backup-content")
+        exporter = AstrBotExporter(main_db=MagicMock())
+        monkeypatch.setattr(
+            "astrbot.core.backup.exporter.get_backup_directories",
+            lambda: {source: root},
+        )
+        archive = tmp_path / "backup.zip"
+        relative_to = Path.relative_to
+        with zipfile.ZipFile(archive, "w") as zf, monkeypatch.context() as context:
+            # Simulate Windows separators while retaining real local file I/O.
+            context.setattr(
+                Path,
+                "relative_to",
+                lambda path, *other: PureWindowsPath(*relative_to(path, *other).parts),
+            )
+            if source == "kb_media":
+                helper = MagicMock(kb_dir=root, kb_medias_dir=root / "media")
+                exporter._export_kb_media_files(zf, helper, "kb1")
+            else:
+                exporter._export_directories(zf, [source])
+
+        entry = f"{archive_prefix}/{relative_name}"
+        with zipfile.ZipFile(archive) as zf:
+            assert zf.namelist() == [entry]
+            assert exporter._checksums == {entry: _sha256(zf.read(entry))}
 
     @pytest.mark.asyncio
     async def test_export_selective_components(self, temp_backup_dir, temp_data_dir):
