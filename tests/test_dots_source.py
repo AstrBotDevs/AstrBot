@@ -219,9 +219,77 @@ async def test_json_fallback_and_standard_call_precedence(provider, tools):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("value", ["    return 1\n", "\t\n", "", " text "])
 async def test_native_string_parameters_preserve_whitespace(provider, tools, value):
-    native = NATIVE_CALL.replace("123 & weather", value).replace(
-        ">5<", "> \n5\t <"
+    native = NATIVE_CALL.replace("123 & weather", value).replace(">5<", "> \n5\t <")
+    result = await provider._parse_openai_completion(completion(native), tools)
+    assert result.tools_call_args == [{"query": value, "max_results": 5}]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+@pytest.mark.parametrize("tag", ["think", "thinking"])
+@pytest.mark.parametrize("example", [NATIVE_CALL, NATIVE_CALL[:-10]])
+async def test_reasoning_examples_are_not_tool_calls(
+    provider, tools, streaming, tag, example
+):
+    thought = "Discard this example: " + example.replace(
+        "123 & weather", "discarded search"
     )
+    content = f"<{tag}>{thought}</{tag}>Searching." + NATIVE_CALL
+    if streaming:
+
+        async def chunks():
+            for index, (text, finish) in enumerate(
+                [
+                    (content[:20], None),
+                    (content[20:], None),
+                    (None, "tool_calls"),
+                ]
+            ):
+                yield ChatCompletionChunk.model_validate(
+                    {
+                        "id": "reasoning-test",
+                        "object": "chat.completion.chunk",
+                        "created": 0,
+                        "model": "dots3-note-prev",
+                        "choices": [
+                            {
+                                "index": 0,
+                                "delta": {
+                                    "content": text,
+                                    **({"role": "assistant"} if index == 0 else {}),
+                                },
+                                "finish_reason": finish,
+                            }
+                        ],
+                    }
+                )
+
+        provider.client.chat.completions.create = AsyncMock(return_value=chunks())
+        results = []
+        visible = []
+        reasoning = []
+        async for response in provider._query_stream({}, tools):
+            if response.is_chunk:
+                visible.append(response.completion_text or "")
+                reasoning.append(response.reasoning_content or "")
+            else:
+                results.append(response)
+        assert "".join(visible) == "Searching."
+        assert "".join(reasoning) == thought
+        assert len(results) == 1
+        result = results[0]
+    else:
+        result = await provider._parse_openai_completion(completion(content), tools)
+    assert result.tools_call_args == [{"query": "123 & weather", "max_results": 5}]
+    assert len(result.tools_call_ids) == 1
+    assert result.reasoning_content == thought
+    assert result.completion_text == "Searching."
+
+
+@pytest.mark.asyncio
+async def test_reasoning_tags_inside_tool_arguments_remain_literal(provider, tools):
+    value = "<think>literal file content</think>"
+    native = NATIVE_CALL.replace("123 & weather", value)
     result = await provider._parse_openai_completion(completion(native), tools)
     assert result.tools_call_args == [{"query": value, "max_results": 5}]
 

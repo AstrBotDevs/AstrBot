@@ -165,6 +165,30 @@ class ProviderDots(ProviderOpenAIOfficial):
             return await super()._parse_openai_completion(completion, tools)
         choice = completion.choices[0]
         content = choice.message.content or ""
+        # Leave ordinary answers and XML examples to the existing text parser.
+        if choice.finish_reason not in ("tool_calls", "length"):
+            return await super()._parse_openai_completion(completion, tools)
+        # Match call blocks first so literal thinking tags inside arguments survive.
+        reasoning_pattern = re.compile(
+            r"<dots_function_call>.*?</dots_function_call>|<(think|thinking)>(.*?)</\1>",
+            re.DOTALL,
+        )
+        thoughts = [
+            match.group(2).strip()
+            for match in reasoning_pattern.finditer(content)
+            if match.group(1)
+        ]
+        if thoughts:
+            content = reasoning_pattern.sub(
+                lambda match: "" if match.group(1) else match.group(), content
+            )
+            normalized = completion.model_dump()
+            message = normalized["choices"][0]["message"]
+            message["content"] = content or None
+            if self._extract_reasoning_content(completion) is None:
+                message[self.reasoning_key] = "\n".join(thoughts)
+            completion = ChatCompletion.model_validate(normalized)
+            choice = completion.choices[0]
         if (
             tools is not None
             and not tools.empty()
@@ -227,10 +251,16 @@ class ProviderDots(ProviderOpenAIOfficial):
             ValueError: A tool-enabled stream ends without a valid final response.
         """
         filter_calls = tools is not None and not tools.empty()
-        markers = ("<dots_function_call", "</dots_function_call>")
+        markers = (
+            "<dots_function_call",
+            "</dots_function_call>",
+            "<think>",
+            "<thinking>",
+        )
         pending = ""
         found_marker = False
         received_final = False
+        streamed_reasoning = False
         async for response in super()._query_stream(
             payloads, tools, request_max_retries=request_max_retries
         ):
@@ -238,6 +268,7 @@ class ProviderDots(ProviderOpenAIOfficial):
                 yield response
                 continue
             if response.is_chunk:
+                streamed_reasoning |= bool(response.reasoning_content)
                 pending += response.completion_text or ""
                 text = ""
                 if not found_marker:
@@ -273,6 +304,25 @@ class ProviderDots(ProviderOpenAIOfficial):
                 continue
             received_final = True
             if response.tools_call_name:
+                reasoning_pattern = re.compile(
+                    r"<dots_function_call>.*?</dots_function_call>|<(think|thinking)>(.*?)</\1>",
+                    re.DOTALL,
+                )
+                thoughts = [
+                    match.group(2).strip()
+                    for match in reasoning_pattern.finditer(pending)
+                    if match.group(1)
+                ]
+                pending = reasoning_pattern.sub(
+                    lambda match: "" if match.group(1) else match.group(), pending
+                )
+                if thoughts and not streamed_reasoning:
+                    yield LLMResponse(
+                        "assistant",
+                        reasoning_content=response.reasoning_content,
+                        is_chunk=True,
+                        id=response.id,
+                    )
                 # Final parsing validated every block and chose standard calls, if
                 # present. Until then, keep the suffix in order for XML examples.
                 pending = re.sub(
