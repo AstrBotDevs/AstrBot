@@ -124,3 +124,16 @@ If there are no errors, you will see a log message similar to `🌈 Dashboard st
 > If deployed on a cloud server, you need to open ports `6180-6200` and `11451` in the cloud provider's console.
 
 Next, you need to deploy any messaging platform to use AstrBot on that platform.
+
+## Configure an HTTP proxy in Docker
+
+Set the HTTP proxy in the WebUI under `Settings → Network → Proxy & Dependency Sources → HTTP Proxy`. AstrBot reaches that address **from inside its own container**, so `http://127.0.0.1:7890` points at the AstrBot container itself rather than the host or another container.
+
+If the proxy runs on the host, or in another container with the port published to the host:
+
+- Mac / Windows (Docker Desktop): `http://host.docker.internal:7890`
+- Linux: `http://172.17.0.1:7890` (replace `172.17.0.1` with your docker0 gateway if it differs)
+
+If AstrBot and the proxy share a Docker network, use the proxy container name, for example `http://clash:7890`.
+
+Clash-style clients commonly use HTTP on `7890` and SOCKS on `7891`. Use `http://` or `socks5://` to match the protocol. Publish the proxy port to the host, and avoid binding it only to `127.0.0.1` (`127.0.0.1:7890:7890` is unreachable from other containers via the gateway).
