@@ -99,6 +99,10 @@ Global settings are under `Settings` at the bottom of the sidebar:
 
 System configuration changes save automatically. Check for a successful save message and restart AstrBot if the page indicates that a restart is required.
 
+Under `Settings → Maintenance`, open the backup dialog to export or restore data. Export selects all components by default; clear any components you do not want to include. After choosing or uploading a backup to restore, review the available components and select those to restore. Restoration replaces the selected data, so check the scope before confirming. Restore attachments together with the main database when their records are needed.
+
+Review any warnings and the restored-data summary when the task finishes, including after a partial failure. Only one backup or restore task can run at a time. Import verification may temporarily delay dashboard responses. Selective backups require a version of AstrBot that supports selective restoration.
+
 ## Plugins
 
 Select `Extensions` in the sidebar. The top tabs are `Plugins`, `Skills`, `MCP Servers`, and `Handlers`. Within `Plugins`, switch between `Installed` and `AstrBot Plugin Market` to view local and market plugins.

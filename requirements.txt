@@ -61,3 +61,4 @@ python-docx>=1.2.0
 pyotp>=2.9.0
 reportlab>=5.0.0
 xlrd>=2.0.2
+ijson>=3.4,<4
