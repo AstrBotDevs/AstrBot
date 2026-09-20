@@ -34,6 +34,23 @@ Using DeepSeek as an example, assuming you have registered and logged in to a De
 6. Click **Save and Fetch Models**, find the desired model, click `+`, and make sure it is enabled. If the model list cannot be fetched, click **Save Configuration**, then **Custom Model** and enter the model ID. Use **Test Model** beside the model to check connectivity.
 7. Open **Config**, select the profile to use, and go to **AI → Model**. Set **Chat Model** to the model you just added, then click **Save Configuration** at the bottom right. This setting is for AstrBot built-in AI.
 
+## Connecting StepFun and Step Plan
+
+Open **Providers → Chat Completion → Add** and select `StepFun` for the standard API or `StepFun Step Plan` for your Step Plan subscription. Enter your StepFun API key; the presets use separate API Base URLs:
+
+![StepFun and StepFun Step Plan in the provider selector (Chinese UI)](/stepfun-provider-presets.png)
+
+| Preset | Default API Base URL |
+| --- | --- |
+| StepFun | `https://api.stepfun.com/v1` |
+| StepFun Step Plan | `https://api.stepfun.com/step_plan/v1` |
+
+The API Base URL remains editable. Use the endpoint that matches your account's region and billing plan; see the [StepFun API documentation](https://platform.stepfun.com/docs/zh/api-reference/chat/chat-completion-create).
+
+Click **Save and Fetch Models** and add a model available to your account. If fetching the list fails, use **Save Configuration → Custom Model** and enter a model ID supported by your endpoint. Then select it as the profile's **AI → Model → Chat Model**, as in the steps above.
+
+Both presets support the same optional settings as other OpenAI-compatible providers: timeout, proxy, and custom headers in the provider's advanced settings, plus model capabilities, context size, and custom request parameters in the model configuration. Only enable capabilities and parameters supported by the selected model. For example, `custom_extra_body` can include `{"reasoning_effort": "high", "max_tokens": 8192}` for models that support those parameters. Leave it empty to use the service defaults.
+
 ## Using Environment Variables to Load Keys
 
 > Introduced in v4.13.0.

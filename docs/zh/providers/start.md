@@ -34,6 +34,23 @@ AstrBot 适配了 OpenAI、Google GenAI、Anthropic 三种原生 API 格式。�
 - 点击「保存并获取模型」，找到想使用的模型，点击右侧 `+` 并确认模型已启用。如果无法获取模型列表，可先「保存配置」，再点击「自定义模型」并填写模型 ID。可通过模型旁的「测试模型」检查连通性。
 - 进入「配置文件」，选择要使用的配置文件，在「AI 配置」→「模型」中将「对话模型」设为刚添加的模型，点击右下角「保存配置」。此项用于 AstrBot 内置 AI。
 
+## 接入 StepFun 和 Step Plan
+
+打开「模型提供商」→「对话」→「新增」，普通 API 选择 `StepFun`，Step Plan 订阅选择 `StepFun Step Plan`，填写阶跃星辰 API Key。两个预设分别使用以下 API Base URL：
+
+![提供商选择器中的 StepFun 和 StepFun Step Plan 入口](/stepfun-provider-presets.png)
+
+| 预设 | 默认 API Base URL |
+| --- | --- |
+| StepFun | `https://api.stepfun.com/v1` |
+| StepFun Step Plan | `https://api.stepfun.com/step_plan/v1` |
+
+API Base URL 仍可编辑，请使用与账号区域及计费套餐对应的地址，详见[阶跃星辰 API 文档](https://platform.stepfun.com/docs/zh/api-reference/chat/chat-completion-create)。
+
+点击「保存并获取模型」，添加账号可用的模型。如果获取列表失败，可先「保存配置」，再通过「自定义模型」填写当前接口支持的模型 ID。最后按照上面的步骤，将其设为配置文件中「AI 配置」→「模型」的「对话模型」。
+
+两个预设与其他 OpenAI 兼容提供商使用相同的可选配置：提供商高级配置支持超时、代理和自定义请求头，模型配置支持模型能力、上下文大小和自定义请求参数。请仅启用所选模型支持的能力和参数。例如，对支持相应参数的模型，可在 `custom_extra_body` 中填写 `{"reasoning_effort": "high", "max_tokens": 8192}`；留空则使用服务端默认值。
+
 ## 使用环境变量加载 Key
 
 > v4.13.0 之后引入
