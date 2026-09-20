@@ -28,7 +28,8 @@ Existing configurations are not migrated automatically. Dots-specific tool handl
 - Standard `tool_calls` responses use the existing tool execution flow.
 - When a response explicitly requests tools with `finish_reason: tool_calls`, but puts the calls inside `<dots_function_call>`, the adapter converts them to standard calls, validates tool names and arguments, and removes the call blocks from assistant text.
 - If both representations are present, standard calls take precedence to prevent duplicate execution. XML examples in ordinary answers are not interpreted as calls.
-- Requests containing tools still use the streaming API, but their output is displayed only after the complete response has been parsed. This prevents raw call markers from reaching the chat. Requests without tools retain incremental text streaming.
+- Requests containing tools stream ordinary text immediately, retaining only suffixes that could be split call markers. Once a native call marker is detected, the marker and subsequent text are buffered until the complete response distinguishes a tool call from an XML example. Call blocks are removed; examples are released in their original order. Requests without tools retain their existing streaming behavior.
+- Tools execute only after the complete response has been parsed and validated. If the stream disconnects or call parsing fails, ordinary text already displayed cannot be retracted, but buffered call content is not exposed as assistant text.
 - Incomplete or invalid native calls raise an error instead of being sent as normal replies. This compatibility layer does not guarantee that the model will avoid repeated tool calls; AstrBot's existing tool-call round limit still applies.
 
 For self-hosted vLLM, enable `--enable-auto-tool-choice --tool-call-parser dots` as described in the [vLLM Dots deployment guide](https://recipes.vllm.ai/dots-studio/dots3-note-prev), so the server returns standard calls.
