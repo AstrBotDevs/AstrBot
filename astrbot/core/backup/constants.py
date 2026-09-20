@@ -84,4 +84,122 @@ def get_backup_directories() -> dict[str, str]:
 
 
 # 备份清单版本号
-BACKUP_MANIFEST_VERSION = "1.1"
+# 1.2: additive — adds "components" and "component_checksums" fields and extends
+# checksums to every archive entry. Older importers ignore unknown fields, and
+# directory import requires >= 1.1, so 1.2 backups remain readable by old versions.
+BACKUP_MANIFEST_VERSION = "1.2"
+
+# Non-directory backup components that can be selected individually.
+SPECIAL_COMPONENTS: list[str] = [
+    "database",
+    "knowledge_base",
+    "cmd_config",
+    "attachments",
+]
+
+# Components whose verification failure aborts the whole import before any
+# modification. All other components are soft-fail: corrupted entries are
+# skipped with warnings and the rest of the import continues.
+HARD_FAIL_COMPONENTS: frozenset[str] = frozenset(
+    {"database", "knowledge_base", "cmd_config"}
+)
+
+# Fixed archive entries that must exist for a declared component to be usable.
+# Components not listed here are validated by prefix scan (see _component_has_entries).
+_REQUIRED_ENTRIES: dict[str, tuple[str, ...]] = {
+    "database": ("databases/main_db.json",),
+    "knowledge_base": ("databases/kb_metadata.json",),
+    "cmd_config": ("config/cmd_config.json",),
+}
+
+
+def get_backup_components() -> list[str]:
+    """Return all selectable backup component ids.
+
+    The four special components come first, followed by every directory key
+    from get_backup_directories() (which doubles as the component id).
+    """
+    return SPECIAL_COMPONENTS + list(get_backup_directories().keys())
+
+
+def component_of_entry(name: str) -> str | None:
+    """Map an archive entry path to its owning backup component id.
+
+    Args:
+        name: Entry path inside the backup ZIP (e.g. "directories/plugins/x.py").
+
+    Returns:
+        The component id, or None for entries not owned by any component
+        (e.g. "manifest.json" or unknown paths).
+    """
+    if name == "databases/main_db.json":
+        return "database"
+    if name == "config/cmd_config.json":
+        return "cmd_config"
+    if name.startswith("databases/kb_") or name.startswith("files/kb_media/"):
+        return "knowledge_base"
+    if name.startswith("files/attachments/"):
+        return "attachments"
+    if name.startswith("directories/"):
+        parts = name.split("/")
+        if len(parts) >= 3 and parts[1] in get_backup_directories():
+            return parts[1]
+    return None
+
+
+def _component_has_entries(component: str, names: set[str], manifest: dict) -> bool:
+    """Check whether a component has its required entries in the archive."""
+    required = _REQUIRED_ENTRIES.get(component)
+    if required is not None:
+        return all(entry in names for entry in required)
+    if component == "attachments":
+        return any(
+            n.startswith("files/attachments/") and not n.endswith("/") for n in names
+        )
+    # Directory component: declared in the manifest and has at least one entry.
+    return component in manifest.get("directories", []) and any(
+        n.startswith(f"directories/{component}/") for n in names
+    )
+
+
+def derive_component_states(
+    manifest: dict, namelist: list[str]
+) -> tuple[list[str], list[str]]:
+    """Derive (available, broken) components from the manifest and real entries.
+
+    Derivation trusts actual ZIP entries, never self-reported manifest booleans.
+
+    - Manifests with a "components" field (v1.2+): a declared component is
+      available when its required entries exist, otherwise it is broken
+      (declared but corrupted — callers must not silently drop it).
+    - Legacy manifests (no "components" field): the exporter always attempted
+      a full backup, so every known component is probed against the actual
+      entries; there is no "declared" concept and nothing is broken.
+
+    Args:
+        manifest: Parsed manifest.json content.
+        namelist: Entry names of the backup ZIP.
+
+    Returns:
+        A (available, broken) tuple of component id lists.
+    """
+    names = set(namelist)
+    known = get_backup_components()
+    declared = manifest.get("components")
+
+    if declared is None:
+        available = [
+            comp for comp in known if _component_has_entries(comp, names, manifest)
+        ]
+        return available, []
+
+    available: list[str] = []
+    broken: list[str] = []
+    for comp in declared:
+        if comp not in known:
+            continue
+        if _component_has_entries(comp, names, manifest):
+            available.append(comp)
+        else:
+            broken.append(comp)
+    return available, broken
