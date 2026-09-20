@@ -310,7 +310,8 @@ async def test_format_message_truncates_long_json_card_fields():
     ],
 )
 def test_cfg_uses_group_or_default_image_caption_provider(
-    configured_provider_id, expected_provider_id
+    configured_provider_id,
+    expected_provider_id,
 ):
     context = MagicMock()
     context.get_config.return_value = {
