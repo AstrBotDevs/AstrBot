@@ -63,7 +63,10 @@ async def test_dots_authentication_follows_request_key_rotation(monkeypatch):
             "first-key",
             "second-key",
         ]
-        assert all("authorization" not in request.headers for request in requests)
+        assert [request.headers["authorization"] for request in requests] == [
+            "Bearer first-key",
+            "Bearer second-key",
+        ]
         assert all(request.headers["X-Test"] == "preserved" for request in requests)
         assert all(
             str(request.url) == "https://note3-prev-api.askdiandian.com/v1/models"
@@ -373,11 +376,13 @@ async def test_native_parameters_resolve_references_and_unions(provider, tools):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "tool_enabled,malformed", [(False, False), (True, False), (True, True)]
+    "tool_enabled,finish_reason",
+    [(False, "stop"), (True, "stop"), (True, "tool_calls"), (True, "length")],
 )
 async def test_stream_output_and_parse_failure(
-    provider, tools, tool_enabled, malformed
+    provider, tools, tool_enabled, finish_reason
 ):
+    malformed = finish_reason != "stop"
     content = NATIVE_CALL[:-10] if malformed else "Hello world"
 
     async def chunks():
@@ -392,9 +397,7 @@ async def test_stream_output_and_parse_failure(
                         {
                             "index": 0,
                             "delta": {"content": text},
-                            "finish_reason": ("tool_calls" if malformed else "stop")
-                            if index == 2
-                            else None,
+                            "finish_reason": finish_reason if index == 2 else None,
                         }
                     ],
                 }

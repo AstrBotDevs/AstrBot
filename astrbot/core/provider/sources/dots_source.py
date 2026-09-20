@@ -34,7 +34,7 @@ class ProviderDots(ProviderOpenAIOfficial):
         super().__init__(provider_config, provider_settings)
 
     def _create_http_client(self, provider_config: dict) -> httpx.AsyncClient:
-        """Translate the SDK's per-request key to Dots authentication.
+        """Add Dots authentication alongside the SDK's per-request bearer key.
 
         Args:
             provider_config: Provider configuration, including proxy settings.
@@ -54,7 +54,6 @@ class ProviderDots(ProviderOpenAIOfficial):
             authorization = request.headers.get("Authorization", "")
             if authorization.startswith("Bearer "):
                 request.headers["api-key"] = authorization.removeprefix("Bearer ")
-                del request.headers["Authorization"]
 
         client.event_hooks["request"].append(add_api_key)
         return client
@@ -166,10 +165,17 @@ class ProviderDots(ProviderOpenAIOfficial):
         if not completion.choices:
             return await super()._parse_openai_completion(completion, tools)
         choice = completion.choices[0]
+        content = choice.message.content or ""
+        if (
+            tools is not None
+            and not tools.empty()
+            and choice.finish_reason == "length"
+            and "<dots_function_call" in content
+        ):
+            raise ValueError("Dots tool call was truncated by the output token limit")
         # Do not execute XML examples in ordinary assistant answers.
         if choice.finish_reason != "tool_calls":
             return await super()._parse_openai_completion(completion, tools)
-        content = choice.message.content or ""
         if "<dots_function_call>" not in content:
             if not choice.message.tool_calls:
                 raise ValueError("Dots requested tools without a usable tool call")
