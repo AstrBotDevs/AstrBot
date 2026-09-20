@@ -5,7 +5,7 @@ AstrBot provides a dedicated **Dots** provider that reuses OpenAI Chat Completio
 ## Setup
 
 1. Create an API key on the [Dots API platform](https://dots.ai/platform/apikeys).
-2. Open **Providers → Chat Completion**, click **Add Provider**, and select **Dots**.
+2. Open **Providers → Chat Completion**, click **Add** in **Provider Sources**, and select **Dots**.
 3. Enter the provider name and API key. The default API Base URL is `https://note3-prev-api.askdiandian.com/v1`. The adapter sends the `api-key` header automatically; you do not need to duplicate the key in custom headers.
 4. Click **Save and Fetch Models**, click `+` beside `dots3-note-prev`, and ensure the model is enabled. Alternatively, save the configuration and enter the model ID through **Custom Model**.
 5. Use **Test Model** beside the model to check connectivity.

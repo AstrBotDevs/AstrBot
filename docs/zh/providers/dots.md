@@ -5,7 +5,7 @@ AstrBot 提供独立的 **Dots** 模型服务商，复用 OpenAI Chat Completion
 ## 配置步骤
 
 1. 在 [Dots API 开放平台](https://dots.ai/platform/apikeys)创建 API Key。
-2. 打开 **模型提供商 → 对话**，点击 **新增模型提供商**，选择 **Dots**。
+2. 打开 **模型提供商 → 对话**，在 **提供商源** 中点击 **新增**，选择 **Dots**。
 3. 填写服务商名称和 API Key。默认 API Base URL 为 `https://note3-prev-api.askdiandian.com/v1`。适配器自动发送 `api-key` 请求头，无需在自定义请求头中重复填写密钥。
 4. 点击 **保存并获取模型**，在 `dots3-note-prev` 旁点击 `+`，并确保模型已启用。也可以保存配置后，通过 **自定义模型** 输入模型 ID。
 5. 点击模型旁的 **测试模型** 检查连通性。
