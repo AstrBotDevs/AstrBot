@@ -80,10 +80,30 @@ class SandboxService:
                 public_message="Failed to list sandbox providers.",
             ) from exc
 
-    async def list_sandboxes(self) -> dict:
+    @staticmethod
+    def _sanitize_sandbox_for_api_key(sandbox: dict) -> dict:
+        sanitized = dict(sandbox)
+        for field in (
+            "connect_info",
+            "owner_user_id",
+            "owner_session_id",
+            "created_by_user_id",
+            "created_by_session_id",
+            "controller_user_id",
+            "controller_session_id",
+        ):
+            sanitized.pop(field, None)
+        return sanitized
+
+    async def list_sandboxes(self, *, include_connection_info: bool = True) -> dict:
         try:
+            sandboxes = await computer_client.sandbox_manager.list_sandboxes_checked()
+            if not include_connection_info:
+                sandboxes = [
+                    self._sanitize_sandbox_for_api_key(sandbox) for sandbox in sandboxes
+                ]
             return {
-                "sandboxes": await computer_client.sandbox_manager.list_sandboxes_checked()
+                "sandboxes": sandboxes
             }
         except Exception as exc:
             logger.error(traceback.format_exc())

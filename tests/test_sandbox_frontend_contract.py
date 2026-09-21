@@ -7,12 +7,46 @@ def test_sandbox_management_page_exists():
     assert (ROOT / "dashboard/src/views/SandboxManagementPage.vue").is_file()
 
 
+def test_sandbox_api_key_list_response_redacts_connection_and_session_data():
+    from astrbot.dashboard.services.sandbox import SandboxService
+
+    sandbox = SandboxService._sanitize_sandbox_for_api_key(
+        {
+            "connect_info": {"access_token": "secret"},
+            "owner_user_id": "owner",
+            "owner_session_id": "owner-session",
+            "created_by_user_id": "creator",
+            "created_by_session_id": "creator-session",
+            "controller_user_id": "controller",
+            "controller_session_id": "controller-session",
+            "sandbox_id": "sandbox-1",
+        }
+    )
+
+    assert sandbox == {"sandbox_id": "sandbox-1"}
+
+
 def test_main_routes_include_sandboxes_page():
     content = (ROOT / "dashboard/src/router/MainRoutes.ts").read_text(encoding="utf-8")
 
     assert "name: 'Sandboxes'" in content
     assert "path: '/sandboxes'" in content
     assert "SandboxManagementPage.vue" in content
+
+
+def test_dashboard_app_includes_legacy_sandbox_routes():
+    content = (ROOT / "astrbot/dashboard/api/app.py").read_text(encoding="utf-8")
+
+    assert "from .sandbox import legacy_router as legacy_sandbox_router" in content
+    assert "app.include_router(legacy_sandbox_router)" in content
+
+
+def test_setting_default_sandbox_requires_dashboard_authentication():
+    content = (ROOT / "astrbot/dashboard/api/sandbox.py").read_text(encoding="utf-8")
+    start = content.index("async def set_default_sandbox")
+    end = content.index("@legacy_router", start)
+
+    assert "Depends(require_dashboard_user)" in content[start:end]
 
 
 def test_sidebar_includes_sandboxes_navigation():

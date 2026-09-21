@@ -57,7 +57,7 @@ git clone https://github.com/AstrBotDevs/astrbot_sandbox_cua.git data/plugins/as
 
 安装完成后，重启 AstrBot，或者在插件管理页重新加载插件。
 
-然后打开 AstrBot 控制台，在“AI 配置” -> “Agent Computer Use”中选择：
+然后打开 AstrBot 控制台，在“配置文件” -> “AI 配置” -> “能力” -> “使用电脑能力”中选择：
 
 - `Computer Use Runtime` = `sandbox`
 - `沙盒驱动` = `Shipyard Neo`、`BoxLite`、`Shipyard` 或 `CUA`

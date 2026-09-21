@@ -6,7 +6,7 @@
 
 在 WebUI 中进入：
 
-- `配置 -> 普通配置 -> 使用电脑能力`
+- `配置文件 -> AI 配置 -> 能力 -> 使用电脑能力`
 
 核心配置项是 `Computer Use Runtime`：
 
@@ -64,6 +64,8 @@ data/workspaces/{normalized_umo}/notes/todo.txt
 
 ### 权限模型
 
+在本地权限表中，展开“文件访问范围”下拉菜单即可查看各选项的说明。“工作区”允许受限访问会话工作区、临时目录和技能文件；“整个环境”（原“主机文件”）允许访问 AstrBot 运行账户有权限访问的文件。Docker 部署时，“整个环境”指容器内及挂载的文件，并非宿主机全部文件。“关闭”不允许通过本地电脑能力工具访问任何文件。范围说明已从表格下方移到下拉菜单的对应选项中；将鼠标悬停在“AstrBot 所在运行环境的所有文件。”后的问号上，或点按问号，可查看账户权限和 Docker 访问范围的详细说明。
+
 电脑能力还有一个独立开关：
 
 - `需要 AstrBot 管理员权限`
@@ -88,24 +90,20 @@ data/workspaces/{normalized_umo}/notes/todo.txt
 
 管理员 ID 可在：
 
-- `配置 -> 其他配置 -> 管理员 ID`
+- `配置文件 -> 平台配置 -> 基本 -> 管理员 ID`
 
 中配置。用户可通过 `/sid` 获取自己的 ID。
 
-## 沙盒模式
+## Sandbox 模式
 
 `sandbox` 模式会把执行动作放到隔离环境中，而不是直接在 AstrBot 主机上运行。
 
 在沙盒中，Agent 仍然可以使用 Shell、Python、文件系统工具；如果所选沙盒 profile 支持 `browser` capability，还会挂载浏览器自动化工具。
 
-沙盒由 AstrBot 托管后，会有“占用”和“保留策略”两层状态。占用表示某个会话暂时控制这个沙盒；占用租约到期后，当前会话不再绑定该沙盒，其他会话可以重新占用或接管。保留策略决定沙盒释放后是保留下来复用，还是按空闲/过期规则清理。
+沙盒环境驱动器可在 `配置文件 -> AI 配置 -> 能力 -> 使用电脑能力` 的沙箱配置中选择。当前常用选项包括：
 
-沙盒驱动需要先安装对应插件。推荐在 WebUI 的“插件管理”页面点击右下角 `+`，输入插件仓库地址安装；插件安装并加载后，才可以在 `配置 -> 普通配置 -> 使用电脑能力` 的沙盒配置中选择和填写参数。当前可用选项包括：
-
-- [`Shipyard Neo`](https://github.com/AstrBotDevs/astrbot_sandbox_shipyard_neo)：AstrBot 推荐的远程/独立部署沙盒服务，适合长期运行和多人使用。
-- [`BoxLite`](https://github.com/AstrBotDevs/astrbot_sandbox_boxlite)：轻量本地沙盒，适合只需要 Shell、Python 和文件操作的场景。
-- [`Shipyard`](https://github.com/AstrBotDevs/astrbot_sandbox_shipyard)：旧方案，仍可继续使用。
-- [`CUA`](https://github.com/AstrBotDevs/astrbot_sandbox_cua)：本地或云端电脑使用沙盒，适合需要桌面截图、鼠标和键盘操作的场景。
+- `Shipyard Neo`：AstrBot 推荐的远程/独立部署沙盒服务，适合长期运行和多人使用。
+- `CUA`：基于 [CUA](https://github.com/trycua/cua) 的本地或云端电脑使用沙盒，可提供桌面截图、鼠标、键盘、Shell、Python 和文件系统能力。
 
 使用 `Shipyard Neo` 时，沙盒 workspace 根目录通常是：
 
@@ -127,7 +125,7 @@ result.txt
 
 使用 `CUA` 时，工作目录和可用命令取决于所选 CUA image 与运行方式。Linux CUA 容器通常提供类 Unix Shell；Windows、Android 等非 POSIX 镜像不保证支持 `sh`、`ls`、`rm`、`base64` 等命令，AstrBot 会对部分 shell fallback 操作返回明确错误。
 
-沙盒部署、驱动选择、CUA 配置、profile、占用租约、TTL、数据持久化、浏览器能力等内容请参考：[Agent 沙盒环境](/use/astrbot-agent-sandbox)。
+沙盒部署、驱动器选择、CUA 配置、profile、TTL、数据持久化、浏览器能力等内容请参考：[Agent 沙盒环境](/use/astrbot-agent-sandbox)。
 
 > [!NOTE]
 > 即使在 `sandbox` 模式下，“需要 AstrBot 管理员权限”仍会影响 Shell、Python、浏览器、上传下载等工具的调用权限。具体权限取决于你的配置。

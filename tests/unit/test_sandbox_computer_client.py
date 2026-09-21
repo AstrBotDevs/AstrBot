@@ -120,6 +120,36 @@ def test_register_sandbox_provider_tags_provider_tools(monkeypatch, tmp_path):
     assert "current sandbox uses provider 'generic'" in tool.description
 
 
+def test_register_sandbox_provider_rejects_replacement_with_managed_sandboxes(
+    monkeypatch, tmp_path
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    manager = SandboxManager(
+        registry=SandboxRegistry(tmp_path / "sandbox_registry.json"),
+        providers={},
+    )
+    manager.registry.upsert_sandbox(
+        sandbox_id="sandbox-1",
+        sandbox_name="sandbox-1",
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id=None,
+        owner_session_id=None,
+        connect_info={},
+    )
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+    monkeypatch.setattr(computer_client, "sandbox_registry", manager.registry)
+
+    computer_client.register_sandbox_provider(FakeProvider())
+
+    with pytest.raises(RuntimeError, match="active managed sandboxes"):
+        computer_client.register_sandbox_provider(FakeProvider(), replace=True)
+
+
 def test_register_sandbox_provider_does_not_duplicate_provider_tool_description(
     monkeypatch, tmp_path
 ):

@@ -67,7 +67,7 @@
               variant="outlined"
               density="compact"
               :color="accessModes[role] === 'full' ? 'warning' : 'primary'"
-              :menu-props="{ rounded: 'lg' }"
+              :menu-props="{ rounded: 'lg', maxWidth: 420 }"
               @update:model-value="updatePermission(role, accessPolicies[$event])"
             >
               <template #prepend-inner>
@@ -80,9 +80,33 @@
                 />
               </template>
               <template #item="{ props: itemProps, item }">
-                <v-list-item v-bind="itemProps" role="option" :aria-selected="accessModes[role] === item.value">
+                <v-list-item v-bind="itemProps" :lines="false" role="option" :aria-selected="accessModes[role] === item.value">
                   <template #prepend>
                     <component :is="accessIcons[item.value]" :size="18" class="mr-3" aria-hidden="true" />
+                  </template>
+                  <template #subtitle>
+                    <div class="scope-hint">
+                      {{ tm(item.value === 'none' ? 'scopeHints.none' : 'scopeHints.host') }}
+                      <v-menu
+                        v-if="item.value !== 'none'"
+                        open-on-hover
+                        open-on-click
+                        open-on-focus
+                        :close-on-content-click="false"
+                        location="top"
+                        :max-width="360"
+                      >
+                        <template #activator="{ props: helpProps }">
+                          <button v-bind="helpProps" type="button" class="scope-help" :aria-label="tm('filesystem')" @click.stop>
+                            <CircleHelp :size="14" aria-hidden="true" />
+                          </button>
+                        </template>
+                        <v-card class="pa-3 text-body-2">
+                          <div>{{ tm('scopeDetails.account') }}</div>
+                          <div class="mt-2">{{ tm('scopeDetails.docker') }}</div>
+                        </v-card>
+                      </v-menu>
+                    </div>
                   </template>
                 </v-list-item>
               </template>
@@ -124,18 +148,43 @@
                 variant="outlined"
                 density="compact"
                 hide-details
+                :menu-props="{ rounded: 'lg', maxWidth: 420 }"
                 @update:model-value="updatePermission(role, { filesystem_scope: $event })"
-              />
+              >
+                <template #item="{ props: itemProps, item }">
+                  <v-list-item v-bind="itemProps" :lines="false" role="option" :aria-selected="policy(role).filesystem_scope === item.value">
+                    <template #subtitle>
+                      <div class="scope-hint">
+                        {{ tm(`scopeHints.${item.value}`) }}
+                        <v-menu
+                          v-if="item.value === 'host'"
+                          open-on-hover
+                          open-on-click
+                          open-on-focus
+                          :close-on-content-click="false"
+                          location="top"
+                          :max-width="360"
+                        >
+                          <template #activator="{ props: helpProps }">
+                            <button v-bind="helpProps" type="button" class="scope-help" :aria-label="tm('filesystem')" @click.stop>
+                              <CircleHelp :size="14" aria-hidden="true" />
+                            </button>
+                          </template>
+                          <v-card class="pa-3 text-body-2">
+                            <div>{{ tm('scopeDetails.account') }}</div>
+                            <div class="mt-2">{{ tm('scopeDetails.docker') }}</div>
+                          </v-card>
+                        </v-menu>
+                      </div>
+                    </template>
+                  </v-list-item>
+                </template>
+              </v-select>
             </td>
           </template>
         </tr>
       </tbody>
     </v-table>
-
-    <div class="text-caption text-medium-emphasis">
-      <p v-if="!unsupported">{{ tm('scopeHints.workspace') }}</p>
-      <p>{{ tm('scopeHints.host') }}</p>
-    </div>
 
     <v-alert v-if="memberHasElevatedAccess" type="warning" variant="tonal" density="compact">
       {{ tm('memberWarning') }}
@@ -152,7 +201,7 @@ export const windowsPermissionDefaults = {
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { Cpu, FolderOpen, LockKeyhole, Monitor, Shield, ShieldAlert, ShieldOff } from '@lucide/vue'
+import { CircleHelp, Cpu, FolderOpen, LockKeyhole, Monitor, Shield, ShieldAlert, ShieldOff } from '@lucide/vue'
 import { useModuleI18n } from '@/i18n/composables'
 import { statsApi } from '@/api/v1'
 
@@ -265,6 +314,25 @@ const memberHasElevatedAccess = computed(() => {
 </script>
 
 <style scoped>
+.scope-hint {
+  padding-top: 4px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.scope-help {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  color: inherit;
+  vertical-align: middle;
+  cursor: help;
+}
+
 .sandbox-error {
   white-space: pre-wrap;
   overflow-wrap: anywhere;

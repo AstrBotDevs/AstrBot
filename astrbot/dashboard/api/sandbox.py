@@ -79,10 +79,14 @@ async def list_providers(
 
 @legacy_router.get("")
 async def list_sandboxes(
-    _auth: AuthContext = Depends(require_sandbox_scope),
+    auth: AuthContext = Depends(require_sandbox_scope),
     service: SandboxService = Depends(get_service),
 ):
-    return await _run(service.list_sandboxes)
+    return await _run(
+        lambda: service.list_sandboxes(
+            include_connection_info=_is_dashboard_user(auth)
+        )
+    )
 
 
 @legacy_router.get("/current")
@@ -171,7 +175,7 @@ async def force_release_sandbox(
 @legacy_router.post("/{sandbox_id}/default")
 async def set_default_sandbox(
     sandbox_id: str,
-    _auth: AuthContext = Depends(require_sandbox_scope),
+    _username: str = Depends(require_dashboard_user),
     service: SandboxService = Depends(get_service),
 ):
     if demo_response := _demo_mode_error():

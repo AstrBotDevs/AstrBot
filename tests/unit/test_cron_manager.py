@@ -284,6 +284,7 @@ class TestUpdateJob:
             enabled=False,  # Disabled to avoid scheduling
         )
         mock_db.update_cron_job.return_value = updated_job
+        mock_db.get_cron_job.return_value = sample_cron_job
 
         result = await cron_manager.update_job("test-job-id", name="Updated Job")
 
@@ -293,6 +294,7 @@ class TestUpdateJob:
     @pytest.mark.asyncio
     async def test_update_job_not_found(self, cron_manager, mock_db):
         """Test updating a non-existent job."""
+        mock_db.get_cron_job.return_value = None
         mock_db.update_cron_job.return_value = None
 
         result = await cron_manager.update_job("non-existent", name="Updated")
@@ -636,9 +638,9 @@ class TestRunActiveAgentJob:
         ("provider_settings", "expected_max_step"),
         [
             pytest.param({"max_agent_step": 50}, 50, id="configured"),
-            pytest.param({}, 30, id="missing_falls_back_to_default"),
+            pytest.param({}, 128, id="missing_falls_back_to_default"),
             pytest.param(
-                {"max_agent_step": True}, 30, id="boolean_falls_back_to_default"
+                {"max_agent_step": True}, 128, id="boolean_falls_back_to_default"
             ),
             pytest.param({"max_agent_step": "50"}, 50, id="numeric_string_coerced"),
             pytest.param({"max_agent_step": 0}, 1, id="zero_clamped_to_min"),
@@ -674,7 +676,7 @@ class TestRunActiveAgentJob:
             "agent_runner": {
                 "runner_type": "local",
                 "config": {
-                    "misc": {"max_steps": provider_settings.get("max_agent_step", 30)}
+                    "misc": {"max_steps": provider_settings.get("max_agent_step", 128)}
                 },
             },
         }

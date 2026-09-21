@@ -1,4 +1,7 @@
-# AstrBot 知识库
+# AstrBot 旧版知识库
+
+> [!WARNING]
+> 本页保留旧版知识库的操作说明和界面截图，导航名称不适用于当前 WebUI。当前版本请参考[知识库使用文档](/use/knowledge-base)。如需访问保留的旧版界面，可在当前 `知识库` 页面点击 `切换到旧版知识库`（`/alkaid/knowledge-base`）。
 
 ![知识库预览](https://files.astrbot.app/docs/zh/use/image-3.png)
 

@@ -8,7 +8,6 @@ import asyncio
 import base64
 import binascii
 import errno
-import hashlib
 import io
 import math
 import mimetypes
@@ -42,6 +41,8 @@ IMAGE_COMPRESS_DEFAULT_MAX_SIZE = 1280
 IMAGE_COMPRESS_DEFAULT_QUALITY = 95
 IMAGE_COMPRESS_DEFAULT_OPTIMIZE = True
 IMAGE_COMPRESS_DEFAULT_MIN_FILE_SIZE_MB = 1.0
+# Model image inputs larger than this are skipped before decoding.
+MODEL_IMAGE_MAX_INPUT_BYTES = 64 * 1024 * 1024
 
 MEDIA_MIME_EXTENSIONS = {
     "audio/wav": ".wav",
@@ -67,23 +68,22 @@ MEDIA_MIME_EXTENSIONS = {
     "video/quicktime": ".mov",
 }
 
-IMAGE_FORMAT_MIME_TYPES = {
-    "JPEG": "image/jpeg",
-    "PNG": "image/png",
-    "GIF": "image/gif",
-    "WEBP": "image/webp",
-    "BMP": "image/bmp",
-    "TIFF": "image/tiff",
-    "AVIF": "image/avif",
-}
+# Magic-byte prefixes for O(1) image MIME sniffing; unknown headers fall
+# back to the caller-provided default instead of decoding the file.
+_IMAGE_MAGIC_MIME_TYPES = (
+    (b"\x89PNG\r\n\x1a\n", "image/png"),
+    (b"\xff\xd8\xff", "image/jpeg"),
+    (b"GIF87a", "image/gif"),
+    (b"GIF89a", "image/gif"),
+    (b"BM", "image/bmp"),
+    (b"II*\x00", "image/tiff"),
+    (b"MM\x00*", "image/tiff"),
+)
 
 ANIMATED_MONTAGE_GRID = 3
 """Animated images become a grid x grid frame montage (contact sheet)."""
 
 ANIMATED_MONTAGE_FRAME_COUNT = ANIMATED_MONTAGE_GRID * ANIMATED_MONTAGE_GRID
-
-CONVERT_CACHE_DIR_NAME = "media_convert_cache"
-"""Cache directory (under the AstrBot temp dir) for converted images and frames."""
 
 AUDIO_FORMAT_MIME_TYPES = {
     "aac": "audio/aac",
@@ -385,36 +385,38 @@ def detect_image_mime_type(
     *,
     default_mime_type: str | None = "image/jpeg",
 ) -> str | None:
-    """Detect an image MIME type from encoded bytes or a local path.
+    """Detect an image MIME type by sniffing the file header.
+
+    Only the first bytes of the input are read, so detection cost and memory
+    stay constant regardless of file size.
 
     Args:
         image_source: Encoded image bytes or a local image path to inspect.
         default_mime_type: MIME type to return when detection fails.
 
     Returns:
-        The detected MIME type, ``application/octet-stream`` for a recognized
-        format without a registered MIME, or ``default_mime_type`` when detection
-        fails.
+        The detected MIME type, or ``default_mime_type`` when the header does
+        not match a known image format.
     """
 
     try:
-        image_file = (
-            io.BytesIO(image_source)
-            if isinstance(image_source, bytes)
-            else image_source
-        )
-        with PILImage.open(image_file) as image:
-            image.verify()
-            image_format = str(image.format or "").upper()
-    except Exception as exc:
-        if not is_recoverable_image_error(exc):
-            raise
+        if isinstance(image_source, bytes):
+            header = image_source[:32]
+        else:
+            with open(image_source, "rb") as image_file:
+                header = image_file.read(32)
+    except OSError:
         return default_mime_type
 
-    # A decoded format must never inherit an unverified input MIME hint.
-    return IMAGE_FORMAT_MIME_TYPES.get(
-        image_format, PILImage.MIME.get(image_format, "application/octet-stream")
-    )
+    if len(header) >= 12:
+        if header[:4] == b"RIFF" and header[8:12] == b"WEBP":
+            return "image/webp"
+        if header[4:8] == b"ftyp" and (b"avif" in header[8:] or b"avis" in header[8:]):
+            return "image/avif"
+    for magic, mime_type in _IMAGE_MAGIC_MIME_TYPES:
+        if header.startswith(magic):
+            return mime_type
+    return default_mime_type
 
 
 async def detect_image_mime_type_async(
@@ -936,11 +938,6 @@ async def resolve_image_ref_to_base64_data(
     )
 
 
-def _image_convert_cache_dir() -> Path:
-    # Reading and encoding must work even when the optional cache is unavailable.
-    return Path(get_astrbot_temp_path()) / CONVERT_CACHE_DIR_NAME
-
-
 def is_recoverable_image_error(error: Exception) -> bool:
     """Identify ordinary input, decoder, network and cache failures.
 
@@ -971,55 +968,8 @@ def is_recoverable_image_error(error: Exception) -> bool:
     )
 
 
-def _image_convert_cache_key(source_bytes: bytes, params: str) -> str:
-    """Build a content-addressed key for derived image bytes.
-
-    Args:
-        source_bytes: Original encoded image content.
-        params: Algorithm version, output category and effective size.
-
-    Returns:
-        A filesystem-safe content and parameter digest.
-    """
-    source_digest = hashlib.sha256(source_bytes).hexdigest()[:32]
-    params_digest = hashlib.sha256(params.encode()).hexdigest()[:8]
-    return f"{source_digest}_{params_digest}"
-
-
-def _image_has_alpha(image: PILImage.Image) -> bool:
-    return "A" in image.getbands() or "transparency" in image.info
-
-
-def _inspect_image(image_bytes: bytes) -> int:
-    """Inspect decodable image bytes.
-
-    Args:
-        image_bytes: Encoded image bytes.
-
-    Returns:
-        Number of frames in the validated image.
-
-    Raises:
-        Exception: Raised by Pillow when the bytes are not a decodable image.
-    """
-    with PILImage.open(io.BytesIO(image_bytes)) as image:
-        frame_count = getattr(image, "n_frames", 1)
-        image.verify()
-    if frame_count == 1:
-        # verify() checks structure, not pixels. Reopen before loading; compatible
-        # still images otherwise bypass every operation that decodes their data.
-        with PILImage.open(io.BytesIO(image_bytes)) as image:
-            image.load()
-    # Animation frames are decoded while building the montage.
-    return frame_count
-
-
-_IMAGE_CONVERT_CACHE_VERSION = "v9-icc"
-"""Bump when conversion output semantics change (modes, transparency, sizing)
-so stale cache entries produced by older code are never served."""
-
-MODEL_IMAGE_PNG_FALLBACK_MAX_BYTES = 1024 * 1024
-"""PNG outputs larger than this are flattened onto white and re-encoded as JPEG."""
+MODEL_IMAGE_MAX_BYTES = 512 * 1024
+"""Model input image files must be strictly smaller than this limit."""
 
 
 def normalize_model_image_max_size(value: object) -> int:
@@ -1066,195 +1016,104 @@ def normalize_model_image_max_size(value: object) -> int:
 def _encode_image_frame_bytes(
     image: PILImage.Image,
     max_size: int | None = None,
-    quality: int = IMAGE_COMPRESS_DEFAULT_QUALITY,
 ) -> bytes:
-    """Encode a display-oriented frame as JPEG, or PNG when it carries transparency.
+    """Encode an owned frame below the byte limit while preserving transparency.
 
     Args:
-        image: Opened source frame, which is never mutated.
+        image: Decoded frame owned by the caller; its pixels and metadata may change.
         max_size: Optional longest-edge limit; smaller images are not enlarged.
-        quality: JPEG output quality in the range 1-100.
 
     Returns:
-        Encoded single-frame JPEG or PNG bytes. A PNG larger than
-        MODEL_IMAGE_PNG_FALLBACK_MAX_BYTES is flattened onto white and
-        re-encoded as JPEG to bound the request payload size. High-bit-depth
-        samples are min-max normalized to 8-bit before JPEG encoding.
+        JPEG or transparent PNG bytes strictly below MODEL_IMAGE_MAX_BYTES.
+
+    Raises:
+        ValueError: The image cannot fit the byte limit even at one pixel.
     """
-    oriented = ImageOps.exif_transpose(image)
-    prepared = oriented
-    extras: list[PILImage.Image] = []
+    ImageOps.exif_transpose(image, in_place=True)
+    has_alpha = "A" in image.getbands() or "transparency" in image.info
+    icc_profile = image.info.get("icc_profile")
+    if image.mode not in {"RGB", "RGBA", "L", "LA", "P", "1", "I", "I;16"}:
+        # A source profile is invalid after a color-space conversion such as CMYK.
+        icc_profile = None
+    prepared = image
     try:
-        has_alpha = _image_has_alpha(oriented)
         if has_alpha:
-            # Promote RGB/L color-key transparency as well as palette alpha.
-            prepared = oriented.convert("RGBA")
-        elif oriented.mode not in {"1", "L", "LA", "P", "RGB", "RGBA", "I", "I;16"}:
-            prepared = oriented.convert("RGB")
-        if max_size is not None and max(prepared.size) > max_size:
-            # Pillow forces nearest-neighbor resampling for palette and binary
-            # images, regardless of the requested filter.
-            if prepared.mode in {"P", "1"}:
-                prepared = prepared.convert("RGB" if prepared.mode == "P" else "L")
-            # Pillow's integer pre-reduction does not support I;16, although
-            # direct Lanczos resampling does. Keep the original bit depth.
+            if image.mode != "RGBA":
+                prepared = image.convert("RGBA")
+        elif image.mode not in {"RGB", "L", "I", "I;16"}:
+            prepared = image.convert("L" if image.mode == "1" else "RGB")
+        if max_size is not None:
             prepared.thumbnail(
                 (max_size, max_size),
                 PILImage.Resampling.LANCZOS,
                 reducing_gap=None if prepared.mode == "I;16" else 2.0,
             )
-        # JPEG saving does not auto-embed the source ICC profile like PNG does;
-        # attach it explicitly, but only when the color space survived intact
-        # (conversions like CMYK -> RGB invalidate the source profile).
-        icc_profile = image.info.get("icc_profile")
-        if image.mode not in {"RGB", "RGBA", "L", "LA", "P", "1", "I", "I;16"}:
-            icc_profile = None
-        save_kwargs = {"icc_profile": icc_profile} if icc_profile else {}
-        if has_alpha:
-            buffer = io.BytesIO()
-            prepared.save(buffer, "PNG", **save_kwargs)
-            data = buffer.getvalue()
-            if len(data) <= MODEL_IMAGE_PNG_FALLBACK_MAX_BYTES:
-                return data
-            # Oversized PNG flattens onto white and re-encodes as JPEG.
-            rgba = prepared if prepared.mode == "RGBA" else prepared.convert("RGBA")
-            extras.append(rgba)
-            flattened = PILImage.new("RGB", rgba.size, (255, 255, 255))
-            extras.append(flattened)
-            flattened.paste(rgba, mask=rgba.getchannel("A"))
-            prepared = flattened
-        elif prepared.mode in {"I", "I;16"}:
-            # convert() clips high-bit-depth samples at 255 instead of scaling;
-            # min-max normalize to 8-bit so the content survives JPEG.
+        if prepared.mode in {"I", "I;16"}:
+            # Normalize high-bit-depth pixels instead of clipping them to 255.
             low, high = prepared.getextrema()
             if high > low:
-                scaled = prepared.point(lambda v: (v - low) * (255.0 / (high - low)))
-                extras.append(scaled)
-                prepared = scaled
-            prepared = prepared.convert("L")
-        elif prepared.mode not in {"RGB", "L"}:
-            # JPEG output supports only RGB and L among the remaining modes.
-            prepared = prepared.convert("L" if prepared.mode == "1" else "RGB")
-        buffer = io.BytesIO()
-        prepared.save(buffer, "JPEG", quality=quality, optimize=True, **save_kwargs)
-        return buffer.getvalue()
+                with prepared.point(
+                    lambda v: (v - low) * (255.0 / (high - low))
+                ) as scaled:
+                    prepared = scaled.convert("L")
+            else:
+                prepared = prepared.convert("L")
+        # Do not carry EXIF, text chunks, or other unbounded metadata into previews.
+        prepared.info.clear()
+        save_kwargs = {"icc_profile": icc_profile} if icc_profile else {}
+        while True:
+            with io.BytesIO() as buffer:
+                if has_alpha:
+                    prepared.save(buffer, "PNG", **save_kwargs)
+                else:
+                    prepared.save(
+                        buffer, "JPEG", quality=85, optimize=True, **save_kwargs
+                    )
+                data = buffer.getvalue()
+            if len(data) < MODEL_IMAGE_MAX_BYTES:
+                return data
+            if save_kwargs:
+                # Oversized profiles must not defeat the byte limit.
+                save_kwargs.clear()
+                continue
+            if prepared.size == (1, 1):
+                raise ValueError("Image cannot fit the model input byte limit")
+            scale = min(0.85, math.sqrt((MODEL_IMAGE_MAX_BYTES - 1) / len(data)) * 0.95)
+            prepared.thumbnail(
+                (
+                    max(1, int(prepared.width * scale)),
+                    max(1, int(prepared.height * scale)),
+                ),
+                PILImage.Resampling.LANCZOS,
+            )
     finally:
-        for extra in extras:
-            extra.close()
-        if prepared is not oriented and prepared not in extras:
+        if prepared is not image:
             prepared.close()
-        oriented.close()
 
 
-def _read_valid_cached_image_bytes(output_path: Path) -> bytes | None:
-    """Read a cache entry, treating any miss or corruption as absent.
-
-    The temp cleaner may delete cache entries concurrently: a missing,
-    unreadable, empty, or undecodable entry is treated as a cache miss and
-    the caller rebuilds from the source bytes it already holds.
+def _prepare_model_image_sync(source_bytes: bytes, max_size: int) -> tuple[bytes, bool]:
+    """Prepare a preview using a single opened source image.
 
     Args:
-        output_path: Candidate cache file path.
+        source_bytes: Original encoded image content.
+        max_size: Longest-edge limit for still images and animation montages.
 
     Returns:
-        Decodable cached bytes, or ``None`` when the entry is unusable.
-    """
-    try:
-        data = output_path.read_bytes()
-    except OSError as exc:
-        if not is_recoverable_image_error(exc):
-            raise
-        return None
-    if not data:
-        return None
-    try:
-        frame_count = _inspect_image(data)
-        with PILImage.open(io.BytesIO(data)) as image:
-            if (
-                image.format not in {"PNG", "JPEG"}
-                or frame_count != 1
-                or image.getexif().get(274, 1) != 1
-            ):
-                return None
-    except Exception as exc:
-        if not is_recoverable_image_error(exc):
-            raise
-        return None
-    return data
-
-
-def _publish_image_cache_atomic(
-    output_path: Path,
-    data: bytes,
-) -> None:
-    """Publish converted bytes via a unique temp file and atomic replace.
-
-    Concurrent readers never observe a partially written cache file. Cache
-    publication failures (e.g. the cache directory vanished mid-write) are
-    non-fatal: callers already hold the complete encoded bytes.
-
-    Args:
-        output_path: Final cache entry path.
-        data: Complete encoded bytes to publish.
-    """
-    try:
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        fd, tmp_name = tempfile.mkstemp(dir=output_path.parent, suffix=".tmp")
-    except OSError as exc:
-        if not is_recoverable_image_error(exc):
-            raise
-        logger.debug("Failed to create image cache temp file: %s", exc)
-        return
-    tmp_path = Path(tmp_name)
-    try:
-        with os.fdopen(fd, "wb") as temp_file:
-            temp_file.write(data)
-        os.replace(tmp_path, output_path)
-    except OSError as exc:
-        if not is_recoverable_image_error(exc):
-            raise
-        logger.debug("Failed to publish image cache %s: %s", output_path, exc)
-    finally:
-        try:
-            tmp_path.unlink(missing_ok=True)
-        except OSError as exc:
-            if not is_recoverable_image_error(exc):
-                raise
-            logger.debug("Failed to clean up image cache temp file: %s", exc)
-
-
-def _convert_image_bytes_sync(
-    source_bytes: bytes, max_size: int, quality: int
-) -> bytes:
-    """Normalize a validated still image with an optional derived cache.
-
-    Args:
-        source_bytes: Encoded source bytes already checked by _inspect_image.
-        max_size: Longest-edge limit in pixels.
-        quality: JPEG output quality in the range 1-100.
-
-    Returns:
-        Single-frame JPEG or PNG bytes. An oriented JPEG or PNG within the size
-        limit is reused unchanged; anything else is re-encoded.
+        Encoded image bytes and whether they represent an animation montage.
     """
     with PILImage.open(io.BytesIO(source_bytes)) as image:
+        if getattr(image, "n_frames", 1) > 1:
+            return _extract_animation_montage_sync(image, max_size), True
         if (
             image.format in {"PNG", "JPEG"}
-            and image.getexif().get(274, 1) == 1
+            and len(source_bytes) < MODEL_IMAGE_MAX_BYTES
             and max(image.size) <= max_size
+            and image.getexif().get(274, 1) == 1
         ):
-            return source_bytes
-        cache_key = _image_convert_cache_key(
-            source_bytes,
-            f"{_IMAGE_CONVERT_CACHE_VERSION}|convert|s={max_size}|q={quality}",
-        )
-        output_path = _image_convert_cache_dir() / (cache_key + ".img")
-        cached = _read_valid_cached_image_bytes(output_path)
-        if cached is not None:
-            return cached
-        encoded = _encode_image_frame_bytes(image, max_size=max_size, quality=quality)
-    _publish_image_cache_atomic(output_path, encoded)
-    return encoded
+            # Validate even byte-identical passthroughs without decoding twice.
+            image.load()
+            return source_bytes, False
+        return _encode_image_frame_bytes(image, max_size), False
 
 
 def _even_frame_indices(total_frames: int, max_frames: int) -> list[int]:
@@ -1273,91 +1132,74 @@ def _even_frame_indices(total_frames: int, max_frames: int) -> list[int]:
     return sorted({round(i * (total_frames - 1) / (count - 1)) for i in range(count)})
 
 
-def _extract_animation_montage_sync(
-    source_bytes: bytes,
-    max_size: int,
-    quality: int,
-) -> tuple[bytes, bool]:
-    """Tile evenly spaced frames of an animated image into one grid montage.
-
-    Frame sampling includes the first and last frames; grid cells beyond the
-    available frames stay blank (white). The montage is flattened onto a white
-    background and its longest edge is capped at ``max_size`` (never upscaled).
+def _extract_animation_montage_sync(image: PILImage.Image, max_size: int) -> bytes:
+    """Tile evenly spaced animation frames into one white 3x3 preview.
 
     Args:
-        source_bytes: Encoded animated image bytes.
-        max_size: Longest edge of the montage in pixels.
+        image: Opened animation owned by the caller.
+        max_size: Longest-edge limit of the montage, without upscaling.
 
     Returns:
-        Tuple of the montage bytes and whether extraction actually ran
-        (``False`` when a valid cached montage was served).
+        JPEG bytes below the byte limit, with unused cells left white.
     """
-    cache_key = _image_convert_cache_key(
-        source_bytes,
-        f"{_IMAGE_CONVERT_CACHE_VERSION}|montage|s={max_size}|q={quality}",
+    total_frames = getattr(image, "n_frames", 1)
+    # APNG's independent default image is a cover, not an animation frame.
+    first_frame = 1 if image.info.get("default_image", False) else 0
+    frame_indices = [
+        first_frame + index
+        for index in _even_frame_indices(
+            total_frames - first_frame, ANIMATED_MONTAGE_FRAME_COUNT
+        )
+    ]
+    image.seek(first_frame)
+    with ImageOps.exif_transpose(image) as oriented:
+        display_size = oriented.size
+    # Floor the per-cell scale so the montage never exceeds max_size.
+    longest_edge = max(display_size) * ANIMATED_MONTAGE_GRID
+    scale = min(1.0, max(max_size, 1) / longest_edge)
+    cell_size = (
+        max(1, int(display_size[0] * scale)),
+        max(1, int(display_size[1] * scale)),
     )
-    output_path = _image_convert_cache_dir() / (cache_key + ".img")
-    cached = _read_valid_cached_image_bytes(output_path)
-    if cached is not None:
-        return cached, False
-    with PILImage.open(io.BytesIO(source_bytes)) as image:
-        total_frames = getattr(image, "n_frames", 1)
-        # APNG's independent default image is a cover, not an animation frame.
-        first_frame = 1 if image.info.get("default_image", False) else 0
-        frame_indices = [
-            first_frame + index
-            for index in _even_frame_indices(
-                total_frames - first_frame, ANIMATED_MONTAGE_FRAME_COUNT
-            )
-        ]
-        image.seek(first_frame)
-        with ImageOps.exif_transpose(image) as oriented:
-            display_size = oriented.size
-        # Floor the per-cell scale so the montage never exceeds max_size.
-        longest_edge = max(display_size) * ANIMATED_MONTAGE_GRID
-        scale = min(1.0, max(max_size, 1) / longest_edge)
-        cell_size = (
-            max(1, int(display_size[0] * scale)),
-            max(1, int(display_size[1] * scale)),
-        )
-        canvas = PILImage.new(
-            "RGB",
-            (
-                cell_size[0] * ANIMATED_MONTAGE_GRID,
-                cell_size[1] * ANIMATED_MONTAGE_GRID,
-            ),
-            (255, 255, 255),
-        )
-        try:
-            for out_index, frame_index in enumerate(frame_indices):
-                image.seek(frame_index)
-                with (
-                    ImageOps.exif_transpose(image) as oriented,
-                    oriented.convert("RGBA") as frame,
-                ):
-                    resized = frame
-                    try:
-                        if frame.size != cell_size:
-                            resized = frame.resize(
-                                cell_size, PILImage.Resampling.LANCZOS
-                            )
-                        # Alpha shows the white canvas through transparent pixels.
-                        canvas.paste(
-                            resized,
-                            (
-                                (out_index % ANIMATED_MONTAGE_GRID) * cell_size[0],
-                                (out_index // ANIMATED_MONTAGE_GRID) * cell_size[1],
-                            ),
-                            resized,
-                        )
-                    finally:
-                        if resized is not frame:
-                            resized.close()
-            encoded = _encode_image_frame_bytes(canvas, quality=quality)
-        finally:
-            canvas.close()
-    _publish_image_cache_atomic(output_path, encoded)
-    return encoded, True
+    canvas = PILImage.new(
+        "RGB",
+        (
+            cell_size[0] * ANIMATED_MONTAGE_GRID,
+            cell_size[1] * ANIMATED_MONTAGE_GRID,
+        ),
+        (255, 255, 255),
+    )
+    try:
+        for out_index, frame_index in enumerate(frame_indices):
+            image.seek(frame_index)
+            with (
+                ImageOps.exif_transpose(image) as oriented,
+                oriented.convert("RGBA") as frame,
+            ):
+                resized = frame
+                try:
+                    if frame.size != cell_size:
+                        resized = frame.resize(cell_size, PILImage.Resampling.LANCZOS)
+                    # Alpha shows the white canvas through transparent pixels.
+                    canvas.paste(
+                        resized,
+                        (
+                            (out_index % ANIMATED_MONTAGE_GRID) * cell_size[0],
+                            (out_index // ANIMATED_MONTAGE_GRID) * cell_size[1],
+                        ),
+                        resized,
+                    )
+                finally:
+                    if resized is not frame:
+                        resized.close()
+        encoded = _encode_image_frame_bytes(canvas)
+    finally:
+        canvas.close()
+    return encoded
+
+
+class ImageInputTooLargeError(ValueError):
+    """Raised with the retained source path when an image exceeds the input cap."""
 
 
 async def prepare_model_image(
@@ -1365,42 +1207,43 @@ async def prepare_model_image(
     *,
     max_size: int,
     output_dir: Path,
-    quality: int = IMAGE_COMPRESS_DEFAULT_QUALITY,
-    montage_max_size: int | None = None,
-) -> str | None:
-    """Prepare a single local model-ready image for the caller to own until consumption.
+) -> tuple[str, bool, bool, str] | None:
+    """Prepare an image, reusing compliant local files without copying them.
 
     Args:
         image_ref: Source reference accepted by MediaResolver.
-        max_size: Validated longest-edge limit for stills.
-        output_dir: Directory for independent request-owned working files.
-        quality: JPEG output quality in the range 1-100.
-        montage_max_size: Optional longest-edge limit for animation montages.
-            CUA sessions lift the still-image cap to keep pixel coordinates 1:1,
-            but montages are never used for coordinates, so callers pass the
-            configured limit here to keep the 3x3 canvas bounded. Defaults to
-            ``max_size``.
+        max_size: Longest-edge limit for both still images and montages.
+        output_dir: Directory for event-owned working files.
 
     Returns:
-        An existing JPEG or PNG path, or None for a recoverable input or write
-        failure.
-        The caller owns this file; shared cache entries are never returned.
+        The image path, whether it is an animation montage, whether the caller must
+        delete the preview after use, and the retained original path. Compliant
+        originals are reused directly. Returns None for a recoverable failure.
+
+    Raises:
+        ImageInputTooLargeError: The input exceeds the size cap. Its original path
+            is retained for file-tool access and returned as the error message.
     """
     try:
         async with MediaResolver(image_ref, media_type="image").as_path() as source:
+            input_size = source.path.stat().st_size
+            if input_size > MODEL_IMAGE_MAX_INPUT_BYTES:
+                logger.warning(
+                    "Skipping oversized image input (%d bytes): %s",
+                    input_size,
+                    source.path,
+                )
+                source.detach()
+                raise ImageInputTooLargeError(str(source.path))
             image_bytes = await asyncio.to_thread(source.read_bytes)
-        frame_count = await asyncio.to_thread(_inspect_image, image_bytes)
-        if frame_count > 1:
-            converted_bytes, _ = await asyncio.to_thread(
-                _extract_animation_montage_sync,
-                image_bytes,
-                montage_max_size if montage_max_size is not None else max_size,
-                quality,
+            converted_bytes, is_montage = await asyncio.to_thread(
+                _prepare_model_image_sync, image_bytes, max_size
             )
-        else:
-            converted_bytes = await asyncio.to_thread(
-                _convert_image_bytes_sync, image_bytes, max_size, quality
-            )
+            original_path = str(source.path)
+            # Final image labels expose this original for later file-tool access.
+            source.detach()
+            if converted_bytes is image_bytes:
+                return original_path, is_montage, False, original_path
         # Publish the working file synchronously after encoding, so cancellation
         # cannot leave an untracked background write alive after this call.
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -1415,7 +1258,9 @@ async def prepare_model_image(
         except BaseException:
             output_path.unlink(missing_ok=True)
             raise
-        return str(output_path)
+        return str(output_path), is_montage, True, original_path
+    except ImageInputTooLargeError:
+        raise
     except Exception as exc:
         if not is_recoverable_image_error(exc):
             raise

@@ -54,7 +54,7 @@ git clone https://github.com/AstrBotDevs/astrbot_sandbox_cua.git data/plugins/as
 
 After installation, restart AstrBot or reload plugins from the plugin management page.
 
-Then open the AstrBot console, go to **AI Settings** -> **Agent Computer Use**, and select:
+Then open the AstrBot console and go to **Config** -> **AI** -> **Capabilities** -> **Agent Computer Use**, then select:
 
 - `Computer Use Runtime` = `sandbox`
 - `Sandbox Driver` = `Shipyard Neo`, `BoxLite`, `Shipyard`, or `CUA`

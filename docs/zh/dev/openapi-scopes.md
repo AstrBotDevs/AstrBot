@@ -207,6 +207,11 @@ outline: deep
 | `POST` | `/api/v1/file` | — |
 | `POST` | `/api/v1/files` | — |
 | `GET` | `/api/v1/files/content` | — |
+| `POST` | `/api/v1/files/upload/abort` | — |
+| `POST` | `/api/v1/files/upload/chunk` | — |
+| `POST` | `/api/v1/files/upload/complete` | — |
+| `POST` | `/api/v1/files/upload/init` | — |
+| `POST` | `/api/v1/files/upload/status` | — |
 | `GET` | `/api/v1/files/{attachment_id}` | — |
 | `DELETE` | `/api/v1/files/{attachment_id}` | — |
 | `GET` | `/api/v1/files/{attachment_id}/content` | — |
@@ -375,6 +380,7 @@ outline: deep
 | `POST` | `/api/v1/backups/upload/chunk` | — |
 | `POST` | `/api/v1/backups/upload/complete` | — |
 | `POST` | `/api/v1/backups/upload/init` | — |
+| `POST` | `/api/v1/backups/upload/status` | — |
 | `PATCH` | `/api/v1/backups/{filename}` | — |
 | `DELETE` | `/api/v1/backups/{filename}` | — |
 | `POST` | `/api/v1/backups/{filename}/check` | — |

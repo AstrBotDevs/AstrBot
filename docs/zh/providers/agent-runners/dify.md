@@ -6,22 +6,20 @@
 
 ## 在 AstrBot 中配置 Dify
 
-在 WebUI 中，点击「模型提供商」->「新增提供商」，选择「Agent 执行器」，选择「Dify」，进入 Dify 的配置页面。
+在 WebUI 中打开「配置文件」，选择要修改的配置文件，进入「AI 配置」。点击标题右侧「更多操作」（`…`）→「更换执行方式」，选择「Dify」，阅读并勾选配置重置提示后点击「使用此方式」。确保「启用 AI」已打开，然后在本页填写连接参数。切换会重置当前执行方式的配置，详情见 [Agent 执行器](../../use/agent-runner.md)。
 
-![image](https://files.astrbot.app/docs/source/images/dify/image.png)
+在 Dify 中，一个 `API Key` 唯一对应一个 Dify 应用。因此，您可以为不同配置文件填写不同的 API Key 来连接多个 Dify 应用。
 
-在 Dify 中，一个 `API Key` 唯一对应一个 Dify 应用。因此，您可以创建多个 Provider 以适配多个 Dify 应用。
-
-根据目前的 Dify 项目，一共有三种类型，分别是：
+AstrBot 的「应用类型」选项包括：
 
 - chat
+- chatflow
 - agent
 - workflow
 
 >[!TIP]
 >请确保你在 AstrBot 里设置的 APP 类型和 Dify 里面创建的应用的类型一致。
 >![image](https://files.astrbot.app/docs/source/images/dify/image-3.png)
-
 
 ### Chat 和 Agent 应用
 
@@ -31,7 +29,7 @@
 
 ![image](https://files.astrbot.app/docs/source/images/dify/chat-agent-api-key-2.png)
 
-复制密钥并粘贴到配置中的 `API Key` 字段中，点击「保存」。
+复制密钥并粘贴到配置中的 `API Key` 字段中，点击「保存配置」。
 
 ### Workflow 应用
 
@@ -46,11 +44,11 @@ Workflow 应用接收输入变量，然后执行工作流，最后输出结果�
 - `astrbot_text_query`: 输入变量名。即用户输入的文本内容。
 - `astrbot_session_id`: 会话 ID
 
-你可以在配置中自定义输入变量名，即上图配置中的 “Prompt 输入变量名”。
+你可以在配置中自定义输入变量名，即当前 Dify 设置中的「Prompt 输入变量名」。
 
 您需要修改您的 Workflow 的输入的变量名以适配 AstrBot 的输入。
 
-最终，Workflow 会输出一个结果，您可以自定义这个结果的变量名，即上图配置中的 “Dify Workflow 输出变量名”，默认为  `astrbot_wf_output`。你需要在 Dify 的 Workflow 的输出节点中配置这个变量名，否则 AstrBot 无法正确解析。
+最终，Workflow 会输出一个结果，您可以自定义这个结果的变量名，即当前 Dify 设置中的「Workflow 输出变量名」，默认为  `astrbot_wf_output`。你需要在 Dify 的 Workflow 的输出节点中配置这个变量名，否则 AstrBot 无法正确解析。
 
 #### 创建 API Key
 
@@ -60,11 +58,11 @@ Workflow 应用接收输入变量，然后执行工作流，最后输出结果�
 
 ![image](https://files.astrbot.app/docs/source/images/dify/workflow-api-key.png)
 
-复制密钥并粘贴到配置中的 `API Key` 字段中，点击「保存」。
+复制密钥并粘贴到配置中的 `API Key` 字段中，点击「保存配置」。
 
-### 选择 Agent 执行器
+## 保存配置
 
-进入左边栏配置页面，点击「Agent 执行方式」，选择「Dify」，然后在下方出现的新的配置项中选择你刚刚创建的 Dify Agent 执行器的 ID，点击右下角「保存」，即可完成配置。
+填写完成后，点击右下角「保存配置」。该配置文件将直接使用上述执行方式和连接参数，无需另外创建或选择执行器提供商 ID。
 
 ## 附录：在聊天时动态设置输入 Workflow 变量（可选）
 

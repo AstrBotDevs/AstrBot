@@ -72,8 +72,13 @@ def register_sandbox_provider(
             f"Sandbox provider {provider.provider_id} is already registered"
         )
 
-    # Clean up previous tools when replacing.
     if replace and provider.provider_id in sandbox_manager.providers:
+        if _has_managed_sandboxes_for_provider(provider.provider_id):
+            raise RuntimeError(
+                f"Sandbox provider {provider.provider_id} has active managed sandboxes; "
+                "destroy them before replacing the provider."
+            )
+        # Clean up previous tools only after replacement is known to be safe.
         _unregister_provider_tools(provider.provider_id)
 
     sandbox_manager.providers[provider.provider_id] = provider
