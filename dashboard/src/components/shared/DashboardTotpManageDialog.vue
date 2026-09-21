@@ -17,17 +17,6 @@
         <div class="totp-dialog-subtitle mb-3">
           {{ tm('system_group.system.dashboard.totp.activeSubtitle') }}
         </div>
-        <div class="text-center">
-          <QrCodeViewer
-            v-if="totpProvisioningUri"
-            :value="totpProvisioningUri"
-            alt="TOTP QR Code"
-            :size="220"
-          />
-          <div class="totp-current-secret-wrap mt-3">
-            <code class="totp-secret">{{ totpSecret }}</code>
-          </div>
-        </div>
         <div class="d-flex justify-center ga-3 mt-4">
           <v-btn
             color="primary"
@@ -52,32 +41,17 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
-import QrCodeViewer from './QrCodeViewer.vue'
 import { useModuleI18n } from '@/i18n/composables'
 
-const props = defineProps({
+defineProps({
   modelValue: {
     type: Boolean,
     default: false
-  },
-  configRoot: {
-    type: Object,
-    default: null
   }
 })
 
 const emit = defineEmits(['update:modelValue', 'rotate', 'rotate-recovery'])
 const { tm } = useModuleI18n('features/config-metadata')
-
-const totpSecret = computed(() => props.configRoot?.dashboard?.totp?.secret || '')
-
-const totpProvisioningUri = computed(() => {
-  if (!totpSecret.value) return ''
-  const label = encodeURIComponent(props.configRoot?.dashboard?.username || 'AstrBot')
-  const issuer = encodeURIComponent('AstrBot')
-  return `otpauth://totp/${label}?secret=${encodeURIComponent(totpSecret.value)}&issuer=${issuer}`
-})
 </script>
 
 <style scoped>
@@ -86,16 +60,4 @@ const totpProvisioningUri = computed(() => {
   color: rgba(var(--v-theme-on-surface), 0.68);
 }
 
-.totp-current-secret-wrap {
-  background: rgba(var(--v-theme-on-surface), 0.04);
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
-  border-radius: 8px;
-  padding: 10px;
-}
-
-.totp-secret {
-  word-break: break-all;
-  font-size: 0.8rem;
-  font-weight: 500;
-}
 </style>

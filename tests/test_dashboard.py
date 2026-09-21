@@ -1110,6 +1110,100 @@ async def test_config_save_requires_two_factor_for_protected_totp_changes(
 
 
 @pytest.mark.asyncio
+async def test_system_config_get_redacts_active_totp_secret(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    original_dashboard_config = copy.deepcopy(
+        core_lifecycle_td.astrbot_config["dashboard"]
+    )
+    test_client = app.test_client()
+    _, recovery_code_hash = generate_recovery_code()
+    secret = pyotp.random_base32()
+
+    try:
+        core_lifecycle_td.astrbot_config["dashboard"]["totp"] = {
+            "enable": True,
+            "secret": secret,
+            "recovery_code_hash": recovery_code_hash,
+        }
+        response = await test_client.get(
+            "/api/v1/system-config",
+            headers=authenticated_header,
+        )
+        data = await response.get_json()
+        response_config = data["data"]["config"]
+
+        assert response_config["dashboard"]["totp"]["secret"] == (
+            "__astrbot_totp_secret_redacted__"
+        )
+        assert response_config["dashboard"]["totp"]["recovery_code_hash"] == (
+            recovery_code_hash
+        )
+        assert core_lifecycle_td.astrbot_config["dashboard"]["totp"]["secret"] == secret
+    finally:
+        await _restore_dashboard_password_state(
+            core_lifecycle_td,
+            original_dashboard_config,
+        )
+
+
+@pytest.mark.asyncio
+async def test_system_config_save_preserves_redacted_totp_secret(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    original_dashboard_config = copy.deepcopy(
+        core_lifecycle_td.astrbot_config["dashboard"]
+    )
+    original_t2i = core_lifecycle_td.astrbot_config.get("t2i")
+    test_client = app.test_client()
+    _, recovery_code_hash = generate_recovery_code()
+    secret = pyotp.random_base32()
+
+    try:
+        core_lifecycle_td.astrbot_config["dashboard"]["totp"] = {
+            "enable": True,
+            "secret": secret,
+            "recovery_code_hash": recovery_code_hash,
+        }
+        config_response = await test_client.get(
+            "/api/v1/system-config",
+            headers=authenticated_header,
+        )
+        config_data = await config_response.get_json()
+        post_config = config_data["data"]["config"]
+        assert post_config["dashboard"]["totp"]["secret"] == (
+            "__astrbot_totp_secret_redacted__"
+        )
+        post_config["t2i"] = not post_config.get("t2i", False)
+
+        response = await test_client.put(
+            "/api/v1/system-config",
+            headers=authenticated_header,
+            json=post_config,
+        )
+        data = await response.get_json()
+
+        assert response.status_code == 200
+        assert data["status"] == "ok"
+        assert core_lifecycle_td.astrbot_config["t2i"] is post_config["t2i"]
+        assert core_lifecycle_td.astrbot_config["dashboard"]["totp"] == {
+            "enable": True,
+            "secret": secret,
+            "recovery_code_hash": recovery_code_hash,
+        }
+    finally:
+        core_lifecycle_td.astrbot_config["t2i"] = original_t2i
+        await _restore_dashboard_password_state(
+            core_lifecycle_td,
+            original_dashboard_config,
+        )
+
+
+@pytest.mark.asyncio
 async def test_config_save_accepts_totp_code_for_protected_totp_changes(
     app: FastAPIAppAdapter,
     authenticated_header: dict,
