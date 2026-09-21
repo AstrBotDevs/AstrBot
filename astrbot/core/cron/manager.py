@@ -462,6 +462,10 @@ class CronJobManager:
         # judge user's role
         umo = cron_event.unified_msg_origin
         cfg = self.ctx.get_config(umo=umo)
+        enabled_plugins_name = cfg.get("plugin_set", ["*"])
+        cron_event.plugins_name = (
+            None if enabled_plugins_name == ["*"] else enabled_plugins_name
+        )
         cron_payload = extras.get("cron_payload", {}) if extras else {}
         sender_id = cron_payload.get("sender_id")
         admin_ids = cfg.get("admins_id", [])
