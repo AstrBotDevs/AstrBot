@@ -136,4 +136,4 @@ If the proxy runs on the host, or in another container with the port published t
 
 If AstrBot and the proxy share a Docker network, use the proxy container name, for example `http://clash:7890`.
 
-Clash-style clients commonly use HTTP on `7890` and SOCKS on `7891`. Use `http://` or `socks5://` to match the protocol. Publish the proxy port to the host, and avoid binding it only to `127.0.0.1` (`127.0.0.1:7890:7890` is unreachable from other containers via the gateway).
+Clash-style clients commonly use HTTP on `7890` and SOCKS on `7891`. Use `http://` or `socks5://` to match the protocol. For a host-installed proxy, it must listen on a host interface reachable from Docker, such as `0.0.0.0` or the Docker gateway interface, rather than only `127.0.0.1`; publish the proxy port to the host.
