@@ -1643,6 +1643,18 @@ CONFIG_METADATA_2 = {
                         "proxy": "",
                         "custom_headers": {},
                     },
+                    "Opper": {
+                        "id": "opper",
+                        "provider": "opper",
+                        "type": "openai_chat_completion",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "timeout": 120,
+                        "api_base": "https://api.opper.ai/v3/compat",
+                        "proxy": "",
+                        "custom_headers": {},
+                    },
                     "SiliconFlow": {
                         "id": "siliconflow",
                         "provider": "siliconflow",
