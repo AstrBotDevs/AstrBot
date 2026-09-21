@@ -438,6 +438,8 @@ class FileReadTool(FunctionTool):
             )
         except PermissionError as exc:
             return f"Error: {exc}"
+        except MemoryError:
+            raise
         except Exception as exc:
             logger.error(f"Error reading file: {exc}")
             return f"Error reading file: {exc}"

@@ -44,6 +44,44 @@ IMAGE_COMPRESS_DEFAULT_MIN_FILE_SIZE_MB = 1.0
 # Model image inputs larger than this are skipped before decoding.
 MODEL_IMAGE_MAX_INPUT_BYTES = 64 * 1024 * 1024
 
+
+class ImagePayloadTooLargeError(ValueError):
+    """Raised when an image exceeds a safe input or output byte budget."""
+
+
+@dataclass(slots=True)
+class ImagePreparationOptions:
+    """Options for the shared provider-facing image preparation boundary.
+
+    Args:
+        max_size: Longest edge of the prepared image in pixels.
+    """
+
+    max_size: int = IMAGE_COMPRESS_DEFAULT_MAX_SIZE
+
+
+def get_image_preparation_options(
+    provider_settings: dict | None,
+) -> ImagePreparationOptions:
+    """Build preparation options from the current provider settings.
+
+    Args:
+        provider_settings: Provider-level settings. Only the mainline image
+            dimension option is read; removed legacy byte-budget settings are
+            intentionally ignored.
+
+    Returns:
+        Validated options for the shared image preparation path.
+    """
+    raw_options = (
+        provider_settings.get("image_compress_options", {})
+        if isinstance(provider_settings, dict)
+        else {}
+    )
+    max_size = raw_options.get("max_size") if isinstance(raw_options, dict) else None
+    return ImagePreparationOptions(max_size=normalize_model_image_max_size(max_size))
+
+
 MEDIA_MIME_EXTENSIONS = {
     "audio/wav": ".wav",
     "audio/wave": ".wav",
@@ -120,6 +158,21 @@ Examples:
 """
 
 
+@dataclass(frozen=True, slots=True)
+class ImagePreparationInput:
+    """Describe an image entering the shared preparation boundary.
+
+    Args:
+        value: Image path, URL, data URI, base64 reference, or raw bytes.
+        source_kind: Logical producer name used for diagnostics.
+        cleanup_paths: Temporary paths owned by the caller.
+    """
+
+    value: MediaRefStr | bytes
+    source_kind: str = "unknown"
+    cleanup_paths: tuple[Path, ...] = ()
+
+
 @dataclass(slots=True)
 class ResolvedMediaData:
     """Base64 media bytes plus the metadata needed by provider payloads.
@@ -133,6 +186,7 @@ class ResolvedMediaData:
     base64_data: str
     mime_type: str
     format: str | None = None
+    byte_size: int | None = None
 
     def to_bytes(self) -> bytes:
         """Decode the base64 payload, accepting missing padding."""
@@ -322,6 +376,133 @@ def _decode_base64_payload(
         raise ValueError(error_message) from exc
 
 
+def _estimate_base64_decoded_size(
+    payload: str,
+    *,
+    start: int = 0,
+    require_valid_chars: bool = False,
+) -> int | None:
+    """Estimate decoded bytes without creating a compact payload copy.
+
+    Args:
+        payload: Base64 text, possibly containing whitespace.
+        start: Index at which the payload begins.
+        require_valid_chars: Whether to reject non-base64 characters.
+
+    Returns:
+        Estimated decoded byte count, or ``None`` when the payload is not a
+        complete standard Base64 string.
+    """
+    encoded_size = 0
+    padding_size = 0
+    for index, char in enumerate(payload):
+        if index < start or char.isspace():
+            continue
+        if require_valid_chars and char not in (
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/="
+        ):
+            return None
+        encoded_size += 1
+        if char == "=":
+            padding_size += 1
+    if encoded_size % 4 == 1:
+        return None
+    return max(0, encoded_size * 3 // 4 - padding_size)
+
+
+def validate_image_input_size(image_source: bytes | str | Path | int) -> int | None:
+    """Reject known oversized image inputs before decoding them.
+
+    Args:
+        image_source: Raw bytes, a local path, a media reference, or a known
+            byte count. Remote URLs return ``None`` until downloaded.
+
+    Returns:
+        Known encoded byte count, or ``None`` when it cannot be determined
+        without reading the source.
+
+    Raises:
+        ImagePayloadTooLargeError: The known source exceeds the 64 MiB input cap.
+        TypeError: The source type is unsupported.
+        ValueError: The source size is negative.
+    """
+    source_size: int | None = None
+    if isinstance(image_source, bool):
+        raise TypeError("Image source size must not be a boolean")
+    if isinstance(image_source, int):
+        source_size = image_source
+    elif isinstance(image_source, bytes):
+        source_size = len(image_source)
+    elif isinstance(image_source, Path):
+        try:
+            source_size = image_source.stat().st_size
+        except FileNotFoundError:
+            return None
+    elif isinstance(image_source, str):
+        if image_source.startswith(("http://", "https://")):
+            return None
+        if image_source.startswith("data:"):
+            comma_index = image_source.find(",")
+            if comma_index < 0:
+                return None
+            header_parts = image_source[5:comma_index].split(";")
+            if any(part.lower() == "base64" for part in header_parts[1:]):
+                source_size = _estimate_base64_decoded_size(
+                    image_source,
+                    start=comma_index + 1,
+                )
+        elif image_source.startswith("base64://"):
+            source_size = _estimate_base64_decoded_size(
+                image_source,
+                start=len("base64://"),
+            )
+        else:
+            is_uri = is_file_uri(image_source)
+            path = (
+                Path(file_uri_to_path(image_source)) if is_uri else Path(image_source)
+            )
+            try:
+                source_size = path.stat().st_size
+            except (FileNotFoundError, OSError, ValueError):
+                source_size = None
+            if source_size is None and not is_uri:
+                source_size = _estimate_base64_decoded_size(
+                    image_source,
+                    require_valid_chars=True,
+                )
+    else:
+        raise TypeError(f"Unsupported image source type: {type(image_source).__name__}")
+
+    if source_size is None:
+        return None
+    if source_size < 0:
+        raise ValueError("Image source size must not be negative")
+    if source_size > MODEL_IMAGE_MAX_INPUT_BYTES:
+        if isinstance(image_source, Path):
+            raise ImageInputTooLargeError(str(image_source))
+        raise ImageInputTooLargeError(
+            "Image input exceeds the "
+            f"{MODEL_IMAGE_MAX_INPUT_BYTES}-byte limit ({source_size} bytes)"
+        )
+    return source_size
+
+
+def _encode_file_to_base64(path: Path) -> str:
+    """Encode a local file in chunks without retaining raw and encoded copies."""
+    encoded = io.StringIO()
+    remainder = b""
+    with path.open("rb") as source:
+        while chunk := source.read(1023 * 1024):
+            block = remainder + chunk if remainder else chunk
+            complete_size = len(block) - len(block) % 3
+            if complete_size:
+                encoded.write(base64.b64encode(block[:complete_size]).decode("ascii"))
+            remainder = block[complete_size:]
+    if remainder:
+        encoded.write(base64.b64encode(remainder).decode("ascii"))
+    return encoded.getvalue()
+
+
 def describe_media_ref(media_ref: object | None) -> str:
     """Return a log-safe description of a media reference.
 
@@ -486,6 +667,11 @@ async def _materialize_media_ref(
         cleanup_paths.append(target_path)
         try:
             await download_file(media_ref, str(target_path))
+            if media_type == "image":
+                validate_image_input_size(target_path)
+        except ImageInputTooLargeError as exc:
+            exc.path = str(target_path)
+            raise
         except Exception:
             _cleanup_paths(cleanup_paths)
             raise
@@ -514,6 +700,8 @@ async def _materialize_media_ref(
         return _LocalMediaFile(path=path, mime_type=_guess_mime_type(path))
 
     if media_ref.startswith("data:"):
+        if media_type == "image":
+            validate_image_input_size(media_ref)
         mime_type, media_bytes = _parse_base64_data_uri(media_ref)
         target_suffix = _extension_from_mime_type(mime_type) or suffix
         if media_type == "image" and target_suffix == suffix:
@@ -538,6 +726,8 @@ async def _materialize_media_ref(
         )
 
     if media_ref.startswith("base64://"):
+        if media_type == "image":
+            validate_image_input_size(media_ref)
         media_bytes = _decode_base64_payload(
             media_ref.removeprefix("base64://"),
             error_message="invalid base64 media payload",
@@ -572,6 +762,8 @@ async def _materialize_media_ref(
     if path_exists:
         return _LocalMediaFile(path=path, mime_type=_guess_mime_type(path))
 
+    if media_type == "image":
+        validate_image_input_size(media_ref)
     compact_media_ref = "".join(media_ref.split())
     if compact_media_ref:
         try:
@@ -858,6 +1050,7 @@ class MediaResolver:
                 return ResolvedMediaData(
                     base64_data=base64.b64encode(media_bytes).decode("utf-8"),
                     mime_type=mime_type,
+                    byte_size=len(media_bytes),
                 )
 
         async with self.as_path(
@@ -913,29 +1106,43 @@ class MediaResolver:
 
 
 async def resolve_image_ref_to_base64_data(
-    image_ref: MediaRefStr,
+    image_ref: MediaRefStr | bytes,
     *,
     strict: bool = False,
     default_mime_type: str | None = "image/jpeg",
+    options: ImagePreparationOptions | None = None,
 ) -> ResolvedMediaData | None:
-    """Resolve an image reference to losslessly encoded base64 data.
+    """Resolve and prepare an image reference for a provider request.
 
-    Only materializes the source and detects its MIME type; no
-    provider-specific format conversion, frame extraction, or montage is
-    performed here. Platform senders and generic request assembly rely on
-    this to encode image bytes without transforming their content.
+    When ``options`` is provided, the mainline preparation path bounds a
+    model-facing image while keeping historical media references outside the
+    in-memory request until selected. Without options, preserve the resolver's
+    original byte-for-byte behavior for platform and compatibility callers.
 
     ``strict=False`` returns ``None`` for invalid images so payload
     assembly can skip bad image refs without failing the whole request.
     """
-    return await MediaResolver(
-        image_ref,
-        media_type="image",
-        default_suffix=".bin",
-    ).to_base64_data(
-        strict=strict,
-        default_mime_type=default_mime_type,
-    )
+    try:
+        if options is None:
+            return await MediaResolver(
+                image_ref,
+                media_type="image",
+                default_suffix=".bin",
+            ).to_base64_data(
+                strict=strict,
+                default_mime_type=default_mime_type,
+            )
+        return await prepare_image_source(
+            image_ref,
+            options=options,
+            default_mime_type=default_mime_type,
+        )
+    except (ImagePayloadTooLargeError, MemoryError):
+        raise
+    except Exception:
+        if strict:
+            raise
+        return None
 
 
 def is_recoverable_image_error(error: Exception) -> bool:
@@ -1198,8 +1405,13 @@ def _extract_animation_montage_sync(image: PILImage.Image, max_size: int) -> byt
     return encoded
 
 
-class ImageInputTooLargeError(ValueError):
+class ImageInputTooLargeError(ImagePayloadTooLargeError):
     """Raised with the retained source path when an image exceeds the input cap."""
+
+    def __init__(self, path: str) -> None:
+        """Keep the source path for the file-reading fallback."""
+        super().__init__(path)
+        self.path = path
 
 
 async def prepare_model_image(
@@ -1233,17 +1445,19 @@ async def prepare_model_image(
                     input_size,
                     source.path,
                 )
+                original_path = str(source.path)
                 source.detach()
-                raise ImageInputTooLargeError(str(source.path))
+                raise ImageInputTooLargeError(original_path)
             image_bytes = await asyncio.to_thread(source.read_bytes)
             converted_bytes, is_montage = await asyncio.to_thread(
                 _prepare_model_image_sync, image_bytes, max_size
             )
             original_path = str(source.path)
+            needs_cleanup = bool(source.cleanup_paths)
             # Final image labels expose this original for later file-tool access.
             source.detach()
             if converted_bytes is image_bytes:
-                return original_path, is_montage, False, original_path
+                return original_path, is_montage, needs_cleanup, original_path
         # Publish the working file synchronously after encoding, so cancellation
         # cannot leave an untracked background write alive after this call.
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -1259,7 +1473,7 @@ async def prepare_model_image(
             output_path.unlink(missing_ok=True)
             raise
         return str(output_path), is_montage, True, original_path
-    except ImageInputTooLargeError:
+    except (ImageInputTooLargeError, ImagePayloadTooLargeError):
         raise
     except Exception as exc:
         if not is_recoverable_image_error(exc):
@@ -1295,31 +1509,6 @@ async def resolve_audio_ref_to_base64_data(
     if audio_data is None:
         raise ValueError(f"Invalid audio data: {describe_media_ref(audio_ref)}")
     return audio_data
-
-
-async def resolve_media_ref_to_base64_data(
-    media_ref: MediaRefStr,
-    *,
-    media_type: str,
-    strict: bool = False,
-) -> ResolvedMediaData | None:
-    """Resolve a media reference to base64 data through one shared entrypoint.
-
-    This helper keeps provider sources from knowing whether a reference is local,
-    HTTP(S), ``base64://``, a data URI, or a legacy bare base64 payload.
-    """
-
-    if media_type == "image":
-        return await resolve_image_ref_to_base64_data(media_ref, strict=strict)
-    if media_type == "audio":
-        return await resolve_audio_ref_to_base64_data(media_ref)
-
-    return await MediaResolver(
-        media_ref,
-        media_type=media_type,
-    ).to_base64_data(
-        strict=strict,
-    )
 
 
 async def get_media_duration(file_path: str) -> int | None:
@@ -1920,6 +2109,8 @@ async def compress_image(
     url_or_path: str,
     max_size: int = IMAGE_COMPRESS_DEFAULT_MAX_SIZE,
     quality: int = IMAGE_COMPRESS_DEFAULT_QUALITY,
+    *,
+    optimize: bool = IMAGE_COMPRESS_DEFAULT_OPTIMIZE,
 ) -> str:
     """Compress large user-uploaded images.
 
@@ -1927,6 +2118,7 @@ async def compress_image(
         url_or_path: Image path or URL.
         max_size: Longest edge of the compressed image in pixels.
         quality: JPEG output quality in the range 1-100.
+        optimize: Whether Pillow should optimize the encoded output.
 
     Returns:
         The compressed image path. Returns the original path if compression
@@ -1934,7 +2126,6 @@ async def compress_image(
     """
     max_size = max(int(max_size), 1)
     quality = min(max(int(quality), 1), 100)
-    optimize = IMAGE_COMPRESS_DEFAULT_OPTIMIZE
     min_file_size_bytes = int(IMAGE_COMPRESS_DEFAULT_MIN_FILE_SIZE_MB * 1024 * 1024)
     image_source: bytes | Path | None = None
 
@@ -1950,6 +2141,7 @@ async def compress_image(
     if url_or_path.startswith("http"):
         return url_or_path
     elif url_or_path.startswith("data:image"):
+        validate_image_input_size(url_or_path)
         _header, encoded = url_or_path.split(",", 1)
         image_source = _decode_base64_payload(
             encoded,
@@ -1963,9 +2155,9 @@ async def compress_image(
         local_path = Path(url_or_path)
         if not local_path.exists():
             return url_or_path
-        if local_path.stat().st_size < min_file_size_bytes and not _exceeds_max_size(
-            local_path
-        ):
+        validate_image_input_size(local_path)
+        source_size = local_path.stat().st_size
+        if source_size < min_file_size_bytes and not _exceeds_max_size(local_path):
             return url_or_path
         image_source = local_path
 
@@ -1985,3 +2177,137 @@ async def compress_image(
         optimize,
     )
     return compressed_path or url_or_path
+
+
+async def prepare_image_source(
+    image_ref: MediaRefStr | bytes | ImagePreparationInput,
+    *,
+    options: ImagePreparationOptions | None = None,
+    default_mime_type: str | None = "image/jpeg",
+) -> ResolvedMediaData:
+    """Prepare one image through the mainline model-image pipeline.
+
+    Args:
+        image_ref: Local path, URL, data URI, base64 reference, or raw bytes.
+        options: Optional dimension settings for the request.
+        default_mime_type: Fallback MIME type when detection is unavailable.
+
+    Returns:
+        Provider-ready Base64 data and its MIME type.
+
+    Raises:
+        ImagePayloadTooLargeError: The input or prepared image exceeds a safe
+            byte budget.
+        ValueError: The source is not a readable image.
+    """
+    selected = options or ImagePreparationOptions()
+    preparation_input = (
+        image_ref
+        if isinstance(image_ref, ImagePreparationInput)
+        else ImagePreparationInput(image_ref)
+    )
+    source_ref = preparation_input.value
+    try:
+        if isinstance(source_ref, bytes):
+            validate_image_input_size(source_ref)
+            prepared_bytes, _ = await asyncio.to_thread(
+                _prepare_model_image_sync,
+                source_ref,
+                max(selected.max_size, 1),
+            )
+            mime_type = detect_image_mime_type(
+                prepared_bytes,
+                default_mime_type=default_mime_type,
+            )
+            if not mime_type:
+                raise ValueError("image content could not be identified")
+            return ResolvedMediaData(
+                base64_data=base64.b64encode(prepared_bytes).decode("ascii"),
+                mime_type=mime_type,
+                byte_size=len(prepared_bytes),
+            )
+
+        if not isinstance(source_ref, str):
+            raise TypeError("image reference must be a string or bytes")
+
+        prepared = await prepare_model_image(
+            source_ref,
+            max_size=max(selected.max_size, 1),
+            output_dir=Path(get_astrbot_temp_path()),
+        )
+        if prepared is None:
+            # Preserve the historical opaque-base64 fallback for callers that
+            # intentionally pass bytes Pillow cannot identify as an image.
+            resolved = await MediaResolver(
+                source_ref,
+                media_type="image",
+                default_suffix=".bin",
+            ).to_base64_data(
+                strict=True,
+                default_mime_type=default_mime_type,
+            )
+            if resolved is not None:
+                if (
+                    resolved.byte_size is not None
+                    and resolved.byte_size >= MODEL_IMAGE_MAX_BYTES
+                ):
+                    raise ImagePayloadTooLargeError(
+                        "Prepared image exceeds the model input byte limit"
+                    )
+                return resolved
+            raise ValueError(f"Invalid image file: {describe_media_ref(source_ref)}")
+        prepared_path, _is_montage, needs_cleanup, _original_path = prepared
+        path = Path(prepared_path)
+        try:
+            mime_type = await detect_image_mime_type_async(
+                path,
+                default_mime_type=default_mime_type,
+            )
+            if not mime_type:
+                raise ValueError("image content could not be identified")
+            encoded_data = await asyncio.to_thread(_encode_file_to_base64, path)
+            byte_size = path.stat().st_size
+            return ResolvedMediaData(
+                base64_data=encoded_data,
+                mime_type=mime_type,
+                byte_size=byte_size,
+            )
+        finally:
+            if needs_cleanup:
+                path.unlink(missing_ok=True)
+    finally:
+        for cleanup_path in preparation_input.cleanup_paths:
+            cleanup_path.unlink(missing_ok=True)
+
+
+async def resolve_media_ref_to_base64_data(
+    media_ref: MediaRefStr | bytes,
+    *,
+    media_type: str,
+    strict: bool = False,
+    image_options: ImagePreparationOptions | None = None,
+    default_mime_type: str | None = "image/jpeg",
+) -> ResolvedMediaData | None:
+    """Resolve a media reference through the shared provider boundary.
+
+    Args:
+        media_ref: Media path, URL, data URI, Base64 reference, or raw bytes.
+        media_type: Logical media family.
+        strict: Whether ordinary resolution failures should propagate.
+        image_options: Optional image preparation settings.
+        default_mime_type: MIME fallback for image data.
+
+    Returns:
+        Resolved media data, or ``None`` for a recoverable non-strict failure.
+    """
+    if media_type == "image":
+        return await resolve_image_ref_to_base64_data(
+            media_ref,
+            strict=strict,
+            default_mime_type=default_mime_type,
+            options=image_options,
+        )
+    return await MediaResolver(
+        media_ref,
+        media_type=media_type,
+    ).to_base64_data(strict=strict, default_mime_type=default_mime_type)

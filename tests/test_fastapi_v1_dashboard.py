@@ -1672,6 +1672,46 @@ async def test_v1_conversation_detail_requires_user_id(
 
 
 @pytest.mark.asyncio
+async def test_v1_conversation_media_route_requires_auth_and_owner(
+    asgi_client: httpx.AsyncClient,
+    monkeypatch,
+):
+    from astrbot.dashboard.services.conversation_service import (
+        ConversationMedia,
+        ConversationService,
+        ConversationServiceError,
+    )
+
+    async def preview(self, user_id: str, cid: str, media_id: str):
+        if user_id != "owner" or cid != "cid" or media_id != "a" * 64:
+            raise ConversationServiceError("对话不存在")
+        return ConversationMedia(b"valid-image", "image/png")
+
+    monkeypatch.setattr(ConversationService, "get_conversation_media", preview)
+    path = "/api/v1/conversations/cid/media/" + "a" * 64
+    assert (await asgi_client.get(path, params={"user_id": "owner"})).status_code == 401
+
+    response = await asgi_client.get(
+        path, params={"user_id": "owner"}, headers=_jwt_headers()
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/png"
+    assert response.content == b"valid-image"
+
+    other_owner = await asgi_client.get(
+        path, params={"user_id": "other"}, headers=_jwt_headers()
+    )
+    assert other_owner.status_code == 400
+
+    unreferenced = await asgi_client.get(
+        "/api/v1/conversations/cid/media/" + "b" * 64,
+        params={"user_id": "owner"},
+        headers=_jwt_headers(),
+    )
+    assert unreferenced.status_code == 400
+
+
+@pytest.mark.asyncio
 async def test_dashboard_alias_conversation_detail_uses_fastapi_service(
     asgi_client: httpx.AsyncClient,
 ):

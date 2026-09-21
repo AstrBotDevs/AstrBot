@@ -32,6 +32,7 @@ from astrbot.core.astr_main_agent_resources import (
 from astrbot.core.computer.booters.local import resolve_windows_shell
 from astrbot.core.conversation_mgr import Conversation
 from astrbot.core.db import BaseDatabase
+from astrbot.core.exceptions import ProviderRequestTooLargeError
 from astrbot.core.message.components import File, Image, Record, Reply, Video
 from astrbot.core.persona_error_reply import (
     extract_persona_custom_error_message_from_persona,
@@ -114,6 +115,7 @@ from astrbot.core.utils.file_extract import extract_file_moonshotai
 from astrbot.core.utils.image_input import prepare_request_images
 from astrbot.core.utils.llm_metadata import LLM_METADATAS
 from astrbot.core.utils.media_utils import (
+    ImagePayloadTooLargeError,
     is_file_uri,
     is_recoverable_image_error,
     normalize_model_image_max_size,
@@ -793,6 +795,11 @@ async def _ensure_img_caption(
             )
             return image_refs
     except Exception as exc:  # noqa: BLE001
+        if isinstance(
+            exc,
+            (MemoryError, ImagePayloadTooLargeError, ProviderRequestTooLargeError),
+        ):
+            raise
         logger.error("处理图片描述失败: %s", exc)
         req.extra_user_content_parts.append(TextPart(text="[Image Captioning Failed]"))
     finally:

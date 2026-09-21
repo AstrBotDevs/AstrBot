@@ -13,6 +13,10 @@ class EmptyModelOutputError(AstrBotError):
     """Raised when the model response contains no usable assistant output."""
 
 
+class ProviderRequestTooLargeError(AstrBotError):
+    """Raised when a provider rejects the serialized request size."""
+
+
 class KnowledgeBaseUploadError(AstrBotError):
     """Raised when knowledge base upload fails with a user-facing message."""
 

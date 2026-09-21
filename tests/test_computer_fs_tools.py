@@ -19,6 +19,7 @@ from astrbot.core.computer import file_read_utils, local_file_security
 from astrbot.core.computer.booters.local import LocalBooter
 from astrbot.core.tools.computer_tools import fs as fs_tools
 from astrbot.core.tools.computer_tools import util as computer_util
+from astrbot.core.utils import media_utils
 
 
 def _make_context(
@@ -184,12 +185,6 @@ def _setup_local_fs_tools(
         "get_astrbot_temp_path",
         lambda: str(temp_root),
     )
-    monkeypatch.setattr(
-        file_read_utils,
-        "get_astrbot_temp_path",
-        lambda: str(temp_root),
-    )
-
     booter = LocalBooter()
 
     async def _fake_get_booter(_ctx, _umo):
@@ -861,8 +856,72 @@ async def test_file_read_tool_returns_image_call_tool_result_for_images(
     assert isinstance(result, CallToolResult)
     assert len(result.content) == 1
     assert isinstance(result.content[0], ImageContent)
-    assert result.content[0].mimeType == "image/jpeg"
-    assert base64.b64decode(result.content[0].data).startswith(b"\xff\xd8\xff")
+    assert result.content[0].mimeType == "image/png"
+    assert base64.b64decode(result.content[0].data) == image_path.read_bytes()
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(os.name == "nt", reason="Restricted file access needs POSIX.")
+async def test_file_read_tool_rejects_oversized_image_before_reading(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    workspace = _setup_local_fs_tools(monkeypatch, tmp_path)
+    image_path = workspace / "oversized.png"
+    image_path.write_bytes(b"\x89PNG\r\n\x1a\n")
+    with image_path.open("ab") as image_file:
+        image_file.truncate(media_utils.MODEL_IMAGE_MAX_INPUT_BYTES + 1)
+
+    async def fail_read(*_args, **_kwargs):
+        raise AssertionError("oversized image must be rejected before reading")
+
+    monkeypatch.setattr(file_read_utils, "_read_local_file_bytes", fail_read)
+    result = await fs_tools.FileReadTool().call(
+        _make_context(),
+        path="oversized.png",
+    )
+
+    assert isinstance(result, str)
+    assert "Image input exceeds" in result
+
+
+@pytest.mark.asyncio
+async def test_local_file_read_defers_image_preparation_to_tool_loop(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    workspace = _setup_local_fs_tools(monkeypatch, tmp_path)
+    image_path = workspace / "sample.png"
+    Image.new("RGB", (32, 16), color=(255, 0, 0)).save(image_path, format="PNG")
+    result = await fs_tools.FileReadTool().call(
+        _make_context(),
+        path="sample.png",
+    )
+
+    assert isinstance(result, CallToolResult)
+    assert result.content[0].data
+    assert base64.b64decode(result.content[0].data) == image_path.read_bytes()
+
+
+@pytest.mark.asyncio
+async def test_file_read_propagates_image_memory_error(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    workspace = _setup_local_fs_tools(monkeypatch, tmp_path)
+    image_path = workspace / "sample.png"
+    Image.new("RGB", (32, 16), color=(255, 0, 0)).save(image_path, format="PNG")
+
+    async def fail_read(*_args, **_kwargs):
+        raise MemoryError("image preparation exhausted memory")
+
+    monkeypatch.setattr(file_read_utils, "_read_local_file_bytes", fail_read)
+
+    with pytest.raises(MemoryError, match="exhausted memory"):
+        await fs_tools.FileReadTool().call(
+            _make_context(),
+            path="sample.png",
+        )
 
 
 @pytest.mark.asyncio

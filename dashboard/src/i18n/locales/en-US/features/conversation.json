@@ -157,6 +157,8 @@
       "toolCall": "Tool call",
       "reasoning": "Reasoning",
       "image": "Message image",
+      "mediaLoading": "Loading image",
+      "mediaUnavailable": "Image is temporarily unavailable",
       "roles": {
         "user": "User",
         "assistant": "Assistant",

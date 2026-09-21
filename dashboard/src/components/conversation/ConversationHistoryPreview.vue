@@ -4,8 +4,13 @@ import { ChevronRight, Minus, Plus } from "@lucide/vue";
 import MarkdownIt from "markdown-it";
 import DOMPurify from "dompurify";
 import { useModuleI18n } from "@/i18n/composables";
+import AuthenticatedMediaImage from "@/components/chat/AuthenticatedMediaImage.vue";
 
-const props = defineProps<{ messages: unknown[] }>();
+const props = defineProps<{
+  messages: unknown[];
+  conversationId?: string;
+  userId?: string;
+}>();
 const { tm } = useModuleI18n("features/conversation");
 const markdownEnabled = ref(true);
 const fontSize = ref(13);
@@ -54,7 +59,17 @@ type PreviewPart = {
   text: string;
   html?: string;
   label?: string;
+  mediaId?: string;
 };
+
+function mediaUrl(mediaId: string) {
+  if (!props.conversationId || !props.userId) return "";
+  return `/api/v1/conversations/${encodeURIComponent(
+    props.conversationId,
+  )}/media/${encodeURIComponent(mediaId)}?user_id=${encodeURIComponent(
+    props.userId,
+  )}`;
+}
 
 const records = computed(() =>
   props.messages
@@ -103,6 +118,16 @@ const records = computed(() =>
           )
         ) {
           parts.push({ kind: "image", text: item.image_url.url });
+        } else if (
+          item?.type === "image_media_ref" &&
+          typeof item.media_id === "string" &&
+          /^[0-9a-f]{64}$/i.test(item.media_id)
+        ) {
+          parts.push({
+            kind: "image",
+            text: "",
+            mediaId: item.media_id,
+          });
         } else {
           parts.push({ kind: "data", text: JSON.stringify(item, null, 2) });
         }
@@ -265,8 +290,18 @@ const records = computed(() =>
             <pre v-else-if="part.kind === 'text'" class="record-text">{{
               part.text
             }}</pre>
+            <AuthenticatedMediaImage
+              v-else-if="
+                part.kind === 'image' && part.mediaId && mediaUrl(part.mediaId)
+              "
+              image-class="record-image"
+              :src="mediaUrl(part.mediaId)"
+              :alt="tm('workspace.preview.image')"
+              :loading-text="tm('workspace.preview.mediaLoading')"
+              :unavailable-text="tm('workspace.preview.mediaUnavailable')"
+            />
             <img
-              v-else-if="part.kind === 'image'"
+              v-else-if="part.kind === 'image' && !part.mediaId"
               class="record-image"
               :src="part.text"
               :alt="tm('workspace.preview.image')"

@@ -1,13 +1,16 @@
+import io
 import json
 from types import SimpleNamespace
 
 import pytest
 from openai.types.responses import Response
+from PIL import Image
 
 from astrbot.core.config.default import CONFIG_METADATA_2
 from astrbot.core.provider.sources.openai_responses_source import (
     ProviderOpenAIResponses,
 )
+from astrbot.core.utils.image_media_store import ImageMediaStore
 
 
 def _make_provider(overrides: dict | None = None) -> ProviderOpenAIResponses:
@@ -206,6 +209,32 @@ async def test_prepare_payload_replays_full_history_without_server_state():
     }
     assert "previous_response_id" not in payloads
     assert "conversation" not in payloads
+
+
+@pytest.mark.asyncio
+async def test_prepare_payload_materializes_durable_image_reference(
+    tmp_path, monkeypatch
+):
+    output = io.BytesIO()
+    Image.new("RGB", (3, 2), "red").save(output, format="PNG")
+    data = output.getvalue()
+    store = ImageMediaStore(tmp_path / "media")
+    ref = store.put(data, "image/png", detail="high")
+    monkeypatch.setattr(
+        "astrbot.core.provider.sources.openai_responses_source.get_astrbot_data_path",
+        lambda: str(tmp_path),
+    )
+    provider = _make_provider()
+
+    payloads, context = await provider._prepare_chat_payload(
+        prompt=None,
+        contexts=[{"role": "user", "content": [ref.model_dump()]}],
+    )
+
+    image = context[0]["content"][0]["image_url"]
+    assert image["url"].startswith("data:image/png;base64,")
+    assert image["detail"] == "high"
+    assert payloads["input"][0]["content"][0]["type"] == "input_image"
 
 
 @pytest.mark.asyncio
