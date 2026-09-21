@@ -489,7 +489,7 @@ Whether to enable the file service. Default is `false`. When enabled, the bot pr
 
 ### `http_proxy`
 
-HTTP proxy. E.g., `http://localhost:7890`.
+HTTP proxy. E.g., `http://localhost:7890`. When AstrBot runs in Docker, use an address reachable from the AstrBot container. See [Deploy with Docker](/en/deploy/astrbot/docker.md).
 
 ### `no_proxy`
 
