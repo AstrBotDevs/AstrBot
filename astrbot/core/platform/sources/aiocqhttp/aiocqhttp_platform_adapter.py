@@ -25,6 +25,7 @@ from astrbot.core.platform.astr_message_event import MessageSesion
 from ...register import register_platform_adapter
 from .aiocqhttp_message_event import *
 from .aiocqhttp_message_event import AiocqhttpMessageEvent
+from .delivery_safety import SafeCQHttp
 
 
 @register_platform_adapter(
@@ -52,7 +53,8 @@ class AiocqhttpAdapter(Platform):
             support_streaming_message=False,
         )
 
-        self.bot = CQHttp(
+        self.bot = SafeCQHttp(
+            platform_id=self.metadata.id,
             use_ws_reverse=True,
             import_name="aiocqhttp",
             api_timeout_sec=180,
@@ -95,6 +97,19 @@ class AiocqhttpAdapter(Platform):
         @self.bot.on_message("private")
         async def private(event: Event) -> None:
             try:
+                umo = f"{self.metadata.id}:FriendMessage:{event.get('user_id')}"
+                blocked = self.bot.delivery_store.blocked(umo)
+                inbound_text = event.get("raw_message")
+                if not isinstance(inbound_text, str):
+                    inbound_text = str(event.get("message") or "")
+                self.bot.delivery_store.record_inbound(
+                    umo,
+                    inbound_text,
+                    event,
+                    blocked=blocked,
+                )
+                if blocked:
+                    return
                 abm = await self.convert_message(event)
                 if abm:
                     await self.handle_msg(abm)

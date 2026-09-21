@@ -11,6 +11,7 @@ from astrbot.core.utils.active_event_registry import active_event_registry
 
 _ACTIVE_AGENT_RUNNERS: dict[str, AgentRunner] = {}
 _FOLLOW_UP_ORDER_STATE: dict[str, dict[str, object]] = {}
+FOLLOW_UP_WAIT_TIMEOUT_SECONDS = 300.0
 """UMO-level follow-up order state.
 
 State fields:
@@ -26,6 +27,7 @@ class FollowUpCapture:
     ticket: FollowUpTicket
     order_seq: int
     monitor_task: asyncio.Task[None]
+    cancellation_event: asyncio.Event
     target_run_id: str | None = None
 
 
@@ -56,6 +58,9 @@ def unregister_active_runner(umo: str, runner: AgentRunner) -> None:
         )
         if runner_event is not None:
             active_event_registry.unregister_agent_stop_callback(runner_event)
+        state = _FOLLOW_UP_ORDER_STATE.get(umo)
+        if state is not None and not state["statuses"]:
+            _FOLLOW_UP_ORDER_STATE.pop(umo, None)
 
 
 def _get_follow_up_order_state(umo: str) -> dict[str, object]:
@@ -63,6 +68,7 @@ def _get_follow_up_order_state(umo: str) -> dict[str, object]:
     if state is None:
         state = {
             "condition": asyncio.Condition(),
+            "cancellation_event": asyncio.Event(),
             # Sequence status map for strict in-order resume after unresolved follow-ups.
             "statuses": {},
             # Stable allocator for arrival order; never decreases for the same UMO state.
@@ -123,10 +129,14 @@ async def _mark_follow_up_consumed(umo: str, seq: int) -> None:
             _FOLLOW_UP_ORDER_STATE.pop(umo, None)
 
 
-async def _activate_and_wait_follow_up_turn(umo: str, seq: int) -> None:
+async def _activate_and_wait_follow_up_turn(
+    umo: str,
+    seq: int,
+    cancellation_event: asyncio.Event,
+) -> bool:
     state = _FOLLOW_UP_ORDER_STATE.get(umo)
     if not state:
-        return
+        return False
     condition = state["condition"]
     assert isinstance(condition, asyncio.Condition)
     async with condition:
@@ -136,12 +146,49 @@ async def _activate_and_wait_follow_up_turn(umo: str, seq: int) -> None:
             statuses[seq] = "active"
 
         # Strict ordering: only the head (`next_turn`) can continue.
+        deadline = asyncio.get_running_loop().time() + FOLLOW_UP_WAIT_TIMEOUT_SECONDS
         while True:
+            if cancellation_event.is_set() or seq not in statuses:
+                return False
             next_turn = state["next_turn"]
             assert isinstance(next_turn, int)
             if next_turn == seq:
-                break
-            await condition.wait()
+                return True
+            remaining = deadline - asyncio.get_running_loop().time()
+            if remaining <= 0:
+                return False
+            try:
+                await asyncio.wait_for(condition.wait(), timeout=remaining)
+            except TimeoutError:
+                return False
+
+
+async def terminate_follow_up_session(umo: str) -> int:
+    """Cancel and wake all captured follow-ups for one conversation.
+
+    Args:
+        umo: Unified message origin whose queued follow-ups must be discarded.
+
+    Returns:
+        Number of queued follow-up turns invalidated.
+    """
+    state = _FOLLOW_UP_ORDER_STATE.get(umo)
+    if state is None:
+        return 0
+    condition = state["condition"]
+    cancellation_event = state["cancellation_event"]
+    assert isinstance(condition, asyncio.Condition)
+    assert isinstance(cancellation_event, asyncio.Event)
+    async with condition:
+        statuses = state["statuses"]
+        assert isinstance(statuses, dict)
+        cancelled_count = len(statuses)
+        cancellation_event.set()
+        statuses.clear()
+        condition.notify_all()
+        if _ACTIVE_AGENT_RUNNERS.get(umo) is None:
+            _FOLLOW_UP_ORDER_STATE.pop(umo, None)
+    return cancelled_count
 
 
 async def _finish_follow_up_turn(umo: str, seq: int) -> None:
@@ -195,6 +242,9 @@ def try_capture_follow_up(event: AstrMessageEvent) -> FollowUpCapture | None:
         return None
     # Allocate strict order at capture time (arrival order), not at wake time.
     order_seq = _allocate_follow_up_order(event.unified_msg_origin)
+    state = _get_follow_up_order_state(event.unified_msg_origin)
+    cancellation_event = state["cancellation_event"]
+    assert isinstance(cancellation_event, asyncio.Event)
     monitor_task = asyncio.create_task(
         _monitor_follow_up_ticket(
             event.unified_msg_origin,
@@ -212,6 +262,7 @@ def try_capture_follow_up(event: AstrMessageEvent) -> FollowUpCapture | None:
         ticket=ticket,
         order_seq=order_seq,
         monitor_task=monitor_task,
+        cancellation_event=cancellation_event,
         target_run_id=str(runner_event.message_obj.message_id)
         if getattr(runner_event.message_obj, "message_id", None) is not None
         else None,
@@ -220,11 +271,35 @@ def try_capture_follow_up(event: AstrMessageEvent) -> FollowUpCapture | None:
 
 async def prepare_follow_up_capture(capture: FollowUpCapture) -> tuple[bool, bool]:
     """Return `(consumed_marked, activated)` for internal stage branch handling."""
-    await capture.ticket.resolved.wait()
+    resolved_task = asyncio.create_task(capture.ticket.resolved.wait())
+    cancelled_task = asyncio.create_task(capture.cancellation_event.wait())
+    done, pending = await asyncio.wait(
+        {resolved_task, cancelled_task},
+        timeout=FOLLOW_UP_WAIT_TIMEOUT_SECONDS,
+        return_when=asyncio.FIRST_COMPLETED,
+    )
+    for task in pending:
+        task.cancel()
+    if pending:
+        await asyncio.gather(*pending, return_exceptions=True)
+    if (
+        cancelled_task in done
+        or capture.cancellation_event.is_set()
+        or resolved_task not in done
+    ):
+        await _mark_follow_up_consumed(capture.umo, capture.order_seq)
+        return True, False
     if capture.ticket.consumed:
         await _mark_follow_up_consumed(capture.umo, capture.order_seq)
         return True, False
-    await _activate_and_wait_follow_up_turn(capture.umo, capture.order_seq)
+    activated = await _activate_and_wait_follow_up_turn(
+        capture.umo,
+        capture.order_seq,
+        capture.cancellation_event,
+    )
+    if not activated:
+        await _mark_follow_up_consumed(capture.umo, capture.order_seq)
+        return True, False
     return False, True
 
 
