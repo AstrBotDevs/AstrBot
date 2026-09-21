@@ -63,10 +63,19 @@ def _log_retry(
     provider_label: str,
     retry_state: RetryCallState,
     max_attempts: int,
+    *,
+    provider_id: str | None = None,
+    model: str | None = None,
 ) -> None:
     error = retry_state.outcome.exception() if retry_state.outcome else None
+    identity_parts = []
+    if provider_id:
+        identity_parts.append(f"provider={provider_id}")
+    if model:
+        identity_parts.append(f"model={model}")
+    identity = f" ({', '.join(identity_parts)})" if identity_parts else ""
     logger.warning(
-        f"[{provider_label}] Request failed with retryable error; "
+        f"[{provider_label}]{identity} Request failed with retryable error; "
         f"retrying ({retry_state.attempt_number + 1}/{max_attempts}): "
         f"{error}"
     )
@@ -77,6 +86,8 @@ def _build_retrying(
     *,
     retry_rate_limits: bool,
     max_attempts: int | None = None,
+    provider_id: str | None = None,
+    model: str | None = None,
 ) -> AsyncRetrying:
     max_attempts = coerce_int_config(
         max_attempts if max_attempts is not None else REQUEST_RETRY_ATTEMPTS,
@@ -103,6 +114,8 @@ def _build_retrying(
             provider_label,
             retry_state,
             max_attempts,
+            provider_id=provider_id,
+            model=model,
         ),
         reraise=True,
     )
@@ -114,11 +127,15 @@ async def retry_provider_request(
     *,
     retry_rate_limits: bool = True,
     max_attempts: int | None = None,
+    provider_id: str | None = None,
+    model: str | None = None,
 ) -> T:
     retrying = _build_retrying(
         provider_label,
         retry_rate_limits=retry_rate_limits,
         max_attempts=max_attempts,
+        provider_id=provider_id,
+        model=model,
     )
 
     async for attempt in retrying:
@@ -135,6 +152,8 @@ async def retry_provider_request_context(
     *,
     retry_rate_limits: bool = True,
     max_attempts: int | None = None,
+    provider_id: str | None = None,
+    model: str | None = None,
 ) -> AsyncIterator[T]:
     manager: AbstractAsyncContextManager[T] | None = None
 
@@ -148,6 +167,8 @@ async def retry_provider_request_context(
         _enter_context,
         retry_rate_limits=retry_rate_limits,
         max_attempts=max_attempts,
+        provider_id=provider_id,
+        model=model,
     )
 
     if manager is None:
