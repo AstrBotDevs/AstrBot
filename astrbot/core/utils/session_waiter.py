@@ -143,7 +143,8 @@ class SessionWaiter:
 
     def _cleanup(self, error: Exception | None = None) -> None:
         """清理会话"""
-        USER_SESSIONS.pop(self.session_id, None)
+        if USER_SESSIONS.get(self.session_id) is self:
+            del USER_SESSIONS[self.session_id]
         try:
             FILTERS.remove(self.session_filter)
         except ValueError:
