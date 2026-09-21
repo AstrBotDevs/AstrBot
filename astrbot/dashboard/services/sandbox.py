@@ -102,9 +102,7 @@ class SandboxService:
                 sandboxes = [
                     self._sanitize_sandbox_for_api_key(sandbox) for sandbox in sandboxes
                 ]
-            return {
-                "sandboxes": sandboxes
-            }
+            return {"sandboxes": sandboxes}
         except Exception as exc:
             logger.error(traceback.format_exc())
             raise SandboxServiceError(

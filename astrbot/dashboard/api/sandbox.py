@@ -83,9 +83,7 @@ async def list_sandboxes(
     service: SandboxService = Depends(get_service),
 ):
     return await _run(
-        lambda: service.list_sandboxes(
-            include_connection_info=_is_dashboard_user(auth)
-        )
+        lambda: service.list_sandboxes(include_connection_info=_is_dashboard_user(auth))
     )
 
 
