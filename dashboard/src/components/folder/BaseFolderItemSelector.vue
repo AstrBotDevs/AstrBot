@@ -1,13 +1,23 @@
 <template>
   <div class="folder-item-selector">
     <!-- 触发按钮区域 -->
-    <div class="d-flex align-center justify-space-between">
+    <div class="d-flex align-center justify-space-between ga-2">
       <span v-if="!modelValue" class="text-medium-emphasis">
         {{ labels.notSelected || "未选择" }}
       </span>
       <span v-else>
         {{ displayValue }}
       </span>
+      <v-btn
+        v-if="clearable && modelValue"
+        icon="mdi-close"
+        size="small"
+        variant="text"
+        color="error"
+        :title="labels.clearSelection || 'Clear selection'"
+        :aria-label="labels.clearSelection || 'Clear selection'"
+        @click="$emit('update:modelValue', '')"
+      />
       <v-btn size="small" color="primary" variant="tonal" @click="openDialog">
         {{ labels.buttonText || "选择..." }}
       </v-btn>
@@ -309,6 +319,10 @@ export default defineComponent({
     },
     // 是否显示编辑按钮
     showEditButton: {
+      type: Boolean,
+      default: false,
+    },
+    clearable: {
       type: Boolean,
       default: false,
     },

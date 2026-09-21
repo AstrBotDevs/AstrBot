@@ -68,6 +68,7 @@
     "noDescription": "No description",
     "noPersonas": "No personas available",
     "createPersona": "Create New Persona",
+    "clearSelection": "Clear selection",
     "cancelSelection": "Cancel",
     "confirmSelection": "Confirm Selection",
     "selectPersonaPool": "Select Persona Pool...",

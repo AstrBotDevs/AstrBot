@@ -23,7 +23,11 @@
         :button-text="t('core.shared.providerSelector.selectProviderPool')" />
     </template>
     <template v-else-if="itemMeta?._special === 'select_persona'">
-      <PersonaSelector :model-value="modelValue" @update:model-value="emitUpdate" />
+      <PersonaSelector
+        :model-value="modelValue"
+        @update:model-value="emitUpdate"
+        :clearable="true"
+      />
     </template>
     <template v-else-if="itemMeta?._special === 'persona_pool'">
       <PersonaSelector :model-value="modelValue" @update:model-value="emitUpdate" :button-text="t('core.shared.personaSelector.selectPersonaPool')" />
