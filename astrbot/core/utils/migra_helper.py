@@ -20,6 +20,7 @@ from astrbot.core.utils.astrbot_path import (
 
 logger = logging.getLogger("astrbot")
 
+_DEFAULT_KEEP_RECENT_RATIO = 0.15
 _LEGACY_AGENT_RUNNER_PROVIDER_ID_KEYS = {
     "dify": "dify_agent_runner_provider_id",
     "coze": "coze_agent_runner_provider_id",
@@ -41,6 +42,7 @@ _LEGACY_AGENT_RUNNER_SETTING_KEYS = (
     "sanitize_context_by_modalities",
     "context_limit_reached_strategy",
     "llm_compress_instruction",
+    "llm_compress_keep_recent",
     "llm_compress_keep_recent_ratio",
     "llm_compress_provider_id",
     "max_context_length",
@@ -142,6 +144,58 @@ def _copy_provider_config(
     )["config"]
 
 
+def _get_migrated_keep_recent_ratio(provider_settings: dict[str, Any]) -> float:
+    """Convert a legacy recent-message count to the bounded new ratio."""
+    existing_ratio = provider_settings.get("llm_compress_keep_recent_ratio")
+    if existing_ratio is not None:
+        return existing_ratio
+
+    legacy_count_value = provider_settings.get("llm_compress_keep_recent")
+    if legacy_count_value is None:
+        return _DEFAULT_KEEP_RECENT_RATIO
+
+    try:
+        legacy_count = int(legacy_count_value)
+    except (TypeError, ValueError):
+        return _DEFAULT_KEEP_RECENT_RATIO
+    if isinstance(legacy_count_value, bool) or legacy_count < 0:
+        return _DEFAULT_KEEP_RECENT_RATIO
+
+    try:
+        max_turns = int(provider_settings.get("max_context_length", -1))
+    except (TypeError, ValueError):
+        return _DEFAULT_KEEP_RECENT_RATIO
+    if max_turns <= 0:
+        return _DEFAULT_KEEP_RECENT_RATIO
+
+    return min(0.3, max(0.0, legacy_count / max_turns))
+
+
+def _migrate_legacy_keep_recent_ratio(
+    agent_runner: dict[str, Any],
+    provider_settings: dict[str, Any],
+) -> None:
+    """Populate an existing local runner before deleting its legacy input."""
+    if not (
+        "llm_compress_keep_recent" in provider_settings
+        or "llm_compress_keep_recent_ratio" in provider_settings
+    ):
+        return
+    if agent_runner.get("runner_type") != "local":
+        return
+    runner_config = agent_runner.get("config")
+    if not isinstance(runner_config, dict):
+        return
+    compression = runner_config.get("compression")
+    if not isinstance(compression, dict):
+        return
+    if "keep_recent_ratio" in compression:
+        return
+    compression["keep_recent_ratio"] = _get_migrated_keep_recent_ratio(
+        provider_settings
+    )
+
+
 def _migrate_agent_runner_config(
     config: dict[str, Any],
     fallback_config: dict[str, Any] | None = None,
@@ -178,6 +232,7 @@ def _migrate_agent_runner_config(
     if isinstance(existing_agent_runner, dict) and not (
         default_root_inserted_before_migration
     ):
+        _migrate_legacy_keep_recent_ratio(existing_agent_runner, provider_settings)
         for key in _LEGACY_AGENT_RUNNER_SETTING_KEYS:
             if key in provider_settings:
                 provider_settings.pop(key)
@@ -224,7 +279,8 @@ def _migrate_agent_runner_config(
                 ),
                 "instruction": provider_settings.get("llm_compress_instruction", ""),
                 "keep_recent_ratio": provider_settings.get(
-                    "llm_compress_keep_recent_ratio", 0.15
+                    "llm_compress_keep_recent_ratio",
+                    _get_migrated_keep_recent_ratio(provider_settings),
                 ),
                 "provider_id": provider_settings.get("llm_compress_provider_id", ""),
                 "fallback_max_tokens": provider_settings.get(
