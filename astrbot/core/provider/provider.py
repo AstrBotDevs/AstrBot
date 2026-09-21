@@ -36,6 +36,17 @@ class AbstractProvider(abc.ABC):
             provider_config.get("custom_headers")
         )
 
+    def _retry_log_metadata(self, model: str | None = None) -> dict[str, str]:
+        """Build identifying context for provider request retry logs."""
+        provider_config = getattr(self, "provider_config", None) or {}
+        metadata = {"provider_id": str(provider_config.get("id", "default"))}
+        resolved_model = (
+            model if model is not None else getattr(self, "model_name", None)
+        )
+        if resolved_model:
+            metadata["model"] = str(resolved_model)
+        return metadata
+
     def set_model(self, model_name: str) -> None:
         """Set the current model name"""
         self.model_name = model_name

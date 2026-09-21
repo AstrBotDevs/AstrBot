@@ -352,6 +352,7 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
                 stream=False,
                 extra_body=extra_body,
             ),
+            **self._retry_log_metadata(payloads.get("model")),
             max_attempts=request_max_retries,
         )
         if not isinstance(response, Response):
@@ -421,6 +422,7 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
                 stream=True,
                 extra_body=extra_body,
             ),
+            **self._retry_log_metadata(payloads.get("model")),
             max_attempts=request_max_retries,
         )
 

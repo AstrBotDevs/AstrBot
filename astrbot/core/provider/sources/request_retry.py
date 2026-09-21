@@ -59,14 +59,32 @@ def _is_retryable_provider_request_error(
     return status_code in REQUEST_RETRY_STATUS_CODES or 500 <= status_code <= 599
 
 
+def _format_retry_context(
+    provider_id: str | None,
+    model: str | None,
+) -> str:
+    fields = []
+    if provider_id:
+        fields.append(f"provider_id={provider_id}")
+    if model:
+        fields.append(f"model={model}")
+    if not fields:
+        return ""
+    return f" ({', '.join(fields)})"
+
+
 def _log_retry(
     provider_label: str,
     retry_state: RetryCallState,
     max_attempts: int,
+    *,
+    provider_id: str | None,
+    model: str | None,
 ) -> None:
+    retry_context = _format_retry_context(provider_id, model)
     error = retry_state.outcome.exception() if retry_state.outcome else None
     logger.warning(
-        f"[{provider_label}] Request failed with retryable error; "
+        f"[{provider_label}]{retry_context} Request failed with retryable error; "
         f"retrying ({retry_state.attempt_number + 1}/{max_attempts}): "
         f"{error}"
     )
@@ -75,6 +93,8 @@ def _log_retry(
 def _build_retrying(
     provider_label: str,
     *,
+    provider_id: str | None = None,
+    model: str | None = None,
     retry_rate_limits: bool,
     max_attempts: int | None = None,
 ) -> AsyncRetrying:
@@ -103,6 +123,8 @@ def _build_retrying(
             provider_label,
             retry_state,
             max_attempts,
+            provider_id=provider_id,
+            model=model,
         ),
         reraise=True,
     )
@@ -112,11 +134,15 @@ async def retry_provider_request(
     provider_label: str,
     request_factory: Callable[[], Awaitable[T]],
     *,
+    provider_id: str | None = None,
+    model: str | None = None,
     retry_rate_limits: bool = True,
     max_attempts: int | None = None,
 ) -> T:
     retrying = _build_retrying(
         provider_label,
+        provider_id=provider_id,
+        model=model,
         retry_rate_limits=retry_rate_limits,
         max_attempts=max_attempts,
     )
@@ -133,6 +159,8 @@ async def retry_provider_request_context(
     provider_label: str,
     context_manager_factory: Callable[[], AbstractAsyncContextManager[T]],
     *,
+    provider_id: str | None = None,
+    model: str | None = None,
     retry_rate_limits: bool = True,
     max_attempts: int | None = None,
 ) -> AsyncIterator[T]:
@@ -146,6 +174,8 @@ async def retry_provider_request_context(
     value = await retry_provider_request(
         provider_label,
         _enter_context,
+        provider_id=provider_id,
+        model=model,
         retry_rate_limits=retry_rate_limits,
         max_attempts=max_attempts,
     )

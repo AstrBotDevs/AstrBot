@@ -639,6 +639,7 @@ class ProviderGoogleGenAI(Provider):
                         contents=cast(types.ContentListUnion, conversation),
                         config=config,
                     ),
+                    **self._retry_log_metadata(model),
                     max_attempts=request_max_retries,
                 )
                 logger.debug(f"genai result: {result}")
@@ -731,6 +732,7 @@ class ProviderGoogleGenAI(Provider):
                         contents=cast(types.ContentListUnion, conversation),
                         config=config,
                     ),
+                    **self._retry_log_metadata(model),
                     max_attempts=request_max_retries,
                 )
                 break
@@ -989,6 +991,7 @@ class ProviderGoogleGenAI(Provider):
             models = await retry_provider_request(
                 "Gemini",
                 lambda: self.client.models.list(),
+                **self._retry_log_metadata(),
             )
             return [
                 m.name.replace("models/", "")

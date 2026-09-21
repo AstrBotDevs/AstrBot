@@ -86,7 +86,10 @@ async def test_provider_client_disables_sdk_builtin_retries(overrides, expected_
 
 
 @pytest.mark.asyncio
-async def test_query_attempts_exactly_request_max_retries_times(monkeypatch):
+async def test_query_attempts_exactly_request_max_retries_times(
+    monkeypatch,
+    caplog,
+):
     monkeypatch.setattr(request_retry, "REQUEST_RETRY_WAIT_MIN_S", 0)
     monkeypatch.setattr(request_retry, "REQUEST_RETRY_WAIT_MAX_S", 0)
 
@@ -101,17 +104,22 @@ async def test_query_attempts_exactly_request_max_retries_times(monkeypatch):
 
         monkeypatch.setattr(provider.client.chat.completions, "create", failing_create)
 
-        with pytest.raises(httpx.ConnectError):
-            await provider._query(
-                payloads={
-                    "model": "gpt-4o-mini",
-                    "messages": [{"role": "user", "content": "hi"}],
-                },
-                tools=None,
-                request_max_retries=2,
-            )
+        with caplog.at_level("WARNING", logger="astrbot"):
+            with pytest.raises(httpx.ConnectError):
+                await provider._query(
+                    payloads={
+                        "model": "gpt-4o-mini",
+                        "messages": [{"role": "user", "content": "hi"}],
+                    },
+                    tools=None,
+                    request_max_retries=2,
+                )
 
         assert calls == 2
+        assert any(
+            "provider_id=test-openai, model=gpt-4o-mini" in record.message
+            for record in caplog.records
+        )
     finally:
         await provider.terminate()
 
