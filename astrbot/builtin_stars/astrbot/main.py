@@ -222,7 +222,15 @@ class Main(star.Star):
                 # chat context that should be injected into future LLM requests.
                 if not event.get_extra("handlers_parsed_params", {}):
                     try:
-                        await self.group_chat_context.handle_message(event)
+                        # The main LLM pipeline already handles images from messages
+                        # that trigger a reply. Captioning them here would add a
+                        # duplicate foreground model request before the reply starts.
+                        await self.group_chat_context.handle_message(
+                            event,
+                            caption_images=not (
+                                event.is_at_or_wake_command or need_active
+                            ),
+                        )
                     except BaseException as e:
                         logger.error(e)
 
