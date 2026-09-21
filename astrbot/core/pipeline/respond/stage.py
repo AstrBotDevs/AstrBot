@@ -136,6 +136,8 @@ class RespondStage(Stage):
             return False
         if self.only_llm_result and not result.is_model_result():
             return False
+        if result.skip_segmentation:
+            return False
 
         if event.get_platform_name() in [
             "qq_official_webhook",

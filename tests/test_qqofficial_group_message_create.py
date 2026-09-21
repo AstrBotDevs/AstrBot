@@ -555,8 +555,25 @@ def test_qqofficial_webhook_remains_excluded_from_segmented_reply():
     assert stage.is_seg_reply_required(cast(Any, event)) is False
 
 
-@pytest.mark.asyncio
-async def test_result_decorate_segments_qqofficial_ws_plain_result():
+def test_agent_tool_result_skips_segmented_delivery():
+    stage = RespondStage()
+    stage.enable_seg = True
+    stage.only_llm_result = True
+    result = MessageEventResult(
+        chain=[Plain("hello")],
+        result_content_type=ResultContentType.LLM_RESULT,
+        skip_segmentation=True,
+    )
+
+    event = SimpleNamespace(
+        get_result=lambda: result,
+        get_platform_name=lambda: "qq_official",
+    )
+
+    assert stage.is_seg_reply_required(cast(Any, event)) is False
+
+
+def _build_segmented_result_decorate_stage() -> ResultDecorateStage:
     stage = ResultDecorateStage()
     stage.reply_prefix = ""
     stage.content_safe_check_reply = False
@@ -592,6 +609,24 @@ async def test_result_decorate_segments_qqofficial_ws_plain_result():
             },
         ),
     )
+    return stage
+
+
+async def _process_result_decorate_stage(stage: ResultDecorateStage, event: Any):
+    processed = stage.process(event)
+    if hasattr(processed, "__aiter__"):
+        async for _ in cast(Any, processed):
+            pass
+    else:
+        yielded = await cast(Any, processed)
+        if yielded is not None:
+            async for _ in cast(Any, yielded):
+                pass
+
+
+@pytest.mark.asyncio
+async def test_result_decorate_segments_qqofficial_ws_plain_result():
+    stage = _build_segmented_result_decorate_stage()
     result = MessageEventResult(
         chain=[Plain("第一段。第二段。")],
         result_content_type=ResultContentType.LLM_RESULT,
@@ -606,19 +641,35 @@ async def test_result_decorate_segments_qqofficial_ws_plain_result():
         get_extra=lambda *_args, **_kwargs: None,
     )
 
-    processed = stage.process(cast(Any, event))
-    if hasattr(processed, "__aiter__"):
-        async for _ in cast(Any, processed):
-            pass
-    else:
-        yielded = await cast(Any, processed)
-        if yielded is not None:
-            async for _ in cast(Any, yielded):
-                pass
+    await _process_result_decorate_stage(stage, cast(Any, event))
 
     assert [comp.text for comp in result.chain if isinstance(comp, Plain)] == [
         "第一段",
         "第二段",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_result_decorate_preserves_agent_tool_result():
+    stage = _build_segmented_result_decorate_stage()
+    result = MessageEventResult(
+        chain=[Plain("第一段。第二段。")],
+        result_content_type=ResultContentType.LLM_RESULT,
+        skip_segmentation=True,
+    )
+    event = SimpleNamespace(
+        plugins_name=None,
+        unified_msg_origin="qq_official:GroupMessage:group-1",
+        get_result=lambda: result,
+        get_platform_name=lambda: "qq_official",
+        is_stopped=lambda: False,
+        get_extra=lambda *_args, **_kwargs: None,
+    )
+
+    await _process_result_decorate_stage(stage, cast(Any, event))
+
+    assert [comp.text for comp in result.chain if isinstance(comp, Plain)] == [
+        "第一段。第二段。"
     ]
 
 
