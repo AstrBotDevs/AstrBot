@@ -16,6 +16,25 @@
 
       <div class="bot-editor__actions">
         <v-btn
+          v-if="
+            [
+              'lark',
+              'dingtalk',
+              'qq_official',
+              'qq_official_webhook',
+              'weixin_oc',
+            ].includes(platform.type)
+          "
+          prepend-icon="mdi-qrcode"
+          variant="text"
+          rounded="xl"
+          :loading="rescanning"
+          :disabled="saving"
+          @click="$emit('rescan')"
+        >
+          {{ tm("workspace.rescan") }}
+        </v-btn>
+        <v-btn
           v-if="runtimeStat?.error_count > 0"
           color="error"
           prepend-icon="mdi-alert-circle-outline"
@@ -49,7 +68,7 @@
           variant="tonal"
           rounded="xl"
           :loading="saving"
-          :disabled="!canSave"
+          :disabled="!canSave || rescanning"
           @click="save"
         >
           {{ tm("workspace.save") }}
@@ -391,6 +410,10 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  rescanning: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 const emit = defineEmits([
@@ -398,6 +421,7 @@ const emit = defineEmits([
   "show-toast",
   "show-error",
   "show-qr",
+  "rescan",
   "show-webhook",
 ]);
 
