@@ -141,6 +141,7 @@ DEFAULT_CONFIG = {
         "image_caption_prompt": "Please describe the image using Chinese.",
         "provider_pool": ["*"],  # "*" 表示使用所有可用的提供者
         "wake_prefix": "",
+        "llm_no_reply_prefixes": [],
         "web_search": False,
         "websearch_provider": "tavily",
         "websearch_tavily_key": [],
@@ -4203,6 +4204,12 @@ CONFIG_METADATA_3 = {
                         "description": "额外唤醒前缀",
                         "type": "string",
                         "hint": "如果唤醒前缀为 /, 额外聊天唤醒前缀为 chat，则需要 /chat 才会触发 LLM 请求",
+                    },
+                    "provider_settings.llm_no_reply_prefixes": {
+                        "description": "LLM 免回复前缀",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "命中这些前缀的消息不会触发普通 LLM 请求；命令和插件仍可正常处理。",
                     },
                     "provider_settings.image_compress_options.max_size": {
                         "description": "输入图片最大边长",

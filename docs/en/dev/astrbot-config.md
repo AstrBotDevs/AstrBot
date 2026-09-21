@@ -284,6 +284,10 @@ Prompt template for image captioning. Default is `"Please describe the image usi
 
 Extra trigger condition for LLM chat. For example, if `chat` is filled, messages must start with `/chat` to trigger LLM chat, where `/` is the bot's wake prefix. This is a measure to prevent abuse.
 
+#### `provider_settings.llm_no_reply_prefixes`
+
+The list of prefixes that suppress normal LLM replies. Default is `[]`. Messages starting with a configured prefix do not trigger a normal LLM request, while commands and plugins can still process them. For example, with `/` configured, `/style 1` does not request the LLM, while the `/help` command still works. Matching is case-sensitive, and blank prefixes are ignored.
+
 #### `provider_settings.web_search`
 
 Whether to enable AstrBot's built-in web search capability. Default is `false`. When enabled, the LLM may automatically search the web and answer based on the content.
