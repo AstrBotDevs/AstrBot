@@ -440,6 +440,7 @@ class ProviderOpenAIOfficial(Provider):
             models = await retry_provider_request(
                 "OpenAI",
                 lambda: self.client.models.list(),
+                **self._retry_log_metadata(),
             )
             models = sorted(models.data, key=lambda x: x.id)
             for model in models:
@@ -572,6 +573,7 @@ class ProviderOpenAIOfficial(Provider):
                 stream=False,
                 extra_body=extra_body,
             ),
+            **self._retry_log_metadata(payloads.get("model")),
             max_attempts=request_max_retries,
         )
 
@@ -631,6 +633,7 @@ class ProviderOpenAIOfficial(Provider):
                 extra_body=extra_body,
                 stream_options={"include_usage": True},
             ),
+            **self._retry_log_metadata(payloads.get("model")),
             max_attempts=request_max_retries,
         )
 
