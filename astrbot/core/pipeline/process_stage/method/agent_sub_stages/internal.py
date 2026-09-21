@@ -37,6 +37,7 @@ from astrbot.core.provider.entities import (
     ProviderRequest,
 )
 from astrbot.core.star.star_handler import EventType
+from astrbot.core.utils.errors import format_exception
 from astrbot.core.utils.image_input import prepare_request_images
 from astrbot.core.utils.media_utils import normalize_model_image_max_size
 from astrbot.core.utils.metrics import Metric
@@ -433,12 +434,13 @@ class InternalAgentSubStage(Stage):
                         unregister_active_runner(event.unified_msg_origin, agent_runner)
 
         except Exception as e:
-            logger.error(f"Error occurred while processing agent: {e}")
+            formatted_error = format_exception(e)
+            logger.error(f"Error occurred while processing agent: {formatted_error}")
             custom_error_message = extract_persona_custom_error_message_from_event(
                 event
             )
             error_text = custom_error_message or (
-                f"Error occurred while processing agent request: {e}"
+                f"Error occurred while processing agent request: {formatted_error}"
             )
             await event.send(MessageChain().message(error_text))
         finally:

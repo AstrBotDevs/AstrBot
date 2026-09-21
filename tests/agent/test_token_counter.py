@@ -101,6 +101,25 @@ class TestMultimodalCounting:
         tokens = counter.count_tokens([msg])
         assert tokens == IMAGE_TOKEN_ESTIMATE * 3
 
+    def test_inline_image_payload_is_counted(self):
+        """A large persisted data URI must not look like a tiny image."""
+        payload = "a" * 30000
+        msg = _msg(
+            "user",
+            [
+                ImageURLPart(
+                    image_url=ImageURLPart.ImageURL(
+                        url=f"data:image/png;base64,{payload}"
+                    )
+                ),
+            ],
+        )
+
+        tokens = counter.count_tokens([msg])
+
+        assert tokens > IMAGE_TOKEN_ESTIMATE
+        assert tokens >= IMAGE_TOKEN_ESTIMATE + len(payload) * 0.3
+
 
 class TestTrustedUsage:
     def test_trusted_overrides(self):
@@ -116,6 +135,24 @@ class TestTrustedUsage:
         )
         tokens = counter.count_tokens([msg], trusted_token_usage=42)
         assert tokens == 42
+
+    def test_trusted_usage_adds_inline_image_payload_overflow(self):
+        """API usage cannot hide a huge persisted image payload."""
+        payload = "a" * 30000
+        msg = _msg(
+            "user",
+            [
+                ImageURLPart(
+                    image_url=ImageURLPart.ImageURL(
+                        url=f"data:image/png;base64,{payload}"
+                    )
+                ),
+            ],
+        )
+
+        tokens = counter.count_tokens([msg], trusted_token_usage=42)
+
+        assert tokens == 42 + int(len(payload) * 0.3)
 
 
 class TestToolCalls:

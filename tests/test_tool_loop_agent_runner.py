@@ -185,6 +185,12 @@ class MockFailingProvider(MockProvider):
         raise RuntimeError("primary provider failed")
 
 
+class MockMemoryErrorProvider(MockProvider):
+    async def text_chat(self, **kwargs) -> LLMResponse:
+        self.call_count += 1
+        raise MemoryError()
+
+
 class MockErrProvider(MockProvider):
     async def text_chat(self, **kwargs) -> LLMResponse:
         self.call_count += 1
@@ -1279,6 +1285,32 @@ async def test_fallback_provider_used_when_primary_raises(
     assert final_resp.completion_text == "这是我的最终回答"
     assert primary_provider.call_count == 1
     assert fallback_provider.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_memory_error_does_not_fall_back(
+    runner, provider_request, mock_tool_executor, mock_hooks
+):
+    primary_provider = MockMemoryErrorProvider()
+    fallback_provider = MockProvider()
+    fallback_provider.should_call_tools = False
+
+    await runner.reset(
+        provider=primary_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+        fallback_providers=[fallback_provider],
+    )
+
+    with pytest.raises(MemoryError):
+        async for _ in runner.step_until_done(5):
+            pass
+
+    assert primary_provider.call_count == 1
+    assert fallback_provider.call_count == 0
 
 
 @pytest.mark.asyncio
