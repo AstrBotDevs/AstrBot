@@ -47,6 +47,7 @@ from astrbot.core.persona_error_reply import (
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.prompt_injection_guard import (
+    InjectionGuardResult,
     PromptInjectionGuard,
 )
 from astrbot.core.provider import Provider
@@ -1170,6 +1171,23 @@ def _apply_llm_safety_mode(config: MainAgentBuildConfig, req: ProviderRequest) -
         )
 
 
+# 零宽字符、疑似 base64 属于弱信号：从网页复制的文本常带 U+200B，
+# 无关的长串也会被认成 base64。单独命中不足以拦截、提醒或改写用户消息。
+_HEURISTIC_GUARD_RULES = frozenset({"pi_zero_width", "pi_base64_payload"})
+
+
+def _has_confirmed_match(result: InjectionGuardResult) -> bool:
+    """判断某个来源的命中是否来自真正的注入规则。
+
+    Args:
+        result: 单个文本来源的检测结果。
+
+    Returns:
+        至少有一条命中不属于编码类启发式规则时为 True。
+    """
+    return any(m.rule not in _HEURISTIC_GUARD_RULES for m in result.matches)
+
+
 def _apply_prompt_injection_guard(
     config: MainAgentBuildConfig,
     req: ProviderRequest,
@@ -1184,25 +1202,27 @@ def _apply_prompt_injection_guard(
     if not original.strip():
         return
 
+    strategy = config.prompt_injection_guard_strategy
     try:
         guard = PromptInjectionGuard(
             extra_patterns=config.prompt_injection_guard_extra_patterns,
         )
-        # 引用消息、插件塞进来的内容块同样不可信，但它们只就地清洗，
-        # 绝不能覆盖用户自己的提问。
-        extra_parts: list[tuple[object, str]] = []
-        suspects = [original]
+        # 引用消息、插件塞进来的内容块同样不可信，但每个来源各自记录结果，
+        # 不用别处的命中去覆盖用户自己的提问。
+        sources: list[tuple[object | None, str]] = [(None, original)]
         for part in getattr(req, "extra_user_content_parts", []) or []:
             text = getattr(part, "text", None)
             if isinstance(text, str) and text.strip():
-                extra_parts.append((part, text))
-                suspects.append(text)
+                sources.append((part, text))
 
         results = [
-            guard.check(src, strategy=config.prompt_injection_guard_strategy)
-            for src in suspects
+            (src, text, guard.check(text, strategy=strategy)) for src, text in sources
         ]
-        result = max(results, key=lambda r: len(r.matches))
+        prompt_result = results[0][2]
+        result = max((r for _, _, r in results), key=lambda r: len(r.matches))
+        flagged = [
+            (src, text, r) for src, text, r in results if _has_confirmed_match(r)
+        ]
     except Exception as exc:  # noqa: BLE001 - never break message handling
         logger.warning("Prompt injection guard failed, skipping: %s", exc)
         return
@@ -1213,25 +1233,45 @@ def _apply_prompt_injection_guard(
     logger.info(
         "Prompt injection guard: %s (strategy=%s)",
         result.summary(),
-        config.prompt_injection_guard_strategy,
+        strategy,
     )
 
+    if not flagged:
+        # 只有编码类弱信号：不动请求，只留日志。
+        logger.info(
+            "Prompt injection guard: encoding artifacts only, request left unchanged.",
+        )
+        return
+
     if result.action == "blocked":
-        req.prompt = INJECTION_GUARD_BLOCK_MESSAGE
-        req.image_urls = []
-        req.audio_urls = []
+        if _has_confirmed_match(prompt_result):
+            req.prompt = INJECTION_GUARD_BLOCK_MESSAGE
+            req.image_urls = []
+            req.audio_urls = []
+        # 命中来自引用消息或插件内容块时，必须把这些块移除，否则 block
+        # 声称「没有处理」，载荷却仍然被送进模型。
+        flagged_ids = {id(src) for src, _, _ in flagged if src is not None}
+        if flagged_ids:
+            existing = getattr(req, "extra_user_content_parts", None) or []
+            req.extra_user_content_parts = [
+                item for item in existing if id(item) not in flagged_ids
+            ]
         return
 
     if result.action == "sanitized":
-        cleaned = guard.sanitize(original)
-        if cleaned != original:
-            req.prompt = cleaned
-        for part, text in extra_parts:
+        # 仅当提问自身命中时才清洗它；否则归一化会把用户原文一并改写。
+        if _has_confirmed_match(prompt_result):
+            cleaned = guard.sanitize(original)
+            if cleaned != original:
+                req.prompt = cleaned
+        for src, text, _ in flagged:
+            if src is None:
+                continue
             cleaned_part = guard.sanitize(text)
             if cleaned_part == text:
                 continue
             try:
-                setattr(part, "text", cleaned_part)
+                setattr(src, "text", cleaned_part)
             except Exception:  # noqa: BLE001 - best effort on foreign objects
                 logger.debug("Could not sanitize an extra user content part.")
         return
