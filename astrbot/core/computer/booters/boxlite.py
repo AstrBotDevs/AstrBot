@@ -43,7 +43,7 @@ class MockShipyardSandboxClient:
 
     async def upload_file(self, path: str, remote_path: str) -> dict:
         """Upload a file to the sandbox"""
-        url = f"http://{self.sb_url}/upload"
+        url = f"{self.sb_url}/upload"
 
         try:
             # Read file content
