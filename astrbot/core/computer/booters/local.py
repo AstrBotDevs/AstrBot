@@ -78,7 +78,8 @@ sys.stdout.write("".join(results))
 
 
 def _is_safe_command(command: str) -> bool:
-    cmd = f" {command.strip().lower()} "
+    # 折叠空白，避免 `rm  -rf` 这类用连续空格绕过子串匹配的写法
+    cmd = f" {' '.join(command.split()).lower()} "
     return not any(pat in cmd for pat in _BLOCKED_COMMAND_PATTERNS)
 
 
