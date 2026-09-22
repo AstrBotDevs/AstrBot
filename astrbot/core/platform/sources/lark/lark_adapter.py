@@ -474,8 +474,9 @@ class LarkPlatformAdapter(Platform):
         suffix = Path(file_name).suffix if file_name else default_suffix
         temp_dir = Path(get_astrbot_temp_path())
         temp_dir.mkdir(parents=True, exist_ok=True)
+        safe_name = Path(file_name.replace("\\", "/")).name.lstrip(".") if file_name else ""
         temp_path = (
-            temp_dir / f"lark_{message_type}_{file_name}_{uuid4().hex[:4]}{suffix}"
+            temp_dir / f"lark_{message_type}_{safe_name}_{uuid4().hex[:4]}{suffix}"
         )
         temp_path.write_bytes(file_bytes)
         return str(temp_path.resolve())
