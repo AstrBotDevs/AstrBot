@@ -246,9 +246,31 @@ async function updateRenderedHtml() {
 
   tempDiv.querySelectorAll("a").forEach((link) => {
     const href = link.getAttribute("href");
-    if (href && (href.startsWith("http") || href.startsWith("//"))) {
+    if (!href) return;
+
+    // 锚点（页内跳转）和 mailto:/tel: 等特殊协议保持原样
+    if (href.startsWith("#") || /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(href)) {
+      return;
+    }
+
+    // 绝对链接：新窗口打开
+    if (href.startsWith("http") || href.startsWith("//")) {
       link.setAttribute("target", "_blank");
       link.setAttribute("rel", "noopener noreferrer");
+      return;
+    }
+
+    // 相对链接：以插件仓库为基准改写为绝对 GitHub 地址，否则
+    // 浏览器会以 WebUI 当前页面 URL 为基准解析，跳转到错误地址
+    if (props.repoUrl) {
+      try {
+        const base = props.repoUrl.replace(/\/+$/, "") + "/blob/HEAD/";
+        link.setAttribute("href", new URL(href, base).href);
+        link.setAttribute("target", "_blank");
+        link.setAttribute("rel", "noopener noreferrer");
+      } catch {
+        // base 或 href 无法解析时保持原样
+      }
     }
   });
 
