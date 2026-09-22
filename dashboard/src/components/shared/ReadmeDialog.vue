@@ -262,14 +262,14 @@ async function updateRenderedHtml() {
 
     // 相对链接：以插件仓库为基准改写为绝对 GitHub 地址，否则
     // 浏览器会以 WebUI 当前页面 URL 为基准解析，跳转到错误地址
-    if (props.repoUrl) {
+    const base = githubBlobBase.value;
+    if (base) {
       try {
-        const base = props.repoUrl.replace(/\/+$/, "") + "/blob/HEAD/";
         link.setAttribute("href", new URL(href, base).href);
         link.setAttribute("target", "_blank");
         link.setAttribute("rel", "noopener noreferrer");
       } catch {
-        // base 或 href 无法解析时保持原样
+        // href 无法解析时保持原样
       }
     }
   });
@@ -283,6 +283,31 @@ async function updateRenderedHtml() {
     renderedHtml.value = tempDiv.innerHTML;
   }
 }
+
+// 将各种形态的仓库地址规范化为 https://<host>/<owner>/<repo>/blob/HEAD/
+const githubBlobBase = computed(() => {
+  let raw = (props.repoUrl || "").trim().replace(/\/+$/, "").replace(/\.git$/, "");
+  if (!raw) return null;
+
+  // git@host:owner/repo 形式
+  const scp = raw.match(/^git@([^:]+):(.+)$/);
+  if (scp) raw = `https://${scp[1]}/${scp[2]}`;
+
+  let url;
+  try {
+    url = new URL(raw);
+  } catch {
+    // owner/repo 简写形式
+    const m = raw.match(/^([\w.-]+)\/([\w.-]+)$/);
+    if (!m) return null;
+    url = new URL(`https://github.com/${m[1]}/${m[2]}`);
+  }
+
+  // 仅保留 host 与前两段路径，剥掉 /tree/<分支> 等后缀
+  const segs = url.pathname.split("/").filter(Boolean).slice(0, 2);
+  if (segs.length < 2) return null;
+  return `${url.origin}/${segs.join("/")}/blob/HEAD/`;
+});
 
 const modeConfig = computed(() => {
   if (props.mode === "changelog") {
@@ -366,7 +391,7 @@ watch(
   { immediate: true },
 );
 
-watch([content, locale, isDark], () => {
+watch([content, locale, isDark, () => props.repoUrl], () => {
   updateRenderedHtml();
 }, { immediate: true });
 
