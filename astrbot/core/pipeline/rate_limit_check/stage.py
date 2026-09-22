@@ -87,6 +87,12 @@ class RateLimitStage(Stage):
                             f"resets in {stall_duration:.2f} seconds.",
                         )
                         return event.stop_event()
+                    case _:
+                        logger.error(
+                            f"未知的限流策略 {self.rl_strategy!r}，本次限流不生效；"
+                            "请检查 platform_settings.rate_limit.strategy 配置。",
+                        )
+                        break
 
     def _remove_expired_timestamps(
         self,
