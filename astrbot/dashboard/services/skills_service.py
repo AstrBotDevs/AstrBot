@@ -103,6 +103,13 @@ class SkillsService:
                 "You are not permitted to do this operation in demo mode"
             )
 
+    @staticmethod
+    def _validated_skill_name(name: object) -> str:
+        skill_name = str(name or "").strip()
+        if not skill_name or not _SKILL_NAME_RE.fullmatch(skill_name):
+            raise SkillsServiceError("Invalid skill name")
+        return skill_name
+
     def resolve_local_skill_dir(self, name: str) -> Path:
         skill_name = str(name or "").strip()
         if not skill_name:
@@ -450,9 +457,12 @@ class SkillsService:
                 "Plugin-provided skill cannot be downloaded from local skill files."
             )
 
-        skill_dir = Path(skill_mgr.skills_root) / skill_name
+        try:
+            skill_dir = self.resolve_local_skill_dir(skill_name)
+        except (ValueError, PermissionError, FileNotFoundError) as exc:
+            raise SkillsServiceError(str(exc), status_code=404) from exc
         skill_md = skill_dir / "SKILL.md"
-        if not skill_dir.is_dir() or not skill_md.exists():
+        if not skill_md.exists():
             raise SkillsServiceError("Local skill not found", status_code=404)
 
         export_dir = Path(get_astrbot_temp_path()) / "skill_exports"
@@ -604,8 +614,13 @@ class SkillsService:
         active = payload.get("active", True)
         if not name:
             raise SkillsServiceError("Missing skill name")
-        SkillManager().set_skill_active(name, bool(active))
-        return {"name": name, "active": bool(active)}
+        skill_name = self._validated_skill_name(name)
+        try:
+            self.resolve_local_skill_dir(skill_name)
+        except (ValueError, PermissionError, FileNotFoundError) as exc:
+            raise SkillsServiceError(str(exc)) from exc
+        SkillManager().set_skill_active(skill_name, bool(active))
+        return {"name": skill_name, "active": bool(active)}
 
     async def delete_skill(self, data: object) -> dict:
         self._ensure_mutation_allowed()
@@ -613,12 +628,17 @@ class SkillsService:
         name = payload.get("name")
         if not name:
             raise SkillsServiceError("Missing skill name")
-        SkillManager().delete_skill(name)
+        skill_name = self._validated_skill_name(name)
+        try:
+            self.resolve_local_skill_dir(skill_name)
+        except (ValueError, PermissionError, FileNotFoundError) as exc:
+            raise SkillsServiceError(str(exc)) from exc
+        SkillManager().delete_skill(skill_name)
         try:
             await sync_skills_to_active_sandboxes()
         except Exception:
             logger.warning("Failed to sync deleted skills to active sandboxes.")
-        return {"name": name}
+        return {"name": skill_name}
 
     async def get_neo_candidates(self, query: dict[str, Any]) -> SkillsOperationResult:
         logger.info("[Neo] GET /skills/neo/candidates requested.")
