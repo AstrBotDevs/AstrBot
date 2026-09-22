@@ -822,7 +822,7 @@ class LocalShellComponent(ShellComponent):
                 session
                 for session in self._sessions.values()
                 if not invalid_only
-                or getattr(session, "permission_check", None) is None
+                or session.permission_check is None
                 or not session.permission_check()
             ]
             for session in sessions:
@@ -881,7 +881,7 @@ class LocalShellComponent(ShellComponent):
                 "Start a new shell session."
             )
         if (
-            getattr(session, "permission_check", None) is None
+            session.permission_check is None
             or not session.permission_check()
         ):
             await self.shutdown_sessions(invalid_only=True)
