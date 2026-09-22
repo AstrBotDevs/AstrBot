@@ -256,3 +256,60 @@ async def test_rank_fusion_does_not_promote_a_single_low_scoring_kb_result():
         "weak",
     ]
     assert results[-1].score == pytest.approx(0.1)
+
+
+@pytest.mark.asyncio
+async def test_rank_fusion_rescues_sparse_only_exact_match_from_dense_field():
+    """仅被稀疏通道召回的精确词面匹配必须能进入融合后的最终结果。
+
+    复现 #9868：embedding 对大小写变体召回失败，而 BM25 把包含该词面
+    的知识块排到了第 1 位。旧实现在缺失通道上按 0 分计入加权，导致仅
+    被稀疏通道召回的候选在 dense_weight=0.9 时最高只能拿到 0.1 分，排
+    不过稠密通道的中游候选，从而完全掉出最终 top-k。
+    """
+    dense_results = [
+        make_dense_result(f"dense-{rank}", 0.90 - rank / 100) for rank in range(1, 51)
+    ]
+    sparse_results = [
+        make_sparse_result("oni-exact", "kb", 30.0, 1),
+        *[
+            make_sparse_result(f"sparse-{rank}", "kb", 20 - rank, rank + 1)
+            for rank in range(1, 6)
+        ],
+    ]
+
+    results = await RankFusion(kb_db=None, dense_weight=0.9).fuse(
+        dense_results=dense_results,
+        sparse_results=sparse_results,
+        top_k=5,
+    )
+
+    assert "oni-exact" in [result.chunk_id for result in results]
+
+
+@pytest.mark.asyncio
+async def test_rank_fusion_rescues_dense_only_top_hit_from_sparse_field():
+    """与稀疏侧对称：仅被稠密通道召回的高分候选也不能被压掉。
+
+    在 sparse_weight 偏高的配置（dense_weight=0.1）下，稠密侧唯一召回
+    的最强候选同样不应因稀疏通道缺失而被按 0 分惩罚。
+    """
+    sparse_results = [
+        make_sparse_result(f"sparse-{rank}", "kb", 30 - rank, rank)
+        for rank in range(1, 51)
+    ]
+    dense_results = [
+        make_dense_result("dense-exact", 0.99),
+        *[
+            make_dense_result(f"dense-{rank}", 0.60 - rank / 100)
+            for rank in range(1, 6)
+        ],
+    ]
+
+    results = await RankFusion(kb_db=None, dense_weight=0.1).fuse(
+        dense_results=dense_results,
+        sparse_results=sparse_results,
+        top_k=5,
+    )
+
+    assert "dense-exact" in [result.chunk_id for result in results]
