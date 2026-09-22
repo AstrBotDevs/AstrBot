@@ -443,17 +443,45 @@
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.js" integrity="sha384-hIoBPJpTUs74ddyc4bFZSM1TVlQDA60VBbJS0oA934VSz82sBx1X7kSx2ATBDIyd" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/contrib/auto-render.min.js" integrity="sha384-43gviWU0YVjaDtb/GhzOouOXtZMP/7XUzwPTstBeZFe/+rCMvRwr4yROQP43s0Xk" crossorigin="anonymous"></script>
-  <textarea id="markdown-source" hidden>{{ text | safe }}</textarea>
+  <textarea id="markdown-source" hidden>{{ text | e }}</textarea>
   <script>
     (function () {
       const contentElement = document.getElementById("content");
       const source = document.getElementById("markdown-source").value;
 
+      function escapeHtml(value) {
+        return String(value ?? "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#39;");
+      }
+
       marked.use({
         gfm: true,
-        breaks: false
+        breaks: false,
+        renderer: {
+          // Raw HTML in the message must never become live markup: this page is
+          // rendered by a headless browser with access to the host, so an injected
+          // <script>/<img onerror> would execute with those privileges. Escaping the
+          // raw-HTML tokens keeps normal markdown rendering intact.
+          html(token) {
+            const raw =
+              typeof token === "string" ? token : (token?.text ?? token?.raw ?? "");
+            return escapeHtml(raw);
+          }
+        }
       });
-      contentElement.innerHTML = marked.parse(source);
+
+      let renderedHtml;
+      try {
+        renderedHtml = marked.parse(source);
+      } catch (error) {
+        console.error("Failed to render markdown:", error);
+        renderedHtml = `<pre>${escapeHtml(source)}</pre>`;
+      }
+      contentElement.innerHTML = renderedHtml;
 
       if (window.AstrBotT2IShiki) {
         window.AstrBotT2IShiki.highlightAllCodeBlocks(contentElement, "github-light");

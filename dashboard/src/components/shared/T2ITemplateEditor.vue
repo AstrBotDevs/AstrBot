@@ -160,6 +160,7 @@
               <iframe
                 ref="previewFrame"
                 :srcdoc="previewContent"
+                sandbox="allow-scripts"
                 style="width: 100%; height: 100%; border: none; zoom: 0.6;"
               />
             </div>
@@ -327,7 +328,7 @@ const getShikiRuntimeScript = () => '<script id="astrbot-t2i-shiki-runtime" src=
 const hasMarkdownSource = (content) => /<[^>]+\bid=["']markdown-source["']/i.test(content)
 
 const insertMarkdownSource = (content) => {
-  const sourceElement = '  <textarea id="markdown-source" hidden>{{ text | safe }}</textarea>\n'
+  const sourceElement = '  <textarea id="markdown-source" hidden>{{ text | e }}</textarea>\n'
   const markedScript = content.search(/^[ \t]*<script\s+src=["']https:\/\/cdn\.jsdelivr\.net\/npm\/marked\/marked\.min\.js["']><\/script>[ \t]*\r?\n?/im)
   if (markedScript >= 0) {
     return `${content.slice(0, markedScript)}${sourceElement}${content.slice(markedScript)}`
@@ -343,8 +344,8 @@ const insertMarkdownSource = (content) => {
 
 const normalizeMarkdownSource = (content) => {
   let normalized = content.replace(
-    /<script\s+id=["']markdown-source["']\s+type=["']text\/plain["']>\s*\{\{\s*text\s*\|\s*safe\s*\}\}\s*<\/script>/gi,
-    '<textarea id="markdown-source" hidden>{{ text | safe }}</textarea>'
+    /<script\s+id=["']markdown-source["']\s+type=["']text\/plain["']>\s*\{\{\s*text\s*\|\s*(?:safe|e)\s*\}\}\s*<\/script>/gi,
+    '<textarea id="markdown-source" hidden>{{ text | e }}</textarea>'
   )
 
   normalized = normalized.replace(
@@ -366,7 +367,7 @@ const normalizeMarkdownSource = (content) => {
 const previewContent = computed(() => {
   try {
     let content = normalizeMarkdownSource(templateContent.value)
-    content = content.replace(/\{\{\s*text\s*\|\s*safe\s*\}\}/g, () => previewData.value.text)
+    content = content.replace(/\{\{\s*text\s*\|\s*(?:safe|e)\s*\}\}/g, () => previewData.value.text)
     content = content.replace(/\{\{\s*version\s*\}\}/g, () => previewData.value.version)
     let usedExistingShikiPlaceholder = false
     content = content.replace(/<script\b[^>]*>\s*\{\{\s*shiki_runtime\s*\|\s*safe\s*\}\}\s*<\/script>/gi, () => {
@@ -536,7 +537,7 @@ const newTemplate = () => {
 </head>
 <body>
   <!-- 从这里开始编辑 -->
-  <article>{{ text | safe }}</article>
+  <article>{{ text | e }}</article>
 </body>
 </html>
 `
@@ -568,7 +569,7 @@ const refreshPreview = () => {
   syncPreviewVersion()
   nextTick(() => {
     if (previewFrame.value) {
-      previewFrame.value.contentWindow.location.reload()
+      previewFrame.value.srcdoc = previewContent.value
     }
     setTimeout(() => previewLoading.value = false, 500)
   })

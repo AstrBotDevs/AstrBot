@@ -18,11 +18,25 @@ _ALLOWED_VARS = frozenset({"text", "version", "shiki_runtime"})
 _LEGACY_CORE_TEMPLATE_HASHES = {
     "base.html": frozenset(
         {
+            "ac59f5c77cbed04ad7ea731491fa50f27e67c6f61cfc8d0743259f6cf95f8b56",
             "23714149d06b3abdcee3a5ac1aed3a95785efd75a49a3a3f4a8d26e0f84253e1",
             "380ccf1824c877635bd2e97df3df0f1960166dfa582aebce768b583c4d6c480a",
             "7d0beae08e25ae51f6b3f8f00338fada559e0b883cef15ec609309d17ba708f0",
         }
-    )
+    ),
+    "astrbot_powershell.html": frozenset(
+        {
+            "d41a240dbd441c4e975adc7867de72f3590cc32a337195a95d58baf9e9ed2b74",
+            "5c00bdad4bcfd132d2d3c8f8f70448da9f08acffd6e8e27c8f245b26f1b65ac7",
+            "51c8deb682091b7a494541cc0cea2bdcd863ec51665575e99324a4a575f3b4ee",
+        }
+    ),
+    "astrbot_vitepress.html": frozenset(
+        {
+            "f77775d78015ccde13d63b3b9a571631dd50711c453d17eb05aeb70257fb4371",
+            "44f25bf371a7ec1be208c75b5b4e1ba28845b213309508166a809134a7e68c39",
+        }
+    ),
 }
 
 _SSTI_BLACKLIST: list[tuple[str, re.Pattern]] = [
