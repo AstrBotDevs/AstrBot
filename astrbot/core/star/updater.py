@@ -486,6 +486,7 @@ class _PluginUpdater(_RepoZipUpdater):
         Raises:
             ValueError: If the archive is not a valid plugin.
             OSError: If extraction or moving the extracted files fails.
+            RuntimeError: If the target directory cannot be created.
         """
         self.validate_plugin_archive(zip_path)
         if os.name == "nt":

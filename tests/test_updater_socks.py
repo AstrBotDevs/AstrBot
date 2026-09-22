@@ -422,14 +422,17 @@ def test_plugin_unzip_file_handles_long_archive_paths(
         archive.writestr(f"{archive_root}/{member_path}", "VALUE = 1\n")
         archive.writestr(f"{archive_root}/empty/", "")
 
+    original_open = builtins.open
+
     def open_with_path_limit(file, mode="r", *args, **kwargs):
         # Reproduce MAX_PATH even when the test host has long paths enabled.
-        path = os.fspath(file)
-        if not path.startswith("\\\\?\\") and len(os.path.abspath(path)) >= 260:
-            raise FileNotFoundError(2, "Path exceeds MAX_PATH", path)
-        return builtins.open(file, mode, *args, **kwargs)
+        if isinstance(file, (str, os.PathLike)):
+            path = os.fspath(file)
+            if not path.startswith("\\\\?\\") and len(os.path.abspath(path)) >= 260:
+                raise FileNotFoundError(2, "Path exceeds MAX_PATH", path)
+        return original_open(file, mode, *args, **kwargs)
 
-    monkeypatch.setattr(zipfile, "open", open_with_path_limit, raising=False)
+    monkeypatch.setattr(builtins, "open", open_with_path_limit)
     target = str(target_dir)
     if target_kind == "relative":
         monkeypatch.chdir(tmp_path)
