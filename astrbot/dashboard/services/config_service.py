@@ -750,6 +750,7 @@ class ConfigProfileService:
         config: dict,
         *,
         two_factor_code: str | None = None,
+        session_id: str | None = None,
         allow_admin_id_change: bool = True,
     ) -> str | None:
         """Update a config profile with explicit admin-ID permission.
@@ -758,6 +759,7 @@ class ConfigProfileService:
             config_id: Identifier of the profile to update.
             config: Complete replacement config content.
             two_factor_code: Optional TOTP code for protected dashboard changes.
+            session_id: Unique identifier from the authenticated dashboard JWT.
             allow_admin_id_change: Whether caller may change administrator IDs.
 
         Returns:
@@ -789,7 +791,16 @@ class ConfigProfileService:
         if (
             is_totp_enabled(current_config)
             and protected_2fa_changed
-            and not await self._verify_config_2fa(current_config, two_factor_code)
+            and not await self._verify_config_2fa(
+                current_config,
+                two_factor_code,
+                session_id=session_id,
+                pending_secret=(
+                    _get_nested_value(config, ("dashboard", "totp", "secret"))
+                    if _get_nested_value(config, ("dashboard", "totp", "enable"))
+                    else None
+                ),
+            )
         ):
             raise ApiError(
                 "需要 TOTP 验证",
@@ -801,10 +812,11 @@ class ConfigProfileService:
             _set_nested_value(config, ("dashboard", "totp", "secret"), "")
             _set_nested_value(config, ("dashboard", "totp", "recovery_code_hash"), "")
 
-        set_pending_totp_secret(None)
         save_config(
             config, self.acm.confs[config_id], is_core=True, runtime=self.runtime
         )
+        if protected_2fa_changed:
+            set_pending_totp_secret(None, session_id=session_id)
         booter = computer_client.local_booter
         if booter is not None and isinstance(booter.shell, LocalShellComponent):
             await booter.shell.shutdown_sessions(invalid_only=True)
@@ -839,7 +851,21 @@ class ConfigProfileService:
     async def _verify_config_2fa(
         current_config: dict,
         two_factor_code: str | None,
+        *,
+        session_id: str | None = None,
+        pending_secret: str | None = None,
     ) -> bool:
+        """Verify the current code or this session's matching pending secret.
+
+        Args:
+            current_config: Configuration before applying the update.
+            two_factor_code: Code supplied for the protected configuration change.
+            session_id: Unique identifier from the authenticated dashboard JWT.
+            pending_secret: New enabled secret submitted in the configuration.
+
+        Returns:
+            Whether an allowed TOTP code was verified and consumed.
+        """
         code = (two_factor_code or "").strip()
         if not code:
             return False
@@ -849,6 +875,8 @@ class ConfigProfileService:
                 code,
                 include_pending=True,
                 allow_recovery=False,
+                session_id=session_id,
+                pending_secret=pending_secret,
             )
         )
 

@@ -6,6 +6,8 @@ import datetime
 import hashlib
 import hmac
 import secrets
+import time
+from dataclasses import dataclass
 from enum import Enum
 
 import pyotp
@@ -24,12 +26,17 @@ _RECOVERY_CODE_KDF_ALGORITHM = "pbkdf2_sha256"
 
 _last_totp_timecode: dict[str, int] = {}
 _totp_replay_lock = asyncio.Lock()
-_totp_pending_secret: str | None = (
-    None  # pending new secret after rotation, before config save
-)
-_totp_rotation_verified: bool = (
-    False  # user passed the current-TOTP verify step during rotation
-)
+_TOTP_ROTATION_TTL_SECONDS = 300
+
+
+@dataclass
+class _TotpRotationState:
+    expires_at: float
+    verified: bool = False
+    pending_secret: str | None = None
+
+
+_totp_rotation_states: dict[str, _TotpRotationState] = {}
 
 
 class TwoFactorCodeType(Enum):
@@ -91,53 +98,110 @@ async def consume_configured_totp_code(config, code: str) -> bool:
 
 
 async def verify_configured_2fa_code(
-    config, code: str, include_pending: bool = False, allow_recovery: bool = False
+    config,
+    code: str,
+    include_pending: bool = False,
+    allow_recovery: bool = False,
+    *,
+    session_id: str | None = None,
+    pending_secret: str | None = None,
 ) -> TwoFactorCodeType | None:
     """Return a 2FA code type when a configured code is valid.
 
-    When include_pending is True, also checks the in-memory pending TOTP
-    secret from an active rotation (used by config-save verification).
-    When allow_recovery is False, only TOTP codes are accepted (recovery
-    codes are rejected to prevent privilege escalation on sensitive ops).
+    Args:
+        config: Current dashboard configuration.
+        code: Code to verify and consume.
+        include_pending: Whether to check this session's pending rotation.
+        allow_recovery: Whether recovery codes are permitted.
+        session_id: Unique identifier from the authenticated dashboard JWT.
+        pending_secret: New secret submitted with the configuration being saved.
+
+    Returns:
+        The verified code type, or None when verification fails.
     """
     if not isinstance(code, str) or not code.strip():
         return None
     if await consume_configured_totp_code(config, code):
         return TwoFactorCodeType.TOTP
     if include_pending:
-        pending = _totp_pending_secret
-        if pending and await consume_totp_code(pending, code):
+        state = _get_rotation_state(session_id)
+        if (
+            state is not None
+            and state.pending_secret
+            and state.pending_secret == pending_secret
+            and await consume_totp_code(state.pending_secret, code)
+        ):
             return TwoFactorCodeType.TOTP
     if allow_recovery and verify_recovery_code(config, code):
         return TwoFactorCodeType.RECOVERY
     return None
 
 
-def set_pending_totp_secret(secret: str | None) -> None:
-    """Set the pending TOTP secret for an in-memory rotation.
+def _get_rotation_state(session_id: str | None) -> _TotpRotationState | None:
+    """Discard expired rotations and look up the authenticated session.
 
-    After a successful TOTP rotation, the new secret is stored in memory
-    so that the subsequent config save 2FA check can verify against it.
-    Cleared once the config save completes.
+    Args:
+        session_id: Unique identifier from the authenticated dashboard JWT.
+
+    Returns:
+        The session's unexpired rotation state, if present.
     """
-    global _totp_pending_secret
-    _totp_pending_secret = secret
+    now = time.monotonic()
+    for key, state in list(_totp_rotation_states.items()):
+        if state.expires_at <= now:
+            del _totp_rotation_states[key]
+    return _totp_rotation_states.get(session_id) if session_id else None
 
 
-def set_rotation_verified(value: bool) -> None:
-    """Set or clear the rotation-verified flag."""
-    global _totp_rotation_verified
-    _totp_rotation_verified = value
+def set_pending_totp_secret(
+    secret: str | None, *, session_id: str | None = None
+) -> None:
+    """Store a pending secret, or clear only this session's rotation.
 
-
-def consume_rotation_verified() -> bool:
-    """Check and consume the rotation-verified flag (single-use).
-
-    Returns True if the user has passed the old-key verification step.
+    Args:
+        secret: Verified new secret, or None after a successful config save.
+        session_id: Unique identifier from the authenticated dashboard JWT.
     """
-    global _totp_rotation_verified
-    if _totp_rotation_verified:
-        _totp_rotation_verified = False
+    state = _get_rotation_state(session_id)
+    if not session_id:
+        return
+    if secret is None:
+        _totp_rotation_states.pop(session_id, None)
+    elif state is not None:
+        state.pending_secret = secret
+
+
+def set_rotation_verified(value: bool, *, session_id: str | None = None) -> None:
+    """Set or clear this session's short-lived rotation authorization.
+
+    Args:
+        value: Whether the current TOTP was successfully verified.
+        session_id: Unique identifier from the authenticated dashboard JWT.
+    """
+    _get_rotation_state(session_id)
+    if not session_id:
+        return
+    if value:
+        _totp_rotation_states[session_id] = _TotpRotationState(
+            expires_at=time.monotonic() + _TOTP_ROTATION_TTL_SECONDS,
+            verified=True,
+        )
+    else:
+        _totp_rotation_states.pop(session_id, None)
+
+
+def consume_rotation_verified(*, session_id: str | None = None) -> bool:
+    """Consume this session's rotation authorization once, without extending it.
+
+    Args:
+        session_id: Unique identifier from the authenticated dashboard JWT.
+
+    Returns:
+        Whether an unexpired authorization was consumed.
+    """
+    state = _get_rotation_state(session_id)
+    if state is not None and state.verified:
+        state.verified = False
         return True
     return False
 
