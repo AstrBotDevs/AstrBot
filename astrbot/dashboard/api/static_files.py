@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import mimetypes
 from pathlib import Path
 
@@ -28,11 +29,15 @@ def _media_type(file_path: Path) -> str | None:
     return guessed
 
 
-def _file_response(request: Request, file_path: Path, headers: dict[str, str]):
+def _read_gzip_body(file_path: Path) -> bytes | None:
+    return gzip_static_body(file_path.read_bytes())
+
+
+async def _file_response(request: Request, file_path: Path, headers: dict[str, str]):
     """Return a static file, gzip-encoded when the client and type allow it.
 
     Range requests stay on FileResponse. A gzip body cannot satisfy a byte range
-    of the original file.
+    of the original file. Reading and compression run off the event loop.
     """
     media_type = _media_type(file_path)
     accept_encoding = request.headers.get("accept-encoding")
@@ -41,7 +46,7 @@ def _file_response(request: Request, file_path: Path, headers: dict[str, str]):
     if not is_compressible_media_type(media_type):
         return FileResponse(file_path, headers=headers)
 
-    compressed = gzip_static_body(file_path.read_bytes())
+    compressed = await asyncio.to_thread(_read_gzip_body, file_path)
     if compressed is None:
         return FileResponse(file_path, headers=headers)
 
@@ -73,7 +78,7 @@ async def serve_index(request: Request):
         # resources change. That makes this request bypass an old URL cache
         # entry and evicts legacy subresources without clearing cookies or storage.
         headers["Clear-Site-Data"] = '"cache"'
-    return _file_response(request, index_file, headers)
+    return await _file_response(request, index_file, headers)
 
 
 async def serve_static_file(request: Request, static_path: str):
@@ -99,7 +104,7 @@ async def serve_static_file(request: Request, static_path: str):
         and request.query_params.get("astrbot_bundle")
     ):
         headers["Clear-Site-Data"] = '"cache"'
-    return _file_response(request, file_path, headers)
+    return await _file_response(request, file_path, headers)
 
 
 for index_route in service.list_index_routes():
