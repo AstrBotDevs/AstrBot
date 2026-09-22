@@ -39,6 +39,22 @@ def _normalize_skill_name(name: str | None) -> str:
     return re.sub(r"\s+", "_", raw.strip())
 
 
+def _resolve_skill_dir_within(skills_root: str | Path, name: str) -> Path | None:
+    """Resolve ``name`` under ``skills_root``, or return None if it escapes it.
+
+    Skill names come from user/plugin input, so they must never resolve outside
+    the skills directory (``..``, absolute paths — CWE-22).
+    """
+    skill_name = str(name or "").strip()
+    if not skill_name:
+        return None
+    root = Path(skills_root).resolve()
+    candidate = (root / skill_name).resolve()
+    if candidate == root or not candidate.is_relative_to(root):
+        return None
+    return candidate
+
+
 def _default_sandbox_skill_path(name: str) -> str:
     return f"{SANDBOX_WORKSPACE_ROOT}/{SANDBOX_SKILLS_ROOT}/{name}/SKILL.md"
 
@@ -683,7 +699,9 @@ class SkillManager:
         return [skills_by_name[name] for name in sorted(skills_by_name)]
 
     def is_sandbox_only_skill(self, name: str) -> bool:
-        skill_dir = Path(self.skills_root) / name
+        skill_dir = _resolve_skill_dir_within(self.skills_root, name)
+        if skill_dir is None:
+            return False
         skill_md_exists = _normalize_skill_markdown_path(skill_dir) is not None
         if skill_md_exists:
             return False
@@ -739,7 +757,9 @@ class SkillManager:
                 "Plugin-provided skill cannot be deleted from local skill management."
             )
 
-        skill_dir = Path(self.skills_root) / name
+        skill_dir = _resolve_skill_dir_within(self.skills_root, name)
+        if skill_dir is None:
+            raise ValueError(f"Invalid skill name: {name!r}")
         if skill_dir.exists():
             shutil.rmtree(skill_dir)
 
