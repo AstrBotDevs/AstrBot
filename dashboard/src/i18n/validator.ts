@@ -13,7 +13,7 @@ export class I18nValidator {
   /**
    * 验证翻译完整性
    */
-  validateCompleteness(localeData: Record<string, any>): ValidationResult {
+  validateCompleteness(localeData: Record<string, any>, locales?: string[]): ValidationResult {
     const errors: ValidationError[] = [];
     const missingKeys: string[] = [];
     const extraKeys: string[] = [];
@@ -33,8 +33,10 @@ export class I18nValidator {
     // 获取所有键
     const baseKeys = this.getAllKeys(baseData);
 
-    // 验证每种语言
-    for (const locale of this.supportedLocales) {
+    // 只遍历本次实际参与校验的语言：调用方可能只传入 supportedLocales 的子集，
+    // 按完整列表遍历会把未请求的语言误报为「数据缺失」。
+    const targets = locales ?? this.supportedLocales;
+    for (const locale of targets) {
       if (locale === this.baseLocale) continue;
 
       const targetData = localeData[locale];
@@ -384,7 +386,8 @@ export class I18nValidator {
 
     // 汇总必须来自真实的校验输出
     if (Object.keys(localeData).length > 0) {
-      results.push(this.validateCompleteness(localeData));
+      // 只校验成功加载的语言；加载失败的语言已在上面的循环里单独记录
+      results.push(this.validateCompleteness(localeData, Object.keys(localeData)));
     }
 
     const totalKeys = this.getAllKeys(localeData[this.baseLocale] ?? {}).length;
