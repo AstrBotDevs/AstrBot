@@ -248,11 +248,6 @@ async function updateRenderedHtml() {
     const href = link.getAttribute("href");
     if (!href) return;
 
-    // 锚点（页内跳转）和 mailto:/tel: 等特殊协议保持原样
-    if (href.startsWith("#") || /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(href)) {
-      return;
-    }
-
     // 绝对链接：新窗口打开
     if (href.startsWith("http") || href.startsWith("//")) {
       link.setAttribute("target", "_blank");
@@ -260,18 +255,26 @@ async function updateRenderedHtml() {
       return;
     }
 
+    // 锚点（页内跳转）和 mailto:/tel: 等特殊协议保持原样
+    if (href.startsWith("#") || /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(href)) {
+      return;
+    }
+
     // 相对链接：以插件仓库为基准改写为绝对 GitHub 地址，否则
     // 浏览器会以 WebUI 当前页面 URL 为基准解析，跳转到错误地址
     const base = githubBlobBase.value;
-    if (base) {
-      try {
-        link.setAttribute("href", new URL(href, base).href);
-        link.setAttribute("target", "_blank");
-        link.setAttribute("rel", "noopener noreferrer");
-      } catch {
-        // href 无法解析时保持原样
-      }
-    }
+    if (!base) return;
+
+    // 与 GitHub 渲染行为对齐：剥掉开头的 /，../ 超出仓库根时截断在仓库根；
+    // #锚点 与 ?查询 原样保留
+    const [rawPath, suffix = ""] = href.split(/([?#].*)$/, 2);
+    const segs = rawPath.split("/").filter((s) => s && s !== ".");
+    while (segs[0] === "..") segs.shift();
+    if (segs.length === 0) return;
+
+    link.setAttribute("href", `${base}${segs.join("/")}${suffix}`);
+    link.setAttribute("target", "_blank");
+    link.setAttribute("rel", "noopener noreferrer");
   });
 
   tempDiv.querySelectorAll("[data-code-block-index]").forEach((placeholder) => {
