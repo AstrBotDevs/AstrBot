@@ -3,7 +3,7 @@
 按照固定的字符数将文本分块,支持重叠区域。
 """
 
-from .base import BaseChunker
+from .base import BaseChunker, validate_chunk_params
 
 
 class FixedSizeChunker(BaseChunker):
@@ -37,6 +37,7 @@ class FixedSizeChunker(BaseChunker):
         """
         chunk_size = kwargs.get("chunk_size", self.chunk_size)
         chunk_overlap = kwargs.get("chunk_overlap", self.chunk_overlap)
+        validate_chunk_params(chunk_size, chunk_overlap)
 
         chunks = []
         start = 0
