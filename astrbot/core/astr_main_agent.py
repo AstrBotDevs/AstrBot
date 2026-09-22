@@ -999,7 +999,11 @@ def _append_system_reminders(
         system_content = (
             "<system_reminder>" + "\n".join(system_parts) + "</system_reminder>"
         )
-        req.extra_user_content_parts.append(TextPart(text=system_content))
+        # mark_as_temp: 提醒（用户身份、群名、当前时间）只对本次请求生效，
+        # 不持久化进对话历史，否则每轮都会残留一条过期时间提醒。
+        req.extra_user_content_parts.append(
+            TextPart(text=system_content).mark_as_temp()
+        )
 
 
 async def _decorate_llm_request(
