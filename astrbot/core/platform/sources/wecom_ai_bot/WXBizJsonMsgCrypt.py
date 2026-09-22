@@ -259,9 +259,9 @@ class WXBizJsonMsgCrypt:
         # return：成功0，sEncryptMsg,失败返回对应的错误码None
         pc = Prpcrypt(self.key)
         ret, encrypt = pc.encrypt(sReplyMsg, self.m_sReceiveId)
-        encrypt = encrypt.decode("utf-8")  # type: ignore
         if ret != 0:
             return ret, None
+        encrypt = encrypt.decode("utf-8")  # type: ignore
         if timestamp is None:
             timestamp = str(int(time.time()))
         # 生成安全签名
