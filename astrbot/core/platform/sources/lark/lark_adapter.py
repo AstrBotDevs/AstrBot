@@ -652,6 +652,11 @@ class LarkPlatformAdapter(Platform):
             if not sender_name:
                 name_cache_ttl = USER_NAME_FAILURE_CACHE_TTL_SECONDS
                 try:
+                    contact_api = self.lark_api.contact
+                    if contact_api is None:
+                        raise RuntimeError(
+                            "Lark API Client contact 模块未初始化，无法查询发送者昵称"
+                        )
                     request = (
                         GetUserRequest.builder()
                         .user_id(sender_open_id)
@@ -659,7 +664,7 @@ class LarkPlatformAdapter(Platform):
                         .build()
                     )
                     response = await asyncio.wait_for(
-                        self.lark_api.contact.v3.user.aget(request),
+                        contact_api.v3.user.aget(request),
                         timeout=USER_NAME_LOOKUP_TIMEOUT_SECONDS,
                     )
                     if response.success() and response.data and response.data.user:
