@@ -1600,3 +1600,48 @@ async def test_only_actually_captioned_images_receive_caption_status(
         assert len(labels) == 1
         assert ("description included as text" in labels[0]) == captioned
         assert ("not included in this request" in labels[0]) != captioned
+
+
+@pytest.mark.asyncio
+async def test_unmaterializable_quoted_image_is_resolved_from_protocol(
+    harness, tmp_path
+):
+    """A quoted image without a usable resource is fetched by its file id."""
+    resolved = source_image(tmp_path, "JPEG")
+    reference = "opaque-quoted-image.png"
+    actions: list[tuple[str, dict]] = []
+
+    async def call_action(action, **params):
+        actions.append((action, params))
+        if action == "get_image" and params.get("file") == reference:
+            return {"data": {"url": resolved.as_uri()}}
+        return {}
+
+    event = make_event([Reply(id="quoted", chain=[Image(file=reference)])])
+    event.bot = SimpleNamespace(api=SimpleNamespace(call_action=call_action))
+
+    await process_event(harness, event)
+
+    req = harness.captured[0].req
+    assert any(
+        action == "get_image" and params.get("file") == reference
+        for action, params in actions
+    )
+    assert len(req.image_urls) == 1
+    assert Path(req.image_urls[0]).is_file()
+
+
+@pytest.mark.asyncio
+async def test_expired_quoted_image_url_is_not_reused(harness):
+    """A failed HTTP image ref is not sent back as a resolved image."""
+    expired_url = "http://127.0.0.1:1/expired.png"
+    event = make_event([Reply(id="quoted", chain=[Image(file=expired_url)])])
+
+    await process_event(harness, event)
+
+    req = harness.captured[0].req
+    assert req.image_urls == []
+    assert any(
+        isinstance(part, TextPart) and part.text == "[Image unavailable]"
+        for part in req.extra_user_content_parts
+    )

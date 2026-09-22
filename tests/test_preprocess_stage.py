@@ -226,3 +226,50 @@ async def test_preprocess_path_mapping_accepts_windows_source_to_posix_target(
     image = event.get_messages()[0]
     assert isinstance(image, Image)
     assert image.file == image.path == image.url == str(target_image)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("quoted", [False, True])
+async def test_preprocess_keeps_unmaterializable_image_reference(
+    tmp_path, monkeypatch, quoted
+):
+    """An unmaterializable image ref keeps its original file field."""
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    monkeypatch.setattr(
+        preprocess_stage, "get_astrbot_temp_path", lambda: str(tmp_path)
+    )
+    reference = "opaque-quoted-image"
+    image = Image(file=reference)
+    event = FakeEvent([Reply(id="reply-1", chain=[image])] if quoted else [image])
+    stage = PreProcessStage()
+    stage.config = {}
+    stage.platform_settings = {}
+    stage.stt_settings = {"enable": False}
+
+    await stage.process(event)
+
+    assert image.file == reference
+    assert image.url == ""
+    assert image.path == ""
+
+
+@pytest.mark.asyncio
+async def test_preprocess_keeps_missing_file_uri_reference(tmp_path, monkeypatch):
+    """A missing file URI remains available for downstream resolution."""
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    monkeypatch.setattr(
+        preprocess_stage, "get_astrbot_temp_path", lambda: str(tmp_path)
+    )
+    reference = (tmp_path / "missing.png").as_uri()
+    image = Image(file=reference)
+    event = FakeEvent([image])
+    stage = PreProcessStage()
+    stage.config = {}
+    stage.platform_settings = {}
+    stage.stt_settings = {"enable": False}
+
+    await stage.process(event)
+
+    assert image.file == reference
+    assert image.url == ""
+    assert image.path == ""

@@ -125,6 +125,7 @@ from astrbot.core.utils.quoted_message.settings import (
     QuotedMessageParserSettings,
 )
 from astrbot.core.utils.quoted_message_parser import (
+    ImageResolver,
     extract_quoted_message_images,
     extract_quoted_message_text,
 )
@@ -1508,26 +1509,52 @@ async def collect_initial_request(
             fallback_quoted_image_count = 0
             for comp in reply_comps:
                 has_embedded_image = False
+                failed_quoted_refs: set[str] = set()
                 if comp.chain:
                     for reply_comp in comp.chain:
                         if isinstance(reply_comp, Image):
-                            has_embedded_image = True
+                            image_path: str | None = None
+                            materialize_failure = ""
                             try:
-                                image_path = await reply_comp.convert_to_file_path()
+                                candidate_path = await reply_comp.convert_to_file_path()
                             except Exception as exc:
                                 if not is_recoverable_image_error(exc):
                                     raise
+                                materialize_failure = type(exc).__name__
+                            else:
+                                # Opaque refs resolve to a guessed, non-existent path.
+                                if Path(candidate_path).is_file():
+                                    image_path = candidate_path
+                            source_ref = reply_comp.url or reply_comp.file or ""
+                            if image_path is None:
+                                if source_ref:
+                                    failed_quoted_refs.add(source_ref)
+                                file_ref = (reply_comp.file or "").strip()
+                                if file_ref.startswith(("http://", "https://")):
+                                    file_ref = ""
+                                resolved_refs = (
+                                    await ImageResolver(event).resolve_for_llm(
+                                        [file_ref]
+                                    )
+                                    if file_ref
+                                    else []
+                                )
+                                if resolved_refs:
+                                    image_path = resolved_refs[0]
+                                    source_ref = file_ref
+                            if image_path is None:
                                 logger.warning(
-                                    "Quoted image is unavailable (%s).",
-                                    type(exc).__name__,
+                                    "Quoted image is unavailable (%s): %s",
+                                    materialize_failure or "unusable reference",
+                                    source_ref[:128],
                                 )
                                 req.extra_user_content_parts.append(
                                     TextPart(text="[Image unavailable]")
                                 )
                                 continue
+                            has_embedded_image = True
                             req.image_urls.append(image_path)
                             attachment_paths.append(image_path)
-                            source_ref = reply_comp.url or reply_comp.file or ""
                             if not is_file_uri(source_ref):
                                 try:
                                     source_is_local = Path(source_ref).is_file()
@@ -1567,6 +1594,12 @@ async def collect_initial_request(
                                 settings=quoted_message_settings,
                             )
                         )
+                        if failed_quoted_refs:
+                            fallback_images = [
+                                ref
+                                for ref in fallback_images
+                                if ref not in failed_quoted_refs
+                            ]
                         remaining_limit = max(
                             config.max_quoted_fallback_images
                             - fallback_quoted_image_count,

@@ -53,13 +53,12 @@ class PreProcessStage(Stage):
         """Return whether an image reference already points at a local file."""
         if not media_ref:
             return False
-        if is_file_uri(media_ref):
-            return True
         if media_ref.startswith(("http://", "https://", "data:", "base64://")):
             return False
         try:
-            return Path(media_ref).exists()
-        except OSError:
+            path = file_uri_to_path(media_ref) if is_file_uri(media_ref) else media_ref
+            return Path(path).is_file()
+        except (OSError, ValueError):
             return False
 
     async def _normalize_image_component(
@@ -73,10 +72,11 @@ class PreProcessStage(Stage):
         materialized = False
         try:
             image_path = await component.convert_to_file_path()
-            materialized = (
-                not self._is_existing_local_image_ref(media_ref)
-                and Path(image_path).is_file()
-            )
+            existing_local_ref = self._is_existing_local_image_ref(media_ref)
+            materialized = not existing_local_ref and Path(image_path).is_file()
+            if not materialized and not existing_local_ref:
+                # Keep the original reference for downstream resolution.
+                raise ValueError("image reference could not be materialized")
             if materialized:
                 self._track_temp_media(event, image_path)
                 detected_mime_type = await detect_image_mime_type_async(
