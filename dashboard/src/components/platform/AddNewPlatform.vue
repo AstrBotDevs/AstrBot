@@ -1851,8 +1851,8 @@ export default {
         for (const umop in fullRoutingTable) {
           if (
             (originalPlatformId &&
-              this.isUmopMatchPlatform(umop, originalPlatformId)) ||
-            (newPlatformId && this.isUmopMatchPlatform(umop, newPlatformId))
+              this.isUmopStrictMatchPlatform(umop, originalPlatformId)) ||
+            (newPlatformId && this.isUmopStrictMatchPlatform(umop, newPlatformId))
           ) {
             delete fullRoutingTable[umop];
           }
@@ -1901,6 +1901,17 @@ export default {
     isUmopMatchPlatform(umop, platformId) {
       const parsedUmop = this.parseUmop(umop);
       return this.isParsedUmopMatchPlatform(parsedUmop, platformId);
+    },
+
+    // 严格匹配：只用于会写/删路由表的路径，不能把 "" / "*" 当作匹配
+    isUmopStrictMatchPlatform(umop, platformId) {
+      const parsedUmop = this.parseUmop(umop);
+      return this.isParsedUmopStrictMatchPlatform(parsedUmop, platformId);
+    },
+
+    isParsedUmopStrictMatchPlatform(parsedUmop, platformId) {
+      if (!parsedUmop) return false;
+      return parsedUmop.platform === platformId;
     },
 
     isParsedUmopMatchPlatform(parsedUmop, platformId) {
