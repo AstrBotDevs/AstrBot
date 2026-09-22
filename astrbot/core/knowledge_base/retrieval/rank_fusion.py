@@ -29,6 +29,7 @@ class RankFusion:
     职责:
     - 融合稠密检索和稀疏检索的结果
     - 全局归一化稠密分数，并在每个知识库内归一化稀疏分数
+    - 通道权重只分摊给确实召回了该候选的通道（未被召回不按 0 分惩罚）
     - 使用 RRF 作为确定性的同分排序依据
     """
 
@@ -64,8 +65,10 @@ class RankFusion:
         """融合稠密和稀疏检索结果。
 
         在所有候选中对稠密相似度做 min-max 归一化，BM25 分数则在
-        每个独立知识库内归一化，再按权重合并。RRF 分数仅用于融合分数
-        相同时的稳定排序。最终结果只去除完全相同的文本块，
+        每个独立知识库内归一化，再按权重合并。只被单个通道召回的
+        候选按实际召回了它的那个通道归一化权重后计分，避免缺失通
+        道按 0 分参与加权而压低稀疏侧的精确匹配。RRF 分数仅用于融
+        合分数相同时的稳定排序。最终结果只去除完全相同的文本块，
         不按来源文档去重。
 
         Args:
@@ -140,9 +143,22 @@ class RankFusion:
         rrf_scores: dict[str, float] = {}
 
         for identifier in all_chunk_ids:
-            fusion_scores[identifier] = self.dense_weight * normalized_dense.get(
-                identifier, 0.0
-            ) + (1 - self.dense_weight) * normalized_sparse.get(identifier, 0.0)
+            # 未被某个通道召回表示“该通道没有给它打分”，而不是“它拿到的
+            # 是该通道最差的 0 分”。若缺失按 0 分计入加权，仅被单个通道
+            # 召回的候选（例如 BM25 命中的精确词面匹配）在 dense_weight
+            # 偏高时最高只能拿到 (1 - dense_weight) 分，永远排不过稠密通
+            # 道的中游候选，从而被系统性压出最终结果。因此权重只分摊给
+            # 真正给出评分的通道。
+            score_sum = 0.0
+            weight_sum = 0.0
+            if identifier in normalized_dense:
+                score_sum += self.dense_weight * normalized_dense[identifier]
+                weight_sum += self.dense_weight
+            if identifier in normalized_sparse:
+                score_sum += (1 - self.dense_weight) * normalized_sparse[identifier]
+                weight_sum += 1 - self.dense_weight
+
+            fusion_scores[identifier] = score_sum / weight_sum if weight_sum else 0.0
 
             rrf_score = 0.0
             if identifier in dense_ranks:
