@@ -42,6 +42,7 @@ from astrbot.core.provider.entities import (
     ToolCallsResult,
 )
 from astrbot.core.provider.modalities import (
+    has_video_blocks,
     log_context_sanitize_stats,
     sanitize_contexts_by_modalities,
 )
@@ -672,13 +673,17 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         contexts: list[Message] | list[dict[str, T.Any]],
     ) -> list[Message] | list[dict[str, T.Any]]:
         modalities = self.provider.provider_config.get("modalities", None)
-        if (
-            not modalities
-        ):  # Unconfigured (None or empty list) defaults to support all modalities
+        if not modalities and not has_video_blocks(contexts):
+            # Unconfigured (None or empty list) defaults to supporting every
+            # modality, so the context objects are handed back untouched. Video
+            # is the exception: it is strictly opt-in (see
+            # `_assemble_request_context_for_provider`), and this path also runs
+            # when a request falls back to another provider, whose context was
+            # assembled for the primary one and may already carry a `video_url`.
             return contexts
         sanitized_contexts, stats = sanitize_contexts_by_modalities(
             contexts,
-            self.provider.provider_config.get("modalities", None),
+            modalities,
         )
         log_context_sanitize_stats(stats)
         return sanitized_contexts

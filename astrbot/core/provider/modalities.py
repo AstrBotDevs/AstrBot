@@ -36,6 +36,33 @@ def _message_to_dict(message: dict[str, Any] | Message) -> dict[str, Any] | None
     return None
 
 
+def has_video_blocks(contexts: Sequence[dict[str, Any] | Message]) -> bool:
+    """Whether any message in `contexts` carries a `video_url` block.
+
+    Accepts both `Message` objects (whose content holds `ContentPart` instances)
+    and plain dicts, since callers pass either form.
+
+    Args:
+        contexts: Messages to inspect.
+
+    Returns:
+        True as soon as a `video_url` block is found.
+    """
+    for msg in contexts:
+        content = msg.content if isinstance(msg, Message) else msg.get("content")
+        if not isinstance(content, list):
+            continue
+        for part in content:
+            part_type = (
+                part.get("type")
+                if isinstance(part, dict)
+                else getattr(part, "type", None)
+            )
+            if part_type == "video_url":
+                return True
+    return False
+
+
 def sanitize_contexts_by_modalities(
     contexts: Sequence[dict[str, Any] | Message],
     modalities: list[str] | None,
@@ -43,12 +70,37 @@ def sanitize_contexts_by_modalities(
     if not contexts:
         return [], ContextSanitizeStats()
     if not modalities or not isinstance(modalities, list):
+        # An unconfigured provider (None or an empty list) keeps the historical
+        # "supports everything" default for image/audio/tool_use. Video postdates
+        # that convention and stays strictly opt-in, so it is degraded even here:
+        # this function also sanitizes a context that was assembled for another
+        # provider, which may have produced a `video_url` block because *it*
+        # declared the video modality. Everything else is copied through
+        # untouched, exactly as before.
         copied_contexts = []
+        stats = ContextSanitizeStats()
         for msg in contexts:
             copied_msg = _message_to_dict(msg)
-            if copied_msg:
-                copied_contexts.append(copied_msg)
-        return copied_contexts, ContextSanitizeStats()
+            if not copied_msg:
+                continue
+            content = copied_msg.get("content")
+            if isinstance(content, list):
+                filtered_parts: list[Any] = []
+                removed_video = False
+                for part in content:
+                    if (
+                        isinstance(part, dict)
+                        and str(part.get("type", "")).lower() == "video_url"
+                    ):
+                        removed_video = True
+                        stats.fixed_video_blocks += 1
+                        filtered_parts.append({"type": "text", "text": "[Video]"})
+                        continue
+                    filtered_parts.append(part)
+                if removed_video:
+                    copied_msg["content"] = filtered_parts
+            copied_contexts.append(copied_msg)
+        return copied_contexts, stats
 
     supports_image = "image" in modalities
     supports_audio = "audio" in modalities

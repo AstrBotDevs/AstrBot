@@ -210,6 +210,7 @@ class ProviderRequest:
         # 构建内容块列表
         content_blocks = []
         image_capture_failed = False
+        transient_video_added = False
 
         # 1. 用户原始发言（OpenAI 建议：用户发言在前）
         if self.prompt and self.prompt.strip():
@@ -260,6 +261,40 @@ class ProviderRequest:
                                 "url": resolved.to_data_url(),
                             },
                         }
+                # A video supplied through `extra_user_content_parts` is handled
+                # like `video_urls` below: resolve it to a portable data URI and
+                # flag it transient. Persisting it would replay the whole payload
+                # on every later request, and a local path may be gone by then.
+                if isinstance(dumped, dict) and dumped.get("type") == "video_url":
+                    video_url = dumped.get("video_url")
+                    url = video_url.get("url") if isinstance(video_url, dict) else None
+                    if isinstance(url, str) and url:
+                        try:
+                            resolved_video = await MediaResolver(
+                                url,
+                                media_type="video",
+                                default_suffix=".mp4",
+                            ).to_base64_data(strict=True)
+                        except Exception as exc:
+                            logger.warning(
+                                "Video preprocessing failed; skipping it. Error: %s",
+                                exc,
+                            )
+                            continue
+                        if not resolved_video:
+                            logger.warning(
+                                "Video preprocessing returned no data; skipping it."
+                            )
+                            continue
+                        dumped = {
+                            **dumped,
+                            "video_url": {
+                                **video_url,
+                                "url": resolved_video.to_data_url(),
+                            },
+                            "_no_save": True,
+                        }
+                        transient_video_added = True
                 content_blocks.append(dumped)
 
         # 3. Read image references without resizing or transcoding.
@@ -348,6 +383,14 @@ class ProviderRequest:
             for block in content_blocks
         ):
             content_blocks = [{"type": "text", "text": "[Image unavailable]"}]
+
+        # A message made only of transient blocks would be persisted with an
+        # empty content list and replayed that way on every later request, so
+        # keep a text placeholder for the attachment.
+        if transient_video_added and not any(
+            not block.get("_no_save") for block in content_blocks
+        ):
+            content_blocks.insert(0, {"type": "text", "text": "[Video]"})
 
         # 只有当只有一个来自 prompt 的文本块且没有额外内容块时，才降级为简单格式以保持向后兼容
         if (
