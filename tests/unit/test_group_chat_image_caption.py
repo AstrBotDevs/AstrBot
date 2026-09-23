@@ -152,3 +152,51 @@ async def test_caption_removes_materialized_inputs(
         assert "3x3 montage" in provider.calls[0]["prompt"]
     else:
         assert provider.calls[0]["prompt"] == "Describe the image."
+
+
+def _temp_names(tmp_path: Path) -> list[str]:
+    return [
+        path.name
+        for path in tmp_path.iterdir()
+        if path.name.startswith(("media_", "model_image_"))
+    ]
+
+
+@pytest.mark.asyncio
+async def test_oversized_data_uri_is_removed_before_the_error_propagates(
+    tmp_path, monkeypatch
+):
+    _use_temp(monkeypatch, tmp_path)
+    monkeypatch.setattr(media, "MODEL_IMAGE_MAX_INPUT_BYTES", 1)
+    source = tmp_path / "huge.png"
+    Image.new("RGB", (8, 8), "blue").save(source)
+    provider = _CaptionProvider()
+
+    with pytest.raises(media.ImageInputTooLargeError):
+        await _context(provider).get_image_caption(
+            _data_uri(source, "image/png"),
+            "",
+            "Describe the image.",
+        )
+
+    assert provider.calls == []
+    assert _temp_names(tmp_path) == []
+
+
+@pytest.mark.asyncio
+async def test_oversized_local_file_is_kept(tmp_path, monkeypatch):
+    _use_temp(monkeypatch, tmp_path)
+    monkeypatch.setattr(media, "MODEL_IMAGE_MAX_INPUT_BYTES", 1)
+    source = tmp_path / "huge.png"
+    Image.new("RGB", (8, 8), "blue").save(source)
+    provider = _CaptionProvider()
+
+    with pytest.raises(media.ImageInputTooLargeError):
+        await _context(provider).get_image_caption(
+            str(source),
+            "",
+            "Describe the image.",
+        )
+
+    assert provider.calls == []
+    assert source.exists()

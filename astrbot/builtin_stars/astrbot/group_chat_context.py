@@ -28,6 +28,7 @@ from astrbot.core.agent.message import TextPart
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.media_utils import (
+    ImageInputTooLargeError,
     file_uri_to_path,
     normalize_model_image_max_size,
     prepare_model_image,
@@ -139,11 +140,17 @@ class GroupChatContext:
         prompt = image_caption_prompt
         image_refs = [image_url]
         cleanup_paths: list[str] = []
-        prepared = await prepare_model_image(
-            image_url,
-            max_size=normalize_model_image_max_size(None),
-            output_dir=Path(get_astrbot_temp_path()),
-        )
+        try:
+            prepared = await prepare_model_image(
+                image_url,
+                max_size=normalize_model_image_max_size(None),
+                output_dir=Path(get_astrbot_temp_path()),
+            )
+        except ImageInputTooLargeError as exc:
+            retained = str(exc)
+            if retained and not _is_source_image(image_url, retained):
+                _discard_prepared_image(retained)
+            raise
         if prepared:
             path, is_montage, _needs_cleanup, original_path = prepared
             image_refs = [path]
