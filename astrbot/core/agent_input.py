@@ -290,6 +290,7 @@ async def prepare_input_content(
         )
     req.image_urls = normalize_and_dedupe_strings(req.image_urls)
     req.audio_urls = normalize_and_dedupe_strings(req.audio_urls)
+    req.video_urls = normalize_and_dedupe_strings(req.video_urls)
 
     if config.file_extract_enabled:
         try:
