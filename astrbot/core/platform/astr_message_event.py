@@ -33,6 +33,9 @@ from .astrbot_message import AstrBotMessage, Group
 from .message_session import MessageSesion, MessageSession  # noqa
 from .platform_metadata import PlatformMetadata
 
+# Event extra key for the pre-ack reaction created by PreProcessStage.
+PRE_ACK_REACTION_ID = "_pre_ack_reaction_id"
+
 
 class AstrMessageEvent(abc.ABC):
     def __init__(
@@ -499,14 +502,33 @@ class AstrMessageEvent(abc.ABC):
         )
         self._has_send_oper = True
 
-    async def react(self, emoji: str) -> None:
-        """对消息添加表情回应。
+    async def react(self, emoji: str) -> str | None:
+        """Add a reaction to the message.
 
-        默认实现为发送一条包含该表情的消息。
-        注意：此实现并不一定符合所有平台的原生“表情回应”行为。
-        如需支持平台原生的消息反应功能，请在对应平台的子类中重写本方法。
+        The default implementation sends the emoji as a plain text message.
+        This may not match native reaction behavior on every platform.
+        Platforms with native message reactions should override this method.
+
+        Args:
+            emoji: Reaction identifier to add.
+
+        Returns:
+            Platform-native reaction ID, or None for the default implementation
+            or when creation fails.
         """
         await self.send(MessageChain([Plain(emoji)]))
+        return None
+
+    async def remove_reaction(self, reaction_id: str) -> None:
+        """Remove a reaction previously added via react().
+
+        The default implementation is a no-op. Platforms with native message
+        reactions should override this method.
+
+        Args:
+            reaction_id: Platform reaction ID returned by react().
+        """
+        return
 
     async def get_group(self, group_id: str | None = None, **kwargs) -> Group | None:
         """Get group information.

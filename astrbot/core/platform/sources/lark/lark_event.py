@@ -19,6 +19,7 @@ from lark_oapi.api.im.v1 import (
     CreateImageRequestBody,
     CreateMessageReactionRequest,
     CreateMessageReactionRequestBody,
+    DeleteMessageReactionRequest,
     Emoji,
     GetChatMembersRequest,
     GetChatRequest,
@@ -965,10 +966,20 @@ class LarkMessageEvent(AstrMessageEvent):
             fallback_chat_id=fallback_chat_id,
         )
 
-    async def react(self, emoji: str) -> None:
+    async def react(self, emoji: str) -> str | None:
+        """Add a reaction to a Lark message.
+
+        Args:
+            emoji: Lark emoji enum name, for example ``Typing``.
+
+        Returns:
+            Reaction ID on success, otherwise None.
+        """
         if self.bot.im is None:
-            logger.error("[Lark] API Client im 模块未初始化，无法发送表情")
-            return
+            logger.error(
+                "[Lark] API Client im module is not initialized; cannot add reaction"
+            )
+            return None
 
         request = (
             CreateMessageReactionRequest.builder()
@@ -983,8 +994,36 @@ class LarkMessageEvent(AstrMessageEvent):
 
         response = await self.bot.im.v1.message_reaction.acreate(request)
         if not response.success():
-            logger.error(f"发送飞书表情回应失败({response.code}): {response.msg}")
+            logger.error(
+                f"Failed to create Lark message reaction({response.code}): {response.msg}"
+            )
+            return None
+        return response.data.reaction_id if response.data else None
+
+    async def remove_reaction(self, reaction_id: str) -> None:
+        """Remove a reaction from a Lark message.
+
+        Args:
+            reaction_id: Reaction ID returned when the reaction was created.
+        """
+        if self.bot.im is None:
+            logger.error(
+                "[Lark] API Client im module is not initialized; cannot remove reaction"
+            )
             return
+
+        request = (
+            DeleteMessageReactionRequest.builder()
+            .message_id(self.message_obj.message_id)
+            .reaction_id(reaction_id)
+            .build()
+        )
+
+        response = await self.bot.im.v1.message_reaction.adelete(request)
+        if not response.success():
+            logger.error(
+                f"Failed to delete Lark message reaction({response.code}): {response.msg}"
+            )
 
     async def _create_streaming_card(self) -> str | None:
         """创建一个开启流式更新模式的卡片实体，返回 card_id。"""

@@ -7,7 +7,10 @@ from pathlib import Path
 
 from astrbot.core import logger
 from astrbot.core.message.components import Image, Plain, Record, Reply
-from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.astr_message_event import (
+    PRE_ACK_REACTION_ID,
+    AstrMessageEvent,
+)
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.media_utils import (
     describe_media_ref,
@@ -117,7 +120,14 @@ class PreProcessStage(Stage):
             and event.is_at_or_wake_command
         ):
             try:
-                await event.react(random.choice(emojis))
+                reaction_id = await event.react(random.choice(emojis))
+                # Auto-remove is a Lark-only option; default True for Lark.
+                if (
+                    reaction_id is not None
+                    and platform == "lark"
+                    and cfg.get("auto_remove", True)
+                ):
+                    event.set_extra(PRE_ACK_REACTION_ID, reaction_id)
             except Exception as e:
                 logger.warning(
                     f"Failed to send a pre-response reaction on {platform}: {e}"
