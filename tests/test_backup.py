@@ -1020,7 +1020,8 @@ class TestModelMappings:
         """测试主数据库模型映射包含预期的表"""
         expected_tables = [
             "platform_stats",
-            "conversations",
+            "conversations_v3",
+            "conversation_events",
             "personas",
             "preferences",
             "chatui_projects",

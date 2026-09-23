@@ -8,6 +8,7 @@ from openai.types.responses import Response
 
 import astrbot.core.message.components as Comp
 from astrbot import logger
+from astrbot.core.agent.event_stream import RequestEventRecorder
 from astrbot.core.agent.message import ContentPart, Message
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.exceptions import EmptyModelOutputError
@@ -300,6 +301,7 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         tools: ToolSet | None,
         *,
         request_max_retries: int | None = None,
+        request_event_recorder: RequestEventRecorder | None = None,
     ) -> LLMResponse:
         """Send a non-streaming Responses API request.
 
@@ -353,6 +355,7 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
                 extra_body=extra_body,
             ),
             max_attempts=request_max_retries,
+            request_event_recorder=request_event_recorder,
         )
         if not isinstance(response, Response):
             raise TypeError(
@@ -369,6 +372,7 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         tools: ToolSet | None,
         *,
         request_max_retries: int | None = None,
+        request_event_recorder: RequestEventRecorder | None = None,
     ) -> AsyncGenerator[LLMResponse, None]:
         """Send a streaming Responses API request.
 
@@ -422,6 +426,7 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
                 extra_body=extra_body,
             ),
             max_attempts=request_max_retries,
+            request_event_recorder=request_event_recorder,
         )
 
         response_id: str | None = None

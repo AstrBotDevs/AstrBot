@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import TypedDict
 
 from deprecated import deprecated
-from sqlalchemy import Index, desc
+from sqlalchemy import BigInteger, CheckConstraint, Column, Index, desc
 from sqlmodel import JSON, Field, SQLModel, Text, UniqueConstraint
 
 
@@ -64,8 +64,16 @@ class ProviderStat(TimestampMixin, SQLModel, table=True):
     time_to_first_token: float = Field(default=0.0, nullable=False)
 
 
-class ConversationV2(TimestampMixin, SQLModel, table=True):
-    __tablename__: str = "conversations"
+@dataclass(frozen=True, slots=True)
+class ConversationRevision:
+    """Committed event position and selected branch observed by a reader."""
+
+    head_seq: int
+    leaf_event_id: str | None
+
+
+class ConversationData(TimestampMixin):
+    """Conversation fields retained by the legacy plugin-facing read API."""
 
     inner_conversation_id: int | None = Field(
         default=None,
@@ -90,6 +98,18 @@ class ConversationV2(TimestampMixin, SQLModel, table=True):
     when 0, will use estimated token counter.
     """
 
+
+class ConversationRead(ConversationData):
+    """Detached read result; content is None when history was not requested."""
+
+    revision: ConversationRevision
+
+
+class ConversationV2(ConversationData, table=True):
+    """Legacy table mapping used only to migrate existing data and backups."""
+
+    __tablename__: str = "conversations"
+
     __table_args__ = (
         Index(
             "ix_conversations_created_at_inner_id",
@@ -106,6 +126,53 @@ class ConversationV2(TimestampMixin, SQLModel, table=True):
             "conversation_id",
             name="uix_conversation_id",
         ),
+    )
+
+
+class ConversationV3(TimestampMixin, SQLModel, table=True):
+    """Current metadata and branch pointers for an event-backed conversation."""
+
+    __tablename__: str = "conversations_v3"
+
+    id: int | None = Field(default=None, primary_key=True)
+    conversation_id: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True)
+    platform_id: str
+    umo: str = Field(index=True)
+    title: str | None = None
+    persona_id: str | None = None
+    head_seq: int = Field(default=0, sa_type=BigInteger)
+    leaf_event_id: str | None = None
+    replay_from_event_id: str | None = None
+
+    __table_args__ = (
+        Index("ix_conversations_v3_created_id", "created_at", "id"),
+        Index(
+            "ix_conversations_v3_platform_created_id", "platform_id", "created_at", "id"
+        ),
+    )
+
+
+class ConversationEvent(SQLModel, table=True):
+    """A context or execution record with reclaimable plugin rebase bodies."""
+
+    __tablename__: str = "conversation_events"
+
+    conversation_ref: int = Field(foreign_key="conversations_v3.id", primary_key=True)
+    seq: int = Field(primary_key=True, sa_type=BigInteger)
+    event_id: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True)
+    replay_from_event_id: str | None = None
+    type: str
+    version: int = Field(default=1)
+    payload: dict | None = Field(
+        default_factory=dict, sa_column=Column(JSON(none_as_null=True), nullable=True)
+    )
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        CheckConstraint("seq > 0"),
+        CheckConstraint("version > 0"),
+        Index("ix_conversation_events_type_seq", "conversation_ref", "type", "seq"),
+        Index("ix_conversation_events_baseline", "replay_from_event_id"),
     )
 
 
@@ -257,7 +324,14 @@ class PlatformMessageHistory(TimestampMixin, SQLModel, table=True):
         default=None,
     )  # Name of the sender in the platform
     content: dict = Field(sa_type=JSON, nullable=False)  # a message chain list
-    llm_checkpoint_id: str | None = Field(default=None, index=True)
+    turn_id: str | None = Field(default=None, index=True)
+    context_event_id: str | None = Field(default=None, index=True)
+    is_active: bool = Field(default=True)
+
+    @property
+    def llm_checkpoint_id(self) -> str | None:
+        """Expose the old plugin-facing association name during migration."""
+        return self.turn_id
 
     __table_args__ = (
         Index(
@@ -288,7 +362,7 @@ class WebChatThread(TimestampMixin, SQLModel, table=True):
     creator: str = Field(nullable=False, index=True)
     parent_session_id: str = Field(nullable=False, index=True)
     parent_message_id: int = Field(nullable=False, index=True)
-    base_checkpoint_id: str = Field(nullable=False, index=True)
+    base_event_id: str = Field(nullable=False, index=True)
     selected_text: str = Field(sa_type=Text, nullable=False)
 
     __table_args__ = (
@@ -576,6 +650,8 @@ class Conversation:
     updated_at: int = 0
     token_usage: int = 0
     """对话的总 token 数量。AstrBot 会保留最近一次 LLM 请求返回的总 token 数，方便统计。token_usage 可能为 0，表示未知。"""
+    revision: ConversationRevision | None = None
+    """Read revision, absent for conversations constructed by legacy plugins."""
 
 
 class Personality(TypedDict):

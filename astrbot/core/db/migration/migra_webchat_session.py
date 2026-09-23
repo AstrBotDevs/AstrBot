@@ -13,7 +13,7 @@ from sqlalchemy import func, select
 from sqlmodel import col
 
 from astrbot.core.db import BaseDatabase
-from astrbot.core.db.po import ConversationV2, PlatformMessageHistory, PlatformSession
+from astrbot.core.db.po import ConversationV3, PlatformMessageHistory, PlatformSession
 
 
 async def migrate_webchat_session(db_helper: BaseDatabase) -> None:
@@ -55,8 +55,8 @@ async def migrate_webchat_session(db_helper: BaseDatabase) -> None:
                 for user_id, _, _, _ in webchat_users
             ]
             conv_query = select(
-                col(ConversationV2.user_id), col(ConversationV2.title)
-            ).where(col(ConversationV2.user_id).in_(user_ids_to_query))
+                col(ConversationV3.umo), col(ConversationV3.title)
+            ).where(col(ConversationV3.umo).in_(user_ids_to_query))
             conv_result = await session.execute(conv_query)
             # 创建 user_id -> title 的映射字典
             title_map = {

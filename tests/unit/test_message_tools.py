@@ -55,6 +55,7 @@ class _DummyRespondEvent:
         self._result = MessageEventResult().message(result_text)
         self.send = AsyncMock()
         self.plugins_name = []
+        self.conversation_events = None
 
     def get_result(self):
         """Return the current message result."""

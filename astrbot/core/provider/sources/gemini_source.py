@@ -14,6 +14,10 @@ from google.genai.errors import APIError
 import astrbot.core.message.components as Comp
 from astrbot import logger
 from astrbot.api.provider import Provider
+from astrbot.core.agent.event_stream import (
+    RequestEventRecorder,
+    request_recorder_kwargs,
+)
 from astrbot.core.agent.message import AudioURLPart, ContentPart, ImageURLPart, TextPart
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.message_event_result import MessageChain
@@ -605,6 +609,7 @@ class ProviderGoogleGenAI(Provider):
         tools: ToolSet | None,
         *,
         request_max_retries: int | None = None,
+        request_event_recorder: RequestEventRecorder | None = None,
     ) -> LLMResponse:
         """非流式请求 Gemini API"""
         system_instruction = next(
@@ -640,6 +645,7 @@ class ProviderGoogleGenAI(Provider):
                         config=config,
                     ),
                     max_attempts=request_max_retries,
+                    request_event_recorder=request_event_recorder,
                 )
                 logger.debug(f"genai result: {result}")
 
@@ -706,6 +712,7 @@ class ProviderGoogleGenAI(Provider):
         tools: ToolSet | None,
         *,
         request_max_retries: int | None = None,
+        request_event_recorder: RequestEventRecorder | None = None,
     ) -> AsyncGenerator[LLMResponse, None]:
         """流式请求 Gemini API"""
         system_instruction = next(
@@ -732,6 +739,7 @@ class ProviderGoogleGenAI(Provider):
                         config=config,
                     ),
                     max_attempts=request_max_retries,
+                    request_event_recorder=request_event_recorder,
                 )
                 break
             except APIError as e:
@@ -864,6 +872,7 @@ class ProviderGoogleGenAI(Provider):
         extra_user_content_parts=None,
         tool_choice: Literal["auto", "required"] = "auto",
         request_max_retries: int | None = None,
+        request_event_recorder: RequestEventRecorder | None = None,
         **kwargs,
     ) -> LLMResponse:
         if contexts is None:
@@ -909,6 +918,7 @@ class ProviderGoogleGenAI(Provider):
                     payloads,
                     func_tool,
                     request_max_retries=request_max_retries,
+                    **request_recorder_kwargs(self._query, request_event_recorder),
                 )
             except APIError as e:
                 if await self._handle_api_error(e, keys):
@@ -931,6 +941,7 @@ class ProviderGoogleGenAI(Provider):
         extra_user_content_parts=None,
         tool_choice: Literal["auto", "required"] = "auto",
         request_max_retries: int | None = None,
+        request_event_recorder: RequestEventRecorder | None = None,
         **kwargs,
     ) -> AsyncGenerator[LLMResponse, None]:
         if contexts is None:
@@ -976,6 +987,9 @@ class ProviderGoogleGenAI(Provider):
                     payloads,
                     func_tool,
                     request_max_retries=request_max_retries,
+                    **request_recorder_kwargs(
+                        self._query_stream, request_event_recorder
+                    ),
                 ):
                     yield response
                 break

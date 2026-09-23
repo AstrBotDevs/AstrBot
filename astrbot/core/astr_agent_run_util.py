@@ -3,8 +3,10 @@ import re
 import time
 import traceback
 from collections.abc import AsyncGenerator
+from contextlib import aclosing
 
 from astrbot.core import logger
+from astrbot.core.agent.conversation_events import ConversationEventWriter
 from astrbot.core.agent.message import Message
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.astr_agent_context import AstrAgentContext
@@ -120,8 +122,11 @@ async def run_agent(
     stream_to_general: bool = False,
     show_reasoning: bool = False,
     buffer_intermediate_messages: bool = False,
+    conversation_events: ConversationEventWriter | None = None,
 ) -> AsyncGenerator[MessageChain | None, None]:
     step_idx = 0
+    if conversation_events is not None:
+        conversation_events.runtime_context = agent_runner.run_context
     agent_runner._step_budget_max = max_step
     agent_runner._step_budget_used = 0
     agent_runner._step_budget_notified = set()
@@ -156,145 +161,165 @@ async def run_agent(
             _watch_agent_stop_signal(agent_runner, astr_event),
         )
         try:
-            async for resp in agent_runner.step():
-                if _should_stop_agent(astr_event):
-                    agent_runner.request_stop()
-
-                if resp.type == "aborted":
-                    if can_buffer_llm_result:
-                        merged_chain = _merge_buffered_llm_chains(buffered_llm_chains)
-                        if merged_chain:
-                            astr_event.set_result(
-                                MessageEventResult(
-                                    chain=merged_chain.chain,
-                                    result_content_type=ResultContentType.LLM_RESULT,
-                                ),
-                            )
-                            yield merged_chain
-                            astr_event.clear_result()
-                    if not stop_watcher.done():
-                        stop_watcher.cancel()
-                        try:
-                            await stop_watcher
-                        except asyncio.CancelledError:
-                            pass
-                    astr_event.set_extra("agent_user_aborted", True)
-                    astr_event.set_extra("agent_stop_requested", False)
-                    return
-
-                if _should_stop_agent(astr_event):
-                    continue
-
-                if resp.type == "agent_stats":
-                    if astr_event.get_platform_name() == "webchat":
-                        await astr_event.send(resp.data["chain"])
-                    continue
-
-                if resp.type == "tool_call_result":
-                    msg_chain = resp.data["chain"]
-
-                    astr_event.trace.record(
-                        "agent_tool_result",
-                        tool_result=msg_chain.get_plain_text(
-                            with_other_comps_mark=True
-                        ),
-                    )
-
-                    if msg_chain.type == "tool_direct_result":
-                        # tool_direct_result 用于标记 llm tool 需要直接发送给用户的内容
-                        await astr_event.send(msg_chain)
-                        continue
-                    if astr_event.get_platform_id() == "webchat":
-                        await astr_event.send(msg_chain)
-                    elif show_tool_use and show_tool_call_result:
-                        status_msg = _build_tool_result_status_message(
-                            msg_chain, tool_name_by_call_id
-                        )
-                        await astr_event.send(
-                            MessageChain(type="tool_call").message(status_msg)
-                        )
-                    # 对于其他情况，暂时先不处理
-                    continue
-                elif resp.type == "tool_call":
-                    if agent_runner.streaming and show_tool_use:
-                        # 向下游平台发送 "break" 分段信号（空 MessageChain，不携带数据）。
-                        # 平台适配器收到后会关闭当前流式消息，并在后续文本到来时创建新消息。
-                        # 仅在 show_tool_use 为 True 时才发送：此时紧接着会通过
-                        # astr_event.send() 独立发送工具状态消息（如"🔨 调用工具: xxx"），
-                        # 需要分段才能保证消息顺序正确。
-                        # 若 show_tool_use 为 False，不会有独立消息插入，无需分段。
-                        yield MessageChain(chain=[], type="break")
-
-                    tool_info = _extract_chain_json_data(resp.data["chain"])
-                    astr_event.trace.record(
-                        "agent_tool_call",
-                        tool_name=tool_info if tool_info else "unknown",
-                    )
-                    _record_tool_call_name(tool_info, tool_name_by_call_id)
-
-                    if astr_event.get_platform_name() == "webchat":
-                        await astr_event.send(resp.data["chain"])
-                    elif show_tool_use:
-                        if show_tool_call_result and isinstance(tool_info, dict):
-                            # Delay tool status notification until tool_call_result.
+            async with aclosing(agent_runner.step()) as responses:
+                async for resp in responses:
+                    if conversation_events is not None:
+                        if await conversation_events.consume(resp):
                             continue
-                        chain = MessageChain(type="tool_call").message(
-                            _build_tool_call_status_message(tool_info)
-                        )
-                        await astr_event.send(chain)
-                    continue
-                elif resp.type == "llm_result":
-                    chain = resp.data["chain"]
-                    if chain.type == "reasoning":
-                        # For non-streaming mode, we handle reasoning in astrbot/core/astr_agent_hooks.py.
-                        # For streaming mode, we yield content immediately when received a reasoning chunk but not in here, see below.
+                    if resp.type in {
+                        "context.updated",
+                        "turn.started",
+                        "turn.finished",
+                        "request.started",
+                        "request.finished",
+                        "tool.started",
+                        "tool.finished",
+                        "message.appended",
+                        "context.rebased",
+                    }:
+                        continue
+                    if _should_stop_agent(astr_event):
+                        agent_runner.request_stop()
+
+                    if resp.type == "aborted":
+                        if can_buffer_llm_result:
+                            merged_chain = _merge_buffered_llm_chains(
+                                buffered_llm_chains
+                            )
+                            if merged_chain:
+                                astr_event.set_result(
+                                    MessageEventResult(
+                                        chain=merged_chain.chain,
+                                        result_content_type=ResultContentType.LLM_RESULT,
+                                    ),
+                                )
+                                yield merged_chain
+                                astr_event.clear_result()
+                        if not stop_watcher.done():
+                            stop_watcher.cancel()
+                            try:
+                                await stop_watcher
+                            except asyncio.CancelledError:
+                                pass
+                        astr_event.set_extra("agent_user_aborted", True)
+                        astr_event.set_extra("agent_stop_requested", False)
+                        return
+
+                    if _should_stop_agent(astr_event):
                         continue
 
-                if stream_to_general and resp.type == "streaming_delta":
-                    continue
-
-                if (
-                    resp.type == "err"
-                    and agent_runner.streaming
-                    and not stream_to_general
-                ):
-                    chain = (
-                        resp.data.get("chain") if isinstance(resp.data, dict) else None
-                    )
-                    if not isinstance(chain, MessageChain):
-                        logger.error(
-                            "Agent runner returned an error response without a message chain."
-                        )
-                        chain = MessageChain().message(
-                            "Error occurred during AI execution."
-                        )
-                    yield chain
-                    continue
-
-                if stream_to_general or not agent_runner.streaming:
-                    if can_buffer_llm_result and resp.type == "llm_result":
-                        buffered_llm_chains.append(resp.data["chain"])
+                    if resp.type == "agent_stats":
+                        if astr_event.get_platform_name() == "webchat":
+                            await astr_event.send(resp.data["chain"])
                         continue
 
-                    content_typ = (
-                        ResultContentType.LLM_RESULT
-                        if resp.type == "llm_result"
-                        else ResultContentType.GENERAL_RESULT
-                    )
-                    astr_event.set_result(
-                        MessageEventResult(
-                            chain=resp.data["chain"].chain,
-                            result_content_type=content_typ,
-                        ),
-                    )
-                    yield resp.data["chain"]
-                    astr_event.clear_result()
-                elif resp.type == "streaming_delta":
-                    chain = resp.data["chain"]
-                    if chain.type == "reasoning" and not show_reasoning:
-                        # display the reasoning content only when configured
+                    if resp.type == "tool_call_result":
+                        msg_chain = resp.data["chain"]
+
+                        astr_event.trace.record(
+                            "agent_tool_result",
+                            tool_result=msg_chain.get_plain_text(
+                                with_other_comps_mark=True
+                            ),
+                        )
+
+                        if msg_chain.type == "tool_direct_result":
+                            # tool_direct_result 用于标记 llm tool 需要直接发送给用户的内容
+                            await astr_event.send(msg_chain)
+                            continue
+                        if astr_event.get_platform_id() == "webchat":
+                            await astr_event.send(msg_chain)
+                        elif show_tool_use and show_tool_call_result:
+                            status_msg = _build_tool_result_status_message(
+                                msg_chain, tool_name_by_call_id
+                            )
+                            await astr_event.send(
+                                MessageChain(type="tool_call").message(status_msg)
+                            )
+                        # 对于其他情况，暂时先不处理
                         continue
-                    yield resp.data["chain"]  # MessageChain
+                    elif resp.type == "tool_call":
+                        if agent_runner.streaming and show_tool_use:
+                            # 向下游平台发送 "break" 分段信号（空 MessageChain，不携带数据）。
+                            # 平台适配器收到后会关闭当前流式消息，并在后续文本到来时创建新消息。
+                            # 仅在 show_tool_use 为 True 时才发送：此时紧接着会通过
+                            # astr_event.send() 独立发送工具状态消息（如"🔨 调用工具: xxx"），
+                            # 需要分段才能保证消息顺序正确。
+                            # 若 show_tool_use 为 False，不会有独立消息插入，无需分段。
+                            yield MessageChain(chain=[], type="break")
+
+                        tool_info = _extract_chain_json_data(resp.data["chain"])
+                        astr_event.trace.record(
+                            "agent_tool_call",
+                            tool_name=tool_info if tool_info else "unknown",
+                        )
+                        _record_tool_call_name(tool_info, tool_name_by_call_id)
+
+                        if astr_event.get_platform_name() == "webchat":
+                            await astr_event.send(resp.data["chain"])
+                        elif show_tool_use:
+                            if show_tool_call_result and isinstance(tool_info, dict):
+                                # Delay tool status notification until tool_call_result.
+                                continue
+                            chain = MessageChain(type="tool_call").message(
+                                _build_tool_call_status_message(tool_info)
+                            )
+                            await astr_event.send(chain)
+                        continue
+                    elif resp.type == "llm_result":
+                        chain = resp.data["chain"]
+                        if chain.type == "reasoning":
+                            # For non-streaming mode, we handle reasoning in astrbot/core/astr_agent_hooks.py.
+                            # For streaming mode, we yield content immediately when received a reasoning chunk but not in here, see below.
+                            continue
+
+                    if stream_to_general and resp.type == "streaming_delta":
+                        continue
+
+                    if (
+                        resp.type == "err"
+                        and agent_runner.streaming
+                        and not stream_to_general
+                    ):
+                        chain = (
+                            resp.data.get("chain")
+                            if isinstance(resp.data, dict)
+                            else None
+                        )
+                        if not isinstance(chain, MessageChain):
+                            logger.error(
+                                "Agent runner returned an error response without a message chain."
+                            )
+                            chain = MessageChain().message(
+                                "Error occurred during AI execution."
+                            )
+                        yield chain
+                        continue
+
+                    if stream_to_general or not agent_runner.streaming:
+                        if can_buffer_llm_result and resp.type == "llm_result":
+                            buffered_llm_chains.append(resp.data["chain"])
+                            continue
+
+                        content_typ = (
+                            ResultContentType.LLM_RESULT
+                            if resp.type == "llm_result"
+                            else ResultContentType.GENERAL_RESULT
+                        )
+                        astr_event.set_result(
+                            MessageEventResult(
+                                chain=resp.data["chain"].chain,
+                                result_content_type=content_typ,
+                            ),
+                        )
+                        yield resp.data["chain"]
+                        astr_event.clear_result()
+                    elif resp.type == "streaming_delta":
+                        chain = resp.data["chain"]
+                        if chain.type == "reasoning" and not show_reasoning:
+                            # display the reasoning content only when configured
+                            continue
+                        yield resp.data["chain"]  # MessageChain
 
             if can_buffer_llm_result and agent_runner.done():
                 merged_chain = _merge_buffered_llm_chains(buffered_llm_chains)
@@ -354,6 +379,10 @@ async def run_agent(
             else:
                 astr_event.set_result(MessageEventResult().message(err_msg))
             return
+        finally:
+            if not stop_watcher.done():
+                stop_watcher.cancel()
+            await asyncio.gather(stop_watcher, return_exceptions=True)
 
 
 async def _watch_agent_stop_signal(agent_runner: AgentRunner, astr_event) -> None:
@@ -372,6 +401,7 @@ async def run_live_agent(
     show_tool_call_result: bool = False,
     show_reasoning: bool = False,
     buffer_intermediate_messages: bool = False,
+    conversation_events: ConversationEventWriter | None = None,
 ) -> AsyncGenerator[MessageChain | None, None]:
     """Live Mode 的 Agent 运行器，支持流式 TTS
 
@@ -396,6 +426,7 @@ async def run_live_agent(
             stream_to_general=False,
             show_reasoning=show_reasoning,
             buffer_intermediate_messages=buffer_intermediate_messages,
+            conversation_events=conversation_events,
         ):
             yield chain
         return
@@ -429,6 +460,7 @@ async def run_live_agent(
             show_tool_call_result,
             show_reasoning,
             buffer_intermediate_messages,
+            conversation_events,
         )
     )
 
@@ -521,6 +553,7 @@ async def _run_agent_feeder(
     show_tool_call_result: bool,
     show_reasoning: bool,
     buffer_intermediate_messages: bool,
+    conversation_events: ConversationEventWriter | None = None,
 ) -> None:
     """运行 Agent 并将文本输出分句放入队列"""
     buffer = ""
@@ -533,6 +566,7 @@ async def _run_agent_feeder(
             stream_to_general=False,
             show_reasoning=show_reasoning,
             buffer_intermediate_messages=buffer_intermediate_messages,
+            conversation_events=conversation_events,
         ):
             if chain is None:
                 continue

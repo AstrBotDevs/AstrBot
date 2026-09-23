@@ -532,7 +532,7 @@ class AstrBotImporter:
         """清空主数据库所有表"""
         async with self.main_db.get_db() as session:
             async with session.begin():
-                for table_name, model_class in MAIN_DB_MODELS.items():
+                for table_name, model_class in reversed(MAIN_DB_MODELS.items()):
                     try:
                         await session.execute(delete(model_class))
                         logger.debug(f"已清空表 {table_name}")
@@ -574,10 +574,87 @@ class AstrBotImporter:
         """导入主数据库数据"""
         imported: dict[str, int] = {}
 
+        from sqlalchemy import text
+
+        from astrbot.core.db.po import ConversationV2
+
+        if data.get("conversations") and data.get("conversations_v3"):
+            raise ValueError("Backup contains ambiguous V2 and V3 conversations")
+
+        if any("parent_event_id" in row for row in data.get("conversation_events", [])):
+            from astrbot.core.db.conversation import linearize_legacy_events
+
+            conversations, events = linearize_legacy_events(
+                data.get("conversations_v3", []), data["conversation_events"]
+            )
+            data = {
+                **data,
+                "conversations_v3": conversations,
+                "conversation_events": events,
+            }
+
+        # A recycled baseline is valid; a missing baseline or an empty message
+        # payload is not. Validate historical targets as well as the active leaf.
+        event_rows = {
+            row["event_id"]: row for row in data.get("conversation_events", [])
+        }
+        baselines = {}
+        latest_context = {}
+        for event in sorted(
+            event_rows.values(), key=lambda row: (row["conversation_ref"], row["seq"])
+        ):
+            kind = event["type"]
+            owner = event["conversation_ref"]
+            if event.get("payload") is None and kind != "context.rebased":
+                raise ValueError("Only a rebase may have a recycled payload")
+            baseline_id = event.get("replay_from_event_id")
+            if kind == "context.rebased" and baseline_id != event["event_id"]:
+                raise ValueError(
+                    "A rebase must identify itself as its recovery baseline"
+                )
+            if kind == "context.rebased":
+                baselines[owner] = event["event_id"]
+            if kind in {"message.appended", "context.rebased"}:
+                if baseline_id != baselines.get(owner):
+                    raise ValueError("Invalid conversation recovery baseline in backup")
+                latest_context[owner] = event["event_id"]
+            if baseline_id is not None:
+                baseline = event_rows.get(baseline_id)
+                if (
+                    kind not in {"message.appended", "context.rebased"}
+                    or baseline is None
+                    or baseline["type"] != "context.rebased"
+                    or baseline["conversation_ref"] != event["conversation_ref"]
+                    or baseline["seq"] > event["seq"]
+                ):
+                    raise ValueError("Invalid conversation recovery baseline in backup")
+
+        for conv in data.get("conversations_v3", []):
+            baseline_id = baselines.get(conv["id"])
+            if (
+                conv.get("leaf_event_id") != latest_context.get(conv["id"])
+                or conv.get("replay_from_event_id") != baseline_id
+                or (baseline_id and event_rows[baseline_id]["payload"] is None)
+            ):
+                raise ValueError("Invalid current conversation context in backup")
+
         async with self.main_db.get_db() as session:
             async with session.begin():
+                await session.execute(text("BEGIN IMMEDIATE"))
+                await session.execute(text("PRAGMA defer_foreign_keys=ON"))
+                if "conversations" in data:
+                    connection = await session.connection()
+                    await connection.run_sync(
+                        lambda conn: ConversationV2.__table__.create(
+                            conn, checkfirst=True
+                        )
+                    )
                 for table_name, rows in data.items():
-                    model_class = MAIN_DB_MODELS.get(table_name)
+                    model_class = (
+                        ConversationV2
+                        if table_name == "conversations"
+                        else MAIN_DB_MODELS.get(table_name)
+                    )
                     if not model_class:
                         logger.warning(f"未知的表: {table_name}")
                         continue
@@ -586,16 +663,40 @@ class AstrBotImporter:
                     count = 0
                     for row in normalized_rows:
                         try:
+                            row = dict(row)
+                            if (
+                                table_name == "platform_message_history"
+                                and "llm_checkpoint_id" in row
+                            ):
+                                row["turn_id"] = row.pop("llm_checkpoint_id")
+                            if (
+                                table_name == "webchat_threads"
+                                and "base_checkpoint_id" in row
+                            ):
+                                row["base_event_id"] = row.pop("base_checkpoint_id")
                             # 转换 datetime 字符串为 datetime 对象
                             row = self._convert_datetime_fields(row, model_class)
                             obj = model_class(**row)
                             session.add(obj)
                             count += 1
                         except Exception as e:
+                            if table_name in {
+                                "conversations",
+                                "conversations_v3",
+                                "conversation_events",
+                                "platform_message_history",
+                                "webchat_threads",
+                            }:
+                                raise ValueError(
+                                    f"Invalid conversation backup row in {table_name}"
+                                ) from e
                             logger.warning(f"导入记录到 {table_name} 失败: {e}")
 
                     imported[table_name] = count
                     logger.debug(f"导入表 {table_name}: {count} 条记录")
+                await session.flush()
+                if "conversations" in data:
+                    await self.main_db.conversation_store.migrate(session=session)
 
         return imported
 

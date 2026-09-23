@@ -6,9 +6,8 @@ from collections.abc import AsyncGenerator
 from dataclasses import replace
 
 from astrbot.core import db_helper, logger
+from astrbot.core.agent.conversation_events import ConversationEventWriter
 from astrbot.core.agent.message import (
-    CheckpointData,
-    CheckpointMessageSegment,
     Message,
     dump_messages_with_checkpoints,
 )
@@ -210,6 +209,7 @@ class InternalAgentSubStage(Stage):
                 agent_runner: AgentRunner | None = None
                 runner_registered = False
                 reset_coro = None
+                event_writer = None
                 try:
                     build_cfg = replace(
                         self.main_agent_cfg,
@@ -239,6 +239,7 @@ class InternalAgentSubStage(Stage):
 
                     agent_runner = build_result.agent_runner
                     req = build_result.provider_request
+                    event_writer = build_result.conversation_events
                     provider = build_result.provider
                     reset_coro = build_result.reset_coro
 
@@ -326,6 +327,7 @@ class InternalAgentSubStage(Stage):
                                     self.show_tool_call_result,
                                     show_reasoning=show_reasoning,
                                     buffer_intermediate_messages=self.buffer_intermediate_messages,
+                                    conversation_events=event_writer,
                                 ),
                             ),
                         )
@@ -342,6 +344,7 @@ class InternalAgentSubStage(Stage):
                                 agent_runner.run_context.messages,
                                 agent_runner.stats,
                                 user_aborted=agent_runner.was_aborted(),
+                                conversation_events=event_writer,
                             )
 
                     elif streaming_response and not stream_to_general:
@@ -357,6 +360,7 @@ class InternalAgentSubStage(Stage):
                                     self.show_tool_call_result,
                                     show_reasoning=show_reasoning,
                                     buffer_intermediate_messages=self.buffer_intermediate_messages,
+                                    conversation_events=event_writer,
                                 ),
                             ),
                         )
@@ -388,6 +392,7 @@ class InternalAgentSubStage(Stage):
                             stream_to_general,
                             show_reasoning=show_reasoning,
                             buffer_intermediate_messages=self.buffer_intermediate_messages,
+                            conversation_events=event_writer,
                         ):
                             yield
 
@@ -417,6 +422,7 @@ class InternalAgentSubStage(Stage):
                             agent_runner.run_context.messages,
                             agent_runner.stats,
                             user_aborted=agent_runner.was_aborted(),
+                            conversation_events=event_writer,
                         )
 
                     asyncio.create_task(
@@ -427,10 +433,29 @@ class InternalAgentSubStage(Stage):
                         ),
                     )
                 finally:
-                    if reset_coro:
-                        reset_coro.close()
-                    if runner_registered and agent_runner is not None:
-                        unregister_active_runner(event.unified_msg_origin, agent_runner)
+                    try:
+                        if event_writer and event_writer.turn_id:
+                            status = "failed"
+                            if agent_runner and agent_runner.was_aborted():
+                                status = "cancelled"
+                            elif agent_runner and agent_runner.done():
+                                final = agent_runner.get_final_llm_resp()
+                                status = (
+                                    "completed"
+                                    if final and final.role == "assistant"
+                                    else "failed"
+                                )
+                            if event.is_stopped():
+                                status = "cancelled"
+                            await event_writer.finish_turn(status)
+                    finally:
+                        event.conversation_events = None
+                        if reset_coro:
+                            reset_coro.close()
+                        if runner_registered and agent_runner is not None:
+                            unregister_active_runner(
+                                event.unified_msg_origin, agent_runner
+                            )
 
         except Exception as e:
             logger.error(f"Error occurred while processing agent: {e}")
@@ -462,40 +487,47 @@ class InternalAgentSubStage(Stage):
         all_messages: list[Message],
         runner_stats: AgentStats | None,
         user_aborted: bool = False,
+        *,
+        conversation_events: ConversationEventWriter | None = None,
     ) -> None:
         if not req or not req.conversation:
             return
 
+        writer = conversation_events
         messages_to_save: list[Message] = []
-        skipped_initial_system = False
-        for message in all_messages:
-            if message.role == "system" and not skipped_initial_system:
-                skipped_initial_system = True
+        for index, message in enumerate(all_messages):
+            if index == 0 and message.role == "system":
                 continue
-            if message.role in ["assistant", "user"] and message._no_save:
+            if (
+                not writer
+                and message.role in ["assistant", "user"]
+                and message._no_save
+            ):
                 continue
             messages_to_save.append(message)
 
-        checkpoint_id = event.get_extra("llm_checkpoint_id")
-        has_checkpoint = isinstance(checkpoint_id, str) and bool(checkpoint_id)
-        message_to_save = dump_messages_with_checkpoints(messages_to_save)
+        turn_id = event.get_extra("turn_id")
+        has_turn = isinstance(turn_id, str) and bool(turn_id)
+        message_to_save = [
+            m
+            for m in dump_messages_with_checkpoints(
+                messages_to_save, include_temporary=bool(writer)
+            )
+            if m.get("role") != "_checkpoint"
+        ]
         if not user_aborted and (
             llm_response is None or llm_response.role != "assistant"
         ):
-            if has_checkpoint:
-                message_to_save.append(
-                    CheckpointMessageSegment(
-                        content=CheckpointData(id=checkpoint_id),
-                    ).model_dump()
-                )
-            if has_checkpoint or (llm_response is None and req.tool_calls_result):
-                token_usage = None if has_checkpoint else req.conversation.token_usage
-                await self.conv_manager.update_conversation(
-                    event.unified_msg_origin,
-                    req.conversation.cid,
-                    history=message_to_save,
-                    token_usage=token_usage,
-                )
+            if has_turn or (llm_response is None and req.tool_calls_result):
+                if writer:
+                    await writer.save_history(message_to_save)
+                else:
+                    await self.conv_manager.update_conversation(
+                        event.unified_msg_origin,
+                        req.conversation.cid,
+                        history=message_to_save,
+                        token_usage=None if has_turn else req.conversation.token_usage,
+                    )
             return
 
         if llm_response and llm_response.role != "assistant":
@@ -516,32 +548,20 @@ class InternalAgentSubStage(Stage):
             logger.debug("The LLM response is empty; not saving a record.")
             return
 
-        if isinstance(checkpoint_id, str) and checkpoint_id:
-            message_to_save.append(
-                CheckpointMessageSegment(
-                    content=CheckpointData(id=checkpoint_id),
-                ).model_dump()
-            )
-
-        # if user_aborted:
-        #     message_to_save.append(
-        #         Message(
-        #             role="assistant",
-        #             content="[User aborted this request. Partial output before abort was preserved.]",
-        #         ).model_dump()
-        #     )
-
         token_usage = None
         if runner_stats:
             # token_usage = runner_stats.token_usage.total
             token_usage = llm_response.usage.total if llm_response.usage else None
 
-        await self.conv_manager.update_conversation(
-            event.unified_msg_origin,
-            req.conversation.cid,
-            history=message_to_save,
-            token_usage=token_usage,
-        )
+        if writer:
+            await writer.save_history(message_to_save, token_usage=token_usage)
+        else:
+            await self.conv_manager.update_conversation(
+                event.unified_msg_origin,
+                req.conversation.cid,
+                history=message_to_save,
+                token_usage=token_usage,
+            )
 
 
 # we prevent astrbot from connecting to known malicious hosts

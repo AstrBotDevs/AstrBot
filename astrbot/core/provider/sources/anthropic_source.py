@@ -12,6 +12,10 @@ from anthropic.types.usage import Usage
 
 from astrbot import logger
 from astrbot.api.provider import Provider
+from astrbot.core.agent.event_stream import (
+    RequestEventRecorder,
+    request_recorder_kwargs,
+)
 from astrbot.core.agent.message import AudioURLPart, ContentPart, ImageURLPart, TextPart
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse, TokenUsage
@@ -515,6 +519,7 @@ class ProviderAnthropic(Provider):
         tools: ToolSet | None,
         *,
         request_max_retries: int | None = None,
+        request_event_recorder: RequestEventRecorder | None = None,
     ) -> LLMResponse:
         if tools:
             if tool_list := tools.get_func_desc_anthropic_style():
@@ -538,6 +543,7 @@ class ProviderAnthropic(Provider):
                     **payloads, stream=False, extra_body=extra_body
                 ),
                 max_attempts=request_max_retries,
+                request_event_recorder=request_event_recorder,
             )
         except httpx.RequestError as e:
             proxy = self.provider_config.get("proxy", "")
@@ -608,6 +614,7 @@ class ProviderAnthropic(Provider):
         tools: ToolSet | None,
         *,
         request_max_retries: int | None = None,
+        request_event_recorder: RequestEventRecorder | None = None,
     ) -> AsyncGenerator[LLMResponse, None]:
         if tools:
             if tool_list := tools.get_func_desc_anthropic_style():
@@ -637,6 +644,7 @@ class ProviderAnthropic(Provider):
             "Anthropic",
             lambda: self.client.messages.stream(**payloads, extra_body=extra_body),
             max_attempts=request_max_retries,
+            request_event_recorder=request_event_recorder,
         ) as stream:
             assert isinstance(stream, anthropic.AsyncMessageStream)
             async for event in stream:
@@ -776,6 +784,7 @@ class ProviderAnthropic(Provider):
         extra_user_content_parts=None,
         tool_choice: Literal["auto", "any", "tool", "none"] | dict[str, str] = "auto",
         request_max_retries: int | None = None,
+        request_event_recorder: RequestEventRecorder | None = None,
         **kwargs,
     ) -> LLMResponse:
         if contexts is None:
@@ -829,6 +838,7 @@ class ProviderAnthropic(Provider):
                 payloads,
                 func_tool,
                 request_max_retries=request_max_retries,
+                **request_recorder_kwargs(self._query, request_event_recorder),
             )
         except Exception as e:
             raise e
@@ -849,6 +859,7 @@ class ProviderAnthropic(Provider):
         extra_user_content_parts=None,
         tool_choice: Literal["auto", "any", "tool", "none"] | dict[str, str] = "auto",
         request_max_retries: int | None = None,
+        request_event_recorder: RequestEventRecorder | None = None,
         **kwargs,
     ):
         if contexts is None:
@@ -899,6 +910,7 @@ class ProviderAnthropic(Provider):
             payloads,
             func_tool,
             request_max_retries=request_max_retries,
+            **request_recorder_kwargs(self._query_stream, request_event_recorder),
         ):
             yield llm_response
 

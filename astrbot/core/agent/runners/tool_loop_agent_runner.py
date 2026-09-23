@@ -5,7 +5,7 @@ import time
 import traceback
 import typing as T
 import uuid
-from contextlib import suppress
+from contextlib import aclosing, suppress
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
@@ -25,7 +25,17 @@ from tenacity import (
 )
 
 from astrbot import logger
-from astrbot.core.agent.message import ImageURLPart, TextPart, ThinkPart
+from astrbot.core.agent.event_stream import (
+    AgentEventStream,
+    RequestEventRecorder,
+    request_recorder_kwargs,
+)
+from astrbot.core.agent.message import (
+    ImageURLPart,
+    TextPart,
+    ThinkPart,
+    dump_messages_with_checkpoints,
+)
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.agent.tool_image_cache import tool_image_cache
 from astrbot.core.exceptions import EmptyModelOutputError
@@ -108,6 +118,9 @@ AwaitableResultT = T.TypeVar("AwaitableResultT")
 
 
 class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
+    conversation_event_capabilities = frozenset(
+        {"turn", "messages", "request", "tool", "context"}
+    )
     TOOL_RESULT_MAX_ESTIMATED_TOKENS = 27_500
     TOOL_RESULT_PREVIEW_MAX_ESTIMATED_TOKENS = 7000
     EMPTY_OUTPUT_RETRY_ATTEMPTS = 3
@@ -231,9 +244,13 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         request_max_retries: int | None = None,
         tool_result_overflow_dir: str | None = None,
         read_tool: FunctionTool | None = None,
+        turn_id: str | None = None,
         **kwargs: T.Any,
     ) -> None:
         self.req = request
+        self.turn_id = turn_id or str(uuid.uuid4())
+        self._turn_started = False
+        self._events = AgentEventStream()
         self.streaming = streaming
         self.enforce_max_turns = enforce_max_turns
         self.llm_compress_instruction = llm_compress_instruction
@@ -257,6 +274,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             llm_compress_provider=self.llm_compress_provider,
             custom_token_counter=self.custom_token_counter,
             custom_compressor=self.custom_compressor,
+            request_event_emitter=self._events.emit,
+            turn_id=self.turn_id,
         )
         self.request_context_manager = ContextManager(
             self.request_context_manager_config
@@ -502,6 +521,93 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 abort_task.cancel()
             await asyncio.gather(abort_task, return_exceptions=True)
 
+    async def _recorded_responses(self, payload: dict, *, streaming: bool):
+        """Emit provider attempt events without including temporary request bodies.
+
+        Args:
+            payload: Actual provider call arguments, kept in memory only.
+            streaming: Whether to consume a streaming provider.
+
+        Yields:
+            Original provider responses.
+        """
+        recorder = None
+        final = None
+        status = "failed"
+        error_code = "NO_FINAL_RESPONSE"
+        if self._events.active:
+            recorder = RequestEventRecorder(
+                self._events.emit,
+                {
+                    "turn_id": self.turn_id,
+                    "provider_id": self.provider.provider_config.get("id", ""),
+                    "model": payload.get("model") or self.provider.get_model(),
+                    "attempt_scope": "provider_call",
+                },
+            )
+            await recorder.begin()
+        try:
+            if streaming:
+                stream = self.provider.text_chat_stream(
+                    **payload,
+                    **request_recorder_kwargs(self.provider.text_chat_stream, recorder),
+                )
+                try:
+                    while True:
+                        try:
+                            resp = await self._await_or_stop(anext(stream))
+                        except StopAsyncIteration:
+                            break
+                        if resp is None:
+                            status = "cancelled"
+                            break
+                        if not resp.is_chunk:
+                            final = resp
+                            status = "failed" if resp.role == "err" else "completed"
+                            if recorder:
+                                await recorder.finish(
+                                    status,
+                                    usage=resp.usage,
+                                    error_code="PROVIDER_ERROR"
+                                    if status == "failed"
+                                    else None,
+                                )
+                        yield resp
+                finally:
+                    await self._close_executor(stream)
+            else:
+                resp = await self._await_or_stop(
+                    self.provider.text_chat(
+                        **payload,
+                        **request_recorder_kwargs(self.provider.text_chat, recorder),
+                    )
+                )
+                if resp is None:
+                    status = "cancelled"
+                else:
+                    final = resp
+                    status = "failed" if resp.role == "err" else "completed"
+                    if recorder:
+                        await recorder.finish(
+                            status,
+                            usage=resp.usage,
+                            error_code="PROVIDER_ERROR" if status == "failed" else None,
+                        )
+                    yield resp
+        except (asyncio.CancelledError, GeneratorExit):
+            status = "cancelled"
+            raise
+        except Exception as exc:
+            error_code = type(exc).__name__
+            raise
+        finally:
+            if recorder:
+                await recorder.finish(
+                    status,
+                    usage=final.usage if final else None,
+                    error_code=error_code if status == "failed" else None,
+                )
+
     async def _iter_llm_responses(
         self, *, include_model: bool = True
     ) -> T.AsyncGenerator[LLMResponse, None]:
@@ -517,23 +623,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         if include_model:
             # For primary provider we keep explicit model selection if provided.
             payload["model"] = self.req.model
-        if self.streaming:
-            stream = self.provider.text_chat_stream(**payload)
-            try:
-                while True:
-                    try:
-                        resp = await self._await_or_stop(anext(stream))  # type: ignore
-                    except StopAsyncIteration:
-                        return
-                    if resp is None:
-                        return
-                    yield resp
-            finally:
-                await self._close_executor(stream)
-        else:
-            resp = await self._await_or_stop(self.provider.text_chat(**payload))
-            if resp is not None:
-                yield resp
+        async for response in self._recorded_responses(
+            payload, streaming=self.streaming
+        ):
+            yield response
 
     async def _iter_llm_responses_with_fallback(
         self,
@@ -799,8 +892,65 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             for tool_name in llm_resp.tools_call_name
         ]
 
+    def _context_response(
+        self, reason="legacy_replace", origin="unknown"
+    ) -> AgentResponse:
+        """Capture working context for the host's legacy mutation adapter.
+
+        Args:
+            reason: Why context may have changed, including compaction.
+            origin: Source of the mutation; custom or unobserved changes stay unknown.
+
+        Returns:
+            A runtime snapshot; the host stages immutable context events from it.
+        """
+        return AgentResponse(
+            "context.updated",
+            {
+                "messages": dump_messages_with_checkpoints(
+                    [
+                        m
+                        for i, m in enumerate(self.run_context.messages)
+                        if not (i == 0 and m.role == "system")
+                    ],
+                    include_temporary=True,
+                ),
+                "reason": reason,
+                "origin": origin,
+            },
+        )
+
     @override
     async def step(self):
+        """Yield execution events and display responses for host consumption.
+
+        Yields:
+            AgentResponse values. Advance the iterator after processing each value;
+            close it to cancel pending work when event persistence fails.
+        """
+        if not self._turn_started:
+            yield AgentResponse(
+                "turn.started", {"trigger": {"kind": "agent"}}, self.turn_id
+            )
+            self._turn_started = True
+        yield self._context_response()
+        async with aclosing(self._events.run(self._step())) as responses:
+            async for response in responses:
+                yield response
+        yield self._context_response()
+        if self.done():
+            yield AgentResponse(
+                "turn.finished",
+                {
+                    "turn_id": self.turn_id,
+                    "status": "cancelled"
+                    if self.was_aborted()
+                    else ("failed" if self.state == AgentState.ERROR else "completed"),
+                },
+                str(uuid.uuid4()),
+            )
+
+    async def _step(self):
         """Process a single step of the agent.
         This method should return the result of the step.
         """
@@ -833,6 +983,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             yield await self._finalize_aborted_step()
             return
         self.run_context.messages = processed_messages
+        yield self._context_response(reason="compaction", origin="system")
         self._simple_print_message_role("[AftCompact]", self.run_context.messages)
 
         async for llm_response in self._iter_llm_responses_with_fallback():
@@ -1149,8 +1300,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         step_count = 0
         while not self.done() and step_count < max_step:
             step_count += 1
-            async for resp in self.step():
-                yield resp
+            async with aclosing(self.step()) as responses:
+                async for resp in responses:
+                    yield resp
 
         #  如果循环结束了但是 agent 还没有完成，说明是达到了 max_step
         if not self.done():
@@ -1168,8 +1320,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 )
             )
             # 再执行最后一步
-            async for resp in self.step():
-                yield resp
+            async with aclosing(self.step()) as responses:
+                async for resp in responses:
+                    yield resp
 
     async def _handle_function_tools(
         self,
@@ -1281,14 +1434,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 except Exception as e:
                     logger.error(f"Error in on_tool_start hook: {e}", exc_info=True)
 
-                executor = self.tool_executor.execute(
-                    tool=func_tool,
-                    run_context=self.run_context,
-                    **valid_params,  # 只传递有效的参数
-                )
-
                 _final_resp: CallToolResult | None = None
-                async for resp in self._iter_tool_executor_results(executor):  # type: ignore
+                async for resp in self._recorded_tool_results(
+                    func_tool, func_tool_name, func_tool_id, valid_params
+                ):
                     if isinstance(resp, CallToolResult):
                         res = resp
                         _final_resp = resp
@@ -1495,18 +1644,20 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             )
             if param_subset.tools and tool_names:
                 contexts = self._build_tool_requery_context(tool_names)
-                requery_resp = await self._await_or_stop(
-                    self.provider.text_chat(
-                        contexts=self._sanitize_contexts_for_provider(contexts),
-                        func_tool=param_subset,
-                        model=self.req.model,
-                        session_id=self.req.session_id,
-                        extra_user_content_parts=self.req.extra_user_content_parts,
-                        # tool_choice="required",
-                        abort_signal=self._abort_signal,
-                        request_max_retries=self.request_max_retries,
-                    )
-                )
+                requery_resp = None
+                async for response in self._recorded_responses(
+                    {
+                        "contexts": self._sanitize_contexts_for_provider(contexts),
+                        "func_tool": param_subset,
+                        "model": self.req.model,
+                        "session_id": self.req.session_id,
+                        "extra_user_content_parts": self.req.extra_user_content_parts,
+                        "abort_signal": self._abort_signal,
+                        "request_max_retries": self.request_max_retries,
+                    },
+                    streaming=False,
+                ):
+                    requery_resp = response
                 if requery_resp:
                     llm_resp = requery_resp
                     self._sanitize_malformed_tool_calls(llm_resp)
@@ -1525,20 +1676,22 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         tool_names,
                         extra_instruction=self.SKILLS_LIKE_REQUERY_REPAIR_INSTRUCTION,
                     )
-                    repair_resp = await self._await_or_stop(
-                        self.provider.text_chat(
-                            contexts=self._sanitize_contexts_for_provider(
+                    repair_resp = None
+                    async for response in self._recorded_responses(
+                        {
+                            "contexts": self._sanitize_contexts_for_provider(
                                 repair_contexts
                             ),
-                            func_tool=param_subset,
-                            model=self.req.model,
-                            session_id=self.req.session_id,
-                            extra_user_content_parts=self.req.extra_user_content_parts,
-                            # tool_choice="required",
-                            abort_signal=self._abort_signal,
-                            request_max_retries=self.request_max_retries,
-                        )
-                    )
+                            "func_tool": param_subset,
+                            "model": self.req.model,
+                            "session_id": self.req.session_id,
+                            "extra_user_content_parts": self.req.extra_user_content_parts,
+                            "abort_signal": self._abort_signal,
+                            "request_max_retries": self.request_max_retries,
+                        },
+                        streaming=False,
+                    ):
+                        repair_resp = response
                     if repair_resp:
                         llm_resp = repair_resp
                         self._sanitize_malformed_tool_calls(llm_resp)
@@ -1604,6 +1757,67 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         with suppress(asyncio.CancelledError, RuntimeError, StopAsyncIteration):
             await close_executor()
 
+    async def _recorded_tool_results(self, tool, tool_name, tool_call_id, arguments):
+        """Emit tool execution boundaries around the actual executor.
+
+        Args:
+            tool: Tool whose executor is created after the started event is handled.
+            tool_name: Executed tool name.
+            tool_call_id: Model's call identity.
+            arguments: Arguments after plugin hooks and validation.
+
+        Yields:
+            Original tool results.
+        """
+        execution_id = None
+        result = None
+        status = "completed"
+        error_code = None
+        if self._events.active:
+            execution_id = str(uuid.uuid4())
+            await self._events.emit(
+                AgentResponse(
+                    "tool.started",
+                    {
+                        "turn_id": self.turn_id,
+                        "tool_call_id": tool_call_id,
+                        "tool_name": tool_name,
+                        "arguments": arguments,
+                    },
+                    execution_id,
+                )
+            )
+        executor = None
+        try:
+            executor = self.tool_executor.execute(
+                tool=tool, run_context=self.run_context, **arguments
+            )
+            async for item in self._iter_tool_executor_results(executor):
+                if isinstance(item, CallToolResult):
+                    result = item.model_dump(mode="json", exclude_none=True)
+                    if item.isError:
+                        status = "failed"
+                yield item
+        except (asyncio.CancelledError, _ToolExecutionInterrupted, GeneratorExit):
+            status = "cancelled"
+            raise
+        except Exception as exc:
+            status = "failed"
+            error_code = type(exc).__name__
+            raise
+        finally:
+            if executor is not None:
+                await self._close_executor(executor)
+            if execution_id:
+                payload = {"execution_id": execution_id, "status": status}
+                if result is not None:
+                    payload["result"] = result
+                if error_code:
+                    payload["error"] = {"code": error_code}
+                await self._events.emit(
+                    AgentResponse("tool.finished", payload, str(uuid.uuid4()))
+                )
+
     async def _iter_tool_executor_results(
         self,
         executor: T.AsyncGenerator[ToolExecutorResultT, None],
@@ -1643,6 +1857,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 except StopAsyncIteration:
                     return
             finally:
+                if not next_result_task.done():
+                    next_result_task.cancel()
+                await asyncio.gather(next_result_task, return_exceptions=True)
                 if not abort_task.done():
                     abort_task.cancel()
                     with suppress(asyncio.CancelledError):

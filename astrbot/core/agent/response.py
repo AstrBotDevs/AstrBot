@@ -11,8 +11,33 @@ class AgentResponseData(T.TypedDict):
 
 @dataclass
 class AgentResponse:
-    type: str
-    data: AgentResponseData
+    """One runner output, dispatched by its literal type.
+
+    Display responses carry ``chain``; protocol responses carry event payloads.
+    ``context.updated`` is an in-memory snapshot for legacy mutation adaptation.
+    Event IDs identify durable records and must be reused on redelivery.
+    """
+
+    type: T.Literal[
+        "streaming_delta",
+        "llm_result",
+        "err",
+        "aborted",
+        "agent_stats",
+        "tool_call",
+        "tool_call_result",
+        "turn.started",
+        "turn.finished",
+        "request.started",
+        "request.finished",
+        "tool.started",
+        "tool.finished",
+        "context.updated",
+        "message.appended",
+        "context.rebased",
+    ]
+    data: AgentResponseData | dict[str, T.Any]
+    event_id: str | None = None
 
 
 @dataclass

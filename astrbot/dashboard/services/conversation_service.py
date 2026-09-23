@@ -218,11 +218,12 @@ class ConversationService:
         if not conversation:
             raise ConversationServiceError("对话不存在")
 
-        await self.conv_mgr.update_conversation(
+        writer = await self.conv_mgr.event_writer(
             unified_msg_origin=user_id,
             conversation_id=cid,
-            history=history,
+            expected_revision=conversation.revision,
         )
+        await writer.save_history(history, origin="user")
 
         return {"message": "对话历史更新成功"}
 

@@ -35,7 +35,7 @@ async def migrate_token_usage(db_helper: BaseDatabase) -> None:
             columns = result.fetchall()
             column_names = [col[1] for col in columns]
 
-            if "token_usage" in column_names:
+            if not column_names or "token_usage" in column_names:
                 logger.info("token_usage 列已存在，跳过迁移")
                 await sp.put_async(
                     "global", "global", "migration_done_token_usage_1", True

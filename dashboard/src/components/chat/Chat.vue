@@ -427,6 +427,27 @@
       <button
         class="thread-selection-button"
         type="button"
+        :disabled="threadSelection.message?.can_fork === false"
+        :title="
+          threadSelection.message?.can_fork === false
+            ? tm(
+                `history.${
+                  threadSelection.message?.fork_unavailable_reason ||
+                  'context_unavailable'
+                }`,
+              )
+            : tm('thread.askInThread')
+        "
+        :aria-label="
+          threadSelection.message?.can_fork === false
+            ? tm(
+                `history.${
+                  threadSelection.message?.fork_unavailable_reason ||
+                  'context_unavailable'
+                }`,
+              )
+            : tm('thread.askInThread')
+        "
         @click="createThreadFromSelection"
       >
         {{ tm("thread.askInThread") }}
@@ -1452,6 +1473,7 @@ function scrollToMessage(messageId?: string | number) {
 }
 
 function openMessageEdit(message: ChatRecord) {
+  if (message.can_edit === false) return;
   messageEditDraft.value = plainTextFromMessage(message);
   editingMessage.value = message;
   nextTick(() => scrollToMessage(message.id));
@@ -1511,7 +1533,12 @@ async function handleRegenerateMessage(
   message: ChatRecord,
   selection?: RegenerateModelSelection,
 ) {
-  if (!currSessionId.value || isUserMessage(message)) return;
+  if (
+    !currSessionId.value ||
+    isUserMessage(message) ||
+    message.can_retry === false
+  )
+    return;
   message.threads = [];
   const effectiveSelection = selection ?? getSelectedProviderSelection();
   await regenerateMessage(
@@ -1557,7 +1584,12 @@ function handleBotTextSelection(event: MouseEvent, message: ChatRecord) {
 
 async function createThreadFromSelection() {
   const message = threadSelection.message;
-  if (!currSessionId.value || !message?.id || !threadSelection.selectedText)
+  if (
+    !currSessionId.value ||
+    !message?.id ||
+    !threadSelection.selectedText ||
+    message.can_fork === false
+  )
     return;
   try {
     const response = await chatApi.createThread({

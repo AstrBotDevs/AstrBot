@@ -6,6 +6,7 @@ import typing as T
 import uuid
 from collections.abc import Sequence
 from collections.abc import Set as AbstractSet
+from contextlib import aclosing
 
 import mcp
 
@@ -619,29 +620,46 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             return
 
         runner = result.agent_runner
-        async for _ in runner.step_until_done(agent_max_step):
-            # agent will send message to user via using tools
-            pass
-        llm_resp = runner.get_final_llm_resp()
-        task_meta = extras.get("background_task_result", {})
-        summary_note = (
-            f"[BackgroundTask] {summary_name} "
-            f"(task_id={task_meta.get('task_id', task_id)}) finished. "
-            f"Result: {task_meta.get('result') or result_text or 'no content'}"
-        )
-        if llm_resp and llm_resp.completion_text:
-            summary_note += (
-                f"I finished the task, here is the result: {llm_resp.completion_text}"
+        event_writer = result.conversation_events
+        if event_writer is not None:
+            event_writer.runtime_context = runner.run_context
+        status = "failed"
+        try:
+            async with aclosing(runner.step_until_done(agent_max_step)) as responses:
+                async for response in responses:
+                    if event_writer is not None:
+                        await event_writer.consume(response)
+            llm_resp = runner.get_final_llm_resp()
+            task_meta = extras.get("background_task_result", {})
+            summary_note = (
+                f"[BackgroundTask] {summary_name} "
+                f"(task_id={task_meta.get('task_id', task_id)}) finished. "
+                f"Result: {task_meta.get('result') or result_text or 'no content'}"
             )
-        await persist_agent_history(
-            ctx.conversation_manager,
-            event=cron_event,
-            req=req,
-            summary_note=summary_note,
-        )
-        if not llm_resp:
-            logger.warning("background task agent got no response")
-            return
+            if llm_resp and llm_resp.completion_text:
+                summary_note += f"I finished the task, here is the result: {llm_resp.completion_text}"
+            await persist_agent_history(
+                ctx.conversation_manager,
+                event=cron_event,
+                req=req,
+                summary_note=summary_note,
+                conversation_events=event_writer,
+            )
+            status = (
+                "completed" if llm_resp and llm_resp.role == "assistant" else "failed"
+            )
+            if not llm_resp:
+                logger.warning("background task agent got no response")
+                return
+        except asyncio.CancelledError:
+            status = "cancelled"
+            raise
+        finally:
+            try:
+                if event_writer is not None:
+                    await event_writer.finish_turn(status)
+            finally:
+                cron_event.conversation_events = None
 
     @classmethod
     async def _execute_local(

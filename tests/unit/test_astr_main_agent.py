@@ -322,6 +322,7 @@ async def test_proactive_agent_respects_runtime_and_safety_settings(
         runner = runner_cls.return_value
         runner.reset = AsyncMock()
         runner.step_until_done.return_value.__aiter__.return_value = []
+        runner.step_until_done.return_value.aclose = AsyncMock()
         runner.get_final_llm_resp.return_value = None
 
         if entrypoint == "cron":
