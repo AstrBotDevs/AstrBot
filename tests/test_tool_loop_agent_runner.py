@@ -2398,3 +2398,22 @@ async def test_small_step_budgets_and_reset(
     )
     assert runner._step_budget_used == 0
     assert runner._step_budget_notified == set()
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(sys.platform == "win32", reason="Restricted opening requires POSIX")
+async def test_tool_overflow_rejects_replaced_workspace_root(tmp_path):
+    """Do not spill host output through a workspace root replaced by a symlink."""
+    workspace = tmp_path / "workspace"
+    outside = tmp_path / "outside"
+    workspace.mkdir()
+    outside.mkdir()
+    runner = ToolLoopAgentRunner()
+    runner.tool_result_overflow_dir = str(workspace)
+    workspace.rmdir()
+    workspace.symlink_to(outside, target_is_directory=True)
+    with pytest.raises(PermissionError):
+        await runner._write_tool_result_overflow_file(
+            tool_call_id="output", content="private tool output"
+        )
+    assert list(outside.iterdir()) == []

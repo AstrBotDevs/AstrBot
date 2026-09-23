@@ -13,9 +13,10 @@ Local behavior follows each role's `filesystem_scope` permission:
   depends on host OS permissions.
 - `workspace`: read/grep are restricted to globally installed Skills,
   plugin-provided Skills, built-in plugin Skills, the current session or project
-  workspace, and AstrBot temporary directories. Write/edit are restricted to the
-  current workspace and temporary directories. Administrators may also update
-  globally installed Skills; plugin-provided and built-in Skills remain read-only.
+  workspace, and the current session's platform attachments. Write/edit are
+  restricted to the current workspace. Administrators may also read and write
+  all platform attachments and globally installed Skills; plugin-provided and
+  built-in Skills remain read-only. Shared temporary roots are not exposed.
 - Upload and download tools are not exposed in Local mode.
 
 Remote Sandbox behavior still follows `computer_use_require_admin`:
@@ -51,9 +52,8 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_builtin_plugin_path,
     get_astrbot_plugin_path,
     get_astrbot_skills_path,
-    get_astrbot_system_tmp_path,
-    get_astrbot_temp_path,
 )
+from astrbot.core.utils.platform_files import platform_files_root
 
 from ..registry import builtin_tool
 from . import util as computer_util
@@ -86,6 +86,7 @@ def _restricted_env_path_labels(
     *,
     include_installed_skills: bool,
     include_plugin_skills: bool,
+    is_admin: bool = False,
     current_workspace_root: Path | None = None,
 ) -> list[str]:
     """Return labels for directories allowed by a workspace-scoped Local policy."""
@@ -99,13 +100,9 @@ def _restricted_env_path_labels(
                 "astrbot/builtin_stars/*/skills",
             ]
         )
-    labels.extend(
-        [
-            str(current_workspace_root or _workspace_root(umo)),
-            get_astrbot_system_tmp_path(),
-            get_astrbot_temp_path(),
-        ]
-    )
+    labels.append(str(current_workspace_root or _workspace_root(umo)))
+    if include_plugin_skills or is_admin:
+        labels.append(str(platform_files_root(None if is_admin else umo)))
     return labels
 
 
@@ -139,14 +136,24 @@ def _plugin_skill_roots() -> tuple[Path, ...]:
 def _read_allowed_roots(
     umo: str,
     current_workspace_root: Path | None = None,
+    *,
+    is_admin: bool = False,
 ) -> tuple[Path, ...]:
-    """Return roots readable by a workspace-scoped Local policy."""
+    """Return roots readable by a workspace-scoped Local policy.
+
+    Args:
+        umo: Final unified message origin for attachment isolation.
+        current_workspace_root: Resolved session or project workspace, if available.
+        is_admin: Whether all sessions' attachments may be read.
+
+    Returns:
+        Trusted roots for reading and searching local files.
+    """
     return (
         Path(get_astrbot_skills_path()).resolve(strict=False),
         *_plugin_skill_roots(),
         current_workspace_root or _workspace_root(umo),
-        Path(get_astrbot_system_tmp_path()).resolve(strict=False),
-        Path(get_astrbot_temp_path()).resolve(strict=False),
+        platform_files_root(None if is_admin else umo),
     )
 
 
@@ -154,18 +161,22 @@ def _write_allowed_roots(
     umo: str,
     current_workspace_root: Path | None = None,
     *,
-    include_installed_skills: bool = False,
+    is_admin: bool = False,
 ) -> tuple[Path, ...]:
-    """Return writable roots for a workspace-scoped Local policy."""
+    """Return writable roots for a workspace-scoped Local policy.
+
+    Args:
+        umo: Unified message origin used for the fallback workspace.
+        current_workspace_root: Resolved session or project workspace, if available.
+        is_admin: Whether installed skills and all platform attachments are writable.
+
+    Returns:
+        Trusted roots for creating and editing local files.
+    """
     return (
-        *(
-            (Path(get_astrbot_skills_path()).resolve(strict=False),)
-            if include_installed_skills
-            else ()
-        ),
+        *((Path(get_astrbot_skills_path()).resolve(strict=False),) if is_admin else ()),
         current_workspace_root or _workspace_root(umo),
-        Path(get_astrbot_system_tmp_path()).resolve(strict=False),
-        Path(get_astrbot_temp_path()).resolve(strict=False),
+        *((platform_files_root(),) if is_admin else ()),
     )
 
 
@@ -267,7 +278,7 @@ def _normalize_rw_path(
     local_env: bool,
     umo: str,
     write: bool = False,
-    allow_installed_skill_write: bool = False,
+    is_admin: bool = False,
     current_workspace_root: Path | None = None,
 ) -> str:
     normalized_path = _resolve_tool_path(
@@ -283,10 +294,10 @@ def _normalize_rw_path(
             _write_allowed_roots(
                 umo,
                 current_workspace_root,
-                include_installed_skills=allow_installed_skill_write,
+                is_admin=is_admin,
             )
             if write
-            else _read_allowed_roots(umo, current_workspace_root)
+            else _read_allowed_roots(umo, current_workspace_root, is_admin=is_admin)
         )
     if restricted and not _is_path_within_allowed_roots(
         normalized_path,
@@ -297,8 +308,9 @@ def _normalize_rw_path(
         allowed = ", ".join(
             _restricted_env_path_labels(
                 umo,
-                include_installed_skills=not write or allow_installed_skill_write,
+                include_installed_skills=not write or is_admin,
                 include_plugin_skills=not write,
+                is_admin=is_admin,
                 current_workspace_root=current_workspace_root,
             )
         )
@@ -383,6 +395,7 @@ class FileReadTool(FunctionTool):
                     restricted=restricted,
                     local_env=local_env,
                     umo=context.context.event.unified_msg_origin,
+                    is_admin=context.context.event.role == "admin",
                     current_workspace_root=current_workspace_root,
                 )
                 if local_env
@@ -407,6 +420,7 @@ class FileReadTool(FunctionTool):
                     _read_allowed_roots(
                         context.context.event.unified_msg_origin,
                         current_workspace_root,
+                        is_admin=context.context.event.role == "admin",
                     ),
                     access="read",
                 )
@@ -487,7 +501,7 @@ class FileWriteTool(FunctionTool):
                     local_env=local_env,
                     umo=context.context.event.unified_msg_origin,
                     write=True,
-                    allow_installed_skill_write=(context.context.event.role == "admin"),
+                    is_admin=(context.context.event.role == "admin"),
                     current_workspace_root=current_workspace_root,
                 )
                 if local_env
@@ -503,14 +517,16 @@ class FileWriteTool(FunctionTool):
             if restricted:
                 if current_workspace_root is not None:
                     current_workspace_root.mkdir(parents=True, exist_ok=True)
+                if context.context.event.role == "admin" and Path(
+                    normalized_path
+                ).is_relative_to(platform_files_root()):
+                    platform_files_root().mkdir(parents=True, exist_ok=True)
                 file_descriptor = open_file_in_allowed_roots(
                     normalized_path,
                     _write_allowed_roots(
                         context.context.event.unified_msg_origin,
                         current_workspace_root,
-                        include_installed_skills=(
-                            context.context.event.role == "admin"
-                        ),
+                        is_admin=context.context.event.role == "admin",
                     ),
                     access="write",
                     create_parents=True,
@@ -603,7 +619,7 @@ class FileEditTool(FunctionTool):
                     local_env=local_env,
                     umo=umo,
                     write=True,
-                    allow_installed_skill_write=(context.context.event.role == "admin"),
+                    is_admin=(context.context.event.role == "admin"),
                     current_workspace_root=current_workspace_root,
                 )
                 if local_env
@@ -630,9 +646,7 @@ class FileEditTool(FunctionTool):
                     _write_allowed_roots(
                         umo,
                         current_workspace_root,
-                        include_installed_skills=(
-                            context.context.event.role == "admin"
-                        ),
+                        is_admin=context.context.event.role == "admin",
                     ),
                     access="edit",
                 )
@@ -791,6 +805,7 @@ class GrepTool(FunctionTool):
         local_env: bool,
         umo: str,
         current_workspace_root: Path | None = None,
+        is_admin: bool = False,
     ) -> list[str]:
         normalized = (
             [
@@ -808,7 +823,9 @@ class GrepTool(FunctionTool):
             if restricted:
                 return [
                     str(root)
-                    for root in _read_allowed_roots(umo, current_workspace_root)
+                    for root in _read_allowed_roots(
+                        umo, current_workspace_root, is_admin=is_admin
+                    )
                     if root.exists()
                 ]
             if local_env:
@@ -822,7 +839,9 @@ class GrepTool(FunctionTool):
                 if not _is_path_within_allowed_roots(
                     path,
                     umo=umo,
-                    allowed_roots=_read_allowed_roots(umo, current_workspace_root),
+                    allowed_roots=_read_allowed_roots(
+                        umo, current_workspace_root, is_admin=is_admin
+                    ),
                     current_workspace_root=current_workspace_root,
                 )
             ]
@@ -832,6 +851,7 @@ class GrepTool(FunctionTool):
                         umo,
                         include_installed_skills=True,
                         include_plugin_skills=True,
+                        is_admin=is_admin,
                         current_workspace_root=current_workspace_root,
                     )
                 )
@@ -873,6 +893,7 @@ class GrepTool(FunctionTool):
                     restricted=restricted,
                     local_env=local_env,
                     umo=context.context.event.unified_msg_origin,
+                    is_admin=context.context.event.role == "admin",
                     current_workspace_root=current_workspace_root,
                 )
                 if local_env
@@ -898,6 +919,7 @@ class GrepTool(FunctionTool):
                         for root in _read_allowed_roots(
                             context.context.event.unified_msg_origin,
                             current_workspace_root,
+                            is_admin=context.context.event.role == "admin",
                         )
                         if path_object == root or path_object.is_relative_to(root)
                     ]
@@ -1056,9 +1078,9 @@ class FileDownloadTool(FunctionTool):
         try:
             name = _remote_basename(remote_path) or os.path.basename(remote_path)
 
-            local_path = os.path.join(
-                get_astrbot_temp_path(), f"sandbox_{uuid.uuid4().hex[:4]}_{name}"
-            )
+            workspace = await workspace_root_for_context(context)
+            workspace.mkdir(parents=True, exist_ok=True)
+            local_path = str(workspace / f"sandbox_{uuid.uuid4().hex}_{name}")
 
             # Download file from sandbox
             await sb.download_file(remote_path, local_path)

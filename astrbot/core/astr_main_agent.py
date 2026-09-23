@@ -114,6 +114,10 @@ from astrbot.core.utils.media_utils import (
     is_recoverable_image_error,
     normalize_model_image_max_size,
 )
+from astrbot.core.utils.platform_files import (
+    retain_platform_file,
+    update_platform_image_path,
+)
 from astrbot.core.utils.quoted_message.settings import (
     SETTINGS as DEFAULT_QUOTED_MESSAGE_SETTINGS,
 )
@@ -813,9 +817,24 @@ async def _append_video_attachment(
     video: Video,
     *,
     quoted: bool = False,
+    event: AstrMessageEvent | None = None,
 ) -> None:
+    """Attach a video, retaining platform input when an event is available.
+
+    Args:
+        req: Request receiving the attachment notice.
+        video: Incoming video component.
+        quoted: Whether the video belongs to a quoted message.
+        event: Owner used to localize late or quoted platform attachments.
+    """
     try:
         video_path = await video.convert_to_file_path()
+        if event is not None:
+            video_path = await retain_platform_file(
+                video_path,
+                event.unified_msg_origin,
+            )
+            video.file = video.path = video.url = video_path
     except Exception as exc:  # noqa: BLE001
         if quoted:
             logger.debug(
@@ -1456,6 +1475,22 @@ async def collect_initial_request(
                 if isinstance(comp, Image):
                     try:
                         image_path = await comp.convert_to_file_path()
+                        source_ref = comp.url or comp.file or ""
+                        if not is_file_uri(source_ref):
+                            try:
+                                source_is_local = Path(source_ref).is_file()
+                            except OSError as exc:
+                                if not is_recoverable_image_error(exc):
+                                    raise
+                                source_is_local = False
+                            if not source_is_local and Path(image_path).is_file():
+                                event.track_temporary_local_file(image_path)
+                        image_path = await retain_platform_file(
+                            image_path, event.unified_msg_origin
+                        )
+                        update_platform_image_path(
+                            comp, image_path, event.message_obj.message
+                        )
                     except Exception as exc:
                         if not is_recoverable_image_error(exc):
                             raise
@@ -1468,24 +1503,23 @@ async def collect_initial_request(
                         continue
                     req.image_urls.append(image_path)
                     attachment_paths.append(image_path)
-                    # Adopt sources created after PreProcess, before another
-                    # attachment or conversation lookup can fail or be cancelled.
-                    source_ref = comp.url or comp.file or ""
-                    if not is_file_uri(source_ref):
-                        try:
-                            source_is_local = Path(source_ref).is_file()
-                        except OSError as exc:
-                            if not is_recoverable_image_error(exc):
-                                raise
-                            source_is_local = False
-                        if not source_is_local and Path(image_path).is_file():
-                            event.track_temporary_local_file(image_path)
                 elif isinstance(comp, Record):
                     audio_path = await comp.convert_to_file_path()
+                    audio_path = await retain_platform_file(
+                        audio_path,
+                        event.unified_msg_origin,
+                    )
+                    comp.file = comp.path = comp.url = audio_path
                     req.audio_urls.append(audio_path)
                     _append_audio_attachment(req, audio_path)
                 elif isinstance(comp, File):
                     file_path = await comp.get_file()
+                    if file_path:
+                        file_path = await retain_platform_file(
+                            file_path,
+                            event.unified_msg_origin,
+                        )
+                        comp.file_ = file_path
                     file_name = comp.name or os.path.basename(file_path)
                     req.extra_user_content_parts.append(
                         TextPart(
@@ -1493,7 +1527,7 @@ async def collect_initial_request(
                         )
                     )
                 elif isinstance(comp, Video):
-                    await _append_video_attachment(req, comp)
+                    await _append_video_attachment(req, comp, event=event)
             # quoted message attachments
             reply_comps = [
                 comp for comp in event.message_obj.message if isinstance(comp, Reply)
@@ -1510,6 +1544,25 @@ async def collect_initial_request(
                             has_embedded_image = True
                             try:
                                 image_path = await reply_comp.convert_to_file_path()
+                                source_ref = reply_comp.url or reply_comp.file or ""
+                                if not is_file_uri(source_ref):
+                                    try:
+                                        source_is_local = Path(source_ref).is_file()
+                                    except OSError as exc:
+                                        if not is_recoverable_image_error(exc):
+                                            raise
+                                        source_is_local = False
+                                    if (
+                                        not source_is_local
+                                        and Path(image_path).is_file()
+                                    ):
+                                        event.track_temporary_local_file(image_path)
+                                image_path = await retain_platform_file(
+                                    image_path, event.unified_msg_origin
+                                )
+                                update_platform_image_path(
+                                    reply_comp, image_path, event.message_obj.message
+                                )
                             except Exception as exc:
                                 if not is_recoverable_image_error(exc):
                                     raise
@@ -1523,23 +1576,26 @@ async def collect_initial_request(
                                 continue
                             req.image_urls.append(image_path)
                             attachment_paths.append(image_path)
-                            source_ref = reply_comp.url or reply_comp.file or ""
-                            if not is_file_uri(source_ref):
-                                try:
-                                    source_is_local = Path(source_ref).is_file()
-                                except OSError as exc:
-                                    if not is_recoverable_image_error(exc):
-                                        raise
-                                    source_is_local = False
-                                if not source_is_local and Path(image_path).is_file():
-                                    event.track_temporary_local_file(image_path)
                             quoted_image_refs.add(image_path)
                         elif isinstance(reply_comp, Record):
                             audio_path = await reply_comp.convert_to_file_path()
+                            audio_path = await retain_platform_file(
+                                audio_path,
+                                event.unified_msg_origin,
+                            )
+                            reply_comp.file = reply_comp.path = reply_comp.url = (
+                                audio_path
+                            )
                             req.audio_urls.append(audio_path)
                             _append_quoted_audio_attachment(req, audio_path)
                         elif isinstance(reply_comp, File):
                             file_path = await reply_comp.get_file()
+                            if file_path:
+                                file_path = await retain_platform_file(
+                                    file_path,
+                                    event.unified_msg_origin,
+                                )
+                                reply_comp.file_ = file_path
                             file_name = reply_comp.name or os.path.basename(file_path)
                             req.extra_user_content_parts.append(
                                 TextPart(
@@ -1550,7 +1606,9 @@ async def collect_initial_request(
                                 )
                             )
                         elif isinstance(reply_comp, Video):
-                            await _append_video_attachment(req, reply_comp, quoted=True)
+                            await _append_video_attachment(
+                                req, reply_comp, quoted=True, event=event
+                            )
 
                 # Fallback quoted image extraction for reply-id-only payloads, or when
                 # embedded reply chain only contains placeholders (e.g. [Forward Message], [Image]).
@@ -1587,9 +1645,19 @@ async def collect_initial_request(
                         for image_ref in fallback_images:
                             if image_ref in req.image_urls:
                                 continue
-                            req.image_urls.append(image_ref)
+                            image = Image(file=image_ref)
+                            image_path = await image.convert_to_file_path()
+                            retained_path = await retain_platform_file(
+                                image_path,
+                                event.unified_msg_origin,
+                            )
+                            image.file = image.path = image.url = retained_path
+                            if comp.chain is None:
+                                comp.chain = []
+                            comp.chain.append(image)
+                            req.image_urls.append(retained_path)
                             fallback_quoted_image_count += 1
-                            quoted_image_refs.add(image_ref)
+                            quoted_image_refs.add(retained_path)
                     except Exception as exc:  # noqa: BLE001
                         logger.warning(
                             "Failed to resolve fallback quoted images for umo=%s, reply_id=%s: %s",
@@ -1613,8 +1681,7 @@ async def collect_initial_request(
         image = next((part for part in quote.chain if isinstance(part, Image)), None)
         if image:
             quote_image_ref = image.url or image.file
-    # Keep adopted source paths usable after cleanup, but retain provisional
-    # ownership until collection succeeds so errors and cancellation can clean up.
+    # Retained images outlive event cleanup; staging files and previews remain owned.
     for image_path in attachment_paths:
         event.untrack_temporary_local_file(image_path)
     return req, quote_image_ref
@@ -1899,7 +1966,15 @@ async def build_main_agent(
         fallback_providers=fallback_providers,
         request_max_retries=config.request_max_retries,
         tool_result_overflow_dir=(
-            get_astrbot_system_tmp_path()
+            (
+                str(
+                    await _get_workspace_path_for_umo(
+                        event.unified_msg_origin, plugin_context
+                    )
+                )
+                if config.computer_use_runtime == "local"
+                else get_astrbot_system_tmp_path()
+            )
             if req.func_tool and req.func_tool.get_tool("astrbot_file_read_tool")
             else None
         ),

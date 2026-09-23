@@ -261,6 +261,10 @@ class Context:
             AstrAgentContext,
         )
         from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
+        from astrbot.core.tools.computer_tools.util import (
+            is_local_runtime,
+            workspace_root_for_context,
+        )
 
         prov = await self.provider_manager.get_provider_by_id(chat_provider_id)
         if not prov or not isinstance(prov, Provider):
@@ -291,6 +295,10 @@ class Context:
             )
         agent_runner = ToolLoopAgentRunner()
         tool_executor = FunctionToolExecutor()
+        run_context = AgentContextWrapper(
+            context=agent_context,
+            tool_call_timeout=tool_call_timeout,
+        )
 
         streaming = kwargs.get("stream", False)
 
@@ -300,9 +308,12 @@ class Context:
             if k not in ["stream", "agent_hooks", "agent_context"]
         }
         if request.func_tool and request.func_tool.get_tool("astrbot_file_read_tool"):
-            other_kwargs.setdefault(
-                "tool_result_overflow_dir", get_astrbot_system_tmp_path()
-            )
+            if "tool_result_overflow_dir" not in other_kwargs:
+                other_kwargs["tool_result_overflow_dir"] = (
+                    str(await workspace_root_for_context(run_context))
+                    if is_local_runtime(run_context)
+                    else get_astrbot_system_tmp_path()
+                )
             other_kwargs.setdefault(
                 "read_tool", request.func_tool.get_tool("astrbot_file_read_tool")
             )
@@ -310,10 +321,7 @@ class Context:
         await agent_runner.reset(
             provider=prov,
             request=request,
-            run_context=AgentContextWrapper(
-                context=agent_context,
-                tool_call_timeout=tool_call_timeout,
-            ),
+            run_context=run_context,
             tool_executor=tool_executor,
             agent_hooks=agent_hooks,
             streaming=streaming,

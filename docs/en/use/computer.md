@@ -66,29 +66,24 @@ The local Shell tool includes basic blocking for dangerous commands such as `rm 
 
 ### Permission Model
 
-In the local permission table, open the **File access scope** menu to read each option's description. **Workspace** restricts access to the session workspace, temporary directories, and skill files. **Entire environment** (formerly **Host files**) allows access to files permitted by the account running AstrBot. In Docker, this means files inside the container and mounted files, not all files on the Docker host. **Disabled** prevents file access through local Computer Use tools. These descriptions now appear under the corresponding menu options instead of below the table. Hover over or tap the question mark after “All files in the environment where AstrBot runs.” for details about account permissions and Docker file access.
+In the local permission table, open the **File access scope** menu to read each option's description. **Workspace** restricts access to the current workspace, platform attachments, and skill files. **Entire environment** (formerly **Host files**) allows access to files permitted by the account running AstrBot. In Docker, this means files inside the container and mounted files, not all files on the Docker host. **Disabled** prevents file access through local Computer Use tools. These descriptions now appear under the corresponding menu options instead of below the table. Hover over or tap the question mark after “All files in the environment where AstrBot runs.” for details about account permissions and Docker file access.
 
-Computer Use has a separate option:
+Local mode configures `filesystem_scope`, code execution, and network access separately for each role. `none` disables local file tools; `host` permits files accessible to the runtime account. `workspace` applies these directory rules:
 
-- `Require AstrBot admin permission`
+| Directory | Members | Administrators |
+| --- | --- | --- |
+| Current session or project workspace | Read/write | Read/write |
+| `data/skills` | Read-only | Read/write |
+| `data/plugins/*/skills`, `astrbot/builtin_stars/*/skills` | Read-only | Read-only |
+| `data/temp/platform_files/<normalized_umo>/` for the current session | Read-only | Read/write |
+| Other sessions under `platform_files` | No access | Read/write |
+| Other files under shared `data/temp` or the system `.astrbot` temp directory | No blanket access | No blanket access |
 
-This option is enabled by default.
+The common preprocessing stage retains incoming files, images, audio, video, and quoted/forwarded attachments after the session identity is finalized. Directory names reuse workspace UMO normalization, including the final isolated UMO for per-user group sessions. Adapters and shared downloaders may create internal staging files before localization. Members must copy incoming attachments into their workspace to edit them. Retained attachments remain subject to temporary-directory size cleanup and are not permanent storage.
 
-When enabled:
+Read/Grep, write/edit, restricted Shell/Python, and file sending use the corresponding session boundaries. Generated files, sandbox downloads, and local tool overflow output use the current workspace without granting access to shared temporary roots. Existing loose temporary files are not automatically migrated because they lack reliable session ownership; available attachments are localized when their messages pass through preprocessing again.
 
-- Admin users can use Shell, Python, file read, file write, file edit, and Grep search in `local` mode.
-- Non-admin users cannot use Shell or Python.
-- Non-admin users can only use file read, write, edit, and search inside restricted directories. Plugin-provided Skills are read/search-only and cannot be written or edited.
-
-Allowed directories for non-admin users in `local` mode include:
-
-- `data/skills`
-- `data/plugins/*/skills` (read-only, for plugin-provided Skills)
-- Current session's `data/workspaces/{normalized_umo}`
-- AstrBot temporary directories
-- `.astrbot` under the system temporary directory
-
-If `Require AstrBot admin permission` is disabled, regular users behave much closer to admins for Computer Use tools. Do not disable it unless you understand the risk.
+New macOS/Linux configurations default both roles to `workspace`, with code execution disabled for members. Windows defaults to disabled member access and administrator `host` access. Migrated configurations may retain administrator host access. `computer_use_require_admin` still gates third-party sandbox operations; it does not replace local per-role directory policies.
 
 Admin IDs can be configured in:
 

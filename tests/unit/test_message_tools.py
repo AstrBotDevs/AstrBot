@@ -410,8 +410,8 @@ async def test_non_admin_can_send_workspace_file(tmp_path, monkeypatch, scope):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("scope", ["none", "workspace"])
-async def test_non_admin_can_send_temp_file(tmp_path, monkeypatch, scope):
-    """Non-admin users can send generated files under AstrBot temp."""
+async def test_non_admin_cannot_send_shared_temp_file(tmp_path, monkeypatch, scope):
+    """Shared temporary files are not accessible through the send tool."""
     tool = SendMessageToUserTool()
     ctx = _make_context(
         role="member", local_permissions={"member": {"filesystem_scope": scope}}
@@ -421,7 +421,7 @@ async def test_non_admin_can_send_temp_file(tmp_path, monkeypatch, scope):
     output_path = temp_root / "output.txt"
     output_path.write_text("output", encoding="utf-8")
     monkeypatch.setattr(
-        "astrbot.core.tools.message_tools.get_astrbot_temp_path",
+        "astrbot.core.utils.platform_files.get_astrbot_temp_path",
         lambda: str(temp_root),
     )
 
@@ -430,8 +430,40 @@ async def test_non_admin_can_send_temp_file(tmp_path, monkeypatch, scope):
         messages=[{"type": "file", "path": str(output_path)}],
     )
 
-    assert "Message sent to session" in result
-    ctx.context.context.send_message.assert_called_once()
+    assert "restricted" in result
+    ctx.context.context.send_message.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role", ["member", "admin"])
+@pytest.mark.parametrize("own_session", [False, True])
+async def test_send_attachment_obeys_session_read_permissions(
+    tmp_path, monkeypatch, role, own_session
+):
+    """Sending must not bypass the member's attachment read boundary."""
+    from astrbot.core.utils import platform_files
+
+    ctx = _make_context(
+        role=role, local_permissions={role: {"filesystem_scope": "workspace"}}
+    )
+    monkeypatch.setattr(platform_files, "get_astrbot_temp_path", lambda: str(tmp_path))
+    umo = (
+        ctx.context.event.unified_msg_origin
+        if own_session
+        else "other:GroupMessage:group"
+    )
+    path = platform_files.platform_files_root(umo) / "file.txt"
+    path.parent.mkdir(parents=True)
+    path.write_text("attachment", encoding="utf-8")
+    result = await SendMessageToUserTool().call(
+        ctx, messages=[{"type": "file", "path": str(path)}]
+    )
+    if role == "admin" or own_session:
+        assert "Message sent to session" in result
+        ctx.context.context.send_message.assert_called_once()
+    else:
+        assert "restricted" in result
+        ctx.context.context.send_message.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -444,7 +476,7 @@ async def test_send_message_downloads_windows_sandbox_file_with_original_name(
     temp_root = tmp_path / "temp"
     temp_root.mkdir()
     monkeypatch.setattr(
-        "astrbot.core.tools.message_tools.get_astrbot_temp_path",
+        "astrbot.core.tools.computer_tools.util.get_astrbot_workspaces_path",
         lambda: str(temp_root),
     )
 
@@ -492,7 +524,7 @@ async def test_send_message_downloads_trailing_slash_sandbox_file_with_basename(
     temp_root = tmp_path / "temp"
     temp_root.mkdir()
     monkeypatch.setattr(
-        "astrbot.core.tools.message_tools.get_astrbot_temp_path",
+        "astrbot.core.tools.computer_tools.util.get_astrbot_workspaces_path",
         lambda: str(temp_root),
     )
 

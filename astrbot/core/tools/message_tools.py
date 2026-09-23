@@ -27,25 +27,19 @@ from astrbot.core.tools.computer_tools.util import (
     workspace_root_for_context,
 )
 from astrbot.core.tools.registry import builtin_tool
-from astrbot.core.utils.astrbot_path import (
-    get_astrbot_system_tmp_path,
-    get_astrbot_temp_path,
-)
+from astrbot.core.utils.platform_files import platform_files_root
 
 
 def _file_send_allowed_roots(
     umo: str | None,
     current_workspace_root: Path | None = None,
+    *,
+    is_admin: bool = False,
 ) -> tuple[Path, ...]:
     roots = []
     if umo:
         roots.append(current_workspace_root or workspace_root(umo))
-    roots.extend(
-        [
-            Path(get_astrbot_temp_path()).resolve(strict=False),
-            Path(get_astrbot_system_tmp_path()).resolve(strict=False),
-        ]
-    )
+        roots.append(platform_files_root(None if is_admin else umo))
     return tuple(roots)
 
 
@@ -65,7 +59,9 @@ def _can_send_local_file(
     current_workspace_root: Path | None = None,
 ) -> bool:
     umo = context.context.event.unified_msg_origin
-    allowed_roots = _file_send_allowed_roots(umo, current_workspace_root)
+    allowed_roots = _file_send_allowed_roots(
+        umo, current_workspace_root, is_admin=context.context.event.role == "admin"
+    )
     if _is_path_within(local_path, allowed_roots):
         return True
     return is_local_runtime(context) and not _is_restricted_local_env(context)
@@ -141,11 +137,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
         if not path:
             raise FileNotFoundError(f"{component_type} path is empty")
 
-        current_workspace_root = (
-            await workspace_root_for_context(context)
-            if is_local_runtime(context)
-            else None
-        )
+        current_workspace_root = await workspace_root_for_context(context)
 
         # Relative host paths are resolved only inside the user's workspace.
         if not os.path.isabs(path):
@@ -171,6 +163,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                         for root in _file_send_allowed_roots(
                             context.context.event.unified_msg_origin,
                             current_workspace_root,
+                            is_admin=context.context.event.role == "admin",
                         )
                     )
                     raise PermissionError(
@@ -194,8 +187,9 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
             result = await sb.shell.exec(f"test -f {quoted_path} && echo '_&exists_'")
             if "_&exists_" in json.dumps(result):
                 name = _remote_basename(path) or os.path.basename(path)
-                local_path = os.path.join(
-                    get_astrbot_temp_path(), f"sandbox_{uuid.uuid4().hex[:4]}_{name}"
+                current_workspace_root.mkdir(parents=True, exist_ok=True)
+                local_path = str(
+                    current_workspace_root / f"sandbox_{uuid.uuid4().hex}_{name}"
                 )
                 await sb.download_file(path, local_path)
                 logger.info(f"Downloaded file from sandbox: {path} -> {local_path}")

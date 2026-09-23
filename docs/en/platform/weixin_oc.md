@@ -61,9 +61,9 @@ You can also watch `Data & Logs` -> `Logs` in the WebUI to confirm that the adap
 
 ## Media File Storage
 
-Received images, videos, files, and voice messages are downloaded and decrypted into AstrBot's local temporary directory:
+Received images, videos, files, and voice messages are downloaded and decrypted by the adapter, then retained by common preprocessing under the final session identity:
 
-`data/temp`
+`data/temp/platform_files/<normalized_umo>/`
 
 These files are temporary cached files and can be further used by plugins, agents, or the file service.
 

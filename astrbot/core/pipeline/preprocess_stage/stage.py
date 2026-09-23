@@ -6,7 +6,16 @@ from collections.abc import AsyncGenerator
 from pathlib import Path
 
 from astrbot.core import logger
-from astrbot.core.message.components import Image, Plain, Record, Reply
+from astrbot.core.message.components import (
+    File,
+    Image,
+    Node,
+    Nodes,
+    Plain,
+    Record,
+    Reply,
+    Video,
+)
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.media_utils import (
@@ -15,6 +24,10 @@ from astrbot.core.utils.media_utils import (
     ensure_wav,
     file_uri_to_path,
     is_file_uri,
+)
+from astrbot.core.utils.platform_files import (
+    retain_platform_file,
+    update_platform_image_path,
 )
 
 from ..context import PipelineContext
@@ -67,7 +80,12 @@ class PreProcessStage(Stage):
         event: AstrMessageEvent,
         component: Image,
     ) -> None:
-        """Resolve and validate an image while preserving cleanup ownership."""
+        """Resolve an image in place while preserving cleanup ownership.
+
+        Args:
+            event: Incoming event with its finalized session identity.
+            component: Image component to localize in place.
+        """
         media_ref = component.url or component.file
         image_path: str | None = None
         materialized = False
@@ -90,11 +108,9 @@ class PreProcessStage(Stage):
                 event.untrack_temporary_local_file(image_path)
             raise
 
-        component.file = image_path
-        component.path = image_path
-        # Image.convert_to_file_path() prefers url, so keep it aligned.
-        component.url = image_path
-        event.untrack_temporary_local_file(image_path)
+        retained_path = await retain_platform_file(image_path, event.unified_msg_origin)
+        update_platform_image_path(component, retained_path, event.get_messages())
+        event.untrack_temporary_local_file(retained_path)
 
     async def process(
         self,
@@ -162,60 +178,72 @@ class PreProcessStage(Stage):
                             logger.debug(f"Path mapping: {url} -> {component.url}")
                     message_chain[idx] = component
 
-        # Localize source images and normalize audio for downstream processing.
-        message_chain = event.get_messages()
-        for idx, component in enumerate(message_chain):
-            if isinstance(component, Record):
+        # WakingCheckStage has finalized the UMO before attachments are retained.
+        # Traverse quoted and forwarded chains as well as the incoming message.
+        pending = list(reversed(event.get_messages()))
+        while pending:
+            component = pending.pop()
+            if isinstance(component, Reply) and component.chain:
+                pending.extend(reversed(component.chain))
+            elif isinstance(component, Node):
+                pending.extend(reversed(component.content))
+            elif isinstance(component, Nodes):
+                pending.extend(reversed(component.nodes))
+            elif isinstance(component, Image):
+                try:
+                    await self._normalize_image_component(event, component)
+                except Exception as exc:
+                    logger.warning(
+                        "Image processing failed for %s: %s",
+                        describe_media_ref(component.url or component.file),
+                        exc,
+                    )
+            elif isinstance(component, Record):
                 try:
                     original_path = await component.convert_to_file_path()
                     self._track_temp_media(event, original_path)
                     record_path = await ensure_wav(original_path)
                     self._track_temp_media(event, record_path)
-                    component.file = record_path
-                    component.path = record_path
-                    message_chain[idx] = component
-                except Exception as e:
-                    logger.warning(f"Voice processing failed: {e}")
-            elif isinstance(component, Image):
-                try:
-                    await self._normalize_image_component(event, component)
-                    message_chain[idx] = component
-                except Exception as e:
-                    media_ref = component.url or component.file
-                    logger.warning(
-                        "Image processing failed for %s: %s",
-                        describe_media_ref(media_ref),
-                        e,
+                    retained_path = await retain_platform_file(
+                        record_path,
+                        event.unified_msg_origin,
                     )
-
-        # Also normalize media components inside Reply chains.
-        for component in event.get_messages():
-            if isinstance(component, Reply) and component.chain:
-                for idx, reply_comp in enumerate(component.chain):
-                    if isinstance(reply_comp, Record):
-                        try:
-                            original_path = await reply_comp.convert_to_file_path()
-                            self._track_temp_media(event, original_path)
-                            record_path = await ensure_wav(original_path)
-                            self._track_temp_media(event, record_path)
-                            reply_comp.file = record_path
-                            reply_comp.path = record_path
-                            component.chain[idx] = reply_comp
-                        except Exception as e:
-                            logger.warning(
-                                f"Voice processing in reply chain failed: {e}"
-                            )
-                    elif isinstance(reply_comp, Image):
-                        try:
-                            await self._normalize_image_component(event, reply_comp)
-                            component.chain[idx] = reply_comp
-                        except Exception as e:
-                            media_ref = reply_comp.url or reply_comp.file
-                            logger.warning(
-                                "Image processing in reply chain failed for %s: %s",
-                                describe_media_ref(media_ref),
-                                e,
-                            )
+                    component.file = retained_path
+                    component.path = retained_path
+                    component.url = retained_path
+                    event.untrack_temporary_local_file(retained_path)
+                except Exception as exc:
+                    logger.warning("Voice processing failed: %s", exc)
+            elif isinstance(component, File | Video):
+                try:
+                    source_ref = (
+                        component.file_
+                        if isinstance(component, File)
+                        else component.file or component.url
+                    )
+                    was_local = self._is_existing_local_image_ref(source_ref)
+                    source_path = (
+                        await component.get_file()
+                        if isinstance(component, File)
+                        else await component.convert_to_file_path()
+                    )
+                    if not source_path:
+                        continue
+                    if not was_local:
+                        self._track_temp_media(event, source_path)
+                    retained_path = await retain_platform_file(
+                        source_path,
+                        event.unified_msg_origin,
+                    )
+                    if isinstance(component, File):
+                        component.file_ = retained_path
+                    else:
+                        component.file = retained_path
+                        component.path = retained_path
+                        component.url = retained_path
+                    event.untrack_temporary_local_file(retained_path)
+                except Exception as exc:
+                    logger.warning("Attachment localization failed: %s", exc)
 
         # STT
         if self.stt_settings.get("enable", False):

@@ -20,6 +20,7 @@ from astrbot.core.agent.message import (
     TextPart,
     dump_messages_with_checkpoints,
 )
+from astrbot.core.agent.tool import ToolSet
 from astrbot.core.config.default import DEFAULT_CONFIG
 from astrbot.core.message.components import Image, Plain, Reply
 from astrbot.core.pipeline.preprocess_stage import stage as preprocess
@@ -34,7 +35,7 @@ from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest
 from astrbot.core.provider.provider import Provider
 from astrbot.core.star.star_handler import EventType
-from astrbot.core.utils import image_input
+from astrbot.core.utils import image_input, platform_files
 from astrbot.core.utils import media_utils as media
 
 
@@ -85,7 +86,7 @@ def source_image(tmp_path, fmt="GIF"):
 @pytest.fixture
 def harness(tmp_path, monkeypatch):
     work = tmp_path / "work"
-    for module in (media, image_input, preprocess):
+    for module in (media, image_input, preprocess, platform_files):
         monkeypatch.setattr(module, "get_astrbot_temp_path", lambda: str(work))
     config = copy.deepcopy(DEFAULT_CONFIG)
     config["provider_settings"].update(
@@ -104,6 +105,7 @@ def harness(tmp_path, monkeypatch):
     )
     context.persona_manager.personas_v3 = []
     context.subagent_orchestrator = None
+    context.get_llm_tool_manager.return_value.get_full_tool_set.return_value = ToolSet()
     context.get_llm_tool_manager.return_value.get_builtin_tool.side_effect = (
         lambda cls, **kwargs: cls(**kwargs)
     )
@@ -219,14 +221,16 @@ async def test_legacy_toggle_does_not_disable_preparation(
     assert Path(event.get_messages()[0].file).read_bytes() == original
     assert str(source) not in event._temporary_local_files
     assert any(
-        str(source) in p.text
+        event.get_messages()[0].file in p.text
         for p in req.extra_user_content_parts
         if isinstance(p, TextPart)
     )
     assert harness.provider.text_chat.await_count == 1
     assert "image_settings" not in harness.provider.text_chat.await_args.kwargs
     visual_path = Path(req.image_urls[0])
-    assert (visual_path == source) == (fmt in {"JPEG", "PNG"})
+    assert (str(visual_path) == event.get_messages()[0].file) == (
+        fmt in {"JPEG", "PNG"}
+    )
     event.cleanup_temporary_local_files()
     assert source.read_bytes() == original
     assert visual_path.exists() == (fmt in {"JPEG", "PNG"})
@@ -549,7 +553,7 @@ async def test_provider_and_history_keep_bounded_previews_and_original_paths(
     texts = [
         part.text for part in req.extra_user_content_parts if isinstance(part, TextPart)
     ]
-    assert any(str(source) in text for text in texts)
+    assert any(part.file in text for text in texts)
     assert all(str(preview) not in text for text in texts)
     provider_messages = harness.provider.text_chat.await_args.kwargs["contexts"]
     history = (
@@ -644,7 +648,7 @@ async def test_caption_animation_notice_uses_actual_image_order(harness, tmp_pat
     caption.text_chat.assert_awaited_once()
     args = caption.text_chat.await_args.kwargs
     assert len(args["image_urls"]) == 2
-    assert args["image_urls"][0] == str(still)
+    assert args["image_urls"][0] == event.get_messages()[0].file
     assert "positions 2 (1-based)" in args["prompt"]
     assert "Describe them as animations" in args["prompt"]
     assert "do not mention the conversion or frame layout" in args["prompt"]
@@ -729,7 +733,7 @@ async def test_oversized_images_explain_omission_and_keep_original_path(
         if part["type"] == "text" and "skipped: exceeds" in part["text"]
     ]
     assert len(notices) == 1
-    assert "64 MiB" in notices[0] and str(source) in notices[0]
+    assert "64 MiB" in notices[0] and attachments[0].file in notices[0]
     advice = [
         part["text"]
         for part in payload
@@ -988,10 +992,10 @@ async def test_third_party_route_retains_original_images(
         "prepare_model_image",
         AsyncMock(side_effect=AssertionError("third party must not prepare")),
     )
-    await process_event(
-        harness, make_event([Image(file=str(source))]), preprocess_first=True
-    )
-    assert seen == [str(source)] and not harness.captured
+    event = make_event([Image(file=str(source))])
+    await process_event(harness, event, preprocess_first=True)
+    assert seen == [event.get_messages()[0].file] and not harness.captured
+    assert Path(seen[0]).read_bytes() == source.read_bytes()
 
 
 @pytest.mark.asyncio
@@ -1094,8 +1098,9 @@ async def test_attachment_sources_survive_event_cleanup(
         assert max(visual_image.size) == 12
 
     owned = [Path(path) for path in event._temporary_local_files]
-    assert len(owned) == 2
+    assert len(owned) >= 2
     assert unrelated in owned
+    assert all(path.is_relative_to(harness.work) for path in owned)
     event.cleanup_temporary_local_files()
     assert attachment_path.read_bytes() == original
     assert all(not path.exists() for path in owned)
@@ -1203,6 +1208,8 @@ async def test_materialized_sources_remain_owned_when_collection_fails(
     )
     if fail_at == "attachment":
         failing_image = MagicMock(spec=Image)
+        failing_image.url = ""
+        failing_image.file = "unavailable-image"
         failing_image.convert_to_file_path = AsyncMock(
             side_effect=failure("unavailable")
         )
@@ -1260,10 +1267,12 @@ async def test_final_image_labels_follow_mixed_visuals_after_hook(
             req.extra_user_content_parts.append(
                 TextPart(text="[Image captions supplied by a plugin]")
             )
-            req.image_urls = ([] if remove_image else [str(animation)]) + [
-                str(still),
-                str(oversized),
-                str(still),
+            req.image_urls = (
+                [] if remove_image else [event.get_messages()[2].chain[0].file]
+            ) + [
+                event.get_messages()[1].file,
+                event.get_messages()[0].file,
+                event.get_messages()[1].file,
             ]
         return False
 
@@ -1272,7 +1281,14 @@ async def test_final_image_labels_follow_mixed_visuals_after_hook(
     assert convert.await_count == 4
     req = harness.captured[0].req
     payload = harness.provider.text_chat.await_args.kwargs["contexts"][-1]["content"]
-    expected = [inserted, still] if remove_image else [inserted, animation, still]
+    archived_oversized = event.get_messages()[0].file
+    archived_still = event.get_messages()[1].file
+    archived_animation = event.get_messages()[2].chain[0].file
+    expected = (
+        [str(inserted), archived_still]
+        if remove_image
+        else [str(inserted), archived_animation, archived_still]
+    )
     images = [
         index for index, part in enumerate(payload) if part["type"] == "image_url"
     ]
@@ -1292,20 +1308,30 @@ async def test_final_image_labels_follow_mixed_visuals_after_hook(
             and part["text"].startswith(f"[Image {number} in quoted message:")
         )
         assert f"original path {original}" in label["text"]
-        assert ("in quoted message" in label["text"]) == (original == animation)
-        assert ("3x3 frame montage" in label["text"]) == (original == animation)
+        assert ("in quoted message" in label["text"]) == (
+            original == archived_animation
+        )
+        assert ("3x3 frame montage" in label["text"]) == (
+            original == archived_animation
+        )
         data = base64.b64decode(payload[position]["image_url"]["url"].split(",", 1)[1])
         assert data == Path(visual_paths[number - 1]).read_bytes()
     texts = [part["text"] for part in payload if part["type"] == "text"]
     assert "[Image captions supplied by a plugin]" in texts
-    for original in (oversized, still, animation, inserted):
-        assert sum(str(original) in text for text in texts) == 1
+    for original in (
+        archived_oversized,
+        archived_still,
+        archived_animation,
+        str(inserted),
+    ):
+        assert sum(original in text for text in texts) == 1
     assert any(
-        str(oversized) in text and "skipped: exceeds 64 MiB" in text for text in texts
+        archived_oversized in text and "skipped: exceeds 64 MiB" in text
+        for text in texts
     )
     if remove_image:
         assert any(
-            str(animation) in text and "not included in this request" in text
+            archived_animation in text and "not included in this request" in text
             for text in texts
         )
     history = (
@@ -1354,7 +1380,8 @@ async def test_captioned_quote_has_status_without_visual_index(
     labels = [
         part["text"]
         for part in payload
-        if part["type"] == "text" and str(source) in part["text"]
+        if part["type"] == "text"
+        and event.get_messages()[0].chain[0].file in part["text"]
     ]
     assert len(labels) == 1
     assert "in quoted message" in labels[0]
@@ -1413,8 +1440,14 @@ async def test_duplicate_current_and_quoted_image_share_one_visual_label(
         for part in content
         if part.get("text", "").startswith("[Image 1 in quoted message:")
     )
-    assert label == f"[Image 1 in quoted message: original path {source}]"
-    assert sum(str(source) in part.get("text", "") for part in content) == 1
+    assert (
+        label
+        == f"[Image 1 in quoted message: original path {event.get_messages()[0].file}]"
+    )
+    assert (
+        sum(event.get_messages()[0].file in part.get("text", "") for part in content)
+        == 1
+    )
 
 
 @pytest.mark.asyncio
@@ -1450,7 +1483,7 @@ async def test_hook_only_new_refs_receive_full_image_policy(
             with PILImage.open(req.image_urls[0]) as image:
                 assert image.size == (90, 45)
             # Reintroducing an already processed original must also reuse its preview.
-            req.image_urls.append(str(initial))
+            req.image_urls.append(event.get_messages()[0].file)
             if origin == "image_urls":
                 req.image_urls.append(str(added))
             elif origin == "image_part":
@@ -1467,7 +1500,7 @@ async def test_hook_only_new_refs_receive_full_image_policy(
     event = make_event([Image(file=str(initial))])
     await process_event(harness, event, preprocess_first=True)
     assert [call.args[0] for call in convert.await_args_list] == [
-        str(initial),
+        event.get_messages()[0].file,
         str(added),
     ]
     assert [call.kwargs["max_size"] for call in convert.await_args_list] == [90, 90]
@@ -1600,3 +1633,85 @@ async def test_only_actually_captioned_images_receive_caption_status(
         assert len(labels) == 1
         assert ("description included as text" in labels[0]) == captioned
         assert ("not included in this request" in labels[0]) != captioned
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("quoted", [False, True])
+@pytest.mark.parametrize("kind", ["image", "audio", "video", "file"])
+async def test_direct_collection_reuses_paths_from_message_segments(
+    harness, tmp_path, monkeypatch, kind, quoted
+):
+    """Late attachments write back their paths and survive repeated collection."""
+    from astrbot.core.message.components import File, Record, Video
+
+    if kind == "image":
+        source = source_image(tmp_path, "PNG")
+        component = Image(file=str(source))
+    else:
+        source = (
+            tmp_path
+            / {"audio": "voice.wav", "video": "clip.mp4", "file": "note.txt"}[kind]
+        )
+        if kind == "audio":
+            import wave
+
+            with wave.open(str(source), "wb") as wav:
+                wav.setnchannels(1)
+                wav.setsampwidth(2)
+                wav.setframerate(16000)
+                wav.writeframes(b"\x00\x00" * 160)
+        else:
+            source.write_bytes(b"platform attachment")
+        component = {
+            "audio": lambda: Record(file=str(source)),
+            "video": lambda: Video(file=str(source)),
+            "file": lambda: File(name=source.name, file=str(source)),
+        }[kind]()
+    event = make_event(
+        [Reply(id="quoted", chain=[component])] if quoted else [component]
+    )
+    monkeypatch.setattr(
+        main, "extract_quoted_message_images", AsyncMock(return_value=[])
+    )
+    config = main.MainAgentBuildConfig(tool_call_timeout=60)
+    await main.collect_initial_request(event, harness.context, config)
+    retained_path = component.file_ if isinstance(component, File) else component.path
+    retained = Path(retained_path)
+    assert retained.parent == platform_files.platform_files_root(
+        event.unified_msg_origin
+    )
+    assert retained.read_bytes() == source.read_bytes()
+    if not isinstance(component, File):
+        assert component.file == component.url == retained_path
+
+    event.set_extra("provider_request", None)
+    await main.collect_initial_request(event, harness.context, config)
+    current_path = component.file_ if isinstance(component, File) else component.path
+    assert current_path == retained_path
+    assert list(retained.parent.iterdir()) == [retained]
+    event.cleanup_temporary_local_files()
+    assert retained.is_file()
+
+
+@pytest.mark.asyncio
+async def test_resolved_quote_images_are_saved_in_reply_chain(
+    harness, tmp_path, monkeypatch
+):
+    """An ID-only reply keeps resolved images in its segments for later collection."""
+    source = source_image(tmp_path, "PNG")
+    extract = AsyncMock(return_value=[str(source)])
+    monkeypatch.setattr(main, "extract_quoted_message_images", extract)
+    reply = Reply(id="quoted")
+    event = make_event([reply])
+    config = main.MainAgentBuildConfig(tool_call_timeout=60)
+    request, _ = await main.collect_initial_request(event, harness.context, config)
+    assert len(reply.chain) == 1
+    image = reply.chain[0]
+    assert isinstance(image, Image)
+    assert image.file == image.url == image.path == request.image_urls[0]
+    assert Path(image.path).read_bytes() == source.read_bytes()
+
+    event.set_extra("provider_request", None)
+    repeated, _ = await main.collect_initial_request(event, harness.context, config)
+    assert repeated.image_urls == request.image_urls
+    extract.assert_awaited_once()

@@ -19,6 +19,7 @@ from astrbot.core.computer import file_read_utils, local_file_security
 from astrbot.core.computer.booters.local import LocalBooter
 from astrbot.core.tools.computer_tools import fs as fs_tools
 from astrbot.core.tools.computer_tools import util as computer_util
+from astrbot.core.utils import platform_files
 
 
 def _make_context(
@@ -78,8 +79,8 @@ async def test_sandbox_file_download_handles_windows_remote_filename(
     temp_root.mkdir(parents=True, exist_ok=True)
 
     monkeypatch.setattr(
-        fs_tools,
-        "get_astrbot_temp_path",
+        computer_util,
+        "get_astrbot_workspaces_path",
         lambda: str(temp_root),
     )
 
@@ -117,8 +118,8 @@ async def test_sandbox_file_download_strips_trailing_remote_slash(
     temp_root.mkdir(parents=True, exist_ok=True)
 
     monkeypatch.setattr(
-        fs_tools,
-        "get_astrbot_temp_path",
+        computer_util,
+        "get_astrbot_workspaces_path",
         lambda: str(temp_root),
     )
 
@@ -180,7 +181,7 @@ def _setup_local_fs_tools(
         lambda: str(builtin_plugins_root),
     )
     monkeypatch.setattr(
-        fs_tools,
+        platform_files,
         "get_astrbot_temp_path",
         lambda: str(temp_root),
     )
@@ -205,6 +206,81 @@ def _setup_local_fs_tools(
 
 def _make_large_text() -> str:
     return "".join(f"line-{index:05d}-{'x' * 48}\n" for index in range(6000))
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Restricted file descriptors require POSIX")
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role", ["member", "admin"])
+@pytest.mark.parametrize("location", ["own", "other", "shared", "workspace"])
+@pytest.mark.parametrize("operation", ["read", "write", "edit"])
+async def test_platform_attachment_file_permissions(
+    monkeypatch, tmp_path, role, location, operation
+):
+    """Enforce session isolation and member read-only access at tool execution."""
+    workspace = _setup_local_fs_tools(monkeypatch, tmp_path)
+    context = _make_context(
+        role=role, local_permissions={role: {"filesystem_scope": "workspace"}}
+    )
+    own = platform_files.platform_files_root(context.context.event.unified_msg_origin)
+    other = platform_files.platform_files_root("qq:friend:another-user")
+    root = {
+        "own": own,
+        "other": other,
+        "shared": tmp_path / "temp",
+        "workspace": workspace,
+    }[location]
+    root.mkdir(parents=True, exist_ok=True)
+    target = root / "attachment.txt"
+    target.write_text("original attachment", encoding="utf-8")
+    allowed = location == "workspace" or (
+        location in {"own", "other"}
+        and (role == "admin" or (location == "own" and operation == "read"))
+    )
+    if operation == "read":
+        result = await fs_tools.FileReadTool().call(context, path=str(target))
+    elif operation == "write":
+        result = await fs_tools.FileWriteTool().call(
+            context, path=str(target), content="updated attachment"
+        )
+    else:
+        result = await fs_tools.FileEditTool().call(
+            context, path=str(target), old="original", new="updated"
+        )
+    assert ("restricted" not in str(result)) is allowed, result
+    assert "Error" not in str(result) if allowed else "Error" in str(result)
+    assert target.read_text() == (
+        "updated attachment"
+        if allowed and operation != "read"
+        else "original attachment"
+    )
+
+
+@pytest.mark.parametrize("role", ["member", "admin"])
+def test_platform_attachment_grep_roots(monkeypatch, tmp_path, role):
+    """Default grep includes only the caller's authorized attachment tree."""
+    workspace = _setup_local_fs_tools(monkeypatch, tmp_path)
+    umo = "qq:friend:user-1"
+    own = platform_files.platform_files_root(umo)
+    other = platform_files.platform_files_root("qq:friend:another-user")
+    own.mkdir(parents=True)
+    other.mkdir(parents=True)
+    kwargs = dict(
+        restricted=True,
+        local_env=True,
+        umo=umo,
+        current_workspace_root=workspace,
+        is_admin=role == "admin",
+    )
+    roots = fs_tools.GrepTool()._normalize_search_paths(None, **kwargs)
+    assert str(own if role == "member" else own.parent) in roots
+    assert str(tmp_path / "temp") not in roots
+    if role == "member":
+        with pytest.raises(PermissionError):
+            fs_tools.GrepTool()._normalize_search_paths(str(other), **kwargs)
+    else:
+        assert fs_tools.GrepTool()._normalize_search_paths(str(other), **kwargs) == [
+            str(other)
+        ]
 
 
 def _make_hardlink_or_skip(source, link) -> None:
@@ -760,7 +836,9 @@ async def test_restricted_local_grep_requests_read_only_os_sandbox(
     (workspace / "target.txt").write_text("needle\n", encoding="utf-8")
     missing_root = tmp_path / "missing-temp"
     monkeypatch.setattr(
-        fs_tools, "_read_allowed_roots", lambda *args: (workspace, missing_root)
+        fs_tools,
+        "_read_allowed_roots",
+        lambda *args, **kwargs: (workspace, missing_root),
     )
     calls = []
 

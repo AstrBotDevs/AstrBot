@@ -328,7 +328,7 @@
         },
         "scopeHints": {
           "none": "不允许访问任何文件",
-          "workspace": "受限的工作区、临时目录和技能文件。",
+          "workspace": "当前工作区和技能文件；成员只读当前会话附件，管理员可读写所有会话附件。",
           "host": "AstrBot 所在运行环境的所有文件。"
         },
         "scopeDetails": {

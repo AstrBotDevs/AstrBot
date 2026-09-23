@@ -23,6 +23,7 @@ from astrbot.core.computer.process_sandbox import (
     unix,
 )
 from astrbot.core.tools.computer_tools import fs, python, shell
+from astrbot.core.utils import platform_files
 from astrbot.dashboard.services import stat_service
 
 requires_local_sandbox = pytest.mark.skipif(
@@ -413,8 +414,7 @@ async def test_local_execution_obeys_file_tool_roots(
     monkeypatch.setattr(
         fs, "get_astrbot_builtin_plugin_path", lambda: str(builtin.parent.parent)
     )
-    monkeypatch.setattr(fs, "get_astrbot_temp_path", lambda: str(temporary))
-    monkeypatch.setattr(fs, "get_astrbot_system_tmp_path", lambda: str(system_temp))
+    monkeypatch.setattr(platform_files, "get_astrbot_temp_path", lambda: str(temporary))
     monkeypatch.setattr(local, "get_astrbot_system_tmp_path", lambda: str(system_temp))
     monkeypatch.setattr(
         shell, "workspace_root_for_context", AsyncMock(return_value=workspace)
@@ -436,7 +436,7 @@ async def test_local_execution_obeys_file_tool_roots(
                     "allow_network": False,
                 }
             },
-        }
+        },
     }
     event = SimpleNamespace(
         role=role,
@@ -449,10 +449,25 @@ async def test_local_execution_obeys_file_tool_roots(
         ),
         tool_call_timeout=20,
     )
-    readable = fs._read_allowed_roots(event.unified_msg_origin, workspace)
-    writable = fs._write_allowed_roots(
-        event.unified_msg_origin, workspace, include_installed_skills=role == "admin"
+    own_attachments = platform_files.platform_files_root(event.unified_msg_origin)
+    other_attachments = platform_files.platform_files_root("test:friend:other")
+    for root in (own_attachments, other_attachments, own_attachments.parent):
+        root.mkdir(parents=True, exist_ok=True)
+        (root / "sample.txt").write_text("approved content", encoding="utf-8")
+    readable = fs._read_allowed_roots(
+        event.unified_msg_origin, workspace, is_admin=role == "admin"
     )
+    writable = fs._write_allowed_roots(
+        event.unified_msg_origin, workspace, is_admin=role == "admin"
+    )
+    blocked = [
+        secret,
+        workspace / "outside-link",
+        temporary / "sample.txt",
+        system_temp / "sample.txt",
+    ]
+    if role == "member":
+        blocked.append(other_attachments / "sample.txt")
     code = f"""
 import runpy
 from pathlib import Path
@@ -469,8 +484,8 @@ for root in {list(map(str, set(readable) - set(writable)))!r}:
     except OSError:
         pass
     else:
-        raise AssertionError("Skill directory is writable: " + root)
-for path in {[str(secret), str(workspace / "outside-link")]!r}:
+        raise AssertionError("Read-only directory is writable: " + root)
+for path in {list(map(str, blocked))!r}:
     try:
         Path(path).read_text()
     except OSError:

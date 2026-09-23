@@ -1,5 +1,6 @@
 import asyncio
 import copy
+import os
 import sys
 import time
 import traceback
@@ -28,6 +29,7 @@ from astrbot import logger
 from astrbot.core.agent.message import ImageURLPart, TextPart, ThinkPart
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.agent.tool_image_cache import tool_image_cache
+from astrbot.core.computer.local_file_security import open_file_in_allowed_roots
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.components import Json
 from astrbot.core.message.message_event_result import (
@@ -380,7 +382,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         if self.tool_result_overflow_dir is None:
             raise ValueError("tool_result_overflow_dir is not configured")
 
-        overflow_dir = Path(self.tool_result_overflow_dir).resolve(strict=False)
+        overflow_dir = Path(self.tool_result_overflow_dir).absolute()
         safe_tool_call_id = (
             "".join(
                 ch if ch.isalnum() or ch in {"-", "_", "."} else "_"
@@ -393,7 +395,20 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
         def _run() -> str:
             overflow_dir.mkdir(parents=True, exist_ok=True)
-            overflow_path.write_text(content, encoding="utf-8")
+            if sys.platform == "win32":
+                with overflow_path.open("x", encoding="utf-8") as output:
+                    output.write(content)
+            else:
+                # The workspace is writable by tools; do not follow a replaced
+                # root or file when the host spills a tool result into it.
+                descriptor = open_file_in_allowed_roots(
+                    str(overflow_path),
+                    (overflow_dir,),
+                    access="write",
+                    create_parents=True,
+                )
+                with os.fdopen(descriptor, "w", encoding="utf-8") as output:
+                    output.write(content)
             return str(overflow_path)
 
         return await asyncio.to_thread(_run)

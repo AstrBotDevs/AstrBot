@@ -30,6 +30,15 @@ from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.skills.skill_manager import SkillInfo
 from astrbot.core.star.context import Context
 from astrbot.core.star.star import StarMetadata
+from astrbot.core.utils import platform_files
+
+
+@pytest.fixture(autouse=True)
+def isolate_platform_attachments(tmp_path, monkeypatch):
+    """Keep direct-builder attachment storage inside the test directory."""
+    monkeypatch.setattr(
+        platform_files, "get_astrbot_temp_path", lambda: str(tmp_path / "temp")
+    )
 
 
 @pytest.fixture
@@ -96,7 +105,9 @@ def mock_event():
     event.platform_meta = platform_meta
     event.session_id = "session123"
     event.unified_msg_origin = "test_platform:private:session123"
-    event.get_extra.return_value = None
+    extras = {}
+    event.get_extra.side_effect = lambda key, default=None: extras.get(key, default)
+    event.set_extra.side_effect = lambda key, value: extras.__setitem__(key, value)
     event.get_platform_name.return_value = "test_platform"
     event.get_platform_id.return_value = "test_platform"
     event.get_group_id.return_value = None
@@ -1941,7 +1952,9 @@ class TestBuildMainAgent:
         assert result is not None
         request = result.provider_request
         label = "Image 1 in quoted message" if quoted else "Image 1"
-        assert f"[{label}: original path {source_path}]" in [
+        retained_path = image.file
+        assert Path(retained_path).read_bytes() == original
+        assert f"[{label}: original path {retained_path}]" in [
             part.text for part in request.extra_user_content_parts
         ]
         assert len(request.image_urls) == 1
@@ -1950,9 +1963,7 @@ class TestBuildMainAgent:
         with PILImage.open(visual_path) as visual_image:
             assert visual_image.size == (4, 4)
         mock_event.track_temporary_local_file.assert_called_once_with(str(visual_path))
-        mock_event.untrack_temporary_local_file.assert_called_once_with(
-            str(source_path)
-        )
+        mock_event.untrack_temporary_local_file.assert_called_once_with(retained_path)
         AstrMessageEvent.cleanup_temporary_local_files(
             SimpleNamespace(
                 _temporary_local_files=[
@@ -2011,7 +2022,7 @@ class TestBuildMainAgent:
             )
 
         assert result is not None
-        assert result.provider_request.image_urls == [valid_image_path]
+        assert result.provider_request.image_urls == [mock_image.file]
         assert not any(
             "Image Caption" in part.text or "<image_caption>" in part.text
             for part in result.provider_request.extra_user_content_parts
@@ -2271,12 +2282,13 @@ class TestBuildMainAgent:
 
     @pytest.mark.asyncio
     async def test_build_main_agent_with_video_attachment(
-        self, mock_event, mock_context, mock_provider
+        self, mock_event, mock_context, mock_provider, tmp_path
     ):
         """Test building main agent with video attachments."""
         module = ama
-        video_path = str(Path("/path/to/video.mp4"))
-        mock_video = Video(file="file:///path/to/video.mp4")
+        source_path = tmp_path / "video.mp4"
+        source_path.write_bytes(b"video attachment")
+        mock_video = Video.fromFileSystem(str(source_path))
         mock_event.message_obj.message = [mock_video]
 
         mock_context.get_provider_by_id.return_value = None
@@ -2301,18 +2313,21 @@ class TestBuildMainAgent:
             )
 
         assert result is not None
+        video_path = mock_video.file
+        assert Path(video_path).read_bytes() == source_path.read_bytes()
         assert [
             part.text for part in result.provider_request.extra_user_content_parts
-        ] == [f"[Video Attachment: name video.mp4, path {video_path}]"]
+        ] == [f"[Video Attachment: name {Path(video_path).name}, path {video_path}]"]
 
     @pytest.mark.asyncio
     async def test_build_main_agent_with_quoted_video_attachment(
-        self, mock_event, mock_context, mock_provider
+        self, mock_event, mock_context, mock_provider, tmp_path
     ):
         """Test building main agent with quoted video attachments."""
         module = ama
-        video_path = str(Path("/path/to/quoted-video.mp4"))
-        mock_video = Video(file="file:///path/to/quoted-video.mp4")
+        source_path = tmp_path / "quoted-video.mp4"
+        source_path.write_bytes(b"video attachment")
+        mock_video = Video.fromFileSystem(str(source_path))
         mock_reply = Reply(
             id="reply-1",
             chain=[mock_video],
@@ -2343,9 +2358,11 @@ class TestBuildMainAgent:
             )
 
         assert result is not None
+        video_path = mock_video.file
+        assert Path(video_path).read_bytes() == source_path.read_bytes()
         assert (
             "[Video Attachment in quoted message: "
-            f"name quoted-video.mp4, path {video_path}]"
+            f"name {Path(video_path).name}, path {video_path}]"
         ) in [part.text for part in result.provider_request.extra_user_content_parts]
 
     @pytest.mark.asyncio

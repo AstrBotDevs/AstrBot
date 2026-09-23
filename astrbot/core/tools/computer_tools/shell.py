@@ -142,13 +142,14 @@ class ExecuteShellTool(FunctionTool):
                     umo = context.context.event.unified_msg_origin
                     sandbox_roots = {
                         "readable_roots": _read_allowed_roots(
-                            umo, current_workspace_root
+                            umo,
+                            current_workspace_root,
+                            is_admin=context.context.event.role == "admin",
                         ),
                         "writable_roots": _write_allowed_roots(
                             umo,
                             current_workspace_root,
-                            include_installed_skills=context.context.event.role
-                            == "admin",
+                            is_admin=context.context.event.role == "admin",
                         ),
                     }
                 started_at = monotonic()

@@ -240,6 +240,8 @@ elif isinstance(i, Video):
 message_event.track_temporary_local_file(temp_media_path)
 ```
 
+公共预处理阶段会在最终 UMO 确定后，将消息组件及引用／转发中的附件复制到 `data/temp/platform_files/<normalized_umo>/`，并更新组件中的本地路径。登记的中转文件仍会在事件结束时清理，归档副本保留到临时目录容量清理。不要按下载时的原始群 ID 自行确定最终附件目录，因为群聊独立会话可能随后改写会话标识。
+
 最后，main.py 只需这样，在初始化的时候导入 fake_platform_adapter 模块。装饰器会自动注册。
 
 ```py

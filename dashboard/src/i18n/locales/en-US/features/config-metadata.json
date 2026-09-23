@@ -312,7 +312,7 @@
         },
         "scopeHints": {
           "none": "No file access allowed",
-          "workspace": "Restricted workspace, temporary directories, and skill files.",
+          "workspace": "Current workspace and skills; members can read their session attachments, while admins can read and write all session attachments.",
           "host": "All files in the environment where AstrBot runs."
         },
         "scopeDetails": {

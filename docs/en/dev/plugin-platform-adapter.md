@@ -247,6 +247,8 @@ If the adapter downloads platform media into AstrBot's temporary directory by it
 message_event.track_temporary_local_file(temp_media_path)
 ```
 
+After the final UMO is established, common preprocessing copies attachments from message components and quoted/forwarded chains into `data/temp/platform_files/<normalized_umo>/` and updates their local paths. Registered staging files are still cleaned up when the event ends; retained copies remain until temporary-directory size cleanup. Do not derive the final attachment directory from the original group ID during download: per-user group isolation may change the session identity afterward.
+
 Finally, in `main.py`, simply import the `fake_platform_adapter` module during initialization. The decorator will handle registration automatically.
 
 ```py
