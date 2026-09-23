@@ -513,9 +513,7 @@ class SQLiteDatabase(BaseDatabase):
                     not_(
                         or_(
                             col(ConversationV3.umo) == exclude_id,
-                            col(ConversationV3.umo).like(
-                                f"{escaped}:%", escape="\\"
-                            ),
+                            col(ConversationV3.umo).like(f"{escaped}:%", escape="\\"),
                         )
                     )
                 )
