@@ -32,10 +32,7 @@ Both services started in the background.
 
 > 可能需要等待半分钟左右。
 
-![WebUI 界面](https://www-s.ucloud.cn/2025/07/7e9fc6edc1dfa916abc069f4cecc24cf_1753940381771.png)
-
 首次登录时请使用启动日志内的随机初始密码（用户名通常是 astrbot），登录后请立即修改密码。
-
 
 登录成功后，可以重新设置密码，并进入 AstrBot 的页面。
 
@@ -50,38 +47,34 @@ Both services started in the background.
 1. 在 [Ollama](https://ollama.com/search) 模型列表找到想部署的模型。
 2. 通过 SSH 进入到实例的终端（进入优云智算平台的控制台页面->实例列表->控制台指令和密码）
 3. 通过 `ollama pull 模型名` 拉取模型，等待拉取成功。
-4. 在 AstrBot 面板的 服务提供商页面找到 `ollama_deepseek-r1`，点击编辑，更新模型名称，点击保存。
-
-![image](https://files.astrbot.app/docs/source/images/compshare/image-1.png)
+4. 在 `模型提供商 → 对话` 中选择镜像预配置的 Ollama 提供商源，点击 `获取模型列表`，在刚拉取的模型旁点击 `+` 添加。如果没有预配置的源，点击 `新增`，选择 `Ollama`，填写实例中的 Ollama 地址后点击 `保存并获取模型`。
 
 ### 使用优云智算提供的模型 API
 
 AstrBot 支持接入优云智算提供的模型 API。
 
 1. 在 [优云智算](https://console.compshare.cn/light-gpu/model-center) 找到想要接入的模型
-2. 在 AstrBot 面板的 服务提供商页面点击「+ 新增服务提供商」，点击优云智算（如果没有，点击“接入 OpenAI”，并且修改下一步弹出窗口的 API Base URL 为 `https://api.modelverse.cn/v1`）。在模型配置-模型名称输入模型名，点击保存。
+2. 打开 `模型提供商 → 对话 → 新增`，选择 `OpenAI Compatible`，填写优云智算的 API Key，并将 API Base URL 设为 `https://api.modelverse.cn/v1`。
+3. 点击 `保存并获取模型`，在需要的模型旁点击 `+`。如果接口未返回模型列表，先 `保存配置`，再点击 `自定义模型`，填写平台提供的完整模型 ID。
 
 ### 测试
 
-在 AstrBot 面板左侧点击 `聊天`，输入 `/provider`，可以查看和切换您当前接入的提供商。
+在已配置的模型上点击 `测试模型`，确认连接成功。然后进入 `配置文件`，选择机器人使用的配置文件，在 `AI → 模型 → 对话模型` 中选择刚添加的模型，点击 `保存配置`。
 
-您可以直接聊天来测试模型是否正常。
-
-![image](https://files.astrbot.app/docs/source/images/compshare/image-2.png)
-
+通过 WebUI 顶部的聊天切换按钮进入聊天，或直接向已接入消息平台的机器人发送消息，测试实际回复。
 
 ## 接入到消息平台
 
-- 飞书：[接入到飞书](https://docs.astrbot.app/deploy/platform/lark.html)
-- LINE：[接入到 LINE](https://docs.astrbot.app/deploy/platform/line.html)
-- 钉钉：[接入到钉钉](https://docs.astrbot.app/deploy/platform/dingtalk.html)
-- 企业微信：[接入到企业微信应用](https://docs.astrbot.app/deploy/platform/wecom.html)
-- 微信客服：[接入到微信客服](https://docs.astrbot.app/deploy/platform/wecom.html)
-- 微信公众平台：[接入到微信公众平台](https://docs.astrbot.app/deploy/platform/weixin-official-account.html)
-- QQ 官方机器人平台：[接入到 QQ 机器人](https://docs.astrbot.app/deploy/platform/qqofficial/webhook.html)
-- KOOK：[接入到 KOOK](https://docs.astrbot.app/deploy/platform/kook.html)
-- Slack：[接入到 Slack](https://docs.astrbot.app/deploy/platform/slack.html)
-- Discord：[接入到 Discord](https://docs.astrbot.app/deploy/platform/discord.html)
+- 飞书：[接入到飞书](https://docs.astrbot.app/platform/lark.html)
+- LINE：[接入到 LINE](https://docs.astrbot.app/platform/line.html)
+- 钉钉：[接入到钉钉](https://docs.astrbot.app/platform/dingtalk.html)
+- 企业微信：[接入到企业微信应用](https://docs.astrbot.app/platform/wecom.html)
+- 微信客服：[接入到微信客服](https://docs.astrbot.app/platform/wecom.html)
+- 微信公众平台：[接入到微信公众平台](https://docs.astrbot.app/platform/weixin-official-account.html)
+- QQ 官方机器人平台：[接入到 QQ 机器人](https://docs.astrbot.app/platform/qqofficial/webhook.html)
+- KOOK：[接入到 KOOK](https://docs.astrbot.app/platform/kook.html)
+- Slack：[接入到 Slack](https://docs.astrbot.app/platform/slack.html)
+- Discord：[接入到 Discord](https://docs.astrbot.app/platform/discord.html)
 - 更多接入方式参考 [AstrBot 官方文档](https://docs.astrbot.app/what-is-astrbot.html)
 
 ## 更多功能

@@ -86,7 +86,7 @@ your_plugin/
     SKILL.md
 ```
 
-In that case, the Skill name uses the plugin directory name. Plugin-provided Skills are managed by the plugin and appear as read-only sources in the WebUI Skills page. They can be enabled or disabled, but cannot be deleted or edited from Local Skills. When the plugin is uninstalled or updated, its bundled Skills change with the plugin files.
+In that case, the Skill name uses the plugin directory name. Plugin-provided Skills are managed by the plugin and appear as read-only sources under `Extensions → Skills` in the WebUI. They can be enabled or disabled, but cannot be deleted or edited from Local Skills. When the plugin is uninstalled or updated, its bundled Skills change with the plugin files.
 
 ### Declare Supported Platforms (Optional)
 
@@ -147,9 +147,9 @@ AstrBot uses a runtime plugin injection mechanism. Therefore, when debugging plu
 
 You can use AstrBot's hot reload feature to streamline the development process.
 
-After modifying the plugin code, you can find your plugin in the AstrBot WebUI's plugin management section, click the `...` button in the upper right corner, and select `Reload Plugin`.
+After modifying the plugin code, open `Extensions → Plugins` in the AstrBot WebUI, find your plugin, and click the refresh icon (`Reload Extension`) on its card.
 
-If the plugin fails to load due to code errors or other reasons, you can also click **"Try one-click reload fix"** in the error prompt on the admin panel to reload it.
+If the plugin fails to load due to code errors or other reasons, click its `Reload` button in the `Failed to Load Plugins` list on the same page.
 
 ### Plugin Dependency Management
 

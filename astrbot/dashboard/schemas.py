@@ -70,6 +70,16 @@ class BackupUploadSessionRequest(OpenModel):
     upload_id: str | None = None
 
 
+class ChatUploadInitRequest(OpenModel):
+    filename: str | None = None
+    total_size: int | None = None
+    content_type: str | None = None
+
+
+class ChatUploadSessionRequest(OpenModel):
+    upload_id: str | None = None
+
+
 class BackupImportRequest(OpenModel):
     confirmed: bool | None = None
 

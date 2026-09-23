@@ -89,6 +89,7 @@ class ProviderGoogleGenAI(Provider):
         """初始化Gemini客户端"""
         proxy = self.provider_config.get("proxy", "")
         http_options = types.HttpOptions(
+            headers=self.request_headers,
             base_url=self.api_base,
             timeout=self.timeout * 1000,  # 毫秒
         )
@@ -118,6 +119,8 @@ class ProviderGoogleGenAI(Provider):
             api_key=self.chosen_api_key,
             http_options=http_options,
         ).aio
+        # The SDK adds its own lower-case UA alongside our explicit header.
+        self.client._api_client._http_options.headers.pop("user-agent", None)
 
     def _init_safety_settings(self) -> None:
         """初始化安全设置"""
@@ -781,6 +784,22 @@ class ProviderGoogleGenAI(Provider):
                     llm_response,
                     validate_output=False,
                 )
+                # This response replaces the whole turn in conversation
+                # history, so keep the narration and reasoning that were
+                # already streamed before the tool call. Dropping them made
+                # the user-visible text missing from history.
+                if accumulated_text or accumulated_reasoning:
+                    parts = list(llm_response.result_chain.chain or [])
+                    if accumulated_text:
+                        parts.insert(0, Comp.Plain(accumulated_text))
+                        llm_response.result_chain = MessageChain(chain=parts)
+                    if accumulated_reasoning:
+                        # _process_content_parts already stored the reasoning
+                        # that came with the tool-call chunk itself, so append
+                        # to it instead of overwriting that part.
+                        llm_response.reasoning_content = accumulated_reasoning + (
+                            llm_response.reasoning_content or ""
+                        )
                 llm_response.id = chunk.response_id
                 if chunk.usage_metadata:
                     llm_response.usage = self._extract_usage(chunk.usage_metadata)

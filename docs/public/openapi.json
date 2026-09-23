@@ -2580,6 +2580,136 @@
         "description": "**Required scope:** `file`"
       }
     },
+    "/api/v1/files/upload/init": {
+      "post": {
+        "tags": [
+          "Files"
+        ],
+        "summary": "Initialize chunked file upload",
+        "operationId": "initFileUpload",
+        "x-astrbot-scope": "file",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatUploadInitRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `file`"
+      }
+    },
+    "/api/v1/files/upload/chunk": {
+      "post": {
+        "tags": [
+          "Files"
+        ],
+        "summary": "Upload a file chunk",
+        "operationId": "uploadFileChunk",
+        "x-astrbot-scope": "file",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatChunkUploadRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `file`"
+      }
+    },
+    "/api/v1/files/upload/complete": {
+      "post": {
+        "tags": [
+          "Files"
+        ],
+        "summary": "Complete chunked file upload",
+        "operationId": "completeFileUpload",
+        "x-astrbot-scope": "file",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatUploadSessionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `file`"
+      }
+    },
+    "/api/v1/files/upload/abort": {
+      "post": {
+        "tags": [
+          "Files"
+        ],
+        "summary": "Abort chunked file upload",
+        "operationId": "abortFileUpload",
+        "x-astrbot-scope": "file",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatUploadSessionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `file`"
+      }
+    },
+    "/api/v1/files/upload/status": {
+      "post": {
+        "tags": [
+          "Files"
+        ],
+        "summary": "Query chunked file upload status",
+        "operationId": "statusFileUpload",
+        "x-astrbot-scope": "file",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatUploadSessionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `file`"
+      }
+    },
     "/api/v1/file": {
       "post": {
         "tags": [
@@ -8060,6 +8190,59 @@
           }
         },
         "additionalProperties": false
+      },
+      "ChatUploadInitRequest": {
+        "type": "object",
+        "required": [
+          "filename",
+          "total_size"
+        ],
+        "properties": {
+          "filename": {
+            "type": "string"
+          },
+          "total_size": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "content_type": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ChatUploadSessionRequest": {
+        "type": "object",
+        "required": [
+          "upload_id"
+        ],
+        "properties": {
+          "upload_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ChatChunkUploadRequest": {
+        "type": "object",
+        "required": [
+          "upload_id",
+          "chunk_index",
+          "chunk"
+        ],
+        "properties": {
+          "upload_id": {
+            "type": "string"
+          },
+          "chunk_index": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "chunk": {
+            "type": "string",
+            "format": "binary"
+          }
+        }
       },
       "T2iTemplateRequest": {
         "type": "object",

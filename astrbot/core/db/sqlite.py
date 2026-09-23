@@ -501,7 +501,24 @@ class SQLiteDatabase(BaseDatabase):
                 conditions.append(col(ConversationV3.platform_id).in_(platforms))
             exclude_ids = kwargs.get("exclude_ids") or []
             for exclude_id in exclude_ids:
-                conditions.append(not_(col(ConversationV3.umo).like(f"{exclude_id}%")))
+                # Match the whole UMO or its platform segment only, so an id
+                # like "astrbot" does not swallow platforms such as
+                # "astrbotweb". Escape LIKE wildcards inside the id itself.
+                escaped = (
+                    exclude_id.replace("\\", "\\\\")
+                    .replace("%", r"\%")
+                    .replace("_", r"\_")
+                )
+                conditions.append(
+                    not_(
+                        or_(
+                            col(ConversationV3.umo) == exclude_id,
+                            col(ConversationV3.umo).like(
+                                f"{escaped}:%", escape="\\"
+                            ),
+                        )
+                    )
+                )
             exclude_platforms = kwargs.get("exclude_platforms") or []
             if exclude_platforms:
                 conditions.append(

@@ -16,6 +16,7 @@ from astrbot.core.astr_main_agent import (
     LLM_ERROR_MESSAGE_EXTRA_KEY,
     MainAgentBuildConfig,
     MainAgentBuildResult,
+    _provider_supports_modality,
     build_main_agent,
 )
 from astrbot.core.config.agent_runner import resolve_context_compression_config
@@ -35,6 +36,8 @@ from astrbot.core.provider.entities import (
     ProviderRequest,
 )
 from astrbot.core.star.star_handler import EventType
+from astrbot.core.utils.image_input import prepare_request_images
+from astrbot.core.utils.media_utils import normalize_model_image_max_size
 from astrbot.core.utils.metrics import Metric
 from astrbot.core.utils.session_lock import session_lock_manager
 
@@ -64,7 +67,7 @@ class InternalAgentSubStage(Stage):
         self.unsupported_streaming_strategy: str = settings[
             "unsupported_streaming_strategy"
         ]
-        self.max_step: int = misc_config.get("max_steps", 30)
+        self.max_step: int = misc_config.get("max_steps", 128)
         self.tool_call_timeout: int = misc_config.get("tool_call_timeout", 120)
         self.tool_schema_mode: str = misc_config.get("tool_schema_mode", "full")
         if self.tool_schema_mode not in ("skills_like", "full"):
@@ -74,7 +77,7 @@ class InternalAgentSubStage(Stage):
             )
             self.tool_schema_mode = "full"
         if isinstance(self.max_step, bool):  # workaround: #2622
-            self.max_step = 30
+            self.max_step = 128
         self.show_tool_use: bool = settings.get("show_tool_use_status", True)
         self.show_tool_call_result: bool = settings.get("show_tool_call_result", False)
         self.buffer_intermediate_messages: bool = settings.get(
@@ -205,6 +208,7 @@ class InternalAgentSubStage(Stage):
                 logger.debug("acquired session lock for llm request")
                 agent_runner: AgentRunner | None = None
                 runner_registered = False
+                reset_coro = None
                 event_writer = None
                 try:
                     build_cfg = replace(
@@ -213,11 +217,14 @@ class InternalAgentSubStage(Stage):
                         streaming_response=streaming_response,
                     )
 
+                    plugin_context = self.ctx.plugin_manager.context
+                    prepared: dict[str, dict] = {}
                     build_result: MainAgentBuildResult | None = await build_main_agent(
                         event=event,
-                        plugin_context=self.ctx.plugin_manager.context,
+                        plugin_context=plugin_context,
                         config=build_cfg,
                         apply_reset=False,
+                        prepared_images=prepared,
                     )
 
                     if build_result is None:
@@ -253,13 +260,26 @@ class InternalAgentSubStage(Stage):
                     )
 
                     if await call_event_hook(event, EventType.OnLLMRequestEvent, req):
-                        if reset_coro:
-                            reset_coro.close()
                         return
 
+                    options = build_cfg.provider_settings.get(
+                        "image_compress_options", {}
+                    )
+                    await prepare_request_images(
+                        req,
+                        event,
+                        max_size=normalize_model_image_max_size(
+                            options.get("max_size")
+                            if isinstance(options, dict)
+                            else None
+                        ),
+                        prepared=prepared,
+                        supports_image=_provider_supports_modality(provider, "image"),
+                    )
                     # apply reset
                     if reset_coro:
                         await reset_coro
+                        reset_coro = None
 
                     register_active_runner(event.unified_msg_origin, agent_runner)
                     runner_registered = True
@@ -430,6 +450,8 @@ class InternalAgentSubStage(Stage):
                             await event_writer.finish_turn(status)
                     finally:
                         event.conversation_events = None
+                        if reset_coro:
+                            reset_coro.close()
                         if runner_registered and agent_runner is not None:
                             unregister_active_runner(
                                 event.unified_msg_origin, agent_runner
