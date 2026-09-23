@@ -66,6 +66,13 @@ export function providerCapabilityBadges(
       label: tm('models.metadata.audio')
     },
     {
+      key: 'video',
+      icon: 'mdi-video-outline',
+      supported: inputs.includes('video'),
+      enabled: modalities.includes('video'),
+      label: tm('models.metadata.video')
+    },
+    {
       key: 'tool_use',
       icon: 'mdi-wrench-outline',
       supported: Boolean(metadata?.tool_call),

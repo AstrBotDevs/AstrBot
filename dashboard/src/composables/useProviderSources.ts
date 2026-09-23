@@ -363,6 +363,11 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     return inputs.includes('audio')
   }
 
+  function supportsVideoInput(meta: any) {
+    const inputs = meta?.modalities?.input || []
+    return inputs.includes('video')
+  }
+
   function supportsToolCall(meta: any) {
     return Boolean(meta?.tool_call)
   }
@@ -646,6 +651,11 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       if (supportsAudioInput(metadata)) {
         modalities.push('audio')
       }
+      // Video is opt-in: only enable it when the model metadata declares video
+      // input, never as part of the "assume everything" fallback above.
+      if (supportsVideoInput(metadata)) {
+        modalities.push('video')
+      }
       if (supportsToolCall(metadata)) {
         modalities.push('tool_use')
       }
@@ -829,6 +839,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     getModelMetadata,
     supportsImageInput,
     supportsAudioInput,
+    supportsVideoInput,
     supportsToolCall,
     supportsReasoning,
     formatContextLimit,

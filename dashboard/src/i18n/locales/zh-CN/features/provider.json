@@ -165,6 +165,7 @@
     "metadata": {
       "image": "图像输入",
       "audio": "音频输入",
+      "video": "视频输入",
       "toolUse": "工具使用",
       "reasoning": "推理",
       "context": "{tokens} 上下文窗口",

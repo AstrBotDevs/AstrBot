@@ -165,6 +165,7 @@
     "metadata": {
       "image": "Image input",
       "audio": "Audio input",
+      "video": "Video input",
       "toolUse": "Tool use",
       "reasoning": "Reasoning",
       "context": "{tokens} context window",
