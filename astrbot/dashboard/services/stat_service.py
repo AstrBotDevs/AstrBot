@@ -58,10 +58,13 @@ class StatService:
         db_helper: BaseDatabase,
         core_lifecycle: AstrBotCoreLifecycle,
         config: AstrBotConfig,
+        *,
+        dashboard_static_folder: str | None = None,
     ) -> None:
         self.db_helper = db_helper
         self.core_lifecycle = core_lifecycle
         self.config = config
+        self.dashboard_static_folder = dashboard_static_folder
         self.storage_cleaner = StorageCleaner(config)
 
         # Probe sandbox startup once; restart AstrBot to refresh this snapshot.
@@ -153,7 +156,9 @@ class StatService:
         if is_desktop_session_auth_enabled():
             return {
                 "version": VERSION,
-                "dashboard_version": await get_dashboard_version(),
+                "dashboard_version": await get_dashboard_version(
+                    self.dashboard_static_folder
+                ),
                 "change_pwd_hint": False,
                 "md5_pwd_hint": False,
                 "password_upgrade_required": False,
@@ -171,7 +176,9 @@ class StatService:
         md5_pwd_hint = is_md5_dashboard_password(password)
         return {
             "version": VERSION,
-            "dashboard_version": await get_dashboard_version(),
+            "dashboard_version": await get_dashboard_version(
+                self.dashboard_static_folder
+            ),
             "change_pwd_hint": await self.is_default_cred(),
             "md5_pwd_hint": md5_pwd_hint,
             "password_upgrade_required": not storage_upgraded,
@@ -186,7 +193,7 @@ class StatService:
 
         Args:
             dashboard_static_folder: Static WebUI dist directory currently served by
-                the dashboard, when available.
+                the dashboard. Defaults to the directory configured on the service.
 
         Returns:
             Public WebUI and AstrBot version information.
@@ -219,12 +226,11 @@ class StatService:
 
         dashboard_version = None
         try:
-            if dashboard_static_folder:
-                dashboard_version = await get_dashboard_version(
-                    Path(dashboard_static_folder)
-                )
-            if dashboard_version is None:
-                dashboard_version = await get_dashboard_version()
+            dashboard_version = await get_dashboard_version(
+                dashboard_static_folder
+                if dashboard_static_folder is not None
+                else self.dashboard_static_folder
+            )
         except Exception as exc:
             logger.warning("Failed to read public WebUI version: %s", exc)
 
