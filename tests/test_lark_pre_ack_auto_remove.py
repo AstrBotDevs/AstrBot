@@ -8,6 +8,7 @@ import pytest
 from astrbot.core.config.default import DEFAULT_CONFIG
 from astrbot.core.pipeline.preprocess_stage.stage import PreProcessStage
 from astrbot.core.platform.astr_message_event import (
+    PRE_ACK_REACTION_EMOJI,
     PRE_ACK_REACTION_ID,
     AstrMessageEvent,
 )
@@ -183,6 +184,41 @@ async def test_lark_remove_reaction_api_failure_does_not_raise():
 
 
 @pytest.mark.asyncio
+async def test_lark_remove_reaction_resolves_missing_id_by_emoji():
+    reaction_api = SimpleNamespace(
+        alist=AsyncMock(
+            return_value=SimpleNamespace(
+                success=lambda: True,
+                code=0,
+                msg="ok",
+                data=SimpleNamespace(
+                    items=[
+                        SimpleNamespace(
+                            reaction_id="reaction-123",
+                            reaction_type=SimpleNamespace(emoji_type="Typing"),
+                            operator=SimpleNamespace(operator_id="bot"),
+                        )
+                    ]
+                ),
+            )
+        ),
+        adelete=AsyncMock(
+            return_value=SimpleNamespace(success=lambda: True, code=0, msg="ok")
+        ),
+    )
+    bot = SimpleNamespace(
+        im=SimpleNamespace(v1=SimpleNamespace(message_reaction=reaction_api))
+    )
+    event = _lark_event(bot)
+
+    await event.remove_reaction(emoji="Typing")
+
+    reaction_api.alist.assert_awaited_once()
+    reaction_api.adelete.assert_awaited_once()
+    assert reaction_api.adelete.await_args.args[0].reaction_id == "reaction-123"
+
+
+@pytest.mark.asyncio
 async def test_base_remove_reaction_is_noop():
     class _Event(AstrMessageEvent):
         async def send(self, message):
@@ -214,6 +250,7 @@ async def test_preprocess_stores_reaction_id_when_auto_remove_enabled():
 
     assert event.react_calls == ["Typing"]
     assert event.get_extra(PRE_ACK_REACTION_ID) == "reaction-1"
+    assert event.get_extra(PRE_ACK_REACTION_EMOJI) == "Typing"
 
 
 @pytest.mark.asyncio
@@ -225,6 +262,7 @@ async def test_preprocess_skips_storage_when_auto_remove_disabled():
 
     assert event.react_calls == ["Typing"]
     assert event.get_extra(PRE_ACK_REACTION_ID, None) is None
+    assert event.get_extra(PRE_ACK_REACTION_EMOJI, None) is None
 
 
 @pytest.mark.asyncio
@@ -238,6 +276,7 @@ async def test_preprocess_skips_storage_on_non_lark_platform():
 
     assert event.react_calls == ["Typing"]
     assert event.get_extra(PRE_ACK_REACTION_ID, None) is None
+    assert event.get_extra(PRE_ACK_REACTION_EMOJI, None) is None
 
 
 @pytest.mark.asyncio
@@ -256,6 +295,7 @@ async def test_preprocess_skips_storage_when_react_returns_no_id():
     )
 
     assert event.get_extra(PRE_ACK_REACTION_ID, None) is None
+    assert event.get_extra(PRE_ACK_REACTION_EMOJI) == "Typing"
 
 
 @pytest.mark.asyncio
@@ -283,7 +323,7 @@ async def test_scheduler_finally_removes_pre_ack_reaction():
         with pytest.raises(RuntimeError, match="boom"):
             await PipelineScheduler.execute(scheduler, event)
 
-    remove_reaction.assert_awaited_once_with("reaction-1")
+    remove_reaction.assert_awaited_once_with("reaction-1", None)
 
 
 @pytest.mark.asyncio

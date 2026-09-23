@@ -23,6 +23,7 @@ from lark_oapi.api.im.v1 import (
     Emoji,
     GetChatMembersRequest,
     GetChatRequest,
+    ListMessageReactionRequest,
     ReplyMessageRequest,
     ReplyMessageRequestBody,
 )
@@ -1000,16 +1001,70 @@ class LarkMessageEvent(AstrMessageEvent):
             return None
         return response.data.reaction_id if response.data else None
 
-    async def remove_reaction(self, reaction_id: str) -> None:
+    async def remove_reaction(
+        self,
+        reaction_id: str | None = None,
+        emoji: str | None = None,
+    ) -> None:
         """Remove a reaction from a Lark message.
 
         Args:
             reaction_id: Reaction ID returned when the reaction was created.
+            emoji: Reaction identifier used when no reaction ID is available.
         """
         if self.bot.im is None:
             logger.error(
                 "[Lark] API Client im module is not initialized; cannot remove reaction"
             )
+            return
+
+        if reaction_id:
+            request = (
+                DeleteMessageReactionRequest.builder()
+                .message_id(self.message_obj.message_id)
+                .reaction_id(reaction_id)
+                .build()
+            )
+            response = await self.bot.im.v1.message_reaction.adelete(request)
+            if response.success():
+                return
+            logger.warning(
+                f"Failed to delete Lark message reaction({response.code}): "
+                f"{response.msg}; resolving it by emoji"
+            )
+
+        if not emoji:
+            logger.warning("[Lark] Pre-ack reaction cannot be resolved for removal")
+            return
+
+        request = (
+            ListMessageReactionRequest.builder()
+            .message_id(self.message_obj.message_id)
+            .reaction_type(emoji)
+            .build()
+        )
+        response = await self.bot.im.v1.message_reaction.alist(request)
+        if not response.success() or not response.data:
+            logger.error(
+                f"Failed to list Lark message reactions({response.code}): {response.msg}"
+            )
+            return
+
+        bot_id = self.get_self_id()
+        reaction_id = next(
+            (
+                item.reaction_id
+                for item in response.data.items or []
+                if item.reaction_id
+                and item.reaction_type
+                and item.reaction_type.emoji_type == emoji
+                and item.operator
+                and item.operator.operator_id == bot_id
+            ),
+            None,
+        )
+        if reaction_id is None:
+            logger.warning("[Lark] Pre-ack reaction is no longer available")
             return
 
         request = (
@@ -1018,7 +1073,6 @@ class LarkMessageEvent(AstrMessageEvent):
             .reaction_id(reaction_id)
             .build()
         )
-
         response = await self.bot.im.v1.message_reaction.adelete(request)
         if not response.success():
             logger.error(

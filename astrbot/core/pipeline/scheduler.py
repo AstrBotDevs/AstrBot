@@ -3,7 +3,10 @@ from typing import cast
 
 from astrbot.core import logger
 from astrbot.core.platform import AstrMessageEvent
-from astrbot.core.platform.astr_message_event import PRE_ACK_REACTION_ID
+from astrbot.core.platform.astr_message_event import (
+    PRE_ACK_REACTION_EMOJI,
+    PRE_ACK_REACTION_ID,
+)
 from astrbot.core.platform.sources.webchat.webchat_event import WebChatMessageEvent
 from astrbot.core.platform.sources.wecom_ai_bot.wecomai_event import (
     WecomAIBotMessageEvent,
@@ -98,9 +101,13 @@ class PipelineScheduler:
             logger.debug("pipeline execution completed.")
         finally:
             pre_ack_reaction_id = event.get_extra(PRE_ACK_REACTION_ID, None)
-            if pre_ack_reaction_id is not None:
+            pre_ack_reaction_emoji = event.get_extra(PRE_ACK_REACTION_EMOJI, None)
+            if pre_ack_reaction_id is not None or pre_ack_reaction_emoji is not None:
                 try:
-                    await event.remove_reaction(pre_ack_reaction_id)
+                    await event.remove_reaction(
+                        pre_ack_reaction_id,
+                        pre_ack_reaction_emoji,
+                    )
                 except Exception as e:
                     logger.warning(f"Failed to remove pre-ack reaction: {e}")
             event.cleanup_temporary_local_files()

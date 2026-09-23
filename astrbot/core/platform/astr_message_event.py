@@ -35,6 +35,7 @@ from .platform_metadata import PlatformMetadata
 
 # Event extra key for the pre-ack reaction created by PreProcessStage.
 PRE_ACK_REACTION_ID = "_pre_ack_reaction_id"
+PRE_ACK_REACTION_EMOJI = "_pre_ack_reaction_emoji"
 
 
 class AstrMessageEvent(abc.ABC):
@@ -519,7 +520,11 @@ class AstrMessageEvent(abc.ABC):
         await self.send(MessageChain([Plain(emoji)]))
         return None
 
-    async def remove_reaction(self, reaction_id: str) -> None:
+    async def remove_reaction(
+        self,
+        reaction_id: str | None = None,
+        emoji: str | None = None,
+    ) -> None:
         """Remove a reaction previously added via react().
 
         The default implementation is a no-op. Platforms with native message
@@ -527,6 +532,8 @@ class AstrMessageEvent(abc.ABC):
 
         Args:
             reaction_id: Platform reaction ID returned by react().
+            emoji: Reaction identifier used to resolve the reaction when the
+                platform API does not return a reaction ID.
         """
         return
 
