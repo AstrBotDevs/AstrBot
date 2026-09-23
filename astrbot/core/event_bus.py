@@ -40,19 +40,24 @@ class EventBus:
     async def dispatch(self) -> None:
         while True:
             event: AstrMessageEvent = await self.event_queue.get()
-            conf_info = self.astrbot_config_mgr.get_conf_info(event.unified_msg_origin)
-            conf_id = conf_info.get("id", "")
-            conf_name = conf_info.get("name", conf_id)
-            self._print_event(event, conf_name)
-            scheduler = self.pipeline_scheduler_mapping.get(conf_id)
-            if not scheduler:
-                logger.error(
-                    f"PipelineScheduler not found for id: {conf_id}, event ignored.",
+            try:
+                conf_info = self.astrbot_config_mgr.get_conf_info(
+                    event.unified_msg_origin,
                 )
-                continue
-            task = asyncio.create_task(scheduler.execute(event))
-            self._pending_tasks.add(task)
-            task.add_done_callback(self._on_task_done)
+                conf_id = conf_info.get("id", "")
+                conf_name = conf_info.get("name", conf_id)
+                self._print_event(event, conf_name)
+                scheduler = self.pipeline_scheduler_mapping.get(conf_id)
+                if not scheduler:
+                    logger.error(
+                        f"PipelineScheduler not found for id: {conf_id}, event ignored.",
+                    )
+                    continue
+                task = asyncio.create_task(scheduler.execute(event))
+                self._pending_tasks.add(task)
+                task.add_done_callback(self._on_task_done)
+            finally:
+                self.event_queue.task_done()
 
     def _on_task_done(self, task: asyncio.Task) -> None:
         """pipeline 任务结束回调: 移除强引用并暴露未捕获的异常"""

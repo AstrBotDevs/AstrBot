@@ -289,6 +289,38 @@ class TestDispatchEdgeInputs:
 
             assert "orphan-id" in mock_logger.error.call_args[0][0]
 
+    @pytest.mark.asyncio
+    async def test_missing_scheduler_marks_event_done(
+        self, event_queue, mock_config_manager
+    ):
+        """Dropped events must not leave Queue.join() waiting forever."""
+        mock_config_manager.get_conf_info.return_value = {
+            "id": "orphan-id",
+            "name": "Orphan",
+        }
+        event_bus = EventBus(
+            event_queue=event_queue,
+            pipeline_scheduler_mapping={},
+            astrbot_config_mgr=mock_config_manager,
+        )
+        event = MagicMock()
+        event.unified_msg_origin = "test:private:1"
+        event.get_platform_id.return_value = "test"
+        event.get_platform_name.return_value = "Test"
+        event.get_sender_name.return_value = "User"
+        event.get_sender_id.return_value = "u1"
+        event.get_message_outline.return_value = "m"
+        await event_queue.put(event)
+
+        with patch("astrbot.core.event_bus.logger"):
+            task = asyncio.create_task(event_bus.dispatch())
+            try:
+                await asyncio.wait_for(event_queue.join(), timeout=1.0)
+            finally:
+                task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await task
+
 
 # ---- _print_event edge cases ----
 
