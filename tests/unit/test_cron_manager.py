@@ -619,6 +619,7 @@ class TestRunActiveAgentJob:
 
         runner = MagicMock(state=AgentState.DONE)
         runner.step_until_done.return_value.__aiter__.return_value = []
+        runner.step_until_done.return_value.aclose = AsyncMock()
         runner.get_final_llm_resp.return_value = None
         with (
             patch(
@@ -627,7 +628,11 @@ class TestRunActiveAgentJob:
             ),
             patch(
                 "astrbot.core.astr_main_agent.build_main_agent",
-                AsyncMock(return_value=SimpleNamespace(agent_runner=runner)),
+                AsyncMock(
+                    return_value=SimpleNamespace(
+                        agent_runner=runner, conversation_events=None
+                    )
+                ),
             ) as build_agent,
             patch("astrbot.core.cron.manager.persist_agent_history", AsyncMock()),
         ):

@@ -2475,6 +2475,9 @@ async def test_cancelled_consumer_joins_pending_tool(
     await source.aclose()
     assert cancelled.is_set()
     assert not runner._events.active
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("entrypoint", ["sdk", "chat"])
 @pytest.mark.parametrize("streaming", [False, True])
 async def test_step_notices_reach_model_once_per_threshold(
