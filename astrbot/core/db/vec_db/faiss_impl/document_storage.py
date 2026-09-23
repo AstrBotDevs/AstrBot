@@ -1,7 +1,7 @@
 import json
 import os
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from sqlalchemy import Column, Text, bindparam
@@ -295,8 +295,8 @@ class DocumentStorage:
                 doc_id=doc_id,
                 text=text,
                 metadata_=json.dumps(metadata),
-                created_at=datetime.now(),
-                updated_at=datetime.now(),
+                created_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(timezone.utc),
             )
             session.add(document)
             await session.flush()  # Flush to get the ID
@@ -332,8 +332,8 @@ class DocumentStorage:
                     doc_id=doc_id,
                     text=text,
                     metadata_=json.dumps(metadata),
-                    created_at=datetime.now(),
-                    updated_at=datetime.now(),
+                    created_at=datetime.now(timezone.utc),
+                    updated_at=datetime.now(timezone.utc),
                 )
                 documents.append(document)
                 session.add(document)
@@ -401,7 +401,7 @@ class DocumentStorage:
                 if document.id is not None:
                     await self._delete_fts_row(session, int(document.id), document.text)
                 document.text = new_text
-                document.updated_at = datetime.now()
+                document.updated_at = datetime.now(timezone.utc)
                 session.add(document)
                 if document.id is not None:
                     await self._insert_fts_row(session, int(document.id), new_text)
