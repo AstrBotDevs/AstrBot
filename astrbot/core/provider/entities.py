@@ -200,6 +200,8 @@ class ProviderRequest:
     """图片 URL 列表"""
     audio_urls: list[str] = field(default_factory=list)
     """音频 URL 列表，也支持本地路径"""
+    video_urls: list[str] = field(default_factory=list)
+    """Video URL list. Local paths are supported as well."""
     extra_user_content_parts: list[ContentPart] = field(default_factory=list)
     """额外的用户消息内容部分列表，用于在用户消息后添加额外的内容块（如系统提醒、指令等）。支持 dict 或 ContentPart 对象"""
     func_tool: ToolSet | None = None
@@ -223,6 +225,7 @@ class ProviderRequest:
             f"ProviderRequest(prompt={self.prompt}, session_id={self.session_id}, "
             f"image_count={len(self.image_urls or [])}, "
             f"audio_count={len(self.audio_urls or [])}, "
+            f"video_count={len(self.video_urls or [])}, "
             f"func_tool={self.func_tool}, "
             f"contexts={self._print_friendly_context()}, "
             f"system_prompt={self.system_prompt}, "
@@ -245,7 +248,8 @@ class ProviderRequest:
         if not self.contexts:
             return (
                 f"prompt: {self.prompt}, image_count: {len(self.image_urls or [])}, "
-                f"audio_count: {len(self.audio_urls or [])}"
+                f"audio_count: {len(self.audio_urls or [])}, "
+                f"video_count: {len(self.video_urls or [])}"
             )
 
         result_parts = []
@@ -262,6 +266,7 @@ class ProviderRequest:
                 msg_parts = []
                 image_count = 0
                 audio_count = 0
+                video_count = 0
 
                 for item in content:
                     item_type = item.get("type", "")
@@ -272,6 +277,8 @@ class ProviderRequest:
                         image_count += 1
                     elif item_type == "audio_url":
                         audio_count += 1
+                    elif item_type == "video_url":
+                        video_count += 1
 
                 if image_count > 0:
                     if msg_parts:
@@ -283,6 +290,11 @@ class ProviderRequest:
                         msg_parts.append(f"[+{audio_count} audios]")
                     else:
                         msg_parts.append(f"[{audio_count} audios]")
+                if video_count > 0:
+                    if msg_parts:
+                        msg_parts.append(f"[+{video_count} videos]")
+                    else:
+                        msg_parts.append(f"[{video_count} videos]")
 
                 result_parts.append(f"{role}: {''.join(msg_parts)}")
 
@@ -307,6 +319,9 @@ class ProviderRequest:
         elif self.audio_urls:
             # 如果没有文本但有音频，添加占位文本
             content_blocks.append({"type": "text", "text": "[音频]"})
+        elif self.video_urls:
+            # If there is no text but there is video, add a placeholder text.
+            content_blocks.append({"type": "text", "text": "[Video]"})
 
         # 2. 额外的内容块（系统提醒、指令等）
         if self.extra_user_content_parts:
@@ -398,6 +413,35 @@ class ProviderRequest:
                     },
                 )
 
+        # 5. Video content. The block is flagged `_no_save` so that the
+        # multi-megabyte data URI is dropped when the message is written back to
+        # the conversation history; otherwise it would be replayed on every later
+        # request in the session. Providers still receive it, because they
+        # serialize messages with `model_dump()`, which does not emit `_no_save`.
+        if self.video_urls:
+            for video_url in self.video_urls:
+                try:
+                    video_data = await MediaResolver(
+                        video_url,
+                        media_type="video",
+                        default_suffix=".mp4",
+                    ).to_base64_data(strict=True)
+                except Exception as exc:
+                    logger.warning(
+                        "Video preprocessing failed; skipping it. Error: %s", exc
+                    )
+                    continue
+                if not video_data:
+                    logger.warning("Video preprocessing returned no data; skipping it.")
+                    continue
+                content_blocks.append(
+                    {
+                        "type": "video_url",
+                        "video_url": {"url": video_data.to_data_url()},
+                        "_no_save": True,
+                    },
+                )
+
         if image_capture_failed and not any(
             block.get("type") != "text" or block.get("text", "").strip()
             for block in content_blocks
@@ -411,6 +455,7 @@ class ProviderRequest:
             and not self.extra_user_content_parts
             and not self.image_urls
             and not self.audio_urls
+            and not self.video_urls
         ):
             return {"role": "user", "content": content_blocks[0]["text"]}
 
