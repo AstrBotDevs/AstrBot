@@ -254,6 +254,19 @@ async def test_preprocess_stores_reaction_id_when_auto_remove_enabled():
 
 
 @pytest.mark.asyncio
+async def test_preprocess_skips_reaction_when_disabled():
+    for value in (False, "false"):
+        event = _FakeEvent()
+        await _run_preprocess(
+            event, {"enable": value, "emojis": ["Typing"], "auto_remove": True}
+        )
+
+        assert event.react_calls == []
+        assert event.get_extra(PRE_ACK_REACTION_ID, None) is None
+        assert event.get_extra(PRE_ACK_REACTION_EMOJI, None) is None
+
+
+@pytest.mark.asyncio
 async def test_preprocess_skips_storage_when_auto_remove_disabled():
     event = _FakeEvent(reaction_id="reaction-1")
     await _run_preprocess(

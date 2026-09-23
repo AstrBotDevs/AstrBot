@@ -115,7 +115,7 @@ class PreProcessStage(Stage):
         ) or {}
         emojis = cfg.get("emojis") or []
         if (
-            cfg.get("enable", False)
+            cfg.get("enable") is True
             and platform in supported
             and emojis
             and event.is_at_or_wake_command
@@ -124,7 +124,7 @@ class PreProcessStage(Stage):
                 emoji = random.choice(emojis)
                 reaction_id = await event.react(emoji)
                 # Auto-remove is a Lark-only option; default True for Lark.
-                if platform == "lark" and cfg.get("auto_remove", True):
+                if platform == "lark" and cfg.get("auto_remove", True) is True:
                     if reaction_id is not None:
                         event.set_extra(PRE_ACK_REACTION_ID, reaction_id)
                     event.set_extra(PRE_ACK_REACTION_EMOJI, emoji)
