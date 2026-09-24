@@ -321,6 +321,8 @@
     "enterUrl": "输入插件仓库链接"
   },
   "skills": {
+    "searchPlaceholder": "搜索技能...",
+    "noSearchResult": "未找到匹配的技能",
     "modeLocal": "本地技能",
     "modeNeo": "Neo 技能",
     "actions": "操作",

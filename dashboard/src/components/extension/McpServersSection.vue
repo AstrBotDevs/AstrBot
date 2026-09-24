@@ -1,15 +1,38 @@
 <template>
   <div class="tools-page">
     <v-container fluid class="pa-0" elevation="0">
+      <div v-if="mcpServers.length > 0" class="mcp-search-row">
+        <v-text-field
+          v-model="mcpSearch"
+          :label="tm('mcpServers.searchPlaceholder')"
+          prepend-inner-icon="mdi-magnify"
+          density="compact"
+          variant="solo-filled"
+          flat
+          clearable
+          hide-details
+          single-line
+          class="mcp-search-field"
+        />
+      </div>
+
       <!-- MCP 服务器部分 -->
       <div v-if="mcpServers.length === 0" class="text-center pa-8">
         <v-icon size="64" color="grey-lighten-1">mdi-server-off</v-icon>
         <p class="text-grey mt-4">{{ tm('mcpServers.empty') }}</p>
       </div>
 
+      <div
+        v-else-if="filteredMcpServers.length === 0"
+        class="text-center pa-8"
+      >
+        <v-icon size="64" color="grey-lighten-1">mdi-magnify</v-icon>
+        <p class="text-grey mt-4">{{ tm('mcpServers.noSearchResult') }}</p>
+      </div>
+
       <div v-else class="mcp-server-list">
         <OutlinedActionListItem
-          v-for="server in mcpServers || []"
+          v-for="server in filteredMcpServers"
           :key="server.name"
           :title="server.name"
           clickable
@@ -325,6 +348,7 @@ import { VueMonacoEditor } from '@guolao/vue-monaco-editor';
 import { mcpApi } from '@/api/v1';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import OutlinedActionListItem from '@/components/shared/OutlinedActionListItem.vue';
+import { buildSearchQuery, matchesText } from '@/utils/pluginSearch';
 import {
   askForConfirmation as askForConfirmationDialog,
   useConfirmDialog
@@ -346,6 +370,7 @@ export default {
     return {
       refreshInterval: null,
       mcpServers: [],
+      mcpSearch: '',
       showMcpServerDialog: false,
       selectedMcpServerProvider: 'modelscope',
       mcpServerProviderList: ['modelscope'],
@@ -372,6 +397,17 @@ export default {
   computed: {
     isServerFormValid() {
       return !!this.currentServer.name && !this.jsonError;
+    },
+    filteredMcpServers() {
+      const query = buildSearchQuery(this.mcpSearch);
+      if (!query) return this.mcpServers;
+      return this.mcpServers.filter((server) => {
+        const args = Array.isArray(server.args) ? server.args.join(' ') : '';
+        const tools = Array.isArray(server.tools) ? server.tools.join(' ') : '';
+        return [server.name, server.transport, server.command, args, tools].some(
+          (field) => matchesText(field, query),
+        );
+      });
     },
     getServerConfigSummary() {
       return (server) => {
@@ -673,6 +709,15 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.mcp-search-row {
+  margin-bottom: 12px;
+  max-width: 360px;
+}
+
+.mcp-search-field {
+  width: 100%;
 }
 
 .mcp-server-config {

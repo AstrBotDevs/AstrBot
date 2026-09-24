@@ -321,6 +321,8 @@
         "enterUrl": "Ссылка на репозиторий"
     },
     "skills": {
+        "searchPlaceholder": "Поиск навыков...",
+        "noSearchResult": "Подходящие навыки не найдены",
         "modeLocal": "Локальные навыки",
         "modeNeo": "Навыки Neo",
         "actions": "Действия",

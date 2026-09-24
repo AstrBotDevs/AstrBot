@@ -24,6 +24,8 @@
       "sync": "同步服务器"
     },
     "empty": "暂无 MCP 服务器，点击 新增服务器 添加",
+    "searchPlaceholder": "搜索 MCP 服务器...",
+    "noSearchResult": "未找到匹配的 MCP 服务器",
     "status": {
       "noTools": "无可用工具",
       "availableTools": "可用工具",

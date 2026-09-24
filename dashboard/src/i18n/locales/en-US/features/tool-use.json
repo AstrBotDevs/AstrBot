@@ -24,6 +24,8 @@
       "sync": "Sync MCP Servers"
     },
     "empty": "No MCP servers available, click Add Server to add one",
+    "searchPlaceholder": "Search MCP servers...",
+    "noSearchResult": "No matching MCP servers found",
     "status": {
       "noTools": "No available tools",
       "availableTools": "Available tools",

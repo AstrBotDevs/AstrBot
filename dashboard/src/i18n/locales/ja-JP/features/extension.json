@@ -321,6 +321,8 @@
     "enterUrl": "プラグインリポジトリの URL を入力"
   },
   "skills": {
+    "searchPlaceholder": "スキルを検索…",
+    "noSearchResult": "一致するスキルが見つかりません",
     "modeLocal": "ローカルスキル",
     "modeNeo": "Neo スキル",
     "actions": "操作",
