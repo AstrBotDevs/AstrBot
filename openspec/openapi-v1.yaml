@@ -4477,7 +4477,46 @@ paths:
             minimum: 1
       responses:
         "200":
-          $ref: "#/components/responses/Ok"
+          description: Reported token usage and actual request attempts
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        description: Grouped image-context attempts do not contribute latency or success-rate samples. Tokens include reported usage only.
+                        required: [range_total_tokens, range_total_calls, range_image_submissions, range_caption_attempts, range_review_attempts, range_unknown_usage_calls, range_success_samples]
+                        properties:
+                          range_total_tokens:
+                            type: integer
+                            minimum: 0
+                            description: Sum of reported token usage, excluding unknown usage.
+                          range_total_calls:
+                            type: integer
+                            minimum: 0
+                            description: Actual attempts for grouped requests; one per legacy record.
+                          range_image_submissions:
+                            type: integer
+                            minimum: 0
+                            description: Images submitted across attempts, including retries.
+                          range_caption_attempts:
+                            type: integer
+                            minimum: 0
+                          range_review_attempts:
+                            type: integer
+                            minimum: 0
+                          range_unknown_usage_calls:
+                            type: integer
+                            minimum: 0
+                            description: Attempts without reported usage, never an assertion of zero cost.
+                          range_success_samples:
+                            type: integer
+                            minimum: 0
+                            description: Legacy records eligible for the displayed success rate.
+
 
   /api/v1/stats/version:
     get:
@@ -6379,19 +6418,17 @@ components:
 
     ConversationExportRequest:
       type: object
+      required: [conversations]
       properties:
         conversations:
           type: array
           items:
             $ref: "#/components/schemas/ConversationRef"
-        conversation_ids:
-          type: array
-          items:
-            type: string
         format:
           type: string
-          enum: [json, markdown]
-          default: json
+          enum: [jsonl, media_zip]
+          default: jsonl
+          description: media_zip exports one conversation with its authorized image catalog and media.
       additionalProperties: false
 
     CronJobRequest:

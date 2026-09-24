@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import TypedDict
 
 from deprecated import deprecated
-from sqlalchemy import Index, desc
+from sqlalchemy import CheckConstraint, Index, desc
 from sqlmodel import JSON, Field, SQLModel, Text, UniqueConstraint
 
 
@@ -62,6 +62,7 @@ class ProviderStat(TimestampMixin, SQLModel, table=True):
     start_time: float = Field(default=0.0, nullable=False)
     end_time: float = Field(default=0.0, nullable=False)
     time_to_first_token: float = Field(default=0.0, nullable=False)
+    request_details: dict = Field(default_factory=dict, nullable=False, sa_type=JSON)
 
 
 class ConversationV2(TimestampMixin, SQLModel, table=True):
@@ -105,6 +106,144 @@ class ConversationV2(TimestampMixin, SQLModel, table=True):
         UniqueConstraint(
             "conversation_id",
             name="uix_conversation_id",
+        ),
+    )
+
+
+class ImageAsset(TimestampMixin, SQLModel, table=True):
+    """Metadata for image bytes owned by the persistent image store.
+
+    Attributes:
+        asset_id: Stable identity; knowledge of this ID does not authorize reads.
+        storage_key: Store-relative key, resolved only by the future storage layer.
+        source_kind: Distinguishes original input from recovered legacy model input.
+    """
+
+    __tablename__: str = "image_assets"
+
+    asset_id: str = Field(primary_key=True, default_factory=lambda: str(uuid.uuid4()))
+    storage_key: str = Field(nullable=False, unique=True)
+    mime_type: str = Field(nullable=False)
+    byte_size: int = Field(nullable=False, ge=0)
+    width: int = Field(nullable=False, gt=0)
+    height: int = Field(nullable=False, gt=0)
+    sha256: str = Field(nullable=False, max_length=64)
+    source_kind: str = Field(default="original", nullable=False)
+    state: str = Field(default="available", nullable=False)
+
+    __table_args__ = (
+        CheckConstraint("byte_size >= 0 AND width > 0 AND height > 0"),
+        CheckConstraint("length(sha256) = 64"),
+        CheckConstraint("source_kind IN ('original', 'legacy_model_input')"),
+        CheckConstraint("state IN ('available', 'unavailable', 'pending_delete')"),
+    )
+
+
+class ImageHistoryMigrationTask(TimestampMixin, SQLModel, table=True):
+    """Durable state for one offline migration of an oversized conversation.
+
+    Attributes:
+        task_id: Stable maintenance task UUID used to derive image identities.
+        conversation_id: Conversation selected for migration; no FK so history remains.
+        source_row_id: Database row identity observed during the source snapshot.
+        source_created_at: Exact stored creation timestamp text from that snapshot.
+        source_sha256: Digest of the original serialized history bytes.
+        source_byte_size: Exact number of bytes in the original history value.
+        state: ``prepared`` until the history transaction commits, then ``committed``.
+        output_sha256: Digest of the committed replacement history, when committed.
+        output_byte_size: Exact byte count of the committed replacement history.
+    """
+
+    __tablename__: str = "image_history_migration_tasks"
+
+    task_id: str = Field(primary_key=True, max_length=36)
+    conversation_id: str = Field(nullable=False, max_length=36, index=True)
+    user_id: str = Field(nullable=False)
+    platform_id: str = Field(nullable=False)
+    source_row_id: int = Field(nullable=False, gt=0)
+    source_created_at: str = Field(nullable=False, sa_type=Text)
+    source_sha256: str = Field(nullable=False, max_length=64)
+    source_byte_size: int = Field(nullable=False, ge=0)
+    state: str = Field(default="prepared", nullable=False, max_length=16)
+    output_sha256: str | None = Field(default=None, max_length=64)
+    output_byte_size: int | None = Field(default=None, ge=0)
+
+    __table_args__ = (
+        CheckConstraint("source_row_id > 0 AND source_byte_size >= 0"),
+        CheckConstraint("length(source_sha256) = 64"),
+        CheckConstraint("state IN ('prepared', 'committed')"),
+        CheckConstraint("output_sha256 IS NULL OR length(output_sha256) = 64"),
+        CheckConstraint("output_byte_size IS NULL OR output_byte_size >= 0"),
+        CheckConstraint(
+            "(state = 'prepared' AND output_sha256 IS NULL AND output_byte_size IS NULL) "
+            "OR (state = 'committed' AND output_sha256 IS NOT NULL "
+            "AND output_byte_size IS NOT NULL)"
+        ),
+    )
+
+
+class ConversationImageCheckpoint(SQLModel, table=True):
+    """Stable turn order retained across context compression.
+
+    Attributes:
+        sequence: Monotonic conversation-local order, including turns without images.
+        active: False after explicit removal; tombstones prevent sequence reuse.
+    """
+
+    __tablename__: str = "conversation_image_checkpoints"
+    conversation_id: str = Field(
+        primary_key=True, foreign_key="conversations.conversation_id"
+    )
+    checkpoint_id: str = Field(primary_key=True)
+    sequence: int = Field(nullable=False, gt=0)
+    active: bool = Field(default=True, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("conversation_id", "sequence"),
+        CheckConstraint("sequence > 0"),
+    )
+
+
+class ConversationImageRef(TimestampMixin, SQLModel, table=True):
+    """A conversation-scoped occurrence and its independent description.
+
+    Attributes:
+        conversation_id: Conversation that owns the reference and description.
+        occurrence_id: Stable occurrence identity, copied when branching history.
+        asset_id: Shared immutable asset; associations must be checked before reads.
+        description: Current observation, independent from other conversation branches.
+        user_annotation: User corrections kept separate from model observations.
+    """
+
+    __tablename__: str = "conversation_image_refs"
+
+    conversation_id: str = Field(
+        primary_key=True, foreign_key="conversations.conversation_id"
+    )
+    occurrence_id: str = Field(
+        primary_key=True, default_factory=lambda: str(uuid.uuid4())
+    )
+    asset_id: str = Field(
+        nullable=False, foreign_key="image_assets.asset_id", index=True
+    )
+    source_message_id: str | None = Field(default=None)
+    image_index: int = Field(default=0, nullable=False, ge=0)
+    checkpoint_id: str | None = Field(default=None)
+    description: str = Field(default="", nullable=False, sa_type=Text, max_length=4096)
+    description_status: str = Field(default="pending", nullable=False)
+    description_version: int = Field(default=0, nullable=False, ge=0)
+    description_provider: str | None = Field(default=None)
+    description_model: str | None = Field(default=None)
+    description_representation: str | None = Field(default=None)
+    user_annotation: str = Field(
+        default="", nullable=False, sa_type=Text, max_length=4096
+    )
+
+    __table_args__ = (
+        CheckConstraint("image_index >= 0 AND description_version >= 0"),
+        CheckConstraint("description_status IN ('pending', 'ready', 'failed')"),
+        CheckConstraint(
+            "length(description) <= 4096 AND length(user_annotation) <= 4096"
         ),
     )
 

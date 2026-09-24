@@ -232,3 +232,91 @@ async def test_provider_token_ranking_includes_umo_display_names(temp_db):
             "tokens": 3,
         },
     ]
+
+
+@pytest.mark.asyncio
+async def test_image_request_groups_count_attempts_and_preserve_unknown_usage(temp_db):
+    """Keep reported tokens while excluding group timing from request metrics."""
+    await temp_db.insert_provider_stat(
+        umo="u",
+        provider_id="legacy",
+        stats={
+            "token_usage": {"output": 10},
+            "start_time": 1,
+            "end_time": 3,
+            "time_to_first_token": 0.5,
+        },
+    )
+    for purpose, attempts, unknown, images, tokens in [
+        ("caption", 2, 1, 4, 30),
+        ("review", 1, 1, 1, 0),
+        ("main", 3, 0, 2, 50),
+    ]:
+        await temp_db.insert_provider_stat(
+            umo="u",
+            provider_id=purpose,
+            provider_model="vision",
+            stats={
+                "token_usage": {"output": tokens},
+                "start_time": 1,
+                "end_time": 900,
+                "time_to_first_token": 800,
+                "image_request": {
+                    "purpose": purpose,
+                    "attempts": attempts,
+                    "unknown_calls": unknown,
+                    "usage_known": unknown == 0,
+                    "image_submissions": images,
+                    "encoded_bytes": 123,
+                },
+            },
+        )
+    result = await _make_service(temp_db).get_provider_token_stats(1)
+    assert result["range_total_calls"] == result["today_total_calls"] == 7
+    assert result["range_total_tokens"] == 90
+    assert result["range_unknown_usage_calls"] == 2
+    assert result["range_image_submissions"] == 7
+    assert result["range_caption_attempts"] == 2
+    assert result["range_review_attempts"] == 1
+    assert result["range_success_samples"] == 1
+    assert result["range_success_rate"] == 1
+    assert result["range_avg_ttft_ms"] == 500
+    assert result["range_avg_duration_ms"] == 2000
+    assert result["range_avg_tpm"] == 300
+    assert {
+        row["provider_id"]: row["tokens"] for row in result["range_by_provider"]
+    } == {
+        "legacy": 10,
+        "caption": 30,
+        "review": 0,
+        "main": 50,
+    }
+
+
+@pytest.mark.asyncio
+async def test_unknown_only_group_does_not_invent_success_or_timing(temp_db):
+    await temp_db.insert_provider_stat(
+        umo="u",
+        provider_id="caption",
+        stats={
+            "image_request": {
+                "purpose": "caption",
+                "attempts": 2,
+                "unknown_calls": 2,
+                "usage_known": False,
+                "image_submissions": 4,
+            },
+            "start_time": 1,
+            "end_time": 10,
+        },
+    )
+    result = await _make_service(temp_db).get_provider_token_stats(1)
+    assert result["range_total_tokens"] == 0
+    assert result["range_unknown_usage_calls"] == result["range_total_calls"] == 2
+    assert result["range_success_samples"] == 0
+    assert (
+        result["range_avg_duration_ms"]
+        == result["range_avg_ttft_ms"]
+        == result["range_avg_tpm"]
+        == 0
+    )

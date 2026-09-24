@@ -1,6 +1,6 @@
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
-from typing import TypeVar
+from typing import Any, TypeVar
 
 from tenacity import (
     AsyncRetrying,
@@ -11,6 +11,7 @@ from tenacity import (
 )
 
 from astrbot import logger
+from astrbot.core.image_request_budget import charge_image_attempt
 from astrbot.core.utils.config_number import coerce_int_config
 from astrbot.core.utils.network_utils import is_connection_error
 
@@ -114,7 +115,23 @@ async def retry_provider_request(
     *,
     retry_rate_limits: bool = True,
     max_attempts: int | None = None,
+    image_request_payload: Any = None,
 ) -> T:
+    """Retry a provider factory and charge each managed image attempt.
+
+    Args:
+        provider_label: Provider name for retry logs.
+        request_factory: Factory that performs the actual SDK request.
+        retry_rate_limits: Whether rate-limit responses are retryable.
+        max_attempts: Maximum actual attempts, including the first request.
+        image_request_payload: Final SDK payload used by a request-local image budget.
+
+    Returns:
+        The successful factory result.
+
+    Raises:
+        Exception: The final request error or exhausted image budget.
+    """
     retrying = _build_retrying(
         provider_label,
         retry_rate_limits=retry_rate_limits,
@@ -123,6 +140,7 @@ async def retry_provider_request(
 
     async for attempt in retrying:
         with attempt:
+            charge_image_attempt(image_request_payload)
             return await request_factory()
 
     raise RuntimeError("Provider request retry loop exited unexpectedly.")
@@ -135,7 +153,20 @@ async def retry_provider_request_context(
     *,
     retry_rate_limits: bool = True,
     max_attempts: int | None = None,
+    image_request_payload: Any = None,
 ) -> AsyncIterator[T]:
+    """Retry entering a provider stream without replaying emitted content.
+
+    Args:
+        provider_label: Provider name for retry logs.
+        context_manager_factory: Factory whose entry performs the SDK request.
+        retry_rate_limits: Whether rate-limit responses are retryable.
+        max_attempts: Maximum entry attempts.
+        image_request_payload: Final SDK payload for managed image accounting.
+
+    Yields:
+        The entered stream, closed when the consumer exits.
+    """
     manager: AbstractAsyncContextManager[T] | None = None
 
     async def _enter_context() -> T:
@@ -148,6 +179,7 @@ async def retry_provider_request_context(
         _enter_context,
         retry_rate_limits=retry_rate_limits,
         max_attempts=max_attempts,
+        image_request_payload=image_request_payload,
     )
 
     if manager is None:

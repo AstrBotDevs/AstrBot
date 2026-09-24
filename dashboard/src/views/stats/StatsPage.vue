@@ -319,6 +319,7 @@ interface ProviderTokenStatsResponse {
   }
   range_total_tokens: number
   range_total_calls: number
+  range_success_samples?: number
   range_avg_ttft_ms: number
   range_avg_duration_ms: number
   range_avg_tpm: number
@@ -570,7 +571,7 @@ const rangeAvgTpmLabel = computed(() =>
 )
 
 const rangeSuccessRateLabel = computed(() => {
-  if (!(providerStats.value?.range_total_calls ?? 0)) {
+  if (!(providerStats.value?.range_success_samples ?? providerStats.value?.range_total_calls ?? 0)) {
     return '—'
   }
   const rate = providerStats.value?.range_success_rate ?? 0

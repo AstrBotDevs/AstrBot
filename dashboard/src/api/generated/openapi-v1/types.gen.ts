@@ -231,12 +231,17 @@ export type ConversationBatchDeleteRequest = {
 };
 
 export type ConversationExportRequest = {
-    conversations?: Array<ConversationRef>;
-    conversation_ids?: Array<(string)>;
-    format?: 'json' | 'markdown';
+    conversations: Array<ConversationRef>;
+    /**
+     * media_zip exports one conversation with its authorized image catalog and media.
+     */
+    format?: 'jsonl' | 'media_zip';
 };
 
-export type format = 'json' | 'markdown';
+/**
+ * media_zip exports one conversation with its authorized image catalog and media.
+ */
+export type format = 'jsonl' | 'media_zip';
 
 export type ConversationMessagesReplaceRequest = {
     user_id?: string;
@@ -3377,7 +3382,35 @@ export type GetProviderTokenStatsData = {
     };
 };
 
-export type GetProviderTokenStatsResponse = (SuccessEnvelope);
+export type GetProviderTokenStatsResponse = ((SuccessEnvelope & {
+    /**
+     * Grouped image-context attempts do not contribute latency or success-rate samples. Tokens include reported usage only.
+     */
+    data?: {
+        /**
+         * Sum of reported token usage, excluding unknown usage.
+         */
+        range_total_tokens: number;
+        /**
+         * Actual attempts for grouped requests; one per legacy record.
+         */
+        range_total_calls: number;
+        /**
+         * Images submitted across attempts, including retries.
+         */
+        range_image_submissions: number;
+        range_caption_attempts: number;
+        range_review_attempts: number;
+        /**
+         * Attempts without reported usage, never an assertion of zero cost.
+         */
+        range_unknown_usage_calls: number;
+        /**
+         * Legacy records eligible for the displayed success rate.
+         */
+        range_success_samples: number;
+    };
+}));
 
 export type GetProviderTokenStatsError = unknown;
 

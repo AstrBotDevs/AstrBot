@@ -258,8 +258,17 @@ class InternalAgentSubStage(Stage):
                         and not event.platform_meta.support_streaming_message
                     )
 
+                    image_context = req.image_context
+                    if image_context is not None:
+                        image_context.project_for_hook(req)
                     if await call_event_hook(event, EventType.OnLLMRequestEvent, req):
                         return
+                    if image_context is not None:
+                        if req.image_context is not image_context:
+                            raise ValueError(
+                                "Image turn context cannot be replaced by a request hook"
+                            )
+                        image_context.restore_after_hook(req)
 
                     options = build_cfg.provider_settings.get(
                         "image_compress_options", {}
@@ -479,6 +488,22 @@ class InternalAgentSubStage(Stage):
         checkpoint_id = event.get_extra("llm_checkpoint_id")
         has_checkpoint = isinstance(checkpoint_id, str) and bool(checkpoint_id)
         message_to_save = dump_messages_with_checkpoints(messages_to_save)
+        image_options = {}
+        if req.image_context is not None:
+            if req.image_context.conversation_id != req.conversation.cid:
+                raise ValueError("Image history belongs to another conversation")
+            saved_occurrences = {
+                part.get("occurrence_id")
+                for message in message_to_save
+                if isinstance(message.get("content"), list)
+                for part in message["content"]
+                if isinstance(part, dict) and part.get("type") == "image_ref"
+            }
+            image_options["image_refs"] = [
+                reference
+                for occurrence, reference in req.image_context.references.items()
+                if occurrence in saved_occurrences
+            ]
         if not user_aborted and (
             llm_response is None or llm_response.role != "assistant"
         ):
@@ -495,6 +520,7 @@ class InternalAgentSubStage(Stage):
                     req.conversation.cid,
                     history=message_to_save,
                     token_usage=token_usage,
+                    **image_options,
                 )
             return
 
@@ -541,6 +567,7 @@ class InternalAgentSubStage(Stage):
             req.conversation.cid,
             history=message_to_save,
             token_usage=token_usage,
+            **image_options,
         )
 
 
@@ -579,6 +606,27 @@ async def _record_internal_agent_stats(
             status = "error"
         else:
             status = "completed"
+
+        turn = req.image_context if req is not None else None
+        groups = (
+            turn.budget.to_dict()["groups"]
+            if turn is not None and turn.configured
+            else []
+        )
+        if turn is not None and turn.configured:
+            groups.extend(getattr(turn, "unmetered_stats", []))
+        if groups:
+            for group in groups:
+                await db_helper.insert_provider_stat(
+                    umo=event.unified_msg_origin,
+                    conversation_id=conversation_id,
+                    provider_id=group["provider_id"],
+                    provider_model=group["model"],
+                    status=status,
+                    stats={"token_usage": group["token_usage"], "image_request": group},
+                    agent_type="internal",
+                )
+            return
 
         await db_helper.insert_provider_stat(
             umo=event.unified_msg_origin,

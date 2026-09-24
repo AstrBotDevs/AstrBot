@@ -4,12 +4,16 @@ import json
 import traceback
 from dataclasses import dataclass
 from datetime import datetime
-from io import BytesIO
+from pathlib import Path
+from tempfile import SpooledTemporaryFile
+from typing import BinaryIO
 
 from astrbot.core import logger
+from astrbot.core.conversation_history_limits import HistoryTooLargeError
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.umo_alias import build_umo_alias_map, parse_umo, serialize_umo_alias
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
 
 class ConversationServiceError(Exception):
@@ -18,9 +22,10 @@ class ConversationServiceError(Exception):
 
 @dataclass
 class ConversationExport:
-    file_obj: BytesIO
+    file_obj: BinaryIO | None
     filename: str
     mimetype: str = "application/jsonl"
+    file_path: Path | None = None
 
 
 class ConversationService:
@@ -174,6 +179,7 @@ class ConversationService:
         conversation = await self.conv_mgr.get_conversation(
             unified_msg_origin=user_id,
             conversation_id=cid,
+            include_history=False,
         )
         if not conversation:
             raise ConversationServiceError("对话不存在")
@@ -222,6 +228,8 @@ class ConversationService:
             unified_msg_origin=user_id,
             conversation_id=cid,
             history=history,
+            expected_history=json.loads(conversation.history),
+            prune_image_refs=True,
         )
 
         return {"message": "对话历史更新成功"}
@@ -232,63 +240,116 @@ class ConversationService:
 
         if not conversations_to_export:
             raise ConversationServiceError("导出列表不能为空")
+        export_format = payload.get("format", "jsonl")
+        if export_format not in {"jsonl", "media_zip"}:
+            raise ConversationServiceError("Unsupported conversation export format")
+        if export_format == "media_zip":
+            from astrbot.core.image_conversation_export import (
+                build_image_conversation_export,
+            )
 
-        jsonl_lines = []
-        exported_count = 0
-        failed_items = []
-
-        for conv_info in conversations_to_export:
-            user_id = conv_info.get("user_id")
-            cid = conv_info.get("cid")
-
-            if not user_id or not cid:
-                failed_items.append(f"user_id:{user_id}, cid:{cid} - 缺少必要参数")
-                continue
-
+            if len(conversations_to_export) != 1:
+                raise ConversationServiceError("请选择一个会话导出含图片的便携包")
+            user_id, cid = self._require_user_and_cid(conversations_to_export[0])
+            conversation = await self.conv_mgr.get_conversation(
+                unified_msg_origin=user_id, conversation_id=cid, include_history=False
+            )
+            if conversation is None or conversation.user_id != user_id:
+                raise ConversationServiceError("对话不存在或不属于指定会话来源")
             try:
-                conversation = await self.conv_mgr.get_conversation(
-                    unified_msg_origin=user_id,
-                    conversation_id=cid,
+                path = await build_image_conversation_export(
+                    self.db_helper,
+                    cid,
+                    user_id=user_id,
+                    platform_id=conversation.platform_id,
                 )
+            except HistoryTooLargeError:
+                raise
+            except (PermissionError, OSError, ValueError) as exc:
+                from astrbot.core.utils.media_utils import is_recoverable_image_error
 
-                if not conversation:
-                    failed_items.append(f"user_id:{user_id}, cid:{cid} - 对话不存在")
+                if isinstance(exc, OSError) and not is_recoverable_image_error(exc):
+                    raise
+                logger.warning("Portable conversation export failed: %s", exc)
+                raise ConversationServiceError(
+                    "图片便携包导出未完成：图片不可用、校验失败或会话授权已变化。原会话未被修改。"
+                ) from exc
+            return ConversationExport(
+                file_obj=None,
+                file_path=path,
+                filename=f"astrbot_conversation_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
+                mimetype="application/zip",
+            )
+
+        temp_dir = Path(get_astrbot_temp_path())
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        file_obj = SpooledTemporaryFile(max_size=1024 * 1024, mode="w+b", dir=temp_dir)
+        try:
+            exported_count = 0
+            failed_items = []
+
+            for conv_info in conversations_to_export:
+                user_id = conv_info.get("user_id")
+                cid = conv_info.get("cid")
+
+                if not user_id or not cid:
+                    failed_items.append(f"user_id:{user_id}, cid:{cid} - 缺少必要参数")
                     continue
 
-                webchat_titles = await self._get_webchat_titles([conversation])
-                content = json.loads(conversation.history)
-                export_record = {
-                    "cid": cid,
-                    "user_id": user_id,
-                    "platform_id": conversation.platform_id,
-                    "title": conversation.title
-                    or webchat_titles.get(conversation.user_id, "")
-                    or None,
-                    "persona_id": conversation.persona_id,
-                    "created_at": conversation.created_at,
-                    "updated_at": conversation.updated_at,
-                    "content": content,
-                }
-                jsonl_lines.append(json.dumps(export_record, ensure_ascii=False))
-                exported_count += 1
-            except Exception as exc:
-                failed_items.append(f"user_id:{user_id}, cid:{cid} - {exc!s}")
-                logger.error(
-                    f"导出对话失败: user_id={user_id}, cid={cid}, error={exc!s}"
-                )
+                try:
+                    conversation = await self.conv_mgr.get_conversation(
+                        unified_msg_origin=user_id,
+                        conversation_id=cid,
+                    )
 
-        if exported_count == 0:
-            raise ConversationServiceError("没有成功导出任何对话")
+                    if not conversation:
+                        failed_items.append(
+                            f"user_id:{user_id}, cid:{cid} - 对话不存在"
+                        )
+                        continue
 
-        jsonl_content = "\n".join(jsonl_lines)
-        file_obj = BytesIO(jsonl_content.encode("utf-8"))
-        file_obj.seek(0)
+                    webchat_titles = await self._get_webchat_titles([conversation])
+                    content = json.loads(conversation.history)
+                    export_record = {
+                        "cid": cid,
+                        "user_id": user_id,
+                        "platform_id": conversation.platform_id,
+                        "title": conversation.title
+                        or webchat_titles.get(conversation.user_id, "")
+                        or None,
+                        "persona_id": conversation.persona_id,
+                        "created_at": conversation.created_at,
+                        "updated_at": conversation.updated_at,
+                        "content": content,
+                    }
+                    encoded = json.dumps(export_record, ensure_ascii=False).encode(
+                        "utf-8"
+                    )
+                    if exported_count:
+                        file_obj.write(b"\n")
+                    file_obj.write(encoded)
+                    exported_count += 1
+                except (HistoryTooLargeError, OSError, MemoryError):
+                    raise
+                except Exception as exc:
+                    failed_items.append(f"user_id:{user_id}, cid:{cid} - {exc!s}")
+                    logger.error(
+                        f"导出对话失败: user_id={user_id}, cid={cid}, error={exc!s}"
+                    )
 
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        return ConversationExport(
-            file_obj=file_obj,
-            filename=f"astrbot_conversations_export_{timestamp}.jsonl",
-        )
+            if exported_count == 0:
+                raise ConversationServiceError("没有成功导出任何对话")
+
+            file_obj.seek(0)
+
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            return ConversationExport(
+                file_obj=file_obj,
+                filename=f"astrbot_conversations_export_{timestamp}.jsonl",
+            )
+        except BaseException:
+            file_obj.close()
+            raise
 
     async def _delete_conversations(self, conversations: object) -> dict:
         if not isinstance(conversations, list) or not conversations:

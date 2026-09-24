@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from astrbot import logger
-from astrbot.core.agent.message import Message
+from astrbot.core.agent.message import ImageRefPart, Message
 
 
 @dataclass(slots=True)
@@ -28,10 +28,18 @@ class ContextSanitizeStats:
 
 def _message_to_dict(message: dict[str, Any] | Message) -> dict[str, Any] | None:
     if isinstance(message, Message):
-        return dict(message.model_dump())
-    if isinstance(message, dict):
-        return dict(copy.deepcopy(message))
-    return None
+        result = dict(message.model_dump())
+    elif isinstance(message, dict):
+        result = dict(copy.deepcopy(message))
+    else:
+        return None
+    content = result.get("content")
+    if isinstance(content, list):
+        for index, part in enumerate(content):
+            if isinstance(part, dict) and part.get("type") == "image_ref":
+                ref = ImageRefPart.model_validate(part)
+                content[index] = {"type": "text", "text": ref.to_text()}
+    return result
 
 
 def sanitize_contexts_by_modalities(

@@ -60,18 +60,62 @@ async def _run(operation):
         _raise_conversation_error(exc)
 
 
+class _ConversationExportResponse(StreamingResponse):
+    """Own temporary export storage across the complete ASGI response lifetime."""
+
+    async def __call__(self, scope, receive, send):
+        """Send the response and clean up even before the first body chunk.
+
+        Args:
+            scope: ASGI request scope.
+            receive: ASGI inbound message callable.
+            send: ASGI outbound message callable.
+        """
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            # A disconnect may happen before the iterator starts, so iterator
+            # cleanup alone cannot own the completed temporary archive.
+            await self.body_iterator.aclose()
+            if self.export.file_obj is not None:
+                self.export.file_obj.close()
+            if self.export.file_path is not None:
+                self.export.file_path.unlink(missing_ok=True)
+
+
 def _export_response(export: ConversationExport) -> StreamingResponse:
-    export.file_obj.seek(0)
+    """Stream an export and release its temporary storage after consumption.
 
-    def iter_file():
-        while chunk := export.file_obj.read(8192):
-            yield chunk
+    Args:
+        export: In-memory JSONL or a completed temporary portable archive.
 
-    return StreamingResponse(
+    Returns:
+        Download response whose stream owns resource cleanup.
+    """
+
+    async def iter_file():
+        file_obj = export.file_obj
+        try:
+            if export.file_path is not None:
+                file_obj = export.file_path.open("rb")
+            if file_obj is None:
+                raise ValueError("Conversation export has no content")
+            file_obj.seek(0)
+            while chunk := file_obj.read(64 * 1024):
+                yield chunk
+        finally:
+            if file_obj is not None:
+                file_obj.close()
+            if export.file_path is not None:
+                export.file_path.unlink(missing_ok=True)
+
+    response = _ConversationExportResponse(
         iter_file(),
         media_type=export.mimetype,
         headers={"Content-Disposition": f'attachment; filename="{export.filename}"'},
     )
+    response.export = export
+    return response
 
 
 async def _export_conversations(

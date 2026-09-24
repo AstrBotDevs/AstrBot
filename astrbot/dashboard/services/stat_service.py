@@ -396,6 +396,11 @@ class StatService:
             range_total_output_tokens = 0
             range_total_calls = 0
             range_success_calls = 0
+            range_success_samples = 0
+            range_image_submissions = 0
+            range_caption_attempts = 0
+            range_review_attempts = 0
+            range_unknown_usage_calls = 0
             range_ttft_total_ms = 0.0
             range_ttft_samples = 0
             range_duration_total_ms = 0.0
@@ -413,6 +418,8 @@ class StatService:
                     + record.token_input_cached
                     + record.token_output
                 )
+                details = record.request_details or {}
+                attempts = max(0, int(details.get("attempts", 0))) if details else 1
                 provider_id = record.provider_id or "unknown"
                 provider_model = record.provider_model or "Unknown"
 
@@ -426,13 +433,38 @@ class StatService:
                     total_by_umo[record.umo or "unknown"] += token_total
                     total_by_bucket[bucket_ts] += token_total
                     range_total_tokens += token_total
-                    range_total_calls += 1
-                    if record.status != "error":
-                        range_success_calls += 1
-                    if record.time_to_first_token > 0:
+                    range_total_calls += attempts
+                    if details:
+                        range_image_submissions += max(
+                            0, int(details.get("image_submissions", 0))
+                        )
+                        range_unknown_usage_calls += min(
+                            attempts,
+                            max(
+                                0,
+                                int(
+                                    details.get(
+                                        "unknown_calls",
+                                        attempts
+                                        if not details.get("usage_known", False)
+                                        else 0,
+                                    )
+                                ),
+                            ),
+                        )
+                        if details.get("purpose") == "caption":
+                            range_caption_attempts += attempts
+                        elif details.get("purpose") == "review":
+                            range_review_attempts += attempts
+                    else:
+                        range_success_samples += 1
+                        if record.status != "error":
+                            range_success_calls += 1
+                    # Grouped attempts have no per-request latency or success outcomes.
+                    if not details and record.time_to_first_token > 0:
                         range_ttft_total_ms += record.time_to_first_token * 1000
                         range_ttft_samples += 1
-                    if record.end_time > record.start_time:
+                    if not details and record.end_time > record.start_time:
                         range_duration_total_ms += (
                             record.end_time - record.start_time
                         ) * 1000
@@ -440,7 +472,7 @@ class StatService:
                         range_total_output_tokens += record.token_output
 
                 if created_at_local >= today_start_local:
-                    today_total_calls += 1
+                    today_total_calls += attempts
                     today_total_tokens += token_total
                     today_by_model[provider_model] += token_total
                     today_by_provider[provider_id] += token_total
@@ -528,6 +560,11 @@ class StatService:
                 },
                 "range_total_tokens": range_total_tokens,
                 "range_total_calls": range_total_calls,
+                "range_image_submissions": range_image_submissions,
+                "range_caption_attempts": range_caption_attempts,
+                "range_review_attempts": range_review_attempts,
+                "range_unknown_usage_calls": range_unknown_usage_calls,
+                "range_success_samples": range_success_samples,
                 "range_avg_ttft_ms": (
                     range_ttft_total_ms / range_ttft_samples
                     if range_ttft_samples
@@ -544,7 +581,9 @@ class StatService:
                     else 0
                 ),
                 "range_success_rate": (
-                    range_success_calls / range_total_calls if range_total_calls else 0
+                    range_success_calls / range_success_samples
+                    if range_success_samples
+                    else 0
                 ),
                 "range_by_provider": range_by_provider_data,
                 "range_by_umo": range_by_umo_data,

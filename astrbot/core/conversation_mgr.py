@@ -96,11 +96,15 @@ class ConversationManager:
         content: list[dict] | None = None,
         title: str | None = None,
         persona_id: str | None = None,
+        *,
+        image_branch_source: tuple[str, str, str, str] | None = None,
     ) -> str:
         """新建对话，并将当前会话的对话转移到新对话.
 
         Args:
             unified_msg_origin (str): 统一的消息来源字符串。格式为 platform_name:message_type:session_id
+            image_branch_source: Trusted source conversation, owner, platform and
+                branch checkpoint; copies image grants after source verification.
         Returns:
             conversation_id (str): 对话 ID, 是 uuid 格式的字符串
 
@@ -112,12 +116,16 @@ class ConversationManager:
                 platform_id = parts[0]
         if not platform_id:
             platform_id = "unknown"
+        image_options = {}
+        if image_branch_source is not None:
+            image_options["image_branch_source"] = image_branch_source
         conv = await self.db.create_conversation(
             user_id=unified_msg_origin,
             platform_id=platform_id,
             content=content,
             title=title,
             persona_id=persona_id,
+            **image_options,
         )
         self.session_conversations[unified_msg_origin] = conv.conversation_id
         await sp.session_put(unified_msg_origin, "sel_conv_id", conv.conversation_id)
@@ -192,6 +200,8 @@ class ConversationManager:
         unified_msg_origin: str,
         conversation_id: str,
         create_if_not_exists: bool = False,
+        *,
+        include_history: bool = True,
     ) -> Conversation | None:
         """获取会话的对话.
 
@@ -199,30 +209,47 @@ class ConversationManager:
             unified_msg_origin (str): 统一的消息来源字符串。格式为 platform_name:message_type:session_id
             conversation_id (str): 对话 ID, 是 uuid 格式的字符串
             create_if_not_exists (bool): 如果对话不存在,是否创建一个新的对话
+            include_history: Whether to load the bounded history body. Metadata-only
+                results contain an empty legacy history string.
+
+        Raises:
+            HistoryTooLargeError: The stored history exceeds the online read limit.
         Returns:
             conversation (Conversation): 对话对象
 
         """
-        conv = await self.db.get_conversation_by_id(cid=conversation_id)
+        conv = await self.db.get_conversation_by_id(
+            cid=conversation_id,
+            include_history=include_history,
+        )
         if not conv and create_if_not_exists:
             # 如果对话不存在且需要创建，则新建一个对话
             conversation_id = await self.new_conversation(unified_msg_origin)
-            conv = await self.db.get_conversation_by_id(cid=conversation_id)
+            conv = await self.db.get_conversation_by_id(
+                cid=conversation_id,
+                include_history=include_history,
+            )
         conv_res = None
         if conv:
-            conv_res = self._convert_conv_from_v2_to_v1(conv)
+            conv_res = self._convert_conv_from_v2_to_v1(
+                conv,
+                include_history=include_history,
+            )
         return conv_res
 
     async def get_conversations(
         self,
         unified_msg_origin: str | None = None,
         platform_id: str | None = None,
+        *,
+        include_history: bool = True,
     ) -> list[Conversation]:
         """获取对话列表.
 
         Args:
             unified_msg_origin (str): 统一的消息来源字符串。格式为 platform_name:message_type:session_id，可选
             platform_id (str): 平台 ID, 可选参数, 用于过滤对话
+            include_history: Whether to load bounded history bodies.
         Returns:
             conversations (List[Conversation]): 对话对象列表
 
@@ -230,10 +257,14 @@ class ConversationManager:
         convs = await self.db.get_conversations(
             user_id=unified_msg_origin,
             platform_id=platform_id,
+            include_history=include_history,
         )
         convs_res = []
         for conv in convs:
-            conv_res = self._convert_conv_from_v2_to_v1(conv)
+            conv_res = self._convert_conv_from_v2_to_v1(
+                conv,
+                include_history=include_history,
+            )
             convs_res.append(conv_res)
         return convs_res
 
@@ -284,6 +315,12 @@ class ConversationManager:
         title: str | None = None,
         persona_id: str | None = None,
         token_usage: int | None = None,
+        *,
+        image_refs: list | None = None,
+        expected_history: list[dict] | None = None,
+        expected_identity: tuple[str, str] | None = None,
+        prune_image_refs: bool = False,
+        image_checkpoint_replacement: tuple[str, str, list[str]] | None = None,
     ) -> None:
         """更新会话的对话.
 
@@ -292,18 +329,39 @@ class ConversationManager:
             conversation_id (str): 对话 ID, 是 uuid 格式的字符串
             history (List[Dict]): 对话历史记录, 是一个字典列表, 每个字典包含 role 和 content 字段
             token_usage (int | None): token 使用量。None 表示不更新
+            image_refs: Trusted server-created image grants committed with history.
+            expected_history: Previous snapshot required for optimistic edit checks.
+            expected_identity: Expected (user_id, platform_id) checked in the
+                same transaction before a protected conversation update.
+            prune_image_refs: Explicit editing retires removed image occurrences.
+            image_checkpoint_replacement: Old/new checkpoint and retained user image
+                occurrences when preparing regeneration.
 
         """
         if not conversation_id:
             # 如果没有提供 conversation_id，则获取当前的
             conversation_id = await self.get_curr_conversation_id(unified_msg_origin)
         if conversation_id:
+            image_options = {}
+            if image_refs is not None:
+                image_options["image_refs"] = image_refs
+            if expected_history is not None:
+                image_options["expected_history"] = expected_history
+            if expected_identity is not None:
+                image_options["expected_identity"] = expected_identity
+            if prune_image_refs:
+                image_options["prune_image_refs"] = True
+            if image_checkpoint_replacement is not None:
+                image_options["image_checkpoint_replacement"] = (
+                    image_checkpoint_replacement
+                )
             await self.db.update_conversation(
                 cid=conversation_id,
                 title=title,
                 persona_id=persona_id,
                 content=history,
                 token_usage=token_usage,
+                **image_options,
             )
 
     @deprecated(reason="Use update_conversation() with the title parameter instead.")

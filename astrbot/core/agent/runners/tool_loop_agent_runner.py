@@ -5,7 +5,7 @@ import time
 import traceback
 import typing as T
 import uuid
-from contextlib import suppress
+from contextlib import nullcontext, suppress
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
@@ -29,6 +29,11 @@ from astrbot.core.agent.message import ImageURLPart, TextPart, ThinkPart
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.agent.tool_image_cache import tool_image_cache
 from astrbot.core.exceptions import EmptyModelOutputError
+from astrbot.core.image_request_budget import (
+    ImageAuthorizationRevoked,
+    ImageBudgetExceeded,
+    current_image_request,
+)
 from astrbot.core.message.components import Json
 from astrbot.core.message.message_event_result import (
     MessageChain,
@@ -46,11 +51,21 @@ from astrbot.core.provider.modalities import (
     sanitize_contexts_by_modalities,
 )
 from astrbot.core.provider.provider import Provider
+from astrbot.core.utils.media_utils import (
+    MediaResolver,
+    is_recoverable_image_error,
+    normalize_model_image_max_size,
+    resolve_image_ref_to_base64_data,
+)
 
 from ..context.compressor import ContextCompressor
 from ..context.config import ContextConfig
 from ..context.manager import ContextManager
-from ..context.token_counter import EstimateTokenCounter, TokenCounter
+from ..context.token_counter import (
+    EstimateTokenCounter,
+    TokenCounter,
+    estimate_preview_tokens,
+)
 from ..hooks import BaseAgentRunHooks
 from ..message import (
     AssistantMessageSegment,
@@ -257,6 +272,13 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             llm_compress_provider=self.llm_compress_provider,
             custom_token_counter=self.custom_token_counter,
             custom_compressor=self.custom_compressor,
+            strip_summary_images=request.image_context is not None,
+            image_context=(
+                request.image_context
+                if request.image_context is not None
+                and request.image_context.configured
+                else None
+            ),
         )
         self.request_context_manager = ContextManager(
             self.request_context_manager_config
@@ -281,6 +303,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.run_context = run_context
         self._aborted = False
         self._abort_signal = asyncio.Event()
+        self._image_request_notices: list[str] = []
         self._pending_follow_ups: list[FollowUpTicket] = []
         self._follow_up_seq = 0
         self._last_tool_name: str | None = None
@@ -506,33 +529,236 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self, *, include_model: bool = True
     ) -> T.AsyncGenerator[LLMResponse, None]:
         """Yields chunks *and* a final LLMResponse."""
+        image_context = self.req.image_context
+        managed = image_context is not None and image_context.configured
+        model = (self.req.model if include_model else None) or self.provider.get_model()
+        contexts = self.run_context.messages
+        if managed:
+            await self._await_or_stop(image_context.prepare_step(self.provider, model))
+            if self._is_stop_requested():
+                return
+            contexts = await image_context.project_messages(contexts)
         payload = {
-            "contexts": self._sanitize_contexts_for_provider(self.run_context.messages),
+            "contexts": self._sanitize_contexts_for_provider(contexts),
             "func_tool": self._func_tool_for_provider(),
             "session_id": self.req.session_id,
             "extra_user_content_parts": self.req.extra_user_content_parts,  # list[ContentPart]
             "abort_signal": self._abort_signal,
             "request_max_retries": self.request_max_retries,
         }
+        image_count = encoded_bytes = 0
+        selected_occurrences = []
+        purpose = "main"
+        if image_context is not None:
+            # The durable messages contain references; visual bytes exist only in
+            # this provider request and must never flow back into saved history.
+            payload["extra_user_content_parts"] = []
+            modalities = self.provider.provider_config.get("modalities")
+            supports_image = not modalities or "image" in modalities
+            visual_parts = []
+            selected_previews = []
+            request_notices = list(image_context.notices)
+            pending_visuals = list(image_context.pending_visuals.items())
+            authorized = (
+                await image_context.authorize_visuals(
+                    [key for key, _ in pending_visuals]
+                )
+                if managed
+                else {key for key, _ in pending_visuals}
+            )
+            for occurrence_id, preview in pending_visuals:
+                if occurrence_id not in authorized or occurrence_id in getattr(
+                    image_context, "revoked_occurrences", set()
+                ):
+                    request_notices.append(
+                        "The requested image is no longer available in this conversation."
+                    )
+                    continue
+                if managed and self.provider.image_request_budget_supported is not True:
+                    request_notices.append(
+                        "This model adapter cannot enforce the image request budget; "
+                        "only available descriptions will be used."
+                    )
+                    continue
+                if not supports_image:
+                    request_notices.append(
+                        "The current model cannot inspect the newly supplied image. "
+                        "Do not claim to have seen its contents."
+                    )
+                    continue
+                if managed:
+                    try:
+                        preview_bytes = await asyncio.to_thread(
+                            lambda path=preview: Path(path).stat().st_size
+                        )
+                        next_bytes = encoded_bytes + 4 * ((preview_bytes + 2) // 3)
+                        image_context.budget.preflight(image_count + 1, next_bytes)
+                    except (ImageBudgetExceeded, OSError) as exc:
+                        if isinstance(exc, OSError) and not is_recoverable_image_error(
+                            exc
+                        ):
+                            raise
+                        request_notices.append(
+                            "Some image previews could not be submitted within this turn's "
+                            "image limits or were unavailable. Stored originals remain available; "
+                            "unprocessed descriptions remain pending."
+                        )
+                        if isinstance(exc, ImageBudgetExceeded):
+                            break
+                        continue
+                resolved = (
+                    await MediaResolver(
+                        preview,
+                        media_type="image",
+                        max_bytes=image_context.budget.max_encoded_bytes * 3 // 4,
+                    ).to_base64_data()
+                    if managed
+                    else await resolve_image_ref_to_base64_data(preview)
+                )
+                if resolved is None:
+                    request_notices.append(
+                        "The current image preview is unavailable. "
+                        "Do not claim to have inspected it."
+                    )
+                    continue
+                if managed:
+                    image_count += 1
+                    selected_occurrences.append(occurrence_id)
+                    selected_previews.append(preview)
+                    encoded_bytes += len(resolved.base64_data)
+                    if occurrence_id in image_context.retrieval_visuals:
+                        purpose = "review"
+                visual_parts.extend(
+                    [
+                        {"type": "text", "text": f"[Current image: {occurrence_id}]"},
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": resolved.to_data_url()},
+                        },
+                    ]
+                )
+            if managed:
+                self._visual_token_estimate = await estimate_preview_tokens(
+                    selected_previews
+                )
+            if visual_parts:
+                payload["contexts"].append({"role": "user", "content": visual_parts})
+            self._image_request_notices = list(dict.fromkeys(request_notices))
+            if request_notices:
+                payload["contexts"].append(
+                    {
+                        "role": "system",
+                        "content": (
+                            "Image handling facts for this turn:\n"
+                            + "\n".join(dict.fromkeys(request_notices))
+                            + "\nBriefly explain the relevant limitation in your next "
+                            "user-facing answer, using the established persona and the "
+                            "user's language. If the gallery is full, explicitly say so. "
+                            "Do not present a disk error as a full gallery. Do not claim "
+                            "an unsaved image was saved. Use natural wording, not a fixed "
+                            "resend instruction. These facts do not change your persona."
+                        ),
+                    }
+                )
         if include_model:
             # For primary provider we keep explicit model selection if provided.
             payload["model"] = self.req.model
+        provider_id = self.provider.provider_config.get("id", "")
+        budget = image_context.budget if managed else None
+        scope = (
+            budget.scope(
+                purpose=purpose,
+                provider_id=provider_id,
+                model=model,
+                image_count=image_count,
+                encoded_bytes=encoded_bytes,
+                authorization_check=lambda: image_context.check_visual_authorization(
+                    selected_occurrences
+                ),
+            )
+            if budget is not None
+            else nullcontext(current_image_request.get())
+        )
+        unmetered = None
+        if managed and self.provider.image_request_budget_supported is not True:
+            # Opaque text adapters expose logical calls, not their hidden SDK attempts.
+            unmetered = {
+                "purpose": purpose,
+                "provider_id": provider_id,
+                "model": model,
+                "attempts": 1,
+                "attempts_kind": "logical",
+                "image_submissions": 0,
+                "encoded_bytes": 0,
+                "unknown_calls": 1,
+                "usage_known": False,
+                "token_usage": {"input_other": 0, "input_cached": 0, "output": 0},
+            }
+            if not hasattr(image_context, "unmetered_stats"):
+                image_context.unmetered_stats = []
+            image_context.unmetered_stats.append(unmetered)
+        # Never retain a ContextVar token across an async-generator yield: the
+        # consumer may close the generator from a different asyncio context.
+        with scope as request_scope:
+            if managed:
+                image_context.check_visual_authorization(selected_occurrences)
         if self.streaming:
             stream = self.provider.text_chat_stream(**payload)
             try:
                 while True:
+                    token = current_image_request.set(request_scope)
                     try:
-                        resp = await self._await_or_stop(anext(stream))  # type: ignore
+                        resp = await self._await_or_stop(anext(stream))
                     except StopAsyncIteration:
                         return
+                    finally:
+                        current_image_request.reset(token)
                     if resp is None:
                         return
+                    if (
+                        unmetered is not None
+                        and not resp.is_chunk
+                        and resp.usage is not None
+                    ):
+                        unmetered.update(
+                            token_usage=resp.usage.__dict__.copy(),
+                            unknown_calls=0,
+                            usage_known=True,
+                        )
+                    if budget is not None and not resp.is_chunk:
+                        budget.record_usage(
+                            resp.usage,
+                            purpose=purpose,
+                            provider_id=provider_id,
+                            model=model,
+                        )
                     yield resp
             finally:
-                await self._close_executor(stream)
+                token = current_image_request.set(request_scope)
+                try:
+                    await self._close_executor(stream)
+                finally:
+                    current_image_request.reset(token)
         else:
-            resp = await self._await_or_stop(self.provider.text_chat(**payload))
+            token = current_image_request.set(request_scope)
+            try:
+                resp = await self._await_or_stop(self.provider.text_chat(**payload))
+            finally:
+                current_image_request.reset(token)
             if resp is not None:
+                if unmetered is not None and resp.usage is not None:
+                    unmetered.update(
+                        token_usage=resp.usage.__dict__.copy(),
+                        unknown_calls=0,
+                        usage_known=True,
+                    )
+                if budget is not None:
+                    budget.record_usage(
+                        resp.usage,
+                        purpose=purpose,
+                        provider_id=provider_id,
+                        model=model,
+                    )
                 yield resp
 
     async def _iter_llm_responses_with_fallback(
@@ -606,6 +832,17 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                     break
 
                                 self._sanitize_malformed_tool_calls(resp)
+                                if (
+                                    resp.role != "err"
+                                    and not self._is_stop_requested()
+                                    and self.req.image_context is not None
+                                ):
+                                    self.req.image_context.pending_visuals.clear()
+                                    self.req.image_context.notices[:] = (
+                                        self._image_request_notices
+                                    )
+                                    if not resp.tools_call_name:
+                                        self.req.image_context.notices.clear()
                                 yield resp
                                 return
 
@@ -627,6 +864,35 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             raise
                     if self._is_stop_requested():
                         return
+            except ImageBudgetExceeded as exc:
+                turn = self.req.image_context
+                if turn is None or not turn.configured:
+                    raise
+                if isinstance(exc, ImageAuthorizationRevoked):
+                    authorized = await turn.authorize_visuals(
+                        list(turn.pending_visuals)
+                    )
+                    for occurrence in list(turn.pending_visuals):
+                        if occurrence not in authorized:
+                            turn.pending_visuals.pop(occurrence, None)
+                else:
+                    turn.pending_visuals.clear()
+                turn.notices.append(
+                    "The requested image is no longer available in this conversation."
+                    if isinstance(exc, ImageAuthorizationRevoked)
+                    else "The visual request budget for this turn is exhausted. "
+                    "Use the available descriptions and explain the limit in your persona; "
+                    "do not claim additional images were inspected."
+                )
+                try:
+                    async for resp in self._iter_llm_responses(include_model=idx == 0):
+                        yield resp
+                except Exception as exc:
+                    yield LLMResponse(
+                        role="err",
+                        completion_text=f"Text response failed: {type(exc).__name__}",
+                    )
+                return
             except Exception as exc:  # noqa: BLE001
                 last_exception = exc
                 logger.warning(
@@ -658,6 +924,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self,
         contexts: list[Message] | list[dict[str, T.Any]],
     ) -> list[Message] | list[dict[str, T.Any]]:
+        if self.req.image_context is not None:
+            # Old inline history is omitted only in the request view. Its actual
+            # conversion belongs to the separate migration module.
+            contexts, _ = sanitize_contexts_by_modalities(
+                contexts, ["text", "audio", "tool_use"]
+            )
         modalities = self.provider.provider_config.get("modalities", None)
         if (
             not modalities
@@ -820,6 +1092,13 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._transition_state(AgentState.RUNNING)
         llm_resp_result = None
 
+        turn = self.req.image_context
+        if turn is not None and turn.configured:
+            await self._await_or_stop(turn.prepare_step(self.provider, self.req.model))
+            if self._is_stop_requested():
+                yield await self._finalize_aborted_step()
+                return
+
         # Process request-time context before sending it to the provider.
         token_usage = self.req.conversation.token_usage if self.req.conversation else 0
         self._simple_print_message_role("[BefCompact]", self.run_context.messages)
@@ -878,6 +1157,17 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     self.req.conversation.token_usage = llm_response.usage.total
             # end_time must be set before the yield serializes to_dict().
             self.stats.end_time = time.time()
+            if turn is not None and turn.configured:
+                self.stats.image_usage = turn.budget.to_dict()
+                self.stats.image_usage["groups"].extend(
+                    getattr(turn, "unmetered_stats", [])
+                )
+                self.stats.image_usage["usage_unknown"] = any(
+                    group["unknown_calls"] for group in self.stats.image_usage["groups"]
+                )
+                self.stats.image_usage["visual_token_estimate"] = getattr(
+                    self, "_visual_token_estimate", None
+                )
             yield AgentResponse(
                 type="agent_stats",
                 data=AgentResponseData(
@@ -1102,7 +1392,31 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
             # If there are cached images and the model supports image input,
             # append a user message with images so LLM can see them
-            if cached_images:
+            if cached_images and self.req.image_context is not None:
+                agent_context = self.run_context.context
+                event = agent_context.event
+                config = agent_context.context.get_config(event.unified_msg_origin)
+                options = config.get("provider_settings", {}).get(
+                    "image_compress_options", {}
+                )
+                max_size = normalize_model_image_max_size(
+                    options.get("max_size") if isinstance(options, dict) else None
+                )
+                image_parts = []
+                for index, cached_img in enumerate(cached_images):
+                    image_parts.append(
+                        await self.req.image_context.capture(
+                            cached_img.file_path,
+                            source_message_id=cached_img.tool_call_id,
+                            image_index=index,
+                            max_size=max_size,
+                            event=event,
+                        )
+                    )
+                self.run_context.messages.append(
+                    Message(role="user", content=image_parts)
+                )
+            elif cached_images:
                 modalities = self.provider.provider_config.get("modalities", [])
                 supports_image = (
                     not modalities or "image" in modalities
@@ -1304,6 +1618,13 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             if isinstance(content_item, TextContent):
                                 result_parts.append(content_item.text)
                             elif isinstance(content_item, ImageContent):
+                                if self.req.image_context is not None and len(
+                                    content_item.data
+                                ) > 4 * ((64 * 1024**2 + 2) // 3):
+                                    result_parts.append(
+                                        "Tool image rejected: exceeds 64 MiB limit."
+                                    )
+                                    continue
                                 # Cache the image instead of sending directly
                                 cached_img = tool_image_cache.save_image(
                                     base64_data=content_item.data,
@@ -1330,6 +1651,13 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                     and resource.mimeType
                                     and resource.mimeType.startswith("image/")
                                 ):
+                                    if self.req.image_context is not None and len(
+                                        resource.blob
+                                    ) > 4 * ((64 * 1024**2 + 2) // 3):
+                                        result_parts.append(
+                                            "Tool image rejected: exceeds 64 MiB limit."
+                                        )
+                                        continue
                                     # Cache the image instead of sending directly
                                     cached_img = tool_image_cache.save_image(
                                         base64_data=resource.blob,

@@ -2,6 +2,7 @@ from pydantic import Field
 from pydantic.dataclasses import dataclass
 
 from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.image_context import ImageTurnContext
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.context import Context
 
@@ -16,6 +17,8 @@ class AstrAgentContext:
     """The message event associated with the agent context."""
     extra: dict[str, str] = Field(default_factory=dict)
     """Customized extra data."""
+    image_context: ImageTurnContext | None = None
+    """Trusted image turn, inaccessible through model-supplied tool arguments."""
 
 
 AgentContextWrapper = ContextWrapper[AstrAgentContext]

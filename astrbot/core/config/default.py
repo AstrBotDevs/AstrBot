@@ -198,6 +198,8 @@ DEFAULT_CONFIG = {
             "cua_local": CUA_DEFAULT_CONFIG["local"],
             "cua_api_key": CUA_DEFAULT_CONFIG["api_key"],
         },
+        # Persist image assets and keep lightweight references in conversation history.
+        "image_context_enabled": True,
         "image_compress_options": {
             "max_size": 1280,
         },

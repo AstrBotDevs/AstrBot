@@ -15,6 +15,7 @@ from astrbot.core import logger, sp
 from astrbot.core.agent.message import get_checkpoint_id, is_checkpoint_message
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
+from astrbot.core.image_context import ImageRegeneration
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.sources.webchat.message_parts_helper import (
     build_webchat_message_parts,
@@ -1266,6 +1267,19 @@ class ChatService:
             raise ChatServiceError("session_id is empty")
 
         webchat_conv_id = session_id
+        image_regeneration = post_data.get("_image_regeneration")
+        if not isinstance(image_regeneration, ImageRegeneration):
+            image_regeneration = None
+        if image_regeneration is not None and isinstance(message, list):
+            # This object is produced only by the authorized regeneration service;
+            # JSON API clients cannot forge it. Avoid touching expired uploads.
+            message = [
+                part
+                for part in message
+                if not isinstance(part, dict) or part.get("type") != "image"
+            ]
+            if not message:
+                message = [{"type": "plain", "text": "[Regenerated image input]"}]
         message_parts = await self.build_user_message_parts(message)
         if not webchat_message_parts_have_content(message_parts):
             raise ChatServiceError(
@@ -1344,6 +1358,7 @@ class ChatService:
                         "flags": flags,
                         "message_id": message_id,
                         "llm_checkpoint_id": llm_checkpoint_id,
+                        "image_regeneration": image_regeneration,
                         "thread_selected_text": thread_selected_text,
                         "_api_key_allow_admin_role": post_data.get(
                             "_api_key_allow_admin_role"
@@ -1708,14 +1723,24 @@ class ChatService:
             base_checkpoint_id=checkpoint_id,
             selected_text=selected_text,
         )
-        await self.conv_mgr.new_conversation(
-            unified_msg_origin=build_thread_unified_msg_origin(
-                username,
-                thread.thread_id,
-            ),
-            platform_id="webchat",
-            content=base_history,
-        )
+        try:
+            await self.conv_mgr.new_conversation(
+                unified_msg_origin=build_thread_unified_msg_origin(
+                    username,
+                    thread.thread_id,
+                ),
+                platform_id="webchat",
+                content=base_history,
+                image_branch_source=(
+                    conversation_id,
+                    build_webchat_unified_msg_origin(session),
+                    session.platform_id,
+                    checkpoint_id,
+                ),
+            )
+        except BaseException:
+            await self.db.delete_webchat_thread(thread.thread_id)
+            raise
         return serialize_thread(thread)
 
     async def create_thread_from_dashboard_payload(
@@ -1874,6 +1899,13 @@ class ChatService:
 
         new_checkpoint_id = str(uuid.uuid4())
         truncated_history = history[:start]
+        await self.conv_mgr.update_conversation(
+            unified_msg_origin=build_webchat_unified_msg_origin(session),
+            conversation_id=conversation_id,
+            history=truncated_history,
+            expected_history=history,
+            prune_image_refs=True,
+        )
         await self.platform_history_mgr.update(
             message_id=message_id,
             content=content,
@@ -1887,11 +1919,7 @@ class ChatService:
             deleted_message_ids,
         )
         await self.delete_threads_by_ids(thread_ids, username)
-        await self.conv_mgr.update_conversation(
-            unified_msg_origin=build_webchat_unified_msg_origin(session),
-            conversation_id=conversation_id,
-            history=truncated_history,
-        )
+
         await self.db.update_platform_session(session_id=session_id)
         updated = await self.db.get_platform_message_history_by_id(message_id)
         return {
@@ -1985,11 +2013,44 @@ class ChatService:
             raise ChatServiceError("Linked bot display message not found")
 
         new_checkpoint_id = str(uuid.uuid4())
+        retained_images = [
+            part["occurrence_id"]
+            for message in history[start : end + 1]
+            if message.get("role") == "user"
+            and isinstance(message.get("content"), list)
+            for part in message["content"]
+            if isinstance(part, dict) and part.get("type") == "image_ref"
+        ]
+        regeneration = None
+        config_manager = getattr(self.core_lifecycle, "astrbot_config_mgr", None)
+        if retained_images and config_manager is not None:
+            settings = config_manager.get_conf(
+                build_webchat_unified_msg_origin(session)
+            ).get("provider_settings", {})
+            if settings.get("image_context_enabled", True):
+                regeneration = ImageRegeneration(
+                    conversation_id,
+                    new_checkpoint_id,
+                    tuple(dict.fromkeys(retained_images)),
+                )
         new_history = history[:start] + history[end + 1 :]
         await self.conv_mgr.update_conversation(
             unified_msg_origin=build_webchat_unified_msg_origin(session),
             conversation_id=conversation_id,
             history=new_history,
+            expected_history=history,
+            image_checkpoint_replacement=(
+                checkpoint_id,
+                new_checkpoint_id,
+                [
+                    part["occurrence_id"]
+                    for message in history[start : end + 1]
+                    if message.get("role") == "user"
+                    and isinstance(message.get("content"), list)
+                    for part in message["content"]
+                    if isinstance(part, dict) and part.get("type") == "image_ref"
+                ],
+            ),
         )
         thread_ids = await self.db.delete_webchat_threads_by_parent_message_ids(
             session_id,
@@ -2011,6 +2072,7 @@ class ChatService:
             "selected_model": data.get("selected_model"),
             "_skip_user_history": True,
             "_llm_checkpoint_id": new_checkpoint_id,
+            "_image_regeneration": regeneration,
         }
 
     async def prepare_regenerate_message_payload_from_dashboard_payload(

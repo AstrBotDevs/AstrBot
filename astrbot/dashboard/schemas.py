@@ -432,6 +432,7 @@ class ConversationBatchDeleteRequest(BaseModel):
 
 class ConversationExportRequest(BaseModel):
     conversations: list[ConversationRef]
+    format: Literal["jsonl", "media_zip"] = "jsonl"
 
 
 class BotConfigRequest(OpenModel):

@@ -14,8 +14,15 @@ from google.genai.errors import APIError
 import astrbot.core.message.components as Comp
 from astrbot import logger
 from astrbot.api.provider import Provider
-from astrbot.core.agent.message import AudioURLPart, ContentPart, ImageURLPart, TextPart
+from astrbot.core.agent.message import (
+    AudioURLPart,
+    ContentPart,
+    ImageRefPart,
+    ImageURLPart,
+    TextPart,
+)
 from astrbot.core.exceptions import EmptyModelOutputError
+from astrbot.core.image_request_budget import current_image_request
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, TokenUsage
 from astrbot.core.provider.func_tool_manager import ToolSet
@@ -44,6 +51,7 @@ logging.getLogger("google_genai.types").addFilter(SuppressNonTextPartsWarning())
     "Google Gemini Chat Completion 提供商适配器",
 )
 class ProviderGoogleGenAI(Provider):
+    image_request_budget_supported = True
     CATEGORY_MAPPING = {
         "harassment": types.HarmCategory.HARM_CATEGORY_HARASSMENT,
         "hate_speech": types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
@@ -632,6 +640,15 @@ class ProviderGoogleGenAI(Provider):
                     modalities,
                     temperature,
                 )
+                if current_image_request.get() is not None:
+                    config.http_options = (
+                        config.http_options.model_copy(deep=True)
+                        if config.http_options is not None
+                        else types.HttpOptions()
+                    )
+                    config.http_options.retry_options = types.HttpRetryOptions(
+                        attempts=1
+                    )
                 result = await retry_provider_request(
                     "Gemini",
                     lambda: self.client.models.generate_content(
@@ -640,6 +657,7 @@ class ProviderGoogleGenAI(Provider):
                         config=config,
                     ),
                     max_attempts=request_max_retries,
+                    image_request_payload={"contents": conversation},
                 )
                 logger.debug(f"genai result: {result}")
 
@@ -716,6 +734,7 @@ class ProviderGoogleGenAI(Provider):
         conversation = await self._prepare_conversation(payloads)
 
         result = None
+        first_chunk = None
         while True:
             try:
                 config = await self._prepare_query_config(
@@ -724,15 +743,51 @@ class ProviderGoogleGenAI(Provider):
                     payloads.get("tool_choice", "auto"),
                     system_instruction,
                 )
-                result = await retry_provider_request(
-                    "Gemini",
-                    lambda: self.client.models.generate_content_stream(
-                        model=model,
-                        contents=cast(types.ContentListUnion, conversation),
-                        config=config,
-                    ),
-                    max_attempts=request_max_retries,
-                )
+                if current_image_request.get() is not None:
+                    config.http_options = (
+                        config.http_options.model_copy(deep=True)
+                        if config.http_options is not None
+                        else types.HttpOptions()
+                    )
+                    config.http_options.retry_options = types.HttpRetryOptions(
+                        attempts=1
+                    )
+                if current_image_request.get() is not None:
+
+                    async def start_stream():
+                        """Open the lazy SDK stream inside the charged retry attempt.
+
+                        Returns:
+                            The stream and its first chunk, or None for an empty stream.
+                        """
+                        stream = await self.client.models.generate_content_stream(
+                            model=model,
+                            contents=cast(types.ContentListUnion, conversation),
+                            config=config,
+                        )
+                        try:
+                            first = await anext(stream, None)
+                        except BaseException:
+                            await stream.aclose()
+                            raise
+                        return stream, first
+
+                    result, first_chunk = await retry_provider_request(
+                        "Gemini",
+                        start_stream,
+                        max_attempts=request_max_retries,
+                        image_request_payload={"contents": conversation},
+                    )
+                else:
+                    result = await retry_provider_request(
+                        "Gemini",
+                        lambda: self.client.models.generate_content_stream(
+                            model=model,
+                            contents=cast(types.ContentListUnion, conversation),
+                            config=config,
+                        ),
+                        max_attempts=request_max_retries,
+                    )
                 break
             except APIError as e:
                 if e.message is None:
@@ -756,7 +811,13 @@ class ProviderGoogleGenAI(Provider):
         accumulated_reasoning = ""
         final_response = None
 
-        async for chunk in result:
+        while True:
+            if first_chunk is not None:
+                chunk, first_chunk = first_chunk, None
+            else:
+                chunk = await anext(result, None)
+                if chunk is None:
+                    break
             llm_response = LLMResponse("assistant", is_chunk=True)
 
             if not chunk.candidates:
@@ -889,10 +950,16 @@ class ProviderGoogleGenAI(Provider):
         # tool calls result
         if tool_calls_result:
             if not isinstance(tool_calls_result, list):
-                context_query.extend(tool_calls_result.to_openai_messages())
+                context_query.extend(
+                    self._ensure_message_to_dicts(
+                        tool_calls_result.to_openai_messages()
+                    )
+                )
             else:
                 for tcr in tool_calls_result:
-                    context_query.extend(tcr.to_openai_messages())
+                    context_query.extend(
+                        self._ensure_message_to_dicts(tcr.to_openai_messages())
+                    )
 
         model = model or self.get_model()
 
@@ -956,10 +1023,16 @@ class ProviderGoogleGenAI(Provider):
         # tool calls result
         if tool_calls_result:
             if not isinstance(tool_calls_result, list):
-                context_query.extend(tool_calls_result.to_openai_messages())
+                context_query.extend(
+                    self._ensure_message_to_dicts(
+                        tool_calls_result.to_openai_messages()
+                    )
+                )
             else:
                 for tcr in tool_calls_result:
-                    context_query.extend(tcr.to_openai_messages())
+                    context_query.extend(
+                        self._ensure_message_to_dicts(tcr.to_openai_messages())
+                    )
 
         model = model or self.get_model()
 
@@ -1073,6 +1146,8 @@ class ProviderGoogleGenAI(Provider):
             for part in extra_user_content_parts:
                 if isinstance(part, TextPart):
                     content_blocks.append({"type": "text", "text": part.text})
+                elif isinstance(part, ImageRefPart):
+                    content_blocks.append({"type": "text", "text": part.to_text()})
                 elif isinstance(part, ImageURLPart):
                     image_part = await resolve_image_part(part.image_url.url)
                     if image_part:

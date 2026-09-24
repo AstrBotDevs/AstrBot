@@ -24,15 +24,20 @@ class AgentStats:
     end_time: float = 0.0
     time_to_first_token: float = 0.0
 
+    image_usage: dict | None = None
+
     @property
     def duration(self) -> float:
         return self.end_time - self.start_time
 
     def to_dict(self) -> dict:
-        return {
+        result = {
             "token_usage": self.token_usage.__dict__.copy(),
             "current_context_tokens": self.current_context_tokens,
             "start_time": self.start_time,
             "end_time": self.end_time,
             "time_to_first_token": self.time_to_first_token,
         }
+        if self.image_usage is not None:
+            result["image_usage"] = self.image_usage
+        return result

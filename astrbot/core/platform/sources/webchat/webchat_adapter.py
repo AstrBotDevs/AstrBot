@@ -8,6 +8,7 @@ from typing import Any
 from astrbot import logger
 from astrbot.core import db_helper
 from astrbot.core.db.po import PlatformMessageHistory
+from astrbot.core.image_context import ImageRegeneration
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import (
     AstrBotMessage,
@@ -268,6 +269,9 @@ class WebChatAdapter(Platform):
                 message_event.set_extra(
                     "llm_checkpoint_id", payload.get("llm_checkpoint_id")
                 )
+                regeneration = payload.get("image_regeneration")
+                if isinstance(regeneration, ImageRegeneration):
+                    message_event.set_extra("image_regeneration", regeneration)
                 message_event.set_extra(
                     "thread_selected_text", payload.get("thread_selected_text")
                 )

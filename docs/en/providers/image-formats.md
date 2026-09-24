@@ -33,6 +33,54 @@ Preview files are owned by the current event and deleted when the event finishes
 
 Successfully localized original attachments, including quoted images, survive event cleanup. Retained originals under the temporary directory remain subject to `temp_dir_max_size` cleanup and are not permanent storage. Sources that have not yet been successfully adopted when request collection fails remain event-owned.
 
-Conversation history captures the prepared image content as Base64 data URIs before preview files expire. Old history is not reprocessed. An unreadable image is skipped; valid text and other images remain. Cancellation, resource exhaustion, and programming errors are not treated as bad images.
+When persistent image context is explicitly disabled, the legacy path captures prepared images as Base64 data URIs before previews expire and does not migrate old history. The default path stores gallery references and migrates recoverable images when continuing old conversations. An unreadable image is skipped; valid text and other images remain. Cancellation, resource exhaustion, and programming errors are not treated as bad images.
 
 Third-party Agent backends, direct provider calls that bypass the main-agent builder, and tool-result images are outside this input preparation flow.
+
+Automatic descriptions in image context accept surrounding whitespace, a leading BOM, one complete JSON or unlabelled Markdown code fence, and surrounding prose without structural brackets. Surplus closing brackets and whitespace after a complete object (before the closing fence, if present) may be discarded; object contents are never repaired. Literal line feeds, carriage returns and tabs inside strings are decoded and preserved; other unescaped C0 control characters are rejected. Exact image-ID mapping and unique keys are still required. Truncated output, multiple objects, plain text, and ambiguous wrappers are rejected without an extra model repair call. Description failure is independent of original-image persistence.
+
+## Persistent image context
+
+Persistent image context is enabled by default (`provider_settings.image_context_enabled=true`), including older configurations that omit the key. An explicit `false` disables it. Originals live in the data directory's `image_assets/`; history stores references and available descriptions. Ordinary text turns do not need to resend historical images. Visual detail requests materialize authorized images on demand; sending originals uses current-conversation gallery references without exposing disk paths or making a visual model call.
+
+Storage limits are 64 MiB per image, 3 GiB per gallery, 20 million pixels per frame and 100 frames per image. Visual requests have no image-count cap but allow at most 32 MiB of total Base64 image data; processing stops at the first over-budget image. Caption failure is separate from persistence failure and does not overwrite an existing valid description. Released references follow lifecycle cleanup; never-associated orphan originals remain for explicit maintenance.
+
+In a QQ/OneBot test on 2026-09-23, all 12 originals passed file-hash verification and had ready descriptions. Two histories occupied 77,907 B and 8,278 B with no inline image Base64. Three consecutive text turns and a ten-image reference send made zero visual calls. These observations are not guarantees of model accuracy, cross-platform compatibility or production performance.
+
+A separate four-image synthetic comparison measured 52,438 B of reference history versus 1,469,926 B after substituting original-sized Base64 placeholders. The same Python parsing/serialization object pipeline was estimated at 0.247 MiB versus 5.654 MiB. This is not old-version process RSS; it excludes SDK, image decoding and platform-send buffers and does not establish whole-process memory savings.
+
+Backend accounting records actual main-answer, description, review and summary attempts with reported usage. Unknown usage is not zero; this feature adds no statistics UI.
+
+## Image context and legacy conversations
+
+Persistent image context is now the default built-in agent image path, including tool-generated images. Keep a complete backup before upgrading. The inline Base64 history behavior described above is the legacy compatibility path used only when `provider_settings.image_context_enabled` is explicitly `false`.
+
+The first new message in a legacy conversation triggers background migration of that conversation. There is no confirmation popup, startup-wide scan, or model call to describe old images. Migration recovers embedded images and accessible caches within AstrBot's temporary directory. The recovered bytes may already be resized or sampled animation frames, so they are marked as legacy model input, not original uploads. Descriptions remain pending until a controlled review is needed.
+
+History and image associations are committed together after checking the conversation snapshot. The rewritten history must also remain within the online read limit. Invalid images, expired caches, unsupported remote addresses, a full gallery, or concurrent edits stop migration and preserve the old conversation. That turn does not overwrite its history. Migration does not fetch remote URLs or arbitrary server files. A later user message may try again; one request does not loop over retries. Files published before an association failure remain quota-accounted orphans for explicit maintenance.
+
+Online history reads and ordinary migration are limited to **16 MiB of stored UTF-8 JSON**, checked before the history reaches Python. This is separate from the 64 MiB image and 3 GiB gallery limits. Oversized conversations remain listed and can be renamed or deleted without loading their history. Opening history, continuing chat, branching, migration, and online export are rejected explicitly. Full online backup also fails on oversized history instead of silently exporting an empty table. Oversized legacy histories can use the offline maintenance tool below; an offline copy of the complete `data` directory is still recommended.
+
+Disabling the feature does not expand migrated references back into Base64. Older AstrBot versions may not understand the references: restore a complete pre-migration backup to downgrade. A portable image archive carries conversation data and media; it is not a database downgrade or automatic import tool.
+
+
+## Offline maintenance for oversized histories
+
+The maintenance tool processes one conversation without model calls or remote image downloads. Stop every AstrBot process using the selected data directory first. `--stopped` records your acknowledgement; it does not stop processes. `--root` is the AstrBot root containing `data`.
+
+```bash
+# List IDs, titles and stored sizes for up to 100 oversized conversations.
+uv run python scripts/migrate_image_history.py --root /path/to/AstrBot --list
+
+# Back up the database and gallery, then validate images, capacity and output size.
+uv run python scripts/migrate_image_history.py --root /path/to/AstrBot --conversation CONVERSATION_ID --stopped
+
+# Apply; rerun the same command after an interruption.
+uv run python scripts/migrate_image_history.py --root /path/to/AstrBot --conversation CONVERSATION_ID --stopped --apply
+```
+
+Preflight creates a maintenance task and backup without publishing images or rewriting the conversation. The tool reads legacy JSON and embedded Base64 incrementally, persists images, and replaces image blocks with lightweight references. History, image associations, checkpoints and task completion are committed together. Retries verify and reuse the task's existing assets. A changed source conversation prevents final replacement.
+
+Task files remain under `data/image_history_migrations/<task ID>/`. Its `backup/` contains the complete main database snapshot `database.sqlite`, an `image_assets/` copy, and integrity manifests. Configuration, plugins and other data are not included, so this does not replace a complete `data` backup. Backups are not automatically removed. Allow additional disk space for the database, gallery copy, new assets and staging files. Restore the database and gallery together while stopped; restoring the database reverts every conversation and must not reuse existing WAL/SHM files.
+
+The rewritten history must still fit within **16 MiB**. Excessive text or references cause a safe stop, without automatic deletion, summarization or conversation splitting. Invalid images, expired caches and a full gallery also stop migration. Failures before commit preserve the old history. Already published assets remain quota-accounted orphans under the explicit cleanup policy; resuming the same task verifies and reuses them. Restart AstrBot and enable image context after maintenance succeeds.

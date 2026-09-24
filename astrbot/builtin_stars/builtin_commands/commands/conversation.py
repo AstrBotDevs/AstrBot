@@ -102,6 +102,7 @@ class ConversationCommands:
         conv = await self.context.conversation_manager.get_conversation(
             session_id,
             curr,
+            include_history=False,
         )
         if not conv:
             return None

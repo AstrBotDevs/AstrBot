@@ -21,12 +21,14 @@ from astrbot.api.provider import Provider
 from astrbot.core.agent.message import (
     AudioURLPart,
     ContentPart,
+    ImageRefPart,
     ImageURLPart,
     Message,
     TextPart,
 )
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.exceptions import EmptyModelOutputError
+from astrbot.core.image_request_budget import ImageBudgetExceeded, current_image_request
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, TokenUsage, ToolCallsResult
 from astrbot.core.utils.media_utils import (
@@ -49,6 +51,7 @@ from .request_retry import retry_provider_request
     "OpenAI API Chat Completion 提供商适配器",
 )
 class ProviderOpenAIOfficial(Provider):
+    image_request_budget_supported = True
     _ERROR_TEXT_CANDIDATE_MAX_CHARS = 4096
 
     @classmethod
@@ -573,6 +576,7 @@ class ProviderOpenAIOfficial(Provider):
                 extra_body=extra_body,
             ),
             max_attempts=request_max_retries,
+            image_request_payload={**payloads, **extra_body},
         )
 
         if not isinstance(completion, ChatCompletion):
@@ -632,6 +636,7 @@ class ProviderOpenAIOfficial(Provider):
                 stream_options={"include_usage": True},
             ),
             max_attempts=request_max_retries,
+            image_request_payload={**payloads, **extra_body},
         )
 
         llm_response = LLMResponse("assistant", is_chunk=True)
@@ -943,7 +948,9 @@ class ProviderOpenAIOfficial(Provider):
         llm_response.id = completion.id
 
         llm_response.usage = (
-            self._extract_usage(completion.usage) if completion.usage else TokenUsage()
+            self._extract_usage(completion.usage)
+            if completion.usage
+            else (None if current_image_request.get() is not None else TokenUsage())
         )
 
         return llm_response
@@ -984,10 +991,16 @@ class ProviderOpenAIOfficial(Provider):
         # tool calls result
         if tool_calls_result:
             if isinstance(tool_calls_result, ToolCallsResult):
-                context_query.extend(tool_calls_result.to_openai_messages())
+                context_query.extend(
+                    self._ensure_message_to_dicts(
+                        tool_calls_result.to_openai_messages()
+                    )
+                )
             else:
                 for tcr in tool_calls_result:
-                    context_query.extend(tcr.to_openai_messages())
+                    context_query.extend(
+                        self._ensure_message_to_dicts(tcr.to_openai_messages())
+                    )
 
         if self._context_contains_image(context_query):
             context_query = await self._materialize_context_image_parts(context_query)
@@ -1083,6 +1096,8 @@ class ProviderOpenAIOfficial(Provider):
         image_fallback_used: bool = False,
     ) -> tuple:
         """处理API错误并尝试恢复"""
+        if isinstance(e, ImageBudgetExceeded):
+            raise e
         if "429" in str(e):
             logger.warning(
                 f"API 调用过于频繁，尝试使用其他 Key 重试。当前 Key: {chosen_key[:12]}",
@@ -1395,6 +1410,8 @@ class ProviderOpenAIOfficial(Provider):
             for part in extra_user_content_parts:
                 if isinstance(part, TextPart):
                     content_blocks.append({"type": "text", "text": part.text})
+                elif isinstance(part, ImageRefPart):
+                    content_blocks.append({"type": "text", "text": part.to_text()})
                 elif isinstance(part, ImageURLPart):
                     image_part = await self._resolve_image_part(
                         part.image_url.url,

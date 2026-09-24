@@ -97,7 +97,7 @@ async def test_filtered_conversations_summary_skips_content_and_applies_filters(
         "astrbotweb",
         "other",
     ]
-    assert all("content" in sqlalchemy_inspect(item).unloaded for item in summary)
+    assert all(item.content is None for item in summary)
 
     manager_summary, manager_total = await ConversationManager(
         db,
@@ -261,7 +261,7 @@ async def test_filtered_conversations_can_paginate_complete_session_groups(
         "b-old",
     ]
     assert [item.conversation_id for item in second_page] == ["a-new", "a-old"]
-    assert all("content" in sqlalchemy_inspect(item).unloaded for item in first_page)
+    assert all(item.content is None for item in first_page)
 
 
 @pytest.mark.asyncio
@@ -349,7 +349,7 @@ async def test_multi_platform_summary_uses_global_order_index(
         "conversation-16",
         "conversation-15",
     ]
-    assert all("content" in sqlalchemy_inspect(item).unloaded for item in conversations)
+    assert all(item.content is None for item in conversations)
 
     ordered_queries = [statement for statement in statements if "ORDER BY" in statement]
     assert len(ordered_queries) == 1

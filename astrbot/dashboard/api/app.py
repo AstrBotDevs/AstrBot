@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from astrbot.core import DEMO_MODE, LogBroker
+from astrbot.core.conversation_history_limits import HistoryTooLargeError
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.log import LogManager
@@ -150,6 +151,10 @@ def create_dashboard_asgi_app(
             error(exc.message, exc.data),
             status_code=exc.status_code,
         )
+
+    @app.exception_handler(HistoryTooLargeError)
+    async def history_too_large_handler(_request: Request, exc: HistoryTooLargeError):
+        return JSONResponse(error(str(exc)), status_code=413)
 
     @app.exception_handler(ValueError)
     async def value_error_handler(_request: Request, exc: ValueError):
