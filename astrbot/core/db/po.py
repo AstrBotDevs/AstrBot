@@ -144,49 +144,6 @@ class ImageAsset(TimestampMixin, SQLModel, table=True):
     )
 
 
-class ImageHistoryMigrationTask(TimestampMixin, SQLModel, table=True):
-    """Durable state for one offline migration of an oversized conversation.
-
-    Attributes:
-        task_id: Stable maintenance task UUID used to derive image identities.
-        conversation_id: Conversation selected for migration; no FK so history remains.
-        source_row_id: Database row identity observed during the source snapshot.
-        source_created_at: Exact stored creation timestamp text from that snapshot.
-        source_sha256: Digest of the original serialized history bytes.
-        source_byte_size: Exact number of bytes in the original history value.
-        state: ``prepared`` until the history transaction commits, then ``committed``.
-        output_sha256: Digest of the committed replacement history, when committed.
-        output_byte_size: Exact byte count of the committed replacement history.
-    """
-
-    __tablename__: str = "image_history_migration_tasks"
-
-    task_id: str = Field(primary_key=True, max_length=36)
-    conversation_id: str = Field(nullable=False, max_length=36, index=True)
-    user_id: str = Field(nullable=False)
-    platform_id: str = Field(nullable=False)
-    source_row_id: int = Field(nullable=False, gt=0)
-    source_created_at: str = Field(nullable=False, sa_type=Text)
-    source_sha256: str = Field(nullable=False, max_length=64)
-    source_byte_size: int = Field(nullable=False, ge=0)
-    state: str = Field(default="prepared", nullable=False, max_length=16)
-    output_sha256: str | None = Field(default=None, max_length=64)
-    output_byte_size: int | None = Field(default=None, ge=0)
-
-    __table_args__ = (
-        CheckConstraint("source_row_id > 0 AND source_byte_size >= 0"),
-        CheckConstraint("length(source_sha256) = 64"),
-        CheckConstraint("state IN ('prepared', 'committed')"),
-        CheckConstraint("output_sha256 IS NULL OR length(output_sha256) = 64"),
-        CheckConstraint("output_byte_size IS NULL OR output_byte_size >= 0"),
-        CheckConstraint(
-            "(state = 'prepared' AND output_sha256 IS NULL AND output_byte_size IS NULL) "
-            "OR (state = 'committed' AND output_sha256 IS NOT NULL "
-            "AND output_byte_size IS NOT NULL)"
-        ),
-    )
-
-
 class ConversationImageCheckpoint(SQLModel, table=True):
     """Stable turn order retained across context compression.
 

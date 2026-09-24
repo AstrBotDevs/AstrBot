@@ -12,7 +12,6 @@ import uuid
 import warnings
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
-from functools import partial
 from pathlib import Path
 from typing import BinaryIO, TypeVar
 
@@ -175,10 +174,6 @@ async def cleanup_image_orphans(db: BaseDatabase, storage_keys: list[str]) -> in
 
 class ImageStorageLimitError(ValueError):
     """The configured pixel or animation frame budget was exceeded."""
-
-
-class ImageAssetImportConflictError(ValueError):
-    """A stable asset ID already names bytes or metadata different from the input."""
 
 
 class ImageValidationError(OSError):
@@ -346,8 +341,6 @@ class ImageAssetStore:
         source: Path,
         source_kind: str,
         stop: threading.Event,
-        *,
-        asset_id: str | None = None,
     ) -> ImageAsset:
         """Copy and validate one original while the caller holds the store lock.
 
@@ -355,7 +348,6 @@ class ImageAssetStore:
             source: Trusted, already-localized source file.
             source_kind: Original bytes or recovered legacy model input.
             stop: Cooperative cancellation flag.
-            asset_id: Optional preselected UUID used by resumable maintenance.
 
         Returns:
             Metadata for an atomically published file, not yet committed to SQLite.
@@ -377,8 +369,7 @@ class ImageAssetStore:
         if not stat.S_ISREG(before.st_mode):
             raise ValueError("Image source must be a regular file")
 
-        stable_asset_id = asset_id is not None
-        asset_id = asset_id or str(uuid.uuid4())
+        asset_id = str(uuid.uuid4())
         staged = self.root / f"{asset_id}.part"
         published = self.root / f"{asset_id}.img"
         digest = hashlib.sha256()
@@ -415,16 +406,7 @@ class ImageAssetStore:
             )
             if stop.is_set():
                 raise InterruptedError("Image publication cancelled")
-            if stable_asset_id:
-                try:
-                    os.link(staged, published)
-                except FileExistsError as exc:
-                    raise ImageAssetImportConflictError(
-                        "Stable image asset path already exists"
-                    ) from exc
-                staged.unlink()
-            else:
-                staged.replace(published)
+            staged.replace(published)
             if os.name != "nt":
                 directory_fd = os.open(
                     self.root, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
@@ -446,162 +428,23 @@ class ImageAssetStore:
         finally:
             staged.unlink(missing_ok=True)
 
-    def _verify_stable_import(
-        self,
-        source: Path,
-        asset_id: str,
-        source_kind: str,
-        existing: dict | None,
-        stop: threading.Event,
-    ) -> tuple[str, int, int, int, str]:
-        """Compare an input with a file already published under its stable ID.
-
-        Args:
-            source: Trusted, already-localized source file.
-            asset_id: Canonical UUID selecting the managed image path.
-            source_kind: Expected asset source classification.
-            existing: Persisted asset columns, or None for a published orphan.
-            stop: Cooperative cancellation flag.
-
-        Returns:
-            MIME type, width, height, byte size, and SHA-256 of matching bytes.
-
-        Raises:
-            ImageAssetImportConflictError: The ID, file, or metadata conflicts.
-            ImageValidationError: The source is not a supported image.
-            OSError: A file cannot be read safely or changes during verification.
-            InterruptedError: Cancellation was requested while reading or validating.
-        """
-        published = self.root / f"{asset_id}.img"
-        try:
-            target_info = published.lstat()
-        except FileNotFoundError as exc:
-            raise ImageAssetImportConflictError(
-                "Stable image asset file is missing"
-            ) from exc
-        if not stat.S_ISREG(target_info.st_mode):
-            raise ImageAssetImportConflictError(
-                "Stable image asset path is not a regular file"
-            )
-
-        source_info = source.lstat()
-        if not stat.S_ISREG(source_info.st_mode):
-            raise ValueError("Image source must be a regular file")
-        if source_info.st_size != target_info.st_size:
-            raise ImageAssetImportConflictError(
-                "Stable image asset byte size does not match the source"
-            )
-        if existing is not None and (
-            existing.get("asset_id") != asset_id
-            or existing.get("storage_key") != published.name
-            or existing.get("source_kind") != source_kind
-            or existing.get("state") != "available"
-            or existing.get("byte_size") != source_info.st_size
-            or not isinstance(existing.get("sha256"), str)
-            or len(existing["sha256"]) != 64
-        ):
-            raise ImageAssetImportConflictError(
-                "Stable image asset metadata does not match the source"
-            )
-
-        flags = os.O_RDONLY | getattr(os, "O_BINARY", 0)
-        flags |= getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
-        source_digest = hashlib.sha256()
-        target_digest = hashlib.sha256()
-        size = 0
-        try:
-            with os.fdopen(os.open(source, flags), "rb") as incoming:
-                opened_source = os.fstat(incoming.fileno())
-                if not stat.S_ISREG(opened_source.st_mode) or (
-                    source_info.st_dev,
-                    source_info.st_ino,
-                ) != (opened_source.st_dev, opened_source.st_ino):
-                    raise OSError("Image source changed before stable import check")
-                with os.fdopen(os.open(published, flags), "rb") as stored:
-                    opened_target = os.fstat(stored.fileno())
-                    if not stat.S_ISREG(opened_target.st_mode) or (
-                        target_info.st_dev,
-                        target_info.st_ino,
-                    ) != (opened_target.st_dev, opened_target.st_ino):
-                        raise ImageAssetImportConflictError(
-                            "Stable image asset changed before verification"
-                        )
-                    while True:
-                        if stop.is_set():
-                            raise InterruptedError(
-                                "Stable image verification cancelled"
-                            )
-                        source_chunk = incoming.read(COPY_CHUNK_BYTES)
-                        stored_chunk = stored.read(COPY_CHUNK_BYTES)
-                        if source_chunk != stored_chunk:
-                            raise ImageAssetImportConflictError(
-                                "Stable image asset bytes do not match the source"
-                            )
-                        if not source_chunk:
-                            break
-                        size += len(source_chunk)
-                        source_digest.update(source_chunk)
-                        target_digest.update(stored_chunk)
-                    after_source = os.fstat(incoming.fileno())
-                    after_target = os.fstat(stored.fileno())
-                    if size != opened_source.st_size or (
-                        opened_source.st_size,
-                        opened_source.st_mtime_ns,
-                    ) != (after_source.st_size, after_source.st_mtime_ns):
-                        raise OSError("Image source changed during stable import check")
-                    if size != opened_target.st_size or (
-                        opened_target.st_size,
-                        opened_target.st_mtime_ns,
-                    ) != (after_target.st_size, after_target.st_mtime_ns):
-                        raise ImageAssetImportConflictError(
-                            "Stable image asset changed during verification"
-                        )
-        except FileNotFoundError as exc:
-            raise ImageAssetImportConflictError(
-                "Stable image asset path disappeared during verification"
-            ) from exc
-
-        digest = source_digest.hexdigest()
-        if digest != target_digest.hexdigest() or (
-            existing is not None and digest != existing["sha256"]
-        ):
-            raise ImageAssetImportConflictError(
-                "Stable image asset digest does not match the source"
-            )
-        mime, width, height = validate_image_source(
-            source, self.max_pixels, self.max_frames, stop
-        )
-        if existing is not None and (
-            existing.get("mime_type") != mime
-            or existing.get("width") != width
-            or existing.get("height") != height
-        ):
-            raise ImageAssetImportConflictError(
-                "Stable image asset image metadata does not match the source"
-            )
-        return mime, width, height, size, digest
-
     async def import_file(
         self,
         source: Path,
         *,
         source_kind: str = "original",
-        asset_id: str | None = None,
     ) -> ImageAsset:
         """Persist bytes before committing metadata, without creating a conversation link.
 
         Args:
             source: Trusted local image path. URL/download authorization is upstream.
             source_kind: ``original`` or ``legacy_model_input``.
-            asset_id: Optional canonical UUID for resumable maintenance. Repeated
-                imports under that ID are accepted only for identical bytes.
 
         Returns:
             The committed asset. No conversation obtains access merely by knowing its ID.
 
         Raises:
             ValueError: Invalid source kind or image data.
-            ImageAssetImportConflictError: The stable ID already names different data.
             ImageStorageLimitError: The image exceeds the pixel or frame limit.
             OSError: File I/O or image validation fails.
             Exception: Metadata commit fails; the published file remains available
@@ -609,73 +452,11 @@ class ImageAssetStore:
         """
         if source_kind not in {"original", "legacy_model_input"}:
             raise ValueError("Invalid image source kind")
-        if asset_id is not None:
-            try:
-                if str(uuid.UUID(asset_id)) != asset_id:
-                    raise ValueError
-            except (AttributeError, TypeError, ValueError) as exc:
-                raise ValueError(
-                    "Stable image asset ID must be a canonical UUID"
-                ) from exc
         if self.root.is_symlink() or (self.root / ".store.lock").is_symlink():
             raise OSError("Image store paths must not be symlinks")
         # A fresh lock instance avoids reentrancy between concurrent tasks/instances.
         async with AsyncFileLock(self.root / ".store.lock", run_in_executor=False):
-            if asset_id is not None:
-                part_path = self.root / f"{asset_id}.part"
-                try:
-                    part_info = part_path.lstat()
-                except FileNotFoundError:
-                    pass
-                else:
-                    if not stat.S_ISREG(part_info.st_mode):
-                        raise ImageAssetImportConflictError(
-                            "Stable image staging path is not a regular file"
-                        )
-                    part_path.unlink()
-
-                async with self.db.get_db() as session:
-                    existing = await session.get(ImageAsset, asset_id)
-                    existing_values = (
-                        existing.model_dump() if existing is not None else None
-                    )
-
-                published = self.root / f"{asset_id}.img"
-                try:
-                    published.lstat()
-                    published_exists = True
-                except FileNotFoundError:
-                    published_exists = False
-
-                if existing is not None or published_exists:
-                    mime, width, height, size, digest = await self._run_io(
-                        self._verify_stable_import,
-                        Path(source),
-                        asset_id,
-                        source_kind,
-                        existing_values,
-                    )
-                    if existing is not None:
-                        return existing
-                    asset = ImageAsset(
-                        asset_id=asset_id,
-                        storage_key=published.name,
-                        mime_type=mime,
-                        byte_size=size,
-                        width=width,
-                        height=height,
-                        sha256=digest,
-                        source_kind=source_kind,
-                    )
-                    async with self.db.get_db() as session:
-                        session.add(asset)
-                        await session.commit()
-                    return asset
-
-                capture = partial(self._capture, asset_id=asset_id)
-                asset = await self._run_io(capture, Path(source), source_kind)
-            else:
-                asset = await self._run_io(self._capture, Path(source), source_kind)
+            asset = await self._run_io(self._capture, Path(source), source_kind)
             async with self.db.get_db() as session:
                 session.add(asset)
                 await session.commit()

@@ -59,28 +59,6 @@ The first new message in a legacy conversation triggers background migration of 
 
 History and image associations are committed together after checking the conversation snapshot. The rewritten history must also remain within the online read limit. Invalid images, expired caches, unsupported remote addresses, storage failure, or concurrent edits stop migration and preserve the old conversation. That turn does not overwrite its history. Migration does not fetch remote URLs or arbitrary server files. A later user message may try again; one request does not loop over retries. Files published before an association failure remain unassociated originals for explicit maintenance.
 
-Online history reads and ordinary migration are limited to **16 MiB of stored UTF-8 JSON**, checked before the history reaches Python. This limits history JSON, not gallery capacity. Oversized conversations remain listed and can be renamed or deleted without loading their history. Opening history, continuing chat, branching, migration, and online export are rejected explicitly. Full online backup also fails on oversized history instead of silently exporting an empty table. Oversized legacy histories can use the offline maintenance tool below; an offline copy of the complete `data` directory is still recommended.
+Online history reads and ordinary migration are limited to **16 MiB of stored UTF-8 JSON**, checked before the history reaches Python. This limits history JSON, not gallery capacity. Oversized conversations remain listed and can be renamed or deleted without loading their history. Opening history, continuing chat, branching, migration, and online export are rejected explicitly. Full online backup also fails on oversized history instead of silently exporting an empty table. This change does not include an offline migration tool for oversized histories. Keep an offline copy of the complete `data` directory before upgrading.
 
 Disabling the feature does not expand migrated references back into Base64. Older AstrBot versions may not understand the references: restore a complete pre-migration backup to downgrade. A portable image archive carries conversation data and media; it is not a database downgrade or automatic import tool.
-
-
-## Offline maintenance for oversized histories
-
-The maintenance tool processes one conversation without model calls or remote image downloads. Stop every AstrBot process using the selected data directory first. `--stopped` records your acknowledgement; it does not stop processes. `--root` is the AstrBot root containing `data`.
-
-```bash
-# List IDs, titles and stored sizes for up to 100 oversized conversations.
-uv run python scripts/migrate_image_history.py --root /path/to/AstrBot --list
-
-# Back up the database and gallery, then validate images, capacity and output size.
-uv run python scripts/migrate_image_history.py --root /path/to/AstrBot --conversation CONVERSATION_ID --stopped
-
-# Apply; rerun the same command after an interruption.
-uv run python scripts/migrate_image_history.py --root /path/to/AstrBot --conversation CONVERSATION_ID --stopped --apply
-```
-
-Preflight creates a maintenance task and backup without publishing images or rewriting the conversation. The tool reads legacy JSON and embedded Base64 incrementally, persists images, and replaces image blocks with lightweight references. History, image associations, checkpoints and task completion are committed together. Retries verify and reuse the task's existing assets. A changed source conversation prevents final replacement.
-
-Task files remain under `data/image_history_migrations/<task ID>/`. Its `backup/` contains the complete main database snapshot `database.sqlite`, an `image_assets/` copy, and integrity manifests. Configuration, plugins and other data are not included, so this does not replace a complete `data` backup. Backups are not automatically removed. Allow additional disk space for the database, gallery copy, new assets and staging files. Restore the database and gallery together while stopped; restoring the database reverts every conversation and must not reuse existing WAL/SHM files.
-
-The rewritten history must still fit within **16 MiB**. Excessive text or references cause a safe stop, without automatic deletion, summarization or conversation splitting. Invalid images, expired caches and storage failure also stop migration. Failures before commit preserve the old history. Already published assets remain unassociated originals under the explicit cleanup policy; resuming the same task verifies and reuses them. Restart AstrBot after maintenance succeeds; image context is enabled by default.
