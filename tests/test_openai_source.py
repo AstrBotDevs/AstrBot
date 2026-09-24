@@ -2264,7 +2264,8 @@ async def test_query_filters_empty_list_content_assistant_message(monkeypatch):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("content", [None, "", " \n\t"])
 @pytest.mark.parametrize("completion_tokens", [0, 86])
-async def test_parse_empty_stop_is_success(content, completion_tokens):
+@pytest.mark.parametrize("reasoning", ["missing", None, "", " \n\t"])
+async def test_parse_empty_stop_is_success(content, completion_tokens, reasoning):
     provider = _make_provider()
     try:
         completion = ChatCompletion.model_validate(
@@ -2287,11 +2288,14 @@ async def test_parse_empty_stop_is_success(content, completion_tokens):
                 },
             }
         )
+        if reasoning != "missing":
+            completion.choices[0].message.reasoning_content = reasoning
         response = await provider._parse_openai_completion(completion, tools=None)
         assert response.role == "assistant"
         assert not response.completion_text
         assert not response.tools_call_args
         assert response.result_chain is None
+        assert response.reasoning_content is None
         assert response.raw_completion is completion
         assert response.id == "empty-stop"
         assert response.usage.output == completion_tokens
@@ -2345,7 +2349,8 @@ async def test_stream_empty_response_requires_normal_finish(monkeypatch, finish_
 
 
 @pytest.mark.asyncio
-async def test_empty_stop_with_unparsed_tool_call_is_not_silent_success():
+@pytest.mark.parametrize("legacy", [False, True])
+async def test_empty_stop_with_unparsed_tool_call_is_not_silent_success(legacy):
     provider = _make_provider()
     try:
         completion = ChatCompletion.model_validate(
@@ -2376,6 +2381,11 @@ async def test_empty_stop_with_unparsed_tool_call_is_not_silent_success():
                 ],
             }
         )
+        if legacy:
+            completion.choices[0].message.function_call = (
+                completion.choices[0].message.tool_calls[0].function
+            )
+            completion.choices[0].message.tool_calls = None
         with pytest.raises(EmptyModelOutputError):
             await provider._parse_openai_completion(completion, tools=None)
     finally:

@@ -941,6 +941,7 @@ class ProviderOpenAIOfficial(Provider):
                 # Normal completion does not require a visible reply. Avoid an
                 # empty Plain component that could acquire a reply prefix later.
                 llm_response.result_chain = None
+                llm_response.reasoning_content = None
             else:
                 logger.error(f"OpenAI completion has no usable output: {completion}.")
                 raise EmptyModelOutputError(
