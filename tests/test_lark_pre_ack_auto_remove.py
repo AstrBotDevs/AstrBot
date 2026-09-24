@@ -215,11 +215,9 @@ async def test_lark_remove_reaction_api_failure_without_emoji_does_not_raise():
 
 
 @pytest.mark.asyncio
-async def test_lark_remove_reaction_falls_back_to_emoji_when_delete_fails():
+async def test_lark_remove_reaction_does_not_delete_another_reaction_on_id_failure():
     reaction_api = SimpleNamespace(
-        adelete=AsyncMock(
-            side_effect=[_response(False), _response(True)],
-        ),
+        adelete=AsyncMock(return_value=_response(False)),
         alist=AsyncMock(
             return_value=_response(
                 True,
@@ -240,9 +238,8 @@ async def test_lark_remove_reaction_falls_back_to_emoji_when_delete_fails():
 
     await event.remove_reaction("reaction-123", "Typing")
 
-    reaction_api.alist.assert_awaited_once()
-    assert reaction_api.adelete.await_count == 2
-    assert reaction_api.adelete.await_args_list[1].args[0].reaction_id == "reaction-123"
+    reaction_api.alist.assert_not_awaited()
+    reaction_api.adelete.assert_awaited_once()
 
 
 @pytest.mark.asyncio

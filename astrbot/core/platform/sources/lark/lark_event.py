@@ -1032,8 +1032,9 @@ class LarkMessageEvent(AstrMessageEvent):
                 return
             logger.warning(
                 f"Failed to delete Lark message reaction({response.code}): "
-                f"{response.msg}; resolving it by emoji"
+                f"{response.msg}; will not remove another reaction by emoji"
             )
+            return
 
         if not emoji:
             logger.warning("[Lark] Reaction cannot be resolved for removal")
