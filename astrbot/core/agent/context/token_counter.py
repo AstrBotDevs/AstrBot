@@ -70,13 +70,13 @@ class EstimateTokenCounter:
                     tc_str = json.dumps(tc if isinstance(tc, dict) else tc.model_dump())
                     total += self._estimate_tokens(tc_str)
 
-        return total
+        return int(total)
 
-    def _estimate_tokens(self, text: str) -> int:
+    def _estimate_tokens(self, text: str) -> float:
         chinese_count = len([c for c in text if "\u4e00" <= c <= "\u9fff"])
         emoji_count = len([c for c in text if self._is_emoji_like(c)])
         other_count = len(text) - chinese_count - emoji_count
-        return int(chinese_count * 0.6 + emoji_count * 2.5 + other_count * 0.3)
+        return chinese_count * 0.6 + emoji_count * 2.5 + other_count * 0.3
 
     def _is_emoji_like(self, c: str) -> bool:
         code = ord(c)

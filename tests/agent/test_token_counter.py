@@ -150,3 +150,9 @@ class TestEmojiCounting:
         """10 个 emoji 真实开销约 20~30 tokens，估算不应低于 20。"""
         tokens = counter.count_tokens([_msg("user", "😀" * 10)])
         assert tokens >= 20
+
+    def test_fragmented_emoji_messages(self):
+        """10条消息各含1个emoji：逐条截断不应累积低估。"""
+        msgs = [_msg("user", "😀") for _ in range(10)]
+        tokens = counter.count_tokens(msgs)
+        assert tokens >= 25
