@@ -32,11 +32,7 @@ from PIL import ImageOps
 from astrbot import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.datetime_utils import generate_timestamp_id
-from astrbot.core.utils.io import (
-    DownloadFileHTTPError,
-    MediaInputTooLargeError,
-    download_file,
-)
+from astrbot.core.utils.io import DownloadFileHTTPError, download_file
 from astrbot.core.utils.tencent_record_helper import (
     tencent_silk_to_wav,
     wav_to_tencent_silk,
@@ -467,22 +463,20 @@ def _cleanup_paths(cleanup_paths: list[Path] | None) -> None:
             logger.warning("Failed to cleanup %s: %s", cleanup_path, exc)
 
 
-async def _materialize_bounded_media_ref(
-    media_ref: str, *, media_type: str, suffix: str, max_bytes: int
+async def _materialize_image_ref(
+    media_ref: str, *, media_type: str, suffix: str
 ) -> _LocalMediaFile:
-    """Stat-check local input or stream a length-checked base64 payload to disk.
+    """Resolve a local image or stream its Base64 payload to disk.
 
     Args:
         media_ref: A non-HTTP local or encoded reference.
         media_type: Media family used for temporary names and MIME sniffing.
         suffix: Fallback suffix for encoded content.
-        max_bytes: Maximum decoded input bytes.
 
     Returns:
         A local file with explicit temporary cleanup ownership.
 
     Raises:
-        MediaInputTooLargeError: Encoded or local input exceeds the byte cap.
         ValueError: The reference or base64 syntax is invalid.
         OSError: A local source or temporary output cannot be accessed.
     """
@@ -493,8 +487,6 @@ async def _materialize_bounded_media_ref(
         info = path.stat()
         if not stat.S_ISREG(info.st_mode):
             raise ValueError("Media source must be a regular file")
-        if info.st_size > max_bytes:
-            raise MediaInputTooLargeError("Local media exceeds input byte limit")
         return _LocalMediaFile(path=path, mime_type=_guess_mime_type(path))
     if media_ref.startswith("data:"):
         separator = media_ref.find(",")
@@ -517,14 +509,11 @@ async def _materialize_bounded_media_ref(
         else:
             if not stat.S_ISREG(info.st_mode):
                 raise ValueError("Media source must be a regular file")
-            if info.st_size > max_bytes:
-                raise MediaInputTooLargeError("Local media exceeds input byte limit")
             return _LocalMediaFile(path=path, mime_type=_guess_mime_type(path))
 
     # Scan encoded length before decoding, without constructing a full compact copy.
     count = 0
     padding = 0
-    encoded_cap = 4 * ((max_bytes + 2) // 3)
     for start in range(offset, len(media_ref), 65536):
         piece = "".join(media_ref[start : start + 65536].split())
         if not piece:
@@ -534,8 +523,6 @@ async def _materialize_bounded_media_ref(
             raise ValueError("Invalid base64 padding")
         padding += len(piece) - len(unpadded)
         count += len(piece)
-        if count > encoded_cap:
-            raise MediaInputTooLargeError("Base64 media exceeds input byte limit")
         if padding > 2:
             raise ValueError("Invalid base64 padding")
         await asyncio.sleep(0)
@@ -543,8 +530,6 @@ async def _materialize_bounded_media_ref(
         raise ValueError("Invalid base64 padding")
     if not count or count % 4 == 1:
         raise ValueError("Invalid base64 payload length")
-    if count * 3 // 4 - padding > max_bytes:
-        raise MediaInputTooLargeError("Base64 media exceeds input byte limit")
 
     target = _temp_media_path(
         media_type, _extension_from_mime_type(mime_type) or suffix
@@ -552,7 +537,6 @@ async def _materialize_bounded_media_ref(
     cleanup_paths = [target]
     try:
         pending = ""
-        written = 0
         with target.open("xb") as output:
             for start in range(offset, len(media_ref), 65536):
                 pending += "".join(media_ref[start : start + 65536].split())
@@ -560,11 +544,6 @@ async def _materialize_bounded_media_ref(
                 if end:
                     decoded = base64.b64decode(pending[:end], validate=True)
                     pending = pending[end:]
-                    written += len(decoded)
-                    if written > max_bytes:
-                        raise MediaInputTooLargeError(
-                            "Decoded media exceeds input byte limit"
-                        )
                     if output.write(decoded) != len(decoded):
                         raise OSError("Short media materialization write")
                 await asyncio.sleep(0)
@@ -572,11 +551,6 @@ async def _materialize_bounded_media_ref(
                 decoded = base64.b64decode(
                     pending + "=" * (4 - len(pending)), validate=True
                 )
-                written += len(decoded)
-                if written > max_bytes:
-                    raise MediaInputTooLargeError(
-                        "Decoded media exceeds input byte limit"
-                    )
                 if output.write(decoded) != len(decoded):
                     raise OSError("Short media materialization write")
         if media_type == "image":
@@ -602,7 +576,6 @@ async def _materialize_media_ref(
     *,
     media_type: str = "file",
     default_suffix: str | None = None,
-    max_bytes: int | None = None,
 ) -> _LocalMediaFile:
     """Resolve a plugin-facing media reference to a local file.
 
@@ -613,7 +586,6 @@ async def _materialize_media_ref(
         media_ref: Original media reference from a platform, plugin, or history.
         media_type: Logical media family used for temp filenames and defaults.
         default_suffix: Suffix to use when the reference does not carry one.
-        max_bytes: Optional byte cap checked before image decoding.
     """
 
     cleanup_paths: list[Path] = []
@@ -628,20 +600,13 @@ async def _materialize_media_ref(
             target_path = _temp_media_path(media_type, target_suffix)
         cleanup_paths.append(target_path)
         try:
-            if max_bytes is None:
-                await download_file(media_ref, str(target_path))
-            else:
-                await download_file(media_ref, str(target_path), max_bytes=max_bytes)
+            await download_file(media_ref, str(target_path))
             mime_type = _guess_mime_type(target_path)
             if media_type == "image":
-                if max_bytes is None:
-                    detected_mime_type = await detect_image_mime_type_async(
-                        target_path, default_mime_type=None
-                    )
-                else:
-                    detected_mime_type = detect_image_mime_type(
-                        target_path, default_mime_type=None
-                    )
+                detected_mime_type = await detect_image_mime_type_async(
+                    target_path,
+                    default_mime_type=None,
+                )
                 if detected_mime_type:
                     mime_type = detected_mime_type
                     detected_suffix = _extension_from_mime_type(detected_mime_type)
@@ -650,10 +615,7 @@ async def _materialize_media_ref(
                         and target_path.suffix.lower() != detected_suffix
                     ):
                         detected_path = _temp_media_path("image", detected_suffix)
-                        if max_bytes is None:
-                            await asyncio.to_thread(target_path.rename, detected_path)
-                        else:
-                            target_path.rename(detected_path)
+                        await asyncio.to_thread(target_path.rename, detected_path)
                         cleanup_paths[-1] = detected_path
                         target_path = detected_path
             return _LocalMediaFile(
@@ -665,9 +627,9 @@ async def _materialize_media_ref(
             _cleanup_paths(cleanup_paths)
             raise
 
-    if max_bytes is not None:
-        return await _materialize_bounded_media_ref(
-            media_ref, media_type=media_type, suffix=suffix, max_bytes=max_bytes
+    if media_type == "image":
+        return await _materialize_image_ref(
+            media_ref, media_type=media_type, suffix=suffix
         )
 
     if is_file_uri(media_ref):
@@ -784,8 +746,6 @@ class MediaResolver:
             defaults to WAV output; ``image`` enables image MIME detection.
         default_suffix: Fallback suffix for temporary files when the source does
             not expose one.
-        max_bytes: Optional positive limit checked during source materialization.
-            Local sources are stat-checked; callers must enforce copy-time limits.
     """
 
     def __init__(
@@ -794,15 +754,7 @@ class MediaResolver:
         *,
         media_type: str = "file",
         default_suffix: str | None = None,
-        max_bytes: int | None = None,
     ) -> None:
-        if max_bytes is not None and (
-            isinstance(max_bytes, bool)
-            or not isinstance(max_bytes, int)
-            or max_bytes <= 0
-        ):
-            raise ValueError("max_bytes must be a positive integer or None")
-        self.max_bytes = max_bytes
         self.media_ref = media_ref
         self.media_type = media_type
         self.default_suffix = default_suffix
@@ -824,7 +776,6 @@ class MediaResolver:
             self.media_ref,
             media_type=self.media_type,
             default_suffix=self.default_suffix,
-            max_bytes=self.max_bytes,
         )
         cleanup_paths = list(local_file.cleanup_paths)
         resolved_path = local_file.path

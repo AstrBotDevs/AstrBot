@@ -28,7 +28,6 @@ from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import ConversationV2
 from astrbot.core.image_asset_store import (
     COPY_CHUNK_BYTES,
-    DEFAULT_MAX_FILE_BYTES,
     image_store_lock,
 )
 from astrbot.core.utils.astrbot_path import (
@@ -258,19 +257,19 @@ class AstrBotExporter:
                 continue
             path = root / asset["storage_key"]
             info = path.lstat()
-            if (
-                not stat.S_ISREG(info.st_mode)
-                or not 0 < info.st_size <= DEFAULT_MAX_FILE_BYTES
-            ):
+            if not stat.S_ISREG(info.st_mode) or info.st_size <= 0:
                 raise ValueError("Invalid original image file in backup")
             archive_path = IMAGE_MEDIA_PREFIX + asset["storage_key"]
             digest = hashlib.sha256()
             size = 0
-            with path.open("rb") as source, zf.open(archive_path, "w") as target:
+            with (
+                path.open("rb") as source,
+                zf.open(archive_path, "w", force_zip64=True) as target,
+            ):
                 while chunk := source.read(COPY_CHUNK_BYTES):
                     size += len(chunk)
-                    if size > DEFAULT_MAX_FILE_BYTES:
-                        raise ValueError("Image exceeds backup file budget")
+                    if size > asset["byte_size"]:
+                        raise ValueError("Image exceeds declared backup size")
                     digest.update(chunk)
                     target.write(chunk)
                     await asyncio.sleep(0)

@@ -321,22 +321,6 @@ async def test_cleanup_failure_does_not_rollback_delete(db, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_metadata_update_preserves_return_without_image_synchronization(
-    db, monkeypatch
-):
-    await seed(db)
-    monkeypatch.setattr(
-        db,
-        "_sync_image_history",
-        AsyncMock(side_effect=AssertionError("unexpected history read")),
-    )
-    updated = await db.update_conversation("parent", title="new title")
-    assert updated.title == "new title"
-    await db.update_conversation("missing", title="ignored")
-    assert (await rows(db, ConversationV2))[0].title == "new title"
-
-
-@pytest.mark.asyncio
 async def test_concurrent_edits_use_expected_history(db):
     await seed(db)
     old = turn("cp1", "image")

@@ -1,4 +1,4 @@
-"""Persistence, quota and failure contracts for the original image store."""
+"""Persistence, integrity and failure contracts for the original image store."""
 
 import asyncio
 import hashlib
@@ -158,60 +158,21 @@ async def test_asset_id_alone_and_orphan_association_do_not_authorize_reads(stor
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("budget", ["max_file_bytes", "max_total_bytes"])
-async def test_byte_limits_reject_before_publication(store_env, budget):
-    store, db, source = store_env
-    limited = storage.ImageAssetStore(
-        db, max_pixels=1000, max_frames=10, **{budget: source.stat().st_size - 1}
-    )
-    with pytest.raises(storage.ImageStorageLimitError):
-        await limited.import_file(source)
-    assert list(store.root.glob("*.img")) == []
-    assert list(store.root.glob("*.part")) == []
+async def test_original_larger_than_64_mib_is_persisted(store_env):
+    store, _, source = store_env
+    with source.open("ab") as output:
+        output.truncate(64 * 1024**2 + 1)
 
+    asset = await store.import_file(source)
 
-@pytest.mark.asyncio
-async def test_multiple_instances_share_quota_and_preserve_existing_assets(store_env):
-    store, db, source = store_env
-    size = source.stat().st_size
-    instances = [
-        storage.ImageAssetStore(
-            db, max_pixels=1000, max_frames=10, max_total_bytes=size
-        )
-        for _ in range(4)
-    ]
-    results = await asyncio.gather(
-        *(instance.import_file(source) for instance in instances),
-        return_exceptions=True,
-    )
-    assert sum(isinstance(result, ImageAsset) for result in results) == 1
-    assert (
-        sum(isinstance(result, storage.ImageStorageLimitError) for result in results)
-        == 3
-    )
-    assert sum(path.stat().st_size for path in store.root.glob("*.img")) == size
-    assert list(store.root.glob("*.part")) == []
-    async with db.get_db() as session:
-        assert len((await session.execute(select(ImageAsset))).scalars().all()) == 1
-
-
-@pytest.mark.asyncio
-async def test_quota_includes_orphans_and_incomplete_files(store_env):
-    store, db, source = store_env
-    (store.root / "orphan.img").write_bytes(b"x" * 20)
-    (store.root / "abandoned.part").write_bytes(b"x" * 20)
-    limited = storage.ImageAssetStore(
-        db, max_pixels=1000, max_frames=10, max_total_bytes=source.stat().st_size + 39
-    )
-    with pytest.raises(storage.ImageStorageLimitError):
-        await limited.import_file(source)
-    assert (store.root / "orphan.img").exists()
-    assert (store.root / "abandoned.part").exists()
+    assert asset.byte_size == 64 * 1024**2 + 1
+    assert (store.root / asset.storage_key).stat().st_size == asset.byte_size
+    assert not list(store.root.glob("*.part"))
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("failure", ["pixels", "frames", "corrupt"])
-async def test_rejects_invalid_or_over_budget_images(store_env, failure):
+async def test_rejects_invalid_or_over_limit_images(store_env, failure):
     store, db, source = store_env
     if failure == "pixels":
         store.max_pixels = 10
@@ -246,7 +207,7 @@ async def test_atomic_publish_failure_cleans_staging(store_env, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_commit_failure_leaves_published_orphan_accounted_for(
+async def test_commit_failure_leaves_published_orphan_for_reconciliation(
     store_env, monkeypatch
 ):
     store, db, source = store_env
@@ -268,11 +229,6 @@ async def test_commit_failure_leaves_published_orphan_accounted_for(
     monkeypatch.setattr(db, "get_db", real_get_db)
     async with db.get_db() as session:
         assert (await session.execute(select(ImageAsset))).first() is None
-    limited = storage.ImageAssetStore(
-        db, max_pixels=1000, max_frames=10, max_total_bytes=source.stat().st_size
-    )
-    with pytest.raises(storage.ImageStorageLimitError):
-        await limited.import_file(source)
 
 
 @pytest.mark.asyncio
@@ -366,14 +322,6 @@ async def test_open_reader_holds_store_lock_until_context_exit(store_env):
     await contender
 
 
-def test_approved_defaults_and_invalid_budgets():
-    assert storage.DEFAULT_MAX_FILE_BYTES == 64 * 1024**2
-    assert storage.DEFAULT_MAX_TOTAL_BYTES == 3 * 1024**3
-    for value in (0, -1, True, 1.5):
-        with pytest.raises(ValueError):
-            storage.ImageAssetStore(None, max_pixels=value, max_frames=10)
-
-
 @pytest.mark.asyncio
 async def test_fsync_failure_does_not_publish_asset(store_env, monkeypatch):
     store, db, source = store_env
@@ -418,10 +366,8 @@ async def test_uncertain_commit_never_deletes_committed_image(store_env, monkeyp
 
 
 @pytest.mark.asyncio
-async def test_growing_source_cannot_exceed_reserved_bytes(store_env, monkeypatch):
+async def test_source_change_during_capture_is_not_published(store_env, monkeypatch):
     store, db, source = store_env
-    size = source.stat().st_size
-    store.max_file_bytes = size
     monkeypatch.setattr(storage, "COPY_CHUNK_BYTES", 16)
     original_hash = hashlib.sha256
 
@@ -441,7 +387,7 @@ async def test_growing_source_cannot_exceed_reserved_bytes(store_env, monkeypatc
             return self.digest.hexdigest()
 
     monkeypatch.setattr(storage.hashlib, "sha256", GrowingHash)
-    with pytest.raises(storage.ImageStorageLimitError):
+    with pytest.raises(OSError, match="source changed during capture"):
         await store.import_file(source)
     assert not list(store.root.glob("*.part"))
     assert not list(store.root.glob("*.img"))

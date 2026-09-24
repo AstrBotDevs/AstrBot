@@ -2,13 +2,13 @@
 
 import asyncio
 import json
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 from PIL import Image
 
+from astrbot.core import image_description as description_module
 from astrbot.core.db.po import ConversationImageRef
 from astrbot.core.image_context import ImageTurnContext
 from astrbot.core.image_description import describe_images
@@ -126,7 +126,9 @@ async def test_invalid_batch_preserves_ready_and_counts_usage(setup_caption, con
 
 
 @pytest.mark.asyncio
-async def test_unknown_and_failure_attempts(setup_caption):
+async def test_unknown_and_failure_attempts_stop_before_third_encoding(
+    setup_caption, monkeypatch
+):
     turn, provider = setup_caption
     provider.response = LLMResponse(
         role="assistant", completion_text='{"images":[]}', usage=None
@@ -135,6 +137,11 @@ async def test_unknown_and_failure_attempts(setup_caption):
     provider.response = RuntimeError("offline failure")
     await describe_images(turn, provider)
     assert turn.budget.to_dict()["groups"][0]["unknown_calls"] == 2
+
+    def reject_encoding(*args, **kwargs):
+        pytest.fail("An exhausted caption budget must stop before image encoding")
+
+    monkeypatch.setattr(description_module, "MediaResolver", reject_encoding)
     with pytest.raises(ImageBudgetExceeded):
         await describe_images(turn, provider)
     assert provider.calls == 2
@@ -196,11 +203,11 @@ async def test_directed_answer(setup_caption):
 
 
 @pytest.mark.asyncio
-async def test_explicit_batch_bound_and_pending_remainder(setup_caption):
+async def test_caption_batch_has_no_image_count_ceiling(setup_caption):
     turn, provider = setup_caption
-    turn.budget.max_images = 8
     preview = turn.pending_visuals["a"]
-    for key in ("c", "d", "e", "f", "g", "h", "i"):
+    ids = ("a", "b", "c", "d", "e", "f", "g", "h", "i")
+    for key in ids[2:]:
         turn.references[key] = ConversationImageRef(
             conversation_id="cid",
             occurrence_id=key,
@@ -211,17 +218,12 @@ async def test_explicit_batch_bound_and_pending_remainder(setup_caption):
     provider.response = LLMResponse(
         role="assistant",
         completion_text=json.dumps(
-            {
-                "images": [
-                    {"image_id": key, "description": "shape"}
-                    for key in ("a", "b", "c", "d", "e", "f", "g", "h")
-                ]
-            }
+            {"images": [{"image_id": key, "description": "shape"} for key in ids]}
         ),
     )
     await describe_images(turn, provider)
-    assert provider.calls == 1 and turn.budget.image_submissions == 8
-    assert turn.references["i"].description_status == "pending"
+    assert provider.calls == 1 and turn.budget.image_submissions == 9
+    assert all(ref.description_status == "ready" for ref in turn.references.values())
 
 
 @pytest.mark.asyncio
@@ -262,32 +264,3 @@ async def test_resource_exhaustion_is_not_hidden(setup_caption):
     with pytest.raises(OSError):
         await describe_images(turn, provider)
     assert provider.calls == 1
-
-
-@pytest.mark.asyncio
-async def test_description_byte_boundary_stops_before_later_smaller_image(
-    setup_caption, tmp_path
-):
-    turn, provider = setup_caption
-    preview = turn.pending_visuals["a"]
-    encoded_size = 4 * ((Path(preview).stat().st_size + 2) // 3)
-    large = tmp_path / "large.png"
-    large.write_bytes(b"x" * (encoded_size * 3))
-    turn.pending_visuals["b"] = str(large)
-    turn.references["c"] = ConversationImageRef(
-        conversation_id="cid", occurrence_id="c", asset_id="asset", checkpoint_id="cp"
-    )
-    turn.pending_visuals["c"] = preview
-    turn.budget = ImageRequestBudget(max_encoded_bytes=encoded_size * 2)
-    provider.response = LLMResponse(
-        role="assistant",
-        completion_text=json.dumps(
-            {"images": [{"image_id": "a", "description": "shape"}]}
-        ),
-    )
-    await describe_images(turn, provider)
-    assert provider.calls == 1
-    assert turn.budget.image_submissions == 1
-    assert turn.references["a"].description_status == "ready"
-    assert turn.references["b"].description_status == "pending"
-    assert turn.references["c"].description_status == "pending"

@@ -10,7 +10,6 @@ from astrbot.core.message.components import Image, Plain, Record, Reply
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.media_utils import (
-    MODEL_IMAGE_MAX_INPUT_BYTES,
     MediaResolver,
     describe_media_ref,
     detect_image_mime_type_async,
@@ -80,7 +79,7 @@ class PreProcessStage(Stage):
                 if not media_ref:
                     raise ValueError("No image reference provided")
                 image_path = await MediaResolver(
-                    media_ref, media_type="image", max_bytes=MODEL_IMAGE_MAX_INPUT_BYTES
+                    media_ref, media_type="image"
                 ).to_path()
             else:
                 image_path = await component.convert_to_file_path()

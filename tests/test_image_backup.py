@@ -152,7 +152,7 @@ async def test_cross_root_restore_authorized_read_and_foreign_keys(image_backup_
         "ledger",
         "inactive",
         "duplicate_sequence",
-        "oversize",
+        "size_mismatch",
         "unexpected",
         "wrong_turn",
         "history_order",
@@ -181,8 +181,8 @@ async def test_invalid_media_rejected_before_clear(image_backup_env, failure):
         elif failure == "duplicate_sequence":
             row = dict(data["conversation_image_checkpoints"][0], checkpoint_id="other")
             data["conversation_image_checkpoints"].append(row)
-        elif failure == "oversize":
-            data["image_assets"][0]["byte_size"] = 64 * 1024**2 + 1
+        elif failure == "size_mismatch":
+            data["image_assets"][0]["byte_size"] += 1
         elif failure == "wrong_turn":
             data["conversations"][0]["content"][-1]["content"]["id"] = "other"
             data["conversation_image_checkpoints"].append(
@@ -232,17 +232,6 @@ async def test_conflicting_existing_identity_is_never_overwritten(image_backup_e
 
 
 @pytest.mark.asyncio
-async def test_restore_quota_counts_untracked_originals(image_backup_env):
-    db, store, asset, archive, monkeypatch, tmp_path = image_backup_env
-    (store.root / "orphan.img").write_bytes(b"orphan")
-    monkeypatch.setattr(import_module, "DEFAULT_MAX_TOTAL_BYTES", asset.byte_size)
-    importer = AstrBotImporter(db)
-    importer._clear_main_db = AsyncMock()
-    result = await importer.import_all(str(archive))
-    assert not result.success
-    importer._clear_main_db.assert_not_awaited()
-
-
 @pytest.mark.asyncio
 async def test_missing_original_makes_export_fail(image_backup_env):
     db, store, asset, archive, monkeypatch, tmp_path = image_backup_env

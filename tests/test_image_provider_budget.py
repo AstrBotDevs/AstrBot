@@ -234,72 +234,6 @@ def no_retry_wait(monkeypatch):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("kind", KINDS)
-async def test_actual_sdk_retry_payload_and_reported_usage(kind):
-    requests = []
-
-    def handler(request):
-        requests.append(json.loads(request.content))
-        if len(requests) == 1:
-            return httpx.Response(
-                500,
-                json={
-                    "error": {
-                        "message": "temporary",
-                        "type": "server_error",
-                        "code": 500,
-                    }
-                },
-            )
-        return httpx.Response(200, json=response_body(kind))
-
-    budget = ImageRequestBudget()
-    async with sdk_provider(kind, handler) as provider:
-        with budget.scope(purpose="caption", provider_id=kind, model="test-model"):
-            result = await provider._query(payload(kind), None, request_max_retries=3)
-        budget.record_usage(
-            result.usage, purpose="caption", provider_id=kind, model="test-model"
-        )
-        if kind == "anthropic":
-            assert provider.client.max_retries == 2
-    group = budget.to_dict()["groups"][0]
-    assert len(requests) == group["attempts"] == 2
-    assert (
-        sum(image_payload_size(item)[0] for item in requests)
-        == group["image_submissions"]
-        == 2
-    )
-    assert (
-        sum(image_payload_size(item)[1] for item in requests)
-        == group["encoded_bytes"]
-        > 0
-    )
-    assert group["unknown_calls"] == 1 and group["token_usage"]["output"] == 2
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("kind", KINDS)
-async def test_budget_exhaustion_stops_before_third_sdk_factory(kind):
-    requests = []
-
-    def handler(request):
-        requests.append(request)
-        return httpx.Response(
-            500,
-            json={
-                "error": {"message": "temporary", "type": "server_error", "code": 500}
-            },
-        )
-
-    budget = ImageRequestBudget()
-    async with sdk_provider(kind, handler) as provider:
-        with budget.scope(purpose="caption", provider_id=kind, model="test-model"):
-            with pytest.raises(ImageBudgetExceeded):
-                await provider._query(payload(kind), None, request_max_retries=10)
-    assert len(requests) == budget.caption_attempts == 2
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("kind", KINDS)
 async def test_missing_usage_remains_unknown_and_off_path_works(kind):
     requests = []
 
@@ -324,24 +258,8 @@ async def test_missing_usage_remains_unknown_and_off_path_works(kind):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("kind", KINDS)
-async def test_final_payload_limit_applies_even_when_scope_hint_is_zero(kind):
-    def handler(request):
-        pytest.fail("An oversized payload must not reach HTTP transport")
-
-    async with sdk_provider(kind, handler) as provider:
-        with ImageRequestBudget(max_images=8).scope(
-            purpose="main", provider_id=kind, model="test-model"
-        ):
-            with pytest.raises(ImageBudgetExceeded):
-                await provider._query(
-                    payload(kind, count=9), None, request_max_retries=1
-                )
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("kind", KINDS)
-@pytest.mark.parametrize("streaming", [False, True])
-async def test_public_provider_does_not_swallow_budget_exhaustion(kind, streaming):
+@pytest.mark.parametrize("entrypoint", ["query", "chat", "stream"])
+async def test_provider_budget_exhaustion_stops_before_third_sdk_call(kind, entrypoint):
     requests = []
 
     def handler(request):
@@ -362,7 +280,9 @@ async def test_public_provider_does_not_swallow_budget_exhaustion(kind, streamin
                     "contexts": payload("openai")["messages"],
                     "request_max_retries": 10,
                 }
-                if streaming:
+                if entrypoint == "query":
+                    await provider._query(payload(kind), None, request_max_retries=10)
+                elif entrypoint == "stream":
                     async for _ in provider.text_chat_stream(**kwargs):
                         pass
                 else:
@@ -373,9 +293,12 @@ async def test_public_provider_does_not_swallow_budget_exhaustion(kind, streamin
 @pytest.mark.asyncio
 @pytest.mark.parametrize("kind", KINDS)
 @pytest.mark.parametrize("reported", [False, True])
-async def test_stream_sse_usage_and_final_payload(kind, reported):
+@pytest.mark.parametrize("streaming", [False, True])
+async def test_sdk_retry_usage_and_final_payload(kind, reported, streaming):
     requests = []
-    if kind == "openai":
+    if not streaming:
+        wire = None
+    elif kind == "openai":
         packet = {
             "id": "chat1",
             "object": "chat.completion.chunk",
@@ -437,6 +360,8 @@ async def test_stream_sse_usage_and_final_payload(kind, reported):
                     }
                 },
             )
+        if not streaming:
+            return httpx.Response(200, json=response_body(kind, usage=reported))
         return httpx.Response(
             200, content=wire, headers={"content-type": "text/event-stream"}
         )
@@ -444,13 +369,20 @@ async def test_stream_sse_usage_and_final_payload(kind, reported):
     budget = ImageRequestBudget()
     async with sdk_provider(kind, handler) as provider:
         with budget.scope(purpose="caption", provider_id=kind, model="test-model"):
-            results = [
-                item
-                async for item in provider._query_stream(
+            if streaming:
+                results = [
+                    item
+                    async for item in provider._query_stream(
+                        payload(kind), None, request_max_retries=3
+                    )
+                ]
+                final = results[-1]
+            else:
+                final = await provider._query(
                     payload(kind), None, request_max_retries=3
                 )
-            ]
-        final = results[-1]
+            if kind == "anthropic":
+                assert provider.client.max_retries == 2
         assert final.completion_text == "ok"
         assert (final.usage is not None) is reported
         budget.record_usage(
@@ -459,6 +391,8 @@ async def test_stream_sse_usage_and_final_payload(kind, reported):
     group = budget.to_dict()["groups"][0]
     assert len(requests) == group["attempts"] == 2
     assert group["unknown_calls"] == (1 if reported else 2)
+    if reported:
+        assert group["token_usage"]["output"] == 2
     assert (
         sum(image_payload_size(item)[0] for item in requests)
         == group["image_submissions"]

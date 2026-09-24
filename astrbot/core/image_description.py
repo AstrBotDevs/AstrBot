@@ -2,7 +2,6 @@
 
 import json
 import re
-from pathlib import Path
 
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -128,16 +127,7 @@ async def describe_images(
     )
     snapshots = []
     parts = []
-    encoded_bytes = 0
     for occurrence in ids:
-        if (
-            turn.budget.max_images is not None
-            and len(snapshots) >= turn.budget.max_images
-        ):
-            turn.notices.append(
-                "Some image descriptions remain pending because the image batch limit was reached."
-            )
-            break
         current = (
             turn.references.get(occurrence)
             if occurrence not in turn.persisted_references
@@ -155,27 +145,12 @@ async def describe_images(
             if not preview:
                 preview = await turn.open_preview(occurrence)
             # Preview paths come only from capture/open_preview, never model arguments.
-            if not str(preview).startswith("data:"):
-                estimate = 4 * ((Path(preview).stat().st_size + 2) // 3)
-                turn.budget.preflight(
-                    len(snapshots) + 1, encoded_bytes + estimate, purpose="caption"
-                )
-            url = await MediaResolver(
-                preview, media_type="image", max_bytes=turn.budget.max_encoded_bytes
-            ).to_data_url(strict=True)
+            turn.budget.ensure_attempt_allowed(len(snapshots) + 1, purpose="caption")
+            url = await MediaResolver(preview, media_type="image").to_data_url(
+                strict=True
+            )
             if url is None:
                 continue
-            size = len(url.partition(",")[2])
-            turn.budget.preflight(
-                len(snapshots) + 1, encoded_bytes + size, purpose="caption"
-            )
-        except ImageBudgetExceeded:
-            if not snapshots:
-                raise
-            turn.notices.append(
-                "Some image descriptions remain pending because the image encoding limit was reached."
-            )
-            break
         except (PermissionError, OSError, ValueError, SQLAlchemyError) as exc:
             if isinstance(exc, OSError) and not is_recoverable_image_error(exc):
                 raise
@@ -183,7 +158,6 @@ async def describe_images(
                 "An image could not be opened for description; its previous observation was preserved."
             )
             continue
-        encoded_bytes += size
         snapshots.append(
             (
                 occurrence,
@@ -211,11 +185,15 @@ async def describe_images(
     parts = [part for _, pair in retained for part in pair]
     if not snapshots:
         return None
-    encoded_bytes = sum(
-        len(part.image_url.url.partition(",")[2])
-        for part in parts
-        if isinstance(part, ImageURLPart)
-    )
+    encoded_bytes = 0
+    for part in parts:
+        if isinstance(part, ImageURLPart):
+            url = part.image_url.url
+            separator = url.find(",")
+            if separator >= 0:
+                if not url.isascii():
+                    url[separator + 1 :].encode("ascii")
+                encoded_bytes += len(url) - separator - 1
     expected = {item[0] for item in snapshots}
     prompt = (
         "Describe each supplied image independently. Return only JSON with exactly "

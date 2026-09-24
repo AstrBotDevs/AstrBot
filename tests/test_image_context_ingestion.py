@@ -192,12 +192,11 @@ async def test_hook_conversation_replacement_is_rejected(env):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "failure", [storage.ImageStorageCapacityError("full"), OSError("disk unavailable")]
-)
-async def test_storage_failure_uses_valid_transient_preview(env, monkeypatch, failure):
+async def test_storage_failure_uses_valid_transient_preview(env, monkeypatch):
     monkeypatch.setattr(
-        storage.ImageAssetStore, "import_file", AsyncMock(side_effect=failure)
+        storage.ImageAssetStore,
+        "import_file",
+        AsyncMock(side_effect=OSError("disk unavailable")),
     )
     part = await env.context.capture(str(env.source), max_size=64, event=env.event)
     assert isinstance(part, TextPart) and part._no_save
@@ -207,11 +206,11 @@ async def test_storage_failure_uses_valid_transient_preview(env, monkeypatch, fa
 
 
 @pytest.mark.asyncio
-async def test_library_full_does_not_allow_corrupt_image_fallback(env, monkeypatch):
+async def test_storage_failure_does_not_allow_corrupt_image_fallback(env, monkeypatch):
     monkeypatch.setattr(
         storage.ImageAssetStore,
         "import_file",
-        AsyncMock(side_effect=storage.ImageStorageCapacityError("full")),
+        AsyncMock(side_effect=OSError("disk unavailable")),
     )
     env.source.write_bytes(b"not an image")
     preview = AsyncMock()
@@ -545,45 +544,3 @@ async def test_hook_deepcopied_legacy_inline_is_preserved_only_to_original_count
     await prepare_request_images(env.request, env.event, max_size=64, prepared={})
     assert env.request.contexts[0]["content"] == [legacy]
     assert len(env.context.pending_visuals) == len(env.context.references) == 1
-
-
-@pytest.mark.asyncio
-async def test_collect_empty_settings_uses_global_enabled_byte_limit(env, monkeypatch):
-    from astrbot.core import astr_main_agent as main
-    from astrbot.core.message.components import Image as ImageComponent
-
-    calls = []
-    real_resolver = main.MediaResolver
-
-    def recording_resolver(ref, **kwargs):
-        calls.append(kwargs)
-        return real_resolver(ref, **kwargs)
-
-    monkeypatch.setattr(main, "MediaResolver", recording_resolver)
-    monkeypatch.setattr(
-        main, "_get_session_conv", AsyncMock(return_value=env.request.conversation)
-    )
-    extras = {}
-    event = SimpleNamespace(
-        unified_msg_origin="owner",
-        message_str="look",
-        message_obj=SimpleNamespace(
-            message_id="current",
-            message=[ImageComponent.fromFileSystem(str(env.source))],
-        ),
-        get_extra=lambda key: extras.get(key),
-        set_extra=lambda key, value: extras.__setitem__(key, value),
-        track_temporary_local_file=lambda path: None,
-        untrack_temporary_local_file=lambda path: None,
-    )
-    context = SimpleNamespace(
-        get_config=lambda **kwargs: {
-            "provider_settings": {"image_context_enabled": True}
-        }
-    )
-    await main.collect_initial_request(
-        event, context, main.MainAgentBuildConfig(tool_call_timeout=60)
-    )
-    assert calls == [
-        {"media_type": "image", "max_bytes": storage.DEFAULT_MAX_FILE_BYTES}
-    ]

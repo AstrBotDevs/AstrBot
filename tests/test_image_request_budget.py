@@ -62,7 +62,22 @@ def test_final_payload_accounting(payload, expected):
     assert image_payload_size(payload) == expected
 
 
-def test_limits_retry_and_unknown_usage():
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {
+            "type": "image_url",
+            "image_url": {"url": "data:image/png;base64,é"},
+        },
+        {"type": "image", "source": {"type": "base64", "data": "é"}},
+    ],
+)
+def test_final_payload_accounting_rejects_non_ascii_image_data(payload):
+    with pytest.raises(UnicodeEncodeError):
+        image_payload_size(payload)
+
+
+def test_caption_retry_limit_and_unknown_usage():
     budget = ImageRequestBudget()
     with budget.scope(
         purpose="caption", provider_id="p", model="m", image_count=4, encoded_bytes=100
@@ -97,20 +112,24 @@ def test_scope_does_not_charge_and_text_fallback_is_not_visual():
     assert budget.image_submissions == 0
 
 
-def test_default_request_limits_and_unlimited_turn_accounting():
+def test_request_has_no_image_count_or_byte_ceiling():
     budget = ImageRequestBudget()
-    assert budget.max_images is None
-    budget.preflight(100, 32 * 1024 * 1024)
     for _ in range(20):
         budget.consume_review()
         with budget.scope(purpose="main", provider_id="p", model="m", image_count=8):
             charge_image_attempt()
+    with budget.scope(
+        purpose="main",
+        provider_id="p",
+        model="m",
+        image_count=100,
+        encoded_bytes=32 * 1024 * 1024 + 1,
+    ):
+        charge_image_attempt()
     assert budget.review_triggers == 20
-    assert budget.image_submissions == 160
-    assert budget.visual_request_attempts == 20
-    budget.preflight(1000, 0)
-    with pytest.raises(ImageBudgetExceeded):
-        budget.preflight(1, 32 * 1024 * 1024 + 1)
+    assert budget.image_submissions == 260
+    assert budget.visual_request_attempts == 21
+    assert budget.to_dict()["groups"][0]["encoded_bytes"] == 32 * 1024 * 1024 + 1
 
 
 def test_explicit_turn_limits_remain_supported():
@@ -118,7 +137,8 @@ def test_explicit_turn_limits_remain_supported():
     with budget.scope(purpose="main", provider_id="p", model="m", image_count=1):
         charge_image_attempt()
     with pytest.raises(ImageBudgetExceeded):
-        budget.preflight(1, 0)
+        with budget.scope(purpose="main", provider_id="p", model="m", image_count=1):
+            charge_image_attempt()
     budget.consume_review()
     with pytest.raises(ImageBudgetExceeded):
         budget.consume_review()

@@ -332,48 +332,6 @@ def test_output_limit_fails_and_clears_partial_result(tmp_path: Path) -> None:
     assert calls == []
 
 
-def test_image_payload_limit_is_enforced_before_callback(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    import astrbot.core.image_history_stream as stream_module
-
-    monkeypatch.setattr(stream_module, "DEFAULT_MAX_IMAGE_BYTES", 3)
-    payload = base64.b64encode(b"four").decode()
-    raw = json.dumps(
-        [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "image_url",
-                        "image_url": f"data:image/png;base64,{payload}",
-                    }
-                ],
-            }
-        ],
-        separators=(",", ":"),
-    ).encode()
-    calls = []
-
-    async def import_image(image: StagedImage) -> dict:
-        calls.append(image)
-        return _reference(1)
-
-    with pytest.raises(ImageHistoryMigrationError) as error:
-        asyncio.run(
-            rewrite_legacy_history_stream(
-                io.BytesIO(raw),
-                io.BytesIO(),
-                staging_dir=tmp_path,
-                import_image=import_image,
-                chunk_bytes=7,
-            )
-        )
-    assert error.value.reason == "invalid_image"
-    assert calls == []
-    assert list(tmp_path.glob("m7-image-*.img")) == []
-
-
 def test_invalid_json_and_invalid_image_shape_fail_closed(tmp_path: Path) -> None:
     async def import_image(image: StagedImage) -> dict:
         return _reference(1)

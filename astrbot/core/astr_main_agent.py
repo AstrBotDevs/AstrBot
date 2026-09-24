@@ -35,7 +35,6 @@ from astrbot.core.computer.booters.local import resolve_windows_shell
 from astrbot.core.conversation_history_limits import HistoryTooLargeError
 from astrbot.core.conversation_mgr import Conversation
 from astrbot.core.db import BaseDatabase
-from astrbot.core.image_asset_store import DEFAULT_MAX_FILE_BYTES
 from astrbot.core.image_context import ImageRegeneration, ImageTurnContext
 from astrbot.core.image_history_migration import (
     ImageHistoryMigrationError,
@@ -1510,9 +1509,7 @@ async def collect_initial_request(
                     try:
                         image_path = (
                             await MediaResolver(
-                                comp.url or comp.file or "",
-                                media_type="image",
-                                max_bytes=DEFAULT_MAX_FILE_BYTES,
+                                comp.url or comp.file or "", media_type="image"
                             ).to_path()
                             if managed_images
                             else await comp.convert_to_file_path()
@@ -1611,7 +1608,6 @@ async def collect_initial_request(
                                     await MediaResolver(
                                         reply_comp.url or reply_comp.file or "",
                                         media_type="image",
-                                        max_bytes=DEFAULT_MAX_FILE_BYTES,
                                     ).to_path()
                                     if managed_images
                                     else await reply_comp.convert_to_file_path()

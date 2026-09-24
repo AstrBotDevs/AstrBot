@@ -113,7 +113,6 @@ def validate_image_backup_data(data: dict) -> None:
     import uuid
 
     from astrbot.core.agent.message import ImageRefPart, get_checkpoint_id
-    from astrbot.core.image_asset_store import DEFAULT_MAX_FILE_BYTES
 
     assets = {}
     for row in data.get("image_assets", []):
@@ -122,7 +121,7 @@ def validate_image_backup_data(data: dict) -> None:
             asset.asset_id in assets
             or str(uuid.UUID(asset.asset_id)) != asset.asset_id
             or asset.storage_key != f"{asset.asset_id}.img"
-            or not 0 < asset.byte_size <= DEFAULT_MAX_FILE_BYTES
+            or asset.byte_size <= 0
             or re.fullmatch(r"[0-9a-f]{64}", asset.sha256) is None
             or asset.state not in {"available", "unavailable", "pending_delete"}
             or asset.source_kind not in {"original", "legacy_model_input"}

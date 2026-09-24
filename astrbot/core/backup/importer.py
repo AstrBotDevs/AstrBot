@@ -27,8 +27,6 @@ from astrbot.core.config.default import VERSION
 from astrbot.core.db import BaseDatabase
 from astrbot.core.image_asset_store import (
     COPY_CHUNK_BYTES,
-    DEFAULT_MAX_FILE_BYTES,
-    DEFAULT_MAX_TOTAL_BYTES,
     image_store_lock,
 )
 from astrbot.core.utils.astrbot_path import (
@@ -586,14 +584,14 @@ class AstrBotImporter:
 
         No database row is changed here. The caller must hold the image store lock
         until database restoration finishes. A later database failure leaves safe
-        orphan files that remain charged against quota.
+        orphan files that remain in the image store.
 
         Args:
             zf: Open backup archive.
             data: Complete main database snapshot.
 
         Raises:
-            ValueError: The archive graph, bytes, quota or existing identity differ.
+            ValueError: The archive graph, bytes or existing identity differ.
             OSError: A destination is unsafe or a file cannot be published.
         """
         validate_image_backup_data(data)
@@ -617,23 +615,15 @@ class AstrBotImporter:
         if root.is_symlink():
             raise OSError("Image asset directory must not be a symlink")
         root.mkdir(parents=True, exist_ok=True)
-        occupied = 0
         for path in root.iterdir():
-            if path.name == ".store.lock":
-                continue
-            info = path.lstat()
-            if not stat.S_ISREG(info.st_mode):
+            if path.name != ".store.lock" and not stat.S_ISREG(path.lstat().st_mode):
                 raise OSError("Unsafe entry in image asset directory")
-            occupied += info.st_size
         publish = []
         # Verify every source and conflicting destination before publishing any file.
         for info in entries:
             asset = expected[info.filename]
-            if (
-                info.file_size != asset["byte_size"]
-                or not 0 < info.file_size <= DEFAULT_MAX_FILE_BYTES
-            ):
-                raise ValueError("Image backup size exceeds metadata or file budget")
+            if info.file_size != asset["byte_size"] or info.file_size <= 0:
+                raise ValueError("Image backup size differs from metadata")
             mode = info.external_attr >> 16
             if stat.S_ISLNK(mode) or info.is_dir():
                 raise ValueError("Image archive member must be a regular file")
@@ -662,10 +652,7 @@ class AstrBotImporter:
                 if digest.hexdigest() != asset["sha256"]:
                     raise ValueError("Image identity conflicts with existing original")
             else:
-                occupied += asset["byte_size"]
                 publish.append((info, asset, destination))
-        if occupied > DEFAULT_MAX_TOTAL_BYTES:
-            raise ValueError("Image restore exceeds total storage budget")
         for info, asset, destination in publish:
             temporary = root / f"{uuid.uuid4()}.part"
             try:

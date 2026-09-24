@@ -28,8 +28,6 @@ from astrbot.core.db.po import (
 )
 from astrbot.core.image_asset_store import (
     COPY_CHUNK_BYTES,
-    DEFAULT_MAX_FILE_BYTES,
-    DEFAULT_MAX_TOTAL_BYTES,
     ImageAssetStore,
 )
 from astrbot.core.image_context import (
@@ -76,7 +74,7 @@ async def build_image_conversation_export(
     Raises:
         HistoryTooLargeError: Stored history exceeds the 16 MiB online limit.
         ImageConversationExportError: The conversation or one of its active images
-            is unavailable, invalid, or exceeds the existing image-store budget.
+            is unavailable or invalid.
         OSError: The temporary archive or image store cannot be read or written.
     """
     temp_dir = Path(get_astrbot_temp_path())
@@ -192,7 +190,6 @@ async def build_image_conversation_export(
                 "conversation": "conversation.jsonl",
                 "image_references": "image_refs.jsonl",
                 "media_prefix": "media/",
-                "media_bytes_limit": DEFAULT_MAX_TOTAL_BYTES,
                 "imports_into_astrbot": False,
             }
 
@@ -208,7 +205,6 @@ async def build_image_conversation_export(
                     json.dumps(record, ensure_ascii=False, separators=(",", ":")),
                 )
 
-                total_media_bytes = 0
                 asset_cursor = ""
                 while True:
                     asset_page = await session.execute(
@@ -267,18 +263,12 @@ async def build_image_conversation_export(
                         if (
                             valid_asset_id != asset.asset_id
                             or asset.storage_key != f"{asset.asset_id}.img"
-                            or not 0 < asset.byte_size <= DEFAULT_MAX_FILE_BYTES
+                            or asset.byte_size <= 0
                             or asset.mime_type not in MEDIA_EXTENSIONS
                         ):
                             raise ImageConversationExportError(
                                 "An active image has invalid metadata"
                             )
-                        total_media_bytes += asset.byte_size
-                        if total_media_bytes > DEFAULT_MAX_TOTAL_BYTES:
-                            raise ImageConversationExportError(
-                                "Conversation images exceed the image-store capacity"
-                            )
-
                         member_name = (
                             f"media/{asset.asset_id}{MEDIA_EXTENSIONS[asset.mime_type]}"
                         )
@@ -290,7 +280,9 @@ async def build_image_conversation_export(
                             user_id=user_id,
                             platform_id=platform_id,
                         ) as source:
-                            with archive.open(member_name, "w") as target:
+                            with archive.open(
+                                member_name, "w", force_zip64=True
+                            ) as target:
                                 while chunk := source.read(COPY_CHUNK_BYTES):
                                     copied_bytes += len(chunk)
                                     if copied_bytes > asset.byte_size:
@@ -309,7 +301,9 @@ async def build_image_conversation_export(
                             )
                         asset_cursor = asset.asset_id
 
-                with archive.open("image_refs.jsonl", "w") as refs_file:
+                with archive.open(
+                    "image_refs.jsonl", "w", force_zip64=True
+                ) as refs_file:
                     cursor: tuple[int, str] | None = None
                     while True:
                         statement = (

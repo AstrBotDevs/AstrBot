@@ -8,7 +8,7 @@ from typing import Any
 
 
 class ImageBudgetExceeded(Exception):
-    """Stop visual work before an approved request or turn limit is exceeded."""
+    """Stop visual work before an approved retry or turn limit is exceeded."""
 
 
 class ImageAuthorizationRevoked(ImageBudgetExceeded):
@@ -58,13 +58,23 @@ def image_payload_size(payload: Any) -> tuple[int, int]:
                     source = source.get("url", "")
                 count += 1
                 if isinstance(source, str) and source.startswith("data:"):
-                    size += len(source.partition(",")[2].encode("ascii"))
+                    separator = source.find(",")
+                    if separator >= 0:
+                        if not source.isascii():
+                            source[separator + 1 :].encode("ascii")
+                        size += len(source) - separator - 1
                 continue
             if kind == "image" and isinstance(value.get("source"), dict):
                 count += 1
                 source = value["source"]
                 if source.get("type") == "base64":
-                    size += len(source.get("data", "").encode("ascii"))
+                    data = source.get("data", "")
+                    if isinstance(data, str):
+                        if not data.isascii():
+                            data.encode("ascii")
+                        size += len(data)
+                    else:
+                        size += len(data.encode("ascii"))
                 continue
             inline = value.get("inline_data", value.get("inlineData"))
             if isinstance(inline, dict) and str(
@@ -95,10 +105,8 @@ def image_payload_size(payload: Any) -> tuple[int, int]:
 
 @dataclass
 class ImageRequestBudget:
-    """Apply approved limits to actual attempts, including failed retries."""
+    """Account for visual attempts and enforce explicit turn-level limits."""
 
-    max_images: int | None = None
-    max_encoded_bytes: int = 32 * 1024 * 1024
     max_caption_attempts: int = 2
     max_review_triggers: int | None = None
     max_image_submissions: int | None = None
@@ -108,34 +116,25 @@ class ImageRequestBudget:
     visual_request_attempts: int = 0
     counters: dict = field(default_factory=dict)
 
-    def preflight(
-        self, image_count: int, encoded_bytes: int, *, purpose: str = "main"
-    ) -> None:
-        """Check capacity without reserving or charging an attempt.
+    def ensure_attempt_allowed(self, image_count: int, *, purpose: str) -> None:
+        """Check caption retry and explicit turn limits before an attempt.
 
         Args:
-            image_count: Images submitted by this request.
-            encoded_bytes: Combined image base64 bytes.
+            image_count: Images expected in the provider attempt.
             purpose: Main, caption, or review operation.
 
         Raises:
-            ImageBudgetExceeded: A request or turn limit would be exceeded.
+            ImageBudgetExceeded: A caption retry or explicit turn limit is exhausted.
         """
-        if image_count < 0 or encoded_bytes < 0:
+        if image_count < 0:
             raise ValueError("Negative image budget input")
         if (
-            (self.max_images is not None and image_count > self.max_images)
-            or encoded_bytes > self.max_encoded_bytes
-            or (
-                self.max_image_submissions is not None
-                and self.image_submissions + image_count > self.max_image_submissions
-            )
-            or (
-                purpose == "caption"
-                and self.caption_attempts >= self.max_caption_attempts
-            )
+            self.max_image_submissions is not None
+            and self.image_submissions + image_count > self.max_image_submissions
+        ) or (
+            purpose == "caption" and self.caption_attempts >= self.max_caption_attempts
         ):
-            raise ImageBudgetExceeded("The image request or turn budget is exhausted.")
+            raise ImageBudgetExceeded("The visual attempt limit is exhausted.")
 
     def consume_review(self) -> None:
         """Charge an explicit old-image review trigger.
@@ -167,14 +166,14 @@ class ImageRequestBudget:
             purpose: Purpose used for separate usage attribution.
             provider_id: Actual configured provider identity.
             model: Actual selected model.
-            image_count: Conservative request image count.
-            encoded_bytes: Conservative image encoding size.
+            image_count: Fallback count when a provider reports no final payload.
+            encoded_bytes: Fallback size when a provider reports no final payload.
             authorization_check: Synchronous revocation guard for every SDK attempt.
 
         Yields:
             The request-local scope consumed by provider factory callbacks.
         """
-        self.preflight(image_count, encoded_bytes, purpose=purpose)
+        self.ensure_attempt_allowed(image_count, purpose=purpose)
         scope = ImageRequestScope(
             self,
             purpose,
@@ -204,7 +203,7 @@ class ImageRequestBudget:
         )
         if count and scope.authorization_check is not None:
             scope.authorization_check()
-        self.preflight(count, size, purpose=scope.purpose)
+        self.ensure_attempt_allowed(count, purpose=scope.purpose)
         key = (scope.purpose, scope.provider_id, scope.model)
         group = self.counters.setdefault(
             key,
@@ -276,7 +275,7 @@ def charge_image_attempt(payload: Any = None) -> None:
     """Charge a factory only inside an opted-in image operation.
 
     Args:
-        payload: Final request payload, or None to use the scope preflight size.
+        payload: Final request payload, or None to use the scope's accounting hint.
     """
     scope = current_image_request.get()
     if scope is not None:

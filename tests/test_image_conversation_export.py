@@ -149,6 +149,7 @@ async def test_export_includes_active_images_missing_from_compressed_history(
 
             assert manifest["format"] == "astrbot-image-conversation"
             assert manifest["version"] == 1
+            assert "media_bytes_limit" not in manifest
             assert manifest["imports_into_astrbot"] is False
             assert history_record["content"] == history
             assert {item["occurrence_id"] for item in image_refs} == {

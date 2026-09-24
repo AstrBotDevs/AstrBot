@@ -22,7 +22,6 @@ from astrbot.core.computer.computer_client import get_booter
 from astrbot.core.db.po import ImageAsset
 from astrbot.core.image_asset_store import (
     COPY_CHUNK_BYTES,
-    DEFAULT_MAX_FILE_BYTES,
     ImageAssetStore,
     run_image_io,
 )
@@ -70,18 +69,14 @@ def _copy_catalog_image_stream(
         stop: Cooperative cancellation signal supplied by ``run_image_io``.
 
     Raises:
-        OSError: The source exceeds the store's per-image limit or copying is cancelled.
+        OSError: Reading or writing fails, or copying is cancelled.
     """
     target.parent.mkdir(parents=True, exist_ok=True)
     with target.open("xb") as output:
-        total = 0
         while not stop.is_set():
             chunk = source.read(COPY_CHUNK_BYTES)
             if not chunk:
                 return
-            total += len(chunk)
-            if total > DEFAULT_MAX_FILE_BYTES:
-                raise OSError("Stored image exceeds the send limit")
             output.write(chunk)
     raise InterruptedError("Image copy cancelled")
 

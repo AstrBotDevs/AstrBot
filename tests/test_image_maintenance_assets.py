@@ -32,13 +32,10 @@ async def maintenance_env(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_stable_import_reuses_asset_without_recharging_full_quota(
-    maintenance_env,
-):
+async def test_stable_import_reuses_identical_asset(maintenance_env):
     store, db, source = maintenance_env
     stable_id = str(uuid.uuid4())
     source_bytes = source.read_bytes()
-    store.max_total_bytes = len(source_bytes)
 
     first = await store.import_file(
         source, source_kind="legacy_model_input", asset_id=stable_id
@@ -63,7 +60,6 @@ async def test_stable_import_recovers_published_file_without_asset_row(maintenan
     store, db, source = maintenance_env
     stable_id = str(uuid.uuid4())
     source_bytes = source.read_bytes()
-    store.max_total_bytes = len(source_bytes)
     published = await store.import_file(
         source, source_kind="legacy_model_input", asset_id=stable_id
     )
@@ -90,7 +86,6 @@ async def test_stable_import_retry_recovers_uncertain_metadata_commit(
 ):
     store, db, source = maintenance_env
     stable_id = str(uuid.uuid4())
-    store.max_total_bytes = source.stat().st_size
     real_get_db = db.get_db
 
     @asynccontextmanager
@@ -192,11 +187,10 @@ async def test_orphan_file_conflict_is_not_overwritten(maintenance_env):
 
 
 @pytest.mark.asyncio
-async def test_stale_stable_part_is_removed_before_quota_check(maintenance_env):
+async def test_stale_stable_part_is_removed_before_reimport(maintenance_env):
     store, _, source = maintenance_env
     stable_id = str(uuid.uuid4())
     source_size = source.stat().st_size
-    store.max_total_bytes = source_size
     stale_part = store.root / f"{stable_id}.part"
     stale_part.write_bytes(b"partial write that must not count as a completed asset")
 

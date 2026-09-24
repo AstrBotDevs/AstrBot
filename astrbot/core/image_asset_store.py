@@ -1,4 +1,4 @@
-"""Bounded storage for original images, independent of request-time previews."""
+"""Validated storage for original images, independent of request-time previews."""
 
 from __future__ import annotations
 
@@ -32,8 +32,6 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 Result = TypeVar("Result")
 COPY_CHUNK_BYTES = 1024 * 1024
-DEFAULT_MAX_FILE_BYTES = 64 * 1024 * 1024
-DEFAULT_MAX_TOTAL_BYTES = 3 * 1024 * 1024 * 1024
 
 
 def image_store_lock() -> AsyncFileLock:
@@ -176,11 +174,7 @@ async def cleanup_image_orphans(db: BaseDatabase, storage_keys: list[str]) -> in
 
 
 class ImageStorageLimitError(ValueError):
-    """The configured file, storage, pixel, or animation budget was exceeded."""
-
-
-class ImageStorageCapacityError(ImageStorageLimitError):
-    """The persistent library is full, although the individual image may be valid."""
+    """The configured pixel or animation frame budget was exceeded."""
 
 
 class ImageAssetImportConflictError(ValueError):
@@ -211,8 +205,8 @@ def validate_image_source(
     """
     try:
         info = source.lstat()
-        if not stat.S_ISREG(info.st_mode) or info.st_size > DEFAULT_MAX_FILE_BYTES:
-            raise ImageValidationError("Image input byte budget exceeded")
+        if not stat.S_ISREG(info.st_mode):
+            raise ImageValidationError("Image input must be a regular file")
         with warnings.catch_warnings():
             warnings.simplefilter("error", Image.DecompressionBombWarning)
             with Image.open(source) as image:
@@ -300,8 +294,7 @@ class ImageAssetStore:
 
     This module is an internal API, not an endpoint accepting arbitrary paths.
     Every operation locks the store directory, including reader lifetimes. Future
-    garbage collection must use the same lock. Unreferenced files still count
-    against capacity until a separate recovery/collection operation removes them.
+    garbage collection must use the same lock.
     """
 
     def __init__(
@@ -310,28 +303,24 @@ class ImageAssetStore:
         *,
         max_pixels: int,
         max_frames: int,
-        max_file_bytes: int = DEFAULT_MAX_FILE_BYTES,
-        max_total_bytes: int = DEFAULT_MAX_TOTAL_BYTES,
     ) -> None:
         """Configure a store without enabling any production image ingestion.
 
         Args:
             db: Database containing image assets and conversation associations.
-            max_file_bytes: Maximum bytes in one original image.
-            max_total_bytes: Maximum on-disk bytes, including unpublished/orphan files.
             max_pixels: Maximum pixels per frame, checked before active decoding.
             max_frames: Maximum number of animation frames.
 
         Raises:
-            ValueError: A budget is not a positive integer.
+            ValueError: A pixel or frame limit is not a positive integer.
             OSError: The dedicated data directory cannot be safely created.
         """
-        for value in (max_file_bytes, max_total_bytes, max_pixels, max_frames):
+        for value in (max_pixels, max_frames):
             if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
-                raise ValueError("Image storage budgets must be positive integers")
+                raise ValueError(
+                    "Image pixel and frame limits must be positive integers"
+                )
         self.db = db
-        self.max_file_bytes = max_file_bytes
-        self.max_total_bytes = max_total_bytes
         self.max_pixels = max_pixels
         self.max_frames = max_frames
         self.root = Path(get_astrbot_data_path()) / "image_assets"
@@ -372,29 +361,21 @@ class ImageAssetStore:
             Metadata for an atomically published file, not yet committed to SQLite.
 
         Raises:
-            ImageStorageLimitError: Any configured budget is exceeded.
+            ImageStorageLimitError: A pixel or animation frame limit is exceeded.
             ValueError: The input is not a supported raster image.
             OSError: Reading, validation, or publishing fails.
             InterruptedError: Cancellation was requested before publication.
         """
-        used_bytes = 0
         for entry in self.root.iterdir():
             if stop.is_set():
                 raise InterruptedError("Image capture cancelled")
             if entry.name == ".store.lock":
                 continue
-            info = entry.lstat()
-            if not stat.S_ISREG(info.st_mode):
+            if not stat.S_ISREG(entry.lstat().st_mode):
                 raise OSError("Unexpected non-regular entry in the image store")
-            used_bytes += info.st_size
-        available = min(self.max_file_bytes, self.max_total_bytes - used_bytes)
         before = source.lstat()
         if not stat.S_ISREG(before.st_mode):
             raise ValueError("Image source must be a regular file")
-        if before.st_size > self.max_file_bytes:
-            raise ImageStorageLimitError("Image input byte budget exceeded")
-        if before.st_size > available:
-            raise ImageStorageCapacityError("Image library byte budget exceeded")
 
         stable_asset_id = asset_id is not None
         asset_id = asset_id or str(uuid.uuid4())
@@ -417,14 +398,6 @@ class ImageAssetStore:
                         if stop.is_set():
                             raise InterruptedError("Image capture cancelled")
                         size += len(chunk)
-                        if size > self.max_file_bytes:
-                            raise ImageStorageLimitError(
-                                "Image input byte budget exceeded"
-                            )
-                        if size > available:
-                            raise ImageStorageCapacityError(
-                                "Image library byte budget exceeded"
-                            )
                         if outgoing.write(chunk) != len(chunk):
                             raise OSError("Incomplete image write")
                         digest.update(chunk)
@@ -495,7 +468,6 @@ class ImageAssetStore:
 
         Raises:
             ImageAssetImportConflictError: The ID, file, or metadata conflicts.
-            ImageStorageLimitError: The image exceeds a configured file limit.
             ImageValidationError: The source is not a supported image.
             OSError: A file cannot be read safely or changes during verification.
             InterruptedError: Cancellation was requested while reading or validating.
@@ -515,8 +487,6 @@ class ImageAssetStore:
         source_info = source.lstat()
         if not stat.S_ISREG(source_info.st_mode):
             raise ValueError("Image source must be a regular file")
-        if source_info.st_size > self.max_file_bytes:
-            raise ImageStorageLimitError("Image input byte budget exceeded")
         if source_info.st_size != target_info.st_size:
             raise ImageAssetImportConflictError(
                 "Stable image asset byte size does not match the source"
@@ -570,10 +540,6 @@ class ImageAssetStore:
                         if not source_chunk:
                             break
                         size += len(source_chunk)
-                        if size > self.max_file_bytes:
-                            raise ImageStorageLimitError(
-                                "Image input byte budget exceeded"
-                            )
                         source_digest.update(source_chunk)
                         target_digest.update(stored_chunk)
                     after_source = os.fstat(incoming.fileno())
@@ -636,9 +602,9 @@ class ImageAssetStore:
         Raises:
             ValueError: Invalid source kind or image data.
             ImageAssetImportConflictError: The stable ID already names different data.
-            ImageStorageLimitError: The image would exceed a configured budget.
+            ImageStorageLimitError: The image exceeds the pixel or frame limit.
             OSError: File I/O or image validation fails.
-            Exception: Metadata commit fails; the published file remains quota-accounted
+            Exception: Metadata commit fails; the published file remains available
                 for later reconciliation, including uncertain commit outcomes.
         """
         if source_kind not in {"original", "legacy_model_input"}:

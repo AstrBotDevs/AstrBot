@@ -178,10 +178,6 @@ async def _emit_download_progress(progress_callback, payload: dict) -> None:
         await result
 
 
-class MediaInputTooLargeError(ValueError):
-    """The supplied media exceeds the caller's decoded or downloaded byte cap."""
-
-
 class DownloadFileHTTPError(RuntimeError):
     """Raised when a file download returns an unsuccessful HTTP status."""
 
@@ -207,7 +203,6 @@ async def _download_response_to_file(
     show_progress: bool,
     progress_callback,
     show_downloading_label: bool = True,
-    max_bytes: int | None = None,
 ) -> None:
     """Write a successful download response to a local file.
 
@@ -218,19 +213,10 @@ async def _download_response_to_file(
         show_progress: Whether to print progress to stdout.
         progress_callback: Optional callback for progress payloads.
         show_downloading_label: Whether to use the standard download heading.
-        max_bytes: Optional maximum response body bytes; enforced before writes.
 
     """
 
-    if max_bytes is not None:
-        encoding = resp.headers.get("content-encoding", "").strip().lower()
-        if encoding not in {"", "identity"}:
-            raise ValueError(
-                "Encoded HTTP media responses are not supported with byte limits"
-            )
     total_size = int(resp.headers.get("content-length", 0))
-    if max_bytes is not None and total_size > max_bytes:
-        raise MediaInputTooLargeError("Media Content-Length exceeds input byte limit")
     downloaded_size = 0
     start_time = time.time()
     if show_progress:
@@ -255,8 +241,6 @@ async def _download_response_to_file(
         chunk = await resp.content.read(8192)
         if not chunk:
             break
-        if max_bytes is not None and downloaded_size + len(chunk) > max_bytes:
-            raise MediaInputTooLargeError("Media download exceeds input byte limit")
         file_obj.write(chunk)
         downloaded_size += len(chunk)
         elapsed_time = time.time() - start_time if time.time() - start_time > 0 else 1
@@ -295,7 +279,6 @@ async def download_file(
     show_progress: bool = False,
     progress_callback=None,
     allow_insecure_ssl_fallback: bool = True,
-    max_bytes: int | None = None,
 ) -> None:
     """Download a remote file to a local path.
 
@@ -306,22 +289,11 @@ async def download_file(
         progress_callback: Optional callback for progress payloads.
         allow_insecure_ssl_fallback: Whether certificate failures may retry with
             TLS certificate verification disabled.
-        max_bytes: Optional positive body-byte limit. Requests identity transfer
-            encoding and rejects compressed HTTP bodies when set.
 
     Returns:
         None.
     """
 
-    if max_bytes is not None and (
-        isinstance(max_bytes, bool) or not isinstance(max_bytes, int) or max_bytes <= 0
-    ):
-        raise ValueError("max_bytes must be a positive integer or None")
-    bounded_options = (
-        {"auto_decompress": False, "headers": {"Accept-Encoding": "identity"}}
-        if max_bytes is not None
-        else {}
-    )
     try:
         ssl_context = ssl.create_default_context(
             cafile=certifi.where(),
@@ -331,7 +303,7 @@ async def download_file(
             trust_env=True,
             connector=connector,
         ) as session:
-            async with session.get(url, timeout=1800, **bounded_options) as resp:
+            async with session.get(url, timeout=1800) as resp:
                 _raise_for_download_status(resp, url)
                 with open(path, "wb") as f:
                     await _download_response_to_file(
@@ -340,7 +312,6 @@ async def download_file(
                         url,
                         show_progress,
                         progress_callback,
-                        max_bytes=max_bytes,
                     )
     except (aiohttp.ClientConnectorSSLError, aiohttp.ClientConnectorCertificateError):
         if not allow_insecure_ssl_fallback:
@@ -360,9 +331,7 @@ async def download_file(
         ssl_context.check_hostname = False
         ssl_context.verify_mode = ssl.CERT_NONE
         async with aiohttp.ClientSession() as session:
-            async with session.get(
-                url, ssl=ssl_context, timeout=120, **bounded_options
-            ) as resp:
+            async with session.get(url, ssl=ssl_context, timeout=120) as resp:
                 _raise_for_download_status(resp, url)
                 with open(path, "wb") as f:
                     await _download_response_to_file(
@@ -372,7 +341,6 @@ async def download_file(
                         show_progress,
                         progress_callback,
                         show_downloading_label=False,
-                        max_bytes=max_bytes,
                     )
     if show_progress:
         print()

@@ -53,7 +53,6 @@ from astrbot.core.provider.modalities import (
 from astrbot.core.provider.provider import Provider
 from astrbot.core.utils.media_utils import (
     MediaResolver,
-    is_recoverable_image_error,
     normalize_model_image_max_size,
     resolve_image_ref_to_base64_data,
 )
@@ -576,7 +575,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     continue
                 if managed and self.provider.image_request_budget_supported is not True:
                     request_notices.append(
-                        "This model adapter cannot enforce the image request budget; "
+                        "This model adapter cannot verify image authorization on each provider attempt; "
                         "only available descriptions will be used."
                     )
                     continue
@@ -586,31 +585,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         "Do not claim to have seen its contents."
                     )
                     continue
-                if managed:
-                    try:
-                        preview_bytes = await asyncio.to_thread(
-                            lambda path=preview: Path(path).stat().st_size
-                        )
-                        next_bytes = encoded_bytes + 4 * ((preview_bytes + 2) // 3)
-                        image_context.budget.preflight(image_count + 1, next_bytes)
-                    except (ImageBudgetExceeded, OSError) as exc:
-                        if isinstance(exc, OSError) and not is_recoverable_image_error(
-                            exc
-                        ):
-                            raise
-                        request_notices.append(
-                            "Some image previews could not be submitted within this turn's "
-                            "image limits or were unavailable. Stored originals remain available; "
-                            "unprocessed descriptions remain pending."
-                        )
-                        if isinstance(exc, ImageBudgetExceeded):
-                            break
-                        continue
                 resolved = (
                     await MediaResolver(
                         preview,
                         media_type="image",
-                        max_bytes=image_context.budget.max_encoded_bytes * 3 // 4,
                     ).to_base64_data()
                     if managed
                     else await resolve_image_ref_to_base64_data(preview)
@@ -653,10 +631,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             + "\n".join(dict.fromkeys(request_notices))
                             + "\nBriefly explain the relevant limitation in your next "
                             "user-facing answer, using the established persona and the "
-                            "user's language. If the gallery is full, explicitly say so. "
-                            "Do not present a disk error as a full gallery. Do not claim "
-                            "an unsaved image was saved. Use natural wording, not a fixed "
-                            "resend instruction. These facts do not change your persona."
+                            "user's language. Do not claim an unsaved image was saved. "
+                            "Use natural wording, not a fixed resend instruction. "
+                            "These facts do not change your persona."
                         ),
                     }
                 )
@@ -1618,13 +1595,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             if isinstance(content_item, TextContent):
                                 result_parts.append(content_item.text)
                             elif isinstance(content_item, ImageContent):
-                                if self.req.image_context is not None and len(
-                                    content_item.data
-                                ) > 4 * ((64 * 1024**2 + 2) // 3):
-                                    result_parts.append(
-                                        "Tool image rejected: exceeds 64 MiB limit."
-                                    )
-                                    continue
                                 # Cache the image instead of sending directly
                                 cached_img = tool_image_cache.save_image(
                                     base64_data=content_item.data,
@@ -1651,13 +1621,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                     and resource.mimeType
                                     and resource.mimeType.startswith("image/")
                                 ):
-                                    if self.req.image_context is not None and len(
-                                        resource.blob
-                                    ) > 4 * ((64 * 1024**2 + 2) // 3):
-                                        result_parts.append(
-                                            "Tool image rejected: exceeds 64 MiB limit."
-                                        )
-                                        continue
                                     # Cache the image instead of sending directly
                                     cached_img = tool_image_cache.save_image(
                                         base64_data=resource.blob,

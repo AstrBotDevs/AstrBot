@@ -25,8 +25,6 @@ from astrbot.core.db.po import (
 from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.image_asset_store import (
     COPY_CHUNK_BYTES,
-    DEFAULT_MAX_FILE_BYTES,
-    DEFAULT_MAX_TOTAL_BYTES,
     ImageAssetStore,
     image_store_lock,
     run_image_io,
@@ -52,18 +50,17 @@ class ImageHistoryMaintenanceError(ValueError):
     """A maintenance operation stopped without a successful history replacement."""
 
 
-def _hash_file(path: Path, limit: int | None = None) -> tuple[str, int]:
+def _hash_file(path: Path) -> tuple[str, int]:
     """Hash a regular file in bounded chunks and detect concurrent replacement.
 
     Args:
         path: Trusted local file selected by the maintenance task.
-        limit: Optional maximum number of bytes to read.
 
     Returns:
         SHA-256 hexadecimal digest and byte count.
 
     Raises:
-        ImageHistoryMaintenanceError: The file is unsafe, changed, or exceeds limit.
+        ImageHistoryMaintenanceError: The file is unsafe or changed.
         OSError: The file cannot be read.
     """
     before = path.lstat()
@@ -80,10 +77,6 @@ def _hash_file(path: Path, limit: int | None = None) -> tuple[str, int]:
             )
         while chunk := stream.read(COPY_CHUNK_BYTES):
             size += len(chunk)
-            if limit is not None and size > limit:
-                raise ImageHistoryMaintenanceError(
-                    "A maintenance file exceeds its byte limit."
-                )
             digest.update(chunk)
         after = os.fstat(stream.fileno())
     if (opened.st_size, opened.st_mtime_ns) != (
@@ -187,11 +180,12 @@ def _prepare_backup(database: Path, job_dir: Path, fingerprint, gallery: Path) -
             gallery_bytes += info.st_size
     # A previous run may have published the snapshot but not its gallery copy.
     # Conservatively reserve a full gallery copy even when some files exist.
+    image_staging_bytes = (fingerprint.source_byte_size * 3 + 3) // 4
     needed = (
         snapshot_bytes
         + gallery_bytes
         + 2 * fingerprint.source_byte_size
-        + DEFAULT_MAX_FILE_BYTES
+        + image_staging_bytes
         + 6 * MAX_ONLINE_HISTORY_BYTES
     )
     if shutil.disk_usage(job_dir).free < needed:
@@ -224,10 +218,6 @@ def _prepare_backup(database: Path, job_dir: Path, fingerprint, gallery: Path) -
                         "An image-store entry is not a regular file."
                     )
                 total_bytes += before.st_size
-                if total_bytes > DEFAULT_MAX_TOTAL_BYTES:
-                    raise ImageHistoryMaintenanceError(
-                        "The existing gallery exceeds its capacity."
-                    )
                 target = media / source.name
                 if target.is_symlink():
                     raise ImageHistoryMaintenanceError(
@@ -410,10 +400,11 @@ async def run_image_history_maintenance(
         store = ImageAssetStore(
             db, max_pixels=MAX_CONTEXT_IMAGE_PIXELS, max_frames=MAX_CONTEXT_IMAGE_FRAMES
         )
-        # A message and its current part may coexist as disk-backed JSON spools.
+        # Base64 payloads decode to at most three quarters of the source history.
+        # A message and its current part may also coexist as disk-backed spools.
         staging_reserve = (
             2 * source.source_byte_size
-            + DEFAULT_MAX_FILE_BYTES
+            + (source.source_byte_size * 3 + 3) // 4
             + 6 * MAX_ONLINE_HISTORY_BYTES
         )
         if shutil.disk_usage(job_dir).free < staging_reserve:
@@ -437,9 +428,7 @@ async def run_image_history_maintenance(
                         MAX_CONTEXT_IMAGE_PIXELS,
                         MAX_CONTEXT_IMAGE_FRAMES,
                     )
-                    digest, size = await _maintenance_io(
-                        _hash_file, image.payload_path, DEFAULT_MAX_FILE_BYTES
-                    )
+                    digest, size = await _maintenance_io(_hash_file, image.payload_path)
                     if image.message_index != previous_message:
                         previous_message, ordinal = image.message_index, 0
                     key = f"{image.message_index}:{image.part_index}"
@@ -551,24 +540,19 @@ async def run_image_history_maintenance(
             raise ImageHistoryMaintenanceError(
                 "Rewritten history still exceeds the 16 MiB online limit; no history was replaced."
             )
-        used_bytes = 0
         owned_parts = {f"{item['asset_id']}.part" for item in new_images}
         reclaimable_bytes = 0
-        for entry in store.root.iterdir():
-            if entry.name == ".store.lock":
+        for name in owned_parts:
+            entry = store.root / name
+            try:
+                info = entry.lstat()
+            except FileNotFoundError:
                 continue
-            info = entry.lstat()
             if not stat.S_ISREG(info.st_mode):
                 raise ImageHistoryMaintenanceError(
                     "An image-store entry is not a regular file."
                 )
-            used_bytes += info.st_size
-            if entry.name in owned_parts:
-                reclaimable_bytes += info.st_size
-        if required_bytes > DEFAULT_MAX_TOTAL_BYTES - used_bytes + reclaimable_bytes:
-            raise ImageHistoryMaintenanceError(
-                "The image gallery is full; the conversation was not changed."
-            )
+            reclaimable_bytes += info.st_size
         planned_path.replace(plan_path)
         report = {
             "status": "prepared",
@@ -584,14 +568,25 @@ async def run_image_history_maintenance(
         }
         if not apply:
             return report
-        if shutil.disk_usage(job_dir).free < required_bytes + staging_reserve:
+        job_device = job_dir.stat().st_dev
+        store_device = store.root.stat().st_dev
+        if job_device == store_device:
+            needed = staging_reserve + required_bytes
+            if shutil.disk_usage(job_dir).free + reclaimable_bytes < needed:
+                raise ImageHistoryMaintenanceError(
+                    "Insufficient free disk space for image publication and staging."
+                )
+        elif (
+            shutil.disk_usage(job_dir).free < staging_reserve
+            or shutil.disk_usage(store.root).free + reclaimable_bytes < required_bytes
+        ):
             raise ImageHistoryMaintenanceError(
                 "Insufficient free disk space for image publication and staging."
             )
 
         # Only this task's deterministic unpublished staging files are restartable.
-        # Clear all of them before importing, so a later image's partial write
-        # cannot incorrectly consume capacity needed by an earlier image.
+        # Clear them before importing, so stale writes do not consume disk space
+        # required for this task's image publication.
         async with image_store_lock():
             for name in owned_parts:
                 path = store.root / name
@@ -616,9 +611,10 @@ async def run_image_history_maintenance(
                 raise ImageHistoryMaintenanceError(
                     "Image order changed before publication."
                 )
-            if await _maintenance_io(
-                _hash_file, image.payload_path, DEFAULT_MAX_FILE_BYTES
-            ) != (item["sha256"], item["byte_size"]):
+            if await _maintenance_io(_hash_file, image.payload_path) != (
+                item["sha256"],
+                item["byte_size"],
+            ):
                 raise ImageHistoryMaintenanceError(
                     "An image changed before publication."
                 )

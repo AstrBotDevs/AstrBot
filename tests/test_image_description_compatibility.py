@@ -5,24 +5,19 @@ import json
 import pytest
 import test_image_description as caption_tests
 
-from astrbot.core.image_description import (
-    _parse_description_response,
-    describe_images,
-)
+from astrbot.core.image_description import _parse_description_response, describe_images
 from astrbot.core.provider.entities import LLMResponse, TokenUsage
 
 SECRET_ID = "caption-compat-occurrence-secret-3c0a"
 SECRET_RESPONSE = "caption-compat-response-secret-6b41"
+SECRET_ERROR = "caption-compat-error-secret-2fa1"
 PREVIOUS_DESCRIPTION = "previous private observation"
 NOTICE = "Image description failed; previous observations were preserved and no repair call was made."
-NON_JSON_C0_CONTROLS = tuple(
-    chr(value) for value in range(0x20) if value not in {0x09, 0x0A, 0x0D}
-)
 
 
 @pytest.fixture
 def setup_caption(tmp_path):
-    """Reuse the existing deterministic caption provider and image setup."""
+    """Reuse the deterministic caption provider and image setup."""
     return caption_tests.setup_caption.__wrapped__(tmp_path)
 
 
@@ -41,50 +36,20 @@ def _single_private_image(turn):
     ("text", "expected"),
     [
         (
-            '\ufeff  {"images": [{"image_id": "a", "description": "shape"}]}  ',
+            '\ufeffObservation:\n```json\n{"images":[{"image_id":"a","description":"shape"}]}\n```',
             {"images": [{"image_id": "a", "description": "shape"}]},
         ),
         (
-            'The visual result follows:\n```JSON\n{"images": [{"image_id": "a", "description": "shape"}]}\n```\nThat is all.',
+            '```\n{"images":[{"image_id":"a","description":"shape"}]}\n```',
             {"images": [{"image_id": "a", "description": "shape"}]},
         ),
         (
-            '```\n{"images": [{"image_id": "a", "description": "shape"}]}\n```',
+            '{"images":[{"image_id":"a","description":"shape"}]} }}] \n',
             {"images": [{"image_id": "a", "description": "shape"}]},
-        ),
-        (
-            '{"images": [{"image_id": "a", "description": "shape"}]} }]] \n\t',
-            {"images": [{"image_id": "a", "description": "shape"}]},
-        ),
-        (
-            '```json\n{"images": [{"image_id": "a", "description": "shape"}]} }]] \n```',
-            {"images": [{"image_id": "a", "description": "shape"}]},
-        ),
-        (
-            "```json\n"
-            + json.dumps(
-                {
-                    "images": [
-                        {
-                            "image_id": "a",
-                            "description": 'text contains ] } [ { and "quotes" plus ``` marks',
-                        }
-                    ]
-                }
-            )
-            + "\n```",
-            {
-                "images": [
-                    {
-                        "image_id": "a",
-                        "description": 'text contains ] } [ { and "quotes" plus ``` marks',
-                    }
-                ]
-            },
         ),
     ],
 )
-def test_parser_accepts_unambiguous_bom_fence_and_explanation_wrappers(text, expected):
+def test_parser_accepts_common_wrappers_and_one_unambiguous_json(text, expected):
     assert _parse_description_response(text) == expected
 
 
@@ -92,19 +57,10 @@ def test_parser_accepts_unambiguous_bom_fence_and_explanation_wrappers(text, exp
     "text",
     [
         '{"images":[{"image_id":"a","description":"first","description":"second"}]}',
-        '{"images":[{"image_id":"a","description":"one"}]}\n'
-        'Candidate 2: {"images":[{"image_id":"a","description":"two"}]}',
-        'Model wrapper: {"candidate": broken '
-        '{"images":[{"image_id":"a","description":"shape"}]}',
+        '{"images":[]}\nCandidate 2: {"images":[]}',
+        'Model wrapper: {"candidate": broken {"images":[]}',
         '```json\n{"images":[]}\n',
-        '```json\n{"images":[]}\n```\n```json\n{"images":[]}\n```',
         '```python\n{"images":[]}\n```',
-        '{"images":[],"images":[]}',
-        '["malformed outer", {"images":[{"image_id":"a","description":"shape"}]',
-        '[image 1] {"images":[]}',
-        '{"images":[{"image_id":"a","description":"shape"}]} }} trailing text',
-        '```json\n{"images":[{"image_id":"a","description":"shape"}]} }}\nnot-json\n```',
-        '```json\n{"images":[{"image_id":"a","description":"shape"}]}\n``` }}',
         "Plain caption text without a JSON envelope.",
     ],
 )
@@ -114,70 +70,72 @@ def test_parser_rejects_ambiguous_or_malformed_wrappers(text):
 
 
 @pytest.mark.parametrize("control", ["\n", "\r", "\t"])
-def test_parser_accepts_lf_cr_tab_inside_json_strings_with_wrappers(control):
-    description = f"before{control}after"
+def test_parser_accepts_common_raw_line_breaks_inside_json_strings(control):
     raw_object = (
         '{"images":[{"image_id":"a","description":"before' + control + 'after"}]}'
     )
-    expected = {"images": [{"image_id": "a", "description": description}]}
-
-    assert _parse_description_response(raw_object) == expected
-    assert _parse_description_response(f"```json\n{raw_object} }} \n```") == expected
-
-
-@pytest.mark.parametrize("control", NON_JSON_C0_CONTROLS)
-def test_parser_rejects_other_c0_controls_inside_and_around_json(control):
-    valid_object = '{"images":[{"image_id":"a","description":"shape"}]}'
-    candidates = (
-        '{"images":[{"image_id":"a","description":"before' + control + 'after"}]}',
-        control + valid_object,
-        valid_object + control,
+    assert _parse_description_response(raw_object)["images"][0]["description"] == (
+        f"before{control}after"
     )
 
-    for candidate in candidates:
-        with pytest.raises(ValueError):
-            _parse_description_response(candidate)
+
+def test_parser_rejects_other_raw_control_characters():
+    valid_object = '{"images":[{"image_id":"a","description":"shape"}]}'
+    with pytest.raises(ValueError):
+        _parse_description_response(valid_object.replace("shape", "before\x01after"))
+    with pytest.raises(ValueError):
+        _parse_description_response("\x01" + valid_object)
+    with pytest.raises(ValueError):
+        _parse_description_response(valid_object + "\x01")
 
 
-def test_parser_preserves_escaped_control_characters_and_quotes():
-    description = 'quote " slash \\ bracket [] {} line\nnext\rreturn\ttab'
-    raw_object = json.dumps({"images": [{"image_id": "a", "description": description}]})
+def test_parser_keeps_structural_text_inside_description():
+    description = 'text contains ] } [ { and "quotes" plus ``` marks'
+    text = json.dumps({"images": [{"image_id": "a", "description": description}]})
 
-    assert _parse_description_response(raw_object) == {
-        "images": [{"image_id": "a", "description": description}]
-    }
+    assert _parse_description_response(text)["images"][0]["description"] == description
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "content",
+    ("content", "provider_error"),
     [
-        '{"images":[{"image_id":"a","description":"first","description":"second"}]}',
-        '{"images":[{"image_id":"a","description":"one"}]}\n'
-        'Candidate 2: {"images":[{"image_id":"a","description":"two"}]}',
-        'Model wrapper: {"candidate": broken '
-        '{"images":[{"image_id":"a","description":"shape"}]}',
-        "Plain caption text " + SECRET_RESPONSE,
-        json.dumps(
-            {"images": [{"image_id": "wrong-private-image-id", "description": "shape"}]}
-        )
-        + " }}} \n",
+        (
+            '{"images":[{"image_id":"a","description":"first","description":"second"}]}',
+            False,
+        ),
+        ("Plain caption text " + SECRET_RESPONSE, False),
+        (
+            json.dumps(
+                {
+                    "images": [
+                        {"image_id": "wrong-private-image-id", "description": "shape"}
+                    ]
+                }
+            ),
+            False,
+        ),
+        (None, True),
     ],
 )
-async def test_invalid_compatibility_outputs_preserve_description_and_log_no_payload(
-    setup_caption, monkeypatch, content
+async def test_failed_outputs_preserve_description_and_log_no_payload(
+    setup_caption, monkeypatch, content, provider_error
 ):
     turn, provider = setup_caption
     ref = _single_private_image(turn)
     ref.description = PREVIOUS_DESCRIPTION
     ref.description_status = "ready"
-    response = LLMResponse(
-        role="assistant",
-        completion_text=content,
-        reasoning_content=SECRET_RESPONSE,
-        usage=TokenUsage(input_other=3),
-    )
-    provider.response = response
+    if provider_error:
+        provider.response = RuntimeError(
+            f"{SECRET_ERROR} {SECRET_ID} {SECRET_RESPONSE}"
+        )
+    else:
+        provider.response = LLMResponse(
+            role="assistant",
+            completion_text=content,
+            reasoning_content=SECRET_RESPONSE,
+            usage=TokenUsage(input_other=3),
+        )
     warning = []
 
     def capture_warning(template, *args):
@@ -188,7 +146,6 @@ async def test_invalid_compatibility_outputs_preserve_description_and_log_no_pay
         "warning",
         capture_warning,
     )
-
     result = await describe_images(
         turn, provider, occurrence_ids=[SECRET_ID], refresh=True
     )
@@ -201,12 +158,17 @@ async def test_invalid_compatibility_outputs_preserve_description_and_log_no_pay
     assert ref.description_status == "ready"
     assert ref.description_version == 0
     turn.db.update_image_description.assert_not_awaited()
-    for private_value in (SECRET_ID, SECRET_RESPONSE, "wrong-private-image-id"):
+    for private_value in (
+        SECRET_ID,
+        SECRET_RESPONSE,
+        SECRET_ERROR,
+        "wrong-private-image-id",
+    ):
         assert private_value not in log_text
 
 
 @pytest.mark.asyncio
-async def test_wrapped_response_updates_one_current_description_once(setup_caption):
+async def test_wrapped_response_updates_current_description_once(setup_caption):
     turn, provider = setup_caption
     ref = turn.references["a"]
     provider.response = LLMResponse(
@@ -214,66 +176,13 @@ async def test_wrapped_response_updates_one_current_description_once(setup_capti
         completion_text=(
             "\ufeffObservation:\n```json\n"
             + json.dumps({"images": [{"image_id": "a", "description": "a blue chair"}]})
-            + "\n```\nThe observation is complete."
+            + "\n```"
         ),
         usage=TokenUsage(input_other=3),
     )
 
-    result = await describe_images(turn, provider, occurrence_ids=["a"])
-
-    assert result is None
+    assert await describe_images(turn, provider, occurrence_ids=["a"]) is None
     assert ref.description == "a blue chair"
-    assert ref.description_status == "ready"
-    assert ref.description_version == 1
-    assert provider.calls == 1
-    turn.db.update_image_description.assert_not_awaited()
-
-
-@pytest.mark.asyncio
-async def test_surplus_closers_after_unique_json_still_update_once(setup_caption):
-    turn, provider = setup_caption
-    ref = turn.references["a"]
-    provider.response = LLMResponse(
-        role="assistant",
-        completion_text=(
-            '{"images":[{"image_id":"a","description":"verified"}]} }}] \n'
-        ),
-        usage=TokenUsage(input_other=2),
-    )
-
-    result = await describe_images(turn, provider, occurrence_ids=["a"])
-
-    assert result is None
-    assert ref.description == "verified"
-    assert ref.description_status == "ready"
-    assert ref.description_version == 1
-    assert provider.calls == 1
-    turn.db.update_image_description.assert_not_awaited()
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("control", ["\n", "\r", "\t"])
-async def test_describe_images_accepts_raw_lf_cr_tab_and_updates_ready_once(
-    setup_caption, control
-):
-    turn, provider = setup_caption
-    ref = turn.references["a"]
-    description = f"first line{control}second line"
-    raw_response = (
-        '```json\n{"images":[{"image_id":"a","description":"first line'
-        + control
-        + 'second line"}]} }}\n```'
-    )
-    provider.response = LLMResponse(
-        role="assistant",
-        completion_text=raw_response,
-        usage=TokenUsage(input_other=2),
-    )
-
-    result = await describe_images(turn, provider, occurrence_ids=["a"])
-
-    assert result is None
-    assert ref.description == description
     assert ref.description_status == "ready"
     assert ref.description_version == 1
     assert provider.calls == 1

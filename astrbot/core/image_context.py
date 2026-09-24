@@ -18,9 +18,7 @@ from astrbot.core.agent.message import (
 )
 from astrbot.core.db.po import ConversationImageRef
 from astrbot.core.image_asset_store import (
-    DEFAULT_MAX_FILE_BYTES,
     ImageAssetStore,
-    ImageStorageCapacityError,
     ImageStorageLimitError,
     ImageValidationError,
     run_image_io,
@@ -265,14 +263,10 @@ class ImageTurnContext:
 
         def copy_original(stream, destination, stop):
             with destination.open("xb") as output:
-                total = 0
                 while not stop.is_set():
                     chunk = stream.read(1024 * 1024)
                     if not chunk:
                         return
-                    total += len(chunk)
-                    if total > DEFAULT_MAX_FILE_BYTES:
-                        raise ImageStorageLimitError("Stored image exceeds input limit")
                     output.write(chunk)
                 raise OSError("Image preparation cancelled")
 
@@ -628,9 +622,7 @@ class ImageTurnContext:
             "quoted": False,
         }
         try:
-            async with MediaResolver(
-                ref, media_type="image", max_bytes=DEFAULT_MAX_FILE_BYTES
-            ).as_path() as source:
+            async with MediaResolver(ref, media_type="image").as_path() as source:
                 model_source = source.path
                 if not temporary:
                     try:
@@ -641,8 +633,6 @@ class ImageTurnContext:
                         )
                         asset = await store.import_file(source.path)
                         model_source = store.root / asset.storage_key
-                    except ImageStorageCapacityError:
-                        storage_notice = "The image library is full. This image is available only for the current request; its original was not saved."
                     except ImageValidationError:
                         raise
                     except (OSError, SQLAlchemyError) as exc:

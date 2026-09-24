@@ -113,14 +113,6 @@ async def test_summary_latest_description_no_bytes_and_separate_usage(projection
 
 
 @pytest.mark.asyncio
-async def test_default_off_does_not_project(projection_turn):
-    messages = [Message(role="user", content="old")]
-    result = await ContextManager(ContextConfig()).process(messages)
-    assert result is messages
-    projection_turn.project_messages.assert_not_awaited()
-
-
-@pytest.mark.asyncio
 @pytest.mark.parametrize("outcome", ["known", "unknown", "error"])
 async def test_opaque_summary_records_logical_usage(projection_turn, outcome):
     async def respond(**kwargs):

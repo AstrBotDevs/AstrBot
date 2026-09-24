@@ -21,7 +21,6 @@ from astrbot.core.image_history_migration import (
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
 DEFAULT_MAX_OUTPUT_BYTES = 16 * 1024 * 1024
-DEFAULT_MAX_IMAGE_BYTES = 64 * 1024 * 1024
 _MAX_CAPTURED_JSON_STRING_BYTES = 4096
 _MAX_LOCAL_URL_BYTES = 32 * 1024
 _MAX_JSON_DEPTH = 256
@@ -480,7 +479,7 @@ def _decode_json_string_chunks(
         yield final
 
 
-def _write_base64_chunk(output: BinaryIO, data: bytes, current_size: int) -> int:
+def _write_base64_chunk(output: BinaryIO, data: bytes) -> None:
     """Decode one non-final block of strict base64 into the staged image."""
     if b"=" in data:
         raise ImageHistoryMigrationError("invalid_image")
@@ -488,12 +487,8 @@ def _write_base64_chunk(output: BinaryIO, data: bytes, current_size: int) -> int
         decoded = base64.b64decode(data, validate=True)
     except (binascii.Error, ValueError):
         raise ImageHistoryMigrationError("invalid_image") from None
-    size = current_size + len(decoded)
-    if size > DEFAULT_MAX_IMAGE_BYTES:
-        raise ImageHistoryMigrationError("invalid_image")
     if output.write(decoded) != len(decoded):
         raise OSError("Incomplete image staging write")
-    return size
 
 
 def _resolve_image_string(
@@ -509,19 +504,13 @@ def _resolve_image_string(
     staged: Path | None = None
     output: BinaryIO | None = None
     base64_pending = bytearray()
-    decoded_size = 0
     temp_root = Path(get_astrbot_temp_path()).resolve()
 
     def feed_base64(data: bytes) -> None:
-        nonlocal decoded_size
         base64_pending.extend(data)
         process_length = max(0, ((len(base64_pending) - 4) // 4) * 4)
         if process_length:
-            decoded_size = _write_base64_chunk(
-                output,
-                bytes(base64_pending[:process_length]),
-                decoded_size,
-            )
+            _write_base64_chunk(output, bytes(base64_pending[:process_length]))
             del base64_pending[:process_length]
 
     try:
@@ -594,15 +583,10 @@ def _resolve_image_string(
             final = base64.b64decode(bytes(base64_pending), validate=True)
         except (binascii.Error, ValueError):
             raise ImageHistoryMigrationError("invalid_image") from None
-        if (
-            not final
-            or decoded_size + len(final) > DEFAULT_MAX_IMAGE_BYTES
-            or b"=" in base64_pending[:-2]
-        ):
+        if not final or b"=" in base64_pending[:-2]:
             raise ImageHistoryMigrationError("invalid_image")
         if output.write(final) != len(final):
             raise OSError("Incomplete image staging write")
-        decoded_size += len(final)
         output.flush()
         return staged, True
     except BaseException:

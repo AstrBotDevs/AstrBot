@@ -21,9 +21,7 @@ from astrbot.core.conversation_history_limits import HistoryTooLargeError
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import ConversationImageRef
 from astrbot.core.image_asset_store import (
-    DEFAULT_MAX_FILE_BYTES,
     ImageAssetStore,
-    ImageStorageCapacityError,
     ImageStorageLimitError,
     ImageValidationError,
     run_image_io,
@@ -51,10 +49,6 @@ class ImageHistoryMigrationError(Exception):
         "invalid_image": (
             "旧对话里有图片数据损坏或超过图片限制，图片整理没有完成；"
             "原对话保持不变，这条消息没有发送给模型。"
-        ),
-        "library_full": (
-            "图库空间不足，旧对话图片整理没有完成；原对话保持不变，"
-            "这条消息没有发送给模型。"
         ),
         "storage_error": (
             "图片存储暂时不可用，旧对话整理没有完成；原对话保持不变，"
@@ -223,7 +217,7 @@ def _checkpoint_image_groups(
 
 
 def _stage_data_uri(url: str, temp_root: Path) -> Path:
-    """Decode a bounded image data URI into an AstrBot-owned temporary file.
+    """Decode an image data URI into an AstrBot-owned temporary file.
 
     Args:
         url: A supported base64 data URI.
@@ -247,13 +241,11 @@ def _stage_data_uri(url: str, temp_root: Path) -> Path:
         or not any(item.lower() == "base64" for item in parameters[1:])
     ):
         raise ImageHistoryMigrationError("invalid_image")
-    if len(encoded) > 4 * ((DEFAULT_MAX_FILE_BYTES + 2) // 3):
-        raise ImageHistoryMigrationError("invalid_image")
     try:
         decoded = base64.b64decode(encoded, validate=True)
     except (binascii.Error, ValueError):
         raise ImageHistoryMigrationError("invalid_image") from None
-    if not decoded or len(decoded) > DEFAULT_MAX_FILE_BYTES:
+    if not decoded:
         raise ImageHistoryMigrationError("invalid_image")
     path = temp_root / f"image-history-migration-{uuid.uuid4()}.img"
     try:
@@ -287,8 +279,7 @@ def _resolve_temp_file(url: str, temp_root: Path) -> Path:
         The canonical source path.
 
     Raises:
-        ImageHistoryMigrationError: The source is remote, missing, unsafe, or too
-            large to be a supported image.
+        ImageHistoryMigrationError: The source is remote, missing, or unsafe.
         OSError: A process resource limit was reached.
     """
     parsed = urllib.parse.urlsplit(url)
@@ -319,8 +310,6 @@ def _resolve_temp_file(url: str, temp_root: Path) -> Path:
         resolved = source.resolve(strict=True)
         if not resolved.is_relative_to(temp_root) or not resolved.is_file():
             raise ImageHistoryMigrationError("unavailable")
-        if resolved.stat().st_size > DEFAULT_MAX_FILE_BYTES:
-            raise ImageHistoryMigrationError("invalid_image")
     except ImageHistoryMigrationError:
         raise
     except OSError as exc:
@@ -429,7 +418,6 @@ async def migrate_legacy_image_history(
             max_pixels=MAX_CONTEXT_IMAGE_PIXELS,
             max_frames=MAX_CONTEXT_IMAGE_FRAMES,
         )
-        required_bytes = 0
         for image in candidates:
             assert image.source_path is not None
             try:
@@ -438,9 +426,8 @@ async def migrate_legacy_image_history(
                 if not is_recoverable_image_error(exc):
                     raise
                 raise ImageHistoryMigrationError("unavailable") from None
-            if not stat.S_ISREG(info.st_mode) or info.st_size > DEFAULT_MAX_FILE_BYTES:
+            if not stat.S_ISREG(info.st_mode):
                 raise ImageHistoryMigrationError("invalid_image")
-            required_bytes += info.st_size
             try:
                 await run_image_io(
                     validate_image_source,
@@ -457,30 +444,12 @@ async def migrate_legacy_image_history(
                     raise ImageHistoryMigrationError("invalid_image") from None
                 raise ImageHistoryMigrationError("storage_error") from None
 
-        used_bytes = 0
-        try:
-            for entry in store.root.iterdir():
-                if entry.name == ".store.lock":
-                    continue
-                info = entry.lstat()
-                if not stat.S_ISREG(info.st_mode):
-                    raise OSError("Unexpected image store entry")
-                used_bytes += info.st_size
-        except OSError as exc:
-            if not is_recoverable_image_error(exc):
-                raise
-            raise ImageHistoryMigrationError("storage_error") from None
-        if required_bytes > store.max_total_bytes - used_bytes:
-            raise ImageHistoryMigrationError("library_full")
-
         for image in candidates:
             assert image.source_path is not None
             try:
                 image.asset = await store.import_file(
                     image.source_path, source_kind="legacy_model_input"
                 )
-            except ImageStorageCapacityError:
-                raise ImageHistoryMigrationError("library_full") from None
             except (ImageStorageLimitError, ValueError):
                 raise ImageHistoryMigrationError("invalid_image") from None
             except OSError as exc:

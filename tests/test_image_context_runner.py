@@ -146,7 +146,7 @@ async def test_empty_response_retries_keep_pending(managed):
 async def test_error_preserves_pending_and_notice(managed):
     request, provider, state = managed
     state.notices.append(
-        "The image gallery is full. This valid image is available only in this turn."
+        "This image could not be saved and is available only in this turn."
     )
     provider.text_chat.return_value = LLMResponse(role="err", completion_text="offline")
     runner = await make_runner(request, provider)
@@ -158,7 +158,9 @@ async def test_error_preserves_pending_and_notice(managed):
 @pytest.mark.asyncio
 async def test_persona_notice_survives_tool_response_without_extra_call(managed):
     request, provider, state = managed
-    state.notices.append("The image gallery is full. This image was not saved.")
+    state.notices.append(
+        "This image could not be saved, but remains available this turn."
+    )
     provider.text_chat.side_effect = [
         LLMResponse(
             role="assistant",
@@ -166,7 +168,9 @@ async def test_persona_notice_survives_tool_response_without_extra_call(managed)
             tools_call_ids=["call-1"],
             tools_call_args=[{}],
         ),
-        LLMResponse(role="assistant", completion_text="Meow, my gallery is full!"),
+        LLMResponse(
+            role="assistant", completion_text="Meow, this image could not be saved!"
+        ),
     ]
     runner = await make_runner(request, provider)
     before = copy.deepcopy(runner.run_context.messages)
@@ -179,7 +183,7 @@ async def test_persona_notice_survives_tool_response_without_extra_call(managed)
     assert provider.text_chat.call_count == 2
     for call in provider.text_chat.call_args_list:
         payload = json.dumps(call.kwargs["contexts"])
-        assert "cheerful cat" in payload and "gallery is full" in payload
+        assert "cheerful cat" in payload and "could not be saved" in payload
         assert "established persona" in payload and "not a fixed" in payload
     assert runner.run_context.messages == before
 
@@ -374,7 +378,6 @@ async def test_managed_small_images_have_no_default_count_limit(managed):
     assert state.budget.image_submissions == 9
     assert len(calls) == 1
     assert not state.pending_visuals
-    assert "image limits" not in str(calls[0]["contexts"])
     assert state.budget.to_dict()["groups"][0]["unknown_calls"] == 1
 
 
@@ -430,41 +433,5 @@ async def test_managed_unknown_adapter_cannot_send_images(managed):
     [resp async for resp in runner._iter_llm_responses_with_fallback()]
     payload = provider.text_chat.call_args.kwargs
     assert "data:image" not in str(payload)
-    assert "cannot enforce" in str(payload)
+    assert "cannot verify image authorization" in str(payload)
     assert state.budget.image_submissions == 0
-
-
-@pytest.mark.asyncio
-async def test_visual_byte_boundary_stops_before_later_smaller_image(managed, tmp_path):
-    from astrbot.core.image_request_budget import (
-        ImageRequestBudget,
-        charge_image_attempt,
-    )
-
-    request, provider, state = managed
-    preview = next(iter(state.pending_visuals.values()))
-    encoded_size = 4 * ((Path(preview).stat().st_size + 2) // 3)
-    large = tmp_path / "large.png"
-    large.write_bytes(b"x" * (encoded_size * 3))
-    state.configured = True
-    state.budget = ImageRequestBudget(max_encoded_bytes=encoded_size * 2)
-    state.retrieval_visuals = set()
-    state.pending_visuals = {"first": preview, "large": str(large), "last": preview}
-    state.prepare_step = AsyncMock()
-    state.project_messages = AsyncMock(side_effect=lambda messages: messages)
-    provider.image_request_budget_supported = True
-    provider.get_model.return_value = "test-model"
-    calls = []
-
-    async def respond(**payload):
-        charge_image_attempt(payload)
-        calls.append(payload)
-        return LLMResponse(role="assistant", completion_text="done")
-
-    provider.text_chat.side_effect = respond
-    runner = await make_runner(request, provider)
-    responses = [resp async for resp in runner._iter_llm_responses_with_fallback()]
-    assert responses[-1].completion_text == "done"
-    assert len(calls) == 1
-    assert state.budget.image_submissions == 1
-    assert "image limits" in str(calls[0]["contexts"])

@@ -93,6 +93,9 @@ def harness(tmp_path, monkeypatch):
             "streaming_response": False,
             "image_compress_options": {"max_size": 90},
             "enable": True,
+            # This suite verifies legacy inline request preparation; managed image
+            # context behavior is covered by tests using the default-enabled setting.
+            "image_context_enabled": False,
         }
     )
     context = MagicMock(spec=main.Context)

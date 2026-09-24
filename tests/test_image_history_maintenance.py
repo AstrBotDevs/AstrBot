@@ -50,6 +50,17 @@ def image_url(tmp_path, color="red", padded_bytes=0):
     )
 
 
+def _legacy_history(*image_urls):
+    return [
+        {
+            "role": "user",
+            "content": [
+                {"type": "image_url", "image_url": {"url": uri}} for uri in image_urls
+            ],
+        }
+    ]
+
+
 async def store_history(db, history):
     # Direct binding can seed an oversized legacy source without online readers.
     async with db.get_db() as session, session.begin():
@@ -122,19 +133,7 @@ async def test_preflight_then_apply_preserves_text_and_is_idempotent(
 @pytest.mark.asyncio
 async def test_migrates_actual_oversized_base64_history(maintenance_env, tmp_path):
     db, _ = maintenance_env
-    original = [
-        {
-            "role": "user",
-            "content": [
-                {
-                    "type": "image_url",
-                    "image_url": {
-                        "url": image_url(tmp_path, padded_bytes=13 * 1024 * 1024)
-                    },
-                }
-            ],
-        }
-    ]
+    original = _legacy_history(image_url(tmp_path, padded_bytes=13 * 1024 * 1024))
     await store_history(db, original)
     assert len(json.dumps(original)) > 16 * 1024 * 1024
     result = await maintenance.run_image_history_maintenance(db, "legacy", apply=True)
@@ -151,18 +150,7 @@ async def test_resume_after_asset_commit_does_not_publish_duplicate(
     maintenance_env, tmp_path
 ):
     db, root = maintenance_env
-    original = [
-        {
-            "role": "user",
-            "content": [
-                {"type": "image_url", "image_url": {"url": image_url(tmp_path)}},
-                {
-                    "type": "image_url",
-                    "image_url": {"url": image_url(tmp_path, "blue")},
-                },
-            ],
-        }
-    ]
+    original = _legacy_history(image_url(tmp_path), image_url(tmp_path, "blue"))
     await store_history(db, original)
     actual_import = storage.ImageAssetStore.import_file
 
@@ -188,17 +176,7 @@ async def test_resume_after_history_commit_reports_already_done(
     maintenance_env, tmp_path
 ):
     db, _ = maintenance_env
-    await store_history(
-        db,
-        [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "image_url", "image_url": {"url": image_url(tmp_path)}}
-                ],
-            }
-        ],
-    )
+    await store_history(db, _legacy_history(image_url(tmp_path)))
     actual_commit = maintenance.commit_migrated_history
 
     async def lose_response(*args, **kwargs):
@@ -220,17 +198,7 @@ async def test_changed_source_during_import_is_not_overwritten(
     maintenance_env, tmp_path
 ):
     db, _ = maintenance_env
-    await store_history(
-        db,
-        [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "image_url", "image_url": {"url": image_url(tmp_path)}}
-                ],
-            }
-        ],
-    )
+    await store_history(db, _legacy_history(image_url(tmp_path)))
     actual_commit = maintenance.commit_migrated_history
     changed = [{"role": "user", "content": "new source"}]
 
@@ -251,14 +219,7 @@ async def test_damaged_backup_is_rejected_before_image_publication(
     maintenance_env, tmp_path
 ):
     db, _ = maintenance_env
-    original = [
-        {
-            "role": "user",
-            "content": [
-                {"type": "image_url", "image_url": {"url": image_url(tmp_path)}}
-            ],
-        }
-    ]
+    original = _legacy_history(image_url(tmp_path))
     await store_history(db, original)
     result = await maintenance.run_image_history_maintenance(db, "legacy")
     backup = Path(result["backup_directory"]) / "database.sqlite"
@@ -285,21 +246,11 @@ async def test_large_text_is_preserved_when_output_cannot_fit(maintenance_env):
 
 
 @pytest.mark.asyncio
-async def test_retry_reclaims_only_owned_partial_images_before_capacity_check(
-    maintenance_env, tmp_path, monkeypatch
-):
+async def test_retry_reclaims_only_owned_partial_images(maintenance_env, tmp_path):
     import uuid
 
     db, root = maintenance_env
-    original = [
-        {
-            "role": "user",
-            "content": [
-                {"type": "image_url", "image_url": image_url(tmp_path)},
-                {"type": "image_url", "image_url": image_url(tmp_path, "blue")},
-            ],
-        }
-    ]
+    original = _legacy_history(image_url(tmp_path), image_url(tmp_path, "blue"))
     await store_history(db, original)
     prepared = await maintenance.run_image_history_maintenance(db, "legacy")
     namespace = uuid.UUID(prepared["task_id"])
@@ -312,11 +263,6 @@ async def test_retry_reclaims_only_owned_partial_images_before_capacity_check(
         own.append(part)
     unrelated = root / "image_assets" / f"{uuid.uuid4()}.part"
     unrelated.write_bytes(b"unrelated" * 20)
-    monkeypatch.setattr(
-        maintenance,
-        "DEFAULT_MAX_TOTAL_BYTES",
-        prepared["additional_image_bytes"] + unrelated.stat().st_size,
-    )
     again = await maintenance.run_image_history_maintenance(db, "legacy")
     assert again["reclaimable_staging_bytes"] == 600
     assert all(path.exists() for path in own)
