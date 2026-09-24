@@ -43,6 +43,68 @@ async def prepare_request_images(
         finalize: Generate notices after captioning or the request hook finishes.
         supports_image: Whether the final provider accepts visual input.
     """
+    if req.image_context is not None:
+        context = req.image_context
+        parts = []
+        index = sum(
+            ref.source_message_id is None for ref in context.references.values()
+        )
+        for part in req.extra_user_content_parts:
+            ref = None
+            temporary = False
+            if isinstance(part, ImageURLPart):
+                ref = part.image_url.url
+                temporary = part._no_save
+            elif isinstance(part, dict) and part.get("type") == "image_url":
+                ref = part["image_url"]["url"]
+                temporary = bool(part.get("_no_save"))
+            if ref is None:
+                parts.append(part)
+                continue
+            source_message_id, source_index = req.image_sources.get(ref, (None, index))
+            captured = await context.capture(
+                ref,
+                temporary=temporary,
+                reuse=True,
+                source_message_id=source_message_id,
+                image_index=source_index,
+                max_size=max_size,
+                event=event,
+            )
+            index += 1
+            parts.append(captured)
+            key = (temporary, ref)
+            prepared[ref] = context.capture_results[key]
+        for ref in normalize_and_dedupe_strings(req.image_urls):
+            source_message_id, source_index = req.image_sources.get(ref, (None, index))
+            captured = await context.capture(
+                ref,
+                reuse=True,
+                source_message_id=source_message_id,
+                image_index=source_index,
+                max_size=max_size,
+                event=event,
+            )
+            index += 1
+            if not any(part is captured for part in parts):
+                parts.append(captured)
+            prepared[ref] = context.capture_results[(False, ref)]
+        req.extra_user_content_parts = parts
+        req.image_urls = []
+        # Plugin deletion must also remove the pending visual, not just its marker.
+        retained = {
+            context.part_visual_keys[id(part)]
+            for part in parts
+            if id(part) in context.part_visual_keys
+        }
+        for key in list(context.pending_visuals):
+            if key not in retained and (
+                key not in context.retrieval_visuals
+                or key in context.part_visual_keys.values()
+            ):
+                del context.pending_visuals[key]
+        return
+
     output_dir = output_dir if output_dir is not None else Path(get_astrbot_temp_path())
     req.image_urls = normalize_and_dedupe_strings(req.image_urls)
     refs = list(req.image_urls)

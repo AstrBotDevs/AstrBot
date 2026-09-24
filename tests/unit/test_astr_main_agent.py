@@ -58,7 +58,11 @@ def mock_provider():
 def mock_context():
     """Create a mock Context."""
     ctx = MagicMock()
-    ctx.get_config.return_value = {}
+    # These isolated runner tests exercise the explicit legacy compatibility path.
+    # Default managed-image behavior is covered with real storage in M6 tests.
+    ctx.get_config.return_value = {
+        "provider_settings": {"image_context_enabled": False}
+    }
     ctx.get_using_provider_async = AsyncMock(
         side_effect=lambda *args, **kwargs: ctx.get_using_provider(*args, **kwargs)
     )
@@ -181,7 +185,7 @@ async def test_proactive_agent_uses_session_fallback_models(
     )
     mock_context.get_config.return_value = {
         "agent_runner": {"config": {"model": model}},
-        "provider_settings": {},
+        "provider_settings": {"image_context_enabled": False},
     }
     mock_context.get_using_provider_async.side_effect = None
     mock_context.get_using_provider_async.return_value = mock_provider
@@ -290,6 +294,7 @@ async def test_proactive_agent_respects_runtime_and_safety_settings(
 ):
     """Build real proactive requests without loading tools outside the runtime."""
     provider_settings = {
+        "image_context_enabled": False,
         "computer_use_require_admin": False,
         "sandbox": {"booter": "cua"},
     }
@@ -795,6 +800,7 @@ class TestBuiltinToolInjection:
         req = ProviderRequest()
         mock_context.get_config.return_value = {
             "provider_settings": {
+                "image_context_enabled": False,
                 "web_search": True,
                 "websearch_provider": "baidu_ai_search",
             }
@@ -820,6 +826,7 @@ class TestBuiltinToolInjection:
         req = ProviderRequest()
         mock_context.get_config.return_value = {
             "provider_settings": {
+                "image_context_enabled": False,
                 "web_search": True,
                 "websearch_provider": "firecrawl",
             }
@@ -1401,6 +1408,7 @@ class TestEnsurePersonaAndSkills:
         mock_event.platform_meta.support_proactive_message = False
         mock_context.get_config.return_value = {
             "provider_settings": {
+                "image_context_enabled": False,
                 "web_search": True,
                 "websearch_provider": "baidu_ai_search",
             }
@@ -1408,6 +1416,7 @@ class TestEnsurePersonaAndSkills:
         config = module.MainAgentBuildConfig(
             tool_call_timeout=60,
             provider_settings={
+                "image_context_enabled": False,
                 "web_search": True,
                 "websearch_provider": "baidu_ai_search",
             },
@@ -1448,7 +1457,13 @@ class TestEnsurePersonaAndSkills:
         [(True, False), (True, True), (False, False)],
     )
     async def test_persona_empty_tools_keeps_local_runtime_builtin_tools(
-        self, mock_event, mock_context, mock_provider, role, allow_execution, allow_network
+        self,
+        mock_event,
+        mock_context,
+        mock_provider,
+        role,
+        allow_execution,
+        allow_network,
     ):
         module = ama
         persona = {"name": "locked", "prompt": "No tools.", "tools": []}
@@ -1459,6 +1474,7 @@ class TestEnsurePersonaAndSkills:
         mock_event.role = role
         mock_context.get_config.return_value = {
             "provider_settings": {
+                "image_context_enabled": False,
                 "computer_use_runtime": "local",
                 "computer_use_local_permissions": {
                     role: {
@@ -1597,7 +1613,8 @@ class TestDecorateLlmRequest:
         module = ama
         req = ProviderRequest(prompt="Hello")
         config = module.MainAgentBuildConfig(
-            tool_call_timeout=60, provider_settings={"prompt_prefix": "AI: "}
+            tool_call_timeout=60,
+            provider_settings={"image_context_enabled": False, "prompt_prefix": "AI: "},
         )
 
         with patch.object(mock_context, "get_config") as mock_get_config:
@@ -1616,7 +1633,10 @@ class TestDecorateLlmRequest:
         req = ProviderRequest(prompt="Hello")
         config = module.MainAgentBuildConfig(
             tool_call_timeout=60,
-            provider_settings={"prompt_prefix": "AI {{prompt}} - Please respond:"},
+            provider_settings={
+                "image_context_enabled": False,
+                "prompt_prefix": "AI {{prompt}} - Please respond:",
+            },
         )
 
         with patch.object(mock_context, "get_config") as mock_get_config:
@@ -1736,7 +1756,9 @@ class TestBuildMainAgent:
         module = ama
         mock_context.get_provider_by_id.return_value = None
         mock_context.get_using_provider.return_value = mock_provider
-        mock_context.get_config.return_value = {}
+        mock_context.get_config.return_value = {
+            "provider_settings": {"image_context_enabled": False}
+        }
 
         conv_mgr = mock_context.conversation_manager
         _setup_conversation_for_build(conv_mgr)
@@ -1765,7 +1787,9 @@ class TestBuildMainAgent:
         module = ama
         mock_context.get_provider_by_id.return_value = None
         mock_context.get_using_provider.return_value = mock_provider
-        mock_context.get_config.return_value = {}
+        mock_context.get_config.return_value = {
+            "provider_settings": {"image_context_enabled": False}
+        }
 
         conv_mgr = mock_context.conversation_manager
         _setup_conversation_for_build(conv_mgr)
@@ -1863,7 +1887,9 @@ class TestBuildMainAgent:
         mock_event.message_str = "/command"
         mock_context.get_provider_by_id.return_value = None
         mock_context.get_using_provider.return_value = mock_provider
-        mock_context.get_config.return_value = {}
+        mock_context.get_config.return_value = {
+            "provider_settings": {"image_context_enabled": False}
+        }
 
         conv_mgr = mock_context.conversation_manager
         _setup_conversation_for_build(conv_mgr)
@@ -1937,7 +1963,9 @@ class TestBuildMainAgent:
 
         mock_context.get_provider_by_id.return_value = None
         mock_context.get_using_provider.return_value = mock_provider
-        mock_context.get_config.return_value = {}
+        mock_context.get_config.return_value = {
+            "provider_settings": {"image_context_enabled": False}
+        }
 
         conv_mgr = mock_context.conversation_manager
         _setup_conversation_for_build(conv_mgr)
@@ -1956,6 +1984,7 @@ class TestBuildMainAgent:
                 config=module.MainAgentBuildConfig(
                     tool_call_timeout=60,
                     provider_settings={
+                        "image_context_enabled": False,
                         "image_compress_enabled": compression_enabled,
                         "image_compress_options": {"max_size": 4},
                     },
@@ -2004,7 +2033,9 @@ class TestBuildMainAgent:
 
         mock_context.get_provider_by_id.return_value = None
         mock_context.get_using_provider.return_value = mock_provider
-        mock_context.get_config.return_value = {}
+        mock_context.get_config.return_value = {
+            "provider_settings": {"image_context_enabled": False}
+        }
 
         conv_mgr = mock_context.conversation_manager
         _setup_conversation_for_build(conv_mgr)
@@ -2028,6 +2059,7 @@ class TestBuildMainAgent:
                 config=module.MainAgentBuildConfig(
                     tool_call_timeout=60,
                     provider_settings={
+                        "image_context_enabled": False,
                         "default_image_caption_provider_id": "caption-provider",
                     },
                 ),
@@ -2073,7 +2105,9 @@ class TestBuildMainAgent:
 
         mock_context.get_provider_by_id.return_value = caption_provider
         mock_context.get_using_provider.return_value = text_provider
-        mock_context.get_config.return_value = {}
+        mock_context.get_config.return_value = {
+            "provider_settings": {"image_context_enabled": False}
+        }
 
         conv_mgr = mock_context.conversation_manager
         _setup_conversation_for_build(conv_mgr)
@@ -2097,6 +2131,7 @@ class TestBuildMainAgent:
                 config=module.MainAgentBuildConfig(
                     tool_call_timeout=60,
                     provider_settings={
+                        "image_context_enabled": False,
                         "default_image_caption_provider_id": "caption-provider",
                     },
                 ),
@@ -2143,7 +2178,9 @@ class TestBuildMainAgent:
 
         mock_context.get_provider_by_id.return_value = caption_provider
         mock_context.get_using_provider.return_value = text_provider
-        mock_context.get_config.return_value = {}
+        mock_context.get_config.return_value = {
+            "provider_settings": {"image_context_enabled": False}
+        }
 
         conv_mgr = mock_context.conversation_manager
         _setup_conversation_for_build(conv_mgr)
@@ -2167,6 +2204,7 @@ class TestBuildMainAgent:
                 config=module.MainAgentBuildConfig(
                     tool_call_timeout=60,
                     provider_settings={
+                        "image_context_enabled": False,
                         "default_image_caption_provider_id": "caption-provider",
                     },
                 ),
@@ -2212,7 +2250,9 @@ class TestBuildMainAgent:
         mock_context.get_provider_by_id.side_effect = lambda provider_id: (
             image_provider if provider_id == "image-provider" else None
         )
-        mock_context.get_config.return_value = {}
+        mock_context.get_config.return_value = {
+            "provider_settings": {"image_context_enabled": False}
+        }
 
         with (
             patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
@@ -2262,7 +2302,9 @@ class TestBuildMainAgent:
             image_urls=[valid_image_path],
         )
         mock_context.get_provider_by_id.return_value = None
-        mock_context.get_config.return_value = {}
+        mock_context.get_config.return_value = {
+            "provider_settings": {"image_context_enabled": False}
+        }
 
         with (
             patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
@@ -2281,6 +2323,7 @@ class TestBuildMainAgent:
                     computer_use_runtime="none",
                     add_cron_tools=False,
                     provider_settings={
+                        "image_context_enabled": False,
                         "fallback_chat_models": ["missing-provider"],
                     },
                 ),
@@ -2305,7 +2348,9 @@ class TestBuildMainAgent:
 
         mock_context.get_provider_by_id.return_value = None
         mock_context.get_using_provider.return_value = mock_provider
-        mock_context.get_config.return_value = {}
+        mock_context.get_config.return_value = {
+            "provider_settings": {"image_context_enabled": False}
+        }
 
         conv_mgr = mock_context.conversation_manager
         _setup_conversation_for_build(conv_mgr)
@@ -2347,7 +2392,9 @@ class TestBuildMainAgent:
 
         mock_context.get_provider_by_id.return_value = None
         mock_context.get_using_provider.return_value = mock_provider
-        mock_context.get_config.return_value = {}
+        mock_context.get_config.return_value = {
+            "provider_settings": {"image_context_enabled": False}
+        }
 
         conv_mgr = mock_context.conversation_manager
         _setup_conversation_for_build(conv_mgr)
@@ -2390,7 +2437,9 @@ class TestBuildMainAgent:
 
         mock_context.get_provider_by_id.return_value = None
         mock_context.get_using_provider.return_value = mock_provider
-        mock_context.get_config.return_value = {}
+        mock_context.get_config.return_value = {
+            "provider_settings": {"image_context_enabled": False}
+        }
 
         conv_mgr = mock_context.conversation_manager
         _setup_conversation_for_build(conv_mgr)
@@ -2450,7 +2499,9 @@ class TestBuildMainAgent:
 
         mock_context.get_provider_by_id.return_value = None
         mock_context.get_using_provider.return_value = mock_provider
-        mock_context.get_config.return_value = {}
+        mock_context.get_config.return_value = {
+            "provider_settings": {"image_context_enabled": False}
+        }
 
         conv_mgr = mock_context.conversation_manager
         _setup_conversation_for_build(conv_mgr)
@@ -2471,7 +2522,9 @@ class TestBuildMainAgent:
         module = ama
         mock_context.get_provider_by_id.return_value = None
         mock_context.get_using_provider.return_value = mock_provider
-        mock_context.get_config.return_value = {}
+        mock_context.get_config.return_value = {
+            "provider_settings": {"image_context_enabled": False}
+        }
 
         conv_mgr = mock_context.conversation_manager
         _setup_conversation_for_build(conv_mgr)

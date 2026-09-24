@@ -13,8 +13,10 @@ from sqlalchemy.dialects.sqlite import dialect as sqlite_dialect
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import defer
+from sqlalchemy.orm.attributes import set_committed_value
 from sqlmodel import col, delete, desc, func, or_, select, text, update
 
+from astrbot.core import conversation_history_limits
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import (
     ApiKey,
@@ -22,8 +24,11 @@ from astrbot.core.db.po import (
     ChatUIProject,
     CommandConfig,
     CommandConflict,
+    ConversationImageCheckpoint,
+    ConversationImageRef,
     ConversationV2,
     CronJob,
+    ImageAsset,
     Persona,
     PersonaFolder,
     PlatformMessageHistory,
@@ -48,6 +53,15 @@ TxResult = T.TypeVar("TxResult")
 CRON_FIELD_NOT_SET = object()
 
 
+def _conversation_history_size():
+    """Build the SQL expression used for stored JSON byte-limit checks.
+
+    Returns:
+        SQL expression measuring the persisted JSON bytes.
+    """
+    return conversation_history_limits.history_size_bytes(ConversationV2.content)
+
+
 def _webchat_session_title_match(keyword: str):
     """Build a correlated EXISTS condition matching WebChat session titles.
 
@@ -70,6 +84,46 @@ def _webchat_session_title_match(keyword: str):
             )
         )
         .exists()
+    )
+
+
+def _authorized_image_catalog(conversation_id: str, user_id: str, platform_id: str):
+    """Build the shared metadata-only authorization query.
+
+    Args:
+        conversation_id: Server-selected conversation.
+        user_id: Server-selected owner.
+        platform_id: Server-selected platform.
+
+    Returns:
+        A query for active references, checkpoint order and asset state.
+    """
+    return (
+        select(
+            ConversationImageRef, ConversationImageCheckpoint.sequence, ImageAsset.state
+        )
+        .join(
+            ConversationV2,
+            ConversationV2.conversation_id == ConversationImageRef.conversation_id,
+        )
+        .join(
+            ConversationImageCheckpoint,
+            (
+                ConversationImageCheckpoint.conversation_id
+                == ConversationImageRef.conversation_id
+            )
+            & (
+                ConversationImageCheckpoint.checkpoint_id
+                == ConversationImageRef.checkpoint_id
+            ),
+        )
+        .join(ImageAsset, ImageAsset.asset_id == ConversationImageRef.asset_id)
+        .where(
+            ConversationImageRef.conversation_id == conversation_id,
+            ConversationV2.user_id == user_id,
+            ConversationV2.platform_id == platform_id,
+            ConversationImageCheckpoint.active == True,  # noqa: E712
+        )
     )
 
 
@@ -98,6 +152,13 @@ class SQLiteDatabase(BaseDatabase):
             await self._ensure_platform_message_history_checkpoint_column(conn)
             await self._ensure_chatui_project_workspace_columns(conn)
             await self._ensure_conversation_indexes(conn)
+            columns = await conn.execute(text("PRAGMA table_info(provider_stats)"))
+            if "request_details" not in {row[1] for row in columns.fetchall()}:
+                await conn.execute(
+                    text(
+                        "ALTER TABLE provider_stats ADD COLUMN request_details JSON NOT NULL DEFAULT '{}'"
+                    )
+                )
             # The table-level unique constraint already provides an index for UMO
             # lookups. Older schemas also created this redundant explicit index.
             await conn.execute(text("DROP INDEX IF EXISTS ix_umo_aliases_umo"))
@@ -326,6 +387,7 @@ class SQLiteDatabase(BaseDatabase):
                     start_time=start_time,
                     end_time=end_time,
                     time_to_first_token=time_to_first_token,
+                    request_details=stats.get("image_request", {}),
                 )
                 session.add(record)
                 await session.flush()
@@ -336,7 +398,188 @@ class SQLiteDatabase(BaseDatabase):
     # Conversation Management
     # ====
 
-    async def get_conversations(self, user_id=None, platform_id=None):
+    async def _conversation_with_history(self, session, cid, *conditions):
+        """Load one history only when SQLite reports it within the byte limit.
+
+        Args:
+            session: Active async database session.
+            cid: Conversation identity.
+            conditions: Additional SQL predicates for identity authorization.
+
+        Returns:
+            The conversation with its history, or None if it does not exist.
+
+        Raises:
+            HistoryTooLargeError: The persisted JSON exceeds the online limit.
+            ValueError: The row changed repeatedly during the bounded read.
+        """
+        max_bytes = conversation_history_limits.MAX_ONLINE_HISTORY_BYTES
+        history_size = _conversation_history_size()
+        byte_size = (
+            await session.execute(
+                select(history_size)
+                .where(ConversationV2.conversation_id == cid)
+                .where(*conditions)
+            )
+        ).scalar_one_or_none()
+        if byte_size is None:
+            return None
+        if byte_size > max_bytes:
+            raise conversation_history_limits.HistoryTooLargeError(
+                cid, byte_size, max_bytes
+            )
+
+        query = (
+            select(ConversationV2)
+            .where(
+                ConversationV2.conversation_id == cid,
+                history_size <= max_bytes,
+                *conditions,
+            )
+            .execution_options(populate_existing=True)
+        )
+        result = await session.execute(query)
+        conversation = result.scalar_one_or_none()
+        if conversation is not None:
+            return conversation
+
+        current_size = (
+            await session.execute(
+                select(history_size)
+                .where(ConversationV2.conversation_id == cid)
+                .where(*conditions)
+            )
+        ).scalar_one_or_none()
+        if current_size is None:
+            return None
+        if current_size > max_bytes:
+            raise conversation_history_limits.HistoryTooLargeError(
+                cid, current_size, max_bytes
+            )
+        result = await session.execute(query)
+        conversation = result.scalar_one_or_none()
+        if conversation is None:
+            raise ValueError("Conversation history changed while it was being loaded")
+        return conversation
+
+    async def _conversation_without_history(self, session, cid):
+        """Load conversation metadata without selecting or lazy-loading content.
+
+        Args:
+            session: Active async database session.
+            cid: Conversation identity.
+
+        Returns:
+            A conversation with ``content=None``, or None if it does not exist.
+        """
+        result = await session.execute(
+            select(ConversationV2)
+            .options(defer(ConversationV2.content))
+            .where(ConversationV2.conversation_id == cid)
+        )
+        conversation = result.scalar_one_or_none()
+        if conversation is not None:
+            set_committed_value(conversation, "content", None)
+        return conversation
+
+    async def _conversation_rows(self, session, query, *, include_history):
+        """Materialize a query while enforcing the SQL-side history limit.
+
+        Args:
+            session: Active async database session.
+            query: Ordered ConversationV2 query, including its filters and page.
+            include_history: Whether to return bounded history bodies.
+
+        Returns:
+            Conversation rows; metadata-only rows have ``content=None``.
+
+        Raises:
+            HistoryTooLargeError: A selected history exceeds the online byte limit.
+            ValueError: A history changed while it was being loaded.
+        """
+        if not include_history:
+            result = await session.execute(query.options(defer(ConversationV2.content)))
+            conversations = result.scalars().all()
+            for conversation in conversations:
+                set_committed_value(conversation, "content", None)
+            return conversations
+
+        max_bytes = conversation_history_limits.MAX_ONLINE_HISTORY_BYTES
+        history_size = _conversation_history_size()
+        size_query = query.with_only_columns(
+            ConversationV2.conversation_id,
+            history_size.label("history_byte_size"),
+            maintain_column_froms=True,
+        )
+        size_rows = (await session.execute(size_query)).all()
+        if not size_rows:
+            return []
+        for cid, byte_size in size_rows:
+            if byte_size > max_bytes:
+                raise conversation_history_limits.HistoryTooLargeError(
+                    cid, byte_size, max_bytes
+                )
+
+        result = await session.execute(
+            query.where(history_size <= max_bytes).execution_options(
+                populate_existing=True
+            )
+        )
+        conversations = result.scalars().all()
+        conversations_by_id = {
+            conversation.conversation_id: conversation for conversation in conversations
+        }
+        missing_ids = [
+            cid for cid, _byte_size in size_rows if cid not in conversations_by_id
+        ]
+        if missing_ids:
+            current_sizes = (
+                await session.execute(
+                    select(
+                        ConversationV2.conversation_id,
+                        history_size.label("history_byte_size"),
+                    ).where(ConversationV2.conversation_id.in_(missing_ids))
+                )
+            ).all()
+            current_size_by_id = dict(current_sizes)
+            for cid, byte_size in current_sizes:
+                if byte_size > max_bytes:
+                    raise conversation_history_limits.HistoryTooLargeError(
+                        cid, byte_size, max_bytes
+                    )
+            still_present = [cid for cid in missing_ids if cid in current_size_by_id]
+            if still_present:
+                latest = await session.execute(
+                    query.where(
+                        ConversationV2.conversation_id.in_(still_present),
+                        history_size <= max_bytes,
+                    ).execution_options(populate_existing=True)
+                )
+                conversations_by_id.update(
+                    {
+                        conversation.conversation_id: conversation
+                        for conversation in latest.scalars().all()
+                    }
+                )
+                unresolved = set(still_present) - conversations_by_id.keys()
+                if unresolved:
+                    raise ValueError(
+                        "Conversation history changed while it was being loaded"
+                    )
+
+        return [
+            conversations_by_id[cid]
+            for cid, _byte_size in size_rows
+            if cid in conversations_by_id
+        ]
+
+    async def get_conversations(
+        self,
+        user_id=None,
+        platform_id=None,
+        *,
+        include_history=True,
+    ):
         async with self.get_db() as session:
             session: AsyncSession
             query = select(ConversationV2)
@@ -347,28 +590,39 @@ class SQLiteDatabase(BaseDatabase):
                 query = query.where(ConversationV2.platform_id == platform_id)
             # order by
             query = query.order_by(desc(ConversationV2.created_at))
-            result = await session.execute(query)
+            return await self._conversation_rows(
+                session,
+                query,
+                include_history=include_history,
+            )
 
-            return result.scalars().all()
-
-    async def get_conversation_by_id(self, cid):
+    async def get_conversation_by_id(self, cid, *, include_history=True):
         async with self.get_db() as session:
-            session: AsyncSession
-            query = select(ConversationV2).where(ConversationV2.conversation_id == cid)
-            result = await session.execute(query)
-            return result.scalar_one_or_none()
+            if not include_history:
+                return await self._conversation_without_history(session, cid)
+            return await self._conversation_with_history(session, cid)
 
-    async def get_all_conversations(self, page=1, page_size=20):
+    async def get_all_conversations(
+        self,
+        page=1,
+        page_size=20,
+        *,
+        include_history=True,
+    ):
         async with self.get_db() as session:
             session: AsyncSession
             offset = (page - 1) * page_size
-            result = await session.execute(
+            query = (
                 select(ConversationV2)
                 .order_by(desc(ConversationV2.created_at))
                 .offset(offset)
-                .limit(page_size),
+                .limit(page_size)
             )
-            return result.scalars().all()
+            return await self._conversation_rows(
+                session,
+                query,
+                include_history=include_history,
+            )
 
     async def get_filtered_conversations(
         self,
@@ -540,8 +794,29 @@ class SQLiteDatabase(BaseDatabase):
                     .offset(offset)
                     .limit(page_size)
                 )
-            if not include_history:
+            history_size = _conversation_history_size()
+            selected_history_ids = []
+            if include_history:
+                max_bytes = conversation_history_limits.MAX_ONLINE_HISTORY_BYTES
+                size_rows = (
+                    await session.execute(
+                        result_query.with_only_columns(
+                            ConversationV2.conversation_id,
+                            history_size.label("history_byte_size"),
+                            maintain_column_froms=True,
+                        )
+                    )
+                ).all()
+                selected_history_ids = [cid for cid, _size in size_rows]
+                for cid, byte_size in size_rows:
+                    if byte_size > max_bytes:
+                        raise conversation_history_limits.HistoryTooLargeError(
+                            cid, byte_size, max_bytes
+                        )
+                result_query = result_query.where(history_size <= max_bytes)
+            else:
                 result_query = result_query.options(defer(ConversationV2.content))
+            bounded_result_query = result_query
             if (
                 not group_by_session
                 and sort_by == "created_at"
@@ -572,10 +847,70 @@ class SQLiteDatabase(BaseDatabase):
                     result_query = result_query.options(
                         defer(ConversationV2.content),
                     )
-                result = await session.execute(result_query, compiled.params)
+                result = await session.execute(
+                    result_query.execution_options(populate_existing=True),
+                    compiled.params,
+                )
             else:
-                result = await session.execute(result_query)
+                result = await session.execute(
+                    result_query.execution_options(populate_existing=True)
+                    if include_history
+                    else result_query
+                )
             conversations = result.scalars().all()
+            if include_history:
+                conversations_by_id = {
+                    conversation.conversation_id: conversation
+                    for conversation in conversations
+                }
+                missing_ids = [
+                    cid
+                    for cid in selected_history_ids
+                    if cid not in conversations_by_id
+                ]
+                if missing_ids:
+                    current_sizes = (
+                        await session.execute(
+                            select(
+                                ConversationV2.conversation_id,
+                                history_size.label("history_byte_size"),
+                            ).where(ConversationV2.conversation_id.in_(missing_ids))
+                        )
+                    ).all()
+                    current_size_by_id = dict(current_sizes)
+                    for cid, byte_size in current_sizes:
+                        if byte_size > max_bytes:
+                            raise conversation_history_limits.HistoryTooLargeError(
+                                cid, byte_size, max_bytes
+                            )
+                    still_present = [
+                        cid for cid in missing_ids if cid in current_size_by_id
+                    ]
+                    if still_present:
+                        latest = await session.execute(
+                            bounded_result_query.where(
+                                ConversationV2.conversation_id.in_(still_present),
+                                history_size <= max_bytes,
+                            ).execution_options(populate_existing=True)
+                        )
+                        conversations_by_id.update(
+                            {
+                                conversation.conversation_id: conversation
+                                for conversation in latest.scalars().all()
+                            }
+                        )
+                        if set(still_present) - conversations_by_id.keys():
+                            raise ValueError(
+                                "Conversation history changed while it was being loaded"
+                            )
+                conversations = [
+                    conversations_by_id[cid]
+                    for cid in selected_history_ids
+                    if cid in conversations_by_id
+                ]
+            else:
+                for conversation in conversations:
+                    set_committed_value(conversation, "content", None)
 
             return conversations, total
 
@@ -593,6 +928,559 @@ class SQLiteDatabase(BaseDatabase):
             )
             return [platform_id for platform_id in result.scalars() if platform_id]
 
+    async def list_conversation_images(
+        self,
+        conversation_id: str,
+        *,
+        user_id: str,
+        platform_id: str,
+        limit: int = 20,
+        cursor: tuple[int, str] | None = None,
+        source_message_id: str | None = None,
+        query: str | None = None,
+    ) -> tuple[list[dict], tuple[int, str] | None]:
+        """List a bounded, authorized metadata page in stable database order.
+
+        Args:
+            conversation_id: Server-selected conversation.
+            user_id: Server-selected owner.
+            platform_id: Server-selected platform.
+            limit: Page size, between one and twenty.
+            cursor: Exclusive previous checkpoint sequence and occurrence ID.
+            source_message_id: Optional exact platform source message.
+            query: Optional literal description or annotation substring.
+
+        Returns:
+            Metadata rows with bounded text snippets and an optional next cursor.
+
+        Raises:
+            ValueError: A pagination or filter input exceeds its bounds.
+        """
+        if type(limit) is not int or not 1 <= limit <= 20:
+            raise ValueError("Image catalog limit must be between 1 and 20")
+        if cursor is not None and (
+            not isinstance(cursor, tuple)
+            or len(cursor) != 2
+            or type(cursor[0]) is not int
+            or cursor[0] <= 0
+            or not isinstance(cursor[1], str)
+            or not 1 <= len(cursor[1]) <= 128
+        ):
+            raise ValueError("Invalid image catalog cursor")
+        if query is not None and (not isinstance(query, str) or len(query) > 256):
+            raise ValueError("Image catalog query exceeds 256 characters")
+        if source_message_id is not None and (
+            not isinstance(source_message_id, str) or len(source_message_id) > 512
+        ):
+            raise ValueError("Image source message ID exceeds 512 characters")
+        statement = _authorized_image_catalog(conversation_id, user_id, platform_id)
+        if cursor is not None:
+            sequence, occurrence = cursor
+            statement = statement.where(
+                or_(
+                    ConversationImageCheckpoint.sequence > sequence,
+                    (ConversationImageCheckpoint.sequence == sequence)
+                    & (ConversationImageRef.occurrence_id > occurrence),
+                )
+            )
+        if source_message_id is not None:
+            statement = statement.where(
+                ConversationImageRef.source_message_id == source_message_id
+            )
+        if query:
+            statement = statement.where(
+                or_(
+                    col(ConversationImageRef.description).contains(
+                        query, autoescape=True
+                    ),
+                    col(ConversationImageRef.user_annotation).contains(
+                        query, autoescape=True
+                    ),
+                )
+            )
+        statement = statement.order_by(
+            ConversationImageCheckpoint.sequence, ConversationImageRef.occurrence_id
+        ).limit(limit + 1)
+        async with self.get_db() as session:
+            rows = (await session.execute(statement)).all()
+        result = []
+        for ref, sequence, state in rows[:limit]:
+            item = ref.model_dump()
+            item.update(checkpoint_sequence=sequence, asset_state=state)
+            item["description"] = item["description"][:512]
+            item["user_annotation"] = item["user_annotation"][:512]
+            result.append(item)
+        next_cursor = (
+            (rows[limit - 1][1], rows[limit - 1][0].occurrence_id)
+            if len(rows) > limit
+            else None
+        )
+        return result, next_cursor
+
+    async def get_conversation_images(
+        self,
+        conversation_id: str,
+        occurrence_ids: list[str],
+        *,
+        user_id: str,
+        platform_id: str,
+        available_only: bool = False,
+    ) -> list[ConversationImageRef]:
+        """Read up to one hundred authorized current description records.
+
+        Args:
+            conversation_id: Server-selected conversation.
+            occurrence_ids: Bounded IDs to resolve, never authorization grants.
+            user_id: Server-selected owner.
+            platform_id: Server-selected platform.
+            available_only: Require a readable asset for a pending visual submission.
+
+        Returns:
+            Matching active records without loading conversation history.
+
+        Raises:
+            ValueError: IDs exceed the batch or identifier bounds.
+        """
+        if (
+            not isinstance(occurrence_ids, (list, tuple))
+            or len(occurrence_ids) > 100
+            or any(
+                not isinstance(item, str) or not 1 <= len(item) <= 128
+                for item in occurrence_ids
+            )
+        ):
+            raise ValueError("Image lookup requires at most 100 bounded occurrence IDs")
+        if not occurrence_ids:
+            return []
+        statement = _authorized_image_catalog(
+            conversation_id, user_id, platform_id
+        ).where(col(ConversationImageRef.occurrence_id).in_(occurrence_ids))
+        if available_only:
+            statement = statement.where(ImageAsset.state == "available")
+        async with self.get_db() as session:
+            return list((await session.execute(statement)).scalars())
+
+    async def update_image_description(
+        self,
+        conversation_id: str,
+        occurrence_id: str,
+        *,
+        user_id: str,
+        platform_id: str,
+        expected_checkpoint_id: str,
+        expected_version: int,
+        description: str,
+        status: str,
+        provider: str | None,
+        model: str | None,
+        representation: str | None,
+    ) -> bool:
+        """Commit a description only if its authorized turn and version still match.
+
+        Args:
+            conversation_id: Server-selected conversation.
+            occurrence_id: Existing occurrence to update.
+            user_id: Server-selected owner.
+            platform_id: Server-selected platform.
+            expected_checkpoint_id: Turn observed before the external model call.
+            expected_version: Description revision observed before that call.
+            description: Validated observation of at most 4096 characters.
+            status: Pending, ready or failed observation status.
+            provider: Provider identity, at most 256 characters.
+            model: Model identity, at most 256 characters.
+            representation: Inspected representation, at most 256 characters.
+
+        Returns:
+            Whether the conditional update succeeded, without resurrecting rows.
+
+        Raises:
+            ValueError: Description or provenance metadata is invalid.
+        """
+        from astrbot.core.image_asset_store import image_store_lock
+
+        if (
+            type(expected_version) is not int
+            or expected_version < 0
+            or not expected_checkpoint_id
+            or status not in {"pending", "ready", "failed"}
+            or not isinstance(description, str)
+            or len(description) > 4096
+            or (status == "ready" and not description.strip())
+            or any(
+                value is not None and (not isinstance(value, str) or len(value) > 256)
+                for value in (provider, model, representation)
+            )
+        ):
+            raise ValueError("Invalid image description metadata")
+        async with image_store_lock():
+            async with self.get_db() as session, session.begin():
+                statement = _authorized_image_catalog(
+                    conversation_id, user_id, platform_id
+                ).where(
+                    ConversationImageRef.occurrence_id == occurrence_id,
+                    ConversationImageRef.checkpoint_id == expected_checkpoint_id,
+                    ConversationImageRef.description_version == expected_version,
+                    ImageAsset.state == "available",
+                )
+                ref = (await session.execute(statement)).scalar_one_or_none()
+                if ref is None or (
+                    ref.description_status == "ready" and status != "ready"
+                ):
+                    return False
+                result = await session.execute(
+                    update(ConversationImageRef)
+                    .where(
+                        ConversationImageRef.conversation_id == conversation_id,
+                        ConversationImageRef.occurrence_id == occurrence_id,
+                        ConversationImageRef.checkpoint_id == expected_checkpoint_id,
+                        ConversationImageRef.description_version == expected_version,
+                    )
+                    .values(
+                        description=description,
+                        description_status=status,
+                        description_version=expected_version + 1,
+                        description_provider=provider,
+                        description_model=model,
+                        description_representation=representation,
+                    )
+                )
+                return result.rowcount == 1
+
+    async def update_image_annotation(
+        self,
+        conversation_id: str,
+        occurrence_id: str,
+        *,
+        user_id: str,
+        platform_id: str,
+        expected_checkpoint_id: str,
+        expected_annotation: str,
+        annotation: str,
+    ) -> bool:
+        """Conditionally update user corrections independently from observations.
+
+        Args:
+            conversation_id: Server-selected conversation.
+            occurrence_id: Existing occurrence to update.
+            user_id: Server-selected owner.
+            platform_id: Server-selected platform.
+            expected_checkpoint_id: Expected active turn.
+            expected_annotation: Previously read correction text.
+            annotation: New user correction, at most 4096 characters.
+
+        Returns:
+            Whether the authorized field-level update succeeded.
+
+        Raises:
+            ValueError: Annotation text exceeds its bounds.
+        """
+        from astrbot.core.image_asset_store import image_store_lock
+
+        if not expected_checkpoint_id or any(
+            not isinstance(value, str) or len(value) > 4096
+            for value in (expected_annotation, annotation)
+        ):
+            raise ValueError("Invalid image annotation")
+        async with image_store_lock():
+            async with self.get_db() as session, session.begin():
+                statement = _authorized_image_catalog(
+                    conversation_id, user_id, platform_id
+                ).where(
+                    ConversationImageRef.occurrence_id == occurrence_id,
+                    ConversationImageRef.checkpoint_id == expected_checkpoint_id,
+                    ConversationImageRef.user_annotation == expected_annotation,
+                )
+                ref = (await session.execute(statement)).scalar_one_or_none()
+                if ref is None:
+                    return False
+                result = await session.execute(
+                    update(ConversationImageRef)
+                    .where(
+                        ConversationImageRef.conversation_id == conversation_id,
+                        ConversationImageRef.occurrence_id == occurrence_id,
+                        ConversationImageRef.checkpoint_id == expected_checkpoint_id,
+                        ConversationImageRef.user_annotation == expected_annotation,
+                    )
+                    .values(user_annotation=annotation)
+                )
+                return result.rowcount == 1
+
+    async def _sync_image_history(
+        self,
+        session,
+        conversation,
+        content,
+        *,
+        image_refs=None,
+        expected_history=None,
+        prune_image_refs=False,
+        clear_image_refs=False,
+        image_checkpoint_replacement=None,
+    ) -> tuple[set[str], set[str]]:
+        """Validate and synchronize image metadata within the caller's transaction.
+
+        Args:
+            session: Active transaction protected by the image store lock.
+            conversation: Conversation being changed.
+            content: New history; None leaves it unchanged.
+            image_refs: Trusted server-created association records, never JSON grants.
+            expected_history: Optional optimistic concurrency snapshot.
+            prune_image_refs: Explicit edit removes associations from deleted turns.
+            clear_image_refs: Reset all image associations, including compressed turns.
+            image_checkpoint_replacement: Old/new checkpoint and retained user occurrences.
+
+        Returns:
+            Removed occurrences and invalidated checkpoints for post-commit notification.
+
+        Raises:
+            ValueError: History or checkpoint order is invalid or stale.
+            PermissionError: An image lacks a valid conversation association.
+        """
+        from astrbot.core.agent.message import ImageRefPart, get_checkpoint_id
+
+        previous = conversation.content or []
+        if expected_history is not None and previous != expected_history:
+            raise ValueError("Conversation history changed; reload before editing")
+        history = previous if content is None else content
+        cid = conversation.conversation_id
+        checkpoints = list(
+            (
+                await session.execute(
+                    select(ConversationImageCheckpoint).where(
+                        ConversationImageCheckpoint.conversation_id == cid
+                    )
+                )
+            ).scalars()
+        )
+        associations = {
+            row.occurrence_id: row
+            for row in (
+                await session.execute(
+                    select(ConversationImageRef).where(
+                        ConversationImageRef.conversation_id == cid
+                    )
+                )
+            ).scalars()
+        }
+        strict_order = bool(associations or image_refs)
+        # Text-only history can be edited by legacy callers without image flags.
+        # Normalize only when its visible order conflicts with the ledger, avoiding
+        # a full ledger rewrite on ordinary appends. There are no image grants to
+        # invalidate. Regeneration uses the history before temporary truncation.
+        ordered = {row.checkpoint_id: row for row in checkpoints}
+        sequence = max((row.sequence for row in checkpoints), default=0)
+        normalize_text_order = False
+        if not associations:
+            last_sequence = 0
+            simulated = sequence
+            seen = set()
+            for message in previous if image_checkpoint_replacement else history:
+                checkpoint_id = get_checkpoint_id(message)
+                if not checkpoint_id:
+                    continue
+                row = ordered.get(checkpoint_id)
+                if row is None:
+                    simulated += 1
+                position = row.sequence if row is not None else simulated
+                if (
+                    checkpoint_id in seen
+                    or position <= last_sequence
+                    or (row is not None and not row.active)
+                ):
+                    normalize_text_order = True
+                seen.add(checkpoint_id)
+                last_sequence = position
+        if normalize_text_order:
+            for checkpoint in checkpoints:
+                await session.delete(checkpoint)
+            await session.flush()
+            ordered = {}
+            sequence = 0
+        # A previous text-only ordering cannot veto a newly normalized history.
+        histories = (
+            (previous, history)
+            if associations or image_checkpoint_replacement
+            else (history,)
+        )
+        for messages in histories:
+            seen = set()
+            last_sequence = 0
+            for message in messages:
+                checkpoint_id = get_checkpoint_id(message)
+                if not checkpoint_id:
+                    continue
+                if checkpoint_id in seen:
+                    if strict_order:
+                        raise ValueError("Duplicate conversation checkpoint")
+                    # Legacy duplicates have no image grants: the last marker is
+                    # the effective boundary for latest-turn operations.
+                    sequence += 1
+                    ordered[checkpoint_id].sequence = sequence
+                    continue
+                seen.add(checkpoint_id)
+                row = ordered.get(checkpoint_id)
+                if row is None:
+                    sequence += 1
+                    row = ConversationImageCheckpoint(
+                        conversation_id=cid,
+                        checkpoint_id=checkpoint_id,
+                        sequence=sequence,
+                    )
+                    session.add(row)
+                    ordered[checkpoint_id] = row
+                if strict_order and (not row.active or row.sequence <= last_sequence):
+                    raise ValueError("Conversation checkpoint order is invalid")
+                if not strict_order:
+                    row.active = True
+                last_sequence = row.sequence
+        affected_assets = set()
+        revoked_occurrences = set()
+        revoked_checkpoints = set()
+        if image_checkpoint_replacement is not None:
+            old_id, new_id, retained = image_checkpoint_replacement
+            old = ordered.get(old_id)
+            if old is None or not old.active or new_id in ordered:
+                raise ValueError("Invalid replacement checkpoint")
+            if old.sequence != max(
+                row.sequence for row in ordered.values() if row.active
+            ):
+                raise ValueError("Only the latest checkpoint can be replaced")
+            sequence += 1
+            replacement = ConversationImageCheckpoint(
+                conversation_id=cid,
+                checkpoint_id=new_id,
+                sequence=sequence,
+            )
+            session.add(replacement)
+            ordered[new_id] = replacement
+            old.active = False
+            revoked_checkpoints.add(old_id)
+            retained_ids = set(retained)
+            for occurrence_id in retained_ids:
+                ref = associations.get(occurrence_id)
+                if ref is None or ref.checkpoint_id != old_id:
+                    raise PermissionError(
+                        "Retained image does not belong to replaced turn"
+                    )
+            for occurrence_id, ref in list(associations.items()):
+                if ref.checkpoint_id != old_id:
+                    continue
+                if occurrence_id in retained_ids:
+                    ref.checkpoint_id = new_id
+                else:
+                    affected_assets.add(ref.asset_id)
+                    await session.delete(ref)
+                    revoked_occurrences.add(occurrence_id)
+                    del associations[occurrence_id]
+        if prune_image_refs:
+            current_cp = {get_checkpoint_id(item) for item in history}
+            removed_cp = (
+                {get_checkpoint_id(item) for item in previous} - current_cp - {None}
+            )
+            if clear_image_refs:
+                # An explicit reset also releases images retained after compression.
+                removed_cp.update(ordered)
+            if image_checkpoint_replacement:
+                removed_cp.discard(image_checkpoint_replacement[0])
+            old_occurrences = {
+                part.get("occurrence_id")
+                for item in previous
+                if isinstance(item.get("content"), list)
+                for part in item["content"]
+                if isinstance(part, dict) and part.get("type") == "image_ref"
+            }
+            new_occurrences = {
+                part.get("occurrence_id")
+                for item in history
+                if isinstance(item.get("content"), list)
+                for part in item["content"]
+                if isinstance(part, dict) and part.get("type") == "image_ref"
+            }
+            revoked_checkpoints.update(removed_cp)
+            for cp in removed_cp:
+                if cp in ordered:
+                    ordered[cp].active = False
+            for occurrence_id, ref in list(associations.items()):
+                if (
+                    ref.checkpoint_id in removed_cp
+                    or occurrence_id in old_occurrences - new_occurrences
+                ):
+                    affected_assets.add(ref.asset_id)
+                    await session.delete(ref)
+                    revoked_occurrences.add(occurrence_id)
+                    del associations[occurrence_id]
+        for supplied in image_refs or []:
+            if (
+                not isinstance(supplied, ConversationImageRef)
+                or supplied.conversation_id != cid
+            ):
+                raise PermissionError(
+                    "Image association must belong to this conversation"
+                )
+            checkpoint = ordered.get(supplied.checkpoint_id)
+            asset = await session.get(ImageAsset, supplied.asset_id)
+            if (
+                checkpoint is None
+                or not checkpoint.active
+                or asset is None
+                or asset.state != "available"
+            ):
+                raise PermissionError(
+                    "Image association requires an active turn and available asset"
+                )
+            existing = associations.get(supplied.occurrence_id)
+            if existing is not None:
+                if (
+                    existing.asset_id != supplied.asset_id
+                    or existing.checkpoint_id != supplied.checkpoint_id
+                ):
+                    raise PermissionError("Image occurrence cannot be reassigned")
+                continue
+            added = ConversationImageRef.model_validate(supplied.model_dump())
+            session.add(added)
+            associations[added.occurrence_id] = added
+        pending_references = []
+        for message in history:
+            checkpoint_id = get_checkpoint_id(message)
+            if checkpoint_id:
+                if any(
+                    ref.checkpoint_id != checkpoint_id for ref in pending_references
+                ):
+                    raise PermissionError("History image cannot move between turns")
+                pending_references.clear()
+                continue
+            if not isinstance(message.get("content"), list):
+                continue
+            for part in message["content"]:
+                if not isinstance(part, dict) or part.get("type") != "image_ref":
+                    continue
+                parsed = ImageRefPart.model_validate(part)
+                ref = associations.get(parsed.occurrence_id)
+                if ref is None or ref.asset_id != parsed.asset_id:
+                    raise PermissionError(
+                        "History image is not authorized in this conversation"
+                    )
+                checkpoint = ordered.get(ref.checkpoint_id)
+                if checkpoint is None or not checkpoint.active:
+                    raise PermissionError("History image belongs to an inactive turn")
+                pending_references.append(ref)
+        if pending_references:
+            raise PermissionError("Persisted images require a closing turn checkpoint")
+        await session.flush()
+        asset_ids = list(affected_assets)
+        for offset in range(0, len(asset_ids), 100):
+            await session.execute(
+                update(ImageAsset)
+                .where(
+                    col(ImageAsset.asset_id).in_(asset_ids[offset : offset + 100]),
+                    ~select(ConversationImageRef.asset_id)
+                    .where(ConversationImageRef.asset_id == ImageAsset.asset_id)
+                    .exists(),
+                )
+                .values(state="pending_delete")
+            )
+        return revoked_occurrences, revoked_checkpoints
+
     async def create_conversation(
         self,
         user_id,
@@ -603,7 +1491,32 @@ class SQLiteDatabase(BaseDatabase):
         cid=None,
         created_at=None,
         updated_at=None,
+        *,
+        image_branch_source=None,
     ):
+        """Create a conversation and optionally inherit an authorized image catalog.
+
+        Args:
+            user_id: Destination conversation owner.
+            platform_id: Destination platform.
+            content: Initial persisted history.
+            title: Optional title.
+            persona_id: Optional persona.
+            cid: Optional stable conversation ID.
+            created_at: Optional original creation timestamp.
+            updated_at: Optional original update timestamp.
+            image_branch_source: Server-validated source CID, owner, platform and
+                checkpoint boundary; never accept these as model-generated grants.
+
+        Returns:
+            The created conversation.
+
+        Raises:
+            PermissionError: Source identity or inherited images are unauthorized.
+            ValueError: The branch boundary or history is invalid.
+        """
+        from astrbot.core.image_asset_store import image_store_lock
+
         kwargs = {}
         if cid:
             kwargs["conversation_id"] = cid
@@ -611,63 +1524,353 @@ class SQLiteDatabase(BaseDatabase):
             kwargs["created_at"] = created_at
         if updated_at:
             kwargs["updated_at"] = updated_at
-        async with self.get_db() as session:
-            session: AsyncSession
-            async with session.begin():
+        async with image_store_lock():
+            async with self.get_db() as session, session.begin():
                 new_conversation = ConversationV2(
                     user_id=user_id,
-                    content=content or [],
+                    content=[],
                     platform_id=platform_id,
                     title=title,
                     persona_id=persona_id,
                     **kwargs,
                 )
                 session.add(new_conversation)
+                await session.flush()
+                if image_branch_source is not None:
+                    source_cid, owner, source_platform, boundary = image_branch_source
+                    source_identity = (
+                        await session.execute(
+                            select(ConversationV2.conversation_id).where(
+                                ConversationV2.conversation_id == source_cid,
+                                ConversationV2.user_id == owner,
+                                ConversationV2.platform_id == source_platform,
+                            )
+                        )
+                    ).scalar_one_or_none()
+                    source = (
+                        await self._conversation_with_history(
+                            session,
+                            source_cid,
+                            ConversationV2.user_id == owner,
+                            ConversationV2.platform_id == source_platform,
+                        )
+                        if source_identity is not None
+                        else None
+                    )
+                    if source is None:
+                        raise PermissionError("Source conversation is not authorized")
+                    await self._sync_image_history(session, source, None)
+                    boundary_row = await session.get(
+                        ConversationImageCheckpoint, (source_cid, boundary)
+                    )
+                    if boundary_row is None or not boundary_row.active:
+                        raise ValueError("Branch checkpoint is not active")
+                    inherited = list(
+                        (
+                            await session.execute(
+                                select(ConversationImageCheckpoint).where(
+                                    ConversationImageCheckpoint.conversation_id
+                                    == source_cid,
+                                    ConversationImageCheckpoint.active == True,  # noqa: E712
+                                    ConversationImageCheckpoint.sequence
+                                    <= boundary_row.sequence,
+                                )
+                            )
+                        ).scalars()
+                    )
+                    inherited_ids = {row.checkpoint_id for row in inherited}
+                    from astrbot.core.agent.message import get_checkpoint_id
+
+                    if any(
+                        get_checkpoint_id(item) not in inherited_ids
+                        for item in content or []
+                        if get_checkpoint_id(item)
+                    ):
+                        raise PermissionError(
+                            "Branch history exceeds its checkpoint boundary"
+                        )
+                    for row in inherited:
+                        session.add(
+                            ConversationImageCheckpoint(
+                                conversation_id=new_conversation.conversation_id,
+                                checkpoint_id=row.checkpoint_id,
+                                sequence=row.sequence,
+                            )
+                        )
+                    refs = (
+                        await session.execute(
+                            select(ConversationImageRef)
+                            .join(
+                                ConversationImageCheckpoint,
+                                (
+                                    ConversationImageCheckpoint.conversation_id
+                                    == ConversationImageRef.conversation_id
+                                )
+                                & (
+                                    ConversationImageCheckpoint.checkpoint_id
+                                    == ConversationImageRef.checkpoint_id
+                                ),
+                            )
+                            .where(
+                                ConversationImageRef.conversation_id == source_cid,
+                                ConversationImageCheckpoint.active == True,  # noqa: E712
+                                ConversationImageCheckpoint.sequence
+                                <= boundary_row.sequence,
+                            )
+                        )
+                    ).scalars()
+                    for ref in refs:
+                        values = ref.model_dump()
+                        values["conversation_id"] = new_conversation.conversation_id
+                        session.add(ConversationImageRef.model_validate(values))
+                    await session.flush()
+                await self._sync_image_history(session, new_conversation, content or [])
+                new_conversation.content = content or []
                 return new_conversation
 
     async def update_conversation(
-        self, cid, title=None, persona_id=None, content=None, token_usage=None
+        self,
+        cid,
+        title=None,
+        persona_id=None,
+        content=None,
+        token_usage=None,
+        *,
+        image_refs=None,
+        expected_history=None,
+        expected_identity=None,
+        prune_image_refs=False,
+        clear_image_refs=False,
+        image_checkpoint_replacement=None,
     ):
-        async with self.get_db() as session:
-            session: AsyncSession
-            async with session.begin():
-                query = update(ConversationV2).where(
-                    col(ConversationV2.conversation_id) == cid,
+        """Update conversation history and image grants in one transaction.
+
+        Args:
+            cid: Conversation identity.
+            title: Optional replacement title.
+            persona_id: Optional replacement persona.
+            content: New history; omission preserves existing history and catalog.
+            token_usage: Optional usage value.
+            image_refs: Trusted association models with active turn and asset IDs.
+            expected_history: Snapshot required by interactive edit callers.
+            expected_identity: Expected (user_id, platform_id) checked in the
+                same transaction before writing the conversation.
+            prune_image_refs: Explicitly revoke references removed by an edit.
+            clear_image_refs: Reset the image catalog; requires an empty new history.
+            image_checkpoint_replacement: Old checkpoint, new checkpoint and user
+                occurrences retained while regenerating the last turn.
+
+        Returns:
+            The updated conversation, or None for an absent legacy target/no changes.
+
+        Raises:
+            ValueError: History is stale, ordering invalid or explicit target absent.
+            PermissionError: An image reference lacks a matching authorization.
+        """
+        from astrbot.core.image_asset_store import image_store_lock
+
+        if clear_image_refs:
+            if content != [] or image_checkpoint_replacement or image_refs:
+                raise ValueError(
+                    "Image catalog reset requires empty history and no new grants"
                 )
-                values = {}
-                if title is not None:
-                    values["title"] = title
-                if persona_id is not None:
-                    values["persona_id"] = persona_id
-                if content is not None:
-                    values["content"] = content
-                if token_usage is not None:
-                    values["token_usage"] = token_usage
-                if not values:
+            prune_image_refs = True
+        if (
+            content is None
+            and image_refs is None
+            and not prune_image_refs
+            and image_checkpoint_replacement is None
+            and expected_history is None
+            and expected_identity is None
+        ):
+            values = {}
+            if title is not None:
+                values["title"] = title
+            if persona_id is not None:
+                values["persona_id"] = persona_id
+            if token_usage is not None:
+                values["token_usage"] = token_usage
+            if values:
+                async with self.get_db() as session, session.begin():
+                    await session.execute(
+                        update(ConversationV2)
+                        .where(ConversationV2.conversation_id == cid)
+                        .values(**values)
+                    )
+                return await self.get_conversation_by_id(
+                    cid,
+                    include_history=False,
+                )
+            return None
+        revoked_occurrences, revoked_checkpoints = set(), set()
+        async with image_store_lock():
+            async with self.get_db() as session, session.begin():
+                if expected_identity is not None or expected_history is not None:
+                    # SQLite legacy mode does not start a transaction on SELECT.
+                    # Reserve the writer before reading the identity/snapshot so
+                    # another connection cannot change either before our commit.
+                    await session.execute(text("BEGIN IMMEDIATE"))
+                if expected_identity is not None:
+                    identity_result = await session.execute(
+                        select(
+                            ConversationV2.user_id,
+                            ConversationV2.platform_id,
+                        ).where(ConversationV2.conversation_id == cid)
+                    )
+                    actual_identity = identity_result.one_or_none()
+                    if actual_identity is None:
+                        raise ValueError("Conversation not found")
+                    if tuple(actual_identity) != expected_identity:
+                        raise PermissionError(
+                            "Conversation identity changed before the update"
+                        )
+                conversation = await self._conversation_with_history(session, cid)
+                if conversation is None:
+                    if (
+                        image_refs is not None
+                        or expected_history is not None
+                        or expected_identity is not None
+                        or prune_image_refs
+                        or image_checkpoint_replacement
+                    ):
+                        raise ValueError("Conversation not found")
                     return None
-                query = query.values(**values)
-                await session.execute(query)
-        return await self.get_conversation_by_id(cid)
+                if (
+                    content is not None
+                    or image_refs is not None
+                    or image_checkpoint_replacement
+                    or prune_image_refs
+                    or expected_history is not None
+                ):
+                    (
+                        revoked_occurrences,
+                        revoked_checkpoints,
+                    ) = await self._sync_image_history(
+                        session,
+                        conversation,
+                        content,
+                        image_refs=image_refs,
+                        expected_history=expected_history,
+                        prune_image_refs=prune_image_refs,
+                        clear_image_refs=clear_image_refs,
+                        image_checkpoint_replacement=image_checkpoint_replacement,
+                    )
+                if title is not None:
+                    conversation.title = title
+                if persona_id is not None:
+                    conversation.persona_id = persona_id
+                if content is not None:
+                    conversation.content = content
+                if token_usage is not None:
+                    conversation.token_usage = token_usage
+                if expected_identity is not None and content is not None:
+                    # A migration can expand tiny inline images into larger
+                    # references. Check the actual stored JSON before committing
+                    # so a successful migration never creates unreadable history.
+                    await session.flush()
+                    byte_size = await session.scalar(
+                        select(_conversation_history_size()).where(
+                            ConversationV2.conversation_id == cid
+                        )
+                    )
+                    max_bytes = conversation_history_limits.MAX_ONLINE_HISTORY_BYTES
+                    if byte_size > max_bytes:
+                        raise conversation_history_limits.HistoryTooLargeError(
+                            cid, byte_size, max_bytes
+                        )
+            from astrbot.core.image_context import ImageTurnContext
+
+            ImageTurnContext.notify_committed_change(
+                self,
+                cid,
+                revoked_occurrences=revoked_occurrences,
+                revoked_checkpoints=revoked_checkpoints,
+                persisted_references=image_refs or (),
+            )
+        if prune_image_refs or image_checkpoint_replacement:
+            from astrbot.core import logger
+            from astrbot.core.image_asset_store import collect_pending_images
+
+            try:
+                await collect_pending_images(self)
+            except Exception as exc:
+                logger.warning(
+                    "Image cleanup deferred after history update: %s",
+                    type(exc).__name__,
+                )
+        return conversation
+
+    async def _delete_image_conversations(self, *, cid=None, user_id=None) -> None:
+        """Remove conversations and release image grants in one locked transaction.
+
+        Args:
+            cid: A single conversation identity.
+            user_id: Owner whose conversations should all be removed.
+        """
+        from astrbot.core.image_asset_store import image_store_lock
+
+        async with image_store_lock():
+            async with self.get_db() as session, session.begin():
+                condition = (
+                    ConversationV2.conversation_id == cid
+                    if cid is not None
+                    else ConversationV2.user_id == user_id
+                )
+                conversations = select(ConversationV2.conversation_id).where(condition)
+                removed_conversations = list(
+                    (await session.execute(conversations)).scalars()
+                )
+                removed_assets = select(ConversationImageRef.asset_id).where(
+                    col(ConversationImageRef.conversation_id).in_(conversations)
+                )
+                surviving_assets = select(ConversationImageRef.asset_id).where(
+                    ~col(ConversationImageRef.conversation_id).in_(conversations)
+                )
+                await session.execute(
+                    update(ImageAsset)
+                    .where(
+                        col(ImageAsset.asset_id).in_(removed_assets),
+                        ~col(ImageAsset.asset_id).in_(surviving_assets),
+                    )
+                    .values(state="pending_delete")
+                )
+                await session.execute(
+                    delete(ConversationImageRef).where(
+                        col(ConversationImageRef.conversation_id).in_(conversations)
+                    )
+                )
+                await session.execute(
+                    delete(ConversationImageCheckpoint).where(
+                        col(ConversationImageCheckpoint.conversation_id).in_(
+                            conversations
+                        )
+                    )
+                )
+                await session.execute(delete(ConversationV2).where(condition))
+
+            from astrbot.core.image_context import ImageTurnContext
+
+            for removed_cid in removed_conversations:
+                ImageTurnContext.notify_committed_change(
+                    self, removed_cid, deleted=True
+                )
+
+        from astrbot.core import logger
+        from astrbot.core.image_asset_store import collect_pending_images
+
+        try:
+            await collect_pending_images(self)
+        except Exception as exc:
+            logger.warning(
+                "Image cleanup deferred after conversation deletion: %s",
+                type(exc).__name__,
+            )
 
     async def delete_conversation(self, cid) -> None:
-        async with self.get_db() as session:
-            session: AsyncSession
-            async with session.begin():
-                await session.execute(
-                    delete(ConversationV2).where(
-                        col(ConversationV2.conversation_id) == cid,
-                    ),
-                )
+        await self._delete_image_conversations(cid=cid)
 
     async def delete_conversations_by_user_id(self, user_id: str) -> None:
-        async with self.get_db() as session:
-            session: AsyncSession
-            async with session.begin():
-                await session.execute(
-                    delete(ConversationV2).where(
-                        col(ConversationV2.user_id) == user_id
-                    ),
-                )
+        await self._delete_image_conversations(user_id=user_id)
 
     async def get_session_conversations(
         self,

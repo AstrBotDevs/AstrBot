@@ -13,6 +13,7 @@ import math
 import mimetypes
 import os
 import shutil
+import stat
 import struct
 import subprocess
 import tempfile
@@ -341,12 +342,18 @@ def describe_media_ref(media_ref: object | None) -> str:
 
     ref_len = len(media_ref)
     if media_ref.startswith("data:"):
-        header, _, payload = media_ref.partition(",")
+        separator = media_ref.find(",")
+        header = media_ref[: min(separator if separator >= 0 else ref_len, 128)]
         mime_type = header[5:].split(";", 1)[0] or "unknown"
-        return f"data URI mime={mime_type!r} payload_len={len(payload)}"
+        return (
+            f"data URI mime={mime_type!r} payload_len={max(0, ref_len - separator - 1)}"
+        )
 
     if media_ref.startswith("base64://"):
-        return f"base64 media payload_len={len(media_ref.removeprefix('base64://'))}"
+        return f"base64 media payload_len={ref_len - len('base64://')}"
+
+    if ref_len > 4096:
+        return f"media reference len={ref_len}"
 
     parsed = urlparse(media_ref)
     if parsed.scheme in {"http", "https"}:
@@ -456,6 +463,114 @@ def _cleanup_paths(cleanup_paths: list[Path] | None) -> None:
             logger.warning("Failed to cleanup %s: %s", cleanup_path, exc)
 
 
+async def _materialize_image_ref(
+    media_ref: str, *, media_type: str, suffix: str
+) -> _LocalMediaFile:
+    """Resolve a local image or stream its Base64 payload to disk.
+
+    Args:
+        media_ref: A non-HTTP local or encoded reference.
+        media_type: Media family used for temporary names and MIME sniffing.
+        suffix: Fallback suffix for encoded content.
+
+    Returns:
+        A local file with explicit temporary cleanup ownership.
+
+    Raises:
+        ValueError: The reference or base64 syntax is invalid.
+        OSError: A local source or temporary output cannot be accessed.
+    """
+    offset = 0
+    mime_type = None
+    if is_file_uri(media_ref):
+        path = Path(file_uri_to_path(media_ref))
+        info = path.stat()
+        if not stat.S_ISREG(info.st_mode):
+            raise ValueError("Media source must be a regular file")
+        return _LocalMediaFile(path=path, mime_type=_guess_mime_type(path))
+    if media_ref.startswith("data:"):
+        separator = media_ref.find(",")
+        if separator < 0 or separator > 4096:
+            raise ValueError("Invalid base64 data URI header")
+        header = media_ref[5:separator].split(";")
+        if not any(part.lower() == "base64" for part in header[1:]):
+            raise ValueError("Data URI is not base64 encoded")
+        mime_type = header[0].strip() or None
+        offset = separator + 1
+    elif media_ref.startswith("base64://"):
+        offset = len("base64://")
+    else:
+        path = Path(media_ref)
+        try:
+            info = path.stat()
+        except OSError as exc:
+            if exc.errno not in {errno.ENOENT, errno.ENAMETOOLONG, errno.ENOTDIR}:
+                raise
+        else:
+            if not stat.S_ISREG(info.st_mode):
+                raise ValueError("Media source must be a regular file")
+            return _LocalMediaFile(path=path, mime_type=_guess_mime_type(path))
+
+    # Scan encoded length before decoding, without constructing a full compact copy.
+    count = 0
+    padding = 0
+    for start in range(offset, len(media_ref), 65536):
+        piece = "".join(media_ref[start : start + 65536].split())
+        if not piece:
+            continue
+        unpadded = piece.rstrip("=")
+        if "=" in unpadded or (padding and unpadded):
+            raise ValueError("Invalid base64 padding")
+        padding += len(piece) - len(unpadded)
+        count += len(piece)
+        if padding > 2:
+            raise ValueError("Invalid base64 padding")
+        await asyncio.sleep(0)
+    if padding and count % 4:
+        raise ValueError("Invalid base64 padding")
+    if not count or count % 4 == 1:
+        raise ValueError("Invalid base64 payload length")
+
+    target = _temp_media_path(
+        media_type, _extension_from_mime_type(mime_type) or suffix
+    )
+    cleanup_paths = [target]
+    try:
+        pending = ""
+        with target.open("xb") as output:
+            for start in range(offset, len(media_ref), 65536):
+                pending += "".join(media_ref[start : start + 65536].split())
+                end = len(pending) // 4 * 4
+                if end:
+                    decoded = base64.b64decode(pending[:end], validate=True)
+                    pending = pending[end:]
+                    if output.write(decoded) != len(decoded):
+                        raise OSError("Short media materialization write")
+                await asyncio.sleep(0)
+            if pending:
+                decoded = base64.b64decode(
+                    pending + "=" * (4 - len(pending)), validate=True
+                )
+                if output.write(decoded) != len(decoded):
+                    raise OSError("Short media materialization write")
+        if media_type == "image":
+            detected = detect_image_mime_type(target, default_mime_type=None)
+            if detected:
+                mime_type = detected
+                detected_suffix = _extension_from_mime_type(detected)
+                if detected_suffix and detected_suffix != target.suffix:
+                    renamed = _temp_media_path(media_type, detected_suffix)
+                    target.rename(renamed)
+                    target = renamed
+                    cleanup_paths[:] = [target]
+        return _LocalMediaFile(
+            path=target, mime_type=mime_type, cleanup_paths=cleanup_paths
+        )
+    except BaseException:
+        _cleanup_paths(cleanup_paths)
+        raise
+
+
 async def _materialize_media_ref(
     media_ref: MediaRefStr,
     *,
@@ -486,27 +601,35 @@ async def _materialize_media_ref(
         cleanup_paths.append(target_path)
         try:
             await download_file(media_ref, str(target_path))
-        except Exception:
+            mime_type = _guess_mime_type(target_path)
+            if media_type == "image":
+                detected_mime_type = await detect_image_mime_type_async(
+                    target_path,
+                    default_mime_type=None,
+                )
+                if detected_mime_type:
+                    mime_type = detected_mime_type
+                    detected_suffix = _extension_from_mime_type(detected_mime_type)
+                    if (
+                        detected_suffix
+                        and target_path.suffix.lower() != detected_suffix
+                    ):
+                        detected_path = _temp_media_path("image", detected_suffix)
+                        await asyncio.to_thread(target_path.rename, detected_path)
+                        cleanup_paths[-1] = detected_path
+                        target_path = detected_path
+            return _LocalMediaFile(
+                path=target_path,
+                mime_type=mime_type,
+                cleanup_paths=cleanup_paths,
+            )
+        except BaseException:
             _cleanup_paths(cleanup_paths)
             raise
-        mime_type = _guess_mime_type(target_path)
-        if media_type == "image":
-            detected_mime_type = await detect_image_mime_type_async(
-                target_path,
-                default_mime_type=None,
-            )
-            if detected_mime_type:
-                mime_type = detected_mime_type
-                detected_suffix = _extension_from_mime_type(detected_mime_type)
-                if detected_suffix and target_path.suffix.lower() != detected_suffix:
-                    detected_path = _temp_media_path("image", detected_suffix)
-                    await asyncio.to_thread(target_path.rename, detected_path)
-                    cleanup_paths[-1] = detected_path
-                    target_path = detected_path
-        return _LocalMediaFile(
-            path=target_path,
-            mime_type=mime_type,
-            cleanup_paths=cleanup_paths,
+
+    if media_type == "image":
+        return await _materialize_image_ref(
+            media_ref, media_type=media_type, suffix=suffix
         )
 
     if is_file_uri(media_ref):

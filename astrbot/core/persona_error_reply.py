@@ -79,7 +79,7 @@ async def resolve_event_conversation_persona_id(
     if not curr_cid:
         return None
     conversation = await conversation_manager.get_conversation(
-        event.unified_msg_origin, curr_cid
+        event.unified_msg_origin, curr_cid, include_history=False
     )
     if not conversation:
         return None

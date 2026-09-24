@@ -3,7 +3,7 @@ from __future__ import annotations
 import enum
 import json
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from anthropic.types import Message as AnthropicMessage
 from deprecated import deprecated
@@ -28,6 +28,9 @@ from astrbot.core.utils.media_utils import (
     is_recoverable_image_error,
     resolve_image_ref_to_base64_data,
 )
+
+if TYPE_CHECKING:
+    from astrbot.core.image_context import ImageTurnContext
 
 
 class ProviderType(enum.Enum):
@@ -118,6 +121,11 @@ class ProviderRequest:
     """附加的上次请求后工具调用的结果。参考: https://platform.openai.com/docs/guides/function-calling#handling-function-calls"""
     model: str | None = None
     """模型名称，为 None 时使用提供商的默认模型"""
+    image_context: ImageTurnContext | None = field(default=None, repr=False)
+    image_sources: dict[str, tuple[str | None, int]] = field(
+        default_factory=dict, repr=False
+    )
+    """Server-owned turn images; not part of the provider or persisted payload."""
 
     def __repr__(self) -> str:
         return (

@@ -137,6 +137,7 @@ async def test_restart_permission_matrix(
                 restart.event.unified_msg_origin,
                 "old-id",
                 history=[],
+                clear_image_refs=True,
             )
             restart.manager.new_conversation.assert_not_awaited()
         else:
@@ -239,6 +240,7 @@ async def test_restart_permissions_follow_pipeline_isolation(
                     event.unified_msg_origin,
                     "old-id",
                     history=[],
+                    clear_image_refs=True,
                 )
                 restart.manager.new_conversation.assert_not_awaited()
             else:

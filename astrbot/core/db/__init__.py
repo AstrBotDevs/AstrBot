@@ -13,6 +13,7 @@ from astrbot.core.db.po import (
     ChatUIProject,
     CommandConfig,
     CommandConflict,
+    ConversationImageRef,
     ConversationV2,
     CronJob,
     Persona,
@@ -129,16 +130,32 @@ class BaseDatabase(abc.ABC):
         self,
         user_id: str | None = None,
         platform_id: str | None = None,
+        *,
+        include_history: bool = True,
     ) -> list[ConversationV2]:
         """Get all conversations for a specific user and platform_id(optional).
 
-        content is not included in the result.
+        Args:
+            user_id: Optional owner filter.
+            platform_id: Optional platform filter.
+            include_history: Whether to load bounded history bodies.
         """
         ...
 
     @abc.abstractmethod
-    async def get_conversation_by_id(self, cid: str) -> ConversationV2:
-        """Get a specific conversation by its ID."""
+    async def get_conversation_by_id(
+        self, cid: str, *, include_history: bool = True
+    ) -> ConversationV2 | None:
+        """Get a specific conversation by ID, with a bounded history by default.
+
+        Args:
+            cid: Conversation identity.
+            include_history: Whether to load the history body. Metadata-only
+                results have ``content=None`` and never lazy-load it.
+
+        Raises:
+            HistoryTooLargeError: The stored body exceeds the online read limit.
+        """
         ...
 
     @abc.abstractmethod
@@ -146,8 +163,16 @@ class BaseDatabase(abc.ABC):
         self,
         page: int = 1,
         page_size: int = 20,
+        *,
+        include_history: bool = True,
     ) -> list[ConversationV2]:
-        """Get all conversations with pagination."""
+        """Get paginated conversations, optionally omitting history bodies.
+
+        Args:
+            page: One-based page number.
+            page_size: Maximum rows to return.
+            include_history: Whether to load bounded history bodies.
+        """
         ...
 
     @abc.abstractmethod
@@ -182,6 +207,130 @@ class BaseDatabase(abc.ABC):
         ...
 
     @abc.abstractmethod
+    async def list_conversation_images(
+        self,
+        conversation_id: str,
+        *,
+        user_id: str,
+        platform_id: str,
+        limit: int = 20,
+        cursor: tuple[int, str] | None = None,
+        source_message_id: str | None = None,
+        query: str | None = None,
+    ) -> tuple[list[dict], tuple[int, str] | None]:
+        """List a bounded, authorized metadata page in stable database order.
+
+        Args:
+            conversation_id: Server-selected conversation.
+            user_id: Server-selected owner.
+            platform_id: Server-selected platform.
+            limit: Page size, between one and twenty.
+            cursor: Exclusive previous checkpoint sequence and occurrence ID.
+            source_message_id: Optional exact platform source message.
+            query: Optional literal description or annotation substring.
+
+        Returns:
+            Metadata rows with bounded text snippets and an optional next cursor.
+
+        Raises:
+            ValueError: A pagination or filter input exceeds its bounds."""
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    async def get_conversation_images(
+        self,
+        conversation_id: str,
+        occurrence_ids: list[str],
+        *,
+        user_id: str,
+        platform_id: str,
+        available_only: bool = False,
+    ) -> list[ConversationImageRef]:
+        """Read up to one hundred authorized current description records.
+
+        Args:
+            conversation_id: Server-selected conversation.
+            occurrence_ids: Bounded IDs to resolve, never authorization grants.
+            user_id: Server-selected owner.
+            platform_id: Server-selected platform.
+            available_only: Require a readable asset for a pending visual submission.
+
+        Returns:
+            Matching active records without loading conversation history.
+
+        Raises:
+            ValueError: IDs exceed the batch or identifier bounds."""
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    async def update_image_description(
+        self,
+        conversation_id: str,
+        occurrence_id: str,
+        *,
+        user_id: str,
+        platform_id: str,
+        expected_checkpoint_id: str,
+        expected_version: int,
+        description: str,
+        status: str,
+        provider: str | None,
+        model: str | None,
+        representation: str | None,
+    ) -> bool:
+        """Commit a description only if its authorized turn and version still match.
+
+        Args:
+            conversation_id: Server-selected conversation.
+            occurrence_id: Existing occurrence to update.
+            user_id: Server-selected owner.
+            platform_id: Server-selected platform.
+            expected_checkpoint_id: Turn observed before the external model call.
+            expected_version: Description revision observed before that call.
+            description: Validated observation of at most 4096 characters.
+            status: Pending, ready or failed observation status.
+            provider: Provider identity, at most 256 characters.
+            model: Model identity, at most 256 characters.
+            representation: Inspected representation, at most 256 characters.
+
+        Returns:
+            Whether the conditional update succeeded, without resurrecting rows.
+
+        Raises:
+            ValueError: Description or provenance metadata is invalid."""
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    async def update_image_annotation(
+        self,
+        conversation_id: str,
+        occurrence_id: str,
+        *,
+        user_id: str,
+        platform_id: str,
+        expected_checkpoint_id: str,
+        expected_annotation: str,
+        annotation: str,
+    ) -> bool:
+        """Conditionally update user corrections independently from observations.
+
+        Args:
+            conversation_id: Server-selected conversation.
+            occurrence_id: Existing occurrence to update.
+            user_id: Server-selected owner.
+            platform_id: Server-selected platform.
+            expected_checkpoint_id: Expected active turn.
+            expected_annotation: Previously read correction text.
+            annotation: New user correction, at most 4096 characters.
+
+        Returns:
+            Whether the authorized field-level update succeeded.
+
+        Raises:
+            ValueError: Annotation text exceeds its bounds."""
+        raise NotImplementedError
+
+    @abc.abstractmethod
     async def create_conversation(
         self,
         user_id: str,
@@ -192,6 +341,8 @@ class BaseDatabase(abc.ABC):
         cid: str | None = None,
         created_at: datetime.datetime | None = None,
         updated_at: datetime.datetime | None = None,
+        *,
+        image_branch_source: tuple[str, str, str, str] | None = None,
     ) -> ConversationV2:
         """Create a new conversation."""
         ...
@@ -204,8 +355,15 @@ class BaseDatabase(abc.ABC):
         persona_id: str | None = None,
         content: list[dict] | None = None,
         token_usage: int | None = None,
+        *,
+        image_refs: list | None = None,
+        expected_history: list[dict] | None = None,
+        expected_identity: tuple[str, str] | None = None,
+        prune_image_refs: bool = False,
+        clear_image_refs: bool = False,
+        image_checkpoint_replacement: tuple[str, str, list[str]] | None = None,
     ) -> None:
-        """Update a conversation's history."""
+        """Update history and trusted image associations atomically."""
         ...
 
     @abc.abstractmethod

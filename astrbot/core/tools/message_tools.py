@@ -1,10 +1,14 @@
 import csv
 import io
 import json
+import mimetypes
 import os
+import re
 import shlex
+import threading
 import uuid
 from pathlib import Path
+from typing import BinaryIO
 
 from pydantic import Field
 from pydantic.dataclasses import dataclass
@@ -15,6 +19,16 @@ from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool, ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.computer.computer_client import get_booter
+from astrbot.core.db.po import ImageAsset
+from astrbot.core.image_asset_store import (
+    COPY_CHUNK_BYTES,
+    ImageAssetStore,
+    run_image_io,
+)
+from astrbot.core.image_context import (
+    MAX_CONTEXT_IMAGE_FRAMES,
+    MAX_CONTEXT_IMAGE_PIXELS,
+)
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.message_type import MessageType
@@ -31,6 +45,40 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_system_tmp_path,
     get_astrbot_temp_path,
 )
+
+_IMAGE_SEND_SUFFIX_BY_MIME = {
+    "image/bmp": ".bmp",
+    "image/gif": ".gif",
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/tiff": ".tiff",
+    "image/vnd.microsoft.icon": ".ico",
+    "image/webp": ".webp",
+    "image/x-portable-pixmap": ".ppm",
+}
+
+
+def _copy_catalog_image_stream(
+    source: BinaryIO, target: Path, stop: threading.Event
+) -> None:
+    """Copy one authorized image into an event-owned temporary file.
+
+    Args:
+        source: Verified image stream held open by the asset store.
+        target: Newly generated temporary path outside the asset store.
+        stop: Cooperative cancellation signal supplied by ``run_image_io``.
+
+    Raises:
+        OSError: Reading or writing fails, or copying is cancelled.
+    """
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with target.open("xb") as output:
+        while not stop.is_set():
+            chunk = source.read(COPY_CHUNK_BYTES)
+            if not chunk:
+                return
+            output.write(chunk)
+    raise InterruptedError("Image copy cancelled")
 
 
 def _file_send_allowed_roots(
@@ -78,6 +126,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
     description: str = (
         "Send message to the user. "
         "Supports various message types including `plain`, `image`, `record`, `video`, `file`, and `mention_user`. "
+        "Use `occurrence_id` on an image component to send an original selected from the current conversation's image catalog; it cannot be combined with `path` or `url`. "
         "Use this tool to send media files (`image`, `record`, `video`, `file`), "
         "or when you need to proactively message the user(such as cron job). For other normal text replies, you can output directly and no need to use this tool."
     )
@@ -109,6 +158,11 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                             "url": {
                                 "type": "string",
                                 "description": "URL for `image`, `record`, `video`, or `file` types.",
+                            },
+                            "occurrence_id": {
+                                "type": "string",
+                                "maxLength": 128,
+                                "description": "For `image` only, send an image selected from the current conversation's image catalog. Mutually exclusive with `path` and `url`.",
                             },
                             "mention_user_id": {
                                 "type": "string",
@@ -224,6 +278,8 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
             return "error: messages parameter is empty or invalid."
 
         components: list[Comp.BaseMessageComponent] = []
+        image_turn = getattr(context.context, "image_context", None)
+        catalog_occurrences: list[str] = []
         for idx, msg in enumerate(messages):
             if not isinstance(msg, dict):
                 return f"error: messages[{idx}] should be an object."
@@ -241,7 +297,94 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                 elif msg_type == "image":
                     path = msg.get("path")
                     url = msg.get("url")
-                    if path:
+                    if "occurrence_id" in msg:
+                        occurrence = msg.get("occurrence_id")
+                        if path is not None or url is not None:
+                            return f"error: messages[{idx}] must use only one of occurrence_id, path, or url for image."
+                        if (
+                            not isinstance(occurrence, str)
+                            or not occurrence.strip()
+                            or len(occurrence) > 128
+                        ):
+                            return f"error: messages[{idx}].occurrence_id is invalid."
+                        if str(session) != current_session:
+                            return "error: catalog images can only be sent to the current conversation."
+                        if image_turn is None or not image_turn.configured:
+                            return "error: the current conversation's image catalog is unavailable."
+                        if (
+                            getattr(
+                                getattr(image_turn, "event", None),
+                                "unified_msg_origin",
+                                current_session,
+                            )
+                            != current_session
+                        ):
+                            return "error: the current conversation's image catalog is unavailable."
+
+                        target_path = None
+                        try:
+                            authorized = await image_turn.authorize_visuals(
+                                [occurrence]
+                            )
+                            reference = await image_turn.get_reference(occurrence)
+                            image_turn.check_visual_authorization([occurrence])
+                            if occurrence not in authorized or reference is None:
+                                return "error: this image is unavailable in the current conversation."
+
+                            # The reference was just authorized; use its asset ID
+                            # only to select a whitelisted temporary suffix. The
+                            # store rechecks the association before opening bytes.
+                            async with image_turn.db.get_db() as db_session:
+                                asset = await db_session.get(
+                                    ImageAsset, reference.asset_id
+                                )
+                                mime_type = (
+                                    asset.mime_type if asset is not None else None
+                                )
+                            if not isinstance(mime_type, str):
+                                return "error: this image is unavailable in the current conversation."
+                            suffix = _IMAGE_SEND_SUFFIX_BY_MIME.get(mime_type)
+                            if suffix is None:
+                                suffix = mimetypes.guess_extension(mime_type) or ".img"
+                                if not re.fullmatch(r"\.[A-Za-z0-9]{1,10}", suffix):
+                                    suffix = ".img"
+
+                            store = ImageAssetStore(
+                                image_turn.db,
+                                max_pixels=MAX_CONTEXT_IMAGE_PIXELS,
+                                max_frames=MAX_CONTEXT_IMAGE_FRAMES,
+                            )
+                            target_path = (
+                                Path(get_astrbot_temp_path())
+                                / f"image-send-{uuid.uuid4()}{suffix}"
+                            )
+                            context.context.event.track_temporary_local_file(
+                                str(target_path)
+                            )
+                            async with store.open_image(
+                                conversation_id=image_turn.conversation_id,
+                                occurrence_id=occurrence,
+                                user_id=image_turn.user_id,
+                                platform_id=image_turn.platform_id,
+                            ) as source:
+                                await run_image_io(
+                                    _copy_catalog_image_stream, source, target_path
+                                )
+                            components.append(
+                                Comp.Image.fromFileSystem(path=str(target_path))
+                            )
+                            catalog_occurrences.append(occurrence)
+                        except Exception:
+                            if target_path is not None:
+                                try:
+                                    target_path.unlink(missing_ok=True)
+                                    context.context.event.untrack_temporary_local_file(
+                                        str(target_path)
+                                    )
+                                except OSError:
+                                    pass
+                            return "error: this image is unavailable in the current conversation."
+                    elif path:
                         local_path, _ = await self._resolve_path_from_sandbox(
                             context, path, component_type="image"
                         )
@@ -337,12 +480,27 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                 return f"error: invalid session: {session}"
 
         message_chain = MessageChain(chain=components)
+        if catalog_occurrences:
+            try:
+                authorized = await image_turn.authorize_visuals(catalog_occurrences)
+                if not set(catalog_occurrences).issubset(authorized):
+                    return (
+                        "error: this image is unavailable in the current conversation."
+                    )
+                for occurrence in dict.fromkeys(catalog_occurrences):
+                    if await image_turn.get_reference(occurrence) is None:
+                        return "error: this image is unavailable in the current conversation."
+                image_turn.check_visual_authorization(catalog_occurrences)
+            except Exception:
+                return "error: this image is unavailable in the current conversation."
         try:
             sent = await context.context.context.send_message(
                 target_session,
                 message_chain,
             )
         except Exception as exc:
+            if catalog_occurrences:
+                return "error: failed to send the selected conversation image."
             return f"error: failed to send message to session {target_session}: {exc}"
         if not sent:
             return f"error: failed to find platform for session {target_session}."

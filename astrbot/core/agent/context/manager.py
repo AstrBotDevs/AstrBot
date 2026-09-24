@@ -1,9 +1,11 @@
 from astrbot import logger
+from astrbot.core.image_request_budget import ImageBudgetExceeded
+from astrbot.core.utils.media_utils import is_recoverable_image_error
 
 from ..message import Message
 from .compressor import LLMSummaryCompressor, TruncateByTurnsCompressor
 from .config import ContextConfig
-from .token_counter import EstimateTokenCounter
+from .token_counter import EstimateTokenCounter, estimate_preview_tokens
 from .truncator import ContextTruncator
 
 
@@ -36,6 +38,8 @@ class ContextManager:
                 keep_recent_ratio=config.llm_compress_keep_recent_ratio,
                 instruction_text=config.llm_compress_instruction,
                 token_counter=self.token_counter,
+                strip_images=config.strip_summary_images,
+                image_context=config.image_context,
             )
         else:
             self.compressor = TruncateByTurnsCompressor(
@@ -66,8 +70,21 @@ class ContextManager:
 
             # 2. 基于 token 的压缩
             if self.config.max_context_tokens > 0:
-                total_tokens = self.token_counter.count_tokens(
-                    result, trusted_token_usage
+                count_messages = result
+                visual_tokens = 0
+                if self.config.image_context is not None:
+                    count_messages = await self.config.image_context.project_messages(
+                        result
+                    )
+                    estimates = await estimate_preview_tokens(
+                        self.config.image_context.pending_visuals.values()
+                    )
+                    visual_tokens = estimates["tokens"]
+                    # Prior usage describes a different request, not this projection.
+                    trusted_token_usage = 0
+                total_tokens = (
+                    self.token_counter.count_tokens(count_messages, trusted_token_usage)
+                    + visual_tokens
                 )
 
                 if self.compressor.should_compress(
@@ -76,7 +93,14 @@ class ContextManager:
                     result = await self._run_compression(result, total_tokens)
 
             return result
+        except ImageBudgetExceeded:
+            raise
         except Exception as e:
+            if self.config.image_context is not None and (
+                isinstance(e, MemoryError)
+                or (isinstance(e, OSError) and not is_recoverable_image_error(e))
+            ):
+                raise
             logger.error(f"Error during context processing: {e}", exc_info=True)
             return messages
 
@@ -98,7 +122,17 @@ class ContextManager:
         messages = await self.compressor(messages)
 
         # double check
-        tokens_after_summary = self.token_counter.count_tokens(messages)
+        count_messages = messages
+        visual_tokens = 0
+        if self.config.image_context is not None:
+            count_messages = await self.config.image_context.project_messages(messages)
+            estimates = await estimate_preview_tokens(
+                self.config.image_context.pending_visuals.values()
+            )
+            visual_tokens = estimates["tokens"]
+        tokens_after_summary = (
+            self.token_counter.count_tokens(count_messages) + visual_tokens
+        )
 
         # calculate compress rate
         compress_rate = (tokens_after_summary / self.config.max_context_tokens) * 100

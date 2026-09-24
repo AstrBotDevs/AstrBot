@@ -11,6 +11,7 @@ from astrbot import logger
 from astrbot.core.agent.message import ContentPart, Message
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.exceptions import EmptyModelOutputError
+from astrbot.core.image_request_budget import current_image_request
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, TokenUsage, ToolCallsResult
 
@@ -276,10 +277,16 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
 
         if tool_calls_result:
             if isinstance(tool_calls_result, ToolCallsResult):
-                context_query.extend(tool_calls_result.to_openai_messages())
+                context_query.extend(
+                    self._ensure_message_to_dicts(
+                        tool_calls_result.to_openai_messages()
+                    )
+                )
             else:
                 for result in tool_calls_result:
-                    context_query.extend(result.to_openai_messages())
+                    context_query.extend(
+                        self._ensure_message_to_dicts(result.to_openai_messages())
+                    )
 
         if self._context_contains_image(context_query):
             context_query = await self._materialize_context_image_parts(context_query)
@@ -353,6 +360,7 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
                 extra_body=extra_body,
             ),
             max_attempts=request_max_retries,
+            image_request_payload={**payloads, **extra_body},
         )
         if not isinstance(response, Response):
             raise TypeError(
@@ -422,6 +430,7 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
                 extra_body=extra_body,
             ),
             max_attempts=request_max_retries,
+            image_request_payload={**payloads, **extra_body},
         )
 
         response_id: str | None = None
@@ -603,7 +612,9 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
                 output=output_tokens,
             )
         else:
-            llm_response.usage = TokenUsage()
+            llm_response.usage = (
+                None if current_image_request.get() is not None else TokenUsage()
+            )
 
         has_text = bool((llm_response.completion_text or "").strip())
         has_reasoning = bool((llm_response.reasoning_content or "").strip())

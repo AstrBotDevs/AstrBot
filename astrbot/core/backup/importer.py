@@ -7,9 +7,13 @@
 - 版本匹配时也需要用户确认
 """
 
+import asyncio
+import hashlib
 import json
 import os
 import shutil
+import stat
+import uuid
 import zipfile
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -21,6 +25,10 @@ from sqlalchemy import delete
 from astrbot.core import logger
 from astrbot.core.config.default import VERSION
 from astrbot.core.db import BaseDatabase
+from astrbot.core.image_asset_store import (
+    COPY_CHUNK_BYTES,
+    image_store_lock,
+)
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_data_path,
     get_astrbot_knowledge_base_path,
@@ -30,9 +38,12 @@ from astrbot.core.utils.version_comparator import VersionComparator
 
 # 从共享常量模块导入
 from .constants import (
+    IMAGE_BACKUP_TABLES,
+    IMAGE_MEDIA_PREFIX,
     KB_METADATA_MODELS,
     MAIN_DB_MODELS,
     get_backup_directories,
+    validate_image_backup_data,
 )
 
 if TYPE_CHECKING:
@@ -377,6 +388,20 @@ class AstrBotImporter:
         Returns:
             ImportResult: 导入结果
         """
+        async with image_store_lock():
+            return await self._import_locked(zip_path, mode, progress_callback)
+
+    async def _import_locked(self, zip_path, mode, progress_callback) -> ImportResult:
+        """Restore while image writes and collection are excluded.
+
+        Args:
+            zip_path: Archive to restore.
+            mode: Existing database replacement mode.
+            progress_callback: Optional progress reporter.
+
+        Returns:
+            Restore status, including media preflight failures.
+        """
         result = ImportResult()
 
         if not os.path.exists(zip_path):
@@ -419,11 +444,37 @@ class AstrBotImporter:
                     main_data_content = zf.read("databases/main_db.json")
                     main_data = json.loads(main_data_content)
 
+                    await self._prepare_image_restore(zf, main_data)
+
                     if mode == "replace":
                         await self._clear_main_db()
 
                     imported = await self._import_main_database(main_data)
                     result.imported_tables.update(imported)
+                    if main_data.get("image_assets"):
+                        async with self.main_db.get_db() as session:
+                            from sqlalchemy import select
+
+                            restored = {}
+                            for table in ("conversations", *IMAGE_BACKUP_TABLES):
+                                records = (
+                                    (
+                                        await session.execute(
+                                            select(MAIN_DB_MODELS[table])
+                                        )
+                                    )
+                                    .scalars()
+                                    .all()
+                                )
+                                restored[table] = [
+                                    record.model_dump() for record in records
+                                ]
+                            validate_image_backup_data(restored)
+                        await self._prepare_image_restore(zf, restored)
+                    result.imported_files["image_assets"] = sum(
+                        asset["state"] == "available"
+                        for asset in main_data.get("image_assets", [])
+                    )
                 except DatabaseClearError as e:
                     result.add_error(f"清空主数据库失败: {e}")
                     return result
@@ -528,11 +579,118 @@ class AstrBotImporter:
         if version_check["status"] == "minor_diff":
             logger.warning(f"版本差异警告: {version_check['message']}")
 
+    async def _prepare_image_restore(self, zf, data: dict) -> None:
+        """Preflight the image graph and bytes, then publish immutable originals.
+
+        No database row is changed here. The caller must hold the image store lock
+        until database restoration finishes. A later database failure leaves safe
+        orphan files that remain in the image store.
+
+        Args:
+            zf: Open backup archive.
+            data: Complete main database snapshot.
+
+        Raises:
+            ValueError: The archive graph, bytes or existing identity differ.
+            OSError: A destination is unsafe or a file cannot be published.
+        """
+        validate_image_backup_data(data)
+        assets = data.get("image_assets", [])
+        expected = {
+            IMAGE_MEDIA_PREFIX + asset["storage_key"]: asset
+            for asset in assets
+            if asset["state"] == "available"
+        }
+        entries = [
+            info
+            for info in zf.infolist()
+            if info.filename.startswith(IMAGE_MEDIA_PREFIX)
+        ]
+        names = [info.filename for info in entries]
+        if len(names) != len(set(names)) or set(names) != set(expected):
+            raise ValueError("Missing, unexpected or duplicate image media entries")
+        if not assets:
+            return
+        root = Path(get_astrbot_data_path()) / "image_assets"
+        if root.is_symlink():
+            raise OSError("Image asset directory must not be a symlink")
+        root.mkdir(parents=True, exist_ok=True)
+        for path in root.iterdir():
+            if path.name != ".store.lock" and not stat.S_ISREG(path.lstat().st_mode):
+                raise OSError("Unsafe entry in image asset directory")
+        publish = []
+        # Verify every source and conflicting destination before publishing any file.
+        for info in entries:
+            asset = expected[info.filename]
+            if info.file_size != asset["byte_size"] or info.file_size <= 0:
+                raise ValueError("Image backup size differs from metadata")
+            mode = info.external_attr >> 16
+            if stat.S_ISLNK(mode) or info.is_dir():
+                raise ValueError("Image archive member must be a regular file")
+            digest = hashlib.sha256()
+            size = 0
+            with zf.open(info) as source:
+                while chunk := source.read(COPY_CHUNK_BYTES):
+                    size += len(chunk)
+                    if size > asset["byte_size"]:
+                        raise ValueError("Image archive expands beyond declared size")
+                    digest.update(chunk)
+                    await asyncio.sleep(0)
+            if size != asset["byte_size"] or digest.hexdigest() != asset["sha256"]:
+                raise ValueError("Image backup checksum mismatch")
+            destination = root / asset["storage_key"]
+            if destination.exists():
+                if not stat.S_ISREG(destination.lstat().st_mode):
+                    raise OSError("Unsafe existing image original")
+                if destination.stat().st_size != asset["byte_size"]:
+                    raise ValueError("Image identity conflicts with existing original")
+                digest = hashlib.sha256()
+                with destination.open("rb") as existing:
+                    while chunk := existing.read(COPY_CHUNK_BYTES):
+                        digest.update(chunk)
+                        await asyncio.sleep(0)
+                if digest.hexdigest() != asset["sha256"]:
+                    raise ValueError("Image identity conflicts with existing original")
+            else:
+                publish.append((info, asset, destination))
+        for info, asset, destination in publish:
+            temporary = root / f"{uuid.uuid4()}.part"
+            try:
+                digest = hashlib.sha256()
+                size = 0
+                with zf.open(info) as source, temporary.open("xb") as target:
+                    while chunk := source.read(COPY_CHUNK_BYTES):
+                        size += len(chunk)
+                        if size > asset["byte_size"]:
+                            raise ValueError("Image archive changed during restore")
+                        digest.update(chunk)
+                        written = target.write(chunk)
+                        if written != len(chunk):
+                            raise OSError("Short image restore write")
+                        await asyncio.sleep(0)
+                    target.flush()
+                    os.fsync(target.fileno())
+                if size != asset["byte_size"] or digest.hexdigest() != asset["sha256"]:
+                    raise ValueError("Image archive changed during restore")
+                # The shared lock excludes publication and collection by other workers.
+                # Never replace an existing identity, even if external code wrote it.
+                if destination.exists() or destination.is_symlink():
+                    raise ValueError("Image destination appeared during restore")
+                os.replace(temporary, destination)
+                if os.name != "nt":
+                    directory_fd = os.open(root, os.O_RDONLY)
+                    try:
+                        os.fsync(directory_fd)
+                    finally:
+                        os.close(directory_fd)
+            finally:
+                temporary.unlink(missing_ok=True)
+
     async def _clear_main_db(self) -> None:
         """清空主数据库所有表"""
         async with self.main_db.get_db() as session:
             async with session.begin():
-                for table_name, model_class in MAIN_DB_MODELS.items():
+                for table_name, model_class in reversed(list(MAIN_DB_MODELS.items())):
                     try:
                         await session.execute(delete(model_class))
                         logger.debug(f"已清空表 {table_name}")
@@ -576,7 +734,10 @@ class AstrBotImporter:
 
         async with self.main_db.get_db() as session:
             async with session.begin():
-                for table_name, rows in data.items():
+                for table_name in MAIN_DB_MODELS:
+                    if table_name not in data:
+                        continue
+                    rows = data[table_name]
                     model_class = MAIN_DB_MODELS.get(table_name)
                     if not model_class:
                         logger.warning(f"未知的表: {table_name}")
@@ -592,8 +753,11 @@ class AstrBotImporter:
                             session.add(obj)
                             count += 1
                         except Exception as e:
+                            if table_name in IMAGE_BACKUP_TABLES:
+                                raise
                             logger.warning(f"导入记录到 {table_name} 失败: {e}")
 
+                    await session.flush()
                     imported[table_name] = count
                     logger.debug(f"导入表 {table_name}: {count} 条记录")
 

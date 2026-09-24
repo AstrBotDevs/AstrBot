@@ -5,6 +5,8 @@ from typing import Any, ClassVar, Literal, TypeVar, cast
 
 from pydantic import (
     BaseModel,
+    ConfigDict,
+    Field,
     GetCoreSchemaHandler,
     PrivateAttr,
     ValidationError,
@@ -21,7 +23,7 @@ class ContentPart(BaseModel):
 
     __content_part_registry: ClassVar[dict[str, type["ContentPart"]]] = {}
 
-    type: Literal["text", "think", "image_url", "audio_url"]
+    type: Literal["text", "think", "image_url", "image_ref", "audio_url"]
     _no_save: bool = PrivateAttr(default=False)
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
@@ -123,6 +125,56 @@ class ImageURLPart(ContentPart):
 
     type: str = "image_url"
     image_url: ImageURL
+
+
+class ImageRefPart(ContentPart):
+    """A versioned history reference, never a provider image payload.
+
+    Attributes:
+        occurrence_id: Stable identity of this image occurrence in a conversation.
+        asset_id: Identity of the immutable stored bytes, not a path or permission.
+        description: Bounded snapshot of a possibly incomplete model observation.
+        description_status: Whether the observation has been generated successfully.
+        description_version: Revision of the conversation-scoped observation.
+        schema_version: Version of the persisted reference format.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["image_ref"] = "image_ref"
+    schema_version: Literal[1] = 1
+    occurrence_id: str = Field(min_length=1, max_length=128, pattern=r"^[\w-]+$")
+    asset_id: str = Field(min_length=1, max_length=128, pattern=r"^[\w-]+$")
+    description: str = Field(default="", max_length=4096)
+    description_status: Literal["pending", "ready", "failed"] = "pending"
+    description_version: int = Field(default=0, ge=0)
+
+    @model_validator(mode="before")
+    @classmethod
+    def accept_context_marker(cls, value: Any) -> Any:
+        """Accept the framework's temporary marker without persisting it.
+
+        Args:
+            value: A reference model or dictionary from the context serializer.
+
+        Returns:
+            Input without the private marker, which ContentPart restores separately.
+        """
+        if isinstance(value, dict) and "_no_save" in value:
+            return {key: item for key, item in value.items() if key != "_no_save"}
+        return value
+
+    def to_text(self) -> str:
+        """Project a reference to ordinary text without resolving its asset.
+
+        Returns:
+            A labelled description snapshot, with no filesystem or network access.
+        """
+        label = (
+            f"[Image reference: {self.occurrence_id}; "
+            f"description status: {self.description_status}]"
+        )
+        return f"{label}\n{self.description}" if self.description else label
 
 
 class AudioURLPart(ContentPart):

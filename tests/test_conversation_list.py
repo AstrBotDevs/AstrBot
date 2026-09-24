@@ -1,6 +1,5 @@
 import json
 from datetime import datetime, timezone
-from pathlib import Path
 
 import pytest
 from sqlalchemy import event, text
@@ -13,9 +12,9 @@ from astrbot.core.db.sqlite import SQLiteDatabase
 
 @pytest.mark.asyncio
 async def test_filtered_conversations_summary_skips_content_and_applies_filters(
-    tmp_path: Path,
+    temp_db: SQLiteDatabase,
 ):
-    db = SQLiteDatabase(str(tmp_path / "conversations.db"))
+    db = temp_db
     await db.initialize()
 
     conversations = [
@@ -97,7 +96,7 @@ async def test_filtered_conversations_summary_skips_content_and_applies_filters(
         "astrbotweb",
         "other",
     ]
-    assert all("content" in sqlalchemy_inspect(item).unloaded for item in summary)
+    assert all(item.content is None for item in summary)
 
     manager_summary, manager_total = await ConversationManager(
         db,
@@ -199,9 +198,9 @@ async def test_filtered_conversations_summary_skips_content_and_applies_filters(
 
 @pytest.mark.asyncio
 async def test_filtered_conversations_can_paginate_complete_session_groups(
-    tmp_path: Path,
+    temp_db: SQLiteDatabase,
 ):
-    db = SQLiteDatabase(str(tmp_path / "grouped-conversations.db"))
+    db = temp_db
     await db.initialize()
 
     def conversation(cid: str, user_id: str, day: int) -> ConversationV2:
@@ -261,14 +260,14 @@ async def test_filtered_conversations_can_paginate_complete_session_groups(
         "b-old",
     ]
     assert [item.conversation_id for item in second_page] == ["a-new", "a-old"]
-    assert all("content" in sqlalchemy_inspect(item).unloaded for item in first_page)
+    assert all(item.content is None for item in first_page)
 
 
 @pytest.mark.asyncio
 async def test_conversation_indexes_are_idempotent_and_support_ordered_list(
-    tmp_path: Path,
+    temp_db: SQLiteDatabase,
 ):
-    db = SQLiteDatabase(str(tmp_path / "conversations.db"))
+    db = temp_db
     await db.initialize()
     await db.initialize()
 
@@ -301,9 +300,9 @@ async def test_conversation_indexes_are_idempotent_and_support_ordered_list(
 
 @pytest.mark.asyncio
 async def test_multi_platform_summary_uses_global_order_index(
-    tmp_path: Path,
+    temp_db: SQLiteDatabase,
 ):
-    db = SQLiteDatabase(str(tmp_path / "multi-platform.db"))
+    db = temp_db
     await db.initialize()
 
     async with db.get_db() as session:
@@ -349,7 +348,7 @@ async def test_multi_platform_summary_uses_global_order_index(
         "conversation-16",
         "conversation-15",
     ]
-    assert all("content" in sqlalchemy_inspect(item).unloaded for item in conversations)
+    assert all(item.content is None for item in conversations)
 
     ordered_queries = [statement for statement in statements if "ORDER BY" in statement]
     assert len(ordered_queries) == 1
@@ -361,9 +360,9 @@ async def test_multi_platform_summary_uses_global_order_index(
 
 
 @pytest.mark.asyncio
-async def test_webchat_session_title_matches_search_and_keyword(tmp_path: Path):
+async def test_webchat_session_title_matches_search_and_keyword(temp_db: SQLiteDatabase):
     """WebChat session titles participate in both search paths."""
-    db = SQLiteDatabase(str(tmp_path / "webchat_titles.db"))
+    db = temp_db
     await db.initialize()
 
     matched_session_id = "session-with-title"

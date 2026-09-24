@@ -4,19 +4,32 @@
 导出格式为 JSON，这是数据库无关的方案，支持未来向 MySQL/PostgreSQL 迁移。
 """
 
+import asyncio
 import hashlib
 import json
 import os
+import stat
+import uuid
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import select
+from sqlalchemy import case, select
+from sqlalchemy.orm import with_expression
 
-from astrbot.core import logger
+from astrbot.core import conversation_history_limits, logger
 from astrbot.core.config.default import VERSION
+from astrbot.core.conversation_history_limits import (
+    HistoryTooLargeError,
+    history_size_bytes,
+)
 from astrbot.core.db import BaseDatabase
+from astrbot.core.db.po import ConversationV2
+from astrbot.core.image_asset_store import (
+    COPY_CHUNK_BYTES,
+    image_store_lock,
+)
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_backups_path,
     get_astrbot_data_path,
@@ -25,9 +38,12 @@ from astrbot.core.utils.astrbot_path import (
 # 从共享常量模块导入
 from .constants import (
     BACKUP_MANIFEST_VERSION,
+    IMAGE_BACKUP_TABLES,
+    IMAGE_MEDIA_PREFIX,
     KB_METADATA_MODELS,
     MAIN_DB_MODELS,
     get_backup_directories,
+    validate_image_backup_data,
 )
 
 if TYPE_CHECKING:
@@ -79,6 +95,19 @@ class AstrBotExporter:
         Returns:
             str: 生成的 ZIP 文件路径
         """
+        async with image_store_lock():
+            return await self._export_locked(output_dir, progress_callback)
+
+    async def _export_locked(self, output_dir, progress_callback) -> str:
+        """Export a snapshot while image writes, reads and collection are locked.
+
+        Args:
+            output_dir: Destination directory or the default backup directory.
+            progress_callback: Optional progress reporter.
+
+        Returns:
+            Path of the completed archive.
+        """
         if output_dir is None:
             output_dir = get_astrbot_backups_path()
 
@@ -97,6 +126,8 @@ class AstrBotExporter:
                 if progress_callback:
                     await progress_callback("main_db", 0, 100, "正在导出主数据库...")
                 main_data = await self._export_main_database()
+                validate_image_backup_data(main_data)
+                await self._export_image_assets(zf, main_data.get("image_assets", []))
                 main_db_json = json.dumps(
                     main_data, ensure_ascii=False, indent=2, default=str
                 )
@@ -196,12 +227,55 @@ class AstrBotExporter:
             logger.info(f"备份导出完成: {zip_path}")
             return zip_path
 
-        except Exception as e:
-            logger.error(f"备份导出失败: {e}")
+        except BaseException as e:
+            logger.error(f"Backup export failed: {type(e).__name__}")
             # 清理失败的文件
             if os.path.exists(zip_path):
                 os.remove(zip_path)
             raise
+
+    async def _export_image_assets(self, zf, assets: list[dict]) -> None:
+        """Stream verified original images into the archive under the store lock.
+
+        Args:
+            zf: Open ZIP writer.
+            assets: Image metadata from the same locked database snapshot.
+
+        Raises:
+            ValueError: Image identity, size or checksum is invalid.
+            OSError: A required original is missing or unsafe.
+        """
+        root = Path(get_astrbot_data_path()) / "image_assets"
+        for asset in assets:
+            asset_id = asset["asset_id"]
+            if (
+                str(uuid.UUID(asset_id)) != asset_id
+                or asset["storage_key"] != f"{asset_id}.img"
+            ):
+                raise ValueError("Invalid image storage key in backup")
+            if asset["state"] != "available":
+                continue
+            path = root / asset["storage_key"]
+            info = path.lstat()
+            if not stat.S_ISREG(info.st_mode) or info.st_size <= 0:
+                raise ValueError("Invalid original image file in backup")
+            archive_path = IMAGE_MEDIA_PREFIX + asset["storage_key"]
+            digest = hashlib.sha256()
+            size = 0
+            with (
+                path.open("rb") as source,
+                zf.open(archive_path, "w", force_zip64=True) as target,
+            ):
+                while chunk := source.read(COPY_CHUNK_BYTES):
+                    size += len(chunk)
+                    if size > asset["byte_size"]:
+                        raise ValueError("Image exceeds declared backup size")
+                    digest.update(chunk)
+                    target.write(chunk)
+                    await asyncio.sleep(0)
+            if size != asset["byte_size"] or digest.hexdigest() != asset["sha256"]:
+                raise ValueError("Image checksum or size mismatch in backup")
+            self._checksums[archive_path] = digest.hexdigest()
 
     async def _export_main_database(self) -> dict[str, list[dict]]:
         """导出主数据库所有表"""
@@ -210,8 +284,32 @@ class AstrBotExporter:
         async with self.main_db.get_db() as session:
             for table_name, model_class in MAIN_DB_MODELS.items():
                 try:
-                    result = await session.execute(select(model_class))
-                    records = result.scalars().all()
+                    if model_class is ConversationV2:
+                        size = history_size_bytes(ConversationV2.content)
+                        limit = conversation_history_limits.MAX_ONLINE_HISTORY_BYTES
+                        # Keep every row in the same snapshot, but never materialize
+                        # an oversized JSON value into Python.
+                        result = await session.execute(
+                            select(model_class, size).options(
+                                with_expression(
+                                    ConversationV2.content,
+                                    case(
+                                        (size <= limit, ConversationV2.content),
+                                        else_=None,
+                                    ),
+                                )
+                            )
+                        )
+                        records = []
+                        for record, byte_size in result:
+                            if byte_size > limit:
+                                raise HistoryTooLargeError(
+                                    record.conversation_id, byte_size, limit
+                                )
+                            records.append(record)
+                    else:
+                        result = await session.execute(select(model_class))
+                        records = result.scalars().all()
                     export_data[table_name] = [
                         self._model_to_dict(record) for record in records
                     ]
@@ -219,6 +317,10 @@ class AstrBotExporter:
                         f"导出表 {table_name}: {len(export_data[table_name])} 条记录"
                     )
                 except Exception as e:
+                    if table_name in IMAGE_BACKUP_TABLES or isinstance(
+                        e, HistoryTooLargeError
+                    ):
+                        raise
                     logger.warning(f"导出表 {table_name} 失败: {e}")
                     export_data[table_name] = []
 

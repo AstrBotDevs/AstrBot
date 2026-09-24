@@ -4,7 +4,7 @@ The main-agent builder (`build_main_agent`) prepares initial input images before
 
 ## Limits and formats
 
-- Original image files larger than **64 MiB** are skipped before reading their contents or decoding pixels. The omission reason and retained original path are saved in history. A temporary notice suggests the file-reading tool if available or asking the user to resend a smaller image; this advice is not saved. Files up to and including 64 MiB are processed normally.
+- During model-image preprocessing, original image files larger than **64 MiB** are skipped before reading their contents or decoding pixels. The omission reason and retained original path are saved in history. A temporary notice suggests the file-reading tool if available or asking the user to resend a smaller image; this advice is not saved. Files up to and including 64 MiB are processed normally.
 - Each prepared image file is **strictly smaller than 512 KiB** (524,288 bytes). This limit applies to image bytes before Base64 encoding, not the entire request.
 - **Input image maximum edge length**, under **Configuration**, remains configurable through `provider_settings.image_compress_options.max_size` (default 1280 pixels). Initial images keep their aspect ratio and are never enlarged. They may be reduced further to meet the byte limit. Images newly introduced by the request hook follow the same configured edge cap, format and animation handling, 64 MiB input limit, and strict 512 KiB output limit.
 - Correctly oriented JPEG/PNG images already within both limits retain their original bytes. Other still images are orientation-corrected and encoded as JPEG, or PNG when they have transparency. Transparent images retain their alpha channel even when further reduction is necessary.
@@ -33,6 +33,32 @@ Preview files are owned by the current event and deleted when the event finishes
 
 Successfully localized original attachments, including quoted images, survive event cleanup. Retained originals under the temporary directory remain subject to `temp_dir_max_size` cleanup and are not permanent storage. Sources that have not yet been successfully adopted when request collection fails remain event-owned.
 
-Conversation history captures the prepared image content as Base64 data URIs before preview files expire. Old history is not reprocessed. An unreadable image is skipped; valid text and other images remain. Cancellation, resource exhaustion, and programming errors are not treated as bad images.
+When persistent image context is explicitly disabled, the legacy path captures prepared images as Base64 data URIs before previews expire and does not migrate old history. The default path stores gallery references and migrates recoverable images when continuing old conversations. An unreadable image is skipped; valid text and other images remain. Cancellation, resource exhaustion, and programming errors are not treated as bad images.
 
 Third-party Agent backends, direct provider calls that bypass the main-agent builder, and tool-result images are outside this input preparation flow.
+
+Automatic descriptions in image context accept surrounding whitespace, a leading BOM, one complete JSON or unlabelled Markdown code fence, and surrounding prose without structural brackets. Surplus closing brackets and whitespace after a complete object (before the closing fence, if present) may be discarded; object contents are never repaired. Literal line feeds, carriage returns and tabs inside strings are decoded and preserved; other unescaped C0 control characters are rejected. Exact image-ID mapping and unique keys are still required. Truncated output, multiple objects, plain text, and ambiguous wrappers are rejected without an extra model repair call. Description failure is independent of original-image persistence.
+
+## Persistent image context
+
+Persistent image context is enabled by default (`provider_settings.image_context_enabled=true`), including older configurations that omit the key. An explicit `false` disables it. Originals live in the data directory's `image_assets/`; history stores references and available descriptions. Ordinary text turns do not need to resend historical images. Visual detail requests materialize authorized images on demand; sending originals uses current-conversation gallery references without exposing disk paths or making a visual model call.
+
+The gallery has no total-capacity or per-original byte quota. File validation, 20 million pixels per frame and 100 frames per image remain enforced. Visual requests have no image-count or combined Base64 byte cap. AstrBot’s existing model-image preprocessing still applies: a 64 MiB input limit and preview output strictly below 512 KiB. Caption failure is separate from persistence failure and does not overwrite an existing valid description. Released references follow lifecycle cleanup; never-associated orphan originals remain for explicit maintenance.
+
+In a QQ/OneBot test on 2026-09-23, all 12 originals passed file-hash verification and had ready descriptions. Two histories occupied 77,907 B and 8,278 B with no inline image Base64. Three consecutive text turns and a ten-image reference send made zero visual calls. These observations are not guarantees of model accuracy, cross-platform compatibility or production performance.
+
+A separate four-image synthetic comparison measured 52,438 B of reference history versus 1,469,926 B after substituting original-sized Base64 placeholders. The same Python parsing/serialization object pipeline was estimated at 0.247 MiB versus 5.654 MiB. This is not old-version process RSS; it excludes SDK, image decoding and platform-send buffers and does not establish whole-process memory savings.
+
+Backend accounting records actual main-answer, description, review and summary attempts with reported usage. Unknown usage is not zero; this feature adds no statistics UI.
+
+## Image context and legacy conversations
+
+Persistent image context is now the default built-in agent image path, including tool-generated images. Keep a complete backup before upgrading. The inline Base64 history behavior described above is the legacy compatibility path used only when `provider_settings.image_context_enabled` is explicitly `false`.
+
+The first new message in a legacy conversation triggers background migration of that conversation. There is no confirmation popup, startup-wide scan, or model call to describe old images. Migration recovers embedded images and accessible caches within AstrBot's temporary directory. The recovered bytes may already be resized or sampled animation frames, so they are marked as legacy model input, not original uploads. Descriptions remain pending until a controlled review is needed.
+
+History and image associations are committed together after checking the conversation snapshot. The rewritten history must also remain within the online read limit. Invalid images, expired caches, unsupported remote addresses, storage failure, or concurrent edits stop migration and preserve the old conversation. That turn does not overwrite its history. Migration does not fetch remote URLs or arbitrary server files. A later user message may try again; one request does not loop over retries. Files published before an association failure remain unassociated originals for explicit maintenance.
+
+Online history reads and ordinary migration are limited to **16 MiB of stored UTF-8 JSON**, checked before the history reaches Python. This limits history JSON, not gallery capacity. Oversized conversations remain listed and can be renamed or deleted without loading their history. Opening history, continuing chat, branching, migration, and online export are rejected explicitly. Full online backup also fails on oversized history instead of silently exporting an empty table. This change does not include an offline migration tool for oversized histories. Keep an offline copy of the complete `data` directory before upgrading.
+
+Disabling the feature does not expand migrated references back into Base64. Older AstrBot versions may not understand the references: restore a complete pre-migration backup to downgrade. A portable image archive carries conversation data and media; it is not a database downgrade or automatic import tool.

@@ -10,6 +10,7 @@ from astrbot.core.message.components import Image, Plain, Record, Reply
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.media_utils import (
+    MediaResolver,
     describe_media_ref,
     detect_image_mime_type_async,
     ensure_wav,
@@ -72,7 +73,16 @@ class PreProcessStage(Stage):
         image_path: str | None = None
         materialized = False
         try:
-            image_path = await component.convert_to_file_path()
+            if self.config.get("provider_settings", {}).get(
+                "image_context_enabled", True
+            ):
+                if not media_ref:
+                    raise ValueError("No image reference provided")
+                image_path = await MediaResolver(
+                    media_ref, media_type="image"
+                ).to_path()
+            else:
+                image_path = await component.convert_to_file_path()
             materialized = (
                 not self._is_existing_local_image_ref(media_ref)
                 and Path(image_path).is_file()

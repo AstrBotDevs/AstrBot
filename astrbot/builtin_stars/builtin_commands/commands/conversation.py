@@ -102,6 +102,7 @@ class ConversationCommands:
         conv = await self.context.conversation_manager.get_conversation(
             session_id,
             curr,
+            include_history=False,
         )
         if not conv:
             return None
@@ -131,6 +132,7 @@ class ConversationCommands:
                     umo,
                     cid,
                     history=[],
+                    clear_image_refs=True,
                 )
 
         message.set_extra("_clean_group_context_session", True)

@@ -4,7 +4,12 @@ import os
 from collections.abc import AsyncGenerator
 from typing import Literal, TypeAlias, Union
 
-from astrbot.core.agent.message import ContentPart, Message, is_checkpoint_message
+from astrbot.core.agent.message import (
+    ContentPart,
+    ImageRefPart,
+    Message,
+    is_checkpoint_message,
+)
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.provider.entities import (
     LLMResponse,
@@ -69,6 +74,9 @@ class AbstractProvider(abc.ABC):
 
 class Provider(AbstractProvider):
     """Chat Provider"""
+
+    image_request_budget_supported = False
+    """Whether every SDK attempt participates in managed image budgets."""
 
     def __init__(
         self,
@@ -194,17 +202,33 @@ class Provider(AbstractProvider):
         self,
         messages: list[dict] | list[Message] | None,
     ) -> list[dict]:
-        """Convert a list of Message objects to a list of dictionaries."""
+        """Convert history to provider messages without resolving image references.
+
+        Args:
+            messages: Runtime messages or persisted message dictionaries.
+
+        Returns:
+            Provider-compatible dictionaries with internal references as text.
+        """
         if not messages:
             return []
         dicts: list[dict] = []
         for message in messages:
             if is_checkpoint_message(message):
                 continue
-            if isinstance(message, Message):
-                dicts.append(message.model_dump())
-            else:
-                dicts.append(message)
+            data = message.model_dump() if isinstance(message, Message) else message
+            content = data.get("content")
+            if isinstance(content, list):
+                converted = []
+                for part in content:
+                    if isinstance(part, dict) and part.get("type") == "image_ref":
+                        # The public request must not expose asset IDs or resolve bytes.
+                        ref = ImageRefPart.model_validate(part)
+                        converted.append({"type": "text", "text": ref.to_text()})
+                    else:
+                        converted.append(part)
+                data = {**data, "content": converted}
+            dicts.append(data)
 
         return dicts
 

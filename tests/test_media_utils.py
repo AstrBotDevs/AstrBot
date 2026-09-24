@@ -989,3 +989,75 @@ def test_convert_image_bytes_reencodes_large_in_range_input(tmp_path, monkeypatc
     assert result is not source
     assert result[:2] == b"\xff\xd8"
     assert len(result) < media_utils.MODEL_IMAGE_MAX_BYTES
+
+
+def test_large_rejected_reference_logging_does_not_decode(monkeypatch):
+    def forbidden(*args, **kwargs):
+        raise AssertionError("Logging must not decode large rejected input")
+
+    monkeypatch.setattr(media_utils.base64, "b64decode", forbidden)
+    for reference in (
+        "A" * 100000,
+        "base64://" + "A" * 100000,
+        "data:image/png;base64," + "A" * 100000,
+    ):
+        description = media_utils.describe_media_ref(reference)
+        assert len(description) < 200
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "reference_kind", ["data", "scheme", "bare", "whitespace", "unpadded"]
+)
+async def test_image_base64_streams_to_owned_file(
+    tmp_path, monkeypatch, reference_kind
+):
+    from PIL import Image as PILImage
+
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    source = BytesIO()
+    PILImage.new("RGB", (4, 4), "red").save(source, "PNG")
+    original = source.getvalue() + b"x" * 200000
+    encoded = base64.b64encode(original).decode()
+    references = {
+        "data": "data:image/png;base64," + encoded,
+        "scheme": "base64://" + encoded,
+        "bare": encoded,
+        "whitespace": "base64://"
+        + " \n".join(encoded[i : i + 71] for i in range(0, len(encoded), 71)),
+        "unpadded": "base64://" + encoded.rstrip("="),
+    }
+    decode = media_utils.base64.b64decode
+    lengths = []
+
+    def measured_decode(value, **kwargs):
+        lengths.append(len(value))
+        return decode(value, **kwargs)
+
+    monkeypatch.setattr(media_utils.base64, "b64decode", measured_decode)
+    async with media_utils.MediaResolver(
+        references[reference_kind], media_type="image"
+    ).as_path() as result:
+        assert result.path.read_bytes() == original
+    assert len(lengths) > 1 and max(lengths) <= 65536
+    assert not list(tmp_path.iterdir())
+
+
+@pytest.mark.asyncio
+async def test_image_base64_cancellation_cleans_partial_file(tmp_path, monkeypatch):
+    import asyncio
+
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    decode = media_utils.base64.b64decode
+
+    def cancelled_decode(value, **kwargs):
+        result = decode(value, **kwargs)
+        asyncio.current_task().cancel()
+        return result
+
+    monkeypatch.setattr(media_utils.base64, "b64decode", cancelled_decode)
+    with pytest.raises(asyncio.CancelledError):
+        await media_utils.MediaResolver(
+            "base64://" + "AAAA" * 100000, media_type="image"
+        ).to_path()
+    assert not list(tmp_path.iterdir())

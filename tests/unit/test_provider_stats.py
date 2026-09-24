@@ -63,3 +63,53 @@ async def test_record_internal_agent_stats_persists_provider_stat(
     assert record.start_time == 100.0
     assert record.end_time == 108.5
     assert record.time_to_first_token == 0.6
+
+
+@pytest.mark.asyncio
+async def test_managed_stats_keep_caption_and_opaque_text_usage(temp_db, monkeypatch):
+    from astrbot.core.image_request_budget import ImageRequestBudget
+
+    monkeypatch.setattr(internal, "db_helper", temp_db)
+    budget = ImageRequestBudget()
+    with budget.scope(
+        purpose="caption", provider_id="vision", model="visual", image_count=1
+    ) as scope:
+        budget.on_attempt(scope)
+    turn = SimpleNamespace(
+        configured=True,
+        budget=budget,
+        unmetered_stats=[
+            {
+                "purpose": "main",
+                "provider_id": "custom",
+                "model": "text",
+                "attempts": 1,
+                "attempts_kind": "logical",
+                "image_submissions": 0,
+                "encoded_bytes": 0,
+                "unknown_calls": 0,
+                "usage_known": True,
+                "token_usage": {"input_other": 13, "input_cached": 0, "output": 5},
+            }
+        ],
+    )
+    provider = SimpleNamespace(
+        provider_config={"id": "custom"}, get_model=lambda: "text"
+    )
+    runner = SimpleNamespace(
+        provider=provider, stats=AgentStats(), was_aborted=lambda: False
+    )
+    await internal._record_internal_agent_stats(
+        SimpleNamespace(unified_msg_origin="test"),
+        ProviderRequest(image_context=turn),
+        runner,
+        SimpleNamespace(role="assistant"),
+    )
+    async with temp_db.get_db() as session:
+        records = (await session.execute(select(ProviderStat))).scalars().all()
+    assert len(records) == 2
+    by_provider = {row.provider_id: row for row in records}
+    assert by_provider["vision"].request_details["unknown_calls"] == 1
+    assert by_provider["custom"].token_input_other == 13
+    assert by_provider["custom"].token_output == 5
+    assert by_provider["custom"].request_details["attempts_kind"] == "logical"

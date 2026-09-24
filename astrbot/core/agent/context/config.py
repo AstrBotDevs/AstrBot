@@ -5,6 +5,7 @@ from .compressor import ContextCompressor
 from .token_counter import TokenCounter
 
 if TYPE_CHECKING:
+    from astrbot.core.image_context import ImageTurnContext
     from astrbot.core.provider.provider import Provider
 
 
@@ -33,3 +34,7 @@ class ContextConfig:
     """Custom token counting method. If None, the default method is used."""
     custom_compressor: ContextCompressor | None = None
     """Custom context compression method. If None, the default method is used."""
+    strip_summary_images: bool = False
+    """Omit image bytes from summary requests when managed image history is enabled."""
+    image_context: "ImageTurnContext | None" = None
+    """Project current authorized descriptions into request/count copies only."""
