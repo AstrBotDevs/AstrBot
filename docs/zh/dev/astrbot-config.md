@@ -489,7 +489,7 @@ AstrBot API 的地址。用于渲染 Markdown 图片。当 `t2i_strategy` 为 `r
 
 ### `http_proxy`
 
-HTTP 代理。如 `http://localhost:7890`。
+HTTP 代理。如 `http://localhost:7890`。Docker 部署时请填写 AstrBot 容器能访问到的地址，见 [Docker 部署](/deploy/astrbot/docker.md)。
 
 ### `no_proxy`
 

@@ -92,7 +92,7 @@ ChatUI 支持以下常用能力：
 
 - `常规`：时区、外部回调地址、日志和缓存。
 - `外观`：侧边栏、主题和文本转图像。
-- `网络`：HTTP 代理、Python 依赖源和 GitHub 加速地址。
+- `网络`：HTTP 代理、Python 依赖源和 GitHub 加速地址。Docker 下的代理填法见 [Docker 部署](/deploy/astrbot/docker.md)。
 - `安全`：WebUI HTTPS、登录限速和 TOTP。
 - `维护`：备份、恢复和重启。
 - `OpenAPI`：开发者访问密钥。

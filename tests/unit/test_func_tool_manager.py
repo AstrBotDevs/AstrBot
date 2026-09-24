@@ -187,10 +187,7 @@ async def test_local_execute_shell_manages_running_and_closed_results(
     )
 
     assert json.loads(result)["session_id"] == "sh_test"
-    notice = shell_tools.LOCAL_NETWORK_POLICY_NOTICE
-    assert json.loads(result).get("policy_notice") == (
-        None if allow_network else notice
-    )
+    assert "policy_notice" not in json.loads(result)
     shell.exec_managed.assert_awaited_once_with(
         "python server.py",
         owner_id="umo",
@@ -229,10 +226,14 @@ async def test_local_execute_shell_manages_running_and_closed_results(
         )
 
         assert result == (
-            ("" if allow_network else f"{notice}\n")
-            + f"Command completed with exit code {exit_code} "
+            f"Command completed with exit code {exit_code} "
             f"(wall time: {wall_time}s).\nOutput:\ndone\n"
         )
+
+    monkeypatch.setattr(shell_tools, "monotonic", lambda: 0)
+    shell.exec_managed.side_effect = RuntimeError("execution failed")
+    result = await LocalExecuteShellTool().call(FakeWrapper(), command="echo done")
+    assert result == "Error executing command: execution failed"
 
 
 @pytest.mark.asyncio

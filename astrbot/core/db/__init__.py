@@ -360,6 +360,7 @@ class BaseDatabase(abc.ABC):
         expected_history: list[dict] | None = None,
         expected_identity: tuple[str, str] | None = None,
         prune_image_refs: bool = False,
+        clear_image_refs: bool = False,
         image_checkpoint_replacement: tuple[str, str, list[str]] | None = None,
     ) -> None:
         """Update history and trusted image associations atomically."""

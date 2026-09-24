@@ -320,6 +320,7 @@ class ConversationManager:
         expected_history: list[dict] | None = None,
         expected_identity: tuple[str, str] | None = None,
         prune_image_refs: bool = False,
+        clear_image_refs: bool = False,
         image_checkpoint_replacement: tuple[str, str, list[str]] | None = None,
     ) -> None:
         """更新会话的对话.
@@ -334,6 +335,7 @@ class ConversationManager:
             expected_identity: Expected (user_id, platform_id) checked in the
                 same transaction before a protected conversation update.
             prune_image_refs: Explicit editing retires removed image occurrences.
+            clear_image_refs: Reset all image associations, including compressed turns.
             image_checkpoint_replacement: Old/new checkpoint and retained user image
                 occurrences when preparing regeneration.
 
@@ -351,6 +353,8 @@ class ConversationManager:
                 image_options["expected_identity"] = expected_identity
             if prune_image_refs:
                 image_options["prune_image_refs"] = True
+            if clear_image_refs:
+                image_options["clear_image_refs"] = True
             if image_checkpoint_replacement is not None:
                 image_options["image_checkpoint_replacement"] = (
                     image_checkpoint_replacement

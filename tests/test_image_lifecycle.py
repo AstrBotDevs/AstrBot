@@ -511,3 +511,20 @@ async def test_legacy_reordered_text_supports_branch_and_regeneration(db, operat
         }
         assert not ledger["a"].active
         assert ledger["new"].sequence > ledger["a"].sequence > ledger["b"].sequence
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("compressed", [False, True])
+async def test_explicit_empty_history_releases_entire_image_catalog(db, compressed):
+    await seed(db)
+    if compressed:
+        await db.update_conversation(
+            "parent", content=[{"role": "assistant", "content": "Summary"}]
+        )
+    assert len(await rows(db, ConversationImageRef)) == 1
+
+    await db.update_conversation("parent", content=[], clear_image_refs=True)
+
+    assert not await rows(db, ConversationImageRef)
+    assert all(not cp.active for cp in await rows(db, ConversationImageCheckpoint))
+    assert (await db.get_conversation_by_id("parent")).content == []

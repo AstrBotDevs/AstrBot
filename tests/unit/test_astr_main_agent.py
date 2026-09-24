@@ -1451,8 +1451,19 @@ class TestEnsurePersonaAndSkills:
                 result.reset_coro.close()
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("role", ["admin", "member"])
+    @pytest.mark.parametrize(
+        ("allow_execution", "allow_network"),
+        [(True, False), (True, True), (False, False)],
+    )
     async def test_persona_empty_tools_keeps_local_runtime_builtin_tools(
-        self, mock_event, mock_context, mock_provider
+        self,
+        mock_event,
+        mock_context,
+        mock_provider,
+        role,
+        allow_execution,
+        allow_network,
     ):
         module = ama
         persona = {"name": "locked", "prompt": "No tools.", "tools": []}
@@ -1460,6 +1471,20 @@ class TestEnsurePersonaAndSkills:
             return_value=("locked", persona, None, False)
         )
         mock_event.platform_meta.support_proactive_message = False
+        mock_event.role = role
+        mock_context.get_config.return_value = {
+            "provider_settings": {
+                "image_context_enabled": False,
+                "computer_use_runtime": "local",
+                "computer_use_local_permissions": {
+                    role: {
+                        "allow_execution": allow_execution,
+                        "allow_network": allow_network,
+                        "filesystem_scope": "workspace",
+                    }
+                },
+            }
+        }
         config = module.MainAgentBuildConfig(
             tool_call_timeout=60,
             computer_use_runtime="local",
@@ -1470,7 +1495,10 @@ class TestEnsurePersonaAndSkills:
 
         with (
             patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
-            patch("astrbot.core.astr_main_agent.AstrAgentContext"),
+            patch(
+                "astrbot.core.astr_main_agent.AstrAgentContext",
+                return_value=SimpleNamespace(context=mock_context, event=mock_event),
+            ),
         ):
             mock_runner = MagicMock()
             mock_runner.reset = AsyncMock()
@@ -1497,6 +1525,9 @@ class TestEnsurePersonaAndSkills:
             assert shell_tool is not None
             assert "background" not in shell_tool.parameters["properties"]
             assert "yield_time_ms" in shell_tool.parameters["properties"]
+            assert result.provider_request.system_prompt.count(
+                module.LOCAL_NETWORK_POLICY_NOTICE
+            ) == int(allow_execution and not allow_network)
         finally:
             if result.reset_coro:
                 result.reset_coro.close()
@@ -1725,7 +1756,9 @@ class TestBuildMainAgent:
         module = ama
         mock_context.get_provider_by_id.return_value = None
         mock_context.get_using_provider.return_value = mock_provider
-        mock_context.get_config.return_value = {"provider_settings": {"image_context_enabled": False}}
+        mock_context.get_config.return_value = {
+            "provider_settings": {"image_context_enabled": False}
+        }
 
         conv_mgr = mock_context.conversation_manager
         _setup_conversation_for_build(conv_mgr)
@@ -1754,7 +1787,9 @@ class TestBuildMainAgent:
         module = ama
         mock_context.get_provider_by_id.return_value = None
         mock_context.get_using_provider.return_value = mock_provider
-        mock_context.get_config.return_value = {"provider_settings": {"image_context_enabled": False}}
+        mock_context.get_config.return_value = {
+            "provider_settings": {"image_context_enabled": False}
+        }
 
         conv_mgr = mock_context.conversation_manager
         _setup_conversation_for_build(conv_mgr)
@@ -1852,7 +1887,9 @@ class TestBuildMainAgent:
         mock_event.message_str = "/command"
         mock_context.get_provider_by_id.return_value = None
         mock_context.get_using_provider.return_value = mock_provider
-        mock_context.get_config.return_value = {"provider_settings": {"image_context_enabled": False}}
+        mock_context.get_config.return_value = {
+            "provider_settings": {"image_context_enabled": False}
+        }
 
         conv_mgr = mock_context.conversation_manager
         _setup_conversation_for_build(conv_mgr)
@@ -1926,7 +1963,9 @@ class TestBuildMainAgent:
 
         mock_context.get_provider_by_id.return_value = None
         mock_context.get_using_provider.return_value = mock_provider
-        mock_context.get_config.return_value = {"provider_settings": {"image_context_enabled": False}}
+        mock_context.get_config.return_value = {
+            "provider_settings": {"image_context_enabled": False}
+        }
 
         conv_mgr = mock_context.conversation_manager
         _setup_conversation_for_build(conv_mgr)
@@ -1994,7 +2033,9 @@ class TestBuildMainAgent:
 
         mock_context.get_provider_by_id.return_value = None
         mock_context.get_using_provider.return_value = mock_provider
-        mock_context.get_config.return_value = {"provider_settings": {"image_context_enabled": False}}
+        mock_context.get_config.return_value = {
+            "provider_settings": {"image_context_enabled": False}
+        }
 
         conv_mgr = mock_context.conversation_manager
         _setup_conversation_for_build(conv_mgr)
@@ -2064,7 +2105,9 @@ class TestBuildMainAgent:
 
         mock_context.get_provider_by_id.return_value = caption_provider
         mock_context.get_using_provider.return_value = text_provider
-        mock_context.get_config.return_value = {"provider_settings": {"image_context_enabled": False}}
+        mock_context.get_config.return_value = {
+            "provider_settings": {"image_context_enabled": False}
+        }
 
         conv_mgr = mock_context.conversation_manager
         _setup_conversation_for_build(conv_mgr)
@@ -2135,7 +2178,9 @@ class TestBuildMainAgent:
 
         mock_context.get_provider_by_id.return_value = caption_provider
         mock_context.get_using_provider.return_value = text_provider
-        mock_context.get_config.return_value = {"provider_settings": {"image_context_enabled": False}}
+        mock_context.get_config.return_value = {
+            "provider_settings": {"image_context_enabled": False}
+        }
 
         conv_mgr = mock_context.conversation_manager
         _setup_conversation_for_build(conv_mgr)
@@ -2205,7 +2250,9 @@ class TestBuildMainAgent:
         mock_context.get_provider_by_id.side_effect = lambda provider_id: (
             image_provider if provider_id == "image-provider" else None
         )
-        mock_context.get_config.return_value = {"provider_settings": {"image_context_enabled": False}}
+        mock_context.get_config.return_value = {
+            "provider_settings": {"image_context_enabled": False}
+        }
 
         with (
             patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
@@ -2255,7 +2302,9 @@ class TestBuildMainAgent:
             image_urls=[valid_image_path],
         )
         mock_context.get_provider_by_id.return_value = None
-        mock_context.get_config.return_value = {"provider_settings": {"image_context_enabled": False}}
+        mock_context.get_config.return_value = {
+            "provider_settings": {"image_context_enabled": False}
+        }
 
         with (
             patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
@@ -2299,7 +2348,9 @@ class TestBuildMainAgent:
 
         mock_context.get_provider_by_id.return_value = None
         mock_context.get_using_provider.return_value = mock_provider
-        mock_context.get_config.return_value = {"provider_settings": {"image_context_enabled": False}}
+        mock_context.get_config.return_value = {
+            "provider_settings": {"image_context_enabled": False}
+        }
 
         conv_mgr = mock_context.conversation_manager
         _setup_conversation_for_build(conv_mgr)
@@ -2341,7 +2392,9 @@ class TestBuildMainAgent:
 
         mock_context.get_provider_by_id.return_value = None
         mock_context.get_using_provider.return_value = mock_provider
-        mock_context.get_config.return_value = {"provider_settings": {"image_context_enabled": False}}
+        mock_context.get_config.return_value = {
+            "provider_settings": {"image_context_enabled": False}
+        }
 
         conv_mgr = mock_context.conversation_manager
         _setup_conversation_for_build(conv_mgr)
@@ -2384,7 +2437,9 @@ class TestBuildMainAgent:
 
         mock_context.get_provider_by_id.return_value = None
         mock_context.get_using_provider.return_value = mock_provider
-        mock_context.get_config.return_value = {"provider_settings": {"image_context_enabled": False}}
+        mock_context.get_config.return_value = {
+            "provider_settings": {"image_context_enabled": False}
+        }
 
         conv_mgr = mock_context.conversation_manager
         _setup_conversation_for_build(conv_mgr)
@@ -2444,7 +2499,9 @@ class TestBuildMainAgent:
 
         mock_context.get_provider_by_id.return_value = None
         mock_context.get_using_provider.return_value = mock_provider
-        mock_context.get_config.return_value = {"provider_settings": {"image_context_enabled": False}}
+        mock_context.get_config.return_value = {
+            "provider_settings": {"image_context_enabled": False}
+        }
 
         conv_mgr = mock_context.conversation_manager
         _setup_conversation_for_build(conv_mgr)
@@ -2465,7 +2522,9 @@ class TestBuildMainAgent:
         module = ama
         mock_context.get_provider_by_id.return_value = None
         mock_context.get_using_provider.return_value = mock_provider
-        mock_context.get_config.return_value = {"provider_settings": {"image_context_enabled": False}}
+        mock_context.get_config.return_value = {
+            "provider_settings": {"image_context_enabled": False}
+        }
 
         conv_mgr = mock_context.conversation_manager
         _setup_conversation_for_build(conv_mgr)

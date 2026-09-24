@@ -1214,6 +1214,7 @@ class SQLiteDatabase(BaseDatabase):
         image_refs=None,
         expected_history=None,
         prune_image_refs=False,
+        clear_image_refs=False,
         image_checkpoint_replacement=None,
     ) -> tuple[set[str], set[str]]:
         """Validate and synchronize image metadata within the caller's transaction.
@@ -1225,6 +1226,7 @@ class SQLiteDatabase(BaseDatabase):
             image_refs: Trusted server-created association records, never JSON grants.
             expected_history: Optional optimistic concurrency snapshot.
             prune_image_refs: Explicit edit removes associations from deleted turns.
+            clear_image_refs: Reset all image associations, including compressed turns.
             image_checkpoint_replacement: Old/new checkpoint and retained user occurrences.
 
         Returns:
@@ -1375,6 +1377,9 @@ class SQLiteDatabase(BaseDatabase):
             removed_cp = (
                 {get_checkpoint_id(item) for item in previous} - current_cp - {None}
             )
+            if clear_image_refs:
+                # An explicit reset also releases images retained after compression.
+                removed_cp.update(ordered)
             if image_checkpoint_replacement:
                 removed_cp.discard(image_checkpoint_replacement[0])
             old_occurrences = {
@@ -1635,6 +1640,7 @@ class SQLiteDatabase(BaseDatabase):
         expected_history=None,
         expected_identity=None,
         prune_image_refs=False,
+        clear_image_refs=False,
         image_checkpoint_replacement=None,
     ):
         """Update conversation history and image grants in one transaction.
@@ -1650,6 +1656,7 @@ class SQLiteDatabase(BaseDatabase):
             expected_identity: Expected (user_id, platform_id) checked in the
                 same transaction before writing the conversation.
             prune_image_refs: Explicitly revoke references removed by an edit.
+            clear_image_refs: Reset the image catalog; requires an empty new history.
             image_checkpoint_replacement: Old checkpoint, new checkpoint and user
                 occurrences retained while regenerating the last turn.
 
@@ -1662,6 +1669,12 @@ class SQLiteDatabase(BaseDatabase):
         """
         from astrbot.core.image_asset_store import image_store_lock
 
+        if clear_image_refs:
+            if content != [] or image_checkpoint_replacement or image_refs:
+                raise ValueError(
+                    "Image catalog reset requires empty history and no new grants"
+                )
+            prune_image_refs = True
         if (
             content is None
             and image_refs is None
@@ -1739,6 +1752,7 @@ class SQLiteDatabase(BaseDatabase):
                         image_refs=image_refs,
                         expected_history=expected_history,
                         prune_image_refs=prune_image_refs,
+                        clear_image_refs=clear_image_refs,
                         image_checkpoint_replacement=image_checkpoint_replacement,
                     )
                 if title is not None:
