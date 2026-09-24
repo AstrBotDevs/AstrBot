@@ -21,7 +21,6 @@ cookies.json
 data_v2.db
 data_v3.db
 data
-data-pr-test/
 configs/session
 configs/config.yaml
 cmd_config.json
