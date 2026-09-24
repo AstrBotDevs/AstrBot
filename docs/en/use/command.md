@@ -161,7 +161,7 @@ This command requires admin permission.
 The language is a global setting that applies to every platform and session. A change takes effect immediately for:
 
 - Replies of built-in commands, and the descriptions of built-in commands in `/help`.
-- Multilingual aliases registered through `multi_alias`. By default only aliases of the current language are accepted, while the main command name always works. Enable **All Language Aliases** in WebUI under `Config -> Platform -> General` to accept aliases of every language.
+- Multilingual aliases registered through `multi_alias`. By default only aliases of the current language are accepted, while the main command name always works. Enable **All-language aliases** in WebUI under `Config -> Platform -> Other Settings` to accept aliases of every language.
 - Command names shown in WebUI command management. Command descriptions follow the WebUI locale and are not affected by `/lang`.
 
 Plugins can adopt multiple languages through `multi_alias`, `desc_i18n`, and `get_lang`. See [Plugin i18n](../dev/star/guides/plugin-i18n.md) for details.

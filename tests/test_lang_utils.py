@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from types import SimpleNamespace
 
+from astrbot.core.config.default import CONFIG_METADATA_3
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.utils.lang_utils import (
     DEFAULT_LANG,
@@ -139,3 +142,44 @@ class TestLangFilteredAliases:
         cfg = self._cfg(full_lang_aliases=False)
         # zh 会话:主命令 /help 依然可用
         assert command_filter.filter(_simple_event_zh("help"), cfg) is True
+
+
+class TestFullLangAliasesMetadata:
+    """「全语言别名」开关在 WebUI 配置元数据中的注册位置与翻译覆盖。"""
+
+    KEY = "platform_settings.full_lang_aliases"
+    LOCALES = ("zh-CN", "en-US", "ru-RU", "ja-JP")
+
+    @staticmethod
+    def _count(node, key) -> int:
+        """统计 metadata 树中指定键出现的次数。"""
+        if not isinstance(node, dict):
+            return 0
+        return sum(
+            (1 if name == key else 0) + TestFullLangAliasesMetadata._count(value, key)
+            for name, value in node.items()
+        )
+
+    def test_declared_once_under_platform_group(self):
+        # 重复注册会让 WebUI 出现两个同名开关,且只有一处有翻译
+        assert self._count(CONFIG_METADATA_3, self.KEY) == 1
+        others = CONFIG_METADATA_3["platform_group"]["metadata"]["others"]
+        assert self.KEY in others["items"]
+
+    def test_translated_in_every_locale(self):
+        root = Path(__file__).resolve().parents[1] / "dashboard/src/i18n/locales"
+        for locale in self.LOCALES:
+            metadata = json.loads(
+                (root / locale / "features/config-metadata.json").read_text(
+                    encoding="utf-8-sig"
+                )
+            )
+            entry = metadata["platform_group"]["others"]["platform_settings"][
+                "full_lang_aliases"
+            ]
+            assert entry["description"]
+            assert entry["hint"]
+            # 迁移到 platform_group 后不应在 ai_group 留下第二份
+            assert "full_lang_aliases" not in metadata["ai_group"]["others"].get(
+                "platform_settings", {}
+            )

@@ -4105,11 +4105,6 @@ CONFIG_METADATA_3 = {
                 "description": "其他配置",
                 "type": "object",
                 "items": {
-                    "platform_settings.full_lang_aliases": {
-                        "description": "全语言别名",
-                        "type": "bool",
-                        "hint": "启用后,所有语言的指令别名(如 /帮助、/ヘルプ)均可直接触发,不受当前会话语言限制;关闭时仅主命令与当前语言对应的别名可用。主命令(如 /help)始终可用。",
-                    },
                     "provider_settings.display_reasoning_text": {
                         "description": "显示思考内容",
                         "type": "bool",
@@ -4457,7 +4452,7 @@ CONFIG_METADATA_3 = {
                     "platform_settings.full_lang_aliases": {
                         "description": "全语言别名",
                         "type": "bool",
-                        "hint": "启用后,所有语言的指令别名(如 /帮助、/ヘルプ)均可直接触发,不受当前会话语言限制;关闭时仅主命令与当前语言对应的别名可用。主命令(如 /help)始终可用。",
+                        "hint": "启用后,插件通过 multi_alias 注册的所有语言别名均可触发;关闭时仅指令主名称与当前全局语言对应的别名可用。主名称(如 /help)始终可用。",
                     },
                     "platform_settings.ignore_bot_self_message": {
                         "description": "是否忽略机器人自身的消息",
