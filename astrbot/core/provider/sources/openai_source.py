@@ -933,11 +933,16 @@ class ProviderOpenAIOfficial(Provider):
             and not has_reasoning_output
             and not llm_response.tools_call_args
         ):
-            logger.error(f"OpenAI completion has no usable output: {completion}.")
-            raise EmptyModelOutputError(
-                "OpenAI completion has no usable output. "
-                f"response_id={completion.id}, finish_reason={choice.finish_reason}"
-            )
+            if choice.finish_reason == "stop" and not choice.message.tool_calls:
+                # Normal completion does not require a visible reply. Avoid an
+                # empty Plain component that could acquire a reply prefix later.
+                llm_response.result_chain = None
+            else:
+                logger.error(f"OpenAI completion has no usable output: {completion}.")
+                raise EmptyModelOutputError(
+                    "OpenAI completion has no usable output. "
+                    f"response_id={completion.id}, finish_reason={choice.finish_reason}"
+                )
 
         llm_response.raw_completion = completion
         llm_response.id = completion.id

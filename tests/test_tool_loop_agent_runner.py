@@ -2398,3 +2398,77 @@ async def test_small_step_budgets_and_reset(
     )
     assert runner._step_budget_used == 0
     assert runner._step_budget_notified == set()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+@pytest.mark.parametrize("empty_chain", [False, True])
+async def test_empty_success_finishes_without_retry_or_empty_history(
+    runner, provider_request, mock_tool_executor, mock_hooks, streaming, empty_chain
+):
+    provider = MockProvider()
+    response = LLMResponse(
+        role="assistant",
+        result_chain=MessageChain().message("") if empty_chain else None,
+        usage=TokenUsage(input_other=10, output=86),
+    )
+    provider.text_chat = AsyncMock(return_value=response)
+    fallback = MockProvider()
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=streaming,
+        fallback_providers=[fallback],
+    )
+    before = list(runner.run_context.messages)
+    results = [result async for result in runner.step_until_done(5)]
+    assert runner.done()
+    assert runner.get_final_llm_resp() is response
+    assert mock_hooks.agent_done_called
+    provider.text_chat.assert_awaited_once()
+    assert fallback.call_count == 0
+    assert runner.run_context.messages == before
+    if not empty_chain:
+        assert not any(r.type == "llm_result" for r in results)
+    assert response.usage.output == 86
+    assert all(result.type != "err" for result in results)
+    assert all(
+        not result.data["chain"].get_plain_text()
+        for result in results
+        if result.type == "llm_result"
+    )
+
+
+@pytest.mark.asyncio
+async def test_tool_call_then_empty_success_preserves_tool_history(
+    runner, provider_request, mock_tool_executor, mock_hooks
+):
+    provider = MockProvider()
+    tool_response = await provider.text_chat(func_tool=provider_request.func_tool)
+    empty_response = LLMResponse(role="assistant", completion_text=None)
+    provider.text_chat = AsyncMock(side_effect=[tool_response, empty_response])
+    fallback = MockProvider()
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+        fallback_providers=[fallback],
+    )
+    async for _ in runner.step_until_done(5):
+        pass
+    assert runner.done()
+    assert runner.get_final_llm_resp() is empty_response
+    assert provider.text_chat.await_count == 2
+    assert fallback.call_count == 0
+    assert mock_hooks.agent_done_called
+    messages = runner.run_context.messages
+    assert messages[-1].role == "tool"
+    assert messages[-2].role == "assistant"
+    assert messages[-2].tool_calls
+    assert all(m.content or m.tool_calls for m in messages if m.role == "assistant")
