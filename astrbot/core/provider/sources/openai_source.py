@@ -933,7 +933,11 @@ class ProviderOpenAIOfficial(Provider):
             and not has_reasoning_output
             and not llm_response.tools_call_args
         ):
-            if choice.finish_reason == "stop" and not choice.message.tool_calls:
+            if (
+                choice.finish_reason == "stop"
+                and not choice.message.tool_calls
+                and not choice.message.function_call
+            ):
                 # Normal completion does not require a visible reply. Avoid an
                 # empty Plain component that could acquire a reply prefix later.
                 llm_response.result_chain = None
