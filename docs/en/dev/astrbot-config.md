@@ -127,11 +127,7 @@ The default AstrBot configuration is as follows:
     "platform_specific": {
         # Platform-specific settings: categorized by platform, then by feature group
         "lark": {
-            "pre_ack_emoji": {
-                "enable": False,
-                "emojis": ["Typing"],
-                "auto_remove": True,
-            },
+            "pre_ack_emoji": {"enable": False, "emojis": ["Typing"]},
         },
         "telegram": {
             "pre_ack_emoji": {"enable": False, "emojis": ["✍️"]},
@@ -524,13 +520,12 @@ Platform-specific settings. Categorized by platform, then by feature group.
 
 #### `platform_specific.<platform>.pre_ack_emoji`
 
-When enabled, AstrBot sends a pre-reply emoji before requesting the LLM to inform the user that the request is being processed. This currently only takes effect in the Lark and Telegram platform adapters.
+When enabled, AstrBot sends a pre-reply emoji before requesting the LLM to inform the user that the request is being processed. This currently only takes effect in the Lark and Telegram platform adapters. On Lark, the pre-reply emoji is removed automatically after processing finishes.
 
 ##### lark
 
 - `enable`: Whether to enable pre-reply emojis for Lark messages. Default is `false`.
 - `emojis`: List of pre-reply emojis. Default is `["Typing"]`. Refer to [Emoji Documentation](https://open.feishu.cn/document/server-docs/im-v1/message-reaction/emojis-introduce) for emoji names.
-- `auto_remove`: Whether to automatically remove the pre-reply emoji after processing finishes. Default is `true`. Only shown and applied when `enable` is `true`.
 
 ##### telegram
 

@@ -34,8 +34,8 @@ from .message_session import MessageSesion, MessageSession  # noqa
 from .platform_metadata import PlatformMetadata
 
 # Event extra key for the pre-ack reaction created by PreProcessStage.
-PRE_ACK_REACTION_ID = "_pre_ack_reaction_id"
-PRE_ACK_REACTION_EMOJI = "_pre_ack_reaction_emoji"
+# The value is a ``(reaction_id, emoji)`` tuple consumed by PipelineScheduler.
+PRE_ACK_REACTION = "_pre_ack_reaction"
 
 
 class AstrMessageEvent(abc.ABC):

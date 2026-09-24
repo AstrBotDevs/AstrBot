@@ -1034,37 +1034,55 @@ class LarkMessageEvent(AstrMessageEvent):
             )
 
         if not emoji:
-            logger.warning("[Lark] Pre-ack reaction cannot be resolved for removal")
+            logger.warning("[Lark] Reaction cannot be resolved for removal")
             return
 
-        request = (
-            ListMessageReactionRequest.builder()
-            .message_id(self.message_obj.message_id)
-            .reaction_type(emoji)
-            .build()
-        )
-        response = await self.bot.im.v1.message_reaction.alist(request)
-        if not response.success() or not response.data:
-            logger.error(
-                f"Failed to list Lark message reactions({response.code}): {response.msg}"
+        # Lark reports the operator of a reaction created with
+        # tenant_access_token as the app_id (operator_type "app") or as the bot
+        # open_id (operator_type "user"), so accept either identifier.
+        operator_ids = {str(self.get_self_id() or "")}
+        app_id = getattr(getattr(self.bot, "config", None), "app_id", None)
+        if app_id:
+            operator_ids.add(str(app_id))
+        operator_ids.discard("")
+
+        reaction_id = None
+        page_token = None
+        while True:
+            builder = (
+                ListMessageReactionRequest.builder()
+                .message_id(self.message_obj.message_id)
+                .reaction_type(emoji)
+                .user_id_type("open_id")
+                .page_size(50)
             )
-            return
+            if page_token:
+                builder = builder.page_token(page_token)
+            response = await self.bot.im.v1.message_reaction.alist(builder.build())
+            if not response.success() or not response.data:
+                logger.error(
+                    f"Failed to list Lark message reactions({response.code}): {response.msg}"
+                )
+                return
 
-        bot_id = self.get_self_id()
-        reaction_id = next(
-            (
-                item.reaction_id
-                for item in response.data.items or []
-                if item.reaction_id
-                and item.reaction_type
-                and item.reaction_type.emoji_type == emoji
-                and item.operator
-                and item.operator.operator_id == bot_id
-            ),
-            None,
-        )
+            reaction_id = next(
+                (
+                    item.reaction_id
+                    for item in response.data.items or []
+                    if item.reaction_id
+                    and item.operator
+                    and item.operator.operator_id in operator_ids
+                ),
+                None,
+            )
+            if reaction_id is not None or not response.data.has_more:
+                break
+            page_token = response.data.page_token
+            if not page_token:
+                break
+
         if reaction_id is None:
-            logger.warning("[Lark] Pre-ack reaction is no longer available")
+            logger.warning("[Lark] Reaction is no longer available")
             return
 
         request = (

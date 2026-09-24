@@ -1213,9 +1213,6 @@
                         "emojis": {
                             "description": "Список эмодзи (Lark Enum Names)",
                             "hint": "Справка по именам эмодзи Lark."
-                        },
-                        "auto_remove": {
-                            "description": "[Lark] Автоудаление пре-эмодзи подтверждения"
                         }
                     }
                 },
