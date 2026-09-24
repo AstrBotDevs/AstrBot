@@ -2,6 +2,7 @@
 
 from astrbot.core.agent.context.token_counter import (
     AUDIO_TOKEN_ESTIMATE,
+    EMOJI_TOKEN_ESTIMATE,
     IMAGE_TOKEN_ESTIMATE,
     EstimateTokenCounter,
 )
@@ -34,6 +35,21 @@ class TestTextCounting:
     def test_text_part(self):
         msg = _msg("user", [TextPart(text="hello")])
         assert counter.count_tokens([msg]) > 0
+
+
+class TestEmojiCounting:
+    def test_single_emoji(self):
+        tokens = counter.count_tokens([_msg("user", "😀")])
+        assert tokens == EMOJI_TOKEN_ESTIMATE
+
+    def test_multiple_emoji(self):
+        tokens = counter.count_tokens([_msg("user", "😀😀😀")])
+        assert tokens == EMOJI_TOKEN_ESTIMATE * 3
+
+    def test_emoji_weighs_more_than_ascii(self):
+        emoji = counter.count_tokens([_msg("user", "😀")])
+        ascii_char = counter.count_tokens([_msg("user", "a")])
+        assert emoji > ascii_char
 
 
 class TestMultimodalCounting:
