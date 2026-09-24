@@ -30,17 +30,17 @@ MSGS: dict[str, dict[str, str]] = {
         "ru-RU": "✅ Нет выполняемых задач в текущей сессии.",
         "ja-JP": "✅ 実行中のタスクはありません。",
     },
+    "reset.success": {
+        "zh-CN": "✅ 当前会话上下文已清除。",
+        "en-US": "✅ The current conversation context has been cleared.",
+        "ru-RU": "✅ Контекст текущего диалога очищен.",
+        "ja-JP": "✅ 現在の会話のコンテキストをクリアしました。",
+    },
     "new.success": {
         "zh-CN": "✅ 已切换到新会话: {cid}。",
         "en-US": "✅ Switched to new conversation: {cid}.",
         "ru-RU": "✅ Переключено на новый диалог: {cid}.",
         "ja-JP": "✅ 新しい会話に切り替えました: {cid}。",
-    },
-    "new.created": {
-        "zh-CN": "✅ 已创建新对话。",
-        "en-US": "✅ New conversation created.",
-        "ru-RU": "✅ Новый диалог создан.",
-        "ja-JP": "✅ 新しい会話を作成しました。",
     },
     "stats.none": {
         "zh-CN": "📊 当前会话暂无统计。",

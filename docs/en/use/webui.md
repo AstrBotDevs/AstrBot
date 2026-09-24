@@ -92,7 +92,7 @@ Global settings are under `Settings` at the bottom of the sidebar:
 
 - `General`: timezone, external callback address, logs, and cache.
 - `Appearance`: sidebar, theme, and text-to-image rendering.
-- `Network`: HTTP proxy, Python package sources, and GitHub proxy.
+- `Network`: HTTP proxy, Python package sources, and GitHub proxy. For the address to use when AstrBot runs in Docker, see [Deploy with Docker](/en/deploy/astrbot/docker.md).
 - `Security`: WebUI HTTPS, login rate limits, and TOTP.
 - `Maintenance`: backup, restore, and restart.
 - `OpenAPI`: developer access keys.

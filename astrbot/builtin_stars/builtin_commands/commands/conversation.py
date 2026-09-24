@@ -109,6 +109,37 @@ class ConversationCommands:
             return None
         return conv.persona_id
 
+    async def reset(self, message: AstrMessageEvent) -> None:
+        """Clear the context of the current conversation.
+
+        Args:
+            message: Command event identifying the session and sender.
+        """
+        umo = message.unified_msg_origin
+        cfg = self.context.get_config(umo=umo)
+        agent_runner_type = cfg["agent_runner"]["runner_type"]
+
+        active_event_registry.stop_all(umo, exclude=message)
+        cid = await self.context.conversation_manager.get_curr_conversation_id(umo)
+        if agent_runner_type in THIRD_PARTY_AGENT_RUNNER_KEY:
+            await _clear_third_party_agent_runner_state(
+                self.context,
+                umo,
+                agent_runner_type,
+            )
+        else:
+            if cid:
+                await self.context.conversation_manager.update_conversation(
+                    umo,
+                    cid,
+                    history=[],
+                )
+
+        message.set_extra("_clean_group_context_session", True)
+        message.set_result(
+            MessageEventResult().message(await t(self.context, umo, "reset.success"))
+        )
+
     async def stop(self, message: AstrMessageEvent) -> None:
         """停止当前会话正在运行的 Agent"""
         cfg = self.context.get_config(umo=message.unified_msg_origin)
@@ -143,21 +174,14 @@ class ConversationCommands:
         """
         cfg = self.context.get_config(umo=message.unified_msg_origin)
         agent_runner_type = cfg["agent_runner"]["runner_type"]
+        active_event_registry.stop_all(message.unified_msg_origin, exclude=message)
         if agent_runner_type in THIRD_PARTY_AGENT_RUNNER_KEY:
-            active_event_registry.stop_all(message.unified_msg_origin, exclude=message)
             await _clear_third_party_agent_runner_state(
                 self.context,
                 message.unified_msg_origin,
                 agent_runner_type,
             )
-            message.set_result(
-                MessageEventResult().message(
-                    await t(self.context, message.unified_msg_origin, "new.created")
-                )
-            )
-            return
 
-        active_event_registry.stop_all(message.unified_msg_origin, exclude=message)
         cpersona = await self._get_current_persona_id(message.unified_msg_origin)
         cid = await self.context.conversation_manager.new_conversation(
             message.unified_msg_origin,
