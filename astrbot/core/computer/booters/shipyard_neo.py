@@ -478,7 +478,7 @@ class ShipyardNeoBooter(ComputerBooter):
             await sandbox.refresh()
             status = getattr(sandbox.status, "value", str(sandbox.status))
 
-            if status == "ready":
+            if status in {"ready", "idle"}:
                 logger.info(
                     "[Computer] Sandbox %s is ready (profile=%s)",
                     sandbox_id,
