@@ -140,3 +140,16 @@ docker run -itd -p 6185:6185 -p 6199:6199 -e TZ=Asia/Shanghai -v "${PWD}\data:/A
 > 如果部署在云服务器上，需要在相应厂商控制台里放行对应端口。
 
 接下来，你需要部署任何一个消息平台，才能够实现在消息平台上使用 AstrBot。
+
+## 在 Docker 中配置 HTTP 代理
+
+AstrBot 的 HTTP 代理在 WebUI：`设置 → 网络 → 代理与依赖源 → HTTP 代理`。填写的地址由 **AstrBot 容器内部**访问，因此 `http://127.0.0.1:7890` 会连到 AstrBot 容器自己，而不是宿主机或其他容器。
+
+代理跑在宿主机、或另一个容器并把端口映射到宿主机时：
+
+- Mac / Windows（Docker Desktop）：`http://host.docker.internal:7890`
+- Linux：`http://172.17.0.1:7890`（把 `172.17.0.1` 换成本机 docker0 网关）
+
+AstrBot 与代理在同一 Docker 网络时，用容器名，例如 `http://clash:7890`。
+
+Clash 一类软件常见 HTTP `7890`、SOCKS `7891`，按实际协议写 `http://` 或 `socks5://`。请确认代理端口已映射到宿主机，且不是只绑在 `127.0.0.1`（写成 `127.0.0.1:7890:7890` 时，其他容器从网关进不去）。

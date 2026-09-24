@@ -12,6 +12,8 @@ This page provides a general checklist for diagnosing AstrBot issues. When somet
 
 ## Logs to Check First
 
+When the WebUI is available, open `Data & Logs → Logs` to view live logs. To change console or file log levels, open `Settings → General → Logs` and save your changes.
+
 Start with the main AstrBot log:
 
 ```text

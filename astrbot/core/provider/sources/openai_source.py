@@ -359,15 +359,9 @@ class ProviderOpenAIOfficial(Provider):
         self.api_keys: list = super().get_keys()
         self.chosen_api_key = self.api_keys[0] if len(self.api_keys) > 0 else None
         self.timeout = provider_config.get("timeout", 120)
-        self.custom_headers = provider_config.get("custom_headers", {})
+        self.custom_headers = self.request_headers
         if isinstance(self.timeout, str):
             self.timeout = int(self.timeout)
-
-        if not isinstance(self.custom_headers, dict) or not self.custom_headers:
-            self.custom_headers = None
-        else:
-            for key in self.custom_headers:
-                self.custom_headers[key] = str(self.custom_headers[key])
 
         if "api_version" in provider_config:
             # Using Azure OpenAI API
@@ -375,17 +369,23 @@ class ProviderOpenAIOfficial(Provider):
                 api_key=self.chosen_api_key,
                 api_version=provider_config.get("api_version", None),
                 default_headers=self.custom_headers,
-                base_url=provider_config.get("api_base", ""),
+                base_url=provider_config.get("api_base") or None,
                 timeout=self.timeout,
+                # Retry is handled by retry_provider_request(); disable the
+                # SDK built-in retry to avoid stacking request attempts.
+                max_retries=0,
                 http_client=self._create_http_client(provider_config),
             )
         else:
             # Using OpenAI Official API
             self.client = AsyncOpenAI(
                 api_key=self.chosen_api_key,
-                base_url=provider_config.get("api_base", None),
+                base_url=provider_config.get("api_base") or None,
                 default_headers=self.custom_headers,
                 timeout=self.timeout,
+                # Retry is handled by retry_provider_request(); disable the
+                # SDK built-in retry to avoid stacking request attempts.
+                max_retries=0,
                 http_client=self._create_http_client(provider_config),
             )
 
@@ -854,17 +854,19 @@ class ProviderOpenAIOfficial(Provider):
         # parse the text completion
         if choice.message.content is not None:
             completion_text = self._normalize_content(choice.message.content)
-            # specially, some providers may set <think> tags around reasoning content in the completion text,
+            # Some compatible providers wrap reasoning in <think> or <thinking> tags.
             # we use regex to remove them, and store then in reasoning_content field
-            reasoning_pattern = re.compile(r"<think>(.*?)</think>", re.DOTALL)
+            reasoning_pattern = re.compile(r"<(think|thinking)>(.*?)</\1>", re.DOTALL)
             matches = reasoning_pattern.findall(completion_text)
             if matches:
                 llm_response.reasoning_content = "\n".join(
-                    [match.strip() for match in matches],
+                    [match[1].strip() for match in matches],
                 )
                 completion_text = reasoning_pattern.sub("", completion_text).strip()
-            # Also clean up orphan </think> tags that may leak from some models
-            completion_text = re.sub(r"</think>\s*$", "", completion_text).strip()
+            # Also clean up trailing reasoning closing tags from some models.
+            completion_text = re.sub(
+                r"</(?:think|thinking)>\s*$", "", completion_text
+            ).strip()
             llm_response.result_chain = MessageChain().message(completion_text)
         elif refusal := getattr(choice.message, "refusal", None):
             refusal_text = self._normalize_content(refusal)

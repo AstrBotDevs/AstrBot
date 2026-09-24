@@ -284,6 +284,7 @@ class TestUpdateJob:
             enabled=False,  # Disabled to avoid scheduling
         )
         mock_db.update_cron_job.return_value = updated_job
+        mock_db.get_cron_job.return_value = sample_cron_job
 
         result = await cron_manager.update_job("test-job-id", name="Updated Job")
 
@@ -293,6 +294,7 @@ class TestUpdateJob:
     @pytest.mark.asyncio
     async def test_update_job_not_found(self, cron_manager, mock_db):
         """Test updating a non-existent job."""
+        mock_db.get_cron_job.return_value = None
         mock_db.update_cron_job.return_value = None
 
         result = await cron_manager.update_job("non-existent", name="Updated")
@@ -554,6 +556,102 @@ class TestRunActiveAgentJob:
     """Tests for active agent cron job execution."""
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("session_config", "expected_plugins"),
+        [
+            ({"plugin_set": ["allowed"]}, {"allowed", "reserved"}),
+            ({"plugin_set": []}, {"reserved"}),
+            ({"plugin_set": ["*"]}, {"allowed", "disabled", "reserved"}),
+            ({}, {"allowed", "disabled", "reserved"}),
+        ],
+        ids=["whitelist", "empty", "wildcard", "default"],
+    )
+    async def test_woke_main_agent_filters_plugin_hooks_and_tools(
+        self, cron_manager, monkeypatch, session_config, expected_plugins
+    ):
+        """Apply the session plugin policy to cron response hooks and tools."""
+        from astrbot.core.agent.tool import FunctionTool, ToolSet
+        from astrbot.core.astr_agent_hooks import MAIN_AGENT_HOOKS
+        from astrbot.core.astr_main_agent import _plugin_tool_fix
+        from astrbot.core.pipeline import context_utils
+        from astrbot.core.star.star import StarMetadata, star_map
+        from astrbot.core.star.star_handler import (
+            EventType,
+            StarHandlerMetadata,
+            StarHandlerRegistry,
+        )
+
+        ctx = MagicMock()
+        ctx.get_config.return_value = session_config
+        cron_manager.ctx = ctx
+        registry = StarHandlerRegistry()
+        monkeypatch.setattr(context_utils, "star_handlers_registry", registry)
+        hooks = {}
+        tools = ToolSet()
+        for name in ("allowed", "disabled", "reserved"):
+            module_path = f"test_cron_plugins.{name}"
+            monkeypatch.setitem(
+                star_map,
+                module_path,
+                StarMetadata(name=name, reserved=name == "reserved"),
+            )
+            tools.add_tool(
+                FunctionTool(
+                    name=name,
+                    description="Test plugin tool",
+                    parameters={"type": "object", "properties": {}},
+                    handler_module_path=module_path,
+                )
+            )
+            for hook_type in (EventType.OnLLMResponseEvent, EventType.OnAgentDoneEvent):
+                hook = AsyncMock()
+                hooks[name, hook_type] = hook
+                registry.append(
+                    StarHandlerMetadata(
+                        event_type=hook_type,
+                        handler_full_name=f"{module_path}.{hook_type.name}",
+                        handler_name=hook_type.name,
+                        handler_module_path=module_path,
+                        handler=hook,
+                        event_filters=[],
+                    )
+                )
+
+        runner = MagicMock(state=AgentState.DONE)
+        runner.step_until_done.return_value.__aiter__.return_value = []
+        runner.get_final_llm_resp.return_value = None
+        with (
+            patch(
+                "astrbot.core.astr_main_agent._get_session_conv",
+                AsyncMock(return_value=SimpleNamespace(history="[]")),
+            ),
+            patch(
+                "astrbot.core.astr_main_agent.build_main_agent",
+                AsyncMock(return_value=SimpleNamespace(agent_runner=runner)),
+            ) as build_agent,
+            patch("astrbot.core.cron.manager.persist_agent_history", AsyncMock()),
+        ):
+            await cron_manager._woke_main_agent(
+                message="run scheduled task",
+                session_str="test:GroupMessage:group123",
+                extras={"cron_job": {"id": "job-1"}, "cron_payload": {}},
+            )
+
+        ctx.get_config.assert_called_once_with(umo="test:GroupMessage:group123")
+        event = build_agent.call_args.kwargs["event"]
+        req = build_agent.call_args.kwargs["req"]
+        req.func_tool = tools
+        _plugin_tool_fix(event, req)
+        await MAIN_AGENT_HOOKS.on_agent_done(
+            SimpleNamespace(context=SimpleNamespace(event=event)),
+            SimpleNamespace(reasoning_content=""),
+        )
+
+        assert set(req.func_tool.names()) == expected_plugins
+        for (name, _), hook in hooks.items():
+            assert hook.await_count == int(name in expected_plugins)
+
+    @pytest.mark.asyncio
     async def test_woke_main_agent_passes_history_and_provider_settings(
         self, cron_manager
     ):
@@ -636,9 +734,9 @@ class TestRunActiveAgentJob:
         ("provider_settings", "expected_max_step"),
         [
             pytest.param({"max_agent_step": 50}, 50, id="configured"),
-            pytest.param({}, 30, id="missing_falls_back_to_default"),
+            pytest.param({}, 128, id="missing_falls_back_to_default"),
             pytest.param(
-                {"max_agent_step": True}, 30, id="boolean_falls_back_to_default"
+                {"max_agent_step": True}, 128, id="boolean_falls_back_to_default"
             ),
             pytest.param({"max_agent_step": "50"}, 50, id="numeric_string_coerced"),
             pytest.param({"max_agent_step": 0}, 1, id="zero_clamped_to_min"),
@@ -674,7 +772,7 @@ class TestRunActiveAgentJob:
             "agent_runner": {
                 "runner_type": "local",
                 "config": {
-                    "misc": {"max_steps": provider_settings.get("max_agent_step", 30)}
+                    "misc": {"max_steps": provider_settings.get("max_agent_step", 128)}
                 },
             },
         }

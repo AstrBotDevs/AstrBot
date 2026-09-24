@@ -14,7 +14,7 @@ Click to enter the application, click Publishing Channel -> API Call -> API KEY,
 
 ![alt text](https://files.astrbot.app/docs/source/images/dashscope/image-2.png)
 
-In the WebUI, click "Model Provider" -> "Add Provider", select "Agent Runner", select "Alibaba Cloud Bailian Application", and enter the Alibaba Cloud Bailian Application configuration page.
+In the WebUI, open **Config**, select the profile to edit, and open **AI**. Click **More actions** (`…`) beside the heading → **Change Execution Mode**, select **Alibaba Cloud Bailian**, read and check the reset acknowledgement, then click **Use This Mode**. Make sure **Enable AI** is on, then enter the connection settings on this page. Switching resets the current mode's configuration; see [Agent Runner](../../use/agent-runner.md).
 
 According to Alibaba Cloud Bailian Application, there are four application types:
 
@@ -28,13 +28,13 @@ According to Alibaba Cloud Bailian Application, there are four application types
 
 Please ensure that the `Application Type` configured in AstrBot matches the application type created in Alibaba Cloud Bailian Application.
 
-Then fill in the Application ID in `dashscope_app_id` and the API KEY in `dashscope_api_key`.
+Then fill in the Application ID in `Application ID` and the API KEY in `API Key`.
 
-After filling in these three items, click Save.
+After filling in these three items, click **Save Configuration**.
 
-## Select Agent Runner
+## Save the Configuration
 
-Go to the Configuration page in the left sidebar, click "Agent Execution Method", select "Alibaba Cloud Bailian Application", then select the ID of the Alibaba Cloud Bailian Application Agent Runner you just created in the new configuration options that appear below, and click "Save" in the bottom right corner to complete the configuration.
+When all fields are complete, click **Save Configuration** at the bottom right. This profile uses the selected execution mode and connection settings directly; no separate runner provider or provider ID selection is needed.
 
 ## Appendix: Dynamically Set Workflow Input Variables During Chat (Optional)
 
@@ -49,4 +49,3 @@ After setting variables, AstrBot will attach the variables you set in the next r
 Of course, you can use the `/unset` command to cancel the variables you set. For example, `/unset name`
 
 Variables are permanently valid in the current session.
-

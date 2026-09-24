@@ -7,11 +7,15 @@ probing, and image compression helpers.
 import asyncio
 import base64
 import binascii
+import errno
 import io
+import math
 import mimetypes
 import os
 import shutil
+import struct
 import subprocess
+import tempfile
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
@@ -20,12 +24,14 @@ from typing import TypeAlias
 from urllib.parse import unquote, urlparse, urlsplit
 from urllib.request import url2pathname
 
+from aiohttp import ClientError
 from PIL import Image as PILImage
+from PIL import ImageOps
 
 from astrbot import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.datetime_utils import generate_timestamp_id
-from astrbot.core.utils.io import download_file
+from astrbot.core.utils.io import DownloadFileHTTPError, download_file
 from astrbot.core.utils.tencent_record_helper import (
     tencent_silk_to_wav,
     wav_to_tencent_silk,
@@ -35,6 +41,8 @@ IMAGE_COMPRESS_DEFAULT_MAX_SIZE = 1280
 IMAGE_COMPRESS_DEFAULT_QUALITY = 95
 IMAGE_COMPRESS_DEFAULT_OPTIMIZE = True
 IMAGE_COMPRESS_DEFAULT_MIN_FILE_SIZE_MB = 1.0
+# Model image inputs larger than this are skipped before decoding.
+MODEL_IMAGE_MAX_INPUT_BYTES = 64 * 1024 * 1024
 
 MEDIA_MIME_EXTENSIONS = {
     "audio/wav": ".wav",
@@ -60,15 +68,22 @@ MEDIA_MIME_EXTENSIONS = {
     "video/quicktime": ".mov",
 }
 
-IMAGE_FORMAT_MIME_TYPES = {
-    "JPEG": "image/jpeg",
-    "PNG": "image/png",
-    "GIF": "image/gif",
-    "WEBP": "image/webp",
-    "BMP": "image/bmp",
-    "TIFF": "image/tiff",
-    "AVIF": "image/avif",
-}
+# Magic-byte prefixes for O(1) image MIME sniffing; unknown headers fall
+# back to the caller-provided default instead of decoding the file.
+_IMAGE_MAGIC_MIME_TYPES = (
+    (b"\x89PNG\r\n\x1a\n", "image/png"),
+    (b"\xff\xd8\xff", "image/jpeg"),
+    (b"GIF87a", "image/gif"),
+    (b"GIF89a", "image/gif"),
+    (b"BM", "image/bmp"),
+    (b"II*\x00", "image/tiff"),
+    (b"MM\x00*", "image/tiff"),
+)
+
+ANIMATED_MONTAGE_GRID = 3
+"""Animated images become a grid x grid frame montage (contact sheet)."""
+
+ANIMATED_MONTAGE_FRAME_COUNT = ANIMATED_MONTAGE_GRID * ANIMATED_MONTAGE_GRID
 
 AUDIO_FORMAT_MIME_TYPES = {
     "aac": "audio/aac",
@@ -370,30 +385,38 @@ def detect_image_mime_type(
     *,
     default_mime_type: str | None = "image/jpeg",
 ) -> str | None:
-    """Detect an image MIME type from encoded bytes or a local path.
+    """Detect an image MIME type by sniffing the file header.
+
+    Only the first bytes of the input are read, so detection cost and memory
+    stay constant regardless of file size.
 
     Args:
         image_source: Encoded image bytes or a local image path to inspect.
         default_mime_type: MIME type to return when detection fails.
 
     Returns:
-        The detected MIME type, or ``default_mime_type`` when detection fails or
-        the format is unknown.
+        The detected MIME type, or ``default_mime_type`` when the header does
+        not match a known image format.
     """
 
     try:
-        image_file = (
-            io.BytesIO(image_source)
-            if isinstance(image_source, bytes)
-            else image_source
-        )
-        with PILImage.open(image_file) as image:
-            image.verify()
-            image_format = str(image.format or "").upper()
-    except Exception:
+        if isinstance(image_source, bytes):
+            header = image_source[:32]
+        else:
+            with open(image_source, "rb") as image_file:
+                header = image_file.read(32)
+    except OSError:
         return default_mime_type
 
-    return IMAGE_FORMAT_MIME_TYPES.get(image_format, default_mime_type)
+    if len(header) >= 12:
+        if header[:4] == b"RIFF" and header[8:12] == b"WEBP":
+            return "image/webp"
+        if header[4:8] == b"ftyp" and (b"avif" in header[8:] or b"avis" in header[8:]):
+            return "image/avif"
+    for magic, mime_type in _IMAGE_MAGIC_MIME_TYPES:
+        if header.startswith(magic):
+            return mime_type
+    return default_mime_type
 
 
 async def detect_image_mime_type_async(
@@ -793,8 +816,8 @@ class MediaResolver:
             async with self.as_path(target_format=target_format) as resolved:
                 try:
                     media_bytes = await asyncio.to_thread(resolved.read_bytes)
-                except OSError:
-                    if strict:
+                except OSError as exc:
+                    if strict or not is_recoverable_image_error(exc):
                         raise
                     return None
 
@@ -895,12 +918,16 @@ async def resolve_image_ref_to_base64_data(
     strict: bool = False,
     default_mime_type: str | None = "image/jpeg",
 ) -> ResolvedMediaData | None:
-    """Resolve an image reference to base64 data and a detected MIME type.
+    """Resolve an image reference to losslessly encoded base64 data.
 
-    ``strict=False`` returns ``None`` for invalid images so provider payload
+    Only materializes the source and detects its MIME type; no
+    provider-specific format conversion, frame extraction, or montage is
+    performed here. Platform senders and generic request assembly rely on
+    this to encode image bytes without transforming their content.
+
+    ``strict=False`` returns ``None`` for invalid images so payload
     assembly can skip bad image refs without failing the whole request.
     """
-
     return await MediaResolver(
         image_ref,
         media_type="image",
@@ -909,6 +936,338 @@ async def resolve_image_ref_to_base64_data(
         strict=strict,
         default_mime_type=default_mime_type,
     )
+
+
+def is_recoverable_image_error(error: Exception) -> bool:
+    """Identify ordinary input, decoder, network and cache failures.
+
+    Args:
+        error: Exception raised while processing an image.
+
+    Returns:
+        Whether the image may be skipped. Resource exhaustion, Pillow's image
+        safety limit and programming errors must propagate to the caller.
+    """
+    if isinstance(error, OSError) and error.errno in {
+        errno.ENOMEM,
+        errno.EMFILE,
+        errno.ENFILE,
+    }:
+        return False
+    return isinstance(
+        error,
+        (
+            OSError,
+            ValueError,
+            SyntaxError,
+            EOFError,
+            struct.error,
+            ClientError,
+            DownloadFileHTTPError,
+        ),
+    )
+
+
+MODEL_IMAGE_MAX_BYTES = 512 * 1024
+"""Model input image files must be strictly smaller than this limit."""
+
+
+def normalize_model_image_max_size(value: object) -> int:
+    """Normalize the model image longest-edge cap.
+
+    Accepts ints, integer-like floats, and integer strings. Booleans,
+    non-finite numbers, unparseable values, and values below the smallest
+    usable montage edge (the grid size) fall back to the default with a
+    warning, so every entry shares one effective-size semantic and a
+    configured cap is actually honored by the produced montage.
+
+    Args:
+        value: Raw configured cap. ``None`` means unset and silently uses
+            the default.
+
+    Returns:
+        The effective longest-edge cap in pixels.
+    """
+    normalized: int | None = None
+    if isinstance(value, bool):
+        normalized = None
+    elif value is None:
+        normalized = None
+    elif isinstance(value, int):
+        normalized = value
+    elif isinstance(value, float):
+        normalized = int(value) if math.isfinite(value) and value.is_integer() else None
+    elif isinstance(value, str):
+        try:
+            normalized = int(value.strip())
+        except ValueError:
+            normalized = None
+    if normalized is None or normalized < ANIMATED_MONTAGE_GRID:
+        if value is not None:
+            logger.warning(
+                "Invalid model image max size %r; falling back to %d.",
+                value,
+                IMAGE_COMPRESS_DEFAULT_MAX_SIZE,
+            )
+        return IMAGE_COMPRESS_DEFAULT_MAX_SIZE
+    return normalized
+
+
+def _encode_image_frame_bytes(
+    image: PILImage.Image,
+    max_size: int | None = None,
+) -> bytes:
+    """Encode an owned frame below the byte limit while preserving transparency.
+
+    Args:
+        image: Decoded frame owned by the caller; its pixels and metadata may change.
+        max_size: Optional longest-edge limit; smaller images are not enlarged.
+
+    Returns:
+        JPEG or transparent PNG bytes strictly below MODEL_IMAGE_MAX_BYTES.
+
+    Raises:
+        ValueError: The image cannot fit the byte limit even at one pixel.
+    """
+    ImageOps.exif_transpose(image, in_place=True)
+    has_alpha = "A" in image.getbands() or "transparency" in image.info
+    icc_profile = image.info.get("icc_profile")
+    if image.mode not in {"RGB", "RGBA", "L", "LA", "P", "1", "I", "I;16"}:
+        # A source profile is invalid after a color-space conversion such as CMYK.
+        icc_profile = None
+    prepared = image
+    try:
+        if has_alpha:
+            if image.mode != "RGBA":
+                prepared = image.convert("RGBA")
+        elif image.mode not in {"RGB", "L", "I", "I;16"}:
+            prepared = image.convert("L" if image.mode == "1" else "RGB")
+        if max_size is not None:
+            prepared.thumbnail(
+                (max_size, max_size),
+                PILImage.Resampling.LANCZOS,
+                reducing_gap=None if prepared.mode == "I;16" else 2.0,
+            )
+        if prepared.mode in {"I", "I;16"}:
+            # Normalize high-bit-depth pixels instead of clipping them to 255.
+            low, high = prepared.getextrema()
+            if high > low:
+                with prepared.point(
+                    lambda v: (v - low) * (255.0 / (high - low))
+                ) as scaled:
+                    prepared = scaled.convert("L")
+            else:
+                prepared = prepared.convert("L")
+        # Do not carry EXIF, text chunks, or other unbounded metadata into previews.
+        prepared.info.clear()
+        save_kwargs = {"icc_profile": icc_profile} if icc_profile else {}
+        while True:
+            with io.BytesIO() as buffer:
+                if has_alpha:
+                    prepared.save(buffer, "PNG", **save_kwargs)
+                else:
+                    prepared.save(
+                        buffer, "JPEG", quality=85, optimize=True, **save_kwargs
+                    )
+                data = buffer.getvalue()
+            if len(data) < MODEL_IMAGE_MAX_BYTES:
+                return data
+            if save_kwargs:
+                # Oversized profiles must not defeat the byte limit.
+                save_kwargs.clear()
+                continue
+            if prepared.size == (1, 1):
+                raise ValueError("Image cannot fit the model input byte limit")
+            scale = min(0.85, math.sqrt((MODEL_IMAGE_MAX_BYTES - 1) / len(data)) * 0.95)
+            prepared.thumbnail(
+                (
+                    max(1, int(prepared.width * scale)),
+                    max(1, int(prepared.height * scale)),
+                ),
+                PILImage.Resampling.LANCZOS,
+            )
+    finally:
+        if prepared is not image:
+            prepared.close()
+
+
+def _prepare_model_image_sync(source_bytes: bytes, max_size: int) -> tuple[bytes, bool]:
+    """Prepare a preview using a single opened source image.
+
+    Args:
+        source_bytes: Original encoded image content.
+        max_size: Longest-edge limit for still images and animation montages.
+
+    Returns:
+        Encoded image bytes and whether they represent an animation montage.
+    """
+    with PILImage.open(io.BytesIO(source_bytes)) as image:
+        if getattr(image, "n_frames", 1) > 1:
+            return _extract_animation_montage_sync(image, max_size), True
+        if (
+            image.format in {"PNG", "JPEG"}
+            and len(source_bytes) < MODEL_IMAGE_MAX_BYTES
+            and max(image.size) <= max_size
+            and image.getexif().get(274, 1) == 1
+        ):
+            # Validate even byte-identical passthroughs without decoding twice.
+            image.load()
+            return source_bytes, False
+        return _encode_image_frame_bytes(image, max_size), False
+
+
+def _even_frame_indices(total_frames: int, max_frames: int) -> list[int]:
+    """Pick evenly spaced animation frames, including both endpoints.
+
+    Args:
+        total_frames: Number of animation frames, excluding an independent cover.
+        max_frames: Maximum number of frames to select.
+
+    Returns:
+        Ascending, unique frame indices.
+    """
+    count = min(max_frames, total_frames)
+    if count <= 1:
+        return [0]
+    return sorted({round(i * (total_frames - 1) / (count - 1)) for i in range(count)})
+
+
+def _extract_animation_montage_sync(image: PILImage.Image, max_size: int) -> bytes:
+    """Tile evenly spaced animation frames into one white 3x3 preview.
+
+    Args:
+        image: Opened animation owned by the caller.
+        max_size: Longest-edge limit of the montage, without upscaling.
+
+    Returns:
+        JPEG bytes below the byte limit, with unused cells left white.
+    """
+    total_frames = getattr(image, "n_frames", 1)
+    # APNG's independent default image is a cover, not an animation frame.
+    first_frame = 1 if image.info.get("default_image", False) else 0
+    frame_indices = [
+        first_frame + index
+        for index in _even_frame_indices(
+            total_frames - first_frame, ANIMATED_MONTAGE_FRAME_COUNT
+        )
+    ]
+    image.seek(first_frame)
+    with ImageOps.exif_transpose(image) as oriented:
+        display_size = oriented.size
+    # Floor the per-cell scale so the montage never exceeds max_size.
+    longest_edge = max(display_size) * ANIMATED_MONTAGE_GRID
+    scale = min(1.0, max(max_size, 1) / longest_edge)
+    cell_size = (
+        max(1, int(display_size[0] * scale)),
+        max(1, int(display_size[1] * scale)),
+    )
+    canvas = PILImage.new(
+        "RGB",
+        (
+            cell_size[0] * ANIMATED_MONTAGE_GRID,
+            cell_size[1] * ANIMATED_MONTAGE_GRID,
+        ),
+        (255, 255, 255),
+    )
+    try:
+        for out_index, frame_index in enumerate(frame_indices):
+            image.seek(frame_index)
+            with (
+                ImageOps.exif_transpose(image) as oriented,
+                oriented.convert("RGBA") as frame,
+            ):
+                resized = frame
+                try:
+                    if frame.size != cell_size:
+                        resized = frame.resize(cell_size, PILImage.Resampling.LANCZOS)
+                    # Alpha shows the white canvas through transparent pixels.
+                    canvas.paste(
+                        resized,
+                        (
+                            (out_index % ANIMATED_MONTAGE_GRID) * cell_size[0],
+                            (out_index // ANIMATED_MONTAGE_GRID) * cell_size[1],
+                        ),
+                        resized,
+                    )
+                finally:
+                    if resized is not frame:
+                        resized.close()
+        encoded = _encode_image_frame_bytes(canvas)
+    finally:
+        canvas.close()
+    return encoded
+
+
+class ImageInputTooLargeError(ValueError):
+    """Raised with the retained source path when an image exceeds the input cap."""
+
+
+async def prepare_model_image(
+    image_ref: str,
+    *,
+    max_size: int,
+    output_dir: Path,
+) -> tuple[str, bool, bool, str] | None:
+    """Prepare an image, reusing compliant local files without copying them.
+
+    Args:
+        image_ref: Source reference accepted by MediaResolver.
+        max_size: Longest-edge limit for both still images and montages.
+        output_dir: Directory for event-owned working files.
+
+    Returns:
+        The image path, whether it is an animation montage, whether the caller must
+        delete the preview after use, and the retained original path. Compliant
+        originals are reused directly. Returns None for a recoverable failure.
+
+    Raises:
+        ImageInputTooLargeError: The input exceeds the size cap. Its original path
+            is retained for file-tool access and returned as the error message.
+    """
+    try:
+        async with MediaResolver(image_ref, media_type="image").as_path() as source:
+            input_size = source.path.stat().st_size
+            if input_size > MODEL_IMAGE_MAX_INPUT_BYTES:
+                logger.warning(
+                    "Skipping oversized image input (%d bytes): %s",
+                    input_size,
+                    source.path,
+                )
+                source.detach()
+                raise ImageInputTooLargeError(str(source.path))
+            image_bytes = await asyncio.to_thread(source.read_bytes)
+            converted_bytes, is_montage = await asyncio.to_thread(
+                _prepare_model_image_sync, image_bytes, max_size
+            )
+            original_path = str(source.path)
+            # Final image labels expose this original for later file-tool access.
+            source.detach()
+            if converted_bytes is image_bytes:
+                return original_path, is_montage, False, original_path
+        # Publish the working file synchronously after encoding, so cancellation
+        # cannot leave an untracked background write alive after this call.
+        output_dir.mkdir(parents=True, exist_ok=True)
+        suffix = ".jpg" if converted_bytes.startswith(b"\xff\xd8") else ".png"
+        fd, name = tempfile.mkstemp(
+            prefix="model_image_", suffix=suffix, dir=output_dir
+        )
+        output_path = Path(name)
+        try:
+            with os.fdopen(fd, "wb") as output:
+                output.write(converted_bytes)
+        except BaseException:
+            output_path.unlink(missing_ok=True)
+            raise
+        return str(output_path), is_montage, True, original_path
+    except ImageInputTooLargeError:
+        raise
+    except Exception as exc:
+        if not is_recoverable_image_error(exc):
+            raise
+        logger.warning(
+            "Model image preparation failed; skipping image (%s).", type(exc).__name__
+        )
+        return None
 
 
 async def resolve_audio_ref_to_base64_data(
