@@ -1,7 +1,6 @@
 """Tests for bounded reads of persisted conversation history."""
 
 import json
-from pathlib import Path
 
 import pytest
 from sqlalchemy import event, select, text
@@ -29,10 +28,10 @@ async def _create_conversation(db: SQLiteDatabase, cid: str, content: list) -> N
 
 @pytest.mark.asyncio
 async def test_single_conversation_limit_measures_stored_utf8_bytes_before_loading(
-    tmp_path: Path,
+    temp_db: SQLiteDatabase,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    db = SQLiteDatabase(str(tmp_path / "history-limits.db"))
+    db = temp_db
     await db.initialize()
     db.inited = True
     await _create_conversation(db, "unicode", [{"role": "user", "content": "x"}])
@@ -99,10 +98,10 @@ async def test_single_conversation_limit_measures_stored_utf8_bytes_before_loadi
 
 @pytest.mark.asyncio
 async def test_conversation_lists_allow_metadata_but_raise_for_oversized_history(
-    tmp_path: Path,
+    temp_db: SQLiteDatabase,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    db = SQLiteDatabase(str(tmp_path / "history-lists.db"))
+    db = temp_db
     await db.initialize()
     db.inited = True
     await _create_conversation(
@@ -149,10 +148,10 @@ async def test_conversation_lists_allow_metadata_but_raise_for_oversized_history
 
 @pytest.mark.asyncio
 async def test_metadata_updates_and_delete_do_not_require_reading_large_history(
-    tmp_path: Path,
+    temp_db: SQLiteDatabase,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    db = SQLiteDatabase(str(tmp_path / "history-metadata.db"))
+    db = temp_db
     await db.initialize()
     db.inited = True
     await _create_conversation(
@@ -183,9 +182,9 @@ async def test_metadata_updates_and_delete_do_not_require_reading_large_history(
 
 @pytest.mark.asyncio
 async def test_expected_identity_is_checked_inside_conversation_update(
-    tmp_path: Path,
+    temp_db: SQLiteDatabase,
 ):
-    db = SQLiteDatabase(str(tmp_path / "history-identity.db"))
+    db = temp_db
     await db.initialize()
     db.inited = True
     await _create_conversation(db, "conversation", [{"role": "user", "content": "ok"}])
