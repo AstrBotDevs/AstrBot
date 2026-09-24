@@ -366,11 +366,11 @@ async def test_preprocess_stores_reaction_when_enabled():
 
 
 @pytest.mark.asyncio
-async def test_preprocess_stores_fallback_emoji_when_react_returns_no_id():
+async def test_preprocess_does_not_track_reaction_when_creation_returns_no_id():
     event = _FakeEvent(reaction_id=None)
     await _run_preprocess(event, {"enable": True, "emojis": ["Typing"]})
 
-    assert event.get_extra(PRE_ACK_REACTION) == (None, "Typing")
+    assert event.get_extra(PRE_ACK_REACTION, None) is None
 
 
 @pytest.mark.asyncio
