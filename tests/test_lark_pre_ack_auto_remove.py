@@ -17,7 +17,11 @@ from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.platform.sources.lark.lark_event import LarkMessageEvent
 
 
-def _lark_event(bot, self_id: str = "bot") -> LarkMessageEvent:
+def _lark_event(
+    bot,
+    self_id: str = "bot",
+    app_id: str | None = None,
+) -> LarkMessageEvent:
     """Build a Lark message event with the provided client double.
 
     Args:
@@ -46,6 +50,7 @@ def _lark_event(bot, self_id: str = "bot") -> LarkMessageEvent:
         ),
         session_id=message.session_id,
         bot=bot,
+        app_id=app_id,
     )
 
 
@@ -289,7 +294,11 @@ async def test_lark_remove_reaction_matches_operator_app_id():
         ),
         adelete=AsyncMock(return_value=_response(True)),
     )
-    event = _lark_event(_lark_bot(reaction_api, app_id="cli_app"), self_id="ou_bot")
+    event = _lark_event(
+        _lark_bot(reaction_api),
+        self_id="ou_bot",
+        app_id="cli_app",
+    )
 
     await event.remove_reaction(emoji="Typing")
 

@@ -50,9 +50,11 @@ class LarkMessageEvent(AstrMessageEvent):
         platform_meta,
         session_id,
         bot: lark.Client,
+        app_id: str | None = None,
     ) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.bot = bot
+        self.app_id = app_id
 
     async def get_group(
         self,
@@ -1041,7 +1043,9 @@ class LarkMessageEvent(AstrMessageEvent):
         # tenant_access_token as the app_id (operator_type "app") or as the bot
         # open_id (operator_type "user"), so accept either identifier.
         operator_ids = {str(self.get_self_id() or "")}
-        app_id = getattr(getattr(self.bot, "config", None), "app_id", None)
+        app_id = self.app_id or getattr(
+            getattr(self.bot, "config", None), "app_id", None
+        )
         if app_id:
             operator_ids.add(str(app_id))
         operator_ids.discard("")
