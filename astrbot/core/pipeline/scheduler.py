@@ -97,12 +97,14 @@ class PipelineScheduler:
 
             logger.debug("pipeline execution completed.")
         finally:
-            pre_ack_reaction = event.get_extra(PRE_ACK_REACTION, None)
-            if pre_ack_reaction is not None:
-                try:
-                    reaction_id, emoji = pre_ack_reaction
-                    await event.remove_reaction(reaction_id, emoji)
-                except Exception as e:
-                    logger.warning(f"Failed to remove pre-ack reaction: {e}")
-            event.cleanup_temporary_local_files()
-            active_event_registry.unregister(event)
+            try:
+                pre_ack_reaction = event.get_extra(PRE_ACK_REACTION, None)
+                if pre_ack_reaction is not None:
+                    try:
+                        reaction_id, emoji = pre_ack_reaction
+                        await event.remove_reaction(reaction_id, emoji)
+                    except Exception as e:
+                        logger.warning(f"Failed to remove pre-ack reaction: {e}")
+            finally:
+                event.cleanup_temporary_local_files()
+                active_event_registry.unregister(event)

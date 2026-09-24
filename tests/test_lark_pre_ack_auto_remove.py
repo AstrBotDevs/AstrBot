@@ -1,7 +1,8 @@
 """Tests for Lark pre-ack emoji auto-remove behavior."""
 
+import asyncio
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -27,6 +28,7 @@ def _lark_event(
     Args:
         bot: Lark client or a compatible test double.
         self_id: Bot open id recorded on the message object.
+        app_id: Optional application ID passed to the event for reaction ownership matching.
 
     Returns:
         Lark private message event for tests.
@@ -424,3 +426,30 @@ async def test_scheduler_finally_swallows_remove_reaction_errors():
     await _execute_scheduler(remove_reaction, fail_processing=True)
 
     remove_reaction.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_scheduler_cleans_up_when_reaction_removal_is_cancelled():
+    from astrbot.core.pipeline.scheduler import PipelineScheduler
+
+    cleanup = Mock()
+    unregister = Mock()
+    remove_reaction = AsyncMock(side_effect=asyncio.CancelledError())
+    event = SimpleNamespace(
+        get_extra=lambda key=None, default=None: (
+            ("reaction-1", "Typing") if key == PRE_ACK_REACTION else default
+        ),
+        remove_reaction=remove_reaction,
+        cleanup_temporary_local_files=cleanup,
+    )
+    registry = SimpleNamespace(register=Mock(), unregister=unregister)
+    scheduler = PipelineScheduler.__new__(PipelineScheduler)
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr("astrbot.core.pipeline.scheduler.active_event_registry", registry)
+        mp.setattr(PipelineScheduler, "_process_stages", AsyncMock())
+        with pytest.raises(asyncio.CancelledError):
+            await PipelineScheduler.execute(scheduler, event)
+
+    cleanup.assert_called_once_with()
+    unregister.assert_called_once_with(event)
