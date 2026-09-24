@@ -33,8 +33,8 @@ class TokenCounter(Protocol):
 # 这里取一个保守中位数，宁可偏高触发压缩也不要偏低导致 API 报错。
 IMAGE_TOKEN_ESTIMATE = 765
 AUDIO_TOKEN_ESTIMATE = 500
-# 单个 emoji 的 token 开销估算值。
-# 仅判断落在 0x2600–0x27BF 以及 0x1F000-0x1FAFF 的 emoji。
+# Estimate value of tokens for each emoji.
+# Only emoji located in 0x2600–0x27BF and 0x1F000-0x1FAFF are estimated.
 EMOJI_TOKEN_ESTIMATE = 3
 
 
