@@ -1476,26 +1476,20 @@ export default {
     };
 
     const toggleSelectAll = () => {
-      const visibleNames = visibleDeletableSkills.value.map(
-        (skill) => skill.name,
-      );
       if (allDeletableSelected.value) {
-        const visibleSet = new Set(visibleNames);
-        selectedSkillNames.value = selectedSkillNames.value.filter(
-          (name) => !visibleSet.has(name),
-        );
+        selectedSkillNames.value = [];
         return;
       }
-      selectedSkillNames.value = [
-        ...new Set([...selectedSkillNames.value, ...visibleNames]),
-      ];
+      selectedSkillNames.value = visibleDeletableSkills.value.map(
+        (skill) => skill.name,
+      );
     };
 
     const confirmBatchDelete = () => {
       const selectedNames = new Set(selectedSkillNames.value);
       batchDeleteTargets.value = [
         ...new Set(
-          deletableSkills.value
+          visibleDeletableSkills.value
             .filter((skill) => selectedNames.has(skill.name))
             .map((skill) => skill.name),
         ),
@@ -2073,6 +2067,16 @@ export default {
       } else {
         await fetchSkills();
       }
+    });
+
+    // Keep the batch selection in sync with the active filter so skills hidden
+    // by the search can never be included in a batch delete.
+    watch(visibleDeletableSkills, (visibleSkills) => {
+      if (!batchSelectionEnabled.value) return;
+      const visibleNames = new Set(visibleSkills.map((skill) => skill.name));
+      selectedSkillNames.value = selectedSkillNames.value.filter((name) =>
+        visibleNames.has(name),
+      );
     });
 
     watch(uploadDialog, (isOpen) => {
