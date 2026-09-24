@@ -138,3 +138,15 @@ class TestToolCalls:
         # 文本 + tool call JSON 都应被计算
         text_only = counter.count_tokens([_msg("assistant", "calling tool")])
         assert tokens > text_only
+
+class TestEmojiCounting:
+    def test_emoji_cost_more_than_ascii(self):
+        """emoji 的估算开销应显著高于同数量的 ASCII 字符。"""
+        emoji = counter.count_tokens([_msg("user", "😀" * 10)])
+        ascii_text = counter.count_tokens([_msg("user", "a" * 10)])
+        assert emoji > ascii_text * 2
+
+    def test_emoji_not_grossly_undercounted(self):
+        """10 个 emoji 真实开销约 20~30 tokens，估算不应低于 20。"""
+        tokens = counter.count_tokens([_msg("user", "😀" * 10)])
+        assert tokens >= 20

@@ -74,5 +74,15 @@ class EstimateTokenCounter:
 
     def _estimate_tokens(self, text: str) -> int:
         chinese_count = len([c for c in text if "\u4e00" <= c <= "\u9fff"])
-        other_count = len(text) - chinese_count
-        return int(chinese_count * 0.6 + other_count * 0.3)
+        emoji_count = len([c for c in text if self._is_emoji_like(c)])
+        other_count = len(text) - chinese_count - emoji_count
+        return int(chinese_count * 0.6 + emoji_count * 2.5 + other_count * 0.3)
+
+    def _is_emoji_like(self, c: str) -> bool:
+        code = ord(c)
+        return (
+            0x1F300 <= code <= 0x1FAFF
+            or 0x2600 <= code <= 0x27BF
+            or 0x1F1E6 <= code <= 0x1F1FF
+            or code in (0x200D, 0xFE0F)
+        )
