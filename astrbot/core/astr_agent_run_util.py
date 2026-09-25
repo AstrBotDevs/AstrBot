@@ -128,6 +128,7 @@ async def run_agent(
     astr_event = agent_runner.run_context.context.event
     tool_name_by_call_id: dict[str, str] = {}
     buffered_llm_chains: list[MessageChain] = []
+    used_tool_call = False
     can_buffer_llm_result = _should_buffer_llm_result(
         buffer_intermediate_messages,
         stream_to_general,
@@ -168,6 +169,7 @@ async def run_agent(
                                 MessageEventResult(
                                     chain=merged_chain.chain,
                                     result_content_type=ResultContentType.LLM_RESULT,
+                                    skip_segmentation=used_tool_call,
                                 ),
                             )
                             yield merged_chain
@@ -191,6 +193,7 @@ async def run_agent(
                     continue
 
                 if resp.type == "tool_call_result":
+                    used_tool_call = True
                     msg_chain = resp.data["chain"]
 
                     astr_event.trace.record(
@@ -216,6 +219,7 @@ async def run_agent(
                     # 对于其他情况，暂时先不处理
                     continue
                 elif resp.type == "tool_call":
+                    used_tool_call = True
                     if agent_runner.streaming and show_tool_use:
                         # 向下游平台发送 "break" 分段信号（空 MessageChain，不携带数据）。
                         # 平台适配器收到后会关闭当前流式消息，并在后续文本到来时创建新消息。
@@ -281,10 +285,12 @@ async def run_agent(
                         if resp.type == "llm_result"
                         else ResultContentType.GENERAL_RESULT
                     )
+                    skip_segmentation = used_tool_call and agent_runner.done()
                     astr_event.set_result(
                         MessageEventResult(
                             chain=resp.data["chain"].chain,
                             result_content_type=content_typ,
+                            skip_segmentation=skip_segmentation,
                         ),
                     )
                     yield resp.data["chain"]
@@ -303,6 +309,7 @@ async def run_agent(
                         MessageEventResult(
                             chain=merged_chain.chain,
                             result_content_type=ResultContentType.LLM_RESULT,
+                            skip_segmentation=used_tool_call,
                         ),
                     )
                     yield merged_chain
