@@ -14,6 +14,27 @@ from astrbot.core.utils.path_util import path_Mapping
 from ..context import PipelineContext, call_event_hook
 from ..stage import Stage, register_stage
 
+DEFAULT_LOG_BASE = 2.6
+
+
+def _resolve_log_base(value: float | str | None) -> float:
+    """Return a log base that math.log accepts, or the documented default."""
+    try:
+        log_base = float(value)
+    except (TypeError, ValueError) as e:
+        logger.error(f"Failed to parse the segmented-reply log base: {e}")
+        return DEFAULT_LOG_BASE
+    if not math.isfinite(log_base) or log_base <= 0 or log_base == 1:
+        # math.log(words, 1) raises ZeroDivisionError and a non-positive base
+        # raises ValueError; both escape from _calc_comp_interval before the
+        # first send, so the whole reply is dropped.
+        logger.error(
+            f"Unusable segmented-reply log base: {log_base}, "
+            f"using the default {DEFAULT_LOG_BASE} instead.",
+        )
+        return DEFAULT_LOG_BASE
+    return log_base
+
 
 @register_stage
 class RespondStage(Stage):
@@ -72,7 +93,7 @@ class RespondStage(Stage):
         self.interval_method = ctx.astrbot_config["platform_settings"][
             "segmented_reply"
         ]["interval_method"]
-        self.log_base = float(
+        self.log_base = _resolve_log_base(
             ctx.astrbot_config["platform_settings"]["segmented_reply"]["log_base"],
         )
         self.interval = [1.5, 3.5]
