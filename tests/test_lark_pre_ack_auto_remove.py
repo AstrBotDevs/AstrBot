@@ -401,6 +401,49 @@ async def test_lark_remove_reaction_paginates_until_found():
 
 
 @pytest.mark.asyncio
+async def test_lark_remove_reaction_swallows_list_exception():
+    reaction_api = SimpleNamespace(
+        adelete=AsyncMock(return_value=_response(False)),
+        alist=AsyncMock(side_effect=RuntimeError("list failed")),
+    )
+    event = _lark_event(_lark_bot(reaction_api))
+
+    await event.remove_reaction("reaction-123", "Typing")
+
+    reaction_api.alist.assert_awaited_once()
+    reaction_api.adelete.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_lark_remove_reaction_swallows_retry_delete_exception():
+    reaction_api = SimpleNamespace(
+        adelete=AsyncMock(
+            side_effect=[_response(False), RuntimeError("delete failed")]
+        ),
+        alist=AsyncMock(
+            return_value=_response(
+                True,
+                SimpleNamespace(
+                    items=[
+                        SimpleNamespace(
+                            reaction_id="reaction-123",
+                            operator=SimpleNamespace(operator_id="bot"),
+                        )
+                    ],
+                    has_more=False,
+                    page_token=None,
+                ),
+            )
+        ),
+    )
+    event = _lark_event(_lark_bot(reaction_api))
+
+    await event.remove_reaction("reaction-123", "Typing")
+
+    assert reaction_api.adelete.await_count == 2
+
+
+@pytest.mark.asyncio
 async def test_base_remove_reaction_is_noop():
     class _Event(AstrMessageEvent):
         async def send(self, message):
