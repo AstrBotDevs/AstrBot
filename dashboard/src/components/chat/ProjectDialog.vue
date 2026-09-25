@@ -12,21 +12,27 @@
                 <v-divider class="my-4" />
                 <v-select v-model="form.workspace_type" :items="workspaceTypeItems" item-title="label" item-value="value"
                     :label="tm('project.workspace.type')" variant="outlined" hide-details class="mb-3" />
-                <v-text-field v-if="form.workspace_type === 'custom'" v-model="form.workspace_path"
-                    :label="tm('project.workspace.path')" variant="outlined" hide-details class="mb-1">
-                    <template #append-inner>
-                        <v-btn
-                            v-if="canPickWorkspaceDirectory"
-                            :aria-label="tm('project.workspace.selectPath')"
-                            :loading="pickingWorkspaceDirectory"
-                            :disabled="props.saving"
-                            icon="mdi-folder-open-outline"
-                            size="small"
-                            variant="text"
-                            @click.stop="handlePickWorkspaceDirectory"
-                        />
-                    </template>
-                </v-text-field>
+                <div v-if="form.workspace_type === 'custom'" class="d-flex align-center ga-2 mb-1">
+                    <v-text-field
+                        v-model="form.workspace_path"
+                        :label="tm('project.workspace.path')"
+                        variant="outlined"
+                        hide-details
+                        class="flex-grow-1"
+                    />
+                    <v-btn
+                        v-if="canPickWorkspaceDirectory"
+                        :aria-label="tm('project.workspace.selectPath')"
+                        :loading="pickingWorkspaceDirectory"
+                        :disabled="props.saving"
+                        prepend-icon="mdi-folder-open-outline"
+                        variant="tonal"
+                        class="text-no-wrap"
+                        @click.stop="handlePickWorkspaceDirectory"
+                    >
+                        {{ tm('project.workspace.selectPath') }}
+                    </v-btn>
+                </div>
                 <v-alert
                     v-if="props.errorMessage"
                     class="mt-3"
