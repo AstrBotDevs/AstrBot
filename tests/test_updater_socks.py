@@ -5,6 +5,7 @@ import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from urllib.parse import urlparse
 
 import certifi
@@ -528,6 +529,7 @@ async def test_astrbot_updater_prepares_both_packages_before_applying(
     tmp_path: Path,
 ) -> None:
     updater = AstrBotUpdater()
+    monkeypatch.setattr(updater, "_download_pypi_package", AsyncMock(return_value=False))
     calls: list[str] = []
     progress_events: list[UpdateProgress] = []
     fetch_count = 0
@@ -657,6 +659,7 @@ async def test_astrbot_updater_does_not_apply_unverified_packages(
     tmp_path: Path,
 ) -> None:
     updater = AstrBotUpdater()
+    monkeypatch.setattr(updater, "_download_pypi_package", AsyncMock(return_value=False))
     calls: list[str] = []
 
     async def fake_fetch_release_info(_url: str):
