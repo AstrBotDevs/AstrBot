@@ -321,6 +321,8 @@
     "enterUrl": "Enter extension repository URL"
   },
   "skills": {
+    "searchPlaceholder": "Search skills...",
+    "noSearchResult": "No matching skills found",
     "modeLocal": "Local Skills",
     "modeNeo": "Neo Skills",
     "actions": "Actions",

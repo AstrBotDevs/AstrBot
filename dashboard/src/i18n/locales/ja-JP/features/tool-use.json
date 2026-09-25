@@ -24,6 +24,8 @@
       "sync": "サーバーを同期"
     },
     "empty": "MCP サーバーがありません。「サーバーを追加」をクリックして追加してください",
+    "searchPlaceholder": "MCP サーバーを検索…",
+    "noSearchResult": "一致する MCP サーバーが見つかりません",
     "status": {
       "noTools": "利用可能なツールがありません",
       "availableTools": "利用可能なツール",
