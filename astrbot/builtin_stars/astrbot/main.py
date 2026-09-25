@@ -116,8 +116,22 @@ class Main(star.Star):
                 controller: SessionController,
                 event: AstrMessageEvent,
             ) -> None:
+                # Process both text and non-text messages (e.g. pure images).
+                # Previously, empty message_str caused an early return that
+                # silently dropped the event after stop_event() had already
+                # been called by handle_session_control_agent.
                 if not event.message_str or not event.message_str.strip():
-                    return
+                    # Degenerate case: completely empty message chain —
+                    # do not re-queue, as it would cause an infinite loop.
+                    # Stop the controller so the waiter session ends cleanly
+                    # and does not linger to intercept subsequent messages.
+                    if not event.get_messages():
+                        logger.warning(
+                            "empty_mention_waiter: received event with "
+                            "empty message_str and empty message chain, skipping"
+                        )
+                        controller.stop()
+                        return
                 event.message_obj.message.insert(
                     0,
                     Comp.At(qq=event.get_self_id(), name=event.get_self_id()),
