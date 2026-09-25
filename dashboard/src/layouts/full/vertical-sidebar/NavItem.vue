@@ -32,6 +32,8 @@ const itemTitle = computed(() => {
   return props.item.isRawTitle ? props.item.title : t(props.item.title);
 });
 
+const isVuetifyIcon = computed(() => typeof props.item?.icon === 'string');
+
 </script>
 
 <template>
@@ -39,17 +41,25 @@ const itemTitle = computed(() => {
     <template v-slot:activator="{ props: groupProps }">
       <v-tooltip v-if="rail" location="right" :text="itemTitle" open-delay="180">
         <template v-slot:activator="{ props: tooltipProps }">
-          <v-list-item v-bind="{ ...groupProps, ...tooltipProps }" rounded class="mb-1" color="secondary"
-            :prepend-icon="item.icon" :style="{ '--indent-padding': '0px' }" :aria-label="itemTitle">
-            <v-list-item-title style="font-size: 14px; font-weight: 500; line-height: 1.2; word-break: break-word;">
+          <v-list-item v-bind="{ ...groupProps, ...tooltipProps }" rounded class="dashboard-nav-item" color="secondary"
+            :style="{ '--indent-padding': '0px' }" :aria-label="itemTitle">
+            <template #prepend>
+              <v-icon v-if="isVuetifyIcon" :icon="item.icon" size="18" />
+              <component :is="item.icon" v-else-if="item.icon" :size="18" class="sidebar-lucide-icon" />
+            </template>
+            <v-list-item-title class="dashboard-nav-item__title">
               {{ itemTitle }}
             </v-list-item-title>
           </v-list-item>
         </template>
       </v-tooltip>
-      <v-list-item v-else v-bind="groupProps" rounded class="mb-1" color="secondary" :prepend-icon="item.icon"
+      <v-list-item v-else v-bind="groupProps" rounded class="dashboard-nav-item" color="secondary"
         :style="{ '--indent-padding': '0px' }">
-        <v-list-item-title style="font-size: 14px; font-weight: 500; line-height: 1.2; word-break: break-word;">
+        <template #prepend>
+          <v-icon v-if="isVuetifyIcon" :icon="item.icon" size="18" />
+          <component :is="item.icon" v-else-if="item.icon" :size="18" class="sidebar-lucide-icon" />
+        </template>
+        <v-list-item-title class="dashboard-nav-item__title">
           {{ itemTitle }}
         </v-list-item-title>
       </v-list-item>
@@ -64,13 +74,14 @@ const itemTitle = computed(() => {
   <v-tooltip v-else-if="rail" location="right" :text="itemTitle" open-delay="180">
     <template v-slot:activator="{ props: tooltipProps }">
       <v-list-item v-bind="tooltipProps" :to="item.type === 'external' ? '' : item.to"
-        :href="item.type === 'external' ? item.to : ''" :active="isItemActive" rounded class="mb-1"
+        :href="item.type === 'external' ? item.to : ''" :active="isItemActive" rounded class="dashboard-nav-item"
         color="secondary" :disabled="item.disabled" :target="item.type === 'external' ? '_blank' : ''"
         :style="itemStyle" :aria-label="itemTitle">
         <template v-slot:prepend>
-          <v-icon v-if="item.icon" :size="item.iconSize" class="hide-menu" :icon="item.icon"></v-icon>
+          <v-icon v-if="item.icon && isVuetifyIcon" size="18" class="hide-menu" :icon="item.icon" />
+          <component :is="item.icon" v-else-if="item.icon" :size="18" class="sidebar-lucide-icon hide-menu" />
         </template>
-        <v-list-item-title style="font-size: 14px;">{{ itemTitle }}</v-list-item-title>
+        <v-list-item-title class="dashboard-nav-item__title">{{ itemTitle }}</v-list-item-title>
         <v-list-item-subtitle v-if="item.subCaption" class="text-caption mt-n1 hide-menu">
           {{ item.subCaption }}
         </v-list-item-subtitle>
@@ -85,12 +96,13 @@ const itemTitle = computed(() => {
   </v-tooltip>
 
   <v-list-item v-else :to="item.type === 'external' ? '' : item.to" :href="item.type === 'external' ? item.to : ''"
-    :active="isItemActive" rounded class="mb-1" color="secondary" :disabled="item.disabled"
+    :active="isItemActive" rounded class="dashboard-nav-item" color="secondary" :disabled="item.disabled"
     :target="item.type === 'external' ? '_blank' : ''" :style="itemStyle">
     <template v-slot:prepend>
-      <v-icon v-if="item.icon" :size="item.iconSize" class="hide-menu" :icon="item.icon"></v-icon>
+      <v-icon v-if="item.icon && isVuetifyIcon" size="18" class="hide-menu" :icon="item.icon" />
+      <component :is="item.icon" v-else-if="item.icon" :size="18" class="sidebar-lucide-icon hide-menu" />
     </template>
-    <v-list-item-title style="font-size: 14px;">{{ itemTitle }}</v-list-item-title>
+    <v-list-item-title class="dashboard-nav-item__title">{{ itemTitle }}</v-list-item-title>
     <v-list-item-subtitle v-if="item.subCaption" class="text-caption mt-n1 hide-menu">
       {{ item.subCaption }}
     </v-list-item-subtitle>
@@ -104,6 +116,19 @@ const itemTitle = computed(() => {
 </template>
 
 <style>
+.dashboard-nav-item__title {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+  word-break: break-word;
+}
+
+.sidebar-lucide-icon {
+  flex: 0 0 auto;
+  color: currentcolor;
+  stroke-width: 2;
+}
+
 .rail-group {
   border-radius: 12px;
   transition: background-color 0.18s ease;
