@@ -293,7 +293,11 @@ DEFAULT_CONFIG = {
     "platform_specific": {
         # 平台特异配置：按平台分类，平台下按功能分组
         "lark": {
-            "pre_ack_emoji": {"enable": False, "emojis": ["Typing"]},
+            "pre_ack_emoji": {
+                "enable": False,
+                "emojis": ["Typing"],
+                "auto_remove": True,
+            },
         },
         "telegram": {
             "pre_ack_emoji": {"enable": False, "emojis": ["✍️"]},
@@ -4468,6 +4472,13 @@ CONFIG_METADATA_3 = {
                         "type": "list",
                         "items": {"type": "string"},
                         "hint": "表情枚举名参考：https://open.feishu.cn/document/server-docs/im-v1/message-reaction/emojis-introduce",
+                        "condition": {
+                            "platform_specific.lark.pre_ack_emoji.enable": True,
+                        },
+                    },
+                    "platform_specific.lark.pre_ack_emoji.auto_remove": {
+                        "description": "[飞书] 自动删除预回应表情",
+                        "type": "bool",
                         "condition": {
                             "platform_specific.lark.pre_ack_emoji.enable": True,
                         },

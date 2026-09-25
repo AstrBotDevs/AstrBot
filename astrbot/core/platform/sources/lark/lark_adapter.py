@@ -719,6 +719,7 @@ class LarkPlatformAdapter(Platform):
             platform_meta=self.meta(),
             session_id=message.session_id,
             bot=self.lark_api,
+            app_id=self.appid,
         )
 
     async def handle_msg(self, abm: AstrBotMessage) -> None:
