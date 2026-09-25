@@ -1081,6 +1081,9 @@
             "emojis": {
               "description": "表情列表(飞书表情枚举名)",
               "hint": "表情枚举名参考:[https://open.feishu.cn/document/server-docs/im-v1/message-reaction/emojis-introduce](https://open.feishu.cn/document/server-docs/im-v1/message-reaction/emojis-introduce)"
+            },
+            "auto_remove": {
+              "description": "[飞书] 自动删除预回应表情"
             }
           }
         },

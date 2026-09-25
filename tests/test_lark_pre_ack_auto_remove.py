@@ -165,15 +165,17 @@ async def _execute_scheduler(remove_reaction: AsyncMock, fail_processing: bool) 
             await PipelineScheduler.execute(scheduler, event)
 
 
-def test_default_config_pre_ack_has_no_auto_remove():
+def test_default_config_pre_ack_enables_auto_remove():
     pre_ack = DEFAULT_CONFIG["platform_specific"]["lark"]["pre_ack_emoji"]
-    assert pre_ack == {"enable": False, "emojis": ["Typing"]}
+    assert pre_ack == {"enable": False, "emojis": ["Typing"], "auto_remove": True}
 
 
 @pytest.mark.asyncio
 async def test_lark_react_returns_reaction_id():
     reaction_api = SimpleNamespace(
-        acreate=AsyncMock(return_value=_response(True, SimpleNamespace(reaction_id="reaction-123")))
+        acreate=AsyncMock(
+            return_value=_response(True, SimpleNamespace(reaction_id="reaction-123"))
+        )
     )
     event = _lark_event(_lark_bot(reaction_api))
 
@@ -367,10 +369,25 @@ async def test_base_remove_reaction_is_noop():
 @pytest.mark.asyncio
 async def test_preprocess_stores_reaction_when_enabled():
     event = _FakeEvent(reaction_id="reaction-1")
-    await _run_preprocess(event, {"enable": True, "emojis": ["Typing"]})
+    await _run_preprocess(
+        event,
+        {"enable": True, "emojis": ["Typing"], "auto_remove": True},
+    )
 
     assert event.react_calls == ["Typing"]
     assert event.get_extra(PRE_ACK_REACTION) == ("reaction-1", "Typing")
+
+
+@pytest.mark.asyncio
+async def test_preprocess_skips_storage_when_auto_remove_disabled():
+    event = _FakeEvent(reaction_id="reaction-1")
+    await _run_preprocess(
+        event,
+        {"enable": True, "emojis": ["Typing"], "auto_remove": False},
+    )
+
+    assert event.react_calls == ["Typing"]
+    assert event.get_extra(PRE_ACK_REACTION, None) is None
 
 
 @pytest.mark.asyncio

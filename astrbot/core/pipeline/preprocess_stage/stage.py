@@ -124,7 +124,11 @@ class PreProcessStage(Stage):
                 reaction_id = await event.react(emoji)
                 # Only track reactions with an ID so a failed create cannot
                 # trigger the emoji fallback and remove an older reaction.
-                if platform == "lark" and reaction_id is not None:
+                if (
+                    platform == "lark"
+                    and cfg.get("auto_remove", True) is True
+                    and reaction_id is not None
+                ):
                     event.set_extra(PRE_ACK_REACTION, (reaction_id, emoji))
             except Exception as e:
                 logger.warning(
