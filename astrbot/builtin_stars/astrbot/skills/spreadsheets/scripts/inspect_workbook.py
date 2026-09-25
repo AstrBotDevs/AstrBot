@@ -7,6 +7,7 @@ import argparse
 import csv
 import json
 import zipfile
+from datetime import datetime, time
 from pathlib import Path
 
 import chardet
@@ -56,6 +57,35 @@ def _inspect_delimited(path: Path, sample_rows: int, sample_cols: int) -> dict:
     }
 
 
+def _xls_cell_value(cell: xlrd.sheet.Cell, datemode: int) -> object:
+    """Read one xlrd cell as its value, the way the XLSX path already reads one.
+
+    xlrd hands back the raw storage: a date is the serial number Excel keeps it
+    as, a boolean is 1 or 0, and every number is a double, so a whole number
+    arrives as 12.0. Left alone, the same workbook is described one way as .xls
+    and another as .xlsx, and the date cannot be recovered from the sample.
+    """
+    if cell.ctype == xlrd.XL_CELL_DATE:
+        try:
+            year, month, day, hour, minute, second = xlrd.xldate_as_tuple(
+                cell.value, datemode
+            )
+        except (ValueError, xlrd.XLDateError):
+            return cell.value
+        if (year, month, day) == (0, 0, 0):
+            # A time-only cell has no date part; openpyxl reads one as a time.
+            return time(hour, minute, second)
+        return datetime(year, month, day, hour, minute, second)
+    if cell.ctype == xlrd.XL_CELL_BOOLEAN:
+        return bool(cell.value)
+    if cell.ctype == xlrd.XL_CELL_NUMBER and float(cell.value).is_integer():
+        return int(cell.value)
+    if cell.ctype == xlrd.XL_CELL_ERROR:
+        # openpyxl reports the text Excel shows, e.g. #DIV/0!
+        return xlrd.error_text_from_code.get(cell.value, "")
+    return cell.value
+
+
 def _inspect_xls(path: Path, sample_rows: int, sample_cols: int) -> dict:
     """Inspect a legacy XLS workbook.
 
@@ -71,13 +101,17 @@ def _inspect_xls(path: Path, sample_rows: int, sample_cols: int) -> dict:
     sheets = []
     for name in workbook.sheet_names():
         sheet = workbook.sheet_by_name(name)
+        columns = min(sheet.ncols, sample_cols)
         sheets.append(
             {
                 "name": name,
                 "rows": sheet.nrows,
                 "columns": sheet.ncols,
                 "sample": [
-                    sheet.row_values(row, end_colx=min(sheet.ncols, sample_cols))
+                    [
+                        _xls_cell_value(cell, workbook.datemode)
+                        for cell in sheet.row_slice(row, 0, columns)
+                    ]
                     for row in range(min(sheet.nrows, sample_rows))
                 ],
             }
