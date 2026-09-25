@@ -151,17 +151,16 @@
         <v-divider />
 
         <v-card-text class="pa-6">
-          <!-- Emoji 选择器 -->
-          <div class="d-flex align-center ga-2 mb-4">
-            <EmojiPicker v-model="formData.emoji" />
-            <span class="text-body-2 text-medium-emphasis">{{ t('create.emojiLabel') }}</span>
-          </div>
-
           <!-- 表单 -->
           <v-form ref="formRef" @submit.prevent="submitForm">
             <v-text-field v-model="formData.kb_name" :label="t('create.nameLabel')"
               :placeholder="t('create.namePlaceholder')" variant="outlined"
-              :rules="[v => !!v || t('create.nameRequired')]" required class="mb-4" :hint="t('create.nameChangeHint')" persistent-hint />
+              :rules="[v => !!v || t('create.nameRequired')]" required
+              class="mb-4 kb-name-field" :hint="t('create.nameChangeHint')" persistent-hint>
+              <template #prepend-inner>
+                <EmojiPicker v-model="formData.emoji" />
+              </template>
+            </v-text-field>
 
             <v-textarea v-model="formData.description" :label="t('create.descriptionLabel')"
               :placeholder="t('create.descriptionPlaceholder')" variant="outlined" rows="3" class="mb-4" />
@@ -489,6 +488,18 @@ onMounted(() => {
 .kb-list-emoji {
   font-size: 1.25rem;
   line-height: 1;
+}
+
+.kb-name-field :deep(.v-field__prepend-inner) {
+  padding-inline-end: 0;
+}
+
+.kb-name-field :deep(.emoji-picker-trigger) {
+  min-width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 8px;
+  font-size: 20px;
 }
 
 .kb-description {
