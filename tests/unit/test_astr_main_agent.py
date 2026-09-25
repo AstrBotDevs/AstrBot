@@ -1448,7 +1448,13 @@ class TestEnsurePersonaAndSkills:
         [(True, False), (True, True), (False, False)],
     )
     async def test_persona_empty_tools_keeps_local_runtime_builtin_tools(
-        self, mock_event, mock_context, mock_provider, role, allow_execution, allow_network
+        self,
+        mock_event,
+        mock_context,
+        mock_provider,
+        role,
+        allow_execution,
+        allow_network,
     ):
         module = ama
         persona = {"name": "locked", "prompt": "No tools.", "tools": []}
@@ -2371,6 +2377,65 @@ class TestBuildMainAgent:
             "[Video Attachment in quoted message: "
             f"name quoted-video.mp4, path {video_path}]"
         ) in [part.text for part in result.provider_request.extra_user_content_parts]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("quoted", [False, True])
+    @pytest.mark.parametrize("url", ["https://example.com/report.pdf", ""])
+    async def test_build_main_agent_with_file_attachment(
+        self,
+        mock_event,
+        mock_context,
+        mock_provider,
+        quoted,
+        url,
+    ):
+        """File-only requests retain source context and read-tool guidance."""
+        module = ama
+        file_path = "/path/to/report.pdf"
+        attachment = File(name="report.pdf", url=url)
+        mock_event.message_str = ""
+        mock_event.message_obj.message = (
+            [Reply(id="reply-1", chain=[attachment])] if quoted else [attachment]
+        )
+
+        mock_context.get_provider_by_id.return_value = None
+        mock_context.get_using_provider.return_value = mock_provider
+        mock_context.get_config.return_value = {}
+
+        conv_mgr = mock_context.conversation_manager
+        _setup_conversation_for_build(conv_mgr)
+
+        with (
+            patch.object(
+                File,
+                "get_file",
+                AsyncMock(return_value=file_path),
+            ),
+            patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
+            patch("astrbot.core.astr_main_agent.AstrAgentContext"),
+        ):
+            mock_runner = MagicMock()
+            mock_runner.reset = AsyncMock()
+            mock_runner_cls.return_value = mock_runner
+
+            result = await module.build_main_agent(
+                event=mock_event,
+                plugin_context=mock_context,
+                config=module.MainAgentBuildConfig(tool_call_timeout=60),
+            )
+
+        assert result is not None
+        request = result.provider_request
+        label = "File Attachment in quoted message: " if quoted else "File Attachment: "
+        expected = (
+            f"[{label}name report.pdf, path {file_path}"
+            + (f", url {url}" if url else "")
+            + "] Use `astrbot_file_read_tool` with the path if available."
+        )
+        assert request.prompt == "<attachment>"
+        extra_texts = [part.text for part in request.extra_user_content_parts]
+        assert expected in extra_texts
+        assert sum("[File Attachment" in text for text in extra_texts) == 1
 
     @pytest.mark.asyncio
     async def test_build_main_agent_preserves_quoted_video_when_conversion_fails(

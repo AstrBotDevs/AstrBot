@@ -1402,6 +1402,21 @@ def _select_image_chat_provider(
     return provider
 
 
+def _file_attachment_text(
+    file_name: str,
+    file_path: str,
+    url: str | None,
+    *,
+    quoted: bool = False,
+) -> str:
+    label = "File Attachment in quoted message: " if quoted else "File Attachment: "
+    source = f", url {url}" if url else ""
+    return (
+        f"[{label}name {file_name}, path {file_path}{source}] "
+        "Use `astrbot_file_read_tool` with the path if available."
+    )
+
+
 async def collect_initial_request(
     event: AstrMessageEvent,
     plugin_context: Context,
@@ -1493,7 +1508,7 @@ async def collect_initial_request(
                     file_name = comp.name or os.path.basename(file_path)
                     req.extra_user_content_parts.append(
                         TextPart(
-                            text=f"[File Attachment: name {file_name}, path {file_path}]"
+                            text=_file_attachment_text(file_name, file_path, comp.url)
                         )
                     )
                 elif isinstance(comp, Video):
@@ -1547,9 +1562,11 @@ async def collect_initial_request(
                             file_name = reply_comp.name or os.path.basename(file_path)
                             req.extra_user_content_parts.append(
                                 TextPart(
-                                    text=(
-                                        f"[File Attachment in quoted message: "
-                                        f"name {file_name}, path {file_path}]"
+                                    text=_file_attachment_text(
+                                        file_name,
+                                        file_path,
+                                        reply_comp.url,
+                                        quoted=True,
                                     )
                                 )
                             )
