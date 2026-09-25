@@ -13,7 +13,20 @@
                 <v-select v-model="form.workspace_type" :items="workspaceTypeItems" item-title="label" item-value="value"
                     :label="tm('project.workspace.type')" variant="outlined" hide-details class="mb-3" />
                 <v-text-field v-if="form.workspace_type === 'custom'" v-model="form.workspace_path"
-                    :label="tm('project.workspace.path')" variant="outlined" hide-details class="mb-1" />
+                    :label="tm('project.workspace.path')" variant="outlined" hide-details class="mb-1">
+                    <template #append-inner>
+                        <v-btn
+                            v-if="canPickWorkspaceDirectory"
+                            :aria-label="tm('project.workspace.selectPath')"
+                            :loading="pickingWorkspaceDirectory"
+                            :disabled="props.saving"
+                            icon="mdi-folder-open-outline"
+                            size="small"
+                            variant="text"
+                            @click.stop="handlePickWorkspaceDirectory"
+                        />
+                    </template>
+                </v-text-field>
                 <v-alert
                     v-if="props.errorMessage"
                     class="mt-3"
@@ -36,6 +49,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
+import { getDesktopRuntimeInfo } from '@/utils/desktopRuntime';
 
 export type WorkspaceType = 'session' | 'project' | 'custom';
 
@@ -83,6 +97,8 @@ const { tm } = useModuleI18n('features/chat');
 
 const isOpen = ref(props.modelValue);
 const isEditing = ref(false);
+const canPickWorkspaceDirectory = ref(false);
+const pickingWorkspaceDirectory = ref(false);
 const form = ref<ProjectFormData>({
     emoji: '📁',
     title: '',
@@ -101,8 +117,9 @@ const canSave = computed(() => {
     return form.value.workspace_path.trim().length > 0;
 });
 
-watch(() => props.modelValue, (newVal) => {
+watch(() => props.modelValue, async (newVal) => {
     isOpen.value = newVal;
+    canPickWorkspaceDirectory.value = false;
     if (newVal) {
         if (props.project) {
             isEditing.value = true;
@@ -123,6 +140,10 @@ watch(() => props.modelValue, (newVal) => {
                 workspace_path: ''
             };
         }
+
+        const runtimeInfo = await getDesktopRuntimeInfo();
+        canPickWorkspaceDirectory.value = runtimeInfo.isDesktopRuntime &&
+            typeof runtimeInfo.bridge?.pickDirectory === 'function';
     }
 });
 
@@ -139,6 +160,25 @@ function handleDialogChange(value: boolean) {
 function handleCancel() {
     isOpen.value = false;
     emit('update:modelValue', false);
+}
+
+async function handlePickWorkspaceDirectory() {
+    const pickDirectory = window.astrbotDesktop?.pickDirectory;
+    if (!canPickWorkspaceDirectory.value || !pickDirectory || pickingWorkspaceDirectory.value) {
+        return;
+    }
+
+    pickingWorkspaceDirectory.value = true;
+    try {
+        const selectedPath = await pickDirectory(form.value.workspace_path || null);
+        if (selectedPath) {
+            form.value.workspace_path = selectedPath;
+        }
+    } catch (error) {
+        console.warn('[chat-project] Failed to pick workspace directory.', error);
+    } finally {
+        pickingWorkspaceDirectory.value = false;
+    }
 }
 
 function handleSave() {
