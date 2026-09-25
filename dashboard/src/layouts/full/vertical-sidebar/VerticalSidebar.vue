@@ -190,7 +190,7 @@ function toggleSidebar() {
 .leftSidebar {
   top: 0 !important;
   height: 100vh !important;
-  border-right: 1px solid rgba(var(--v-theme-on-surface), 0.1) !important;
+  border-right: 0 !important;
   background: rgb(var(--v-theme-surface)) !important;
   user-select: none;
 }
@@ -207,16 +207,15 @@ function toggleSidebar() {
   flex-direction: column;
 }
 
-/* The macOS desktop window draws its header across the whole width, above the sidebar. */
-:global(html[data-astrbot-desktop-platform='macos'] .leftSidebar .sidebar-container) {
+/* The header draws across the whole width, above the full-height sidebar. */
+:global(.leftSidebar .sidebar-container) {
   /* Seat the brand's top edge at the content area's top edge, fully below the toolbar. */
   padding-top: calc(var(--astrbot-toolbar-height, 40px) - 14px);
   box-sizing: border-box;
 }
 
-/* The sidebar stays transparent; the shared tint is painted behind it on the main area. */
+/* On macOS the sidebar stays transparent; the shared tint is painted behind it. */
 :global(html[data-astrbot-desktop-platform='macos'] .leftSidebar) {
-  border-right: 0 !important;
   background: transparent !important;
 }
 

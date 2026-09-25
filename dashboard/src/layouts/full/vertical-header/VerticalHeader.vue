@@ -2432,29 +2432,34 @@ onMounted(async () => {
   }
 }
 
-/* macOS desktop: the header doubles as the window toolbar, so its actions move to
-   the right of the traffic lights and follow the provider tab styling.
+/* The header doubles as a slim toolbar, so its actions follow the provider tab
+   styling. On macOS desktop it also becomes the draggable window chrome.
    This style block is NOT scoped, so plain selectors are already global here. */
 .top-header {
   user-select: none;
 }
 
-html[data-astrbot-desktop-platform='macos'] {
+html {
   /* Keep in sync with the app bar height above. */
   --astrbot-toolbar-height: 40px;
+}
+
+.top-header,
+.top-header.chat-mode-header,
+.top-header.chat-mode-header.chat-mode-header--dark {
+  border-bottom: 0 !important;
+  box-shadow: none !important;
 }
 
 html[data-astrbot-desktop-platform='macos'] .top-header,
 html[data-astrbot-desktop-platform='macos'] .top-header.chat-mode-header,
 html[data-astrbot-desktop-platform='macos'] .top-header.chat-mode-header.chat-mode-header--dark {
   background: var(--astrbot-vibrancy-tint, transparent) !important;
-  border-bottom: 0 !important;
-  box-shadow: none !important;
 }
 
 /* Keep the toolbar in the normal flow so the content area sits below it instead of
    scrolling underneath a floating bar. */
-html[data-astrbot-desktop-platform='macos'] .top-header {
+.top-header {
   position: relative !important;
   top: 0 !important;
   left: 0 !important;
@@ -2462,25 +2467,21 @@ html[data-astrbot-desktop-platform='macos'] .top-header {
   width: 100% !important;
 }
 
-html[data-astrbot-desktop-platform='macos'] .top-header .v-toolbar__content {
+.top-header .v-toolbar__content {
   padding-inline-end: 16px !important;
 }
 
 /* Keep the chat context above the content area instead of the whole window. */
-html[data-astrbot-desktop-platform='macos'] .top-header.chat-mode-header .v-toolbar__content {
+.top-header.chat-mode-header .v-toolbar__content {
   padding-inline-start: var(--astrbot-chat-sidebar-width, 245px) !important;
 }
 
 .header-toolbar-label {
-  display: none;
-}
-
-html[data-astrbot-desktop-platform='macos'] .header-toolbar-label {
   display: inline;
   margin-inline-start: 6px;
 }
 
-html[data-astrbot-desktop-platform='macos'] .top-header .header-actions .v-btn {
+.top-header .header-actions .v-btn {
   height: 34px;
   padding: 0 12px;
   border-radius: 8px;
@@ -2493,12 +2494,12 @@ html[data-astrbot-desktop-platform='macos'] .top-header .header-actions .v-btn {
   text-transform: none;
 }
 
-html[data-astrbot-desktop-platform='macos'] .top-header .header-actions .v-btn .v-btn__overlay {
+.top-header .header-actions .v-btn .v-btn__overlay {
   opacity: 0 !important;
 }
 
 /* Hover keeps a text-only affordance: no background, just a stronger label color. */
-html[data-astrbot-desktop-platform='macos'] .top-header .header-actions .v-btn:hover {
+.top-header .header-actions .v-btn:hover {
   color: rgba(var(--v-theme-on-surface), 0.9);
 }
 

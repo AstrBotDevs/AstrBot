@@ -190,6 +190,58 @@ onMounted(() => {
   padding-top: 0 !important;
 }
 
+/* The header takes its own row in the flow, so the content area owns the remaining
+   height and scrolls on its own instead of sliding under the header. */
+:global(html),
+:global(body) {
+  height: 100%;
+  overflow: hidden;
+}
+
+:global(.v-application),
+:global(.v-application__wrap) {
+  height: 100vh;
+  min-height: 0;
+  overflow: hidden;
+}
+
+:global(.v-main) {
+  height: calc(100vh - var(--astrbot-toolbar-height, 40px)) !important;
+  padding-top: 0 !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  scrollbar-width: none;
+  /* The document no longer scrolls; the content area does. Sticky offsets that were
+     written for the document layout must be measured from the content area's own top. */
+  --v-layout-top: 0px !important;
+}
+
+:global(.v-main::-webkit-scrollbar) {
+  width: 0;
+  background: transparent;
+}
+
+/* The content area is the opaque card next to the sidebar. */
+:global(.page-wrapper) {
+  border-left: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+  border-top-left-radius: 12px;
+}
+
+/* Normal pages grow with their content so the main area has something to scroll. */
+:global(.page-wrapper:not(.viewport-locked-container):not(.chat-mode-container):not(.fullscreen-container)) {
+  height: auto !important;
+  min-height: calc(100vh - var(--astrbot-toolbar-height, 40px));
+}
+
+/* Viewport-locked and full-screen pages keep a fixed height and scroll internally.
+   Clipping them keeps full-bleed children from painting outside the rounded corner. */
+:global(.viewport-locked-container),
+:global(.chat-mode-container),
+:global(.fullscreen-container) {
+  height: calc(100vh - var(--astrbot-toolbar-height, 40px)) !important;
+  overflow: hidden !important;
+}
+
 /* macOS desktop vibrancy: the window material shows through wherever the UI stays
    transparent. Only the content area keeps an opaque background. */
 :global(html[data-astrbot-desktop-platform='macos']) {
@@ -216,67 +268,6 @@ onMounted(() => {
     var(--astrbot-vibrancy-tint, transparent) 0 calc(var(--v-layout-left) + 12px),
     transparent calc(var(--v-layout-left) + 12px) 100%
   ) !important;
-}
-
-/* Only the content area scrolls, so the toolbar can never be covered. */
-:global(html[data-astrbot-desktop-platform='macos']),
-:global(html[data-astrbot-desktop-platform='macos'] body) {
-  height: 100%;
-  overflow: hidden;
-}
-
-/* The content area is the only opaque surface. It starts below the toolbar and to the
-   right of the sidebar, so its rounded corner reveals the window material behind it. */
-:global(html[data-astrbot-desktop-platform='macos'] .page-wrapper) {
-  border-left: 1px solid rgba(var(--v-theme-on-surface), 0.1);
-  border-top-left-radius: 12px;
-}
-
-/* Normal pages grow with their content so the main area has something to scroll. */
-:global(html[data-astrbot-desktop-platform='macos'] .page-wrapper:not(.viewport-locked-container):not(.chat-mode-container):not(.fullscreen-container)) {
-  height: auto !important;
-  min-height: calc(100vh - var(--astrbot-toolbar-height, 40px));
-}
-
-/* Viewport-locked and full-screen pages keep a fixed height and scroll internally.
-   Clipping them keeps full-bleed children from painting outside the rounded corner. */
-:global(html[data-astrbot-desktop-platform='macos'] .viewport-locked-container),
-:global(html[data-astrbot-desktop-platform='macos'] .chat-mode-container),
-:global(html[data-astrbot-desktop-platform='macos'] .fullscreen-container) {
-  height: calc(100vh - var(--astrbot-toolbar-height, 40px)) !important;
-  overflow: hidden !important;
-}
-
-/* Hide the content scrollbar so it does not paint a strip over the right edge. */
-:global(html[data-astrbot-desktop-platform='macos'] .v-main) {
-  scrollbar-width: none;
-}
-
-:global(html[data-astrbot-desktop-platform='macos'] .v-main::-webkit-scrollbar) {
-  width: 0;
-  background: transparent;
-}
-
-/* The toolbar takes its own row, so the content area owns the remaining height and
-   scrolls on its own instead of sliding under the toolbar. */
-:global(html[data-astrbot-desktop-platform='macos'] .v-application),
-:global(html[data-astrbot-desktop-platform='macos'] .v-application__wrap) {
-  height: 100vh;
-  min-height: 0;
-  overflow: hidden;
-}
-
-:global(html[data-astrbot-desktop-platform='macos'] .v-main) {
-  height: calc(100vh - var(--astrbot-toolbar-height, 40px)) !important;
-  padding-top: 0 !important;
-  overflow-x: hidden !important;
-  overflow-y: auto !important;
-}
-
-/* The document no longer scrolls; the content area does. Sticky offsets that were
-   written for the document layout must be measured from the content area's own top. */
-:global(html[data-astrbot-desktop-platform='macos'] .v-main) {
-  --v-layout-top: 0px !important;
 }
 
 /* Vuetify paints its own surface behind every list, which would sit on top of the

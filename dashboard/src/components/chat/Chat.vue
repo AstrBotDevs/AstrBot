@@ -1879,13 +1879,13 @@ async function stopCurrentSession() {
   top: 0 !important;
   height: 100vh !important;
   background: var(--chat-sidebar-bg);
-  border-right: 1px solid var(--chat-border);
+  border-right: 0;
   user-select: none;
 }
 
 .chat-sidebar.collapsed {
   background: var(--chat-sidebar-bg);
-  border-right: 1px solid var(--chat-border);
+  border-right: 0;
 }
 
 .chat-sidebar :deep(.v-navigation-drawer__content) {
@@ -1894,22 +1894,21 @@ async function stopCurrentSession() {
   height: 100%;
 }
 
-/* The macOS desktop window draws its header across the whole width, above the chat sidebar. */
-:global(html[data-astrbot-desktop-platform='macos'] .chat-sidebar .v-navigation-drawer__content) {
+/* The header draws across the whole width, above the full-height chat sidebar. */
+:global(.chat-sidebar .v-navigation-drawer__content) {
   /* Seat the brand's top edge at the content area's top edge, fully below the toolbar. */
   padding-top: calc(var(--astrbot-toolbar-height, 40px) - 14px);
   box-sizing: border-box;
 }
 
-/* The chat sidebar stays transparent; the shared tint is painted behind it on the main area. */
+/* On macOS the chat sidebar stays transparent; the shared tint is painted behind it. */
 :global(html[data-astrbot-desktop-platform='macos'] .chat-sidebar) {
-  border-right: 0 !important;
   background: transparent !important;
 }
 
-/* The chat header is in-flow on macOS, so the old absolute-header top offset is dead
-   space; drop it so the sub-header sits directly under the toolbar band. */
-:global(html[data-astrbot-desktop-platform='macos'] .chat-main) {
+/* The chat header is in-flow, so the old absolute-header top offset is dead space;
+   drop it so the sub-header sits directly under the toolbar band. */
+:global(.chat-main) {
   padding-top: 0 !important;
 }
 
