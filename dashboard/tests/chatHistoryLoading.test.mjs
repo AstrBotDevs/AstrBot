@@ -47,11 +47,14 @@ test("failed history loading pauses scroll requests until an explicit retry", as
   };
   const current = { id: 51, content: { message: [] } };
   const records = { session: [current] };
+  let anchorTop = 100;
   const container = {
     scrollHeight: 1000,
     clientHeight: 400,
     scrollTop: 0,
-    querySelector: () => null,
+    querySelector: () => ({
+      getBoundingClientRect: () => ({ top: anchorTop }),
+    }),
   };
   const requests = [];
   const context = vm.createContext({
@@ -61,6 +64,7 @@ test("failed history loading pauses scroll requests until an explicit retry", as
     messagesContainer: { value: container },
     suppressAutoScroll: { value: false },
     LOAD_EARLIER_SCROLL_THRESHOLD: 120,
+    lastMessagesScrollTop: 0,
     CSS: { escape: (value) => value },
     nextTick: async () => {},
     paginationBySession: { session: state },
@@ -96,6 +100,7 @@ test("failed history loading pauses scroll requests until an explicit retry", as
     "scroll events must not retry a failed page",
   );
 
+  container.scrollTop = 80;
   const retry = context.retryCurrentSessionLoad();
   assert.equal(requests.length, 2);
   assert.equal(
@@ -104,6 +109,8 @@ test("failed history loading pauses scroll requests until an explicit retry", as
     "retry must request the failed page again",
   );
   assert.equal(state.error, undefined);
+  container.scrollTop = 20;
+  anchorTop = 360;
   context.maybeLoadEarlierOnScroll(container);
   assert.equal(requests.length, 2);
   requests[1].resolve({
@@ -118,9 +125,15 @@ test("failed history loading pauses scroll requests until an explicit retry", as
     },
   });
   await retry;
+  assert.equal(
+    container.scrollTop,
+    220,
+    "prepending history must preserve scrolling that continues during loading",
+  );
   assert.equal(state.page, 2);
   assert.equal(state.error, undefined);
   assert.equal(records.session.length, 2);
+  container.scrollTop = 0;
   context.maybeLoadEarlierOnScroll(container);
   assert.equal(
     requests.length,
