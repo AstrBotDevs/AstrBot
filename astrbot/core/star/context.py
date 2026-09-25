@@ -651,11 +651,11 @@ class Context:
             是否找到匹配的平台。
 
         Raises:
-            ValueError: session 字符串不合法时抛出。
+            ValueError: The session string is invalid or the adapter cannot resolve
+                its delivery route.
 
         Note:
             当 session 为字符串时，会尝试解析为 MessageSession 对象。(类名为MessageSesion是因为历史遗留拼写错误)
-            qq_official(QQ 官方 API 平台) 不支持此方法。
         """
         if isinstance(session, str):
             try:
