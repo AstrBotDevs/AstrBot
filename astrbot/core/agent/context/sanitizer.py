@@ -3,7 +3,8 @@
 Addresses Issue #10195:
 - Strips historical reasoning chains (<think> blocks, ThinkPart) from prior completed turns.
 - Compacts or truncates bulky historical tool call results (role='tool') from prior completed turns.
-- Ensures the active/current turn retains full reasoning and tool execution content.
+- Prunes historical image parts and heavy data URIs when sanitize_historical_images is enabled.
+- Ensures the active/current turn retains full reasoning, tool execution, and multimedia content.
 - Preserves OpenAI/Anthropic/Gemini protocol validity (tool_calls <-> role="tool" pairing).
 - Operates non-destructively: returns new message objects without corrupting underlying persistent history.
 - Supports both Message objects and raw dictionary formats.
@@ -15,10 +16,14 @@ import copy
 import re
 from typing import Any
 
-from ..message import Message, TextPart, ThinkPart
+from ..message import ImageURLPart, Message, TextPart, ThinkPart
 from .truncator import ContextTruncator
 
 _THINK_TAG_REGEX = re.compile(r"<think>.*?</think>", flags=re.DOTALL | re.IGNORECASE)
+_DATA_URI_REGEX = re.compile(
+    r"data:image\/[a-zA-Z0-9\+\-\.]+;base64,[A-Za-z0-9+/=]+",
+    flags=re.IGNORECASE,
+)
 
 
 def _get_item_role(item: Any) -> str:
@@ -70,7 +75,11 @@ class ContextSanitizer:
         if not messages:
             return messages
 
-        if not self.sanitize_historical_thoughts and not self.sanitize_historical_tools:
+        if (
+            not self.sanitize_historical_thoughts
+            and not self.sanitize_historical_tools
+            and not self.sanitize_historical_images
+        ):
             return messages
 
         last_user_idx = self.find_last_user_index(messages)
@@ -97,14 +106,18 @@ class ContextSanitizer:
         self, msg: Message | dict[str, Any]
     ) -> Message | dict[str, Any]:
         """Sanitize an individual historical message without mutating the original."""
-        role = _get_item_role(msg)
+        res = msg
+        role = _get_item_role(res)
         if role == "assistant" and self.sanitize_historical_thoughts:
-            return self._sanitize_assistant_message(msg)
+            res = self._sanitize_assistant_message(res)
 
         if role == "tool" and self.sanitize_historical_tools:
-            return self._sanitize_tool_message(msg)
+            res = self._sanitize_tool_message(res)
 
-        return msg
+        if self.sanitize_historical_images:
+            res = self._sanitize_image_content(res)
+
+        return res
 
     def _sanitize_assistant_message(
         self, msg: Message | dict[str, Any]
@@ -122,7 +135,7 @@ class ContextSanitizer:
                         continue
                     if isinstance(part, TextPart):
                         cleaned_text = _THINK_TAG_REGEX.sub("", part.text).strip()
-                        filtered_parts.append(TextPart(text=cleaned_text))
+                        filtered_parts.append({"type": "text", "text": cleaned_text})
                     elif isinstance(part, dict) and part.get("type") == "text":
                         cleaned_text = _THINK_TAG_REGEX.sub(
                             "", str(part.get("text", ""))
@@ -158,9 +171,7 @@ class ContextSanitizer:
                     cleaned_text = _THINK_TAG_REGEX.sub(
                         "", str(part.get("text", ""))
                     ).strip()
-                    part_copy = copy.copy(part)
-                    part_copy["text"] = cleaned_text
-                    filtered_parts.append(part_copy)
+                    filtered_parts.append(TextPart(text=cleaned_text))
                 else:
                     filtered_parts.append(part)
 
@@ -184,14 +195,15 @@ class ContextSanitizer:
         if isinstance(msg, dict):
             new_msg = copy.copy(msg)
             content = new_msg.get("content")
-            if (
-                isinstance(content, str)
-                and len(content) > self.max_historical_tool_result_chars
-            ):
-                new_msg["content"] = (
-                    content[: self.max_historical_tool_result_chars]
-                    + "\n... [historical tool output truncated to save context]"
+            if content is not None:
+                serialized_content = (
+                    content if isinstance(content, str) else str(content)
                 )
+                if len(serialized_content) > self.max_historical_tool_result_chars:
+                    new_msg["content"] = (
+                        serialized_content[: self.max_historical_tool_result_chars]
+                        + "\n... [historical tool output truncated to save context]"
+                    )
             return new_msg
 
         new_msg = copy.copy(msg)
@@ -202,4 +214,105 @@ class ContextSanitizer:
                     + "\n... [historical tool output truncated to save context]"
                 )
                 new_msg.content = truncated
+        elif isinstance(new_msg.content, list):
+            serialized_content = "".join(
+                p.text if hasattr(p, "text") else str(p) for p in new_msg.content
+            )
+            if len(serialized_content) > self.max_historical_tool_result_chars:
+                truncated = (
+                    serialized_content[: self.max_historical_tool_result_chars]
+                    + "\n... [historical tool output truncated to save context]"
+                )
+                new_msg.content = [TextPart(text=truncated)]
+        elif new_msg.content is not None:
+            serialized_content = str(new_msg.content)
+            if len(serialized_content) > self.max_historical_tool_result_chars:
+                truncated = (
+                    serialized_content[: self.max_historical_tool_result_chars]
+                    + "\n... [historical tool output truncated to save context]"
+                )
+                new_msg.content = truncated
+        return new_msg
+
+    def _sanitize_image_content(
+        self, msg: Message | dict[str, Any]
+    ) -> Message | dict[str, Any]:
+        """Strip image parts and heavy base64 data URIs from historical messages."""
+        if isinstance(msg, dict):
+            new_msg = copy.deepcopy(msg)
+            content = new_msg.get("content")
+            if isinstance(content, list):
+                sanitized_parts: list[Any] = []
+                for part in content:
+                    if isinstance(part, dict) and part.get("type") in (
+                        "image",
+                        "image_url",
+                    ):
+                        sanitized_parts.append(
+                            {"type": "text", "text": "[historical image omitted]"}
+                        )
+                    elif isinstance(part, ImageURLPart):
+                        sanitized_parts.append(
+                            {"type": "text", "text": "[historical image omitted]"}
+                        )
+                    elif isinstance(part, dict) and part.get("type") == "text":
+                        text = str(part.get("text", ""))
+                        if _DATA_URI_REGEX.search(text):
+                            part_copy = copy.copy(part)
+                            part_copy["text"] = _DATA_URI_REGEX.sub(
+                                "[data:image omitted]", text
+                            )
+                            sanitized_parts.append(part_copy)
+                        else:
+                            sanitized_parts.append(part)
+                    elif isinstance(part, TextPart):
+                        text = part.text
+                        if _DATA_URI_REGEX.search(text):
+                            text = _DATA_URI_REGEX.sub("[data:image omitted]", text)
+                        sanitized_parts.append({"type": "text", "text": text})
+                    else:
+                        sanitized_parts.append(part)
+                new_msg["content"] = sanitized_parts
+            elif isinstance(content, str):
+                if _DATA_URI_REGEX.search(content):
+                    new_msg["content"] = _DATA_URI_REGEX.sub(
+                        "[data:image omitted]", content
+                    )
+            return new_msg
+
+        new_msg = copy.copy(msg)
+        if isinstance(new_msg.content, list):
+            sanitized_parts_msg: list[Any] = []
+            for part in new_msg.content:
+                if isinstance(part, ImageURLPart) or (
+                    isinstance(part, dict)
+                    and part.get("type") in ("image", "image_url")
+                ):
+                    sanitized_parts_msg.append(
+                        TextPart(text="[historical image omitted]")
+                    )
+                elif isinstance(part, TextPart):
+                    if _DATA_URI_REGEX.search(part.text):
+                        sanitized_parts_msg.append(
+                            TextPart(
+                                text=_DATA_URI_REGEX.sub(
+                                    "[data:image omitted]", part.text
+                                )
+                            )
+                        )
+                    else:
+                        sanitized_parts_msg.append(part)
+                elif isinstance(part, dict) and part.get("type") == "text":
+                    text = str(part.get("text", ""))
+                    if _DATA_URI_REGEX.search(text):
+                        text = _DATA_URI_REGEX.sub("[data:image omitted]", text)
+                    sanitized_parts_msg.append(TextPart(text=text))
+                else:
+                    sanitized_parts_msg.append(part)
+            new_msg.content = sanitized_parts_msg
+        elif isinstance(new_msg.content, str):
+            if _DATA_URI_REGEX.search(new_msg.content):
+                new_msg.content = _DATA_URI_REGEX.sub(
+                    "[data:image omitted]", new_msg.content
+                )
         return new_msg

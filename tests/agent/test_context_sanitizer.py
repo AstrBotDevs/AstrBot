@@ -13,6 +13,7 @@ from astrbot.core.agent.context.manager import ContextManager
 from astrbot.core.agent.context.sanitizer import ContextSanitizer
 from astrbot.core.agent.message import (
     AssistantMessageSegment,
+    ImageURLPart,
     Message,
     TextPart,
     ThinkPart,
@@ -361,3 +362,97 @@ class TestContextSanitizer:
         # Active turn assistant (index 4) should remain UNTOUCHED
         assert "<think>Active reasoning</think>" in result[4]["content"]
         assert result[4]["reasoning_content"] == "Active reasoning"
+
+    def test_sanitize_dict_multipart_assistant_maintains_dict_types(self):
+        """Sanitizer must maintain dictionary types when sanitizing multipart assistant dicts."""
+        sanitizer = ContextSanitizer(sanitize_historical_thoughts=True)
+        dict_messages = [
+            {"role": "user", "content": "Question 1"},
+            {
+                "role": "assistant",
+                "content": [
+                    {"type": "think", "think": "Hidden reasoning"},
+                    {"type": "text", "text": "Answer 1 <think>extra</think>"},
+                ],
+            },
+            {"role": "user", "content": "Question 2 (active)"},
+        ]
+
+        result = sanitizer.sanitize(dict_messages)
+        assert len(result) == 3
+        assistant_content = result[1]["content"]
+        assert isinstance(assistant_content, list)
+        assert len(assistant_content) == 1
+        # Part MUST be a dict, not a Pydantic object
+        assert isinstance(assistant_content[0], dict)
+        assert assistant_content[0]["type"] == "text"
+        assert assistant_content[0]["text"] == "Answer 1"
+
+    def test_sanitize_historical_images(self):
+        """Sanitizer should prune historical images and data URIs when sanitize_historical_images is enabled."""
+        sanitizer = ContextSanitizer(
+            sanitize_historical_thoughts=True,
+            sanitize_historical_images=True,
+        )
+
+        dummy_b64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+        messages = [
+            Message(
+                role="user",
+                content=[
+                    TextPart(text=f"Look at this screenshot: {dummy_b64}"),
+                    ImageURLPart(image_url={"url": "http://example.com/sample.png"}),
+                ],
+            ),
+            Message(role="assistant", content="Acknowledged screenshot."),
+            Message(
+                role="user",
+                content=[
+                    TextPart(text=f"Now solve this with current image: {dummy_b64}"),
+                    ImageURLPart(image_url={"url": "http://example.com/current.png"}),
+                ],
+            ),
+        ]
+
+        result = sanitizer.sanitize(messages)
+        assert len(result) == 3
+
+        # Historical user turn (index 0) should have image omitted and data URI replaced
+        hist_parts = result[0].content
+        assert isinstance(hist_parts, list)
+        assert len(hist_parts) == 2
+        assert "[data:image omitted]" in hist_parts[0].text
+        assert dummy_b64 not in hist_parts[0].text
+        assert hist_parts[1].text == "[historical image omitted]"
+
+        # Active user turn (index 2) should remain UNTOUCHED
+        active_parts = result[2].content
+        assert isinstance(active_parts, list)
+        assert dummy_b64 in active_parts[0].text
+        assert isinstance(active_parts[1], ImageURLPart)
+
+    def test_sanitize_tool_message_structured_content(self):
+        """Sanitizer should truncate structured / non-string content in tool messages."""
+        sanitizer = ContextSanitizer(
+            sanitize_historical_tools=True,
+            max_historical_tool_result_chars=30,
+        )
+
+        dict_messages = [
+            {"role": "user", "content": "Run tool"},
+            {"role": "assistant", "content": "Running tool..."},
+            {
+                "role": "tool",
+                "content": {
+                    "result": "extremely_large_payload_that_exceeds_thirty_chars_easily"
+                },
+            },
+            {"role": "user", "content": "Next question"},
+        ]
+
+        result = sanitizer.sanitize(dict_messages)
+        assert len(result) == 4
+        tool_content = result[2]["content"]
+        assert isinstance(tool_content, str)
+        assert "... [historical tool output truncated to save context]" in tool_content
+        assert len(tool_content) > 30
