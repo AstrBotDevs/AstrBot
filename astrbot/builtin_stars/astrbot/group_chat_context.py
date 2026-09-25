@@ -4,6 +4,7 @@ import json
 import random
 import uuid
 from collections import defaultdict, deque
+from pathlib import Path
 
 from astrbot import logger
 from astrbot.api import star
@@ -25,6 +26,13 @@ from astrbot.api.platform import MessageType
 from astrbot.api.provider import Provider, ProviderRequest
 from astrbot.core.agent.message import TextPart
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.media_utils import (
+    ImageInputTooLargeError,
+    file_uri_to_path,
+    normalize_model_image_max_size,
+    prepare_model_image,
+)
 
 """
 Group chat context awareness.
@@ -38,6 +46,34 @@ GROUP_HISTORY_HEADER = (
 )
 GROUP_HISTORY_FOOTER = "\n--- END CONTEXT ---\n</system_reminder>"
 DEFAULT_GROUP_MESSAGE_MAX_CNT = 1000
+_ANIMATION_CAPTION_NOTE = (
+    "The attached image is one animation shown as a 3x3 montage of frames "
+    "in reading order. Describe the motion and expression changes across "
+    "the frames. Do not mention the montage, grid, or frame layout."
+)
+
+
+def _is_source_image(image_url: str, candidate: str) -> bool:
+    """Return whether a prepared path is the caller's original image."""
+    if candidate == image_url:
+        return True
+    if image_url.startswith(("http://", "https://", "data:", "base64://")):
+        return False
+    try:
+        left = Path(file_uri_to_path(image_url))
+        right = Path(candidate)
+        if not left.exists() or not right.exists():
+            return False
+        return left.resolve() == right.resolve()
+    except OSError:
+        return False
+
+
+def _discard_prepared_image(path: str) -> None:
+    try:
+        Path(path).unlink(missing_ok=True)
+    except OSError as exc:
+        logger.warning("Failed to remove temporary caption image %s: %s", path, exc)
 
 
 class GroupChatContext:
@@ -101,12 +137,39 @@ class GroupChatContext:
                 raise Exception(f"没有找到 ID 为 {image_caption_provider_id} 的提供商")
         if not isinstance(provider, Provider):
             raise Exception(f"提供商类型错误({type(provider)})，无法获取图片描述")
-        response = await provider.text_chat(
-            prompt=image_caption_prompt,
-            session_id=uuid.uuid4().hex,
-            image_urls=[image_url],
-            persist=False,
-        )
+        prompt = image_caption_prompt
+        image_refs = [image_url]
+        cleanup_paths: list[str] = []
+        try:
+            prepared = await prepare_model_image(
+                image_url,
+                max_size=normalize_model_image_max_size(None),
+                output_dir=Path(get_astrbot_temp_path()),
+            )
+        except ImageInputTooLargeError as exc:
+            retained = str(exc)
+            if retained and not _is_source_image(image_url, retained):
+                _discard_prepared_image(retained)
+            raise
+        if prepared:
+            path, is_montage, _needs_cleanup, original_path = prepared
+            image_refs = [path]
+            for candidate in (path, original_path):
+                if candidate and not _is_source_image(image_url, candidate):
+                    if candidate not in cleanup_paths:
+                        cleanup_paths.append(candidate)
+            if is_montage:
+                prompt = f"{image_caption_prompt.rstrip()}\n\n{_ANIMATION_CAPTION_NOTE}"
+        try:
+            response = await provider.text_chat(
+                prompt=prompt,
+                session_id=uuid.uuid4().hex,
+                image_urls=image_refs,
+                persist=False,
+            )
+        finally:
+            for path in cleanup_paths:
+                _discard_prepared_image(path)
         return response.completion_text
 
     async def need_active_reply(self, event: AstrMessageEvent) -> bool:
