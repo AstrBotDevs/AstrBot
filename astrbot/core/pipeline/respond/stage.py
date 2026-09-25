@@ -209,6 +209,10 @@ class RespondStage(Stage):
             )
             return
 
+        if event.is_stopped():
+            logger.info("Event stopped before delivery; skipping respond stage.")
+            return
+
         logger.info(
             f"Prepare to send - {event.get_sender_name()}/{event.get_sender_id()}: {event._outline_chain(result.chain)}",
             extra={"category": "user_chat"},
@@ -276,6 +280,9 @@ class RespondStage(Stage):
                 for comp in result.chain:
                     i = await self._calc_comp_interval(comp)
                     await asyncio.sleep(i)
+                    if event.is_stopped():
+                        logger.info("Event stopped during segmented delivery.")
+                        return
                     try:
                         if comp.type in need_separately:
                             await event.send(result.derive([comp]))
@@ -305,6 +312,9 @@ class RespondStage(Stage):
                     modify_raw_chain=True,
                 )
                 for comp in sep_comps:
+                    if event.is_stopped():
+                        logger.info("Event stopped during separate delivery.")
+                        return
                     chain = result.derive([comp])
                     try:
                         await event.send(chain)
@@ -316,6 +326,9 @@ class RespondStage(Stage):
                         )
                 chain = result.derive(result.chain)
                 if result.chain and len(result.chain) > 0:
+                    if event.is_stopped():
+                        logger.info("Event stopped before final delivery.")
+                        return
                     try:
                         await event.send(chain)
                     except Exception as e:
