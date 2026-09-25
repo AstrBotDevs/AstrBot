@@ -33,17 +33,48 @@
           <div>
             <div class="section-title">{{ t('messageOverview.title') }}</div>
           </div>
-          <div class="range-switch">
-            <button
-              v-for="option in rangeOptions"
-              :key="`toolbar-${option.value}`"
-              type="button"
-              class="range-chip"
-              :class="{ active: selectedRange === option.value }"
-              @click="selectedRange = option.value"
-            >
-              {{ t(option.labelKey) }}
-            </button>
+          <div class="toolbar-actions">
+            <div class="range-switch">
+              <button
+                v-for="option in rangeOptions"
+                :key="`toolbar-${option.value}`"
+                type="button"
+                class="range-chip"
+                :class="{ active: selectedRange === option.value }"
+                @click="selectedRange = option.value"
+              >
+                {{ t(option.labelKey) }}
+              </button>
+            </div>
+            <div v-if="selectedRange === 'custom'" class="custom-range">
+              <v-text-field
+                v-model="customStartInput"
+                type="date"
+                density="compact"
+                variant="outlined"
+                hide-details
+                class="custom-range__field"
+                :label="t('customRange.start')"
+              />
+              <span class="custom-range__sep">~</span>
+              <v-text-field
+                v-model="customEndInput"
+                type="date"
+                density="compact"
+                variant="outlined"
+                hide-details
+                class="custom-range__field"
+                :label="t('customRange.end')"
+              />
+              <button
+                type="button"
+                class="range-chip range-chip--apply"
+                :disabled="!canApplyCustomRange"
+                @click="applyCustomRange"
+              >
+                {{ t('customRange.apply') }}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -55,8 +86,8 @@
               </div>
               <div class="card-head-actions">
                 <div class="section-metric">
-                  <span class="metric-label">{{ t('messageTrend.totalMessages') }}</span>
-                  <span class="metric-value">{{ formatNumber(baseStats?.message_count ?? 0) }}</span>
+                  <span class="metric-label">{{ t('messageTrend.totalMessages', { range: rangeLabel }) }}</span>
+                  <span class="metric-value">{{ formatNumber(baseStats?.range_message_count ?? 0) }}</span>
                 </div>
               </div>
             </div>
@@ -166,7 +197,6 @@
             </section>
           </section>
         </div>
-
         <section class="stat-card provider-list-card">
           <div class="card-head compact">
             <div>
@@ -262,7 +292,8 @@ import { useI18n, useModuleI18n } from '@/i18n/composables'
 import { copyToClipboard } from '@/utils/clipboard'
 import { getPlatformIcon } from '@/utils/platformUtils'
 
-type TokenRange = 1 | 3 | 7
+// Time span: preset ranges (1/3/7/30 days), all-time (since deployment), and a custom range
+type RangePreset = '1d' | '3d' | '7d' | '30d' | 'all' | 'custom'
 type ChartSeries = Array<{
   name: string
   data: unknown[]
@@ -276,6 +307,8 @@ interface RunningStats {
 
 interface BaseStatsResponse {
   message_count: number
+  // Messages within the current window (follows the selected range)
+  range_message_count: number
   platform_count: number
   platform: Array<{
     name: string
@@ -312,7 +345,10 @@ interface UmoRankingItem {
 }
 
 interface ProviderTokenStatsResponse {
-  days: TokenRange
+  days: number
+  range_start?: number
+  range_end?: number
+  bucket_seconds?: number
   trend: {
     series: ProviderTrendItem[]
     total_series: Array<[number, number]>
@@ -337,7 +373,12 @@ const loading = ref(true)
 const errorMessage = ref('')
 const baseStats = ref<BaseStatsResponse | null>(null)
 const providerStats = ref<ProviderTokenStatsResponse | null>(null)
-const selectedRange = ref<TokenRange>(1)
+const selectedRange = ref<RangePreset>('1d')
+// Custom range: raw input values plus the timestamps actually applied
+const customStartInput = ref('')
+const customEndInput = ref('')
+const appliedCustomStart = ref<number | null>(null)
+const appliedCustomEnd = ref<number | null>(null)
 const currentTimeMs = ref(Date.now())
 const copiedUmo = ref('')
 const failedCopyUmo = ref('')
@@ -364,6 +405,14 @@ let copyFeedbackTimer: number | null = null
 
 function formatNumber(value: number): string {
   return new Intl.NumberFormat(locale.value).format(value)
+}
+
+function formatDateLabel(timestamp: number | null): string {
+  if (timestamp === null) return '—'
+  const date = new Date(timestamp * 1000)
+  const month = `${date.getMonth() + 1}`.padStart(2, '0')
+  const day = `${date.getDate()}`.padStart(2, '0')
+  return `${date.getFullYear()}-${month}-${day}`
 }
 
 function formatCompactNumber(value: number): string {
@@ -452,14 +501,85 @@ function aggregateOverflowSeries(series: ProviderTrendItem[]): ProviderTrendItem
   ]
 }
 
+const PRESET_DAYS: Record<'1d' | '3d' | '7d' | '30d', number> = {
+  '1d': 1,
+  '3d': 3,
+  '7d': 7,
+  '30d': 30
+}
+
+interface ResolvedRange {
+  offsetSec: number
+  days: number
+  startTs?: number
+  endTs?: number
+}
+
+const hasAppliedCustomRange = computed(
+  () => appliedCustomStart.value !== null && appliedCustomEnd.value !== null
+)
+
+function resolveRange(): ResolvedRange {
+  if (selectedRange.value === 'all') {
+    // Passing 0 for offset_sec / days means the full window since deployment
+    return { offsetSec: 0, days: 0 }
+  }
+  if (selectedRange.value === 'custom') {
+    if (hasAppliedCustomRange.value) {
+      const startTs = appliedCustomStart.value as number
+      const endTs = appliedCustomEnd.value as number
+      return {
+        offsetSec: Math.max(1, endTs - startTs),
+        days: Math.max(1, Math.ceil((endTs - startTs) / 86_400)),
+        startTs,
+        endTs
+      }
+    }
+    return { offsetSec: 86_400, days: 1 }
+  }
+  const presetDays = PRESET_DAYS[selectedRange.value]
+  return { offsetSec: presetDays * 86_400, days: presetDays }
+}
+
 async function fetchBaseStats(): Promise<void> {
-  const response = await statsApi.get(selectedRange.value * 24 * 60 * 60)
+  const range = resolveRange()
+  const response = await statsApi.get(range.offsetSec, range.endTs)
   baseStats.value = response.data.data
 }
 
 async function fetchProviderStats(): Promise<void> {
-  const response = await statsApi.providerTokens(selectedRange.value)
+  const range = resolveRange()
+  const response = await statsApi.providerTokens(range.days, range.startTs, range.endTs)
   providerStats.value = response.data.data
+}
+
+function toLocalTimestamp(value: string, endOfDay = false): number | null {
+  if (!value) return null
+  const date = new Date(`${value}T${endOfDay ? '23:59:59' : '00:00:00'}`)
+  const timestamp = date.getTime()
+  return Number.isNaN(timestamp) ? null : Math.floor(timestamp / 1000)
+}
+
+const canApplyCustomRange = computed(
+  () => Boolean(customStartInput.value) && Boolean(customEndInput.value)
+)
+
+async function applyCustomRange(): Promise<void> {
+  const startTs = toLocalTimestamp(customStartInput.value)
+  const endTs = toLocalTimestamp(customEndInput.value, true)
+  if (startTs === null || endTs === null || startTs > endTs) {
+    errorMessage.value = t('customRange.invalid')
+    return
+  }
+  errorMessage.value = ''
+  appliedCustomStart.value = startTs
+  appliedCustomEnd.value = endTs
+  try {
+    await Promise.all([fetchBaseStats(), fetchProviderStats()])
+  } catch (error) {
+    console.error('Failed to load custom range stats:', error)
+    errorMessage.value = t('errors.rangeFailed')
+  }
 }
 
 async function refreshStats(): Promise<void> {
@@ -475,15 +595,32 @@ async function refreshStats(): Promise<void> {
 }
 
 const rangeOptions = computed(() => [
-  { labelKey: 'ranges.oneDay', value: 1 as TokenRange },
-  { labelKey: 'ranges.threeDays', value: 3 as TokenRange },
-  { labelKey: 'ranges.oneWeek', value: 7 as TokenRange }
+  { labelKey: 'ranges.oneDay', value: '1d' as RangePreset },
+  { labelKey: 'ranges.threeDays', value: '3d' as RangePreset },
+  { labelKey: 'ranges.oneWeek', value: '7d' as RangePreset },
+  { labelKey: 'ranges.oneMonth', value: '30d' as RangePreset },
+  { labelKey: 'ranges.all', value: 'all' as RangePreset },
+  { labelKey: 'ranges.custom', value: 'custom' as RangePreset }
 ])
 
 const rangeLabel = computed(() => {
-  if (selectedRange.value === 3) return t('rangeLabels.threeDays')
-  if (selectedRange.value === 7) return t('rangeLabels.oneWeek')
-  return t('rangeLabels.oneDay')
+  switch (selectedRange.value) {
+    case '3d':
+      return t('rangeLabels.threeDays')
+    case '7d':
+      return t('rangeLabels.oneWeek')
+    case '30d':
+      return t('rangeLabels.oneMonth')
+    case 'all':
+      return t('rangeLabels.all')
+    case 'custom':
+      if (hasAppliedCustomRange.value) {
+        return `${formatDateLabel(appliedCustomStart.value)} ~ ${formatDateLabel(appliedCustomEnd.value)}`
+      }
+      return t('rangeLabels.custom')
+    default:
+      return t('rangeLabels.oneDay')
+  }
 })
 
 const uptimeLabel = computed(() => {
@@ -510,8 +647,8 @@ const overviewCards = computed(() => [
     icon: 'mdi-message-outline'
   },
   {
-    label: t('overviewCards.todayModelCalls.label'),
-    value: formatCompactNumber(providerStats.value?.today_total_tokens ?? 0),
+    label: t('overviewCards.rangeModelCalls.label', { range: rangeLabel.value }),
+    value: formatCompactNumber(providerStats.value?.range_total_tokens ?? 0),
     icon: 'mdi-creation-outline'
   },
   {
@@ -701,7 +838,14 @@ const providerChartOptions = computed<ApexOptions>(() => ({
   }
 }))
 
-watch(selectedRange, async () => {
+watch(selectedRange, async (value) => {
+  // When switching to "Custom", clear the previously applied range and
+  // wait until the dates are picked and applied before sending a request
+  if (value === 'custom') {
+    appliedCustomStart.value = null
+    appliedCustomEnd.value = null
+    return
+  }
   try {
     await Promise.all([fetchBaseStats(), fetchProviderStats()])
   } catch (error) {
@@ -1012,6 +1156,41 @@ onBeforeUnmount(() => {
   background: var(--stats-surface);
 }
 
+.toolbar-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.custom-range {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.custom-range__field {
+  max-width: 168px;
+}
+
+.custom-range__sep {
+  color: var(--stats-muted);
+  font-size: 13px;
+}
+
+.range-chip--apply {
+  border: 1px solid var(--stats-border);
+  color: rgb(var(--v-theme-primary));
+  font-weight: 650;
+}
+
+.range-chip--apply:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .stats-page.is-dark .range-switch {
   border-color: var(--stats-border-strong);
   background: var(--stats-surface);
@@ -1106,6 +1285,43 @@ onBeforeUnmount(() => {
   font-size: 14px;
   min-width: 0;
   width: 100%;
+}
+
+.model-usage-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--stats-border);
+  min-width: 0;
+  width: 100%;
+}
+
+.model-usage-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+  min-width: 0;
+}
+
+.model-usage-breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  color: var(--stats-muted);
+  font-size: 12.5px;
+}
+
+.model-usage-breakdown strong {
+  color: inherit;
+  font-weight: 650;
+}
+
+.model-usage-calls {
+  margin-left: auto;
 }
 
 .provider-row > strong {
@@ -1221,6 +1437,14 @@ onBeforeUnmount(() => {
     justify-content: flex-start;
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .toolbar-actions {
+    align-items: flex-start;
+  }
+
+  .custom-range {
+    justify-content: flex-start;
   }
 
   .card-head,

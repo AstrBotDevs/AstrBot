@@ -145,6 +145,8 @@ async def test_get_stat_aggregates_platform_stats(temp_db):
 
     # Global total counts every row, including the one outside the window.
     assert result["message_count"] == 21
+    # range_message_count only counts records inside the current window
+    assert result["range_message_count"] == 17
 
     # Windowed per-platform sums, serialized with the legacy response keys.
     platform = {entry["name"]: entry["count"] for entry in result["platform"]}
@@ -169,6 +171,10 @@ async def test_get_stat_aggregates_platform_stats(temp_db):
         "plugin_count",
         "plugins",
         "message_time_series",
+        "range_message_count",
+        "range_start",
+        "range_end",
+        "bucket_seconds",
         "running",
         "memory",
         "cpu_percent",
@@ -188,6 +194,121 @@ async def test_get_stat_empty_window(temp_db):
     assert result["platform"] == []
     assert result["message_count"] == 4
     assert all(count == 0 for _, count in result["message_time_series"])
+
+
+@pytest.mark.asyncio
+async def test_get_stat_full_window_uses_daily_buckets(temp_db):
+    """The all-time window (offset_sec=0) uses daily buckets and starts from the earliest platform record."""
+    now = datetime.now()
+    for days_ago in (10, 5, 0):
+        await temp_db.insert_platform_stats(
+            "webchat",
+            "webchat",
+            2,
+            now - timedelta(days=days_ago),
+        )
+
+    result = await _make_service(temp_db).get_stat(0)
+
+    assert result["bucket_seconds"] == 86400
+    assert result["range_start"] <= int((now - timedelta(days=10)).timestamp()) + 1
+    assert len(result["message_time_series"]) >= 10
+    # Every record in the window must appear on the chart; bucketing must not drop data.
+    assert sum(count for _, count in result["message_time_series"]) == 6
+
+
+@pytest.mark.asyncio
+async def test_get_stat_month_window_uses_daily_buckets(temp_db):
+    """A 30-day window also uses daily buckets, yielding far fewer points than hourly buckets."""
+    now = datetime.now()
+    await temp_db.insert_platform_stats(
+        "webchat",
+        "webchat",
+        5,
+        now - timedelta(days=20),
+    )
+
+    result = await _make_service(temp_db).get_stat(30 * 86400)
+
+    assert result["bucket_seconds"] == 86400
+    assert len(result["message_time_series"]) == 30
+    assert sum(count for _, count in result["message_time_series"]) == 5
+
+
+@pytest.mark.asyncio
+async def test_provider_token_stats_custom_range_and_full_window(temp_db):
+    """Custom ranges and the all-time window both return statistics correctly."""
+    await temp_db.insert_provider_stat(
+        umo="webchat:FriendMessage:session-1",
+        provider_id="provider-1",
+        stats={"token_usage": {"input_other": 1, "input_cached": 2, "output": 3}},
+    )
+    service = _make_service(temp_db)
+    now = int(time.time())
+
+    custom = await service.get_provider_token_stats(1, now - 86400, now + 60)
+    assert custom["bucket_seconds"] == 3600
+    assert custom["range_start"] <= now <= custom["range_end"]
+    assert custom["range_total_tokens"] == 6
+    assert custom["range_by_provider"][0]["provider_id"] == "provider-1"
+    assert custom["range_by_provider"][0]["tokens"] == 6
+
+    full = await service.get_provider_token_stats(0)
+    assert full["range_start"] <= now
+    assert full["range_total_tokens"] == 6
+
+
+@pytest.mark.asyncio
+async def test_get_stat_excludes_records_after_end_ts(temp_db):
+    """Records newer than the requested window end stay out of the window."""
+    await temp_db.insert_platform_stats("webchat", "webchat", 3, datetime.now())
+
+    result = await _make_service(temp_db).get_stat(3600, int(time.time()) - 3600)
+
+    assert result["range_message_count"] == 0
+    assert sum(count for _, count in result["message_time_series"]) == 0
+
+
+@pytest.mark.asyncio
+async def test_provider_token_stats_excludes_records_after_end_ts(temp_db):
+    """Provider records newer than the requested window end are ignored."""
+    await temp_db.insert_provider_stat(
+        umo="webchat:FriendMessage:session-1",
+        provider_id="provider-1",
+        stats={"token_usage": {"input_other": 1, "input_cached": 2, "output": 3}},
+    )
+    now = int(time.time())
+
+    result = await _make_service(temp_db).get_provider_token_stats(
+        2, now - 2 * 86400, now - 86400
+    )
+
+    assert result["range_total_tokens"] == 0
+    assert sum(value for _, value in result["trend"]["total_series"]) == 0
+
+
+@pytest.mark.asyncio
+async def test_provider_token_daily_buckets_include_non_midnight_records(temp_db):
+    """Daily buckets keep records even when their hour differs from the anchor."""
+    await temp_db.insert_provider_stat(
+        umo="webchat:FriendMessage:session-1",
+        provider_id="provider-1",
+        stats={"token_usage": {"input_other": 2, "input_cached": 0, "output": 4}},
+    )
+    now = int(time.time())
+    # The custom picker sends a midnight start date, so the daily bucket
+    # anchor hour differs from the record's hour.
+    today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    start_ts = int(today_start.timestamp()) - 20 * 86400
+
+    result = await _make_service(temp_db).get_provider_token_stats(
+        0, start_ts, now + 7200
+    )
+
+    assert result["bucket_seconds"] == 86400
+    assert result["range_total_tokens"] == 6
+    # The record must land in one of the daily buckets instead of vanishing.
+    assert sum(value for _, value in result["trend"]["total_series"]) == 6
 
 
 @pytest.mark.asyncio
