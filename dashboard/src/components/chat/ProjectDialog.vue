@@ -179,6 +179,11 @@ async function handlePickWorkspaceDirectory() {
         const selectedPath = await pickDirectory(form.value.workspace_path || null);
         if (selectedPath) {
             form.value.workspace_path = selectedPath;
+            const normalizedPath = selectedPath.replace(/[\\/]+$/, '');
+            const folderName = normalizedPath.split(/[\\/]/).pop();
+            if (folderName) {
+                form.value.title = folderName;
+            }
         }
     } catch (error) {
         console.warn('[chat-project] Failed to pick workspace directory.', error);
