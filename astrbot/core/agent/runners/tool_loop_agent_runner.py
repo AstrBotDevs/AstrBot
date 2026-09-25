@@ -70,6 +70,17 @@ else:
     from typing_extensions import override
 
 
+def _extract_content_mime_type(item: T.Any, default: str = "image/png") -> str:
+    """Safely extract MIME type from MCP Content or Resource, supporting both snake_case and camelCase."""
+    return (
+        getattr(item, "mime_type", None)
+        or getattr(item, "mimeType", None)
+        or (item.get("mime_type") if isinstance(item, dict) else None)
+        or (item.get("mimeType") if isinstance(item, dict) else None)
+        or default
+    )
+
+
 @dataclass(slots=True)
 class _HandleFunctionToolsResult:
     kind: T.Literal["message_chain", "tool_call_result_blocks", "cached_image"]
@@ -255,6 +266,18 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             llm_compress_provider=self.llm_compress_provider,
             custom_token_counter=self.custom_token_counter,
             custom_compressor=self.custom_compressor,
+            sanitize_historical_thoughts=provider.provider_config.get(
+                "sanitize_historical_thoughts", True
+            ),
+            sanitize_historical_tools=provider.provider_config.get(
+                "sanitize_historical_tools", False
+            ),
+            max_historical_tool_result_chars=provider.provider_config.get(
+                "max_historical_tool_result_chars", 500
+            ),
+            sanitize_historical_images=provider.provider_config.get(
+                "sanitize_historical_images", False
+            ),
         )
         self.context_manager = ContextManager(self.context_config)
 
@@ -581,6 +604,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self,
         contexts: list[Message] | list[dict[str, T.Any]],
     ) -> list[Message] | list[dict[str, T.Any]]:
+        # 1. Sanitize historical reasoning and heavy tool outputs for provider projection
+        if getattr(self, "context_manager", None) and getattr(
+            self.context_manager, "sanitizer", None
+        ):
+            contexts = self.context_manager.sanitizer.sanitize(contexts)
+
         if not self._should_fix_modalities_for_provider():
             return contexts
         sanitized_contexts, stats = sanitize_contexts_by_modalities(
@@ -1096,12 +1125,15 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                 result_parts.append(content_item.text)
                             elif isinstance(content_item, ImageContent):
                                 # Cache the image instead of sending directly
+                                mime_type = _extract_content_mime_type(
+                                    content_item, default="image/png"
+                                )
                                 cached_img = tool_image_cache.save_image(
                                     base64_data=content_item.data,
                                     tool_call_id=func_tool_id,
                                     tool_name=func_tool_name,
                                     index=index,
-                                    mime_type=content_item.mimeType or "image/png",
+                                    mime_type=mime_type,
                                 )
                                 result_parts.append(
                                     f"Image returned and cached at path='{cached_img.file_path}'. "
@@ -1116,28 +1148,28 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                 resource = content_item.resource
                                 if isinstance(resource, TextResourceContents):
                                     result_parts.append(resource.text)
-                                elif (
-                                    isinstance(resource, BlobResourceContents)
-                                    and resource.mimeType
-                                    and resource.mimeType.startswith("image/")
-                                ):
-                                    # Cache the image instead of sending directly
-                                    cached_img = tool_image_cache.save_image(
-                                        base64_data=resource.blob,
-                                        tool_call_id=func_tool_id,
-                                        tool_name=func_tool_name,
-                                        index=index,
-                                        mime_type=resource.mimeType,
+                                elif isinstance(resource, BlobResourceContents):
+                                    res_mime = _extract_content_mime_type(
+                                        resource, default=""
                                     )
-                                    result_parts.append(
-                                        f"Image returned and cached at path='{cached_img.file_path}'. "
-                                        f"Review the image below. Use send_message_to_user to send it to the user if satisfied, "
-                                        f"with type='image' and path='{cached_img.file_path}'."
-                                    )
-                                    # Yield image info for LLM visibility
-                                    yield _HandleFunctionToolsResult.from_cached_image(
-                                        cached_img
-                                    )
+                                    if res_mime and res_mime.startswith("image/"):
+                                        # Cache the image instead of sending directly
+                                        cached_img = tool_image_cache.save_image(
+                                            base64_data=resource.blob,
+                                            tool_call_id=func_tool_id,
+                                            tool_name=func_tool_name,
+                                            index=index,
+                                            mime_type=res_mime,
+                                        )
+                                        result_parts.append(
+                                            f"Image returned and cached at path='{cached_img.file_path}'. "
+                                            f"Review the image below. Use send_message_to_user to send it to the user if satisfied, "
+                                            f"with type='image' and path='{cached_img.file_path}'."
+                                        )
+                                        # Yield image info for LLM visibility
+                                        yield _HandleFunctionToolsResult.from_cached_image(
+                                            cached_img
+                                        )
                                 else:
                                     result_parts.append(
                                         "The tool has returned a data type that is not supported."

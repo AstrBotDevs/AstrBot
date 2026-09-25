@@ -33,3 +33,13 @@ class ContextConfig:
     """Custom token counting method. If None, the default method is used."""
     custom_compressor: ContextCompressor | None = None
     """Custom context compression method. If None, the default method is used."""
+    sanitize_historical_thoughts: bool = True
+    """Whether to strip historical reasoning (<think> tags and ThinkPart blocks) from prior turns before calling LLM."""
+    sanitize_historical_tools: bool = False
+    """Whether to truncate bulky historical tool execution results in prior turns."""
+    max_historical_tool_result_chars: int = 500
+    """Maximum character length for historical tool results when tool sanitization is enabled."""
+    sanitize_historical_images: bool = False
+    """Whether to sanitize or prune inline data URIs from historical turns."""
+    persist_sanitized_history: bool = False
+    """Whether to persist sanitized history to SQLite storage. Defaults to False (only sanitize request view)."""
