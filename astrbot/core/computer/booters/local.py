@@ -880,10 +880,7 @@ class LocalShellComponent(ShellComponent):
                 f"Shell session {session_id} was not found or has expired. "
                 "Start a new shell session."
             )
-        if (
-            session.permission_check is None
-            or not session.permission_check()
-        ):
+        if session.permission_check is None or not session.permission_check():
             await self.shutdown_sessions(invalid_only=True)
             raise ValueError(
                 f"Shell session {session_id} expired after a permission change. "

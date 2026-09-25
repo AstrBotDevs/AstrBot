@@ -90,12 +90,9 @@ def download_repository(
             base_dir = Path(temp_dir).resolve()
             for member in z.namelist():
                 member_path = (base_dir / member).resolve()
-                if member_path != base_dir and not member_path.is_relative_to(
-                    base_dir
-                ):
+                if member_path != base_dir and not member_path.is_relative_to(base_dir):
                     raise ValueError(
-                        "Archive member escapes the extraction directory: "
-                        f"{member}"
+                        f"Archive member escapes the extraction directory: {member}"
                     )
             z.extractall(temp_dir)
             namelist = z.namelist()
