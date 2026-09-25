@@ -128,12 +128,16 @@ class MarkdownChunker(BaseChunker):
                 # 章节过长，内部递归分割
                 # 扣除前缀长度，确保添加前缀后不超过 chunk_size
                 prefix_len = self._estimate_prefix_length(heading_path)
-                effective_chunk_size = max(chunk_size // 4, chunk_size - prefix_len)
+                effective_chunk_size = max(1, chunk_size // 4, chunk_size - prefix_len)
+                # 标题前缀压缩了正文预算，但外部配置的 overlap 是针对原始
+                # chunk_size 传入的合法值；不随预算同步收紧的话，递归分块
+                # 器会因 overlap >= chunk_size 直接抛错。
+                effective_overlap = max(0, min(chunk_overlap, effective_chunk_size - 1))
 
                 sub_chunks = await self._fallback_chunker.chunk(
                     section_text,
                     chunk_size=effective_chunk_size,
-                    chunk_overlap=chunk_overlap,
+                    chunk_overlap=effective_overlap,
                 )
                 for i, sub_chunk in enumerate(sub_chunks):
                     chunk_text = self._apply_heading_context(
