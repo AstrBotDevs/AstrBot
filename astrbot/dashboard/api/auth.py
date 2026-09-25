@@ -43,6 +43,7 @@ class AuthContext:
     scopes: list[str]
     api_key_id: str | None = None
     via: str = "jwt"
+    session_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -192,7 +193,13 @@ async def require_scope(request: Request, scope: str) -> AuthContext:
     username = payload.get("username")
     if not isinstance(username, str) or not username.strip():
         raise ApiError("Invalid token", status_code=401)
-    return AuthContext(username=username, scopes=["*"], via="jwt")
+    session_id = payload.get("jti")
+    return AuthContext(
+        username=username,
+        scopes=["*"],
+        via="jwt",
+        session_id=session_id if isinstance(session_id, str) and session_id else None,
+    )
 
 
 def get_auth_service(request: Request) -> AuthService:
@@ -357,10 +364,11 @@ async def _totp_setup(
     request: Request,
     payload: TotpSetupRequest | None,
     service: AuthService,
+    session_id: str | None,
 ):
     return _auth_service_response(
         request,
-        await service.totp_setup(_payload(payload)),
+        await service.totp_setup(_payload(payload), session_id=session_id),
     )
 
 
@@ -478,7 +486,7 @@ async def totp_setup(
     _auth: AuthContext = Depends(require_system_scope),
     service: AuthService = Depends(get_auth_service),
 ):
-    return await _totp_setup(request, payload, service)
+    return await _totp_setup(request, payload, service, _auth.session_id)
 
 
 @legacy_router.post("/totp/setup")
@@ -486,9 +494,10 @@ async def dashboard_totp_setup(
     request: Request,
     payload: TotpSetupRequest | None = None,
     _username: str = Depends(require_dashboard_user),
+    _auth: AuthContext = Depends(require_system_scope),
     service: AuthService = Depends(get_auth_service),
 ):
-    return await _totp_setup(request, payload, service)
+    return await _totp_setup(request, payload, service, _auth.session_id)
 
 
 @router.post("/auth/totp/recovery")
