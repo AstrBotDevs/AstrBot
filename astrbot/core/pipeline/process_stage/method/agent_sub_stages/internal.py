@@ -54,6 +54,24 @@ from ...follow_up import (
 )
 
 
+async def _prepare_file_attachments(event: AstrMessageEvent) -> None:
+    """Download file attachments before acquiring the session lock.
+
+    Args:
+        event: Incoming event whose direct and quoted files should be prepared.
+
+    Returns:
+        None.
+    """
+    for component in event.message_obj.message:
+        if isinstance(component, File):
+            await component.get_file()
+        elif isinstance(component, Reply) and component.chain:
+            for reply_component in component.chain:
+                if isinstance(reply_component, File):
+                    await reply_component.get_file()
+
+
 class InternalAgentSubStage(Stage):
     async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
@@ -204,6 +222,8 @@ class InternalAgentSubStage(Stage):
                 logger.warning("send_typing failed", exc_info=True)
             if await call_event_hook(event, EventType.OnWaitingLLMRequestEvent):
                 return
+
+            await _prepare_file_attachments(event)
 
             async with session_lock_manager.acquire_lock(event.unified_msg_origin):
                 logger.debug("acquired session lock for llm request")
