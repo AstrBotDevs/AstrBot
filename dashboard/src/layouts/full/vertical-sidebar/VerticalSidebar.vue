@@ -179,7 +179,6 @@ function toggleSidebar() {
           variant="text" :icon="isRailSidebar" to="/settings" :aria-label="t('core.navigation.settings')">
           <Settings :size="20" class="sidebar-footer-lucide-icon" />
           <span v-if="!isRailSidebar">{{ t('core.navigation.settings') }}</span>
-          <v-tooltip v-if="isRailSidebar" activator="parent" location="right" :text="t('core.navigation.settings')" open-delay="180" />
         </v-btn>
       </div>
     </div>
