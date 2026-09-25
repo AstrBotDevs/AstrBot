@@ -68,6 +68,7 @@
     "noDescription": "无描述",
     "noPersonas": "暂无可用的人格",
     "createPersona": "创建新人格",
+    "clearSelection": "清除选择",
     "cancelSelection": "取消",
     "confirmSelection": "确认选择",
     "selectPersonaPool": "选择人格池...",

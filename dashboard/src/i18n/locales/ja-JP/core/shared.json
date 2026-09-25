@@ -68,6 +68,7 @@
     "noDescription": "説明なし",
     "noPersonas": "利用可能なペルソナがありません",
     "createPersona": "新しいペルソナを作成",
+    "clearSelection": "選択を解除",
     "cancelSelection": "キャンセル",
     "confirmSelection": "選択を確定",
     "selectPersonaPool": "ペルソナプールを選択…",

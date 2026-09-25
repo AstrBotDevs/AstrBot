@@ -69,6 +69,7 @@
         "noDescription": "Нет описания",
         "noPersonas": "Доступных персонажей нет",
         "createPersona": "Создать персонажа",
+        "clearSelection": "Сбросить выбор",
         "cancelSelection": "Отмена",
         "confirmSelection": "ОК",
         "selectPersonaPool": "Выбрать пул персонажей...",
