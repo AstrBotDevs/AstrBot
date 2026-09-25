@@ -101,7 +101,9 @@ class _FakeEvent:
         self._reaction_id = reaction_id
         self._platform = platform
         self._reaction_created = (
-            reaction_created if reaction_created is not None else reaction_id is not None
+            reaction_created
+            if reaction_created is not None
+            else reaction_id is not None
         )
         self._extras: dict = {}
         self.is_at_or_wake_command = True
@@ -241,7 +243,40 @@ async def test_lark_remove_reaction_api_failure_without_emoji_does_not_raise():
 
 
 @pytest.mark.asyncio
-async def test_lark_remove_reaction_does_not_delete_another_reaction_on_id_failure():
+async def test_lark_remove_reaction_retries_same_id_after_delete_failure():
+    reaction_api = SimpleNamespace(
+        adelete=AsyncMock(side_effect=[_response(False), _response(True)]),
+        alist=AsyncMock(
+            return_value=_response(
+                True,
+                SimpleNamespace(
+                    items=[
+                        SimpleNamespace(
+                            reaction_id="reaction-123",
+                            operator=SimpleNamespace(operator_id="old-bot"),
+                        ),
+                        SimpleNamespace(
+                            reaction_id="old-reaction",
+                            operator=SimpleNamespace(operator_id="bot"),
+                        ),
+                    ],
+                    has_more=False,
+                    page_token=None,
+                ),
+            )
+        ),
+    )
+    event = _lark_event(_lark_bot(reaction_api))
+
+    await event.remove_reaction("reaction-123", "Typing")
+
+    reaction_api.alist.assert_awaited_once()
+    assert reaction_api.adelete.await_count == 2
+    assert reaction_api.adelete.await_args_list[1].args[0].reaction_id == "reaction-123"
+
+
+@pytest.mark.asyncio
+async def test_lark_remove_reaction_does_not_delete_another_reaction_when_target_is_missing():
     reaction_api = SimpleNamespace(
         adelete=AsyncMock(return_value=_response(False)),
         alist=AsyncMock(
@@ -250,7 +285,7 @@ async def test_lark_remove_reaction_does_not_delete_another_reaction_on_id_failu
                 SimpleNamespace(
                     items=[
                         SimpleNamespace(
-                            reaction_id="reaction-123",
+                            reaction_id="old-reaction",
                             operator=SimpleNamespace(operator_id="bot"),
                         )
                     ],
@@ -264,7 +299,7 @@ async def test_lark_remove_reaction_does_not_delete_another_reaction_on_id_failu
 
     await event.remove_reaction("reaction-123", "Typing")
 
-    reaction_api.alist.assert_not_awaited()
+    reaction_api.alist.assert_awaited_once()
     reaction_api.adelete.assert_awaited_once()
 
 

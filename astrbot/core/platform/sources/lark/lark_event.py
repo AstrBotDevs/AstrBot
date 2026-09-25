@@ -1023,21 +1023,24 @@ class LarkMessageEvent(AstrMessageEvent):
             )
             return
 
-        if reaction_id:
+        target_reaction_id = reaction_id
+        if target_reaction_id:
             request = (
                 DeleteMessageReactionRequest.builder()
                 .message_id(self.message_obj.message_id)
-                .reaction_id(reaction_id)
+                .reaction_id(target_reaction_id)
                 .build()
             )
-            response = await self.bot.im.v1.message_reaction.adelete(request)
-            if response.success():
-                return
+            try:
+                response = await self.bot.im.v1.message_reaction.adelete(request)
+                if response.success():
+                    return
+            except Exception as exc:
+                logger.warning(f"Failed to delete Lark message reaction by ID: {exc}")
             logger.warning(
-                f"Failed to delete Lark message reaction({response.code}): "
-                f"{response.msg}; will not remove another reaction by emoji"
+                "Failed to delete Lark message reaction by ID; "
+                "will verify the same ID before retrying"
             )
-            return
 
         if not emoji:
             logger.warning("[Lark] Reaction cannot be resolved for removal")
@@ -1078,8 +1081,11 @@ class LarkMessageEvent(AstrMessageEvent):
                     item.reaction_id
                     for item in response.data.items or []
                     if item.reaction_id
-                    and item.operator
-                    and item.operator.operator_id in operator_ids
+                    and (
+                        item.reaction_id == target_reaction_id
+                        if target_reaction_id
+                        else item.operator and item.operator.operator_id in operator_ids
+                    )
                 ),
                 None,
             )
