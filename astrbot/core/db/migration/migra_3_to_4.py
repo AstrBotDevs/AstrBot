@@ -134,46 +134,44 @@ async def migration_platform_table(
                 if bucket_idx % 500 == 0:
                     progress = int((bucket_idx + 1) / total_buckets * 100)
                     logger.info(f"进度: {progress}% ({bucket_idx + 1}/{total_buckets})")
-                cnt = 0
+                bucket_counts: dict[str, int] = {}
                 while (
                     idx < len(platform_stats_v3)
                     and platform_stats_v3[idx].timestamp < bucket_end
                 ):
-                    cnt += platform_stats_v3[idx].count
+                    record = platform_stats_v3[idx]
+                    bucket_counts[record.name] = (
+                        bucket_counts.get(record.name, 0) + record.count
+                    )
                     idx += 1
-                if cnt == 0:
+                if not bucket_counts:
                     continue
-                platform_id = get_platform_id(
-                    platform_id_map,
-                    platform_stats_v3[idx].name,
-                )
-                platform_type = get_platform_type(
-                    platform_id_map,
-                    platform_stats_v3[idx].name,
-                )
-                try:
-                    await dbsession.execute(
-                        text("""
-                        INSERT INTO platform_stats (timestamp, platform_id, platform_type, count)
-                        VALUES (:timestamp, :platform_id, :platform_type, :count)
-                        ON CONFLICT(timestamp, platform_id, platform_type) DO UPDATE SET
-                            count = platform_stats.count + EXCLUDED.count
-                        """),
-                        {
-                            "timestamp": datetime.datetime.fromtimestamp(
-                                bucket_end,
-                                tz=datetime.timezone.utc,
-                            ),
-                            "platform_id": platform_id,
-                            "platform_type": platform_type,
-                            "count": cnt,
-                        },
-                    )
-                except Exception:
-                    logger.error(
-                        f"迁移平台统计数据失败: {platform_id}, {platform_type}, 时间戳: {bucket_end}",
-                        exc_info=True,
-                    )
+                for platform_name, cnt in bucket_counts.items():
+                    platform_id = get_platform_id(platform_id_map, platform_name)
+                    platform_type = get_platform_type(platform_id_map, platform_name)
+                    try:
+                        await dbsession.execute(
+                            text("""
+                            INSERT INTO platform_stats (timestamp, platform_id, platform_type, count)
+                            VALUES (:timestamp, :platform_id, :platform_type, :count)
+                            ON CONFLICT(timestamp, platform_id, platform_type) DO UPDATE SET
+                                count = platform_stats.count + EXCLUDED.count
+                            """),
+                            {
+                                "timestamp": datetime.datetime.fromtimestamp(
+                                    bucket_end,
+                                    tz=datetime.timezone.utc,
+                                ),
+                                "platform_id": platform_id,
+                                "platform_type": platform_type,
+                                "count": cnt,
+                            },
+                        )
+                    except Exception:
+                        logger.error(
+                            f"迁移平台统计数据失败: {platform_id}, {platform_type}, 时间戳: {bucket_end}",
+                            exc_info=True,
+                        )
     logger.info(f"成功迁移 {len(platform_stats_v3)} 条旧的平台数据到新表。")
 
 

@@ -5,9 +5,7 @@
         <img width="80" src="@/assets/images/plugin_icon.png" alt="AstrBot Logo">
       </div>
       <div class="logo-text">
-        <h2 
-          v-html="formatTitle(title || t('core.header.logoTitle'))"
-        ></h2>
+        <h2>{{ formatTitle(title || t('core.header.logoTitle')) }}</h2>
         <h4 class="hint-text">{{ subtitle || t('core.header.accountDialog.title') }}</h4>
       </div>
     </div>
@@ -31,8 +29,10 @@ const props = withDefaults(defineProps<{
 const formatTitle = (title: string) => {
   // 如果标题包含 "AstrBot" 和其他文字，在它们之间添加换行机会
   if (title.includes('AstrBot ') || title.includes('AstrBot')) {
-    // 处理 "AstrBot 仪表盘" 或 "AstrBot Dashboard" 等格式
-    return title.replace(/(AstrBot)\s+(.+)/, '$1<wbr> $2');
+    // 处理 "AstrBot 仪表盘" 或 "AstrBot Dashboard" 等格式。
+    // 用零宽空格提供换行机会，而不是 <wbr> + v-html：title 属于组件公共
+    // API，任何调用方传入的 HTML 都不应被当作标记执行。
+    return title.replace(/(AstrBot)\s+(.+)/, '$1\u200B $2');
   }
   return title;
 }

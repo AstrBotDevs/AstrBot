@@ -749,6 +749,10 @@ class AstrBotImporter:
 
             # 创建知识库目录
             kb_dir = Path(self.kb_root_dir) / kb_id
+            # kb_id 来自备份载荷，不可信：必须校验解析后的目录仍在知识库根目录内
+            if not _validate_path_within(kb_dir, Path(self.kb_root_dir)):
+                result.add_warning(f"知识库 id 非法，已跳过: {kb_id}")
+                continue
             kb_dir.mkdir(parents=True, exist_ok=True)
 
             # 导入文档数据
@@ -798,6 +802,9 @@ class AstrBotImporter:
         from astrbot.core.db.vec_db.faiss_impl.document_storage import DocumentStorage
 
         kb_dir = Path(self.kb_root_dir) / kb_id
+        # kb_id 来自备份载荷，不可信：写入 doc.db 前再次确认目录未越界
+        if not _validate_path_within(kb_dir, Path(self.kb_root_dir)):
+            raise ValueError(f"Invalid knowledge base id: {kb_id}")
         doc_db_path = kb_dir / "doc.db"
 
         # 初始化文档存储

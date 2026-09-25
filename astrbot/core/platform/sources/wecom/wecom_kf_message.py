@@ -161,7 +161,7 @@ class WeChatKFMessage(BaseWeChatAPI):
             msgid,
             msg={
                 "msgtype": "location",
-                "msgmenu": {
+                "location": {
                     "name": name,
                     "address": address,
                     "latitude": latitude,
@@ -186,7 +186,7 @@ class WeChatKFMessage(BaseWeChatAPI):
             msgid,
             msg={
                 "msgtype": "miniprogram",
-                "msgmenu": {
+                "miniprogram": {
                     "appid": appid,
                     "title": title,
                     "thumb_media_id": thumb_media_id,

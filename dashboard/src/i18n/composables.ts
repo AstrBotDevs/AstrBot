@@ -186,6 +186,9 @@ export function useLanguageSwitcher() {
   };
 }
 
+// `in`/`target[key]` 会命中原型链，`__proto__` 等键会污染 Object.prototype。
+const UNSAFE_TRANSLATION_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
 /**
  * 将动态翻译数据（如插件提供的 i18n）合并到当前翻译中。
  * @param modulePath 模块路径，如 'features.config-metadata'
@@ -199,7 +202,14 @@ export function mergeDynamicTranslations(modulePath: string, allLocaleData: Reco
   const pathParts = modulePath.split('.');
   let target: any = translations.value;
   for (const part of pathParts) {
-    if (!(part in target) || typeof target[part] !== 'object') {
+    if (UNSAFE_TRANSLATION_KEYS.has(part)) {
+      console.warn(`Unsafe translation path segment ignored: ${part}`);
+      return;
+    }
+    if (
+      !Object.prototype.hasOwnProperty.call(target, part) ||
+      typeof target[part] !== 'object'
+    ) {
       target[part] = {};
     }
     target = target[part];
@@ -213,8 +223,14 @@ export function mergeDynamicTranslations(modulePath: string, allLocaleData: Reco
 
 function deepMerge(target: Record<string, any>, source: Record<string, any>) {
   for (const key of Object.keys(source)) {
+    if (UNSAFE_TRANSLATION_KEYS.has(key)) {
+      continue;
+    }
     if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
-      if (!(key in target) || typeof target[key] !== 'object') {
+      if (
+        !Object.prototype.hasOwnProperty.call(target, key) ||
+        typeof target[key] !== 'object'
+      ) {
         target[key] = {};
       }
       deepMerge(target[key], source[key]);

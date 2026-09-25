@@ -245,9 +245,14 @@ async function toggleCapabilities(field, names, toggleGroup = false) {
   const availableNames =
     field === "tools" ? selectableToolNames.value : selectableSkillNames.value;
   const previousValue = props[field];
+
+  const baselineNames =
+    field === "tools"
+      ? props.availableTools.map((tool) => tool.name)
+      : props.availableSkills.map((skill) => skill.name);
   const selectedNames =
     previousValue === null
-      ? [...availableNames]
+      ? [...baselineNames]
       : [...(Array.isArray(previousValue) ? previousValue : [])];
   const allTargetsSelected = names.every((name) =>
     selectedNames.includes(name),
@@ -354,9 +359,14 @@ async function saveSelectionDialog() {
   const availableNames =
     field === "tools" ? selectableToolNames.value : selectableSkillNames.value;
   const previousValue = props[field];
+
+  const baselineNames =
+    field === "tools"
+      ? props.availableTools.map((tool) => tool.name)
+      : props.availableSkills.map((skill) => skill.name);
   const selectedNames =
     previousValue === null
-      ? [...availableNames]
+      ? [...baselineNames]
       : [...(Array.isArray(previousValue) ? previousValue : [])];
   const dialogItemNames = selectionDialog.value.items.map((item) => item.name);
   const nextSelectedNames = selectedNames.filter(

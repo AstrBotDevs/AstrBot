@@ -68,13 +68,13 @@ class DocumentStorage:
                 await conn.execute(
                     text(
                         "ALTER TABLE documents ADD COLUMN kb_doc_id TEXT "
-                        "GENERATED ALWAYS AS (json_extract(metadata, '$.kb_doc_id')) STORED",
+                        "GENERATED ALWAYS AS (json_extract(metadata, '$.kb_doc_id')) VIRTUAL",
                     ),
                 )
                 await conn.execute(
                     text(
                         "ALTER TABLE documents ADD COLUMN user_id TEXT "
-                        "GENERATED ALWAYS AS (json_extract(metadata, '$.user_id')) STORED",
+                        "GENERATED ALWAYS AS (json_extract(metadata, '$.user_id')) VIRTUAL",
                     ),
                 )
 
@@ -89,8 +89,8 @@ class DocumentStorage:
                         "CREATE INDEX IF NOT EXISTS idx_documents_user_id ON documents(user_id)",
                     ),
                 )
-            except BaseException:
-                pass
+            except Exception as e:
+                logger.debug(f"document storage generated columns unavailable: {e}")
 
             await conn.execute(
                 text(

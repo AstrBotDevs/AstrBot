@@ -474,8 +474,11 @@ class LarkPlatformAdapter(Platform):
         suffix = Path(file_name).suffix if file_name else default_suffix
         temp_dir = Path(get_astrbot_temp_path())
         temp_dir.mkdir(parents=True, exist_ok=True)
+        safe_name = (
+            Path(file_name.replace("\\", "/")).name.lstrip(".") if file_name else ""
+        )
         temp_path = (
-            temp_dir / f"lark_{message_type}_{file_name}_{uuid4().hex[:4]}{suffix}"
+            temp_dir / f"lark_{message_type}_{safe_name}_{uuid4().hex[:4]}{suffix}"
         )
         temp_path.write_bytes(file_bytes)
         return str(temp_path.resolve())
@@ -651,6 +654,11 @@ class LarkPlatformAdapter(Platform):
             if not sender_name:
                 name_cache_ttl = USER_NAME_FAILURE_CACHE_TTL_SECONDS
                 try:
+                    contact_api = self.lark_api.contact
+                    if contact_api is None:
+                        raise RuntimeError(
+                            "Lark API Client contact 模块未初始化，无法查询发送者昵称"
+                        )
                     request = (
                         GetUserRequest.builder()
                         .user_id(sender_open_id)
@@ -658,7 +666,7 @@ class LarkPlatformAdapter(Platform):
                         .build()
                     )
                     response = await asyncio.wait_for(
-                        self.lark_api.contact.v3.user.aget(request),
+                        contact_api.v3.user.aget(request),
                         timeout=USER_NAME_LOOKUP_TIMEOUT_SECONDS,
                     )
                     if response.success() and response.data and response.data.user:

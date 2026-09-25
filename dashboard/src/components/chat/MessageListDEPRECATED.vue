@@ -286,6 +286,24 @@ export default {
         }
         this.extractWebSearchResults();
     },
+    // 必须是 options 顶层钩子：写在 methods 里只会变成普通方法，Vue 永远不会调用，
+    // 导致 scroll 监听器和 elapsed time 定时器泄漏。
+    beforeUnmount() {
+        const container = this.$refs.messageContainer;
+        if (container) {
+            container.removeEventListener('scroll', this.throttledHandleScroll);
+        }
+        // 清理定时器
+        if (this.scrollTimer) {
+            clearTimeout(this.scrollTimer);
+            this.scrollTimer = null;
+        }
+        // 清理 elapsed time 计时器
+        if (this.elapsedTimeTimer) {
+            clearInterval(this.elapsedTimeTimer);
+            this.elapsedTimeTimer = null;
+        }
+    },
     methods: {
         // 从消息中提取 web_search_tavily 的搜索结果
         extractWebSearchResults() {
@@ -759,24 +777,6 @@ export default {
 
                 // 判断用户是否在底部附近
                 this.isUserNearBottom = distanceFromBottom <= this.scrollThreshold;
-            }
-        },
-
-        // 组件销毁时移除监听器
-        beforeUnmount() {
-            const container = this.$refs.messageContainer;
-            if (container) {
-                container.removeEventListener('scroll', this.throttledHandleScroll);
-            }
-            // 清理定时器
-            if (this.scrollTimer) {
-                clearTimeout(this.scrollTimer);
-                this.scrollTimer = null;
-            }
-            // 清理 elapsed time 计时器
-            if (this.elapsedTimeTimer) {
-                clearInterval(this.elapsedTimeTimer);
-                this.elapsedTimeTimer = null;
             }
         },
 
