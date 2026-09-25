@@ -5,6 +5,7 @@ import asyncio
 import platform
 import re
 import shutil
+import sys
 import tempfile
 import threading
 import time
@@ -46,6 +47,26 @@ from astrbot.dashboard.password_state import (
     is_password_change_required,
     is_password_storage_upgraded,
 )
+
+PYTHON_REQUIRED_VERSION = (3, 12)
+
+
+def python_compat_info() -> dict[str, str | bool]:
+    """Return the current Python runtime version and whether it meets the supported minimum.
+
+    Returns:
+        A dict with the detected ``python_version`` string, the ``python_required_version``
+        string, and a ``python_compatible`` boolean.
+    """
+    current = (
+        f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+    )
+    required = ".".join(str(part) for part in PYTHON_REQUIRED_VERSION)
+    return {
+        "python_version": current,
+        "python_required_version": required,
+        "python_compatible": sys.version_info >= PYTHON_REQUIRED_VERSION,
+    }
 
 
 class StatServiceError(Exception):
@@ -162,6 +183,7 @@ class StatService:
                 "change_pwd_hint": False,
                 "md5_pwd_hint": False,
                 "password_upgrade_required": False,
+                **python_compat_info(),
                 "runtime": self.runtime,
             }
         storage_upgraded = await is_password_storage_upgraded(
@@ -182,6 +204,7 @@ class StatService:
             "change_pwd_hint": await self.is_default_cred(),
             "md5_pwd_hint": md5_pwd_hint,
             "password_upgrade_required": not storage_upgraded,
+            **python_compat_info(),
             "runtime": self.runtime,
         }
 
@@ -244,6 +267,7 @@ class StatService:
             "webui_version": dashboard_version,
             "astrbot_version": VERSION,
             "astrbot_code_version": code_version,
+            **python_compat_info(),
         }
 
     def get_start_time(self) -> dict:
