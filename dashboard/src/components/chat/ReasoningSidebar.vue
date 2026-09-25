@@ -6,7 +6,7 @@
         <v-btn icon="mdi-close" size="small" variant="text" @click="close" />
       </div>
 
-      <div class="reasoning-sidebar-body">
+      <div ref="sidebarBody" class="reasoning-sidebar-body">
         <ReasoningTimeline
           v-if="parts.length || reasoning"
           :parts="parts"
@@ -23,7 +23,7 @@
 
 <script setup lang="ts">
 import "@/components/chat/chatPanelTransition.css";
-import { computed } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import {
   reasoningActivityCounts,
   reasoningActivityTitle,
@@ -38,6 +38,8 @@ const props = defineProps<{
   reasoning?: string;
   isDark?: boolean;
 }>();
+
+const sidebarBody = ref<HTMLElement | null>(null);
 
 const emit = defineEmits<{
   "update:modelValue": [value: boolean];
@@ -56,6 +58,21 @@ const reasoningTitle = computed(() =>
 function close() {
   emit("update:modelValue", false);
 }
+
+function scrollToLatestActivity() {
+  if (!props.modelValue) return;
+  void nextTick(() => {
+    const body = sidebarBody.value;
+    if (!body) return;
+    body.scrollTop = body.scrollHeight;
+  });
+}
+
+watch(
+  () => [props.modelValue, props.reasoning, props.parts],
+  scrollToLatestActivity,
+  { deep: true, flush: "post", immediate: true },
+);
 </script>
 
 <style scoped>
@@ -94,6 +111,13 @@ function close() {
   padding: 0 14px 12px;
   font-size: 14.5px;
   line-height: 1.62;
+}
+
+.reasoning-sidebar-body :deep(.reasoning-text) {
+  --ms-text-body: 0.8125rem;
+  --ms-leading-body: 1.55;
+  font-size: 13px;
+  line-height: 1.55;
 }
 
 .reasoning-sidebar-empty {

@@ -165,12 +165,14 @@
     "name": "プロジェクト名",
     "emoji": "アイコン（Emoji）",
     "description": "プロジェクトの説明（任意）",
+    "moreSettings": "その他の設定",
     "workspace": {
       "type": "ワークスペース",
       "session": "セッションごとに分離",
       "project": "プロジェクト共有ワークスペース",
       "custom": "カスタムパス",
-      "path": "ワークスペースのパス"
+      "path": "ワークスペースのパス",
+      "selectPath": "フォルダーを選択"
     },
     "loadingSessions": "会話を読み込み中…",
     "noSessions": "このプロジェクトには会話がありません",
