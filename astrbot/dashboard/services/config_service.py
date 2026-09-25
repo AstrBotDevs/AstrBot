@@ -46,6 +46,7 @@ PROTECTED_2FA_CONFIG_PATHS = (
     ("dashboard", "totp", "secret"),
     ("dashboard", "totp", "recovery_code_hash"),
 )
+TOTP_SECRET_REDACTED = "__astrbot_totp_secret_redacted__"
 MAX_FILE_BYTES = 500 * 1024 * 1024
 
 
@@ -509,6 +510,37 @@ def _protected_2fa_config_changed(old_config: dict, new_config: dict) -> bool:
     )
 
 
+def _redact_totp_secret(config: dict) -> dict:
+    """Return a response copy without exposing an active TOTP secret."""
+    dashboard = config.get("dashboard")
+    totp = dashboard.get("totp") if isinstance(dashboard, dict) else None
+    if not is_totp_enabled(config) or not isinstance(totp, dict):
+        return config
+
+    response_config = dict(config)
+    response_dashboard = dict(dashboard)
+    response_totp = dict(totp)
+    response_totp["secret"] = TOTP_SECRET_REDACTED
+    response_dashboard["totp"] = response_totp
+    response_config["dashboard"] = response_dashboard
+    return response_config
+
+
+def _restore_redacted_totp_secret(config: dict, current_config: dict) -> None:
+    """Restore the server-side secret before comparing a redacted update."""
+    totp = config.get("dashboard", {}).get("totp")
+    if not isinstance(totp, dict):
+        return
+    if totp.get("secret") != TOTP_SECRET_REDACTED:
+        return
+
+    current_secret = _get_nested_value(
+        current_config,
+        ("dashboard", "totp", "secret"),
+    )
+    totp["secret"] = current_secret if isinstance(current_secret, str) else ""
+
+
 async def _validate_neo_connectivity(post_config: dict) -> str | None:
     ps = post_config.get("provider_settings", {})
     runtime = ps.get("computer_use_runtime", "none")
@@ -625,7 +657,7 @@ class ConfigProfileService:
 
     def get_system_schema(self) -> dict:
         return {
-            "config": self.acm.confs["default"],
+            "config": _redact_totp_secret(self.acm.confs["default"]),
             "metadata": ConfigMetadataI18n.convert_to_i18n_keys(
                 CONFIG_METADATA_3_SYSTEM
             ),
@@ -719,7 +751,7 @@ class ConfigProfileService:
         if config_id not in self.acm.confs:
             raise ValueError(f"Config file {config_id} does not exist")
         return {
-            "config": self.acm.confs[config_id],
+            "config": _redact_totp_secret(self.acm.confs[config_id]),
             "metadata": ConfigMetadataI18n.convert_to_i18n_keys(CONFIG_METADATA_3),
         }
 
@@ -776,6 +808,7 @@ class ConfigProfileService:
                 config[key] = default_conf.get(key, [])
 
         current_config = self.acm.confs[config_id]
+        _restore_redacted_totp_secret(config, current_config)
         if (
             not allow_admin_id_change
             and "admins_id" in config
@@ -1009,7 +1042,7 @@ class ConfigDisplayService:
 
         return {
             "metadata": metadata,
-            "config": self.config,
+            "config": _redact_totp_secret(self.config),
             "platform_i18n_translations": platform_i18n_translations,
         }
 
