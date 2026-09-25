@@ -74,11 +74,5 @@
     "vue-cli-plugin-vuetify": "2.5.8",
     "vue-tsc": "1.8.8",
     "vuetify-loader": "^2.0.0-alpha.9"
-  },
-  "pnpm": {
-    "overrides": {
-      "immutable": "4.3.8",
-      "lodash-es": "4.17.23"
-    }
   }
 }
