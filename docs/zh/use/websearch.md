@@ -13,9 +13,9 @@ AstrBot 内置的网页搜索功能依赖大模型提供 `函数调用` 能力�
 
 等等带有搜索意味的提示让大模型触发调用搜索工具。
 
-AstrBot 当前支持 7 种网页搜索源接入方式：`Tavily`、`BoCha`、`百度 AI 搜索`、`Brave`、`Firecrawl`、`Exa`、`AnySearch`。
+AstrBot 当前支持 8 种网页搜索源接入方式：`Tavily`、`BoCha`、`百度 AI 搜索`、`Brave`、`Firecrawl`、`Exa`、`AnySearch`、`Serply`。
 
-进入 `配置文件`，选择要修改的配置文件，在 `AI 配置 → 能力 → 网页搜索` 中启用网页搜索，您可选择 `Tavily`、`BoCha`、`百度 AI 搜索`、`Brave`、`Firecrawl` 、`Exa` 或`AnySearch`。填写所需参数后，点击右下角的 `保存配置`。
+进入 `配置文件`，选择要修改的配置文件，在 `AI 配置 → 能力 → 网页搜索` 中启用网页搜索，您可选择 `Tavily`、`BoCha`、`百度 AI 搜索`、`Brave`、`Firecrawl`、`Exa`、`AnySearch` 或 `Serply`。填写所需参数后，点击右下角的 `保存配置`。
 
 ### Tavily
 
@@ -40,6 +40,10 @@ AstrBot 当前支持 7 种网页搜索源接入方式：`Tavily`、`BoCha`、`�
 ### Exa
 
 前往 [Exa](https://dashboard.exa.ai) 获取 API Key，然后填写在相应的配置项。Exa 是一个 AI 原生搜索引擎，支持关键词和语义搜索，提供分类过滤、域名限制和日期范围等高级搜索功能。
+
+### Serply
+
+前往 [Serply](https://serply.io) 获取 API Key，然后填写在相应的配置项。Serply 返回实时的 Google 搜索结果，并可通过搜索工具的 `search_type` 参数使用 Google 新闻和 Google 学术两个垂直搜索。详情参见 [Serply API 文档](https://serply.io/docs)。
 
 如果您使用 Tavily 作为网页搜索源，在 AstrBot ChatUI 上将会获得更好的体验优化，包括引用来源展示等：
 
