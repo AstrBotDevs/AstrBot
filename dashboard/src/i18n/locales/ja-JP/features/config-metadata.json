@@ -1157,6 +1157,9 @@
             "emojis": {
               "description": "リアクション一覧（Lark リアクション列挙名）",
               "hint": "リアクション列挙名の参照: [https://open.feishu.cn/document/server-docs/im-v1/message-reaction/emojis-introduce](https://open.feishu.cn/document/server-docs/im-v1/message-reaction/emojis-introduce)"
+            },
+            "auto_remove": {
+              "description": "[Lark] 事前応答リアクションを自動削除"
             }
           }
         },

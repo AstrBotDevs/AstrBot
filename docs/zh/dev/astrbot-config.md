@@ -127,7 +127,11 @@ AstrBot 默认配置如下：
     "platform_specific": {
         # 平台特异配置：按平台分类，平台下按功能分组
         "lark": {
-            "pre_ack_emoji": {"enable": False, "emojis": ["Typing"]},
+            "pre_ack_emoji": {
+                "enable": False,
+                "emojis": ["Typing"],
+                "auto_remove": True,
+            },
         },
         "telegram": {
             "pre_ack_emoji": {"enable": False, "emojis": ["✍️"]},
@@ -520,12 +524,13 @@ AstrBot WebUI 配置。
 
 #### `platform_specific.<platform>.pre_ack_emoji`
 
-启用后，当请求 LLM 前，AstrBot 会先发送一个预回复的表情以告知用户正在处理请求。此功能目前仅在飞书平台适配器和 Telegram 中生效。
+启用后，当请求 LLM 前，AstrBot 会先发送一个预回复的表情以告知用户正在处理请求。此功能目前仅在飞书平台适配器和 Telegram 中生效。在飞书平台，处理完成后预回复表情会被自动删除。
 
 ##### lark (飞书)
 
 - `enable`: 是否启用飞书消息预回复表情。默认为 `false`。
 - `emojis`: 预回复的表情列表。默认为 `["Typing"]`。表情枚举名参考：[表情文案说明](https://open.feishu.cn/document/server-docs/im-v1/message-reaction/emojis-introduce)
+- `auto_remove`: 处理完成后是否自动删除预回复表情。默认为 `true`。仅在 `enable` 为 `true` 时展示与生效。
 
 ##### telegram
 
