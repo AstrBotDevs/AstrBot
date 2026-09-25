@@ -20,6 +20,14 @@ from .astrbot_path import get_astrbot_temp_path
 
 logger = logging.getLogger("astrbot")
 
+# 2 GiB safety cap for streamed HTTP downloads. Content-Length headers above this
+# threshold cause the download to abort before any bytes are written to disk.
+_DOWNLOAD_MAX_BYTES = 2 * 1024 * 1024 * 1024
+
+
+class DownloadTooLargeError(RuntimeError):
+    """Raised when an HTTP download exceeds the configured size cap."""
+
 
 def _safe_url_for_log(url: str) -> str:
     """Return a URL summary that omits query strings and fragments.
@@ -117,57 +125,47 @@ async def download_image_by_url(
     path: str | None = None,
 ) -> str:
     """下载图片, 返回 path"""
-    try:
-        ssl_context = ssl.create_default_context(
-            cafile=certifi.where(),
-        )  # 使用 certifi 提供的 CA 证书
-        connector = aiohttp.TCPConnector(ssl=ssl_context)  # 使用 certifi 的根证书
-        async with aiohttp.ClientSession(
-            trust_env=True,
-            connector=connector,
-        ) as session:
-            if post:
-                async with session.post(url, json=post_data) as resp:
-                    if not path:
-                        return save_temp_img(await resp.read())
-                    with open(path, "wb") as f:
-                        f.write(await resp.read())
-                    return path
-            else:
-                async with session.get(url) as resp:
-                    if not path:
-                        return save_temp_img(await resp.read())
-                    with open(path, "wb") as f:
-                        f.write(await resp.read())
-                    return path
-    except (aiohttp.ClientConnectorSSLError, aiohttp.ClientConnectorCertificateError):
-        # 关闭SSL验证（仅在证书验证失败时作为fallback）
-        logger.warning(
-            f"SSL certificate verification failed for {_safe_url_for_log(url)}. "
-            "Disabling SSL verification (CERT_NONE) as a fallback. "
-            "This is insecure and exposes the application to man-in-the-middle attacks. "
-            "Please investigate and resolve certificate issues."
-        )
-        ssl_context = ssl.create_default_context()
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE
-        async with aiohttp.ClientSession() as session:
-            if post:
-                async with session.post(url, json=post_data, ssl=ssl_context) as resp:
-                    if not path:
-                        return save_temp_img(await resp.read())
-                    with open(path, "wb") as f:
-                        f.write(await resp.read())
-                    return path
-            else:
-                async with session.get(url, ssl=ssl_context) as resp:
-                    if not path:
-                        return save_temp_img(await resp.read())
-                    with open(path, "wb") as f:
-                        f.write(await resp.read())
-                    return path
-    except Exception as e:
-        raise e
+    ssl_context = ssl.create_default_context(
+        cafile=certifi.where(),
+    )  # 使用 certifi 提供的 CA 证书
+    connector = aiohttp.TCPConnector(ssl=ssl_context)  # 使用 certifi 的根证书
+    async with aiohttp.ClientSession(
+        trust_env=True,
+        connector=connector,
+    ) as session:
+        if post:
+            async with session.post(url, json=post_data) as resp:
+                resp.raise_for_status()
+                return await _download_image_to_dest(resp, path)
+        else:
+            async with session.get(url) as resp:
+                resp.raise_for_status()
+                return await _download_image_to_dest(resp, path)
+
+
+async def _download_image_to_dest(
+    resp: aiohttp.ClientResponse, path: str | None
+) -> str:
+    """Stream download an image with size cap, saving to path or temp file."""
+    total_read = 0
+    chunks: list[bytes] = []
+
+    async for chunk in resp.content.iter_chunked(64 * 1024):
+        if not chunk:
+            break
+        total_read += len(chunk)
+        if total_read > _DOWNLOAD_MAX_BYTES:
+            raise DownloadTooLargeError(
+                f"Image download exceeded size cap of {_DOWNLOAD_MAX_BYTES} bytes"
+            )
+        chunks.append(chunk)
+
+    data = b"".join(chunks)
+    if path:
+        with open(path, "wb") as f:
+            f.write(data)
+        return path
+    return save_temp_img(data)
 
 
 async def _emit_download_progress(progress_callback, payload: dict) -> None:
@@ -217,6 +215,11 @@ async def _download_response_to_file(
     """
 
     total_size = int(resp.headers.get("content-length", 0))
+    if total_size and total_size > _DOWNLOAD_MAX_BYTES:
+        raise DownloadTooLargeError(
+            f"Refusing download from {_safe_url_for_log(url)}: advertised size "
+            f"{total_size} bytes exceeds {_DOWNLOAD_MAX_BYTES} byte cap.",
+        )
     downloaded_size = 0
     start_time = time.time()
     if show_progress:
@@ -241,8 +244,13 @@ async def _download_response_to_file(
         chunk = await resp.content.read(8192)
         if not chunk:
             break
-        file_obj.write(chunk)
         downloaded_size += len(chunk)
+        if downloaded_size > _DOWNLOAD_MAX_BYTES:
+            raise DownloadTooLargeError(
+                f"Aborting download from {_safe_url_for_log(url)}: response "
+                f"exceeded {_DOWNLOAD_MAX_BYTES} byte cap.",
+            )
+        file_obj.write(chunk)
         elapsed_time = time.time() - start_time if time.time() - start_time > 0 else 1
         speed = downloaded_size / 1024 / elapsed_time  # KB/s
         percent = downloaded_size / total_size if total_size > 0 else 0
@@ -278,7 +286,7 @@ async def download_file(
     path: str,
     show_progress: bool = False,
     progress_callback=None,
-    allow_insecure_ssl_fallback: bool = True,
+    allow_insecure_ssl_fallback: bool = False,
 ) -> None:
     """Download a remote file to a local path.
 
@@ -288,7 +296,9 @@ async def download_file(
         show_progress: Whether to print progress to stdout.
         progress_callback: Optional callback for progress payloads.
         allow_insecure_ssl_fallback: Whether certificate failures may retry with
-            TLS certificate verification disabled.
+            TLS certificate verification disabled. Defaults to ``False`` because
+            silently disabling certificate verification enables man-in-the-middle
+            attacks against users and remote plugin/dashboard downloads.
 
     Returns:
         None.
@@ -342,6 +352,14 @@ async def download_file(
                         progress_callback,
                         show_downloading_label=False,
                     )
+    except DownloadTooLargeError:
+        # Remove the partial file written before the size cap tripped so a
+        # truncated/empty artifact is not left on disk.
+        try:
+            os.remove(path)
+        except FileNotFoundError:
+            pass
+        raise
     if show_progress:
         print()
 
