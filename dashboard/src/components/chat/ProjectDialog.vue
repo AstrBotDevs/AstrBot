@@ -5,55 +5,62 @@
                 {{ isEditing ? tm('project.edit') : tm('project.create') }}
             </v-card-title>
             <v-card-text>
-                <div class="d-flex align-center ga-2 mb-4">
+                <div class="project-name-row">
                     <EmojiPicker v-model="form.emoji" />
-                    <v-text-field
+                    <input
                         v-model="form.title"
-                        :label="tm('project.name')"
-                        variant="outlined"
-                        hide-details
-                        class="flex-grow-1"
+                        class="project-input project-name-input"
+                        type="text"
+                        :placeholder="tm('project.name')"
+                        :aria-label="tm('project.name')"
                         autofocus
                         @keyup.enter="handleSave"
                     />
                 </div>
-                <v-expansion-panels variant="accordion" class="mb-4">
-                    <v-expansion-panel>
-                        <v-expansion-panel-title>{{ tm('project.moreSettings') }}</v-expansion-panel-title>
-                        <v-expansion-panel-text>
-                            <v-textarea
-                                v-model="form.description"
-                                :label="tm('project.description')"
-                                variant="outlined"
-                                hide-details
-                                rows="3"
-                            />
-                        </v-expansion-panel-text>
-                    </v-expansion-panel>
-                </v-expansion-panels>
+                <div class="more-settings">
+                    <span
+                        class="more-settings-toggle"
+                        role="button"
+                        tabindex="0"
+                        :aria-expanded="moreSettingsOpen"
+                        @click="moreSettingsOpen = !moreSettingsOpen"
+                        @keydown.enter.prevent="moreSettingsOpen = !moreSettingsOpen"
+                    >
+                        <span>{{ tm('project.moreSettings') }}</span>
+                        <span class="more-settings-chevron" :class="{ 'is-open': moreSettingsOpen }">⌄</span>
+                    </span>
+                    <div v-if="moreSettingsOpen" class="more-settings-content">
+                        <textarea
+                            v-model="form.description"
+                            class="project-input project-description-input"
+                            :placeholder="tm('project.description')"
+                            :aria-label="tm('project.description')"
+                            rows="3"
+                        />
+                    </div>
+                </div>
                 <v-divider class="my-4" />
                 <v-select v-model="form.workspace_type" :items="workspaceTypeItems" item-title="label" item-value="value"
                     :label="tm('project.workspace.type')" variant="outlined" hide-details class="mb-3" />
-                <div v-if="form.workspace_type === 'custom'" class="d-flex align-center ga-2 mb-1">
-                    <v-text-field
+                <div v-if="form.workspace_type === 'custom'" class="workspace-path-row">
+                    <input
                         v-model="form.workspace_path"
-                        :label="tm('project.workspace.path')"
-                        variant="outlined"
-                        hide-details
-                        class="flex-grow-1"
+                        class="project-input workspace-path-input"
+                        type="text"
+                        :placeholder="tm('project.workspace.path')"
+                        :aria-label="tm('project.workspace.path')"
                     />
-                    <v-btn
+                    <button
                         v-if="canPickWorkspaceDirectory"
+                        type="button"
+                        class="folder-picker-button"
                         :aria-label="tm('project.workspace.selectPath')"
-                        :loading="pickingWorkspaceDirectory"
                         :disabled="props.saving"
-                        prepend-icon="mdi-folder-open-outline"
-                        variant="tonal"
-                        class="text-no-wrap"
                         @click.stop="handlePickWorkspaceDirectory"
                     >
-                        {{ tm('project.workspace.selectPath') }}
-                    </v-btn>
+                        <v-icon size="20">mdi-folder-open-outline</v-icon>
+                        <span>{{ tm('project.workspace.selectPath') }}</span>
+                    </button>
                 </div>
                 <v-alert
                     v-if="props.errorMessage"
@@ -126,6 +133,7 @@ const { tm } = useModuleI18n('features/chat');
 
 const isOpen = ref(props.modelValue);
 const isEditing = ref(false);
+const moreSettingsOpen = ref(false);
 const canPickWorkspaceDirectory = ref(false);
 const pickingWorkspaceDirectory = ref(false);
 const form = ref<ProjectFormData>({
@@ -148,6 +156,7 @@ const canSave = computed(() => {
 
 watch(() => props.modelValue, async (newVal) => {
     isOpen.value = newVal;
+    moreSettingsOpen.value = false;
     canPickWorkspaceDirectory.value = false;
     if (newVal) {
         if (props.project) {
@@ -229,8 +238,100 @@ function handleSave() {
 </script>
 
 <style scoped>
-.dialog-title {
+.project-name-row,
+.workspace-path-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.project-input {
+    width: 100%;
+    border: 1px solid rgba(var(--v-theme-on-surface), 0.38);
+    border-radius: 4px;
+    background: transparent;
+    color: rgb(var(--v-theme-on-surface));
+    font: inherit;
+    outline: none;
+    transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.project-input:focus {
+    border-color: rgb(var(--v-theme-primary));
+    box-shadow: 0 0 0 1px rgb(var(--v-theme-primary));
+}
+
+.project-name-input,
+.workspace-path-input {
+    height: 48px;
+    padding: 0 14px;
+}
+
+.more-settings {
+    margin-top: 14px;
+}
+
+.more-settings-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 4px 0;
+    border: 0;
+    background: transparent;
+    color: rgba(var(--v-theme-on-surface), 0.72);
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
+}
+
+.more-settings-toggle:hover {
+    color: rgb(var(--v-theme-primary));
+}
+
+.more-settings-chevron {
     font-size: 22px;
-    font-weight: 500;
+    line-height: 1;
+    transition: transform 120ms ease;
+}
+
+.more-settings-chevron.is-open {
+    transform: rotate(180deg);
+}
+
+.more-settings-content {
+    padding-top: 10px;
+}
+
+.project-description-input {
+    min-height: 92px;
+    padding: 12px 14px;
+    resize: vertical;
+}
+
+.folder-picker-button {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    height: 48px;
+    padding: 0 16px;
+    border: 0;
+    border-radius: 4px;
+    background: rgba(var(--v-theme-primary), 0.12);
+    color: rgb(var(--v-theme-primary));
+    cursor: pointer;
+    font: inherit;
+    white-space: nowrap;
+}
+
+.folder-picker-button:hover {
+    background: rgba(var(--v-theme-primary), 0.2);
+}
+
+.folder-picker-button:disabled {
+    cursor: default;
+    opacity: 0.5;
 }
 </style>

@@ -6,44 +6,45 @@
     offset="8"
   >
     <template #activator="{ props: activatorProps }">
-      <v-btn
+      <button
         v-bind="activatorProps"
+        type="button"
         class="emoji-picker-trigger"
-        variant="tonal"
-        size="large"
         :aria-label="tm('emoji.title')"
       >
         <span aria-hidden="true">{{ modelValue || '📚' }}</span>
-        <v-icon size="16" class="ms-1">mdi-chevron-down</v-icon>
-      </v-btn>
+        <span class="emoji-picker-chevron" aria-hidden="true">⌄</span>
+      </button>
     </template>
 
     <v-card class="emoji-picker-menu" min-width="300" max-width="340">
       <v-card-title class="text-body-1 pa-3">{{ tm('emoji.title') }}</v-card-title>
-      <v-tabs v-model="activeCategory" density="compact" grow color="primary">
-        <v-tab
+      <div class="emoji-category-tabs">
+        <button
           v-for="category in emojiCategories"
           :key="category.key"
-          :value="category.key"
+          type="button"
+          class="emoji-category-tab"
+          :class="{ 'is-active': activeCategory === category.key }"
           :aria-label="tm(`emoji.categories.${category.key}`)"
+          @click="activeCategory = category.key"
         >
           <span aria-hidden="true">{{ category.icon }}</span>
-        </v-tab>
-      </v-tabs>
+        </button>
+      </div>
       <v-divider />
       <v-card-text class="pa-2">
         <div class="emoji-grid">
-          <v-btn
+          <button
             v-for="emoji in activeEmojis"
             :key="emoji"
+            type="button"
             class="emoji-option"
-            variant="text"
-            size="36"
             :aria-label="emoji"
             @click="selectEmoji(emoji)"
           >
             {{ emoji }}
-          </v-btn>
+          </button>
         </div>
       </v-card-text>
     </v-card>
@@ -101,9 +102,28 @@ function selectEmoji(emoji: string) {
 
 <style scoped>
 .emoji-picker-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-width: 56px;
-  padding-inline: 10px;
+  height: 48px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
   font-size: 24px;
+}
+
+.emoji-picker-trigger:hover {
+  background: rgba(var(--v-theme-on-surface), 0.06);
+}
+
+.emoji-picker-chevron {
+  margin-left: 4px;
+  font-size: 18px;
+  line-height: 1;
 }
 
 .emoji-picker-menu {
@@ -116,9 +136,40 @@ function selectEmoji(emoji: string) {
   gap: 2px;
 }
 
+.emoji-category-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 2px;
+  padding: 0 8px 8px;
+}
+
+.emoji-category-tab {
+  height: 32px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 18px;
+}
+
+.emoji-category-tab:hover,
+.emoji-category-tab.is-active {
+  background: rgba(var(--v-theme-primary), 0.12);
+}
+
 .emoji-option {
   min-width: 0;
   padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
   font-size: 22px;
+  line-height: 36px;
+}
+
+.emoji-option:hover {
+  background: rgba(var(--v-theme-primary), 0.12);
 }
 </style>
