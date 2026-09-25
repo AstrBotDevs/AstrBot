@@ -1188,6 +1188,35 @@ async def test_direct_build_prepares_images_and_quote_collection(
 
 
 @pytest.mark.asyncio
+async def test_quoted_image_file_id_is_resolved_after_preprocessing(harness):
+    api_calls = []
+
+    async def call_action(action, **params):
+        api_calls.append((action, params))
+        if action == "get_image" and params == {"file": "opaque-id"}:
+            return {"data": {"url": "https://img.example.com/quoted.jpg"}}
+        raise RuntimeError(f"unexpected action: {action} {params}")
+
+    event = make_event([Reply(id="quoted", chain=[Image(file="opaque-id")])])
+    event.bot = SimpleNamespace(api=SimpleNamespace(call_action=call_action))
+
+    stage = preprocess.PreProcessStage()
+    await stage.initialize(harness.ctx)
+    await stage.process(event)
+    assert event.message_obj.message[0].chain[0].file == "opaque-id"
+
+    req, _ = await main.collect_initial_request(
+        event,
+        harness.context,
+        main.MainAgentBuildConfig(tool_call_timeout=60),
+    )
+
+    assert req is not None
+    assert req.image_urls == ["https://img.example.com/quoted.jpg"]
+    assert api_calls == [("get_image", {"file": "opaque-id"})]
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("quoted", [False, True])
 @pytest.mark.parametrize("failure", [RuntimeError, asyncio.CancelledError])
 @pytest.mark.parametrize("fail_at", ["attachment", "conversation"])

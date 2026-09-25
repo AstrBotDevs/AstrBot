@@ -54,7 +54,10 @@ class PreProcessStage(Stage):
         if not media_ref:
             return False
         if is_file_uri(media_ref):
-            return True
+            try:
+                return Path(file_uri_to_path(media_ref)).is_file()
+            except OSError:
+                return False
         if media_ref.startswith(("http://", "https://", "data:", "base64://")):
             return False
         try:
@@ -73,10 +76,12 @@ class PreProcessStage(Stage):
         materialized = False
         try:
             image_path = await component.convert_to_file_path()
-            materialized = (
-                not self._is_existing_local_image_ref(media_ref)
-                and Path(image_path).is_file()
-            )
+            existing_local_ref = self._is_existing_local_image_ref(media_ref)
+            materialized = not existing_local_ref and Path(image_path).is_file()
+            if not materialized and not existing_local_ref:
+                # Keep opaque platform references (for example, OneBot file IDs)
+                # intact so a downstream protocol resolver can handle them.
+                raise ValueError("image reference could not be materialized")
             if materialized:
                 self._track_temp_media(event, image_path)
                 detected_mime_type = await detect_image_mime_type_async(

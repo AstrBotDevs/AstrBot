@@ -118,6 +118,7 @@ from astrbot.core.utils.media_utils import (
     is_recoverable_image_error,
     normalize_model_image_max_size,
 )
+from astrbot.core.utils.quoted_message.image_resolver import ImageResolver
 from astrbot.core.utils.quoted_message.settings import (
     SETTINGS as DEFAULT_QUOTED_MESSAGE_SETTINGS,
 )
@@ -1506,6 +1507,20 @@ async def collect_initial_request(
                 config.provider_settings
             )
             fallback_quoted_image_count = 0
+            image_resolver = ImageResolver(event)
+
+            async def resolve_unmaterialized_image(component: Image) -> list[str]:
+                refs = []
+                for ref in (component.file, component.url):
+                    if not isinstance(ref, str):
+                        continue
+                    ref = ref.strip()
+                    if ref and not ref.startswith(("http://", "https://")):
+                        refs.append(ref)
+                if not refs:
+                    return []
+                return await image_resolver.resolve_for_llm(refs[:1])
+
             for comp in reply_comps:
                 has_embedded_image = False
                 if comp.chain:
@@ -1517,9 +1532,31 @@ async def collect_initial_request(
                             except Exception as exc:
                                 if not is_recoverable_image_error(exc):
                                     raise
+                                resolved_refs = await resolve_unmaterialized_image(
+                                    reply_comp
+                                )
+                                if resolved_refs:
+                                    req.image_urls.extend(resolved_refs)
+                                    quoted_image_refs.update(resolved_refs)
+                                    continue
                                 logger.warning(
                                     "Quoted image is unavailable (%s).",
                                     type(exc).__name__,
+                                )
+                                req.extra_user_content_parts.append(
+                                    TextPart(text="[Image unavailable]")
+                                )
+                                continue
+                            if not Path(image_path).is_file():
+                                resolved_refs = await resolve_unmaterialized_image(
+                                    reply_comp
+                                )
+                                if resolved_refs:
+                                    req.image_urls.extend(resolved_refs)
+                                    quoted_image_refs.update(resolved_refs)
+                                    continue
+                                logger.warning(
+                                    "Quoted image is unavailable (not a file)."
                                 )
                                 req.extra_user_content_parts.append(
                                     TextPart(text="[Image unavailable]")
