@@ -139,6 +139,7 @@ class RetrievalManager:
             dense_results=dense_results,
             sparse_results=sparse_results,
             top_k=top_k_fusion,
+            query=query,
         )
         time_end = time.time()
         logger.debug(

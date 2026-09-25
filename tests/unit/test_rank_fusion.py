@@ -256,3 +256,130 @@ async def test_rank_fusion_does_not_promote_a_single_low_scoring_kb_result():
         "weak",
     ]
     assert results[-1].score == pytest.approx(0.1)
+
+
+@pytest.mark.asyncio
+async def test_rank_fusion_protects_case_insensitive_sparse_exact_match():
+    # Dense 因 embedding 对大小写敏感而完全没有召回目标 chunk（查询 "oni"，
+    # 文档中是 "Oni"）。Sparse (FTS5) 大小写不敏感，命中了目标 chunk。
+    # 大量高分的纯 Dense 候选会把目标挤出 top_k，除非融合阶段对
+    # 大小写不敏感的词面匹配给予保护。
+    dense_results = [
+        make_dense_result(f"dense-{rank}", 0.95 - rank / 100) for rank in range(1, 21)
+    ]
+    sparse_results = [
+        make_sparse_result(
+            "target-oni",
+            "kb",
+            30.0,
+            1,
+            content="#### 恶鬼\n**恶鬼** **Oni** 是日式奇幻中的经典怪物。",
+        ),
+        *[
+            make_sparse_result(f"sparse-{rank}", "kb", 20.0 - rank, rank)
+            for rank in range(2, 11)
+        ],
+    ]
+
+    # 不传 query：目标 chunk 仅靠稀疏侧得分，被大量 dense 候选挤出。
+    without_query = await RankFusion(kb_db=None).fuse(
+        dense_results=dense_results,
+        sparse_results=sparse_results,
+        top_k=5,
+    )
+    assert "target-oni" not in [r.chunk_id for r in without_query]
+
+    # 传入 query：目标 chunk 因大小写不敏感的词面匹配被保底提升，进入 top_k。
+    with_query = await RankFusion(kb_db=None).fuse(
+        dense_results=dense_results,
+        sparse_results=sparse_results,
+        top_k=5,
+        query="oni",
+    )
+    assert "target-oni" in [r.chunk_id for r in with_query]
+    assert with_query[0].chunk_id == "target-oni"
+
+
+@pytest.mark.asyncio
+async def test_rank_fusion_query_protection_ignores_dense_recalled_chunks():
+    # 已同时被 Dense 召回的目标 chunk 不应因 query 保护而再次提升排序，
+    # 即保护只作用于 Dense 完全漏召回的候选。
+    dense_results = [
+        make_dense_result("target-oni", 0.99),
+        make_dense_result("other", 0.95),
+    ]
+    sparse_results = [
+        make_sparse_result(
+            "target-oni",
+            "kb",
+            30.0,
+            1,
+            content="#### 恶鬼\n**恶鬼** **Oni**",
+        ),
+    ]
+
+    with_query = await RankFusion(kb_db=None).fuse(
+        dense_results=dense_results,
+        sparse_results=sparse_results,
+        top_k=5,
+        query="oni",
+    )
+
+    assert [r.chunk_id for r in with_query] == ["target-oni", "other"]
+    assert with_query[0].score == pytest.approx(1.0)
+
+
+@pytest.mark.asyncio
+async def test_rank_fusion_query_protection_survives_dense_weight_boundary():
+    # dense_weight=1.0 是合法边界值。保护不依赖分数保底，而是显式排序，
+    # 因此即使 dense 权重为 1.0，大小写变体精确匹配仍必须排在第一位。
+    dense_results = [
+        make_dense_result(f"dense-{rank}", 0.95 - rank / 100) for rank in range(1, 11)
+    ]
+    sparse_results = [
+        make_sparse_result(
+            "target-oni",
+            "kb",
+            30.0,
+            1,
+            content="#### 恶鬼\n**恶鬼** **Oni** 是日式奇幻中的经典怪物。",
+        ),
+    ]
+
+    results = await RankFusion(kb_db=None, dense_weight=1.0).fuse(
+        dense_results=dense_results,
+        sparse_results=sparse_results,
+        top_k=5,
+        query="oni",
+    )
+
+    assert results[0].chunk_id == "target-oni"
+
+
+@pytest.mark.asyncio
+async def test_rank_fusion_query_protection_skips_exact_case_matches():
+    # 只有当查询词以大小写变体出现时才保护（原样词未出现、小写形式出现）。
+    # 如果 chunk 内容本身就包含原样的查询词，说明不是大小写变体问题，
+    # 应保持既有融合排序，不触发保护。
+    dense_results = [
+        make_dense_result(f"dense-{rank}", 0.95 - rank / 100) for rank in range(1, 11)
+    ]
+    sparse_results = [
+        make_sparse_result(
+            "target-oni",
+            "kb",
+            30.0,
+            1,
+            content="#### 恶鬼\n**恶鬼** **oni** 是日式奇幻中的经典怪物。",
+        ),
+    ]
+
+    results = await RankFusion(kb_db=None).fuse(
+        dense_results=dense_results,
+        sparse_results=sparse_results,
+        top_k=5,
+        query="oni",
+    )
+
+    # 内容包含原样查询词 "oni"，不是大小写变体，不触发保护。
+    assert results[0].chunk_id != "target-oni"
