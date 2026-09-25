@@ -849,6 +849,10 @@ async def _append_video_attachment(
     else:
         text = f"[Video Attachment: name {video_name}, path {video_path}]"
 
+    # Collect the resolved path so providers that declare the `video` modality
+    # receive the video itself. The text part above is kept for every other
+    # provider, and for the persisted history where the video block is dropped.
+    req.video_urls.append(video_path)
     req.extra_user_content_parts.append(TextPart(text=text))
 
 
@@ -1717,6 +1721,7 @@ async def build_main_agent(
         )
     req.image_urls = normalize_and_dedupe_strings(req.image_urls)
     req.audio_urls = normalize_and_dedupe_strings(req.audio_urls)
+    req.video_urls = normalize_and_dedupe_strings(req.video_urls)
 
     if config.file_extract_enabled:
         try:

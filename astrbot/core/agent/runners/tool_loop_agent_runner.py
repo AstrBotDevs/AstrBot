@@ -42,6 +42,7 @@ from astrbot.core.provider.entities import (
     ToolCallsResult,
 )
 from astrbot.core.provider.modalities import (
+    has_video_blocks,
     log_context_sanitize_stats,
     sanitize_contexts_by_modalities,
 )
@@ -316,6 +317,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             request.prompt is not None
             or request.image_urls
             or request.audio_urls
+            or request.video_urls
             or request.extra_user_content_parts
         ):
             m = await self._assemble_request_context_for_provider(request)
@@ -341,17 +343,26 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     ) -> dict[str, T.Any]:
         modalities = self.provider.provider_config.get("modalities", None)
         if not modalities:  # Unconfigured (None or empty list) defaults to support all modalities for backward compatibility
-            return await request.assemble_context()
+            # Video is excluded from that default. It postdates the "supports
+            # everything" convention and is not universally supported, so a
+            # provider that never opted in would fail the whole request rather
+            # than degrade. Video is therefore strictly opt-in via the
+            # `modalities` list.
+            if not request.video_urls:
+                return await request.assemble_context()
+            return await replace(request, video_urls=[]).assemble_context()
 
         supports_image = "image" in modalities
         supports_audio = "audio" in modalities
-        if supports_image and supports_audio:
+        supports_video = "video" in modalities
+        if supports_image and supports_audio and supports_video:
             return await request.assemble_context()
 
         adjusted_request = replace(
             request,
             image_urls=request.image_urls if supports_image else [],
             audio_urls=request.audio_urls if supports_audio else [],
+            video_urls=request.video_urls if supports_video else [],
         )
         context = await adjusted_request.assemble_context()
         content = context.get("content")
@@ -368,6 +379,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         if not supports_audio:
             for _ in request.audio_urls:
                 content_blocks.append({"type": "text", "text": "[Audio]"})
+        if not supports_video:
+            for _ in request.video_urls:
+                content_blocks.append({"type": "text", "text": "[Video]"})
 
         return {"role": "user", "content": content_blocks}
 
@@ -662,13 +676,17 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         contexts: list[Message] | list[dict[str, T.Any]],
     ) -> list[Message] | list[dict[str, T.Any]]:
         modalities = self.provider.provider_config.get("modalities", None)
-        if (
-            not modalities
-        ):  # Unconfigured (None or empty list) defaults to support all modalities
+        if not modalities and not has_video_blocks(contexts):
+            # Unconfigured (None or empty list) defaults to supporting every
+            # modality, so the context objects are handed back untouched. Video
+            # is the exception: it is strictly opt-in (see
+            # `_assemble_request_context_for_provider`), and this path also runs
+            # when a request falls back to another provider, whose context was
+            # assembled for the primary one and may already carry a `video_url`.
             return contexts
         sanitized_contexts, stats = sanitize_contexts_by_modalities(
             contexts,
-            self.provider.provider_config.get("modalities", None),
+            modalities,
         )
         log_context_sanitize_stats(stats)
         return sanitized_contexts
