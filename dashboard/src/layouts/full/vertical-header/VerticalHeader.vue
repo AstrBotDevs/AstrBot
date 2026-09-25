@@ -2477,6 +2477,12 @@ html[data-astrbot-desktop-platform='macos'] .top-header {
   width: 100% !important;
 }
 
+/* Windows draws its native caption buttons (min/max/close) over the toolbar's
+   right edge, so keep the header actions clear of that zone. */
+html[data-astrbot-desktop-platform='windows'] .top-header .v-toolbar__content {
+  padding-inline-end: 150px !important;
+}
+
 .top-header .v-toolbar__content {
   padding-inline-end: 16px !important;
 }
