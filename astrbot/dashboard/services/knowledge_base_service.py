@@ -810,6 +810,26 @@ class KnowledgeBaseService:
         )
 
     async def retrieve(self, data: object) -> dict[str, Any]:
+        """Retrieve chunks from one or more knowledge bases.
+
+        Args:
+            data: Request payload. ``query`` is required. The knowledge bases
+                are taken from ``kb_names`` when present, which is how the
+                legacy ``POST /api/kb/retrieve`` endpoint targets several bases
+                at once; otherwise the ``kb_id`` that the REST route reads from
+                its path is resolved to the matching name. ``top_k`` defaults
+                to 5, and ``debug`` additionally renders a t-SNE plot.
+
+        Returns:
+            A dict with the ``results`` list, its ``total`` and the ``query``
+            that produced it, plus ``visualization`` (or ``visualization_error``)
+            when ``debug`` is set.
+
+        Raises:
+            KnowledgeBaseServiceError: If ``query`` is missing, the given
+                ``kb_id`` does not exist, or neither ``kb_names`` nor ``kb_id``
+                identifies a knowledge base.
+        """
         payload = self._payload(data)
         query = payload.get("query")
         kb_names = payload.get("kb_names")
@@ -818,6 +838,15 @@ class KnowledgeBaseService:
         if not query:
             raise KnowledgeBaseServiceError("缺少参数 query")
         kb_manager = self.get_kb_manager()
+        if not kb_names:
+            # The REST route identifies the knowledge base with the kb_id path
+            # parameter, so resolve it into the kb_names the manager expects.
+            kb_id = payload.get("kb_id")
+            if kb_id:
+                kb_helper = await kb_manager.get_kb(kb_id)
+                if not kb_helper:
+                    raise KnowledgeBaseServiceError("知识库不存在")
+                kb_names = [kb_helper.kb.kb_name]
         if not kb_names or not isinstance(kb_names, list):
             raise KnowledgeBaseServiceError("缺少参数 kb_names 或格式错误")
 
