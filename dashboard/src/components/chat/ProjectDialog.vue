@@ -1,10 +1,10 @@
 <template>
-    <v-dialog v-model="isOpen" max-width="560" @update:model-value="handleDialogChange">
-        <v-card>
-            <v-card-title class="text-h3 pa-4 pb-0 pl-6">
+    <v-dialog v-model="isOpen" max-width="520" @update:model-value="handleDialogChange">
+        <v-card class="project-dialog-card">
+            <v-card-title class="project-dialog-title">
                 {{ isEditing ? tm('project.edit') : tm('project.create') }}
             </v-card-title>
-            <v-card-text>
+            <v-card-text class="project-dialog-content">
                 <div class="project-name-row">
                     <EmojiPicker v-model="form.emoji" />
                     <input
@@ -17,8 +17,17 @@
                         @keyup.enter="handleSave"
                     />
                 </div>
-                <v-select v-model="form.workspace_type" :items="workspaceTypeItems" item-title="label" item-value="value"
-                    :label="tm('project.workspace.type')" variant="outlined" hide-details class="mb-3" />
+                <label class="field-label" for="project-workspace-type">{{ tm('project.workspace.type') }}</label>
+                <select
+                    id="project-workspace-type"
+                    v-model="form.workspace_type"
+                    class="project-input workspace-type-input"
+                    :aria-label="tm('project.workspace.type')"
+                >
+                    <option v-for="item in workspaceTypeItems" :key="item.value" :value="item.value">
+                        {{ item.label }}
+                    </option>
+                </select>
                 <div v-if="form.workspace_type === 'custom'" class="workspace-path-row">
                     <input
                         v-model="form.workspace_path"
@@ -76,11 +85,14 @@
                     {{ props.errorMessage }}
                 </v-alert>
             </v-card-text>
-            <v-card-actions>
-                <v-spacer></v-spacer>
-                <v-btn variant="text" @click="handleCancel" color="grey-darken-1" :disabled="props.saving">{{ t('core.common.cancel') }}</v-btn>
-                <v-btn variant="text" @click="handleSave" color="primary" :disabled="!canSave || props.saving" :loading="props.saving">{{ t('core.common.save') }}</v-btn>
-            </v-card-actions>
+            <div class="project-dialog-actions">
+                <button type="button" class="dialog-action dialog-action-cancel" @click="handleCancel" :disabled="props.saving">
+                    {{ t('core.common.cancel') }}
+                </button>
+                <button type="button" class="dialog-action dialog-action-save" @click="handleSave" :disabled="!canSave || props.saving" :aria-busy="props.saving">
+                    {{ t('core.common.save') }}
+                </button>
+            </div>
         </v-card>
     </v-dialog>
 </template>
@@ -242,6 +254,21 @@ function handleSave() {
 </script>
 
 <style scoped>
+.project-dialog-card {
+    overflow: hidden;
+}
+
+.project-dialog-title {
+    padding: 24px 28px 12px;
+    font-size: 26px;
+    font-weight: 600;
+    line-height: 1.2;
+}
+
+.project-dialog-content {
+    padding: 12px 28px 0;
+}
+
 .project-name-row,
 .workspace-path-row {
     display: flex;
@@ -260,6 +287,13 @@ function handleSave() {
     transition: border-color 120ms ease, box-shadow 120ms ease;
 }
 
+.field-label {
+    display: block;
+    margin: 20px 0 7px;
+    color: rgba(var(--v-theme-on-surface), 0.62);
+    font-size: 12px;
+}
+
 .project-input:focus {
     border-color: rgb(var(--v-theme-primary));
     box-shadow: 0 0 0 1px rgb(var(--v-theme-primary));
@@ -269,6 +303,12 @@ function handleSave() {
 .workspace-path-input {
     height: 48px;
     padding: 0 14px;
+}
+
+.workspace-type-input {
+    height: 48px;
+    padding: 0 42px 0 14px;
+    appearance: auto;
 }
 
 .more-settings {
@@ -337,5 +377,40 @@ function handleSave() {
 .folder-picker-button:disabled {
     cursor: default;
     opacity: 0.5;
+}
+
+.project-dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 18px 20px 20px;
+}
+
+.dialog-action {
+    min-width: 64px;
+    height: 40px;
+    padding: 0 14px;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    cursor: pointer;
+    font: inherit;
+}
+
+.dialog-action-cancel {
+    color: rgba(var(--v-theme-on-surface), 0.72);
+}
+
+.dialog-action-save {
+    color: rgb(var(--v-theme-primary));
+}
+
+.dialog-action:hover:not(:disabled) {
+    background: rgba(var(--v-theme-on-surface), 0.06);
+}
+
+.dialog-action:disabled {
+    cursor: default;
+    opacity: 0.4;
 }
 </style>
