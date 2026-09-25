@@ -46,6 +46,7 @@ declare global {
         ok: boolean;
         reason: string | null;
       }>;
+      pickDirectory?: (defaultPath?: string | null) => Promise<string | null>;
       onTrayRestartBackend?: (callback: () => void) => () => void;
     };
   }
