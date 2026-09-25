@@ -80,8 +80,13 @@ class ChatUploadSessionRequest(OpenModel):
     upload_id: str | None = None
 
 
+class BackupExportRequest(OpenModel):
+    components: list[str] | None = None
+
+
 class BackupImportRequest(OpenModel):
     confirmed: bool | None = None
+    components: list[str] | None = None
 
 
 class BackupRenameRequest(OpenModel):

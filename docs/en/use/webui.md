@@ -99,6 +99,14 @@ Global settings are under `Settings` at the bottom of the sidebar:
 
 System configuration changes save automatically. Check for a successful save message and restart AstrBot if the page indicates that a restart is required.
 
+Under `Settings → Maintenance`, open the backup dialog to export or restore data. Selection is grouped into **Main Data**, **Plugins & Extensions**, and **Temporary Files**. Use the checkbox to select a whole group, or click its heading to expand individual items and their descriptions. Partially selected groups show an indeterminate checkbox and a selection count. Export selects Main Data and Plugins & Extensions by default. Temporary Files are optional: these include message downloads and files produced by media processing and tools, and usually do not need to be backed up.
+
+After choosing or uploading a backup to restore, all available items are selected by default. Missing items are disabled; groups containing incomplete items expand automatically and explain why those items cannot be restored. Review the selected scope and the list of data that will be cleared and replaced before confirming. Restore attachments together with the main database when their records are needed.
+
+The Attachments option includes ordinary attachment files and legacy WebChat images. Conversation and attachment table records are included in Main Database. Legacy WebChat images from older backups retain their filenames and location when restored. Upload fragments are excluded from backups and are not restored from older backups, even when Temporary Files is selected.
+
+Review any warnings and the restored-data summary when the task finishes, including after a partial failure. Only one backup or restore task can run at a time. Import verification may temporarily delay dashboard responses. Selective backups require a version of AstrBot that supports selective restoration.
+
 ## Plugins
 
 Select `Extensions` in the sidebar. The top tabs are `Plugins`, `Skills`, `MCP Servers`, and `Handlers`. Within `Plugins`, switch between `Installed` and `AstrBot Plugin Market` to view local and market plugins.

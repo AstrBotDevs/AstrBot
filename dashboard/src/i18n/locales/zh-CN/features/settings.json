@@ -171,10 +171,26 @@
       "import": "导入备份",
       "list": "备份列表"
     },
+    "components": {
+      "database": "主数据库",
+      "knowledge_base": "知识库",
+      "cmd_config": "主配置文件",
+      "attachments": "附件文件",
+      "plugins": "插件",
+      "plugin_data": "插件数据",
+      "config": "配置目录",
+      "t2i_templates": "T2I 模板",
+      "temp": "临时文件",
+      "skills": "Skills"
+    },
     "export": {
       "title": "创建备份",
-      "description": "将所有数据导出为 ZIP 备份文件，包括数据库、知识库、配置、附件和技能。",
-      "includes": "备份包含：主数据库、知识库（元数据+向量索引+文档）、配置文件、附件文件、技能",
+      "description": "将所选数据导出为 ZIP 备份。默认选择主要数据和插件与扩展，临时文件按需选择。",
+      "selectComponents": "选择要备份的内容",
+      "selectAll": "全选",
+      "clearAll": "清空",
+      "warningAttachmentsWithoutDb": "附件需要对应的主数据库记录才能正常访问，建议同时备份主数据库。",
+      "warningSelectiveOldVersion": "选择性备份无法在旧版本 AstrBot 上恢复（旧版仅支持全量备份）。",
       "button": "开始导出",
       "processing": "正在导出...",
       "wait": "请稍候，正在打包数据...",
@@ -186,7 +202,7 @@
     },
     "import": {
       "title": "导入备份",
-      "warning": "⚠️ 导入将会清空并覆盖现有数据！请确保已备份当前数据。",
+      "warning": "恢复会清空并替换所选范围内的现有数据，请先备份当前数据。",
       "selectFile": "选择备份文件 (.zip)",
       "uploadAndCheck": "上传并检查",
       "uploading": "正在上传...",
@@ -196,10 +212,11 @@
       "uploadComplete": "上传完成，正在合并文件...",
       "checking": "正在检查备份文件...",
       "invalidBackup": "无效的备份文件",
-      "backupContents": "备份内容",
-      "tables": "个数据表",
-      "knowledgeBases": "知识库",
-      "configFiles": "配置文件",
+      "restoreScope": "选择要恢复的内容",
+      "brokenHint": "备份声明了该项，但所需条目缺失，无法恢复。",
+      "warningAttachmentsWithoutDb": "单独恢复附件将没有数据库记录引用，可能成为无法访问的孤儿文件。",
+      "restoredBeforeFailure": "失败前已恢复的内容",
+      "restoredEmpty": "0（已清空）",
       "confirmImport": "确认导入",
       "button": "开始导入",
       "processing": "正在导入...",
@@ -215,12 +232,13 @@
         "currentVersion": "当前版本",
         "backupTime": "备份时间",
         "matchTitle": "✅ 版本匹配",
-        "matchMessage": "导入将会清空并覆盖现有的所有数据，包括：\n• 主数据库（对话记录、配置等）\n• 知识库数据\n• 插件及插件数据\n• 配置文件\n• 技能\n\n此操作不可撤销！是否确认继续？",
+        "matchMessage": "版本匹配，请在下方确认要恢复的范围。",
         "minorDiffTitle": "⚠️ 版本差异警告",
-        "minorDiffMessage": "小版本差异通常是兼容的，但可能存在少量数据结构变化。\n导入将会清空并覆盖现有的所有数据！\n\n是否确认继续导入？",
+        "minorDiffMessage": "小版本差异通常兼容，但可能存在数据结构变化，请在下方确认要恢复的范围。",
         "majorDiffTitle": "⛔ 无法导入",
         "majorDiffMessage": "主版本号不同，跨主版本导入可能导致数据损坏。\n请使用相同主版本的 AstrBot 进行导入。"
-      }
+      },
+      "replacementSummary": "以下内容的现有数据将被清空并替换，此操作不可撤销："
     },
     "list": {
       "empty": "暂无备份文件",
@@ -236,6 +254,37 @@
       "renameInvalidChars": "文件名包含非法字符",
       "renameFailed": "重命名失败",
       "ftpHint": "对于较大的备份文件，也可以通过 FTP/SFTP 等方式直接上传到 data/backups 目录"
+    },
+    "groups": {
+      "main": {
+        "title": "主要数据",
+        "description": "对话、知识库、配置和附件等主要数据。"
+      },
+      "extensions": {
+        "title": "插件与扩展",
+        "description": "插件、插件数据、技能和文转图模板。"
+      },
+      "temporary": {
+        "title": "临时文件",
+        "description": "消息下载、媒体处理和工具运行产生的临时文件，通常无需备份。"
+      }
+    },
+    "componentDescriptions": {
+      "database": "对话记录、人格、统计和其他存储在数据库中的数据。",
+      "knowledge_base": "知识库文档、元数据、向量索引和媒体文件。",
+      "cmd_config": "机器人的主配置文件。",
+      "config": "配置档案、插件配置等配置文件。",
+      "attachments": "聊天中使用的图片、音频和其他文件，包含旧版 WebChat 附件。建议与主数据库一起备份和恢复。",
+      "plugins": "已安装插件的程序文件。",
+      "plugin_data": "插件保存的持久化数据。",
+      "skills": "已安装的技能文件。",
+      "t2i_templates": "自定义的文字转图片模板。",
+      "temp": "消息下载、媒体处理和工具运行产生的临时文件，通常无需备份。"
+    },
+    "scope": {
+      "selectedCount": "已选 {selected} / {total} 项",
+      "notIncluded": "此备份未包含该项。",
+      "selectAtLeastOne": "请至少选择一项要恢复的内容。"
     }
   },
   "apiKey": {

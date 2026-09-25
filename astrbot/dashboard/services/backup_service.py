@@ -6,7 +6,6 @@ import os
 import re
 import traceback
 import uuid
-import zipfile
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -17,6 +16,11 @@ import jwt
 from astrbot.core import logger
 from astrbot.core.backup.exporter import AstrBotExporter
 from astrbot.core.backup.importer import AstrBotImporter
+from astrbot.core.backup.resources import (
+    MAX_MANIFEST_BYTES,
+    open_backup,
+    read_backup_json,
+)
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.utils.astrbot_path import (
@@ -93,6 +97,11 @@ class BackupService:
         return filename
 
     def _init_task(self, task_id: str, task_type: str, status: str = "pending") -> None:
+        if any(
+            task["status"] in ("pending", "processing")
+            for task in self.backup_tasks.values()
+        ):
+            raise BackupServiceError("已有备份任务正在运行，请等待完成后重试")
         self.backup_tasks[task_id] = {
             "type": task_type,
             "status": status,
@@ -105,6 +114,9 @@ class BackupService:
             "current": 0,
             "total": 100,
             "message": "",
+            # Accumulated per-stage completion entries (append-only) so the
+            # UI can show every component's outcome, not just the latest.
+            "stages": [],
         }
 
     def _set_task_result(
@@ -160,6 +172,11 @@ class BackupService:
                 total=total,
                 message=message,
             )
+            progress = self.backup_progress.get(task_id)
+            if progress is not None and total > 0 and current >= total:
+                stages = progress.setdefault("stages", [])
+                if not stages or stages[-1]["component"] != stage:
+                    stages.append({"component": stage, "message": message})
 
         return _callback
 
@@ -171,13 +188,12 @@ class BackupService:
 
     def get_backup_manifest(self, zip_path: str) -> dict | None:
         try:
-            with zipfile.ZipFile(zip_path, "r") as zf:
+            with open_backup(zip_path) as zf:
                 if "manifest.json" in zf.namelist():
-                    manifest_data = zf.read("manifest.json")
-                    return json.loads(manifest_data.decode("utf-8"))
+                    return read_backup_json(zf, "manifest.json")
                 return None
         except Exception as exc:
-            logger.debug(f"读取备份 manifest 失败: {exc}")
+            logger.debug(f"Failed to read backup manifest: {exc}")
         return None
 
     def list_backups(self, *, page: int, page_size: int) -> dict:
@@ -195,7 +211,7 @@ class BackupService:
 
             manifest = self.get_backup_manifest(file_path)
             if manifest is None:
-                logger.debug(f"跳过无效备份文件: {filename}")
+                logger.debug(f"Skipping invalid backup: {filename}")
                 continue
 
             stat = os.stat(file_path)
@@ -221,16 +237,25 @@ class BackupService:
             "page_size": page_size,
         }
 
-    def export_backup(self) -> dict:
+    def export_backup(self, data: object = None) -> dict:
+        payload = self._payload(data)
+        components = payload.get("components")
+        if components is not None and not (
+            isinstance(components, list) and all(isinstance(c, str) for c in components)
+        ):
+            raise BackupServiceError("components 必须是字符串数组")
+
         task_id = str(uuid.uuid4())
         self._init_task(task_id, "export", "pending")
-        asyncio.create_task(self.background_export_task(task_id))
+        asyncio.create_task(self.background_export_task(task_id, components))
         return {
             "task_id": task_id,
             "message": "export task created, processing in background",
         }
 
-    async def background_export_task(self, task_id: str) -> None:
+    async def background_export_task(
+        self, task_id: str, components: list[str] | None = None
+    ) -> None:
         try:
             self._update_progress(task_id, status="processing", message="正在初始化...")
             kb_manager = getattr(self.core_lifecycle, "kb_manager", None)
@@ -242,6 +267,7 @@ class BackupService:
             zip_path = await exporter.export_all(
                 output_dir=self.backup_dir,
                 progress_callback=self._make_progress_callback(task_id),
+                components=components,
             )
             self._set_task_result(
                 task_id,
@@ -250,10 +276,15 @@ class BackupService:
                     "filename": os.path.basename(zip_path),
                     "path": zip_path,
                     "size": os.path.getsize(zip_path),
+                    "components": exporter.exported_components,
+                    "skipped": exporter.skipped_entries,
                 },
             )
+        except asyncio.CancelledError:
+            self._set_task_result(task_id, "failed", error="Backup task cancelled")
+            raise
         except Exception as exc:
-            logger.error(f"后台导出任务 {task_id} 失败: {exc}")
+            logger.error(f"Background export task {task_id} failed: {exc}")
             logger.error(traceback.format_exc())
             self._set_task_result(task_id, "failed", error=str(exc))
 
@@ -277,7 +308,7 @@ class BackupService:
             ) from exc
 
         logger.info(
-            f"上传的备份文件已保存: {unique_filename} (原始名称: {file.filename})"
+            f"Saved uploaded backup: {unique_filename} (original name: {file.filename})"
         )
         return {
             "filename": unique_filename,
@@ -352,20 +383,21 @@ class BackupService:
     def mark_backup_as_uploaded(self, zip_path: str) -> None:
         try:
             manifest = {"origin": "uploaded", "uploaded_at": datetime.now().isoformat()}
-            with zipfile.ZipFile(zip_path, "r") as zf:
+            with open_backup(zip_path) as zf:
                 if "manifest.json" in zf.namelist():
-                    manifest_data = zf.read("manifest.json")
-                    manifest = json.loads(manifest_data.decode("utf-8"))
+                    manifest = read_backup_json(zf, "manifest.json")
                     manifest["origin"] = "uploaded"
                     manifest["uploaded_at"] = datetime.now().isoformat()
 
-            with zipfile.ZipFile(zip_path, "a") as zf:
+            with open_backup(zip_path, "a") as zf:
                 new_manifest = json.dumps(manifest, ensure_ascii=False, indent=2)
+                if len(new_manifest.encode("utf-8")) > MAX_MANIFEST_BYTES:
+                    raise ValueError("Updated backup manifest exceeds the size limit")
                 zf.writestr("manifest.json", new_manifest)
 
-            logger.debug(f"已标记备份为上传来源: {zip_path}")
+            logger.debug(f"Marked backup as uploaded: {zip_path}")
         except Exception as exc:
-            logger.warning(f"标记备份来源失败: {exc}")
+            logger.warning(f"Failed to mark backup origin: {exc}")
 
     async def upload_complete(self, data: object, *, owner: str = "") -> dict:
         payload = self._payload(data)
@@ -386,7 +418,7 @@ class BackupService:
 
         self.mark_backup_as_uploaded(output_path)
         logger.info(
-            f"分片上传完成: {session.filename}, size={file_size}, "
+            f"Chunked upload completed: {session.filename}, size={file_size}, "
             f"chunks={session.total_chunks}"
         )
 
@@ -406,7 +438,7 @@ class BackupService:
 
         try:
             if await self.chunked_uploads.abort(upload_id, owner=owner):
-                logger.info(f"取消分片上传: {upload_id}")
+                logger.info(f"Aborted chunked upload: {upload_id}")
         except ChunkedUploadError as exc:
             raise BackupServiceError(str(exc)) from exc
 
@@ -457,16 +489,24 @@ class BackupService:
         if not os.path.exists(zip_path):
             raise BackupServiceError(f"备份文件不存在: {filename}")
 
+        components = payload.get("components")
+        if components is not None and not (
+            isinstance(components, list) and all(isinstance(c, str) for c in components)
+        ):
+            raise BackupServiceError("components 必须是字符串数组")
+
         task_id = str(uuid.uuid4())
         self._init_task(task_id, "import", "pending")
-        asyncio.create_task(self.background_import_task(task_id, zip_path))
+        asyncio.create_task(self.background_import_task(task_id, zip_path, components))
 
         return {
             "task_id": task_id,
             "message": "import task created, processing in background",
         }
 
-    async def background_import_task(self, task_id: str, zip_path: str) -> None:
+    async def background_import_task(
+        self, task_id: str, zip_path: str, components: list[str] | None = None
+    ) -> None:
         try:
             self._update_progress(task_id, status="processing", message="正在初始化...")
             kb_manager = getattr(self.core_lifecycle, "kb_manager", None)
@@ -479,18 +519,25 @@ class BackupService:
                 zip_path=zip_path,
                 mode="replace",
                 progress_callback=self._make_progress_callback(task_id),
+                components=components,
             )
 
             if result.success:
                 self._set_task_result(task_id, "completed", result=result.to_dict())
             else:
+                # Keep the full result on failure: warnings and the already
+                # restored scope must survive, not just the error string.
                 self._set_task_result(
                     task_id,
                     "failed",
+                    result=result.to_dict(),
                     error="; ".join(result.errors),
                 )
+        except asyncio.CancelledError:
+            self._set_task_result(task_id, "failed", error="Backup task cancelled")
+            raise
         except Exception as exc:
-            logger.error(f"后台导入任务 {task_id} 失败: {exc}")
+            logger.error(f"Background import task {task_id} failed: {exc}")
             logger.error(traceback.format_exc())
             self._set_task_result(task_id, "failed", error=str(exc))
 
@@ -510,7 +557,7 @@ class BackupService:
 
         if status == "processing" and task_id in self.backup_progress:
             response_data["progress"] = self.backup_progress[task_id]
-        if status == "completed":
+        if status in ("completed", "failed") and task_info.get("result") is not None:
             response_data["result"] = task_info["result"]
         if status == "failed":
             response_data["error"] = task_info["error"]
@@ -592,7 +639,7 @@ class BackupService:
             raise BackupServiceError(f"文件名 '{new_filename}' 已存在")
 
         os.rename(old_path, new_path)
-        logger.info(f"备份文件重命名: {filename} -> {new_filename}")
+        logger.info(f"Renamed backup: {filename} -> {new_filename}")
         return {
             "old_filename": filename,
             "new_filename": new_filename,

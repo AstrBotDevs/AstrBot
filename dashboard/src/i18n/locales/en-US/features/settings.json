@@ -171,10 +171,26 @@
       "import": "Import Backup",
       "list": "Backup List"
     },
+    "components": {
+      "database": "Main Database",
+      "knowledge_base": "Knowledge Base",
+      "cmd_config": "Main Config File",
+      "attachments": "Attachments",
+      "plugins": "Plugins",
+      "plugin_data": "Plugin Data",
+      "config": "Config Directory",
+      "t2i_templates": "T2I Templates",
+      "temp": "Temporary Files",
+      "skills": "Skills"
+    },
     "export": {
       "title": "Create Backup",
-      "description": "Export all data as a ZIP backup file, including database, knowledge base, config, attachments and skills.",
-      "includes": "Backup includes: Main database, Knowledge bases (metadata + vector index + documents), Config files, Attachment files, Skills",
+      "description": "Export selected data as a ZIP backup. Main Data and Plugins & Extensions are selected by default; include Temporary Files if needed.",
+      "selectComponents": "Select what to back up",
+      "selectAll": "Select All",
+      "clearAll": "Clear",
+      "warningAttachmentsWithoutDb": "Attachments need matching main database records to be accessible. Back up the main database with them.",
+      "warningSelectiveOldVersion": "Selective backups cannot be restored on older AstrBot versions (full backups only).",
       "button": "Start Export",
       "processing": "Exporting...",
       "wait": "Please wait, packaging data...",
@@ -186,7 +202,7 @@
     },
     "import": {
       "title": "Import Backup",
-      "warning": "⚠️ Import will clear and overwrite existing data! Please make sure you have backed up your current data.",
+      "warning": "Restoration clears and replaces existing data within the selected scope. Back up your current data first.",
       "selectFile": "Select backup file (.zip)",
       "uploadAndCheck": "Upload & Check",
       "uploading": "Uploading...",
@@ -196,10 +212,11 @@
       "uploadComplete": "Upload complete, merging file...",
       "checking": "Checking backup file...",
       "invalidBackup": "Invalid backup file",
-      "backupContents": "Backup Contents",
-      "tables": "tables",
-      "knowledgeBases": "Knowledge Bases",
-      "configFiles": "Config Files",
+      "restoreScope": "Select what to restore",
+      "brokenHint": "Declared in this backup, but required entries are missing. Cannot be restored.",
+      "warningAttachmentsWithoutDb": "Restoring attachments without the main database leaves them unreferenced and possibly inaccessible.",
+      "restoredBeforeFailure": "Restored before failure",
+      "restoredEmpty": "0 (emptied)",
       "confirmImport": "Confirm Import",
       "button": "Start Import",
       "processing": "Importing...",
@@ -215,12 +232,13 @@
         "currentVersion": "Current Version",
         "backupTime": "Backup Time",
         "matchTitle": "✅ Version Match",
-        "matchMessage": "Import will clear and overwrite all existing data, including:\n• Main database (conversations, settings, etc.)\n• Knowledge bases\n• Plugins and plugin data\n• Configuration files\n• Skills\n\nThis action cannot be undone! Do you want to continue?",
+        "matchMessage": "Versions match. Review the restoration scope below.",
         "minorDiffTitle": "⚠️ Version Difference Warning",
-        "minorDiffMessage": "Minor version differences can usually be imported, but there may be some data structure changes.\nImport will clear and overwrite all existing data!\n\nDo you want to continue?",
+        "minorDiffMessage": "Minor version differences are usually compatible, but data structures may differ. Review the restoration scope below.",
         "majorDiffTitle": "⛔ Cannot Import",
         "majorDiffMessage": "Major version numbers are different. Cross-major-version import may cause data corruption.\nPlease use the same major version of AstrBot for import."
-      }
+      },
+      "replacementSummary": "Existing data for the following items will be cleared and replaced. This cannot be undone:"
     },
     "list": {
       "empty": "No backup files",
@@ -236,6 +254,37 @@
       "renameInvalidChars": "Filename contains invalid characters",
       "renameFailed": "Rename failed",
       "ftpHint": "For large backup files, you can also upload directly to the data/backups directory via FTP/SFTP"
+    },
+    "groups": {
+      "main": {
+        "title": "Main Data",
+        "description": "Conversations, knowledge bases, settings and attachments."
+      },
+      "extensions": {
+        "title": "Plugins & Extensions",
+        "description": "Plugins, plugin data, skills and text-to-image templates."
+      },
+      "temporary": {
+        "title": "Temporary Files",
+        "description": "Temporary files from message downloads, media processing and tools; usually unnecessary to back up."
+      }
+    },
+    "componentDescriptions": {
+      "database": "Conversations, personas, statistics and other data stored in the database.",
+      "knowledge_base": "Knowledge base documents, metadata, vector indexes and media files.",
+      "cmd_config": "The main bot configuration file.",
+      "config": "Configuration profiles, plugin settings and other configuration files.",
+      "attachments": "Images, audio and other chat files, including legacy WebChat attachments. Back up and restore together with the main database.",
+      "plugins": "Program files of installed plugins.",
+      "plugin_data": "Persistent data saved by plugins.",
+      "skills": "Installed skill files.",
+      "t2i_templates": "Custom text-to-image templates.",
+      "temp": "Temporary files from message downloads, media processing and tools; usually unnecessary to back up."
+    },
+    "scope": {
+      "selectedCount": "{selected} / {total} selected",
+      "notIncluded": "Not included in this backup.",
+      "selectAtLeastOne": "Select at least one item to restore."
     }
   },
   "apiKey": {
