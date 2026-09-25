@@ -1244,6 +1244,18 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     )
                     continue
 
+                # Some models wrap tool inputs in one or more extra arguments objects.
+                # Normalize before filtering and hooks, preserving declared arguments fields.
+                properties = (func_tool.parameters or {}).get("properties", {})
+                while (
+                    properties
+                    and "arguments" not in properties
+                    and isinstance(func_tool_args, dict)
+                    and set(func_tool_args) == {"arguments"}
+                    and isinstance(func_tool_args["arguments"], dict)
+                ):
+                    func_tool_args = func_tool_args["arguments"]
+
                 valid_params = {}  # 参数过滤：只传递函数实际需要的参数
 
                 # 获取实际的 handler 函数
