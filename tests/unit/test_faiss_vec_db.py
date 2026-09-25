@@ -1,6 +1,7 @@
 import asyncio
 from unittest.mock import AsyncMock
 
+import numpy as np
 import pytest
 
 from astrbot.core.db.vec_db.faiss_impl.embedding_storage import EmbeddingStorage
@@ -136,6 +137,50 @@ async def test_insert_batch_rejects_embedding_content_count_mismatch() -> None:
     }
     vec_db.embedding_provider.get_embeddings_batch.assert_not_awaited()
     vec_db.document_storage.insert_documents_batch.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_insert_batch_rejects_non_finite_embeddings_before_storage() -> None:
+    vec_db = FaissVecDB.__new__(FaissVecDB)
+    vec_db.embedding_provider = AsyncMock()
+    vec_db.embedding_provider.get_embeddings_batch.return_value = [
+        [0.1, float("nan")],
+        [0.3, 0.4],
+    ]
+    vec_db.document_storage = AsyncMock()
+    vec_db.embedding_storage = AsyncMock()
+    vec_db.embedding_storage.dimension = 2
+
+    with pytest.raises(KnowledgeBaseUploadError, match="非有限值"):
+        await FaissVecDB.insert_batch(
+            vec_db,
+            contents=["chunk-1", "chunk-2"],
+            metadatas=[{}, {}],
+            ids=["doc-1", "doc-2"],
+        )
+
+    vec_db.document_storage.insert_documents_batch.assert_not_awaited()
+    vec_db.embedding_storage.insert_batch.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_embedding_storage_rejects_non_finite_single_and_batch_vectors() -> None:
+    storage = EmbeddingStorage(2)
+    storage.save_index = AsyncMock()
+
+    with pytest.raises(RuntimeError, match="非有限值"):
+        await storage.insert(np.array([float("inf"), 0.2], dtype=np.float32), 1)
+
+    with pytest.raises(RuntimeError, match="非有限值"):
+        await storage.insert_batch(
+            np.array([[0.1, 0.2], [float("nan"), 0.4]], dtype=np.float32),
+            [1, 2],
+        )
+
+    with pytest.raises(RuntimeError, match="非有限值"):
+        await storage.search(np.array([0.1, float("nan")], dtype=np.float32), 1)
+
+    storage.save_index.assert_not_awaited()
 
 
 def test_embedding_storage_rejects_zero_dimension_for_a_fresh_index(tmp_path) -> None:
