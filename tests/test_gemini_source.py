@@ -1,8 +1,10 @@
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
 from google.genai import types
+from google.genai.errors import APIError
 
 import astrbot.core.message.components as Comp
 import astrbot.core.provider.sources.gemini_source as gemini_source
@@ -238,6 +240,119 @@ async def test_gemini_get_models_retries_transient_request_error(monkeypatch):
 
     assert await provider.get_models() == ["gemini-a"]
     assert models.calls == 2
+
+
+@pytest.mark.asyncio
+async def test_gemini_get_models_falls_back_to_relay_models(monkeypatch):
+    class FakeRelayClient:
+        def __init__(self):
+            self.request = None
+
+        async def get(self, url, headers=None):
+            self.request = (url, headers)
+            return SimpleNamespace(
+                raise_for_status=lambda: None,
+                json=lambda: {
+                    "data": [
+                        {"id": "gemini-relay-b"},
+                        {"id": "gemini-relay-a"},
+                    ]
+                },
+            )
+
+    native_models = SimpleNamespace(
+        list=AsyncMock(
+            side_effect=APIError(
+                404,
+                {"error": {"message": "Native model listing is unavailable"}},
+            )
+        )
+    )
+    relay_client = FakeRelayClient()
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    provider.api_base = "https://relay.example.com/"
+    provider.chosen_api_key = "relay-key"
+    provider.request_headers = {"X-Custom": "value"}
+    provider.client = SimpleNamespace(models=native_models)
+    provider._http_client = relay_client
+
+    async def fake_retry(provider_name, request_factory, **kwargs):
+        return await request_factory()
+
+    monkeypatch.setattr(gemini_source, "retry_provider_request", fake_retry)
+
+    assert await provider.get_models() == ["gemini-relay-b", "gemini-relay-a"]
+    assert native_models.list.await_count == 1
+    assert relay_client.request == (
+        "https://relay.example.com/v1/models",
+        {"X-Custom": "value", "Authorization": "Bearer relay-key"},
+    )
+
+
+@pytest.mark.asyncio
+async def test_gemini_get_models_without_relay_base_does_not_fall_back(monkeypatch):
+    native_models = SimpleNamespace(
+        list=AsyncMock(side_effect=APIError(404, {"error": {"message": "Not Found"}}))
+    )
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    provider.api_base = None
+    provider.client = SimpleNamespace(models=native_models)
+
+    async def fail_retry(provider_name, request_factory, **kwargs):
+        return await request_factory()
+
+    monkeypatch.setattr(gemini_source, "retry_provider_request", fail_retry)
+
+    with pytest.raises(Exception, match="Failed to fetch Gemini model list"):
+        await provider.get_models()
+
+    assert native_models.list.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_gemini_get_models_on_official_base_does_not_fall_back(monkeypatch):
+    native_models = SimpleNamespace(
+        list=AsyncMock(side_effect=APIError(404, {"error": {"message": "Not Found"}}))
+    )
+    relay_client = AsyncMock()
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    provider.api_base = "https://generativelanguage.googleapis.com/"
+    provider.chosen_api_key = ""
+    provider.request_headers = {}
+    provider.client = SimpleNamespace(models=native_models)
+    provider._http_client = relay_client
+
+    async def fail_retry(provider_name, request_factory, **kwargs):
+        return await request_factory()
+
+    monkeypatch.setattr(gemini_source, "retry_provider_request", fail_retry)
+
+    with pytest.raises(Exception, match="Failed to fetch Gemini model list"):
+        await provider.get_models()
+
+    relay_client.get.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("api_base", "expected_url"),
+    [
+        ("https://relay.example.com", "https://relay.example.com/v1/models"),
+        ("https://relay.example.com/v1", "https://relay.example.com/v1/models"),
+        (
+            "https://relay.example.com/v1beta/openai/",
+            "https://relay.example.com/v1beta/openai/models",
+        ),
+        (
+            "https://relay.example.com/v1/models",
+            "https://relay.example.com/v1/models",
+        ),
+    ],
+)
+def test_gemini_relay_models_url_handles_base_variants(api_base, expected_url):
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    provider.api_base = api_base
+
+    assert provider._get_relay_models_url() == expected_url
 
 
 def _gemini_part(*, text=None, thought=None, function_call=None):
