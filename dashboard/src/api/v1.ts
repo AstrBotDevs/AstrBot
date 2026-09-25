@@ -812,6 +812,9 @@ export const chatApi = {
   sendStreamUrl() {
     return '/api/v1/chat';
   },
+  sessionEventsUrl(sessionId: string) {
+    return `/api/v1/chat/sessions/${encodeURIComponent(sessionId)}/events`;
+  },
   resumeRunStreamUrl(runId: string) {
     return `/api/v1/chat/runs/${encodeURIComponent(runId)}/stream`;
   },
