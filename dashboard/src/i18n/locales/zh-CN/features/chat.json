@@ -165,6 +165,7 @@
     "name": "项目名称",
     "emoji": "图标 (Emoji)",
     "description": "项目描述（可选）",
+    "moreSettings": "更多设置",
     "workspace": {
       "type": "工作区",
       "session": "按会话分开",

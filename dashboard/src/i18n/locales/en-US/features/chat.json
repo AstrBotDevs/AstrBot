@@ -165,6 +165,7 @@
     "name": "Project Name",
     "emoji": "Icon (Emoji)",
     "description": "Description (Optional)",
+    "moreSettings": "More settings",
     "workspace": {
       "type": "Workspace",
       "session": "Per-session workspace",

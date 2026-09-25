@@ -165,6 +165,7 @@
     "name": "プロジェクト名",
     "emoji": "アイコン（Emoji）",
     "description": "プロジェクトの説明（任意）",
+    "moreSettings": "その他の設定",
     "workspace": {
       "type": "ワークスペース",
       "session": "セッションごとに分離",

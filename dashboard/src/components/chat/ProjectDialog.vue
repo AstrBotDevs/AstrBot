@@ -1,14 +1,36 @@
 <template>
-    <v-dialog v-model="isOpen" max-width="640" @update:model-value="handleDialogChange">
+    <v-dialog v-model="isOpen" max-width="560" @update:model-value="handleDialogChange">
         <v-card>
             <v-card-title class="text-h3 pa-4 pb-0 pl-6">
                 {{ isEditing ? tm('project.edit') : tm('project.create') }}
             </v-card-title>
             <v-card-text>
-                <v-text-field v-model="form.emoji" :label="tm('project.emoji')" variant="outlined" hide-details class="mb-3" />
-                <v-text-field v-model="form.title" :label="tm('project.name')" variant="outlined" hide-details class="mb-3" autofocus
-                    @keyup.enter="handleSave" />
-                <v-textarea v-model="form.description" :label="tm('project.description')" variant="outlined" hide-details rows="3" />
+                <div class="d-flex align-center ga-2 mb-4">
+                    <EmojiPicker v-model="form.emoji" />
+                    <v-text-field
+                        v-model="form.title"
+                        :label="tm('project.name')"
+                        variant="outlined"
+                        hide-details
+                        class="flex-grow-1"
+                        autofocus
+                        @keyup.enter="handleSave"
+                    />
+                </div>
+                <v-expansion-panels variant="accordion" class="mb-4">
+                    <v-expansion-panel>
+                        <v-expansion-panel-title>{{ tm('project.moreSettings') }}</v-expansion-panel-title>
+                        <v-expansion-panel-text>
+                            <v-textarea
+                                v-model="form.description"
+                                :label="tm('project.description')"
+                                variant="outlined"
+                                hide-details
+                                rows="3"
+                            />
+                        </v-expansion-panel-text>
+                    </v-expansion-panel>
+                </v-expansion-panels>
                 <v-divider class="my-4" />
                 <v-select v-model="form.workspace_type" :items="workspaceTypeItems" item-title="label" item-value="value"
                     :label="tm('project.workspace.type')" variant="outlined" hide-details class="mb-3" />
@@ -56,6 +78,7 @@
 import { computed, ref, watch } from 'vue';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import { getDesktopRuntimeInfo } from '@/utils/desktopRuntime';
+import EmojiPicker from '@/components/shared/EmojiPicker.vue';
 
 export type WorkspaceType = 'session' | 'project' | 'custom';
 
