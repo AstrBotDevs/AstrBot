@@ -1069,7 +1069,11 @@ class LarkMessageEvent(AstrMessageEvent):
             )
             if page_token:
                 builder = builder.page_token(page_token)
-            response = await self.bot.im.v1.message_reaction.alist(builder.build())
+            try:
+                response = await self.bot.im.v1.message_reaction.alist(builder.build())
+            except Exception as exc:
+                logger.error(f"Failed to list Lark message reactions: {exc}")
+                return
             if not response.success() or not response.data:
                 logger.error(
                     f"Failed to list Lark message reactions({response.code}): {response.msg}"
@@ -1105,7 +1109,14 @@ class LarkMessageEvent(AstrMessageEvent):
             .reaction_id(reaction_id)
             .build()
         )
-        response = await self.bot.im.v1.message_reaction.adelete(request)
+        try:
+            response = await self.bot.im.v1.message_reaction.adelete(request)
+        except Exception as exc:
+            logger.error(
+                f"Failed to delete Lark message reaction; it may remain on the "
+                f"message: {exc}"
+            )
+            return
         if not response.success():
             logger.error(
                 f"Failed to delete Lark message reaction({response.code}): {response.msg}"
