@@ -1,7 +1,7 @@
 <template>
-    <v-dialog v-model="isOpen" max-width="520" @update:model-value="handleDialogChange">
+    <v-dialog v-model="isOpen" max-width="460" @update:model-value="handleDialogChange">
         <v-card class="project-dialog-card">
-            <v-card-title class="project-dialog-title">
+            <v-card-title class="text-h3 pa-4 pb-0 pl-6 project-dialog-title">
                 {{ isEditing ? tm('project.edit') : tm('project.create') }}
             </v-card-title>
             <v-card-text class="project-dialog-content">
@@ -9,7 +9,7 @@
                     <EmojiPicker v-model="form.emoji" />
                     <input
                         v-model="form.title"
-                        class="project-input project-name-input"
+                        class="project-name-input"
                         type="text"
                         :placeholder="tm('project.name')"
                         :aria-label="tm('project.name')"
@@ -17,64 +17,95 @@
                         @keyup.enter="handleSave"
                     />
                 </div>
-                <label class="field-label" for="project-workspace-type">{{ tm('project.workspace.type') }}</label>
-                <select
-                    id="project-workspace-type"
-                    v-model="form.workspace_type"
-                    class="project-input workspace-type-input"
-                    :aria-label="tm('project.workspace.type')"
-                >
-                    <option v-for="item in workspaceTypeItems" :key="item.value" :value="item.value">
-                        {{ item.label }}
-                    </option>
-                </select>
-                <div v-if="form.workspace_type === 'custom'" class="workspace-path-row">
-                    <input
-                        v-model="form.workspace_path"
-                        class="project-input workspace-path-input"
-                        type="text"
-                        :placeholder="tm('project.workspace.path')"
-                        :aria-label="tm('project.workspace.path')"
-                    />
-                    <button
-                        v-if="canPickWorkspaceDirectory"
-                        type="button"
-                        class="folder-picker-button"
-                        :aria-label="tm('project.workspace.selectPath')"
-                        :disabled="props.saving"
-                        @click.stop="handlePickWorkspaceDirectory"
-                    >
-                        <v-icon size="20">mdi-folder-open-outline</v-icon>
-                        <span>{{ tm('project.workspace.selectPath') }}</span>
-                    </button>
+
+                <div class="project-field">
+                    <label class="field-label" for="project-workspace-type">{{ tm('project.workspace.type') }}</label>
+                    <v-menu location="bottom start" offset="6">
+                        <template #activator="{ props: activatorProps }">
+                            <button
+                                id="project-workspace-type"
+                                ref="workspaceSelectTrigger"
+                                v-bind="activatorProps"
+                                type="button"
+                                class="project-select-trigger"
+                                :aria-label="tm('project.workspace.type')"
+                                aria-haspopup="listbox"
+                                @click="syncWorkspaceMenuWidth"
+                            >
+                                <span>{{ currentWorkspaceLabel }}</span>
+                                <v-icon class="select-chevron" size="18" aria-hidden="true">mdi-chevron-down</v-icon>
+                            </button>
+                        </template>
+                        <div
+                            class="project-select-menu"
+                            role="listbox"
+                            :style="{ minWidth: workspaceMenuWidth ? `${workspaceMenuWidth}px` : undefined }"
+                        >
+                            <button
+                                v-for="item in workspaceTypeItems"
+                                :key="item.value"
+                                type="button"
+                                role="option"
+                                class="project-select-option"
+                                :class="{ 'is-selected': form.workspace_type === item.value }"
+                                :aria-selected="form.workspace_type === item.value"
+                                @click="form.workspace_type = item.value"
+                            >
+                                <span>{{ item.label }}</span>
+                                <v-icon v-if="form.workspace_type === item.value" size="16" aria-hidden="true">mdi-check</v-icon>
+                            </button>
+                        </div>
+                    </v-menu>
                 </div>
+
+                <div v-if="form.workspace_type === 'custom'" class="project-field">
+                    <label class="field-label" for="project-workspace-path">{{ tm('project.workspace.path') }}</label>
+                    <div class="workspace-path-row">
+                        <input
+                            id="project-workspace-path"
+                            v-model="form.workspace_path"
+                            class="project-path-input"
+                            type="text"
+                            :aria-label="tm('project.workspace.path')"
+                        />
+                        <button
+                            v-if="canPickWorkspaceDirectory"
+                            type="button"
+                            class="folder-picker-button"
+                            :disabled="props.saving"
+                            @click.stop="handlePickWorkspaceDirectory"
+                        >
+                            <v-icon size="18">mdi-folder-open-outline</v-icon>
+                            <span>{{ tm('project.workspace.selectPath') }}</span>
+                        </button>
+                    </div>
+                </div>
+
                 <div class="more-settings">
-                    <span
+                    <button
+                        type="button"
                         class="more-settings-toggle"
-                        role="button"
-                        tabindex="0"
                         :aria-expanded="moreSettingsOpen"
                         @click="moreSettingsOpen = !moreSettingsOpen"
-                        @keydown.enter.prevent="moreSettingsOpen = !moreSettingsOpen"
                     >
                         <span>{{ tm('project.moreSettings') }}</span>
                         <v-icon
-                            size="20"
+                            size="18"
                             class="more-settings-chevron"
                             :class="{ 'is-open': moreSettingsOpen }"
                             aria-hidden="true"
                         >mdi-chevron-down</v-icon>
-                    </span>
-                    <div v-if="moreSettingsOpen" class="more-settings-content">
-                        <textarea
-                            v-model="form.description"
-                            class="project-input project-description-input"
-                            :placeholder="tm('project.description')"
-                            :aria-label="tm('project.description')"
-                            rows="3"
-                        />
-                    </div>
+                    </button>
+                    <textarea
+                        v-if="moreSettingsOpen"
+                        v-model="form.description"
+                        class="project-description-input"
+                        :placeholder="tm('project.description')"
+                        :aria-label="tm('project.description')"
+                        rows="3"
+                    />
                 </div>
+
                 <v-alert
                     v-if="props.errorMessage"
                     class="mt-3"
@@ -86,10 +117,16 @@
                 </v-alert>
             </v-card-text>
             <div class="project-dialog-actions">
-                <button type="button" class="dialog-action dialog-action-cancel" @click="handleCancel" :disabled="props.saving">
+                <button type="button" class="dialog-action" :disabled="props.saving" @click="handleCancel">
                     {{ t('core.common.cancel') }}
                 </button>
-                <button type="button" class="dialog-action dialog-action-save" @click="handleSave" :disabled="!canSave || props.saving" :aria-busy="props.saving">
+                <button
+                    type="button"
+                    class="dialog-action dialog-action-save"
+                    :disabled="!canSave || props.saving"
+                    :aria-busy="props.saving"
+                    @click="handleSave"
+                >
                     {{ t('core.common.save') }}
                 </button>
             </div>
@@ -159,11 +196,22 @@ const form = ref<ProjectFormData>({
     workspace_type: 'project',
     workspace_path: ''
 });
-const workspaceTypeItems = computed(() => [
+const workspaceTypeItems = computed<{ label: string; value: WorkspaceType }[]>(() => [
     { label: tm('project.workspace.project'), value: 'project' },
     { label: tm('project.workspace.session'), value: 'session' },
     { label: tm('project.workspace.custom'), value: 'custom' }
 ]);
+const currentWorkspaceLabel = computed(() =>
+    workspaceTypeItems.value.find((item) => item.value === form.value.workspace_type)?.label || ''
+);
+const workspaceSelectTrigger = ref<HTMLElement | null>(null);
+const workspaceMenuWidth = ref(0);
+
+// The dropdown is teleported to the body, so its width has to be synced from the trigger.
+function syncWorkspaceMenuWidth() {
+    workspaceMenuWidth.value = workspaceSelectTrigger.value?.getBoundingClientRect().width ?? 0;
+}
+
 const canSave = computed(() => {
     if (!form.value.title.trim()) return false;
     if (form.value.workspace_type !== 'custom') return true;
@@ -255,60 +303,198 @@ function handleSave() {
 
 <style scoped>
 .project-dialog-card {
-    overflow: hidden;
+    --project-border: rgba(var(--v-theme-on-surface), 0.13);
+    --project-divider: rgba(var(--v-theme-on-surface), 0.09);
+    --project-muted: rgba(var(--v-theme-on-surface), 0.64);
+    overflow: hidden !important;
+    border: 1px solid var(--project-border);
+    border-radius: 20px !important;
+    background: rgb(var(--v-theme-surface));
 }
 
 .project-dialog-title {
-    padding: 24px 28px 12px;
-    font-size: 26px;
-    font-weight: 600;
-    line-height: 1.2;
+    font-weight: 780;
+    line-height: 1.25;
 }
 
 .project-dialog-content {
-    padding: 12px 28px 0;
+    padding: 20px 24px 0 !important;
 }
 
-.project-name-row,
-.workspace-path-row {
+.project-name-row {
     display: flex;
     align-items: center;
-    gap: 10px;
+    height: 40px;
+    border: 1px solid var(--project-border);
+    border-radius: 10px;
+    transition: border-color 120ms ease, box-shadow 120ms ease;
 }
 
-.project-input {
-    width: 100%;
-    border: 1px solid rgba(var(--v-theme-on-surface), 0.38);
-    border-radius: 4px;
+.project-name-row:focus-within {
+    border-color: rgb(var(--v-theme-primary));
+    box-shadow: 0 0 0 3px rgba(var(--v-theme-primary), 0.14);
+}
+
+.project-name-row :deep(.emoji-picker-trigger) {
+    flex: 0 0 auto;
+    min-width: 40px;
+    height: 38px;
+    padding: 0;
+    border-radius: 9px 0 0 9px;
+    font-size: 20px;
+}
+
+.project-name-input,
+.project-path-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 100%;
+    padding: 0 12px;
+    border: 0;
     background: transparent;
     color: rgb(var(--v-theme-on-surface));
     font: inherit;
+    font-size: 0.86rem;
     outline: none;
-    transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.project-name-input {
+    padding-left: 2px;
+}
+
+.project-name-input::placeholder,
+.project-path-input::placeholder,
+.project-description-input::placeholder {
+    color: var(--project-muted);
+}
+
+.project-field {
+    margin-top: 16px;
 }
 
 .field-label {
     display: block;
-    margin: 20px 0 7px;
-    color: rgba(var(--v-theme-on-surface), 0.62);
-    font-size: 12px;
+    margin-bottom: 6px;
+    color: var(--project-muted);
+    font-size: 0.78rem;
 }
 
-.project-input:focus {
+.project-select-trigger {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+    height: 40px;
+    padding: 0 10px 0 12px;
+    border: 1px solid var(--project-border);
+    border-radius: 10px;
+    background: transparent;
+    color: rgb(var(--v-theme-on-surface));
+    font: inherit;
+    font-size: 0.86rem;
+    text-align: left;
+    cursor: pointer;
+    outline: none;
+    transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.project-select-trigger:hover {
+    border-color: rgba(var(--v-theme-on-surface), 0.24);
+}
+
+.project-select-trigger:focus-visible {
     border-color: rgb(var(--v-theme-primary));
-    box-shadow: 0 0 0 1px rgb(var(--v-theme-primary));
+    box-shadow: 0 0 0 3px rgba(var(--v-theme-primary), 0.14);
 }
 
-.project-name-input,
-.workspace-path-input {
-    height: 48px;
-    padding: 0 14px;
+.select-chevron {
+    flex: 0 0 auto;
+    color: var(--project-muted);
 }
 
-.workspace-type-input {
-    height: 48px;
-    padding: 0 42px 0 14px;
-    appearance: auto;
+.project-select-menu {
+    --project-border: rgba(var(--v-theme-on-surface), 0.13);
+    --project-muted: rgba(var(--v-theme-on-surface), 0.64);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 4px;
+    border: 1px solid var(--project-border);
+    border-radius: 12px;
+    background: rgb(var(--v-theme-surface));
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.36);
+}
+
+.project-select-option {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    height: 34px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: rgb(var(--v-theme-on-surface));
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.86rem;
+    text-align: left;
+}
+
+.project-select-option:hover {
+    background: rgba(var(--v-theme-on-surface), 0.06);
+}
+
+.project-select-option.is-selected {
+    background: rgba(var(--v-theme-primary), 0.14);
+    color: rgb(var(--v-theme-primary));
+    font-weight: 600;
+}
+
+.workspace-path-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.project-path-input {
+    height: 40px;
+    border: 1px solid var(--project-border);
+    border-radius: 10px;
+    transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.project-path-input:focus {
+    border-color: rgb(var(--v-theme-primary));
+    box-shadow: 0 0 0 3px rgba(var(--v-theme-primary), 0.14);
+}
+
+.folder-picker-button {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 6px;
+    height: 40px;
+    padding: 0 12px;
+    border: 0;
+    border-radius: 10px;
+    background: rgba(var(--v-theme-primary), 0.14);
+    color: rgb(var(--v-theme-primary));
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.82rem;
+    white-space: nowrap;
+}
+
+.folder-picker-button:hover:not(:disabled) {
+    background: rgba(var(--v-theme-primary), 0.22);
+}
+
+.folder-picker-button:disabled {
+    cursor: default;
+    opacity: 0.5;
 }
 
 .more-settings {
@@ -318,87 +504,70 @@ function handleSave() {
 .more-settings-toggle {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    width: 100%;
-    padding: 4px 0;
+    gap: 4px;
+    padding: 0;
     border: 0;
     background: transparent;
-    color: rgba(var(--v-theme-on-surface), 0.72);
+    color: var(--project-muted);
     cursor: pointer;
     font: inherit;
-    text-align: left;
+    font-size: 0.78rem;
 }
 
 .more-settings-toggle:hover {
-    color: rgb(var(--v-theme-primary));
+    color: rgb(var(--v-theme-on-surface));
 }
 
 .more-settings-chevron {
-    font-size: 22px;
-    line-height: 1;
-    transition: transform 120ms ease;
+    transition: transform 140ms ease;
 }
 
 .more-settings-chevron.is-open {
     transform: rotate(180deg);
 }
 
-.more-settings-content {
-    padding-top: 10px;
-}
-
 .project-description-input {
-    min-height: 92px;
-    padding: 12px 14px;
-    resize: vertical;
-}
-
-.folder-picker-button {
-    display: inline-flex;
-    flex: 0 0 auto;
-    align-items: center;
-    justify-content: center;
-    gap: 7px;
-    height: 48px;
-    padding: 0 16px;
-    border: 0;
-    border-radius: 4px;
-    background: rgba(var(--v-theme-primary), 0.12);
-    color: rgb(var(--v-theme-primary));
-    cursor: pointer;
+    display: block;
+    width: 100%;
+    min-height: 76px;
+    margin-top: 10px;
+    padding: 10px 12px;
+    border: 1px solid var(--project-border);
+    border-radius: 10px;
+    background: transparent;
+    color: rgb(var(--v-theme-on-surface));
     font: inherit;
-    white-space: nowrap;
+    font-size: 0.86rem;
+    line-height: 1.5;
+    outline: none;
+    resize: vertical;
+    transition: border-color 120ms ease, box-shadow 120ms ease;
 }
 
-.folder-picker-button:hover {
-    background: rgba(var(--v-theme-primary), 0.2);
-}
-
-.folder-picker-button:disabled {
-    cursor: default;
-    opacity: 0.5;
+.project-description-input:focus {
+    border-color: rgb(var(--v-theme-primary));
+    box-shadow: 0 0 0 3px rgba(var(--v-theme-primary), 0.14);
 }
 
 .project-dialog-actions {
     display: flex;
     justify-content: flex-end;
-    gap: 8px;
-    padding: 18px 20px 20px;
+    gap: 4px;
+    padding: 16px 16px 16px;
 }
 
 .dialog-action {
-    min-width: 64px;
-    height: 40px;
-    padding: 0 14px;
+    min-width: 60px;
+    height: 36px;
+    padding: 0 12px;
     border: 0;
-    border-radius: 4px;
+    border-radius: 8px;
     background: transparent;
+    color: rgb(var(--v-theme-on-surface));
     cursor: pointer;
     font: inherit;
-}
-
-.dialog-action-cancel {
-    color: rgba(var(--v-theme-on-surface), 0.72);
+    font-size: 0.86rem;
+    font-weight: 600;
 }
 
 .dialog-action-save {

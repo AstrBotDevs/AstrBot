@@ -121,6 +121,8 @@ function selectEmoji(emoji: string) {
 
 .emoji-picker-menu {
   overflow: hidden;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.13);
+  border-radius: 16px;
 }
 
 .emoji-grid {
