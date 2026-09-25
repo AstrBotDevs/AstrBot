@@ -5,13 +5,12 @@
     :class="{ 'is-dark': isDark, 'sidebar-collapsed': isSidebarCollapsed }"
   >
     <v-navigation-drawer
-      v-model="chatSidebarDrawer"
       class="chat-sidebar"
       :class="{ collapsed: isSidebarCollapsed }"
-      :permanent="lgAndUp"
-      :temporary="!lgAndUp"
-      :rail="lgAndUp && customizer.chatSidebarCollapsed"
-      :width="280"
+      permanent
+      :mobile-breakpoint="0"
+      :rail="isSidebarCollapsed"
+      :width="245"
       :rail-width="56"
       location="left"
       floating
@@ -20,6 +19,7 @@
         <div
           class="chat-sidebar-brand"
           :class="{ collapsed: isSidebarCollapsed }"
+          data-tauri-drag-region
         >
           <div
             v-if="!isSidebarCollapsed"
@@ -273,6 +273,12 @@
         class="conversation-stack"
         :class="{ 'is-empty': isEmptyChat }"
       >
+        <div class="chat-content-header">
+          <ProviderModelMenu variant="header" />
+          <div v-if="contentHeaderTitle" class="chat-content-header-title">
+            {{ contentHeaderTitle }}
+          </div>
+        </div>
         <v-progress-linear
           v-if="activeSessionPagination?.loading"
           class="history-loading"
@@ -508,6 +514,7 @@ import {
 } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useDisplay } from "vuetify";
+import { SIDEBAR_RAIL_BREAKPOINT } from "@/utils/sidebarLayout";
 import { isAxiosError } from "axios";
 import {
   ArrowDown,
@@ -527,6 +534,7 @@ import ProjectList, { type Project } from "@/components/chat/ProjectList.vue";
 import ProjectView from "@/components/chat/ProjectView.vue";
 import ChatInput from "@/components/chat/ChatInput.vue";
 import ChatMessageList from "@/components/chat/ChatMessageList.vue";
+import ProviderModelMenu from "@/components/chat/ProviderModelMenu.vue";
 import ChatUILogo from "@/components/chat/ChatUILogo.vue";
 import type { RegenerateModelSelection } from "@/components/chat/RegenerateMenu.vue";
 import ChatLoadError from "@/components/chat/ChatLoadError.vue";
@@ -570,7 +578,7 @@ const props = withDefaults(
 
 const route = useRoute();
 const router = useRouter();
-const { lgAndUp } = useDisplay();
+const { width: viewportWidth } = useDisplay();
 const chatHeader = useChatHeaderStore();
 const customizer = useCustomizerStore();
 const { t } = useI18n();
@@ -695,27 +703,17 @@ const {
   startRecording: startRecorder,
   stopRecording: stopRecorder,
 } = useRecording();
-const chatSidebarDrawer = computed({
-  get: () => lgAndUp.value || customizer.chatSidebarOpen,
-  set: (value: boolean) => {
-    if (!lgAndUp.value) {
-      customizer.SET_CHAT_SIDEBAR(value);
-    }
-  },
-});
 const isSidebarCollapsed = computed(() =>
-  lgAndUp.value ? customizer.chatSidebarCollapsed : !customizer.chatSidebarOpen,
+  customizer.chatSidebarCollapsed ||
+  viewportWidth.value < SIDEBAR_RAIL_BREAKPOINT,
 );
 const isProviderWorkspace = computed(
   () => activeWorkspace.value === "providers",
 );
 
 function toggleChatSidebar() {
-  if (lgAndUp.value) {
-    customizer.SET_CHAT_SIDEBAR_COLLAPSED(!customizer.chatSidebarCollapsed);
-    return;
-  }
-  customizer.TOGGLE_CHAT_SIDEBAR();
+  if (viewportWidth.value < SIDEBAR_RAIL_BREAKPOINT) return;
+  customizer.SET_CHAT_SIDEBAR_COLLAPSED(!customizer.chatSidebarCollapsed);
 }
 
 const activeReasoningParts = computed<MessagePart[]>(() => {
@@ -828,6 +826,12 @@ const chatHeaderSubtitle = computed(() =>
     ? sessionProject.value?.title || selectedProject.value?.title || ""
     : "",
 );
+const contentHeaderTitle = computed(() => {
+  const title = chatHeader.title.trim();
+  const subtitle = chatHeader.subtitle.trim();
+  if (title && subtitle) return `${subtitle} / ${title}`;
+  return title || subtitle;
+});
 const chatInputReplyTarget = computed(() =>
   replyTarget.value?.id == null
     ? null
@@ -1023,12 +1027,6 @@ function basePath() {
   return props.chatboxMode ? "/chatbox" : "/chat";
 }
 
-function closeMobileSidebar() {
-  if (!lgAndUp.value) {
-    customizer.SET_CHAT_SIDEBAR(false);
-  }
-}
-
 function closeSecondaryPanels() {
   threadSelection.visible = false;
   threadPanelOpen.value = false;
@@ -1049,9 +1047,8 @@ async function openProviderWorkspace() {
   activeWorkspace.value = "providers";
   const targetPath = `${basePath()}/models`;
   if (route.path !== targetPath) {
-    await router.push(targetPath);
+  await router.push(targetPath);
   }
-  closeMobileSidebar();
 }
 
 function sessionTitle(session: Session) {
@@ -1097,7 +1094,6 @@ async function startNewChat() {
   selectedProjectId.value = null;
   replyTarget.value = null;
   newChat();
-  closeMobileSidebar();
   await focusChatInput();
 }
 
@@ -1120,7 +1116,6 @@ async function selectProject(projectId: string) {
   replyTarget.value = null;
   await router.push(basePath());
   await loadProjectSessions(projectId);
-  closeMobileSidebar();
 }
 
 async function loadProjectSessions(projectId = selectedProjectId.value) {
@@ -1305,7 +1300,6 @@ async function selectSession(sessionId: string, pushRoute = true) {
     if (currSessionId.value !== sessionId) return;
   }
   scrollToBottom(true);
-  closeMobileSidebar();
   await focusChatInput();
 }
 
@@ -1886,6 +1880,7 @@ async function stopCurrentSession() {
   height: 100vh !important;
   background: var(--chat-sidebar-bg);
   border-right: 1px solid var(--chat-border);
+  user-select: none;
 }
 
 .chat-sidebar.collapsed {
@@ -1897,6 +1892,25 @@ async function stopCurrentSession() {
   display: flex;
   flex-direction: column;
   height: 100%;
+}
+
+/* The macOS desktop window draws its header across the whole width, above the chat sidebar. */
+:global(html[data-astrbot-desktop-platform='macos'] .chat-sidebar .v-navigation-drawer__content) {
+  /* Seat the brand's top edge at the content area's top edge, fully below the toolbar. */
+  padding-top: calc(var(--astrbot-toolbar-height, 40px) - 14px);
+  box-sizing: border-box;
+}
+
+/* The chat sidebar stays transparent; the shared tint is painted behind it on the main area. */
+:global(html[data-astrbot-desktop-platform='macos'] .chat-sidebar) {
+  border-right: 0 !important;
+  background: transparent !important;
+}
+
+/* The chat header is in-flow on macOS, so the old absolute-header top offset is dead
+   space; drop it so the sub-header sits directly under the toolbar band. */
+:global(html[data-astrbot-desktop-platform='macos'] .chat-main) {
+  padding-top: 0 !important;
 }
 
 .sidebar-top {
@@ -2157,9 +2171,13 @@ async function stopCurrentSession() {
   text-align: left;
 }
 
-.session-item:hover,
-.session-item.active {
+.session-item:hover {
   background: var(--chat-session-active-bg);
+}
+
+/* Active session stays clearly highlighted (subtle in light mode otherwise). */
+.session-item.active {
+  background: rgba(var(--v-theme-primary), 0.22);
 }
 
 .session-item.running {
@@ -2266,6 +2284,29 @@ async function stopCurrentSession() {
   display: flex;
   flex-direction: column;
   position: relative;
+}
+
+.chat-content-header {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+  padding: 2px 24px;
+}
+
+.chat-content-header-title {
+  color: var(--chat-muted, rgba(var(--v-theme-on-surface), 0.62));
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+/* Keep the sub-header pinned to the top even when the empty chat is centered. */
+.conversation-stack.is-empty .chat-content-header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
 }
 
 /* 全区域拖拽上传遮罩 */
@@ -2540,11 +2581,6 @@ kbd {
 }
 
 @media (max-width: 760px) {
-  .chat-sidebar {
-    top: 50px !important;
-    height: calc(100vh - 50px) !important;
-  }
-
   .messages-panel {
     padding: 18px 0 calc(var(--chat-composer-height, 72px) + 20px);
     scroll-padding-bottom: calc(var(--chat-composer-height, 72px) + 20px);

@@ -21,7 +21,7 @@ import type { Locale } from "@/i18n/types";
 import AboutPage from "@/views/AboutPage.vue";
 import { authApi, isLegacyFallbackError, statsApi, updatesApi } from "@/api/v1";
 import { getDesktopRuntimeInfo } from "@/utils/desktopRuntime";
-import ProviderModelMenu from "@/components/chat/ProviderModelMenu.vue";
+import { SIDEBAR_RAIL_BREAKPOINT } from "@/utils/sidebarLayout";
 
 enableKatex();
 enableMermaid();
@@ -31,7 +31,7 @@ const commonStore = useCommonStore();
 const authStore = useAuthStore();
 const chatHeader = useChatHeaderStore();
 const theme = useTheme();
-const { lgAndUp } = useDisplay();
+const { width: viewportWidth } = useDisplay();
 const { t } = useI18n();
 const { tm } = useModuleI18n("features/chat");
 const route = useRoute();
@@ -133,27 +133,18 @@ const isDarkTheme = computed(
 );
 const chatHeaderStyle = computed(() => {
   if (!isChatPath.value) return undefined;
-  const sidebarWidth = lgAndUp.value
-    ? customizer.chatSidebarCollapsed
+  const sidebarWidth =
+    customizer.chatSidebarCollapsed ||
+    viewportWidth.value < SIDEBAR_RAIL_BREAKPOINT
       ? 56
-      : 280
-    : 0;
+      : 245;
   return {
     left: `${sidebarWidth}px`,
     width: `calc(100% - ${sidebarWidth}px)`,
+    // The macOS header spans the whole window, so it pads its content instead.
+    "--astrbot-chat-sidebar-width": `${sidebarWidth}px`,
   };
 });
-const chatHeaderSubtitleText = computed(() => {
-  const title = chatHeader.title.trim();
-  const subtitle = chatHeader.subtitle.trim();
-  if (title && subtitle) return `${subtitle}/${title}`;
-  return title || subtitle;
-});
-
-function toggleChatSidebarFromHeader() {
-  customizer.TOGGLE_CHAT_SIDEBAR();
-}
-
 const getAppUpdaterBridge = (): AstrBotAppUpdaterBridge | null => {
   if (typeof window === "undefined") {
     return null;
@@ -525,9 +516,10 @@ function checkUpdate() {
   updatesApi
     .check()
     .then((res) => {
-      hasNewVersion.value = res.data.data.has_new_version;
+      const backendHasNewVersion = !isDesktopReleaseMode.value && res.data.data.has_new_version;
+      hasNewVersion.value = backendHasNewVersion;
 
-      if (res.data.data.has_new_version) {
+      if (backendHasNewVersion) {
         releaseMessage.value = res.data.message || "";
         updateStatus.value = t("core.header.version.hasNewVersion");
       } else {
@@ -902,14 +894,6 @@ function openReleaseNotesDialog(body: string, tag: string) {
   releaseNotesDialog.value = true;
 }
 
-function handleLogoClick() {
-  if (isChatPath.value) {
-    aboutDialog.value = true;
-  } else {
-    router.push("/about");
-  }
-}
-
 getVersion();
 checkUpdate();
 initPasswordWarningFromStorage();
@@ -1025,14 +1009,6 @@ function switchMode() {
   mainMenuOpen.value = false;
 }
 
-// Merry Christmas! 🎄
-const isChristmas = computed(() => {
-  const today = new Date();
-  const month = today.getMonth() + 1; // getMonth() 返回 0-11
-  const day = today.getDate();
-  return month === 12 && day === 25;
-});
-
 // 语言切换相关
 const { languageOptions, currentLanguage, switchLanguage, locale } =
   useLanguageSwitcher();
@@ -1055,13 +1031,21 @@ onMounted(async () => {
   if (isDesktopReleaseMode.value) {
     dashboardHasNewVersion.value = false;
   }
+
+  // The toolbar band doubles as the window drag region on desktop (no native title bar).
+  // Interactive children stay clickable because the handler only fires when the hit
+  // target itself carries the attribute.
+  document
+    .querySelector(".top-header .v-toolbar__content")
+    ?.setAttribute("data-tauri-drag-region", "");
 });
 </script>
 
 <template>
   <v-app-bar
     elevation="0"
-    height="50"
+    height="40"
+    data-tauri-drag-region
     class="top-header"
     :class="{
       'chat-mode-header': isChatPath,
@@ -1070,77 +1054,6 @@ onMounted(async () => {
     :absolute="isChatPath"
     :style="chatHeaderStyle"
   >
-    <!-- 桌面端 menu 按钮 - 仅在 bot 模式下显示 -->
-    <v-btn
-      v-if="!isChatPath"
-      style="margin-left: 16px"
-      class="hidden-md-and-down"
-      icon
-      rounded="sm"
-      variant="flat"
-      @click.stop="customizer.SET_MINI_SIDEBAR(!customizer.mini_sidebar)"
-    >
-      <v-icon>mdi-menu</v-icon>
-    </v-btn>
-
-    <!-- 移动端 menu 按钮 -->
-    <v-btn
-      v-if="!isChatPath"
-      class="hidden-lg-and-up ms-3"
-      icon
-      rounded="sm"
-      variant="flat"
-      @click.stop="customizer.SET_SIDEBAR_DRAWER"
-    >
-      <v-icon>mdi-menu</v-icon>
-    </v-btn>
-
-    <div
-      v-if="!isChatPath"
-      class="logo-container"
-      :class="{
-        'mobile-logo': $vuetify.display.xs,
-      }"
-      @click="handleLogoClick"
-    >
-      <span class="logo-text Outfit"
-        >Astr<span class="logo-text bot-text-wrapper"
-          >Bot
-          <img
-            v-if="isChristmas"
-            src="@/assets/images/xmas-hat.png"
-            alt="Christmas hat"
-            class="xmas-hat"
-          /> </span
-      ></span>
-      <span class="version-text hidden-xs">{{ botCurrVersion }}</span>
-    </div>
-
-    <!-- Keep the chat drawer accessible whenever it is not permanent. -->
-    <v-btn
-      v-if="isChatPath && !lgAndUp"
-      class="chat-mobile-sidebar-toggle"
-      icon
-      size="small"
-      rounded="lg"
-      variant="text"
-      @click.stop="toggleChatSidebarFromHeader"
-    >
-      <v-icon size="20">
-        {{ customizer.chatSidebarOpen ? "mdi-chevron-left" : "mdi-chevron-right" }}
-      </v-icon>
-    </v-btn>
-
-    <div
-      v-if="isChatPath"
-      class="chat-header-context"
-    >
-      <ProviderModelMenu variant="header" />
-      <div v-if="chatHeaderSubtitleText" class="chat-header-subtitle">
-        {{ chatHeaderSubtitleText }}
-      </div>
-    </div>
-
     <v-spacer />
 
     <!-- 版本提示信息 - 在手机上隐藏 -->
@@ -1184,10 +1097,13 @@ onMounted(async () => {
         variant="text"
         size="small"
         rounded="sm"
+        :ripple="false"
         @click="switchMode"
       >
         <v-icon start>{{ nextMode === "bot" ? "mdi-robot" : "mdi-chat" }}</v-icon>
-        {{ nextMode === "bot" ? "Bot" : "Chat" }}
+        <span class="mode-switch-label">{{
+          nextMode === "bot" ? t("core.navigation.botMode") : t("core.navigation.chat")
+        }}</span>
       </v-btn>
 
       <!-- 功能菜单 -->
@@ -1204,8 +1120,10 @@ onMounted(async () => {
             :variant="isChatPath ? 'text' : 'flat'"
             rounded="sm"
             icon
+            :ripple="false"
           >
             <v-icon>mdi-dots-vertical</v-icon>
+            <span class="header-toolbar-label">{{ t("core.navigation.options") }}</span>
           </v-btn>
         </template>
 
@@ -1226,7 +1144,11 @@ onMounted(async () => {
               <v-icon start>{{
                 nextMode === "bot" ? "mdi-robot" : "mdi-chat"
               }}</v-icon>
-              {{ nextMode === "bot" ? "Bot" : "Chat" }}
+              {{
+                nextMode === "bot"
+                  ? t("core.navigation.botMode")
+                  : t("core.navigation.chat")
+              }}
             </v-btn>
           </div>
           <v-divider class="my-1" />
@@ -2216,49 +2138,6 @@ onMounted(async () => {
   color: rgb(var(--v-theme-on-surface));
 }
 
-/* 响应式布局样式 */
-.logo-container {
-  margin-left: 10px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-}
-
-.mobile-logo {
-  margin-left: 8px;
-  gap: 4px;
-}
-
-.logo-text {
-  font-size: 24px;
-  font-weight: 1000;
-}
-
-.logo-text-light {
-  font-weight: normal;
-}
-
-.bot-text-wrapper {
-  position: relative;
-  display: inline-block;
-}
-
-.xmas-hat {
-  position: absolute;
-  top: -3px;
-  right: -14px;
-  width: 24px;
-  height: 24px;
-  z-index: 1;
-}
-
-.version-text {
-  font-size: 12px;
-  color: gray;
-  margin-left: 4px;
-}
-
 .action-btn {
   margin-right: 6px;
 }
@@ -2499,10 +2378,6 @@ onMounted(async () => {
 
 /* 移动端样式优化 */
 @media (max-width: 600px) {
-  .logo-text {
-    font-size: 20px;
-  }
-
   .action-btn {
     margin-right: 4px;
     min-width: 32px !important;
@@ -2556,4 +2431,75 @@ onMounted(async () => {
     flex-direction: column;
   }
 }
+
+/* macOS desktop: the header doubles as the window toolbar, so its actions move to
+   the right of the traffic lights and follow the provider tab styling.
+   This style block is NOT scoped, so plain selectors are already global here. */
+.top-header {
+  user-select: none;
+}
+
+html[data-astrbot-desktop-platform='macos'] {
+  /* Keep in sync with the app bar height above. */
+  --astrbot-toolbar-height: 40px;
+}
+
+html[data-astrbot-desktop-platform='macos'] .top-header,
+html[data-astrbot-desktop-platform='macos'] .top-header.chat-mode-header,
+html[data-astrbot-desktop-platform='macos'] .top-header.chat-mode-header.chat-mode-header--dark {
+  background: var(--astrbot-vibrancy-tint, transparent) !important;
+  border-bottom: 0 !important;
+  box-shadow: none !important;
+}
+
+/* Keep the toolbar in the normal flow so the content area sits below it instead of
+   scrolling underneath a floating bar. */
+html[data-astrbot-desktop-platform='macos'] .top-header {
+  position: relative !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  width: 100% !important;
+}
+
+html[data-astrbot-desktop-platform='macos'] .top-header .v-toolbar__content {
+  padding-inline-end: 16px !important;
+}
+
+/* Keep the chat context above the content area instead of the whole window. */
+html[data-astrbot-desktop-platform='macos'] .top-header.chat-mode-header .v-toolbar__content {
+  padding-inline-start: var(--astrbot-chat-sidebar-width, 245px) !important;
+}
+
+.header-toolbar-label {
+  display: none;
+}
+
+html[data-astrbot-desktop-platform='macos'] .header-toolbar-label {
+  display: inline;
+  margin-inline-start: 6px;
+}
+
+html[data-astrbot-desktop-platform='macos'] .top-header .header-actions .v-btn {
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 8px;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: rgba(var(--v-theme-on-surface), 0.58);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+html[data-astrbot-desktop-platform='macos'] .top-header .header-actions .v-btn .v-btn__overlay {
+  opacity: 0 !important;
+}
+
+/* Hover keeps a text-only affordance: no background, just a stronger label color. */
+html[data-astrbot-desktop-platform='macos'] .top-header .header-actions .v-btn:hover {
+  color: rgba(var(--v-theme-on-surface), 0.9);
+}
+
 </style>
