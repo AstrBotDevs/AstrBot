@@ -51,3 +51,34 @@ def register_provider_adapter(
         return cls
 
     return decorator
+
+
+def unregister_provider_adapters_by_module(module_path_prefix: str) -> list[str]:
+    """Unregister provider adapters declared by one plugin module tree.
+
+    Args:
+        module_path_prefix: Complete plugin module prefix to unregister.
+
+    Returns:
+        Adapter type names removed from the registries.
+    """
+    to_remove = []
+    for metadata in provider_registry:
+        module_path = getattr(metadata.cls_type, "__module__", None)
+        if module_path and (
+            module_path == module_path_prefix
+            or module_path.startswith(f"{module_path_prefix}.")
+        ):
+            to_remove.append(metadata)
+
+    for metadata in to_remove:
+        provider_registry.remove(metadata)
+        if provider_cls_map.get(metadata.type) is metadata:
+            provider_cls_map.pop(metadata.type, None)
+        logger.debug(
+            "Model provider unregistered: %s (from module %s)",
+            metadata.type,
+            getattr(metadata.cls_type, "__module__", None),
+        )
+
+    return [metadata.type for metadata in to_remove]
