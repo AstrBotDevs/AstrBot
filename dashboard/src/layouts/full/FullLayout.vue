@@ -227,6 +227,12 @@ onMounted(() => {
   border-top-left-radius: 12px;
 }
 
+/* Off macOS the card also carries the hairline under the toolbar, so the line
+   follows the rounded corner instead of cutting across the notch. */
+:global(html:not([data-astrbot-desktop-platform='macos']) .page-wrapper) {
+  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+}
+
 /* Normal pages grow with their content so the main area has something to scroll. */
 :global(.page-wrapper:not(.viewport-locked-container):not(.chat-mode-container):not(.fullscreen-container)) {
   height: auto !important;
@@ -251,6 +257,16 @@ onMounted(() => {
 
 :global(html[data-astrbot-desktop-platform='macos'] .v-application.v-theme--PurpleThemeDark) {
   --astrbot-vibrancy-tint: rgba(0, 0, 0, 0.3);
+}
+
+/* Off macOS the sidebar column is opaque; extend its color behind the content
+   card's rounded corner so the notch does not contrast with the sidebar. */
+:global(html:not([data-astrbot-desktop-platform='macos']) .v-main) {
+  background-image: linear-gradient(
+    to right,
+    rgb(var(--v-theme-surface)) 0 calc(var(--v-layout-left) + 12px),
+    transparent calc(var(--v-layout-left) + 12px) 100%
+  ) !important;
 }
 
 :global(html[data-astrbot-desktop-platform='macos']),

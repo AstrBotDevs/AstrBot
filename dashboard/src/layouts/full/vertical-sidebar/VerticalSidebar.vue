@@ -161,6 +161,7 @@ function toggleSidebar() {
           icon
           rounded="sm"
           variant="text"
+          :ripple="false"
           :aria-label="t('core.navigation.collapseSidebar')"
           @click.stop="toggleSidebar"
         >
@@ -210,8 +211,18 @@ function toggleSidebar() {
 /* The header draws across the whole width, above the full-height sidebar. */
 :global(.leftSidebar .sidebar-container) {
   /* Seat the brand's top edge at the content area's top edge, fully below the toolbar. */
-  padding-top: calc(var(--astrbot-toolbar-height, 40px) - 14px);
+  padding-top: calc(var(--astrbot-toolbar-height, 40px) - 10px);
   box-sizing: border-box;
+}
+
+/* Off macOS the sidebar owns the top-left corner, so the brand sits in the toolbar
+   band itself instead of clearing it. */
+:global(html:not([data-astrbot-desktop-platform='macos']) .leftSidebar .sidebar-container) {
+  padding-top: 4px;
+}
+
+:global(html:not([data-astrbot-desktop-platform='macos']) .leftSidebar .dashboard-sidebar-brand) {
+  min-height: var(--astrbot-toolbar-height, 40px);
 }
 
 /* On macOS the sidebar stays transparent; the shared tint is painted behind it. */
@@ -272,12 +283,18 @@ function toggleSidebar() {
   width: 36px;
   height: 36px;
   min-width: 36px;
+  background: transparent !important;
+  box-shadow: none !important;
   color: rgba(var(--v-theme-on-surface), 0.56);
 }
 
+.dashboard-sidebar-brand-toggle :deep(.v-btn__overlay) {
+  opacity: 0 !important;
+}
+
 .dashboard-sidebar-brand-toggle:hover {
-  background: rgba(var(--v-theme-on-surface), 0.06);
-  color: rgb(var(--v-theme-on-surface));
+  background: transparent !important;
+  color: rgba(var(--v-theme-on-surface), 0.9);
 }
 
 .dashboard-sidebar-rail-btn {
@@ -434,6 +451,18 @@ function toggleSidebar() {
   grid-template-areas: "prepend" !important;
   grid-template-columns: 1fr !important;
   place-items: center;
+  box-shadow: none !important;
+}
+
+/* Keep the rail flat on hover: no shadow, and hovering the active item must not
+   stack an extra primary overlay that reads as a glow. */
+.leftSidebar.v-navigation-drawer--rail :deep(.dashboard-nav-item:hover),
+.leftSidebar.v-navigation-drawer--rail :deep(.dashboard-nav-item.v-list-item--active:hover) {
+  box-shadow: none !important;
+}
+
+.leftSidebar.v-navigation-drawer--rail :deep(.dashboard-nav-item.v-list-item--active .v-list-item__overlay) {
+  opacity: 0 !important;
 }
 
 .leftSidebar.v-navigation-drawer--rail :deep(.dashboard-nav-item .v-list-item__prepend) {

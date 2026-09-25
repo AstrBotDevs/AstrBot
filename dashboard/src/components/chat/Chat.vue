@@ -51,6 +51,7 @@
             icon
             rounded="sm"
             variant="text"
+            :ripple="false"
             @click.stop="toggleChatSidebar"
           >
             <PanelLeft :size="20" class="sidebar-panel-toggle-icon" />
@@ -1897,13 +1898,32 @@ async function stopCurrentSession() {
 /* The header draws across the whole width, above the full-height chat sidebar. */
 :global(.chat-sidebar .v-navigation-drawer__content) {
   /* Seat the brand's top edge at the content area's top edge, fully below the toolbar. */
-  padding-top: calc(var(--astrbot-toolbar-height, 40px) - 14px);
+  padding-top: calc(var(--astrbot-toolbar-height, 40px) - 10px);
   box-sizing: border-box;
+}
+
+/* Off macOS the chat sidebar owns the top-left corner, so the brand sits in the
+   toolbar band itself instead of clearing it. */
+:global(html:not([data-astrbot-desktop-platform='macos']) .chat-sidebar .v-navigation-drawer__content) {
+  padding-top: 4px;
+}
+
+:global(html:not([data-astrbot-desktop-platform='macos']) .chat-sidebar .chat-sidebar-brand) {
+  min-height: var(--astrbot-toolbar-height, 40px);
 }
 
 /* On macOS the chat sidebar stays transparent; the shared tint is painted behind it. */
 :global(html[data-astrbot-desktop-platform='macos'] .chat-sidebar) {
   background: transparent !important;
+}
+
+/* The dark chat sidebar uses its own palette; match the corner notch to it. */
+:global(html:not([data-astrbot-desktop-platform='macos']) .v-application.v-theme--PurpleThemeDark .v-main.chat-main) {
+  background-image: linear-gradient(
+    to right,
+    #242424 0 calc(var(--v-layout-left) + 12px),
+    transparent calc(var(--v-layout-left) + 12px) 100%
+  ) !important;
 }
 
 /* The chat header is in-flow, so the old absolute-header top offset is dead space;
@@ -1982,7 +2002,13 @@ async function stopCurrentSession() {
   width: 36px;
   height: 36px;
   min-width: 36px;
+  background: transparent !important;
+  box-shadow: none !important;
   color: var(--chat-muted);
+}
+
+.chat-sidebar-brand-toggle :deep(.v-btn__overlay) {
+  opacity: 0 !important;
 }
 
 .chat-sidebar-rail-btn {
@@ -1997,8 +2023,8 @@ async function stopCurrentSession() {
 }
 
 .chat-sidebar-brand-toggle:hover {
-  background: var(--chat-session-active-bg);
-  color: rgb(var(--v-theme-on-surface));
+  background: transparent !important;
+  color: rgba(var(--v-theme-on-surface), 0.9);
 }
 
 .chat-sidebar-rail-icon-stack {
