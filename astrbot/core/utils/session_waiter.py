@@ -97,8 +97,20 @@ class SessionFilter:
 
 class DefaultSessionFilter(SessionFilter):
     def filter(self, event: AstrMessageEvent) -> str:
-        """默认实现，返回统一消息来源字符串作为会话标识符"""
-        return event.unified_msg_origin
+        """默认实现，返回「消息来源 + 发送人」作为会话标识符。
+
+        两部分都是必需的: 只用 ``unified_msg_origin`` 会让群内任意成员的下一条
+        消息命中别人注册的等待器(等待器会截获并重新投递该消息); 只用
+        ``sender_id`` 又会让同一用户在其他群聊/私聊中的消息命中此等待器。
+        需要整群共享一个会话时，请自定义 :class:`SessionFilter`。
+
+        Args:
+            event: 待判定的消息事件。
+
+        Returns:
+            会话标识符，格式为 ``{unified_msg_origin}!{sender_id}``。
+        """
+        return f"{event.unified_msg_origin}!{event.get_sender_id()}"
 
 
 class SessionWaiter:
