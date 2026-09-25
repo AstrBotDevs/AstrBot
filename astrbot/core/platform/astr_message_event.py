@@ -36,6 +36,9 @@ from .platform_metadata import PlatformMetadata
 # Event extra key for the pre-ack reaction created by PreProcessStage.
 # The value is a ``(reaction_id, emoji)`` tuple consumed by PipelineScheduler.
 PRE_ACK_REACTION = "_pre_ack_reaction"
+# Event extra key used by platform implementations to report a successful
+# reaction creation when the platform does not return a reaction ID.
+LAST_REACTION_CREATED = "_last_reaction_created"
 
 
 class AstrMessageEvent(abc.ABC):

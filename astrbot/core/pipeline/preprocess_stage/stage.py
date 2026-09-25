@@ -8,6 +8,7 @@ from pathlib import Path
 from astrbot.core import logger
 from astrbot.core.message.components import Image, Plain, Record, Reply
 from astrbot.core.platform.astr_message_event import (
+    LAST_REACTION_CREATED,
     PRE_ACK_REACTION,
     AstrMessageEvent,
 )
@@ -127,7 +128,10 @@ class PreProcessStage(Stage):
                 if (
                     platform == "lark"
                     and cfg.get("auto_remove", True) is True
-                    and reaction_id is not None
+                    and (
+                        reaction_id is not None
+                        or event.get_extra(LAST_REACTION_CREATED, False) is True
+                    )
                 ):
                     event.set_extra(PRE_ACK_REACTION, (reaction_id, emoji))
             except Exception as e:

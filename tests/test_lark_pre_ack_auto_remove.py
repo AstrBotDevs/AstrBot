@@ -9,6 +9,7 @@ import pytest
 from astrbot.core.config.default import DEFAULT_CONFIG
 from astrbot.core.pipeline.preprocess_stage.stage import PreProcessStage
 from astrbot.core.platform.astr_message_event import (
+    LAST_REACTION_CREATED,
     PRE_ACK_REACTION,
     AstrMessageEvent,
 )
@@ -91,9 +92,17 @@ def _response(success: bool, data=None):
 class _FakeEvent:
     """Minimal event double for PreProcessStage reaction tracking."""
 
-    def __init__(self, reaction_id: str | None = "reaction-1", platform: str = "lark"):
+    def __init__(
+        self,
+        reaction_id: str | None = "reaction-1",
+        platform: str = "lark",
+        reaction_created: bool | None = None,
+    ):
         self._reaction_id = reaction_id
         self._platform = platform
+        self._reaction_created = (
+            reaction_created if reaction_created is not None else reaction_id is not None
+        )
         self._extras: dict = {}
         self.is_at_or_wake_command = True
         self.message_obj = SimpleNamespace(message=[], message_str="")
@@ -116,6 +125,7 @@ class _FakeEvent:
 
     async def react(self, emoji: str):
         self.react_calls.append(emoji)
+        self.set_extra(LAST_REACTION_CREATED, self._reaction_created)
         return self._reaction_id
 
 
@@ -193,6 +203,18 @@ async def test_lark_react_returns_none_on_failure():
     reaction_id = await event.react("Typing")
 
     assert reaction_id is None
+    assert event.get_extra(LAST_REACTION_CREATED) is False
+
+
+@pytest.mark.asyncio
+async def test_lark_react_marks_success_without_reaction_id():
+    reaction_api = SimpleNamespace(acreate=AsyncMock(return_value=_response(True)))
+    event = _lark_event(_lark_bot(reaction_api))
+
+    reaction_id = await event.react("Typing")
+
+    assert reaction_id is None
+    assert event.get_extra(LAST_REACTION_CREATED) is True
 
 
 @pytest.mark.asyncio
@@ -396,6 +418,17 @@ async def test_preprocess_does_not_track_reaction_when_creation_returns_no_id():
     await _run_preprocess(event, {"enable": True, "emojis": ["Typing"]})
 
     assert event.get_extra(PRE_ACK_REACTION, None) is None
+
+
+@pytest.mark.asyncio
+async def test_preprocess_tracks_successful_reaction_without_id_for_removal():
+    event = _FakeEvent(reaction_id=None, reaction_created=True)
+    await _run_preprocess(
+        event,
+        {"enable": True, "emojis": ["Typing"], "auto_remove": True},
+    )
+
+    assert event.get_extra(PRE_ACK_REACTION) == (None, "Typing")
 
 
 @pytest.mark.asyncio

@@ -33,6 +33,7 @@ from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import At, File, Json, Plain, Record, Video
 from astrbot.api.message_components import Image as AstrBotImage
 from astrbot.api.platform import Group, MessageMember
+from astrbot.core.platform.astr_message_event import LAST_REACTION_CREATED
 from astrbot.core.utils.media_utils import (
     MediaResolver,
     convert_audio_to_opus,
@@ -978,6 +979,7 @@ class LarkMessageEvent(AstrMessageEvent):
         Returns:
             Reaction ID on success, otherwise None.
         """
+        self.set_extra(LAST_REACTION_CREATED, False)
         if self.bot.im is None:
             logger.error(
                 "[Lark] API Client im module is not initialized; cannot add reaction"
@@ -1001,6 +1003,7 @@ class LarkMessageEvent(AstrMessageEvent):
                 f"Failed to create Lark message reaction({response.code}): {response.msg}"
             )
             return None
+        self.set_extra(LAST_REACTION_CREATED, True)
         return response.data.reaction_id if response.data else None
 
     async def remove_reaction(
