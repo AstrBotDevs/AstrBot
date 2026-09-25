@@ -143,7 +143,12 @@ class SessionWaiter:
 
     def _cleanup(self, error: Exception | None = None) -> None:
         """清理会话"""
-        USER_SESSIONS.pop(self.session_id, None)
+        # register_wait() lets a newer waiter replace this one under the same
+        # session_id. Only drop the registry entry if it still points at this
+        # waiter, otherwise the newer waiter becomes unreachable for trigger()
+        # and its future can only time out.
+        if USER_SESSIONS.get(self.session_id) is self:
+            USER_SESSIONS.pop(self.session_id, None)
         try:
             FILTERS.remove(self.session_filter)
         except ValueError:
