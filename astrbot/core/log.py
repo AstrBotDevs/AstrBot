@@ -225,10 +225,15 @@ class LogManager:
             return
 
         _loguru.remove()
+        # NOTE(n100): enqueue=True keeps console logging OFF the event loop
+        # thread. Without it a blocking console (e.g. Windows QuickEdit with
+        # text selected) stalls the whole asyncio loop for many seconds, which
+        # kills the heartbeat of long-lived websocket clients.
         cls._console_sink_id = _loguru.add(
             sys.stdout,
             level="DEBUG",
             colorize=True,
+            enqueue=True,
             filter=lambda record: not record["extra"].get("is_trace", False),
             format=(
                 "<green>[{time:HH:mm:ss.SSS}]</green> {extra[plugin_tag]} "
@@ -509,6 +514,7 @@ class LogManager:
                         sys.stdout,
                         level=configured_level,
                         colorize=True,
+                        enqueue=True,  # NOTE(n100): non-blocking, see above
                         filter=lambda record: (
                             not record["extra"].get("is_trace", False)
                         ),
