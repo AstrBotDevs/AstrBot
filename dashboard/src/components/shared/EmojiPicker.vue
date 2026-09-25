@@ -13,7 +13,6 @@
         :aria-label="tm('emoji.title')"
       >
         <span aria-hidden="true">{{ modelValue || '📚' }}</span>
-        <span class="emoji-picker-chevron" aria-hidden="true">⌄</span>
       </button>
     </template>
 
@@ -118,12 +117,6 @@ function selectEmoji(emoji: string) {
 
 .emoji-picker-trigger:hover {
   background: rgba(var(--v-theme-on-surface), 0.06);
-}
-
-.emoji-picker-chevron {
-  margin-left: 4px;
-  font-size: 18px;
-  line-height: 1;
 }
 
 .emoji-picker-menu {

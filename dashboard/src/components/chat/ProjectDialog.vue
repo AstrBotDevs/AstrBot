@@ -17,29 +17,6 @@
                         @keyup.enter="handleSave"
                     />
                 </div>
-                <div class="more-settings">
-                    <span
-                        class="more-settings-toggle"
-                        role="button"
-                        tabindex="0"
-                        :aria-expanded="moreSettingsOpen"
-                        @click="moreSettingsOpen = !moreSettingsOpen"
-                        @keydown.enter.prevent="moreSettingsOpen = !moreSettingsOpen"
-                    >
-                        <span>{{ tm('project.moreSettings') }}</span>
-                        <span class="more-settings-chevron" :class="{ 'is-open': moreSettingsOpen }">⌄</span>
-                    </span>
-                    <div v-if="moreSettingsOpen" class="more-settings-content">
-                        <textarea
-                            v-model="form.description"
-                            class="project-input project-description-input"
-                            :placeholder="tm('project.description')"
-                            :aria-label="tm('project.description')"
-                            rows="3"
-                        />
-                    </div>
-                </div>
-                <v-divider class="my-4" />
                 <v-select v-model="form.workspace_type" :items="workspaceTypeItems" item-title="label" item-value="value"
                     :label="tm('project.workspace.type')" variant="outlined" hide-details class="mb-3" />
                 <div v-if="form.workspace_type === 'custom'" class="workspace-path-row">
@@ -61,6 +38,33 @@
                         <v-icon size="20">mdi-folder-open-outline</v-icon>
                         <span>{{ tm('project.workspace.selectPath') }}</span>
                     </button>
+                </div>
+                <div class="more-settings">
+                    <span
+                        class="more-settings-toggle"
+                        role="button"
+                        tabindex="0"
+                        :aria-expanded="moreSettingsOpen"
+                        @click="moreSettingsOpen = !moreSettingsOpen"
+                        @keydown.enter.prevent="moreSettingsOpen = !moreSettingsOpen"
+                    >
+                        <span>{{ tm('project.moreSettings') }}</span>
+                        <v-icon
+                            size="20"
+                            class="more-settings-chevron"
+                            :class="{ 'is-open': moreSettingsOpen }"
+                            aria-hidden="true"
+                        >mdi-chevron-down</v-icon>
+                    </span>
+                    <div v-if="moreSettingsOpen" class="more-settings-content">
+                        <textarea
+                            v-model="form.description"
+                            class="project-input project-description-input"
+                            :placeholder="tm('project.description')"
+                            :aria-label="tm('project.description')"
+                            rows="3"
+                        />
+                    </div>
                 </div>
                 <v-alert
                     v-if="props.errorMessage"
