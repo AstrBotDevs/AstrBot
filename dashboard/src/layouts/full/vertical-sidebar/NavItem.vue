@@ -39,7 +39,7 @@ const isVuetifyIcon = computed(() => typeof props.item?.icon === 'string');
 <template>
   <v-list-group v-if="item.children" :value="item.title" :class="{ 'rail-group': rail }">
     <template v-slot:activator="{ props: groupProps }">
-      <v-tooltip v-if="rail" location="right" :text="itemTitle" open-delay="180">
+      <v-tooltip v-if="rail" location="right" :text="itemTitle" :open-delay="0">
         <template v-slot:activator="{ props: tooltipProps }">
           <v-list-item v-bind="{ ...groupProps, ...tooltipProps }" rounded class="dashboard-nav-item" color="secondary"
             :style="{ '--indent-padding': '0px' }" :aria-label="itemTitle">
@@ -71,7 +71,7 @@ const isVuetifyIcon = computed(() => typeof props.item?.icon === 'string');
     </template>
   </v-list-group>
 
-  <v-tooltip v-else-if="rail" location="right" :text="itemTitle" open-delay="180">
+  <v-tooltip v-else-if="rail" location="right" :text="itemTitle" :open-delay="0">
     <template v-slot:activator="{ props: tooltipProps }">
       <v-list-item v-bind="tooltipProps" :to="item.type === 'external' ? '' : item.to"
         :href="item.type === 'external' ? item.to : ''" :active="isItemActive" rounded class="dashboard-nav-item"
