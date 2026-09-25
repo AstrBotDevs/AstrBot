@@ -350,6 +350,59 @@ async def test_upload_document_cleans_up_on_storage_failure(
 
 
 @pytest.mark.asyncio
+async def test_storage_failure_redacts_secrets_from_details(
+    tmp_path: Path,
+    stub_provider_manager_module,
+) -> None:
+    """The cause is logged, so it must not carry the provider's API key."""
+    KBHelper = _import_kb_helper()
+
+    helper = KBHelper.__new__(KBHelper)
+    helper.kb = KnowledgeBase(
+        kb_name="Test KB",
+        description="",
+        embedding_provider_id="emb",
+    )
+    helper.kb_db = MagicMock()
+    helper.vec_db = AsyncMock()
+    helper.kb_medias_dir = tmp_path / "medias"
+    helper.kb_medias_dir.mkdir()
+    helper.chunker = AsyncMock()
+    helper.chunker.chunk = AsyncMock(return_value=["hello world"])
+    helper._save_media = AsyncMock(return_value=None)
+    helper.vec_db.insert_batch.side_effect = RuntimeError(
+        "401 Incorrect API key provided: sk-proj-abcdefghijklmnopqrstuvwxyz012345"
+    )
+    helper.vec_db.delete_documents = AsyncMock()
+    helper.kb_db.get_db = _successful_get_db(_session_with_begin())
+
+    parse_result = MagicMock()
+    parse_result.text = "hello world"
+    parse_result.media = []
+
+    with (
+        patch(
+            "astrbot.core.knowledge_base.kb_helper.select_parser",
+            new=AsyncMock(
+                return_value=MagicMock(parse=AsyncMock(return_value=parse_result)),
+            ),
+        ),
+        patch.object(helper, "_ensure_vec_db", new=AsyncMock()),
+        pytest.raises(KnowledgeBaseUploadError) as exc_info,
+    ):
+        await helper.upload_document(
+            file_name="demo.txt",
+            file_content=b"hello world",
+            file_type="txt",
+        )
+
+    assert exc_info.value.stage == "storage"
+    cause = exc_info.value.details["cause"]
+    assert "sk-proj-abcdefghijklmnopqrstuvwxyz012345" not in cause
+    assert "[REDACTED]" in cause
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("file_name", "file_type"),
     [

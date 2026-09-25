@@ -2437,6 +2437,11 @@ CONFIG_METADATA_2 = {
                         "options": ["auto", "always", "never"],
                         "hint": "控制是否在 OpenAI 兼容 Embedding 请求中发送 dimensions 参数。auto 会仅对官方 OpenAI embedding-3 模型自动发送；第三方兼容 API 如需该参数可改为 always，报错时改为 never。",
                     },
+                    "embedding_max_batch_items": {
+                        "description": "单次请求最大文本数",
+                        "type": "int",
+                        "hint": "留空则自动判断。当嵌入服务限制单次请求可携带的文本数量时（如百炼 text-embedding-v3/v4 最多 10 条），填写该上限可避免请求被拒绝；已知上限的服务无需填写。",
+                    },
                     "embedding_model": {
                         "description": "嵌入模型",
                         "type": "string",
