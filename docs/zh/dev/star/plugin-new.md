@@ -159,6 +159,9 @@ AstrBot 采用在运行时注入插件的机制。因此，在调试插件时，
 
 > `requirements.txt` 的完整格式可以参考 [pip 官方文档](https://pip.pypa.io/en/stable/reference/requirements-file-format/)。
 
+> [!NOTE]
+> `requirements.txt` 文件请使用 UTF-8 无 BOM 编码保存，否则 pip 可能无法正确解析依赖包名（例如包名会变成 \ufeffreportlab 导致安装失败）。
+
 ## 开发原则
 
 感谢您为 AstrBot 生态做出贡献，开发插件请遵守以下原则，这也是良好的编程习惯。
