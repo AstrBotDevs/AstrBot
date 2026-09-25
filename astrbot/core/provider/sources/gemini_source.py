@@ -798,77 +798,82 @@ class ProviderGoogleGenAI(Provider):
         accumulated_reasoning = ""
         final_response = None
 
-        async for chunk in result:
-            llm_response = LLMResponse("assistant", is_chunk=True)
+        async with self._conversation_header(conversation_id):
+            async for chunk in result:
+                llm_response = LLMResponse("assistant", is_chunk=True)
 
-            if not chunk.candidates:
-                logger.warning(f"Gemini stream chunk has empty candidates: {chunk}")
-                continue
-            if not chunk.candidates[0].content:
-                logger.warning(f"Gemini stream chunk has empty content: {chunk}")
-                continue
+                if not chunk.candidates:
+                    logger.warning(f"Gemini stream chunk has empty candidates: {chunk}")
+                    continue
+                if not chunk.candidates[0].content:
+                    logger.warning(f"Gemini stream chunk has empty content: {chunk}")
+                    continue
 
-            if chunk.candidates[0].content.parts and any(
-                part.function_call for part in chunk.candidates[0].content.parts
-            ):
-                llm_response = LLMResponse("assistant", is_chunk=False)
-                llm_response.raw_completion = chunk
-                llm_response.result_chain = self._process_content_parts(
-                    chunk.candidates[0],
-                    llm_response,
-                    validate_output=False,
-                )
-                # This response replaces the whole turn in conversation
-                # history, so keep the narration and reasoning that were
-                # already streamed before the tool call. Dropping them made
-                # the user-visible text missing from history.
-                if accumulated_text or accumulated_reasoning:
-                    parts = list(llm_response.result_chain.chain or [])
-                    if accumulated_text:
-                        parts.insert(0, Comp.Plain(accumulated_text))
-                        llm_response.result_chain = MessageChain(chain=parts)
-                    if accumulated_reasoning:
-                        # _process_content_parts already stored the reasoning
-                        # that came with the tool-call chunk itself, so append
-                        # to it instead of overwriting that part.
-                        llm_response.reasoning_content = accumulated_reasoning + (
-                            llm_response.reasoning_content or ""
-                        )
-                llm_response.id = chunk.response_id
-                if chunk.usage_metadata:
-                    llm_response.usage = self._extract_usage(chunk.usage_metadata)
-                yield llm_response
-                return
-
-            _f = False
-
-            # 提取 reasoning content
-            reasoning = self._extract_reasoning_content(chunk.candidates[0])
-            if reasoning:
-                _f = True
-                accumulated_reasoning += reasoning
-                llm_response.reasoning_content = reasoning
-            if chunk.text:
-                _f = True
-                accumulated_text += chunk.text
-                llm_response.result_chain = MessageChain(chain=[Comp.Plain(chunk.text)])
-            if _f:
-                yield llm_response
-
-            if chunk.candidates[0].finish_reason:
-                # Process the final chunk for potential tool calls or other content
-                if chunk.candidates[0].content.parts:
-                    final_response = LLMResponse("assistant", is_chunk=False)
-                    final_response.raw_completion = chunk
-                    final_response.result_chain = self._process_content_parts(
+                if chunk.candidates[0].content.parts and any(
+                    part.function_call for part in chunk.candidates[0].content.parts
+                ):
+                    llm_response = LLMResponse("assistant", is_chunk=False)
+                    llm_response.raw_completion = chunk
+                    llm_response.result_chain = self._process_content_parts(
                         chunk.candidates[0],
-                        final_response,
+                        llm_response,
                         validate_output=False,
                     )
-                    final_response.id = chunk.response_id
+                    # This response replaces the whole turn in conversation
+                    # history, so keep the narration and reasoning that were
+                    # already streamed before the tool call. Dropping them made
+                    # the user-visible text missing from history.
+                    if accumulated_text or accumulated_reasoning:
+                        parts = list(llm_response.result_chain.chain or [])
+                        if accumulated_text:
+                            parts.insert(0, Comp.Plain(accumulated_text))
+                            llm_response.result_chain = MessageChain(chain=parts)
+                        if accumulated_reasoning:
+                            # _process_content_parts already stored the reasoning
+                            # that came with the tool-call chunk itself, so append
+                            # to it instead of overwriting that part.
+                            llm_response.reasoning_content = accumulated_reasoning + (
+                                llm_response.reasoning_content or ""
+                            )
+                    llm_response.id = chunk.response_id
                     if chunk.usage_metadata:
-                        final_response.usage = self._extract_usage(chunk.usage_metadata)
-                break
+                        llm_response.usage = self._extract_usage(chunk.usage_metadata)
+                    yield llm_response
+                    return
+
+                _f = False
+
+                # 提取 reasoning content
+                reasoning = self._extract_reasoning_content(chunk.candidates[0])
+                if reasoning:
+                    _f = True
+                    accumulated_reasoning += reasoning
+                    llm_response.reasoning_content = reasoning
+                if chunk.text:
+                    _f = True
+                    accumulated_text += chunk.text
+                    llm_response.result_chain = MessageChain(
+                        chain=[Comp.Plain(chunk.text)]
+                    )
+                if _f:
+                    yield llm_response
+
+                if chunk.candidates[0].finish_reason:
+                    # Process the final chunk for potential tool calls or other content
+                    if chunk.candidates[0].content.parts:
+                        final_response = LLMResponse("assistant", is_chunk=False)
+                        final_response.raw_completion = chunk
+                        final_response.result_chain = self._process_content_parts(
+                            chunk.candidates[0],
+                            final_response,
+                            validate_output=False,
+                        )
+                        final_response.id = chunk.response_id
+                        if chunk.usage_metadata:
+                            final_response.usage = self._extract_usage(
+                                chunk.usage_metadata
+                            )
+                    break
 
         # Yield final complete response with accumulated text
         if not final_response:
