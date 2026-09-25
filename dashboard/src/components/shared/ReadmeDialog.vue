@@ -6,6 +6,7 @@ import DOMPurify from "dompurify";
 import { pluginApi, statsApi } from "@/api/v1";
 import { useI18n } from "@/i18n/composables";
 import { copyToClipboard } from "@/utils/clipboard";
+import { resolveRelativeUrls } from "@/utils/markdownUrls.mjs";
 import {
   escapeHtml,
   ensureShikiLanguages,
@@ -243,6 +244,8 @@ async function updateRenderedHtml() {
     const slug = slugifyHeading(heading.textContent, slugCounts);
     if (slug) heading.id = slug;
   });
+
+  resolveRelativeUrls(tempDiv, { repoUrl: props.repoUrl });
 
   tempDiv.querySelectorAll("a").forEach((link) => {
     const href = link.getAttribute("href");
