@@ -273,11 +273,22 @@ class ResultDecorateStage(Stage):
                 )
             )
 
+            # When an agent sub-stage already rolled the TTS dice for a reply
+            # that would otherwise stream ("tts_forced" is set), the roll has
+            # been consumed and the voice conversion below must not be rolled
+            # again. For ordinary non-streaming results the probability
+            # configured in provider_tts_settings applies as usual.
+            tts_trigger_probability = (
+                1.0
+                if event.get_extra("tts_forced", False)
+                else self.tts_trigger_probability
+            )
+
             should_tts = (
                 bool(self.ctx.astrbot_config["provider_tts_settings"]["enable"])
                 and result.is_llm_result()
                 and await SessionServiceManager.should_process_tts_request(event)
-                and random.random() <= self.tts_trigger_probability
+                and random.random() <= tts_trigger_probability
                 and tts_provider
             )
             if should_tts and not tts_provider:
