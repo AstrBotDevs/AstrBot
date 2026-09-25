@@ -844,6 +844,10 @@
       "ws_reverse_port": {
         "description": "Reverse WebSocket Port"
       },
+      "strip_self_mention": {
+        "description": "Strip self-mentions from message text",
+        "hint": "Enabled by default to preserve the existing wake-prefix behavior. Disable to retain the bot mention name and ID in message text so models can identify all addressed bots. This also affects commands matched against message text. Structured mention components are always preserved."
+      },
       "ws_reverse_token": {
         "description": "Reverse WebSocket Token",
         "hint": "Reverse WebSocket token. If not set, token verification is disabled."
