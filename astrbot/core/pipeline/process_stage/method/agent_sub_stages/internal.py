@@ -2,8 +2,10 @@
 
 import asyncio
 import base64
+import re
 from collections.abc import AsyncGenerator
-from dataclasses import replace
+from dataclasses import dataclass, field, replace
+from time import time
 
 from astrbot.core import db_helper, logger
 from astrbot.core.agent.message import (
@@ -32,6 +34,7 @@ from astrbot.core.persona_error_reply import (
 )
 from astrbot.core.pipeline.stage import Stage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.message_type import MessageType
 from astrbot.core.provider.entities import (
     LLMResponse,
     ProviderRequest,
@@ -52,6 +55,167 @@ from ...follow_up import (
     try_capture_follow_up,
     unregister_active_runner,
 )
+
+_INBOUND_MERGE_MIN_INTERVAL_SECONDS = 15.0
+_INBOUND_MERGE_MAX_AGE_SECONDS = 180.0
+_INBOUND_MERGE_MAX_MESSAGES = 20
+_INBOUND_MERGE_MAX_CHARS = 6000
+
+
+@dataclass(frozen=True)
+class _PendingInboundMessage:
+    """One text message waiting for a session-scoped consolidated reply."""
+
+    sequence: int
+    text: str
+    received_at: float
+
+
+@dataclass
+class _InboundMergeState:
+    """Pending inbound messages and the last LLM start for one UMO."""
+
+    next_sequence: int = 0
+    pending: list[_PendingInboundMessage] = field(default_factory=list)
+    last_started_at: float = 0.0
+
+
+@dataclass(frozen=True)
+class _InboundMergeDecision:
+    """Result of the final pre-LLM inbound merge check."""
+
+    action: str
+    wait_seconds: float = 0.0
+    messages: tuple[_PendingInboundMessage, ...] = ()
+
+
+class _InboundReplyMerger:
+    """Coalesce queued private texts without crossing conversation boundaries."""
+
+    def __init__(self) -> None:
+        self._states: dict[str, _InboundMergeState] = {}
+
+    def register(self, event: AstrMessageEvent) -> bool:
+        """Register an eligible private text before it waits for the session lock."""
+        if not self._eligible(event):
+            return False
+        umo = event.unified_msg_origin
+        state = self._states.setdefault(umo, _InboundMergeState())
+        state.next_sequence += 1
+        received_at = self._received_at(event)
+        message = _PendingInboundMessage(
+            sequence=state.next_sequence,
+            text=self._message_text(event),
+            received_at=received_at,
+        )
+        state.pending.append(message)
+        event.set_extra("_inbound_merge_sequence", message.sequence)
+        event.set_extra("_inbound_received_at", received_at)
+        return True
+
+    def decide(
+        self,
+        event: AstrMessageEvent,
+        *,
+        now: float | None = None,
+    ) -> _InboundMergeDecision:
+        """Decide whether this event is latest, stale, waiting, or ready."""
+        sequence = event.get_extra("_inbound_merge_sequence")
+        if not isinstance(sequence, int):
+            return _InboundMergeDecision("ready")
+        state = self._states.get(event.unified_msg_origin)
+        if not state or not state.pending:
+            return _InboundMergeDecision("superseded")
+        if sequence != state.pending[-1].sequence:
+            return _InboundMergeDecision("superseded")
+
+        current = time() if now is None else now
+        newest_age = max(0.0, current - state.pending[-1].received_at)
+        if newest_age > _INBOUND_MERGE_MAX_AGE_SECONDS:
+            messages = tuple(state.pending)
+            state.pending.clear()
+            return _InboundMergeDecision("stale", messages=messages)
+
+        remaining = _INBOUND_MERGE_MIN_INTERVAL_SECONDS - (
+            current - state.last_started_at
+        )
+        if remaining > 0:
+            return _InboundMergeDecision("wait", wait_seconds=remaining)
+
+        messages = tuple(state.pending)
+        state.pending.clear()
+        state.last_started_at = current
+        return _InboundMergeDecision("ready", messages=messages)
+
+    @staticmethod
+    def _eligible(event: AstrMessageEvent) -> bool:
+        if event.get_extra("provider_request") is not None:
+            return False
+        if event.get_message_type() is not MessageType.FRIEND_MESSAGE:
+            return False
+        if str(event.get_platform_name()).casefold() != "aiocqhttp":
+            return False
+        text = (event.get_message_str() or "").strip()
+        if not text or re.match(r"^[!！/／]", text):
+            return False
+        return not any(
+            isinstance(component, (Image, File, Record, Video))
+            for component in event.message_obj.message
+        )
+
+    @staticmethod
+    def _received_at(event: AstrMessageEvent) -> float:
+        value = getattr(event.message_obj, "timestamp", None)
+        try:
+            timestamp = float(value)
+        except (TypeError, ValueError):
+            timestamp = float(getattr(event, "created_at", time()))
+        current = time()
+        if timestamp <= 0 or timestamp > current + 300:
+            return float(getattr(event, "created_at", current))
+        return timestamp
+
+    @staticmethod
+    def _message_text(event: AstrMessageEvent) -> str:
+        text = (event.get_message_str() or "").strip()
+        if any(isinstance(component, Reply) for component in event.message_obj.message):
+            outline = (event.get_message_outline() or "").strip()
+            if outline:
+                return outline
+        return text
+
+
+def _merge_inbound_prompt(messages: tuple[_PendingInboundMessage, ...]) -> str:
+    """Build one bounded prompt from same-session messages in receive order."""
+    if len(messages) <= 1:
+        return messages[0].text if messages else ""
+
+    selected: list[str] = []
+    used_chars = 0
+    omitted = 0
+    for message in reversed(messages):
+        text = message.text.strip()
+        projected = used_chars + len(text)
+        if (
+            len(selected) >= _INBOUND_MERGE_MAX_MESSAGES
+            or projected > _INBOUND_MERGE_MAX_CHARS
+        ):
+            omitted += 1
+            continue
+        selected.append(text)
+        used_chars = projected
+    selected.reverse()
+    header = (
+        f"[同一私聊会话有 {len(messages)} 条积压消息，已按实际接收顺序合并。"
+        "请结合全部内容只回复一次，不要逐条复读。]"
+    )
+    if omitted:
+        header += f"[较早的 {omitted} 条因长度限制已省略。]"
+    body = "\n".join(f"{index}. {text}" for index, text in enumerate(selected, 1))
+    return f"{header}\n{body}"
+
+
+_inbound_reply_merger = _InboundReplyMerger()
 
 
 class InternalAgentSubStage(Stage):
@@ -197,15 +361,91 @@ class InternalAgentSubStage(Stage):
                     )
                     return
 
-            try:
-                typing_requested = True
-                await event.send_typing()
-            except Exception:
-                logger.warning("send_typing failed", exc_info=True)
-            if await call_event_hook(event, EventType.OnWaitingLLMRequestEvent):
+            if event.is_stopped() or event.get_extra("agent_stop_requested"):
+                logger.info(
+                    "Session terminated before LLM request, skipping processing. umo=%s",
+                    event.unified_msg_origin,
+                )
                 return
 
+            inbound_merge_candidate = _inbound_reply_merger._eligible(event)
+            if not inbound_merge_candidate:
+                try:
+                    typing_requested = True
+                    await event.send_typing()
+                except Exception:
+                    logger.warning("send_typing failed", exc_info=True)
+            if await call_event_hook(event, EventType.OnWaitingLLMRequestEvent):
+                return
+            inbound_merge_registered = (
+                _inbound_reply_merger.register(event)
+                if inbound_merge_candidate
+                else False
+            )
+
             async with session_lock_manager.acquire_lock(event.unified_msg_origin):
+                if event.is_stopped() or event.get_extra("agent_stop_requested"):
+                    logger.info(
+                        "Session terminated while waiting for lock, skipping LLM request. umo=%s",
+                        event.unified_msg_origin,
+                    )
+                    return
+                if inbound_merge_registered:
+                    while True:
+                        merge_decision = _inbound_reply_merger.decide(event)
+                        if merge_decision.action == "superseded":
+                            logger.info(
+                                "Newer inbound message superseded queued LLM request. "
+                                "umo=%s",
+                                event.unified_msg_origin,
+                            )
+                            return
+                        if merge_decision.action == "stale":
+                            event.set_extra(
+                                "_inbound_merge",
+                                {
+                                    "status": "stale_dropped",
+                                    "count": len(merge_decision.messages),
+                                },
+                            )
+                            event.stop_event()
+                            logger.warning(
+                                "Dropped stale inbound backlog before LLM request. "
+                                "umo=%s count=%s max_age_seconds=%s",
+                                event.unified_msg_origin,
+                                len(merge_decision.messages),
+                                _INBOUND_MERGE_MAX_AGE_SECONDS,
+                            )
+                            return
+                        if merge_decision.action == "wait":
+                            await asyncio.sleep(merge_decision.wait_seconds)
+                            if event.is_stopped() or event.get_extra(
+                                "agent_stop_requested"
+                            ):
+                                return
+                            continue
+                        messages = merge_decision.messages
+                        if len(messages) > 1:
+                            merged_prompt = _merge_inbound_prompt(messages)
+                            event.message_str = merged_prompt
+                            event.message_obj.message_str = merged_prompt
+                        if messages:
+                            event.set_extra(
+                                "_inbound_merge",
+                                {
+                                    "status": "ready",
+                                    "count": len(messages),
+                                    "oldest_received_at": messages[0].received_at,
+                                    "newest_received_at": messages[-1].received_at,
+                                    "processing_started_at": time(),
+                                },
+                            )
+                        try:
+                            typing_requested = True
+                            await event.send_typing()
+                        except Exception:
+                            logger.warning("send_typing failed", exc_info=True)
+                        break
                 logger.debug("acquired session lock for llm request")
                 agent_runner: AgentRunner | None = None
                 runner_registered = False
