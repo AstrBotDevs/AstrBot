@@ -1,4 +1,5 @@
 import copy
+import json
 import traceback
 from collections.abc import Iterable
 from sys import maxsize
@@ -11,6 +12,11 @@ from astrbot.api.provider import LLMResponse, ProviderRequest
 from astrbot.core import logger
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.message_type import MessageType
+from astrbot.core.provider.oauth.openai_oauth_usage import QuotaReader
+from astrbot.core.provider.oauth.openai_oauth_usage_format import format_usage
+from astrbot.core.provider.oauth.openai_oauth_usage_service import (
+    OpenAIOAuthUsageService,
+)
 from astrbot.core.utils.session_waiter import (
     FILTERS,
     USER_SESSIONS,
@@ -32,6 +38,7 @@ def _iter_message_components(event: AstrMessageEvent):
 class Main(star.Star):
     def __init__(self, context: star.Context) -> None:
         self.context = context
+        self.oauth_usage_service = OpenAIOAuthUsageService(context, QuotaReader())
         self.group_chat_context = None
         try:
             self.group_chat_context = GroupChatContext(
@@ -40,6 +47,29 @@ class Main(star.Star):
             )
         except BaseException as e:
             logger.error(f"group chat context init failed: {e}")
+
+    async def terminate(self):
+        await self.oauth_usage_service.close()
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.command("codex_oauth_usage")
+    async def codex_oauth_usage_command(self, event: AstrMessageEvent):
+        """直接查询 Codex OAuth 额度，不调用聊天模型。"""
+        event.stop_event()
+        yield event.plain_result(
+            format_usage(await self.oauth_usage_service.run(event))
+        )
+
+    @filter.llm_tool(name="codex_oauth_usage")
+    async def codex_oauth_usage(self, event: AstrMessageEvent) -> str:
+        """查询管理员配置的 Codex OAuth 账号额度，仅用户明确询问时调用。
+
+        调用模型不限厂商。仅允许管理员私聊或当前配置允许的群聊。
+        返回使用比例、剩余比例、窗口、重置时间和采集时间。
+        cached 表示短时缓存，缺失值不是零，不推算剩余请求次数。
+        status 非 success 时仅说明错误，不编造额度。
+        """
+        return json.dumps(await self.oauth_usage_service.run(event), ensure_ascii=False)
 
     @filter.event_message_type(filter.EventMessageType.ALL, priority=maxsize)
     async def handle_session_control_agent(self, event: AstrMessageEvent) -> None:
