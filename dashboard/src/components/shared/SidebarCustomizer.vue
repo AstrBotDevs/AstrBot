@@ -43,7 +43,8 @@
                   @drop.stop="handleDrop($event, 'main', index)"
                 >
                   <template v-slot:prepend>
-                    <v-icon :icon="item.icon" size="small" class="mr-2"></v-icon>
+                    <v-icon v-if="typeof item.icon === 'string'" :icon="item.icon" size="small" class="mr-2" />
+                    <component :is="item.icon" v-else-if="item.icon" :size="18" class="mr-2" />
                   </template>
                   <v-list-item-title>{{ t(item.title) }}</v-list-item-title>
                   <template v-slot:append>
@@ -76,7 +77,8 @@
                   @drop.stop="handleDrop($event, 'more', index)"
                 >
                   <template v-slot:prepend>
-                    <v-icon :icon="item.icon" size="small" class="mr-2"></v-icon>
+                    <v-icon v-if="typeof item.icon === 'string'" :icon="item.icon" size="small" class="mr-2" />
+                    <component :is="item.icon" v-else-if="item.icon" :size="18" class="mr-2" />
                   </template>
                   <v-list-item-title>{{ t(item.title) }}</v-list-item-title>
                   <template v-slot:append>

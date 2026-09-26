@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 272 icons */
+/* Auto-generated MDI subset – 264 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -230,10 +230,6 @@
 
 .mdi-circle-small::before {
   content: "\F09DF";
-}
-
-.mdi-clock-outline::before {
-  content: "\F0150";
 }
 
 .mdi-clock-time-four-outline::before {
@@ -540,14 +536,6 @@
   content: "\F10F1";
 }
 
-.mdi-hand-wave-outline::before {
-  content: "\F1822";
-}
-
-.mdi-heart::before {
-  content: "\F02D1";
-}
-
 .mdi-help-circle-outline::before {
   content: "\F0625";
 }
@@ -800,14 +788,6 @@
   content: "\F0DEB";
 }
 
-.mdi-pencil-ruler::before {
-  content: "\F1353";
-}
-
-.mdi-phone-in-talk::before {
-  content: "\F03F6";
-}
-
 .mdi-pin::before {
   content: "\F0403";
 }
@@ -976,14 +956,6 @@
   content: "\F04D2";
 }
 
-.mdi-stop::before {
-  content: "\F04DB";
-}
-
-.mdi-stop-circle::before {
-  content: "\F0666";
-}
-
 .mdi-subdirectory-arrow-right::before {
   content: "\F060D";
 }
@@ -1066,10 +1038,6 @@
 
 .mdi-vector-intersection::before {
   content: "\F055D";
-}
-
-.mdi-vector-link::before {
-  content: "\F0FE8";
 }
 
 .mdi-vector-point::before {

@@ -5,13 +5,15 @@
     :class="{ 'is-dark': isDark, 'sidebar-collapsed': isSidebarCollapsed }"
   >
     <v-navigation-drawer
-      v-model="chatSidebarDrawer"
       class="chat-sidebar"
       :class="{ collapsed: isSidebarCollapsed }"
-      :permanent="lgAndUp"
-      :temporary="!lgAndUp"
-      :rail="lgAndUp && customizer.chatSidebarCollapsed"
-      :width="280"
+      :model-value="isMobile ? mobileDrawer.open : true"
+      @update:model-value="isMobile && mobileDrawer.SET($event)"
+      :permanent="!isMobile"
+      :temporary="isMobile"
+      :mobile-breakpoint="0"
+      :rail="isSidebarCollapsed"
+      :width="245"
       :rail-width="56"
       location="left"
       floating
@@ -20,6 +22,7 @@
         <div
           class="chat-sidebar-brand"
           :class="{ collapsed: isSidebarCollapsed }"
+          data-tauri-drag-region
         >
           <div
             v-if="!isSidebarCollapsed"
@@ -51,6 +54,7 @@
             icon
             rounded="sm"
             variant="text"
+            :ripple="false"
             @click.stop="toggleChatSidebar"
           >
             <PanelLeft :size="20" class="sidebar-panel-toggle-icon" />
@@ -498,9 +502,11 @@
 <script setup lang="ts">
 import {
   computed,
+  markRaw,
   nextTick,
   onBeforeUnmount,
   onMounted,
+  onUnmounted,
   provide,
   reactive,
   ref,
@@ -520,6 +526,7 @@ import {
 } from "@lucide/vue";
 import { chatApi, providerApi } from "@/api/v1";
 import ChatSettingsDialog from "@/components/chat/ChatSettingsDialog.vue";
+import ChatToolbarContext from "@/components/chat/ChatToolbarContext.vue";
 import ProjectDialog, {
   type ProjectFormData,
 } from "@/components/chat/ProjectDialog.vue";
@@ -548,6 +555,8 @@ import { useRecording } from "@/composables/useRecording";
 import { useProjects } from "@/composables/useProjects";
 import { useDragUpload } from "@/composables/useDragUpload";
 import { useChatHeaderStore } from "@/stores/chatHeader";
+import { useHeaderContextStore } from "@/stores/headerContext";
+import { useMobileDrawerStore } from "@/stores/mobileDrawer";
 import { useCustomizerStore } from "@/stores/customizer";
 import ProviderChatCompletionPanel from "@/components/provider/ProviderChatCompletionPanel.vue";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
@@ -570,8 +579,19 @@ const props = withDefaults(
 
 const route = useRoute();
 const router = useRouter();
-const { lgAndUp } = useDisplay();
 const chatHeader = useChatHeaderStore();
+const headerContext = useHeaderContextStore();
+const mobileDrawer = useMobileDrawerStore();
+
+/* Project the chat toolbar context (model selector + session title) into the
+   top toolbar only while the chat page is actually visible. */
+watch(
+  () => props.active,
+  (active) =>
+    headerContext.SET_COMPONENT(active ? markRaw(ChatToolbarContext) : null),
+  { immediate: true },
+);
+onUnmounted(() => headerContext.SET_COMPONENT(null));
 const customizer = useCustomizerStore();
 const { t } = useI18n();
 const { tm } = useModuleI18n("features/chat");
@@ -695,27 +715,21 @@ const {
   startRecording: startRecorder,
   stopRecording: stopRecorder,
 } = useRecording();
-const chatSidebarDrawer = computed({
-  get: () => lgAndUp.value || customizer.chatSidebarOpen,
-  set: (value: boolean) => {
-    if (!lgAndUp.value) {
-      customizer.SET_CHAT_SIDEBAR(value);
-    }
-  },
-});
-const isSidebarCollapsed = computed(() =>
-  lgAndUp.value ? customizer.chatSidebarCollapsed : !customizer.chatSidebarOpen,
+const { smAndDown: isMobile } = useDisplay();
+
+const isSidebarCollapsed = computed(
+  () => !isMobile.value && customizer.chatSidebarCollapsed,
 );
 const isProviderWorkspace = computed(
   () => activeWorkspace.value === "providers",
 );
 
 function toggleChatSidebar() {
-  if (lgAndUp.value) {
-    customizer.SET_CHAT_SIDEBAR_COLLAPSED(!customizer.chatSidebarCollapsed);
+  if (isMobile.value) {
+    mobileDrawer.SET(false);
     return;
   }
-  customizer.TOGGLE_CHAT_SIDEBAR();
+  customizer.SET_CHAT_SIDEBAR_COLLAPSED(!customizer.chatSidebarCollapsed);
 }
 
 const activeReasoningParts = computed<MessagePart[]>(() => {
@@ -1023,12 +1037,6 @@ function basePath() {
   return props.chatboxMode ? "/chatbox" : "/chat";
 }
 
-function closeMobileSidebar() {
-  if (!lgAndUp.value) {
-    customizer.SET_CHAT_SIDEBAR(false);
-  }
-}
-
 function closeSecondaryPanels() {
   threadSelection.visible = false;
   threadPanelOpen.value = false;
@@ -1049,9 +1057,8 @@ async function openProviderWorkspace() {
   activeWorkspace.value = "providers";
   const targetPath = `${basePath()}/models`;
   if (route.path !== targetPath) {
-    await router.push(targetPath);
+  await router.push(targetPath);
   }
-  closeMobileSidebar();
 }
 
 function sessionTitle(session: Session) {
@@ -1097,7 +1104,6 @@ async function startNewChat() {
   selectedProjectId.value = null;
   replyTarget.value = null;
   newChat();
-  closeMobileSidebar();
   await focusChatInput();
 }
 
@@ -1120,7 +1126,6 @@ async function selectProject(projectId: string) {
   replyTarget.value = null;
   await router.push(basePath());
   await loadProjectSessions(projectId);
-  closeMobileSidebar();
 }
 
 async function loadProjectSessions(projectId = selectedProjectId.value) {
@@ -1305,7 +1310,6 @@ async function selectSession(sessionId: string, pushRoute = true) {
     if (currSessionId.value !== sessionId) return;
   }
   scrollToBottom(true);
-  closeMobileSidebar();
   await focusChatInput();
 }
 
@@ -1885,18 +1889,70 @@ async function stopCurrentSession() {
   top: 0 !important;
   height: 100vh !important;
   background: var(--chat-sidebar-bg);
-  border-right: 1px solid var(--chat-border);
+  border-right: 0;
+  user-select: none;
 }
 
 .chat-sidebar.collapsed {
   background: var(--chat-sidebar-bg);
-  border-right: 1px solid var(--chat-border);
+  border-right: 0;
 }
 
 .chat-sidebar :deep(.v-navigation-drawer__content) {
   display: flex;
   flex-direction: column;
   height: 100%;
+}
+
+/* The header draws across the whole width, above the full-height chat sidebar. */
+:global(.chat-sidebar .v-navigation-drawer__content) {
+  /* Seat the brand's top edge at the content area's top edge, fully below the toolbar. */
+  padding-top: calc(var(--astrbot-toolbar-height, 40px) - 10px);
+  box-sizing: border-box;
+}
+
+/* Off macOS the chat sidebar owns the top-left corner, so the brand sits in the
+   toolbar band itself instead of clearing it. */
+:global(html:not([data-astrbot-desktop-platform='macos']) .chat-sidebar .v-navigation-drawer__content) {
+  padding-top: 4px;
+}
+
+:global(html:not([data-astrbot-desktop-platform='macos']) .chat-sidebar .chat-sidebar-brand) {
+  min-height: var(--astrbot-toolbar-height, 40px);
+}
+
+/* On macOS the chat sidebar stays transparent; the shared tint is painted behind it. */
+:global(html[data-astrbot-desktop-platform='macos'] .chat-sidebar) {
+  background: transparent !important;
+}
+
+/* A temporary (mobile) drawer floats above the page, so the vibrancy
+   transparency would let content bleed through; keep it opaque instead. */
+:global(html[data-astrbot-desktop-platform='macos'] .chat-sidebar.v-navigation-drawer--temporary) {
+  background: var(--chat-sidebar-bg) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16) !important;
+  z-index: 1007 !important;
+}
+
+/* Off macOS the chat sidebar is opaque and owns the top-left corner: it must paint
+   above the header's left zone so the brand stays visible in the toolbar band. */
+:global(html:not([data-astrbot-desktop-platform='macos']) .chat-sidebar) {
+  z-index: 1007 !important;
+}
+
+/* The dark chat sidebar uses its own palette; match the corner notch to it. */
+:global(html:not([data-astrbot-desktop-platform='macos']) .v-application.v-theme--PurpleThemeDark .v-main.chat-main) {
+  background-image: linear-gradient(
+    to right,
+    #242424 0 calc(var(--v-layout-left) + 12px),
+    transparent calc(var(--v-layout-left) + 12px) 100%
+  ) !important;
+}
+
+/* The chat header is in-flow, so the old absolute-header top offset is dead space;
+   drop it so the sub-header sits directly under the toolbar band. */
+:global(.chat-main) {
+  padding-top: 0 !important;
 }
 
 .sidebar-top {
@@ -1919,6 +1975,12 @@ async function stopCurrentSession() {
   justify-content: space-between;
   gap: 10px;
   padding: 0 10px 2px;
+}
+
+/* Force the brand onto its own compositing layer: on the macOS vibrancy window
+   the inline SVG logo can fail to paint after a webview reload. */
+.chat-sidebar-brand .chat-sidebar-brand-logo {
+  transform: translateZ(0);
 }
 
 .chat-sidebar-brand.collapsed {
@@ -1969,7 +2031,13 @@ async function stopCurrentSession() {
   width: 36px;
   height: 36px;
   min-width: 36px;
+  background: transparent !important;
+  box-shadow: none !important;
   color: var(--chat-muted);
+}
+
+.chat-sidebar-brand-toggle :deep(.v-btn__overlay) {
+  opacity: 0 !important;
 }
 
 .chat-sidebar-rail-btn {
@@ -1984,8 +2052,8 @@ async function stopCurrentSession() {
 }
 
 .chat-sidebar-brand-toggle:hover {
-  background: var(--chat-session-active-bg);
-  color: rgb(var(--v-theme-on-surface));
+  background: transparent !important;
+  color: rgba(var(--v-theme-on-surface), 0.9);
 }
 
 .chat-sidebar-rail-icon-stack {
@@ -2157,9 +2225,13 @@ async function stopCurrentSession() {
   text-align: left;
 }
 
-.session-item:hover,
-.session-item.active {
+.session-item:hover {
   background: var(--chat-session-active-bg);
+}
+
+/* Active session stays clearly highlighted (subtle in light mode otherwise). */
+.session-item.active {
+  background: rgba(var(--v-theme-primary), 0.22);
 }
 
 .session-item.running {
@@ -2540,11 +2612,6 @@ kbd {
 }
 
 @media (max-width: 760px) {
-  .chat-sidebar {
-    top: 50px !important;
-    height: calc(100vh - 50px) !important;
-  }
-
   .messages-panel {
     padding: 18px 0 calc(var(--chat-composer-height, 72px) + 20px);
     scroll-padding-bottom: calc(var(--chat-composer-height, 72px) + 20px);

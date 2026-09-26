@@ -33,6 +33,8 @@
     "knowledgeBase": "База знаний",
     "about": "О программе",
     "settings": "Настройки",
+    "expandSidebar": "Развернуть боковую панель",
+    "collapseSidebar": "Свернуть боковую панель",
     "changelog": "Журнал изменений",
     "documentation": "Документация",
     "faq": "FAQ",

@@ -1,4 +1,4 @@
-import { createApp } from 'vue';
+import { createApp, watch } from 'vue';
 import { createPinia } from 'pinia';
 import App from './App.vue';
 import { router } from './router';
@@ -97,6 +97,16 @@ function setupThemeSync(pinia: ReturnType<typeof createPinia>) {
       localStorage.setItem('uiTheme', uiTheme);
       vuetify.theme.global.name.value = uiTheme;
     });
+
+    // 5. Sync the desktop window's appearance with the app theme, so the native
+    //    vibrancy material matches the sidebar/header in both light and dark mode.
+    const syncDesktopWindowTheme = () => {
+      const setWindowTheme = window.astrbotDesktop?.setWindowTheme;
+      if (typeof setWindowTheme !== 'function') return;
+      setWindowTheme(customizer.uiTheme === 'PurpleThemeDark' ? 'dark' : 'light');
+    };
+    syncDesktopWindowTheme();
+    watch(() => customizer.uiTheme, syncDesktopWindowTheme);
   });
 }
 
