@@ -1443,8 +1443,10 @@ async def collect_initial_request(
                 # Handler requests can be prepared before the pipeline acquires
                 # the session lock. Reload the bound conversation here so queued
                 # turns include replies saved while they were waiting.
-                conversation = await plugin_context.conversation_manager.get_conversation(
-                    event.unified_msg_origin, req.conversation.cid
+                conversation = (
+                    await plugin_context.conversation_manager.get_conversation(
+                        event.unified_msg_origin, req.conversation.cid
+                    )
                 )
                 if conversation is None:
                     _set_llm_error_message(
