@@ -94,3 +94,68 @@ async def test_third_party_runner_receives_inline_profile_config(
     assert results == [None]
     assert runner.reset.await_args.kwargs["provider_config"] is inline_config
     assert runner_factory_calls == [True]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("platform", "message_str", "expected_prompt"),
+    [
+        # Without the prefix the message is rejected off WebChat.
+        ("aiocqhttp", "hello", None),
+        # WebChat is exempt from the provider wake prefix (#10242).
+        ("webchat", "hello", "hello"),
+        # A present prefix is stripped on every platform.
+        ("aiocqhttp", "/chat hello", " hello"),
+    ],
+)
+async def test_third_party_wake_prefix_gating(
+    monkeypatch: pytest.MonkeyPatch,
+    platform: str,
+    message_str: str,
+    expected_prompt: str | None,
+):
+    """Third-party runners must mirror the waking stage's WebChat exemption."""
+    hook_requests = []
+
+    async def capture_hook(_event, _event_type, req=None):
+        hook_requests.append(req)
+        return True  # Stop the pipeline right after the request is built.
+
+    monkeypatch.setattr(third_party, "call_event_hook", capture_hook)
+
+    config = {
+        "agent_runner": {"runner_type": "dify", "config": {}},
+        "provider_settings": {
+            "streaming_response": False,
+            "unsupported_streaming_strategy": "turn_off",
+            "third_party_stream_consumption_close_timeout_sec": 30,
+        },
+    }
+    stage = third_party.ThirdPartyAgentSubStage()
+    await stage.initialize(
+        SimpleNamespace(
+            astrbot_config=config,
+            plugin_manager=SimpleNamespace(
+                context=SimpleNamespace(
+                    conversation_manager=MagicMock(),
+                    persona_manager=MagicMock(),
+                )
+            ),
+        )
+    )
+    stage._resolve_persona_custom_error_message = AsyncMock(return_value=None)
+    event = MagicMock()
+    event.message_str = message_str
+    event.unified_msg_origin = "webchat:FriendMessage:test"
+    event.message_obj.message = []
+    event.platform_meta.support_streaming_message = True
+    event.get_extra.return_value = None
+    event.get_platform_name.return_value = platform
+
+    _ = [item async for item in stage.process(event, "/chat")]
+
+    if expected_prompt is None:
+        assert hook_requests == []
+    else:
+        assert len(hook_requests) == 1
+        assert hook_requests[0].prompt == expected_prompt
