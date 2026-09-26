@@ -612,11 +612,15 @@ class TelegramPlatformAdapter(Platform):
             if plain_text.startswith("/"):
                 command_parts = plain_text.split(" ", 1)
                 if "@" in command_parts[0]:
-                    command, bot_name = command_parts[0].split("@")
-                    if bot_name == self.client.username:
+                    command, bot_name = command_parts[0].split("@", 1)
+                    if bot_name.lower() == context.bot.username.lower():
                         plain_text = command + (
                             f" {command_parts[1]}" if len(command_parts) > 1 else ""
                         )
+                    else:
+                        # The command targets another bot. Drop the message so
+                        # its "/" prefix cannot wake this bot (#10240).
+                        return None
 
             if update.message.entities:
                 for entity in update.message.entities:
