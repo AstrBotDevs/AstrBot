@@ -131,6 +131,28 @@ async def test_telegram_command_for_another_bot_is_ignored():
 
 
 @pytest.mark.asyncio
+async def test_telegram_command_for_another_bot_skips_reply_side_effects():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    adapter.start = AsyncMock()
+    reply_to_message = create_mock_update(message_text="/start").message
+    update = create_mock_update(
+        message_text="/help@another_bot",
+        chat_type="group",
+        reply_to_message=reply_to_message,
+    )
+
+    result = await adapter.convert_message(update, _build_context())
+
+    assert result is None
+    adapter.start.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_telegram_topic_with_missing_name_falls_back_to_group_name():
     TelegramPlatformAdapter = _load_telegram_adapter()
     adapter = TelegramPlatformAdapter(

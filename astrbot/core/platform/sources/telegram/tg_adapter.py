@@ -562,6 +562,13 @@ class TelegramPlatformAdapter(Platform):
         message.message_str = ""
         message.message = []
 
+        if update.message.text and update.message.text.startswith("/"):
+            command_token = update.message.text.split(" ", 1)[0]
+            if "@" in command_token:
+                _, bot_name = command_token.split("@", 1)
+                if bot_name.casefold() != context.bot.username.casefold():
+                    return None
+
         if update.message.reply_to_message and not (
             update.message.is_topic_message
             and update.message.message_thread_id
@@ -612,9 +619,7 @@ class TelegramPlatformAdapter(Platform):
             if plain_text.startswith("/"):
                 command_parts = plain_text.split(" ", 1)
                 if "@" in command_parts[0]:
-                    command, bot_name = command_parts[0].split("@", 1)
-                    if bot_name.casefold() != context.bot.username.casefold():
-                        return None
+                    command, _ = command_parts[0].split("@", 1)
                     plain_text = command + (
                         f" {command_parts[1]}" if len(command_parts) > 1 else ""
                     )
