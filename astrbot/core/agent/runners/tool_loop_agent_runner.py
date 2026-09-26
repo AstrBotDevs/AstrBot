@@ -1,5 +1,6 @@
 import asyncio
 import copy
+import errno
 import sys
 import time
 import traceback
@@ -631,6 +632,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     if self._is_stop_requested():
                         return
             except Exception as exc:  # noqa: BLE001
+                is_resource_exhaustion = isinstance(exc, MemoryError) or (
+                    isinstance(exc, OSError) and exc.errno == errno.ENOMEM
+                )
+                if is_resource_exhaustion:
+                    raise
                 last_exception = exc
                 logger.warning(
                     "Chat Model %s request error: %s",

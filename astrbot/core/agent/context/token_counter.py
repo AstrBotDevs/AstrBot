@@ -47,7 +47,10 @@ class EstimateTokenCounter:
         self, messages: list[Message], trusted_token_usage: int = 0
     ) -> int:
         if trusted_token_usage > 0:
-            return trusted_token_usage
+            # Usage reported by a provider can miss the memory cost of new
+            # inline media. Add only the payload volume above the fixed image
+            # estimate so ordinary usage values remain the preferred estimate.
+            inline_payload_tokens = 0
 
         total = 0
         for msg in messages:
@@ -61,7 +64,12 @@ class EstimateTokenCounter:
                     elif isinstance(part, ThinkPart):
                         total += self._estimate_tokens(part.think)
                     elif isinstance(part, ImageURLPart):
-                        total += IMAGE_TOKEN_ESTIMATE
+                        image_tokens = self._estimate_image_tokens(part.image_url.url)
+                        total += image_tokens
+                        if trusted_token_usage > 0:
+                            inline_payload_tokens += max(
+                                0, image_tokens - IMAGE_TOKEN_ESTIMATE
+                            )
                     elif isinstance(part, AudioURLPart):
                         total += AUDIO_TOKEN_ESTIMATE
 
@@ -70,9 +78,21 @@ class EstimateTokenCounter:
                     tc_str = json.dumps(tc if isinstance(tc, dict) else tc.model_dump())
                     total += self._estimate_tokens(tc_str)
 
+        if trusted_token_usage > 0:
+            return trusted_token_usage + inline_payload_tokens
+
         return total
 
     def _estimate_tokens(self, text: str) -> int:
         chinese_count = len([c for c in text if "\u4e00" <= c <= "\u9fff"])
         other_count = len(text) - chinese_count
         return int(chinese_count * 0.6 + other_count * 0.3)
+
+    def _estimate_image_tokens(self, url: str) -> int:
+        header, separator, payload = url.partition(",")
+        if separator and header.startswith("data:") and ";base64" in header:
+            # Inline payloads are persisted with history. Their character
+            # volume is a conservative proxy for the memory needed to resend
+            # them and must trigger compression before the process is starved.
+            return IMAGE_TOKEN_ESTIMATE + int(len(payload) * 0.3)
+        return IMAGE_TOKEN_ESTIMATE
