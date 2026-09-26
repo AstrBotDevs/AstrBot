@@ -24,6 +24,8 @@ DASHBOARD_INITIAL_PASSWORD_ENV = "ASTRBOT_DASHBOARD_INITIAL_PASSWORD"
 DASHBOARD_RESET_PASSWORD_ENV = "ASTRBOT_RESET_DASHBOARD_PASSWORD"
 logger = logging.getLogger("astrbot")
 
+CORE_COMPUTER_RUNTIME_IDS = {"local", "sandbox", "none"}
+
 
 class RateLimitStrategy(enum.Enum):
     STALL = "stall"
@@ -112,6 +114,7 @@ class AstrBotConfig(dict):
         # 检查配置完整性，并插入
         has_new = self.check_config_integrity(default_config, conf, schema=schema)
         has_new |= config_migrated
+        has_new |= self._migrate_legacy_sandbox_runtime(conf)
         reset_dashboard_password = self._consume_reset_dashboard_password_flag()
         if reset_dashboard_password and "dashboard" in conf:
             self._reset_generated_dashboard_password(conf)
@@ -188,6 +191,33 @@ class AstrBotConfig(dict):
         _parse_schema(schema, conf)
 
         return conf
+
+    def _migrate_legacy_sandbox_runtime(self, conf: dict) -> bool:
+        provider_settings = conf.get("provider_settings")
+        if not isinstance(provider_settings, dict):
+            return False
+
+        runtime = provider_settings.get("computer_use_runtime")
+        if runtime in CORE_COMPUTER_RUNTIME_IDS or not runtime:
+            return False
+
+        # Older configs stored sandbox provider IDs directly as the runtime.
+        # Preserve that value as the selected sandbox booter without teaching
+        # core about concrete provider names.
+        sandbox_cfg = provider_settings.get("sandbox")
+        if not isinstance(sandbox_cfg, dict):
+            sandbox_cfg = {}
+            provider_settings["sandbox"] = sandbox_cfg
+
+        if not sandbox_cfg.get("booter"):
+            sandbox_cfg["booter"] = runtime
+            logger.info(
+                "Config key migrated: provider_settings.computer_use_runtime %s -> sandbox",
+                runtime,
+            )
+
+        provider_settings["computer_use_runtime"] = "sandbox"
+        return True
 
     def check_config_integrity(
         self, refer_conf: dict, conf: dict, path="", schema: dict | None = None

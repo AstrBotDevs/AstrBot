@@ -71,7 +71,8 @@ def test_sync_skills_keeps_builtin_skills_when_local_is_empty(
 
     captured = {"skills": None}
 
-    def _fake_set_cache(self, skills):
+    def _fake_set_cache(self, skills, provider_id=None):
+        _ = provider_id
         captured["skills"] = skills
 
     monkeypatch.setattr(
@@ -97,7 +98,10 @@ def test_sync_skills_keeps_builtin_skills_when_local_is_empty(
     asyncio.run(computer_client._sync_skills_to_sandbox(cast(ComputerBooter, booter)))
 
     assert booter.uploads == []
-    assert any(cmd == "rm -f skills/skills.zip" for cmd in booter.shell.commands)
+    assert any(
+        cmd.startswith("rm -f skills/skills_bundle_") and cmd.endswith(".zip")
+        for cmd in booter.shell.commands
+    )
     assert captured["skills"] == [
         {
             "name": "python-sandbox",
@@ -120,7 +124,8 @@ def test_sync_skills_uses_managed_strategy_instead_of_wiping_all(
 
     captured = {"skills": None}
 
-    def _fake_set_cache(self, skills):
+    def _fake_set_cache(self, skills, provider_id=None):
+        _ = provider_id
         captured["skills"] = skills
 
     monkeypatch.setattr(
@@ -142,7 +147,8 @@ def test_sync_skills_uses_managed_strategy_instead_of_wiping_all(
     asyncio.run(computer_client._sync_skills_to_sandbox(cast(ComputerBooter, booter)))
 
     assert len(booter.uploads) == 1
-    assert booter.uploads[0][1] == "skills/skills.zip"
+    assert booter.uploads[0][1].startswith("skills/skills_bundle_")
+    assert booter.uploads[0][1].endswith(".zip")
     assert not any(
         "find skills -mindepth 1 -delete" in cmd for cmd in booter.shell.commands
     )
@@ -173,7 +179,8 @@ def test_sync_skills_includes_plugin_provided_skills(
 
     captured = {"skills": None}
 
-    def _fake_set_cache(self, skills):
+    def _fake_set_cache(self, skills, provider_id=None):
+        _ = provider_id
         captured["skills"] = skills
 
     monkeypatch.setattr(
@@ -210,7 +217,8 @@ def test_sync_skills_includes_plugin_provided_skills(
     asyncio.run(computer_client._sync_skills_to_sandbox(cast(ComputerBooter, booter)))
 
     assert len(booter.uploads) == 1
-    assert booter.uploads[0][1] == "skills/skills.zip"
+    assert booter.uploads[0][1].startswith("skills/skills_bundle_")
+    assert booter.uploads[0][1].endswith(".zip")
     assert captured["skills"] == [
         {
             "name": "demo-skill",
@@ -264,7 +272,10 @@ def test_sync_skills_skips_inactive_plugin_provided_skills(
     asyncio.run(computer_client._sync_skills_to_sandbox(cast(ComputerBooter, booter)))
 
     assert booter.uploads == []
-    assert any(cmd == "rm -f skills/skills.zip" for cmd in booter.shell.commands)
+    assert any(
+        cmd.startswith("rm -f skills/skills_bundle_") and cmd.endswith(".zip")
+        for cmd in booter.shell.commands
+    )
 
 
 def test_build_scan_command_frontmatter_newline_is_escaped_literal():
