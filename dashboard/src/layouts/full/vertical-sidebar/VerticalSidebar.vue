@@ -238,6 +238,14 @@ function toggleSidebar() {
   background: transparent !important;
 }
 
+/* A temporary (mobile) drawer floats above the page, so the vibrancy
+   transparency would let content bleed through; keep it opaque instead. */
+:global(html[data-astrbot-desktop-platform='macos'] .leftSidebar.v-navigation-drawer--temporary) {
+  background: rgb(var(--v-theme-surface)) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16) !important;
+  z-index: 1007 !important;
+}
+
 /* Off macOS the sidebar is opaque and owns the top-left corner: it must paint
    above the header's left zone so the brand stays visible in the toolbar band. */
 :global(html:not([data-astrbot-desktop-platform='macos']) .leftSidebar) {

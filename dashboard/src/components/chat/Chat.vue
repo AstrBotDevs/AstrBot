@@ -1926,6 +1926,14 @@ async function stopCurrentSession() {
   background: transparent !important;
 }
 
+/* A temporary (mobile) drawer floats above the page, so the vibrancy
+   transparency would let content bleed through; keep it opaque instead. */
+:global(html[data-astrbot-desktop-platform='macos'] .chat-sidebar.v-navigation-drawer--temporary) {
+  background: var(--chat-sidebar-bg) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16) !important;
+  z-index: 1007 !important;
+}
+
 /* Off macOS the chat sidebar is opaque and owns the top-left corner: it must paint
    above the header's left zone so the brand stays visible in the toolbar band. */
 :global(html:not([data-astrbot-desktop-platform='macos']) .chat-sidebar) {
