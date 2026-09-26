@@ -295,6 +295,22 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
 
         return payloads, context_query
 
+    def _maybe_inject_xai_search(self, payloads: dict) -> None:
+        """Add the xAI Responses API web-search tool when native search is enabled."""
+        if self.provider_config.get("provider") != "xai":
+            return
+        if not bool(self.provider_config.get("xai_native_search", False)):
+            return
+
+        tools = payloads.setdefault("tools", [])
+        if not isinstance(tools, list):
+            return
+        if not any(
+            isinstance(tool, dict) and tool.get("type") == "web_search"
+            for tool in tools
+        ):
+            tools.append({"type": "web_search"})
+
     async def _query(
         self,
         payloads: dict,
@@ -324,6 +340,7 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
             if response_tools:
                 payloads["tools"] = response_tools
                 payloads["tool_choice"] = payloads.get("tool_choice", "auto")
+        self._maybe_inject_xai_search(payloads)
 
         extra_body: dict[str, Any] = {}
         custom_extra_body = self.provider_config.get("custom_extra_body", {})
@@ -395,6 +412,7 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
             if response_tools:
                 payloads["tools"] = response_tools
                 payloads["tool_choice"] = payloads.get("tool_choice", "auto")
+        self._maybe_inject_xai_search(payloads)
 
         extra_body: dict[str, Any] = {}
         custom_extra_body = self.provider_config.get("custom_extra_body", {})

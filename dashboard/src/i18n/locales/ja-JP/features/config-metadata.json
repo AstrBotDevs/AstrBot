@@ -1474,7 +1474,7 @@
       },
       "xai_native_search": {
         "description": "ネイティブ検索を有効化",
-        "hint": "有効にすると、xAI の Chat Completions ネイティブ Live Search を使用してウェブ検索を行います（従量課金）。xAI プロバイダーにのみ適用されます。"
+        "hint": "有効にすると、xAI のネイティブ Web Search を使用してウェブ検索を行います（従量課金）。xAI プロバイダーにのみ適用されます。"
       },
       "rerank_api_base": {
         "description": "リランキングモデル API Base URL",
