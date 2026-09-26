@@ -41,6 +41,9 @@ from .request_retry import (
 IMAGE_WEBSOCKET_MAX_MESSAGE_BYTES = 64 * 1024 * 1024
 IMAGE_WEBSOCKET_MAX_TRANSCRIPT_BYTES = 128 * 1024 * 1024
 IMAGE_WEBSOCKET_MAX_EVENTS = 16384
+OAUTH_IMAGE_MODEL_ALIASES = frozenset(
+    {"gpt-image-2", "gpt-image-2.5-flare", "gpt-image-2.5-sunburst"}
+)
 OAUTH_PLACEHOLDER_KEY = "__openai_oauth__"
 CODEX_CLIENT_VERSION = "0.158.0"
 
@@ -1766,18 +1769,22 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
         action: str | None = None,
         transport: str = "http",
         timeout: float | None = None,
+        *,
+        image_model: str | None = None,
     ) -> list[OpenAIOAuthImageResult]:
         """Generate images through HTTP or a bounded WebSocket session.
 
         Args:
             prompt: Image generation or editing instruction.
-            model: Explicit model override.
+            model: Main Responses controller model, not the image-generation model.
             size: Requested image dimensions.
             n: Number of backend image generations.
             reference_images: Local files, URLs, or data URLs used as references.
             action: Image tool action override.
             transport: Image transport, either legacy HTTP or WebSocket.
             timeout: Optional per-image deadline; WebSocket defaults to provider timeout.
+            image_model: Experimental image-generation model request; the backend
+                may ignore it. An empty string omits it, overriding the source setting.
 
         Returns:
             Extracted image results from all backend generations.
@@ -1793,6 +1800,20 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
             timeout = float(timeout)
             if not math.isfinite(timeout) or timeout <= 0:
                 raise ValueError("Image timeout must be a finite positive number")
+        selected_image_model = (
+            self.provider_config.get("oauth_image_model", "")
+            if image_model is None
+            else image_model
+        )
+        if selected_image_model is None:
+            selected_image_model = ""
+        if not isinstance(selected_image_model, str):
+            raise ValueError("Invalid image model selection")
+        if selected_image_model.strip():
+            if selected_image_model not in OAUTH_IMAGE_MODEL_ALIASES:
+                raise ValueError("Invalid image model selection")
+        else:
+            selected_image_model = ""
         references = [
             str(image).strip() for image in reference_images or [] if str(image).strip()
         ]
@@ -1812,6 +1833,8 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
             }
             if size:
                 tool["size"] = size
+            if selected_image_model:
+                tool["model"] = selected_image_model
             payload = {
                 "model": model or self.get_model(),
                 "input": image_input,

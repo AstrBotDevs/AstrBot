@@ -1366,6 +1366,7 @@ CONFIG_METADATA_2 = {
                         "oauth_account_id": "",
                         "oauth_web_search": "disabled",
                         "oauth_web_search_domains": [],
+                        "oauth_image_model": "",
                         "oauth_audio_transcription": False,
                         "oauth_transcription_model": "gpt-4o-transcribe",
                     },
@@ -2609,6 +2610,17 @@ CONFIG_METADATA_2 = {
                         "description": "Codex 搜索域名限制",
                         "type": "list",
                         "hint": "留空不限制，例如 example.com。",
+                    },
+                    "oauth_image_model": {
+                        "description": "Codex 图像模型请求（实验性）",
+                        "type": "string",
+                        "options": [
+                            "",
+                            "gpt-image-2",
+                            "gpt-image-2.5-flare",
+                            "gpt-image-2.5-sunburst",
+                        ],
+                        "hint": "向图像生成工具请求指定模型，不改变主调用模型；留空由后端选择。后端可能忽略或回退，成功出图不能确认实际采用的模型；可用性取决于账号权限。",
                     },
                     "oauth_audio_transcription": {
                         "description": "转录 OAuth 聊天音频输入",

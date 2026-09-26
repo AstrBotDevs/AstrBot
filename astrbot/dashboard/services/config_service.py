@@ -1554,6 +1554,21 @@ class ProviderConfigService:
             provider.pop("reasoning", None)
         return provider
 
+    @staticmethod
+    def _provider_source_for_dashboard(source: dict) -> dict:
+        """Add display defaults to an isolated source copy.
+
+        Args:
+            source: Persisted provider source configuration.
+
+        Returns:
+            A display copy with optional OAuth fields, without changing storage.
+        """
+        result = copy.deepcopy(source)
+        if result.get("type") == "openai_oauth_chat_completion":
+            result.setdefault("oauth_image_model", "")
+        return result
+
     def get_provider_schema(self) -> dict:
         provider_metadata = ConfigMetadataI18n.convert_to_i18n_keys(
             {
@@ -1589,20 +1604,26 @@ class ProviderConfigService:
         return {
             "config_schema": config_schema,
             "providers": providers,
-            "provider_sources": self.config.get("provider_sources", []),
+            "provider_sources": [
+                self._provider_source_for_dashboard(source)
+                for source in self.config.get("provider_sources", [])
+            ],
             "model_metadata": model_metadata,
         }
 
     def list_provider_sources(self) -> dict:
         return {
-            "provider_sources": copy.deepcopy(self.config.get("provider_sources", []))
+            "provider_sources": [
+                self._provider_source_for_dashboard(source)
+                for source in self.config.get("provider_sources", [])
+            ]
         }
 
     def get_provider_source(self, source_id: str) -> dict:
         source = self._find_provider_source(source_id)
         if source is None:
             raise ValueError(f"Provider source {source_id} not found")
-        return {"provider_source": copy.deepcopy(source)}
+        return {"provider_source": self._provider_source_for_dashboard(source)}
 
     async def upsert_provider_source(self, source_id: str, config: dict) -> None:
         current_source = self._find_provider_source(source_id)

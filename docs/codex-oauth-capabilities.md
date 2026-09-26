@@ -84,6 +84,33 @@ The same image extraction and error handling apply to HTTP and WebSocket. The
 `model` argument selects the outer Responses model; it does not verify the
 identity of the image tool's underlying model.
 
+## Experimental image generation and editing model request
+
+The ChatGPT/Codex OAuth source has an optional, experimental `oauth_image_model` setting.
+It sends a model request in the `image_generation` tool and does not change the
+main `model` used for the Responses request. An empty setting leaves the tool
+model unset, preserving the previous request. Accepted request values are
+`gpt-image-2`, `gpt-image-2.5-flare`, and `gpt-image-2.5-sunburst`.
+
+Plugins calling the provider can override the source setting for one image
+request. Passing an empty string explicitly restores backend selection for
+that request. The same selection applies to HTTP and WebSocket requests and
+to both generation and reference-image editing.
+
+```python
+images = await provider.generate_image(
+    "Illustrate a mountain at sunrise",
+    model="gpt-6-sol",
+    image_model="gpt-image-2.5-flare",
+)
+```
+
+An unsupported nonempty image model fails before sending the request. Existing
+calls without the new argument keep the previous payload when the source
+setting is empty. The backend may ignore the requested image model or fall
+back, and a successful image response does not confirm which model was used.
+Availability depends on the account's backend permissions.
+
 ## Ordinary voice messages
 
 Existing AstrBot STT and TTS providers remain usable with the Codex text model.

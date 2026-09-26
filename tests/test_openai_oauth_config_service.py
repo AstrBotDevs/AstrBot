@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import json
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -8,6 +9,47 @@ import pytest
 import astrbot.dashboard.services.config_service as config_service_module
 from astrbot.core.provider.manager import ProviderManager
 from astrbot.dashboard.services.config_service import ProviderConfigService
+
+_SOURCE_READERS = (
+    lambda service: service.get_provider_schema()["provider_sources"][0],
+    lambda service: service.list_provider_sources()["provider_sources"][0],
+    lambda service: service.get_provider_source("openai_oauth")["provider_source"],
+)
+
+
+@pytest.mark.parametrize("read_source", _SOURCE_READERS)
+def test_legacy_oauth_source_reads_include_image_model_without_persisting(read_source):
+    service, _manager, _reloads = _build_service()
+    original = copy.deepcopy(service.config)
+
+    returned = read_source(service)
+
+    assert returned["oauth_image_model"] == ""
+    assert returned["oauth_access_token"] == "access-0"
+    assert service.config == original
+    returned["oauth_access_token"] = "modified-copy"
+    returned["oauth_image_model"] = "gpt-image-2"
+    assert service.config == original
+
+
+@pytest.mark.parametrize("read_source", _SOURCE_READERS)
+@pytest.mark.parametrize("configured", ["gpt-image-2.5-flare", None])
+def test_oauth_source_reads_preserve_existing_image_model(read_source, configured):
+    service, _manager, _reloads = _build_service()
+    service.config["provider_sources"][0]["oauth_image_model"] = configured
+
+    assert read_source(service)["oauth_image_model"] == configured
+    assert service.config["provider_sources"][0]["oauth_image_model"] == configured
+
+
+@pytest.mark.parametrize("read_source", _SOURCE_READERS)
+def test_other_source_type_does_not_gain_image_model(read_source):
+    service, _manager, _reloads = _build_service()
+    service.config["provider_sources"][0]["type"] = "openai_chat_completion"
+    original = copy.deepcopy(service.config)
+
+    assert "oauth_image_model" not in read_source(service)
+    assert service.config == original
 
 
 def _build_service():

@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 import astrbot.core.provider.sources.openai_oauth_source as oauth_source
+from astrbot.core.config.default import CONFIG_METADATA_2
 from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.provider.oauth.openai_oauth import parse_oauth_credential_json
@@ -16,6 +17,12 @@ from astrbot.core.provider.oauth.openai_oauth_shared_state import (
     OpenAIOAuthSharedState,
 )
 from astrbot.core.provider.sources.openai_oauth_source import ProviderOpenAIOAuth
+
+_IMAGE_MODEL_ALIASES = (
+    "gpt-image-2",
+    "gpt-image-2.5-flare",
+    "gpt-image-2.5-sunburst",
+)
 
 
 def _jwt_with_claims(claims: dict) -> str:
@@ -1605,3 +1612,203 @@ def test_gpt6_sol_luna_reject_invalid_reasoning(model, effort):
         provider._build_responses_params(
             {"model": model, "messages": [], "reasoning_effort": effort}, None
         )
+
+
+def test_oauth_source_image_model_metadata_defaults_to_backend_selection():
+    provider_metadata = CONFIG_METADATA_2["provider_group"]["metadata"]["provider"]
+    source = provider_metadata["config_template"]["ChatGPT/Codex OAuth"]
+    field = provider_metadata["items"]["oauth_image_model"]
+
+    assert source["oauth_image_model"] == ""
+    assert field["options"] == ["", *_IMAGE_MODEL_ALIASES]
+    assert "主调用模型" in field["hint"]
+    assert "图像" in field["description"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("alias", _IMAGE_MODEL_ALIASES)
+@pytest.mark.parametrize("transport", ["http", "websocket"])
+@pytest.mark.parametrize("with_reference", [False, True])
+async def test_generate_image_model_alias_only_changes_image_tool(
+    tmp_path, alias, transport, with_reference
+):
+    provider = _make_provider({"generated_image_dir": str(tmp_path)})
+    requests = []
+
+    async def fake_http(payload):
+        requests.append(("http", payload))
+        return {
+            "output": [
+                {
+                    "type": "image_generation_call",
+                    "result": base64.b64encode(b"image").decode(),
+                }
+            ]
+        }
+
+    async def fake_websocket(payload, *, timeout=None):
+        requests.append(("websocket", payload))
+        return {
+            "output": [
+                {
+                    "type": "image_generation_call",
+                    "result": base64.b64encode(b"image").decode(),
+                }
+            ]
+        }
+
+    provider._request_image_backend = fake_http
+    provider._request_image_backend_websocket = fake_websocket
+    reference = "data:image/png;base64," + base64.b64encode(b"reference").decode()
+    try:
+        await provider.generate_image(
+            "draw",
+            model="gpt-6-sol",
+            transport=transport,
+            reference_images=[reference] if with_reference else None,
+            image_model=alias,
+        )
+
+        assert len(requests) == 1
+        used_transport, payload = requests[0]
+        assert used_transport == transport
+        assert payload["model"] == "gpt-6-sol"
+        assert payload["tools"] == [
+            {
+                "type": "image_generation",
+                "action": "edit" if with_reference else "generate",
+                "model": alias,
+            }
+        ]
+        content = payload["input"][0]["content"]
+        assert len(content) == (2 if with_reference else 1)
+        if with_reference:
+            assert content[1] == {"type": "input_image", "image_url": reference}
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("configured", "explicit", "expected"),
+    [
+        ("gpt-image-2.5-flare", None, "gpt-image-2.5-flare"),
+        ("gpt-image-2.5-flare", "gpt-image-2", "gpt-image-2"),
+        ("gpt-image-2.5-flare", "", None),
+        ("gpt-image-2.5-flare", "   ", None),
+        ("", None, None),
+        ("   ", None, None),
+    ],
+)
+async def test_generate_image_model_config_and_override(
+    tmp_path, configured, explicit, expected
+):
+    provider = _make_provider(
+        {"generated_image_dir": str(tmp_path), "oauth_image_model": configured}
+    )
+    payloads = []
+
+    async def fake_http(payload):
+        payloads.append(payload)
+        return {
+            "output": [
+                {
+                    "type": "image_generation_call",
+                    "result": base64.b64encode(b"image").decode(),
+                }
+            ]
+        }
+
+    provider._request_image_backend = fake_http
+    try:
+        await provider.generate_image("draw", image_model=explicit)
+        tool = payloads[0]["tools"][0]
+        assert tool.get("model") == expected
+        assert ("model" in tool) is (expected is not None)
+        assert payloads[0]["model"] == "gpt-5.4"
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_generate_image_model_edit_with_local_reference_and_old_positional_args(
+    tmp_path,
+):
+    source = tmp_path / "source.png"
+    source.write_bytes(b"local-reference")
+    provider = _make_provider({"generated_image_dir": str(tmp_path)})
+    payloads = []
+
+    async def fake_http(payload):
+        payloads.append(payload)
+        return {
+            "output": [
+                {
+                    "type": "image_generation_call",
+                    "result": base64.b64encode(b"image").decode(),
+                }
+            ]
+        }
+
+    provider._request_image_backend = fake_http
+    try:
+        await provider.generate_image(
+            "edit",
+            "gpt-6-sol",
+            "1024x1024",
+            1,
+            [str(source)],
+            None,
+            "http",
+            4.0,
+            image_model="gpt-image-2.5-sunburst",
+        )
+        payload = payloads[0]
+        assert payload["model"] == "gpt-6-sol"
+        assert payload["tools"] == [
+            {
+                "type": "image_generation",
+                "action": "edit",
+                "size": "1024x1024",
+                "model": "gpt-image-2.5-sunburst",
+            }
+        ]
+        assert payload["input"][0]["content"][1]["image_url"] == (
+            "data:image/png;base64," + base64.b64encode(source.read_bytes()).decode()
+        )
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "invalid", [True, False, 1, {}, "gpt-image-1", " gpt-image-2", "GPT-IMAGE-2"]
+)
+@pytest.mark.parametrize("transport", ["http", "websocket"])
+async def test_generate_image_model_rejects_invalid_selection_before_backend(
+    invalid, transport
+):
+    provider = _make_provider()
+    provider._request_image_backend = AsyncMock()
+    provider._request_image_backend_websocket = AsyncMock()
+    try:
+        with pytest.raises(ValueError, match="image model"):
+            await provider.generate_image(
+                "draw", image_model=invalid, transport=transport
+            )
+        provider._request_image_backend.assert_not_awaited()
+        provider._request_image_backend_websocket.assert_not_awaited()
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_generate_image_model_invalid_source_value_fails_before_backend():
+    provider = _make_provider({"oauth_image_model": 23})
+    provider._request_image_backend = AsyncMock()
+    try:
+        with pytest.raises(ValueError, match="image model"):
+            await provider.generate_image("draw")
+        provider._request_image_backend.assert_not_awaited()
+    finally:
+        await provider.terminate()
