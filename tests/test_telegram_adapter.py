@@ -84,6 +84,82 @@ def _build_context() -> MagicMock:
     return context
 
 
+def _find_reply_component(message) -> Comp.Reply:
+    replies = [
+        component for component in message.message if isinstance(component, Comp.Reply)
+    ]
+    assert len(replies) == 1
+    return replies[0]
+
+
+@pytest.mark.asyncio
+async def test_telegram_reply_to_bot_uses_self_id_and_preserves_quote():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    reply_to_message = create_mock_update(
+        message_text="机器人上一条回复",
+        user_id=12345678,
+        username="test_bot",
+        message_id=10,
+    ).message
+    update = create_mock_update(
+        message_text="继续",
+        chat_type="group",
+        reply_to_message=reply_to_message,
+    )
+    update.message.quote = SimpleNamespace(text="引用片段")
+
+    result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    reply = _find_reply_component(result)
+    assert reply.sender_id == result.self_id == "test_bot"
+    assert reply.qq == 12345678
+    assert reply.id == str(reply_to_message.message_id)
+    assert reply.message_str == "引用片段"
+    assert len(reply.chain) == 1
+    assert isinstance(reply.chain[0], Comp.Plain)
+    assert reply.chain[0].text == "引用片段"
+
+
+@pytest.mark.asyncio
+async def test_telegram_reply_to_user_preserves_sender_and_message():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    reply_to_message = create_mock_update(
+        message_text="普通用户消息",
+        user_id=87654321,
+        username="alice",
+        message_id=11,
+    ).message
+    update = create_mock_update(
+        message_text="继续",
+        chat_type="group",
+        reply_to_message=reply_to_message,
+    )
+
+    result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    reply = _find_reply_component(result)
+    assert str(reply.sender_id) == "87654321"
+    assert reply.qq == 87654321
+    assert reply.id == str(reply_to_message.message_id)
+    assert reply.message_str == reply_to_message.text
+    assert any(
+        isinstance(component, Comp.Plain) and component.text == reply_to_message.text
+        for component in reply.chain
+    )
+
+
 @pytest.mark.asyncio
 async def test_telegram_topic_with_missing_name_falls_back_to_group_name():
     TelegramPlatformAdapter = _load_telegram_adapter()

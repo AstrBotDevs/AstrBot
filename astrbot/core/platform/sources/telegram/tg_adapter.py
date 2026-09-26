@@ -582,11 +582,16 @@ class TelegramPlatformAdapter(Platform):
                     reply_chain = [Comp.Plain(quote_text)]
                     reply_message_str = quote_text
 
+                reply_sender_id = reply_abm.sender.user_id
+                reply_from_user = update.message.reply_to_message.from_user
+                if reply_from_user and reply_from_user.id == context.bot.id:
+                    reply_sender_id = message.self_id
+
                 message.message.append(
                     Comp.Reply(
                         id=reply_abm.message_id,
                         chain=reply_chain,
-                        sender_id=reply_abm.sender.user_id,
+                        sender_id=reply_sender_id,
                         sender_nickname=reply_abm.sender.nickname,
                         time=reply_abm.timestamp,
                         message_str=reply_message_str,
