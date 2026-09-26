@@ -1217,6 +1217,72 @@ async def test_quoted_image_file_id_is_resolved_after_preprocessing(harness):
 
 
 @pytest.mark.asyncio
+async def test_caption_provider_uses_resolved_quoted_image_reference(
+    harness, tmp_path, monkeypatch
+):
+    source = source_image(tmp_path, "JPEG")
+    resolved_url = "https://img.example.com/quoted.jpg"
+    harness.provider.provider_config["modalities"] = ["text"]
+    harness.config["provider_settings"]["default_image_caption_provider_id"] = "caption"
+    caption = MagicMock(spec=Provider)
+    caption.text_chat = AsyncMock(
+        return_value=LLMResponse(role="assistant", completion_text="red square")
+    )
+    harness.context.get_provider_by_id.return_value = caption
+
+    async def call_action(action, **params):
+        if action == "get_image" and params == {"file": "opaque-id"}:
+            return {"data": {"url": resolved_url}}
+        raise RuntimeError(f"unexpected action: {action} {params}")
+
+    async def prepare(ref, *, max_size, output_dir):
+        if ref == resolved_url:
+            return str(source), False, False, str(source)
+        return None
+
+    monkeypatch.setattr(image_input, "prepare_model_image", prepare)
+    event = make_event(
+        [Reply(id="quoted", chain=[Image(file="opaque-id")], message_str="quoted")]
+    )
+    event.bot = SimpleNamespace(api=SimpleNamespace(call_action=call_action))
+
+    req, quote_ref = await main.collect_initial_request(
+        event,
+        harness.context,
+        main.MainAgentBuildConfig(tool_call_timeout=60),
+    )
+    assert req is not None
+    assert quote_ref == resolved_url
+    prepared = {}
+    await image_input.prepare_request_images(
+        req,
+        event,
+        max_size=90,
+        prepared=prepared,
+        quote_image_ref=quote_ref,
+        quoted_refs={quote_ref},
+        finalize=False,
+    )
+    await main._process_quote_message(
+        event,
+        req,
+        "caption",
+        harness.context,
+        main_provider_supports_image=False,
+        skip_quote_image_caption=False,
+        image_ref=prepared[quote_ref]["path"],
+    )
+
+    caption.text_chat.assert_awaited_once()
+    assert caption.text_chat.await_args.kwargs["image_urls"] == [str(source)]
+    assert any(
+        "red square" in part.text
+        for part in req.extra_user_content_parts
+        if isinstance(part, TextPart)
+    )
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("quoted", [False, True])
 @pytest.mark.parametrize("failure", [RuntimeError, asyncio.CancelledError])
 @pytest.mark.parametrize("fail_at", ["attachment", "conversation"])
