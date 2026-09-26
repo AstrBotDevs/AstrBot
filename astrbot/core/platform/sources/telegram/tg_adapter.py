@@ -608,15 +608,16 @@ class TelegramPlatformAdapter(Platform):
                 plain_text2 = f"/@{context.bot.username} " + plain_text
                 plain_text = plain_text2
 
-            # 群聊场景命令特殊处理
+            # Normalize commands explicitly addressed to a Telegram bot.
             if plain_text.startswith("/"):
                 command_parts = plain_text.split(" ", 1)
                 if "@" in command_parts[0]:
-                    command, bot_name = command_parts[0].split("@")
-                    if bot_name == self.client.username:
-                        plain_text = command + (
-                            f" {command_parts[1]}" if len(command_parts) > 1 else ""
-                        )
+                    command, bot_name = command_parts[0].split("@", 1)
+                    if bot_name.casefold() != context.bot.username.casefold():
+                        return None
+                    plain_text = command + (
+                        f" {command_parts[1]}" if len(command_parts) > 1 else ""
+                    )
 
             if update.message.entities:
                 for entity in update.message.entities:

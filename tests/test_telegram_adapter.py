@@ -85,6 +85,52 @@ def _build_context() -> MagicMock:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("/help@test_bot", "/help"),
+        ("/help@TEST_BOT details", "/help details"),
+        ("/help", "/help"),
+    ],
+)
+async def test_telegram_command_for_current_bot_is_normalized(text, expected):
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    update = create_mock_update(message_text=text, chat_type="group")
+
+    result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    assert result.message_str == expected
+    assert any(
+        isinstance(component, Comp.Plain) and component.text == expected
+        for component in result.message
+    )
+
+
+@pytest.mark.asyncio
+async def test_telegram_command_for_another_bot_is_ignored():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    update = create_mock_update(
+        message_text="/help@another_bot details",
+        chat_type="group",
+    )
+
+    result = await adapter.convert_message(update, _build_context())
+
+    assert result is None
+
+
+@pytest.mark.asyncio
 async def test_telegram_topic_with_missing_name_falls_back_to_group_name():
     TelegramPlatformAdapter = _load_telegram_adapter()
     adapter = TelegramPlatformAdapter(
