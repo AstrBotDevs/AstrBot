@@ -2464,18 +2464,6 @@ html[data-astrbot-desktop-platform='macos'] .top-header.chat-mode-header.chat-mo
   top: 0 !important;
 }
 
-/* Off macOS the header only covers the content zone, right of the sidebar. */
-html:not([data-astrbot-desktop-platform='macos']) .top-header {
-  left: var(--v-layout-left, 0px) !important;
-  width: calc(100% - var(--v-layout-left, 0px)) !important;
-}
-
-/* On macOS the header is the window chrome and spans the whole window. */
-html[data-astrbot-desktop-platform='macos'] .top-header {
-  left: 0 !important;
-  right: 0 !important;
-  width: 100% !important;
-}
 
 /* Windows draws its native caption buttons (min/max/close) over the toolbar's
    right edge, so keep the header actions clear of that zone. */

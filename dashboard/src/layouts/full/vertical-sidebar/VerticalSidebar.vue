@@ -230,6 +230,12 @@ function toggleSidebar() {
   background: transparent !important;
 }
 
+/* Off macOS the sidebar is opaque and owns the top-left corner: it must paint
+   above the header's left zone so the brand stays visible in the toolbar band. */
+:global(html:not([data-astrbot-desktop-platform='macos']) .leftSidebar) {
+  z-index: 1007 !important;
+}
+
 .dashboard-sidebar-brand {
   display: flex;
   min-height: 50px;

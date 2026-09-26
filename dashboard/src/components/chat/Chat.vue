@@ -1917,6 +1917,12 @@ async function stopCurrentSession() {
   background: transparent !important;
 }
 
+/* Off macOS the chat sidebar is opaque and owns the top-left corner: it must paint
+   above the header's left zone so the brand stays visible in the toolbar band. */
+:global(html:not([data-astrbot-desktop-platform='macos']) .chat-sidebar) {
+  z-index: 1007 !important;
+}
+
 /* The dark chat sidebar uses its own palette; match the corner notch to it. */
 :global(html:not([data-astrbot-desktop-platform='macos']) .v-application.v-theme--PurpleThemeDark .v-main.chat-main) {
   background-image: linear-gradient(
