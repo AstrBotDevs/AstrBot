@@ -112,7 +112,7 @@ class TestEmojiCounting:
     def test_emoji_estimate_close_to_real_usage(self):
         """50000 个 🔥 的真实 prompt_tokens 实测为 150082。"""
         tokens = counter.count_tokens([_msg("user", "🔥" * 50_000)])
-        assert tokens >= 100_000
+        assert 100_000 <= tokens <= 170_000
 
     def test_flag_and_zwj_sequences_counted(self):
         """国旗与 ZWJ 组合的 token 开销同样高于普通字符。"""
