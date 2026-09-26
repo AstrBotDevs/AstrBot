@@ -280,15 +280,23 @@ class ThirdPartyAgentSubStage(Stage):
     ) -> AsyncGenerator[None, None]:
         req: ProviderRequest | None = None
 
-        if provider_wake_prefix and not event.message_str.startswith(
+        # WebChat is a point-to-point panel session, so like the waking
+        # stage (#9215) it is exempt from wake-prefix gating; otherwise a
+        # configured provider wake prefix silently drops every message.
+        is_webchat = event.get_platform_name() == "webchat"
+        if (
             provider_wake_prefix
+            and not is_webchat
+            and not event.message_str.startswith(provider_wake_prefix)
         ):
             return
 
         # make provider request
         req = ProviderRequest()
         req.session_id = event.unified_msg_origin
-        req.prompt = event.message_str[len(provider_wake_prefix) :]
+        req.prompt = event.message_str
+        if provider_wake_prefix and event.message_str.startswith(provider_wake_prefix):
+            req.prompt = event.message_str[len(provider_wake_prefix) :]
         for comp in event.message_obj.message:
             if isinstance(comp, Image):
                 image_path = await comp.convert_to_base64()

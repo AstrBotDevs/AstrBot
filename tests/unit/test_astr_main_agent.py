@@ -3042,3 +3042,66 @@ class TestApplySandboxTools:
 
         assert isinstance(req.system_prompt, str)
         assert "sandboxed environment" in req.system_prompt
+
+
+def _conversation_ready(mock_context, mock_conversation):
+    """Prepare the conversation manager mocks used by request collection."""
+    conv_mgr = mock_context.conversation_manager
+    conv_mgr.get_curr_conversation_id = AsyncMock(return_value="conv-id")
+    conv_mgr.get_conversation = AsyncMock(return_value=mock_conversation)
+
+
+@pytest.mark.asyncio
+async def test_collect_initial_request_rejects_missing_provider_wake_prefix(
+    mock_event, mock_context, mock_conversation
+):
+    """Messages without the provider wake prefix are rejected off WebChat."""
+    _conversation_ready(mock_context, mock_conversation)
+    mock_event.message_str = "hello"
+
+    req, _ = await ama.collect_initial_request(
+        mock_event,
+        mock_context,
+        ama.MainAgentBuildConfig(tool_call_timeout=60, provider_wake_prefix="/chat"),
+    )
+
+    assert req is None
+
+
+@pytest.mark.asyncio
+async def test_collect_initial_request_exempts_webchat_from_provider_wake_prefix(
+    mock_event, mock_context, mock_conversation
+):
+    """WebChat is exempt from the provider wake prefix, like the waking stage."""
+    _conversation_ready(mock_context, mock_conversation)
+    mock_event.get_platform_name.return_value = "webchat"
+    mock_event.message_str = "hello"
+
+    req, _ = await ama.collect_initial_request(
+        mock_event,
+        mock_context,
+        ama.MainAgentBuildConfig(tool_call_timeout=60, provider_wake_prefix="/chat"),
+    )
+
+    assert req is not None
+    assert req.prompt == "hello"
+
+
+@pytest.mark.asyncio
+async def test_collect_initial_request_strips_present_provider_wake_prefix(
+    mock_event, mock_context, mock_conversation
+):
+    """A provider wake prefix present in the message is still stripped."""
+    _conversation_ready(mock_context, mock_conversation)
+    mock_event.message_str = "/chat hello"
+
+    req, _ = await ama.collect_initial_request(
+        mock_event,
+        mock_context,
+        ama.MainAgentBuildConfig(tool_call_timeout=60, provider_wake_prefix="/chat"),
+    )
+
+    assert req is not None
+    # The prefix is removed with a length-based slice, matching the
+    # pre-existing behavior; the leading space stays.
+    assert req.prompt == " hello"
