@@ -150,7 +150,7 @@ async def test_telegram_reply_to_user_preserves_sender_and_message():
 
     assert result is not None
     reply = _find_reply_component(result)
-    assert reply.sender_id == 87654321
+    assert str(reply.sender_id) == "87654321"
     assert reply.qq == 87654321
     assert reply.id == str(reply_to_message.message_id)
     assert reply.message_str == reply_to_message.text
