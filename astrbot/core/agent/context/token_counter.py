@@ -33,6 +33,9 @@ class TokenCounter(Protocol):
 # 这里取一个保守中位数，宁可偏高触发压缩也不要偏低导致 API 报错。
 IMAGE_TOKEN_ESTIMATE = 765
 AUDIO_TOKEN_ESTIMATE = 500
+# Estimate value of tokens for each emoji.
+# Only emoji located in 0x2600–0x27BF and 0x1F000-0x1FAFF are estimated.
+EMOJI_TOKEN_ESTIMATE = 3
 
 
 class EstimateTokenCounter:
@@ -73,6 +76,13 @@ class EstimateTokenCounter:
         return total
 
     def _estimate_tokens(self, text: str) -> int:
+        emoji_count = sum(
+            1
+            for c in text
+            if 0x1F000 <= ord(c) <= 0x1FAFF or 0x2600 <= ord(c) <= 0x27BF
+        )
         chinese_count = len([c for c in text if "\u4e00" <= c <= "\u9fff"])
-        other_count = len(text) - chinese_count
-        return int(chinese_count * 0.6 + other_count * 0.3)
+        other_count = len(text) - emoji_count - chinese_count
+        return int(
+            chinese_count * 0.6 + other_count * 0.3 + emoji_count * EMOJI_TOKEN_ESTIMATE
+        )
