@@ -115,6 +115,77 @@ async def test_gemini_prepare_conversation_preserves_user_model_history():
 
 
 @pytest.mark.asyncio
+async def test_gemini_prepare_conversation_maps_tool_call_id_to_function_name():
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+
+    contents = await provider._prepare_conversation(
+        {
+            "messages": [
+                {"role": "user", "content": "check the weather"},
+                {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": "call_opaque_123",
+                            "function": {
+                                "name": "get_weather",
+                                "arguments": '{"city": "Shenyang"}',
+                            },
+                        }
+                    ],
+                },
+                {
+                    "role": "tool",
+                    "tool_call_id": "call_opaque_123",
+                    "content": "sunny",
+                },
+            ]
+        }
+    )
+
+    assert contents[-1].parts is not None
+    function_response = contents[-1].parts[0].function_response
+    assert function_response is not None
+    assert function_response.name == "get_weather"
+    assert function_response.response == {
+        "name": "get_weather",
+        "content": "sunny",
+    }
+
+
+@pytest.mark.asyncio
+async def test_gemini_prepare_conversation_keeps_tool_name_fallbacks():
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+
+    contents = await provider._prepare_conversation(
+        {
+            "messages": [
+                {"role": "user", "content": "run tools"},
+                {
+                    "role": "tool",
+                    "name": "explicit_name",
+                    "tool_call_id": "call_explicit",
+                    "content": "first result",
+                },
+                {
+                    "role": "tool",
+                    "tool_call_id": "legacy_function_name",
+                    "content": "second result",
+                },
+            ]
+        }
+    )
+
+    assert contents[-1].parts is not None
+    function_responses = [part.function_response for part in contents[-1].parts]
+    assert [response.name for response in function_responses if response] == [
+        "explicit_name",
+        "legacy_function_name",
+    ]
+
+
+@pytest.mark.asyncio
 async def test_gemini_prepare_conversation_resolves_local_history_image(tmp_path):
     image_path = tmp_path / "history.webp"
     image_bytes = (
