@@ -26,12 +26,15 @@ class OpenAIOAuthUsageService:
             or settings.get("enabled", True) is not True
         ):
             return "disabled", ""
-        if not event.is_admin():
+        admin_ids = config.get("admins_id")
+        sender_id = str(event.get_sender_id() or "")
+        if (
+            not event.is_admin()
+            or not isinstance(admin_ids, list)
+            or not sender_id
+            or sender_id not in admin_ids
+        ):
             return "not_admin", ""
-        if not event.is_private_chat():
-            allowed = settings.get("group_allowlist", [])
-            if not isinstance(allowed, list) or origin not in allowed:
-                return "group_not_allowed", ""
         target = str(settings.get("provider_id") or "").strip()
         if expected_target is not None and target != expected_target:
             return "authorization_changed", ""

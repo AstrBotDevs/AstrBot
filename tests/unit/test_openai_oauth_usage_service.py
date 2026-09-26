@@ -2,6 +2,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
+from astrbot.core.config.default import CONFIG_METADATA_3, DEFAULT_CONFIG
 from astrbot.core.provider.oauth.openai_oauth_usage_service import (
     OpenAIOAuthUsageService,
 )
@@ -14,10 +15,12 @@ class UsageServiceTests(unittest.IsolatedAsyncioTestCase):
         )
         self.profiles = {
             "test:FriendMessage:1": {
-                "provider_settings": {"codex_oauth_usage": {"enabled": True}}
+                "admins_id": ["admin-1"],
+                "provider_settings": {"codex_oauth_usage": {"enabled": True}},
             },
             "test:GroupMessage:2": {
-                "provider_settings": {"codex_oauth_usage": {"enabled": True}}
+                "admins_id": ["admin-2"],
+                "provider_settings": {"codex_oauth_usage": {"enabled": True}},
             },
         }
         self.context = SimpleNamespace(
@@ -30,14 +33,24 @@ class UsageServiceTests(unittest.IsolatedAsyncioTestCase):
             close=AsyncMock(),
         )
         self.service = OpenAIOAuthUsageService(self.context, self.reader)
+        self.sender_id = "admin-1"
         self.event = SimpleNamespace(
             is_admin=lambda: True,
             is_private_chat=lambda: True,
+            get_sender_id=lambda: self.sender_id,
             unified_msg_origin="test:FriendMessage:1",
         )
 
     def settings(self, umo="test:FriendMessage:1"):
         return self.profiles[umo]["provider_settings"]["codex_oauth_usage"]
+
+    def test_new_profile_defaults_do_not_advertise_legacy_group_allowlist(self):
+        self.assertEqual(
+            DEFAULT_CONFIG["provider_settings"]["codex_oauth_usage"],
+            {"enabled": True, "provider_id": ""},
+        )
+        items = CONFIG_METADATA_3["ai_group"]["metadata"]["ai"]["items"]
+        self.assertNotIn("provider_settings.codex_oauth_usage.group_allowlist", items)
 
     async def test_admin_private_uses_current_profile_provider(self):
         result = await self.service.run(self.event)
@@ -54,7 +67,10 @@ class UsageServiceTests(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_profile_isolation_and_default_settings(self):
-        self.profiles["test:FriendMessage:1"] = {"provider_settings": {}}
+        self.profiles["test:FriendMessage:1"] = {
+            "admins_id": ["admin-1"],
+            "provider_settings": {},
+        }
         self.settings("test:GroupMessage:2")["enabled"] = False
         self.assertEqual((await self.service.run(self.event))["status"], "success")
         self.event.unified_msg_origin = "test:GroupMessage:2"
@@ -67,17 +83,25 @@ class UsageServiceTests(unittest.IsolatedAsyncioTestCase):
         self.context.get_using_provider_async.assert_not_awaited()
         self.reader.read.assert_not_awaited()
 
-    async def test_group_requires_exact_origin_allowlist(self):
+    async def test_admin_group_ignores_legacy_allowlist(self):
         self.event.is_private_chat = lambda: False
         self.event.unified_msg_origin = "test:GroupMessage:2"
+        self.sender_id = "admin-2"
         self.settings("test:GroupMessage:2")["group_allowlist"] = ["2"]
-        self.assertEqual(
-            (await self.service.run(self.event))["status"], "group_not_allowed"
-        )
+        self.assertEqual((await self.service.run(self.event))["status"], "success")
+        self.settings("test:GroupMessage:2")["group_allowlist"] = []
+        self.assertEqual((await self.service.run(self.event))["status"], "success")
+
+    async def test_non_admin_group_cannot_query_even_with_legacy_allowlist(self):
+        self.event.is_private_chat = lambda: False
+        self.event.is_admin = lambda: False
+        self.event.unified_msg_origin = "test:GroupMessage:2"
+        self.sender_id = "admin-2"
         self.settings("test:GroupMessage:2")["group_allowlist"] = [
             self.event.unified_msg_origin
         ]
-        self.assertEqual((await self.service.run(self.event))["status"], "success")
+        self.assertEqual((await self.service.run(self.event))["status"], "not_admin")
+        self.reader.read.assert_not_awaited()
 
     async def test_only_builtin_oauth_provider_can_be_queried(self):
         self.provider.provider_config["type"] = (
@@ -148,21 +172,33 @@ class UsageServiceTests(unittest.IsolatedAsyncioTestCase):
         self.reader.read.side_effect = read
         self.assertEqual((await self.service.run(self.event))["status"], "not_admin")
 
-    async def test_profile_group_permission_revoked_during_request(self):
+    async def test_profile_group_admin_revoked_during_request(self):
         self.event.is_private_chat = lambda: False
         self.event.unified_msg_origin = "test:GroupMessage:2"
-        self.settings("test:GroupMessage:2")["group_allowlist"] = [
-            self.event.unified_msg_origin
-        ]
+        self.sender_id = "admin-2"
 
         async def read(_provider):
-            self.settings("test:GroupMessage:2")["group_allowlist"] = []
+            self.profiles["test:GroupMessage:2"]["admins_id"] = []
             return {"status": "success"}
 
         self.reader.read.side_effect = read
-        self.assertEqual(
-            (await self.service.run(self.event))["status"], "group_not_allowed"
-        )
+        self.assertEqual((await self.service.run(self.event))["status"], "not_admin")
+
+    async def test_each_profile_uses_its_current_admin_list(self):
+        self.assertEqual((await self.service.run(self.event))["status"], "success")
+        self.event.unified_msg_origin = "test:GroupMessage:2"
+        self.event.is_private_chat = lambda: False
+        self.assertEqual((await self.service.run(self.event))["status"], "not_admin")
+        self.sender_id = "admin-2"
+        self.assertEqual((await self.service.run(self.event))["status"], "success")
+
+    async def test_missing_or_invalid_current_admin_list_denies(self):
+        for admin_ids in (None, "admin-1", []):
+            self.profiles["test:FriendMessage:1"]["admins_id"] = admin_ids
+            self.assertEqual(
+                (await self.service.run(self.event))["status"], "not_admin"
+            )
+        self.reader.read.assert_not_awaited()
 
     async def test_disabled_and_closed_never_query(self):
         self.settings()["enabled"] = False

@@ -64,7 +64,8 @@ class Main(star.Star):
     async def codex_oauth_usage(self, event: AstrMessageEvent) -> str:
         """查询管理员配置的 Codex OAuth 账号额度，仅用户明确询问时调用。
 
-        调用模型不限厂商。仅允许管理员私聊或当前配置允许的群聊。
+        Any chat model may call this tool. Only the current profile's
+        administrators may query usage, in private chat or any group.
         返回使用比例、剩余比例、窗口、重置时间和采集时间。
         cached 表示短时缓存，缺失值不是零，不推算剩余请求次数。
         status 非 success 时仅说明错误，不编造额度。
