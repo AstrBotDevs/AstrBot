@@ -397,3 +397,65 @@ async def test_parse_failed_response_raises_provider_error():
 
     with pytest.raises(RuntimeError, match="server_error: failed"):
         await provider._parse_response(response, tools=None)
+
+
+def test_xai_web_search_not_injected_by_default():
+    provider = _make_provider({"provider": "xai"})
+    payloads: dict = {}
+
+    provider._maybe_inject_xai_native_search(payloads)
+
+    assert "tools" not in payloads
+
+
+def test_xai_web_search_injected_without_function_tools():
+    provider = _make_provider({"provider": "xai", "xai_native_search": True})
+    payloads: dict = {}
+
+    provider._maybe_inject_xai_native_search(payloads)
+
+    assert payloads["tools"] == [{"type": "web_search"}]
+
+
+def test_xai_web_search_appended_after_function_tools_only_once():
+    provider = _make_provider({"provider": "xai", "xai_native_search": True})
+    payloads = {"tools": [{"type": "function", "name": "weather", "parameters": {}}]}
+
+    provider._maybe_inject_xai_native_search(payloads)
+    provider._maybe_inject_xai_native_search(payloads)
+
+    assert payloads["tools"] == [
+        {"type": "function", "name": "weather", "parameters": {}},
+        {"type": "web_search"},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_query_sends_xai_web_search_tool_when_native_search_enabled(
+    monkeypatch,
+):
+    provider = _make_provider({"provider": "xai", "xai_native_search": True})
+    captured: dict = {}
+
+    async def fake_create(**kwargs):
+        captured.update(kwargs)
+        return _make_response(
+            [
+                {
+                    "type": "message",
+                    "id": "msg_1",
+                    "status": "completed",
+                    "role": "assistant",
+                    "content": [
+                        {"type": "output_text", "text": "news", "annotations": []},
+                    ],
+                }
+            ]
+        )
+
+    monkeypatch.setattr(provider.client.responses, "create", fake_create)
+
+    result = await provider._query({"model": "grok-4.5", "input": "news"}, None)
+
+    assert captured["tools"] == [{"type": "web_search"}]
+    assert result.completion_text == "news"
