@@ -227,6 +227,15 @@ onMounted(() => {
   border-top-left-radius: 12px;
 }
 
+/* On small screens there is no permanent sidebar to separate from, so the
+   card's left edge treatments would only read as stray lines. */
+@media (max-width: 959.98px) {
+  :global(.page-wrapper) {
+    border-left: 0;
+    border-top-left-radius: 0;
+  }
+}
+
 /* Off macOS the card also carries the hairline under the toolbar, so the line
    follows the rounded corner instead of cutting across the notch. */
 :global(html:not([data-astrbot-desktop-platform='macos']) .page-wrapper) {

@@ -1063,6 +1063,7 @@ onMounted(async () => {
       v-if="$vuetify.display.smAndDown"
       class="header-menu-btn"
       icon
+      rounded="lg"
       variant="text"
       :ripple="false"
       :aria-label="t('core.navigation.options')"
@@ -2511,8 +2512,19 @@ html[data-astrbot-desktop-platform='windows'] .top-header .v-toolbar__content {
    is no longer permanent, so the menu button must clear them. */
 @media (max-width: 959.98px) {
   html[data-astrbot-desktop-platform='macos'] .top-header .v-toolbar__content {
-    padding-inline-start: 80px !important;
+    padding-inline-start: 74px !important;
   }
+}
+
+.top-header .header-menu-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px !important;
+  color: rgba(var(--v-theme-on-surface), 0.58);
+}
+
+.top-header .header-menu-btn:hover {
+  color: rgba(var(--v-theme-on-surface), 0.9);
 }
 
 .header-toolbar-label {
