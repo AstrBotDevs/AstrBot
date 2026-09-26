@@ -491,6 +491,8 @@ AstrBot API 的地址。用于渲染 Markdown 图片。当 `t2i_strategy` 为 `r
 
 HTTP 代理。如 `http://localhost:7890`。Docker 部署时请填写 AstrBot 容器能访问到的地址，见 [Docker 部署](/deploy/astrbot/docker.md)。
 
+安全说明：受 SSRF 防护的 URL 下载会绕过环境变量中的 HTTP(S) 代理，以避免代理服务器自行解析目标域名而绕过目标地址校验。因此，这类下载不会自动使用 `HTTP_PROXY`/`HTTPS_PROXY`；依赖代理访问外部资源的部署需要改用可直接访问的下载地址或其他应用层代理/镜像配置。
+
 ### `no_proxy`
 
 不使用代理的地址列表。如 `["localhost", "127.0.0.1"]`。

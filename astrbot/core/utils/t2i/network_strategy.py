@@ -6,6 +6,7 @@ from functools import lru_cache
 from pathlib import Path
 
 import aiohttp
+from yarl import URL
 
 from astrbot.core.config import VERSION
 from astrbot.core.utils.http_ssl import build_tls_connector
@@ -194,6 +195,13 @@ class NetworkRenderStrategy(RenderStrategy):
                         f"{endpoint}/generate",
                         post=True,
                         post_data=post_data,
+                        # The endpoint is configured by the operator and may be
+                        # a local self-hosted renderer. Official endpoints fetched
+                        # from the service registry remain on the public-only path.
+                        allow_private_network=(
+                            self.BASE_RENDER_URL != ASTRBOT_T2I_DEFAULT_ENDPOINT
+                        ),
+                        allowed_origin=str(URL(endpoint).origin()),
                     )
             except Exception as e:
                 last_exception = e

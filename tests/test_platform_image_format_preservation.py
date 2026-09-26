@@ -52,6 +52,21 @@ async def test_satori_image_data_url_preserves_jpeg_mime_type():
 
 
 @pytest.mark.asyncio
+async def test_satori_image_prefers_local_path_over_private_file_service_url(tmp_path):
+    image_path = tmp_path / "image.png"
+    PILImage.new("RGBA", (2, 2), (255, 0, 0, 128)).save(image_path, format="PNG")
+    component = Image(
+        file="http://127.0.0.1:1/api/file/private-token",
+        url="http://127.0.0.1:1/api/file/private-token",
+        path=str(image_path),
+    )
+
+    result = await SatoriPlatformEvent._convert_component_to_satori_static(component)
+
+    assert result.startswith('<img src="data:image/png;base64,')
+
+
+@pytest.mark.asyncio
 async def test_webchat_image_attachment_uses_detected_extension(tmp_path, monkeypatch):
     image_buffer = BytesIO()
     PILImage.new("RGBA", (2, 2), (255, 0, 0, 128)).save(

@@ -491,6 +491,8 @@ Whether to enable the file service. Default is `false`. When enabled, the bot pr
 
 HTTP proxy. E.g., `http://localhost:7890`. When AstrBot runs in Docker, use an address reachable from the AstrBot container. See [Deploy with Docker](/en/deploy/astrbot/docker.md).
 
+Security note: URL downloads protected by SSRF checks bypass HTTP(S) environment proxies because a proxy can resolve the target hostname independently and bypass the destination-address check. These downloads therefore do not automatically use `HTTP_PROXY`/`HTTPS_PROXY`; deployments that rely on a proxy for external access need a directly reachable download URL or another application-level proxy/mirror configuration.
+
 ### `no_proxy`
 
 List of addresses that bypass the proxy. E.g., `["localhost", "127.0.0.1"]`.
