@@ -1,5 +1,7 @@
 """Tests for EstimateTokenCounter multimodal support."""
 
+import pytest
+
 from astrbot.core.agent.context.token_counter import (
     AUDIO_TOKEN_ESTIMATE,
     IMAGE_TOKEN_ESTIMATE,
@@ -103,8 +105,20 @@ class TestMultimodalCounting:
 
 
 class TestTrustedUsage:
-    def test_trusted_overrides(self):
-        """如果 API 返回了 token 数，直接用它不做估算。"""
+    @pytest.mark.parametrize(
+        ("args", "usage", "expected"),
+        [
+            ((42,), {}, 42),
+            ((), {"trusted_token_usage": 42}, 42),
+            ((), {}, None),
+            ((0,), {}, None),
+            ((-1,), {}, None),
+            ((), {"trusted_token_usage": 0}, None),
+            ((), {"trusted_token_usage": -1}, None),
+        ],
+    )
+    def test_usage_overrides(self, args, usage, expected):
+        """Positive usage overrides estimates for keyword and positional calls."""
         msg = _msg(
             "user",
             [
@@ -114,8 +128,8 @@ class TestTrustedUsage:
                 ),
             ],
         )
-        tokens = counter.count_tokens([msg], trusted_token_usage=42)
-        assert tokens == 42
+        tokens = counter.count_tokens([msg], *args, **usage)
+        assert tokens == (counter.count_tokens([msg]) if expected is None else expected)
 
 
 class TestToolCalls:
