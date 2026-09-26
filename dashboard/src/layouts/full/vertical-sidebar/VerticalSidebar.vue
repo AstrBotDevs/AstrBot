@@ -239,6 +239,12 @@ function toggleSidebar() {
   padding: 0 16px 2px 24px;
 }
 
+/* Force the brand onto its own compositing layer: on the macOS vibrancy window
+   the inline SVG logo can fail to paint after a webview reload. */
+.dashboard-sidebar-brand .dashboard-sidebar-brand-logo {
+  transform: translateZ(0);
+}
+
 .dashboard-sidebar-brand.collapsed {
   width: 56px;
   justify-content: center;

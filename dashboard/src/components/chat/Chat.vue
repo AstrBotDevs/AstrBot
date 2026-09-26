@@ -1954,6 +1954,12 @@ async function stopCurrentSession() {
   padding: 0 10px 2px;
 }
 
+/* Force the brand onto its own compositing layer: on the macOS vibrancy window
+   the inline SVG logo can fail to paint after a webview reload. */
+.chat-sidebar-brand .chat-sidebar-brand-logo {
+  transform: translateZ(0);
+}
+
 .chat-sidebar-brand.collapsed {
   width: 36px;
   justify-content: center;
