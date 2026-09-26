@@ -21,6 +21,7 @@ The following commands are shipped with AstrBot and loaded by default:
 - `/stats`: View token usage statistics for the current conversation.
 - `/provider`: View or switch LLM Provider. This command requires admin permission.
 - `/dashboard_update`: Update AstrBot WebUI. This command requires admin permission.
+- `/lang`: View or set the global language. This command requires admin permission.
 - `/set`: Set a session variable, commonly used for Agent Runner input variables such as Dify, Coze, or DashScope.
 - `/unset`: Remove a session variable.
 
@@ -149,6 +150,22 @@ Use `/provider <index>` to switch the current session's LLM Provider to the Prov
 
 This command requires admin permission.
 
+### `/lang`
+
+`/lang` views or sets AstrBot's global language. Four languages are supported: `zh-CN`, `en-US`, `ru-RU`, and `ja-JP`, with `en-US` as the default. This command requires admin permission.
+
+- `/lang`: View the current language. If the value stored in the global config is unrecognized, the fallback language actually in effect is reported as well.
+- `/lang <language>`: Set the global language. Short forms such as `zh`, `en`, `ru`, and `jp` are accepted, as are full codes such as `zh-CN`, `en-US`, `ru-RU`, and `ja-JP`.
+- `/lang reset`: Restore the default language `en-US`.
+
+The language is a global setting that applies to every platform and session. A change takes effect immediately for:
+
+- Replies of built-in commands, and the descriptions of built-in commands in `/help`.
+- Multilingual aliases registered through `multi_alias`. By default only aliases of the current language are accepted, while the main command name always works. Enable **All-language aliases** in WebUI under `Config -> Platform -> Other Settings` to accept aliases of every language.
+- Command names shown in WebUI command management. Command descriptions follow the WebUI locale and are not affected by `/lang`.
+
+Plugins can adopt multiple languages through `multi_alias`, `desc_i18n`, and `get_lang`. See [Plugin i18n](../dev/star/guides/plugin-i18n.md) for details.
+
 ## Built-in Commands Extension
 
 Other commands that were previously shipped with the core have been moved to a separate plugin:
@@ -174,6 +191,6 @@ Install or enable the `builtin_commands_extension` plugin if you need these exte
 
 ## Permission Notes
 
-Some commands require AstrBot admin permission, such as `/dashboard_update`, `/name`, `/op`, `/deop`, `/provider`, `/model`, and `/persona`.
+Some commands require AstrBot admin permission, such as `/dashboard_update`, `/lang`, `/name`, `/op`, `/deop`, `/provider`, `/model`, and `/persona`.
 
 You can use `/sid` to get a user ID, then add it in WebUI under `Config -> Platform -> General -> Administrator IDs`.

@@ -21,6 +21,7 @@ AstrBot 的指令通过插件机制注册。为了保持主程序轻量，当前
 - `/stats`：查看当前会话的 Token 用量统计。
 - `/provider`：查看或切换 LLM Provider。该指令需要管理员权限。
 - `/dashboard_update`：更新 AstrBot WebUI。该指令需要管理员权限。
+- `/lang`：查看或设置全局语言。该指令需要管理员权限。
 - `/set`：设置当前会话变量，常用于 Dify、Coze、DashScope 等 Agent 执行器的输入变量。
 - `/unset`：移除当前会话变量。
 
@@ -143,6 +144,22 @@ DeerFlow 还会尝试删除旧的远端 thread。
 
 该指令需要管理员权限。
 
+### `/lang`
+
+`/lang` 用于查看或设置 AstrBot 的全局语言，支持 `zh-CN`、`en-US`、`ru-RU`、`ja-JP` 四种语言，默认 `en-US`。该指令需要管理员权限。
+
+- `/lang`：查看当前语言。如果全局配置中的值无法识别，会同时提示实际生效的默认语言。
+- `/lang <语言>`：设置全局语言，接受 `zh`、`en`、`ru`、`jp` 等缩写，也接受 `zh-CN`、`en-US`、`ru-RU`、`ja-JP` 等完整代码。
+- `/lang reset`：恢复为默认语言 `en-US`。
+
+语言是全局设置，对所有平台、所有会话生效，修改后立即影响：
+
+- 内置指令的回复文案，以及 `/help` 中内置指令的描述。
+- 使用 `multi_alias` 注册的多语言别名。默认只放行当前语言的别名（指令主名称始终可用）；在 WebUI 的 `配置文件 -> 平台配置 -> 其他配置 -> 全语言别名` 中开启后，所有语言的别名都可以触发。
+- WebUI 指令管理中展示的指令名。指令描述跟随 WebUI 界面语言，不受 `/lang` 影响。
+
+插件可以通过 `multi_alias`、`desc_i18n` 和 `get_lang` 接入多语言，详见 [插件多语言](../dev/star/guides/plugin-i18n.md)。
+
 ## 内置指令扩展
 
 除上述基础指令外，其他原本随主程序提供的内置指令已经迁移到独立插件：
@@ -170,6 +187,6 @@ DeerFlow 还会尝试删除旧的远端 thread。
 
 ## 权限说明
 
-部分指令需要 AstrBot 管理员权限，例如 `/dashboard_update`、`/name`、`/op`、`/deop`、`/provider`、`/model`、`/persona` 等。
+部分指令需要 AstrBot 管理员权限，例如 `/dashboard_update`、`/lang`、`/name`、`/op`、`/deop`、`/provider`、`/model`、`/persona` 等。
 
 可以通过 `/sid` 获取用户 ID，然后在 WebUI 的 `配置文件 -> 平台配置 -> 基本 -> 管理员 ID` 中添加管理员。

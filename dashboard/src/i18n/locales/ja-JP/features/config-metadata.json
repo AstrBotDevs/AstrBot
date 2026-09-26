@@ -1138,6 +1138,10 @@
     "others": {
       "description": "その他の設定",
       "platform_settings": {
+        "full_lang_aliases": {
+          "description": "全言語エイリアス",
+          "hint": "有効にすると、プラグインが multi_alias で登録したすべての言語の別名を利用できます。無効の場合はメイン名と現在のグローバル言語に対応する別名のみ利用できます。メイン名(例: /help)は常に利用できます。"
+        },
         "ignore_bot_self_message": {
           "description": "ボット自身のメッセージを無視"
         },

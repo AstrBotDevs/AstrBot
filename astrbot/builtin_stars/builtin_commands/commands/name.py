@@ -2,6 +2,8 @@ from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
 from astrbot.core.umo_alias import get_event_auto_name, normalize_umo_name
 
+from .utils.i18n import t
+
 
 class NameCommand:
     def __init__(self, context: star.Context) -> None:
@@ -19,14 +21,14 @@ class NameCommand:
             event.set_result(
                 MessageEventResult()
                 .message(
-                    "\n".join(
-                        [
-                            "Usage: /name <name>",
-                            f"UMO: {umo}",
-                            f"Auto name: {auto_name or '(empty)'}",
-                            f"Alias: {user_alias or '(empty)'}",
-                        ]
-                    )
+                    await t(
+                        self.context,
+                        umo,
+                        "name.usage",
+                        umo=umo,
+                        name=auto_name or "(empty)",
+                        alias=user_alias or "(empty)",
+                    ),
                 )
                 .use_t2i(False)
             )
@@ -43,6 +45,6 @@ class NameCommand:
 
         event.set_result(
             MessageEventResult()
-            .message(f"UMO name set to: {alias}\nUMO: {umo}")
+            .message(await t(self.context, umo, "name.set", alias=alias, umo=umo))
             .use_t2i(False)
         )

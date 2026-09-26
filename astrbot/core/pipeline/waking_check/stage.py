@@ -10,6 +10,7 @@ from astrbot.core.star.filter.permission import PermissionTypeFilter
 from astrbot.core.star.session_plugin_manager import SessionPluginManager
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import EventType, star_handlers_registry
+from astrbot.core.utils.lang_utils import resolve_lang
 
 from ..context import PipelineContext
 from ..stage import Stage, register_stage
@@ -161,6 +162,14 @@ class WakingCheckStage(Stage):
         # 检查插件的 handler filter
         activated_handlers = []
         handlers_parsed_params = {}  # 注册了指令的 handler
+
+        # 解析全局语言配置供多语言别名过滤使用
+        try:
+            resolved_lang = resolve_lang(self.ctx.astrbot_config)
+        except Exception:
+            resolved_lang = None
+        if resolved_lang:
+            event.set_extra("_astrbot_lang", resolved_lang)
 
         # 将 plugins_name 设置到 event 中
         enabled_plugins_name = self.ctx.astrbot_config.get("plugin_set", ["*"])

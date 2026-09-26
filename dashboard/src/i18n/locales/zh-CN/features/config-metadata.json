@@ -1062,6 +1062,10 @@
     "others": {
       "description": "其他配置",
       "platform_settings": {
+        "full_lang_aliases": {
+          "description": "全语言别名",
+          "hint": "启用后,插件通过 multi_alias 注册的所有语言别名均可触发;关闭时仅指令主名称与当前全局语言对应的别名可用。主名称(如 /help)始终可用。"
+        },
         "ignore_bot_self_message": {
           "description": "是否忽略机器人自身的消息"
         },

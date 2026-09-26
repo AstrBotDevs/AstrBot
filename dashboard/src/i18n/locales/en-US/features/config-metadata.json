@@ -1041,6 +1041,10 @@
     "others": {
       "description": "Other Settings",
       "platform_settings": {
+        "full_lang_aliases": {
+          "description": "All-language aliases",
+          "hint": "When enabled, every alias registered by plugins through multi_alias can be triggered. When disabled, only the main command name and aliases matching the current global language are accepted. The main name (e.g. /help) is always available."
+        },
         "ignore_bot_self_message": {
           "description": "Ignore Bot's Own Messages"
         },
