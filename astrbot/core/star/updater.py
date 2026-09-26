@@ -477,7 +477,27 @@ class _PluginUpdater(_RepoZipUpdater):
         return str(inspection["metadata_entry"])
 
     def _extract_plugin_archive(self, zip_path: str, target_dir: str) -> None:
+        """Extract a validated plugin archive and flatten its repository directory.
+
+        Args:
+            zip_path: Path to the downloaded plugin archive.
+            target_dir: Directory that will receive the plugin files.
+
+        Raises:
+            ValueError: If the archive is not a valid plugin.
+            OSError: If extraction or moving the extracted files fails.
+            RuntimeError: If the target directory cannot be created.
+        """
         self.validate_plugin_archive(zip_path)
+        if os.name == "nt":
+            # Repository archive roots can push otherwise valid paths over MAX_PATH.
+            # Normalize before adding the prefix, and retain it through finalization.
+            target_dir = os.path.normpath(Path(target_dir).absolute())
+            if not target_dir.startswith("\\\\?\\"):
+                if target_dir.startswith("\\\\"):
+                    target_dir = "\\\\?\\UNC\\" + target_dir[2:]
+                else:
+                    target_dir = "\\\\?\\" + target_dir
         ensure_dir(target_dir)
         logger.info(f"Extracting archive: {zip_path}")
         with zipfile.ZipFile(zip_path, "r") as z:

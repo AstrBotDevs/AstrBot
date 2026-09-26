@@ -1,10 +1,13 @@
 import asyncio
+import builtins
 import ntpath
+import os
 import posixpath
 import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import Mock
 from urllib.parse import urlparse
 
 import certifi
@@ -395,6 +398,97 @@ def test_plugin_unzip_file_accepts_metadata_yml(tmp_path: Path) -> None:
     assert (target_dir / "metadata.yml").is_file()
     assert (target_dir / "main.py").is_file()
     assert not zip_path.exists()
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows extended-length paths")
+@pytest.mark.parametrize("target_kind", ["absolute", "relative", "extended"])
+def test_plugin_unzip_file_handles_long_archive_paths(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    target_kind: str,
+) -> None:
+    zip_path = tmp_path / "plugin.zip"
+    target_dir = tmp_path / "plugin"
+    archive_root = "demo-plugin-" + "a" * 180
+    member_path = "src/infrastructure/analysis/analyzers/chat_quality_analyzer.py"
+    assert len(str(target_dir / archive_root / member_path)) >= 260
+    assert len(str(target_dir / member_path)) < 260
+
+    with zipfile.ZipFile(zip_path, "w") as archive:
+        archive.writestr(
+            f"{archive_root}/metadata.yaml",
+            "name: demo\ndesc: Demo plugin\nversion: 1.0.0\nauthor: AstrBot Team\n",
+        )
+        archive.writestr(f"{archive_root}/{member_path}", "VALUE = 1\n")
+        archive.writestr(f"{archive_root}/empty/", "")
+
+    original_open = builtins.open
+
+    def open_with_path_limit(file, mode="r", *args, **kwargs):
+        # Reproduce MAX_PATH even when the test host has long paths enabled.
+        if isinstance(file, (str, os.PathLike)):
+            path = os.fspath(file)
+            if not path.startswith("\\\\?\\") and len(os.path.abspath(path)) >= 260:
+                raise FileNotFoundError(2, "Path exceeds MAX_PATH", path)
+        return original_open(file, mode, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "open", open_with_path_limit)
+    target = str(target_dir)
+    if target_kind == "relative":
+        monkeypatch.chdir(tmp_path)
+        target = "unused/../plugin"
+    elif target_kind == "extended":
+        target = "\\\\?\\" + target
+
+    updater = _PluginUpdater.__new__(_PluginUpdater)
+    updater._extract_plugin_archive(str(zip_path), target)
+
+    assert (target_dir / member_path).read_text(encoding="utf-8") == "VALUE = 1\n"
+    assert (target_dir / "metadata.yaml").is_file()
+    assert (target_dir / "empty").is_dir()
+    assert {entry.name for entry in target_dir.iterdir()} == {
+        "metadata.yaml",
+        "src",
+        "empty",
+    }
+    assert not zip_path.exists()
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows extended-length paths")
+@pytest.mark.parametrize(
+    ("target_dir", "expected_dir"),
+    [
+        (r"C:\AstrBot\data\plugins\demo", r"\\?\C:\AstrBot\data\plugins\demo"),
+        (r"\\server\share\plugins\demo", r"\\?\UNC\server\share\plugins\demo"),
+        (r"\\?\C:\AstrBot\data\plugins\demo", r"\\?\C:\AstrBot\data\plugins\demo"),
+        (r"\\?\UNC\server\share\plugins\demo", r"\\?\UNC\server\share\plugins\demo"),
+    ],
+)
+def test_plugin_unzip_file_uses_extended_paths_throughout(
+    monkeypatch: pytest.MonkeyPatch,
+    target_dir: str,
+    expected_dir: str,
+) -> None:
+    import astrbot.core.star.updater as plugin_updater_module
+
+    updater = _PluginUpdater.__new__(_PluginUpdater)
+    ensure_dir = Mock()
+    extractall = Mock()
+    finalize = Mock()
+    monkeypatch.setattr(plugin_updater_module, "ensure_dir", ensure_dir)
+    monkeypatch.setattr(_FakeZipArchive, "extractall", extractall)
+    monkeypatch.setattr(
+        plugin_updater_module.zipfile,
+        "ZipFile",
+        lambda *args: _FakeZipArchive(_build_fake_archive_entries("demo/")),
+    )
+    monkeypatch.setattr(updater, "_finalize_extracted_archive", finalize)
+
+    updater._extract_plugin_archive("plugin.zip", target_dir)
+
+    ensure_dir.assert_called_once_with(expected_dir)
+    extractall.assert_called_once_with(expected_dir)
+    finalize.assert_called_once_with("plugin.zip", expected_dir, "demo")
 
 
 def test_plugin_unzip_file_rejects_archive_without_metadata(tmp_path: Path) -> None:
