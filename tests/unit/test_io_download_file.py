@@ -70,25 +70,27 @@ async def test_download_file_rejects_non_200_response(monkeypatch, tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_download_file_rejects_non_200_response_after_ssl_fallback(
+async def test_download_file_raises_ssl_error_immediately(
     monkeypatch,
     tmp_path,
 ):
+    """Test that SSL errors are raised immediately without fallback retry.
+
+    This test validates the fix for Issue #9446 - SSL verification should not
+    be downgraded when certificate validation fails.
+    """
     class FakeSSLError(Exception):
         pass
 
     target_path = tmp_path / "missing.bin"
-    _patch_download_sessions(
+    _patch_download_session(
         monkeypatch,
-        [
-            FakeSSLError(),
-            _FakeResponse(status=404, chunks=[b"not found"]),
-        ],
+        FakeSSLError(),
     )
     monkeypatch.setattr(io.aiohttp, "ClientConnectorSSLError", FakeSSLError)
     monkeypatch.setattr(io.aiohttp, "ClientConnectorCertificateError", FakeSSLError)
 
-    with pytest.raises(io.DownloadFileHTTPError, match="HTTP status code: 404"):
+    with pytest.raises(FakeSSLError):
         await io.download_file("https://example.test/missing", str(target_path))
 
     assert not target_path.exists()
