@@ -118,6 +118,7 @@ from astrbot.core.utils.media_utils import (
     is_recoverable_image_error,
     normalize_model_image_max_size,
 )
+from astrbot.core.utils.quoted_message.image_resolver import ImageResolver
 from astrbot.core.utils.quoted_message.settings import (
     SETTINGS as DEFAULT_QUOTED_MESSAGE_SETTINGS,
 )
@@ -1427,6 +1428,7 @@ async def collect_initial_request(
     if quoted_image_refs is None:
         quoted_image_refs = set()
     attachment_paths: list[str] = []
+    first_quoted_image_ref: str | None = None
     if req is None:
         if event.get_extra("provider_request"):
             req = event.get_extra("provider_request")
@@ -1506,6 +1508,20 @@ async def collect_initial_request(
                 config.provider_settings
             )
             fallback_quoted_image_count = 0
+            image_resolver = ImageResolver(event)
+
+            async def resolve_unmaterialized_image(component: Image) -> list[str]:
+                refs = []
+                for ref in (component.file, component.url):
+                    if not isinstance(ref, str):
+                        continue
+                    ref = ref.strip()
+                    if ref and not ref.startswith(("http://", "https://")):
+                        refs.append(ref)
+                if not refs:
+                    return []
+                return await image_resolver.resolve_for_llm(refs[:1])
+
             for comp in reply_comps:
                 has_embedded_image = False
                 if comp.chain:
@@ -1517,9 +1533,35 @@ async def collect_initial_request(
                             except Exception as exc:
                                 if not is_recoverable_image_error(exc):
                                     raise
+                                resolved_refs = await resolve_unmaterialized_image(
+                                    reply_comp
+                                )
+                                if resolved_refs:
+                                    req.image_urls.extend(resolved_refs)
+                                    quoted_image_refs.update(resolved_refs)
+                                    if first_quoted_image_ref is None:
+                                        first_quoted_image_ref = resolved_refs[0]
+                                    continue
                                 logger.warning(
                                     "Quoted image is unavailable (%s).",
                                     type(exc).__name__,
+                                )
+                                req.extra_user_content_parts.append(
+                                    TextPart(text="[Image unavailable]")
+                                )
+                                continue
+                            if not Path(image_path).is_file():
+                                resolved_refs = await resolve_unmaterialized_image(
+                                    reply_comp
+                                )
+                                if resolved_refs:
+                                    req.image_urls.extend(resolved_refs)
+                                    quoted_image_refs.update(resolved_refs)
+                                    if first_quoted_image_ref is None:
+                                        first_quoted_image_ref = resolved_refs[0]
+                                    continue
+                                logger.warning(
+                                    "Quoted image is unavailable (not a file)."
                                 )
                                 req.extra_user_content_parts.append(
                                     TextPart(text="[Image unavailable]")
@@ -1538,6 +1580,8 @@ async def collect_initial_request(
                                 if not source_is_local and Path(image_path).is_file():
                                     event.track_temporary_local_file(image_path)
                             quoted_image_refs.add(image_path)
+                            if first_quoted_image_ref is None:
+                                first_quoted_image_ref = image_path
                         elif isinstance(reply_comp, Record):
                             audio_path = await reply_comp.convert_to_file_path()
                             req.audio_urls.append(audio_path)
@@ -1594,6 +1638,8 @@ async def collect_initial_request(
                             req.image_urls.append(image_ref)
                             fallback_quoted_image_count += 1
                             quoted_image_refs.add(image_ref)
+                            if first_quoted_image_ref is None:
+                                first_quoted_image_ref = image_ref
                     except Exception as exc:  # noqa: BLE001
                         logger.warning(
                             "Failed to resolve fallback quoted images for umo=%s, reply_id=%s: %s",
@@ -1609,11 +1655,11 @@ async def collect_initial_request(
             event.set_extra("provider_request", req)
 
     req.image_urls = normalize_and_dedupe_strings(req.image_urls)
-    quote_image_ref = None
+    quote_image_ref = first_quoted_image_ref
     quote = next(
         (part for part in event.message_obj.message if isinstance(part, Reply)), None
     )
-    if quote and quote.chain:
+    if quote_image_ref is None and quote and quote.chain:
         image = next((part for part in quote.chain if isinstance(part, Image)), None)
         if image:
             quote_image_ref = image.url or image.file

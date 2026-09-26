@@ -180,6 +180,31 @@ async def test_preprocess_image_cleanup_removes_invalid_materialized_file(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("quoted", [False, True])
+async def test_preprocess_preserves_missing_file_uri_reference(
+    tmp_path, monkeypatch, quoted
+):
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    monkeypatch.setattr(
+        preprocess_stage, "get_astrbot_temp_path", lambda: str(tmp_path)
+    )
+    missing_path = tmp_path / "missing-quoted-image.png"
+    image = Image(file=missing_path.as_uri())
+    event = FakeEvent([Reply(id="reply-1", chain=[image])] if quoted else [image])
+    stage = PreProcessStage()
+    stage.config = {}
+    stage.platform_settings = {}
+    stage.stt_settings = {"enable": False}
+
+    await stage.process(event)
+
+    assert image.file == missing_path.as_uri()
+    assert image.url == ""
+    assert image.path in (None, "")
+    assert event.temporary_local_files == []
+
+
+@pytest.mark.asyncio
 async def test_preprocess_path_mapping_accepts_file_uri(tmp_path):
     from PIL import Image as PILImage
 
