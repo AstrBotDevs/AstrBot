@@ -18,6 +18,7 @@ import { useRoute } from "vue-router";
 import { useDisplay, useTheme } from "vuetify";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
 import { Menu } from "@lucide/vue";
+import { Minus, Square, X } from "@lucide/vue";
 import DesktopUpdateProgress from "@/components/shared/DesktopUpdateProgress.vue";
 import { useLanguageSwitcher } from "@/i18n/composables";
 import type { Locale } from "@/i18n/types";
@@ -34,6 +35,10 @@ const authStore = useAuthStore();
 const chatHeader = useChatHeaderStore();
 const headerContext = useHeaderContextStore();
 const mobileDrawer = useMobileDrawerStore();
+
+/** Windows hides the native title bar, so the header draws its own caption buttons. */
+const isWindowsDesktop = ref(false);
+const astrbotDesktop = computed(() => window.astrbotDesktop);
 const theme = useTheme();
 const { smAndDown } = useDisplay();
 const { t } = useI18n();
@@ -913,6 +918,8 @@ onUnmounted(() => {
 
 // 视图模式切换
 onMounted(() => {
+  isWindowsDesktop.value =
+    document.documentElement.dataset.astrbotDesktopPlatform === "windows";
   // 初次加載時保存當前路由
   if (typeof window !== "undefined") {
     if (isChatPath.value) {
@@ -1348,6 +1355,36 @@ onMounted(async () => {
         </v-list-item-title>
       </v-list-item>
       </StyledMenu>
+      <!-- Custom caption buttons on Windows, where the native title bar is disabled. -->
+      <div v-if="isWindowsDesktop" class="header-caption-btns">
+        <v-btn
+          class="caption-btn"
+          variant="text"
+          :ripple="false"
+          aria-label="Minimize"
+          @click="astrbotDesktop?.minimizeWindow?.()"
+        >
+          <Minus :size="16" />
+        </v-btn>
+        <v-btn
+          class="caption-btn"
+          variant="text"
+          :ripple="false"
+          aria-label="Maximize"
+          @click="astrbotDesktop?.toggleMaximizeWindow?.()"
+        >
+          <Square :size="14" />
+        </v-btn>
+        <v-btn
+          class="caption-btn caption-btn--close"
+          variant="text"
+          :ripple="false"
+          aria-label="Close"
+          @click="astrbotDesktop?.closeWindow?.()"
+        >
+          <X :size="16" />
+        </v-btn>
+      </div>
     </div>
 
     <!-- 更新对话框 -->
@@ -2498,12 +2535,6 @@ html[data-astrbot-desktop-platform='macos'] .top-header.chat-mode-header.chat-mo
 }
 
 
-/* Windows draws its native caption buttons (min/max/close) over the toolbar's
-   right edge, so keep the header actions clear of that zone. */
-html[data-astrbot-desktop-platform='windows'] .top-header .v-toolbar__content {
-  padding-inline-end: 150px !important;
-}
-
 .top-header .v-toolbar__content {
   padding-inline-end: 16px !important;
 }
@@ -2552,6 +2583,35 @@ html[data-astrbot-desktop-platform='windows'] .top-header .v-toolbar__content {
 /* Hover keeps a text-only affordance: no background, just a stronger label color. */
 .top-header .header-actions .v-btn:hover {
   color: rgba(var(--v-theme-on-surface), 0.9);
+}
+
+.header-caption-btns {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-inline-start: 8px;
+}
+
+.top-header .header-caption-btns .caption-btn {
+  width: 40px;
+  min-width: 40px;
+  height: 34px;
+  padding: 0;
+  border-radius: 8px;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: rgba(var(--v-theme-on-surface), 0.58);
+}
+
+.top-header .header-caption-btns .caption-btn:hover {
+  background: rgba(var(--v-theme-on-surface), 0.08) !important;
+  color: rgba(var(--v-theme-on-surface), 0.9);
+}
+
+/* Windows convention: the close button turns red on hover. */
+.top-header .header-caption-btns .caption-btn--close:hover {
+  background: rgba(232, 17, 35, 0.9) !important;
+  color: #fff;
 }
 
 </style>

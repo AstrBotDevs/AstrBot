@@ -51,6 +51,18 @@ declare global {
         ok: boolean;
         reason: string | null;
       }>;
+      minimizeWindow?: () => Promise<{
+        ok: boolean;
+        reason: string | null;
+      }>;
+      toggleMaximizeWindow?: () => Promise<{
+        ok: boolean;
+        reason: string | null;
+      }>;
+      closeWindow?: () => Promise<{
+        ok: boolean;
+        reason: string | null;
+      }>;
       onTrayRestartBackend?: (callback: () => void) => () => void;
     };
   }
