@@ -21,7 +21,7 @@ MacOS 用户下载安装好后，可能会遇到 "已损坏，无法打开" 的�
 
 
 > [!WARNING]
-> 需要您的电脑上预先安装好 Python 环境（3.10 - 3.13），并且将 Python 添加到环境变量中，否则安装器将无法正常工作。
+> <span style="color: gray">~~需要您的电脑上预先安装好 Python 环境（3.10 - 3.13）~~（已归档：AstrBot 自 v4.26.2 起要求 Python >= 3.12）</span>需要您的电脑上预先安装好 Python 3.12 或更高版本，并且将 Python 添加到环境变量中，否则安装器将无法正常工作。
 
 
 推荐使用上面提到的 AstrBot 一键启动器来部署 AstrBot，因为它更简单、更自动化、更现代化，适合大多数用户。
@@ -37,7 +37,7 @@ MacOS 用户下载安装好后，可能会遇到 "已损坏，无法打开" 的�
 
 ### 运行安装器
 
-> 视频和此处不一致，请参考此处！！！如果部署不了，请参阅其他两个部署方式：Docker 部署和 手动部署。
+> 视频和此处不一致，请参考此处！！！如果部署不了，请参阅其他部署方式：[Docker 部署](/deploy/astrbot/docker) 和 [手动部署](/deploy/astrbot/cli)。
 
 解压后，打开文件夹，
 
@@ -50,7 +50,7 @@ MacOS 用户下载安装好后，可能会遇到 "已损坏，无法打开" 的�
 > [!WARNING]
 > - 这个脚本没有病毒。如果提示 `Windows 已保护您的电脑`，请点击 `更多信息`，然后点击 `仍要运行`。
 >
-> - 脚本默认使用 `python` 指令来执行代码，如果你想指定 Python 解释器器路径或者指令，请修改 `launcher_astrbot_en.bat` 文件。找到 `set PYTHON_CMD=python` 这一行，将 `python` 改为你的 Python 解释器路径或指令。
+> - 脚本默认使用 `python` 指令来执行代码，如果你想指定 Python 解释器路径或者指令，请修改 `launcher_astrbot_en.bat` 文件。找到 `set PYTHON_CMD=python` 这一行，将 `python` 改为你的 Python 解释器路径或指令。
 >
 
 如果没有检测到 Python 环境，脚本将会提示并退出。
@@ -67,7 +67,7 @@ MacOS 用户下载安装好后，可能会遇到 "已损坏，无法打开" 的�
 > 首次登录请使用启动日志中打印的随机初始密码（用户名通常为 `astrbot`）。登录后请立即修改密码。
 >
 > **当管理面板打开时遇到 404 错误：**
-> 在 [release](https://github.com/AstrBotDevs/AstrBot/releases) 页面下载dist.zip，解压拖到 AstrBot/data 下。还不行请重启电脑（来自群里的反馈）
+> 在 [release](https://github.com/AstrBotDevs/AstrBot/releases) 页面下载 `AstrBot-v版本号-dashboard.zip`（即 dist 压缩包），解压拖到 AstrBot/data 下。还不行请重启电脑（来自群里的反馈）
 
 接下来，你需要部署任何一个消息平台，才能够实现在消息平台上使用 AstrBot。
 
