@@ -1,6 +1,7 @@
 <script setup>
 import { ref, shallowRef, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useCustomizerStore } from '../../../stores/customizer';
+import { useMobileDrawerStore } from '@/stores/mobileDrawer';
 import { useI18n } from '@/i18n/composables';
 import sidebarItems, { MORE_GROUP_KEY } from './sidebarItem';
 import NavItem from './NavItem.vue';
@@ -10,14 +11,13 @@ import { useDisplay } from 'vuetify';
 import { PanelLeft, Settings } from '@lucide/vue';
 import ChatUILogo from '@/components/chat/ChatUILogo.vue';
 import { useCommonStore } from '@/stores/common';
-import { SIDEBAR_RAIL_BREAKPOINT } from '@/utils/sidebarLayout';
 
 const { t } = useI18n();
 
 const customizer = useCustomizerStore();
+const mobileDrawer = useMobileDrawerStore();
 const commonStore = useCommonStore();
 const { pluginItems } = usePluginSidebarItems();
-const { width: viewportWidth } = useDisplay();
 
 function buildSidebarMenu() {
   const base = applySidebarCustomization(sidebarItems);
@@ -109,13 +109,18 @@ onUnmounted(() => {
   window.removeEventListener('sidebar-customization-changed', handleCustomEvent);
 });
 
+const { smAndDown: isMobile } = useDisplay();
+
 const isRailSidebar = computed(
-  () => customizer.mini_sidebar || viewportWidth.value < SIDEBAR_RAIL_BREAKPOINT,
+  () => !isMobile.value && customizer.mini_sidebar,
 );
 const botVersion = computed(() => commonStore.astrbotVersion ? `v${commonStore.astrbotVersion}` : '');
 
 function toggleSidebar() {
-  if (viewportWidth.value < SIDEBAR_RAIL_BREAKPOINT) return;
+  if (isMobile.value) {
+    mobileDrawer.SET(false);
+    return;
+  }
   customizer.SET_MINI_SIDEBAR(!customizer.mini_sidebar);
 }
 
@@ -123,7 +128,10 @@ function toggleSidebar() {
 
 <template>
   <v-navigation-drawer
-    permanent
+    :model-value="isMobile ? mobileDrawer.open : true"
+    @update:model-value="isMobile && mobileDrawer.SET($event)"
+    :permanent="!isMobile"
+    :temporary="isMobile"
     :mobile-breakpoint="0"
     elevation="0"
     rail-width="56"

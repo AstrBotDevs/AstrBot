@@ -7,7 +7,10 @@
     <v-navigation-drawer
       class="chat-sidebar"
       :class="{ collapsed: isSidebarCollapsed }"
-      permanent
+      :model-value="isMobile ? mobileDrawer.open : true"
+      @update:model-value="isMobile && mobileDrawer.SET($event)"
+      :permanent="!isMobile"
+      :temporary="isMobile"
       :mobile-breakpoint="0"
       :rail="isSidebarCollapsed"
       :width="245"
@@ -274,12 +277,6 @@
         class="conversation-stack"
         :class="{ 'is-empty': isEmptyChat }"
       >
-        <div class="chat-content-header">
-          <ProviderModelMenu variant="header" />
-          <div v-if="contentHeaderTitle" class="chat-content-header-title">
-            {{ contentHeaderTitle }}
-          </div>
-        </div>
         <v-progress-linear
           v-if="activeSessionPagination?.loading"
           class="history-loading"
@@ -505,9 +502,11 @@
 <script setup lang="ts">
 import {
   computed,
+  markRaw,
   nextTick,
   onBeforeUnmount,
   onMounted,
+  onUnmounted,
   provide,
   reactive,
   ref,
@@ -515,7 +514,6 @@ import {
 } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useDisplay } from "vuetify";
-import { SIDEBAR_RAIL_BREAKPOINT } from "@/utils/sidebarLayout";
 import { isAxiosError } from "axios";
 import {
   ArrowDown,
@@ -528,6 +526,7 @@ import {
 } from "@lucide/vue";
 import { chatApi, providerApi } from "@/api/v1";
 import ChatSettingsDialog from "@/components/chat/ChatSettingsDialog.vue";
+import ChatToolbarContext from "@/components/chat/ChatToolbarContext.vue";
 import ProjectDialog, {
   type ProjectFormData,
 } from "@/components/chat/ProjectDialog.vue";
@@ -535,7 +534,6 @@ import ProjectList, { type Project } from "@/components/chat/ProjectList.vue";
 import ProjectView from "@/components/chat/ProjectView.vue";
 import ChatInput from "@/components/chat/ChatInput.vue";
 import ChatMessageList from "@/components/chat/ChatMessageList.vue";
-import ProviderModelMenu from "@/components/chat/ProviderModelMenu.vue";
 import ChatUILogo from "@/components/chat/ChatUILogo.vue";
 import type { RegenerateModelSelection } from "@/components/chat/RegenerateMenu.vue";
 import ChatLoadError from "@/components/chat/ChatLoadError.vue";
@@ -557,6 +555,8 @@ import { useRecording } from "@/composables/useRecording";
 import { useProjects } from "@/composables/useProjects";
 import { useDragUpload } from "@/composables/useDragUpload";
 import { useChatHeaderStore } from "@/stores/chatHeader";
+import { useHeaderContextStore } from "@/stores/headerContext";
+import { useMobileDrawerStore } from "@/stores/mobileDrawer";
 import { useCustomizerStore } from "@/stores/customizer";
 import ProviderChatCompletionPanel from "@/components/provider/ProviderChatCompletionPanel.vue";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
@@ -579,8 +579,19 @@ const props = withDefaults(
 
 const route = useRoute();
 const router = useRouter();
-const { width: viewportWidth } = useDisplay();
 const chatHeader = useChatHeaderStore();
+const headerContext = useHeaderContextStore();
+const mobileDrawer = useMobileDrawerStore();
+
+/* Project the chat toolbar context (model selector + session title) into the
+   top toolbar only while the chat page is actually visible. */
+watch(
+  () => props.active,
+  (active) =>
+    headerContext.SET_COMPONENT(active ? markRaw(ChatToolbarContext) : null),
+  { immediate: true },
+);
+onUnmounted(() => headerContext.SET_COMPONENT(null));
 const customizer = useCustomizerStore();
 const { t } = useI18n();
 const { tm } = useModuleI18n("features/chat");
@@ -704,16 +715,20 @@ const {
   startRecording: startRecorder,
   stopRecording: stopRecorder,
 } = useRecording();
-const isSidebarCollapsed = computed(() =>
-  customizer.chatSidebarCollapsed ||
-  viewportWidth.value < SIDEBAR_RAIL_BREAKPOINT,
+const { smAndDown: isMobile } = useDisplay();
+
+const isSidebarCollapsed = computed(
+  () => !isMobile.value && customizer.chatSidebarCollapsed,
 );
 const isProviderWorkspace = computed(
   () => activeWorkspace.value === "providers",
 );
 
 function toggleChatSidebar() {
-  if (viewportWidth.value < SIDEBAR_RAIL_BREAKPOINT) return;
+  if (isMobile.value) {
+    mobileDrawer.SET(false);
+    return;
+  }
   customizer.SET_CHAT_SIDEBAR_COLLAPSED(!customizer.chatSidebarCollapsed);
 }
 
@@ -827,12 +842,6 @@ const chatHeaderSubtitle = computed(() =>
     ? sessionProject.value?.title || selectedProject.value?.title || ""
     : "",
 );
-const contentHeaderTitle = computed(() => {
-  const title = chatHeader.title.trim();
-  const subtitle = chatHeader.subtitle.trim();
-  if (title && subtitle) return `${subtitle} / ${title}`;
-  return title || subtitle;
-});
 const chatInputReplyTarget = computed(() =>
   replyTarget.value?.id == null
     ? null
@@ -2321,29 +2330,6 @@ async function stopCurrentSession() {
   display: flex;
   flex-direction: column;
   position: relative;
-}
-
-.chat-content-header {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0;
-  padding: 2px 24px;
-}
-
-.chat-content-header-title {
-  color: var(--chat-muted, rgba(var(--v-theme-on-surface), 0.62));
-  font-size: 0.75rem;
-  font-weight: 500;
-  line-height: 1.2;
-}
-
-/* Keep the sub-header pinned to the top even when the empty chat is centered. */
-.conversation-stack.is-empty .chat-content-header {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
 }
 
 /* 全区域拖拽上传遮罩 */

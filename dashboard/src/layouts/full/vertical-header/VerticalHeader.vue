@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import { useChatHeaderStore } from "@/stores/chatHeader";
+import { useHeaderContextStore } from "@/stores/headerContext";
+import { useMobileDrawerStore } from "@/stores/mobileDrawer";
 import { useCustomizerStore } from "@/stores/customizer";
 import axios from "axios";
 import Logo from "@/components/shared/Logo.vue";
@@ -15,13 +17,13 @@ import { router } from "@/router";
 import { useRoute } from "vue-router";
 import { useDisplay, useTheme } from "vuetify";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
+import { Menu } from "@lucide/vue";
 import DesktopUpdateProgress from "@/components/shared/DesktopUpdateProgress.vue";
 import { useLanguageSwitcher } from "@/i18n/composables";
 import type { Locale } from "@/i18n/types";
 import AboutPage from "@/views/AboutPage.vue";
 import { authApi, isLegacyFallbackError, statsApi, updatesApi } from "@/api/v1";
 import { getDesktopRuntimeInfo } from "@/utils/desktopRuntime";
-import { SIDEBAR_RAIL_BREAKPOINT } from "@/utils/sidebarLayout";
 
 enableKatex();
 enableMermaid();
@@ -30,8 +32,10 @@ const customizer = useCustomizerStore();
 const commonStore = useCommonStore();
 const authStore = useAuthStore();
 const chatHeader = useChatHeaderStore();
+const headerContext = useHeaderContextStore();
+const mobileDrawer = useMobileDrawerStore();
 const theme = useTheme();
-const { width: viewportWidth } = useDisplay();
+const { smAndDown } = useDisplay();
 const { t } = useI18n();
 const { tm } = useModuleI18n("features/chat");
 const route = useRoute();
@@ -133,9 +137,9 @@ const isDarkTheme = computed(
 );
 const chatHeaderStyle = computed(() => {
   if (!isChatPath.value) return undefined;
-  const sidebarWidth =
-    customizer.chatSidebarCollapsed ||
-    viewportWidth.value < SIDEBAR_RAIL_BREAKPOINT
+  const sidebarWidth = smAndDown.value
+    ? 0
+    : customizer.chatSidebarCollapsed
       ? 56
       : 245;
   return {
@@ -1054,6 +1058,25 @@ onMounted(async () => {
     :absolute="isChatPath"
     :style="chatHeaderStyle"
   >
+    <!-- Mobile: open the navigation drawer (sidebars become temporary overlays). -->
+    <v-btn
+      v-if="$vuetify.display.smAndDown"
+      class="header-menu-btn"
+      icon
+      variant="text"
+      :ripple="false"
+      :aria-label="t('core.navigation.options')"
+      @click="mobileDrawer.TOGGLE"
+    >
+      <Menu :size="20" />
+    </v-btn>
+
+    <!-- Pages register their contextual toolbar content through the
+         headerContext store (e.g. the chat page's model selector and title). -->
+    <div class="app-header-context">
+      <component :is="headerContext.component" v-if="headerContext.component" />
+    </div>
+
     <v-spacer />
 
     <!-- 版本提示信息 - 在手机上隐藏 -->
@@ -2439,6 +2462,15 @@ onMounted(async () => {
   user-select: none;
 }
 
+/* Mount point for page-contextual toolbar content (see the template note). */
+.app-header-context {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 100%;
+  min-width: 0;
+}
+
 html {
   /* Keep in sync with the app bar height above. */
   --astrbot-toolbar-height: 40px;
@@ -2475,9 +2507,12 @@ html[data-astrbot-desktop-platform='windows'] .top-header .v-toolbar__content {
   padding-inline-end: 16px !important;
 }
 
-/* Keep the chat context above the content area instead of the whole window. */
-.top-header.chat-mode-header .v-toolbar__content {
-  padding-inline-start: var(--astrbot-chat-sidebar-width, 245px) !important;
+/* On macOS the traffic lights sit over the toolbar's left zone once the sidebar
+   is no longer permanent, so the menu button must clear them. */
+@media (max-width: 959.98px) {
+  html[data-astrbot-desktop-platform='macos'] .top-header .v-toolbar__content {
+    padding-inline-start: 80px !important;
+  }
 }
 
 .header-toolbar-label {
