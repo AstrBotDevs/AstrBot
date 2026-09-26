@@ -1,3 +1,4 @@
+import base64
 from types import SimpleNamespace
 
 import httpx
@@ -370,3 +371,89 @@ async def test_gemini_stream_keeps_reasoning_from_tool_call_chunk(monkeypatch):
 
     final = responses[-1]
     assert final.reasoning_content == "weighing optionsdeciding to call"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "content",
+    [
+        None,
+        "",
+        [],
+        [{"type": "think", "think": "private reasoning", "encrypted": None}],
+    ],
+)
+@pytest.mark.parametrize("tools", [False, True])
+async def test_gemini_no_empty_parts(content, tools):
+    p = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    message = {"role": "assistant", "content": content}
+    if tools:
+        message["tool_calls"] = [
+            {
+                "id": "call",
+                "type": "function",
+                "function": {"name": "test", "arguments": '{"value":1}'},
+            }
+        ]
+    result = await p._prepare_conversation(
+        {"messages": [{"role": "user", "content": "hello"}, message]}
+    )
+    parts = result[-1].parts
+    assert all(t.text or t.function_call for t in parts)
+    assert all(t.text != "" for t in parts)
+    if tools:
+        assert len(parts) == 1 and parts[0].function_call.name == "test"
+        assert parts[0].function_call.args == {"value": 1}
+
+
+@pytest.mark.asyncio
+async def test_gemini_preserves_signature_and_text():
+    p = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    signature = base64.b64encode(b"signature").decode()
+    for text in ("hello", ""):
+        content = [{"type": "think", "think": "reasoning", "encrypted": signature}]
+        if text:
+            content.append({"type": "text", "text": text})
+        r = await p._prepare_conversation(
+            {
+                "messages": [
+                    {"role": "user", "content": "test"},
+                    {"role": "assistant", "content": content},
+                ]
+            }
+        )
+        assert r[-1].parts[0].text == (text or " ")
+        assert r[-1].parts[0].thought_signature == b"signature"
+
+
+@pytest.mark.asyncio
+async def test_gemini_empty_text_does_not_duplicate_tool_thought_signature():
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    signature = base64.b64encode(b"signature").decode()
+    contents = await provider._prepare_conversation(
+        {
+            "messages": [
+                {"role": "user", "content": "call the tool"},
+                {
+                    "role": "assistant",
+                    "content": [{"type": "think", "encrypted": signature}],
+                    "tool_calls": [
+                        {
+                            "id": "call",
+                            "type": "function",
+                            "function": {"name": "test", "arguments": '{"value":1}'},
+                            "extra_content": {
+                                "google": {"thought_signature": signature}
+                            },
+                        }
+                    ],
+                },
+            ]
+        }
+    )
+    parts = contents[-1].parts
+    assert len(parts) == 1
+    assert parts[0].function_call.name == "test"
+    assert parts[0].function_call.args == {"value": 1}
+    assert parts[0].thought_signature == b"signature"
+    assert parts[0].text is None

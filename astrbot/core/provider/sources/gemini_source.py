@@ -360,7 +360,8 @@ class ProviderGoogleGenAI(Provider):
             elif role == "assistant":
                 parts = []
                 if isinstance(content, str):
-                    parts.append(types.Part.from_text(text=content))
+                    if content:
+                        parts.append(types.Part.from_text(text=content))
                 elif isinstance(content, list):
                     thinking_signature = None
                     text = ""
@@ -396,12 +397,17 @@ class ProviderGoogleGenAI(Provider):
                         # If the main content is empty but tool calls have thought signatures,
                         # skip adding an empty text part to deduplicate the thinking signature in the main content and tool calls.
                         pass
-                    else:
+                    elif text:
                         parts.append(
                             types.Part(
                                 text=text,
                                 thought_signature=thinking_signature,
                             )
+                        )
+                    elif thinking_signature:
+                        # A signature requires a populated data field as well.
+                        parts.append(
+                            types.Part(text=" ", thought_signature=thinking_signature)
                         )
 
                 if "tool_calls" in message:
