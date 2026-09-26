@@ -129,6 +129,56 @@ async def test_telegram_regular_supergroup_message_uses_group_name():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "text",
+    ["/help@other_bot", "/help@OTHER_BOT", "/help@bot@other_bot"],
+)
+async def test_telegram_command_targeted_at_other_bot_is_dropped(text):
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    update = create_mock_update(
+        chat_type="supergroup", chat_id=-100123, message_text=text
+    )
+
+    result = await adapter.convert_message(update, _build_context())
+
+    # A command addressed to another bot must not reach the event bus,
+    # otherwise its "/" prefix would wake this bot (#10240).
+    assert result is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("/help@test_bot", "/help"),
+        ("/help@TEST_BOT", "/help"),
+        ("/ban@TEST_BOT @alice", "/ban @alice"),
+        ("/help", "/help"),
+    ],
+)
+async def test_telegram_command_targeted_at_self_keeps_behavior(text, expected):
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    update = create_mock_update(
+        chat_type="supergroup", chat_id=-100123, message_text=text
+    )
+
+    result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    assert result.message_str == expected
+
+
+@pytest.mark.asyncio
 async def test_telegram_forum_topic_name_is_learned_and_updated_from_events():
     TelegramPlatformAdapter = _load_telegram_adapter()
     adapter = TelegramPlatformAdapter(
