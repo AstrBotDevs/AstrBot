@@ -759,8 +759,10 @@ async def test_oauth_provider_exposes_codex_model_catalog_and_defaults():
     try:
         models = await provider.get_models()
 
-        assert models[:4] == [
+        assert models[:6] == [
             "gpt-6-astra",
+            "gpt-6-sol",
+            "gpt-6-luna",
             "gpt-5.6-sol",
             "gpt-5.6-terra",
             "gpt-5.6-luna",
@@ -776,7 +778,7 @@ async def test_oauth_provider_exposes_codex_model_catalog_and_defaults():
             ),
         }
         expected_efforts = ("none", "low", "medium", "high", "xhigh", "max")
-        for model in models[1:4]:
+        for model in models[1:6]:
             assert (
                 provider.model_capabilities[model]["supported_reasoning_efforts"]
                 == expected_efforts
@@ -850,8 +852,8 @@ async def test_request_backend_sends_codex_identity_and_residency_headers(
         headers = sent_requests[0]["headers"]
         assert status_code == 200
         assert attempted_version == provider._oauth_shared_state.version
-        assert headers["version"] == "0.153.4"
-        assert headers["User-Agent"] == "codex_cli_rs/0.153.4"
+        assert headers["version"] == "0.158.0"
+        assert headers["User-Agent"] == "codex_cli_rs/0.158.0"
         assert headers["x-openai-internal-codex-residency"] == "us"
     finally:
         await provider.terminate()
@@ -1421,8 +1423,8 @@ async def test_generate_image_reads_sse_incrementally(monkeypatch, tmp_path):
         results = await provider.generate_image("draw from streaming response")
 
         assert sent_requests[0]["method"] == "POST"
-        assert sent_requests[0]["headers"]["version"] == "0.153.4"
-        assert sent_requests[0]["headers"]["User-Agent"] == ("codex_cli_rs/0.153.4")
+        assert sent_requests[0]["headers"]["version"] == "0.158.0"
+        assert sent_requests[0]["headers"]["User-Agent"] == ("codex_cli_rs/0.158.0")
         assert sent_requests[0]["headers"]["x-openai-internal-codex-residency"] == "eu"
         assert sent_requests[0]["json"]["stream"] is True
         assert (
@@ -1545,3 +1547,61 @@ async def test_text_chat_stream_preserves_provider_positional_arguments():
         ]
     finally:
         await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_gpt6_sol_luna_are_discoverable():
+    provider = _make_provider()
+    assert {"gpt-6-sol", "gpt-6-luna"} <= set(await provider.get_models())
+    await provider.terminate()
+
+
+@pytest.mark.parametrize("model", ["gpt-6-sol", "gpt-6-luna"])
+@pytest.mark.parametrize(
+    "effort", [None, "none", "off", "low", "medium", "high", "xhigh", "max"]
+)
+def test_gpt6_sol_luna_request_parameters(model, effort):
+    provider = _make_provider(
+        {
+            "model": model,
+            "custom_extra_body": {
+                "top_p": 0.8,
+                "top_logprobs": 5,
+                "include": [
+                    "message.output_text.logprobs",
+                    "reasoning.encrypted_content",
+                ],
+            },
+        }
+    )
+    request = {"model": model, "messages": []}
+    if effort is not None:
+        request["reasoning_effort"] = effort
+    params = provider._build_responses_params(request, None)
+    expected = "none" if effort == "off" else effort or "medium"
+    if effort is None:
+        assert "reasoning" not in params
+        assert (
+            provider.model_capabilities[model]["default_reasoning_effort"] == "medium"
+        )
+    else:
+        assert params["reasoning"]["effort"] == expected
+    assert params["model"] == model
+    assert "top_p" not in params
+    assert "top_logprobs" not in params
+    if expected == "none":
+        assert "message.output_text.logprobs" in params["include"]
+    else:
+        assert "top_p" not in params
+        assert "top_logprobs" not in params
+        assert params["include"] == ["reasoning.encrypted_content"]
+
+
+@pytest.mark.parametrize("model", ["gpt-6-sol", "gpt-6-luna"])
+@pytest.mark.parametrize("effort", ["invalid", "ultra"])
+def test_gpt6_sol_luna_reject_invalid_reasoning(model, effort):
+    provider = _make_provider({"model": model})
+    with pytest.raises(ValueError):
+        provider._build_responses_params(
+            {"model": model, "messages": [], "reasoning_effort": effort}, None
+        )

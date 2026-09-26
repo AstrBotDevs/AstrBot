@@ -42,7 +42,7 @@ IMAGE_WEBSOCKET_MAX_MESSAGE_BYTES = 64 * 1024 * 1024
 IMAGE_WEBSOCKET_MAX_TRANSCRIPT_BYTES = 128 * 1024 * 1024
 IMAGE_WEBSOCKET_MAX_EVENTS = 16384
 OAUTH_PLACEHOLDER_KEY = "__openai_oauth__"
-CODEX_CLIENT_VERSION = "0.153.4"
+CODEX_CLIENT_VERSION = "0.158.0"
 
 
 class OpenAIOAuthImageStreamError(RuntimeError):
@@ -94,6 +94,28 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
         "gpt-6-astra": {
             "default_reasoning_effort": "medium",
             "supported_reasoning_efforts": (
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max",
+            ),
+        },
+        "gpt-6-sol": {
+            "default_reasoning_effort": "medium",
+            "supported_reasoning_efforts": (
+                "none",
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max",
+            ),
+        },
+        "gpt-6-luna": {
+            "default_reasoning_effort": "medium",
+            "supported_reasoning_efforts": (
+                "none",
                 "low",
                 "medium",
                 "high",
@@ -1247,9 +1269,14 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
         params.pop("max_output_tokens", None)
         params.pop("temperature", None)
         model_name = str(params.get("model") or "").strip().lower()
-        if model_name.startswith("gpt-6-astra"):
+        if model_name.startswith(("gpt-6-astra", "gpt-6-sol", "gpt-6-luna")):
+            # The Codex backend rejects sampling parameters even without reasoning.
             params.pop("top_p", None)
             params.pop("top_logprobs", None)
+        if model_name.startswith("gpt-6-astra") or (
+            model_name.startswith(("gpt-6-sol", "gpt-6-luna"))
+            and reasoning.get("effort") != "none"
+        ):
             include = params.get("include")
             if isinstance(include, list):
                 filtered_include = [
