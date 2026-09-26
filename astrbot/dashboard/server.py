@@ -504,7 +504,7 @@ class AstrBotDashboard:
 
     def _build_dashboard_credentials_display(self) -> str:
         username = self.config["dashboard"].get("username", "astrbot")
-        generated_password = getattr(self.config, "_generated_dashboard_password", None)
+            "   ➜  Initial password: [REDACTED - not logged]\n"
         if not generated_password:
             return f"   ➜  Username: {username}\n ✨✨✨\n"
 
