@@ -1804,7 +1804,6 @@ function handleMessagesInteraction(
       return;
     }
   } else {
-    if (event.target !== messagesContainer.value) return;
     scrollIntent = 0;
     shouldStickToBottom.value = false;
   }
@@ -1822,7 +1821,7 @@ function handleMessagesScroll() {
   const scrollTop = Math.max(0, container.scrollTop);
   const previousTop = Math.min(lastMessagesScrollTop, maxScrollTop);
   isAwayFromBottom.value = maxScrollTop - scrollTop > 2;
-  if (scrollTop < previousTop) {
+  if (isAwayFromBottom.value || scrollTop < previousTop) {
     shouldStickToBottom.value = false;
   } else if (
     scrollTop > previousTop &&
@@ -2359,6 +2358,7 @@ async function stopCurrentSession() {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  overscroll-behavior-y: contain;
   overflow-anchor: none;
   padding: 24px 0 calc(var(--chat-composer-height, 82px) + 34px);
   scroll-padding-bottom: calc(var(--chat-composer-height, 82px) + 34px);
