@@ -11,7 +11,7 @@
       :fade="false"
       :typewriter="false"
       :node-virtual="false"
-      :max-live-nodes="MARKDOWN_RENDER_MAX_LIVE_NODES"
+      :max-live-nodes="isStreaming ? MARKDOWN_RENDER_MAX_LIVE_NODES : 0"
       :style="CHAT_MARKDOWN_HEADING_STYLE"
     />
   </div>
