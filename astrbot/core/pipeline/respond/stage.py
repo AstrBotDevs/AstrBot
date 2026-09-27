@@ -24,7 +24,7 @@ def _resolve_log_base(value: float | str | None) -> float:
     except (TypeError, ValueError) as e:
         logger.error(f"Failed to parse the segmented-reply log base: {e}")
         return DEFAULT_LOG_BASE
-    if not math.isfinite(log_base) or log_base <= 0 or log_base == 1:
+    if not math.isfinite(log_base) or log_base <= 1:
         # math.log(words, 1) raises ZeroDivisionError and a non-positive base
         # raises ValueError; both escape from _calc_comp_interval before the
         # first send, so the whole reply is dropped.
