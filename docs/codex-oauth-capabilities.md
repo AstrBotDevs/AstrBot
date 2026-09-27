@@ -86,6 +86,30 @@ identity of the image tool's underlying model.
 
 ## Read-only quota query
 
+Quota configuration is intentionally hidden from general AI settings and other
+provider pages. It selects a Codex OAuth source (account), never a chat model.
+With one enabled built-in Codex OAuth source, the source is selected automatically,
+even when no chat model has been added for it. With multiple sources, set the
+source ID explicitly in the active profile's configuration:
+
+```json
+{
+  "provider_settings": {
+    "codex_oauth_usage": {
+      "enabled": true,
+      "source_id": "openai_oauth"
+    }
+  }
+}
+```
+
+An empty `source_id` uses automatic selection only when the source is unambiguous.
+`enabled: false` disables quota queries for the profile. Existing `provider_id`
+settings are supported by resolving the saved model's exact `provider_source_id`;
+new configuration should use `source_id`. The calling chat model is never used
+as an account fallback. Quota reads use source credentials and network settings
+without invoking a model or refreshing credentials.
+
 The built-in `/codex_oauth_usage` command and `codex_oauth_usage` LLM tool
 read the configured Codex OAuth account's usage. An administrator in the
 current configuration profile can use them in private chats or any group;

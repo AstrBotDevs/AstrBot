@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 import httpx
 import pytest
 
+from astrbot.core.provider.oauth.openai_oauth_shared_state import OpenAIOAuthSharedState
 from astrbot.core.provider.oauth.openai_oauth_usage import QuotaReader
 
 
@@ -337,3 +338,68 @@ async def test_close_during_request_returns_closed_without_snapshot(harness):
     release.set()
     assert await read_task == {"status": "closed"}
     await close_task
+
+
+@pytest.mark.asyncio
+async def test_read_source_uses_shared_credentials_and_source_proxy_only(harness):
+    _, reader, responses, requests, options, _ = harness
+    source = {
+        "id": "oauth-source",
+        "api_base": "https://chatgpt.com/backend-api/codex",
+        "proxy": "http://source-proxy:8080",
+        "custom_headers": {"X-Source": "yes", "Authorization": "Bearer wrong-token"},
+        "oauth_access_token": "source-token",
+        "oauth_account_id": "source-account",
+        "model": "irrelevant-model-override",
+    }
+    shared_state = OpenAIOAuthSharedState("oauth-source", source)
+    shared_state.apply({"oauth_access_token": "current-token"})
+    responses.append(httpx.Response(200, json={"plan_type": "pro"}))
+
+    result = await reader.read_source(source, shared_state)
+
+    assert result["status"] == "success"
+    assert str(requests[0].url) == "https://chatgpt.com/backend-api/wham/usage"
+    assert requests[0].headers["authorization"] == "Bearer current-token"
+    assert requests[0].headers["chatgpt-account-id"] == "source-account"
+    assert requests[0].headers["x-source"] == "yes"
+    assert options[0]["proxy"] == "http://source-proxy:8080"
+    await reader.close()
+
+
+@pytest.mark.asyncio
+async def test_read_source_rechecks_shared_account_during_response(harness):
+    _, reader, responses, requests, _, _ = harness
+    source = {
+        "api_base": "https://chatgpt.com/backend-api/codex",
+        "oauth_access_token": "old-token",
+        "oauth_account_id": "old-account",
+    }
+    shared_state = OpenAIOAuthSharedState("oauth-source", source)
+
+    def rotate(_request):
+        shared_state.apply(
+            {"oauth_access_token": "new-token", "oauth_account_id": "new-account"}
+        )
+        return httpx.Response(200, json={"plan_type": "old"})
+
+    responses.extend([rotate, httpx.Response(200, json={"plan_type": "new"})])
+    result = await reader.read_source(source, shared_state)
+    assert result["plan_type"] == "new"
+    assert len(requests) == 2
+    assert requests[1].headers["chatgpt-account-id"] == "new-account"
+    await reader.close()
+
+
+@pytest.mark.asyncio
+async def test_read_source_rejects_unofficial_base_before_network(harness):
+    _, reader, _, requests, _, _ = harness
+    source = {
+        "api_base": "https://example.invalid/backend-api/codex",
+        "oauth_access_token": "token",
+        "oauth_account_id": "account",
+    }
+    result = await reader.read_source(source, OpenAIOAuthSharedState("source", source))
+    assert result["status"] == "unsupported_endpoint"
+    assert requests == []
+    await reader.close()

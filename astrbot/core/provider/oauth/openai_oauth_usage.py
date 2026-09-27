@@ -14,9 +14,57 @@ from typing import Any
 
 import httpx
 
+from astrbot.core.provider.oauth.openai_oauth import decode_jwt_claims
+from astrbot.core.provider.sources.openai_oauth_source import CODEX_CLIENT_VERSION
+
 _CODEX_BASE_URL = "https://chatgpt.com/backend-api/codex"
 _USAGE_URL = "https://chatgpt.com/backend-api/wham/usage"
 _CACHE_SECONDS = 60
+
+
+class _SourceQuotaAdapter:
+    """Expose source credentials to the reader without creating a chat provider."""
+
+    def __init__(self, source: dict[str, Any], shared_state: Any) -> None:
+        self.provider_config = source
+        self._shared_state = shared_state
+        self.base_url = str(source.get("api_base") or _CODEX_BASE_URL).rstrip("/")
+
+    def _build_backend_headers(self) -> dict[str, str]:
+        credentials = self._shared_state.snapshot()
+        access_token = str(credentials.get("oauth_access_token") or "").strip()
+        account_id = str(credentials.get("oauth_account_id") or "").strip()
+        if not access_token or not account_id:
+            return {}
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "chatgpt-account-id": account_id,
+            "OpenAI-Beta": "responses=experimental",
+            "originator": "codex_cli_rs",
+            "version": CODEX_CLIENT_VERSION,
+            "User-Agent": f"codex_cli_rs/{CODEX_CLIENT_VERSION}",
+            "Content-Type": "application/json",
+        }
+        claims = decode_jwt_claims(access_token)
+        auth_claims = claims.get("https://api.openai.com/auth")
+        if not isinstance(auth_claims, dict):
+            auth_claims = {}
+        residency = (
+            auth_claims.get("chatgpt_data_residency")
+            or auth_claims.get("chatgpt_compute_residency")
+            or claims.get("chatgpt_data_residency")
+            or claims.get("chatgpt_compute_residency")
+        )
+        if isinstance(residency, str) and residency.strip():
+            headers["x-openai-internal-codex-residency"] = residency.strip()
+        custom_headers = self.provider_config.get("custom_headers")
+        if isinstance(custom_headers, dict):
+            protected = {"authorization", "chatgpt-account-id", "host", "accept"}
+            for key, value in custom_headers.items():
+                name = str(key)
+                if name.lower() not in protected:
+                    headers[name] = str(value)
+        return headers
 
 
 def _number(
@@ -169,6 +217,20 @@ class QuotaReader:
         }
         safe_headers["Accept"] = "application/json"
         return safe_headers, fingerprint
+
+    async def read_source(
+        self, source: dict[str, Any], shared_state: Any
+    ) -> dict[str, Any]:
+        """Read quota using one OAuth source and its live shared credentials.
+
+        Args:
+            source: Selected source-level endpoint, proxy, and headers.
+            shared_state: Manager-owned OAuth credential state.
+
+        Returns:
+            A normalized quota snapshot or sanitized status.
+        """
+        return await self.read(_SourceQuotaAdapter(source, shared_state))
 
     async def read(self, provider: Any) -> dict[str, Any]:
         if self._closed:

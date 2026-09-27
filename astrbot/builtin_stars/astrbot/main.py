@@ -66,6 +66,7 @@ class Main(star.Star):
 
         Any chat model may call this tool. Only the current profile's
         administrators may query usage, in private chat or any group.
+        The account is selected by its Codex OAuth source, not a chat model.
         返回使用比例、剩余比例、窗口、重置时间和采集时间。
         cached 表示短时缓存，缺失值不是零，不推算剩余请求次数。
         status 非 success 时仅说明错误，不编造额度。

@@ -139,7 +139,7 @@ DEFAULT_CONFIG = {
         "enable": True,
         "codex_oauth_usage": {
             "enabled": True,
-            "provider_id": "",
+            "source_id": "",
         },
         "default_image_caption_provider_id": "",
         "image_caption_prompt": "Please describe the image using Chinese.",
@@ -3624,17 +3624,6 @@ CONFIG_METADATA_3 = {
                         "type": "string",
                         "_special": "select_provider",
                         "hint": "留空代表不使用，可用于非多模态模型",
-                    },
-                    "provider_settings.codex_oauth_usage.enabled": {
-                        "description": "Codex OAuth 额度查询",
-                        "type": "bool",
-                        "hint": "启用管理员直接命令和额度工具，不依赖独立 OAuth 插件。",
-                    },
-                    "provider_settings.codex_oauth_usage.provider_id": {
-                        "description": "Codex 额度查询账号来源",
-                        "type": "string",
-                        "_special": "select_provider",
-                        "hint": "选择已有 OAuth 模型提供商，仅用于定位查询账号；调用工具的聊天模型不限厂商。留空时使用当前会话提供商。",
                     },
                     "provider_stt_settings.enable": {
                         "description": "语音识别",

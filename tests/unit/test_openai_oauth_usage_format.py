@@ -49,3 +49,12 @@ class UsageFormatTests(unittest.TestCase):
     def test_permission_rejections_are_distinct(self):
         self.assertIn("管理员", format_usage({"status": "not_admin"}))
         self.assertIn("此群聊", format_usage({"status": "group_not_allowed"}))
+
+    def test_source_selection_errors_are_actionable_without_identifiers(self):
+        self.assertIn("多个", format_usage({"status": "source_ambiguous"}))
+        self.assertIn("source_id", format_usage({"status": "source_ambiguous"}))
+        self.assertIn("未找到", format_usage({"status": "source_not_found"}))
+        self.assertIn("已禁用", format_usage({"status": "source_unavailable"}))
+        self.assertNotIn(
+            "secret", format_usage({"status": "source_unavailable", "detail": "secret"})
+        )
