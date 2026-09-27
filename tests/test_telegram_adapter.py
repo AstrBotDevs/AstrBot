@@ -131,6 +131,46 @@ async def test_telegram_command_for_another_bot_is_ignored():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "text",
+    [
+        "/help @some_user",
+        "hello @some_user",
+    ],
+)
+async def test_telegram_non_target_mentions_are_preserved(text):
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    update = create_mock_update(message_text=text, chat_type="group")
+
+    result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    assert result.message_str == text
+
+
+@pytest.mark.asyncio
+async def test_telegram_private_command_for_another_bot_is_preserved():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    text = "/help@another_bot"
+    update = create_mock_update(message_text=text, chat_type="private")
+
+    result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    assert result.message_str == text
+
+
+@pytest.mark.asyncio
 async def test_telegram_command_for_another_bot_skips_reply_side_effects():
     TelegramPlatformAdapter = _load_telegram_adapter()
     adapter = TelegramPlatformAdapter(
