@@ -2153,11 +2153,11 @@ onMounted(async () => {
 .header-actions {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 10px;
 }
 
 .chat-header-actions {
-  gap: 4px;
+  gap: 10px;
   margin-right: 0;
 }
 
@@ -2551,7 +2551,7 @@ html[data-astrbot-desktop-platform='macos'] .top-header.chat-mode-header.chat-mo
 
 
 .top-header .v-toolbar__content {
-  padding-inline-end: 16px !important;
+  padding-inline-end: 24px !important;
 }
 
 /* On macOS the traffic lights sit over the toolbar's left zone once the sidebar
@@ -2637,6 +2637,12 @@ html[data-astrbot-desktop-platform='macos'] .top-header.chat-mode-header.chat-mo
 .top-header .header-actions .mode-switch-btn {
   width: 66px;
   min-width: 66px;
+}
+
+.top-header .header-actions .action-btn {
+  width: 74px !important;
+  min-width: 74px !important;
+  justify-content: center;
 }
 
 .header-caption-btns {
