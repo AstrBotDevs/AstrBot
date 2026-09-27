@@ -24,6 +24,8 @@
   },
   "config": "設定ファイル",
   "chat": "チャット",
+  "botMode": "ボット",
+  "options": "オプション",
   "cron": "スケジュールタスク",
   "conversation": "会話データ",
   "sessionManagement": "カスタムルール",
