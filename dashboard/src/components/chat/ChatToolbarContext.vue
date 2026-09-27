@@ -31,6 +31,7 @@ const title = computed(() => {
 /* Slim the trigger down so the selector and title stack inside the 40px band. */
 .chat-toolbar-context :deep(.provider-select-menu) {
   height: 20px;
+  display: flex;
 }
 
 .chat-toolbar-context :deep(.provider-trigger--header) {
