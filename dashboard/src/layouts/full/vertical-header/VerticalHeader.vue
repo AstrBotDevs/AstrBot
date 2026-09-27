@@ -2153,6 +2153,7 @@ onMounted(async () => {
 .header-actions {
   display: flex;
   align-items: center;
+  gap: 4px;
 }
 
 .chat-header-actions {
@@ -2623,6 +2624,19 @@ html[data-astrbot-desktop-platform='macos'] .top-header.chat-mode-header.chat-mo
   display: inline-flex;
   align-items: center;
   line-height: 1;
+}
+
+/* Keep the two header variants on the same right edge. The bot view used a
+   Vuetify mr-4 utility while chat used the action button's 6px margin, which
+   made the same controls shift by a few pixels between panels. */
+.top-header .header-actions .mode-switch-btn,
+.top-header .header-actions .action-btn {
+  margin-right: 0 !important;
+}
+
+.top-header .header-actions .mode-switch-btn {
+  width: 66px;
+  min-width: 66px;
 }
 
 .header-caption-btns {
