@@ -376,16 +376,6 @@ CONFIG_METADATA_2 = {
                         "ws_reverse_port": 6199,
                         "ws_reverse_token": "",
                     },
-                    "个人微信": {
-                        "id": "weixin_personal",
-                        "type": "weixin_oc",
-                        "enable": True,
-                        "weixin_oc_base_url": "https://ilinkai.weixin.qq.com",
-                        "weixin_oc_bot_type": "3",
-                        "weixin_oc_qr_poll_interval": 1,
-                        "weixin_oc_long_poll_timeout_ms": 35_000,
-                        "weixin_oc_api_timeout_ms": 120_000,
-                    },
                     "飞书(Lark)": {
                         "id": "lark",
                         "type": "lark",
@@ -397,6 +387,16 @@ CONFIG_METADATA_2 = {
                         "webhook_uuid": "",
                         "lark_encrypt_key": "",
                         "lark_verification_token": "",
+                    },
+                    "个人微信": {
+                        "id": "weixin_personal",
+                        "type": "weixin_oc",
+                        "enable": True,
+                        "weixin_oc_base_url": "https://ilinkai.weixin.qq.com",
+                        "weixin_oc_bot_type": "3",
+                        "weixin_oc_qr_poll_interval": 1,
+                        "weixin_oc_long_poll_timeout_ms": 35_000,
+                        "weixin_oc_api_timeout_ms": 120_000,
                     },
                     "企业微信 (智能机器人)": {
                         "id": "wecom_ai_bot",
@@ -435,14 +435,6 @@ CONFIG_METADATA_2 = {
                         "callback_server_host": "0.0.0.0",
                         "port": 6195,
                     },
-                    "钉钉(DingTalk)": {
-                        "id": "dingtalk",
-                        "type": "dingtalk",
-                        "enable": True,
-                        "client_id": "",
-                        "client_secret": "",
-                        "card_template_id": "",
-                    },
                     "微信公众平台": {
                         "id": "weixin_official_account",
                         "type": "weixin_official_account",
@@ -457,6 +449,14 @@ CONFIG_METADATA_2 = {
                         "callback_server_host": "0.0.0.0",
                         "port": 6194,
                         "active_send_mode": False,
+                    },
+                    "钉钉(DingTalk)": {
+                        "id": "dingtalk",
+                        "type": "dingtalk",
+                        "enable": True,
+                        "client_id": "",
+                        "client_secret": "",
+                        "card_template_id": "",
                     },
                     "Telegram": {
                         "id": "telegram",
