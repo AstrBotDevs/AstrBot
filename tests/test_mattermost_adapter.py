@@ -1,4 +1,5 @@
 import asyncio
+import math
 import time
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -297,6 +298,16 @@ def test_mattermost_unparsable_reconnect_delay_does_not_skip_the_platform():
     for raw in ("", None, "abc"):
         adapter = _adapter_with_reconnect_delay(raw)
         assert adapter.reconnect_delay == 5.0
+
+
+def test_mattermost_non_finite_reconnect_delay_still_wakes_up():
+    """`float()` accepts nan/inf, and neither compares below the 0.1s minimum, so the
+    floor let them through and `asyncio.sleep()` never returned: the reconnect loop
+    hung after the first dropped websocket."""
+    for raw in (float("nan"), float("inf"), float("-inf"), "nan", "inf"):
+        delay = _adapter_with_reconnect_delay(raw).reconnect_delay
+        assert math.isfinite(delay), f"{raw!r} left reconnect_delay={delay!r}"
+        assert delay == 5.0, f"{raw!r} fell back to {delay!r}, expected the default 5.0"
 
 
 def test_mattermost_reconnect_delay_keeps_valid_values():

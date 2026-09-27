@@ -1,5 +1,6 @@
 import asyncio
 import json
+import math
 import re
 import time
 from collections import deque
@@ -47,6 +48,14 @@ class MattermostPlatformAdapter(Platform):
         except (TypeError, ValueError):
             logger.warning(
                 "Invalid 'mattermost_reconnect_delay' value %r in config, "
+                "falling back to default 5.0s",
+                raw_delay,
+            )
+            delay = 5.0
+
+        if not math.isfinite(delay):
+            logger.warning(
+                "Non-finite 'mattermost_reconnect_delay' value %r in config, "
                 "falling back to default 5.0s",
                 raw_delay,
             )
