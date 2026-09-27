@@ -315,7 +315,6 @@
 
           <div
             v-if="!loadingMessages && activeMessages.length"
-            ref="messagesContent"
             class="messages-list-shell"
           >
             <ChatLoadError
@@ -652,7 +651,6 @@ const tokenProviderConfigs = ref<TokenProviderConfig[]>([]);
 const tokenModelMetadata = ref<Record<string, ProviderModelMetadata>>({});
 const selectedTokenProviderId = ref("");
 const messagesContainer = ref<HTMLElement | null>(null);
-const messagesContent = ref<HTMLElement | null>(null);
 const composerShell = ref<HTMLElement | null>(null);
 const inputRef = ref<InstanceType<typeof ChatInput> | null>(null);
 const shouldStickToBottom = ref(true);
@@ -955,24 +953,21 @@ onMounted(async () => {
     chatResizeObserver = new ResizeObserver((entries) => {
       const container = messagesContainer.value;
       if (!container) return;
+      let composerResized = false;
       for (const entry of entries) {
         if (entry.target === composerShell.value) {
+          composerResized = true;
           const height = Math.ceil(entry.target.getBoundingClientRect().height);
           container.style.setProperty("--chat-composer-height", `${height}px`);
         }
       }
+      if (!composerResized) return;
       isAwayFromBottom.value =
         container.scrollHeight - container.scrollTop - container.clientHeight >
         2;
       if (shouldStickToBottom.value) scrollToBottom();
     });
-    for (const element of [
-      composerShell.value,
-      messagesContent.value,
-      messagesContainer.value,
-    ]) {
-      if (element) chatResizeObserver.observe(element);
-    }
+    if (composerShell.value) chatResizeObserver.observe(composerShell.value);
   }
 
   loadingSessions.value = true;
@@ -998,15 +993,11 @@ onBeforeUnmount(() => {
 });
 
 watch(
-  [composerShell, messagesContent, messagesContainer],
-  (elements, previousElements) => {
+  composerShell,
+  (element, previousElement) => {
     if (!chatResizeObserver) return;
-    for (const element of previousElements) {
-      if (element) chatResizeObserver.unobserve(element);
-    }
-    for (const element of elements) {
-      if (element) chatResizeObserver.observe(element);
-    }
+    if (previousElement) chatResizeObserver.unobserve(previousElement);
+    if (element) chatResizeObserver.observe(element);
   },
   { flush: "post" },
 );
@@ -1854,6 +1845,14 @@ function scrollToBottom(resumeFollowing = false) {
     // Recheck after rendering so queued stream updates cannot override user intent.
     if (!container || suppressAutoScroll.value || !shouldStickToBottom.value)
       return;
+    if (
+      !resumeFollowing &&
+      container.scrollHeight - container.scrollTop - container.clientHeight > 2
+    ) {
+      shouldStickToBottom.value = false;
+      isAwayFromBottom.value = true;
+      return;
+    }
     container.scrollTop = container.scrollHeight;
     lastMessagesScrollTop = Math.max(0, container.scrollTop);
     isAwayFromBottom.value = false;

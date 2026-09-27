@@ -18,7 +18,11 @@ test("user scrolling disables auto-follow even when the event target is a messag
     true,
   );
   const functions = [];
-  const names = new Set(["handleMessagesInteraction", "handleMessagesScroll"]);
+  const names = new Set([
+    "handleMessagesInteraction",
+    "handleMessagesScroll",
+    "scrollToBottom",
+  ]);
   const visit = (node) => {
     if (ts.isFunctionDeclaration(node) && names.has(node.name?.text)) {
       functions.push(node.getText(ast));
@@ -37,6 +41,7 @@ test("user scrolling disables auto-follow even when the event target is a messag
     messagesContainer: { value: container },
     activeSessionPagination: { value: undefined },
     maybeLoadEarlierOnScroll: () => {},
+    nextTick: (callback) => callback(),
     currSessionId: { value: "session" },
     threadSelection: { visible: false },
     WheelEvent: class {},
@@ -46,6 +51,7 @@ test("user scrolling disables auto-follow even when the event target is a messag
     lastMessagesScrollTop: 600,
     scrollIntent: 0,
     LOAD_EARLIER_SCROLL_THRESHOLD: 120,
+    suppressAutoScroll: { value: false },
   });
   vm.runInContext(ts.transpile(functions.join("\n")), context);
 
@@ -67,4 +73,14 @@ test("user scrolling disables auto-follow even when the event target is a messag
     false,
     "being away from the bottom must cancel auto-follow even without a wheel event",
   );
+
+  context.shouldStickToBottom.value = true;
+  container.scrollTop = 500;
+  context.scrollToBottom();
+  assert.equal(
+    container.scrollTop,
+    500,
+    "a queued auto-scroll must not move a container that is already away from the bottom",
+  );
+  assert.equal(context.shouldStickToBottom.value, false);
 });
