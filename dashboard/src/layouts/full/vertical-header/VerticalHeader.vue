@@ -2585,6 +2585,32 @@ html[data-astrbot-desktop-platform='macos'] .top-header.chat-mode-header.chat-mo
   color: rgba(var(--v-theme-on-surface), 0.9);
 }
 
+/* Normalize header action contents: identical font size and unit line-height so
+   icon+label stay mutually centered across platform font metrics (Windows
+   otherwise shows a 1-2px optical offset between the buttons). */
+.top-header .header-actions .v-btn {
+  font-size: 0.8125rem;
+}
+
+.top-header .header-actions .v-btn .v-btn__content {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+}
+
+.top-header .header-actions .v-btn .v-icon {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+}
+
+.top-header .header-actions .v-btn .mode-switch-label,
+.top-header .header-actions .v-btn .header-toolbar-label {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+}
+
 .header-caption-btns {
   display: flex;
   align-items: center;
