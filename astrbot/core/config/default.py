@@ -376,6 +376,18 @@ CONFIG_METADATA_2 = {
                         "ws_reverse_port": 6199,
                         "ws_reverse_token": "",
                     },
+                    "飞书(Lark)": {
+                        "id": "lark",
+                        "type": "lark",
+                        "enable": True,
+                        "app_id": "",
+                        "app_secret": "",
+                        "domain": "https://open.feishu.cn",
+                        "lark_connection_mode": "socket",  # webhook, socket
+                        "webhook_uuid": "",
+                        "lark_encrypt_key": "",
+                        "lark_verification_token": "",
+                    },
                     "个人微信": {
                         "id": "weixin_personal",
                         "type": "weixin_oc",
@@ -437,18 +449,6 @@ CONFIG_METADATA_2 = {
                         "webhook_uuid": "",
                         "callback_server_host": "0.0.0.0",
                         "port": 6195,
-                    },
-                    "飞书(Lark)": {
-                        "id": "lark",
-                        "type": "lark",
-                        "enable": True,
-                        "app_id": "",
-                        "app_secret": "",
-                        "domain": "https://open.feishu.cn",
-                        "lark_connection_mode": "socket",  # webhook, socket
-                        "webhook_uuid": "",
-                        "lark_encrypt_key": "",
-                        "lark_verification_token": "",
                     },
                     "钉钉(DingTalk)": {
                         "id": "dingtalk",
