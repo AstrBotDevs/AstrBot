@@ -209,6 +209,7 @@
       "restartNow": "Restart Now",
       "failed": "Import Failed",
       "retry": "Retry",
+      "resumeUpload": "Resume Upload",
       "version": {
         "backupVersion": "Backup Version",
         "currentVersion": "Current Version",

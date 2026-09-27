@@ -2,7 +2,7 @@
 
 Starting from v4.11.0, AstrBot introduced an automatic context compression feature.
 
-![alt text](https://files.astrbot.app/docs/source/images/context-compress/image.png)
+On the `Config` page, select the profile to edit, open `AI → Advanced → Context Management Strategy`, set the compression strategy, and click `Save Configuration` at the bottom right.
 
 AstrBot automatically compresses the context when the conversation context **reaches 82% of the maximum context window length of the conversation model being used**, ensuring that as much conversation content as possible is retained without losing key information.
 
@@ -30,11 +30,6 @@ After one round of compression, AstrBot will perform a secondary check to verify
 
 By default, when you add a model, AstrBot automatically retrieves the model's context window size from the API provided by [MODELS.DEV](https://models.dev/) based on the model's ID. However, due to the wide variety of models and the fact that some providers even modify the model IDs, AstrBot cannot automatically infer the context window size for all models you add.
 
-You can manually set the model's context window size in the model configuration, as shown in the image below:
-
-![alt text](https://files.astrbot.app/docs/source/images/context-compress/image1.png)
-
-> [!NOTE]
-> If you don't see the configuration option shown in the image above, please delete the model and re-add it.
+Open `Providers → Chat Completion`, select the model's provider in the left panel, and click an added model in the model list on the right. Edit `max_context_tokens` in the model configuration and save it.
 
 When the model context window size is set to 0, AstrBot will still automatically retrieve the model's context window size from MODELS.DEV for each request. If it remains 0, context compression will not be enabled for that request.

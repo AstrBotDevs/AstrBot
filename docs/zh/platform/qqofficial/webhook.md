@@ -34,9 +34,7 @@
 8. 保存回调配置后，重启 AstrBot。
 
 > [!TIP]
-> 使用 `统一 Webhook 模式` 时，AstrBot 会自动生成唯一的 Webhook 回调链接。你可以在日志中，或者 WebUI 的机器人卡片上找到该链接。
-
-![unified_webhook](https://files.astrbot.app/docs/source/images/use/unified-webhook.png)
+> 使用 `统一 Webhook 模式` 时，AstrBot 会自动生成唯一的 Webhook 回调链接。你可以在 `数据与日志 → 日志` 中查看，或在 `机器人` 页选中该机器人，点击 `查看 Webhook 链接`。
 
 ### 在群聊中使用
 
@@ -97,7 +95,7 @@ Webhook 模式还需要在 QQ 开放平台的回调配置中勾选群事件 `GRO
 
 1. 进入 AstrBot 的管理面板
 2. 点击左边栏 `机器人`
-3. 然后在右边的界面中，点击 `+ 创建机器人`
+3. 点击机器人列表上方的 `创建机器人`
 4. 选择 `QQ 官方机器人（Webhook）`
 
 推荐使用 `扫码一键创建`：
@@ -127,7 +125,7 @@ Webhook 回调地址必须可以被 QQ 开放平台公网访问，并且需要�
 
 在 `开发 -> 回调配置` 处，配置回调地址。
 
-上一步点击保存之后，AstrBot 将会自动为你生成唯一的 Webhook 回调链接，你可以在日志中或者 WebUI 的机器人页的卡片上找到。
+上一步点击保存之后，AstrBot 将会自动为你生成唯一的 Webhook 回调链接，你可以在 `数据与日志 → 日志` 中查看，或在 `机器人` 页选中该机器人，点击 `查看 Webhook 链接`。
 
 将请求地址填写为该地址。
 

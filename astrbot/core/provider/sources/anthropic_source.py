@@ -26,6 +26,7 @@ from astrbot.core.utils.network_utils import (
     log_connection_failure,
 )
 
+from ..headers import build_conversation_headers, build_provider_headers
 from ..register import register_provider_adapter
 from .request_retry import retry_provider_request, retry_provider_request_context
 
@@ -71,12 +72,14 @@ class ProviderAnthropic(Provider):
         *,
         required_headers: dict[str, str] | None = None,
     ) -> dict[str, str] | None:
-        merged_headers = cls._normalize_custom_headers(provider_config) or {}
+        merged_headers = build_provider_headers(
+            cls._normalize_custom_headers(provider_config)
+        )
         if required_headers:
             for header_name, header_value in required_headers.items():
                 if not merged_headers.get(header_name, "").strip():
                     merged_headers[header_name] = header_value
-        return merged_headers or None
+        return merged_headers
 
     def __init__(
         self,
@@ -90,7 +93,9 @@ class ProviderAnthropic(Provider):
             provider_settings,
         )
 
-        self.base_url = provider_config.get("api_base", "https://api.anthropic.com")
+        api_base = str(provider_config.get("api_base", "") or "").strip()
+        self.base_url = (api_base or "https://api.anthropic.com").rstrip("/")
+        self.base_url = self.base_url.removesuffix("/v1")
         self.timeout = provider_config.get("timeout", 120)
         if isinstance(self.timeout, str):
             self.timeout = int(self.timeout)
@@ -443,15 +448,21 @@ class ProviderAnthropic(Provider):
         if usage is None:
             return TokenUsage()
         # https://docs.claude.com/en/docs/build-with-claude/prompt-caching#tracking-cache-performance
+        # Anthropic's input_tokens excludes cache served reads AND writes, so
+        # cache_creation_input_tokens must be added back into input_other to
+        # keep total input (and context-occupancy stats) accurate.
         return TokenUsage(
-            input_other=usage.input_tokens or 0,
+            input_other=(usage.input_tokens or 0)
+            + (usage.cache_creation_input_tokens or 0),
             input_cached=usage.cache_read_input_tokens or 0,
             output=usage.output_tokens or 0,
         )
 
     def _update_usage(self, token_usage: TokenUsage, usage: MessageDeltaUsage) -> None:
         if usage.input_tokens is not None:
-            token_usage.input_other = usage.input_tokens
+            token_usage.input_other = usage.input_tokens + (
+                usage.cache_creation_input_tokens or 0
+            )
         if usage.cache_read_input_tokens is not None:
             token_usage.input_cached = usage.cache_read_input_tokens
         if usage.output_tokens is not None:
@@ -504,6 +515,7 @@ class ProviderAnthropic(Provider):
         tools: ToolSet | None,
         *,
         request_max_retries: int | None = None,
+        conversation_id: str | None = None,
     ) -> LLMResponse:
         if tools:
             if tool_list := tools.get_func_desc_anthropic_style():
@@ -524,7 +536,10 @@ class ProviderAnthropic(Provider):
             completion = await retry_provider_request(
                 "Anthropic",
                 lambda: self.client.messages.create(
-                    **payloads, stream=False, extra_body=extra_body
+                    **payloads,
+                    stream=False,
+                    extra_body=extra_body,
+                    extra_headers=build_conversation_headers(conversation_id),
                 ),
                 max_attempts=request_max_retries,
             )
@@ -597,6 +612,7 @@ class ProviderAnthropic(Provider):
         tools: ToolSet | None,
         *,
         request_max_retries: int | None = None,
+        conversation_id: str | None = None,
     ) -> AsyncGenerator[LLMResponse, None]:
         if tools:
             if tool_list := tools.get_func_desc_anthropic_style():
@@ -624,7 +640,11 @@ class ProviderAnthropic(Provider):
 
         async with retry_provider_request_context(
             "Anthropic",
-            lambda: self.client.messages.stream(**payloads, extra_body=extra_body),
+            lambda: self.client.messages.stream(
+                **payloads,
+                extra_body=extra_body,
+                extra_headers=build_conversation_headers(conversation_id),
+            ),
             max_attempts=request_max_retries,
         ) as stream:
             assert isinstance(stream, anthropic.AsyncMessageStream)
@@ -767,6 +787,7 @@ class ProviderAnthropic(Provider):
         request_max_retries: int | None = None,
         **kwargs,
     ) -> LLMResponse:
+        conversation_id = kwargs.pop("conversation_id", None)
         if contexts is None:
             contexts = []
         new_record = None
@@ -814,10 +835,14 @@ class ProviderAnthropic(Provider):
 
         llm_response = None
         try:
+            query_kwargs = {}
+            if conversation_id:
+                query_kwargs["conversation_id"] = conversation_id
             llm_response = await self._query(
                 payloads,
                 func_tool,
                 request_max_retries=request_max_retries,
+                **query_kwargs,
             )
         except Exception as e:
             raise e
@@ -840,6 +865,7 @@ class ProviderAnthropic(Provider):
         request_max_retries: int | None = None,
         **kwargs,
     ):
+        conversation_id = kwargs.pop("conversation_id", None)
         if contexts is None:
             contexts = []
         new_record = None
@@ -884,10 +910,14 @@ class ProviderAnthropic(Provider):
                 else system_prompt
             )
 
+        query_kwargs = {}
+        if conversation_id:
+            query_kwargs["conversation_id"] = conversation_id
         async for llm_response in self._query_stream(
             payloads,
             func_tool,
             request_max_retries=request_max_retries,
+            **query_kwargs,
         ):
             yield llm_response
 

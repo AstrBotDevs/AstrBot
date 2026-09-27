@@ -658,9 +658,9 @@ const openExternalLink = (url) => {
 };
 
 const openFaqLink = () => {
-    openExternalLink(locale.value === 'en-US'
-        ? 'https://docs.astrbot.app/en/faq.html'
-        : 'https://docs.astrbot.app/faq.html');
+    openExternalLink(locale.value.startsWith('zh-')
+        ? 'https://docs.astrbot.app/faq.html'
+        : 'https://docs.astrbot.app/en/faq.html');
 };
 
 const resourceItems = computed(() => [

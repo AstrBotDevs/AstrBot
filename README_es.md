@@ -151,6 +151,7 @@ Conecta AstrBot a tu plataforma de chat favorita.
 | DeepSeek | Servicios LLM |
 | Ollama (Autoalojado) | Servicios LLM |
 | LM Studio (Autoalojado) | Servicios LLM |
+| [MiraRouter](https://mirarouter.com/) | Servicios LLM (API Gateway, soporta todos los modelos) |
 | [AIHubMix](https://aihubmix.com/?aff=4bfH) | Servicios LLM (API Gateway, soporta todos los modelos) |
 | [CompShare](https://www.compshare.cn/?ytag=GPU_YY-gh_astrbot&referral_code=FV7DcGowN4hB5UuXKgpE74) | Servicios LLM |
 | [302.AI](https://share.302.ai/rr1M3l) | Servicios LLM |

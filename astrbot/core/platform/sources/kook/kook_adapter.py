@@ -7,6 +7,7 @@ from astrbot.api.event import MessageChain
 from astrbot.api.message_components import At, AtAll, Image, Plain
 from astrbot.api.platform import (
     AstrBotMessage,
+    Group,
     MessageMember,
     MessageType,
     Platform,
@@ -451,7 +452,10 @@ class KookPlatformAdapter(Platform):
             case KookChannelType.GROUP:
                 session_id = data.target_id or "unknown"
                 abm.type = MessageType.GROUP_MESSAGE
-                abm.group_id = session_id
+                abm.group = Group(
+                    group_id=session_id,
+                    group_name=data.extra.channel_name or None,
+                )
                 abm.session_id = session_id
             case KookChannelType.PERSON:
                 abm.type = MessageType.FRIEND_MESSAGE

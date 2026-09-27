@@ -2,7 +2,7 @@
 
 在 v4.11.0 之后，AstrBot 引入了自动上下文压缩功能。
 
-![alt text](https://files.astrbot.app/docs/source/images/context-compress/image.png)
+在 `配置文件` 中选择要修改的配置文件，进入 `AI 配置 → 高级 → 上下文管理策略` 设置压缩策略，然后点击右下角的 `保存配置`。
 
 AstrBot 会在对话上下文达到**使用的对话模型上下文窗口的最大长度的 82% 时**，自动对上下文进行压缩，以确保在不丢失关键信息的情况下，尽可能多地保留对话内容。 
 
@@ -30,12 +30,6 @@ Based on our full conversation history, produce a concise summary of key takeawa
 
 默认情况下，当您添加模型时，AstrBot 会自动根据模型的 id，从 [MODELS.DEV](https://models.dev/) 提供的接口中获取模型的上下文窗口大小。但由于模型种类繁多，部分提供商甚至会修改模型的 id，因此 AstrBot 不能自动推断出您所添加的模型的上下文窗口大小。
 
-您可以手动在模型配置中设置模型的上下文窗口大小，参考下图：
-
-![alt text](https://files.astrbot.app/docs/source/images/context-compress/image1.png)
-
-> [!NOTE]
-> 如果没有看到上图中的配置项，请您删除该模型，然后重新添加模型即可。
+打开 `模型提供商 → 对话`，在左侧选择模型所属的提供商，在右侧模型列表中点击已添加的模型，编辑上下文窗口大小（`max_context_tokens`）并保存。
 
 当模型上下文窗口大小被设置为 0 时，在每次请求时，AstrBot 仍会自动从 MODELS.DEV 获取模型的上下文窗口大小。如果仍为 0，则这次请求不会启用上下文压缩功能。
-

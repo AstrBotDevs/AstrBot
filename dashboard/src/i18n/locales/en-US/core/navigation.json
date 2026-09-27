@@ -5,10 +5,19 @@
   "providers": "Providers",
   "commands": "Commands",
   "persona": "Persona",
+  "data": "Data & Logs",
+  "dataTabs": {
+    "statistics": "Statistics",
+    "conversations": "Conversations",
+    "logs": "Logs",
+    "trace": "Trace"
+  },
   "subagent": "SubAgents",
   "toolUse": "MCP Tools",
   "config": "Config",
   "chat": "Chat",
+  "botMode": "Bot",
+  "options": "Options",
   "cron": "Future Tasks",
   "extension": "Extensions",
   "extensionTabs": {
@@ -26,6 +35,8 @@
   "knowledgeBase": "Knowledge Base",
   "about": "About",
   "settings": "Settings",
+  "expandSidebar": "Expand sidebar",
+  "collapseSidebar": "Collapse sidebar",
   "changelog": "Changelog",
   "documentation": "Documentation",
   "faq": "FAQ",

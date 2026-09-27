@@ -39,6 +39,7 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         )
         logger.info(f"[OpenAI Embedding] {provider_id} Using API Base: {api_base}")
         self.client = AsyncOpenAI(
+            default_headers=self.request_headers,
             api_key=provider_config.get("embedding_api_key"),
             base_url=api_base,
             timeout=int(provider_config.get("timeout", 20)),

@@ -18,6 +18,22 @@ def test_github_repository_resolves_branch_with_slashes() -> None:
     assert repository.archive_url == (
         "https://github.com/AstrBotDevs/AstrBot/archive/refs/heads/feature/updater.zip"
     )
+    assert repository.raw_file_url("metadata.yaml") == (
+        "https://raw.githubusercontent.com/AstrBotDevs/AstrBot/"
+        "feature/updater/metadata.yaml"
+    )
+
+
+def test_github_repository_uses_head_when_branch_is_unspecified() -> None:
+    repository = GitHubRepository.parse("https://github.com/AstrBotDevs/AstrBot")
+
+    assert repository.branch is None
+    assert repository.archive_url == (
+        "https://github.com/AstrBotDevs/AstrBot/archive/HEAD.zip"
+    )
+    assert repository.raw_file_url("metadata.yaml") == (
+        "https://raw.githubusercontent.com/AstrBotDevs/AstrBot/HEAD/metadata.yaml"
+    )
 
 
 def test_non_github_http_repository_uses_git_transport() -> None:

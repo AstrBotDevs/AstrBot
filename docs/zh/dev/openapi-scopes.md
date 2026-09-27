@@ -180,6 +180,7 @@ outline: deep
 | `GET` | `/api/v1/conversations` | — |
 | `POST` | `/api/v1/conversations/batch-delete` | — |
 | `POST` | `/api/v1/conversations/export` | — |
+| `GET` | `/api/v1/conversations/filter-options` | — |
 | `GET` | `/api/v1/conversations/{conversation_id}` | — |
 | `PATCH` | `/api/v1/conversations/{conversation_id}` | — |
 | `DELETE` | `/api/v1/conversations/{conversation_id}` | — |
@@ -206,6 +207,11 @@ outline: deep
 | `POST` | `/api/v1/file` | — |
 | `POST` | `/api/v1/files` | — |
 | `GET` | `/api/v1/files/content` | — |
+| `POST` | `/api/v1/files/upload/abort` | — |
+| `POST` | `/api/v1/files/upload/chunk` | — |
+| `POST` | `/api/v1/files/upload/complete` | — |
+| `POST` | `/api/v1/files/upload/init` | — |
+| `POST` | `/api/v1/files/upload/status` | — |
 | `GET` | `/api/v1/files/{attachment_id}` | — |
 | `DELETE` | `/api/v1/files/{attachment_id}` | — |
 | `GET` | `/api/v1/files/{attachment_id}/content` | — |
