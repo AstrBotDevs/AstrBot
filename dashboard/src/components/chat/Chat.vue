@@ -654,6 +654,7 @@ const messagesContainer = ref<HTMLElement | null>(null);
 const composerShell = ref<HTMLElement | null>(null);
 const inputRef = ref<InstanceType<typeof ChatInput> | null>(null);
 const shouldStickToBottom = ref(true);
+const autoScrollPaused = ref(false);
 const suppressAutoScroll = ref(false);
 const LOAD_EARLIER_SCROLL_THRESHOLD = 120;
 const isAwayFromBottom = ref(false);
@@ -1767,6 +1768,7 @@ function handleMessagesInteraction(
 ) {
   if (event instanceof WheelEvent) {
     if (event.ctrlKey || event.deltaY === 0) return;
+    autoScrollPaused.value = true;
     scrollIntent = Math.sign(event.deltaY);
   } else if (event.type === "touchstart" || event.type === "touchmove") {
     const touch = (event as TouchEvent).touches[0];
@@ -1775,6 +1777,7 @@ function handleMessagesInteraction(
       touchScrollY = touch.clientY;
       return;
     }
+    autoScrollPaused.value = true;
     scrollIntent = Math.sign(touchScrollY - touch.clientY);
     touchScrollY = touch.clientY;
   } else if (event instanceof KeyboardEvent) {
@@ -1794,7 +1797,9 @@ function handleMessagesInteraction(
     } else {
       return;
     }
+    autoScrollPaused.value = true;
   } else {
+    autoScrollPaused.value = true;
     scrollIntent = 0;
     shouldStickToBottom.value = false;
   }
@@ -1813,6 +1818,7 @@ function handleMessagesScroll() {
   const previousTop = Math.min(lastMessagesScrollTop, maxScrollTop);
   isAwayFromBottom.value = maxScrollTop - scrollTop > 2;
   if (isAwayFromBottom.value || scrollTop < previousTop) {
+    autoScrollPaused.value = true;
     shouldStickToBottom.value = false;
   } else if (
     scrollTop > previousTop &&
@@ -1837,13 +1843,19 @@ function maybeLoadEarlierOnScroll(container: HTMLElement) {
 
 function scrollToBottom(resumeFollowing = false) {
   if (resumeFollowing) {
+    autoScrollPaused.value = false;
     shouldStickToBottom.value = true;
     scrollIntent = 0;
   }
   nextTick(() => {
     const container = messagesContainer.value;
     // Recheck after rendering so queued stream updates cannot override user intent.
-    if (!container || suppressAutoScroll.value || !shouldStickToBottom.value)
+    if (
+      !container ||
+      suppressAutoScroll.value ||
+      autoScrollPaused.value ||
+      !shouldStickToBottom.value
+    )
       return;
     if (
       !resumeFollowing &&

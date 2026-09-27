@@ -47,6 +47,7 @@ test("user scrolling disables auto-follow even when the event target is a messag
     WheelEvent: class {},
     KeyboardEvent: class {},
     isAwayFromBottom: { value: false },
+    autoScrollPaused: { value: false },
     shouldStickToBottom: { value: true },
     lastMessagesScrollTop: 600,
     scrollIntent: 0,
@@ -64,6 +65,7 @@ test("user scrolling disables auto-follow even when the event target is a messag
     false,
     "pointer interaction inside a message must cancel auto-follow",
   );
+  assert.equal(context.autoScrollPaused.value, true);
 
   context.shouldStickToBottom.value = true;
   container.scrollTop = 500;
@@ -82,5 +84,11 @@ test("user scrolling disables auto-follow even when the event target is a messag
     500,
     "a queued auto-scroll must not move a container that is already away from the bottom",
   );
-  assert.equal(context.shouldStickToBottom.value, false);
+  assert.equal(context.shouldStickToBottom.value, true);
+  assert.equal(context.autoScrollPaused.value, true);
+
+  context.autoScrollPaused.value = false;
+  context.shouldStickToBottom.value = true;
+  context.scrollToBottom(true);
+  assert.equal(context.autoScrollPaused.value, false);
 });
