@@ -127,6 +127,37 @@ async def test_telegram_reply_to_bot_uses_self_id_and_preserves_quote():
 
 
 @pytest.mark.asyncio
+async def test_telegram_media_reply_to_bot_uses_self_id_without_text_fallback():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    reply_to_message = create_mock_update(
+        message_text="机器人上一条回复",
+        user_id=12345678,
+        username="test_bot",
+        message_id=12,
+    ).message
+    photo = create_mock_file("https://api.telegram.org/file/test/reply.jpg")
+    update = create_mock_update(
+        message_text=None,
+        chat_type="group",
+        photo=[photo],
+        reply_to_message=reply_to_message,
+    )
+
+    result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    reply = _find_reply_component(result)
+    assert reply.sender_id == result.self_id == "test_bot"
+    assert result.message_str == ""
+    assert any(isinstance(component, Comp.Image) for component in result.message)
+
+
+@pytest.mark.asyncio
 async def test_telegram_reply_to_user_preserves_sender_and_message():
     TelegramPlatformAdapter = _load_telegram_adapter()
     adapter = TelegramPlatformAdapter(
