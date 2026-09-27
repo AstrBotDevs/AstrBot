@@ -718,6 +718,7 @@ const DRAFT_SAVE_DELAY_MS = 300;
 let activeDraftSessionId = currSessionId.value;
 let draftSaveTimer: number | null = null;
 let chatResizeObserver: ResizeObserver | null = null;
+let chatMutationObserver: MutationObserver | null = null;
 const {
   isRecording,
   startRecording: startRecorder,
@@ -1001,6 +1002,24 @@ onMounted(async () => {
     if (messagesContent.value)
       chatResizeObserver.observe(messagesContent.value);
   }
+  if (typeof MutationObserver !== "undefined") {
+    chatMutationObserver = new MutationObserver(() => {
+      if (
+        !suppressAutoScroll.value &&
+        shouldStickToBottom.value &&
+        !autoScrollPaused.value
+      ) {
+        scrollToBottom();
+      }
+    });
+    if (messagesContent.value) {
+      chatMutationObserver.observe(messagesContent.value, {
+        childList: true,
+        characterData: true,
+        subtree: true,
+      });
+    }
+  }
 
   loadingSessions.value = true;
   try {
@@ -1020,6 +1039,7 @@ onBeforeUnmount(() => {
   flushDraft();
   window.removeEventListener("beforeunload", flushDraft);
   chatResizeObserver?.disconnect();
+  chatMutationObserver?.disconnect();
   chatHeader.CLEAR_CONTEXT();
   cleanupMediaCache();
 });
@@ -1033,6 +1053,22 @@ watch(
     }
     for (const element of elements) {
       if (element) chatResizeObserver.observe(element);
+    }
+  },
+  { flush: "post" },
+);
+
+watch(
+  messagesContent,
+  (element, previousElement) => {
+    if (!chatMutationObserver) return;
+    if (previousElement) chatMutationObserver.disconnect();
+    if (element) {
+      chatMutationObserver.observe(element, {
+        childList: true,
+        characterData: true,
+        subtree: true,
+      });
     }
   },
   { flush: "post" },
