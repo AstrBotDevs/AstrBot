@@ -187,7 +187,14 @@ function toggleSidebar() {
           variant="text" :icon="isRailSidebar" to="/settings" :aria-label="t('core.navigation.settings')">
           <Settings :size="20" class="sidebar-footer-lucide-icon" />
           <span v-if="!isRailSidebar">{{ t('core.navigation.settings') }}</span>
-          <v-tooltip v-if="isRailSidebar" activator="parent" location="right" :text="t('core.navigation.settings')" :open-delay="0" />
+          <v-tooltip
+            v-if="isRailSidebar"
+            activator="parent"
+            location="right"
+            :text="t('core.navigation.settings')"
+            :open-delay="0"
+            content-class="sidebar-rail-tooltip"
+          />
         </v-btn>
       </div>
     </div>
@@ -494,7 +501,7 @@ function toggleSidebar() {
 }
 
 /* Rail tooltips stay, but they must read as plain chips: no drop shadow. */
-:global(.v-tooltip > .v-overlay__content) {
+:global(.sidebar-rail-tooltip) {
   box-shadow: none !important;
 }
 

@@ -246,7 +246,7 @@
           />
           <!-- Provider/Model Selector Menu -->
           <ProviderModelMenu
-            v-if="props.showProviderSelector"
+            v-if="props.showProviderSelector && providerSelectorAvailable"
             ref="providerModelMenuRef"
           />
           <v-progress-circular

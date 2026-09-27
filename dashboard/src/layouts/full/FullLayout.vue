@@ -8,6 +8,7 @@ import Chat from "@/components/chat/Chat.vue";
 import { useCustomizerStore } from "@/stores/customizer";
 import { useRouterLoadingStore } from "@/stores/routerLoading";
 import { useCommonStore } from "@/stores/common";
+import { useMobileDrawerStore } from "@/stores/mobileDrawer";
 import { statsApi } from "@/api/v1";
 import { useI18n } from "@/i18n/composables";
 
@@ -15,6 +16,7 @@ const FIRST_NOTICE_SEEN_KEY = "astrbot:first_notice_seen:v1";
 
 const customizer = useCustomizerStore();
 const commonStore = useCommonStore();
+const mobileDrawer = useMobileDrawerStore();
 const { locale } = useI18n();
 const route = useRoute();
 const routerLoadingStore = useRouterLoadingStore();
@@ -46,6 +48,15 @@ watch(isCurrentChatRoute, (isChatRoute) => {
     shouldMountChat.value = true;
   }
 });
+
+// Temporary mobile drawers must never survive a route transition. Chat stays
+// mounted with v-show, so resetting the shared store here also covers Chat/Bot
+// switches and navigation initiated from inside ChatUI.
+watch(
+  () => route.fullPath,
+  () => mobileDrawer.SET(false),
+  { immediate: true },
+);
 
 const maybeShowFirstNotice = async () => {
   if (localStorage.getItem(FIRST_NOTICE_SEEN_KEY) === "1") {
