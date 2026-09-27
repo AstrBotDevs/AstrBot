@@ -276,7 +276,7 @@ onMounted(() => {
 }
 
 :global(html[data-astrbot-desktop-platform='macos'] .v-application.v-theme--PurpleThemeDark) {
-  --astrbot-vibrancy-tint: rgba(0, 0, 0, 0.3);
+  --astrbot-vibrancy-tint: rgba(26, 26, 26, 0.92);
 }
 
 /* Off macOS the sidebar column is opaque; extend its color behind the content
