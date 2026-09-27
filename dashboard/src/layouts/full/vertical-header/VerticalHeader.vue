@@ -2508,6 +2508,14 @@ onMounted(async () => {
   min-width: 0;
 }
 
+/* The toolbar background spans the window, while page-specific context starts
+   where the permanent chat sidebar ends. Keeping this offset on the content
+   mount point avoids moving the toolbar itself and keeps the sidebar brand
+   unobstructed. */
+.top-header.chat-mode-header .app-header-context {
+  margin-left: var(--astrbot-chat-sidebar-width, 0px);
+}
+
 html {
   /* Keep in sync with the app bar height above. */
   --astrbot-toolbar-height: 40px;
