@@ -17,6 +17,7 @@ from astrbot.core.astr_main_agent import (
     LLM_ERROR_MESSAGE_EXTRA_KEY,
     MainAgentBuildConfig,
     MainAgentBuildResult,
+    _matches_provider_wake_prefix,
     _provider_supports_modality,
     build_main_agent,
 )
@@ -52,6 +53,24 @@ from ...follow_up import (
     try_capture_follow_up,
     unregister_active_runner,
 )
+
+
+async def _prepare_file_attachments(event: AstrMessageEvent) -> None:
+    """Download file attachments before acquiring the session lock.
+
+    Args:
+        event: Incoming event whose direct and quoted files should be prepared.
+
+    Returns:
+        None.
+    """
+    for component in event.message_obj.message:
+        if isinstance(component, File):
+            await component.get_file()
+        elif isinstance(component, Reply) and component.chain:
+            for reply_component in component.chain:
+                if isinstance(reply_component, File):
+                    await reply_component.get_file()
 
 
 class InternalAgentSubStage(Stage):
@@ -204,6 +223,16 @@ class InternalAgentSubStage(Stage):
                 logger.warning("send_typing failed", exc_info=True)
             if await call_event_hook(event, EventType.OnWaitingLLMRequestEvent):
                 return
+
+            if event.get_extra(
+                "provider_request"
+            ) is None and not _matches_provider_wake_prefix(
+                event,
+                provider_wake_prefix,
+            ):
+                return
+
+            await _prepare_file_attachments(event)
 
             async with session_lock_manager.acquire_lock(event.unified_msg_origin):
                 logger.debug("acquired session lock for llm request")

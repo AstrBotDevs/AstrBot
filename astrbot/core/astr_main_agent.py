@@ -1402,6 +1402,27 @@ def _select_image_chat_provider(
     return provider
 
 
+def _matches_provider_wake_prefix(
+    event: AstrMessageEvent,
+    provider_wake_prefix: str,
+) -> bool:
+    """Return whether an event satisfies the provider wake prefix.
+
+    Args:
+        event: Incoming event whose message and platform should be inspected.
+        provider_wake_prefix: Prefix required by the provider, if any.
+
+    Returns:
+        True when no prefix is configured, WebChat is exempt, or the message
+        starts with the configured prefix.
+    """
+    return (
+        not provider_wake_prefix
+        or event.get_platform_name() == "webchat"
+        or (event.message_str or "").startswith(provider_wake_prefix)
+    )
+
+
 async def collect_initial_request(
     event: AstrMessageEvent,
     plugin_context: Context,
@@ -1464,14 +1485,7 @@ async def collect_initial_request(
             if sel_model := event.get_extra("selected_model"):
                 req.model = sel_model
             provider_wake_prefix = config.provider_wake_prefix
-            # WebChat is a point-to-point panel session, so like the waking
-            # stage (#9215) it is exempt from wake-prefix gating; otherwise a
-            # configured provider wake prefix silently drops every message.
-            if (
-                provider_wake_prefix
-                and event.get_platform_name() != "webchat"
-                and not event.message_str.startswith(provider_wake_prefix)
-            ):
+            if not _matches_provider_wake_prefix(event, provider_wake_prefix):
                 return None, None
 
             req.prompt = event.message_str
