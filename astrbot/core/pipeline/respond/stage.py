@@ -15,6 +15,7 @@ from ..context import PipelineContext, call_event_hook
 from ..stage import Stage, register_stage
 
 DEFAULT_LOG_BASE = 2.6
+DEFAULT_INTERVAL = (1.5, 3.5)
 
 
 def _resolve_log_base(value: float | str | None) -> float:
@@ -34,6 +35,31 @@ def _resolve_log_base(value: float | str | None) -> float:
         )
         return DEFAULT_LOG_BASE
     return log_base
+
+
+def _resolve_interval(values: list[float]) -> list[float]:
+    """Return an interval pair that random.uniform accepts, or the documented default."""
+    if len(values) != 2:
+        # _calc_comp_interval reads self.interval[1], so the single value a
+        # one-item "interval" string parses to raises IndexError before the
+        # first segment is sent, and the whole reply is dropped.
+        logger.error(
+            f"Unusable segmented-reply interval: {values}, "
+            f"expected a minimum and a maximum, "
+            f"using the default {list(DEFAULT_INTERVAL)} instead.",
+        )
+        return list(DEFAULT_INTERVAL)
+    if not all(math.isfinite(value) for value in values):
+        # random.uniform() returns nan for a nan or inf bound, and on the
+        # supported Python 3.12 asyncio.sleep(nan) never resumes, so the
+        # pipeline task would hang with half of the reply unsent.
+        logger.error(
+            f"Unusable segmented-reply interval: {values}, "
+            f"a delay must be finite, "
+            f"using the default {list(DEFAULT_INTERVAL)} instead.",
+        )
+        return list(DEFAULT_INTERVAL)
+    return values
 
 
 @register_stage
@@ -96,14 +122,16 @@ class RespondStage(Stage):
         self.log_base = _resolve_log_base(
             ctx.astrbot_config["platform_settings"]["segmented_reply"]["log_base"],
         )
-        self.interval = [1.5, 3.5]
+        self.interval = list(DEFAULT_INTERVAL)
         if self.enable_seg:
             interval_str: str = ctx.astrbot_config["platform_settings"][
                 "segmented_reply"
             ]["interval"]
             interval_str_ls = interval_str.replace(" ", "").split(",")
             try:
-                self.interval = [float(t) for t in interval_str_ls]
+                self.interval = _resolve_interval(
+                    [float(t) for t in interval_str_ls],
+                )
             except BaseException as e:
                 logger.error(f"Failed to parse the segmented-reply interval: {e}")
             logger.info(f"Segmented-reply interval: {self.interval}")
