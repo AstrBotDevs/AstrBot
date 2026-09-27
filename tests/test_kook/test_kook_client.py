@@ -222,3 +222,101 @@ async def test_kook_event_warp_message(
         assert astrbotMessage.message_str == expected_message_str
     else:
         assert get_json_field(raw_event, expected_message_str)
+
+
+KOOK_BASE_CONFIG = {
+    "enable": True,
+    "kook_bot_token": "test-token",
+}
+
+
+class RefusingKookClient:
+    """Stands in for a gateway that rejects every connect attempt."""
+
+    bot_id = TEST_BOT_ID
+    running = False
+
+    def __init__(self) -> None:
+        self.attempts = 0
+
+    async def get_bot_info(self) -> None:
+        return None
+
+    async def connect(self) -> bool:
+        self.attempts += 1
+        return False
+
+    async def close(self) -> None:
+        return None
+
+
+def _refusing_adapter(platform_config: dict):
+    """A real adapter whose transport always refuses to connect."""
+    from astrbot.core.platform.sources.kook.kook_adapter import KookPlatformAdapter
+
+    adapter = KookPlatformAdapter(platform_config, {}, asyncio.Queue())
+    adapter.client = RefusingKookClient()
+    adapter.running = True
+    return adapter
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        pytest.param(120, 120, id="valid-value-kept"),
+        pytest.param("45", 45, id="numeric-string-parsed"),
+        pytest.param(0, 1, id="cleared-input-floored"),
+        pytest.param(-5, 1, id="negative-floored"),
+        pytest.param("fast", 60, id="non-numeric-falls-back"),
+        pytest.param(None, 60, id="missing-falls-back"),
+        pytest.param(True, 60, id="boolean-falls-back"),
+    ],
+)
+def test_kook_max_retry_delay_is_coerced(raw, expected):
+    config = KookConfig.from_dict({**KOOK_BASE_CONFIG, "kook_max_retry_delay": raw})
+    assert config.max_retry_delay == expected
+
+
+@pytest.mark.asyncio
+async def test_kook_reconnect_loop_keeps_a_pause_when_delay_is_cleared(monkeypatch):
+    """A cleared 最大重试延迟 box must not turn reconnection into a burst."""
+    from astrbot.core.platform.sources.kook import kook_adapter as kook_adapter_module
+
+    real_sleep = asyncio.sleep
+    pauses: list = []
+
+    async def record_sleep(duration, *args, **kwargs):
+        pauses.append(duration)
+        await real_sleep(0)
+
+    monkeypatch.setattr(kook_adapter_module.asyncio, "sleep", record_sleep)
+    adapter = _refusing_adapter({**KOOK_BASE_CONFIG, "kook_max_retry_delay": 0})
+    client = adapter.client
+
+    await adapter._main_loop()
+
+    # kook_max_consecutive_failures documents five attempts
+    assert client.attempts == 5
+    assert pauses, "the adapter reconnected without waiting at all"
+    assert all(pause >= 1 for pause in pauses), f"backoff collapsed to {pauses}"
+
+
+@pytest.mark.asyncio
+async def test_kook_reconnect_loop_uses_every_attempt_of_a_string_delay(
+    monkeypatch,
+):
+    """A quoted number in config.json is still a delay, not a failed attempt."""
+    from astrbot.core.platform.sources.kook import kook_adapter as kook_adapter_module
+
+    real_sleep = asyncio.sleep
+
+    async def fast_sleep(duration, *args, **kwargs):
+        await real_sleep(0)
+
+    monkeypatch.setattr(kook_adapter_module.asyncio, "sleep", fast_sleep)
+    adapter = _refusing_adapter({**KOOK_BASE_CONFIG, "kook_max_retry_delay": "60"})
+    client = adapter.client
+
+    await adapter._main_loop()
+
+    assert client.attempts == 5

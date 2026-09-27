@@ -2,6 +2,8 @@ import json
 from dataclasses import asdict, dataclass
 from typing import Any
 
+from astrbot.core.utils.config_number import coerce_int_config
+
 
 @dataclass
 class KookConfig:
@@ -48,9 +50,15 @@ class KookConfig:
                 "kook_max_reconnect_delay",
                 KookConfig.max_reconnect_delay,
             ),
-            max_retry_delay=config_dict.get(
-                "kook_max_retry_delay",
-                KookConfig.max_retry_delay,
+            max_retry_delay=coerce_int_config(
+                config_dict.get(
+                    "kook_max_retry_delay",
+                    KookConfig.max_retry_delay,
+                ),
+                default=KookConfig.max_retry_delay,
+                min_value=1,
+                field_name="kook_max_retry_delay",
+                source="KOOK config",
             ),
             heartbeat_interval=config_dict.get(
                 "kook_heartbeat_interval",
