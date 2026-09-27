@@ -1402,6 +1402,24 @@ def _select_image_chat_provider(
     return provider
 
 
+def _matches_provider_wake_prefix(
+    message_str: str | None,
+    provider_wake_prefix: str,
+) -> bool:
+    """Return whether a message satisfies the provider wake prefix.
+
+    Args:
+        message_str: Message text to inspect.
+        provider_wake_prefix: Prefix required by the provider, if any.
+
+    Returns:
+        True when no prefix is configured or the message starts with it.
+    """
+    return not provider_wake_prefix or (message_str or "").startswith(
+        provider_wake_prefix
+    )
+
+
 async def collect_initial_request(
     event: AstrMessageEvent,
     plugin_context: Context,
@@ -1448,8 +1466,9 @@ async def collect_initial_request(
             req.audio_urls = []
             if sel_model := event.get_extra("selected_model"):
                 req.model = sel_model
-            if config.provider_wake_prefix and not event.message_str.startswith(
-                config.provider_wake_prefix
+            if not _matches_provider_wake_prefix(
+                event.message_str,
+                config.provider_wake_prefix,
             ):
                 return None, None
 

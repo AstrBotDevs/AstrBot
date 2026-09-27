@@ -71,6 +71,52 @@ async def test_file_download_finishes_before_session_lock(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_file_prefetch_skips_when_provider_wake_prefix_does_not_match(
+    monkeypatch,
+):
+    downloaded: list[File] = []
+    component = File(name="report.pdf", url="https://example.test/report.pdf")
+
+    async def fake_get_file(file_component):
+        downloaded.append(file_component)
+        return "/tmp/report.pdf"
+
+    async def _completed():
+        return None
+
+    async def fake_call_event_hook(*_args, **_kwargs):
+        return False
+
+    async def unexpected_build_main_agent(**_kwargs):
+        raise AssertionError("the provider wake prefix should reject this event")
+
+    event = SimpleNamespace(
+        message_str="read the attached report",
+        message_obj=SimpleNamespace(message=[component]),
+        unified_msg_origin="private:session",
+        get_extra=lambda _key: None,
+        send_typing=lambda: _completed(),
+        stop_typing=lambda: _completed(),
+    )
+
+    monkeypatch.setattr(File, "get_file", fake_get_file)
+    monkeypatch.setattr(internal, "build_main_agent", unexpected_build_main_agent)
+    monkeypatch.setattr(internal, "call_event_hook", fake_call_event_hook)
+    monkeypatch.setattr(internal, "try_capture_follow_up", lambda _event: None)
+
+    stage = internal.InternalAgentSubStage.__new__(internal.InternalAgentSubStage)
+    stage.streaming_response = True
+    stage.show_reasoning = False
+    stage.main_agent_cfg = MainAgentBuildConfig(tool_call_timeout=120)
+    stage.ctx = SimpleNamespace(plugin_manager=SimpleNamespace(context=object()))
+
+    async for _ in stage.process(event, "/"):
+        pass
+
+    assert downloaded == []
+
+
+@pytest.mark.asyncio
 async def test_prepare_file_attachments_includes_quoted_files(monkeypatch):
     downloaded: list[File] = []
     direct_file = File(name="direct.pdf", url="https://example.test/direct.pdf")

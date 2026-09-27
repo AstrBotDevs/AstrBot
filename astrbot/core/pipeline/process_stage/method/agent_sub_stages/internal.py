@@ -17,6 +17,7 @@ from astrbot.core.astr_main_agent import (
     LLM_ERROR_MESSAGE_EXTRA_KEY,
     MainAgentBuildConfig,
     MainAgentBuildResult,
+    _matches_provider_wake_prefix,
     _provider_supports_modality,
     build_main_agent,
 )
@@ -221,6 +222,14 @@ class InternalAgentSubStage(Stage):
             except Exception:
                 logger.warning("send_typing failed", exc_info=True)
             if await call_event_hook(event, EventType.OnWaitingLLMRequestEvent):
+                return
+
+            if event.get_extra(
+                "provider_request"
+            ) is None and not _matches_provider_wake_prefix(
+                event.message_str,
+                provider_wake_prefix,
+            ):
                 return
 
             await _prepare_file_attachments(event)
