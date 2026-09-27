@@ -272,7 +272,7 @@ onMounted(() => {
 :global(html[data-astrbot-desktop-platform='macos']) {
   /* Bias the native window material toward white in light mode, black in dark mode.
      Mostly opaque so the chrome reads as light even when the material behind is dark. */
-  --astrbot-vibrancy-tint: rgba(253, 252, 252, 0.8);
+  --astrbot-vibrancy-tint: rgba(253, 252, 252, 0.92);
 }
 
 :global(html[data-astrbot-desktop-platform='macos'] .v-application.v-theme--PurpleThemeDark) {
