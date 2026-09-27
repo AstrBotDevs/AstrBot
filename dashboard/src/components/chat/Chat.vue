@@ -320,6 +320,7 @@
 
           <div
             v-if="!loadingMessages && activeMessages.length"
+            ref="messagesContent"
             class="messages-list-shell"
           >
             <ChatLoadError
@@ -672,6 +673,7 @@ const tokenProviderConfigs = ref<TokenProviderConfig[]>([]);
 const tokenModelMetadata = ref<Record<string, ProviderModelMetadata>>({});
 const selectedTokenProviderId = ref("");
 const messagesContainer = ref<HTMLElement | null>(null);
+const messagesContent = ref<HTMLElement | null>(null);
 const composerShell = ref<HTMLElement | null>(null);
 const inputRef = ref<InstanceType<typeof ChatInput> | null>(null);
 const shouldStickToBottom = ref(true);
@@ -680,6 +682,8 @@ const suppressAutoScroll = ref(false);
 const LOAD_EARLIER_SCROLL_THRESHOLD = 120;
 const isAwayFromBottom = ref(false);
 let lastMessagesScrollTop = 0;
+let lastMessagesScrollHeight = 0;
+let lastMessagesClientHeight = 0;
 let touchScrollY = 0;
 let scrollIntent = 0;
 const replyTarget = ref<ChatRecord | null>(null);
@@ -970,20 +974,32 @@ onMounted(async () => {
       const container = messagesContainer.value;
       if (!container) return;
       let composerResized = false;
+      let messagesResized = false;
       for (const entry of entries) {
         if (entry.target === composerShell.value) {
           composerResized = true;
           const height = Math.ceil(entry.target.getBoundingClientRect().height);
           container.style.setProperty("--chat-composer-height", `${height}px`);
         }
+        if (entry.target === messagesContent.value) {
+          messagesResized = true;
+        }
       }
-      if (!composerResized) return;
-      isAwayFromBottom.value =
-        container.scrollHeight - container.scrollTop - container.clientHeight >
-        2;
-      if (shouldStickToBottom.value) scrollToBottom();
+      if (!composerResized && !messagesResized) return;
+
+      if (shouldStickToBottom.value && !autoScrollPaused.value) {
+        scrollToBottom();
+      } else {
+        isAwayFromBottom.value =
+          container.scrollHeight -
+            container.scrollTop -
+            container.clientHeight >
+          2;
+      }
     });
     if (composerShell.value) chatResizeObserver.observe(composerShell.value);
+    if (messagesContent.value)
+      chatResizeObserver.observe(messagesContent.value);
   }
 
   loadingSessions.value = true;
@@ -1009,11 +1025,15 @@ onBeforeUnmount(() => {
 });
 
 watch(
-  composerShell,
-  (element, previousElement) => {
+  [composerShell, messagesContent],
+  (elements, previousElements) => {
     if (!chatResizeObserver) return;
-    if (previousElement) chatResizeObserver.unobserve(previousElement);
-    if (element) chatResizeObserver.observe(element);
+    for (const element of previousElements) {
+      if (element) chatResizeObserver.unobserve(element);
+    }
+    for (const element of elements) {
+      if (element) chatResizeObserver.observe(element);
+    }
   },
   { flush: "post" },
 );
@@ -1691,6 +1711,8 @@ async function loadEarlierWithAnchor() {
       container.scrollTop +=
         row.getBoundingClientRect().top - beforeTop + userScrollDelta;
       lastMessagesScrollTop = Math.max(0, container.scrollTop);
+      lastMessagesScrollHeight = container.scrollHeight;
+      lastMessagesClientHeight = container.clientHeight;
     }
   } finally {
     suppressAutoScroll.value = false;
@@ -1821,8 +1843,30 @@ function handleMessagesScroll() {
   );
   const scrollTop = Math.max(0, container.scrollTop);
   const previousTop = Math.min(lastMessagesScrollTop, maxScrollTop);
+  const contentGrew = container.scrollHeight > lastMessagesScrollHeight + 1;
+  const wasAtBottom =
+    lastMessagesScrollHeight > 0 &&
+    lastMessagesScrollHeight -
+      lastMessagesScrollTop -
+      lastMessagesClientHeight <=
+      2;
   isAwayFromBottom.value = maxScrollTop - scrollTop > 2;
-  if (isAwayFromBottom.value || scrollTop < previousTop) {
+
+  // A growing message list can emit a scroll event before the browser has
+  // adjusted scrollTop. Keep following when we were already at the bottom;
+  // only explicit user interaction should pause auto-scroll.
+  const causedByContentGrowth =
+    contentGrew &&
+    wasAtBottom &&
+    !autoScrollPaused.value &&
+    scrollIntent >= 0 &&
+    scrollTop >= previousTop;
+
+  if (causedByContentGrowth) {
+    shouldStickToBottom.value = true;
+    isAwayFromBottom.value = false;
+    scrollToBottom();
+  } else if (isAwayFromBottom.value || scrollTop < previousTop) {
     autoScrollPaused.value = true;
     shouldStickToBottom.value = false;
   } else if (
@@ -1830,9 +1874,12 @@ function handleMessagesScroll() {
     !isAwayFromBottom.value &&
     scrollIntent >= 0
   ) {
+    autoScrollPaused.value = false;
     shouldStickToBottom.value = true;
   }
   lastMessagesScrollTop = scrollTop;
+  lastMessagesScrollHeight = container.scrollHeight;
+  lastMessagesClientHeight = container.clientHeight;
   maybeLoadEarlierOnScroll(container);
 }
 
@@ -1862,16 +1909,10 @@ function scrollToBottom(resumeFollowing = false) {
       !shouldStickToBottom.value
     )
       return;
-    if (
-      !resumeFollowing &&
-      container.scrollHeight - container.scrollTop - container.clientHeight > 2
-    ) {
-      shouldStickToBottom.value = false;
-      isAwayFromBottom.value = true;
-      return;
-    }
     container.scrollTop = container.scrollHeight;
     lastMessagesScrollTop = Math.max(0, container.scrollTop);
+    lastMessagesScrollHeight = container.scrollHeight;
+    lastMessagesClientHeight = container.clientHeight;
     isAwayFromBottom.value = false;
   });
 }
