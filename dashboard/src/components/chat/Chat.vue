@@ -1895,7 +1895,9 @@ async function stopCurrentSession() {
 
 <style scoped>
 .chat-ui {
-  --chat-panel-top-offset: 50px;
+  /* Side panels live inside .chat-main, which already starts below the 40px
+     window toolbar. Keep them flush with the content area's top edge. */
+  --chat-panel-top-offset: 0px;
   --chat-session-active-bg: #efefef;
   --chat-page-bg: #fdfcfc;
   --chat-border: #f2f2f2;
