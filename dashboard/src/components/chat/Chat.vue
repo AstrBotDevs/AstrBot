@@ -1991,7 +1991,9 @@ async function stopCurrentSession() {
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 8px;
+  /* The ChatUI brand has a 2px logo optical correction below, so its layout
+     gap is 6px to match the dashboard brand's resulting visual spacing. */
+  gap: 6px;
   color: rgb(var(--v-theme-on-surface));
   line-height: 1.05;
 }
