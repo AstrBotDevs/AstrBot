@@ -1,4 +1,5 @@
 import asyncio
+import time
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -255,3 +256,69 @@ async def test_mattermost_get_group_returns_cached_name_when_lookup_fails():
     group = await adapter.create_event(message).get_group()
 
     assert group == Group(group_id="channel-1", group_name="Cached Name")
+
+
+class _DroppingClient:
+    """A Mattermost server that refuses every websocket immediately."""
+
+    def __init__(self) -> None:
+        self.attempted_at: list[float] = []
+
+    async def get_me(self) -> dict:
+        return {"id": "bot-id", "username": "bot"}
+
+    async def ws_connect(self) -> None:
+        self.attempted_at.append(time.monotonic())
+        raise ConnectionError("connection reset by peer")
+
+
+def _adapter_with_reconnect_delay(delay) -> MattermostPlatformAdapter:
+    return MattermostPlatformAdapter(
+        make_platform_config(
+            "mattermost",
+            id="test_mattermost",
+            mattermost_url="https://chat.example.com",
+            mattermost_bot_token="test_token",
+            mattermost_reconnect_delay=delay,
+        ),
+        {},
+        asyncio.Queue(),
+    )
+
+
+def test_mattermost_cleared_reconnect_delay_keeps_a_pause():
+    """The dashboard maps a cleared numeric box to 0, so 0 must not remove the pause."""
+    assert _adapter_with_reconnect_delay(0).reconnect_delay == 0.1
+    assert _adapter_with_reconnect_delay(-1).reconnect_delay == 0.1
+
+
+def test_mattermost_unparsable_reconnect_delay_does_not_skip_the_platform():
+    """`float()` on these raised out of __init__, so the whole adapter failed to load."""
+    for raw in ("", None, "abc"):
+        adapter = _adapter_with_reconnect_delay(raw)
+        assert adapter.reconnect_delay == 5.0
+
+
+def test_mattermost_reconnect_delay_keeps_valid_values():
+    assert _adapter_with_reconnect_delay(2.5).reconnect_delay == 2.5
+    assert _adapter_with_reconnect_delay(10).reconnect_delay == 10.0
+    assert _adapter_with_reconnect_delay("8").reconnect_delay == 8.0
+
+
+@pytest.mark.asyncio
+async def test_mattermost_reconnect_loop_is_not_a_busy_loop():
+    adapter = _adapter_with_reconnect_delay(0)
+    client = _DroppingClient()
+    adapter.client = client
+
+    task = asyncio.create_task(adapter.run())
+    await asyncio.sleep(0.35)
+    adapter._running = False
+    await asyncio.wait_for(task, timeout=2)
+
+    gaps = [
+        later - earlier
+        for earlier, later in zip(client.attempted_at, client.attempted_at[1:])
+    ]
+    assert len(gaps) >= 2, "the reconnect loop never retried"
+    assert min(gaps) >= 0.09, f"retried after {min(gaps):.6f}s: tight reconnect loop"

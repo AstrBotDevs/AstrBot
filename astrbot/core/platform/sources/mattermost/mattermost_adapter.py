@@ -41,9 +41,25 @@ class MattermostPlatformAdapter(Platform):
         self.settings = platform_settings
         self.base_url = str(platform_config.get("mattermost_url", "")).rstrip("/")
         self.bot_token = str(platform_config.get("mattermost_bot_token", "")).strip()
-        self.reconnect_delay = float(
-            platform_config.get("mattermost_reconnect_delay", 5.0)
-        )
+        raw_delay = platform_config.get("mattermost_reconnect_delay", 5.0)
+        try:
+            delay = float(raw_delay)
+        except (TypeError, ValueError):
+            logger.warning(
+                "Invalid 'mattermost_reconnect_delay' value %r in config, "
+                "falling back to default 5.0s",
+                raw_delay,
+            )
+            delay = 5.0
+
+        if delay < 0.1:
+            logger.warning(
+                "Configured 'mattermost_reconnect_delay' (%s) is too small; "
+                "enforcing minimum of 0.1s to avoid tight reconnect loops",
+                delay,
+            )
+            delay = 0.1
+        self.reconnect_delay = delay
 
         if not self.base_url:
             raise ValueError("Mattermost URL 是必需的")
