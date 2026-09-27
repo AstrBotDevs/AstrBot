@@ -286,6 +286,7 @@
         <section
           ref="messagesContainer"
           class="messages-panel"
+          :class="{ 'history-anchor-locked': suppressAutoScroll }"
           tabindex="0"
           @scroll="handleMessagesScroll"
           @wheel.passive="handleMessagesInteraction"
@@ -315,7 +316,6 @@
 
           <div
             v-if="!loadingMessages && activeMessages.length"
-            ref="messagesContent"
             class="messages-list-shell"
           >
             <ChatLoadError
@@ -652,10 +652,10 @@ const tokenProviderConfigs = ref<TokenProviderConfig[]>([]);
 const tokenModelMetadata = ref<Record<string, ProviderModelMetadata>>({});
 const selectedTokenProviderId = ref("");
 const messagesContainer = ref<HTMLElement | null>(null);
-const messagesContent = ref<HTMLElement | null>(null);
 const composerShell = ref<HTMLElement | null>(null);
 const inputRef = ref<InstanceType<typeof ChatInput> | null>(null);
 const shouldStickToBottom = ref(true);
+const autoScrollPaused = ref(false);
 const suppressAutoScroll = ref(false);
 const LOAD_EARLIER_SCROLL_THRESHOLD = 120;
 const isAwayFromBottom = ref(false);
@@ -955,24 +955,21 @@ onMounted(async () => {
     chatResizeObserver = new ResizeObserver((entries) => {
       const container = messagesContainer.value;
       if (!container) return;
+      let composerResized = false;
       for (const entry of entries) {
         if (entry.target === composerShell.value) {
+          composerResized = true;
           const height = Math.ceil(entry.target.getBoundingClientRect().height);
           container.style.setProperty("--chat-composer-height", `${height}px`);
         }
       }
+      if (!composerResized) return;
       isAwayFromBottom.value =
         container.scrollHeight - container.scrollTop - container.clientHeight >
         2;
       if (shouldStickToBottom.value) scrollToBottom();
     });
-    for (const element of [
-      composerShell.value,
-      messagesContent.value,
-      messagesContainer.value,
-    ]) {
-      if (element) chatResizeObserver.observe(element);
-    }
+    if (composerShell.value) chatResizeObserver.observe(composerShell.value);
   }
 
   loadingSessions.value = true;
@@ -998,15 +995,11 @@ onBeforeUnmount(() => {
 });
 
 watch(
-  [composerShell, messagesContent, messagesContainer],
-  (elements, previousElements) => {
+  composerShell,
+  (element, previousElement) => {
     if (!chatResizeObserver) return;
-    for (const element of previousElements) {
-      if (element) chatResizeObserver.unobserve(element);
-    }
-    for (const element of elements) {
-      if (element) chatResizeObserver.observe(element);
-    }
+    if (previousElement) chatResizeObserver.unobserve(previousElement);
+    if (element) chatResizeObserver.observe(element);
   },
   { flush: "post" },
 );
@@ -1776,6 +1769,7 @@ function handleMessagesInteraction(
 ) {
   if (event instanceof WheelEvent) {
     if (event.ctrlKey || event.deltaY === 0) return;
+    autoScrollPaused.value = true;
     scrollIntent = Math.sign(event.deltaY);
   } else if (event.type === "touchstart" || event.type === "touchmove") {
     const touch = (event as TouchEvent).touches[0];
@@ -1784,6 +1778,7 @@ function handleMessagesInteraction(
       touchScrollY = touch.clientY;
       return;
     }
+    autoScrollPaused.value = true;
     scrollIntent = Math.sign(touchScrollY - touch.clientY);
     touchScrollY = touch.clientY;
   } else if (event instanceof KeyboardEvent) {
@@ -1803,8 +1798,9 @@ function handleMessagesInteraction(
     } else {
       return;
     }
+    autoScrollPaused.value = true;
   } else {
-    if (event.target !== messagesContainer.value) return;
+    autoScrollPaused.value = true;
     scrollIntent = 0;
     shouldStickToBottom.value = false;
   }
@@ -1822,7 +1818,8 @@ function handleMessagesScroll() {
   const scrollTop = Math.max(0, container.scrollTop);
   const previousTop = Math.min(lastMessagesScrollTop, maxScrollTop);
   isAwayFromBottom.value = maxScrollTop - scrollTop > 2;
-  if (scrollTop < previousTop) {
+  if (isAwayFromBottom.value || scrollTop < previousTop) {
+    autoScrollPaused.value = true;
     shouldStickToBottom.value = false;
   } else if (
     scrollTop > previousTop &&
@@ -1847,14 +1844,28 @@ function maybeLoadEarlierOnScroll(container: HTMLElement) {
 
 function scrollToBottom(resumeFollowing = false) {
   if (resumeFollowing) {
+    autoScrollPaused.value = false;
     shouldStickToBottom.value = true;
     scrollIntent = 0;
   }
   nextTick(() => {
     const container = messagesContainer.value;
     // Recheck after rendering so queued stream updates cannot override user intent.
-    if (!container || suppressAutoScroll.value || !shouldStickToBottom.value)
+    if (
+      !container ||
+      suppressAutoScroll.value ||
+      autoScrollPaused.value ||
+      !shouldStickToBottom.value
+    )
       return;
+    if (
+      !resumeFollowing &&
+      container.scrollHeight - container.scrollTop - container.clientHeight > 2
+    ) {
+      shouldStickToBottom.value = false;
+      isAwayFromBottom.value = true;
+      return;
+    }
     container.scrollTop = container.scrollHeight;
     lastMessagesScrollTop = Math.max(0, container.scrollTop);
     isAwayFromBottom.value = false;
@@ -2359,9 +2370,14 @@ async function stopCurrentSession() {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  overflow-anchor: none;
+  overscroll-behavior-y: contain;
+  overflow-anchor: auto;
   padding: 24px 0 calc(var(--chat-composer-height, 82px) + 34px);
   scroll-padding-bottom: calc(var(--chat-composer-height, 82px) + 34px);
+}
+
+.messages-panel.history-anchor-locked {
+  overflow-anchor: none;
 }
 
 .history-loading {
