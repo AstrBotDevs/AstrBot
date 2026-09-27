@@ -268,13 +268,20 @@ def _refusing_adapter(platform_config: dict):
         pytest.param(0, 1, id="cleared-input-floored"),
         pytest.param(-5, 1, id="negative-floored"),
         pytest.param("fast", 60, id="non-numeric-falls-back"),
-        pytest.param(None, 60, id="missing-falls-back"),
+        pytest.param(None, 60, id="null-falls-back"),
         pytest.param(True, 60, id="boolean-falls-back"),
+        pytest.param(float("inf"), 60, id="infinite-falls-back"),
+        pytest.param(float("-inf"), 60, id="negative-infinite-falls-back"),
     ],
 )
 def test_kook_max_retry_delay_is_coerced(raw, expected):
     config = KookConfig.from_dict({**KOOK_BASE_CONFIG, "kook_max_retry_delay": raw})
     assert config.max_retry_delay == expected
+
+
+def test_kook_max_retry_delay_absent_keeps_the_default():
+    config = KookConfig.from_dict(dict(KOOK_BASE_CONFIG))
+    assert config.max_retry_delay == 60
 
 
 @pytest.mark.asyncio

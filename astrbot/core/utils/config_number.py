@@ -1,3 +1,5 @@
+import math
+
 from astrbot.core import logger
 
 
@@ -23,6 +25,16 @@ def coerce_int_config(
         parsed = default
     elif isinstance(value, int):
         parsed = value
+    elif isinstance(value, float) and not math.isfinite(value):
+        if warn:
+            logger.warning(
+                "%s %s value %s is not finite. Fallback to %s.",
+                source,
+                label,
+                value,
+                default,
+            )
+        parsed = default
     elif isinstance(value, str):
         try:
             parsed = int(value.strip())
@@ -39,7 +51,7 @@ def coerce_int_config(
     else:
         try:
             parsed = int(value)
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             if warn:
                 logger.warning(
                     "%s %s has unsupported type %s. Fallback to %s.",
