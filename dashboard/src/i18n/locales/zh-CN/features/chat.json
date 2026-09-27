@@ -165,12 +165,14 @@
     "name": "项目名称",
     "emoji": "图标 (Emoji)",
     "description": "项目描述（可选）",
+    "moreSettings": "更多设置",
     "workspace": {
       "type": "工作区",
       "session": "按会话分开",
       "project": "项目共享工作区",
       "custom": "自定义路径",
-      "path": "工作区路径"
+      "path": "工作区路径",
+      "selectPath": "选择文件夹"
     },
     "loadingSessions": "加载对话中...",
     "noSessions": "该项目暂无对话",

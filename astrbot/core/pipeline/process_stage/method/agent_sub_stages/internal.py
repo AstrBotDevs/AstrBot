@@ -227,7 +227,7 @@ class InternalAgentSubStage(Stage):
             if event.get_extra(
                 "provider_request"
             ) is None and not _matches_provider_wake_prefix(
-                event.message_str,
+                event,
                 provider_wake_prefix,
             ):
                 return

@@ -282,7 +282,7 @@ class ThirdPartyAgentSubStage(Stage):
         req: ProviderRequest | None = None
 
         if not _matches_provider_wake_prefix(
-            event.message_str,
+            event,
             provider_wake_prefix,
         ):
             return
@@ -290,7 +290,9 @@ class ThirdPartyAgentSubStage(Stage):
         # make provider request
         req = ProviderRequest()
         req.session_id = event.unified_msg_origin
-        req.prompt = event.message_str[len(provider_wake_prefix) :]
+        req.prompt = event.message_str
+        if provider_wake_prefix and event.message_str.startswith(provider_wake_prefix):
+            req.prompt = event.message_str[len(provider_wake_prefix) :]
         for comp in event.message_obj.message:
             if isinstance(comp, Image):
                 image_path = await comp.convert_to_base64()

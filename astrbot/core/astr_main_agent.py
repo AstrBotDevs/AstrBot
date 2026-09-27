@@ -1403,20 +1403,23 @@ def _select_image_chat_provider(
 
 
 def _matches_provider_wake_prefix(
-    message_str: str | None,
+    event: AstrMessageEvent,
     provider_wake_prefix: str,
 ) -> bool:
-    """Return whether a message satisfies the provider wake prefix.
+    """Return whether an event satisfies the provider wake prefix.
 
     Args:
-        message_str: Message text to inspect.
+        event: Incoming event whose message and platform should be inspected.
         provider_wake_prefix: Prefix required by the provider, if any.
 
     Returns:
-        True when no prefix is configured or the message starts with it.
+        True when no prefix is configured, WebChat is exempt, or the message
+        starts with the configured prefix.
     """
-    return not provider_wake_prefix or (message_str or "").startswith(
-        provider_wake_prefix
+    return (
+        not provider_wake_prefix
+        or event.get_platform_name() == "webchat"
+        or (event.message_str or "").startswith(provider_wake_prefix)
     )
 
 
@@ -1458,7 +1461,22 @@ async def collect_initial_request(
                 list(req.contexts) if isinstance(req.contexts, list) else req.contexts
             )
             if req.conversation:
-                req.contexts = json.loads(req.conversation.history)
+                # Handler requests can be prepared before the pipeline acquires
+                # the session lock. Reload the bound conversation here so queued
+                # turns include replies saved while they were waiting.
+                conversation = (
+                    await plugin_context.conversation_manager.get_conversation(
+                        event.unified_msg_origin, req.conversation.cid
+                    )
+                )
+                if conversation is None:
+                    _set_llm_error_message(
+                        event,
+                        "The requested conversation no longer exists. Please send a new message.",
+                    )
+                    return None, None
+                req.conversation = conversation
+                req.contexts = json.loads(conversation.history)
         else:
             req = ProviderRequest()
             req.prompt = ""
@@ -1466,13 +1484,15 @@ async def collect_initial_request(
             req.audio_urls = []
             if sel_model := event.get_extra("selected_model"):
                 req.model = sel_model
-            if not _matches_provider_wake_prefix(
-                event.message_str,
-                config.provider_wake_prefix,
-            ):
+            provider_wake_prefix = config.provider_wake_prefix
+            if not _matches_provider_wake_prefix(event, provider_wake_prefix):
                 return None, None
 
-            req.prompt = event.message_str[len(config.provider_wake_prefix) :]
+            req.prompt = event.message_str
+            if provider_wake_prefix and event.message_str.startswith(
+                provider_wake_prefix
+            ):
+                req.prompt = event.message_str[len(provider_wake_prefix) :]
 
             # media files attachments
             for comp in event.message_obj.message:

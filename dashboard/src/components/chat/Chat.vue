@@ -1631,6 +1631,7 @@ async function loadEarlierWithAnchor() {
   const container = messagesContainer.value;
   const firstMessage = activeMessages.value[0];
   const firstId = firstMessage?.id == null ? "" : String(firstMessage.id);
+  const beforeScrollTop = Math.max(0, container?.scrollTop || 0);
   const beforeTop = firstId
     ? container
         ?.querySelector<HTMLElement>(
@@ -1648,7 +1649,11 @@ async function loadEarlierWithAnchor() {
       `[data-message-id="${CSS.escape(firstId)}"]`,
     );
     if (row) {
-      container.scrollTop += row.getBoundingClientRect().top - beforeTop;
+      const currentScrollTop = Math.max(0, container.scrollTop);
+      const userScrollDelta = currentScrollTop - beforeScrollTop;
+      container.scrollTop +=
+        row.getBoundingClientRect().top - beforeTop + userScrollDelta;
+      lastMessagesScrollTop = Math.max(0, container.scrollTop);
     }
   } finally {
     suppressAutoScroll.value = false;
