@@ -148,9 +148,12 @@ const chatHeaderStyle = computed(() => {
       ? 56
       : 245;
   return {
-    left: `${sidebarWidth}px`,
-    width: `calc(100% - ${sidebarWidth}px)`,
-    // The macOS header spans the whole window, so it pads its content instead.
+    // The chat toolbar is window chrome, so it must paint the full window. The
+    // sidebar width remains available to contextual content through this CSS
+    // variable, but must not offset the toolbar itself and expose the native
+    // window material in the top-left corner.
+    left: "0px",
+    width: "100%",
     "--astrbot-chat-sidebar-width": `${sidebarWidth}px`,
   };
 });
