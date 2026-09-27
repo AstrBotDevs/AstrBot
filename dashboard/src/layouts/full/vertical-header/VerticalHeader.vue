@@ -2531,6 +2531,13 @@ html[data-astrbot-desktop-platform='macos'] .top-header.chat-mode-header.chat-mo
 .top-header {
   position: relative !important;
   top: 0 !important;
+  /* Vuetify's app-bar layout writes the drawer offset as inline left/width
+     values. The toolbar is shared window chrome, so it must cover that area
+     too; otherwise a transparent macOS window exposes its native material as
+     a visible block above the sidebar. */
+  left: 0 !important;
+  right: auto !important;
+  width: 100% !important;
 }
 
 
