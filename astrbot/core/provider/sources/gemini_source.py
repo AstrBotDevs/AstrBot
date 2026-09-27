@@ -15,7 +15,13 @@ from google.genai.errors import APIError
 import astrbot.core.message.components as Comp
 from astrbot import logger
 from astrbot.api.provider import Provider
-from astrbot.core.agent.message import AudioURLPart, ContentPart, ImageURLPart, TextPart
+from astrbot.core.agent.message import (
+    AudioURLPart,
+    ContentPart,
+    ImageURLPart,
+    TextPart,
+    VideoURLPart,
+)
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, TokenUsage
@@ -366,6 +372,22 @@ class ProviderGoogleGenAI(Provider):
             audio_bytes = base64.b64decode(url.split(",", 1)[1])
             return types.Part.from_bytes(data=audio_bytes, mime_type=mime_type)
 
+        async def process_video_url(video_url_dict: dict) -> types.Part:
+            url = video_url_dict["url"]
+            video_data = await resolve_media_ref_to_base64_data(
+                url,
+                media_type="video",
+                strict=True,
+            )
+            if video_data is None:
+                raise ValueError(
+                    f"Failed to resolve Gemini history video: {describe_media_ref(url)}"
+                )
+            return types.Part.from_bytes(
+                data=base64.b64decode(video_data.base64_data),
+                mime_type=video_data.mime_type,
+            )
+
         def append_or_extend(
             contents: list[types.Content],
             part: list[types.Part],
@@ -389,8 +411,16 @@ class ProviderGoogleGenAI(Provider):
                             parts.append(types.Part.from_text(text=item["text"] or " "))
                         elif item["type"] == "image_url":
                             parts.append(await process_image_url(item["image_url"]))
-                        else:
+                        elif item["type"] == "audio_url":
                             parts.append(process_audio_url(item["audio_url"]))
+                        elif item["type"] == "video_url":
+                            parts.append(await process_video_url(item["video_url"]))
+                        else:
+                            # Never raise for an unknown block type here. This
+                            # message is replayed from the session history on
+                            # every later request, so an exception would keep
+                            # failing long after the original turn.
+                            parts.append(create_text_part(f"[{item['type']}]"))
                 else:
                     parts = [create_text_part(content)]
                 append_or_extend(gemini_contents, parts, types.UserContent)
@@ -903,6 +933,7 @@ class ProviderGoogleGenAI(Provider):
         session_id=None,
         image_urls=None,
         audio_urls=None,
+        video_urls=None,
         func_tool=None,
         contexts=None,
         system_prompt=None,
@@ -922,6 +953,7 @@ class ProviderGoogleGenAI(Provider):
                 prompt or "",
                 image_urls,
                 audio_urls,
+                video_urls,
                 extra_user_content_parts,
             )
         context_query = self._ensure_message_to_dicts(contexts)
@@ -975,6 +1007,7 @@ class ProviderGoogleGenAI(Provider):
         session_id=None,
         image_urls=None,
         audio_urls=None,
+        video_urls=None,
         func_tool=None,
         contexts=None,
         system_prompt=None,
@@ -994,6 +1027,7 @@ class ProviderGoogleGenAI(Provider):
                 prompt or "",
                 image_urls,
                 audio_urls,
+                video_urls,
                 extra_user_content_parts,
             )
         context_query = self._ensure_message_to_dicts(contexts)
@@ -1072,6 +1106,7 @@ class ProviderGoogleGenAI(Provider):
         text: str,
         image_urls: list[str] | None = None,
         audio_urls: list[str] | None = None,
+        video_urls: list[str] | None = None,
         extra_user_content_parts: list[ContentPart] | None = None,
     ):
         """组装上下文。"""
@@ -1110,6 +1145,27 @@ class ProviderGoogleGenAI(Provider):
                 "audio_url": {"url": audio_data.to_data_url()},
             }
 
+        async def resolve_video_part(video_ref: str) -> dict | None:
+            try:
+                video_data = await resolve_media_ref_to_base64_data(
+                    video_ref,
+                    media_type="video",
+                    strict=True,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Video preprocessing failed; ignoring it. Error: %s", exc
+                )
+                return None
+
+            if not video_data:
+                logger.warning("Video preprocessing returned no data; ignoring it.")
+                return None
+            return {
+                "type": "video_url",
+                "video_url": {"url": video_data.to_data_url()},
+            }
+
         # 构建内容块列表
         content_blocks = []
 
@@ -1121,6 +1177,9 @@ class ProviderGoogleGenAI(Provider):
             content_blocks.append({"type": "text", "text": "[Image]"})
         elif audio_urls:
             content_blocks.append({"type": "text", "text": "[Audio]"})
+        elif video_urls:
+            # If there is no text but there is video, add a placeholder text.
+            content_blocks.append({"type": "text", "text": "[Video]"})
         elif extra_user_content_parts:
             # 如果只有额外内容块，也需要添加占位文本
             content_blocks.append({"type": "text", "text": " "})
@@ -1138,6 +1197,10 @@ class ProviderGoogleGenAI(Provider):
                     audio_part = await resolve_audio_part(part.audio_url.url)
                     if audio_part:
                         content_blocks.append(audio_part)
+                elif isinstance(part, VideoURLPart):
+                    video_part = await resolve_video_part(part.video_url.url)
+                    if video_part:
+                        content_blocks.append(video_part)
                 else:
                     raise ValueError(
                         f"Unsupported extra content part type: {type(part)}"
@@ -1156,12 +1219,19 @@ class ProviderGoogleGenAI(Provider):
                 if audio_part:
                     content_blocks.append(audio_part)
 
+        if video_urls:
+            for video_ref in video_urls:
+                video_part = await resolve_video_part(video_ref)
+                if video_part:
+                    content_blocks.append(video_part)
+
         # 如果只有主文本且没有额外内容块和图片，返回简单格式以保持向后兼容
         if (
             text
             and not extra_user_content_parts
             and not image_urls
             and not audio_urls
+            and not video_urls
             and len(content_blocks) == 1
             and content_blocks[0]["type"] == "text"
         ):
