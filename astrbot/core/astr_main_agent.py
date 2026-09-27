@@ -1448,12 +1448,22 @@ async def collect_initial_request(
             req.audio_urls = []
             if sel_model := event.get_extra("selected_model"):
                 req.model = sel_model
-            if config.provider_wake_prefix and not event.message_str.startswith(
-                config.provider_wake_prefix
+            provider_wake_prefix = config.provider_wake_prefix
+            # WebChat is a point-to-point panel session, so like the waking
+            # stage (#9215) it is exempt from wake-prefix gating; otherwise a
+            # configured provider wake prefix silently drops every message.
+            if (
+                provider_wake_prefix
+                and event.get_platform_name() != "webchat"
+                and not event.message_str.startswith(provider_wake_prefix)
             ):
                 return None, None
 
-            req.prompt = event.message_str[len(config.provider_wake_prefix) :]
+            req.prompt = event.message_str
+            if provider_wake_prefix and event.message_str.startswith(
+                provider_wake_prefix
+            ):
+                req.prompt = event.message_str[len(provider_wake_prefix) :]
 
             # media files attachments
             for comp in event.message_obj.message:
