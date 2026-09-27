@@ -259,6 +259,16 @@ onMounted(() => {
 
 /* macOS desktop vibrancy: the window material shows through wherever the UI stays
    transparent. Only the content area keeps an opaque background. */
+:global(html) {
+  /* Shared chrome background for the top toolbar and the sidebars, so the
+     header and sidebar always read as one surface in both themes. */
+  --astrbot-chrome-bg: #fdfcfc;
+}
+
+:global(html .v-application.v-theme--PurpleThemeDark) {
+  --astrbot-chrome-bg: rgb(var(--v-theme-background));
+}
+
 :global(html[data-astrbot-desktop-platform='macos']) {
   /* Bias the native window material toward white in light mode, black in dark mode. */
   --astrbot-vibrancy-tint: rgba(255, 255, 255, 0.55);

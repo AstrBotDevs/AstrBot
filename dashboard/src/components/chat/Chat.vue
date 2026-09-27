@@ -1845,7 +1845,6 @@ async function stopCurrentSession() {
 <style scoped>
 .chat-ui {
   --chat-panel-top-offset: 50px;
-  --chat-sidebar-bg: rgb(var(--v-theme-surface));
   --chat-session-active-bg: #efefef;
   --chat-page-bg: #fdfcfc;
   --chat-border: #f2f2f2;
@@ -1874,7 +1873,6 @@ async function stopCurrentSession() {
 }
 
 .chat-ui.is-dark {
-  --chat-sidebar-bg: #242424;
   --chat-session-active-bg: rgba(255, 255, 255, 0.08);
   --chat-page-bg: rgb(var(--v-theme-background));
   --chat-border: rgba(255, 255, 255, 0.1);
@@ -1888,13 +1886,13 @@ async function stopCurrentSession() {
 .chat-sidebar {
   top: 0 !important;
   height: 100vh !important;
-  background: var(--chat-sidebar-bg);
+  background: var(--astrbot-chrome-bg, rgb(var(--v-theme-surface)));
   border-right: 0;
   user-select: none;
 }
 
 .chat-sidebar.collapsed {
-  background: var(--chat-sidebar-bg);
+  background: var(--astrbot-chrome-bg, rgb(var(--v-theme-surface)));
   border-right: 0;
 }
 
@@ -1929,7 +1927,7 @@ async function stopCurrentSession() {
 /* A temporary (mobile) drawer floats above the page, so the vibrancy
    transparency would let content bleed through; keep it opaque instead. */
 :global(html[data-astrbot-desktop-platform='macos'] .chat-sidebar.v-navigation-drawer--temporary) {
-  background: var(--chat-sidebar-bg) !important;
+  background: var(--astrbot-chrome-bg, rgb(var(--v-theme-surface))) !important;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16) !important;
   z-index: 1007 !important;
 }
@@ -1944,7 +1942,7 @@ async function stopCurrentSession() {
 :global(html:not([data-astrbot-desktop-platform='macos']) .v-application.v-theme--PurpleThemeDark .v-main.chat-main) {
   background-image: linear-gradient(
     to right,
-    #242424 0 calc(var(--v-layout-left) + 12px),
+    var(--astrbot-chrome-bg, #242424) 0 calc(var(--v-layout-left) + 12px),
     transparent calc(var(--v-layout-left) + 12px) 100%
   ) !important;
 }

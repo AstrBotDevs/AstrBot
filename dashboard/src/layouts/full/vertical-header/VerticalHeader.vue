@@ -2073,13 +2073,9 @@ onMounted(async () => {
 }
 
 .top-header.chat-mode-header {
-  background: #fdfcfc !important;
+  background: var(--astrbot-chrome-bg, #fdfcfc) !important;
   border-bottom: 0;
   box-shadow: none !important;
-}
-
-.top-header.chat-mode-header.chat-mode-header--dark {
-  background: rgb(var(--v-theme-background)) !important;
 }
 
 .top-header.chat-mode-header .v-toolbar__content {
