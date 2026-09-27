@@ -286,6 +286,7 @@
         <section
           ref="messagesContainer"
           class="messages-panel"
+          :class="{ 'history-anchor-locked': suppressAutoScroll }"
           tabindex="0"
           @scroll="handleMessagesScroll"
           @wheel.passive="handleMessagesInteraction"
@@ -2370,9 +2371,13 @@ async function stopCurrentSession() {
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior-y: contain;
-  overflow-anchor: none;
+  overflow-anchor: auto;
   padding: 24px 0 calc(var(--chat-composer-height, 82px) + 34px);
   scroll-padding-bottom: calc(var(--chat-composer-height, 82px) + 34px);
+}
+
+.messages-panel.history-anchor-locked {
+  overflow-anchor: none;
 }
 
 .history-loading {
