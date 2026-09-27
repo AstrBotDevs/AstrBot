@@ -38,7 +38,7 @@ AUDIO_TOKEN_ESTIMATE = 500
 # An emoji costs about 3 tokens per character under common BPE tokenizers, and
 # flag or zero width joiner sequences cost more. The plain text rate of 0.3
 # underestimates an emoji heavy context by an order of magnitude.
-EMOJI_TOKEN_ESTIMATE = 3.0
+EMOJI_TOKEN_ESTIMATE = 2.0
 
 # Emoji blocks, the miscellaneous symbols and dingbats block, the variation
 # selectors and the zero width joiner that build flag and multi person emoji.
