@@ -166,7 +166,7 @@ const MainRoutes = {
       name: 'Data',
       path: '/data',
       component: () => import('@/views/DataPage.vue'),
-      redirect: redirectToDataTab('Stats'),
+      redirect: redirectToDataTab('Console'),
       children: [
         {
           name: 'Stats',
