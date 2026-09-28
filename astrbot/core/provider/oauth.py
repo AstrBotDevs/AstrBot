@@ -176,7 +176,9 @@ class OAuth2Session:
             state = secrets.token_urlsafe(32)
             verifier = secrets.token_urlsafe(64)
             challenge = (
-                base64.urlsafe_b64encode(hashlib.sha256(verifier.encode("ascii")).digest())
+                base64.urlsafe_b64encode(
+                    hashlib.sha256(verifier.encode("ascii")).digest()
+                )
                 .rstrip(b"=")
                 .decode("ascii")
             )

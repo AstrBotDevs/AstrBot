@@ -45,9 +45,10 @@ class OAuthProviderPlugin(Star):
         }
         settings["scopes"] = tuple(self.config.get("scopes", []))
         # Changing the supplier/client must never reuse another account's token.
-        self.storage_key = "oauth:" + hashlib.sha256(
-            json.dumps(settings, sort_keys=True).encode()
-        ).hexdigest()
+        self.storage_key = (
+            "oauth:"
+            + hashlib.sha256(json.dumps(settings, sort_keys=True).encode()).hexdigest()
+        )
         self.http = httpx.AsyncClient(proxy=self.config.get("proxy") or None)
         try:
             self.oauth = OAuth2Session(
@@ -98,7 +99,8 @@ class OAuthProviderPlugin(Star):
                 await self.oauth.close()
             if self.provider_class is not None:
                 unregister_provider_adapter(PROVIDER_TYPE, self.provider_class)
-            await self.http.aclose()
+            if self.http is not None:
+                await self.http.aclose()
             raise
 
     async def load_token(self) -> OAuth2Token | None:
