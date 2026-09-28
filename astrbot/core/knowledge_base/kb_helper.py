@@ -34,24 +34,30 @@ if TYPE_CHECKING:
 
 
 class RateLimiter:
-    """一个简单的速率限制器"""
+    """Space concurrent callers according to the configured request rate.
+
+    Serialize waiting and release-time updates so an event loop stall cannot
+    cause overdue callers to be released together. The lock is released before
+    the caller starts its request.
+    """
 
     def __init__(self, max_rpm: int) -> None:
         self.max_per_minute = max_rpm
         self.interval = 60.0 / max_rpm if max_rpm > 0 else 0
         self.last_call_time = 0
+        self._lock = asyncio.Lock()
 
     async def __aenter__(self):
         if self.interval == 0:
             return
 
-        now = time.monotonic()
-        elapsed = now - self.last_call_time
+        async with self._lock:
+            elapsed = time.monotonic() - self.last_call_time
+            if elapsed < self.interval:
+                await asyncio.sleep(self.interval - elapsed)
 
-        if elapsed < self.interval:
-            await asyncio.sleep(self.interval - elapsed)
-
-        self.last_call_time = time.monotonic()
+            # Base the next wait on the actual release time, including delays.
+            self.last_call_time = time.monotonic()
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         pass
@@ -323,16 +329,28 @@ class KBHelper:
                     await progress_callback("chunking", 0, 100)
 
                 try:
-                    # 根据文件类型选择分块器：Markdown 文件使用结构感知分块
+                    # These parsers return Markdown, so retain their heading hierarchy.
                     effective_chunker = self.chunker
                     file_ext = Path(file_name).suffix.lower() if file_name else ""
-                    if file_ext in (".md", ".markdown", ".mkd", ".mdx"):
+                    if file_ext in {
+                        ".adoc",
+                        ".docx",
+                        ".epub",
+                        ".markdown",
+                        ".md",
+                        ".mdx",
+                        ".mkd",
+                        ".rst",
+                        ".xls",
+                        ".xlsx",
+                    }:
                         effective_chunker = MarkdownChunker(
                             chunk_size=chunk_size,
                             chunk_overlap=chunk_overlap,
                         )
                         logger.info(
-                            f"检测到 Markdown 文件 '{file_name}'，使用 MarkdownChunker 进行结构化分块"
+                            f"Using MarkdownChunker for structured document "
+                            f"'{file_name}'."
                         )
 
                     chunks_text = await effective_chunker.chunk(
@@ -380,6 +398,12 @@ class KBHelper:
                         "chunk_index": idx,
                     },
                 )
+            document_title = Path(file_name).stem.strip()
+            embedding_contents = (
+                [f"{document_title}\n\n{chunk_text}" for chunk_text in chunks_text]
+                if document_title
+                else contents
+            )
 
             if progress_callback:
                 await progress_callback("chunking", 100, 100)
@@ -397,6 +421,7 @@ class KBHelper:
                     tasks_limit=tasks_limit,
                     max_retries=max_retries,
                     progress_callback=embedding_progress_callback,
+                    embedding_contents=embedding_contents,
                 )
             except KnowledgeBaseUploadError:
                 raise

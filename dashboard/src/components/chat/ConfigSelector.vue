@@ -220,7 +220,7 @@ async function getAgentRunnerType(confId: string): Promise<string> {
     try {
         const res = await configProfileApi.get(confId);
         const config = ((res.data.data as any).config || {}) as any;
-        const type = config?.provider_settings?.agent_runner_type || 'local';
+        const type = config?.agent_runner?.runner_type || 'local';
         configCache.value[confId] = type;
         return type;
     } catch (error) {

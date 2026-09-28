@@ -53,7 +53,7 @@ async def _collect_text_and_images_from_forward_ids(
             if nested_id not in seen:
                 pending.append(nested_id)
 
-    if pending:
+    if pending and max_fetch > 0:
         logger.warning(
             "quoted_message_parser: stop fetching nested forward messages after %d hops",
             max_fetch,

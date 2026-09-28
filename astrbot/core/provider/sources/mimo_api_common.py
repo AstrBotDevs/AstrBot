@@ -8,7 +8,7 @@ from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.media_utils import MediaResolver, describe_media_ref
 
 DEFAULT_MIMO_API_BASE = "https://api.xiaomimimo.com/v1"
-DEFAULT_MIMO_TTS_MODEL = "mimo-v2-tts"
+DEFAULT_MIMO_TTS_MODEL = "mimo-v2.5-tts"
 DEFAULT_MIMO_TTS_VOICE = "mimo_default"
 DEFAULT_MIMO_TTS_SEED_TEXT = "Hello, MiMo, have you had lunch?"
 # The MiMo-V2 series went offline on 2026-06-30; mimo-v2.5-asr is the

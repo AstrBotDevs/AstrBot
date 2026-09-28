@@ -29,6 +29,8 @@ Welcome to submit Issues or Pull Requests:
 - Group 12: 916228568 (Full)
 - Group 13: 1092185289
 - Group 14: 1103419483
+- Group 15: 258637629
+- Group 16: 1044542496
 - **AstrBot Core Development Group: 975206796** (AstrBot development members are usually active here. Welcome to anyone interested in programming/AI technology~)
 
 ## Become an AstrBot Organization Member

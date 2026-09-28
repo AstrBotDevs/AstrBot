@@ -28,5 +28,7 @@ class Main(star.Star):
 from pathlib import Path
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-plugin_data_path = Path(get_astrbot_data_path()) / "plugin_data" / self.name # self.name 为插件名称，在 v4.9.2 及以上版本可用，低于此版本请自行指定插件名称
+plugin_data_path = (
+    Path(get_astrbot_data_path()) / "plugin_data" / self.name
+)  # self.name 为插件名称，在 v4.9.2 及以上版本可用，低于此版本请自行指定插件名称
 ```

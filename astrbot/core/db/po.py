@@ -3,13 +3,20 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import TypedDict
 
+from deprecated import deprecated
+from sqlalchemy import DateTime, Index, desc
 from sqlmodel import JSON, Field, SQLModel, Text, UniqueConstraint
 
 
 class TimestampMixin(SQLModel):
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    # Preserve legacy storage instead of SQLModel's inferred UTCDateTime type.
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_type=DateTime(timezone=False),
+    )
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
+        sa_type=DateTime(timezone=False),
         sa_column_kwargs={"onupdate": lambda: datetime.now(timezone.utc)},
     )
 
@@ -23,7 +30,7 @@ class PlatformStat(SQLModel, table=True):
     __tablename__: str = "platform_stats"
 
     id: int = Field(primary_key=True, sa_column_kwargs={"autoincrement": True})
-    timestamp: datetime = Field(nullable=False)
+    timestamp: datetime = Field(nullable=False, sa_type=DateTime(timezone=False))
     platform_id: str = Field(nullable=False)
     platform_type: str = Field(nullable=False)  # such as "aiocqhttp", "slack", etc.
     count: int = Field(default=0, nullable=False)
@@ -89,6 +96,17 @@ class ConversationV2(TimestampMixin, SQLModel, table=True):
     """
 
     __table_args__ = (
+        Index(
+            "ix_conversations_created_at_inner_id",
+            desc("created_at"),
+            desc("inner_conversation_id"),
+        ),
+        Index(
+            "ix_conversations_platform_created_at_inner_id",
+            "platform_id",
+            desc("created_at"),
+            desc("inner_conversation_id"),
+        ),
         UniqueConstraint(
             "conversation_id",
             name="uix_conversation_id",
@@ -191,8 +209,10 @@ class CronJob(TimestampMixin, SQLModel, table=True):
     persistent: bool = Field(default=True)
     run_once: bool = Field(default=False)
     status: str = Field(default="scheduled", max_length=32)
-    last_run_at: datetime | None = Field(default=None)
-    next_run_time: datetime | None = Field(default=None)
+    last_run_at: datetime | None = Field(default=None, sa_type=DateTime(timezone=False))
+    next_run_time: datetime | None = Field(
+        default=None, sa_type=DateTime(timezone=False)
+    )
     last_error: str | None = Field(default=None, sa_type=Text)
 
 
@@ -226,8 +246,8 @@ class Preference(TimestampMixin, SQLModel, table=True):
 class PlatformMessageHistory(TimestampMixin, SQLModel, table=True):
     """This class represents the message history for a specific platform.
 
-    It is used to store messages that are not LLM-generated, such as user messages
-    or platform-specific messages.
+    It stores user, bot, and platform-specific messages independently from LLM
+    conversation checkpoints.
     """
 
     __tablename__: str = "platform_message_history"
@@ -245,6 +265,15 @@ class PlatformMessageHistory(TimestampMixin, SQLModel, table=True):
     )  # Name of the sender in the platform
     content: dict = Field(sa_type=JSON, nullable=False)  # a message chain list
     llm_checkpoint_id: str | None = Field(default=None, index=True)
+
+    __table_args__ = (
+        Index(
+            "ix_platform_message_history_platform_user_id",
+            "platform_id",
+            "user_id",
+            "id",
+        ),
+    )
 
 
 class WebChatThread(TimestampMixin, SQLModel, table=True):
@@ -324,7 +353,7 @@ class UmoAlias(TimestampMixin, SQLModel, table=True):
         sa_column_kwargs={"autoincrement": True},
         default=None,
     )
-    umo: str = Field(nullable=False, max_length=512, unique=True, index=True)
+    umo: str = Field(nullable=False, max_length=512)
     creator_sender_id: str = Field(nullable=False, max_length=255)
     auto_name: str | None = Field(default=None, max_length=255)
     user_alias: str | None = Field(default=None, max_length=255)
@@ -389,9 +418,11 @@ class ApiKey(TimestampMixin, SQLModel, table=True):
     key_prefix: str = Field(max_length=24, nullable=False)
     scopes: list | None = Field(default=None, sa_type=JSON)
     created_by: str = Field(max_length=255, nullable=False)
-    last_used_at: datetime | None = Field(default=None)
-    expires_at: datetime | None = Field(default=None)
-    revoked_at: datetime | None = Field(default=None)
+    last_used_at: datetime | None = Field(
+        default=None, sa_type=DateTime(timezone=False)
+    )
+    expires_at: datetime | None = Field(default=None, sa_type=DateTime(timezone=False))
+    revoked_at: datetime | None = Field(default=None, sa_type=DateTime(timezone=False))
 
     __table_args__ = (
         UniqueConstraint(
@@ -417,7 +448,9 @@ class DashboardTrustedDevice(TimestampMixin, SQLModel, table=True):
     )
     token_hash: str = Field(max_length=64, nullable=False, unique=True, index=True)
     totp_secret_hash: str = Field(max_length=64, nullable=False, index=True)
-    expires_at: datetime = Field(nullable=False, index=True)
+    expires_at: datetime = Field(
+        nullable=False, index=True, sa_type=DateTime(timezone=False)
+    )
 
 
 class ChatUIProject(TimestampMixin, SQLModel, table=True):
@@ -584,6 +617,7 @@ class Personality(TypedDict):
 # ====
 
 
+@deprecated(version="4.0.0", reason="Use PlatformStat instead.")
 @dataclass
 class Platform:
     """平台使用统计数据"""
@@ -593,6 +627,7 @@ class Platform:
     timestamp: int
 
 
+@deprecated(version="4.0.0", reason="Use get_platform_stats() instead.")
 @dataclass
 class Stats:
     platform: list[Platform] = field(default_factory=list)

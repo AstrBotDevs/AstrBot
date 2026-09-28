@@ -89,6 +89,43 @@ Windows 同步 Host Time（需要WSL2）
 sudo docker logs -f astrbot
 ```
 
+## 通过 Windows Docker Desktop 部署
+
+### 使用`Windows CMD`
+
+`TZ` 的值请设置为 **IANA 时区标准格式**（地区/城市），例如中国为 `Asia/Shanghai`
+
+```bash
+docker run -itd -p 6185:6185 -p 6199:6199 -e TZ=Asia/Shanghai -v "%cd%\data:/AstrBot/data" --name astrbot soulter/astrbot:latest
+```
+> [!TIP]
+> 如果您的网络环境在中国大陆境内，上述命令将无法正常拉取。请使用以下命令拉取镜像：
+>
+> ```bash
+> docker run -itd -p 6185:6185 -p 6199:6199 -e TZ=Asia/Shanghai -v "%cd%\data:/AstrBot/data" --name astrbot m.daocloud.io/docker.io/soulter/astrbot:latest
+> ```
+>
+> (感谢 DaoCloud ❤️)
+> 
+### 使用`PowerShell`
+
+`TZ` 的值请设置为 **IANA 时区标准格式**（地区/城市），例如中国为 `Asia/Shanghai`
+
+```powershell
+docker run -itd -p 6185:6185 -p 6199:6199 -e TZ=Asia/Shanghai -v "${PWD}\data:/AstrBot/data" --name astrbot soulter/astrbot:latest
+```
+> [!TIP]
+> 如果您的网络环境在中国大陆境内，上述命令将无法正常拉取。请使用以下命令拉取镜像：
+>
+> ```powershell
+> docker run -itd -p 6185:6185 -p 6199:6199 -e TZ=Asia/Shanghai -v "${PWD}\data:/AstrBot/data" --name astrbot m.daocloud.io/docker.io/soulter/astrbot:latest
+> ```
+>
+> (感谢 DaoCloud ❤️)
+> 
+
+
+
 ## 🎉 大功告成
 
 如果一切顺利，你会看到 AstrBot 打印出的日志。
@@ -103,3 +140,16 @@ sudo docker logs -f astrbot
 > 如果部署在云服务器上，需要在相应厂商控制台里放行对应端口。
 
 接下来，你需要部署任何一个消息平台，才能够实现在消息平台上使用 AstrBot。
+
+## 在 Docker 中配置 HTTP 代理
+
+AstrBot 的 HTTP 代理在 WebUI：`设置 → 网络 → 代理与依赖源 → HTTP 代理`。填写的地址由 **AstrBot 容器内部**访问，因此 `http://127.0.0.1:7890` 会连到 AstrBot 容器自己，而不是宿主机或其他容器。
+
+代理跑在宿主机、或另一个容器并把端口映射到宿主机时：
+
+- Mac / Windows（Docker Desktop）：`http://host.docker.internal:7890`
+- Linux：`http://172.17.0.1:7890`（把 `172.17.0.1` 换成本机 docker0 网关）
+
+AstrBot 与代理在同一 Docker 网络时，用容器名，例如 `http://clash:7890`。
+
+Clash 一类软件常见 HTTP `7890`、SOCKS `7891`，按实际协议写 `http://` 或 `socks5://`。请确认代理端口已映射到宿主机，且不是只绑在 `127.0.0.1`（写成 `127.0.0.1:7890:7890` 时，其他容器从网关进不去）。

@@ -103,23 +103,6 @@ class SkillsService:
                 "You are not permitted to do this operation in demo mode"
             )
 
-    @staticmethod
-    async def _save_upload(file: Any, target_path: str) -> None:
-        if hasattr(file, "save"):
-            maybe_awaitable = file.save(target_path)
-            if hasattr(maybe_awaitable, "__await__"):
-                await maybe_awaitable
-            return
-
-        if hasattr(file, "read"):
-            data = file.read()
-            if hasattr(data, "__await__"):
-                data = await data
-            Path(target_path).write_bytes(data)
-            return
-
-        raise SkillsServiceError("Invalid upload file")
-
     def resolve_local_skill_dir(self, name: str) -> Path:
         skill_name = str(name or "").strip()
         if not skill_name:
@@ -244,18 +227,50 @@ class SkillsService:
             return SkillsOperationResult(ok=False, message=str(exc))
 
     def get_skills(self) -> dict:
+        """Return the Skill inventory for Dashboard consumers.
+
+        Returns:
+            The serialized Skill inventory and current runtime metadata.
+        """
         provider_settings = self.core_lifecycle.astrbot_config.get(
             "provider_settings", {}
         )
-        runtime = provider_settings.get("computer_use_runtime", "local")
+        runtime = provider_settings.get("computer_use_runtime", "none")
         skill_mgr = SkillManager()
         skills = skill_mgr.list_skills(
             active_only=False,
             runtime=runtime,
             show_sandbox_path=False,
         )
+        plugin_display_names = {}
+        plugin_activation_by_root_name = {}
+        for plugin in self.core_lifecycle.plugin_manager.context.get_all_stars():
+            display_name = str(plugin.display_name or plugin.name or "").strip()
+            for plugin_name in (plugin.name, plugin.root_dir_name):
+                if plugin_name:
+                    plugin_display_names[str(plugin_name)] = display_name
+            if plugin.root_dir_name:
+                plugin_activation_by_root_name[str(plugin.root_dir_name)] = bool(
+                    plugin.activated
+                )
+
+        serialized_skills = []
+        for skill in skills:
+            skill_data = dict(skill.__dict__)
+            if skill.source_type == "plugin":
+                plugin_active = plugin_activation_by_root_name.get(
+                    skill.plugin_name,
+                    False,
+                )
+                skill_data["plugin_active"] = plugin_active
+                skill_data["plugin_display_name"] = plugin_display_names.get(
+                    skill.plugin_name,
+                    "",
+                )
+            serialized_skills.append(skill_data)
+
         return {
-            "skills": [skill.__dict__ for skill in skills],
+            "skills": serialized_skills,
             "runtime": runtime,
             "sandbox_cache": skill_mgr.get_sandbox_skills_cache_status(),
         }
@@ -276,7 +291,7 @@ class SkillsService:
         temp_path = _next_available_temp_path(temp_dir, filename)
 
         try:
-            await self._save_upload(file, temp_path)
+            await file.save(temp_path)
             try:
                 skill_name = skill_mgr.install_skill_from_zip(
                     temp_path,
@@ -333,7 +348,7 @@ class SkillsService:
                     continue
 
                 temp_path = _next_available_temp_path(temp_dir, filename)
-                await self._save_upload(file, temp_path)
+                await file.save(temp_path)
 
                 try:
                     skill_name = skill_mgr.install_skill_from_zip(

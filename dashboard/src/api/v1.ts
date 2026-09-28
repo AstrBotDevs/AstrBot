@@ -11,6 +11,7 @@ import {
   type BackupUploadSessionRequest,
   type BotConfigRequest,
   type BotRegistrationRequest,
+  type ChatChunkUploadRequest,
   type ChatMessagePatchRequest,
   type ChatMessageRegenerateRequest,
   type ChatProjectRequest,
@@ -19,6 +20,8 @@ import {
   type ChatSessionPatchRequest,
   type ChatThreadCreateRequest,
   type ChatThreadMessageRequest,
+  type ChatUploadInitRequest,
+  type ChatUploadSessionRequest,
   type CommandPatchRequest,
   type ConfigRouteUpsertRequest,
   type ConfigRoutesReplaceRequest,
@@ -43,6 +46,7 @@ import {
   type PluginValidateRepoRequest,
   type PluginConfigFileDeleteRequest,
   type ProviderConfigRequest,
+  type RuntimeInfo,
   type BatchSessionProviderRequest,
   type BatchSessionServiceRequest,
   type SetupAuthRequest,
@@ -56,7 +60,7 @@ import {
   type UpdateAccountRequest,
   type UpdateRequest,
 } from './generated/openapi-v1';
-import { apiV1Client, httpClient } from './http';
+import { apiV1Client, fetchWithAuth, httpClient } from './http';
 
 openApiV1Client.setConfig({
   axios: httpClient,
@@ -120,6 +124,7 @@ export interface VersionData {
   change_pwd_hint?: boolean;
   md5_pwd_hint?: boolean;
   password_upgrade_required?: boolean;
+  runtime?: RuntimeInfo;
   [key: string]: unknown;
 }
 
@@ -151,7 +156,7 @@ export interface BotListParams {
 }
 
 export interface ProviderListParams {
-  capability?: 'chat' | 'agent' | 'stt' | 'tts' | 'embedding' | 'rerank';
+  capability?: 'chat' | 'stt' | 'tts' | 'embedding' | 'rerank';
   source_id?: string;
   enabled?: boolean;
 }
@@ -159,6 +164,11 @@ export interface ProviderListParams {
 export interface ToolListParams {
   origin?: 'builtin' | 'plugin' | 'mcp';
   enabled?: boolean;
+}
+
+export interface SkillListParams extends Record<string, unknown> {
+  enabled?: boolean;
+  source?: string;
 }
 
 export interface BackupListParams {
@@ -186,6 +196,11 @@ export interface ChatSessionListParams {
   username?: string;
 }
 
+export interface ChatHistoryPageParams {
+  page?: number;
+  page_size?: number;
+}
+
 export interface CronJobListParams {
   type?: string;
 }
@@ -194,7 +209,6 @@ type ProviderCapability = NonNullable<ProviderListParams['capability']>;
 
 const PROVIDER_TYPE_TO_CAPABILITY: Record<string, ProviderCapability> = {
   chat_completion: 'chat',
-  agent_runner: 'agent',
   speech_to_text: 'stt',
   text_to_speech: 'tts',
   embedding: 'embedding',
@@ -760,6 +774,9 @@ export const backupApi = {
   abortUpload(payload: BackupUploadSessionRequest) {
     return typed<OpenConfig>(openApiV1.abortBackupUpload({ body: payload }));
   },
+  statusUpload(payload: BackupUploadSessionRequest) {
+    return typed<any>(openApiV1.statusBackupUpload({ body: payload }));
+  },
   check(filename: string) {
     return typed<any>(
       openApiV1.checkBackup({ path: { filename } }),
@@ -818,9 +835,12 @@ export const chatApi = {
       }),
     );
   },
-  getSession(sessionId: string) {
+  getSession(sessionId: string, params?: ChatHistoryPageParams) {
     return typed<any>(
-      openApiV1.getChatSession({ path: { session_id: sessionId } }),
+      openApiV1.getChatSession({
+        path: { session_id: sessionId },
+        query: generatedQuery(params),
+      }),
     );
   },
   updateSession(sessionId: string, payload: ChatSessionPatchRequest) {
@@ -924,6 +944,29 @@ export const chatApi = {
       openApiV1.listChatProjectSessions({ path: { project_id: projectId } }),
     );
   },
+  listProjectWorkspaceFiles(projectId: string, path = '') {
+    return typed<any>(
+      openApiV1.listChatProjectWorkspaceFiles({
+        path: { project_id: projectId },
+        query: path ? { path } : undefined,
+      }),
+    );
+  },
+  getProjectWorkspaceFile(projectId: string, path: string) {
+    return typed<any>(
+      openApiV1.getChatProjectWorkspaceFile({
+        path: { project_id: projectId },
+        query: { path },
+      }),
+    );
+  },
+  downloadProjectWorkspaceFile(projectId: string, path: string) {
+    return openApiV1.downloadChatProjectWorkspaceFile({
+      path: { project_id: projectId },
+      query: { path },
+      responseType: 'blob',
+    }) as Promise<AxiosResponse<Blob>>;
+  },
   addProjectSession(projectId: string, sessionId: string) {
     return typed<any>(
       openApiV1.addChatProjectSession({
@@ -943,6 +986,23 @@ export const fileApi = {
     return typed<any>(
       openApiV1.uploadFile({ body: generatedFormData(formData) }),
     );
+  },
+  initUpload(payload: ChatUploadInitRequest) {
+    return typed<any>(openApiV1.initFileUpload({ body: payload }));
+  },
+  uploadChunk(formData: FormData | ChatChunkUploadRequest) {
+    return typed<any>(
+      openApiV1.uploadFileChunk({ body: generatedFormData(formData) }),
+    );
+  },
+  completeUpload(payload: ChatUploadSessionRequest) {
+    return typed<any>(openApiV1.completeFileUpload({ body: payload }));
+  },
+  abortUpload(payload: ChatUploadSessionRequest) {
+    return typed<any>(openApiV1.abortFileUpload({ body: payload }));
+  },
+  statusUpload(payload: ChatUploadSessionRequest) {
+    return typed<any>(openApiV1.statusFileUpload({ body: payload }));
   },
   getByName(filename: string) {
     return openApiV1.getFileByName({
@@ -1322,16 +1382,27 @@ export const pluginApi = {
       openApiV1.replacePluginSources({ body: { sources: sources as any } }),
     );
   },
-  installUpload(formData: FormData) {
-    return typed<OpenConfig>(
-      openApiV1.installPluginFromUpload({
-        body: generatedFormData(formData),
-      }),
-    );
+  async installUpload(formData: FormData) {
+    const response = await fetchWithAuth('/api/v1/plugins/install/upload', {
+      method: 'POST',
+      body: formData,
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(
+        data?.message || `Plugin upload failed (${response.status})`,
+      );
+    }
+    return { data } as AxiosResponse<ApiEnvelope<OpenConfig>>;
   },
   installGithub(body: OpenConfig) {
     return typed<OpenConfig>(
       openApiV1.installPluginFromGithub({ body: body as any }),
+    );
+  },
+  installGit(body: OpenConfig) {
+    return typed<OpenConfig>(
+      openApiV1.installPluginFromGit({ body: body as any }),
     );
   },
   installUrl(body: OpenConfig) {
@@ -1501,7 +1572,7 @@ export const knowledgeApi = {
 };
 
 export const skillApi = {
-  list(params?: { enabled?: boolean; source?: string }) {
+  list(params?: SkillListParams) {
     return typed<any>(openApiV1.listSkills({ query: params }));
   },
   uploadBatch(files: File[]) {
@@ -1666,6 +1737,11 @@ export const personaApi = {
 };
 
 export const conversationApi = {
+  filterOptions() {
+    return typed<{ bots: Array<{ id: string; type: string }> }>(
+      openApiV1.getConversationFilterOptions(),
+    );
+  },
   list(params?: ListConversationsQuery, requestConfig?: AxiosRequestConfig) {
     return typed<any>(
       openApiV1.listConversations(

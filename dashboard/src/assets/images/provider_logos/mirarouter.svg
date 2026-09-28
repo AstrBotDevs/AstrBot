@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="518" height="464" viewBox="128 178 518 464" fill="none">
+  <title>Cat head with capsule eyes and reference-style short whiskers</title>
+  <desc>A black cat head with two matching white capsule eyes with straight sides and semicircular ends and short whiskers, without pupils, on a transparent background.</desc>
+  <path fill="#1D1D1B" d="M237.5 313.5C242.8 277.9 260.3 230.2 282.9 204.8C303.8 180.9 341.6 218.4 382.3 278.5C424.2 277 468.1 289.7 505.1 312.6C539.3 291.5 583.3 269.7 604.8 273C623.8 275.7 624.5 306.7 624.2 325.7C623.8 362.3 613.7 394.1 599.3 421.5C607.5 440 612.4 460.5 612.3 481.4C612 523.9 589.3 559 553.5 582.6C516.7 607 463.2 620.4 410.6 621C350.8 621.9 295.3 610.6 251.8 586.1C206.8 560.8 177.2 521.4 170.7 473C162.8 414.5 192.5 356.5 237.5 313.5Z"/>
+  <g fill="#FFFFFF">
+    <rect x="252" y="342" width="44" height="102" rx="22" fill="#FFFFFF" transform="rotate(18 274 393)"/>
+    <rect x="403" y="387" width="44" height="102" rx="22" fill="#FFFFFF" transform="rotate(18 425 438)"/>
+  </g>
+  <g fill="none" stroke-width="10" stroke-linecap="round">
+    <path d="M146 405L180 416 M141 447L176 445" stroke="#1D1D1B"/>
+    <path d="M548 493L573 500 M539 519L560 532" stroke="#FFFFFF"/>
+  </g>
+</svg>

@@ -5,6 +5,14 @@
       <v-progress-circular indeterminate color="primary" size="64" />
     </div>
 
+    <div v-else-if="loadError" class="loading-container">
+      <v-icon size="72" color="error">mdi-alert-circle-outline</v-icon>
+      <p class="mt-4 text-medium-emphasis">{{ t('states.loadError') }}</p>
+      <v-btn class="mt-4" prepend-icon="mdi-refresh" color="primary" variant="tonal" @click="loadKB">
+        {{ t('states.retry') }}
+      </v-btn>
+    </div>
+
     <!-- 主内容 -->
     <div v-else class="kb-content">
       <!-- 标签页 -->
@@ -159,12 +167,13 @@
 import { ref, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { knowledgeApi } from '@/api/v1'
-import { useModuleI18n } from '@/i18n/composables'
+import { useI18n, useModuleI18n } from '@/i18n/composables'
 import DocumentsTab from './components/DocumentsTab.vue'
 import RetrievalTab from './components/RetrievalTab.vue'
 import SettingsTab from './components/SettingsTab.vue'
 
 const { tm: t } = useModuleI18n('features/knowledge-base/detail')
+const { locale } = useI18n()
 const route = useRoute()
 
 const emit = defineEmits<{
@@ -173,6 +182,7 @@ const emit = defineEmits<{
 
 const kbId = ref(route.params.kbId as string)
 const loading = ref(true)
+const loadError = ref(false)
 const activeTab = ref('overview')
 const kb = ref<any>({})
 
@@ -191,17 +201,21 @@ const showSnackbar = (text: string, color: string = 'success') => {
 // 加载知识库详情
 const loadKB = async () => {
   loading.value = true
+  loadError.value = false
   try {
     const response = await knowledgeApi.get(kbId.value)
     if (response.data.status === 'ok') {
       kb.value = response.data.data
+      loadError.value = false
       emit('title-change', kb.value.kb_name || '')
     } else {
-      showSnackbar(response.data.message || '加载失败', 'error')
+      loadError.value = true
+      showSnackbar(response.data.message || t('states.loadError'), 'error')
     }
   } catch (error) {
     console.error('Failed to load knowledge base:', error)
-    showSnackbar('加载知识库详情失败', 'error')
+    loadError.value = true
+    showSnackbar(t('states.loadError'), 'error')
   } finally {
     loading.value = false
   }
@@ -211,7 +225,7 @@ const loadKB = async () => {
 const formatDate = (dateStr: string) => {
   if (!dateStr) return '-'
   const date = new Date(dateStr)
-  return date.toLocaleString('zh-CN', {
+  return date.toLocaleString(locale.value, {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',

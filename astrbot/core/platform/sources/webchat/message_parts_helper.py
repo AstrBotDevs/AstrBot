@@ -1,7 +1,6 @@
 import json
 import mimetypes
 import shutil
-import uuid
 from collections.abc import Awaitable, Callable, Sequence
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -17,6 +16,7 @@ from astrbot.core.message.components import (
     Video,
 )
 from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.utils.datetime_utils import generate_timestamp_id
 from astrbot.core.utils.media_utils import MediaResolver
 
 AttachmentGetter = Callable[[str], Awaitable[Attachment | None]]
@@ -479,7 +479,7 @@ async def _copy_file_to_attachment_part(
         return None
 
     suffix = src_path.suffix
-    target_path = attachments_dir / f"{uuid.uuid4().hex}{suffix}"
+    target_path = attachments_dir / f"{generate_timestamp_id()}{suffix}"
     shutil.copy2(src_path, target_path)
 
     mime_type, _ = mimetypes.guess_type(target_path.name)

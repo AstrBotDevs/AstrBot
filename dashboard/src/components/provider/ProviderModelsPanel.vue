@@ -378,7 +378,7 @@ const capabilityBadges = (entry) => {
       key: 'reasoning',
       icon: 'mdi-brain',
       supported: props.supportsReasoning(metadata),
-      enabled: !isConfigured || Boolean(provider?.reasoning),
+      enabled: props.supportsReasoning(metadata),
       label: props.tm('models.metadata.reasoning')
     }
   ]
