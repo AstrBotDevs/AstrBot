@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import io
 import json
@@ -50,7 +51,7 @@ def _provider(base_url: str, **overrides: object) -> ProviderModelBestVoxCPMTTSA
 
 @pytest_asyncio.fixture
 async def modelbest_server(unused_tcp_port):
-    state = {"status": 200, "body": b"", "request": None}
+    state = {"status": 200, "body": b"", "request": None, "delay": 0}
 
     async def speech(request):
         state["request"] = {
@@ -64,6 +65,8 @@ async def modelbest_server(unused_tcp_port):
         await response.prepare(request)
         body = state["body"]
         for offset in range(0, len(body), 7):
+            if state["delay"]:
+                await asyncio.sleep(state["delay"])
             await response.write(body[offset : offset + 7])
         await response.write_eof()
         return response
@@ -185,6 +188,17 @@ async def test_get_audio_rejects_oversized_response(
     provider = _provider(base_url)
 
     with pytest.raises(ModelBestVoxCPMError, match="exceeds 100 MiB"):
+        await provider.get_audio("Hello")
+
+
+@pytest.mark.asyncio
+async def test_get_audio_applies_total_request_timeout(modelbest_server):
+    base_url, state = modelbest_server
+    state["body"] = b'data: {"type": "speech.audio.delta"}\r\n\r\n'
+    state["delay"] = 0.6
+    provider = _provider(base_url, timeout=1)
+
+    with pytest.raises(ModelBestVoxCPMError, match="timed out"):
         await provider.get_audio("Hello")
 
 

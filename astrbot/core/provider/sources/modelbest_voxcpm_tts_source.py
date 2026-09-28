@@ -209,7 +209,7 @@ class ProviderModelBestVoxCPMTTSAPI(TTSProvider):
             "Accept": "text/event-stream",
         }
         timeout = aiohttp.ClientTimeout(
-            total=None,
+            total=self.timeout,
             connect=min(10, self.timeout),
             sock_read=self.timeout,
         )
