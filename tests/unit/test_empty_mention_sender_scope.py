@@ -65,76 +65,100 @@ def make_main() -> Main:
             # Skip the LLM reply so the handler goes straight to waiting.
             "empty_mention_waiting_need_reply": False,
         },
-        "wake_prefix": [],
+        "wake_prefix": ["/bot"],
     }
     return main
 
 
 @pytest.mark.asyncio
-async def test_other_members_message_passes_through():
+@pytest.mark.parametrize(
+    ("trigger_text", "trigger_component"),
+    [
+        pytest.param("", At(qq=BOT_ID, name=BOT_ID), id="empty-mention"),
+        pytest.param("/bot", Plain("/bot"), id="wake-prefix-only"),
+    ],
+)
+async def test_other_members_message_passes_through(trigger_text, trigger_component):
     """BOB's message must not be stopped, modified, or re-enqueued."""
     main = make_main()
     queue = main.context.get_event_queue.return_value
-    trigger = FakeEvent(ALICE, "", [At(qq=BOT_ID, name=BOT_ID)])
+    trigger = FakeEvent(ALICE, trigger_text, [trigger_component])
 
     async def drain() -> None:
         async for _ in main.handle_empty_mention(trigger):
             pass
 
     task = asyncio.create_task(drain())
-    await asyncio.sleep(0.05)  # let the handler reach (or skip) the waiter
-    assert len(USER_SESSIONS) == 1, "waiter should be registered"
-
-    bob_event = FakeEvent(BOB, "just chatting", [Plain("just chatting")])
-    await main.handle_session_control_agent(bob_event)
-
-    assert bob_event.stop_event_calls == 0, "BOB's event must not be stopped"
-    queue.put_nowait.assert_not_called()
-    assert isinstance(bob_event.message_obj.message[0], Plain), (
-        "no At component may be injected into BOB's message"
-    )
-    assert len(USER_SESSIONS) == 1, "the waiter must still be waiting for ALICE"
-
-    task.cancel()
     try:
-        await task
-    except asyncio.CancelledError:
-        pass
+        await asyncio.sleep(0.05)  # let the handler reach (or skip) the waiter
+        assert len(USER_SESSIONS) == 1, "waiter should be registered"
+
+        bob_event = FakeEvent(BOB, "just chatting", [Plain("just chatting")])
+        await main.handle_session_control_agent(bob_event)
+
+        assert bob_event.stop_event_calls == 0, "BOB's event must not be stopped"
+        queue.put_nowait.assert_not_called()
+        assert isinstance(bob_event.message_obj.message[0], Plain), (
+            "no At component may be injected into BOB's message"
+        )
+        assert len(USER_SESSIONS) == 1, "the waiter must still be waiting for ALICE"
+    finally:
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
 
 
 @pytest.mark.asyncio
-async def test_original_senders_followup_is_redispatched():
+@pytest.mark.parametrize(
+    ("trigger_text", "trigger_component"),
+    [
+        pytest.param("", At(qq=BOT_ID, name=BOT_ID), id="empty-mention"),
+        pytest.param("/bot", Plain("/bot"), id="wake-prefix-only"),
+    ],
+)
+async def test_original_senders_followup_is_redispatched(
+    trigger_text, trigger_component
+):
     """ALICE's follow-up gets the bot At injected, is stopped and re-enqueued."""
     main = make_main()
     queue = main.context.get_event_queue.return_value
-    trigger = FakeEvent(ALICE, "", [At(qq=BOT_ID, name=BOT_ID)])
+    trigger = FakeEvent(ALICE, trigger_text, [trigger_component])
 
     async def drain() -> None:
         async for _ in main.handle_empty_mention(trigger):
             pass
 
     task = asyncio.create_task(drain())
-    await asyncio.sleep(0.05)  # let the handler reach (or skip) the waiter
+    try:
+        await asyncio.sleep(0.05)  # let the handler reach (or skip) the waiter
 
-    followup = FakeEvent(ALICE, "hello bot", [Plain("hello bot")])
-    await main.handle_session_control_agent(followup)
+        followup = FakeEvent(ALICE, "hello bot", [Plain("hello bot")])
+        await main.handle_session_control_agent(followup)
 
-    assert followup.stop_event_calls > 0, "the consumed follow-up must be stopped"
-    queue.put_nowait.assert_called_once()
-    injected = followup.message_obj.message[0]
-    assert isinstance(injected, At) and str(injected.qq) == BOT_ID
-    await task  # controller.stop() lets the handler complete
-    assert USER_SESSIONS == {}, "the waiter must be cleaned up after consuming"
+        assert followup.stop_event_calls > 0, "the consumed follow-up must be stopped"
+        queue.put_nowait.assert_called_once()
+        injected = followup.message_obj.message[0]
+        assert isinstance(injected, At) and str(injected.qq) == BOT_ID
+        await task  # controller.stop() lets the handler complete
+        assert USER_SESSIONS == {}, "the waiter must be cleaned up after consuming"
+    finally:
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("bad_sender", [None, 0, False, [], b""])
 async def test_unusable_sender_id_skips_waiting(monkeypatch, bad_sender):
-    """A sender id that is not a non-empty string must not start a waiter.
+    """A falsy sender id must not start a waiter.
 
     A truthiness check on ``str(sender_id)`` would pass here: ``str(None)`` is
     ``"None"``, which is truthy, so the waiter would register under a key like
-    ``...:None``. The guard must therefore check the type as well.
+    ``...:None``. The guard must check the original value before key encoding.
     """
     main = make_main()
     trigger = FakeEvent(bad_sender, "", [At(qq=BOT_ID, name=BOT_ID)])
