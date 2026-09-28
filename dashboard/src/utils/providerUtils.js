@@ -48,6 +48,7 @@ export function getProviderIcon(type) {
     'openrouter': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/openrouter.svg',
     'typesafe': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/typesafeai.svg',
     'vercel': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/vercel.svg',
+    'requesty': 'https://www.requesty.ai/favicon.ico',
     'ssycloud': 'https://admin.shengsuanyun.com/assets/logo-BoujJhP-.png',
     "tokenpony": "https://tokenpony.cn/tokenpony-web/logo.png",
     "compshare": "https://compshare.cn/favicon.ico",
