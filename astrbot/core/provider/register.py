@@ -51,3 +51,24 @@ def register_provider_adapter(
         return cls
 
     return decorator
+
+
+def unregister_provider_adapter(provider_type_name: str, provider_class: type) -> bool:
+    """Remove a plugin's registration without removing a replacement's entry.
+
+    The plugin must close authentication sessions and terminate its provider
+    instances before unregistering. This does not delete saved model settings.
+
+    Args:
+        provider_type_name: Registered adapter type to remove.
+        provider_class: Exact class returned by register_provider_adapter.
+
+    Returns:
+        Whether a registration owned by this class was removed.
+    """
+    metadata = provider_cls_map.get(provider_type_name)
+    if metadata is None or metadata.cls_type is not provider_class:
+        return False
+    del provider_cls_map[provider_type_name]
+    provider_registry[:] = [item for item in provider_registry if item is not metadata]
+    return True

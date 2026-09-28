@@ -6,6 +6,10 @@ from astrbot.core.provider.entities import (
     ProviderRequest,
     ProviderType,
 )
+from astrbot.core.provider.register import (
+    register_provider_adapter,
+    unregister_provider_adapter,
+)
 
 __all__ = [
     "LLMResponse",
@@ -15,4 +19,6 @@ __all__ = [
     "ProviderRequest",
     "ProviderType",
     "STTProvider",
+    "register_provider_adapter",
+    "unregister_provider_adapter",
 ]
