@@ -138,13 +138,17 @@ async def test_background_execution_reports_status_and_logs_failures(
 
 
 @pytest.mark.asyncio
-async def test_background_handoff_reports_image_preparation_failure(monkeypatch):
+async def test_background_handoff_reports_unhandled_image_collection_failure(
+    monkeypatch,
+):
     monkeypatch.setattr(
         FunctionToolExecutor,
         "_collect_handoff_image_urls",
         AsyncMock(side_effect=RuntimeError("image preparation failed")),
     )
     wake = AsyncMock()
+    handoff = AsyncMock()
+    monkeypatch.setattr(FunctionToolExecutor, "_execute_handoff", handoff)
     monkeypatch.setattr(
         FunctionToolExecutor, "_wake_main_agent_for_background_result", wake
     )
@@ -154,6 +158,93 @@ async def test_background_handoff_reports_image_preparation_failure(monkeypatch)
     wake.assert_awaited_once()
     assert wake.await_args.kwargs["status"] == "failed"
     assert "image preparation failed" in wake.await_args.kwargs["result_text"]
+    handoff.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("include_valid_image", [False, True])
+async def test_background_handoff_skips_failed_image_conversion(
+    monkeypatch, caplog, include_valid_image
+):
+    broken_image = Image(file="file:///tmp/broken.png")
+    valid_image = Image(file="file:///tmp/valid.png")
+
+    async def _convert(self):
+        if self is broken_image:
+            raise RuntimeError("image conversion failed")
+        return "/tmp/valid.png"
+
+    captured = {}
+
+    async def _handoff(cls, tool, run_context, **kwargs):
+        captured.update(kwargs)
+        yield mcp.types.CallToolResult(
+            content=[mcp.types.TextContent(type="text", text="done")]
+        )
+
+    monkeypatch.setattr(Image, "convert_to_file_path", _convert)
+    monkeypatch.setattr(FunctionToolExecutor, "_execute_handoff", classmethod(_handoff))
+    wake = AsyncMock()
+    monkeypatch.setattr(
+        FunctionToolExecutor, "_wake_main_agent_for_background_result", wake
+    )
+    images = [broken_image, valid_image] if include_valid_image else [broken_image]
+    await FunctionToolExecutor._do_handoff_background(
+        tool=_DummyTool(), run_context=_build_run_context(images), task_id="image-task"
+    )
+
+    assert captured["image_urls_prepared"] is True
+    assert captured["image_urls"] == (["/tmp/valid.png"] if include_valid_image else [])
+    wake.assert_awaited_once()
+    assert wake.await_args.kwargs["status"] == "succeeded"
+    assert wake.await_args.kwargs["result_text"] == "done\n"
+    assert "finished" in wake.await_args.kwargs["note"]
+    records = [
+        r for r in caplog.records if "Failed to convert handoff image" in r.message
+    ]
+    assert len(records) == 1
+    assert records[0].exc_info[0] is RuntimeError
+    assert str(records[0].exc_info[1]) == "image conversion failed"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("handoff", [False, True])
+@pytest.mark.parametrize("first_result_failed", [False, True])
+async def test_background_execution_retains_all_text_results(
+    monkeypatch, handoff, first_result_failed
+):
+    async def _execute(cls, tool, run_context, **kwargs):
+        yield mcp.types.CallToolResult(
+            content=[mcp.types.TextContent(type="text", text="first result")],
+            isError=first_result_failed,
+        )
+        yield mcp.types.CallToolResult(
+            content=[mcp.types.TextContent(type="text", text="last result")]
+        )
+
+    monkeypatch.setattr(
+        FunctionToolExecutor,
+        "_execute_handoff" if handoff else "_execute_local",
+        classmethod(_execute),
+    )
+    wake = AsyncMock()
+    monkeypatch.setattr(
+        FunctionToolExecutor, "_wake_main_agent_for_background_result", wake
+    )
+    execute = (
+        FunctionToolExecutor._do_handoff_background
+        if handoff
+        else FunctionToolExecutor._execute_background
+    )
+    await execute(
+        tool=_DummyTool(), run_context=_build_run_context(), task_id="multi-result-task"
+    )
+
+    wake.assert_awaited_once()
+    assert wake.await_args.kwargs["result_text"] == "first result\nlast result\n"
+    assert wake.await_args.kwargs["status"] == (
+        "failed" if first_result_failed else "succeeded"
+    )
 
 
 @pytest.mark.parametrize("runtime", ["none", "local", "sandbox", None])

@@ -79,6 +79,14 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
     async def _collect_image_urls_from_message(
         cls, run_context: ContextWrapper[AstrAgentContext]
     ) -> list[str]:
+        """Collect message images, logging and skipping individual conversion failures.
+
+        Args:
+            run_context: Context containing the incoming message.
+
+        Returns:
+            Paths from successfully converted image components.
+        """
         urls: list[str] = []
         event = getattr(run_context.context, "event", None)
         message_obj = getattr(event, "message_obj", None)
@@ -500,7 +508,6 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 if isinstance(r, mcp.types.CallToolResult):
                     if r.isError:
                         status = "failed"
-                    result_text = ""
                     for content in r.content:
                         if isinstance(content, mcp.types.TextContent):
                             result_text += content.text + "\n"
