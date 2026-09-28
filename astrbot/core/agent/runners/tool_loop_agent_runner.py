@@ -52,7 +52,6 @@ from astrbot.core.provider.modalities import (
 )
 from astrbot.core.provider.provider import Provider
 from astrbot.core.utils.media_utils import (
-    MediaResolver,
     normalize_model_image_max_size,
     resolve_image_ref_to_base64_data,
 )
@@ -532,95 +531,214 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         managed = image_context is not None and image_context.configured
         model = (self.req.model if include_model else None) or self.provider.get_model()
         contexts = self.run_context.messages
+        projected_occurrences: set[str] = set()
         if managed:
             await self._await_or_stop(image_context.prepare_step(self.provider, model))
             if self._is_stop_requested():
                 return
             contexts = await image_context.project_messages(contexts)
+            projected_occurrences = set(image_context.projected_visuals)
+            for message in contexts:
+                if isinstance(message.content, list):
+                    message.content = [
+                        part
+                        for part in message.content
+                        if not isinstance(part, ImageURLPart)
+                        or image_context.projected_visuals.get(part.image_url.id)
+                        == part.image_url.url
+                    ]
+        sanitized_contexts = self._sanitize_contexts_for_provider(contexts)
+        if managed:
+            sanitized_contexts = [
+                message.model_dump() if isinstance(message, Message) else message
+                for message in sanitized_contexts
+            ]
         payload = {
-            "contexts": self._sanitize_contexts_for_provider(contexts),
+            "contexts": sanitized_contexts,
             "func_tool": self._func_tool_for_provider(),
             "session_id": self.req.session_id,
-            "extra_user_content_parts": self.req.extra_user_content_parts,  # list[ContentPart]
+            "extra_user_content_parts": (
+                [] if managed else self.req.extra_user_content_parts
+            ),
             "abort_signal": self._abort_signal,
             "request_max_retries": self.request_max_retries,
         }
         image_count = encoded_bytes = 0
-        selected_occurrences = []
+        selected_occurrences: set[str] = set()
         purpose = "main"
         if image_context is not None:
-            # The durable messages contain references; visual bytes exist only in
-            # this provider request and must never flow back into saved history.
-            payload["extra_user_content_parts"] = []
             modalities = self.provider.provider_config.get("modalities")
             supports_image = not modalities or "image" in modalities
-            visual_parts = []
-            selected_previews = []
             request_notices = list(image_context.notices)
             pending_visuals = list(image_context.pending_visuals.items())
+            pending_only = [
+                (occurrence, preview)
+                for occurrence, preview in pending_visuals
+                if occurrence not in projected_occurrences
+            ]
+            candidates = projected_occurrences | {
+                occurrence for occurrence, _ in pending_only
+            }
             authorized = (
-                await image_context.authorize_visuals(
-                    [key for key, _ in pending_visuals]
-                )
+                await image_context.authorize_visuals(candidates)
                 if managed
-                else {key for key, _ in pending_visuals}
+                else candidates
             )
-            for occurrence_id, preview in pending_visuals:
-                if occurrence_id not in authorized or occurrence_id in getattr(
-                    image_context, "revoked_occurrences", set()
-                ):
-                    request_notices.append(
-                        "The requested image is no longer available in this conversation."
-                    )
-                    continue
-                if managed and self.provider.image_request_budget_supported is not True:
-                    request_notices.append(
-                        "This model adapter cannot verify image authorization on each provider attempt; "
-                        "only available descriptions will be used."
-                    )
-                    continue
-                if not supports_image:
-                    request_notices.append(
-                        "The current model cannot inspect the newly supplied image. "
-                        "Do not claim to have seen its contents."
-                    )
-                    continue
-                resolved = (
-                    await MediaResolver(
-                        preview,
-                        media_type="image",
-                    ).to_base64_data()
-                    if managed
-                    else await resolve_image_ref_to_base64_data(preview)
-                )
-                if resolved is None:
-                    request_notices.append(
-                        "The current image preview is unavailable. "
-                        "Do not claim to have inspected it."
-                    )
-                    continue
-                if managed:
-                    image_count += 1
-                    selected_occurrences.append(occurrence_id)
-                    selected_previews.append(preview)
-                    encoded_bytes += len(resolved.base64_data)
-                    if occurrence_id in image_context.retrieval_visuals:
-                        purpose = "review"
-                visual_parts.extend(
-                    [
-                        {"type": "text", "text": f"[Current image: {occurrence_id}]"},
-                        {
-                            "type": "image_url",
-                            "image_url": {"url": resolved.to_data_url()},
-                        },
+            invalid_occurrences = projected_occurrences - authorized
+            if managed and invalid_occurrences:
+                for message in payload["contexts"]:
+                    if not isinstance(message.get("content"), list):
+                        continue
+                    message["content"] = [
+                        (
+                            {
+                                "type": "text",
+                                "text": "[Image reference unavailable in this conversation]",
+                            }
+                            if isinstance(part, dict)
+                            and part.get("type") == "image_url"
+                            and isinstance(part.get("image_url"), dict)
+                            and part["image_url"].get("id") in invalid_occurrences
+                            else part
+                        )
+                        for part in message["content"]
                     ]
+                if isinstance(payload["extra_user_content_parts"], list):
+                    payload["extra_user_content_parts"] = [
+                        (
+                            TextPart(
+                                text="[Image reference unavailable in this conversation]"
+                            )
+                            if isinstance(part, ImageURLPart)
+                            and part.image_url.id in invalid_occurrences
+                            else part
+                        )
+                        for part in payload["extra_user_content_parts"]
+                    ]
+                request_notices.append(
+                    "A referenced image is no longer available in this conversation."
                 )
-            if managed:
+            can_verify = (
+                not managed or self.provider.image_request_budget_supported is True
+            )
+            if managed and supports_image and not can_verify and authorized:
+                for message in payload["contexts"]:
+                    if not isinstance(message.get("content"), list):
+                        continue
+                    message["content"] = [
+                        (
+                            {
+                                "type": "text",
+                                "text": "[Image reference omitted because this provider adapter cannot verify access]",
+                            }
+                            if isinstance(part, dict)
+                            and part.get("type") == "image_url"
+                            and isinstance(part.get("image_url"), dict)
+                            and part["image_url"].get("id") in authorized
+                            else part
+                        )
+                        for part in message["content"]
+                    ]
+                if isinstance(payload["extra_user_content_parts"], list):
+                    payload["extra_user_content_parts"] = [
+                        (
+                            TextPart(
+                                text="[Image reference omitted because this provider adapter cannot verify access]"
+                            )
+                            if isinstance(part, ImageURLPart)
+                            and part.image_url.id in authorized
+                            else part
+                        )
+                        for part in payload["extra_user_content_parts"]
+                    ]
+            if not supports_image and candidates:
+                request_notices.append(
+                    "The active model cannot view images. Image references were kept in the conversation, but no image was sent."
+                )
+            elif managed and not can_verify and candidates:
+                request_notices.append(
+                    "The active provider adapter cannot verify image access for each request attempt, so no stored images were sent."
+                )
+
+            if managed and supports_image and can_verify:
+                selected_occurrences.update(authorized)
+                visual_positions = []
+                for message in payload["contexts"]:
+                    if not isinstance(message.get("content"), list):
+                        continue
+                    for part in message["content"]:
+                        if (
+                            isinstance(part, dict)
+                            and part.get("type") == "image_url"
+                            and isinstance(part.get("image_url"), dict)
+                            and part["image_url"].get("id") in authorized
+                        ):
+                            visual_positions.append(part["image_url"]["url"])
+                if isinstance(payload["extra_user_content_parts"], list):
+                    for part in payload["extra_user_content_parts"]:
+                        if (
+                            isinstance(part, ImageURLPart)
+                            and part.image_url.id in authorized
+                        ):
+                            visual_positions.append(part.image_url.url)
+                for occurrence_id, preview in pending_only:
+                    if occurrence_id not in authorized:
+                        request_notices.append(
+                            "A current image is no longer available for this request."
+                        )
+                        continue
+                    image_message = next(
+                        (
+                            message
+                            for message in reversed(payload["contexts"])
+                            if message.get("role") == "user"
+                        ),
+                        None,
+                    )
+                    if image_message is None:
+                        image_message = {"role": "user", "content": []}
+                        payload["contexts"].append(image_message)
+                    if not isinstance(image_message.get("content"), list):
+                        image_message["content"] = [
+                            {"type": "text", "text": image_message["content"]}
+                        ]
+                    image_message["content"].extend(
+                        [
+                            {
+                                "type": "text",
+                                "text": f"[Current image: {occurrence_id}]",
+                            },
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": preview, "id": occurrence_id},
+                            },
+                        ]
+                    )
+                    visual_positions.append(preview)
+                image_count = len(visual_positions)
+                for preview in visual_positions:
+                    try:
+                        encoded_bytes += 4 * ((Path(preview).stat().st_size + 2) // 3)
+                    except OSError:
+                        pass
                 self._visual_token_estimate = await estimate_preview_tokens(
-                    selected_previews
+                    visual_positions
                 )
-            if visual_parts:
-                payload["contexts"].append({"role": "user", "content": visual_parts})
+            elif not managed and supports_image:
+                # Preserve request-only images for callers using the legacy runner path.
+                for occurrence_id, preview in pending_visuals:
+                    resolved = await resolve_image_ref_to_base64_data(preview)
+                    if resolved is None:
+                        continue
+                    if not isinstance(payload["extra_user_content_parts"], list):
+                        payload["extra_user_content_parts"] = []
+                    payload["extra_user_content_parts"].append(
+                        ImageURLPart(
+                            image_url=ImageURLPart.ImageURL(
+                                url=resolved.to_data_url(), id=occurrence_id
+                            )
+                        )
+                    )
             self._image_request_notices = list(dict.fromkeys(request_notices))
             if request_notices:
                 payload["contexts"].append(
@@ -656,24 +774,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             if budget is not None
             else nullcontext(current_image_request.get())
         )
-        unmetered = None
-        if managed and self.provider.image_request_budget_supported is not True:
-            # Opaque text adapters expose logical calls, not their hidden SDK attempts.
-            unmetered = {
-                "purpose": purpose,
-                "provider_id": provider_id,
-                "model": model,
-                "attempts": 1,
-                "attempts_kind": "logical",
-                "image_submissions": 0,
-                "encoded_bytes": 0,
-                "unknown_calls": 1,
-                "usage_known": False,
-                "token_usage": {"input_other": 0, "input_cached": 0, "output": 0},
-            }
-            if not hasattr(image_context, "unmetered_stats"):
-                image_context.unmetered_stats = []
-            image_context.unmetered_stats.append(unmetered)
         # Never retain a ContextVar token across an async-generator yield: the
         # consumer may close the generator from a different asyncio context.
         with scope as request_scope:
@@ -692,16 +792,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         current_image_request.reset(token)
                     if resp is None:
                         return
-                    if (
-                        unmetered is not None
-                        and not resp.is_chunk
-                        and resp.usage is not None
-                    ):
-                        unmetered.update(
-                            token_usage=resp.usage.__dict__.copy(),
-                            unknown_calls=0,
-                            usage_known=True,
-                        )
                     if budget is not None and not resp.is_chunk:
                         budget.record_usage(
                             resp.usage,
@@ -723,12 +813,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             finally:
                 current_image_request.reset(token)
             if resp is not None:
-                if unmetered is not None and resp.usage is not None:
-                    unmetered.update(
-                        token_usage=resp.usage.__dict__.copy(),
-                        unknown_calls=0,
-                        usage_known=True,
-                    )
                 if budget is not None:
                     budget.record_usage(
                         resp.usage,
@@ -847,7 +931,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     raise
                 if isinstance(exc, ImageAuthorizationRevoked):
                     authorized = await turn.authorize_visuals(
-                        list(turn.pending_visuals)
+                        set(turn.pending_visuals) | set(turn.projected_visuals)
                     )
                     for occurrence in list(turn.pending_visuals):
                         if occurrence not in authorized:
@@ -857,9 +941,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 turn.notices.append(
                     "The requested image is no longer available in this conversation."
                     if isinstance(exc, ImageAuthorizationRevoked)
-                    else "The visual request budget for this turn is exhausted. "
-                    "Use the available descriptions and explain the limit in your persona; "
-                    "do not claim additional images were inspected."
+                    else "The visual request limit for this turn has been reached. Explain the limitation naturally and do not claim to have seen images that were not sent."
                 )
                 try:
                     async for resp in self._iter_llm_responses(include_model=idx == 0):
@@ -901,12 +983,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self,
         contexts: list[Message] | list[dict[str, T.Any]],
     ) -> list[Message] | list[dict[str, T.Any]]:
-        if self.req.image_context is not None:
-            # Old inline history is omitted only in the request view. Its actual
-            # conversion belongs to the separate migration module.
-            contexts, _ = sanitize_contexts_by_modalities(
-                contexts, ["text", "audio", "tool_use"]
-            )
         modalities = self.provider.provider_config.get("modalities", None)
         if (
             not modalities
@@ -1136,12 +1212,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             self.stats.end_time = time.time()
             if turn is not None and turn.configured:
                 self.stats.image_usage = turn.budget.to_dict()
-                self.stats.image_usage["groups"].extend(
-                    getattr(turn, "unmetered_stats", [])
-                )
-                self.stats.image_usage["usage_unknown"] = any(
-                    group["unknown_calls"] for group in self.stats.image_usage["groups"]
-                )
                 self.stats.image_usage["visual_token_estimate"] = getattr(
                     self, "_visual_token_estimate", None
                 )

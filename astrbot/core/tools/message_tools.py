@@ -162,7 +162,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                             "occurrence_id": {
                                 "type": "string",
                                 "maxLength": 128,
-                                "description": "For `image` only, send an image selected from the current conversation's image catalog. Mutually exclusive with `path` and `url`.",
+                                "description": "For `image` only, send a stored original using an image reference ID from the current conversation. Mutually exclusive with `path` and `url`.",
                             },
                             "mention_user_id": {
                                 "type": "string",

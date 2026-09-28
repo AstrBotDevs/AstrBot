@@ -24,6 +24,7 @@ from astrbot.core.db.po import (
     ImageAsset,
 )
 from astrbot.core.db.sqlite import SQLiteDatabase
+from astrbot.core.image_request_budget import ImageRequestBudget
 from astrbot.core.pipeline.process_stage.method.agent_sub_stages.internal import (
     InternalAgentSubStage,
 )
@@ -98,6 +99,120 @@ async def test_three_preparation_passes_capture_once_and_keep_original_bytes(env
         next(iter(env.context.references.values())).source_message_id
         == "source-message"
     )
+
+
+@pytest.mark.asyncio
+async def test_history_projection_restores_authorized_image_without_description(env):
+    image_ref = await env.context.capture(str(env.source), max_size=64, event=env.event)
+    original = [
+        Message(role="user", content=[TextPart(text="Look at this"), image_ref]),
+        Message(role="assistant", content="I will inspect it."),
+    ]
+    stage = InternalAgentSubStage()
+    stage.conv_manager = ConversationManager(env.db)
+    await stage._save_to_history(
+        env.event,
+        env.request,
+        LLMResponse(role="assistant", completion_text="I will inspect it."),
+        original,
+        None,
+    )
+
+    provider = SimpleNamespace(
+        provider_config={"modalities": ["text", "image"]},
+        text_chat=AsyncMock(),
+    )
+    env.context.configure(
+        user_id="owner",
+        platform_id="test",
+        event=env.event,
+        max_size=64,
+        provider=provider,
+        budget=ImageRequestBudget(),
+    )
+    await env.context.prepare_step(provider, "vision-model")
+    projected = await env.context.project_messages(original)
+
+    assert [message.role for message in projected] == ["user", "assistant"]
+    assert [
+        part.type if not isinstance(part, TextPart) else "text"
+        for part in projected[0].content
+    ] == ["text", "text", "image_url"]
+    assert (
+        projected[0].content[1].text == f"[Image reference: {image_ref.occurrence_id}]"
+    )
+    preview = projected[0].content[2].image_url.url
+    assert projected[0].content[2].image_url.id == image_ref.occurrence_id
+    assert Path(preview).is_file()
+    assert env.context.projected_visuals == {image_ref.occurrence_id: preview}
+    assert isinstance(original[0].content[1], ImageRefPart)
+    assert env.context.provider is provider and env.context.model == "vision-model"
+    provider.text_chat.assert_not_awaited()
+    assert "description" not in json.dumps(
+        [message.model_dump() for message in projected]
+    )
+
+
+@pytest.mark.asyncio
+async def test_nonvisual_projection_does_not_read_authorized_image(env, monkeypatch):
+    image_ref = await env.context.capture(str(env.source), max_size=64, event=env.event)
+    provider = SimpleNamespace(provider_config={"modalities": ["image"]})
+    projection_provider = SimpleNamespace(provider_config={"modalities": ["text"]})
+    env.context.configure(
+        user_id="owner",
+        platform_id="test",
+        event=env.event,
+        max_size=64,
+        provider=provider,
+        budget=ImageRequestBudget(),
+    )
+    open_preview = AsyncMock()
+    monkeypatch.setattr(env.context, "open_preview", open_preview)
+
+    projected = await env.context.project_messages(
+        [Message(role="user", content=[image_ref])], provider=projection_provider
+    )
+
+    assert len(projected[0].content) == 1
+    assert "cannot view images" in projected[0].content[0].text
+    assert not env.context.projected_visuals
+    assert env.context.provider is provider
+    open_preview.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_visual_projection_rejects_unowned_and_mismatched_references(
+    env, monkeypatch
+):
+    owned = await env.context.capture(str(env.source), max_size=64, event=env.event)
+    provider = SimpleNamespace(provider_config={"modalities": ["image"]})
+    env.context.configure(
+        user_id="owner",
+        platform_id="test",
+        event=env.event,
+        max_size=64,
+        provider=provider,
+        budget=ImageRequestBudget(),
+    )
+    open_preview = AsyncMock()
+    monkeypatch.setattr(env.context, "open_preview", open_preview)
+    messages = [
+        Message(
+            role="user",
+            content=[
+                ImageRefPart(occurrence_id=owned.occurrence_id, asset_id="other-asset"),
+                ImageRefPart(occurrence_id="not-owned", asset_id="other-asset"),
+            ],
+        )
+    ]
+
+    projected = await env.context.project_messages(messages)
+
+    assert all(
+        "unavailable in this conversation" in part.text for part in projected[0].content
+    )
+    assert not env.context.projected_visuals
+    open_preview.assert_not_awaited()
 
 
 @pytest.mark.asyncio

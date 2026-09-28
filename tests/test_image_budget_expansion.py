@@ -1,4 +1,4 @@
-"""Regression tests for the expanded per-request image budget."""
+"""Regression tests for image request accounting without visual size caps."""
 
 import httpx
 import pytest
@@ -40,8 +40,6 @@ async def test_actual_openai_sdk_accepts_payload_above_previous_byte_limit():
         return httpx.Response(200, json=response_body("openai"))
 
     budget = ImageRequestBudget()
-    assert budget.max_caption_attempts == 2
-    assert budget.max_review_triggers is None
     assert budget.max_image_submissions is None
     async with sdk_provider("openai", handler) as provider:
         oversized = payload("openai")

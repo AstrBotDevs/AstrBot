@@ -1,4 +1,4 @@
-"""Controlled rereads preserve grants, assets, and current provider boundaries."""
+"""Conversation history resolves image references to authorized original assets."""
 
 import json
 from pathlib import Path
@@ -12,11 +12,10 @@ from sqlmodel import select
 
 from astrbot.core import image_asset_store as storage
 from astrbot.core import image_context as images
-from astrbot.core.agent.message import ImageRefPart, Message, TextPart
+from astrbot.core.agent.message import ImageRefPart, ImageURLPart, Message, TextPart
 from astrbot.core.db.po import ConversationImageRef, ImageAsset
 from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.image_request_budget import ImageRequestBudget
-from astrbot.core.tools.image_tools import ImageCatalogTool, ReadImageTool
 
 
 @pytest_asyncio.fixture
@@ -69,13 +68,33 @@ async def gallery(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_reread_original_survives_cache_without_new_asset_or_reference(gallery):
-    before = gallery.part.model_dump()
-    result = await gallery.turn.read_existing(gallery.part.occurrence_id)
-    assert "queued" in result
-    assert Path(gallery.turn.pending_visuals[gallery.part.occurrence_id]).exists()
-    assert gallery.turn.references == {}
-    assert gallery.part.model_dump() == before
+async def test_cached_preview_does_not_bypass_deleted_grant(gallery):
+    await gallery.turn.open_preview(gallery.part.occurrence_id)
+    await gallery.db.delete_conversation("conversation")
+    with pytest.raises(PermissionError):
+        await gallery.turn.open_preview(gallery.part.occurrence_id)
+
+
+@pytest.mark.asyncio
+async def test_projection_resolves_original_without_mutating_history(gallery):
+    reference = ImageRefPart.model_validate(
+        {**gallery.part.model_dump(), "description": "legacy observation"}
+    )
+    message = Message(role="user", content=[reference])
+    projected = await gallery.turn.project_messages([message])
+    assert isinstance(message.content[0], ImageRefPart)
+    assert message.content[0].description == "legacy observation"
+    assert reference.to_text() == f"[Image reference: {reference.occurrence_id}]"
+    assert isinstance(projected[0].content[0], TextPart)
+    assert (
+        projected[0].content[0].text == f"[Image reference: {reference.occurrence_id}]"
+    )
+    assert isinstance(projected[0].content[1], ImageURLPart)
+    assert (
+        projected[0].content[1].image_url.url
+        == gallery.turn.projected_visuals[reference.occurrence_id]
+    )
+    assert "legacy observation" not in str(projected[0].model_dump())
     async with gallery.db.get_db() as session:
         assert len((await session.execute(select(ImageAsset))).scalars().all()) == 1
         assert (
@@ -85,111 +104,13 @@ async def test_reread_original_survives_cache_without_new_asset_or_reference(gal
 
 
 @pytest.mark.asyncio
-async def test_cached_preview_does_not_bypass_deleted_grant(gallery):
-    await gallery.turn.open_preview(gallery.part.occurrence_id)
-    await gallery.db.delete_conversation("conversation")
-    with pytest.raises(PermissionError):
-        await gallery.turn.open_preview(gallery.part.occurrence_id)
-
-
-@pytest.mark.asyncio
-async def test_catalog_has_no_paths_and_exact_reply_filter(gallery):
-    result = await gallery.turn.catalog(source_message_id="reply-id")
-    assert result["images"][0]["occurrence_id"] == gallery.part.occurrence_id
-    assert "asset_id" not in json.dumps(result)
-    assert "storage_key" not in json.dumps(result)
-    assert not (await gallery.turn.catalog(source_message_id="another"))["images"]
-
-
-@pytest.mark.asyncio
-async def test_project_refreshes_annotation_without_mutation(gallery):
-    occurrence = gallery.part.occurrence_id
-    assert "updated" in await gallery.turn.update_note(
-        occurrence, "It is a bag, not a cat."
-    )
-    message = Message(role="user", content=[gallery.part])
-    projected = await gallery.turn.project_messages([message])
-    assert isinstance(message.content[0], ImageRefPart)
-    assert isinstance(projected[0].content[0], TextPart)
-    assert "User annotation" in projected[0].content[0].text
-    assert "bag" in projected[0].content[0].text
-    assert (await gallery.turn.get_reference(occurrence)).description == ""
-
-
-@pytest.mark.asyncio
-async def test_projection_and_read_refuse_other_owner(gallery):
+async def test_projection_refuses_other_owner(gallery):
     gallery.turn.user_id = "someone-else"
-    assert "unavailable" in await gallery.turn.read_existing(gallery.part.occurrence_id)
-    assert gallery.turn.budget.review_triggers == 0
     projected = await gallery.turn.project_messages(
         [Message(role="user", content=[gallery.part])]
     )
     assert "unavailable" in projected[0].content[0].text
-
-
-@pytest.mark.asyncio
-async def test_repeated_reviews_remain_available_and_counted(gallery):
-    occurrence = gallery.part.occurrence_id
-    for _ in range(20):
-        assert "queued" in await gallery.turn.read_existing(occurrence)
-    assert gallery.turn.budget.review_triggers == 20
-    assert len(gallery.turn.pending_visuals) == 1
-
-
-@pytest.mark.asyncio
-async def test_nonvisual_directed_answer_does_not_queue_image(gallery, monkeypatch):
-    from astrbot.core import image_description
-
-    caption = AsyncMock(return_value="The label says OPEN.")
-    monkeypatch.setattr(image_description, "describe_images", caption)
-    gallery.turn.caption_provider = object()
-    gallery.turn.provider = SimpleNamespace(
-        provider_config={"modalities": ["text", "tool_use"]}
-    )
-    answer = await gallery.turn.read_existing(
-        gallery.part.occurrence_id, question="Read the label"
-    )
-    assert answer == "The label says OPEN."
-    assert not gallery.turn.pending_visuals
-    assert caption.call_args.kwargs["question"] == "Read the label"
-    assert not caption.call_args.kwargs["refresh"]
-
-
-@pytest.mark.asyncio
-async def test_explicit_refresh_uses_structured_caption(gallery, monkeypatch):
-    from astrbot.core import image_description
-
-    caption = AsyncMock(return_value=None)
-    monkeypatch.setattr(image_description, "describe_images", caption)
-    gallery.turn.caption_provider = object()
-    await gallery.turn.read_existing(
-        gallery.part.occurrence_id, refresh_description=True
-    )
-    assert caption.call_args.kwargs["refresh"] is True
-    assert gallery.part.occurrence_id in gallery.turn.pending_visuals
-
-
-@pytest.mark.asyncio
-async def test_previous_turn_requires_one_authorized_user_image(gallery):
-    assert (
-        await gallery.turn.previous_input(gallery.history) == gallery.part.occurrence_id
-    )
-    history = gallery.history + [
-        {"role": "user", "content": "new text"},
-        {"role": "_checkpoint", "content": {"id": "cp2"}},
-    ]
-    assert await gallery.turn.previous_input(history) is None
-
-
-@pytest.mark.asyncio
-async def test_tools_accept_only_scoped_occurrence_and_bounded_arguments(gallery):
-    wrapper = SimpleNamespace(context=SimpleNamespace(image_context=gallery.turn))
-    result = await ImageCatalogTool().call(wrapper, query="x" * 257)
-    assert "256" in result
-    result = await ReadImageTool().call(
-        wrapper, occurrence_id="not-authorized", owner="owner"
-    )
-    assert "unavailable" in result
+    assert gallery.turn.projected_visuals == {}
 
 
 @pytest.mark.asyncio
@@ -289,18 +210,6 @@ async def test_collect_regeneration_accepts_only_internal_marker(
 
 
 @pytest.mark.asyncio
-async def test_provider_switch_rebinds_implicit_caption_but_keeps_explicit(gallery):
-    fallback = SimpleNamespace(provider_config={"modalities": ["image"]})
-    await gallery.turn.prepare_step(fallback, "fallback-model")
-    assert gallery.turn.caption_provider is fallback
-    assert gallery.turn.caption_model == "fallback-model"
-    gallery.turn.caption_explicit = True
-    gallery.turn.caption_provider = None
-    await gallery.turn.prepare_step(fallback, "other-model")
-    assert gallery.turn.caption_provider is None
-
-
-@pytest.mark.asyncio
 async def test_service_regeneration_rebinds_then_skips_expired_display_image(gallery):
     from astrbot.core.conversation_mgr import ConversationManager
     from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
@@ -362,17 +271,3 @@ async def test_service_regeneration_rebinds_then_skips_expired_display_image(gal
     with pytest.raises(StopAfterParts):
         await service.build_chat_stream("user", payload)
     assert service.build_user_message_parts.call_args.args[0][0]["type"] == "image"
-
-
-@pytest.mark.asyncio
-async def test_hook_deleting_explicit_retrieval_marker_removes_its_visual(gallery):
-    from astrbot.core.provider.entities import ProviderRequest
-    from astrbot.core.utils.image_input import prepare_request_images
-
-    occurrence = gallery.part.occurrence_id
-    await gallery.turn.read_existing(occurrence)
-    marker = TextPart(text="Explicit image review").mark_as_temp()
-    gallery.turn.part_visual_keys[id(marker)] = occurrence
-    request = ProviderRequest(image_context=gallery.turn, extra_user_content_parts=[])
-    await prepare_request_images(request, gallery.event, max_size=64, prepared={})
-    assert not gallery.turn.pending_visuals

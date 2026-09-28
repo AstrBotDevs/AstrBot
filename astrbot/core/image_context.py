@@ -26,7 +26,6 @@ from astrbot.core.image_asset_store import (
 )
 from astrbot.core.image_request_budget import (
     ImageAuthorizationRevoked,
-    ImageBudgetExceeded,
 )
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.media_utils import (
@@ -79,9 +78,7 @@ class ImageTurnContext:
         self._hook_legacy_remaining: list[dict] = []
         self.configured = False
         self.preview_cache: dict[str, str] = {}
-        self.preview_representations: dict[str, str] = {}
-        self.retrieval_visuals: set[str] = set()
-        self.description_attempted: set[str] = set()
+        self.projected_visuals: dict[str, str] = {}
         self.persisted_references: dict[str, ConversationImageRef] = {}
         self.revoked = False
         self.revoked_occurrences: set[str] = set()
@@ -150,9 +147,9 @@ class ImageTurnContext:
         if self.revoked:
             return set()
         candidates = set(occurrence_ids) - self.revoked_occurrences
-        current = (
-            set(self.references) | (set(self.pending_visuals) - self.retrieval_visuals)
-        ) - set(self.persisted_references)
+        current = (set(self.references) | set(self.pending_visuals)) - set(
+            self.persisted_references
+        )
         authorized = candidates & current
         stored = list(candidates - current)
         for offset in range(0, len(stored), 100):
@@ -177,12 +174,9 @@ class ImageTurnContext:
         max_size,
         provider,
         model=None,
-        caption_provider=None,
-        caption_model=None,
         budget=None,
-        caption_explicit=False,
     ) -> None:
-        """Bind trusted execution identity and the explicitly selected providers.
+        """Bind trusted execution identity and the active chat provider.
 
         Args:
             user_id: Server-selected conversation owner.
@@ -191,17 +185,12 @@ class ImageTurnContext:
             max_size: Model preview edge limit.
             provider: Current main provider.
             model: Current explicit main model.
-            caption_provider: Selected description provider, or None if unavailable.
-            caption_model: Explicit description model override.
             budget: Shared request/turn accounting object.
-            caption_explicit: Whether an explicitly configured provider must remain fixed.
         """
         self.user_id, self.platform_id = user_id, platform_id
         self.event, self.max_size = event, max_size
         self.provider, self.model = provider, model
-        self.caption_provider, self.caption_model = caption_provider, caption_model
         self.budget = budget
-        self.caption_explicit = caption_explicit
         self.configured = True
 
     async def get_reference(self, occurrence_id: str) -> ConversationImageRef | None:
@@ -257,7 +246,7 @@ class ImageTurnContext:
             max_pixels=MAX_CONTEXT_IMAGE_PIXELS,
             max_frames=MAX_CONTEXT_IMAGE_FRAMES,
         )
-        target = Path(get_astrbot_temp_path()) / f"image-review-{uuid.uuid4()}.img"
+        target = Path(get_astrbot_temp_path()) / f"image-context-{uuid.uuid4()}.img"
         target.parent.mkdir(parents=True, exist_ok=True)
         self.event.track_temporary_local_file(str(target))
 
@@ -284,139 +273,67 @@ class ImageTurnContext:
         )
         if prepared is None:
             raise OSError("Image preview unavailable")
-        path, montage, cleanup, _ = prepared
+        path, _, cleanup, _ = prepared
         if cleanup:
             self.event.track_temporary_local_file(path)
         self.preview_cache[occurrence_id] = path
-        self.preview_representations[occurrence_id] = (
-            "animation_montage" if montage else "model_preview"
-        )
         self.persisted_references[occurrence_id] = reference
         return path
 
-    async def catalog(self, *, query=None, cursor=None, source_message_id=None):
-        """List bounded authorized metadata without reading image files.
-
-        Args:
-            query: Optional literal description search.
-            cursor: Last sequence and occurrence returned by a prior page.
-            source_message_id: Optional exact platform reply target.
-
-        Returns:
-            Bounded entries and the next cursor; paths and asset IDs are omitted.
-        """
-        rows, next_cursor = await self.db.list_conversation_images(
-            self.conversation_id,
-            user_id=self.user_id,
-            platform_id=self.platform_id,
-            limit=20,
-            cursor=cursor,
-            query=query,
-            source_message_id=source_message_id,
-        )
-        entries = [
-            {
-                key: row.get(key)
-                for key in (
-                    "occurrence_id",
-                    "source_message_id",
-                    "image_index",
-                    "checkpoint_sequence",
-                    "description",
-                    "description_status",
-                    "user_annotation",
-                    "asset_state",
-                )
-            }
-            for row in rows
-        ]
-        return {"images": entries, "next_cursor": next_cursor}
-
     async def prepare_step(self, provider, model=None) -> None:
-        """Describe unprocessed current inputs and bind the active provider.
+        """Bind the provider and model selected for the next chat request.
 
         Args:
             provider: Actual provider for this attempt, including fallbacks.
             model: Explicit model override for this attempt.
         """
         self.provider, self.model = provider, model
-        if not self.configured:
-            return
-        modalities = provider.provider_config.get("modalities")
-        if modalities and "tool_use" not in modalities:
-            notice = "The active model cannot call image catalog or review tools. Use available descriptions and explicitly injected images; ask for clarification when a target is ambiguous."
-            if notice not in self.notices:
-                self.notices.append(notice)
-        if not self.caption_explicit:
-            modalities = provider.provider_config.get("modalities")
-            self.caption_provider = (
-                provider if not modalities or "image" in modalities else None
-            )
-            self.caption_model = model
-        if self.caption_provider is None:
-            return
-        from astrbot.core.image_description import describe_images
 
-        pending = [
-            occurrence
-            for occurrence in self.pending_visuals
-            if occurrence in self.references
-            and occurrence not in self.description_attempted
-        ]
-        if pending:
-            self.description_attempted.update(pending)
-            try:
-                await describe_images(
-                    self,
-                    self.caption_provider,
-                    model=self.caption_model,
-                    occurrence_ids=pending,
-                )
-            except ImageBudgetExceeded:
-                self.notices.append(
-                    "The image description budget is exhausted; remaining descriptions are pending."
-                )
-
-    async def project_messages(self, messages: list[Message]) -> list[Message]:
-        """Project fresh authorized descriptions without mutating persistent messages.
+    async def project_messages(
+        self, messages: list[Message], *, provider=None
+    ) -> list[Message]:
+        """Resolve authorized history references to previews for this request.
 
         Args:
             messages: Current runner messages, including lightweight references.
+            provider: Optional provider override for summarization or fallback.
 
         Returns:
-            Same ordered messages with reference content projected to ordinary text.
+            Deep-copied messages with authorized images at their original positions.
         """
         projected = copy.deepcopy(messages)
-        ids = list(
-            dict.fromkeys(
-                part.occurrence_id
-                for message in messages
-                if isinstance(message.content, list)
-                for part in message.content
-                if isinstance(part, ImageRefPart)
-                and (
-                    part.occurrence_id not in self.references
-                    or part.occurrence_id in self.persisted_references
-                )
-            )
-        )
+        self.projected_visuals.clear()
+        references = {
+            part.occurrence_id: part
+            for message in messages
+            if isinstance(message.content, list)
+            for part in message.content
+            if isinstance(part, ImageRefPart)
+        }
+        ids = list(references)
         authorized = {
             key: ref
             for key, ref in self.references.items()
-            if key not in self.persisted_references
+            if key in references and key not in self.persisted_references
         }
-        for offset in range(0, len(ids), 100):
+        lookup_ids = [key for key in ids if key not in authorized]
+        for offset in range(0, len(lookup_ids), 100):
             rows = await self.db.get_conversation_images(
                 self.conversation_id,
-                ids[offset : offset + 100],
+                lookup_ids[offset : offset + 100],
                 user_id=self.user_id,
                 platform_id=self.platform_id,
+                available_only=True,
             )
             authorized.update({row.occurrence_id: row for row in rows})
         if self.revoked:
             authorized.clear()
         for key in self.revoked_occurrences:
             authorized.pop(key, None)
+        selected_provider = provider or self.provider
+        provider_config = getattr(selected_provider, "provider_config", {})
+        modalities = provider_config.get("modalities")
+        supports_image = not modalities or "image" in modalities
         for message in projected:
             if not isinstance(message.content, list):
                 continue
@@ -424,158 +341,57 @@ class ImageTurnContext:
             for part in message.content:
                 if isinstance(part, ImageRefPart):
                     ref = authorized.get(part.occurrence_id)
-                    text = f"[Image reference: {part.occurrence_id}; unavailable]"
-                    if ref is not None:
-                        text = (
-                            f"[Image reference: {ref.occurrence_id}; description status: "
-                            f"{ref.description_status}]\n{ref.description}"
+                    marker = f"[Image reference: {part.occurrence_id}]"
+                    if ref is None or ref.asset_id != part.asset_id:
+                        parts.append(
+                            TextPart(
+                                text=f"{marker} [unavailable in this conversation]"
+                            )
                         )
-                        if ref.user_annotation:
-                            text += f"\n[User annotation, separate from model observation]\n{ref.user_annotation}"
-                    part = TextPart(text=text)
+                        continue
+                    if not supports_image:
+                        parts.append(
+                            TextPart(
+                                text=f"{marker} [the active model cannot view images]"
+                            )
+                        )
+                        continue
+                    try:
+                        preview = await self.open_preview(part.occurrence_id)
+                    except (PermissionError, OSError, ValueError) as exc:
+                        if isinstance(exc, OSError) and not is_recoverable_image_error(
+                            exc
+                        ):
+                            raise
+                        notice = (
+                            "A referenced image could not be prepared for this request."
+                        )
+                        if notice not in self.notices:
+                            self.notices.append(notice)
+                        parts.append(TextPart(text=f"{marker} [image unavailable]"))
+                        continue
+                    if self.revoked or part.occurrence_id in self.revoked_occurrences:
+                        parts.append(
+                            TextPart(
+                                text=f"{marker} [unavailable in this conversation]"
+                            )
+                        )
+                        continue
+                    self.projected_visuals[part.occurrence_id] = preview
+                    parts.extend(
+                        [
+                            TextPart(text=marker),
+                            ImageURLPart(
+                                image_url=ImageURLPart.ImageURL(
+                                    url=preview, id=part.occurrence_id
+                                )
+                            ),
+                        ]
+                    )
+                    continue
                 parts.append(part)
             message.content = parts
         return projected
-
-    async def previous_input(self, history: list[dict]) -> str | None:
-        """Resolve a unique user image in the most recent visible complete turn.
-
-        Args:
-            history: Server-loaded history including checkpoint boundaries.
-
-        Returns:
-            An authorized occurrence, or None when absent or ambiguous.
-        """
-        end = next(
-            (
-                index
-                for index in range(len(history) - 1, -1, -1)
-                if history[index].get("role") == "_checkpoint"
-            ),
-            None,
-        )
-        if end is None:
-            return None
-        start = next(
-            (
-                index + 1
-                for index in range(end - 1, -1, -1)
-                if history[index].get("role") == "_checkpoint"
-            ),
-            0,
-        )
-        occurrences = list(
-            dict.fromkeys(
-                part.get("occurrence_id")
-                for message in history[start:end]
-                if message.get("role") == "user"
-                and isinstance(message.get("content"), list)
-                for part in message["content"]
-                if isinstance(part, dict) and part.get("type") == "image_ref"
-            )
-        )
-        if len(occurrences) != 1:
-            return None
-        reference = await self.get_reference(occurrences[0])
-        return reference.occurrence_id if reference else None
-
-    async def read_existing(
-        self, occurrence_id, *, question="", refresh_description=False
-    ):
-        """Queue a controlled reread, or answer through the selected caption model.
-
-        Args:
-            occurrence_id: Conversation-scoped target.
-            question: Optional directed visual question.
-            refresh_description: Explicit request for a new structured observation.
-
-        Returns:
-            Tool-visible text; image bytes remain in the transient request queue.
-        """
-        from astrbot.core.image_description import describe_images
-
-        reference = await self.get_reference(occurrence_id)
-        if reference is None:
-            return "Image is unavailable in this conversation."
-        try:
-            self.budget.consume_review()
-        except ImageBudgetExceeded:
-            self.notices.append(
-                "The image review limit for this turn has been reached."
-            )
-            return "Image review limit reached; use existing descriptions or ask in another turn."
-        try:
-            preview = await self.open_preview(occurrence_id)
-        except (PermissionError, OSError, ValueError) as exc:
-            if isinstance(exc, OSError) and not is_recoverable_image_error(exc):
-                raise
-            return "The authorized image original is currently unavailable."
-        modalities = self.provider.provider_config.get("modalities")
-        visual = not modalities or "image" in modalities
-        if refresh_description or not visual:
-            if self.caption_provider is None:
-                return (
-                    "No configured visual description provider is available. Existing description: "
-                    + reference.description
-                )
-            try:
-                answer = await describe_images(
-                    self,
-                    self.caption_provider,
-                    model=self.caption_model,
-                    question=question or None,
-                    occurrence_ids=[occurrence_id],
-                    refresh=refresh_description,
-                )
-            except ImageBudgetExceeded:
-                self.notices.append("The image description budget is exhausted.")
-                return "Image description budget exhausted; no additional visual request was sent."
-            if not visual:
-                return (
-                    answer
-                    or "The requested image description is available in the image catalog."
-                )
-        if self.revoked or occurrence_id in self.revoked_occurrences:
-            return "Image is unavailable in this conversation."
-        self.pending_visuals[occurrence_id] = preview
-        self.retrieval_visuals.add(occurrence_id)
-        return "The authorized image is queued for the next visual step."
-
-    async def update_note(self, occurrence_id: str, annotation: str) -> str:
-        """Store an explicit user correction independently of model observations.
-
-        Args:
-            occurrence_id: Authorized occurrence.
-            annotation: User-provided correction, not a generated observation.
-
-        Returns:
-            Status without exposing private asset metadata.
-        """
-        if not isinstance(annotation, str) or len(annotation) > 4096:
-            return "User annotation must be at most 4096 characters."
-        ref = await self.get_reference(occurrence_id)
-        if ref is None:
-            return "Image is unavailable in this conversation."
-        if (
-            occurrence_id in self.references
-            and occurrence_id not in self.persisted_references
-        ):
-            ref.user_annotation = annotation
-            return "User annotation updated separately from the image description."
-        updated = await self.db.update_image_annotation(
-            self.conversation_id,
-            occurrence_id,
-            user_id=self.user_id,
-            platform_id=self.platform_id,
-            expected_checkpoint_id=ref.checkpoint_id,
-            expected_annotation=ref.user_annotation,
-            annotation=annotation,
-        )
-        return (
-            "User annotation updated."
-            if updated
-            else "Image changed; obtain its latest catalog entry before retrying."
-        )
 
     async def capture(
         self,
@@ -672,9 +488,6 @@ class ImageTurnContext:
                     self.notices.append(storage_notice)
                 self.pending_visuals[occurrence] = preview_path
                 self.preview_cache[occurrence] = preview_path
-                self.preview_representations[occurrence] = (
-                    "animation_montage" if montage else "model_preview"
-                )
                 if asset is not None:
                     association = ConversationImageRef(
                         conversation_id=self.conversation_id,

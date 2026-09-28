@@ -5,7 +5,7 @@ from astrbot.core.utils.media_utils import is_recoverable_image_error
 from ..message import Message
 from .compressor import LLMSummaryCompressor, TruncateByTurnsCompressor
 from .config import ContextConfig
-from .token_counter import EstimateTokenCounter, estimate_preview_tokens
+from .token_counter import EstimateTokenCounter, count_projected_tokens
 from .truncator import ContextTruncator
 
 
@@ -70,22 +70,21 @@ class ContextManager:
 
             # 2. 基于 token 的压缩
             if self.config.max_context_tokens > 0:
-                count_messages = result
-                visual_tokens = 0
                 if self.config.image_context is not None:
-                    count_messages = await self.config.image_context.project_messages(
-                        result
+                    projected_messages = (
+                        await self.config.image_context.project_messages(result)
                     )
-                    estimates = await estimate_preview_tokens(
-                        self.config.image_context.pending_visuals.values()
+                    total_tokens = await count_projected_tokens(
+                        projected_messages,
+                        self.config.image_context,
+                        self.token_counter,
                     )
-                    visual_tokens = estimates["tokens"]
                     # Prior usage describes a different request, not this projection.
                     trusted_token_usage = 0
-                total_tokens = (
-                    self.token_counter.count_tokens(count_messages, trusted_token_usage)
-                    + visual_tokens
-                )
+                else:
+                    total_tokens = self.token_counter.count_tokens(
+                        result, trusted_token_usage
+                    )
 
                 if self.compressor.should_compress(
                     result, total_tokens, self.config.max_context_tokens
@@ -122,17 +121,17 @@ class ContextManager:
         messages = await self.compressor(messages)
 
         # double check
-        count_messages = messages
-        visual_tokens = 0
         if self.config.image_context is not None:
-            count_messages = await self.config.image_context.project_messages(messages)
-            estimates = await estimate_preview_tokens(
-                self.config.image_context.pending_visuals.values()
+            projected_messages = await self.config.image_context.project_messages(
+                messages
             )
-            visual_tokens = estimates["tokens"]
-        tokens_after_summary = (
-            self.token_counter.count_tokens(count_messages) + visual_tokens
-        )
+            tokens_after_summary = await count_projected_tokens(
+                projected_messages,
+                self.config.image_context,
+                self.token_counter,
+            )
+        else:
+            tokens_after_summary = self.token_counter.count_tokens(messages)
 
         # calculate compress rate
         compress_rate = (tokens_after_summary / self.config.max_context_tokens) * 100

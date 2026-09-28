@@ -98,10 +98,7 @@ async def prepare_request_images(
             if id(part) in context.part_visual_keys
         }
         for key in list(context.pending_visuals):
-            if key not in retained and (
-                key not in context.retrieval_visuals
-                or key in context.part_visual_keys.values()
-            ):
+            if key not in retained:
                 del context.pending_visuals[key]
         return
 

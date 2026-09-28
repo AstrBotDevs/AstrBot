@@ -2,7 +2,6 @@
 
 import asyncio
 import gc
-import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -19,10 +18,26 @@ from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.exceptions import EmptyModelOutputError
-from astrbot.core.image_description import describe_images
 from astrbot.core.image_request_budget import ImageRequestBudget, charge_image_attempt
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest
 from astrbot.core.provider.provider import Provider
+
+
+def has_visual(payload):
+    """Check the native image parts submitted to the provider adapter.
+
+    Args:
+        payload: Keyword arguments received by the test provider.
+
+    Returns:
+        Whether any user message contains an image input.
+    """
+    return any(
+        part.get("type") == "image_url"
+        for message in payload.get("contexts", [])
+        if isinstance(message.get("content"), list)
+        for part in message["content"]
+    )
 
 
 @pytest_asyncio.fixture(autouse=True)
@@ -82,7 +97,6 @@ async def revocation(tmp_path, monkeypatch):
             max_size=64,
             provider=provider,
             budget=ImageRequestBudget(),
-            caption_explicit=True,
         )
         return turn
 
@@ -141,7 +155,7 @@ async def test_unsaved_new_image_is_not_falsely_rejected(revocation, temporary):
         platform_id="test",
     )
     await run_visual(turn, revocation.provider, part)
-    assert "data:image" in str(revocation.provider.text_chat.call_args.kwargs)
+    assert has_visual(revocation.provider.text_chat.call_args.kwargs)
     assert turn.budget.image_submissions == 1
 
 
@@ -178,7 +192,7 @@ async def test_deleted_conversation_blocks_new_capture(
         part = await capture(turn, revocation.source, temporary=temporary)
         await turn.db.delete_conversation(turn.conversation_id)
     await run_visual(turn, revocation.provider, part)
-    assert "data:image" not in str(revocation.provider.text_chat.call_args.kwargs)
+    assert not has_visual(revocation.provider.text_chat.call_args.kwargs)
     assert turn.budget.image_submissions == 0
 
 
@@ -197,7 +211,7 @@ async def test_deletion_is_scoped_to_conversation_and_owner(revocation, all_owne
         await revocation.db.delete_conversation("a")
     for index, (turn, part) in enumerate(zip(turns, parts)):
         await run_visual(turn, revocation.provider, part)
-        actual = "data:image" in str(revocation.provider.text_chat.call_args.kwargs)
+        actual = has_visual(revocation.provider.text_chat.call_args.kwargs)
         assert actual is (index == 2 or (index == 1 and not all_owner))
 
 
@@ -213,9 +227,9 @@ async def test_identical_ids_in_different_databases_are_isolated(revocation):
         surviving_part = await capture(surviving, revocation.source)
         await deleted.db.delete_conversation(deleted.conversation_id)
         await run_visual(deleted, revocation.provider, deleted_part)
-        assert "data:image" not in str(revocation.provider.text_chat.call_args.kwargs)
+        assert not has_visual(revocation.provider.text_chat.call_args.kwargs)
         await run_visual(surviving, revocation.provider, surviving_part)
-        assert "data:image" in str(revocation.provider.text_chat.call_args.kwargs)
+        assert has_visual(revocation.provider.text_chat.call_args.kwargs)
     finally:
         await other_db.engine.dispose()
 
@@ -248,7 +262,7 @@ async def test_failed_delete_rolls_back_without_revoking(revocation, all_owner):
         turn.conversation_id, [part.occurrence_id], user_id="owner", platform_id="test"
     )
     await run_visual(turn, revocation.provider, part)
-    assert "data:image" in str(revocation.provider.text_chat.call_args.kwargs)
+    assert has_visual(revocation.provider.text_chat.call_args.kwargs)
 
 
 @pytest.mark.asyncio
@@ -268,14 +282,18 @@ async def test_edit_removes_cached_image_authorization(revocation, cached_curren
             max_size=64,
             provider=revocation.provider,
             budget=ImageRequestBudget(),
-            caption_explicit=True,
         )
-        assert "queued" in await turn.read_existing(part.occurrence_id)
+    from astrbot.core.agent.message import Message
+
+    await turn.project_messages([Message(role="user", content=[part])])
     await revocation.db.update_conversation(
         "conversation", content=[], expected_history=history, prune_image_refs=True
     )
-    await run_visual(turn, revocation.provider, part)
-    assert "data:image" not in str(revocation.provider.text_chat.call_args.kwargs)
+    assert await turn.authorize_visuals([part.occurrence_id]) == set()
+    from astrbot.core.image_request_budget import ImageAuthorizationRevoked
+
+    with pytest.raises(ImageAuthorizationRevoked):
+        turn.check_visual_authorization([part.occurrence_id])
     with pytest.raises(PermissionError):
         await turn.open_preview(part.occurrence_id)
 
@@ -313,137 +331,35 @@ async def test_delete_after_started_request_blocks_retry_and_next_step(
     )
     async for _ in runner._iter_llm_responses_with_fallback():
         pass
-    assert "data:image" in str(calls[0])
+    assert has_visual(calls[0])
     assert len(calls) >= 3
-    assert all("data:image" not in str(payload) for payload in calls[1:])
+    assert all(not has_visual(payload) for payload in calls[1:])
     assert turn.budget.image_submissions == 1
 
 
 @pytest.mark.asyncio
-async def test_delete_before_caption_prevents_provider_call(revocation):
-    turn = await revocation.create_turn()
-    part = await capture(turn, revocation.source)
-    await turn.db.delete_conversation(turn.conversation_id)
-    await describe_images(
-        turn, revocation.provider, occurrence_ids=[part.occurrence_id]
-    )
-    revocation.provider.text_chat.assert_not_called()
-    assert turn.budget.image_submissions == 0
-
-
-@pytest.mark.asyncio
-async def test_delete_during_caption_does_not_commit_description(revocation):
-    turn = await revocation.create_turn()
-    part = await capture(turn, revocation.source)
-    reference = turn.references[part.occurrence_id]
-    entered, release = asyncio.Event(), asyncio.Event()
-
-    async def blocked_caption(**payload):
-        charge_image_attempt(payload)
-        entered.set()
-        await release.wait()
-        return LLMResponse(
-            role="assistant",
-            completion_text=json.dumps(
-                {
-                    "images": [
-                        {
-                            "image_id": part.occurrence_id,
-                            "description": "must not commit",
-                        }
-                    ],
-                    "answer": "must not return",
-                }
-            ),
-        )
-
-    revocation.provider.text_chat.side_effect = blocked_caption
-    task = asyncio.create_task(
-        describe_images(
-            turn,
-            revocation.provider,
-            occurrence_ids=[part.occurrence_id],
-            question="What?",
-        )
-    )
-    await asyncio.wait_for(entered.wait(), 5)
-    try:
-        await turn.db.delete_conversation(turn.conversation_id)
-    finally:
-        release.set()
-    assert await asyncio.wait_for(task, 5) is None
-    assert reference.description_status == "pending"
-    assert reference.description_version == 0
-    assert "unavailable" in await turn.read_existing(part.occurrence_id)
-
-
-@pytest.mark.asyncio
-async def test_caption_cancellation_propagates_without_updating(revocation):
-    turn = await revocation.create_turn()
-    part = await capture(turn, revocation.source)
-    reference = turn.references[part.occurrence_id]
-    entered = asyncio.Event()
-
-    async def cancelled_caption(**payload):
-        charge_image_attempt(payload)
-        entered.set()
-        await asyncio.Event().wait()
-
-    revocation.provider.text_chat.side_effect = cancelled_caption
-    task = asyncio.create_task(
-        describe_images(turn, revocation.provider, occurrence_ids=[part.occurrence_id])
-    )
-    await asyncio.wait_for(entered.wait(), 5)
-    task.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await task
-    assert reference.description_status == "pending"
-    assert reference.description_version == 0
-    assert turn.budget.image_submissions == 1
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("caption", [False, True])
-async def test_delete_during_encoding_blocks_factory_submission(
-    revocation, monkeypatch, caption
-):
-    from astrbot.core.utils.media_utils import MediaResolver
-
+async def test_delete_during_preview_blocks_factory_submission(revocation, monkeypatch):
     turn = await revocation.create_turn()
     part = await capture(turn, revocation.source)
     entered, release = asyncio.Event(), asyncio.Event()
-    method = "to_data_url" if caption else "to_base64_data"
-    original = getattr(MediaResolver, method)
+    original = images.ImageTurnContext.open_preview
 
-    async def blocked_encode(self, *args, **kwargs):
+    async def blocked_preview(self, *args, **kwargs):
         result = await original(self, *args, **kwargs)
         entered.set()
         await release.wait()
         return result
 
-    monkeypatch.setattr(MediaResolver, method, blocked_encode)
-    operation = (
-        describe_images(turn, revocation.provider, occurrence_ids=[part.occurrence_id])
-        if caption
-        else run_visual(turn, revocation.provider, part)
-    )
-    task = asyncio.create_task(operation)
+    monkeypatch.setattr(images.ImageTurnContext, "open_preview", blocked_preview)
+    task = asyncio.create_task(run_visual(turn, revocation.provider, part))
     await asyncio.wait_for(entered.wait(), 5)
     try:
         await turn.db.delete_conversation(turn.conversation_id)
     finally:
         release.set()
-    try:
-        await asyncio.wait_for(task, 5)
-    except Exception as exc:
-        from astrbot.core.image_request_budget import ImageAuthorizationRevoked
-
-        assert caption and isinstance(exc, ImageAuthorizationRevoked)
+    await asyncio.wait_for(task, 5)
     assert turn.budget.image_submissions == 0
-    if caption:
-        revocation.provider.text_chat.assert_not_called()
-    else:
-        assert "data:image" not in str(revocation.provider.text_chat.call_args.kwargs)
+    assert not has_visual(revocation.provider.text_chat.call_args.kwargs)
 
 
 @pytest.mark.asyncio
@@ -458,7 +374,7 @@ async def test_sdk_internal_retry_rechecks_revocation(revocation):
     async def retrying_provider(**payload):
         charge_image_attempt(payload)
         transmitted.append(payload)
-        if "data:image" in str(payload):
+        if has_visual(payload):
             await turn.db.delete_conversation(turn.conversation_id)
             try:
                 charge_image_attempt(payload)
@@ -472,8 +388,8 @@ async def test_sdk_internal_retry_rechecks_revocation(revocation):
     await run_visual(turn, revocation.provider, part)
     assert rejected_retries == [True]
     assert len(transmitted) == 2
-    assert "data:image" in str(transmitted[0])
-    assert "data:image" not in str(transmitted[1])
+    assert has_visual(transmitted[0])
+    assert not has_visual(transmitted[1])
     assert turn.budget.image_submissions == 1
 
 
@@ -486,7 +402,7 @@ async def test_same_database_separate_handles_share_revocation(revocation):
     try:
         await second_handle.delete_conversation(turn.conversation_id)
         await run_visual(turn, revocation.provider, part)
-        assert "data:image" not in str(revocation.provider.text_chat.call_args.kwargs)
+        assert not has_visual(revocation.provider.text_chat.call_args.kwargs)
     finally:
         await second_handle.engine.dispose()
 
@@ -530,7 +446,7 @@ async def test_persisted_preview_rechecks_metadata_without_broadcast(
         await session.execute(statement)
     assert not turn.revoked and not turn.revoked_occurrences
     await run_visual(turn, revocation.provider, part)
-    assert "data:image" not in str(revocation.provider.text_chat.call_args.kwargs)
+    assert not has_visual(revocation.provider.text_chat.call_args.kwargs)
     assert turn.budget.image_submissions == 0
 
 

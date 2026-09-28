@@ -77,10 +77,10 @@ def test_final_payload_accounting_rejects_non_ascii_image_data(payload):
         image_payload_size(payload)
 
 
-def test_caption_retry_limit_and_unknown_usage():
-    budget = ImageRequestBudget()
+def test_explicit_submission_limit_and_unknown_usage():
+    budget = ImageRequestBudget(max_image_submissions=8)
     with budget.scope(
-        purpose="caption", provider_id="p", model="m", image_count=4, encoded_bytes=100
+        purpose="main", provider_id="p", model="m", image_count=4, encoded_bytes=100
     ):
         charge_image_attempt()
         charge_image_attempt()
@@ -88,7 +88,7 @@ def test_caption_retry_limit_and_unknown_usage():
             charge_image_attempt()
     budget.record_usage(
         TokenUsage(input_other=10, output=5),
-        purpose="caption",
+        purpose="main",
         provider_id="p",
         model="m",
     )
@@ -115,7 +115,6 @@ def test_scope_does_not_charge_and_text_fallback_is_not_visual():
 def test_request_has_no_image_count_or_byte_ceiling():
     budget = ImageRequestBudget()
     for _ in range(20):
-        budget.consume_review()
         with budget.scope(purpose="main", provider_id="p", model="m", image_count=8):
             charge_image_attempt()
     with budget.scope(
@@ -126,23 +125,18 @@ def test_request_has_no_image_count_or_byte_ceiling():
         encoded_bytes=32 * 1024 * 1024 + 1,
     ):
         charge_image_attempt()
-    assert budget.review_triggers == 20
     assert budget.image_submissions == 260
     assert budget.visual_request_attempts == 21
     assert budget.to_dict()["groups"][0]["encoded_bytes"] == 32 * 1024 * 1024 + 1
 
 
 def test_explicit_turn_limits_remain_supported():
-    budget = ImageRequestBudget(max_image_submissions=1, max_review_triggers=1)
+    budget = ImageRequestBudget(max_image_submissions=1)
     with budget.scope(purpose="main", provider_id="p", model="m", image_count=1):
         charge_image_attempt()
     with pytest.raises(ImageBudgetExceeded):
         with budget.scope(purpose="main", provider_id="p", model="m", image_count=1):
             charge_image_attempt()
-    budget.consume_review()
-    with pytest.raises(ImageBudgetExceeded):
-        budget.consume_review()
-
 
 @pytest.mark.asyncio
 async def test_context_isolation_and_atomic_shared_limit():

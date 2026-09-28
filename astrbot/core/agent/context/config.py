@@ -35,6 +35,6 @@ class ContextConfig:
     custom_compressor: ContextCompressor | None = None
     """Custom context compression method. If None, the default method is used."""
     strip_summary_images: bool = False
-    """Omit image bytes from summary requests when managed image history is enabled."""
+    """Omit unmanaged inline image bytes from LLM summary requests."""
     image_context: "ImageTurnContext | None" = None
-    """Project current authorized descriptions into request/count copies only."""
+    """Project authorized image references into request/count copies only."""

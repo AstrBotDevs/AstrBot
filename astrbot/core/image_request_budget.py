@@ -1,4 +1,4 @@
-"""Request-local visual limits and accounting, independent of model prices."""
+"""Request-local image authorization and accounting, independent of model prices."""
 
 from collections.abc import Callable
 from contextlib import contextmanager
@@ -8,7 +8,7 @@ from typing import Any
 
 
 class ImageBudgetExceeded(Exception):
-    """Stop visual work before an approved retry or turn limit is exceeded."""
+    """Stop visual work when a request constraint is violated."""
 
 
 class ImageAuthorizationRevoked(ImageBudgetExceeded):
@@ -107,47 +107,28 @@ def image_payload_size(payload: Any) -> tuple[int, int]:
 class ImageRequestBudget:
     """Account for visual attempts and enforce explicit turn-level limits."""
 
-    max_caption_attempts: int = 2
-    max_review_triggers: int | None = None
     max_image_submissions: int | None = None
-    caption_attempts: int = 0
-    review_triggers: int = 0
     image_submissions: int = 0
     visual_request_attempts: int = 0
     counters: dict = field(default_factory=dict)
 
     def ensure_attempt_allowed(self, image_count: int, *, purpose: str) -> None:
-        """Check caption retry and explicit turn limits before an attempt.
+        """Check explicit submission limits before an attempt.
 
         Args:
             image_count: Images expected in the provider attempt.
-            purpose: Main, caption, or review operation.
+            purpose: Main-answer or context-summary operation.
 
         Raises:
-            ImageBudgetExceeded: A caption retry or explicit turn limit is exhausted.
+            ImageBudgetExceeded: An explicit image submission limit is exhausted.
         """
         if image_count < 0:
             raise ValueError("Negative image budget input")
         if (
             self.max_image_submissions is not None
             and self.image_submissions + image_count > self.max_image_submissions
-        ) or (
-            purpose == "caption" and self.caption_attempts >= self.max_caption_attempts
         ):
             raise ImageBudgetExceeded("The visual attempt limit is exhausted.")
-
-    def consume_review(self) -> None:
-        """Charge an explicit old-image review trigger.
-
-        Raises:
-            ImageBudgetExceeded: The turn already used its review triggers.
-        """
-        if (
-            self.max_review_triggers is not None
-            and self.review_triggers >= self.max_review_triggers
-        ):
-            raise ImageBudgetExceeded("The image review limit is exhausted.")
-        self.review_triggers += 1
 
     @contextmanager
     def scope(
@@ -223,8 +204,6 @@ class ImageRequestBudget:
         group["encoded_bytes"] += size
         self.image_submissions += count
         self.visual_request_attempts += int(count > 0)
-        if scope.purpose == "caption":
-            self.caption_attempts += 1
 
     def record_usage(
         self, usage, *, purpose: str, provider_id: str, model: str
@@ -263,8 +242,6 @@ class ImageRequestBudget:
             group["usage_known"] = group["unknown_calls"] == 0
             groups.append(group)
         return {
-            "caption_attempts": self.caption_attempts,
-            "review_triggers": self.review_triggers,
             "image_submissions": self.image_submissions,
             "usage_unknown": self.usage_unknown,
             "groups": groups,

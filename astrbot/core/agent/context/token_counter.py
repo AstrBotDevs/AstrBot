@@ -1,3 +1,4 @@
+import copy
 import json
 from typing import Protocol, runtime_checkable
 
@@ -141,3 +142,54 @@ async def estimate_preview_tokens(previews) -> dict:
     # Only metadata is inspected; decompression and provider requests are excluded.
     previews = tuple(previews)
     return await asyncio.to_thread(inspect)
+
+
+async def count_projected_tokens(
+    messages, image_context, token_counter, *, provider=None
+) -> int:
+    """Count projected visual inputs using their prepared image dimensions.
+
+    Args:
+        messages: Request-only messages returned by ``project_messages``.
+        image_context: Turn state containing current inputs not already projected.
+        token_counter: Text and non-image token counter.
+        provider: Optional model used for this projection instead of the active chat model.
+
+    Returns:
+        Estimated total tokens, counting every image position in the request.
+    """
+    provider = provider or image_context.provider
+    modalities = getattr(provider, "provider_config", {}).get("modalities")
+    supports_image = (not modalities or "image" in modalities) and getattr(
+        provider, "image_request_budget_supported", False
+    ) is True
+    projected = copy.deepcopy(messages)
+    previews = []
+    projected_occurrences = set(image_context.projected_visuals)
+    for message in projected:
+        if not isinstance(message.content, list):
+            continue
+        kept_parts = []
+        for part in message.content:
+            if isinstance(part, ImageURLPart):
+                if (
+                    supports_image
+                    and image_context.projected_visuals.get(part.image_url.id)
+                    == part.image_url.url
+                ):
+                    previews.append(part.image_url.url)
+            else:
+                kept_parts.append(part)
+        message.content = kept_parts or ""
+
+    if supports_image:
+        previews.extend(
+            preview
+            for occurrence, preview in image_context.pending_visuals.items()
+            if occurrence not in projected_occurrences
+            and occurrence not in image_context.revoked_occurrences
+        )
+
+    estimates = await estimate_preview_tokens(previews)
+    unknown_tokens = estimates["unknown_images"] * IMAGE_TOKEN_ESTIMATE
+    return token_counter.count_tokens(projected) + estimates["tokens"] + unknown_tokens

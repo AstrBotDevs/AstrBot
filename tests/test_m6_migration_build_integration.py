@@ -166,6 +166,9 @@ async def test_first_enabled_chat_build_migrates_history_without_caption_call(
 
     assert result is not None
     assert req.image_context is not None
+    await req.image_context.prepare_step(provider)
+    tool_names = {tool.name for tool in req.func_tool.tools} if req.func_tool else set()
+    assert tool_names.isdisjoint({"image_catalog", "read_image", "image_user_note"})
     assert req.contexts[0]["content"][0]["type"] == "image_ref"
     assert "data:image/" not in json.dumps(req.contexts)
     assert req.contexts[0]["content"][0]["description_status"] == "pending"

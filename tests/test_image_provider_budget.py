@@ -271,9 +271,9 @@ async def test_provider_budget_exhaustion_stops_before_third_sdk_call(kind, entr
             },
         )
 
-    budget = ImageRequestBudget()
+    budget = ImageRequestBudget(max_image_submissions=2)
     async with sdk_provider(kind, handler) as provider:
-        with budget.scope(purpose="caption", provider_id=kind, model="test-model"):
+        with budget.scope(purpose="main", provider_id=kind, model="test-model"):
             with pytest.raises(ImageBudgetExceeded):
                 kwargs = {
                     "prompt": "look",
@@ -287,7 +287,7 @@ async def test_provider_budget_exhaustion_stops_before_third_sdk_call(kind, entr
                         pass
                 else:
                     await provider.text_chat(**kwargs)
-    assert len(requests) == budget.caption_attempts == 2
+    assert len(requests) == budget.visual_request_attempts == 2
 
 
 @pytest.mark.asyncio
@@ -368,7 +368,7 @@ async def test_sdk_retry_usage_and_final_payload(kind, reported, streaming):
 
     budget = ImageRequestBudget()
     async with sdk_provider(kind, handler) as provider:
-        with budget.scope(purpose="caption", provider_id=kind, model="test-model"):
+        with budget.scope(purpose="main", provider_id=kind, model="test-model"):
             if streaming:
                 results = [
                     item
@@ -386,7 +386,7 @@ async def test_sdk_retry_usage_and_final_payload(kind, reported, streaming):
         assert final.completion_text == "ok"
         assert (final.usage is not None) is reported
         budget.record_usage(
-            final.usage, purpose="caption", provider_id=kind, model="test-model"
+            final.usage, purpose="main", provider_id=kind, model="test-model"
         )
     group = budget.to_dict()["groups"][0]
     assert len(requests) == group["attempts"] == 2
@@ -433,11 +433,54 @@ async def test_gemini_does_not_retry_after_stream_output(monkeypatch):
     budget = ImageRequestBudget()
     async with sdk_provider("gemini", handler) as provider:
         monkeypatch.setattr(provider.client.models, "generate_content_stream", start)
-        with budget.scope(purpose="caption", provider_id="gemini", model="test-model"):
+        with budget.scope(purpose="main", provider_id="gemini", model="test-model"):
             stream = provider._query_stream(
                 payload("gemini"), None, request_max_retries=10
             )
             assert (await anext(stream)).completion_text == "partial"
             with pytest.raises(httpx.ReadError):
                 await anext(stream)
-    assert calls == budget.caption_attempts == 1
+    assert calls == budget.visual_request_attempts == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", KINDS)
+async def test_gallery_preview_is_encoded_once_at_sdk_boundary(kind, tmp_path):
+    preview = tmp_path / "gallery-preview.png"
+    Image.new("RGB", (20, 10), "orange").save(preview)
+    requests = []
+    authorization_checks = []
+
+    def handler(request):
+        requests.append(json.loads(request.content))
+        return httpx.Response(200, json=response_body(kind, usage=True))
+
+    budget = ImageRequestBudget()
+    async with sdk_provider(kind, handler) as provider:
+        with budget.scope(
+            purpose="main",
+            provider_id=kind,
+            model="test-model",
+            authorization_check=lambda: authorization_checks.append(True),
+        ):
+            response = await provider.text_chat(
+                contexts=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": "[Image reference: saved-image]"},
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": str(preview), "id": "saved-image"},
+                            },
+                        ],
+                    }
+                ],
+                request_max_retries=1,
+            )
+    assert response.completion_text == "ok"
+    assert len(requests) == len(authorization_checks) == 1
+    assert image_payload_size(requests[0])[0] == 1
+    assert image_payload_size(requests[0])[1] > 0
+    assert str(preview) not in json.dumps(requests[0])
+    assert budget.image_submissions == budget.visual_request_attempts == 1

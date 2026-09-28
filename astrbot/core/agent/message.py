@@ -133,9 +133,9 @@ class ImageRefPart(ContentPart):
     Attributes:
         occurrence_id: Stable identity of this image occurrence in a conversation.
         asset_id: Identity of the immutable stored bytes, not a path or permission.
-        description: Bounded snapshot of a possibly incomplete model observation.
-        description_status: Whether the observation has been generated successfully.
-        description_version: Revision of the conversation-scoped observation.
+        description: Legacy observation retained only for stored-format compatibility.
+        description_status: Legacy observation state, unused by gallery projection.
+        description_version: Legacy revision, unused by gallery projection.
         schema_version: Version of the persisted reference format.
     """
 
@@ -165,16 +165,12 @@ class ImageRefPart(ContentPart):
         return value
 
     def to_text(self) -> str:
-        """Project a reference to ordinary text without resolving its asset.
+        """Return an identity label without substituting an image description.
 
         Returns:
-            A labelled description snapshot, with no filesystem or network access.
+            A reference label, with no filesystem or network access.
         """
-        label = (
-            f"[Image reference: {self.occurrence_id}; "
-            f"description status: {self.description_status}]"
-        )
-        return f"{label}\n{self.description}" if self.description else label
+        return f"[Image reference: {self.occurrence_id}]"
 
 
 class AudioURLPart(ContentPart):

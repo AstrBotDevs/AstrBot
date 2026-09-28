@@ -35,13 +35,7 @@ from astrbot.core.provider.sources.openai_source import ProviderOpenAIOfficial
 
 @pytest.fixture
 def image_ref():
-    return ImageRefPart(
-        occurrence_id="image-1",
-        asset_id="asset-1",
-        description="A screenshot with a connection error.",
-        description_status="ready",
-        description_version=1,
-    )
+    return ImageRefPart(occurrence_id="image-1", asset_id="asset-1")
 
 
 def test_history_round_trip_preserves_refs_and_drops_only_temporary_images(image_ref):
@@ -72,7 +66,6 @@ def test_temporary_reference_keeps_existing_content_marker_contract(image_ref):
         {"schema_version": 2},
         {"asset_id": "../../private.png"},
         {"occurrence_id": ""},
-        {"description": "x" * 4097},
         {"description_status": "invented"},
         {"description_version": -1},
         {"url": "data:image/png;base64,AAAA"},
@@ -129,7 +122,7 @@ def test_provider_projection_preserves_legacy_blocks_without_mutating_history(
     "modalities", [None, [], ["text"], ["image", "audio", "tool_use"]]
 )
 @pytest.mark.parametrize("typed", [False, True])
-def test_modality_sanitizer_retains_reference_description(image_ref, modalities, typed):
+def test_modality_sanitizer_keeps_reference_identity(image_ref, modalities, typed):
     message = Message(role="user", content=[image_ref])
     history = [message if typed else message.model_dump()]
     before = copy.deepcopy(history)
@@ -137,6 +130,7 @@ def test_modality_sanitizer_retains_reference_description(image_ref, modalities,
     assert projected == [
         {"role": "user", "content": [{"type": "text", "text": image_ref.to_text()}]}
     ]
+    assert "A screenshot" not in str(projected)
     assert not stats.changed
     assert history == before
 
@@ -183,7 +177,7 @@ async def test_request_assembly_keeps_internal_history_ref_until_provider_bounda
     assert history["content"][1]["type"] == "image_ref"
 
 
-def test_conversation_associations_keep_branch_descriptions_independent(tmp_path):
+def test_conversation_image_associations_are_conversation_scoped(tmp_path):
     engine = create_engine(f"sqlite:///{tmp_path / 'images.db'}")
 
     @event.listens_for(engine, "connect")
@@ -219,24 +213,20 @@ def test_conversation_associations_keep_branch_descriptions_independent(tmp_path
                         conversation_id="parent",
                         occurrence_id="image",
                         asset_id="asset",
-                        description="original",
                     ),
                     ConversationImageRef(
                         conversation_id="child",
                         occurrence_id="image",
                         asset_id="asset",
-                        description="original",
                     ),
                 ]
             )
             session.commit()
             child = session.get(ConversationImageRef, ("child", "image"))
-            child.description = "corrected in child"
-            session.add(child)
-            session.commit()
+            assert child.asset_id == "asset"
             assert (
-                session.get(ConversationImageRef, ("parent", "image")).description
-                == "original"
+                session.get(ConversationImageRef, ("parent", "image")).asset_id
+                == "asset"
             )
             assert session.get(ConversationImageRef, ("other", "image")) is None
             session.delete(child)
@@ -281,7 +271,8 @@ async def test_openai_tool_result_refs_are_projected_before_payload(
     serialized = json.dumps(payload)
     assert "asset-1" not in serialized
     assert '"image_ref"' not in serialized
-    assert image_ref.description in serialized
+    assert image_ref.occurrence_id in serialized
+    assert "description" not in serialized
     assert isinstance(result.tool_calls_result[0].content[0], ImageRefPart)
 
 
@@ -322,5 +313,6 @@ async def test_tool_result_refs_are_projected_in_stream_and_nonstream_paths(
     serialized = json.dumps(payload)
     assert "asset-1" not in serialized
     assert '"image_ref"' not in serialized
-    assert image_ref.description in serialized
+    assert image_ref.occurrence_id in serialized
+    assert "description" not in serialized
     assert isinstance(result.tool_calls_result[0].content[0], ImageRefPart)

@@ -837,6 +837,32 @@ class ProviderAnthropic(Provider):
                         )
                     )
 
+        # Gallery history carries local previews until the provider boundary.
+        # Copy each replaced part so the caller's history keeps its references.
+        encoded_previews = {}
+        for message in context_query:
+            if message.get("role") != "user" or not isinstance(
+                message.get("content"), list
+            ):
+                continue
+            for index, part in enumerate(message["content"]):
+                if part.get("type") != "image_url":
+                    continue
+                image_url = part.get("image_url", {})
+                url = image_url.get("url", "")
+                if not url or url.startswith(("data:", "http:", "https:")):
+                    continue
+                if url not in encoded_previews:
+                    resolved = await resolve_media_ref_to_base64_data(
+                        url, media_type="image"
+                    )
+                    encoded_previews[url] = resolved.to_data_url() if resolved else None
+                if encoded_previews[url] is not None:
+                    message["content"][index] = {
+                        **part,
+                        "image_url": {**image_url, "url": encoded_previews[url]},
+                    }
+
         system_prompt, new_messages = self._prepare_payload(context_query)
 
         model = model or self.get_model()
@@ -916,6 +942,32 @@ class ProviderAnthropic(Provider):
                             tool_call_result.to_openai_messages()
                         )
                     )
+
+        # Gallery history carries local previews until the provider boundary.
+        # Copy each replaced part so the caller's history keeps its references.
+        encoded_previews = {}
+        for message in context_query:
+            if message.get("role") != "user" or not isinstance(
+                message.get("content"), list
+            ):
+                continue
+            for index, part in enumerate(message["content"]):
+                if part.get("type") != "image_url":
+                    continue
+                image_url = part.get("image_url", {})
+                url = image_url.get("url", "")
+                if not url or url.startswith(("data:", "http:", "https:")):
+                    continue
+                if url not in encoded_previews:
+                    resolved = await resolve_media_ref_to_base64_data(
+                        url, media_type="image"
+                    )
+                    encoded_previews[url] = resolved.to_data_url() if resolved else None
+                if encoded_previews[url] is not None:
+                    message["content"][index] = {
+                        **part,
+                        "image_url": {**image_url, "url": encoded_previews[url]},
+                    }
 
         system_prompt, new_messages = self._prepare_payload(context_query)
 
