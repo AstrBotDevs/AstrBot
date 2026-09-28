@@ -27,8 +27,9 @@ jobs:
       
     - name: Check code formatting with ruff
       run: |
-        uvx --from ruff==0.15.22 ruff format --check .
+        uvx --from ruff==0.15.22 ruff format --diff .
         
     - name: Check code style with ruff
+      if: success() || failure()
       run: |
         uvx --from ruff==0.15.22 ruff check .
