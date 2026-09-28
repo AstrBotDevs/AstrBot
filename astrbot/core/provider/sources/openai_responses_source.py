@@ -15,6 +15,7 @@ from astrbot.core.image_request_budget import current_image_request
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, TokenUsage, ToolCallsResult
 
+from ..headers import build_conversation_headers
 from ..register import register_provider_adapter
 from .openai_source import ProviderOpenAIOfficial
 from .request_retry import retry_provider_request
@@ -307,6 +308,7 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         tools: ToolSet | None,
         *,
         request_max_retries: int | None = None,
+        conversation_id: str | None = None,
     ) -> LLMResponse:
         """Send a non-streaming Responses API request.
 
@@ -358,6 +360,7 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
                 **payloads,
                 stream=False,
                 extra_body=extra_body,
+                extra_headers=build_conversation_headers(conversation_id),
             ),
             max_attempts=request_max_retries,
             image_request_payload={**payloads, **extra_body},
@@ -377,6 +380,7 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         tools: ToolSet | None,
         *,
         request_max_retries: int | None = None,
+        conversation_id: str | None = None,
     ) -> AsyncGenerator[LLMResponse, None]:
         """Send a streaming Responses API request.
 
@@ -428,6 +432,7 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
                 **payloads,
                 stream=True,
                 extra_body=extra_body,
+                extra_headers=build_conversation_headers(conversation_id),
             ),
             max_attempts=request_max_retries,
             image_request_payload={**payloads, **extra_body},

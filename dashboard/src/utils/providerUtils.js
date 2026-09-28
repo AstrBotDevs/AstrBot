@@ -88,7 +88,13 @@ export function isMonochromeProviderIcon(type) {
     'xiaomi',
     'xiaomi-token-plan',
     'openrouter',
-    'groq'
+    'groq',
+    'microsoft',
+    'fishaudio',
+    'vllm',
+    'huggingface',
+    'coze',
+    'deerflow'
   ].includes(type);
 }
 

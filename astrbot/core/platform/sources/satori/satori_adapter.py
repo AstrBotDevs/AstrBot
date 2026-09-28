@@ -28,6 +28,7 @@ from astrbot.api.platform import (
     register_platform_adapter,
 )
 from astrbot.core.platform.astr_message_event import MessageSession
+from astrbot.core.utils.config_number import coerce_int_config
 from astrbot.core.utils.media_utils import MediaResolver
 
 if TYPE_CHECKING:
@@ -57,8 +58,20 @@ class SatoriPlatformAdapter(Platform):
             "ws://localhost:5140/satori/v1/events",
         )
         self.auto_reconnect = self.config.get("satori_auto_reconnect", True)
-        self.heartbeat_interval = self.config.get("satori_heartbeat_interval", 10)
-        self.reconnect_delay = self.config.get("satori_reconnect_delay", 5)
+        self.heartbeat_interval = coerce_int_config(
+            self.config.get("satori_heartbeat_interval", 10),
+            default=10,
+            min_value=1,
+            field_name="satori_heartbeat_interval",
+            source="Satori config",
+        )
+        self.reconnect_delay = coerce_int_config(
+            self.config.get("satori_reconnect_delay", 5),
+            default=5,
+            min_value=1,
+            field_name="satori_reconnect_delay",
+            source="Satori config",
+        )
 
         self.metadata = PlatformMetadata(
             name="satori",

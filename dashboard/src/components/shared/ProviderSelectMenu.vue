@@ -835,12 +835,11 @@ defineExpose({ getCurrentSelection });
 
 .provider-trigger--header {
   height: 24px;
-  margin-top: 2px;
   padding: 0;
 }
 
 .provider-trigger--header .provider-trigger-title {
-  font-size: 17px;
+  font-size: 0.88rem;
   font-weight: 620;
   line-height: 24px;
 }
@@ -1136,10 +1135,6 @@ defineExpose({ getCurrentSelection });
 }
 
 @media (max-width: 768px) {
-  .provider-trigger--header .provider-trigger-title {
-    font-size: 16px;
-  }
-
   .provider-trigger--header .provider-trigger-meta {
     display: none;
   }

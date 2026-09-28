@@ -348,6 +348,7 @@ async def test_sdk_retry_usage_and_final_payload(kind, reported, streaming):
         wire = "data: " + json.dumps(response_body(kind, usage=reported)) + "\n\n"
 
     def handler(request):
+        assert request.headers["x-astrbot-conversation-id"] == "retry-conversation"
         requests.append(json.loads(request.content))
         if len(requests) == 1:
             return httpx.Response(
@@ -373,13 +374,19 @@ async def test_sdk_retry_usage_and_final_payload(kind, reported, streaming):
                 results = [
                     item
                     async for item in provider._query_stream(
-                        payload(kind), None, request_max_retries=3
+                        payload(kind),
+                        None,
+                        request_max_retries=3,
+                        conversation_id="retry-conversation",
                     )
                 ]
                 final = results[-1]
             else:
                 final = await provider._query(
-                    payload(kind), None, request_max_retries=3
+                    payload(kind),
+                    None,
+                    request_max_retries=3,
+                    conversation_id="retry-conversation",
                 )
             if kind == "anthropic":
                 assert provider.client.max_retries == 2
@@ -452,6 +459,7 @@ async def test_gallery_preview_is_encoded_once_at_sdk_boundary(kind, tmp_path):
     authorization_checks = []
 
     def handler(request):
+        assert request.headers["x-astrbot-conversation-id"] == "gallery-conversation"
         requests.append(json.loads(request.content))
         return httpx.Response(200, json=response_body(kind, usage=True))
 
@@ -477,6 +485,7 @@ async def test_gallery_preview_is_encoded_once_at_sdk_boundary(kind, tmp_path):
                     }
                 ],
                 request_max_retries=1,
+                conversation_id="gallery-conversation",
             )
     assert response.completion_text == "ok"
     assert len(requests) == len(authorization_checks) == 1

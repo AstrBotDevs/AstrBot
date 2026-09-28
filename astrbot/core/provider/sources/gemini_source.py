@@ -4,6 +4,7 @@ import json
 import logging
 import random
 from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from typing import Literal, cast
 
 import httpx
@@ -32,6 +33,7 @@ from astrbot.core.utils.media_utils import (
 )
 from astrbot.core.utils.network_utils import is_connection_error, log_connection_failure
 
+from ..headers import build_conversation_headers
 from ..register import register_provider_adapter
 from .request_retry import retry_provider_request
 
@@ -85,6 +87,7 @@ class ProviderGoogleGenAI(Provider):
 
         self._http_client: httpx.AsyncClient | None = None
         self._stale_http_clients: list[httpx.AsyncClient] = []
+        self._request_lock = asyncio.Lock()
         self._init_client()
         self.set_model(provider_config.get("model", "unknown"))
         self._init_safety_settings()
@@ -125,6 +128,41 @@ class ProviderGoogleGenAI(Provider):
         ).aio
         # The SDK adds its own lower-case UA alongside our explicit header.
         self.client._api_client._http_options.headers.pop("user-agent", None)
+
+    @asynccontextmanager
+    async def _conversation_header(self, conversation_id: str | None):
+        """Temporarily attach a conversation ID to a Gemini HTTP request.
+
+        Args:
+            conversation_id: AstrBot conversation ID to associate with the request.
+
+        Yields:
+            Control while the request is using the temporary header.
+        """
+        http_options = getattr(getattr(self, "client", None), "_api_client", None)
+        http_options = getattr(http_options, "_http_options", None)
+        headers = getattr(http_options, "headers", None)
+        conversation_headers = build_conversation_headers(conversation_id)
+        if not isinstance(headers, dict) or not conversation_headers:
+            yield
+            return
+
+        request_lock = getattr(self, "_request_lock", None)
+        if request_lock is None:
+            request_lock = asyncio.Lock()
+            self._request_lock = request_lock
+        header_name, header_value = next(iter(conversation_headers.items()))
+        missing = object()
+        async with request_lock:
+            previous_value = headers.get(header_name, missing)
+            headers[header_name] = header_value
+            try:
+                yield
+            finally:
+                if previous_value is missing:
+                    headers.pop(header_name, None)
+                else:
+                    headers[header_name] = previous_value
 
     def _init_safety_settings(self) -> None:
         """初始化安全设置"""
@@ -613,6 +651,7 @@ class ProviderGoogleGenAI(Provider):
         tools: ToolSet | None,
         *,
         request_max_retries: int | None = None,
+        conversation_id: str | None = None,
     ) -> LLMResponse:
         """非流式请求 Gemini API"""
         system_instruction = next(
@@ -649,16 +688,17 @@ class ProviderGoogleGenAI(Provider):
                     config.http_options.retry_options = types.HttpRetryOptions(
                         attempts=1
                     )
-                result = await retry_provider_request(
-                    "Gemini",
-                    lambda: self.client.models.generate_content(
-                        model=model,
-                        contents=cast(types.ContentListUnion, conversation),
-                        config=config,
-                    ),
-                    max_attempts=request_max_retries,
-                    image_request_payload={"contents": conversation},
-                )
+                async with self._conversation_header(conversation_id):
+                    result = await retry_provider_request(
+                        "Gemini",
+                        lambda: self.client.models.generate_content(
+                            model=model,
+                            contents=cast(types.ContentListUnion, conversation),
+                            config=config,
+                        ),
+                        max_attempts=request_max_retries,
+                        image_request_payload={"contents": conversation},
+                    )
                 logger.debug(f"genai result: {result}")
 
                 if not result.candidates:
@@ -724,6 +764,7 @@ class ProviderGoogleGenAI(Provider):
         tools: ToolSet | None,
         *,
         request_max_retries: int | None = None,
+        conversation_id: str | None = None,
     ) -> AsyncGenerator[LLMResponse, None]:
         """流式请求 Gemini API"""
         system_instruction = next(
@@ -733,183 +774,187 @@ class ProviderGoogleGenAI(Provider):
         model = payloads.get("model", self.get_model())
         conversation = await self._prepare_conversation(payloads)
 
-        result = None
-        first_chunk = None
-        while True:
-            try:
-                config = await self._prepare_query_config(
-                    payloads,
-                    tools,
-                    payloads.get("tool_choice", "auto"),
-                    system_instruction,
-                )
-                if current_image_request.get() is not None:
-                    config.http_options = (
-                        config.http_options.model_copy(deep=True)
-                        if config.http_options is not None
-                        else types.HttpOptions()
+        async with self._conversation_header(conversation_id):
+            result = None
+            first_chunk = None
+            while True:
+                try:
+                    config = await self._prepare_query_config(
+                        payloads,
+                        tools,
+                        payloads.get("tool_choice", "auto"),
+                        system_instruction,
                     )
-                    config.http_options.retry_options = types.HttpRetryOptions(
-                        attempts=1
-                    )
-                if current_image_request.get() is not None:
-
-                    async def start_stream():
-                        """Open the lazy SDK stream inside the charged retry attempt.
-
-                        Returns:
-                            The stream and its first chunk, or None for an empty stream.
-                        """
-                        stream = await self.client.models.generate_content_stream(
-                            model=model,
-                            contents=cast(types.ContentListUnion, conversation),
-                            config=config,
+                    if current_image_request.get() is not None:
+                        config.http_options = (
+                            config.http_options.model_copy(deep=True)
+                            if config.http_options is not None
+                            else types.HttpOptions()
                         )
-                        try:
-                            first = await anext(stream, None)
-                        except BaseException:
-                            await stream.aclose()
-                            raise
-                        return stream, first
+                        config.http_options.retry_options = types.HttpRetryOptions(
+                            attempts=1
+                        )
 
-                    result, first_chunk = await retry_provider_request(
-                        "Gemini",
-                        start_stream,
-                        max_attempts=request_max_retries,
-                        image_request_payload={"contents": conversation},
-                    )
-                else:
-                    result = await retry_provider_request(
-                        "Gemini",
-                        lambda: self.client.models.generate_content_stream(
-                            model=model,
-                            contents=cast(types.ContentListUnion, conversation),
-                            config=config,
-                        ),
-                        max_attempts=request_max_retries,
-                    )
-                break
-            except APIError as e:
-                if e.message is None:
-                    e.message = ""
-                if "Developer instruction is not enabled" in e.message:
-                    logger.warning(
-                        f"{model} does not support system prompts; removing it automatically. This may affect persona settings.",
-                    )
-                    system_instruction = None
-                elif "Function calling is not enabled" in e.message:
-                    logger.warning(
-                        f"{model} does not support function calling; removing tools automatically."
-                    )
-                    tools = None
-                else:
-                    raise
-                continue
+                        async def start_stream():
+                            """Open the lazy SDK stream and its first charged chunk.
 
-        # Accumulate the complete response text for the final response
-        accumulated_text = ""
-        accumulated_reasoning = ""
-        final_response = None
+                            Returns:
+                                The stream and its first chunk, or None if empty.
+                            """
+                            stream = await self.client.models.generate_content_stream(
+                                model=model,
+                                contents=cast(types.ContentListUnion, conversation),
+                                config=config,
+                            )
+                            try:
+                                first = await anext(stream, None)
+                            except BaseException:
+                                await stream.aclose()
+                                raise
+                            return stream, first
 
-        while True:
-            if first_chunk is not None:
-                chunk, first_chunk = first_chunk, None
-            else:
-                chunk = await anext(result, None)
-                if chunk is None:
+                        result, first_chunk = await retry_provider_request(
+                            "Gemini",
+                            start_stream,
+                            max_attempts=request_max_retries,
+                            image_request_payload={"contents": conversation},
+                        )
+                    else:
+                        result = await retry_provider_request(
+                            "Gemini",
+                            lambda: self.client.models.generate_content_stream(
+                                model=model,
+                                contents=cast(types.ContentListUnion, conversation),
+                                config=config,
+                            ),
+                            max_attempts=request_max_retries,
+                        )
                     break
-            llm_response = LLMResponse("assistant", is_chunk=True)
-
-            if not chunk.candidates:
-                logger.warning(f"Gemini stream chunk has empty candidates: {chunk}")
-                continue
-            if not chunk.candidates[0].content:
-                logger.warning(f"Gemini stream chunk has empty content: {chunk}")
-                continue
-
-            if chunk.candidates[0].content.parts and any(
-                part.function_call for part in chunk.candidates[0].content.parts
-            ):
-                llm_response = LLMResponse("assistant", is_chunk=False)
-                llm_response.raw_completion = chunk
-                llm_response.result_chain = self._process_content_parts(
-                    chunk.candidates[0],
-                    llm_response,
-                    validate_output=False,
-                )
-                # This response replaces the whole turn in conversation
-                # history, so keep the narration and reasoning that were
-                # already streamed before the tool call. Dropping them made
-                # the user-visible text missing from history.
-                if accumulated_text or accumulated_reasoning:
-                    parts = list(llm_response.result_chain.chain or [])
-                    if accumulated_text:
-                        parts.insert(0, Comp.Plain(accumulated_text))
-                        llm_response.result_chain = MessageChain(chain=parts)
-                    if accumulated_reasoning:
-                        # _process_content_parts already stored the reasoning
-                        # that came with the tool-call chunk itself, so append
-                        # to it instead of overwriting that part.
-                        llm_response.reasoning_content = accumulated_reasoning + (
-                            llm_response.reasoning_content or ""
+                except APIError as e:
+                    if e.message is None:
+                        e.message = ""
+                    if "Developer instruction is not enabled" in e.message:
+                        logger.warning(
+                            f"{model} does not support system prompts; removing it automatically. This may affect persona settings.",
                         )
-                llm_response.id = chunk.response_id
-                if chunk.usage_metadata:
-                    llm_response.usage = self._extract_usage(chunk.usage_metadata)
-                yield llm_response
-                return
+                        system_instruction = None
+                    elif "Function calling is not enabled" in e.message:
+                        logger.warning(
+                            f"{model} does not support function calling; removing tools automatically."
+                        )
+                        tools = None
+                    else:
+                        raise
+                    continue
 
-            _f = False
+            # Accumulate the complete response text for the final response
+            accumulated_text = ""
+            accumulated_reasoning = ""
+            final_response = None
 
-            # 提取 reasoning content
-            reasoning = self._extract_reasoning_content(chunk.candidates[0])
-            if reasoning:
-                _f = True
-                accumulated_reasoning += reasoning
-                llm_response.reasoning_content = reasoning
-            if chunk.text:
-                _f = True
-                accumulated_text += chunk.text
-                llm_response.result_chain = MessageChain(chain=[Comp.Plain(chunk.text)])
-            if _f:
-                yield llm_response
+            while True:
+                if first_chunk is not None:
+                    chunk, first_chunk = first_chunk, None
+                else:
+                    chunk = await anext(result, None)
+                    if chunk is None:
+                        break
+                llm_response = LLMResponse("assistant", is_chunk=True)
 
-            if chunk.candidates[0].finish_reason:
-                # Process the final chunk for potential tool calls or other content
-                if chunk.candidates[0].content.parts:
-                    final_response = LLMResponse("assistant", is_chunk=False)
-                    final_response.raw_completion = chunk
-                    final_response.result_chain = self._process_content_parts(
+                if not chunk.candidates:
+                    logger.warning(f"Gemini stream chunk has empty candidates: {chunk}")
+                    continue
+                if not chunk.candidates[0].content:
+                    logger.warning(f"Gemini stream chunk has empty content: {chunk}")
+                    continue
+
+                if chunk.candidates[0].content.parts and any(
+                    part.function_call for part in chunk.candidates[0].content.parts
+                ):
+                    llm_response = LLMResponse("assistant", is_chunk=False)
+                    llm_response.raw_completion = chunk
+                    llm_response.result_chain = self._process_content_parts(
                         chunk.candidates[0],
-                        final_response,
+                        llm_response,
                         validate_output=False,
                     )
-                    final_response.id = chunk.response_id
+                    # This response replaces the whole turn in conversation
+                    # history, so keep the narration and reasoning that were
+                    # already streamed before the tool call. Dropping them made
+                    # the user-visible text missing from history.
+                    if accumulated_text or accumulated_reasoning:
+                        parts = list(llm_response.result_chain.chain or [])
+                        if accumulated_text:
+                            parts.insert(0, Comp.Plain(accumulated_text))
+                            llm_response.result_chain = MessageChain(chain=parts)
+                        if accumulated_reasoning:
+                            # _process_content_parts already stored the reasoning
+                            # that came with the tool-call chunk itself, so append
+                            # to it instead of overwriting that part.
+                            llm_response.reasoning_content = accumulated_reasoning + (
+                                llm_response.reasoning_content or ""
+                            )
+                    llm_response.id = chunk.response_id
                     if chunk.usage_metadata:
-                        final_response.usage = self._extract_usage(chunk.usage_metadata)
-                break
+                        llm_response.usage = self._extract_usage(chunk.usage_metadata)
+                    yield llm_response
+                    return
 
-        # Yield final complete response with accumulated text
-        if not final_response:
-            final_response = LLMResponse("assistant", is_chunk=False)
+                _f = False
 
-        # Set the complete accumulated reasoning in the final response
-        if accumulated_reasoning:
-            final_response.reasoning_content = accumulated_reasoning
+                # 提取 reasoning content
+                reasoning = self._extract_reasoning_content(chunk.candidates[0])
+                if reasoning:
+                    _f = True
+                    accumulated_reasoning += reasoning
+                    llm_response.reasoning_content = reasoning
+                if chunk.text:
+                    _f = True
+                    accumulated_text += chunk.text
+                    llm_response.result_chain = MessageChain(
+                        chain=[Comp.Plain(chunk.text)]
+                    )
+                if _f:
+                    yield llm_response
 
-        # Set the complete accumulated text in the final response
-        if accumulated_text:
-            final_response.result_chain = MessageChain(
-                chain=[Comp.Plain(accumulated_text)],
+                if chunk.candidates[0].finish_reason:
+                    # Process the final chunk for potential tool calls or other content
+                    if chunk.candidates[0].content.parts:
+                        final_response = LLMResponse("assistant", is_chunk=False)
+                        final_response.raw_completion = chunk
+                        final_response.result_chain = self._process_content_parts(
+                            chunk.candidates[0],
+                            final_response,
+                            validate_output=False,
+                        )
+                        final_response.id = chunk.response_id
+                        if chunk.usage_metadata:
+                            final_response.usage = self._extract_usage(
+                                chunk.usage_metadata
+                            )
+                    break
+
+            # Yield final complete response with accumulated text
+            if not final_response:
+                final_response = LLMResponse("assistant", is_chunk=False)
+
+            # Set the complete accumulated reasoning in the final response
+            if accumulated_reasoning:
+                final_response.reasoning_content = accumulated_reasoning
+
+            # Set the complete accumulated text in the final response
+            if accumulated_text:
+                final_response.result_chain = MessageChain(
+                    chain=[Comp.Plain(accumulated_text)],
+                )
+
+            self._ensure_usable_response(
+                final_response,
+                response_id=getattr(final_response, "id", None),
+                finish_reason=None,
             )
 
-        self._ensure_usable_response(
-            final_response,
-            response_id=getattr(final_response, "id", None),
-            finish_reason=None,
-        )
-
-        yield final_response
+            yield final_response
 
     async def text_chat(
         self,
@@ -927,6 +972,7 @@ class ProviderGoogleGenAI(Provider):
         request_max_retries: int | None = None,
         **kwargs,
     ) -> LLMResponse:
+        conversation_id = kwargs.pop("conversation_id", None)
         if contexts is None:
             contexts = []
         new_record = None
@@ -972,10 +1018,14 @@ class ProviderGoogleGenAI(Provider):
 
         for _ in range(retry):
             try:
+                query_kwargs = {}
+                if conversation_id:
+                    query_kwargs["conversation_id"] = conversation_id
                 return await self._query(
                     payloads,
                     func_tool,
                     request_max_retries=request_max_retries,
+                    **query_kwargs,
                 )
             except APIError as e:
                 if await self._handle_api_error(e, keys):
@@ -1000,6 +1050,7 @@ class ProviderGoogleGenAI(Provider):
         request_max_retries: int | None = None,
         **kwargs,
     ) -> AsyncGenerator[LLMResponse, None]:
+        conversation_id = kwargs.pop("conversation_id", None)
         if contexts is None:
             contexts = []
         new_record = None
@@ -1045,10 +1096,14 @@ class ProviderGoogleGenAI(Provider):
 
         for _ in range(retry):
             try:
+                query_kwargs = {}
+                if conversation_id:
+                    query_kwargs["conversation_id"] = conversation_id
                 async for response in self._query_stream(
                     payloads,
                     func_tool,
                     request_max_retries=request_max_retries,
+                    **query_kwargs,
                 ):
                     yield response
                 break

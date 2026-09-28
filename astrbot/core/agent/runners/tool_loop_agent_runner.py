@@ -557,6 +557,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             "contexts": sanitized_contexts,
             "func_tool": self._func_tool_for_provider(),
             "session_id": self.req.session_id,
+            "conversation_id": (
+                self.req.conversation.cid if self.req.conversation else None
+            ),
             "extra_user_content_parts": (
                 [] if managed else self.req.extra_user_content_parts
             ),

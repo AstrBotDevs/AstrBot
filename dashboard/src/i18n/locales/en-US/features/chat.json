@@ -165,12 +165,14 @@
     "name": "Project Name",
     "emoji": "Icon (Emoji)",
     "description": "Description (Optional)",
+    "moreSettings": "More settings",
     "workspace": {
       "type": "Workspace",
       "session": "Per-session workspace",
       "project": "Shared project workspace",
       "custom": "Custom path",
-      "path": "Workspace path"
+      "path": "Workspace path",
+      "selectPath": "Select folder"
     },
     "loadingSessions": "Loading conversations...",
     "noSessions": "No conversations in this project",
