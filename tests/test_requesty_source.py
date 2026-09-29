@@ -84,6 +84,14 @@ async def test_requesty_model_list_survives_one_failing_endpoint():
 
 
 @pytest.mark.asyncio
+async def test_requesty_model_list_returns_empty_when_one_endpoint_is_empty():
+    provider = _make_provider()
+    provider.client.get_api_list = MagicMock(side_effect=[_page(), ValueError("boom")])
+
+    assert await provider.get_models() == []
+
+
+@pytest.mark.asyncio
 async def test_requesty_model_list_raises_when_all_endpoints_fail():
     provider = _make_provider()
     provider.client.get_api_list = MagicMock(side_effect=ValueError("boom"))
