@@ -16,15 +16,33 @@
         "buttons": {
             "refresh": "Обновить",
             "add": "Добавить сервер",
+            "connect": "Подключить",
+            "disconnect": "Отключить",
             "useTemplateStdio": "Шаблон Stdio",
             "useTemplateStreamableHttp": "Шаблон Streamable HTTP",
             "useTemplateSse": "Шаблон SSE",
             "sync": "Синхронизировать"
         },
-        "empty": "MCP-сервера не найдены. Нажмите «Добавить сервер».",
-        "status": {
+  "empty": "MCP-сервера не найдены. Нажмите «Добавить сервер».",
+  "searchPlaceholder": "Поиск MCP-серверов...",
+  "noSearchResult": "Подходящие MCP-серверы не найдены",
+  "select": "Выбрать",
+  "selectServer": "Выбрать сервер {name}",
+  "selectAll": "Выбрать все",
+  "clearSelection": "Снять выбор",
+  "deleteSelected": "Удалить выбранные ({count})",
+  "cancel": "Отмена",
+  "batchDeleteTitle": "Удалить MCP-серверы",
+  "batchDeleteMessage": "Удалить выбранные MCP-серверы ({count})? Это действие нельзя отменить.",
+  "batchDeleteConfirm": "Удалить ({count})",
+  "batchDeleteSuccess": "Удалено MCP-серверов: {count}",
+  "batchDeletePartial": "Удалено: {succeeded}, ошибок: {failed}",
+  "status": {
+    "installed": "Установленные",
             "noTools": "Нет доступных инструментов",
             "availableTools": "Доступные инструменты",
+            "connected": "Подключен",
+            "disconnected": "Не подключен",
             "configSummary": "Конфигурация: {keys}",
             "noConfig": "Конфигурация не задана"
         }
@@ -94,7 +112,7 @@
             "fields": {
                 "name": "Название сервера",
                 "nameRequired": "Название обязательно",
-                "enable": "Включить сервер",
+                "enable": "Подключить после сохранения",
                 "config": "Конфигурация сервера"
             },
             "errors": {

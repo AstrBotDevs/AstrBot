@@ -19,11 +19,19 @@
 - 12 群：916228568 (人满)
 - 13 群：1092185289
 - 14 群：1103419483
-- **AstrBot 核心开发交流群: 975206796**（AstrBot 开发成员通常活跃于此，欢迎任何对编程/AI 技术感兴趣的同学加入~）
+- 15 群：258637629
+- 16 群：1044542496
+- 闲聊群：975206796
 
 ### Discord
 
 https://discord.gg/hAVk6tgV36
+
+### 邮箱
+
+正式性沟通请优先通过邮箱的方式与我们联系：
+
+- [community@astrbot.app](mailto:community@astrbot.app)
 
 ### Astrbook
 

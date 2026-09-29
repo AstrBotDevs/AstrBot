@@ -2,7 +2,6 @@ import asyncio
 import base64
 import logging
 import os
-import uuid
 
 import aiohttp
 import dashscope
@@ -16,6 +15,7 @@ except (
     MultiModalConversation = None
 
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.datetime_utils import generate_timestamp_id
 
 from ..entities import ProviderType
 from ..provider import TTSProvider
@@ -58,7 +58,7 @@ class ProviderDashscopeTTSAPI(TTSProvider):
                 "Audio synthesis failed, returned empty content. The model may not be supported or the service is unavailable.",
             )
 
-        path = os.path.join(temp_dir, f"dashscope_tts_{uuid.uuid4()}{ext}")
+        path = os.path.join(temp_dir, f"dashscope_tts_{generate_timestamp_id()}{ext}")
         with open(path, "wb") as f:
             f.write(audio_bytes)
         return path
@@ -71,6 +71,7 @@ class ProviderDashscopeTTSAPI(TTSProvider):
 
         kwargs = {
             "model": model,
+            "headers": self.request_headers.copy(),
             "messages": None,
             "api_key": self.chosen_api_key,
             "voice": self.voice or "Cherry",
@@ -122,7 +123,9 @@ class ProviderDashscopeTTSAPI(TTSProvider):
         timeout = max(self.timeout_ms / 1000, 1) if self.timeout_ms else 20
         try:
             async with (
-                aiohttp.ClientSession() as session,
+                aiohttp.ClientSession(
+                    headers={"User-Agent": self.request_headers["User-Agent"]}
+                ) as session,
                 session.get(
                     url,
                     timeout=aiohttp.ClientTimeout(total=timeout),
@@ -139,6 +142,9 @@ class ProviderDashscopeTTSAPI(TTSProvider):
         text: str,
     ) -> tuple[bytes | None, str]:
         synthesizer = SpeechSynthesizer(
+            headers={
+                name.lower(): value for name, value in self.request_headers.items()
+            },
             model=model,
             voice=self.voice,
             format=AudioFormat.WAV_24000HZ_MONO_16BIT,

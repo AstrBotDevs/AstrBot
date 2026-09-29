@@ -65,15 +65,19 @@ class FaissVecDB(BaseVecDB):
         tasks_limit: int = 3,
         max_retries: int = 3,
         progress_callback=None,
+        embedding_contents: list[str] | None = None,
     ) -> list[int]:
         """批量插入文本和其对应向量，自动生成 ID 并保持一致性。
 
         Args:
             progress_callback: 进度回调函数，接收参数 (current, total)
+            embedding_contents: Optional enriched texts used only for embeddings.
 
         """
         metadatas = metadatas or [{} for _ in contents]
         ids = ids or [str(uuid.uuid4()) for _ in contents]
+        if embedding_contents is None:
+            embedding_contents = contents
 
         if not contents:
             logger.debug(
@@ -106,11 +110,23 @@ class FaissVecDB(BaseVecDB):
                     "actual_ids": len(ids),
                 },
             )
+        if len(embedding_contents) != content_count:
+            raise KnowledgeBaseUploadError(
+                stage="storage",
+                user_message=(
+                    f"存储失败：文本分块数量与向量化文本数量不一致（期望 {content_count}，"
+                    f"实际 {len(embedding_contents)}）。"
+                ),
+                details={
+                    "expected_contents": content_count,
+                    "actual_embedding_contents": len(embedding_contents),
+                },
+            )
 
         start = time.time()
         logger.debug(f"Generating embeddings for {len(contents)} contents...")
         vectors = await self.embedding_provider.get_embeddings_batch(
-            contents,
+            embedding_contents,
             batch_size=batch_size,
             tasks_limit=tasks_limit,
             max_retries=max_retries,

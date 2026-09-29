@@ -61,6 +61,25 @@
                           "
                         />
                       </template>
+                      <v-tooltip
+                        v-if="
+                          [
+                            'qq_official',
+                            'qq_official_webhook',
+                            'aiocqhttp',
+                            'weixin_oc',
+                          ].includes(platformTemplates[item.raw].type)
+                        "
+                        activator="parent"
+                        :text="
+                          tm(
+                            `createDialog.platformTooltips.${platformTemplates[item.raw].type}`,
+                          )
+                        "
+                        location="end"
+                        max-width="360"
+                        open-delay="50"
+                      />
                     </v-list-item>
                   </template>
                 </v-select>
@@ -1400,6 +1419,7 @@ export default {
       }
 
       try {
+        const createdPlatformId = this.selectedPlatformConfig.id;
         // 先保存平台配置
         const res = await botApi.create(this.selectedPlatformConfig);
 
@@ -1409,7 +1429,7 @@ export default {
         this.loading = false;
         this.showDialog = false;
         this.resetForm();
-        this.$emit("refresh-config");
+        this.$emit("refresh-config", createdPlatformId);
         this.showSuccess(
           res.data.message || this.tm("messages.addSuccessWithConfig"),
         );
@@ -1997,7 +2017,7 @@ export default {
 .creation-mode-title {
   font-size: 14px;
   font-weight: 600;
-  color: rgba(0, 0, 0, 0.78);
+  color: rgba(var(--v-theme-on-surface), 0.88);
 }
 
 .route-source-cell {

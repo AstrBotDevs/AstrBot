@@ -130,7 +130,9 @@ export default defineConfig({
                 link: "/start",
                 collapsed: true,
                 items: [
+                  { text: "MiraRouter", link: "/mirarouter" },
                   { text: "NewAPI", link: "/newapi" },
+                  { text: "胜算云", link: "/shengsuanyun" },
                   { text: "AIHubMix", link: "/aihubmix" },
                   { text: "PPIO 派欧云", link: "/ppio" },
                   { text: "硅基流动", link: "/siliconflow" },
@@ -221,6 +223,10 @@ export default defineConfig({
                 link: "/openapi",
               },
               {
+                text: "API Scope 与接口对照",
+                link: "/openapi-scopes",
+              },
+              {
                 text: "AstrBot 配置文件",
                 link: "/astrbot-config",
               },
@@ -261,7 +267,7 @@ export default defineConfig({
           pattern: 'https://github.com/AstrBotdevs/AstrBot/edit/master/docs/:path',
           text: '发现文档有问题？在 GitHub 上编辑此页',
         },
-        logo: '/logo_prod.png',
+        logo: '/favicon.svg',
         socialLinks: [
           { icon: "github", link: "https://github.com/AstrBotDevs/AstrBot" },
         ],
@@ -385,7 +391,9 @@ export default defineConfig({
                 link: "/start",
                 collapsed: true,
                 items: [
+                  { text: "MiraRouter", link: "/mirarouter" },
                   { text: "NewAPI", link: "/newapi" },
+                  { text: "ShengSuanYun", link: "/shengsuanyun" },
                   { text: "AIHubMix", link: "/aihubmix" },
                   { text: "PPIO Cloud", link: "/ppio" },
                   { text: "SiliconFlow", link: "/siliconflow" },
@@ -475,6 +483,10 @@ export default defineConfig({
                 link: "/openapi",
               },
               {
+                text: "API Scope–Endpoint Reference",
+                link: "/openapi-scopes",
+              },
+              {
                 text: "AstrBot Configuration File",
                 link: "/astrbot-config",
               },
@@ -511,7 +523,7 @@ export default defineConfig({
           pattern: 'https://github.com/AstrBotdevs/AstrBot/edit/master/docs/:path',
           text: 'Edit this page on GitHub',
         },
-        logo: '/logo_prod.png',
+        logo: '/favicon.svg',
         socialLinks: [
           { icon: "github", link: "https://github.com/AstrBotDevs/AstrBot" },
         ],

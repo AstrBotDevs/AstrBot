@@ -22,10 +22,11 @@ model_name 格式：`<model_name>:<model_version>`。如 `deepseek-r1:8b`。
 
 ## 配置 AstrBot
 
-打开 AstrBot 控制台 -> 服务提供商页面，点击新增模型提供商，找到并点击 `Ollama`。
-![image](https://files.astrbot.app/docs/source/images/ollama/image.png)
+打开「模型提供商」→「对话」，点击「新增」，选择 `Ollama`。默认 API 地址为 `http://127.0.0.1:11434/v1`，请按实际部署位置调整。
 
-保存配置即可。
+填写提供商名称并确认 `API Base URL`。模板已预填 `API Key` 为 `ollama`；如果服务端另有认证要求，请改为实际密钥。点击「保存并获取模型」。在模型列表中点击所需模型右侧的 `+`，确认模型已启用；也可先「保存配置」，再通过「自定义模型」填写准确的模型 ID。点击已配置模型旁的「测试模型」按钮可检查是否可用。
+
+进入「配置文件」，选择要使用的配置文件，在「AI 配置」→「模型」中将「对话模型」设为刚添加的模型，点击右下角「保存配置」。此项用于 AstrBot 内置 AI。
 
 ::: tip
 
@@ -34,7 +35,6 @@ model_name 格式：`<model_name>:<model_version>`。如 `deepseek-r1:8b`。
 如果 Ollama 使用了 Docker 部署，请确保 11434 端口已经映射到宿主机。
 
 :::
-
 
 ## FAQ
 

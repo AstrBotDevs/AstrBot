@@ -50,6 +50,7 @@ class _RecordEnricherFilter(logging.Filter):
         record.source_file = _build_source_file(record.pathname)
         record.source_line = record.lineno
         record.is_trace = record.name == "astrbot.trace"
+        record.category = getattr(record, "category", None) or "system"
         return True
 
 
@@ -106,6 +107,7 @@ def _patch_record(record: "Record") -> None:
     extra.setdefault("source_file", _build_source_file(record["file"].path))
     extra.setdefault("source_line", record["line"])
     extra.setdefault("is_trace", False)
+    extra.setdefault("category", "system")
 
 
 _loguru = _raw_loguru_logger.patch(_patch_record)
@@ -179,6 +181,7 @@ class LogQueueHandler(logging.Handler):
                 "level": record.levelname,
                 "time": time.time(),
                 "data": log_entry,
+                "category": getattr(record, "category", None) or "system",
             },
         )
 
@@ -200,6 +203,8 @@ class LogManager:
         "asyncio": logging.WARNING,
         "tzlocal": logging.WARNING,
         "apscheduler": logging.WARNING,
+        "httpx": logging.WARNING,
+        "httpcore": logging.WARNING,
     }
 
     @classmethod
@@ -495,6 +500,33 @@ class LogManager:
                 logger.setLevel(level)
             except Exception:
                 logger.setLevel(logging.INFO)
+
+            # Sync the console loguru sink and root logger to the configured
+            try:
+                configured_level = logging.getLevelName(logger.level)
+                if isinstance(configured_level, str):
+                    new_sink_id = _loguru.add(
+                        sys.stdout,
+                        level=configured_level,
+                        colorize=True,
+                        filter=lambda record: (
+                            not record["extra"].get("is_trace", False)
+                        ),
+                        format=(
+                            "<green>[{time:HH:mm:ss.SSS}]</green> {extra[plugin_tag]} "
+                            "<level>[{extra[short_levelname]}]</level>{extra[astrbot_version_tag]} "
+                            "[{extra[source_file]}:{extra[source_line]}]: <level>{message}</level>"
+                        ),
+                    )
+                    _loguru.remove(cls._console_sink_id)
+                    cls._console_sink_id = new_sink_id
+            except Exception:
+                pass
+
+            root_logger = logging.getLogger()
+            root_logger.setLevel(logger.level)
+            for name, level in cls._NOISY_LOGGER_LEVELS.items():
+                logging.getLogger(name).setLevel(level)
 
             # Plugin loggers without an explicit override follow the global level.
             plugin_level = logger.level

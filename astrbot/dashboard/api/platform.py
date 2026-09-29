@@ -15,7 +15,7 @@ from astrbot.dashboard.services.platform_service import (
     PlatformServiceError,
 )
 
-from .auth import AuthContext, require_dashboard_user, require_scope
+from .auth import AuthContext, ScopeDependency, require_dashboard_user
 
 router = APIRouter(tags=["Platforms"])
 legacy_router = APIRouter(
@@ -29,8 +29,7 @@ def get_service(request: Request) -> PlatformService:
     return request.app.state.services.platforms
 
 
-async def require_config_scope(request: Request) -> AuthContext:
-    return await require_scope(request, "config")
+require_config_scope = ScopeDependency("config")
 
 
 async def _json_or_empty(request: Request) -> dict[str, Any]:

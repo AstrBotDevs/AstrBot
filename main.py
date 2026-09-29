@@ -2,7 +2,6 @@ import argparse
 import asyncio
 import mimetypes
 import os
-import shutil
 import sys
 from pathlib import Path
 
@@ -33,25 +32,16 @@ def _apply_startup_env_flags(argv: list[str]) -> None:
 _apply_startup_env_flags(sys.argv[1:])
 
 from astrbot.core import LogBroker, LogManager, db_helper, logger  # noqa: E402
-from astrbot.core.config.default import VERSION  # noqa: E402
+from astrbot.core.dashboard_assets import resolve_dashboard_dist  # noqa: E402
 from astrbot.core.initial_loader import InitialLoader  # noqa: E402
+from astrbot.core.updater import AstrBotUpdater  # noqa: E402
 from astrbot.core.utils.astrbot_path import (  # noqa: E402
     get_astrbot_config_path,
-    get_astrbot_data_path,
     get_astrbot_knowledge_base_path,
     get_astrbot_plugin_path,
     get_astrbot_root,
     get_astrbot_site_packages_path,
     get_astrbot_temp_path,
-)
-from astrbot.core.utils.io import (  # noqa: E402
-    download_dashboard,
-    get_bundled_dashboard_dist_path,
-    get_dashboard_dist_version,
-    is_dashboard_dist_compatible,
-    is_dashboard_version_compatible,
-    remove_dir,
-    should_use_bundled_dashboard_dist,
 )
 from astrbot.core.utils.runtime_env import is_packaged_desktop_runtime  # noqa: E402
 
@@ -107,93 +97,35 @@ async def check_dashboard_files(webui_dir: str | None = None):
     # 指定webui目录
     if webui_dir:
         if os.path.exists(webui_dir):
-            logger.info("Using WebUI directory: %s", webui_dir)
-            return webui_dir
-        logger.warning("WebUI directory not found: %s. Using default.", webui_dir)
-
-    data_dist_path = Path(get_astrbot_data_path()) / "dist"
-    bundled_dist = get_bundled_dashboard_dist_path()
-    if data_dist_path.exists():
-        v = get_dashboard_dist_version(data_dist_path)
-        if is_dashboard_dist_compatible(data_dist_path, VERSION):
-            logger.info("WebUI is up to date.")
-            return str(data_dist_path)
-
-        if should_use_bundled_dashboard_dist(data_dist_path, VERSION):
-            logger.info(
-                "Replacing data/dist with bundled WebUI because its version does not match core version v%s.",
-                VERSION,
-            )
-            try:
-                remove_dir(str(data_dist_path))
-                shutil.copytree(bundled_dist, data_dist_path)
-                return str(data_dist_path)
-            except Exception as e:
-                logger.warning(
-                    "Failed to replace data/dist with bundled WebUI: %s. Using bundled WebUI directly.",
-                    e,
-                )
-                return str(bundled_dist)
-
-        if is_dashboard_version_compatible(v, VERSION):
+            resolved_dist = resolve_dashboard_dist(webui_dir)
+            if resolved_dist is not None:
+                logger.info("Using WebUI directory: %s", resolved_dist)
+                return str(resolved_dist)
             logger.warning(
-                "WebUI files are incomplete for v%s. Re-downloading WebUI.",
-                VERSION,
-            )
-        elif v is not None:
-            logger.warning(
-                "WebUI version mismatch: %s, expected v%s. Re-downloading WebUI.",
-                v,
-                VERSION,
+                "WebUI directory is incompatible with this desktop-managed core: "
+                "%s. Attempting repair.",
+                webui_dir,
             )
         else:
-            logger.warning(
-                "WebUI version file is missing. Re-downloading WebUI v%s.",
-                VERSION,
-            )
-
-        try:
-            await download_dashboard(
-                version=f"v{VERSION}",
-                latest=False,
-                allow_insecure_ssl_fallback=False,
-            )
-        except Exception as e:
-            logger.critical(f"Failed to download dashboard files: {e}.")
-            if (data_dist_path / "index.html").is_file():
-                logger.warning(
-                    "Falling back to existing data/dist WebUI %s even though core expects v%s. "
-                    "Some dashboard features may not work until the matching WebUI is available.",
-                    v or "unknown",
-                    VERSION,
-                )
-                return str(data_dist_path)
-            return None
-        logger.info("Dashboard download completed.")
-        return str(data_dist_path)
-
-    if is_dashboard_dist_compatible(bundled_dist, VERSION):
-        logger.info(
-            "Using bundled WebUI v%s.", get_dashboard_dist_version(bundled_dist)
-        )
-        return str(bundled_dist)
-
-    logger.info(
-        "Downloading WebUI. If it fails, download dist.zip from https://github.com/AstrBotDevs/AstrBot/releases/latest and extract dist to data/.",
-    )
+            logger.warning("WebUI directory not found: %s. Using default.", webui_dir)
 
     try:
-        await download_dashboard(
-            version=f"v{VERSION}",
-            latest=False,
-            allow_insecure_ssl_fallback=False,
-        )
+        prepared_dist = await AstrBotUpdater().ensure_dashboard()
     except Exception as e:
         logger.critical(f"Failed to download dashboard files: {e}.")
         return None
 
-    logger.info("Dashboard download completed.")
-    return str(data_dist_path)
+    # The updater only prepares managed or bundled assets. Resolve without an
+    # explicit path so the legacy Desktop package exception cannot admit an
+    # unversioned data/dist returned after a failed repair.
+    resolved_dist = resolve_dashboard_dist()
+    if resolved_dist is None:
+        logger.critical(
+            "Prepared dashboard files are not compatible with the running core: %s.",
+            prepared_dist,
+        )
+        return None
+    return str(resolved_dist)
 
 
 async def main_async(webui_dir_arg: str | None) -> None:

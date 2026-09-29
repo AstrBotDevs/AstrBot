@@ -35,18 +35,24 @@ Dify、Coze、百炼应用、DeerFlow 等平台已经内置了这个循环，如
 
 ## 使用
 
-默认情况下，AstrBot 内置 Agent 执行器为默认执行器。使用默认执行器已经可以满足大部分需求，并且可以使用 AstrBot 的 MCP、知识库、网页搜索等功能。
+默认使用 AstrBot 内置 AI，可在「配置文件」→「AI 配置」→「模型」中选择对话模型，并配置人格、知识库和工具能力。
 
-如果你需要使用 Dify、Coze、百炼应用、DeerFlow 等平台的能力，可以创建一个 Agent 执行器，并选择相应的提供商。
+接入第三方应用时，在当前配置文件内直接选择执行方式并填写连接参数：
 
-## 创建 Agent 执行器
+1. 打开 WebUI 左侧「配置文件」，选择要修改的配置文件，进入「AI 配置」。
+2. 点击 AI 标题右侧的「更多操作」（`…`），选择「更换执行方式」。
+3. 选择 Dify、Coze、阿里云百炼或 DeerFlow，阅读并勾选配置重置提示，然后点击「使用此方式」。
+4. 确保「启用 AI」已打开，在出现的执行方式设置中填写 API Key、应用 ID、API 地址等参数，具体字段见下方接入指南。
+5. 点击右下角「保存配置」使更改生效。
 
-![image](https://files.astrbot.app/docs/source/images/use/agent-runner/image-1.png)
+> [!IMPORTANT]
+> 切换执行方式会将配置重置为新执行方式的默认值，当前执行方式的配置不会保留。再次切回时需要重新配置；如需保留原配置，请先通过「管理配置文件」复制配置文件。
 
-在 WebUI 中，点击「模型提供商」->「新增提供商」，选择「Agent 执行器」，选择你想接入的平台或执行器类型，填写相关信息即可。
+当前 WebUI 无需在「模型提供商」中新建 Agent 执行器，也无需选择执行器提供商 ID。每个配置文件保存自己的执行方式和连接参数；多个机器人需要连接不同应用时，可分别使用不同配置文件。
 
-## 更换默认 Agent 执行器
+## 接入指南
 
-![image](https://files.astrbot.app/docs/source/images/use/agent-runner/image.png)
-
-在 WebUI 中，点击「配置」->「Agent 执行方式」，将执行器类型更换为你刚刚创建的 Agent 执行器类型，然后选择 `XX Agent 执行器提供商 ID` 为你刚刚创建的 Agent 执行器提供商的 ID，点击保存即可。
+- [Dify](../providers/agent-runners/dify.md)
+- [Coze](../providers/agent-runners/coze.md)
+- [阿里云百炼应用](../providers/agent-runners/dashscope.md)
+- [DeerFlow](../providers/agent-runners/deerflow.md)

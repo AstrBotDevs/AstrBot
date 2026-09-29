@@ -65,7 +65,7 @@ class CommandFilter(HandlerFilter):
 
     def init_handler_md(self, handle_md: StarHandlerMetadata) -> None:
         self.handler_md = handle_md
-        signature = inspect.signature(self.handler_md.handler)
+        signature = inspect.signature(self.handler_md.handler, eval_str=True)
         self.handler_params = {}  # 参数名 -> 参数类型，如果有默认值则为默认值
         idx = 0
         for k, v in signature.parameters.items():

@@ -1,6 +1,5 @@
 import os
 import sys
-from pathlib import Path
 
 # 将项目根目录添加到 sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -9,7 +8,11 @@ from unittest import mock
 
 import pytest
 
-from astrbot.core.utils.io import get_dashboard_version, should_use_bundled_dashboard_dist
+from astrbot.core.dashboard_assets import (
+    _should_use_bundled_dist,
+    get_dashboard_version,
+    resolve_dashboard_dist,
+)
 from main import (
     DASHBOARD_RESET_PASSWORD_ENV,
     _apply_startup_env_flags,
@@ -47,6 +50,18 @@ class _version_info:
         if isinstance(other, tuple):
             return (self.major, self.minor) < other[:2]
         return (self.major, self.minor) < (other.major, other.minor)
+
+
+def _write_dashboard_dist(dist_path, version: str | None = None) -> None:
+    assets = dist_path / "assets"
+    assets.mkdir(parents=True, exist_ok=True)
+    (dist_path / "index.html").write_text(
+        '<script type="module" src="/assets/app.js"></script>',
+        encoding="utf-8",
+    )
+    (assets / "app.js").write_text("export {};", encoding="utf-8")
+    if version is not None:
+        (assets / "version").write_text(version, encoding="utf-8")
 
 
 def test_check_env(monkeypatch):
@@ -173,144 +188,38 @@ def test_version_info_comparisons():
 
 
 @pytest.mark.asyncio
-async def test_check_dashboard_files_not_exists(tmp_path):
-    """Tests dashboard download when files do not exist."""
-    data_dir = tmp_path / "data"
-    bundled_dist = tmp_path / "bundled-dist"
+async def test_check_dashboard_files_delegates_to_updater(monkeypatch, tmp_path):
+    """Startup should depend only on the updater's Dashboard contract."""
+    dashboard_path = tmp_path / "dist"
+    from astrbot.core.config.default import VERSION
 
-    with mock.patch("main.get_astrbot_data_path", return_value=str(data_dir)):
-        with mock.patch(
-            "main.get_bundled_dashboard_dist_path",
-            return_value=bundled_dist,
-        ):
-            with mock.patch("main.download_dashboard") as mock_download:
-                result = await check_dashboard_files()
-
-        from main import VERSION
-
-        assert result == str(data_dir / "dist")
-        mock_download.assert_called_once()
-        mock_download.assert_called_once_with(
-            version=f"v{VERSION}",
-            latest=False,
-            allow_insecure_ssl_fallback=False,
-        )
-
-
-@pytest.mark.asyncio
-async def test_check_dashboard_files_exists_and_version_match(tmp_path):
-    """Tests that dashboard is not downloaded when it exists and version matches."""
-    from main import VERSION
-
-    data_dir = tmp_path / "data"
-    data_dist = data_dir / "dist"
-    (data_dist / "assets").mkdir(parents=True)
-    (data_dist / "assets" / "version").write_text(f"v{VERSION}", encoding="utf-8")
-    (data_dist / "index.html").write_text("user", encoding="utf-8")
-
-    with mock.patch("main.get_astrbot_data_path", return_value=str(data_dir)):
-        with mock.patch("main.download_dashboard") as mock_download:
-            result = await check_dashboard_files()
-            assert result == str(data_dist)
-            mock_download.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_check_dashboard_files_exists_but_version_mismatch_downloads(tmp_path):
-    """Tests that a mismatched dashboard is downloaded on startup."""
-    from main import VERSION
-
-    data_dir = tmp_path / "data"
-    data_dist = data_dir / "dist"
-    bundled_dist = tmp_path / "bundled-dist"
-    (data_dist / "assets").mkdir(parents=True)
-    (data_dist / "assets" / "version").write_text("v0.0.1", encoding="utf-8")
-
-    with mock.patch("main.get_astrbot_data_path", return_value=str(data_dir)):
-        with mock.patch(
-            "main.get_bundled_dashboard_dist_path",
-            return_value=bundled_dist,
-        ):
-            with mock.patch("main.download_dashboard") as mock_download:
-                with mock.patch("main.logger.warning") as mock_logger_warning:
-                    result = await check_dashboard_files()
-
-            assert result == str(data_dist)
-            mock_download.assert_called_once_with(
-                version=f"v{VERSION}",
-                latest=False,
-                allow_insecure_ssl_fallback=False,
-            )
-            mock_logger_warning.assert_called_once()
-            call_args, _ = mock_logger_warning.call_args
-            assert "WebUI version mismatch" in call_args[0]
-
-
-@pytest.mark.asyncio
-async def test_check_dashboard_files_falls_back_to_stale_dist_when_download_fails(
-    tmp_path,
-):
-    """Tests stale dashboard fallback when the matching WebUI cannot be downloaded."""
-    from main import VERSION
-
-    data_dir = tmp_path / "data"
-    data_dist = data_dir / "dist"
-    bundled_dist = tmp_path / "bundled-dist"
-    (data_dist / "assets").mkdir(parents=True)
-    (data_dist / "assets" / "version").write_text("v0.0.1", encoding="utf-8")
-    (data_dist / "index.html").write_text("stale", encoding="utf-8")
-
-    with mock.patch("main.get_astrbot_data_path", return_value=str(data_dir)):
-        with mock.patch(
-            "main.get_bundled_dashboard_dist_path",
-            return_value=bundled_dist,
-        ):
-            with mock.patch(
-                "main.download_dashboard",
-                side_effect=RuntimeError("missing dashboard asset"),
-            ) as mock_download:
-                with mock.patch("main.logger.warning") as mock_logger_warning:
-                    result = await check_dashboard_files()
-
-    assert result == str(data_dist)
-    mock_download.assert_called_once_with(
-        version=f"v{VERSION}",
-        latest=False,
-        allow_insecure_ssl_fallback=False,
+    _write_dashboard_dist(dashboard_path, f"v{VERSION}")
+    monkeypatch.setattr(
+        "astrbot.core.dashboard_assets.get_astrbot_data_path",
+        lambda: str(tmp_path),
     )
-    assert any(
-        "Falling back to existing data/dist WebUI" in call.args[0]
-        for call in mock_logger_warning.call_args_list
+    ensure_dashboard = mock.AsyncMock(return_value=dashboard_path)
+    monkeypatch.setattr(
+        "main.AstrBotUpdater",
+        lambda: mock.Mock(ensure_dashboard=ensure_dashboard),
     )
 
+    result = await check_dashboard_files()
+
+    assert result == str(dashboard_path)
+    ensure_dashboard.assert_awaited_once_with()
+
 
 @pytest.mark.asyncio
-async def test_check_dashboard_files_downloads_when_matching_dist_is_incomplete(
-    tmp_path,
-):
-    """Tests that a version match alone is not enough to serve WebUI."""
-    from main import VERSION
-
-    data_dir = tmp_path / "data"
-    data_dist = data_dir / "dist"
-    bundled_dist = tmp_path / "bundled-dist"
-    (data_dist / "assets").mkdir(parents=True)
-    (data_dist / "assets" / "version").write_text(f"v{VERSION}", encoding="utf-8")
-
-    with mock.patch("main.get_astrbot_data_path", return_value=str(data_dir)):
-        with mock.patch(
-            "main.get_bundled_dashboard_dist_path",
-            return_value=bundled_dist,
-        ):
-            with mock.patch("main.download_dashboard") as mock_download:
-                result = await check_dashboard_files()
-
-    assert result == str(data_dist)
-    mock_download.assert_called_once_with(
-        version=f"v{VERSION}",
-        latest=False,
-        allow_insecure_ssl_fallback=False,
+async def test_check_dashboard_files_returns_none_when_updater_fails(monkeypatch):
+    """Startup should fail cleanly when no Dashboard can be prepared."""
+    ensure_dashboard = mock.AsyncMock(side_effect=RuntimeError("unavailable"))
+    monkeypatch.setattr(
+        "main.AstrBotUpdater",
+        lambda: mock.Mock(ensure_dashboard=ensure_dashboard),
     )
+
+    assert await check_dashboard_files() is None
 
 
 def test_should_use_bundled_dashboard_dist_when_data_dist_is_stale(tmp_path):
@@ -319,14 +228,13 @@ def test_should_use_bundled_dashboard_dist_when_data_dist_is_stale(tmp_path):
     (user_dist / "assets").mkdir(parents=True)
     (bundled_dist / "assets").mkdir(parents=True)
     (user_dist / "assets" / "version").write_text("v4.24.2", encoding="utf-8")
-    (bundled_dist / "assets" / "version").write_text("v4.24.4", encoding="utf-8")
-    (bundled_dist / "index.html").write_text("bundled", encoding="utf-8")
+    _write_dashboard_dist(bundled_dist, "v4.24.4")
 
     with mock.patch(
-        "astrbot.core.utils.io.get_bundled_dashboard_dist_path",
+        "astrbot.core.dashboard_assets._get_bundled_dist_path",
         return_value=bundled_dist,
     ):
-        assert should_use_bundled_dashboard_dist(user_dist, "v4.24.4") is True
+        assert _should_use_bundled_dist(user_dist, "v4.24.4") is True
 
 
 def test_should_use_bundled_dashboard_dist_when_version_file_is_malformed(tmp_path):
@@ -335,29 +243,40 @@ def test_should_use_bundled_dashboard_dist_when_version_file_is_malformed(tmp_pa
     (user_dist / "assets").mkdir(parents=True)
     (bundled_dist / "assets").mkdir(parents=True)
     (user_dist / "assets" / "version").write_text("not-a-version", encoding="utf-8")
-    (bundled_dist / "assets" / "version").write_text("v4.24.4", encoding="utf-8")
-    (bundled_dist / "index.html").write_text("bundled", encoding="utf-8")
+    _write_dashboard_dist(bundled_dist, "v4.24.4")
 
     with mock.patch(
-        "astrbot.core.utils.io.get_bundled_dashboard_dist_path",
+        "astrbot.core.dashboard_assets._get_bundled_dist_path",
         return_value=bundled_dist,
     ):
-        assert should_use_bundled_dashboard_dist(user_dist, "4.24.4") is True
+        assert _should_use_bundled_dist(user_dist, "4.24.4") is True
 
 
 def test_should_use_bundled_dashboard_dist_when_data_version_file_is_missing(tmp_path):
     user_dist = tmp_path / "user-dist"
     bundled_dist = tmp_path / "bundled-dist"
     (user_dist / "assets").mkdir(parents=True)
-    (bundled_dist / "assets").mkdir(parents=True)
-    (bundled_dist / "assets" / "version").write_text("v4.24.4", encoding="utf-8")
-    (bundled_dist / "index.html").write_text("bundled", encoding="utf-8")
+    _write_dashboard_dist(bundled_dist, "v4.24.4")
 
     with mock.patch(
-        "astrbot.core.utils.io.get_bundled_dashboard_dist_path",
+        "astrbot.core.dashboard_assets._get_bundled_dist_path",
         return_value=bundled_dist,
     ):
-        assert should_use_bundled_dashboard_dist(user_dist, "4.24.4") is True
+        assert _should_use_bundled_dist(user_dist, "4.24.4") is True
+
+
+def test_should_use_bundled_dashboard_dist_when_data_entries_are_incomplete(tmp_path):
+    user_dist = tmp_path / "user-dist"
+    bundled_dist = tmp_path / "bundled-dist"
+    _write_dashboard_dist(user_dist, "v4.24.4")
+    (user_dist / "assets" / "app.js").unlink()
+    _write_dashboard_dist(bundled_dist, "v4.24.4")
+
+    with mock.patch(
+        "astrbot.core.dashboard_assets._get_bundled_dist_path",
+        return_value=bundled_dist,
+    ):
+        assert _should_use_bundled_dist(user_dist, "4.24.4") is True
 
 
 @pytest.mark.asyncio
@@ -365,70 +284,117 @@ async def test_get_dashboard_version_uses_bundled_dist_when_data_dist_is_missing
     tmp_path,
 ):
     """Tests bundled WebUI version lookup when data/dist is absent."""
-    from main import VERSION
+    from astrbot.core.config.default import VERSION
 
     data_dir = tmp_path / "data"
     bundled_dist = tmp_path / "bundled-dist"
-    (bundled_dist / "assets").mkdir(parents=True)
-    (bundled_dist / "assets" / "version").write_text(f"v{VERSION}", encoding="utf-8")
-    (bundled_dist / "index.html").write_text("bundled", encoding="utf-8")
+    _write_dashboard_dist(bundled_dist, f"v{VERSION}")
 
     with mock.patch(
-        "astrbot.core.utils.io.get_astrbot_data_path",
+        "astrbot.core.dashboard_assets.get_astrbot_data_path",
         return_value=str(data_dir),
     ):
         with mock.patch(
-            "astrbot.core.utils.io.get_bundled_dashboard_dist_path",
+            "astrbot.core.dashboard_assets._get_bundled_dist_path",
             return_value=bundled_dist,
         ):
             assert await get_dashboard_version() == f"v{VERSION}"
 
 
 @pytest.mark.asyncio
-async def test_check_dashboard_files_replaces_stale_data_dist_with_bundled_dist(
-    tmp_path,
+async def test_check_dashboard_files_with_non_desktop_custom_webui_dir(
+    monkeypatch, tmp_path
 ):
-    """Tests that a stale data/dist is repaired from bundled dashboard assets."""
-    from main import VERSION
+    """A custom explicit WebUI remains unchanged outside Desktop."""
+    monkeypatch.delenv("ASTRBOT_DESKTOP_MANAGED", raising=False)
+    valid_dir = tmp_path / "my-custom-webui"
+    (valid_dir / "assets").mkdir(parents=True)
+    (valid_dir / "index.html").write_text("custom", encoding="utf-8")
+    updater = mock.Mock()
+    monkeypatch.setattr("main.AstrBotUpdater", updater)
 
-    data_dir = tmp_path / "data"
-    data_dist = data_dir / "dist"
-    bundled_dist = tmp_path / "bundled-dist"
-    (data_dist / "assets").mkdir(parents=True)
-    (bundled_dist / "assets").mkdir(parents=True)
-    (data_dist / "assets" / "version").write_text("v0.0.1", encoding="utf-8")
-    (data_dist / "old.txt").write_text("old", encoding="utf-8")
-    (bundled_dist / "assets" / "version").write_text(f"v{VERSION}", encoding="utf-8")
-    (bundled_dist / "index.html").write_text("bundled", encoding="utf-8")
+    result = await check_dashboard_files(webui_dir=str(valid_dir))
 
-    with mock.patch("main.get_astrbot_data_path", return_value=str(data_dir)):
-        with mock.patch(
-            "main.get_bundled_dashboard_dist_path",
-            return_value=Path(bundled_dist),
-        ):
-            with mock.patch(
-                "astrbot.core.utils.io.get_bundled_dashboard_dist_path",
-                return_value=Path(bundled_dist),
-            ):
-                with mock.patch("main.download_dashboard") as mock_download:
-                    result = await check_dashboard_files()
-
-    assert result == str(data_dist)
-    assert (data_dist / "assets" / "version").read_text(encoding="utf-8") == f"v{VERSION}"
-    assert (data_dist / "index.html").read_text(encoding="utf-8") == "bundled"
-    assert not (data_dist / "old.txt").exists()
-    mock_download.assert_not_called()
+    assert result == str(valid_dir.absolute())
+    updater.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_check_dashboard_files_with_webui_dir_arg(monkeypatch):
-    """Tests that providing a valid webui_dir skips all checks."""
-    valid_dir = "/tmp/my-custom-webui"
-    monkeypatch.setattr(os.path, "exists", lambda path: path == valid_dir)
+async def test_check_dashboard_files_repairs_stale_desktop_webui(monkeypatch, tmp_path):
+    """Desktop startup verifies the repaired dist before serving it."""
+    monkeypatch.setenv("ASTRBOT_DESKTOP_MANAGED", "1")
+    explicit_dist = tmp_path / "webui"
+    (explicit_dist / "assets").mkdir(parents=True)
+    (explicit_dist / "index.html").write_text("stale", encoding="utf-8")
+    (explicit_dist / "assets" / "version").write_text("v0.0.1", encoding="utf-8")
+    data_dir = tmp_path / "data"
+    repaired_dist = data_dir / "dist"
+    monkeypatch.setattr(
+        "astrbot.core.dashboard_assets.get_astrbot_data_path",
+        lambda: str(data_dir),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.dashboard_assets._get_bundled_dist_path",
+        lambda: tmp_path / "missing-bundled-dist",
+    )
 
-    with mock.patch("main.download_dashboard") as mock_download:
-        with mock.patch("main.get_dashboard_dist_version") as mock_get_version:
-            result = await check_dashboard_files(webui_dir=valid_dir)
-            assert result == valid_dir
-            mock_download.assert_not_called()
-            mock_get_version.assert_not_called()
+    async def repair_dashboard():
+        from astrbot.core.config.default import VERSION
+
+        _write_dashboard_dist(repaired_dist, f"v{VERSION}")
+        return repaired_dist
+
+    ensure_dashboard = mock.AsyncMock(side_effect=repair_dashboard)
+    monkeypatch.setattr(
+        "main.AstrBotUpdater",
+        lambda: mock.Mock(ensure_dashboard=ensure_dashboard),
+    )
+
+    result = await check_dashboard_files(str(explicit_dist))
+
+    assert result == str(repaired_dist.absolute())
+    ensure_dashboard.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "failed_version",
+    ["v0.0.2", None],
+    ids=["known-stale", "unversioned"],
+)
+async def test_check_dashboard_files_does_not_serve_stale_desktop_webui_when_repair_fails(
+    monkeypatch, tmp_path, failed_version
+):
+    """A failed desktop repair cannot fall back to unverified managed assets."""
+    monkeypatch.setenv("ASTRBOT_DESKTOP_MANAGED", "1")
+    explicit_dist = tmp_path / "webui"
+    (explicit_dist / "assets").mkdir(parents=True)
+    (explicit_dist / "index.html").write_text("stale", encoding="utf-8")
+    (explicit_dist / "assets" / "version").write_text("v0.0.1", encoding="utf-8")
+    data_dir = tmp_path / "data"
+    failed_repair_dist = data_dir / "dist"
+    (failed_repair_dist / "assets").mkdir(parents=True)
+    (failed_repair_dist / "index.html").write_text("also stale", encoding="utf-8")
+    if failed_version is not None:
+        (failed_repair_dist / "assets" / "version").write_text(
+            failed_version, encoding="utf-8"
+        )
+    monkeypatch.setattr(
+        "astrbot.core.dashboard_assets.get_astrbot_data_path",
+        lambda: str(data_dir),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.dashboard_assets._get_bundled_dist_path",
+        lambda: tmp_path / "missing-bundled-dist",
+    )
+    # ensure_dashboard historically returns a usable stale dist when its download
+    # fails. Startup must validate that fallback rather than trusting the path.
+    ensure_dashboard = mock.AsyncMock(return_value=failed_repair_dist)
+    monkeypatch.setattr(
+        "main.AstrBotUpdater",
+        lambda: mock.Mock(ensure_dashboard=ensure_dashboard),
+    )
+
+    assert await check_dashboard_files(str(explicit_dist)) is None
+    assert resolve_dashboard_dist(str(explicit_dist)) is None
+    ensure_dashboard.assert_awaited_once_with()
