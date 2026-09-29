@@ -267,7 +267,7 @@ export default defineConfig({
           pattern: 'https://github.com/AstrBotdevs/AstrBot/edit/master/docs/:path',
           text: '发现文档有问题？在 GitHub 上编辑此页',
         },
-        logo: '/logo_prod.png',
+        logo: '/favicon.svg',
         socialLinks: [
           { icon: "github", link: "https://github.com/AstrBotDevs/AstrBot" },
         ],
@@ -523,7 +523,7 @@ export default defineConfig({
           pattern: 'https://github.com/AstrBotdevs/AstrBot/edit/master/docs/:path',
           text: 'Edit this page on GitHub',
         },
-        logo: '/logo_prod.png',
+        logo: '/favicon.svg',
         socialLinks: [
           { icon: "github", link: "https://github.com/AstrBotDevs/AstrBot" },
         ],
