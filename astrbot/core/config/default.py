@@ -3207,9 +3207,9 @@ CONFIG_METADATA_2 = {
                 "type": "string",
             },
             "disable_metrics": {
-                "description": "禁用匿名使用统计",
+                "description": "禁用用户体验改进计划",
                 "type": "bool",
-                "hint": "禁用后，AstrBot 将不再上传匿名使用统计数据。",
+                "hint": "开启后，AstrBot 将不再上传用户体验改进计划所需的匿名使用数据。",
             },
             "log_level": {
                 "type": "string",
@@ -4831,9 +4831,9 @@ CONFIG_METADATA_3_SYSTEM = {
                         "items": {"type": "string"},
                     },
                     "disable_metrics": {
-                        "description": "禁用匿名使用统计",
+                        "description": "禁用用户体验改进计划",
                         "type": "bool",
-                        "hint": "禁用后，AstrBot 将不再上传匿名使用统计数据。",
+                        "hint": "开启后，AstrBot 将不再上传用户体验改进计划所需的匿名使用数据。",
                     },
                 },
             },

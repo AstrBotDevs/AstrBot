@@ -1354,8 +1354,8 @@
         "hint": "外部サービスは、AstrBot が生成したコールバックリンク（ファイルダウンロードリンクなど）を通じて AstrBot バックエンドへアクセスする場合があります。AstrBot はデプロイ環境で外部から到達可能なホストアドレス（ホスト）を自動判定できないため、この設定で外部サービスから AstrBot へアクセスするアドレスを明示的に指定します。例: [http://localhost:6185](http://localhost:6185)、[https://example.com](https://example.com)。"
       },
       "disable_metrics": {
-        "description": "匿名利用統計を無効化",
-        "hint": "この設定を有効にすると、AstrBot は匿名の利用統計データをアップロードしません。"
+        "description": "ユーザー体験改善プログラムを無効化",
+        "hint": "有効にすると、AstrBot はユーザー体験改善プログラムで使用する匿名の利用データを送信しなくなります。"
       },
       "dashboard": {
         "trust_proxy_headers": {

@@ -65,7 +65,10 @@
                                 @focusout.capture="scheduleSystemConfigAutoSave"
                             >
                                 <div class="system-config-group__heading">
-                                    <div class="system-config-group__title">{{ group.title }}</div>
+                                    <div>
+                                        <div class="system-config-group__title">{{ group.title }}</div>
+                                        <div class="system-config-group__subtitle">{{ group.subtitle }}</div>
+                                    </div>
                                     <div
                                         v-if="group.key === 'runtime' && timezoneTimePreview"
                                         class="timezone-time-preview"
@@ -147,7 +150,12 @@
                                 class="system-config-group"
                                 @focusout.capture="scheduleSystemConfigAutoSave"
                             >
-                                <div class="system-config-group__title">{{ group.title }}</div>
+                                <div class="system-config-group__heading">
+                                    <div>
+                                        <div class="system-config-group__title">{{ group.title }}</div>
+                                        <div class="system-config-group__subtitle">{{ group.subtitle }}</div>
+                                    </div>
+                                </div>
                                 <AstrBotConfigV4
                                     :metadata="group.metadata"
                                     :iterable="systemConfigData"
@@ -170,7 +178,12 @@
                                 class="system-config-group"
                                 @focusout.capture="scheduleSystemConfigAutoSave"
                             >
-                                <div class="system-config-group__title">{{ group.title }}</div>
+                                <div class="system-config-group__heading">
+                                    <div>
+                                        <div class="system-config-group__title">{{ group.title }}</div>
+                                        <div class="system-config-group__subtitle">{{ group.subtitle }}</div>
+                                    </div>
+                                </div>
                                 <AstrBotConfigV4
                                     :metadata="group.metadata"
                                     :iterable="systemConfigData"
@@ -205,7 +218,12 @@
                                 class="system-config-group"
                                 @focusout.capture="scheduleSystemConfigAutoSave"
                             >
-                                <div class="system-config-group__title">{{ group.title }}</div>
+                                <div class="system-config-group__heading">
+                                    <div>
+                                        <div class="system-config-group__title">{{ group.title }}</div>
+                                        <div class="system-config-group__subtitle">{{ group.subtitle }}</div>
+                                    </div>
+                                </div>
                                 <AstrBotConfigV4
                                     :metadata="group.metadata"
                                     :iterable="systemConfigData"
@@ -743,6 +761,7 @@ const systemConfigGroups = computed(() => {
         return {
             key,
             title: tm(`systemConfig.groups.${key}.title`),
+            subtitle: tm(`systemConfig.groups.${key}.subtitle`),
             metadata: {
                 [key]: {
                     type: 'object',
@@ -1422,6 +1441,15 @@ onUnmounted(() => {
     font-weight: 760;
     letter-spacing: 0;
     line-height: 1.32;
+}
+
+.system-config-group__subtitle {
+    margin-top: 2px;
+    color: rgba(var(--v-theme-on-surface), 0.68);
+    font-size: 0.8rem;
+    font-weight: 500;
+    letter-spacing: 0;
+    line-height: 1.45;
 }
 
 .timezone-time-preview {
