@@ -3,15 +3,14 @@
     :model-value="modelValue"
     @update:model-value="handleUpdate"
     :folder-tree="folderTree"
-    :items="currentPersonas as any"
+    :items="selectablePersonas as any"
     :tree-loading="treeLoading"
     :items-loading="itemsLoading"
     :labels="labels"
     :show-create-button="true"
     :show-edit-button="true"
-    :default-item="defaultPersona"
     item-id-field="persona_id"
-    item-name-field="persona_id"
+    item-name-field="name"
     item-description-field="system_prompt"
     :display-value-formatter="formatDisplayValue"
     @navigate="handleNavigate"
@@ -36,7 +35,7 @@ import { personaApi } from "@/api/v1";
 import BaseFolderItemSelector from "@/components/folder/BaseFolderItemSelector.vue";
 import PersonaForm from "./PersonaForm.vue";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
-import type { FolderTreeNode, SelectableItem } from "@/components/folder/types";
+import type { FolderTreeNode } from "@/components/folder/types";
 
 interface Persona {
   persona_id: string;
@@ -71,12 +70,12 @@ const editingPersona = ref<Persona | null>(null);
 const currentFolderId = ref<string | null>(null);
 
 // 默认人格
-const defaultPersona: SelectableItem = {
-  id: "default",
-  persona_id: "default",
-  name: tm("personaSelector.defaultPersona"),
-  system_prompt: "You are a helpful and friendly assistant.",
-};
+const selectablePersonas = computed(() =>
+  currentPersonas.value.map((persona) => ({
+    ...persona,
+    name: formatDisplayValue(persona.persona_id),
+  })),
+);
 
 // 递归查找文件夹名称
 function findFolderName(

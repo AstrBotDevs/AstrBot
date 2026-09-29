@@ -39,6 +39,17 @@ class PersonaManager:
 
     async def initialize(self) -> None:
         self.personas = await self.get_all_personas()
+        if not any(persona.persona_id == "default" for persona in self.personas):
+            default_persona = await self.db.insert_persona(
+                persona_id="default",
+                system_prompt=DEFAULT_PERSONALITY["prompt"],
+            )
+            self.personas.append(default_persona)
+            logger.info("Seeded the built-in system default persona (id='default').")
+        else:
+            logger.info(
+                "Using the existing persona 'default' as the system default persona."
+            )
         self.get_v3_persona_data()
         logger.info("Loaded %s personas.", len(self.personas))
 
@@ -53,17 +64,34 @@ class PersonaManager:
         """Resolve a v3 persona object by id.
 
         - None/empty id returns None.
-        - "default" maps to in-memory DEFAULT_PERSONALITY.
-        - Otherwise search in personas_v3 by persona name.
+        - A persona in personas_v3 with the same name takes precedence, so the
+          system default persona (id "default") stays reachable and editable.
+        - "default" falls back to the in-memory DEFAULT_PERSONALITY only when no
+          persona with that name exists.
         """
         if not persona_id:
+            logger.debug("[persona] get_persona_v3_by_id(None) -> None")
             return None
-        if persona_id == "default":
-            return DEFAULT_PERSONALITY
-        return next(
+        persona = next(
             (persona for persona in self.personas_v3 if persona["name"] == persona_id),
             None,
         )
+        if persona is not None:
+            logger.debug(
+                "[persona] get_persona_v3_by_id(%r) -> persona prompt=%r",
+                persona_id,
+                persona["prompt"][:60],
+            )
+            return persona
+        if persona_id == "default":
+            logger.debug(
+                "[persona] get_persona_v3_by_id('default') -> built-in "
+                "DEFAULT_PERSONALITY (prompt=%r); no persona named 'default'",
+                DEFAULT_PERSONALITY["prompt"],
+            )
+            return DEFAULT_PERSONALITY
+        logger.debug("[persona] get_persona_v3_by_id(%r) -> None", persona_id)
+        return None
 
     async def get_default_persona_v3(
         self,
@@ -128,6 +156,16 @@ class PersonaManager:
             (item for item in self.personas_v3 if item["name"] == persona_id),
             None,
         )
+        logger.debug(
+            "[persona] resolve_selected_persona: umo=%s conversation_persona_id=%r "
+            "force_applied=%r -> persona_id=%r matched_persona=%r prompt=%r",
+            umo,
+            conversation_persona_id,
+            force_applied_persona_id,
+            persona_id,
+            persona["name"] if persona else None,
+            persona["prompt"][:60] if persona else None,
+        )
 
         use_webchat_special_default = False
         if not persona and platform_name == "webchat" and persona_id != "[%None]":
@@ -143,6 +181,8 @@ class PersonaManager:
 
     async def delete_persona(self, persona_id: str) -> None:
         """删除指定 persona"""
+        if persona_id == "default":
+            raise ValueError("The system default persona cannot be deleted.")
         if not await self.db.get_persona_by_id(persona_id):
             raise ValueError(f"Persona with ID {persona_id} does not exist.")
         await self.db.delete_persona(persona_id)
@@ -349,6 +389,10 @@ class PersonaManager:
             folder_id: 所属文件夹 ID，None 表示根目录
             sort_order: 排序顺序
         """
+        if persona_id == "default":
+            raise ValueError(
+                "Persona ID 'default' is reserved for the system default persona."
+            )
         if await self.db.get_persona_by_id(persona_id):
             raise ValueError(f"Persona with ID {persona_id} already exists.")
         new_persona = await self.db.insert_persona(
