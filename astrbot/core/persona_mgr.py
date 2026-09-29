@@ -124,10 +124,7 @@ class PersonaManager:
                     else runner_config.get("persona_id", "default")
                 )
 
-        persona = next(
-            (item for item in self.personas_v3 if item["name"] == persona_id),
-            None,
-        )
+        persona = self.get_persona_v3_by_id(persona_id)
 
         use_webchat_special_default = False
         if not persona and platform_name == "webchat" and persona_id != "[%None]":
