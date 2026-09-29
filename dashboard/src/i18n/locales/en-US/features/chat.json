@@ -99,6 +99,8 @@
     "placeholder": "Ask about this excerpt..."
   },
   "conversation": {
+    "loading": "Loading conversations",
+    "loadFailed": "Could not load conversations",
     "title": "Conversations",
     "newConversation": "New Conversation",
     "noHistory": "No conversation history",
