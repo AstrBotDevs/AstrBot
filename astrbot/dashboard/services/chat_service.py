@@ -1568,6 +1568,17 @@ class ChatService:
     ) -> list[dict]:
         return await self.get_sessions(username, platform_id)
 
+    async def subscribe_session_history(self, username: str, session_id: str):
+        """Subscribe to history changes after validating session ownership."""
+        session = await self.db.get_platform_session_by_id(session_id)
+        if not session:
+            raise ChatServiceError(f"Session {session_id} not found")
+        if session.creator != username:
+            raise ChatServiceError("Permission denied")
+        if session.platform_id != "webchat":
+            raise ChatServiceError("Only WebChat sessions support history updates")
+        return webchat_queue_mgr.subscribe_history(session_id)
+
     async def get_session(
         self,
         username: str,

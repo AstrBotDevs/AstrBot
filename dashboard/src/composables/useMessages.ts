@@ -1,4 +1,5 @@
-import { computed, onBeforeUnmount, reactive, ref, type Ref } from "vue";
+import { computed, onBeforeUnmount, reactive, ref, watch, type Ref } from "vue";
+import { EventSourcePolyfill } from "event-source-polyfill";
 import { chatApi, fileApi } from "@/api/v1";
 import { fetchWithAuth } from "@/api/http";
 import type { Session } from "@/composables/useSessions";
@@ -198,6 +199,55 @@ export function useMessages(options: UseMessagesOptions) {
     );
   }
 
+  watch(
+    [
+      () => options.currentSessionId.value,
+      () => Boolean(loadedSessions[options.currentSessionId.value]),
+      () => isSessionRunning(options.currentSessionId.value),
+      () =>
+        loadingMessages.value ||
+        Boolean(paginationBySession[options.currentSessionId.value]?.loading),
+    ],
+    ([sessionId, loaded, running, loading], _previous, onCleanup) => {
+      if (!sessionId || !loaded || running || loading) return;
+      let current = true;
+      let refreshing = false;
+      let dirty = false;
+      const source = new EventSourcePolyfill(
+        chatApi.sessionEventsUrl(sessionId),
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+          },
+        },
+      );
+      source.onmessage = async () => {
+        dirty = true;
+        if (refreshing) return;
+        refreshing = true;
+        try {
+          while (dirty && current) {
+            dirty = false;
+            await loadSessionMessages(
+              sessionId,
+              false,
+              false,
+              true,
+              () => current,
+            );
+          }
+        } finally {
+          refreshing = false;
+        }
+      };
+      onCleanup(() => {
+        current = false;
+        source.close();
+      });
+    },
+    { immediate: true, flush: "sync" },
+  );
+
   function isUserMessage(msg: ChatRecord) {
     return messageContent(msg).type === "user";
   }
@@ -286,6 +336,7 @@ export function useMessages(options: UseMessagesOptions) {
     resumeRuns = true,
     showLoading = true,
     preserveLoadedPages = false,
+    shouldApply: () => boolean = () => true,
   ) {
     if (!sessionId) return;
     if (showLoading) {
@@ -311,7 +362,7 @@ export function useMessages(options: UseMessagesOptions) {
       );
       attachThreads(records, payload.threads || []);
       await resolveRecordMedia(records);
-      if (sessionLoadEpochs[sessionId] !== epoch) return;
+      if (sessionLoadEpochs[sessionId] !== epoch || !shouldApply()) return;
       const previousPagination = paginationBySession[sessionId];
       if (preserveLoadedPages && previousPagination?.page > 1) {
         const refreshedById = new Map(
@@ -359,7 +410,7 @@ export function useMessages(options: UseMessagesOptions) {
         await restoreNextActiveRun(sessionId, payload.active_runs);
       }
     } catch (error) {
-      if (sessionLoadEpochs[sessionId] !== epoch) return;
+      if (sessionLoadEpochs[sessionId] !== epoch || !shouldApply()) return;
       console.error("Failed to load session messages:", error);
       messagesBySession[sessionId] = messagesBySession[sessionId] || [];
       const previousPagination = paginationBySession[sessionId];

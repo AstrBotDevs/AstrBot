@@ -154,6 +154,23 @@ async def get_chat_session(
     )
 
 
+@router.get("/chat/sessions/{session_id}/events")
+async def subscribe_chat_session_history(
+    session_id: str,
+    auth: AuthContext = Depends(require_chat_scope),
+    service: ChatService = Depends(get_service),
+):
+    try:
+        stream = await service.subscribe_session_history(auth.username, session_id)
+    except ChatServiceError:
+        return JSONResponse(error("Session unavailable"), status_code=403)
+    return StreamingResponse(
+        stream,
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 @router.patch("/chat/sessions/{session_id}")
 async def update_chat_session(
     session_id: str,

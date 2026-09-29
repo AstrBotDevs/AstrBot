@@ -153,6 +153,7 @@ class WebChatAdapter(Platform):
             sender_id="bot",
             sender_name="bot",
         )
+        self._webchat_queue_mgr.notify_history_updated(conversation_id)
 
     async def _get_message_history(
         self, message_id: int
