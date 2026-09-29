@@ -44,6 +44,7 @@ class ProviderRequesty(ProviderOpenAIOfficial):
         """
         model_ids: list[str] = []
         last_error: Exception | None = None
+        any_succeeded = False
         for path in ("/models/managed", "/models"):
             try:
                 page = await retry_provider_request(
@@ -56,11 +57,12 @@ class ProviderRequesty(ProviderOpenAIOfficial):
                 logger.warning(f"Failed to fetch Requesty models from {path}: {exc}")
                 last_error = exc
                 continue
+            any_succeeded = True
             # Model IDs are rendered in the WebUI, so skip any with control characters.
             model_ids.extend(
                 sorted(m.id for m in page.data if m.id and m.id.isprintable())
             )
-        if not model_ids and last_error is not None:
+        if not any_succeeded and last_error is not None:
             raise Exception(
                 f"Failed to fetch Requesty model list: {last_error}"
             ) from last_error
