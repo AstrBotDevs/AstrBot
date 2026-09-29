@@ -686,6 +686,7 @@ let lastMessagesScrollHeight = 0;
 let lastMessagesClientHeight = 0;
 let touchScrollY = 0;
 let scrollIntent = 0;
+let autoScrollFrame: number | null = null;
 const replyTarget = ref<ChatRecord | null>(null);
 const threadPanelOpen = ref(false);
 const activeThread = ref<ChatThread | null>(null);
@@ -1040,6 +1041,10 @@ onBeforeUnmount(() => {
   window.removeEventListener("beforeunload", flushDraft);
   chatResizeObserver?.disconnect();
   chatMutationObserver?.disconnect();
+  if (autoScrollFrame !== null) {
+    window.cancelAnimationFrame(autoScrollFrame);
+    autoScrollFrame = null;
+  }
   chatHeader.CLEAR_CONTEXT();
   cleanupMediaCache();
 });
@@ -1935,7 +1940,10 @@ function scrollToBottom(resumeFollowing = false) {
     shouldStickToBottom.value = true;
     scrollIntent = 0;
   }
-  nextTick(() => {
+  // Coalesce stream, mutation, and resize notifications into one scroll per frame.
+  if (autoScrollFrame !== null) return;
+  autoScrollFrame = window.requestAnimationFrame(() => {
+    autoScrollFrame = null;
     const container = messagesContainer.value;
     // Recheck after rendering so queued stream updates cannot override user intent.
     if (
