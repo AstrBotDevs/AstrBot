@@ -1,8 +1,10 @@
 import asyncio
 import os
+import re
 import shutil
 import tempfile
 import zipfile
+from copy import copy
 from pathlib import Path
 
 import yaml
@@ -489,19 +491,26 @@ class _PluginUpdater(_RepoZipUpdater):
             RuntimeError: If the target directory cannot be created.
         """
         self.validate_plugin_archive(zip_path)
-        if os.name == "nt":
-            # Repository archive roots can push otherwise valid paths over MAX_PATH.
-            # Normalize before adding the prefix, and retain it through finalization.
-            target_dir = os.path.normpath(Path(target_dir).absolute())
-            if not target_dir.startswith("\\\\?\\"):
-                if target_dir.startswith("\\\\"):
-                    target_dir = "\\\\?\\UNC\\" + target_dir[2:]
-                else:
-                    target_dir = "\\\\?\\" + target_dir
         ensure_dir(target_dir)
         logger.info(f"Extracting archive: {zip_path}")
         with zipfile.ZipFile(zip_path, "r") as z:
             update_dir = self._resolve_archive_root_dir(z.namelist())
-            z.extractall(target_dir)
+            root_parts = update_dir.replace("\\", "/").split("/")
+            archive_root = root_parts[0]
+            match = re.fullmatch(r"(.+)-([0-9a-fA-F]{40})", archive_root)
+            if match and all(
+                name == archive_root or name.startswith(archive_root + "/")
+                for name in z.namelist()
+            ):
+                short_root = f"{match[1]}-{match[2][:8]}"
+                # Shorten the temporary repository directory before extraction.
+                # Keep orig_filename intact for ZIP local-header validation.
+                for member in z.infolist():
+                    member = copy(member)
+                    member.filename = short_root + member.filename[len(archive_root) :]
+                    z.extract(member, target_dir)
+                update_dir = str(Path(short_root).joinpath(*root_parts[1:]))
+            else:
+                z.extractall(target_dir)
 
         self._finalize_extracted_archive(zip_path, target_dir, update_dir)
