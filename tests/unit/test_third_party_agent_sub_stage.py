@@ -18,11 +18,17 @@ from astrbot.core.pipeline.process_stage.method.agent_sub_stages import third_pa
         ("deerflow", "DeerFlowAgentRunner", "deerflow_api_key"),
     ],
 )
+@pytest.mark.parametrize(
+    ("wake_word", "expected_prompt"),
+    [("", "hello"), ("@bot-1", "@bot-1 hello")],
+)
 async def test_third_party_runner_receives_inline_profile_config(
     monkeypatch: pytest.MonkeyPatch,
     runner_type: str,
     runner_class_name: str,
     config_key: str,
+    wake_word: str,
+    expected_prompt: str,
 ):
     inline_config = {config_key: "inline-secret"}
     runner = MagicMock()
@@ -87,10 +93,13 @@ async def test_third_party_runner_receives_inline_profile_config(
     event.unified_msg_origin = "webchat:FriendMessage:test"
     event.message_obj.message = []
     event.platform_meta.support_streaming_message = True
-    event.get_extra.return_value = None
+    event.get_extra.side_effect = lambda key=None, default=None: (
+        wake_word if key == "_wake_word" else default
+    )
 
     results = [item async for item in stage.process(event, "")]
 
     assert results == [None]
     assert runner.reset.await_args.kwargs["provider_config"] is inline_config
+    assert runner.reset.await_args.kwargs["request"].prompt == expected_prompt
     assert runner_factory_calls == [True]

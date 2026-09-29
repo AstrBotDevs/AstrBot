@@ -181,6 +181,9 @@ class InternalAgentSubStage(Stage):
 
             has_provider_request = event.get_extra("provider_request") is not None
             has_valid_message = bool(event.message_str and event.message_str.strip())
+            # 仅含唤醒词（如只有 @机器人 或只有唤醒前缀）的消息在保留唤醒词时也应请求 AI
+            if not has_valid_message and event.get_extra("_wake_word"):
+                has_valid_message = True
             has_media_content = any(
                 isinstance(comp, (Image, File, Record, Video))
                 for comp in event.message_obj.message

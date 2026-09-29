@@ -130,6 +130,7 @@ DEFAULT_CONFIG = {
         "empty_mention_waiting": True,
         "empty_mention_waiting_need_reply": True,
         "friend_message_needs_wake_prefix": False,
+        "keep_wake_word_in_prompt": False,
         "ignore_bot_self_message": False,
         "ignore_at_all": False,
     },
@@ -1187,6 +1188,10 @@ CONFIG_METADATA_2 = {
                     "friend_message_needs_wake_prefix": {
                         "type": "bool",
                         "hint": "启用后，私聊消息需要唤醒前缀才会被处理，同群聊一样。",
+                    },
+                    "keep_wake_word_in_prompt": {
+                        "type": "bool",
+                        "hint": "启用后，唤醒词（唤醒前缀或 @ 机器人）会原样保留在发给 AI 的消息内容中，并写入对话记录。不影响指令匹配。",
                     },
                     "ignore_bot_self_message": {
                         "type": "bool",
@@ -4304,6 +4309,11 @@ CONFIG_METADATA_3 = {
                     "platform_settings.friend_message_needs_wake_prefix": {
                         "description": "私聊消息需要唤醒词",
                         "type": "bool",
+                    },
+                    "platform_settings.keep_wake_word_in_prompt": {
+                        "description": "保留唤醒词",
+                        "type": "bool",
+                        "hint": "启用后，唤醒词（唤醒前缀或 @ 机器人）会原样保留在发给 AI 的消息内容中，并写入对话记录。不影响指令匹配。",
                     },
                     "platform_settings.reply_prefix": {
                         "description": "回复时的文本前缀",

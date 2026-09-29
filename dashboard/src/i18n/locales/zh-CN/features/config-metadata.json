@@ -955,6 +955,10 @@
         "friend_message_needs_wake_prefix": {
           "description": "私聊消息需要唤醒词"
         },
+        "keep_wake_word_in_prompt": {
+          "description": "保留唤醒词",
+          "hint": "启用后，唤醒词（唤醒前缀或 @ 机器人）会原样保留在发给 AI 的消息内容中，并写入对话记录。不影响指令匹配。"
+        },
         "reply_prefix": {
           "description": "回复时的文本前缀"
         },

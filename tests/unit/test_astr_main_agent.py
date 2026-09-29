@@ -1907,6 +1907,42 @@ class TestBuildMainAgent:
         assert result is None
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("wake_word", "expected_prompt"),
+        [("@MyBot", "@MyBot hello"), ("", "hello")],
+    )
+    async def test_build_main_agent_restores_wake_word_in_prompt(
+        self, mock_event, mock_context, mock_provider, wake_word, expected_prompt
+    ):
+        """Restore the wake word recorded by the waking stage into the prompt."""
+        module = ama
+        mock_event.message_str = "hello"
+        mock_event.get_extra.side_effect = lambda key=None, default=None: (
+            wake_word if key == "_wake_word" else default
+        )
+        mock_context.get_provider_by_id.return_value = None
+        mock_context.get_using_provider.return_value = mock_provider
+        mock_context.get_config.return_value = {}
+        _setup_conversation_for_build(mock_context.conversation_manager)
+
+        with (
+            patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
+            patch("astrbot.core.astr_main_agent.AstrAgentContext"),
+        ):
+            mock_runner = MagicMock()
+            mock_runner.reset = AsyncMock()
+            mock_runner_cls.return_value = mock_runner
+
+            result = await module.build_main_agent(
+                event=mock_event,
+                plugin_context=mock_context,
+                config=module.MainAgentBuildConfig(tool_call_timeout=60),
+            )
+
+        assert result is not None
+        assert result.provider_request.prompt == expected_prompt
+
+    @pytest.mark.asyncio
     @pytest.mark.parametrize("quoted", [False, True])
     @pytest.mark.parametrize("compression_enabled", [False, True])
     async def test_build_main_agent_with_images(

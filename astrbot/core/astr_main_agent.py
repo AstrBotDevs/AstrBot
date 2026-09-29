@@ -1493,6 +1493,9 @@ async def collect_initial_request(
                 provider_wake_prefix
             ):
                 req.prompt = event.message_str[len(provider_wake_prefix) :]
+            if wake_word := event.get_extra("_wake_word"):
+                # 按 platform_settings.keep_wake_word_in_prompt 的配置原样补回唤醒词
+                req.prompt = f"{wake_word} {req.prompt}".strip()
 
             # media files attachments
             for comp in event.message_obj.message:

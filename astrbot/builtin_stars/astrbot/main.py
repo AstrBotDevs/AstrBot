@@ -96,12 +96,22 @@ class Main(star.Star):
                             )
                         )
 
-                    yield event.request_llm(
-                        prompt=(
+                    if p_settings.get("keep_wake_word_in_prompt", False):
+                        # 原样把唤醒词交给 AI，AI 自然能理解用户只是在呼叫它
+                        prompt = (
+                            f"@{messages[0].name or event.get_self_id()}"
+                            if is_empty_mention
+                            else messages[0].text.strip()
+                        )
+                    else:
+                        prompt = (
                             "注意，你正在社交媒体上中与用户进行聊天，用户只是通过@来唤醒你，但并未在这条消息中输入内容，他可能会在接下来一条发送他想发送的内容。"
                             "你友好地询问用户想要聊些什么或者需要什么帮助，回复要符合人设，不要太过机械化。"
                             "请注意，你仅需要输出要回复用户的内容，不要输出其他任何东西"
-                        ),
+                        )
+
+                    yield event.request_llm(
+                        prompt=prompt,
                         session_id=curr_cid,
                         contexts=[],
                         system_prompt="",
