@@ -99,6 +99,8 @@
     "placeholder": "Спросить об этом фрагменте..."
   },
   "conversation": {
+    "loading": "Загрузка бесед",
+    "loadFailed": "Не удалось загрузить беседы",
     "title": "Диалоги",
     "newConversation": "Новый чат",
     "noHistory": "История диалогов пуста",

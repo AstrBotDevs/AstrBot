@@ -97,8 +97,14 @@
         </v-btn>
       </div>
 
-      <div v-if="!isSidebarCollapsed" class="sidebar-content">
+      <div
+        v-if="!isSidebarCollapsed"
+        ref="sidebarContent"
+        class="sidebar-content"
+        @scroll.passive="loadMoreSessions"
+      >
         <ProjectList
+          ref="sidebarProjects"
           :projects="projects"
           :project-sessions="projectSessionsById"
           :loading-project-ids="loadingProjectSessionIds"
@@ -120,7 +126,7 @@
             <span>{{ tm("conversation.title") }}</span>
           </div>
           <div
-            v-for="session in sessions"
+            v-for="session in sidebarSessions"
             :key="session.session_id"
             class="session-item"
             :class="{
@@ -165,6 +171,19 @@
               width="2"
             />
           </div>
+          <v-progress-linear
+            v-if="sessionsPagination.loading"
+            color="primary"
+            height="2"
+            indeterminate
+            :aria-label="tm('conversation.loading')"
+          />
+          <ChatLoadError
+            v-if="sessionsPagination.error"
+            :message="tm('conversation.loadFailed')"
+            :loading="sessionsPagination.loading"
+            @retry="getSessions(sessionsPagination.append)"
+          />
         </section>
       </div>
 
@@ -601,6 +620,7 @@ const confirmDialog = useConfirmDialog();
 const toast = useToast();
 const {
   sessions,
+  sessionsPagination,
   currSessionId,
   getSessions,
   newSession,
@@ -673,6 +693,11 @@ const tokenProviderConfigs = ref<TokenProviderConfig[]>([]);
 const tokenModelMetadata = ref<Record<string, ProviderModelMetadata>>({});
 const selectedTokenProviderId = ref("");
 const messagesContainer = ref<HTMLElement | null>(null);
+const sidebarContent = ref<HTMLElement | null>(null);
+const sidebarProjects = ref<InstanceType<typeof ProjectList> | null>(null);
+const sidebarProjectElement = computed<HTMLElement | null>(
+  () => sidebarProjects.value?.$el || null,
+);
 const messagesContent = ref<HTMLElement | null>(null);
 const composerShell = ref<HTMLElement | null>(null);
 const inputRef = ref<InstanceType<typeof ChatInput> | null>(null);
@@ -761,6 +786,7 @@ const {
   loadingMessages,
   sending,
   loadedSessions,
+  sessionDetails,
   sessionProjects,
   activeMessages,
   paginationBySession,
@@ -830,11 +856,23 @@ const currentSession = computed(
     Object.values(projectSessionsById.value)
       .flat()
       .find((session) => session.session_id === currSessionId.value) ||
+    sessionDetails[currSessionId.value] ||
     null,
 );
 const sessionProject = computed(() =>
   currSessionId.value ? sessionProjects[currSessionId.value] : null,
 );
+const sidebarSessions = computed(() => {
+  const current = currentSession.value;
+  if (
+    current &&
+    !sessionProject.value &&
+    !sessions.value.some((session) => session.session_id === current.session_id)
+  ) {
+    return [current, ...sessions.value];
+  }
+  return sessions.value;
+});
 const currentSessionTitle = computed(() =>
   currentSession.value ? sessionTitle(currentSession.value) : "",
 );
@@ -973,6 +1011,15 @@ onMounted(async () => {
   window.addEventListener("beforeunload", flushDraft);
   if (typeof ResizeObserver !== "undefined") {
     chatResizeObserver = new ResizeObserver((entries) => {
+      if (
+        entries.some(
+          (entry) =>
+            entry.target === sidebarContent.value ||
+            entry.target === sidebarProjectElement.value,
+        )
+      ) {
+        loadMoreSessions();
+      }
       const container = messagesContainer.value;
       if (!container) return;
       let composerResized = false;
@@ -1000,6 +1047,9 @@ onMounted(async () => {
       }
     });
     if (composerShell.value) chatResizeObserver.observe(composerShell.value);
+    if (sidebarContent.value) chatResizeObserver.observe(sidebarContent.value);
+    if (sidebarProjectElement.value)
+      chatResizeObserver.observe(sidebarProjectElement.value);
     if (messagesContent.value)
       chatResizeObserver.observe(messagesContent.value);
   }
@@ -1050,7 +1100,7 @@ onBeforeUnmount(() => {
 });
 
 watch(
-  [composerShell, messagesContent],
+  [composerShell, messagesContent, sidebarContent, sidebarProjectElement],
   (elements, previousElements) => {
     if (!chatResizeObserver) return;
     for (const element of previousElements) {
@@ -1060,6 +1110,12 @@ watch(
       if (element) chatResizeObserver.observe(element);
     }
   },
+  { flush: "post" },
+);
+
+watch(
+  [() => sessionsPagination.loading, () => mobileDrawer.open],
+  () => loadMoreSessions(),
   { flush: "post" },
 );
 
@@ -1272,6 +1328,9 @@ async function saveSessionTitleDialog() {
       display_name: displayName,
     });
     updateSessionTitle(sessionId, displayName);
+    if (sessionDetails[sessionId]) {
+      sessionDetails[sessionId].display_name = displayName;
+    }
     const projectSession = projectSessions.value.find(
       (session) => session.session_id === sessionId,
     );
@@ -1288,6 +1347,8 @@ async function saveSessionTitleDialog() {
     });
     if (refreshProjectSessionsAfterTitleSave.value) {
       await loadProjectSessions();
+    } else {
+      await getSessions();
     }
     sessionTitleDialogOpen.value = false;
   } finally {
@@ -1922,6 +1983,24 @@ function handleMessagesScroll() {
   lastMessagesScrollHeight = container.scrollHeight;
   lastMessagesClientHeight = container.clientHeight;
   maybeLoadEarlierOnScroll(container);
+}
+
+function loadMoreSessions() {
+  const container = sidebarContent.value;
+  if (
+    !container ||
+    container.clientHeight === 0 ||
+    (isMobile.value && !mobileDrawer.open) ||
+    !sessionsPagination.hasMore ||
+    sessionsPagination.loading ||
+    sessionsPagination.error
+  )
+    return;
+  if (
+    container.scrollHeight - container.scrollTop - container.clientHeight > 120
+  )
+    return;
+  void getSessions(true);
 }
 
 function maybeLoadEarlierOnScroll(container: HTMLElement) {

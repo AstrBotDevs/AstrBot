@@ -95,7 +95,13 @@ async def test_get_session_returns_complete_content_and_pagination_metadata(
     class Database:
         async def get_platform_session_by_id(self, session_id):
             return SimpleNamespace(
-                session_id=session_id, platform_id="webchat", creator="owner"
+                session_id=session_id,
+                platform_id="webchat",
+                creator="owner",
+                display_name="Session title",
+                is_group=0,
+                created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                updated_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
             )
 
         async def get_project_by_session(self, **kwargs):
@@ -111,6 +117,8 @@ async def test_get_session_returns_complete_content_and_pagination_metadata(
     service.get_active_chat_runs = lambda _username, _session_id: []
 
     result = await service.get_session("owner", "session-1", page=page, page_size=1)
+    assert result["session"]["display_name"] == "Session title"
+    assert result["session"]["session_id"] == "session-1"
     assert result["total"] == total
     assert result["page"] == page
     assert result["page_size"] == 1

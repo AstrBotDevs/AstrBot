@@ -1,6 +1,7 @@
 import { computed, onBeforeUnmount, reactive, ref, type Ref } from "vue";
 import { chatApi, fileApi } from "@/api/v1";
 import { fetchWithAuth } from "@/api/http";
+import type { Session } from "@/composables/useSessions";
 
 export type TransportMode = "sse" | "websocket";
 
@@ -157,6 +158,7 @@ export function useMessages(options: UseMessagesOptions) {
   const sending = ref(false);
   const messagesBySession = reactive<Record<string, ChatRecord[]>>({});
   const loadedSessions = reactive<Record<string, boolean>>({});
+  const sessionDetails = reactive<Record<string, Session>>({});
   const paginationBySession = reactive<Record<string, HistoryPaginationState>>(
     {},
   );
@@ -351,6 +353,7 @@ export function useMessages(options: UseMessagesOptions) {
         };
       }
       sessionProjects[sessionId] = normalizeSessionProject(payload.project);
+      if (payload.session) sessionDetails[sessionId] = payload.session;
       loadedSessions[sessionId] = true;
       if (resumeRuns && Array.isArray(payload.active_runs)) {
         await restoreNextActiveRun(sessionId, payload.active_runs);
@@ -1323,6 +1326,7 @@ export function useMessages(options: UseMessagesOptions) {
     sending,
     messagesBySession,
     loadedSessions,
+    sessionDetails,
     paginationBySession,
     sessionProjects,
     activeMessages,
