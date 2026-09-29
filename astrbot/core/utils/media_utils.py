@@ -511,6 +511,7 @@ async def _materialize_media_ref(
 
     if is_file_uri(media_ref):
         path = Path(file_uri_to_path(media_ref))
+        path.stat()
         return _LocalMediaFile(path=path, mime_type=_guess_mime_type(path))
 
     if media_ref.startswith("data:"):
@@ -604,6 +605,7 @@ async def _materialize_media_ref(
                 cleanup_paths=cleanup_paths,
             )
 
+    path.stat()
     return _LocalMediaFile(path=path, mime_type=_guess_mime_type(path))
 
 

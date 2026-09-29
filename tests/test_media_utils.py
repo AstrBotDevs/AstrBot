@@ -19,6 +19,48 @@ from astrbot.core.utils.tencent_record_helper import wav_to_tencent_silk
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("media_type", ["image", "audio", "file"])
+@pytest.mark.parametrize("as_uri", [False, True])
+async def test_media_resolver_rejects_missing_local_file(tmp_path, media_type, as_uri):
+    missing_path = tmp_path / "missing.png"
+    media_ref = missing_path.as_uri() if as_uri else str(missing_path)
+
+    with pytest.raises(FileNotFoundError):
+        await media_utils.MediaResolver(media_ref, media_type=media_type).to_path()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("media_type", ["image", "audio", "file"])
+async def test_media_resolver_rejects_unresolved_url_path(
+    tmp_path, monkeypatch, media_type
+):
+    monkeypatch.chdir(tmp_path)
+
+    with pytest.raises(FileNotFoundError):
+        await media_utils.MediaResolver(
+            "/api/v1/files/tokens/missing-media",
+            media_type=media_type,
+        ).to_path()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("media_type", ["image", "file"])
+async def test_media_resolver_prefers_existing_file_to_bare_base64(
+    tmp_path, monkeypatch, media_type
+):
+    monkeypatch.chdir(tmp_path)
+    local_path = tmp_path / "abcd"
+    local_path.write_bytes(b"local media")
+
+    resolved_path = await media_utils.MediaResolver(
+        "abcd", media_type=media_type
+    ).to_path()
+
+    assert Path(resolved_path) == local_path.resolve()
+    assert Path(resolved_path).read_bytes() == b"local media"
+
+
+@pytest.mark.asyncio
 async def test_resolve_audio_ref_to_base64_data_decodes_data_uri(tmp_path, monkeypatch):
     monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
     audio_bytes = b"RIFF\x24\x00\x00\x00WAVEfmt " + b"\x00" * 16

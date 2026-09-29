@@ -684,6 +684,40 @@ async def test_failed_images_keep_valid_input(harness, tmp_path, text, good):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("preprocess_first", [False, True])
+@pytest.mark.parametrize("ref_kind", ["local", "file_uri", "url_path"])
+async def test_missing_image_reference_is_reported_without_a_fake_path(
+    harness, tmp_path, ref_kind, preprocess_first
+):
+    missing_path = tmp_path / "missing.png"
+    if ref_kind == "file_uri":
+        media_ref = missing_path.as_uri()
+    elif ref_kind == "url_path":
+        media_ref = "/api/v1/files/tokens/missing-media"
+    else:
+        media_ref = str(missing_path)
+    event = make_event(
+        [Image(file=media_ref, url=media_ref), Plain(text="keep text")],
+        text="keep text",
+    )
+
+    await process_event(harness, event, preprocess_first=preprocess_first)
+
+    req = harness.captured[0].req
+    assert req.prompt == "keep text"
+    assert req.image_urls == []
+    assert any(
+        isinstance(part, TextPart) and part.text == "[Image unavailable]"
+        for part in req.extra_user_content_parts
+    )
+    assert all(
+        media_ref not in str(message.content)
+        for message in harness.captured[0].run_context.messages
+    )
+    harness.provider.text_chat.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("origin", ["ordinary", "quote", "plugin", "hook"])
 @pytest.mark.parametrize("with_valid_image", [False, True])
 async def test_oversized_images_explain_omission_and_keep_original_path(
