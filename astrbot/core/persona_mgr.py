@@ -154,15 +154,27 @@ class PersonaManager:
             (item for item in self.personas_v3 if item["name"] == persona_id),
             None,
         )
+        is_implicit_system_default = (
+            force_applied_persona_id is None
+            and conversation_persona_id is None
+            and persona_id == "default"
+        )
         logger.debug(
             "[persona] resolve_selected_persona: umo=%s conversation_persona_id=%r "
-            "force_applied=%r -> persona_id=%r matched_persona=%r",
+            "force_applied=%r -> persona_id=%r matched_persona=%r "
+            "implicit_system_default=%s",
             umo,
             conversation_persona_id,
             force_applied_persona_id,
             persona_id,
             persona["name"] if persona else None,
+            is_implicit_system_default,
         )
+
+        if is_implicit_system_default and platform_name == "webchat":
+            # WebChat keeps its dedicated ChatUI default prompt (gated by the
+            # request flag) instead of the editable system default persona.
+            persona = None
 
         use_webchat_special_default = False
         if not persona and platform_name == "webchat" and persona_id != "[%None]":

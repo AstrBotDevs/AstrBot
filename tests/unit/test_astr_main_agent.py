@@ -1166,6 +1166,124 @@ class TestEnsurePersonaAndSkills:
         assert module.CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT not in req.system_prompt
 
     @pytest.mark.asyncio
+    async def test_webchat_implicit_default_injects_chatui_prompt(
+        self, mock_event, mock_context
+    ):
+        """WebChat implicit default uses the ChatUI prompt, not the DB persona."""
+        module = ama
+        mock_context.persona_manager.resolve_selected_persona = AsyncMock(
+            return_value=("_chatui_default_", None, None, True)
+        )
+        mock_event.get_platform_name.return_value = "webchat"
+        mock_event.get_extra.side_effect = lambda key: {
+            "enable_inline_genui": False,
+            "enable_default_system_prompt": True,
+        }.get(key)
+        req = ProviderRequest()
+        req.conversation = MagicMock(persona_id=None)
+
+        await module._ensure_persona_and_skills(req, {}, mock_context, mock_event)
+
+        assert module.CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT in req.system_prompt
+        assert "Persona Instructions" not in req.system_prompt
+
+    @pytest.mark.asyncio
+    async def test_non_webchat_implicit_default_injects_db_persona(
+        self, mock_event, mock_context
+    ):
+        """Non-WebChat implicit default injects the editable DB default persona."""
+        module = ama
+        persona = {"name": "default", "prompt": "EDITED DEFAULT"}
+        mock_context.persona_manager.resolve_selected_persona = AsyncMock(
+            return_value=("default", persona, None, False)
+        )
+        mock_event.get_extra.side_effect = lambda key: None
+        req = ProviderRequest()
+        req.conversation = MagicMock(persona_id=None)
+
+        await module._ensure_persona_and_skills(req, {}, mock_context, mock_event)
+
+        assert "EDITED DEFAULT" in req.system_prompt
+        assert module.CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT not in req.system_prompt
+
+    @pytest.mark.asyncio
+    async def test_explicit_default_persona_ignores_default_system_prompt_flag(
+        self, mock_event, mock_context
+    ):
+        """Explicitly selecting the default persona uses the record even when the flag is off."""
+        module = ama
+        persona = {"name": "default", "prompt": "EDITED DEFAULT"}
+        mock_context.persona_manager.resolve_selected_persona = AsyncMock(
+            return_value=("default", persona, None, False)
+        )
+        mock_event.get_platform_name.return_value = "webchat"
+        mock_event.get_extra.side_effect = lambda key: {
+            "enable_inline_genui": False,
+            "enable_default_system_prompt": False,
+        }.get(key)
+        req = ProviderRequest()
+        req.conversation = MagicMock(persona_id="default")
+
+        await module._ensure_persona_and_skills(req, {}, mock_context, mock_event)
+
+        assert "EDITED DEFAULT" in req.system_prompt
+        assert module.CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT not in req.system_prompt
+
+    @pytest.mark.asyncio
+    async def test_webchat_implicit_default_regression_with_real_persona_manager(
+        self, mock_event, mock_context
+    ):
+        """A seeded system default must not swallow the WebChat ChatUI prompt."""
+        from astrbot.core import persona_mgr as pm
+        from astrbot.core.db.po import Persona
+
+        module = ama
+        conf = {
+            "agent_runner": {
+                "runner_type": "local",
+                "config": {"persona": {"persona_id": "default"}},
+            },
+            "provider_settings": {},
+        }
+        acm = MagicMock()
+        acm.default_conf = conf
+        acm.get_conf.return_value = conf
+
+        db = MagicMock()
+        db.get_personas = AsyncMock(
+            return_value=[
+                Persona(
+                    persona_id="default",
+                    system_prompt="EDITED DEFAULT",
+                    begin_dialogs=[],
+                    tools=None,
+                    skills=None,
+                    custom_error_message=None,
+                    folder_id=None,
+                    sort_order=0,
+                )
+            ]
+        )
+        db.insert_persona = AsyncMock()
+        manager = pm.PersonaManager(db_helper=db, acm=acm)
+        await manager.initialize()
+        mock_context.persona_manager = manager
+
+        mock_event.get_platform_name.return_value = "webchat"
+        mock_event.get_extra.side_effect = lambda key: {
+            "enable_inline_genui": False,
+            "enable_default_system_prompt": True,
+        }.get(key)
+        req = ProviderRequest()
+        req.conversation = MagicMock(persona_id=None)
+
+        with patch.object(pm.sp, "get_async", new=AsyncMock(return_value={})):
+            await module._ensure_persona_and_skills(req, {}, mock_context, mock_event)
+
+        assert module.CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT in req.system_prompt
+        assert "EDITED DEFAULT" not in req.system_prompt
+
+    @pytest.mark.asyncio
     async def test_ensure_persona_none_explicit(self, mock_event, mock_context):
         """Test that [%None] persona is explicitly set to no persona."""
         module = ama
@@ -1448,7 +1566,13 @@ class TestEnsurePersonaAndSkills:
         [(True, False), (True, True), (False, False)],
     )
     async def test_persona_empty_tools_keeps_local_runtime_builtin_tools(
-        self, mock_event, mock_context, mock_provider, role, allow_execution, allow_network
+        self,
+        mock_event,
+        mock_context,
+        mock_provider,
+        role,
+        allow_execution,
+        allow_network,
     ):
         module = ama
         persona = {"name": "locked", "prompt": "No tools.", "tools": []}
