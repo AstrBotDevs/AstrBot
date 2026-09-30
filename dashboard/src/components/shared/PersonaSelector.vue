@@ -69,13 +69,24 @@ const showPersonaDialog = ref(false);
 const editingPersona = ref<Persona | null>(null);
 const currentFolderId = ref<string | null>(null);
 
-// 默认人格
-const selectablePersonas = computed(() =>
-  currentPersonas.value.map((persona) => ({
+// 默认人格：映射显示名，并在根目录保持置顶（与旧版选择器行为一致）
+const selectablePersonas = computed(() => {
+  const personas = currentPersonas.value.map((persona) => ({
     ...persona,
     name: formatDisplayValue(persona.persona_id),
-  })),
-);
+  }));
+  if (currentFolderId.value !== null) {
+    return personas;
+  }
+  const defaultIndex = personas.findIndex(
+    (persona) => persona.persona_id === "default",
+  );
+  if (defaultIndex <= 0) {
+    return personas;
+  }
+  const [defaultPersona] = personas.splice(defaultIndex, 1);
+  return [defaultPersona, ...personas];
+});
 
 // 递归查找文件夹名称
 function findFolderName(
