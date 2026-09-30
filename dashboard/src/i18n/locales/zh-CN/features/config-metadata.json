@@ -245,11 +245,15 @@
       "provider_settings": {
         "computer_use_runtime": {
           "description": "运行环境",
-          "hint": "允许 Agent 访问的环境。local 为本机环境，sandbox 为沙箱环境，none 为不允许任何环境。"
+          "hint": "允许 Agent 访问的环境。",
+          "labels": ["不允许任何环境", "本机环境", "第三方沙箱环境"]
+        },
+        "computer_use_local_permissions": {
+          "description": "本地权限策略"
         },
         "computer_use_require_admin": {
-          "description": "需要 AstrBot 管理员权限",
-          "hint": "开启后，需要 AstrBot 管理员权限才能调用使用电脑能力。在平台配置->管理员中可添加管理员。使用 /sid 指令查看管理员 ID。"
+          "description": "沙箱能力需要 AstrBot 管理员权限",
+          "hint": "开启后，需要 AstrBot 管理员权限才能调用远程沙箱能力。在平台配置->管理员中可添加管理员。使用 /sid 指令查看管理员 ID。"
         },
         "sandbox": {
           "booter": {
@@ -310,6 +314,50 @@
           "shipyard_max_sessions": {
             "description": "Shipyard Ship 会话复用上限",
             "hint": "决定了一个实例承载的最大会话数量。"
+          }
+        }
+      },
+      "local_permissions": {
+        "role": "用户身份",
+        "execution": "允许执行代码",
+        "network": "允许执行环境联网",
+        "filesystem": "文件访问范围",
+        "scopes": {
+          "workspace": "工作区",
+          "host": "整个环境"
+        },
+        "scopeHints": {
+          "none": "不允许访问任何文件",
+          "workspace": "受限的工作区、临时目录和技能文件。",
+          "host": "AstrBot 所在运行环境的所有文件。"
+        },
+        "scopeDetails": {
+          "account": "1. 可访问 AstrBot 运行账户有权限访问的文件。",
+          "docker": "2. 如果通过 Docker 部署，则仅可访问容器内及挂载的文件，并非宿主机全部文件。"
+        },
+        "roles": {
+          "member": "普通成员",
+          "admin": "管理员"
+        },
+        "accessMode": "本地电脑访问",
+        "modes": {
+          "none": "关闭",
+          "files": "仅文件访问",
+          "full": "不受限访问"
+        },
+        "unsupportedSelection": "当前策略不受支持",
+        "runtimeUnknown": "运行环境信息不可用。",
+        "memberWarning": "普通成员已获得联网或整个环境访问权限。",
+        "runtime": {
+          "os": "操作系统",
+          "arch": "架构",
+          "sandbox": "本地隔离",
+          "unavailableHint": "沙箱启动失败，受限 Shell/Python 执行及工作区文件搜索会受到影响。请根据下方错误检查系统安全策略（如 Linux 的 AppArmor、用户命名空间限制）或容器限制，修复后重启 AstrBot 重新检测。",
+          "status": {
+            "detected": "{backend} · 启动检测通过",
+            "missing": "缺少 {dependency}",
+            "unavailable": "{backend} · 已安装但无法启动",
+            "unsupported": "暂不支持"
           }
         }
       }
@@ -454,20 +502,12 @@
           "description": "用户提示词",
           "hint": "可使用 {{prompt}} 作为用户输入的占位符。如果不输入占位符则代表添加在用户输入的前面。"
         },
-        "image_compress_enabled": {
-          "description": "启用图片压缩",
-          "hint": "默认开启。发送给多模态模型前按需压缩转换图片：合规的 JPEG/PNG 原样发送，动图生成拼图预览。"
-        },
         "image_compress_options": {
-          "description": "图片压缩配置",
-          "hint": "用于控制发送给模型的图片尺寸上限和 JPEG 输出质量。",
+          "description": "模型输入图片设置",
+          "hint": "图片始终处理为严格小于 512 KiB 的 JPEG/PNG，原始附件保留。",
           "max_size": {
-            "description": "最大边长",
-            "hint": "压缩后图片的最长边，单位为像素。超过该尺寸时会按比例缩放。"
-          },
-          "quality": {
-            "description": "JPEG 质量",
-            "hint": "JPEG 输出质量，范围为 1-100。值越高，画质越好，文件也越大。"
+            "description": "输入图片最大边长",
+            "hint": "发送给模型的图片最长边（像素），系统会在必要时进一步压缩。"
           }
         },
         "reachability_check": {

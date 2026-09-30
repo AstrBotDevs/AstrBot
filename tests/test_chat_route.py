@@ -508,3 +508,44 @@ async def test_chat_stream_forwards_follow_up_status_by_default(
             run.task.cancel()
             await asyncio.gather(run.task, return_exceptions=True)
         chat_service.webchat_queue_mgr.remove_queues(session_id)
+
+
+@pytest.mark.asyncio
+async def test_save_uploaded_file_rejects_oversized_content_length(
+    chat_service_instance,
+):
+    class FakeUpload:
+        filename = "big.bin"
+        content_type = "application/octet-stream"
+        content_length = chat_service.MAX_UPLOAD_FILE_SIZE_BYTES + 1
+
+    with pytest.raises(ChatServiceError, match="File too large"):
+        await chat_service_instance.save_uploaded_file(FakeUpload())
+
+
+@pytest.mark.asyncio
+async def test_save_uploaded_file_rejects_oversized_saved_file(
+    chat_service_instance,
+):
+    from pathlib import Path
+
+    class FakeUpload:
+        filename = "big.bin"
+        content_type = "application/octet-stream"
+        content_length = None
+
+        async def save(self, path, *, max_bytes=None):
+            saved = Path(path)
+            saved.write_bytes(b"x")
+            with saved.open("rb+") as f:
+                f.truncate(chat_service.MAX_UPLOAD_FILE_SIZE_BYTES + 1)
+            # Mirror save_upload_stream: enforce the cap mid-write and
+            # remove the partial file on overflow.
+            if max_bytes is not None and saved.stat().st_size > max_bytes:
+                saved.unlink()
+                raise chat_service.UploadTooLargeError(max_bytes)
+
+    with pytest.raises(ChatServiceError, match="File too large"):
+        await chat_service_instance.save_uploaded_file(FakeUpload())
+
+    assert not list(Path(chat_service_instance.attachments_dir).iterdir())

@@ -8,11 +8,11 @@
 
 ## Configuring Embedding Model
 
-Open the service provider page, click "Add Service Provider", and select Embedding.
+Open `Providers` (`/providers`), switch to the `Embedding` tab, click `Add`, and select a provider type.
 
 Currently, AstrBot supports embedding vector services compatible with OpenAI API and Gemini API.
 
-Click on the provider card above to enter the configuration page and fill in the configuration.
+Select the provider in the left panel and fill in its API endpoint, API key, model name, and other settings in the right panel.
 
 After completing the configuration, click Save.
 
@@ -20,17 +20,15 @@ After completing the configuration, click Save.
 
 A reranker model can improve the precision of final retrieval results to some extent.
 
-Similar to configuring the embedding model, open the service provider page, click "Add Service Provider", and select Reranker. For more information about reranker models, please refer to online resources.
+Similar to configuring the embedding model, open `Providers`, switch to the `Rerank` tab, click `Add`, select a provider type, and save its configuration.
 
 ## Creating a Knowledge Base
 
 AstrBot supports multiple knowledge base management. During chat, you can **freely specify which knowledge base to use**.
 
-Enter the knowledge base page and click "Create Knowledge Base", as shown below:
+Open `Knowledge Base` (`/knowledge-base`) from the sidebar and click `Create Knowledge Base`.
 
-![image](https://files.astrbot.app/docs/source/images/knowledge-base/image.png)
-
-Fill in the relevant information. In the embedding model dropdown menu, you will see the embedding model and reranker model you just created (reranker model is optional).
+Fill in the name and other details. Select the embedding model under `Embedding Model` and, optionally, select a reranker in the separate `Rerank Model (Optional)` field. Then click `Create`.
 
 > [!TIP]
 > Once you've selected an embedding model for a knowledge base, do not modify the **model** or **vector dimension information** of that provider, as this will **seriously affect** the retrieval accuracy of the knowledge base or even **cause errors**.
@@ -43,4 +41,4 @@ After creating a knowledge base, you can upload documents to it. Up to 10 files 
 
 ## Using the Knowledge Base
 
-In the configuration file, you can specify different knowledge bases for different configuration profiles.
+Open `Config`, select the profile to edit, choose the knowledge bases under `AI → Capabilities → Knowledge Base`, and click `Save Configuration` at the bottom right. Each profile can use different knowledge bases.

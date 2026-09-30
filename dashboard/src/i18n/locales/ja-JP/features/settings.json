@@ -209,6 +209,7 @@
       "restartNow": "今すぐ再起動",
       "failed": "インポートに失敗しました",
       "retry": "再試行",
+      "resumeUpload": "アップロードを再開",
       "version": {
         "backupVersion": "バックアップのバージョン",
         "currentVersion": "現在のバージョン",

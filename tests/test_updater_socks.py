@@ -1,4 +1,7 @@
+import asyncio
+import builtins
 import ntpath
+import os
 import posixpath
 import zipfile
 from dataclasses import dataclass, field
@@ -47,6 +50,9 @@ class _FakeStreamResponse:
 
 
 class _FakeFailingStreamResponse:
+    def __init__(self, error: BaseException | None = None):
+        self._error = error if error is not None else RuntimeError("stream interrupted")
+
     async def __aenter__(self):
         return self
 
@@ -58,7 +64,7 @@ class _FakeFailingStreamResponse:
 
     async def aiter_bytes(self, chunk_size: int = 8192):  # noqa: ARG002
         yield b"partial"
-        raise RuntimeError("stream interrupted")
+        raise self._error
 
 
 class _FakeStatusErrorResponse:
@@ -162,6 +168,9 @@ class _FakeStatusErrorAsyncClient:
 
 
 class _FakeFailingStreamAsyncClient:
+    def __init__(self, error: BaseException | None = None):
+        self._error = error
+
     async def __aenter__(self):
         return self
 
@@ -169,7 +178,7 @@ class _FakeFailingStreamAsyncClient:
         return None
 
     def stream(self, method: str, url: str):  # noqa: ARG002
-        return _FakeFailingStreamResponse()
+        return _FakeFailingStreamResponse(self._error)
 
 
 class _FakeZipArchive:
@@ -387,6 +396,113 @@ def test_plugin_unzip_file_accepts_metadata_yml(tmp_path: Path) -> None:
 
     assert (target_dir / "metadata.yml").is_file()
     assert (target_dir / "main.py").is_file()
+    assert not zip_path.exists()
+
+
+@pytest.mark.parametrize("target_kind", ["absolute", "relative"])
+def test_plugin_unzip_file_handles_long_archive_paths(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    target_kind: str,
+) -> None:
+    zip_path = tmp_path / "plugin.zip"
+    target_dir = tmp_path / "plugin"
+    archive_root = "demo-plugin-" + "a" * 40
+    # The original destination is 270 characters; shortening the SHA saves 32.
+    filename_length = 270 - len(str(target_dir / archive_root)) - 1
+    assert 3 < filename_length <= 255
+    member_path = "x" * (filename_length - 3) + ".py"
+
+    with zipfile.ZipFile(zip_path, "w") as archive:
+        archive.writestr(
+            f"{archive_root}/metadata.yaml",
+            "name: demo\ndesc: Demo plugin\nversion: 1.0.0\nauthor: AstrBot Team\n",
+        )
+        archive.writestr(f"{archive_root}/{member_path}", "VALUE = 1\n")
+        archive.writestr(f"{archive_root}/empty/", "")
+
+    original_open = builtins.open
+
+    def open_with_path_limit(file, mode="r", *args, **kwargs):
+        # Enforce MAX_PATH even on hosts that support longer paths.
+        if isinstance(file, (str, os.PathLike)):
+            path = os.fspath(file)
+            if len(os.path.abspath(path)) >= 260:
+                raise FileNotFoundError(2, "Path exceeds MAX_PATH", path)
+        return original_open(file, mode, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "open", open_with_path_limit)
+    target = str(target_dir)
+    if target_kind == "relative":
+        monkeypatch.chdir(tmp_path)
+        target = "plugin"
+
+    updater = _PluginUpdater.__new__(_PluginUpdater)
+    updater._extract_plugin_archive(str(zip_path), target)
+
+    assert (target_dir / member_path).read_text(encoding="utf-8") == "VALUE = 1\n"
+    assert (target_dir / "metadata.yaml").is_file()
+    assert (target_dir / "empty").is_dir()
+    assert {entry.name for entry in target_dir.iterdir()} == {
+        "metadata.yaml",
+        member_path,
+        "empty",
+    }
+    assert not zip_path.exists()
+
+
+@pytest.mark.parametrize(
+    ("archive_root", "extracted_root"),
+    [
+        ("demo-" + "a" * 40, "demo-" + "a" * 8),
+        ("demo-" + "A" * 40 + "/plugin", "demo-" + "A" * 8 + "/plugin"),
+        ("demo-main", "demo-main"),
+        ("demo-v1.0.0", "demo-v1.0.0"),
+        ("demo-12345678", "demo-12345678"),
+        ("demo-" + "g" * 40, "demo-" + "g" * 40),
+        ("./demo-" + "a" * 40, "demo-" + "a" * 40),
+        ("", ""),
+    ],
+)
+def test_plugin_unzip_file_only_shortens_full_root_sha(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    archive_root: str,
+    extracted_root: str,
+) -> None:
+    zip_path = tmp_path / "plugin.zip"
+    target_dir = tmp_path / "plugin"
+    prefix = f"{archive_root}/" if archive_root else ""
+    internal_path = "src/nested-" + "a" * 40 + "/main.py"
+    with zipfile.ZipFile(zip_path, "w") as archive:
+        if archive_root:
+            archive.writestr(f"{archive_root}/", "")
+        archive.writestr(
+            f"{prefix}metadata.yaml",
+            "name: demo\ndesc: Demo plugin\nversion: 1.0.0\nauthor: AstrBot Team\n",
+        )
+        archive.writestr(f"{prefix}{internal_path}", "VALUE = 1\n")
+
+    original_open = builtins.open
+    destinations = []
+
+    def record_destination(file, mode="r", *args, **kwargs):
+        if mode == "wb" and isinstance(file, (str, os.PathLike)):
+            destinations.append(Path(file))
+        return original_open(file, mode, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "open", record_destination)
+    updater = _PluginUpdater.__new__(_PluginUpdater)
+    updater._extract_plugin_archive(str(zip_path), str(target_dir))
+
+    assert destinations == [
+        target_dir / extracted_root / "metadata.yaml",
+        target_dir / extracted_root / internal_path,
+    ]
+    assert (target_dir / internal_path).read_text(encoding="utf-8") == "VALUE = 1\n"
+    assert (target_dir / "metadata.yaml").is_file()
+    if extracted_root:
+        assert not (target_dir / extracted_root).exists()
     assert not zip_path.exists()
 
 
@@ -1173,14 +1289,13 @@ async def test_fetch_release_info_uses_httpx_client_with_env_proxy_support(
 
 
 @pytest.mark.asyncio
-async def test_download_from_repo_url_uses_httpx_stream_for_zip_download(
+async def test_download_from_repo_url_uses_head_without_metadata_lookup(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     fake_async_client_state: _FakeAsyncClientState,
 ) -> None:
     import astrbot.core.zip_updater as zip_updater_module
 
-    fake_async_client_state.json_payload = {"default_branch": "trunk"}
     fake_async_client_state.stream_payload = b"zip-data"
     monkeypatch.setattr(
         zip_updater_module,
@@ -1206,11 +1321,9 @@ async def test_download_from_repo_url_uses_httpx_stream_for_zip_download(
     )
 
     assert (tmp_path / "AstrBot.zip").read_bytes() == b"zip-data"
-    assert fake_async_client_state.requested_urls == [
-        "https://api.github.com/repos/AstrBotDevs/AstrBot"
-    ]
+    assert fake_async_client_state.requested_urls == []
     assert fake_async_client_state.stream_urls == [
-        "https://github.com/AstrBotDevs/AstrBot/archive/refs/heads/trunk.zip"
+        "https://github.com/AstrBotDevs/AstrBot/archive/HEAD.zip"
     ]
     assert fake_async_client_state.init_kwargs is not None
     assert fake_async_client_state.init_kwargs["follow_redirects"] is True
@@ -1227,20 +1340,10 @@ async def test_download_from_repo_url_uses_explicit_branch_without_default_branc
     updater = _RepoZipUpdater()
     calls: list[str] = []
 
-    async def fail_fetch_repository_default_branch(
-        repository,
-    ):  # noqa: ARG001
-        raise AssertionError("explicit branch should not fetch the default branch")
-
     async def fake_download_file(url: str, path: str):
         calls.append(url)
         Path(path).write_bytes(b"zip-data")
 
-    monkeypatch.setattr(
-        updater,
-        "_fetch_repository_default_branch",
-        fail_fetch_repository_default_branch,
-    )
     monkeypatch.setattr(updater, "_download_file", fake_download_file)
 
     await updater._download_repository(
@@ -1340,16 +1443,6 @@ async def test_plugin_updater_inspects_github_repository_source(
 ) -> None:
     updater = _PluginUpdater()
     requested_urls: list[str] = []
-    source = SimpleNamespace(
-        raw_file_url=lambda filename: (
-            "https://raw.githubusercontent.com/AstrBotDevs/"
-            f"astrbot-plugin-demo/trunk/{filename}"
-        ),
-    )
-
-    async def fake_resolve_repository_source(repo_url: str):
-        assert repo_url == "https://github.com/AstrBotDevs/astrbot-plugin-demo"
-        return source
 
     def handle_request(request: httpx.Request) -> httpx.Response:
         requested_urls.append(str(request.url))
@@ -1369,11 +1462,6 @@ async def test_plugin_updater_inspects_github_repository_source(
 
     monkeypatch.setattr(
         updater,
-        "_resolve_repository_source",
-        fake_resolve_repository_source,
-    )
-    monkeypatch.setattr(
-        updater,
         "_create_httpx_client",
         lambda timeout=30.0: httpx.AsyncClient(
             transport=httpx.MockTransport(handle_request),
@@ -1388,10 +1476,12 @@ async def test_plugin_updater_inspects_github_repository_source(
 
     assert result["name"] == "astrbot_plugin_demo"
     assert result["desc"] == "Demo plugin"
-    assert requested_urls[-1] == (
+    assert requested_urls == [
         "https://proxy.example/https://raw.githubusercontent.com/AstrBotDevs/"
-        "astrbot-plugin-demo/trunk/metadata.yml"
-    )
+        "astrbot-plugin-demo/HEAD/metadata.yaml",
+        "https://proxy.example/https://raw.githubusercontent.com/AstrBotDevs/"
+        "astrbot-plugin-demo/HEAD/metadata.yml",
+    ]
 
 
 @pytest.mark.asyncio
@@ -1399,12 +1489,6 @@ async def test_plugin_updater_rejects_large_repository_metadata(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     updater = _PluginUpdater()
-    source = SimpleNamespace(
-        raw_file_url=lambda filename: f"https://example.com/{filename}",
-    )
-
-    async def fake_resolve_repository_source(repo_url: str):  # noqa: ARG001
-        return source
 
     def handle_request(request: httpx.Request) -> httpx.Response:  # noqa: ARG001
         return httpx.Response(
@@ -1412,11 +1496,6 @@ async def test_plugin_updater_rejects_large_repository_metadata(
             headers={"Content-Length": str(1024 * 1024 + 1)},
         )
 
-    monkeypatch.setattr(
-        updater,
-        "_resolve_repository_source",
-        fake_resolve_repository_source,
-    )
     monkeypatch.setattr(
         updater,
         "_create_httpx_client",
@@ -1509,6 +1588,86 @@ async def test_download_file_removes_partial_file_when_stream_fails(
         )
 
     assert not target_path.exists()
+
+
+@pytest.mark.asyncio
+async def test_download_file_removes_partial_file_when_cancelled(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    cancellation = asyncio.CancelledError("download cancelled")
+    monkeypatch.setattr(
+        _RepoZipUpdater,
+        "_create_httpx_client",
+        staticmethod(
+            lambda timeout=30.0: _FakeFailingStreamAsyncClient(  # noqa: ARG005
+                cancellation
+            )
+        ),
+    )
+
+    target_path = tmp_path / "cancelled.zip"
+
+    with pytest.raises(asyncio.CancelledError) as exc_info:
+        await _RepoZipUpdater()._download_file(
+            "https://example.com/archive.zip",
+            str(target_path),
+        )
+
+    assert exc_info.value is cancellation
+    assert not target_path.exists()
+
+
+@pytest.mark.parametrize(
+    "download_error",
+    [
+        pytest.param(RuntimeError("stream interrupted"), id="stream-error"),
+        pytest.param(asyncio.CancelledError("download cancelled"), id="cancellation"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_download_file_preserves_original_error_when_cleanup_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    download_error: BaseException,
+) -> None:
+    import astrbot.core.zip_updater as zip_updater_module
+
+    target_path = tmp_path / "undeletable.zip"
+    log_messages: list[str] = []
+    original_unlink = Path.unlink
+
+    def fail_target_unlink(path: Path, missing_ok: bool = False) -> None:
+        if path == target_path:
+            raise OSError("permission denied")
+        original_unlink(path, missing_ok=missing_ok)
+
+    monkeypatch.setattr(
+        _RepoZipUpdater,
+        "_create_httpx_client",
+        staticmethod(
+            lambda timeout=30.0: _FakeFailingStreamAsyncClient(  # noqa: ARG005
+                download_error
+            )
+        ),
+    )
+    monkeypatch.setattr(Path, "unlink", fail_target_unlink)
+    monkeypatch.setattr(
+        zip_updater_module.logger,
+        "warning",
+        lambda message: log_messages.append(message),
+    )
+
+    with pytest.raises(type(download_error)) as exc_info:
+        await _RepoZipUpdater()._download_file(
+            "https://example.com/archive.zip",
+            str(target_path),
+        )
+
+    assert exc_info.value is download_error
+    assert target_path.exists()
+    assert any(str(target_path) in message for message in log_messages)
+    assert any("permission denied" in message for message in log_messages)
 
 
 @pytest.mark.asyncio

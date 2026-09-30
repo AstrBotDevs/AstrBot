@@ -10,7 +10,7 @@ import zipfile
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 from urllib.parse import parse_qs, urlsplit, urlunsplit
 
 import jwt
@@ -2560,7 +2560,7 @@ async def test_plugins(
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch,
 ):
-    """测试插件 API 端点，使用 Mock 避免真实网络调用。"""
+    """Test plugin endpoints with mocked marketplace and repository operations."""
     test_client = app.test_client()
 
     # 已经安装的插件
@@ -2577,7 +2577,15 @@ async def test_plugins(
         assert isinstance(installed_at, str)
         datetime.fromisoformat(installed_at)
 
-    # 插件市场
+    # Keep marketplace requests independent of external services and local caches.
+    market_plugins = {
+        "test/market-plugin": {
+            "name": "market-plugin",
+            "repo": "https://github.com/test/market-plugin",
+        }
+    }
+    get_online_plugins = AsyncMock(return_value=(market_plugins, None))
+    monkeypatch.setattr(PluginService, "get_online_plugins", get_online_plugins)
     response = await test_client.get(
         "/api/plugin/market_list",
         headers=authenticated_header,
@@ -2585,6 +2593,10 @@ async def test_plugins(
     assert response.status_code == 200
     data = await response.get_json()
     assert data["status"] == "ok"
+    assert data["data"] == market_plugins
+    get_online_plugins.assert_awaited_once_with(
+        custom_registry=None, force_refresh=False
+    )
 
     # 使用 MockPluginBuilder 创建测试插件
     plugin_store_path = core_lifecycle_td.plugin_manager.plugin_store_path

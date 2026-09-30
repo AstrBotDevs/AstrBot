@@ -1,5 +1,5 @@
 <template>
-  <div class="w-100">
+  <div class="w-100" :class="{ 'config-field--full-width': itemMeta?.full_width }">
     <!-- Special handling for specific metadata types -->
     <template v-if="itemMeta?._special === 'select_provider'">
       <ProviderSelector :model-value="modelValue" @update:model-value="emitUpdate" :provider-type="'chat_completion'" />
@@ -41,6 +41,12 @@
       <DashboardTotpManager
         :model-value="Boolean(modelValue)"
         :config-root="configRoot"
+        @update:model-value="emitUpdate"
+      />
+    </template>
+    <template v-else-if="itemMeta?._special === 'local_permission_matrix'">
+      <LocalPermissionMatrix
+        :model-value="modelValue"
         @update:model-value="emitUpdate"
       />
     </template>
@@ -152,14 +158,14 @@
         </span>
 
         <v-slider :model-value="toNumber(numericTemp ?? modelValue)"
-          @update:model-value="val => { numericTemp = val; emitUpdate(toNumber(val)) }" 
+          @update:model-value="val => { numericTemp = val; emitUpdate(toNumber(val)) }"
           @end="numericTemp = null"
-          :min="itemMeta?.slider?.min ?? 0" 
-          :max="itemMeta?.slider?.max ?? 100" 
+          :min="itemMeta?.slider?.min ?? 0"
+          :max="itemMeta?.slider?.max ?? 100"
           :step="itemMeta?.slider?.step ?? 1"
-          color="primary" 
-          density="compact" 
-          hide-details 
+          color="primary"
+          density="compact"
+          hide-details
           style="flex: 1"></v-slider>
 
         <span style="min-width: 5px; text-align: left;">
@@ -256,6 +262,8 @@ import KnowledgeBaseSelector from './KnowledgeBaseSelector.vue'
 import PluginSetSelector from './PluginSetSelector.vue'
 import T2ITemplateEditor from './T2ITemplateEditor.vue'
 import DashboardTotpManager from './DashboardTotpManager.vue'
+import LocalPermissionMatrix, { windowsPermissionDefaults } from './LocalPermissionMatrix.vue'
+import { statsApi } from '@/api/v1'
 import { computed, ref } from 'vue'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
 import { usePluginI18n } from '@/utils/pluginI18n'
@@ -304,8 +312,10 @@ const { t } = useI18n()
 const { getRaw } = useModuleI18n('features/config-metadata')
 const { configText } = usePluginI18n()
 
-function emitUpdate(val) {
+async function emitUpdate(val) {
   val = validateNumericConfig(props.itemMeta?.type, val)
+  const enablingLocal = props.configKey === 'provider_settings.computer_use_runtime'
+    && (props.modelValue === 'none' || props.modelValue == null) && val === 'local'
   if (
     props.itemMeta?._special === 'agent_runner_type'
     && props.configRoot?.agent_runner
@@ -316,6 +326,22 @@ function emitUpdate(val) {
     )
   }
   emit('update:modelValue', val)
+  if (enablingLocal && props.configRoot?.provider_settings) {
+    const settings = props.configRoot.provider_settings
+    try {
+      const response = await statsApi.version()
+      if (response.data?.data?.runtime?.os === 'windows' && settings.computer_use_runtime === 'local') {
+        const permissions = { ...settings.computer_use_local_permissions }
+        for (const [role, defaults] of Object.entries(windowsPermissionDefaults)) {
+          const policy = permissions[role]
+          if (!policy || policy.filesystem_scope === 'workspace') permissions[role] = { ...defaults }
+        }
+        settings.computer_use_local_permissions = permissions
+      }
+    } catch (error) {
+      console.warn('Failed to initialize local permissions:', error)
+    }
+  }
 }
 
 const listSelectItems = computed(() =>

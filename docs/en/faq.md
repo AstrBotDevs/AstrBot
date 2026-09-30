@@ -89,8 +89,9 @@ After restart, AstrBot will reload or download WebUI files that match the curren
 
 ### How to Let AstrBot Control My Mac / Windows / Linux Computer?
 
-1. In AstrBot WebUI's `Config -> General Config`, find `Use Computer Capabilities`, and select `local` for the runtime environment.
-2. In `Config -> Other Config`, find `Admin ID List`, and add your user ID (you can get it through the `/sid` command).
+1. In the AstrBot WebUI, open `Config`, select the profile used by your bot, and go to `AI → Capabilities → Agent Computer Use`. Set `Computer Use Runtime` to `local`. This section requires the built-in AstrBot AI runner.
+2. In the same profile, go to `Platform → General → Administrator IDs` and add your user ID (available through the `/sid` command).
+3. Click `Save Configuration` in the bottom-right corner.
 
 > [!TIP]
 > For security reasons, when runtime environment is set to `local`, AstrBot only allows AstrBot administrators to use computer capabilities by default.
@@ -102,7 +103,7 @@ After restart, AstrBot will reload or download WebUI files that match the curren
 
 ### No Permission to Execute Admin Commands
 
-1. `/name, /provider, /dashboard_update, /op, /deop, /persona, /llm, /plugin, /model, /groupnew` are the default admin commands. You can use the `/sid` command to get a user's ID, then add it to the admin ID list in Settings -> Other Settings.
+1. `/name, /provider, /dashboard_update, /op, /deop, /persona, /llm, /plugin, /model, /groupnew` are the default admin commands. You can use the `/sid` command to get a user's ID, then open `Config`, select the profile used by your bot, add the ID under `Platform → General → Administrator IDs`, and click `Save Configuration` in the bottom-right corner.
 
 ### Chinese Characters Garbled When Locally Rendering Markdown Images (t2i)
 
@@ -125,7 +126,7 @@ This is because the provider's API returned empty text. Try the following steps:
 
 ### Cannot Install Plugin
 
-1. Plugins are installed via GitHub. Access to GitHub from mainland China can indeed be unstable. You can use a proxy, then go to Other Settings -> HTTP Proxy to configure it. Alternatively, download the plugin archive directly and upload it.
+1. Plugins are installed via GitHub. Access to GitHub from mainland China can indeed be unstable. Configure and save a proxy under `Settings → Network → Proxy & Dependency Sources → HTTP Proxy`. You can also set a `GitHub Proxy Address` on the same page, or download the plugin archive and install it from the Plugins page.
 
 ### Error `No module named 'xxx'` After Installing Plugin
 
@@ -139,8 +140,8 @@ This is because the plugin's dependencies were not installed properly. Normally,
 
 Solution:
 
-Based on the error message, refer to the plugin's README to manually install dependencies. You can install dependencies in the AstrBot WebUI under `Data` -> `Logs` -> `Install Pip Package`.
+Based on the error message, refer to the plugin's README to manually install dependencies. You can install dependencies in the AstrBot WebUI under `Data & Logs → Logs → Install pip Package`.
 
-![image](https://files.astrbot.app/docs/source/images/faq/image-1.png)
+Enter the package name in the dialog, optionally specify a PyPI repository URL, and click `Install`.
 
 If you find that the plugin author did not include a `requirements.txt` file, please submit an issue in the plugin repository to remind the author to add it.

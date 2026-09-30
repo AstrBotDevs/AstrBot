@@ -35,7 +35,7 @@
 >
 > 可以将下面链接中的 `<APP_ID>` 替换为你的飞书应用 App ID 后打开，一键进入权限开通页：
 >
-> App ID 获取方式：回到 AstrBot 的 `机器人` 页，找到刚刚创建的飞书机器人，点击 `编辑`，弹出的对话框中可以看到 App ID。
+> App ID 获取方式：回到 AstrBot 的 `机器人` 页，选中刚刚创建的飞书机器人，在 `接入设置` 中查看 `app_id`。
 >
 > ```text
 > https://open.feishu.cn/app/<APP_ID>/auth?q=contact:contact.base:readonly,contact:user.base:readonly,im:message.p2p_msg:readonly,im:message.group_at_msg:readonly,im:message:send,im:message,im:message:send_as_bot,im:resource:upload,im:resource,cardkit:card:write,im:message.group_at_msg:readonly,im:message.group_msg&op_from=openapi&token_type=tenant
@@ -61,7 +61,7 @@
 
 1. 进入 AstrBot 的管理面板
 2. 点击左边栏 `机器人`
-3. 然后在右边的界面中，点击 `+ 创建机器人` 
+3. 点击机器人列表上方的 `创建机器人`
 4. 选择 `lark(飞书)`
 5. 如果使用扫码一键创建，选择 `扫码一键创建` 并完成扫码；如果使用自己创建的企业自建应用，选择 `手动创建`
 
@@ -95,9 +95,7 @@
 > [!TIP]
 > 为了更好地使用这种方式，请先参考 [统一 Webhook 模式](/use/unified-webhook.html) 做好相关配置。
 
-在点击 `保存` 后，机器人卡片会显示「查看 Webhook 链接」，点击查看，复制回调 URL。
-
-![](https://files.astrbot.app/docs/source/images/lark/webhook.png)
+点击 `保存` 后，在 `机器人` 页选中刚创建的机器人，点击 `查看 Webhook 链接`，复制回调 URL。
 
 接下来，回到飞书的事件与回调页，点击「事件配置」，选择「将事件发送至开发者服务器」，将“请求地址”填写为刚刚复制的回调 URL，点击保存。如果一切无误将不会报错。
 

@@ -90,9 +90,9 @@ Set dashboard.host in data/cmd_config.json to enable remote access.
 
 ### 如何让 AstrBot 控制我的 Mac / Windows / Linux 电脑？
 
-1. 在 AstrBot WebUI 的 `配置 -> 普通配置` 中，找到 `使用电脑能力`，运行环境选择 `local`。
-2. 在 `配置 -> 其他配置` 中，找到 `管理员 ID 列表`，添加你的用户 ID（可以通过 `/sid` 指令获取）。
-3. 右下角保存配置
+1. 在 AstrBot WebUI 的 `配置文件` 中选择机器人使用的配置文件，进入 `AI 配置 → 能力 → 使用电脑能力`，将 `运行环境` 设为 `local`。此处需要使用 AstrBot 内置 AI。
+2. 在同一配置文件的 `平台配置 → 基本 → 管理员 ID` 中添加你的用户 ID（可以通过 `/sid` 指令获取）。
+3. 点击右下角的 `保存配置` 按钮。
 
 > [!TIP]
 > AstrBot 为了安全起见，运行环境选择 `local` 时，默认仅允许 AstrBot 管理员使用电脑能力。
@@ -120,7 +120,7 @@ Set dashboard.host in data/cmd_config.json to enable remote access.
 
 ### 没有权限操作管理员指令
 
-1. `/name, /provider, /dashboard_update, /op, /deop, /persona, /llm, /plugin, /model, /groupnew` 等是默认的管理员指令。可以通过 `/sid` 指令得到用户的 ID，然后在 `配置` -> `其他配置` 中添加到管理员 ID 名单中。
+1. `/name, /provider, /dashboard_update, /op, /deop, /persona, /llm, /plugin, /model, /groupnew` 等是默认的管理员指令。可以通过 `/sid` 指令得到用户的 ID，然后在 `配置文件` 中选择机器人使用的配置文件，在 `平台配置 → 基本 → 管理员 ID` 中添加该 ID，并点击右下角的 `保存配置`。
 
 ### 本地渲染 Markdown 图片（t2i）时中文乱码
 
@@ -143,7 +143,7 @@ Set dashboard.host in data/cmd_config.json to enable remote access.
 
 ### 插件安装不上
 
-1. 插件通过 GitHub 安装，在国内访问 GitHub 确实有时候连不上。可以挂代理，然后进入 `其他配置` -> `HTTP 代理` 设置代理，或者直接下载插件压缩包后上传。
+1. 插件通过 GitHub 安装，在国内访问 GitHub 确实有时候连不上。可以在 `设置 → 网络 → 代理与依赖源 → HTTP 代理` 中配置代理并保存；也可以在同一页面设置 `GitHub 加速地址`，或直接下载插件压缩包后在插件页安装。
 
 ### 安装插件后报错 `No module named 'xxx'`
 
@@ -157,9 +157,9 @@ Set dashboard.host in data/cmd_config.json to enable remote access.
 
 解决方法：
 
-结合报错信息，参考插件的 README 手动安装依赖库。你可以在 AstrBot WebUI 的 `数据` -> `日志` -> `安装 Pip 库` 中安装依赖库。
+结合报错信息，参考插件的 README 手动安装依赖库。你可以在 AstrBot WebUI 的 `数据与日志 → 日志 → 安装 pip 库` 中安装依赖库。
 
-![image](https://files.astrbot.app/docs/source/images/faq/image-1.png)
+在弹窗中填写库名，按需填写 PyPI 软件仓库链接，然后点击 `安装`。
 
 如果发现插件作者没有填写 `requirements.txt` 文件，请在插件仓库提交 Issue，提醒作者补充。
 

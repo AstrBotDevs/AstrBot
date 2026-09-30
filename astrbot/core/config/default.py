@@ -1,12 +1,39 @@
 """如需修改配置，请在 `data/cmd_config.json` 中修改或者在管理面板中可视化修改。"""
 
 import os
+import platform
 
 from astrbot import __version__
 from astrbot.core.computer.booters.cua_defaults import CUA_DEFAULT_CONFIG
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 from .agent_runner import get_agent_runner_config_default
+
+
+def get_local_permission_defaults(system: str | None = None) -> dict:
+    """Return fresh Local permission defaults for the operating system.
+
+    Args:
+        system: Operating system name, or None to use the current system.
+
+    Returns:
+        Per-role policies. Windows disables member access and gives admins
+        unrestricted access because workspace isolation is unavailable.
+    """
+    windows = (system or platform.system()).lower() == "windows"
+    return {
+        "member": {
+            "allow_execution": False,
+            "allow_network": False,
+            "filesystem_scope": "none" if windows else "workspace",
+        },
+        "admin": {
+            "allow_execution": True,
+            "allow_network": True,
+            "filesystem_scope": "host" if windows else "workspace",
+        },
+    }
+
 
 VERSION = __version__
 
@@ -63,7 +90,7 @@ WEBHOOK_SUPPORTED_PLATFORMS = [
 
 # 默认配置
 DEFAULT_CONFIG = {
-    "config_version": 3,
+    "config_version": 4,
     "platform_settings": {
         "unique_session": False,
         "rate_limit": {
@@ -152,6 +179,7 @@ DEFAULT_CONFIG = {
             "add_cron_tools": True,
         },
         "computer_use_runtime": "none",
+        "computer_use_local_permissions": get_local_permission_defaults(),
         "computer_use_require_admin": True,
         "sandbox": {
             "booter": "shipyard_neo",
@@ -170,10 +198,8 @@ DEFAULT_CONFIG = {
             "cua_local": CUA_DEFAULT_CONFIG["local"],
             "cua_api_key": CUA_DEFAULT_CONFIG["api_key"],
         },
-        "image_compress_enabled": True,
         "image_compress_options": {
             "max_size": 1280,
-            "quality": 95,
         },
     },
     "agent_runner": {
@@ -350,16 +376,6 @@ CONFIG_METADATA_2 = {
                         "ws_reverse_port": 6199,
                         "ws_reverse_token": "",
                     },
-                    "个人微信": {
-                        "id": "weixin_personal",
-                        "type": "weixin_oc",
-                        "enable": True,
-                        "weixin_oc_base_url": "https://ilinkai.weixin.qq.com",
-                        "weixin_oc_bot_type": "3",
-                        "weixin_oc_qr_poll_interval": 1,
-                        "weixin_oc_long_poll_timeout_ms": 35_000,
-                        "weixin_oc_api_timeout_ms": 120_000,
-                    },
                     "飞书(Lark)": {
                         "id": "lark",
                         "type": "lark",
@@ -371,6 +387,16 @@ CONFIG_METADATA_2 = {
                         "webhook_uuid": "",
                         "lark_encrypt_key": "",
                         "lark_verification_token": "",
+                    },
+                    "个人微信": {
+                        "id": "weixin_personal",
+                        "type": "weixin_oc",
+                        "enable": True,
+                        "weixin_oc_base_url": "https://ilinkai.weixin.qq.com",
+                        "weixin_oc_bot_type": "3",
+                        "weixin_oc_qr_poll_interval": 1,
+                        "weixin_oc_long_poll_timeout_ms": 35_000,
+                        "weixin_oc_api_timeout_ms": 120_000,
                     },
                     "企业微信 (智能机器人)": {
                         "id": "wecom_ai_bot",
@@ -409,14 +435,6 @@ CONFIG_METADATA_2 = {
                         "callback_server_host": "0.0.0.0",
                         "port": 6195,
                     },
-                    "钉钉(DingTalk)": {
-                        "id": "dingtalk",
-                        "type": "dingtalk",
-                        "enable": True,
-                        "client_id": "",
-                        "client_secret": "",
-                        "card_template_id": "",
-                    },
                     "微信公众平台": {
                         "id": "weixin_official_account",
                         "type": "weixin_official_account",
@@ -431,6 +449,14 @@ CONFIG_METADATA_2 = {
                         "callback_server_host": "0.0.0.0",
                         "port": 6194,
                         "active_send_mode": False,
+                    },
+                    "钉钉(DingTalk)": {
+                        "id": "dingtalk",
+                        "type": "dingtalk",
+                        "enable": True,
+                        "client_id": "",
+                        "client_secret": "",
+                        "card_template_id": "",
                     },
                     "Telegram": {
                         "id": "telegram",
@@ -2997,9 +3023,6 @@ CONFIG_METADATA_2 = {
             "provider_settings": {
                 "type": "object",
                 "items": {
-                    "image_compress_enabled": {
-                        "type": "bool",
-                    },
                     "enable": {
                         "type": "bool",
                     },
@@ -3759,13 +3782,53 @@ CONFIG_METADATA_3 = {
                         "description": "Computer Use Runtime",
                         "type": "string",
                         "options": ["none", "local", "sandbox"],
-                        "labels": ["无", "本地", "沙箱"],
+                        "labels": [
+                            "不允许任何环境",
+                            "本机环境",
+                            "第三方沙箱环境",
+                        ],
                         "hint": "选择 Computer Use 运行环境。",
                     },
+                    "provider_settings.computer_use_local_permissions": {
+                        "description": "本地权限策略",
+                        "type": "object",
+                        "_special": "local_permission_matrix",
+                        "full_width": True,
+                        "items": {
+                            "member": {
+                                "type": "object",
+                                "items": {
+                                    "allow_execution": {"type": "bool"},
+                                    "allow_network": {"type": "bool"},
+                                    "filesystem_scope": {
+                                        "type": "string",
+                                        "options": ["none", "workspace", "host"],
+                                    },
+                                },
+                            },
+                            "admin": {
+                                "type": "object",
+                                "items": {
+                                    "allow_execution": {"type": "bool"},
+                                    "allow_network": {"type": "bool"},
+                                    "filesystem_scope": {
+                                        "type": "string",
+                                        "options": ["none", "workspace", "host"],
+                                    },
+                                },
+                            },
+                        },
+                        "condition": {
+                            "provider_settings.computer_use_runtime": "local",
+                        },
+                    },
                     "provider_settings.computer_use_require_admin": {
-                        "description": "需要 AstrBot 管理员权限",
+                        "description": "沙箱能力需要 AstrBot 管理员权限",
                         "type": "bool",
-                        "hint": "开启后，需要 AstrBot 管理员权限才能调用使用电脑能力。在平台配置->管理员中可添加管理员。使用 /sid 指令查看管理员 ID。",
+                        "hint": "开启后，需要 AstrBot 管理员权限才能调用远程沙箱能力。在平台配置->管理员中可添加管理员。使用 /sid 指令查看管理员 ID。",
+                        "condition": {
+                            "provider_settings.computer_use_runtime": "sandbox",
+                        },
                     },
                     "provider_settings.sandbox.booter": {
                         "description": "沙箱环境驱动器",
@@ -4141,28 +4204,11 @@ CONFIG_METADATA_3 = {
                         "type": "string",
                         "hint": "如果唤醒前缀为 /, 额外聊天唤醒前缀为 chat，则需要 /chat 才会触发 LLM 请求",
                     },
-                    "provider_settings.image_compress_enabled": {
-                        "description": "启用图片压缩",
-                        "type": "bool",
-                        "hint": "默认开启。发送给多模态模型前按需压缩转换图片：合规的 JPEG/PNG 原样发送，动图生成拼图预览。",
-                    },
                     "provider_settings.image_compress_options.max_size": {
-                        "description": "最大边长",
+                        "description": "输入图片最大边长",
                         "type": "int",
-                        "hint": "压缩后图片的最长边，单位为像素，超出则按比例缩放。CUA 沙箱下输入图片不缩放，大图可能超出服务商上传限制。",
-                        "condition": {
-                            "provider_settings.image_compress_enabled": True,
-                        },
+                        "hint": "发送给模型的图片最长边（像素），系统会在必要时进一步压缩。",
                         "slider": {"min": 256, "max": 4096, "step": 64},
-                    },
-                    "provider_settings.image_compress_options.quality": {
-                        "description": "压缩质量",
-                        "type": "int",
-                        "hint": "JPEG 输出质量，范围为 1-100。值越高，画质越好，文件也越大。",
-                        "condition": {
-                            "provider_settings.image_compress_enabled": True,
-                        },
-                        "slider": {"min": 1, "max": 100, "step": 1},
                     },
                     "provider_settings.prompt_prefix": {
                         "description": "用户提示词",

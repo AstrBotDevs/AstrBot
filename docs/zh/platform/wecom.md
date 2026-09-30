@@ -22,7 +22,7 @@ AstrBot 支持接入企业微信应用和微信客服。
 
 1. 进入 AstrBot 的管理面板
 2. 点击左边栏 `机器人`
-3. 然后在右边的界面中，点击 `+ 创建机器人` 
+3. 点击机器人列表上方的 `创建机器人`
 4. 选择 `wecom`
 
 这将弹出一个对话框。接下来，不要关闭页面，转移到下一步。
@@ -50,9 +50,7 @@ AstrBot 支持接入企业微信应用和微信客服。
 
 回调 URL 填写：
 
-- 如果开启了 `统一 Webhook 模式`，点击保存之后，AstrBot 将会自动为你生成唯一的 Webhook 回调链接，你可以在日志中或者 WebUI 的机器人页的卡片上找到，将该链接填入回调 URL 处。
-
-![unified_webhook](https://files.astrbot.app/docs/source/images/use/unified-webhook.png)
+- 如果开启了 `统一 Webhook 模式`，点击保存之后，AstrBot 将会自动为你生成唯一的 Webhook 回调链接，你可以在 `数据与日志 → 日志` 中查看，或在 `机器人` 页选中该机器人，点击 `查看 Webhook 链接`，将该链接填入回调 URL 处。
 
 - 如果没有开启 `统一 Webhook 模式`，填写 `http://你的带公网地址的服务器ip:6195/callback/command`。
 
@@ -60,12 +58,12 @@ AstrBot 支持接入企业微信应用和微信客服。
 
 回到微信客服 `回调配置`，点击 `完成`。如果一切无误，将会显示 `已完成`（否则会显示类似 `openapi 回调不通过` 类似的文本）。
 
-1. **获取 Secret。** 之后，在 `开发配置` 中得到 Secret，找到复制到刚刚创建的企业微信适配器，点击编辑，然后修改配置中的 `secret`。然后再次保存配置，等待适配器加载完成。
+1. **获取 Secret。** 之后，在 `开发配置` 中得到 Secret，回到 AstrBot 的 `机器人` 页，选中刚刚创建的企业微信机器人，在 `接入设置` 中填写 `secret`。点击 `保存更改`，等待适配器加载完成。
 
 > [!TIP]
 > 根据 [#571](https://github.com/Soulter/AstrBot/issues/571) 的反馈，对于新注册的企业，`corp_id` 可能要注册一段时间后才生效（前后大概过了半个小时）。
 
-然后，打开 `数据` -> `日志`，你应该会看到如下日志：
+然后，打开 `数据与日志` -> `日志`，你应该会看到如下日志：
 
 ```txt
 请打开以下链接，在微信扫码以获取客服微信 ...
@@ -100,13 +98,11 @@ AstrBot 支持接入企业微信应用和微信客服。
 
 并且点击下方的两个随机获取，得到 `Token` 和 `EncodingAESKey`，复制到 AstrBot 配置的 `token` 和 `encoding_aes_key` 处。建议保持 `统一 Webhook 模式 (unified_webhook_mode)` 为开启状态。
 
-现在应该已经填完 AstrBot 连接到企业微信的所有配置项。点击 AstrBot 配置页右下角保存，等待 AstrBot 重启。
+现在应该已经填完 AstrBot 连接到企业微信的所有配置项。点击创建弹窗中的 `保存`（修改已有机器人时点击 `保存更改`），等待适配器重新加载。
 
 在 URL 处填入回调地址：
 
-- 如果开启了 `统一 Webhook 模式`，点击保存之后，AstrBot 将会自动为你生成唯一的 Webhook 回调链接，你可以在日志中或者 WebUI 的机器人页的卡片上找到，将该链接填入 URL 处。
-
-![unified_webhook](https://files.astrbot.app/docs/source/images/use/unified-webhook.png)
+- 如果开启了 `统一 Webhook 模式`，点击保存之后，AstrBot 将会自动为你生成唯一的 Webhook 回调链接，你可以在 `数据与日志 → 日志` 中查看，或在 `机器人` 页选中该机器人，点击 `查看 Webhook 链接`，将该链接填入 URL 处。
 
 - 如果没有开启 `统一 Webhook 模式`，填入 `http://你的带公网地址的服务器ip:6195/callback/command`。
 
@@ -119,7 +115,7 @@ AstrBot 支持接入企业微信应用和微信客服。
 将你的 公网 IP 地址填写到此处，点击确定。
 
 
-重启成功后，回到API 接收页面，点击下面的保存，看是否能够保存成功。如果出现 `openapi 请求回调地址不通过` 说明配置有问题，请检查四个配置项是否填写正确。
+适配器加载完成后，回到 API 接收页面，点击下面的保存，看是否能够保存成功。如果出现 `openapi 请求回调地址不通过` 说明配置有问题，请检查四个配置项是否填写正确。
 
 如果能够保存成功，AstrBot 就已经能够接收信息。
 
@@ -145,4 +141,4 @@ linux 用户可以使用 `apt install ffmpeg` 安装。
 
 windows 用户可以在 [ffmpeg 官网](https://ffmpeg.org/download.html) 下载安装。
 
-mac 用户可以使用 `brew install ffmpeg` 安装。   
+mac 用户可以使用 `brew install ffmpeg` 安装。

@@ -22,8 +22,8 @@ AstrBot supports connecting a personal WeChat account through the `Personal WeCh
 ## Create the Bot
 
 1. Open AstrBot WebUI.
-2. Click `Bots` in the left sidebar.
-3. Click `+ Create Bot` in the upper-right corner.
+2. Click `Platforms` in the left sidebar.
+3. Click `Add Adapter` above the bot list.
 4. Select `Personal WeChat`.
 5. The login QR code is shown directly. Scan it with WeChat on your phone and confirm the login inside WeChat.
 6. After login succeeds, click `Save`.
@@ -57,7 +57,7 @@ After login succeeds and the bot is saved, AstrBot will automatically persist th
 
 After login succeeds, send a message from WeChat. If AstrBot replies normally, the integration is working.
 
-You can also watch `Data` -> `Logs` in the WebUI to confirm that the adapter has completed login and started polling messages.
+You can also watch `Data & Logs` -> `Logs` in the WebUI to confirm that the adapter has completed login and started polling messages.
 
 ## Media File Storage
 

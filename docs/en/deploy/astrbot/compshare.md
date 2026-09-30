@@ -33,8 +33,6 @@ You can find the public IP in Console -> Basic Network (Public).
 
 > It may take around 30 seconds before the page becomes reachable.
 
-![WebUI](https://www-s.ucloud.cn/2025/07/7e9fc6edc1dfa916abc069f4cecc24cf_1753940381771.png)
-
 Use the random password printed in startup logs for first-time login, and use the username shown in the logs (usually `astrbot`). Change it immediately after login.
 
 After logging in, you can reset your password and continue setup.
@@ -50,26 +48,21 @@ The image includes Ollama. You can pull any model and host it locally on the ins
 1. Choose a model from [Ollama Search](https://ollama.com/search).
 2. Connect to the instance terminal via SSH (from Compshare Console -> Instance List -> Console Command and Password).
 3. Run `ollama pull <model-name>` and wait for completion.
-4. In AstrBot Dashboard -> Providers, edit `ollama_deepseek-r1`, update the model name, and save.
-
-![image](https://files.astrbot.app/docs/source/images/compshare/image-1.png)
+4. Open `Providers → Chat Completion`, select the preconfigured Ollama source, click `Fetch Model List`, and click `+` beside the model you just pulled. If no source is preconfigured, click `Add`, select `Ollama`, enter the instance's Ollama URL, and click `Save and Fetch Models`.
 
 ### Use Compshare Model API
 
 AstrBot supports direct access to model APIs provided by Compshare.
 
 1. Find the model you want at [Compshare Model Center](https://console.compshare.cn/light-gpu/model-center).
-2. In AstrBot Dashboard -> Providers, click `+ Add Provider`, then choose Compshare.
-If Compshare is not listed, choose OpenAI-compatible access and set API Base URL to `https://api.modelverse.cn/v1`.
-Enter the model name in model configuration and save.
+2. Open `Providers → Chat Completion → Add`, select `OpenAI Compatible`, enter your Compshare API key, and set API Base URL to `https://api.modelverse.cn/v1`.
+3. Click `Save and Fetch Models`, then click `+` beside the model you want. If the API returns no model list, click `Save Configuration`, then `Custom Model`, and enter the exact model ID supplied by Compshare.
 
 ### Test
 
-In AstrBot Dashboard, click `Chat` and run `/provider` to view and switch your active provider.
+Click `Test Model` on the configured model to check connectivity. Then open `Config`, select the profile used by your bot, choose the new model under `AI → Model → Chat Model`, and click `Save Configuration`.
 
-Then send a normal message to test whether the model works.
-
-![image](https://files.astrbot.app/docs/source/images/compshare/image-2.png)
+Use the chat switch in the WebUI header or send a message to the bot on its connected messaging platform to test a reply.
 
 ## Connect to Messaging Platforms
 

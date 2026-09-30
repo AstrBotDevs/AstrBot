@@ -2274,3 +2274,127 @@ async def test_follow_up_after_stop_not_merged_into_tool_result(
 if __name__ == "__main__":
     # 运行测试
     pytest.main([__file__, "-v"])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("entrypoint", ["sdk", "chat"])
+@pytest.mark.parametrize("streaming", [False, True])
+async def test_step_notices_reach_model_once_per_threshold(
+    runner,
+    mock_provider,
+    provider_request,
+    mock_tool_executor,
+    mock_hooks,
+    entrypoint,
+    streaming,
+    monkeypatch,
+):
+    snapshots = []
+    original_chat = mock_provider.text_chat
+    mock_provider.max_calls_before_normal_response = 1000
+
+    async def chat_with_two_tools(**kwargs):
+        snapshots.append([message.model_dump() for message in kwargs["contexts"]])
+        response = await original_chat(**kwargs)
+        if response.tools_call_name:
+            response.tools_call_name *= 2
+            response.tools_call_args *= 2
+            response.tools_call_ids = [
+                f"call_{mock_provider.call_count}_a",
+                f"call_{mock_provider.call_count}_b",
+            ]
+        return response
+
+    monkeypatch.setattr(mock_provider, "text_chat", chat_with_two_tools)
+    event = MagicMock()
+    event.is_stopped.return_value = False
+    event.get_extra.return_value = None
+    event.get_platform_name.return_value = "test"
+    event.get_platform_id.return_value = "test"
+    event.send = AsyncMock()
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=SimpleNamespace(event=event)),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=streaming,
+    )
+
+    # Simulate compaction that drops old notices while retaining the latest tool round.
+    async def replace_context(messages, **kwargs):
+        return [messages[0], *messages[-3:]] if len(messages) > 4 else list(messages)
+
+    runner.request_context_manager.process = AsyncMock(side_effect=replace_context)
+    if entrypoint == "sdk":
+        responses = runner.step_until_done(128)
+    else:
+        # Bootstrap the public API first, as the application does, to avoid import cycles.
+        import astrbot.api  # noqa: F401
+        from astrbot.core.astr_agent_run_util import run_agent
+
+        responses = run_agent(runner, max_step=128)
+    async for _ in responses:
+        pass
+
+    assert mock_provider.call_count == 129
+    assert runner.req.func_tool is None
+    assert runner.done()
+    tools = [
+        m for result in runner.req.tool_calls_result for m in result.tool_calls_result
+    ]
+    assert len(tools) == 256
+    for percent, step, remaining in [(80, 103, 25), (90, 116, 12), (95, 122, 6)]:
+        marker = f"[SYSTEM NOTICE: Agent step budget {percent}%]"
+        matches = [m for m in tools if marker in str(m.content)]
+        assert len(matches) == 1
+        assert matches[0].tool_call_id == f"call_{step}_b"
+        assert f"Remaining steps: {remaining}." in str(matches[0].content)
+        assert not any(marker in str(m) for m in snapshots[step - 1])
+        assert any(marker in str(m) for m in snapshots[step])
+    assert "Remaining steps: 0." in str(tools[-1].content)
+    assert "tool-call round limit in AstrBot WebUI" in str(tools[-1].content)
+    assert any(
+        "tool-call round limit in AstrBot WebUI" in str(m) for m in snapshots[-1]
+    )
+    assert runner.request_context_manager.process.await_count == 129
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("max_steps", [1, 15, 16])
+async def test_small_step_budgets_and_reset(
+    runner,
+    mock_provider,
+    provider_request,
+    mock_tool_executor,
+    mock_hooks,
+    max_steps,
+):
+    mock_provider.max_calls_before_normal_response = 1000
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+    )
+    async for _ in runner.step_until_done(max_steps):
+        pass
+    tools = [m for m in runner.run_context.messages if m.role == "tool"]
+    for percent in (80, 90, 95):
+        assert sum(
+            f"[SYSTEM NOTICE: Agent step budget {percent}%]" in str(m.content)
+            for m in tools
+        ) == (1 if max_steps >= 16 else 0)
+    assert "tool-call round limit in AstrBot WebUI" in str(tools[-1].content)
+    assert mock_provider.call_count == max_steps + 1
+    assert runner._step_budget_notified
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+    )
+    assert runner._step_budget_used == 0
+    assert runner._step_budget_notified == set()
