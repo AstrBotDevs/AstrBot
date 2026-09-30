@@ -52,7 +52,7 @@ The file content is a `Schema` that represents the configuration. The Schema is 
 - `invisible`: Optional. Whether the configuration is hidden. Default is `false`. If set to `true`, it will not be displayed in the management panel.
 - `secret`: Optional. Applies to `string` and string `list` fields. When set to `true`, the dashboard displays a password input and lets the user temporarily reveal its value. This only masks the value in the UI; it does not encrypt the value in the configuration file.
 - `options`: Optional. A list, such as `"options": ["chat", "agent", "workflow"]`. Provides dropdown list options.
-- `slider`: Optional. Applies to `int` and `float` fields. A dict，such as `"slider": {"min": 1, "max": 100, "step": 1}`. Provide a slider list with upper and lower limits and a set step size.
+- `slider`: Optional. Applies to `int` and `float` fields. A dict，such as `"slider": {"min": 1, "max": 100, "step": 1}`. Displays a slider with configurable minimum, maximum, and step values.
 - `editor_mode`: Optional. Whether to enable code editor mode. Requires AstrBot >= `v3.5.10`. Versions below this won't report errors but won't take effect. Default is false.
 - `editor_language`: Optional. The code language for the code editor, defaults to `json`.
 - `editor_theme`: Optional. The theme for the code editor. Options are `vs-light` (default) and `vs-dark`.
