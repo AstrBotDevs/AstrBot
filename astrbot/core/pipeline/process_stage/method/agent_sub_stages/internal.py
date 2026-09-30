@@ -10,6 +10,7 @@ from astrbot.core.agent.message import (
     CheckpointData,
     CheckpointMessageSegment,
     Message,
+    TextPart,
     dump_messages_with_checkpoints,
 )
 from astrbot.core.agent.response import AgentStats
@@ -530,7 +531,33 @@ class InternalAgentSubStage(Stage):
                         content=CheckpointData(id=checkpoint_id),
                     ).model_dump()
                 )
-            if has_checkpoint or (llm_response is None and req.tool_calls_result):
+            # Persist the turn when the LLM request failed after tools already
+            # ran. Without this, every tool result of the turn is dropped and
+            # the model reports only what it did in the previous turn.
+            llm_failed = llm_response is not None and llm_response.role == "err"
+            if has_checkpoint or (
+                req.tool_calls_result and (llm_response is None or llm_failed)
+            ):
+                # A tool result must be followed by an assistant turn, otherwise
+                # the next request is rejected as an unpaired tool call.
+                if (
+                    llm_failed
+                    and message_to_save
+                    and message_to_save[-1].get("role") == "tool"
+                ):
+                    message_to_save.append(
+                        Message(
+                            role="assistant",
+                            content=[
+                                TextPart(
+                                    text=(
+                                        "[The upstream request failed before this turn "
+                                        "produced a final reply.]"
+                                    ),
+                                )
+                            ],
+                        ).model_dump()
+                    )
                 token_usage = None if has_checkpoint else req.conversation.token_usage
                 await self.conv_manager.update_conversation(
                     event.unified_msg_origin,
