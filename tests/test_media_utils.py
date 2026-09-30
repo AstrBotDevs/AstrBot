@@ -6,6 +6,7 @@ import sys
 import wave
 from io import BytesIO
 from pathlib import Path
+from types import SimpleNamespace
 from urllib.parse import quote
 
 import pytest
@@ -755,14 +756,55 @@ async def test_video_and_file_components_accept_standard_file_uri(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_file_token_service_accepts_standard_file_uri(tmp_path):
+@pytest.mark.parametrize("single_use", [True, False])
+async def test_file_token_service_accepts_standard_file_uri(tmp_path, single_use):
     file_path = tmp_path / "document with space.txt"
     file_path.write_text("document", encoding="utf-8")
     service = FileTokenService()
 
-    token = await service.register_file(file_path.as_uri())
+    token = await service.register_file(file_path.as_uri(), single_use=single_use)
 
     assert await service.handle_file(token) == str(file_path)
+
+
+@pytest.mark.asyncio
+async def test_file_token_service_reusable_token_expires(tmp_path, monkeypatch):
+    file_path = tmp_path / "logo.png"
+    file_path.write_bytes(b"logo")
+    now = 1000.0
+    monkeypatch.setattr(
+        sys.modules[FileTokenService.__module__],
+        "time",
+        SimpleNamespace(time=lambda: now),
+    )
+    service = FileTokenService()
+    single_use_token = await service.register_file(str(file_path), timeout=1)
+    reusable_token = await service.register_file(
+        str(file_path), timeout=60, single_use=False
+    )
+
+    now += 2
+    assert await service.check_token_expired(single_use_token)
+    assert await service.handle_file(reusable_token) == str(file_path)
+    assert await service.handle_file(reusable_token) == str(file_path)
+    assert not await service.check_token_expired(reusable_token)
+
+    now += 59
+    with pytest.raises(KeyError, match="Invalid or expired file token"):
+        await service.handle_file(reusable_token)
+    assert await service.check_token_expired(reusable_token)
+
+
+@pytest.mark.asyncio
+async def test_file_token_service_reusable_token_checks_file_exists(tmp_path):
+    file_path = tmp_path / "logo.png"
+    file_path.write_bytes(b"logo")
+    service = FileTokenService()
+    token = await service.register_file(str(file_path), single_use=False)
+    file_path.unlink()
+
+    with pytest.raises(FileNotFoundError, match="File does not exist"):
+        await service.handle_file(token)
 
 
 def test_path_mapping_accepts_standard_and_legacy_file_uri(tmp_path):

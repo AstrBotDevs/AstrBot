@@ -1035,38 +1035,49 @@ class ConfigDisplayService:
         return result
 
     async def register_platform_logo(self, platform, platform_default_tmpl) -> None:
+        """Attach a reusable logo token to a platform's configuration template.
+
+        Args:
+            platform: Registered adapter metadata including its logo path.
+            platform_default_tmpl: Configuration templates updated with the token.
+        """
         if not platform.logo_path:
             return
 
         try:
             cache_key = f"{platform.name}:{platform.logo_path}"
-            if cache_key in self._logo_token_cache:
-                self._set_platform_logo_token(
-                    platform_default_tmpl,
-                    platform.name,
-                    self._logo_token_cache[cache_key],
-                )
-                logger.debug(f"Using cached logo token for platform {platform.name}")
-                return
+            if cached_token := self._logo_token_cache.get(cache_key):
+                if not await file_token_service.check_token_expired(cached_token):
+                    self._set_platform_logo_token(
+                        platform_default_tmpl,
+                        platform.name,
+                        cached_token,
+                    )
+                    logger.debug(
+                        f"Using cached logo token for platform {platform.name}"
+                    )
+                    return
+                self._logo_token_cache.pop(cache_key, None)
 
             platform_cls = platform_cls_map.get(platform.name)
             if not platform_cls:
                 logger.warning(f"Platform class not found for {platform.name}")
                 return
 
-            module_file = inspect.getfile(platform_cls)
-            plugin_dir = os.path.dirname(module_file)
-            logo_file_path = os.path.join(plugin_dir, platform.logo_path)
+            logo_file_path = (
+                Path(inspect.getfile(platform_cls)).parent / platform.logo_path
+            )
 
-            if not os.path.exists(logo_file_path):
+            if not logo_file_path.exists():
                 logger.warning(
                     f"Platform {platform.name} logo file not found: {logo_file_path}",
                 )
                 return
 
             logo_token = await file_token_service.register_file(
-                logo_file_path,
+                str(logo_file_path),
                 timeout=3600,
+                single_use=False,
             )
             self._set_platform_logo_token(
                 platform_default_tmpl,
