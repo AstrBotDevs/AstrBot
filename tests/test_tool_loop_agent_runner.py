@@ -324,6 +324,33 @@ class SingleToolThenFinalProvider(MockProvider):
         )
 
 
+class PreambleToolProvider(MockProvider):
+    """First call returns a tool call carrying the given preamble text as
+    completion_text; the second call returns the final answer."""
+
+    def __init__(self, tool_name: str, preamble: str):
+        super().__init__()
+        self.tool_name = tool_name
+        self.preamble = preamble
+
+    async def text_chat(self, **kwargs) -> LLMResponse:
+        self.call_count += 1
+        if self.call_count > 1:
+            return LLMResponse(
+                role="assistant",
+                completion_text="最终回复",
+                usage=TokenUsage(input_other=10, output=5),
+            )
+        return LLMResponse(
+            role="assistant",
+            completion_text=self.preamble,
+            tools_call_name=[self.tool_name],
+            tools_call_args=[{"query": "test"}],
+            tools_call_ids=["call_preamble"],
+            usage=TokenUsage(input_other=10, output=5),
+        )
+
+
 class CapturingToolLoopProvider(MockProvider):
     def __init__(self, tool_name: str):
         super().__init__()
@@ -2398,3 +2425,58 @@ async def test_small_step_budgets_and_reset(
     )
     assert runner._step_budget_used == 0
     assert runner._step_budget_notified == set()
+
+
+@pytest.mark.asyncio
+async def test_whitespace_preamble_with_tool_call_is_not_yielded(
+    provider_request, mock_tool_executor, mock_hooks
+):
+    """A whitespace-only completion_text followed by tool calls must not
+    produce an intermediate llm_result; the respond stage would only log it
+    as an empty message (see #10236)."""
+    provider = PreambleToolProvider("test_tool", preamble=" ")
+    runner = ToolLoopAgentRunner()
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    responses = [resp async for resp in runner.step_until_done(5)]
+
+    texts = [
+        resp.data["chain"].get_plain_text()
+        for resp in responses
+        if resp.type == "llm_result"
+    ]
+    assert texts == ["最终回复"]
+
+
+@pytest.mark.asyncio
+async def test_non_empty_preamble_with_tool_call_is_still_yielded(
+    provider_request, mock_tool_executor, mock_hooks
+):
+    """A real preamble before tool calls keeps flowing; tool progress UX
+    depends on it."""
+    provider = PreambleToolProvider("test_tool", preamble="先查一下天气。")
+    runner = ToolLoopAgentRunner()
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    responses = [resp async for resp in runner.step_until_done(5)]
+
+    texts = [
+        resp.data["chain"].get_plain_text()
+        for resp in responses
+        if resp.type == "llm_result"
+    ]
+    assert texts == ["先查一下天气。", "最终回复"]

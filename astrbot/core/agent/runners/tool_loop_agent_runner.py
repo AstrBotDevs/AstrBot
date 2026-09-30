@@ -938,7 +938,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 type="llm_result",
                 data=AgentResponseData(chain=llm_resp.result_chain),
             )
-        elif llm_resp.completion_text:
+        elif llm_resp.completion_text and (
+            not llm_resp.tools_call_name or llm_resp.completion_text.strip()
+        ):
+            # A whitespace-only preamble carries no information. When tool
+            # calls follow, skip it so no empty message reaches the respond
+            # stage; without tool calls keep the model's reply untouched.
             yield AgentResponse(
                 type="llm_result",
                 data=AgentResponseData(
