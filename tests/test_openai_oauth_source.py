@@ -766,7 +766,8 @@ async def test_oauth_provider_exposes_codex_model_catalog_and_defaults():
     try:
         models = await provider.get_models()
 
-        assert models[:6] == [
+        assert models[:7] == [
+            "gpt-6.1-sol",
             "gpt-6-astra",
             "gpt-6-sol",
             "gpt-6-luna",
@@ -785,7 +786,7 @@ async def test_oauth_provider_exposes_codex_model_catalog_and_defaults():
             ),
         }
         expected_efforts = ("none", "low", "medium", "high", "xhigh", "max")
-        for model in models[1:6]:
+        for model in models[2:7]:
             assert (
                 provider.model_capabilities[model]["supported_reasoning_efforts"]
                 == expected_efforts
@@ -859,8 +860,8 @@ async def test_request_backend_sends_codex_identity_and_residency_headers(
         headers = sent_requests[0]["headers"]
         assert status_code == 200
         assert attempted_version == provider._oauth_shared_state.version
-        assert headers["version"] == "0.158.0"
-        assert headers["User-Agent"] == "codex_cli_rs/0.158.0"
+        assert headers["version"] == "0.159.2"
+        assert headers["User-Agent"] == "codex_cli_rs/0.159.2"
         assert headers["x-openai-internal-codex-residency"] == "us"
     finally:
         await provider.terminate()
@@ -1430,8 +1431,8 @@ async def test_generate_image_reads_sse_incrementally(monkeypatch, tmp_path):
         results = await provider.generate_image("draw from streaming response")
 
         assert sent_requests[0]["method"] == "POST"
-        assert sent_requests[0]["headers"]["version"] == "0.158.0"
-        assert sent_requests[0]["headers"]["User-Agent"] == ("codex_cli_rs/0.158.0")
+        assert sent_requests[0]["headers"]["version"] == "0.159.2"
+        assert sent_requests[0]["headers"]["User-Agent"] == ("codex_cli_rs/0.159.2")
         assert sent_requests[0]["headers"]["x-openai-internal-codex-residency"] == "eu"
         assert sent_requests[0]["json"]["stream"] is True
         assert (
@@ -1561,6 +1562,79 @@ async def test_gpt6_sol_luna_are_discoverable():
     provider = _make_provider()
     assert {"gpt-6-sol", "gpt-6-luna"} <= set(await provider.get_models())
     await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_gpt61_sol_catalog_exposes_supported_reasoning():
+    provider = _make_provider()
+    try:
+        assert "gpt-6.1-sol" in await provider.get_models()
+        assert provider.model_capabilities["gpt-6.1-sol"] == {
+            "default_reasoning_effort": "medium",
+            "supported_reasoning_efforts": ("low", "medium", "high", "xhigh", "max"),
+        }
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.parametrize("effort", [None, "low", "medium", "high", "xhigh", "max"])
+def test_gpt61_sol_filters_parameters_and_preserves_tools(effort):
+    tools = [
+        {
+            "type": "function",
+            "name": "get_weather",
+            "parameters": {"type": "object", "properties": {}},
+        },
+        {"type": "web_search"},
+    ]
+    provider = _make_provider(
+        {
+            "model": "gpt-6.1-sol",
+            "custom_extra_body": {
+                "top_p": 0.8,
+                "top_logprobs": 5,
+                "include": [
+                    "message.output_text.logprobs",
+                    "reasoning.encrypted_content",
+                ],
+                "tools": tools,
+            },
+        }
+    )
+    request = {"model": "gpt-6.1-sol", "messages": [], "tool_choice": "auto"}
+    if effort is not None:
+        request["reasoning_effort"] = effort
+    params = provider._build_responses_params(request, None)
+    assert params["model"] == "gpt-6.1-sol"
+    if effort is None:
+        assert "reasoning" not in params
+    else:
+        assert params["reasoning"] == {"effort": effort}
+    assert "top_p" not in params
+    assert "top_logprobs" not in params
+    assert params["include"] == ["reasoning.encrypted_content"]
+    assert params["tools"] == tools
+    assert params["tool_choice"] == "auto"
+
+
+@pytest.mark.parametrize("effort", ["none", "off", "minimal", "invalid", "ultra"])
+def test_gpt61_sol_rejects_unsupported_reasoning(effort):
+    provider = _make_provider({"model": "gpt-6.1-sol"})
+    with pytest.raises(ValueError):
+        provider._build_responses_params(
+            {"model": "gpt-6.1-sol", "messages": [], "reasoning_effort": effort}, None
+        )
+
+
+@pytest.mark.parametrize(
+    "include", [["message.output_text.logprobs"], "message.output_text.logprobs"]
+)
+def test_gpt61_sol_removes_logprobs_only_include(include):
+    provider = _make_provider({"custom_extra_body": {"include": include}})
+    params = provider._build_responses_params(
+        {"model": "gpt-6.1-sol", "messages": []}, None
+    )
+    assert "include" not in params
 
 
 @pytest.mark.parametrize("model", ["gpt-6-sol", "gpt-6-luna"])

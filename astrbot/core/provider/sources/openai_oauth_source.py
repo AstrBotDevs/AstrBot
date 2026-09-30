@@ -45,7 +45,7 @@ OAUTH_IMAGE_MODEL_ALIASES = frozenset(
     {"gpt-image-2", "gpt-image-2.5-flare", "gpt-image-2.5-sunburst"}
 )
 OAUTH_PLACEHOLDER_KEY = "__openai_oauth__"
-CODEX_CLIENT_VERSION = "0.158.0"
+CODEX_CLIENT_VERSION = "0.159.2"
 
 
 class OpenAIOAuthImageStreamError(RuntimeError):
@@ -94,6 +94,16 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
         "image_websocket": True,
     }
     model_capabilities = {
+        "gpt-6.1-sol": {
+            "default_reasoning_effort": "medium",
+            "supported_reasoning_efforts": (
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max",
+            ),
+        },
         "gpt-6-astra": {
             "default_reasoning_effort": "medium",
             "supported_reasoning_efforts": (
@@ -1272,11 +1282,13 @@ class ProviderOpenAIOAuth(OpenAIOAuthAudioMixin, ProviderOpenAIOfficial):
         params.pop("max_output_tokens", None)
         params.pop("temperature", None)
         model_name = str(params.get("model") or "").strip().lower()
-        if model_name.startswith(("gpt-6-astra", "gpt-6-sol", "gpt-6-luna")):
+        if model_name.startswith(
+            ("gpt-6.1-sol", "gpt-6-astra", "gpt-6-sol", "gpt-6-luna")
+        ):
             # The Codex backend rejects sampling parameters even without reasoning.
             params.pop("top_p", None)
             params.pop("top_logprobs", None)
-        if model_name.startswith("gpt-6-astra") or (
+        if model_name.startswith(("gpt-6.1-sol", "gpt-6-astra")) or (
             model_name.startswith(("gpt-6-sol", "gpt-6-luna"))
             and reasoning.get("effort") != "none"
         ):
