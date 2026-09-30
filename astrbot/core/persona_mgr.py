@@ -78,16 +78,14 @@ class PersonaManager:
         )
         if persona is not None:
             logger.debug(
-                "[persona] get_persona_v3_by_id(%r) -> persona prompt=%r",
+                "[persona] get_persona_v3_by_id(%r) -> matched stored persona",
                 persona_id,
-                persona["prompt"][:60],
             )
             return persona
         if persona_id == "default":
             logger.debug(
                 "[persona] get_persona_v3_by_id('default') -> built-in "
-                "DEFAULT_PERSONALITY (prompt=%r); no persona named 'default'",
-                DEFAULT_PERSONALITY["prompt"],
+                "DEFAULT_PERSONALITY (no stored persona named 'default')"
             )
             return DEFAULT_PERSONALITY
         logger.debug("[persona] get_persona_v3_by_id(%r) -> None", persona_id)
@@ -158,13 +156,12 @@ class PersonaManager:
         )
         logger.debug(
             "[persona] resolve_selected_persona: umo=%s conversation_persona_id=%r "
-            "force_applied=%r -> persona_id=%r matched_persona=%r prompt=%r",
+            "force_applied=%r -> persona_id=%r matched_persona=%r",
             umo,
             conversation_persona_id,
             force_applied_persona_id,
             persona_id,
             persona["name"] if persona else None,
-            persona["prompt"][:60] if persona else None,
         )
 
         use_webchat_special_default = False
