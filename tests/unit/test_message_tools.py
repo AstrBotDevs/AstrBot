@@ -504,7 +504,7 @@ async def test_send_message_quotes_explicit_message_in_target_session(session):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("reply_id", ["", "  ", 123, True, [], {}])
+@pytest.mark.parametrize("reply_id", [123, True, [], {}])
 async def test_send_message_rejects_invalid_reply_id_before_sending(reply_id):
     """Invalid quote arguments must not send a partial message."""
     ctx = _make_context()
@@ -513,18 +513,23 @@ async def test_send_message_rejects_invalid_reply_id_before_sending(reply_id):
         reply_to_message_id=reply_id,
         messages=[{"type": "plain", "text": "hello"}],
     )
-    assert result == "error: reply_to_message_id must be a non-empty string."
+    assert result == "error: reply_to_message_id must be a string."
     ctx.context.context.send_message.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_send_message_without_reply_id_keeps_plain_chain():
-    """Omitting the quote argument preserves ordinary message sending."""
+@pytest.mark.parametrize(
+    "reply_args",
+    [{}, {"reply_to_message_id": None}, {"reply_to_message_id": ""},
+     {"reply_to_message_id": " \t\n "}],
+)
+async def test_send_message_without_reply_id_keeps_plain_chain(reply_args):
+    """Absent or blank quote arguments preserve ordinary message sending."""
     from astrbot.core.message.components import Plain
 
     ctx = _make_context()
     await SendMessageToUserTool().call(
-        ctx, messages=[{"type": "plain", "text": "hello"}]
+        ctx, messages=[{"type": "plain", "text": "hello"}], **reply_args
     )
     chain = ctx.context.context.send_message.await_args.args[1]
     assert len(chain.chain) == 1

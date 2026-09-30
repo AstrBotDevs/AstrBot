@@ -129,7 +129,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                         "Optional platform message ID to quote in the target session, "
                         "on platforms that support replies. Use only a real message ID "
                         "from that session, never invent one or use a history database row ID. "
-                        "Omit to send without an explicit quote."
+                        "Omit or leave empty to send without an explicit quote."
                     ),
                 },
                 "session": {
@@ -233,12 +233,9 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
 
         reply_to_message_id = kwargs.get("reply_to_message_id")
         if reply_to_message_id is not None:
-            if (
-                not isinstance(reply_to_message_id, str)
-                or not reply_to_message_id.strip()
-            ):
-                return "error: reply_to_message_id must be a non-empty string."
-            reply_to_message_id = reply_to_message_id.strip()
+            if not isinstance(reply_to_message_id, str):
+                return "error: reply_to_message_id must be a string."
+            reply_to_message_id = reply_to_message_id.strip() or None
 
         components: list[Comp.BaseMessageComponent] = []
         if reply_to_message_id is not None:
