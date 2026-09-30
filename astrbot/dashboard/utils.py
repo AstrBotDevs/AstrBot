@@ -1,14 +1,10 @@
 import base64
 import traceback
 from io import BytesIO
-from typing import TYPE_CHECKING
 
 from astrbot.api import logger
 from astrbot.core.knowledge_base.kb_helper import KBHelper
 from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
-
-if TYPE_CHECKING:
-    from astrbot.core.db.vec_db.faiss_impl import FaissVecDB
 
 
 async def generate_tsne_visualization(
@@ -84,8 +80,9 @@ async def generate_tsne_visualization(
                 index.reconstruct(i, vectors[i])
 
         # 获取查询向量
-        vec_db: FaissVecDB = kb_helper.vec_db  # type: ignore
-        embedding_provider = vec_db.embedding_provider
+        # Resolve the provider by ID: the vector store caches the instance it
+        # was built with, which a provider reload may have terminated.
+        embedding_provider = await kb_helper.get_ep()
         query_embedding = await embedding_provider.get_embedding(query)
         query_vector = np.array([query_embedding], dtype=np.float32)
 
