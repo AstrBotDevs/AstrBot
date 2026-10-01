@@ -574,6 +574,7 @@ import { useMediaHandling } from "@/composables/useMediaHandling";
 import { useRecording } from "@/composables/useRecording";
 import { useProjects } from "@/composables/useProjects";
 import { useDragUpload } from "@/composables/useDragUpload";
+import { useProviderModelSelection } from "@/composables/useProviderModelSelection";
 import { useChatHeaderStore } from "@/stores/chatHeader";
 import { useHeaderContextStore } from "@/stores/headerContext";
 import { useMobileDrawerStore } from "@/stores/mobileDrawer";
@@ -979,6 +980,60 @@ function getSelectedProviderSelection() {
   };
 }
 
+const {
+  selectedProviderId: currentProviderId,
+  selectedModelName: currentModelName,
+  setSelection: setProviderSelection,
+} = useProviderModelSelection();
+
+const SESSION_PROVIDER_STORAGE_PREFIX = "chat.sessionProvider.";
+
+function readSessionProviderSelection(sessionId: string) {
+  try {
+    const raw = localStorage.getItem(
+      SESSION_PROVIDER_STORAGE_PREFIX + sessionId,
+    );
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed.providerId === "string" && parsed.providerId) {
+      return {
+        providerId: parsed.providerId,
+        modelName: typeof parsed.modelName === "string" ? parsed.modelName : "",
+      };
+    }
+  } catch {
+    // Ignore corrupted entries.
+  }
+  return null;
+}
+
+function writeSessionProviderSelection(
+  sessionId: string,
+  selection: { providerId?: string; modelName?: string } | null,
+) {
+  if (!sessionId || !selection?.providerId) return;
+  try {
+    localStorage.setItem(
+      SESSION_PROVIDER_STORAGE_PREFIX + sessionId,
+      JSON.stringify({
+        providerId: selection.providerId,
+        modelName: selection.modelName || "",
+      }),
+    );
+  } catch {
+    // Session model persistence must not block chat flows.
+  }
+}
+
+// Remember the model picked by the user for the active session.
+watch([currentProviderId, currentModelName], ([providerId, modelName]) => {
+  if (!currSessionId.value || !providerId) return;
+  writeSessionProviderSelection(currSessionId.value, {
+    providerId,
+    modelName,
+  });
+});
+
 provide("isDark", isDark);
 
 watch(
@@ -1258,6 +1313,7 @@ async function selectProject(projectId: string) {
   replyTarget.value = null;
   await router.push(basePath());
   await loadProjectSessions(projectId);
+  await focusChatInput();
 }
 
 async function loadProjectSessions(projectId = selectedProjectId.value) {
@@ -1446,6 +1502,10 @@ async function selectSession(sessionId: string, pushRoute = true) {
     await loadSessionMessages(sessionId);
     if (currSessionId.value !== sessionId) return;
   }
+  const storedSelection = readSessionProviderSelection(sessionId);
+  if (storedSelection) {
+    setProviderSelection(storedSelection.providerId, storedSelection.modelName);
+  }
   scrollToBottom(true);
   await focusChatInput();
 }
@@ -1484,6 +1544,7 @@ async function sendCurrentMessage() {
 
     const messageId = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
     const selection = getSelectedProviderSelection();
+    writeSessionProviderSelection(sessionId, selection);
     const { userRecord, botRecord } = createLocalExchange({
       sessionId,
       messageId,
@@ -1673,6 +1734,7 @@ async function handleRegenerateMessage(
   if (!currSessionId.value || isUserMessage(message)) return;
   message.threads = [];
   const effectiveSelection = selection ?? getSelectedProviderSelection();
+  writeSessionProviderSelection(currSessionId.value, effectiveSelection);
   await regenerateMessage(
     currSessionId.value,
     message,
