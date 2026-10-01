@@ -4,6 +4,7 @@ import asyncio
 import logging
 import os
 import random
+import re
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -629,6 +630,29 @@ class QQOfficialPlatformAdapter(Platform):
 
         return Record(file=path_wav, url=path_wav)
 
+    # 合并转发（message_type=102）不发 attachments，只把附件摊平成
+    # "[附件N] 类型:图片 文件名:... 尺寸:... 大小:... URL:..." 的纯文本。
+    _FORWARD_IMAGE_URL_PATTERN = re.compile(
+        r"\[附件\d+\][^\n]*?类型\s*[:：]\s*图片[^\n]*?URL\s*[:：]\s*(\S+)"
+    )
+    # 一条合并转发可能带几十张图，全部塞进请求会顶爆上下文。
+    _MAX_FORWARD_IMAGES = 10
+
+    @staticmethod
+    def _extract_forward_image_urls(content: str) -> list[str]:
+        """从合并转发的扁平文本里取出图片 URL，按出现顺序去重。"""
+        urls: list[str] = []
+        seen: set[str] = set()
+        for match in QQOfficialPlatformAdapter._FORWARD_IMAGE_URL_PATTERN.finditer(
+            content
+        ):
+            url = match.group(1).strip().rstrip("\\n")
+            if not url.startswith(("http://", "https://")) or url in seen:
+                continue
+            seen.add(url)
+            urls.append(url)
+        return urls[: QQOfficialPlatformAdapter._MAX_FORWARD_IMAGES]
+
     @staticmethod
     async def _append_attachments(
         msg: list[BaseMessageComponent],
@@ -893,6 +917,10 @@ class QQOfficialPlatformAdapter(Platform):
             await QQOfficialPlatformAdapter._append_attachments(
                 msg, message.attachments
             )
+            for url in QQOfficialPlatformAdapter._extract_forward_image_urls(
+                abm.message_str
+            ):
+                msg.append(Image.fromURL(url))
             abm.message = msg
 
         elif isinstance(message, botpy.message.Message) or isinstance(
@@ -922,6 +950,10 @@ class QQOfficialPlatformAdapter(Platform):
             )
             msg.append(At(qq="qq_official"))
             msg.append(Plain(plain_content))
+            for url in QQOfficialPlatformAdapter._extract_forward_image_urls(
+                plain_content
+            ):
+                msg.append(Image.fromURL(url))
 
             if isinstance(message, botpy.message.Message):
                 raw_data = getattr(message, "raw_data", {})
