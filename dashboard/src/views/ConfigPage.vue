@@ -165,7 +165,12 @@
 
         <!-- Config List -->
         <v-list lines="two">
-          <v-list-item v-for="config in configInfoList" :key="config.id" :title="configDisplayName(config)">
+          <v-list-item
+            v-for="config in configInfoList"
+            :key="config.id"
+            :title="configDisplayName(config)"
+            :subtitle="config.id"
+          >
             <template v-slot:append>
               <div class="d-flex align-center" style="gap: 8px;">
                 <v-btn icon="mdi-content-copy" size="small" variant="text" color="primary"
