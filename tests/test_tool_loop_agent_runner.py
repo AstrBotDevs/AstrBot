@@ -2480,3 +2480,90 @@ async def test_non_empty_preamble_with_tool_call_is_still_yielded(
         if resp.type == "llm_result"
     ]
     assert texts == ["先查一下天气。", "最终回复"]
+
+
+class PreambleChainToolProvider(MockProvider):
+    """First call returns a tool call with the preamble wrapped in
+    result_chain (the OpenAI non-streaming shape); the second call returns
+    the final answer as plain completion_text."""
+
+    def __init__(self, preamble_chain):
+        super().__init__()
+        self.preamble_chain = preamble_chain
+
+    async def text_chat(self, **kwargs) -> LLMResponse:
+        self.call_count += 1
+        if self.call_count > 1:
+            return LLMResponse(
+                role="assistant",
+                completion_text="最终回复",
+                usage=TokenUsage(input_other=10, output=5),
+            )
+        return LLMResponse(
+            role="assistant",
+            completion_text="",
+            result_chain=MessageChain(chain=self.preamble_chain),
+            tools_call_name=["test_tool"],
+            tools_call_args=[{"query": "test"}],
+            tools_call_ids=["call_preamble_chain"],
+            usage=TokenUsage(input_other=10, output=5),
+        )
+
+
+@pytest.mark.asyncio
+async def test_whitespace_preamble_chain_with_tool_call_is_not_yielded(
+    provider_request, mock_tool_executor, mock_hooks
+):
+    """A result_chain holding only blank Plain components is the same
+    whitespace preamble and must be skipped when tool calls follow."""
+    from astrbot.core.message.components import Plain as PlainComp
+
+    provider = PreambleChainToolProvider([PlainComp(" \n ")])
+    runner = ToolLoopAgentRunner()
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    responses = [resp async for resp in runner.step_until_done(5)]
+
+    texts = [
+        resp.data["chain"].get_plain_text()
+        for resp in responses
+        if resp.type == "llm_result"
+    ]
+    assert texts == ["最终回复"]
+
+
+@pytest.mark.asyncio
+async def test_media_preamble_chain_with_tool_call_is_still_yielded(
+    provider_request, mock_tool_executor, mock_hooks
+):
+    """A result_chain carrying media next to blank text is real content and
+    must reach the respond stage even when tool calls follow."""
+    from astrbot.core.message.components import At
+    from astrbot.core.message.components import Plain as PlainComp
+
+    provider = PreambleChainToolProvider([PlainComp(" "), At(qq="123")])
+    runner = ToolLoopAgentRunner()
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    responses = [resp async for resp in runner.step_until_done(5)]
+
+    yielded = [resp for resp in responses if resp.type == "llm_result"]
+    assert any(
+        any(not isinstance(comp, PlainComp) for comp in resp.data["chain"].chain)
+        for resp in yielded
+    )
+    assert yielded[-1].data["chain"].get_plain_text() == "最终回复"

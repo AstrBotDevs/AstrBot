@@ -29,7 +29,7 @@ from astrbot.core.agent.message import ImageURLPart, TextPart, ThinkPart
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.agent.tool_image_cache import tool_image_cache
 from astrbot.core.exceptions import EmptyModelOutputError
-from astrbot.core.message.components import Json
+from astrbot.core.message.components import Json, Plain
 from astrbot.core.message.message_event_result import (
     MessageChain,
 )
@@ -934,10 +934,19 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 ),
             )
         if llm_resp.result_chain:
-            yield AgentResponse(
-                type="llm_result",
-                data=AgentResponseData(chain=llm_resp.result_chain),
+            # Providers that wrap the reply in result_chain (e.g. OpenAI's
+            # non-streaming path) need the same whitespace-only preamble skip
+            # as the completion_text branch below; chains carrying media or
+            # any non-Plain component stay untouched.
+            blank_text_chain = (
+                all(isinstance(comp, Plain) for comp in llm_resp.result_chain.chain)
+                and not llm_resp.result_chain.get_plain_text().strip()
             )
+            if not (llm_resp.tools_call_name and blank_text_chain):
+                yield AgentResponse(
+                    type="llm_result",
+                    data=AgentResponseData(chain=llm_resp.result_chain),
+                )
         elif llm_resp.completion_text and (
             not llm_resp.tools_call_name or llm_resp.completion_text.strip()
         ):
