@@ -61,10 +61,6 @@
       "tempStorage": {
         "title": "缓存",
         "subtitle": "临时目录自动清理阈值。"
-      },
-      "t2iRendering": {
-        "title": "文本转图像",
-        "subtitle": "文本转图像渲染策略、端点和自定义模板。"
       }
     },
     "timePreview": {

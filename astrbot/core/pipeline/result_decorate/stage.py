@@ -384,6 +384,8 @@ class ResultDecorateStage(Stage):
                             return_url=True,
                             use_network=self.t2i_use_network,
                             template_name=self.t2i_active_template,
+                            endpoint=self.ctx.astrbot_config.get("t2i_endpoint")
+                            or None,
                         )
                     except BaseException:
                         logger.error(

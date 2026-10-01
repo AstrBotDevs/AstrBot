@@ -49,6 +49,7 @@ logger = logging.getLogger("astrbot")
 
 if TYPE_CHECKING:
     from astrbot.core.cron.manager import CronJobManager
+    from astrbot.core.utils.t2i.renderer import HtmlRenderer
 
 WebApiHandler = Callable[..., Awaitable[Any]]
 RegisteredWebApi = tuple[str, WebApiHandler, list[str], str]
@@ -124,6 +125,8 @@ class Context:
     """暴露给插件的接口上下文。"""
 
     registered_web_apis: list[RegisteredWebApi] = []
+    html_renderer: HtmlRenderer
+    """Text-to-image renderer, injected by the core lifecycle after creation."""
 
     # 向后兼容的变量
     _register_tasks: list[Awaitable] = []
