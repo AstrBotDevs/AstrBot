@@ -2,7 +2,7 @@
 import { useI18n } from '@/i18n/composables';
 import { computed } from 'vue';
 import { useRoute } from 'vue-router';
-import { Pin, PinOff } from '@lucide/vue';
+import { Pin, PinOff, Puzzle, User } from '@lucide/vue';
 
 const props = defineProps({ item: Object, level: Number, rail: Boolean, pinnable: Boolean, pinned: Boolean });
 const emit = defineEmits(['togglePin']);
@@ -32,6 +32,14 @@ const isItemActive = computed(() => {
 const itemTitle = computed(() => {
   if (!props.item?.title) return '';
   return props.item.isRawTitle ? props.item.title : t(props.item.title);
+});
+
+// Plugin page hover card: display name shown in dark text with the plugin id
+// in parentheses; plugins without a display name show only the id.
+const pluginDisplayName = computed(() => {
+  const info = props.item?.pluginInfo;
+  if (!info || !props.item.isRawTitle) return '';
+  return props.item.title !== info.id ? props.item.title : '';
 });
 
 const isVuetifyIcon = computed(() => typeof props.item?.icon === 'string');
@@ -113,7 +121,7 @@ const isVuetifyIcon = computed(() => typeof props.item?.icon === 'string');
     v-else
     :disabled="!item.pluginInfo"
     location="right"
-    :open-delay="150"
+    :open-delay="0"
     content-class="plugin-page-hover-card"
   >
     <template v-slot:activator="{ props: tooltipProps }">
@@ -149,8 +157,18 @@ const isVuetifyIcon = computed(() => typeof props.item?.icon === 'string');
     </template>
     <div v-if="item.pluginInfo" class="plugin-hover-card">
       <div class="plugin-hover-card__title">{{ itemTitle }}</div>
-      <div class="plugin-hover-card__meta">{{ item.pluginInfo.id }}</div>
-      <div v-if="item.pluginInfo.author" class="plugin-hover-card__meta">{{ item.pluginInfo.author }}</div>
+      <div class="plugin-hover-card__row">
+        <Puzzle :size="13" class="plugin-hover-card__icon" />
+        <template v-if="pluginDisplayName">
+          <span class="plugin-hover-card__name">{{ pluginDisplayName }}</span>
+          <span class="plugin-hover-card__id">({{ item.pluginInfo.id }})</span>
+        </template>
+        <span v-else class="plugin-hover-card__id">{{ item.pluginInfo.id }}</span>
+      </div>
+      <div v-if="item.pluginInfo.author" class="plugin-hover-card__row">
+        <User :size="13" class="plugin-hover-card__icon" />
+        <span>{{ item.pluginInfo.author }}</span>
+      </div>
     </div>
   </v-tooltip>
 </template>
@@ -179,6 +197,7 @@ const isVuetifyIcon = computed(() => typeof props.item?.icon === 'string');
     0 2px 6px rgba(0, 0, 0, 0.08);
   color: rgb(var(--v-theme-on-surface));
   opacity: 1 !important;
+  transition: none !important;
 }
 
 .plugin-hover-card__title {
@@ -187,12 +206,29 @@ const isVuetifyIcon = computed(() => typeof props.item?.icon === 'string');
   line-height: 20px;
 }
 
-.plugin-hover-card__meta {
-  margin-top: 2px;
-  color: rgba(var(--v-theme-on-surface), 0.55);
-  font-family: monospace;
+.plugin-hover-card__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  color: rgba(var(--v-theme-on-surface), 0.65);
   font-size: 12px;
   line-height: 16px;
+}
+
+.plugin-hover-card__icon {
+  flex: 0 0 auto;
+  color: rgba(var(--v-theme-on-surface), 0.45);
+}
+
+.plugin-hover-card__name {
+  color: rgb(var(--v-theme-on-surface));
+  font-weight: 500;
+}
+
+.plugin-hover-card__id {
+  color: rgba(var(--v-theme-on-surface), 0.55);
+  font-family: monospace;
 }
 
 .nav-item-pin {
