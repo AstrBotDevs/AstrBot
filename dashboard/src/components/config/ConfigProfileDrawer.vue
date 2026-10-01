@@ -39,7 +39,7 @@ function close() {
     <v-card class="config-profile-drawer-card" elevation="12">
       <div class="config-profile-drawer-header">
         <div>
-          <span class="text-h6">{{ tm('configProfileDrawer.title') }}</span>
+          <span class="text-h3">{{ tm('configProfileDrawer.title') }}</span>
         </div>
         <v-btn icon variant="text" :aria-label="tm('configProfileDrawer.close')" @click="close">
           <v-icon>mdi-close</v-icon>
@@ -71,7 +71,7 @@ function close() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 20px 12px;
+  padding: 8px 12px 8px 20px;
 }
 
 .config-profile-drawer-content {
