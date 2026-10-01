@@ -139,13 +139,14 @@
             class="route-default-card__select"
           />
           <v-btn
-            icon="mdi-cog-outline"
             variant="text"
             size="small"
             :disabled="!routesReady"
             :aria-label="sharedTm('configProfileDrawer.title')"
             @click="openConfigDrawer(fallbackConfigId)"
-          />
+          >
+            <ArrowUpRight :size="18" />
+          </v-btn>
         </div>
 
         <div class="route-builder">
@@ -211,13 +212,14 @@
             />
 
             <v-btn
-              icon="mdi-cog-outline"
               variant="text"
               size="small"
               :disabled="!routesReady || !pendingConfigId"
               :aria-label="sharedTm('configProfileDrawer.title')"
               @click="openConfigDrawer(pendingConfigId)"
-            />
+            >
+              <ArrowUpRight :size="18" />
+            </v-btn>
 
             <v-btn
               color="primary"
@@ -392,6 +394,7 @@ import {
 import AstrBotConfig from "@/components/shared/AstrBotConfig.vue";
 import ConfigProfileDrawer from "@/components/config/ConfigProfileDrawer.vue";
 import UmoDisplay from "@/components/shared/UmoDisplay.vue";
+import { ArrowUpRight } from "@lucide/vue";
 import { useModuleI18n } from "@/i18n/composables";
 import { getPlatformIcon, getTutorialLink } from "@/utils/platformUtils";
 
