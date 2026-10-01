@@ -83,6 +83,11 @@ const sidebarItem: menu[] = [
     header: EXTENSION_GROUP_KEY,
   },
   {
+    title: 'core.navigation.persona',
+    icon: markRaw(Heart),
+    to: '/persona'
+  },
+  {
     title: 'core.navigation.knowledgeBase',
     icon: markRaw(BookSearch),
     to: '/knowledge-base',
@@ -96,11 +101,6 @@ const sidebarItem: menu[] = [
     title: 'core.navigation.subagent',
     icon: markRaw(Workflow),
     to: '/subagent'
-  },
-  {
-    title: 'core.navigation.persona',
-    icon: markRaw(Heart),
-    to: '/persona'
   },
 ];
 
