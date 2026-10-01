@@ -87,7 +87,9 @@ class Star(CommandParserMixin, PluginKVStoreMixin):
             The image URL or file path, depending on `return_url`.
         """
         if template_name is None:
-            template_name = self.context.get_config(umo).get("t2i_active_template")
+            config = self.context.get_config(umo)
+            if config is not None:
+                template_name = config.get("t2i_active_template")
         return await html_renderer.render_t2i(
             text,
             return_url=return_url,
