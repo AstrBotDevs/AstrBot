@@ -58,7 +58,6 @@
           </div>
         </div>
         <div class="config-toolbar-separator">
-          <v-divider />
           <v-progress-linear
             v-if="!fetched"
             indeterminate
