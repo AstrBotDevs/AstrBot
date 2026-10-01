@@ -137,7 +137,23 @@
             hide-details
             :disabled="!routesReady"
             class="route-default-card__select"
-          />
+          >
+            <template #item="{ props: itemProps, item }">
+              <v-list-item v-bind="itemProps">
+                <template #append>
+                  <v-btn
+                    variant="text"
+                    size="x-small"
+                    class="route-config-edit-btn"
+                    :aria-label="sharedTm('configProfileDrawer.title')"
+                    @click.stop.prevent="openConfigDrawer(item.value)"
+                  >
+                    <ArrowUpRight :size="16" />
+                  </v-btn>
+                </template>
+              </v-list-item>
+            </template>
+          </v-select>
         </div>
 
         <div class="route-builder">
@@ -200,7 +216,23 @@
               variant="outlined"
               hide-details
               :disabled="!routesReady"
-            />
+            >
+              <template #item="{ props: itemProps, item }">
+                <v-list-item v-bind="itemProps">
+                  <template #append>
+                    <v-btn
+                      variant="text"
+                      size="x-small"
+                      class="route-config-edit-btn"
+                      :aria-label="sharedTm('configProfileDrawer.title')"
+                      @click.stop.prevent="openConfigDrawer(item.value)"
+                    >
+                      <ArrowUpRight :size="16" />
+                    </v-btn>
+                  </template>
+                </v-list-item>
+              </template>
+            </v-select>
 
             <v-btn
               color="primary"
@@ -356,6 +388,10 @@
       </section>
     </div>
   </div>
+  <ConfigProfileDrawer
+    v-model="configDrawerOpen"
+    :config-id="configDrawerId"
+  />
 </template>
 
 <script setup>
@@ -368,7 +404,9 @@ import {
   sessionApi,
 } from "@/api/v1";
 import AstrBotConfig from "@/components/shared/AstrBotConfig.vue";
+import ConfigProfileDrawer from "@/components/config/ConfigProfileDrawer.vue";
 import UmoDisplay from "@/components/shared/UmoDisplay.vue";
+import { ArrowUpRight } from "@lucide/vue";
 import { useModuleI18n } from "@/i18n/composables";
 import { getPlatformIcon, getTutorialLink } from "@/utils/platformUtils";
 
@@ -402,6 +440,17 @@ const emit = defineEmits([
 ]);
 
 const { tm } = useModuleI18n("features/platform");
+const { tm: sharedTm } = useModuleI18n("core/shared");
+
+const configDrawerOpen = ref(false);
+const configDrawerId = ref("");
+
+function openConfigDrawer(configId) {
+  // The sentinel means "system default", which is the "default" profile.
+  const realId = configId === SYSTEM_DEFAULT_CONFIG ? "default" : configId;
+  configDrawerId.value = realId;
+  configDrawerOpen.value = true;
+}
 
 const draft = ref({});
 const originalPlatformId = ref("");
@@ -1003,6 +1052,23 @@ function showError(error) {
 .route-default-card__select {
   flex: 0 1 280px;
   min-width: 220px;
+}
+
+.route-config-edit-btn {
+  min-width: 28px;
+  padding: 0 4px;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: rgba(var(--v-theme-on-surface), 0.55);
+}
+
+.route-config-edit-btn:hover {
+  background: transparent !important;
+  color: rgba(var(--v-theme-on-surface), 0.9);
+}
+
+.route-config-edit-btn :deep(.v-btn__overlay) {
+  opacity: 0 !important;
 }
 
 .route-builder {
