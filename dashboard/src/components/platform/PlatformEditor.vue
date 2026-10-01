@@ -137,17 +137,23 @@
             hide-details
             :disabled="!routesReady"
             class="route-default-card__select"
-          />
-          <v-btn
-            variant="text"
-            size="small"
-            class="route-config-edit-btn"
-            :disabled="!routesReady"
-            :aria-label="sharedTm('configProfileDrawer.title')"
-            @click="openConfigDrawer(fallbackConfigId)"
           >
-            <ArrowUpRight :size="18" />
-          </v-btn>
+            <template #item="{ props: itemProps, item }">
+              <v-list-item v-bind="itemProps">
+                <template #append>
+                  <v-btn
+                    variant="text"
+                    size="x-small"
+                    class="route-config-edit-btn"
+                    :aria-label="sharedTm('configProfileDrawer.title')"
+                    @click.stop.prevent="openConfigDrawer(item.value)"
+                  >
+                    <ArrowUpRight :size="16" />
+                  </v-btn>
+                </template>
+              </v-list-item>
+            </template>
+          </v-select>
         </div>
 
         <div class="route-builder">
@@ -210,18 +216,23 @@
               variant="outlined"
               hide-details
               :disabled="!routesReady"
-            />
-
-            <v-btn
-              variant="text"
-              size="small"
-              class="route-config-edit-btn"
-              :disabled="!routesReady || !pendingConfigId"
-              :aria-label="sharedTm('configProfileDrawer.title')"
-              @click="openConfigDrawer(pendingConfigId)"
             >
-              <ArrowUpRight :size="18" />
-            </v-btn>
+              <template #item="{ props: itemProps, item }">
+                <v-list-item v-bind="itemProps">
+                  <template #append>
+                    <v-btn
+                      variant="text"
+                      size="x-small"
+                      class="route-config-edit-btn"
+                      :aria-label="sharedTm('configProfileDrawer.title')"
+                      @click.stop.prevent="openConfigDrawer(item.value)"
+                    >
+                      <ArrowUpRight :size="16" />
+                    </v-btn>
+                  </template>
+                </v-list-item>
+              </template>
+            </v-select>
 
             <v-btn
               color="primary"

@@ -1,9 +1,7 @@
 <script setup>
-import { computed, ref, watch } from 'vue';
-import { useI18n } from '@/i18n/composables';
+import { computed } from 'vue';
 import { useModuleI18n } from '@/i18n/composables';
-import AstrBotCoreConfigWrapper from '@/components/config/AstrBotCoreConfigWrapper.vue';
-import { configProfileApi } from '@/api/v1';
+import ConfigPage from '@/views/ConfigPage.vue';
 
 const props = defineProps({
   modelValue: {
@@ -21,161 +19,71 @@ const props = defineProps({
 });
 const emit = defineEmits(['update:modelValue']);
 
-const { t } = useI18n();
-const { tm } = useModuleI18n('features/config');
+const { tm } = useModuleI18n('core/shared');
 
 const open = computed({
   get: () => props.modelValue,
   set: (value) => emit('update:modelValue', value),
 });
 
-const loading = ref(false);
-const saving = ref(false);
-const loadFailed = ref(false);
-const configData = ref(null);
-const configMetadata = ref(null);
-const snackbar = ref(false);
-const snackbarText = ref('');
-const snackbarColor = ref('success');
-
-watch(
-  [open, () => props.configId],
-  async ([isOpen, id]) => {
-    if (!isOpen || !id) return;
-    loading.value = true;
-    loadFailed.value = false;
-    configData.value = null;
-    configMetadata.value = null;
-    try {
-      const res = await configProfileApi.get(id);
-      configData.value = res.data.data.config;
-      configMetadata.value = res.data.data.metadata;
-    } catch {
-      loadFailed.value = true;
-    } finally {
-      loading.value = false;
-    }
-  },
-  { immediate: true },
-);
-
-async function save() {
-  if (!configData.value || saving.value) return;
-  saving.value = true;
-  try {
-    const res = await configProfileApi.update(
-      props.configId,
-      JSON.parse(JSON.stringify(configData.value)),
-    );
-    const ok = res.data?.status === 'ok';
-    snackbarText.value = res.data?.message || tm(ok ? 'messages.saveSuccess' : 'messages.saveError');
-    snackbarColor.value = ok ? 'success' : 'error';
-  } catch {
-    snackbarText.value = tm('messages.saveError');
-    snackbarColor.value = 'error';
-  } finally {
-    saving.value = false;
-    snackbar.value = true;
-  }
+function close() {
+  open.value = false;
 }
 </script>
 
 <template>
-  <v-navigation-drawer
+  <v-overlay
     v-model="open"
+    class="config-profile-drawer-overlay"
     location="right"
-    temporary
-    :width="760"
-    class="config-profile-drawer"
+    transition="slide-x-reverse-transition"
+    :scrim="true"
+    @click:outside="close"
   >
-    <div class="config-profile-drawer__layout">
-      <div class="config-profile-drawer__header">
-        <div class="config-profile-drawer__title text-h3">
-          {{ t('core.shared.configProfileDrawer.title') }}
-          <span v-if="configName" class="config-profile-drawer__name">{{ configName }}</span>
+    <v-card class="config-profile-drawer-card" elevation="12">
+      <div class="config-profile-drawer-header">
+        <div>
+          <span class="text-h6">{{ tm('configProfileDrawer.title') }}</span>
+          <div v-if="configName" class="text-caption text-grey">
+            {{ configName }}
+          </div>
         </div>
-        <v-btn icon="mdi-close" variant="text" size="small" @click="open = false" />
-      </div>
-
-      <div class="config-profile-drawer__content">
-        <div v-if="loading" class="d-flex justify-center py-8">
-          <v-progress-circular indeterminate color="primary" />
-        </div>
-        <div v-else-if="loadFailed" class="text-center py-8 text-grey">
-          <v-icon>mdi-information-outline</v-icon>
-          <p class="mt-2">{{ t('core.shared.configProfileDrawer.loadFailed') }}</p>
-        </div>
-        <AstrBotCoreConfigWrapper
-          v-else-if="configData && configMetadata"
-          :metadata="configMetadata"
-          :config_data="configData"
-        />
-      </div>
-
-      <div class="config-profile-drawer__footer">
-        <v-btn variant="text" @click="open = false">
-          {{ t('core.shared.configProfileDrawer.close') }}
-        </v-btn>
-        <v-btn
-          color="primary"
-          variant="tonal"
-          :loading="saving"
-          :disabled="!configData || loading || loadFailed"
-          @click="save"
-        >
-          {{ tm('actions.save') }}
+        <v-btn icon variant="text" :aria-label="tm('configProfileDrawer.close')" @click="close">
+          <v-icon>mdi-close</v-icon>
         </v-btn>
       </div>
-    </div>
-
-    <v-snackbar v-model="snackbar" :color="snackbarColor" :timeout="2500" location="bottom right">
-      {{ snackbarText }}
-    </v-snackbar>
-  </v-navigation-drawer>
+      <v-divider />
+      <div class="config-profile-drawer-content">
+        <ConfigPage v-if="open && configId" :initial-config-id="configId" />
+      </div>
+    </v-card>
+  </v-overlay>
 </template>
 
-<style scoped>
-.config-profile-drawer {
-  max-width: 92vw;
-}
-
-.config-profile-drawer__layout {
-  display: flex;
-  height: 100%;
-  flex-direction: column;
-}
-
-.config-profile-drawer__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  padding: 16px 12px 0 24px;
-}
-
-.config-profile-drawer__title {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-}
-
-.config-profile-drawer__name {
-  color: rgba(var(--v-theme-on-surface), 0.55);
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.config-profile-drawer__content {
-  flex: 1 1 auto;
-  overflow-y: auto;
-  padding: 8px 16px 16px;
-}
-
-.config-profile-drawer__footer {
-  display: flex;
-  flex: 0 0 auto;
+<style>
+.config-profile-drawer-overlay {
+  align-items: stretch;
   justify-content: flex-end;
-  gap: 8px;
-  padding: 10px 16px;
-  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+}
+
+.config-profile-drawer-card {
+  display: flex;
+  width: clamp(320px, 60vw, 820px);
+  height: calc(100vh - 32px);
+  flex-direction: column;
+  margin: 16px;
+}
+
+.config-profile-drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 12px;
+}
+
+.config-profile-drawer-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 16px 24px;
 }
 </style>
