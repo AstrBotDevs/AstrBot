@@ -1042,7 +1042,11 @@ export default {
 
 /* Embedded in the config drawer: stick to the drawer's top, not the app bar. */
 .config-panel--embedded .config-toolbar-sticky {
-  top: 0;
+  /* Cover the drawer's 16px top padding as well, so scrolled content does not
+     bleed through the strip above the bar. */
+  top: -16px;
+  padding-top: 16px;
+  background: rgb(var(--v-theme-containerBg));
 }
 
 .config-toolbar {
