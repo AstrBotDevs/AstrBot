@@ -31,9 +31,11 @@ export interface menu {
   collapsible?: boolean;
   pluginInfo?: {
     id: string;
+    displayName?: string;
     author?: string | null;
     version?: string;
   };
+  groupToggle?: boolean;
 }
 
 export const SYSTEM_GROUP_KEY = 'core.navigation.groups.system';
@@ -88,6 +90,7 @@ const sidebarItem: menu[] = [
   {
     header: EXTENSION_GROUP_KEY,
     collapsible: true,
+    groupToggle: true,
   },
   {
     title: 'core.navigation.persona',

@@ -37,6 +37,8 @@
   "settings": "システム設定",
   "pin": "トップに固定",
   "unpin": "固定を解除",
+  "groupByPlugin": "プラグイン別にグループ化",
+  "ungroupByPlugin": "グループ化を解除",
   "expandSidebar": "サイドバーを展開",
   "collapseSidebar": "サイドバーを折りたたむ",
   "changelog": "変更履歴",
@@ -61,6 +63,6 @@
     "normal": "一般設定",
     "system": "システム設定"
   },
-  "pluginWebui": "プラグインページ",
-  "pluginPageType": "プラグインの可視化ビュー"
+  "pluginWebui": "プラグインビュー",
+  "pluginPageType": "プラグインビュー"
 }

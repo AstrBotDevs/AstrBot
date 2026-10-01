@@ -4,7 +4,7 @@ import { computed } from 'vue';
 import { useRoute } from 'vue-router';
 import { AppWindow, Pin, PinOff, Puzzle, User } from '@lucide/vue';
 
-const props = defineProps({ item: Object, level: Number, rail: Boolean, pinnable: Boolean, pinned: Boolean });
+const props = defineProps({ item: Object, level: Number, rail: Boolean, pinnable: Boolean, pinnedTos: Array });
 const emit = defineEmits(['togglePin']);
 const { t } = useI18n();
 const route = useRoute();
@@ -38,9 +38,13 @@ const itemTitle = computed(() => {
 // in parentheses; plugins without a display name show only the id.
 const pluginDisplayName = computed(() => {
   const info = props.item?.pluginInfo;
-  if (!info || !props.item.isRawTitle) return '';
+  if (!info) return '';
+  if (info.displayName) return info.displayName;
+  if (!props.item.isRawTitle) return '';
   return props.item.title !== info.id ? props.item.title : '';
 });
+
+const isPinned = computed(() => Boolean(props.pinnedTos?.includes(props.item?.to)));
 
 const isVuetifyIcon = computed(() => typeof props.item?.icon === 'string');
 
@@ -83,7 +87,14 @@ const isVuetifyIcon = computed(() => typeof props.item?.icon === 'string');
 
     <!-- children -->
     <template v-for="(child, index) in item.children" :key="child.title || child.to || `child-${index}`">
-      <NavItem :item="child" :level="(level || 0) + 1" :rail="rail" />
+      <NavItem
+        :item="child"
+        :level="(level || 0) + 1"
+        :rail="rail"
+        :pinnable="pinnable"
+        :pinned-tos="pinnedTos"
+        @toggle-pin="(i) => emit('togglePin', i)"
+      />
     </template>
   </v-list-group>
 
@@ -145,11 +156,11 @@ const isVuetifyIcon = computed(() => typeof props.item?.icon === 'string');
             v-if="pinnable && !rail"
             type="button"
             class="nav-item-pin"
-            :class="{ 'nav-item-pin--active': pinned }"
-            :aria-label="pinned ? t('core.navigation.unpin') : t('core.navigation.pin')"
+            :class="{ 'nav-item-pin--active': isPinned }"
+            :aria-label="isPinned ? t('core.navigation.unpin') : t('core.navigation.pin')"
             @click.prevent.stop="emit('togglePin', item)"
           >
-            <PinOff v-if="pinned" :size="14" />
+            <PinOff v-if="isPinned" :size="14" />
             <Pin v-else :size="14" />
           </button>
         </template>

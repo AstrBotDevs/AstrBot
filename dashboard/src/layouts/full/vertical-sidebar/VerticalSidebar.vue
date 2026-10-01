@@ -16,12 +16,26 @@ const { t } = useI18n();
 const customizer = useCustomizerStore();
 const mobileDrawer = useMobileDrawerStore();
 const commonStore = useCommonStore();
-const { pluginItems } = usePluginSidebarItems();
+const { pluginItems, pluginGroups } = usePluginSidebarItems();
 
 function buildSidebarMenu() {
   // Plugin pages are flattened into the extension group section.
-  const pluginChildren = pluginItems.value?.children ?? [];
-  return [...sidebarItems, ...pluginChildren];
+  const tail = groupByPlugin.value
+    ? pluginGroups.value
+    : (pluginItems.value?.children ?? []);
+  return [...sidebarItems, ...tail];
+}
+
+// Group plugin views by plugin under the extensions group; off by default.
+const groupByPlugin = ref(localStorage.getItem('sidebar_group_by_plugin') === '1');
+watch(groupByPlugin, (val) => {
+  localStorage.setItem('sidebar_group_by_plugin', val ? '1' : '0');
+  sidebarMenu.value = buildSidebarMenu();
+  openedItems.value = sanitizeOpenedItems(openedItems.value, sidebarMenu.value);
+});
+
+function toggleGroupByPlugin() {
+  groupByPlugin.value = !groupByPlugin.value;
 }
 
 function collectGroupValues(items, values = new Set()) {
@@ -93,6 +107,10 @@ const extensionTos = computed(() => {
       inExtension = item.header === EXTENSION_GROUP_KEY;
     } else if (inExtension && item.to) {
       tos.add(item.to);
+    } else if (inExtension && item.children) {
+      for (const child of item.children) {
+        if (child.to) tos.add(child.to);
+      }
     }
   }
   return tos;
@@ -121,25 +139,45 @@ const isRailSidebar = computed(
 // (rail mode always shows everything).
 const visibleMenu = computed(() => {
   const pinnedSet = new Set(pinnedItems.value);
-  const pinned = sidebarMenu.value.filter(
-    (item) => !item.header && pinnedSet.has(item.to) && extensionTos.value.has(item.to),
-  );
+  const extTos = extensionTos.value;
+  const isOpen = (header) => isRailSidebar.value || !collapsedGroups.value.includes(header);
+  const pinned = [];
   const result = [];
   let currentHeader = null;
   for (const item of sidebarMenu.value) {
     if (item.header) {
       currentHeader = item.header;
       result.push(item);
-      if (
-        item.header === EXTENSION_GROUP_KEY
-        && (isRailSidebar.value || !collapsedGroups.value.includes(item.header))
-      ) {
-        result.push(...pinned);
-      }
-    } else if (pinnedSet.has(item.to) && extensionTos.value.has(item.to)) {
       continue;
-    } else if (isRailSidebar.value || !currentHeader || !collapsedGroups.value.includes(currentHeader)) {
+    }
+    if (item.children) {
+      // Plugin group in group-by-plugin mode: lift pinned views out of it.
+      const keptChildren = item.children.filter((child) => {
+        if (pinnedSet.has(child.to) && extTos.has(child.to)) {
+          pinned.push(child);
+          return false;
+        }
+        return true;
+      });
+      if (isOpen(currentHeader) && keptChildren.length) {
+        result.push({ ...item, children: keptChildren });
+      }
+      continue;
+    }
+    if (pinnedSet.has(item.to) && extTos.has(item.to)) {
+      pinned.push(item);
+      continue;
+    }
+    if (!currentHeader || isOpen(currentHeader)) {
       result.push(item);
+    }
+  }
+  if (pinned.length) {
+    const idx = result.findIndex((i) => i.header === EXTENSION_GROUP_KEY);
+    if (idx >= 0 && isOpen(EXTENSION_GROUP_KEY)) {
+      result.splice(idx + 1, 0, ...pinned);
+    } else {
+      result.push(...pinned);
     }
   }
   return result;
@@ -216,24 +254,46 @@ function toggleSidebar() {
             @click="item.collapsible && toggleGroup(item.header)"
           >
             <span>{{ t(item.header) }}</span>
-            <ChevronRight
-              v-if="item.collapsible && collapsedGroups.includes(item.header)"
-              :size="14"
-              class="sidebar-group-header-chevron"
-            />
-            <ChevronDown
-              v-else-if="item.collapsible"
-              :size="14"
-              class="sidebar-group-header-chevron"
-            />
+            <span class="sidebar-group-header-actions">
+              <v-tooltip
+                v-if="item.groupToggle"
+                location="right"
+                :text="groupByPlugin ? t('core.navigation.ungroupByPlugin') : t('core.navigation.groupByPlugin')"
+                :open-delay="0"
+                content-class="plugin-page-hover-card"
+              >
+                <template v-slot:activator="{ props: tooltipProps }">
+                  <button
+                    v-bind="tooltipProps"
+                    type="button"
+                    class="sidebar-group-header-icon"
+                    :class="{ 'sidebar-group-header-icon--active': groupByPlugin }"
+                    :aria-label="groupByPlugin ? t('core.navigation.ungroupByPlugin') : t('core.navigation.groupByPlugin')"
+                    @click.stop="toggleGroupByPlugin"
+                  >
+                    <v-icon :icon="groupByPlugin ? 'mdi-view-grid' : 'mdi-view-grid-outline'" size="14" />
+                  </button>
+                </template>
+              </v-tooltip>
+              <ChevronRight
+                v-if="item.collapsible && collapsedGroups.includes(item.header)"
+                :size="14"
+                class="sidebar-group-header-chevron"
+              />
+              <ChevronDown
+                v-else-if="item.collapsible"
+                :size="14"
+                class="sidebar-group-header-chevron"
+              />
+            </span>
           </div>
           <NavItem
             v-else
             :item="item"
             class="leftPadding"
             :rail="isRailSidebar"
-            :pinnable="extensionTos.has(item.to)"
-            :pinned="pinnedItems.includes(item.to)"
+            :pinnable="extensionTos.has(item.to) || Boolean(item.children?.some((c) => extensionTos.has(c.to)))"
+            :pinned-tos="pinnedItems"
             @toggle-pin="togglePin"
           />
         </template>
@@ -302,6 +362,35 @@ function toggleSidebar() {
 
 .sidebar-group-header-chevron {
   flex: 0 0 auto;
+}
+
+.sidebar-group-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sidebar-group-header-icon {
+  display: grid;
+  place-items: center;
+  padding: 2px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.sidebar-group-header:hover .sidebar-group-header-icon,
+.sidebar-group-header-icon:focus-visible {
+  opacity: 1;
+}
+
+.sidebar-group-header-icon--active {
+  color: rgb(var(--v-theme-primary));
+  opacity: 1;
 }
 
 .sidebar-container {

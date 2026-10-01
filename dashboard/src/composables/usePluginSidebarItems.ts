@@ -30,20 +30,7 @@ function buildPluginItems(plugins: PluginEntry[]): menu | null {
   if (activeWithPages.length === 0) return null;
 
   const children: menu[] = activeWithPages.map((p) => {
-    const displayName = p.display_name || p.name || "Unknown Plugin";
-    const firstPage = p.pages[0];
-
-    return {
-      title: displayName,
-      icon: DEFAULT_ICON,
-      to: `/plugin-page/${encodeURIComponent(p.name)}/${encodeURIComponent(firstPage)}`,
-      isRawTitle: true,
-      pluginInfo: {
-        id: p.name,
-        author: p.author,
-        version: p.version,
-      },
-    };
+    return buildPageItem(p, p.pages[0]);
   });
 
   return {
@@ -51,6 +38,36 @@ function buildPluginItems(plugins: PluginEntry[]): menu | null {
     icon: GROUP_ICON,
     children,
   };
+}
+
+function buildPageItem(p: PluginEntry, page: string): menu {
+  const displayName = p.display_name || p.name || "Unknown Plugin";
+  return {
+    title: page,
+    icon: DEFAULT_ICON,
+    to: `/plugin-view/${encodeURIComponent(p.name)}/${encodeURIComponent(page)}`,
+    isRawTitle: true,
+    pluginInfo: {
+      id: p.name,
+      displayName,
+      author: p.author,
+      version: p.version,
+    },
+  };
+}
+
+function buildPluginGroups(plugins: PluginEntry[]): menu[] {
+  return plugins
+    .filter((p) => p.activated && Array.isArray(p.pages) && p.pages.length > 0)
+    .map((p) => {
+      const displayName = p.display_name || p.name || "Unknown Plugin";
+      return {
+        title: displayName,
+        icon: GROUP_ICON,
+        isRawTitle: true,
+        children: p.pages.map((page) => buildPageItem(p, page)),
+      };
+    });
 }
 
 let initialFetched = false;
@@ -70,9 +87,11 @@ async function initPluginState() {
 
 export function usePluginSidebarItems() {
   const pluginItems = shallowRef<menu | null>(null);
+  const pluginGroups = shallowRef<menu[]>([]);
 
   function refreshItems() {
     pluginItems.value = buildPluginItems(pluginSidebarState.plugins);
+    pluginGroups.value = buildPluginGroups(pluginSidebarState.plugins);
   }
 
   onMounted(async () => {
@@ -87,5 +106,5 @@ export function usePluginSidebarItems() {
     },
   );
 
-  return { pluginItems };
+  return { pluginItems, pluginGroups };
 }
