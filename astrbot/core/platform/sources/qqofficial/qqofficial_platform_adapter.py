@@ -646,7 +646,7 @@ class QQOfficialPlatformAdapter(Platform):
         for match in QQOfficialPlatformAdapter._FORWARD_IMAGE_URL_PATTERN.finditer(
             content
         ):
-            url = match.group(1).strip().rstrip("\\n")
+            url = match.group(1).strip()
             if not url.startswith(("http://", "https://")) or url in seen:
                 continue
             seen.add(url)

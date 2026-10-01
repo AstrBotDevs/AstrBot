@@ -26,6 +26,15 @@ def test_extracts_forward_image_urls_in_order():
     ]
 
 
+def test_keeps_urls_ending_with_backslash_or_n():
+    # rstrip("\\n") 会削掉 URL 末尾的字面反斜杠和字母 n
+    for suffix in ("n", "\\n"):
+        url = f"https://example.com/image{suffix}"
+        content = f"[附件1] 类型:图片 文件名:i.jpg URL:{url}"
+
+        assert QQOfficialPlatformAdapter._extract_forward_image_urls(content) == [url]
+
+
 def test_dedupes_repeated_urls():
     line = "[附件1] 类型:图片 文件名:a.jpg URL:https://example.com/a.jpg"
 
