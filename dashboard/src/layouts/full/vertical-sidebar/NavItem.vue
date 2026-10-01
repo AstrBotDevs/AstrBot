@@ -2,7 +2,7 @@
 import { useI18n } from '@/i18n/composables';
 import { computed } from 'vue';
 import { useRoute } from 'vue-router';
-import { Pin } from '@lucide/vue';
+import { Pin, PinOff } from '@lucide/vue';
 
 const props = defineProps({ item: Object, level: Number, rail: Boolean, pinnable: Boolean, pinned: Boolean });
 const emit = defineEmits(['togglePin']);
@@ -133,7 +133,8 @@ const isVuetifyIcon = computed(() => typeof props.item?.icon === 'string');
         :aria-label="pinned ? t('core.navigation.unpin') : t('core.navigation.pin')"
         @click.prevent.stop="emit('togglePin', item)"
       >
-        <Pin :size="14" />
+        <PinOff v-if="pinned" :size="14" />
+        <Pin v-else :size="14" />
       </button>
     </template>
   </v-list-item>
@@ -177,6 +178,7 @@ const isVuetifyIcon = computed(() => typeof props.item?.icon === 'string');
 
 .nav-item-pin--active {
   color: rgb(var(--v-theme-primary));
+  opacity: 1;
 }
 
 .rail-group {
