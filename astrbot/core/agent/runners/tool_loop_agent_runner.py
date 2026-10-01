@@ -1202,8 +1202,15 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 )
             )
             # 再执行最后一步
+            repair_armed = not self._empty_final_repaired
             async for resp in self.step():
                 yield resp
+            # The forced step does not finish on an empty final; it schedules
+            # the one-shot repair instead. Drive that single repair step so
+            # the run actually completes instead of staying RUNNING forever.
+            if not self.done() and repair_armed and self._empty_final_repaired:
+                async for resp in self.step():
+                    yield resp
 
     async def _handle_function_tools(
         self,
@@ -1453,11 +1460,32 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 tool_result_content = str(tool_call_result_blocks[-1].content)
                 # A successful send_message_to_user means the reply already
                 # reached the user this run; a later empty final is intentional.
-                if (
-                    func_tool_name == "send_message_to_user"
-                    and not tool_result_content.startswith("error:")
+                # It only counts when aimed at this run's own session: a
+                # proactive send to another session leaves the current user
+                # waiting. Unverifiable target counts as elsewhere, so the
+                # empty-final repair still fires rather than risking silence.
+                if func_tool_name == "send_message_to_user" and not (
+                    tool_result_content.startswith("error:")
                 ):
-                    self._delivered_via_message_tool = True
+                    target_session = (func_tool_args or {}).get("session")
+                    if target_session:
+                        event = getattr(
+                            getattr(self.run_context, "context", None), "event", None
+                        )
+                        current_session = getattr(event, "unified_msg_origin", None)
+                        target_session = str(target_session)
+                        if current_session and (
+                            target_session == str(current_session)
+                            or (
+                                ":" not in target_session
+                                and target_session
+                                == str(current_session).rsplit(":", 1)[-1]
+                            )
+                        ):
+                            self._delivered_via_message_tool = True
+                    else:
+                        # No session argument: the tool targets the current one.
+                        self._delivered_via_message_tool = True
                 yield _HandleFunctionToolsResult.from_message_chain(
                     MessageChain(
                         type="tool_call_result",
@@ -1502,8 +1530,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
     @staticmethod
     def _has_meaningful_assistant_reply(llm_resp: LLMResponse) -> bool:
-        text = (llm_resp.completion_text or "").strip()
-        return bool(text)
+        if (llm_resp.completion_text or "").strip():
+            return True
+        # A media-only reply is a real answer too, same as in the final path.
+        chain = llm_resp.result_chain
+        return bool(chain) and any(not isinstance(comp, Plain) for comp in chain.chain)
 
     def _build_tool_subset(self, tool_set: ToolSet, tool_names: list[str]) -> ToolSet:
         """Build a subset of tools from the given tool set based on tool names."""
