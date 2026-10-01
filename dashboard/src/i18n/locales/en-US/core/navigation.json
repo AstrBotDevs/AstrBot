@@ -43,7 +43,9 @@
   "github": "GitHub",
   "drag": "Drag",
   "groups": {
-    "more": "More Features"
+    "more": "More Features",
+    "system": "System",
+    "extension": "Extensions"
   },
   "changelogDialog": {
     "title": "Changelog",

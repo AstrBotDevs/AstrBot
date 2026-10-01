@@ -43,7 +43,9 @@
   "github": "GitHub",
   "drag": "拖拽",
   "groups": {
-    "more": "更多功能"
+    "more": "更多功能",
+    "system": "系统",
+    "extension": "扩展功能"
   },
   "changelogDialog": {
     "title": "更新日志",

@@ -43,7 +43,9 @@
     "github": "GitHub",
     "drag": "Перетащить",
     "groups": {
-        "more": "Дополнительно"
+        "more": "Дополнительно",
+        "system": "Система",
+        "extension": "Расширения"
     },
     "changelogDialog": {
         "title": "Журнал изменений",

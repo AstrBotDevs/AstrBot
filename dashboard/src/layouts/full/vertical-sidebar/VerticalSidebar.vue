@@ -1,11 +1,10 @@
 <script setup>
-import { ref, shallowRef, computed, onMounted, onUnmounted, watch } from 'vue';
+import { ref, shallowRef, computed, watch } from 'vue';
 import { useCustomizerStore } from '../../../stores/customizer';
 import { useMobileDrawerStore } from '@/stores/mobileDrawer';
 import { useI18n } from '@/i18n/composables';
-import sidebarItems, { MORE_GROUP_KEY } from './sidebarItem';
+import sidebarItems from './sidebarItem';
 import NavItem from './NavItem.vue';
-import { applySidebarCustomization } from '@/utils/sidebarCustomization';
 import { usePluginSidebarItems } from '@/composables/usePluginSidebarItems';
 import { useDisplay } from 'vuetify';
 import { PanelLeft, Settings } from '@lucide/vue';
@@ -20,25 +19,9 @@ const commonStore = useCommonStore();
 const { pluginItems } = usePluginSidebarItems();
 
 function buildSidebarMenu() {
-  const base = applySidebarCustomization(sidebarItems);
-  if (!pluginItems.value?.children?.length) return base;
-
-  const result = [];
-
-  for (const item of base) {
-    if (item.title === MORE_GROUP_KEY) {
-      result.push(pluginItems.value);
-      result.push(item);
-    } else {
-      result.push(item);
-    }
-  }
-
-  if (!base.some((item) => item.title === MORE_GROUP_KEY)) {
-    result.push(pluginItems.value);
-  }
-
-  return result;
+  // Plugin pages are flattened into the extension group section.
+  const pluginChildren = pluginItems.value?.children ?? [];
+  return [...sidebarItems, ...pluginChildren];
 }
 
 function collectGroupValues(items, values = new Set()) {
@@ -81,32 +64,6 @@ watch(openedItems, (val) => {
 watch(pluginItems, () => {
   sidebarMenu.value = buildSidebarMenu();
   openedItems.value = sanitizeOpenedItems(openedItems.value, sidebarMenu.value);
-});
-
-function refreshSidebarMenu() {
-  sidebarMenu.value = buildSidebarMenu();
-  openedItems.value = sanitizeOpenedItems(openedItems.value, sidebarMenu.value);
-}
-
-// Apply customization on mount and listen for storage changes
-const handleStorageChange = (e) => {
-  if (e.key === 'astrbot_sidebar_customization') {
-    refreshSidebarMenu();
-  }
-};
-
-const handleCustomEvent = () => {
-  refreshSidebarMenu();
-};
-
-onMounted(() => {
-  window.addEventListener('storage', handleStorageChange);
-  window.addEventListener('sidebar-customization-changed', handleCustomEvent);
-});
-
-onUnmounted(() => {
-  window.removeEventListener('storage', handleStorageChange);
-  window.removeEventListener('sidebar-customization-changed', handleCustomEvent);
 });
 
 const { smAndDown: isMobile } = useDisplay();
@@ -177,8 +134,9 @@ function toggleSidebar() {
       </div>
 
       <v-list :class="['dashboard-sidebar-list', 'listitem', 'flex-grow-1', { 'hidden-scrollbar': isRailSidebar }]" v-model:opened="openedItems" :open-strategy="'multiple'">
-        <template v-for="(item, i) in sidebarMenu" :key="item.title || item.to || `sidebar-item-${i}`">
-          <NavItem :item="item" class="leftPadding" :rail="isRailSidebar" />
+        <template v-for="(item, i) in sidebarMenu" :key="item.header || item.title || item.to || `sidebar-item-${i}`">
+          <div v-if="item.header" v-show="!isRailSidebar" class="sidebar-group-header">{{ t(item.header) }}</div>
+          <NavItem v-else :item="item" class="leftPadding" :rail="isRailSidebar" />
         </template>
       </v-list>
       <div class="sidebar-footer">
@@ -215,6 +173,21 @@ function toggleSidebar() {
   display: flex;
   height: 100%;
   flex-direction: column;
+}
+
+.sidebar-group-header {
+  padding: 16px 10px 8px;
+  color: rgba(var(--v-theme-on-surface), 0.45);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  line-height: 16px;
+  text-transform: uppercase;
+  user-select: none;
+}
+
+.sidebar-group-header:first-child {
+  padding-top: 4px;
 }
 
 .sidebar-container {

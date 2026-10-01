@@ -17,7 +17,7 @@ These paths use the current default sidebar. If you customized it, open `System 
 | Config → System Config | System Settings → General, Appearance, Network, or Security, depending on the setting |
 | Commands / Command Management | Extensions → Handlers → Command |
 | Standalone MCP / Skills entries | Extensions → MCP Servers / Skills |
-| Custom Rules / Future Tasks / SubAgents | More Features → The corresponding feature |
+| Custom Rules / Future Tasks / SubAgents | Custom Rules is under the sidebar `System` group; Future Tasks and SubAgents are under the `Extensions` group |
 
 Old log, trace, conversation, and statistics URLs still redirect to the corresponding tabs. Agent runners are now saved in each profile; they are no longer created as model providers. See [Agent Runners](./agent-runner.md) for the setup steps.
 

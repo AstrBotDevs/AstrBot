@@ -43,7 +43,9 @@
   "github": "GitHub",
   "drag": "ドラッグ",
   "groups": {
-    "more": "その他の機能"
+    "more": "その他の機能",
+    "system": "システム",
+    "extension": "拡張機能"
   },
   "changelogDialog": {
     "title": "変更履歴",
