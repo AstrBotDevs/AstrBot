@@ -1,7 +1,11 @@
 <template>
 
   <div class="config-page-shell">
-    <div v-if="selectedConfigID || isSystemConfig" class="config-panel">
+    <div
+      v-if="selectedConfigID || isSystemConfig"
+      class="config-panel"
+      :class="{ 'config-panel--embedded': initialConfigId !== null }"
+    >
 
       <div class="config-toolbar-sticky">
         <div
@@ -1031,12 +1035,15 @@ export default {
   z-index: -1;
   top: 0;
   bottom: 0;
-  left: 50%;
-  width: calc(100vw - var(--v-layout-left, 0px));
-  max-width: 100vw;
-  transform: translateX(-50%);
+  left: 0;
+  width: 100%;
   background: rgb(var(--v-theme-containerBg));
   content: '';
+}
+
+/* Embedded in the config drawer: stick to the drawer's top, not the app bar. */
+.config-panel--embedded .config-toolbar-sticky {
+  top: 0;
 }
 
 .config-toolbar {
@@ -1088,11 +1095,9 @@ export default {
 
 .config-toolbar-separator {
   position: relative;
-  width: calc(100vw - var(--v-layout-left, 0px));
-  max-width: 100vw;
+  width: 100%;
   height: 1px;
-  margin-left: 50%;
-  transform: translateX(-50%);
+  margin-left: 0;
 }
 
 .config-toolbar-separator :is(.v-divider) {
