@@ -2,7 +2,7 @@
 import { useI18n } from '@/i18n/composables';
 import { computed } from 'vue';
 import { useRoute } from 'vue-router';
-import { Pin, PinOff, Puzzle, User } from '@lucide/vue';
+import { AppWindow, Pin, PinOff, Puzzle, User } from '@lucide/vue';
 
 const props = defineProps({ item: Object, level: Number, rail: Boolean, pinnable: Boolean, pinned: Boolean });
 const emit = defineEmits(['togglePin']);
@@ -168,6 +168,10 @@ const isVuetifyIcon = computed(() => typeof props.item?.icon === 'string');
       <div v-if="item.pluginInfo.author" class="plugin-hover-card__row">
         <User :size="13" class="plugin-hover-card__icon" />
         <span>{{ item.pluginInfo.author }}</span>
+      </div>
+      <div class="plugin-hover-card__row">
+        <AppWindow :size="13" class="plugin-hover-card__icon" />
+        <span>{{ t('core.navigation.pluginPageType') }}</span>
       </div>
     </div>
   </v-tooltip>

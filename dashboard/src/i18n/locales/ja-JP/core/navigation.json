@@ -61,5 +61,6 @@
     "normal": "一般設定",
     "system": "システム設定"
   },
-  "pluginWebui": "プラグインページ"
+  "pluginWebui": "プラグインページ",
+  "pluginPageType": "プラグインの可視化ビュー"
 }
