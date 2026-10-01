@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from astrbot.core import html_renderer
 from astrbot.core.log import LogManager
@@ -51,16 +51,6 @@ class Star(CommandParserMixin, PluginKVStoreMixin):
             # The plugin defines ``logger`` as a read-only property; keep its own.
             pass
 
-    def _get_context_config(self) -> Any:
-        get_config = getattr(self.context, "get_config", None)
-        if callable(get_config):
-            try:
-                return get_config()
-            except Exception as e:
-                logger.debug(f"get_config() failed: {e}")
-                return None
-        return getattr(self.context, "_config", None)
-
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
         if not star_map.get(cls.__module__):
@@ -74,15 +64,30 @@ class Star(CommandParserMixin, PluginKVStoreMixin):
             star_map[cls.__module__].star_cls_type = cls
             star_map[cls.__module__].module_path = cls.__module__
 
-    async def text_to_image(self, text: str, return_url=True) -> str:
-        """将文本转换为图片"""
-        config_obj = self._get_context_config()
-        template_name = None
-        if hasattr(config_obj, "get"):
-            try:
-                template_name = config_obj.get("t2i_active_template")
-            except Exception:
-                template_name = None
+    async def text_to_image(
+        self,
+        text: str,
+        return_url: bool = True,
+        template_name: str | None = None,
+        umo: str | None = None,
+    ) -> str:
+        """Convert text to an image using the t2i render service.
+
+        Args:
+            text: The text to render.
+            return_url: Whether to return an image URL instead of a file path.
+            template_name: Explicit t2i template name. Takes precedence over
+                the `t2i_active_template` value from any configuration file.
+            umo: The unified_message_origin used to resolve the bound
+                configuration file. Only consulted when `template_name` is not
+                given; falls back to the default configuration file when the
+                session has no bound configuration.
+
+        Returns:
+            The image URL or file path, depending on `return_url`.
+        """
+        if template_name is None:
+            template_name = self.context.get_config(umo).get("t2i_active_template")
         return await html_renderer.render_t2i(
             text,
             return_url=return_url,
