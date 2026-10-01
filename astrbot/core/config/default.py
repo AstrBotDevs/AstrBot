@@ -4664,18 +4664,25 @@ CONFIG_METADATA_3 = {
                     "t2i_word_threshold": {
                         "description": "文本转图像字数阈值",
                         "type": "int",
+                        "condition": {
+                            "t2i": True,
+                        },
                     },
                     "t2i_strategy": {
                         "description": "文本转图像策略",
                         "type": "string",
                         "hint": "文本转图像策略。`remote` 为使用远程基于 HTML 的渲染服务，`local` 为使用 PIL 本地渲染。当使用 local 时，将 ttf 字体命名为 'font.ttf' 放在 data/ 目录下可自定义字体。",
                         "options": ["remote", "local"],
+                        "condition": {
+                            "t2i": True,
+                        },
                     },
                     "t2i_endpoint": {
                         "description": "文本转图像服务 API 地址",
                         "type": "string",
                         "hint": "为空时使用 AstrBot API 服务",
                         "condition": {
+                            "t2i": True,
                             "t2i_strategy": "remote",
                         },
                     },
@@ -4684,6 +4691,7 @@ CONFIG_METADATA_3 = {
                         "type": "bool",
                         "hint": "启用后可自定义 HTML 模板用于文转图渲染。",
                         "condition": {
+                            "t2i": True,
                             "t2i_strategy": "remote",
                         },
                         "_special": "t2i_template",
