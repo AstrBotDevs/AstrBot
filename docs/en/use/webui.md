@@ -153,6 +153,8 @@ You can enable/disable and rename each command.
 
 ## Updating the Admin Panel
 
+When updating AstrBot Core from `⋮ → Update AstrBot`, the WebUI waits up to 90 seconds for restart confirmation after entering the restart stage. If confirmation does not arrive, it shows **Restart could not be confirmed** instead of continuing to wait. Check the server logs and, if necessary, restart AstrBot through your deployment tools. **Check again** only repeats the status check; it does not reinstall the update or request another restart. You can also refresh manually. A reachable backend alone does not confirm that the update or restart succeeded, especially if the pre-update start time could not be read.
+
 When AstrBot starts, it automatically checks if the admin panel needs updating. If it does, the first log entry (in yellow) will prompt you.
 
 In the browser WebUI, open `⋮ → Update AstrBot` in the upper-right corner, expand `Advanced settings`, and click `Download and Update` under `Update Dashboard to Latest Version Only`. The page refreshes automatically after a successful update. In the desktop app, the update entry opens the desktop application updater.
