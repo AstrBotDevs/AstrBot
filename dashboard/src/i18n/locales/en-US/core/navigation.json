@@ -35,6 +35,8 @@
   "knowledgeBase": "Knowledge Base",
   "about": "About",
   "settings": "System Settings",
+  "pin": "Pin to top",
+  "unpin": "Unpin",
   "expandSidebar": "Expand sidebar",
   "collapseSidebar": "Collapse sidebar",
   "changelog": "Changelog",

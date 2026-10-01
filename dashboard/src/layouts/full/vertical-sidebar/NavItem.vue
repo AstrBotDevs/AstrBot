@@ -2,8 +2,10 @@
 import { useI18n } from '@/i18n/composables';
 import { computed } from 'vue';
 import { useRoute } from 'vue-router';
+import { Pin } from '@lucide/vue';
 
-const props = defineProps({ item: Object, level: Number, rail: Boolean });
+const props = defineProps({ item: Object, level: Number, rail: Boolean, pinnable: Boolean, pinned: Boolean });
+const emit = defineEmits(['togglePin']);
 const { t } = useI18n();
 const route = useRoute();
 
@@ -118,11 +120,21 @@ const isVuetifyIcon = computed(() => typeof props.item?.icon === 'string');
     <v-list-item-subtitle v-if="item.subCaption" class="text-caption mt-n1 hide-menu">
       {{ item.subCaption }}
     </v-list-item-subtitle>
-    <template v-slot:append v-if="item.chip">
+    <template v-slot:append v-if="item.chip || (pinnable && !rail)">
       <v-chip :color="item.chipColor" class="sidebarchip hide-menu" :size="item.chipIcon ? 'small' : 'default'"
-        :variant="item.chipVariant" :prepend-icon="item.chipIcon">
+        :variant="item.chipVariant" :prepend-icon="item.chipIcon" v-if="item.chip">
         {{ item.chip }}
       </v-chip>
+      <button
+        v-if="pinnable && !rail"
+        type="button"
+        class="nav-item-pin"
+        :class="{ 'nav-item-pin--active': pinned }"
+        :aria-label="pinned ? t('core.navigation.unpin') : t('core.navigation.pin')"
+        @click.prevent.stop="emit('togglePin', item)"
+      >
+        <Pin :size="14" />
+      </button>
     </template>
   </v-list-item>
 </template>
@@ -139,6 +151,32 @@ const isVuetifyIcon = computed(() => typeof props.item?.icon === 'string');
   flex: 0 0 auto;
   color: currentcolor;
   stroke-width: 2;
+}
+
+.nav-item-pin {
+  display: grid;
+  place-items: center;
+  padding: 2px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: rgba(var(--v-theme-on-surface), 0.45);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.dashboard-nav-item:hover .nav-item-pin,
+.nav-item-pin:focus-visible {
+  opacity: 1;
+}
+
+.nav-item-pin:hover {
+  color: rgba(var(--v-theme-on-surface), 0.85);
+}
+
+.nav-item-pin--active {
+  color: rgb(var(--v-theme-primary));
 }
 
 .rail-group {

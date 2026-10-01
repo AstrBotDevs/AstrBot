@@ -35,6 +35,8 @@
   "knowledgeBase": "ナレッジベース",
   "about": "概要",
   "settings": "システム設定",
+  "pin": "トップに固定",
+  "unpin": "固定を解除",
   "expandSidebar": "サイドバーを展開",
   "collapseSidebar": "サイドバーを折りたたむ",
   "changelog": "変更履歴",

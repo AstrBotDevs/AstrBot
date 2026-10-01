@@ -3,7 +3,7 @@ import { ref, shallowRef, computed, watch } from 'vue';
 import { useCustomizerStore } from '../../../stores/customizer';
 import { useMobileDrawerStore } from '@/stores/mobileDrawer';
 import { useI18n } from '@/i18n/composables';
-import sidebarItems from './sidebarItem';
+import sidebarItems, { EXTENSION_GROUP_KEY } from './sidebarItem';
 import NavItem from './NavItem.vue';
 import { usePluginSidebarItems } from '@/composables/usePluginSidebarItems';
 import { useDisplay } from 'vuetify';
@@ -69,6 +69,35 @@ function toggleGroup(header) {
   }
 }
 
+// Pinned items (by `to`), lifted to the top of the sidebar; persisted locally.
+const pinnedItems = ref(JSON.parse(localStorage.getItem('sidebar_pinned_items') || '[]'));
+watch(pinnedItems, (val) => {
+  localStorage.setItem('sidebar_pinned_items', JSON.stringify(val));
+}, { deep: true });
+
+function togglePin(item) {
+  const idx = pinnedItems.value.indexOf(item.to);
+  if (idx >= 0) {
+    pinnedItems.value.splice(idx, 1);
+  } else {
+    pinnedItems.value.push(item.to);
+  }
+}
+
+// `to` values of items under the extensions group header (incl. plugin pages).
+const extensionTos = computed(() => {
+  const tos = new Set();
+  let inExtension = false;
+  for (const item of sidebarMenu.value) {
+    if (item.header) {
+      inExtension = item.header === EXTENSION_GROUP_KEY;
+    } else if (inExtension && item.to) {
+      tos.add(item.to);
+    }
+  }
+  return tos;
+});
+
 // 侧边栏分组展开状态持久化
 const openedItems = ref(getInitialOpenedItems(sidebarMenu.value));
 watch(openedItems, (val) => {
@@ -87,17 +116,29 @@ const isRailSidebar = computed(
   () => !isMobile.value && customizer.mini_sidebar,
 );
 
-// Items visible in the sidebar: entries under a collapsed header are hidden
+// Items visible in the sidebar: pinned extension items are lifted to the top
+// of the extensions group; entries under a collapsed header are hidden
 // (rail mode always shows everything).
 const visibleMenu = computed(() => {
-  if (isRailSidebar.value) return sidebarMenu.value;
+  const pinnedSet = new Set(pinnedItems.value);
+  const pinned = sidebarMenu.value.filter(
+    (item) => !item.header && pinnedSet.has(item.to) && extensionTos.value.has(item.to),
+  );
   const result = [];
   let currentHeader = null;
   for (const item of sidebarMenu.value) {
     if (item.header) {
       currentHeader = item.header;
       result.push(item);
-    } else if (!currentHeader || !collapsedGroups.value.includes(currentHeader)) {
+      if (
+        item.header === EXTENSION_GROUP_KEY
+        && (isRailSidebar.value || !collapsedGroups.value.includes(item.header))
+      ) {
+        result.push(...pinned);
+      }
+    } else if (pinnedSet.has(item.to) && extensionTos.value.has(item.to)) {
+      continue;
+    } else if (isRailSidebar.value || !currentHeader || !collapsedGroups.value.includes(currentHeader)) {
       result.push(item);
     }
   }
@@ -186,7 +227,15 @@ function toggleSidebar() {
               class="sidebar-group-header-chevron"
             />
           </div>
-          <NavItem v-else :item="item" class="leftPadding" :rail="isRailSidebar" />
+          <NavItem
+            v-else
+            :item="item"
+            class="leftPadding"
+            :rail="isRailSidebar"
+            :pinnable="extensionTos.has(item.to)"
+            :pinned="pinnedItems.includes(item.to)"
+            @toggle-pin="togglePin"
+          />
         </template>
       </v-list>
       <div class="sidebar-footer">
