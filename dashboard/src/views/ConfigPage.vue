@@ -96,7 +96,7 @@
         <v-tooltip text="测试当前配置" location="left" v-if="!isSystemConfig">
           <template v-slot:activator="{ props }">
             <v-btn v-bind="props" icon="mdi-chat-processing" size="x-large"
-              style="position: fixed; right: 52px; bottom: 196px;" color="secondary"
+              style="position: fixed; right: 52px; bottom: 196px;" color="primary"
               @click="openTestChat">
             </v-btn>
           </template>
