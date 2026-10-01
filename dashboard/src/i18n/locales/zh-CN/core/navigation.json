@@ -35,6 +35,10 @@
   "knowledgeBase": "知识库",
   "about": "关于",
   "settings": "系统设置",
+  "pin": "置顶",
+  "unpin": "取消置顶",
+  "groupByPlugin": "按插件分组",
+  "ungroupByPlugin": "取消按插件分组",
   "expandSidebar": "展开侧边栏",
   "collapseSidebar": "收起侧边栏",
   "changelog": "更新日志",
@@ -43,7 +47,9 @@
   "github": "GitHub",
   "drag": "拖拽",
   "groups": {
-    "more": "更多功能"
+    "more": "更多功能",
+    "system": "系统",
+    "extension": "扩展功能"
   },
   "changelogDialog": {
     "title": "更新日志",
@@ -57,5 +63,6 @@
     "normal": "普通配置",
     "system": "系统配置"
   },
-  "pluginWebui": "插件页面"
+  "pluginWebui": "插件可视化视图",
+  "pluginPageType": "插件可视化视图"
 }

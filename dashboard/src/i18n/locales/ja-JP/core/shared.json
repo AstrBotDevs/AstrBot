@@ -34,7 +34,7 @@
     "cancelSelection": "キャンセル",
     "noDescription": "説明なし",
     "notActivated": "未有効化",
-    "note": "*システムプラグインと、プラグインページで無効になっているプラグインは表示されません。",
+    "note": "*システムプラグインと、プラグイン管理ページで無効になっているプラグインは表示されません。",
     "selectedPluginsLabel": "選択したプラグイン：",
     "allPluginsLabel": "すべてのプラグイン"
   },

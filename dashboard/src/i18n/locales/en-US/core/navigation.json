@@ -35,6 +35,10 @@
   "knowledgeBase": "Knowledge Base",
   "about": "About",
   "settings": "System Settings",
+  "pin": "Pin to top",
+  "unpin": "Unpin",
+  "groupByPlugin": "Group by plugin",
+  "ungroupByPlugin": "Ungroup plugin views",
   "expandSidebar": "Expand sidebar",
   "collapseSidebar": "Collapse sidebar",
   "changelog": "Changelog",
@@ -43,7 +47,9 @@
   "github": "GitHub",
   "drag": "Drag",
   "groups": {
-    "more": "More Features"
+    "more": "More Features",
+    "system": "System",
+    "extension": "Extensions"
   },
   "changelogDialog": {
     "title": "Changelog",
@@ -57,5 +63,6 @@
     "normal": "Normal Config",
     "system": "System Config"
   },
-  "pluginWebui": "Plugin Pages"
+  "pluginWebui": "Plugin Views",
+  "pluginPageType": "Plugin View"
 }

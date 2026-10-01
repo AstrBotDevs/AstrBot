@@ -24,7 +24,7 @@ const isCurrentChatRoute = computed(
   () => route.path === "/chat" || route.path.startsWith("/chat/"),
 );
 const isPluginPageRoute = computed(
-  () => route.path.startsWith("/plugin-page/"),
+  () => route.path.startsWith("/plugin-view/") || route.path.startsWith("/plugin-page/"),
 );
 const isProviderPageRoute = computed(() => route.path === "/providers");
 const isPlatformPageRoute = computed(() => route.path === "/platforms");
