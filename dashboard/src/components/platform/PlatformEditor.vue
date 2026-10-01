@@ -141,6 +141,7 @@
           <v-btn
             variant="text"
             size="small"
+            class="route-config-edit-btn"
             :disabled="!routesReady"
             :aria-label="sharedTm('configProfileDrawer.title')"
             @click="openConfigDrawer(fallbackConfigId)"
@@ -214,6 +215,7 @@
             <v-btn
               variant="text"
               size="small"
+              class="route-config-edit-btn"
               :disabled="!routesReady || !pendingConfigId"
               :aria-label="sharedTm('configProfileDrawer.title')"
               @click="openConfigDrawer(pendingConfigId)"
@@ -1047,6 +1049,23 @@ function showError(error) {
 .route-default-card__select {
   flex: 0 1 280px;
   min-width: 220px;
+}
+
+.route-config-edit-btn {
+  min-width: 28px;
+  padding: 0 4px;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: rgba(var(--v-theme-on-surface), 0.55);
+}
+
+.route-config-edit-btn:hover {
+  background: transparent !important;
+  color: rgba(var(--v-theme-on-surface), 0.9);
+}
+
+.route-config-edit-btn :deep(.v-btn__overlay) {
+  opacity: 0 !important;
 }
 
 .route-builder {
