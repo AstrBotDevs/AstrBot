@@ -41,7 +41,7 @@ function close() {
         <div>
           <span class="text-h3">{{ tm('configProfileDrawer.title') }}</span>
         </div>
-        <v-btn icon variant="text" :aria-label="tm('configProfileDrawer.close')" @click="close">
+        <v-btn icon variant="text" size="small" :aria-label="tm('configProfileDrawer.close')" @click="close">
           <v-icon>mdi-close</v-icon>
         </v-btn>
       </div>
@@ -71,7 +71,7 @@ function close() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 12px 8px 20px;
+  padding: 4px 8px 4px 20px;
 }
 
 .config-profile-drawer-content {
