@@ -4429,20 +4429,6 @@ CONFIG_METADATA_3 = {
                     },
                 },
             },
-            "t2i": {
-                "description": "文本转图像",
-                "type": "object",
-                "items": {
-                    "t2i": {
-                        "description": "文本转图像输出",
-                        "type": "bool",
-                    },
-                    "t2i_word_threshold": {
-                        "description": "文本转图像字数阈值",
-                        "type": "int",
-                    },
-                },
-            },
             "others": {
                 "description": "其他配置",
                 "type": "object",
@@ -4667,18 +4653,18 @@ CONFIG_METADATA_3 = {
                     },
                 },
             },
-        },
-    },
-}
-
-CONFIG_METADATA_3_SYSTEM = {
-    "system_group": {
-        "name": "系统配置",
-        "metadata": {
-            "system": {
-                "description": "系统配置",
+            "t2i": {
+                "description": "文本转图像",
                 "type": "object",
                 "items": {
+                    "t2i": {
+                        "description": "文本转图像输出",
+                        "type": "bool",
+                    },
+                    "t2i_word_threshold": {
+                        "description": "文本转图像字数阈值",
+                        "type": "int",
+                    },
                     "t2i_strategy": {
                         "description": "文本转图像策略",
                         "type": "string",
@@ -4708,6 +4694,20 @@ CONFIG_METADATA_3_SYSTEM = {
                         "hint": "此处的值由文转图模板管理页面进行维护。",
                         "invisible": True,
                     },
+                },
+            },
+        },
+    },
+}
+
+CONFIG_METADATA_3_SYSTEM = {
+    "system_group": {
+        "name": "系统配置",
+        "metadata": {
+            "system": {
+                "description": "系统配置",
+                "type": "object",
+                "items": {
                     "log_level": {
                         "description": "控制台日志级别",
                         "type": "string",

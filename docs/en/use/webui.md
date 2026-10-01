@@ -83,6 +83,7 @@ Select `Config` in the sidebar, then choose the profile to edit from the selecto
 - In `AI`, built-in AI settings have `Model`, `Persona`, `Capabilities`, and `Advanced` tabs. Use `… → Change execution mode` beside the AI heading to connect a third-party agent.
 - `Platform` contains administrator and message-trigger settings.
 - `Plugin` selects the plugins enabled for this profile. To edit an individual plugin's parameters, open `Extensions` and click that plugin's gear icon (`Extension Config`).
+- `Ext.` contains segmented reply, group chat context, and text-to-image settings (output toggle, word count threshold, rendering strategy, service endpoint, and custom templates).
 
 After editing, click the disk icon labeled `Save Configuration` in the lower-right corner and check for a successful save message.
 
@@ -93,7 +94,7 @@ Use the `{}` icon labeled `Edit Configuration File` to edit the current profile 
 Global settings are under `Settings` at the bottom of the sidebar:
 
 - `General`: timezone, external callback address, logs, and cache.
-- `Appearance`: sidebar, theme, and text-to-image rendering.
+- `Appearance`: sidebar and theme.
 - `Network`: HTTP proxy, Python package sources, and GitHub proxy. For the address to use when AstrBot runs in Docker, see [Deploy with Docker](/en/deploy/astrbot/docker.md).
 - `Security`: WebUI HTTPS, login rate limits, and TOTP.
 - `Maintenance`: backup, restore, and restart.
