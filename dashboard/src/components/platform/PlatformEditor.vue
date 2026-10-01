@@ -391,7 +391,6 @@
   <ConfigProfileDrawer
     v-model="configDrawerOpen"
     :config-id="configDrawerId"
-    :config-name="configDrawerName"
   />
 </template>
 
@@ -445,18 +444,11 @@ const { tm: sharedTm } = useModuleI18n("core/shared");
 
 const configDrawerOpen = ref(false);
 const configDrawerId = ref("");
-const configDrawerName = ref("");
 
 function openConfigDrawer(configId) {
   // The sentinel means "system default", which is the "default" profile.
   const realId = configId === SYSTEM_DEFAULT_CONFIG ? "default" : configId;
-  const allProfiles = [
-    { id: SYSTEM_DEFAULT_CONFIG, name: tm("workspace.routes.systemDefault") },
-    ...configProfiles.value,
-  ];
   configDrawerId.value = realId;
-  configDrawerName.value =
-    allProfiles.find((p) => p.id === configId)?.name || realId;
   configDrawerOpen.value = true;
 }
 

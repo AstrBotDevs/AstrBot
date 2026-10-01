@@ -12,10 +12,6 @@ const props = defineProps({
     type: String,
     default: '',
   },
-  configName: {
-    type: String,
-    default: '',
-  },
 });
 const emit = defineEmits(['update:modelValue']);
 
@@ -44,9 +40,6 @@ function close() {
       <div class="config-profile-drawer-header">
         <div>
           <span class="text-h6">{{ tm('configProfileDrawer.title') }}</span>
-          <div v-if="configName" class="text-caption text-grey">
-            {{ configName }}
-          </div>
         </div>
         <v-btn icon variant="text" :aria-label="tm('configProfileDrawer.close')" @click="close">
           <v-icon>mdi-close</v-icon>
