@@ -138,6 +138,14 @@
             :disabled="!routesReady"
             class="route-default-card__select"
           />
+          <v-btn
+            icon="mdi-cog-outline"
+            variant="text"
+            size="small"
+            :disabled="!routesReady"
+            :aria-label="sharedTm('configProfileDrawer.title')"
+            @click="openConfigDrawer(fallbackConfigId)"
+          />
         </div>
 
         <div class="route-builder">
@@ -200,6 +208,15 @@
               variant="outlined"
               hide-details
               :disabled="!routesReady"
+            />
+
+            <v-btn
+              icon="mdi-cog-outline"
+              variant="text"
+              size="small"
+              :disabled="!routesReady || !pendingConfigId"
+              :aria-label="sharedTm('configProfileDrawer.title')"
+              @click="openConfigDrawer(pendingConfigId)"
             />
 
             <v-btn
@@ -356,6 +373,11 @@
       </section>
     </div>
   </div>
+  <ConfigProfileDrawer
+    v-model="configDrawerOpen"
+    :config-id="configDrawerId"
+    :config-name="configDrawerName"
+  />
 </template>
 
 <script setup>
@@ -368,6 +390,7 @@ import {
   sessionApi,
 } from "@/api/v1";
 import AstrBotConfig from "@/components/shared/AstrBotConfig.vue";
+import ConfigProfileDrawer from "@/components/config/ConfigProfileDrawer.vue";
 import UmoDisplay from "@/components/shared/UmoDisplay.vue";
 import { useModuleI18n } from "@/i18n/composables";
 import { getPlatformIcon, getTutorialLink } from "@/utils/platformUtils";
@@ -402,6 +425,24 @@ const emit = defineEmits([
 ]);
 
 const { tm } = useModuleI18n("features/platform");
+const { tm: sharedTm } = useModuleI18n("core/shared");
+
+const configDrawerOpen = ref(false);
+const configDrawerId = ref("");
+const configDrawerName = ref("");
+
+function openConfigDrawer(configId) {
+  // The sentinel means "system default", which is the "default" profile.
+  const realId = configId === SYSTEM_DEFAULT_CONFIG ? "default" : configId;
+  const allProfiles = [
+    { id: SYSTEM_DEFAULT_CONFIG, name: tm("workspace.routes.systemDefault") },
+    ...configProfiles.value,
+  ];
+  configDrawerId.value = realId;
+  configDrawerName.value =
+    allProfiles.find((p) => p.id === configId)?.name || realId;
+  configDrawerOpen.value = true;
+}
 
 const draft = ref({});
 const originalPlatformId = ref("");
