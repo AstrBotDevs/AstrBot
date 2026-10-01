@@ -1,7 +1,8 @@
 import { markRaw, type Component } from 'vue';
 import {
-  BookOpen,
+  BookSearch,
   Bot,
+  Box,
   Clock3,
   Database,
   Ellipsis,
@@ -9,8 +10,7 @@ import {
   Heart,
   PencilRuler,
   Puzzle,
-  Settings,
-  Sparkles,
+  SlidersHorizontal,
   Workflow,
 } from '@lucide/vue';
 
@@ -49,7 +49,7 @@ const sidebarItem: menu[] = [
   },
   {
     title: 'core.navigation.providers',
-    icon: markRaw(Sparkles),
+    icon: markRaw(Box),
     to: '/providers',
   },
   {
@@ -59,12 +59,12 @@ const sidebarItem: menu[] = [
   },
   {
     title: 'core.navigation.config',
-    icon: markRaw(Settings),
+    icon: markRaw(SlidersHorizontal),
     to: '/config',
   },
   {
     title: 'core.navigation.knowledgeBase',
-    icon: markRaw(BookOpen),
+    icon: markRaw(BookSearch),
     to: '/knowledge-base',
   },
   {

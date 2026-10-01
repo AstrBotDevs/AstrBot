@@ -148,7 +148,6 @@ function toggleSidebar() {
           <ChatUILogo class="dashboard-sidebar-brand-logo" />
           <span class="dashboard-sidebar-brand-copy">
             <span class="dashboard-sidebar-brand-name">AstrBot</span>
-            <span v-if="botVersion" class="dashboard-sidebar-brand-version">{{ botVersion }}</span>
           </span>
         </div>
         <button
@@ -196,6 +195,7 @@ function toggleSidebar() {
             content-class="sidebar-rail-tooltip"
           />
         </v-btn>
+        <div v-if="!isRailSidebar && botVersion" class="sidebar-footer-version">{{ botVersion }}</div>
       </div>
     </div>
   </v-navigation-drawer>
@@ -306,12 +306,6 @@ function toggleSidebar() {
 .dashboard-sidebar-brand-name {
   font-size: 18px;
   font-weight: 800;
-}
-
-.dashboard-sidebar-brand-version {
-  color: rgba(var(--v-theme-on-surface), 0.46);
-  font-size: 11px;
-  font-weight: 500;
 }
 
 .dashboard-sidebar-brand-toggle {
@@ -429,8 +423,19 @@ function toggleSidebar() {
 .sidebar-footer {
   display: flex;
   flex: 0 0 auto;
+  flex-direction: column;
   align-items: stretch;
   padding: 8px 16px 14px !important;
+}
+
+.sidebar-footer-version {
+  margin-top: 2px;
+  padding-inline: 10px;
+  text-align: left;
+  color: rgba(var(--v-theme-on-surface), 0.46);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
 }
 
 .sidebar-footer-btn {
@@ -438,7 +443,7 @@ function toggleSidebar() {
   max-width: none !important;
   min-height: 36px !important;
   justify-content: flex-start !important;
-  gap: 12px;
+  gap: 0;
   padding-inline: 10px !important;
   border-radius: 8px !important;
   color: rgba(var(--v-theme-on-surface), 0.76);
@@ -455,9 +460,11 @@ function toggleSidebar() {
   color: rgb(var(--v-theme-on-surface));
 }
 
+/* Icon-to-label spacing matches the nav items above (10px); the v-btn grid
+   gap stays 0 so the gear lines up with the nav icons. */
 .sidebar-footer-btn :deep(.v-btn__content) {
   justify-content: flex-start;
-  gap: 12px;
+  gap: 10px;
 }
 
 .sidebar-footer-lucide-icon {
