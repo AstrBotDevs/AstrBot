@@ -7,7 +7,7 @@ import sidebarItems from './sidebarItem';
 import NavItem from './NavItem.vue';
 import { usePluginSidebarItems } from '@/composables/usePluginSidebarItems';
 import { useDisplay } from 'vuetify';
-import { PanelLeft, Settings } from '@lucide/vue';
+import { ChevronDown, ChevronRight, PanelLeft, Settings } from '@lucide/vue';
 import ChatUILogo from '@/components/chat/ChatUILogo.vue';
 import { useCommonStore } from '@/stores/common';
 
@@ -54,6 +54,21 @@ function getInitialOpenedItems(menuItems) {
 
 const sidebarMenu = shallowRef(buildSidebarMenu());
 
+// Collapsed group headers, persisted across sessions.
+const collapsedGroups = ref(JSON.parse(localStorage.getItem('sidebar_collapsed_groups') || '[]'));
+watch(collapsedGroups, (val) => {
+  localStorage.setItem('sidebar_collapsed_groups', JSON.stringify(val));
+}, { deep: true });
+
+function toggleGroup(header) {
+  const idx = collapsedGroups.value.indexOf(header);
+  if (idx >= 0) {
+    collapsedGroups.value.splice(idx, 1);
+  } else {
+    collapsedGroups.value.push(header);
+  }
+}
+
 // 侧边栏分组展开状态持久化
 const openedItems = ref(getInitialOpenedItems(sidebarMenu.value));
 watch(openedItems, (val) => {
@@ -71,6 +86,23 @@ const { smAndDown: isMobile } = useDisplay();
 const isRailSidebar = computed(
   () => !isMobile.value && customizer.mini_sidebar,
 );
+
+// Items visible in the sidebar: entries under a collapsed header are hidden
+// (rail mode always shows everything).
+const visibleMenu = computed(() => {
+  if (isRailSidebar.value) return sidebarMenu.value;
+  const result = [];
+  let currentHeader = null;
+  for (const item of sidebarMenu.value) {
+    if (item.header) {
+      currentHeader = item.header;
+      result.push(item);
+    } else if (!currentHeader || !collapsedGroups.value.includes(currentHeader)) {
+      result.push(item);
+    }
+  }
+  return result;
+});
 const botVersion = computed(() => commonStore.astrbotVersion ? `v${commonStore.astrbotVersion}` : '');
 
 function toggleSidebar() {
@@ -134,8 +166,26 @@ function toggleSidebar() {
       </div>
 
       <v-list :class="['dashboard-sidebar-list', 'listitem', 'flex-grow-1', { 'hidden-scrollbar': isRailSidebar }]" v-model:opened="openedItems" :open-strategy="'multiple'">
-        <template v-for="(item, i) in sidebarMenu" :key="item.header || item.title || item.to || `sidebar-item-${i}`">
-          <div v-if="item.header" v-show="!isRailSidebar" class="sidebar-group-header">{{ t(item.header) }}</div>
+        <template v-for="(item, i) in visibleMenu" :key="item.header || item.title || item.to || `sidebar-item-${i}`">
+          <div
+            v-if="item.header"
+            v-show="!isRailSidebar"
+            class="sidebar-group-header"
+            :class="{ 'sidebar-group-header--toggle': item.collapsible }"
+            @click="item.collapsible && toggleGroup(item.header)"
+          >
+            <span>{{ t(item.header) }}</span>
+            <ChevronRight
+              v-if="item.collapsible && collapsedGroups.includes(item.header)"
+              :size="14"
+              class="sidebar-group-header-chevron"
+            />
+            <ChevronDown
+              v-else-if="item.collapsible"
+              :size="14"
+              class="sidebar-group-header-chevron"
+            />
+          </div>
           <NavItem v-else :item="item" class="leftPadding" :rail="isRailSidebar" />
         </template>
       </v-list>
@@ -176,6 +226,9 @@ function toggleSidebar() {
 }
 
 .sidebar-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   padding: 16px 10px 8px;
   color: rgba(var(--v-theme-on-surface), 0.45);
   font-size: 11px;
@@ -188,6 +241,18 @@ function toggleSidebar() {
 
 .sidebar-group-header:first-child {
   padding-top: 4px;
+}
+
+.sidebar-group-header--toggle {
+  cursor: pointer;
+}
+
+.sidebar-group-header--toggle:hover {
+  color: rgba(var(--v-theme-on-surface), 0.7);
+}
+
+.sidebar-group-header-chevron {
+  flex: 0 0 auto;
 }
 
 .sidebar-container {

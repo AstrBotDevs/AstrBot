@@ -28,6 +28,7 @@ export interface menu {
   type?: string;
   subCaption?: string;
   isRawTitle?: boolean;
+  collapsible?: boolean;
 }
 
 export const SYSTEM_GROUP_KEY = 'core.navigation.groups.system';
@@ -81,6 +82,7 @@ const sidebarItem: menu[] = [
   },
   {
     header: EXTENSION_GROUP_KEY,
+    collapsible: true,
   },
   {
     title: 'core.navigation.persona',
