@@ -36,6 +36,11 @@ function buildPluginItems(plugins: PluginEntry[]): menu | null {
       icon: DEFAULT_ICON,
       to: `/plugin-page/${encodeURIComponent(p.name)}/${encodeURIComponent(firstPage)}`,
       isRawTitle: true,
+      pluginInfo: {
+        id: p.name,
+        author: p.author,
+        version: p.version,
+      },
     };
   });
 

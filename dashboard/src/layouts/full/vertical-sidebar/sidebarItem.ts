@@ -29,6 +29,11 @@ export interface menu {
   subCaption?: string;
   isRawTitle?: boolean;
   collapsible?: boolean;
+  pluginInfo?: {
+    id: string;
+    author?: string | null;
+    version?: string;
+  };
 }
 
 export const SYSTEM_GROUP_KEY = 'core.navigation.groups.system';

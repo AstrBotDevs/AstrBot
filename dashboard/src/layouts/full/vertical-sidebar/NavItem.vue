@@ -109,35 +109,50 @@ const isVuetifyIcon = computed(() => typeof props.item?.icon === 'string');
     </template>
   </v-tooltip>
 
-  <v-list-item v-else :to="item.type === 'external' ? '' : item.to" :href="item.type === 'external' ? item.to : ''"
-    :active="isItemActive" rounded class="dashboard-nav-item" color="secondary" :disabled="item.disabled"
-    :target="item.type === 'external' ? '_blank' : ''" :style="itemStyle">
-    <template v-slot:prepend>
-      <v-icon v-if="item.icon && isVuetifyIcon" size="18" class="hide-menu" :icon="item.icon" />
-      <component :is="item.icon" v-else-if="item.icon" :size="18" class="sidebar-lucide-icon hide-menu" />
+  <v-tooltip
+    v-else
+    :disabled="!item.pluginInfo"
+    location="right"
+    :open-delay="150"
+    content-class="plugin-page-hover-card"
+  >
+    <template v-slot:activator="{ props: tooltipProps }">
+      <v-list-item v-bind="tooltipProps" :to="item.type === 'external' ? '' : item.to" :href="item.type === 'external' ? item.to : ''"
+        :active="isItemActive" rounded class="dashboard-nav-item" color="secondary" :disabled="item.disabled"
+        :target="item.type === 'external' ? '_blank' : ''" :style="itemStyle">
+        <template v-slot:prepend>
+          <v-icon v-if="item.icon && isVuetifyIcon" size="18" class="hide-menu" :icon="item.icon" />
+          <component :is="item.icon" v-else-if="item.icon" :size="18" class="sidebar-lucide-icon hide-menu" />
+        </template>
+        <v-list-item-title class="dashboard-nav-item__title">{{ itemTitle }}</v-list-item-title>
+        <v-list-item-subtitle v-if="item.subCaption" class="text-caption mt-n1 hide-menu">
+          {{ item.subCaption }}
+        </v-list-item-subtitle>
+        <template v-slot:append v-if="item.chip || (pinnable && !rail)">
+          <v-chip :color="item.chipColor" class="sidebarchip hide-menu" :size="item.chipIcon ? 'small' : 'default'"
+            :variant="item.chipVariant" :prepend-icon="item.chipIcon" v-if="item.chip">
+            {{ item.chip }}
+          </v-chip>
+          <button
+            v-if="pinnable && !rail"
+            type="button"
+            class="nav-item-pin"
+            :class="{ 'nav-item-pin--active': pinned }"
+            :aria-label="pinned ? t('core.navigation.unpin') : t('core.navigation.pin')"
+            @click.prevent.stop="emit('togglePin', item)"
+          >
+            <PinOff v-if="pinned" :size="14" />
+            <Pin v-else :size="14" />
+          </button>
+        </template>
+      </v-list-item>
     </template>
-    <v-list-item-title class="dashboard-nav-item__title">{{ itemTitle }}</v-list-item-title>
-    <v-list-item-subtitle v-if="item.subCaption" class="text-caption mt-n1 hide-menu">
-      {{ item.subCaption }}
-    </v-list-item-subtitle>
-    <template v-slot:append v-if="item.chip || (pinnable && !rail)">
-      <v-chip :color="item.chipColor" class="sidebarchip hide-menu" :size="item.chipIcon ? 'small' : 'default'"
-        :variant="item.chipVariant" :prepend-icon="item.chipIcon" v-if="item.chip">
-        {{ item.chip }}
-      </v-chip>
-      <button
-        v-if="pinnable && !rail"
-        type="button"
-        class="nav-item-pin"
-        :class="{ 'nav-item-pin--active': pinned }"
-        :aria-label="pinned ? t('core.navigation.unpin') : t('core.navigation.pin')"
-        @click.prevent.stop="emit('togglePin', item)"
-      >
-        <PinOff v-if="pinned" :size="14" />
-        <Pin v-else :size="14" />
-      </button>
-    </template>
-  </v-list-item>
+    <div v-if="item.pluginInfo" class="plugin-hover-card">
+      <div class="plugin-hover-card__title">{{ itemTitle }}</div>
+      <div class="plugin-hover-card__meta">{{ item.pluginInfo.id }}</div>
+      <div v-if="item.pluginInfo.author" class="plugin-hover-card__meta">{{ item.pluginInfo.author }}</div>
+    </div>
+  </v-tooltip>
 </template>
 
 <style>
@@ -152,6 +167,32 @@ const isVuetifyIcon = computed(() => typeof props.item?.icon === 'string');
   flex: 0 0 auto;
   color: currentcolor;
   stroke-width: 2;
+}
+
+.v-tooltip .v-overlay__content.plugin-page-hover-card {
+  padding: 10px 14px;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  border-radius: 12px;
+  background: rgb(var(--v-theme-surface));
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.12),
+    0 2px 6px rgba(0, 0, 0, 0.08);
+  color: rgb(var(--v-theme-on-surface));
+  opacity: 1 !important;
+}
+
+.plugin-hover-card__title {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.plugin-hover-card__meta {
+  margin-top: 2px;
+  color: rgba(var(--v-theme-on-surface), 0.55);
+  font-family: monospace;
+  font-size: 12px;
+  line-height: 16px;
 }
 
 .nav-item-pin {
