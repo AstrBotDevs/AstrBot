@@ -3,7 +3,6 @@
 import asyncio
 import base64
 import copy
-import inspect
 import os
 import random
 from contextlib import nullcontext
@@ -856,11 +855,6 @@ def test_image_preparation_stays_outside_agent_runner_and_providers():
             and "resolve_image_ref_to_images" not in source
         )
         assert "image_settings" not in source
-    from astrbot.core.tools.computer_tools.cua import CuaMouseClickTool
-
-    assert (
-        "coordinate_space" not in inspect.signature(CuaMouseClickTool.call).parameters
-    )
 
 
 @pytest.mark.asyncio

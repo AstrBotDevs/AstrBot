@@ -51,7 +51,7 @@ Skills 提供了 Agent 操作说明书，并且内容通常包含 Python 代码�
 目前，AstrBot 提供两种执行环境：
 
 - Local（Agent 将在你的 AstrBot 运行环境中运行。**请谨慎使用，因为这会允许 Agent 在你的环境执行任意代码，可能带来安全风险**）
-- Sandbox (Agent 在隔离化的沙盒环境中运行。**需要先启动 AstrBot 沙盒模式**，请参考：[沙盒模式](/use/astrbot-agent-sandbox)，如果这个模式下不启动沙盒模式，将不会将 Skills 传给 Agent)
+- Sandbox：Agent 在隔离沙盒中运行。需要先启用 AstrBot 沙盒模式，参考：[沙盒模式](/use/astrbot-agent-sandbox)。如果没有启用沙盒模式，Skills 不会传给 Agent。
 
 在 `配置文件` 页面选择要修改的配置文件，进入 `AI 配置 → 能力 → 使用电脑能力`，设置执行环境后点击右下角的 `保存配置`。
 

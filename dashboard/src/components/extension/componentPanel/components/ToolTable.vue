@@ -68,7 +68,7 @@ const formatCondition = (condition: ToolConfigCondition) => {
 };
 
 const enabledConfigTags = (tool: ToolItem): BuiltinToolConfigTag[] => {
-  if (tool.origin !== 'builtin') return [];
+  if (tool.origin !== 'builtin' && tool.origin !== 'sandbox') return [];
   return (tool.builtin_config_tags || []).filter(tag => tag.enabled);
 };
 
@@ -87,6 +87,23 @@ const getPermissionLabel = (permission?: string): string => {
       return tmTool('functionTools.table.permissionAdmin');
     default:
       return tmTool('functionTools.table.permissionEveryone');
+  }
+};
+
+const getOriginLabel = (origin?: string): string => {
+  switch (origin) {
+    case 'builtin':
+      return tmTool('functionTools.table.originBuiltin');
+    case 'mcp':
+      return tmTool('functionTools.table.originMcp');
+    case 'plugin':
+      return tmTool('functionTools.table.originPlugin');
+    case 'sandbox':
+      return tmTool('functionTools.table.originSandbox');
+    case 'unknown':
+      return tmTool('functionTools.table.originUnknown');
+    default:
+      return origin || '-';
   }
 };
 </script>
@@ -148,7 +165,7 @@ const getPermissionLabel = (permission?: string): string => {
 
       <template #item.origin="{ item }">
         <v-chip size="x-small" variant="tonal" color="info" class="text-caption font-weight-medium">
-          {{ item.origin || '-' }}
+          {{ getOriginLabel(item.origin) }}
         </v-chip>
       </template>
 

@@ -96,6 +96,11 @@ const sidebarItem: menu[] = [
         icon: markRaw(Workflow),
         to: '/subagent'
       },
+      {
+        title: 'core.navigation.sandboxes',
+        icon: 'mdi-cube-outline',
+        to: '/sandboxes'
+      },
     ]
   }
   // {
