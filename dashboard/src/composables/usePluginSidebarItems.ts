@@ -9,6 +9,8 @@ const GROUP_ICON = "mdi-puzzle-outline";
 interface PluginEntry {
   name: string;
   display_name?: string | null;
+  author?: string | null;
+  version?: string;
   activated: boolean;
   pages: string[];
 }
