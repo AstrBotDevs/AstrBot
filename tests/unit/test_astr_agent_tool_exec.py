@@ -85,6 +85,168 @@ class _DoneRunner:
         return SimpleNamespace(role="assistant", completion_text="done")
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("handoff", [False, True])
+@pytest.mark.parametrize("outcome", ["success", "exception", "error_result"])
+async def test_background_execution_reports_status_and_logs_failures(
+    monkeypatch, caplog, handoff, outcome
+):
+    async def _execute(cls, tool, run_context, **kwargs):
+        if outcome == "exception":
+            raise RuntimeError("provider unavailable")
+        yield mcp.types.CallToolResult(
+            content=[mcp.types.TextContent(type="text", text="error: ordinary output")],
+            isError=outcome == "error_result",
+        )
+
+    wake = AsyncMock()
+    monkeypatch.setattr(
+        FunctionToolExecutor,
+        "_execute_handoff" if handoff else "_execute_local",
+        classmethod(_execute),
+    )
+    monkeypatch.setattr(
+        FunctionToolExecutor, "_wake_main_agent_for_background_result", wake
+    )
+    execute = (
+        FunctionToolExecutor._do_handoff_background
+        if handoff
+        else FunctionToolExecutor._execute_background
+    )
+    await execute(
+        tool=_DummyTool(),
+        run_context=_build_run_context(),
+        task_id="task-status-test",
+        input="private-tool-input",
+    )
+
+    wake.assert_awaited_once()
+    result = wake.await_args.kwargs
+    fails = outcome != "success"
+    assert result["status"] == ("failed" if fails else "succeeded")
+    assert ("failed" if fails else "finished") in result["note"]
+    if outcome == "exception":
+        assert "provider unavailable" in result["result_text"]
+        records = [r for r in caplog.records if "task-status-test" in r.message]
+        assert len(records) == 1
+        assert "transfer_to_subagent" in records[0].message
+        assert records[0].exc_info[0] is RuntimeError
+        assert "private-tool-input" not in records[0].message
+    else:
+        assert result["result_text"] == "error: ordinary output\n"
+        assert not [r for r in caplog.records if "task-status-test" in r.message]
+
+
+@pytest.mark.asyncio
+async def test_background_handoff_reports_unhandled_image_collection_failure(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        FunctionToolExecutor,
+        "_collect_handoff_image_urls",
+        AsyncMock(side_effect=RuntimeError("image preparation failed")),
+    )
+    wake = AsyncMock()
+    handoff = AsyncMock()
+    monkeypatch.setattr(FunctionToolExecutor, "_execute_handoff", handoff)
+    monkeypatch.setattr(
+        FunctionToolExecutor, "_wake_main_agent_for_background_result", wake
+    )
+    await FunctionToolExecutor._do_handoff_background(
+        tool=_DummyTool(), run_context=_build_run_context(), task_id="image-task"
+    )
+    wake.assert_awaited_once()
+    assert wake.await_args.kwargs["status"] == "failed"
+    assert "image preparation failed" in wake.await_args.kwargs["result_text"]
+    handoff.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("include_valid_image", [False, True])
+async def test_background_handoff_skips_failed_image_conversion(
+    monkeypatch, caplog, include_valid_image
+):
+    broken_image = Image(file="file:///tmp/broken.png")
+    valid_image = Image(file="file:///tmp/valid.png")
+
+    async def _convert(self):
+        if self is broken_image:
+            raise RuntimeError("image conversion failed")
+        return "/tmp/valid.png"
+
+    captured = {}
+
+    async def _handoff(cls, tool, run_context, **kwargs):
+        captured.update(kwargs)
+        yield mcp.types.CallToolResult(
+            content=[mcp.types.TextContent(type="text", text="done")]
+        )
+
+    monkeypatch.setattr(Image, "convert_to_file_path", _convert)
+    monkeypatch.setattr(FunctionToolExecutor, "_execute_handoff", classmethod(_handoff))
+    wake = AsyncMock()
+    monkeypatch.setattr(
+        FunctionToolExecutor, "_wake_main_agent_for_background_result", wake
+    )
+    images = [broken_image, valid_image] if include_valid_image else [broken_image]
+    await FunctionToolExecutor._do_handoff_background(
+        tool=_DummyTool(), run_context=_build_run_context(images), task_id="image-task"
+    )
+
+    assert captured["image_urls_prepared"] is True
+    assert captured["image_urls"] == (["/tmp/valid.png"] if include_valid_image else [])
+    wake.assert_awaited_once()
+    assert wake.await_args.kwargs["status"] == "succeeded"
+    assert wake.await_args.kwargs["result_text"] == "done\n"
+    assert "finished" in wake.await_args.kwargs["note"]
+    records = [
+        r for r in caplog.records if "Failed to convert handoff image" in r.message
+    ]
+    assert len(records) == 1
+    assert records[0].exc_info[0] is RuntimeError
+    assert str(records[0].exc_info[1]) == "image conversion failed"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("handoff", [False, True])
+@pytest.mark.parametrize("first_result_failed", [False, True])
+async def test_background_execution_retains_all_text_results(
+    monkeypatch, handoff, first_result_failed
+):
+    async def _execute(cls, tool, run_context, **kwargs):
+        yield mcp.types.CallToolResult(
+            content=[mcp.types.TextContent(type="text", text="first result")],
+            isError=first_result_failed,
+        )
+        yield mcp.types.CallToolResult(
+            content=[mcp.types.TextContent(type="text", text="last result")]
+        )
+
+    monkeypatch.setattr(
+        FunctionToolExecutor,
+        "_execute_handoff" if handoff else "_execute_local",
+        classmethod(_execute),
+    )
+    wake = AsyncMock()
+    monkeypatch.setattr(
+        FunctionToolExecutor, "_wake_main_agent_for_background_result", wake
+    )
+    execute = (
+        FunctionToolExecutor._do_handoff_background
+        if handoff
+        else FunctionToolExecutor._execute_background
+    )
+    await execute(
+        tool=_DummyTool(), run_context=_build_run_context(), task_id="multi-result-task"
+    )
+
+    wake.assert_awaited_once()
+    assert wake.await_args.kwargs["result_text"] == "first result\nlast result\n"
+    assert wake.await_args.kwargs["status"] == (
+        "failed" if first_result_failed else "succeeded"
+    )
+
+
 @pytest.mark.parametrize("runtime", ["none", "local", "sandbox", None])
 def test_build_handoff_toolset_keeps_permission_guards_for_default_tools(runtime):
     mgr = FunctionToolManager()
@@ -413,8 +575,10 @@ async def test_execute_handoff_passes_tool_call_timeout_to_tool_loop_agent(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["succeeded", "failed"])
 async def test_background_wakeup_passes_history_and_provider_settings_to_main_agent(
     monkeypatch: pytest.MonkeyPatch,
+    status: str,
 ):
     """Test background wakeup keeps structured history and provider settings."""
     provider_settings = {
@@ -443,9 +607,10 @@ async def test_background_wakeup_passes_history_and_provider_settings_to_main_ag
         "astrbot.core.astr_main_agent.build_main_agent",
         _fake_build_main_agent,
     )
+    persist_history = AsyncMock()
     monkeypatch.setattr(
         "astrbot.core.astr_agent_tool_exec.persist_agent_history",
-        AsyncMock(),
+        persist_history,
     )
 
     send_tool = FunctionTool(
@@ -473,6 +638,7 @@ async def test_background_wakeup_passes_history_and_provider_settings_to_main_ag
         tool_args={},
         note="task finished",
         summary_name="BackgroundTask",
+        status=status,
     )
 
     config = captured["config"]
@@ -484,6 +650,18 @@ async def test_background_wakeup_passes_history_and_provider_settings_to_main_ag
     assert "old question" not in request.system_prompt
     assert "old answer" not in request.system_prompt
     assert request.contexts == history
+    assert f'"status": "{status}"' in request.system_prompt
+    summary = persist_history.await_args.kwargs["summary_note"]
+    assert (
+        f"(task_id=task-id) {'failed' if status == 'failed' else 'finished'}."
+        in summary
+    )
+    assert "Result: ok\n" in summary
+    if status == "failed":
+        assert "I finished the task" not in summary
+        assert "Follow-up: done" in summary
+    else:
+        assert "I finished the task, here is the result: done" in summary
 
 
 @pytest.mark.asyncio

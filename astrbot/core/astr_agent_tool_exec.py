@@ -79,6 +79,14 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
     async def _collect_image_urls_from_message(
         cls, run_context: ContextWrapper[AstrAgentContext]
     ) -> list[str]:
+        """Collect message images, logging and skipping individual conversion failures.
+
+        Args:
+            run_context: Context containing the incoming message.
+
+        Returns:
+            Paths from successfully converted image components.
+        """
         urls: list[str] = []
         event = getattr(run_context.context, "event", None)
         message_obj = getattr(event, "message_obj", None)
@@ -437,12 +445,13 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
     ) -> None:
         """Run the subagent handoff and, on completion, wake the main agent."""
         result_text = ""
+        status = "succeeded"
         tool_args = dict(tool_args)
-        tool_args["image_urls"] = await cls._collect_handoff_image_urls(
-            run_context,
-            tool_args.get("image_urls"),
-        )
         try:
+            tool_args["image_urls"] = await cls._collect_handoff_image_urls(
+                run_context,
+                tool_args.get("image_urls"),
+            )
             async for r in cls._execute_handoff(
                 tool,
                 run_context,
@@ -450,10 +459,14 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 **tool_args,
             ):
                 if isinstance(r, mcp.types.CallToolResult):
+                    if r.isError:
+                        status = "failed"
                     for content in r.content:
                         if isinstance(content, mcp.types.TextContent):
                             result_text += content.text + "\n"
         except Exception as e:
+            status = "failed"
+            logger.exception("Background handoff %s (%s) failed", task_id, tool.name)
             result_text = (
                 f"error: Background task execution failed, internal error: {e!s}"
             )
@@ -465,10 +478,12 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             task_id=task_id,
             tool_name=tool.name,
             result_text=result_text,
+            status=status,
             tool_args=tool_args,
             note=(
                 event.get_extra("background_note")
-                or f"Background task for subagent '{tool.agent.name}' finished."
+                or f"Background task for subagent '{tool.agent.name}' "
+                f"{'failed' if status == 'failed' else 'finished'}."
             ),
             summary_name=f"Dedicated to subagent `{tool.agent.name}`",
             extra_result_fields={"subagent_name": tool.agent.name},
@@ -484,17 +499,21 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
     ) -> None:
         # run the tool
         result_text = ""
+        status = "succeeded"
         try:
             async for r in cls._execute_local(
                 tool, run_context, tool_call_timeout=3600, **tool_args
             ):
                 # collect results, currently we just collect the text results
                 if isinstance(r, mcp.types.CallToolResult):
-                    result_text = ""
+                    if r.isError:
+                        status = "failed"
                     for content in r.content:
                         if isinstance(content, mcp.types.TextContent):
                             result_text += content.text + "\n"
         except Exception as e:
+            status = "failed"
+            logger.exception("Background task %s (%s) failed", task_id, tool.name)
             result_text = (
                 f"error: Background task execution failed, internal error: {e!s}"
             )
@@ -506,10 +525,12 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             task_id=task_id,
             tool_name=tool.name,
             result_text=result_text,
+            status=status,
             tool_args=tool_args,
             note=(
                 event.get_extra("background_note")
-                or f"Background task {tool.name} finished."
+                or f"Background task {tool.name} "
+                f"{'failed' if status == 'failed' else 'finished'}."
             ),
             summary_name=tool.name,
         )
@@ -525,6 +546,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         tool_args: dict[str, T.Any],
         note: str,
         summary_name: str,
+        status: T.Literal["succeeded", "failed"] = "succeeded",
         extra_result_fields: dict[str, T.Any] | None = None,
     ) -> None:
         from astrbot.core.astr_main_agent import (
@@ -539,6 +561,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         task_result = {
             "task_id": task_id,
             "tool_name": tool_name,
+            "status": status,
             "result": result_text or "",
             "tool_args": tool_args,
         }
@@ -626,13 +649,17 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         task_meta = extras.get("background_task_result", {})
         summary_note = (
             f"[BackgroundTask] {summary_name} "
-            f"(task_id={task_meta.get('task_id', task_id)}) finished. "
+            f"(task_id={task_meta.get('task_id', task_id)}) "
+            f"{'failed' if status == 'failed' else 'finished'}. "
             f"Result: {task_meta.get('result') or result_text or 'no content'}"
         )
         if llm_resp and llm_resp.completion_text:
             summary_note += (
-                f"I finished the task, here is the result: {llm_resp.completion_text}"
+                "\nFollow-up: "
+                if status == "failed"
+                else "\nI finished the task, here is the result: "
             )
+            summary_note += llm_resp.completion_text
         await persist_agent_history(
             ctx.conversation_manager,
             event=cron_event,
