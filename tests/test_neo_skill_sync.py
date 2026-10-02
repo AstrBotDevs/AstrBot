@@ -47,13 +47,13 @@ class _FakeClient:
 
 
 def test_sync_release_writes_skill_and_map(monkeypatch, tmp_path: Path):
-    calls = {"active": [], "sandbox_sync": 0}
+    calls: dict[str, list | int] = {"active": [], "sandbox_sync": 0}
 
     def _fake_set_skill_active(self, name, active):
-        calls["active"].append((name, active))
+        calls["active"].append((name, active))  # type: ignore[union-attr]
 
     async def _fake_sync_sandboxes():
-        calls["sandbox_sync"] += 1
+        calls["sandbox_sync"] += 1  # type: ignore[operator]
 
     monkeypatch.setattr(
         "astrbot.core.skills.neo_skill_sync.SkillManager.set_skill_active",

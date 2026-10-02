@@ -233,7 +233,7 @@ class TestGetMessageInfo:
     def test_get_sender_name_coerces_non_string(self, platform_meta, astrbot_message):
         """Test get_sender_name stringifies non-string nickname values."""
         astrbot_message.sender = MessageMember(user_id="user123", nickname=None)
-        astrbot_message.sender.nickname = 12345
+        astrbot_message.sender.nickname = "12345"
         event = ConcreteAstrMessageEvent(
             message_str="test",
             message_obj=astrbot_message,

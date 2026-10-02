@@ -1,10 +1,9 @@
 import aiohttp
 
 from astrbot import logger
-
-from ..entities import ProviderType
-from ..provider import EmbeddingProvider
-from ..register import register_provider_adapter
+from astrbot.core.provider.entities import ProviderType
+from astrbot.core.provider.provider import EmbeddingProvider
+from astrbot.core.provider.register import register_provider_adapter
 
 
 @register_provider_adapter(
@@ -75,15 +74,17 @@ class OllamaEmbeddingProvider(EmbeddingProvider):
 
         try:
             async with client.post(
-                request_url, json=payload, proxy=self.proxy or None
+                request_url,
+                json=payload,
+                proxy=self.proxy or None,
             ) as response:
                 if response.status != 200:
                     error_text = await response.text()
                     logger.error(
-                        f"[Ollama Embedding] API Error: {response.status} - {error_text}"
+                        f"[Ollama Embedding] API Error: {response.status} - {error_text}",
                     )
                     raise Exception(
-                        f"Ollama Embedding API request failed: HTTP {response.status} - {error_text}"
+                        f"Ollama Embedding API request failed: HTTP {response.status} - {error_text}",
                     )
 
                 response_data = await response.json()
@@ -91,7 +92,7 @@ class OllamaEmbeddingProvider(EmbeddingProvider):
 
                 if not embeddings:
                     raise Exception(
-                        f"[Ollama Embedding] No embeddings returned: {response_data}"
+                        f"[Ollama Embedding] No embeddings returned: {response_data}",
                     )
 
                 return embeddings
@@ -110,7 +111,7 @@ class OllamaEmbeddingProvider(EmbeddingProvider):
             except (ValueError, TypeError):
                 logger.warning(
                     f"embedding_dimensions in embedding configs is not a valid integer: "
-                    f"'{self.provider_config['embedding_dimensions']}', ignored."
+                    f"'{self.provider_config['embedding_dimensions']}', ignored.",
                 )
         return 0
 

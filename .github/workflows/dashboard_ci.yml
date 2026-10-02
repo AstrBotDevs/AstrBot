@@ -30,6 +30,7 @@ jobs:
         working-directory: dashboard
         run: |
           pnpm install --frozen-lockfile
+          pnpm lint:check
           pnpm run build
 
       - name: Inject Commit SHA

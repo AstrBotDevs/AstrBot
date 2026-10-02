@@ -467,7 +467,7 @@ async def authenticated_header(
         },
     )
     data = await response.get_json()
-    assert data["status"] == "ok"
+    assert data["status"] == "ok", str(data)
     token = data["data"]["token"]
     return {"Authorization": f"Bearer {token}"}
 
@@ -2058,7 +2058,8 @@ async def test_plugin_page_content_issues_scoped_asset_token(
     bridge_response = await anonymous_client.get(bridge_sdk_url.group(1))
     assert bridge_response.status_code == 200
     bridge_js = (await bridge_response.get_data()).decode("utf-8")
-    assert "window.AstrBotPluginPage?.__setInitialContext" in bridge_js
+    assert "window.AstrBotPluginView?.__setInitialContext" in bridge_js
+    assert "window.AstrBotPluginPage = window.AstrBotPluginView" in bridge_js
     assert '"locale": "zh-CN"' in bridge_js
     assert '"displayName": "插件页面演示"' in bridge_js
     assert '"pageTitle": "Bridge 演示页"' in bridge_js
@@ -2332,7 +2333,11 @@ async def test_dashboard_ssl_missing_cert_and_key_falls_back_to_http(
             "cert_file": "",
             "key_file": "",
         }
-        monkeypatch.setattr(server, "check_port_in_use", lambda port: False)
+        monkeypatch.setattr(
+            server,
+            "check_port_in_use",
+            lambda _host, _port: False,
+        )
         monkeypatch.setattr("astrbot.dashboard.server.serve", fake_serve)
         monkeypatch.setattr(
             "astrbot.dashboard.server.logger.warning",
@@ -3769,7 +3774,7 @@ async def test_batch_upload_skills_accepts_valid_skill_archive(
         _fake_sync_skills_to_active_sandboxes,
     )
     monkeypatch.setattr(
-        "astrbot.core.skills.skill_manager.get_astrbot_data_path",
+        "astrbot.core.utils.astrbot_path.get_astrbot_data_path",
         lambda: str(data_dir),
     )
     monkeypatch.setattr(

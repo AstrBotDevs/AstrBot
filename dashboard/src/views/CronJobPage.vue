@@ -381,7 +381,7 @@
                     <v-list-item v-bind="props">
                       <template #title>
                         <UmoDisplay
-                          v-bind="getUmoDisplayProps(item.raw)"
+                          v-bind="getUmoDisplayProps(item)"
                           compact
                           :show-info="false"
                           :show-platform="false"
@@ -389,27 +389,27 @@
                       </template>
                       <template #append>
                         <v-chip
-                          v-if="getUmoInfo(item.raw).platform"
+                          v-if="getUmoInfo(item).platform"
                           size="x-small"
                           :color="
-                            getPlatformColor(getUmoInfo(item.raw).platform)
+                            getPlatformColor(getUmoInfo(item).platform)
                           "
                           class="cron-umo-platform"
                         >
-                          {{ getUmoInfo(item.raw).platform }}
+                          {{ getUmoInfo(item).platform }}
                         </v-chip>
                       </template>
                     </v-list-item>
                   </template>
                   <template #selection="{ item }">
                     <v-chip
-                      v-if="item && getUmoSelectionText(item.raw)"
+                      v-if="item && getUmoSelectionText(item)"
                       size="small"
                       variant="tonal"
                       color="primary"
                       class="umo-selection-chip"
                     >
-                      {{ getUmoSelectionText(item.raw) }}
+                      {{ getUmoSelectionText(item) }}
                     </v-chip>
                   </template>
                 </v-autocomplete>
@@ -438,23 +438,50 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useTheme } from "vuetify";
-import { botApi, cronApi, sessionApi } from "@/api/v1";
-import { useModuleI18n } from "@/i18n/composables";
+import type { CronJobRequest } from "@/api/generated/openapi-v1";
+import type { ApiEnvelope } from "@/api/v1";
 import OutlinedActionListItem from "@/components/shared/OutlinedActionListItem.vue";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
 import UmoDisplay from "@/components/shared/UmoDisplay.vue";
+import { useModuleI18n } from "@/i18n/composables";
+import { resolveErrorMessage } from "@/utils/errorUtils.js";
+import axios from "@/utils/request";
 
 const { tm } = useModuleI18n("features/cron");
 const theme = useTheme();
 
 const isDark = computed(() => theme.global.current.value.dark);
 const loading = ref(false);
-const jobs = ref<any[]>([]);
+interface CronJob {
+  job_id: string;
+  name?: string;
+  note?: string;
+  description?: string | null;
+  cron_expression?: string | null;
+  run_at?: string | null;
+  run_once?: boolean;
+  session?: string;
+  timezone?: string | null;
+  enabled: boolean;
+  payload?: { session?: string };
+  last_run_at?: string | null;
+  next_run_time?: string | null;
+  last_error?: string | null;
+}
+
+interface PlatformStatus {
+  id?: string;
+  type?: string;
+  display_name?: string;
+  meta?: { id?: string; name?: string; display_name?: string; support_proactive_message?: boolean };
+}
+
+type TimeValue = string | number | null | undefined;
+
+const jobs = ref<CronJob[]>([]);
 const taskSearch = ref("");
 const selectedUmoFilter = ref<string | null>(null);
-const proactivePlatforms = ref<
-  { id: string; name: string; display_name?: string }[]
->([]);
+const proactivePlatforms = ref<{ id: string; name: string; display_name?: string }[]>([]);
 const availableUmos = ref<string[]>([]);
 const availableUmoInfoMap = ref<Record<string, UmoInfo>>({});
 const loadingUmos = ref(false);
@@ -464,13 +491,7 @@ const creating = ref(false);
 const editingJobId = ref("");
 const runningJobIds = ref(new Set<string>());
 const NO_DELIVERY_TARGET_FILTER = "__astrbot_no_delivery_target__";
-type ScheduleMode =
-  | "once"
-  | "interval"
-  | "daily"
-  | "weekly"
-  | "monthly"
-  | "cron";
+type ScheduleMode = "once" | "interval" | "daily" | "weekly" | "monthly" | "cron";
 type IntervalUnit = "minutes" | "hours" | "days";
 type UmoInfo = {
   umo: string;
@@ -517,7 +538,7 @@ const jobUmoFilterOptions = computed(() => [
 ]);
 
 const filteredJobs = computed(() => {
-  const query = taskSearch.value.trim().toLowerCase();
+  const query = (taskSearch.value || "").trim().toLowerCase();
   const umo = selectedUmoFilter.value;
   return jobs.value.filter((job) => {
     const session = getJobSession(job);
@@ -558,12 +579,8 @@ const sortedJobs = computed(() =>
 );
 
 const isEditing = computed(() => !!editingJobId.value);
-const dialogTitle = computed(() =>
-  tm(isEditing.value ? "form.editTitle" : "form.title"),
-);
-const dialogSubmitText = computed(() =>
-  tm(isEditing.value ? "actions.save" : "actions.submit"),
-);
+const dialogTitle = computed(() => tm(isEditing.value ? "form.editTitle" : "form.title"));
+const dialogSubmitText = computed(() => tm(isEditing.value ? "actions.save" : "actions.submit"));
 const scheduleModeOptions = computed(() => [
   { label: tm("form.scheduleModes.once"), value: "once" },
   { label: tm("form.scheduleModes.interval"), value: "interval" },
@@ -587,20 +604,17 @@ const weekdayOptions = computed(() => [
   { label: tm("form.weekdays.saturday"), value: 6 },
 ]);
 
-function toast(
-  message: string,
-  color: "success" | "error" | "warning" = "success",
-) {
+function toast(message: string, color: "success" | "error" | "warning" = "success") {
   snackbar.value = { show: true, message, color };
 }
 
-function parseTimeValue(value: any): number {
+function parseTimeValue(value: TimeValue): number {
   if (!value) return 0;
   const ts = new Date(value).getTime();
   return Number.isNaN(ts) ? 0 : ts;
 }
 
-function formatTime(val: any, fallback = tm("table.notAvailable")): string {
+function formatTime(val: TimeValue, fallback = tm("table.notAvailable")): string {
   if (!val) return fallback;
   try {
     const date = new Date(val);
@@ -610,21 +624,21 @@ function formatTime(val: any, fallback = tm("table.notAvailable")): string {
   }
 }
 
-function taskPreview(item: any): string {
+function taskPreview(item: CronJob): string {
   const text = String(item.note || item.description || "").trim();
   if (!text) return item.job_id || tm("table.notAvailable");
   return text.length > 86 ? `${text.slice(0, 86)}...` : text;
 }
 
-function getJobSession(job: any): string {
+function getJobSession(job: CronJob): string {
   return String(job.session || job?.payload?.session || "").trim();
 }
 
-function deliveryTargetText(item: any): string {
+function deliveryTargetText(item: CronJob): string {
   return getJobSession(item) || tm("card.noDeliveryTarget");
 }
 
-function nextRunText(item: any): string {
+function nextRunText(item: CronJob): string {
   if (item.run_once) {
     return tm("card.runAt", { time: formatTime(item.run_at) });
   }
@@ -633,10 +647,8 @@ function nextRunText(item: any): string {
   });
 }
 
-function lastRunTooltipText(item: any): string {
-  const lastRun = `${tm("table.headers.lastRun")}: ${formatTime(
-    item.last_run_at,
-  )}`;
+function lastRunTooltipText(item: CronJob): string {
+  const lastRun = `${tm("table.headers.lastRun")}: ${formatTime(item.last_run_at)}`;
   const lastError = String(item.last_error || "").trim();
   if (!lastError) {
     return lastRun;
@@ -644,7 +656,7 @@ function lastRunTooltipText(item: any): string {
   return `${lastRun} · ${lastError}`;
 }
 
-function scheduleProductLabel(item: any): string {
+function scheduleProductLabel(item: CronJob): string {
   if (item.run_once) {
     return tm("card.onceAt", { time: formatTime(item.run_at) });
   }
@@ -657,35 +669,17 @@ function scheduleProductLabel(item: any): string {
 
   const [minute, hour, dayOfMonth, month, dayOfWeek] = parts;
   const minuteInterval = /^\*\/(\d+)$/.exec(minute);
-  if (
-    minuteInterval &&
-    hour === "*" &&
-    dayOfMonth === "*" &&
-    month === "*" &&
-    dayOfWeek === "*"
-  ) {
+  if (minuteInterval && hour === "*" && dayOfMonth === "*" && month === "*" && dayOfWeek === "*") {
     return tm("card.everyMinutes", { count: Number(minuteInterval[1]) });
   }
 
   const hourInterval = /^\*\/(\d+)$/.exec(hour);
-  if (
-    minute === "0" &&
-    hourInterval &&
-    dayOfMonth === "*" &&
-    month === "*" &&
-    dayOfWeek === "*"
-  ) {
+  if (minute === "0" && hourInterval && dayOfMonth === "*" && month === "*" && dayOfWeek === "*") {
     return tm("card.everyHours", { count: Number(hourInterval[1]) });
   }
 
   const dayInterval = /^\*\/(\d+)$/.exec(dayOfMonth);
-  if (
-    minute === "0" &&
-    hour === "0" &&
-    dayInterval &&
-    month === "*" &&
-    dayOfWeek === "*"
-  ) {
+  if (minute === "0" && hour === "0" && dayInterval && month === "*" && dayOfWeek === "*") {
     return tm("card.everyDays", { count: Number(dayInterval[1]) });
   }
 
@@ -725,15 +719,7 @@ function scheduleProductLabel(item: any): string {
 }
 
 function weekdayText(value: number): string {
-  const keyMap = [
-    "sunday",
-    "monday",
-    "tuesday",
-    "wednesday",
-    "thursday",
-    "friday",
-    "saturday",
-  ];
+  const keyMap = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
   return tm(`form.weekdays.${keyMap[value]}`);
 }
 
@@ -802,15 +788,11 @@ async function loadUmos(force = false) {
   if (loadingUmos.value || (!force && availableUmos.value.length)) return;
   loadingUmos.value = true;
   try {
-    const res = await sessionApi.activeUmos();
+    const res = await axios.get<ApiEnvelope<{ umos: string[]; umo_infos?: UmoInfo[] }>>("/api/session/active-umos");
     if (res.data.status === "ok") {
-      const loadedUmos = Array.isArray(res.data.data?.umos)
-        ? res.data.data.umos
-        : [];
+      const loadedUmos = Array.isArray(res.data.data?.umos) ? res.data.data.umos : [];
       mergeUmoInfos(res.data.data?.umo_infos || []);
-      availableUmos.value = Array.from(
-        new Set([...availableUmos.value, ...loadedUmos]),
-      );
+      availableUmos.value = Array.from(new Set([...availableUmos.value, ...loadedUmos]));
     }
   } catch {
     // The field remains editable through free search only when a UMO list is available.
@@ -822,21 +804,19 @@ async function loadUmos(force = false) {
 async function loadJobs() {
   loading.value = true;
   try {
-    const res = await cronApi.list();
+    const res = await axios.get<ApiEnvelope<CronJob[]>>("/api/cron/jobs");
     if (res.data.status === "ok") {
       const data = Array.isArray(res.data.data) ? res.data.data : [];
-      jobs.value = data.map((job: any) => ({
+      jobs.value = data.map((job) => ({
         ...job,
         session: job?.payload?.session || job?.session || "",
       }));
-      mergeUmoInfos(
-        jobs.value.map(getJobSession).filter(Boolean).map(parseUmoInfo),
-      );
+      mergeUmoInfos(jobs.value.map(getJobSession).filter(Boolean).map(parseUmoInfo));
     } else {
       toast(res.data.message || tm("messages.loadFailed"), "error");
     }
-  } catch (e: any) {
-    toast(e?.response?.data?.message || tm("messages.loadFailed"), "error");
+  } catch (error: unknown) {
+    toast(resolveErrorMessage(error, tm("messages.loadFailed")), "error");
   } finally {
     loading.value = false;
   }
@@ -844,11 +824,11 @@ async function loadJobs() {
 
 async function loadPlatforms() {
   try {
-    const res = await botApi.stats();
+    const res = await axios.get<ApiEnvelope<{ platforms: PlatformStatus[] }>>("/api/platform/stats");
     if (res.data.status === "ok" && Array.isArray(res.data.data?.platforms)) {
       proactivePlatforms.value = res.data.data.platforms
-        .filter((p: any) => p?.meta?.support_proactive_message)
-        .map((p: any) => ({
+        .filter((p) => p.meta?.support_proactive_message)
+        .map((p) => ({
           id: p?.id || p?.meta?.id || "unknown",
           name: p?.meta?.name || p?.type || "",
           display_name: p?.meta?.display_name || p?.display_name,
@@ -859,49 +839,49 @@ async function loadPlatforms() {
   }
 }
 
-async function toggleJob(job: any) {
+async function toggleJob(job: CronJob) {
   try {
-    const res = await cronApi.update(job.job_id, {
+    const res = await axios.patch(`/api/cron/jobs/${job.job_id}`, {
       enabled: job.enabled,
     });
     if (res.data.status !== "ok") {
       toast(res.data.message || tm("messages.updateFailed"), "error");
       await loadJobs();
     }
-  } catch (e: any) {
-    toast(e?.response?.data?.message || tm("messages.updateFailed"), "error");
+  } catch (error: unknown) {
+    toast(resolveErrorMessage(error, tm("messages.updateFailed")), "error");
     await loadJobs();
   }
 }
 
-async function deleteJob(job: any) {
+async function deleteJob(job: CronJob) {
   try {
-    const res = await cronApi.delete(job.job_id);
+    const res = await axios.delete(`/api/cron/jobs/${job.job_id}`);
     if (res.data.status === "ok") {
       toast(tm("messages.deleteSuccess"));
       jobs.value = jobs.value.filter((item) => item.job_id !== job.job_id);
     } else {
       toast(res.data.message || tm("messages.deleteFailed"), "error");
     }
-  } catch (e: any) {
-    toast(e?.response?.data?.message || tm("messages.deleteFailed"), "error");
+  } catch (error: unknown) {
+    toast(resolveErrorMessage(error, tm("messages.deleteFailed")), "error");
   }
 }
 
-async function runJobNow(job: any) {
+async function runJobNow(job: CronJob) {
   const jobId = String(job.job_id || "");
   if (!jobId || runningJobIds.value.has(jobId)) return;
   runningJobIds.value = new Set([...runningJobIds.value, jobId]);
   try {
-    const res = await cronApi.run(jobId);
+    const res = await axios.post(`/api/cron/jobs/${jobId}/run`);
     if (res.data.status === "ok") {
       toast(tm("messages.runStarted"));
       await loadJobs();
     } else {
       toast(res.data.message || tm("messages.runFailed"), "error");
     }
-  } catch (e: any) {
-    toast(e?.response?.data?.message || tm("messages.runFailed"), "error");
+  } catch (error: unknown) {
+    toast(resolveErrorMessage(error, tm("messages.runFailed")), "error");
   } finally {
     const next = new Set(runningJobIds.value);
     next.delete(jobId);
@@ -916,7 +896,7 @@ function openCreate() {
   loadUmos();
 }
 
-function toDatetimeLocalValue(value: any): string {
+function toDatetimeLocalValue(value: TimeValue): string {
   if (!value) return "";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
@@ -951,7 +931,7 @@ function resetNewJob() {
   };
 }
 
-function openEdit(job: any) {
+function openEdit(job: CronJob) {
   editingJobId.value = job.job_id;
   const schedule = readScheduleFromJob(job);
   if (job.session && !availableUmos.value.includes(job.session)) {
@@ -979,9 +959,7 @@ function openEdit(job: any) {
   loadUmos(true);
 }
 
-function parseTimeParts(
-  value: string,
-): { hour: number; minute: number } | null {
+function parseTimeParts(value: string): { hour: number; minute: number } | null {
   const match = /^(\d{2}):(\d{2})(?::\d{2})?$/.exec(value || "");
   if (!match) return null;
   const hour = Number(match[1]);
@@ -995,14 +973,7 @@ function padTimePart(value: string | number): string {
 }
 
 function isCronTime(minute: number, hour: number): boolean {
-  return (
-    Number.isInteger(minute) &&
-    minute >= 0 &&
-    minute <= 59 &&
-    Number.isInteger(hour) &&
-    hour >= 0 &&
-    hour <= 23
-  );
+  return Number.isInteger(minute) && minute >= 0 && minute <= 59 && Number.isInteger(hour) && hour >= 0 && hour <= 23;
 }
 
 function buildCronExpression(): string {
@@ -1031,16 +1002,13 @@ function buildCronExpression(): string {
   if (mode === "monthly") {
     const time = parseTimeParts(newJob.value.monthly_time);
     if (!time) return "";
-    const day = Math.min(
-      Math.max(Number(newJob.value.monthly_day || 1), 1),
-      31,
-    );
+    const day = Math.min(Math.max(Number(newJob.value.monthly_day || 1), 1), 31);
     return `${time.minute} ${time.hour} ${day} * *`;
   }
   return newJob.value.cron_expression.trim();
 }
 
-function readScheduleFromJob(job: any) {
+function readScheduleFromJob(job: CronJob) {
   const fallback = {
     schedule_mode: "cron" as ScheduleMode,
     cron_expression: job.cron_expression || "",
@@ -1068,18 +1036,10 @@ function readScheduleFromJob(job: any) {
   const dayOfMonthNumber = Number(dayOfMonth);
   const dayOfWeekNumber = Number(dayOfWeek);
   const hasCronTime = isCronTime(minuteNumber, hourNumber);
-  const time = hasCronTime
-    ? `${padTimePart(hourNumber)}:${padTimePart(minuteNumber)}`
-    : "09:00";
+  const time = hasCronTime ? `${padTimePart(hourNumber)}:${padTimePart(minuteNumber)}` : "09:00";
 
   const minuteInterval = /^\*\/(\d+)$/.exec(minute);
-  if (
-    minuteInterval &&
-    hour === "*" &&
-    dayOfMonth === "*" &&
-    month === "*" &&
-    dayOfWeek === "*"
-  ) {
+  if (minuteInterval && hour === "*" && dayOfMonth === "*" && month === "*" && dayOfWeek === "*") {
     return {
       ...fallback,
       schedule_mode: "interval" as ScheduleMode,
@@ -1089,13 +1049,7 @@ function readScheduleFromJob(job: any) {
   }
 
   const hourInterval = /^\*\/(\d+)$/.exec(hour);
-  if (
-    minute === "0" &&
-    hourInterval &&
-    dayOfMonth === "*" &&
-    month === "*" &&
-    dayOfWeek === "*"
-  ) {
+  if (minute === "0" && hourInterval && dayOfMonth === "*" && month === "*" && dayOfWeek === "*") {
     return {
       ...fallback,
       schedule_mode: "interval" as ScheduleMode,
@@ -1105,13 +1059,7 @@ function readScheduleFromJob(job: any) {
   }
 
   const dayInterval = /^\*\/(\d+)$/.exec(dayOfMonth);
-  if (
-    minute === "0" &&
-    hour === "0" &&
-    dayInterval &&
-    month === "*" &&
-    dayOfWeek === "*"
-  ) {
+  if (minute === "0" && hour === "0" && dayInterval && month === "*" && dayOfWeek === "*") {
     return {
       ...fallback,
       schedule_mode: "interval" as ScheduleMode,
@@ -1163,7 +1111,7 @@ function readScheduleFromJob(job: any) {
   return fallback;
 }
 
-function buildPayload() {
+function buildPayload(): CronJobRequest {
   const runOnce = newJob.value.schedule_mode === "once";
   const cronExpression = runOnce ? "" : buildCronExpression();
   return {
@@ -1202,9 +1150,7 @@ function validateScheduleFields(): boolean {
 
   if (mode === "interval") {
     const value = Number(newJob.value.interval_value);
-    const validUnit = ["minutes", "hours", "days"].includes(
-      newJob.value.interval_unit,
-    );
+    const validUnit = ["minutes", "hours", "days"].includes(newJob.value.interval_unit);
     if (!Number.isInteger(value) || value < 1 || !validUnit) {
       toast(tm("messages.intervalRequired"), "warning");
       return false;
@@ -1222,12 +1168,7 @@ function validateScheduleFields(): boolean {
 
   if (mode === "weekly") {
     const weekday = Number(newJob.value.weekly_day);
-    if (
-      !parseTimeParts(newJob.value.weekly_time) ||
-      !Number.isInteger(weekday) ||
-      weekday < 0 ||
-      weekday > 6
-    ) {
+    if (!parseTimeParts(newJob.value.weekly_time) || !Number.isInteger(weekday) || weekday < 0 || weekday > 6) {
       toast(tm("messages.weeklyTimeRequired"), "warning");
       return false;
     }
@@ -1236,12 +1177,7 @@ function validateScheduleFields(): boolean {
 
   if (mode === "monthly") {
     const day = Number(newJob.value.monthly_day);
-    if (
-      !parseTimeParts(newJob.value.monthly_time) ||
-      !Number.isInteger(day) ||
-      day < 1 ||
-      day > 31
-    ) {
+    if (!parseTimeParts(newJob.value.monthly_time) || !Number.isInteger(day) || day < 1 || day > 31) {
       toast(tm("messages.monthlyTimeRequired"), "warning");
       return false;
     }
@@ -1263,7 +1199,7 @@ async function createJob() {
   creating.value = true;
   try {
     const payload = buildPayload();
-    const res = await cronApi.create(payload);
+    const res = await axios.post("/api/cron/jobs", payload);
     if (res.data.status === "ok") {
       toast(tm("messages.createSuccess"));
       createDialog.value = false;
@@ -1273,8 +1209,8 @@ async function createJob() {
     } else {
       toast(res.data.message || tm("messages.createFailed"), "error");
     }
-  } catch (e: any) {
-    toast(e?.response?.data?.message || tm("messages.createFailed"), "error");
+  } catch (error: unknown) {
+    toast(resolveErrorMessage(error, tm("messages.createFailed")), "error");
   } finally {
     creating.value = false;
   }
@@ -1294,7 +1230,7 @@ async function updateJob() {
       ...buildPayload(),
       description: newJob.value.note,
     };
-    const res = await cronApi.update(editingJobId.value, payload);
+    const res = await axios.patch(`/api/cron/jobs/${editingJobId.value}`, payload);
     if (res.data.status === "ok") {
       toast(tm("messages.updateSuccess"));
       createDialog.value = false;
@@ -1304,8 +1240,8 @@ async function updateJob() {
     } else {
       toast(res.data.message || tm("messages.updateFailed"), "error");
     }
-  } catch (e: any) {
-    toast(e?.response?.data?.message || tm("messages.updateFailed"), "error");
+  } catch (error: unknown) {
+    toast(resolveErrorMessage(error, tm("messages.updateFailed")), "error");
   } finally {
     creating.value = false;
   }

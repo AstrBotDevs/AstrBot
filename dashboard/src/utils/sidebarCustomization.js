@@ -1,5 +1,5 @@
 // Utility for managing sidebar customization in localStorage
-const STORAGE_KEY = 'astrbot_sidebar_customization';
+const STORAGE_KEY = "astrbot_sidebar_customization";
 
 /**
  * Get the customized sidebar configuration from localStorage
@@ -10,7 +10,7 @@ export function getSidebarCustomization() {
     const stored = localStorage.getItem(STORAGE_KEY);
     return stored ? JSON.parse(stored) : null;
   } catch (error) {
-    console.error('Error reading sidebar customization:', error);
+    console.error("Error reading sidebar customization:", error);
     return null;
   }
 }
@@ -25,7 +25,7 @@ export function setSidebarCustomization(config) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
   } catch (error) {
-    console.error('Error saving sidebar customization:', error);
+    console.error("Error saving sidebar customization:", error);
   }
 }
 
@@ -36,7 +36,7 @@ export function clearSidebarCustomization() {
   try {
     localStorage.removeItem(STORAGE_KEY);
   } catch (error) {
-    console.error('Error clearing sidebar customization:', error);
+    console.error("Error clearing sidebar customization:", error);
   }
 }
 
@@ -60,7 +60,7 @@ export function resolveSidebarItems(defaultItems, customization, options = {}) {
     const seen = new Set();
 
     list.forEach((key) => {
-      if (typeof key !== 'string') return;
+      if (typeof key !== "string") return;
       if (seen.has(key)) return;
       seen.add(key);
       deduped.push(key);
@@ -72,12 +72,12 @@ export function resolveSidebarItems(defaultItems, customization, options = {}) {
   const all = new Map();
   const defaultMain = [];
   const defaultMore = [];
-  const defaultMoreGroup = defaultItems.find(item => item.children && item.title === MORE_GROUP_KEY);
+  const defaultMoreGroup = defaultItems.find((item) => item.children && item.title === MORE_GROUP_KEY);
 
   // 收集所有条目，按 title 建索引
-  defaultItems.forEach(item => {
+  defaultItems.forEach((item) => {
     if (item.children && item.title === MORE_GROUP_KEY) {
-      item.children.forEach(child => {
+      item.children.forEach((child) => {
         all.set(child.title, cloneItems ? { ...child } : child);
         defaultMore.push(child.title);
       });
@@ -92,27 +92,23 @@ export function resolveSidebarItems(defaultItems, customization, options = {}) {
   let moreKeys = hasCustomization ? normalizeKeys(customization.moreItems || []) : [...defaultMore];
 
   if (hasCustomization) {
-    mainKeys = mainKeys.filter(title => all.has(title));
-    moreKeys = moreKeys.filter(title => all.has(title));
+    mainKeys = mainKeys.filter((title) => all.has(title));
+    moreKeys = moreKeys.filter((title) => all.has(title));
   }
 
   if (hasCustomization) {
     // 如果同一项同时出现在主区与更多区，主区优先。
     const mainSet = new Set(mainKeys);
-    moreKeys = moreKeys.filter(title => !mainSet.has(title));
+    moreKeys = moreKeys.filter((title) => !mainSet.has(title));
   }
 
-  const used = hasCustomization
-    ? new Set([...mainKeys, ...moreKeys])
-    : new Set(defaultMain.concat(defaultMore));
+  const used = hasCustomization ? new Set([...mainKeys, ...moreKeys]) : new Set(defaultMain.concat(defaultMore));
 
-  const mainItems = mainKeys
-    .map(title => all.get(title))
-    .filter(Boolean);
+  const mainItems = mainKeys.map((title) => all.get(title)).filter(Boolean);
 
   if (hasCustomization) {
     // 补充新增默认主区项
-    defaultMain.forEach(title => {
+    defaultMain.forEach((title) => {
       if (!used.has(title)) {
         const item = all.get(title);
         if (item) mainItems.push(item);
@@ -120,13 +116,11 @@ export function resolveSidebarItems(defaultItems, customization, options = {}) {
     });
   }
 
-  const moreItems = moreKeys
-    .map(title => all.get(title))
-    .filter(Boolean);
+  const moreItems = moreKeys.map((title) => all.get(title)).filter(Boolean);
 
   if (hasCustomization) {
     // 补充新增默认更多区项
-    defaultMore.forEach(title => {
+    defaultMore.forEach((title) => {
       if (!used.has(title)) {
         const item = all.get(title);
         if (item) moreItems.push(item);
@@ -136,15 +130,15 @@ export function resolveSidebarItems(defaultItems, customization, options = {}) {
 
   let merged;
   if (assembleMoreGroup) {
-    const children = cloneItems ? moreItems.map(item => ({ ...item })) : [...moreItems];
+    const children = cloneItems ? moreItems.map((item) => ({ ...item })) : [...moreItems];
     if (children.length > 0) {
       merged = [
         ...mainItems,
         {
           title: MORE_GROUP_KEY,
-          icon: defaultMoreGroup?.icon || 'mdi-dots-horizontal',
-          children
-        }
+          icon: defaultMoreGroup?.icon || "mdi-dots-horizontal",
+          children,
+        },
       ];
     } else {
       merged = [...mainItems];
@@ -156,7 +150,7 @@ export function resolveSidebarItems(defaultItems, customization, options = {}) {
     moreItems,
     merged,
     normalizedMainKeys: [...mainKeys],
-    normalizedMoreKeys: [...moreKeys]
+    normalizedMoreKeys: [...moreKeys],
   };
 }
 
@@ -167,13 +161,9 @@ export function resolveSidebarItems(defaultItems, customization, options = {}) {
  */
 export function applySidebarCustomization(defaultItems) {
   const customization = getSidebarCustomization();
-  const {
-    merged,
-    normalizedMainKeys,
-    normalizedMoreKeys
-  } = resolveSidebarItems(defaultItems, customization, {
+  const { merged, normalizedMainKeys, normalizedMoreKeys } = resolveSidebarItems(defaultItems, customization, {
     cloneItems: true,
-    assembleMoreGroup: true
+    assembleMoreGroup: true,
   });
 
   if (customization) {
@@ -186,7 +176,7 @@ export function applySidebarCustomization(defaultItems) {
     if (hasChanged) {
       setSidebarCustomization({
         mainItems: normalizedMainKeys,
-        moreItems: normalizedMoreKeys
+        moreItems: normalizedMoreKeys,
       });
     }
   }

@@ -5,11 +5,12 @@ import logging
 import os
 import random
 from pathlib import Path
-from typing import cast
+from typing import TypedDict
 
 import aiofiles
 import botpy
 import botpy.errors
+import botpy.http
 import botpy.message
 import botpy.types
 import botpy.types.message
@@ -25,15 +26,36 @@ from tenacity import (
     wait_exponential,
 )
 
-from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import At, File, Image, Plain, Record, Video
 from astrbot.api.platform import AstrBotMessage, Group, PlatformMetadata
+from astrbot.core import logger
 from astrbot.core.platform.sources.qqofficial.qqofficial_chunked_upload import (
     QQOFFICIAL_CHUNKED_UPLOAD_THRESHOLD,
     QQOfficialChunkedUploader,
 )
 from astrbot.core.utils.media_utils import MediaResolver, file_uri_to_path, is_file_uri
+
+
+class QQStreamPayload(TypedDict):
+    """QQ C2C streaming state; the server assigns its string ID after sending."""
+
+    state: int
+    id: str | None
+    index: int
+    reset: bool
+
+
+class QQSendPayload(TypedDict, total=False):
+    """Fields shared by the QQ send and markdown fallback paths."""
+
+    content: str | None
+    markdown: MarkdownPayload | None
+    msg_type: int
+    msg_id: str
+    msg_seq: int
+    media: Media
+    file_image: str
 
 
 class APIReturnNoneError(Exception):
@@ -49,10 +71,10 @@ def _patch_qq_botpy_formdata() -> None:
     """
 
     try:
-        from botpy.http import _FormData  # type: ignore
+        form_data_type = getattr(botpy.http, "_FormData", None)
 
-        if not hasattr(_FormData, "_is_processed"):
-            setattr(_FormData, "_is_processed", False)
+        if form_data_type is not None and not hasattr(form_data_type, "_is_processed"):
+            setattr(form_data_type, "_is_processed", False)
     except Exception:
         logger.debug("[QQOfficial] Skip botpy FormData patch.")
 
@@ -108,7 +130,15 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         self.bot = bot
         self.send_buffer = None
 
-    async def get_group(self, group_id: str | None = None, **kwargs) -> Group | None:
+    async def send_typing(self) -> None:
+        """QQ Official does not expose a typing-state API."""
+
+    async def stop_typing(self) -> None:
+        """QQ Official does not expose a typing-state API."""
+
+    async def get_group(
+        self, group_id: str | None = None, **kwargs: object
+    ) -> Group | None:
         """Get QQ group or guild-channel information for this event.
 
         QQ group metadata is restricted to allowlisted bots. When the API is
@@ -242,7 +272,12 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         # 先标记事件层“已执行发送操作”，避免异常路径遗漏
         await super().send_streaming(generator, use_fallback)
         # QQ C2C 流式协议：开始/中间分片使用 state=1，结束分片使用 state=10
-        stream_payload = {"state": 1, "id": None, "index": 0, "reset": False}
+        stream_payload: QQStreamPayload = {
+            "state": 1,
+            "id": None,
+            "index": 0,
+            "reset": False,
+        }
         last_edit_time = 0  # 上次发送分片的时间
         throttle_interval = 1  # 分片间最短间隔 (秒)
         ret = None
@@ -285,10 +320,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 # 节流：按时间间隔发送中间分片
                 current_time = asyncio.get_running_loop().time()
                 if current_time - last_edit_time >= throttle_interval:
-                    ret = cast(
-                        message.Message,
-                        await self._post_send(stream=stream_payload),
-                    )
+                    ret = await self._post_send(stream=stream_payload)
                     stream_payload["index"] += 1
                     ret_id = self._extract_response_message_id(ret)
                     if ret_id is not None:
@@ -362,7 +394,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
         return chunks
 
-    async def _post_send(self, stream: dict | None = None):
+    async def _post_send(self, stream: QQStreamPayload | None = None):
         if not self.send_buffer:
             return None
 
@@ -380,7 +412,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
     async def _post_send_one(
         self,
         message_to_send: MessageChain,
-        stream: dict | None = None,
+        stream: QQStreamPayload | None = None,
     ):
         if not message_to_send:
             return None
@@ -437,8 +469,9 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
         # 根据消息链的 use_markdown_ 标记决定发送模式
         use_md = getattr(self.send_buffer, "use_markdown_", None)
+        payload: QQSendPayload
         if use_md is False:
-            payload: dict = {
+            payload = {
                 "content": plain_text,
                 "msg_type": 0,
                 "msg_id": self.message_obj.message_id,
@@ -507,7 +540,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                         payload["content"] = plain_text or None
                 ret = await self._send_with_markdown_fallback(
                     send_func=lambda retry_payload: self.bot.api.post_group_message(
-                        group_openid=source.group_openid,  # type: ignore
+                        group_openid=source.group_openid or "",
                         **retry_payload,
                     ),
                     payload=payload,
@@ -623,9 +656,9 @@ class QQOfficialMessageEvent(AstrMessageEvent):
     @staticmethod
     async def _send_with_markdown_fallback(
         send_func,
-        payload: dict,
+        payload: QQSendPayload,
         plain_text: str,
-        stream: dict | None = None,
+        stream: QQStreamPayload | None = None,
     ):
         try:
             return await send_func(payload)
@@ -654,11 +687,11 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
                 markdown_payload = retry_payload.get("markdown")
                 if isinstance(markdown_payload, dict):
-                    md_content = cast(str, markdown_payload.get("content", "") or "")
+                    md_content = markdown_payload.get("content", "") or ""
                     if md_content and not md_content.endswith("\n"):
                         retry_payload["markdown"] = {"content": md_content + "\n"}
 
-                content = cast(str | None, retry_payload.get("content"))
+                content = retry_payload.get("content")
                 if content and not content.endswith("\n"):
                     retry_payload["content"] = content + "\n"
 
@@ -683,7 +716,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             if fallback_payload.get("msg_type") == 2:
                 fallback_payload["msg_type"] = 0
             if stream:
-                fallback_content = cast(str, fallback_payload.get("content") or "")
+                fallback_content = fallback_payload.get("content") or ""
                 if fallback_content and not fallback_content.endswith("\n"):
                     fallback_payload["content"] = fallback_content + "\n"
             return await send_func(fallback_payload)
@@ -748,22 +781,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         file_name: str | None = None,
         **kwargs,
     ) -> Media:
-        """Upload media to a QQ group or C2C session.
-
-        Args:
-            file_source: Local file path or remote URL to upload.
-            file_type: QQ media type identifier.
-            srv_send_msg: Whether QQ should send the media immediately.
-            file_name: Optional display name for the uploaded file.
-            **kwargs: Recipient identifier as ``openid`` or ``group_openid``.
-
-        Returns:
-            Metadata for the uploaded media.
-
-        Raises:
-            ValueError: No supported recipient identifier was provided.
-            Exception: The upload request fails or returns an invalid response.
-        """
+        """Upload media to a QQ group or C2C session."""
         local_file = Path(file_source)
         if (
             local_file.is_file()
@@ -782,6 +800,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     user_openid=openid,
                     srv_send_msg=srv_send_msg,
                 )
+            if not group_openid:
+                raise ValueError("Group upload requires group_openid")
             return await uploader.upload_group(
                 file_path=local_file,
                 file_type=file_type,
@@ -868,8 +888,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         event_id: str | None = None,
         markdown: message.MarkdownPayload | None = None,
         keyboard: message.Keyboard | None = None,
-        stream: dict | None = None,
-    ) -> message.Message | None:
+        stream: QQStreamPayload | None = None,
+    ) -> dict[str, object] | None:
         payload = locals()
         payload.pop("self", None)
         if payload.get("msg_id") is None:
@@ -905,7 +925,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             logger.error(f"[QQOfficial] post_c2c_message: 响应不是 dict: {result}")
             return None
 
-        return message.Message(**result)
+        return {str(key): value for key, value in result.items()}
 
     @staticmethod
     async def _parse_to_qqofficial(message: MessageChain):

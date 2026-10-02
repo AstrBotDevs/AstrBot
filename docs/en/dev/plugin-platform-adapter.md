@@ -65,7 +65,7 @@ from astrbot.api.message_components import (
     Image,
     Record,
 )  # Message chain components, import as needed
-from astrbot.core.platform.message_session import MessageSesion
+from astrbot.core.platform.message_session import MessageSession
 from astrbot.api.platform import register_platform_adapter
 from astrbot import logger
 from .client import FakeClient
@@ -87,7 +87,7 @@ class FakePlatformAdapter(Platform):
         self.settings = platform_settings  # platform_settings: platform settings
 
     async def send_by_session(
-        self, session: MessageSesion, message_chain: MessageChain
+        self, session: MessageSession, message_chain: MessageChain
     ):
         # Must be implemented
         await super().send_by_session(session, message_chain)
@@ -151,7 +151,6 @@ class FakePlatformAdapter(Platform):
             message_event
         )  # Submit the event to the event queue. Don't forget this!
 ```
-
 
 `fake_platform_event.py`:
 
@@ -269,6 +268,5 @@ The `fake` adapter we created now appears here.
 After starting, you can see it working correctly:
 
 ![image](https://files.astrbot.app/docs/source/images/plugin-platform-adapter/QQ_1738156166893.png)
-
 
 If you have any questions, feel free to join the community group and ask~

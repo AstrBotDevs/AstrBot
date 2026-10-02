@@ -5,17 +5,12 @@ from typing import Any
 
 from astrbot.api import FunctionTool
 from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.agent.tool import ToolExecResult
+from astrbot.core.agent.tool import ParametersType, ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.computer.computer_client import get_booter
 from astrbot.core.skills.neo_skill_sync import NeoSkillSyncManager
 from astrbot.core.tools.computer_tools.util import check_admin_permission
 from astrbot.core.tools.registry import builtin_tool
-
-_SHIPYARD_NEO_TOOL_CONFIG = {
-    "provider_settings.computer_use_runtime": "sandbox",
-    "provider_settings.sandbox.booter": "shipyard_neo",
-}
 
 
 def _to_jsonable(model_like: Any) -> Any:
@@ -44,7 +39,7 @@ async def _get_neo_context(
     if client is None or sandbox is None:
         raise RuntimeError(
             "Current sandbox booter does not support Neo skill lifecycle APIs. "
-            "Please switch to shipyard_neo."
+            "Please switch to shipyard_neo.",
         )
     return client, sandbox
 
@@ -66,15 +61,15 @@ class NeoSkillToolBase(FunctionTool):
             result = await neo_call(client, sandbox)
             return _to_json_text(result)
         except Exception as e:
-            return f"{self.error_prefix} {error_action}: {str(e)}"
+            return f"{self.error_prefix} {error_action}: {e!s}"
 
 
-@builtin_tool(config=_SHIPYARD_NEO_TOOL_CONFIG)
+@builtin_tool
 @dataclass
 class GetExecutionHistoryTool(NeoSkillToolBase):
     name: str = "astrbot_get_execution_history"
     description: str = "Get execution history from current sandbox."
-    parameters: dict = field(
+    parameters: ParametersType | None = field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -87,7 +82,7 @@ class GetExecutionHistoryTool(NeoSkillToolBase):
                 "has_description": {"type": "boolean", "default": False},
             },
             "required": [],
-        }
+        },
     )
 
     async def call(
@@ -116,12 +111,12 @@ class GetExecutionHistoryTool(NeoSkillToolBase):
         )
 
 
-@builtin_tool(config=_SHIPYARD_NEO_TOOL_CONFIG)
+@builtin_tool
 @dataclass
 class AnnotateExecutionTool(NeoSkillToolBase):
     name: str = "astrbot_annotate_execution"
     description: str = "Annotate one execution history record."
-    parameters: dict = field(
+    parameters: ParametersType | None = field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -131,7 +126,7 @@ class AnnotateExecutionTool(NeoSkillToolBase):
                 "notes": {"type": "string"},
             },
             "required": ["execution_id"],
-        }
+        },
     )
 
     async def call(
@@ -154,7 +149,7 @@ class AnnotateExecutionTool(NeoSkillToolBase):
         )
 
 
-@builtin_tool(config=_SHIPYARD_NEO_TOOL_CONFIG)
+@builtin_tool
 @dataclass
 class CreateSkillPayloadTool(NeoSkillToolBase):
     name: str = "astrbot_create_skill_payload"
@@ -162,7 +157,7 @@ class CreateSkillPayloadTool(NeoSkillToolBase):
         "Step 1/3 for Neo skill authoring: create immutable payload content and return payload_ref. "
         "Use this to store skill_markdown and structured metadata; do NOT write local skill folders directly."
     )
-    parameters: dict = field(
+    parameters: ParametersType | None = field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -183,7 +178,7 @@ class CreateSkillPayloadTool(NeoSkillToolBase):
                 },
             },
             "required": ["payload"],
-        }
+        },
     )
 
     async def call(
@@ -202,19 +197,19 @@ class CreateSkillPayloadTool(NeoSkillToolBase):
         )
 
 
-@builtin_tool(config=_SHIPYARD_NEO_TOOL_CONFIG)
+@builtin_tool
 @dataclass
 class GetSkillPayloadTool(NeoSkillToolBase):
     name: str = "astrbot_get_skill_payload"
     description: str = "Get one skill payload by payload_ref."
-    parameters: dict = field(
+    parameters: ParametersType | None = field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
                 "payload_ref": {"type": "string"},
             },
             "required": ["payload_ref"],
-        }
+        },
     )
 
     async def call(
@@ -229,7 +224,7 @@ class GetSkillPayloadTool(NeoSkillToolBase):
         )
 
 
-@builtin_tool(config=_SHIPYARD_NEO_TOOL_CONFIG)
+@builtin_tool
 @dataclass
 class CreateSkillCandidateTool(NeoSkillToolBase):
     name: str = "astrbot_create_skill_candidate"
@@ -237,7 +232,7 @@ class CreateSkillCandidateTool(NeoSkillToolBase):
         "Step 2/3 for Neo skill authoring: create a candidate by binding execution evidence "
         "(source_execution_ids) with skill identity (skill_key) and optional payload_ref."
     )
-    parameters: dict = field(
+    parameters: ParametersType | None = field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -260,7 +255,7 @@ class CreateSkillCandidateTool(NeoSkillToolBase):
                 },
             },
             "required": ["skill_key", "source_execution_ids"],
-        }
+        },
     )
 
     async def call(
@@ -283,12 +278,12 @@ class CreateSkillCandidateTool(NeoSkillToolBase):
         )
 
 
-@builtin_tool(config=_SHIPYARD_NEO_TOOL_CONFIG)
+@builtin_tool
 @dataclass
 class ListSkillCandidatesTool(NeoSkillToolBase):
     name: str = "astrbot_list_skill_candidates"
     description: str = "List skill candidates."
-    parameters: dict = field(
+    parameters: ParametersType | None = field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -298,7 +293,7 @@ class ListSkillCandidatesTool(NeoSkillToolBase):
                 "offset": {"type": "integer", "default": 0},
             },
             "required": [],
-        }
+        },
     )
 
     async def call(
@@ -321,12 +316,12 @@ class ListSkillCandidatesTool(NeoSkillToolBase):
         )
 
 
-@builtin_tool(config=_SHIPYARD_NEO_TOOL_CONFIG)
+@builtin_tool
 @dataclass
 class EvaluateSkillCandidateTool(NeoSkillToolBase):
     name: str = "astrbot_evaluate_skill_candidate"
     description: str = "Evaluate a skill candidate."
-    parameters: dict = field(
+    parameters: ParametersType | None = field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -337,7 +332,7 @@ class EvaluateSkillCandidateTool(NeoSkillToolBase):
                 "report": {"type": "string"},
             },
             "required": ["candidate_id", "passed"],
-        }
+        },
     )
 
     async def call(
@@ -362,7 +357,7 @@ class EvaluateSkillCandidateTool(NeoSkillToolBase):
         )
 
 
-@builtin_tool(config=_SHIPYARD_NEO_TOOL_CONFIG)
+@builtin_tool
 @dataclass
 class PromoteSkillCandidateTool(NeoSkillToolBase):
     name: str = "astrbot_promote_skill_candidate"
@@ -370,7 +365,7 @@ class PromoteSkillCandidateTool(NeoSkillToolBase):
         "Step 3/3 for Neo skill authoring: promote candidate to canary/stable release. "
         "If stage=stable and sync_to_local=true, payload.skill_markdown is synced to local SKILL.md automatically."
     )
-    parameters: dict = field(
+    parameters: ParametersType | None = field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -390,7 +385,7 @@ class PromoteSkillCandidateTool(NeoSkillToolBase):
                 },
             },
             "required": ["candidate_id"],
-        }
+        },
     )
 
     async def call(
@@ -427,18 +422,18 @@ class PromoteSkillCandidateTool(NeoSkillToolBase):
                     "release": result.get("release"),
                     "sync": result.get("sync"),
                     "rollback": result.get("rollback"),
-                }
+                },
             )
         except Exception as e:
-            return f"Error promoting skill candidate: {str(e)}"
+            return f"Error promoting skill candidate: {e!s}"
 
 
-@builtin_tool(config=_SHIPYARD_NEO_TOOL_CONFIG)
+@builtin_tool
 @dataclass
 class ListSkillReleasesTool(NeoSkillToolBase):
     name: str = "astrbot_list_skill_releases"
     description: str = "List skill releases."
-    parameters: dict = field(
+    parameters: ParametersType | None = field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -449,7 +444,7 @@ class ListSkillReleasesTool(NeoSkillToolBase):
                 "offset": {"type": "integer", "default": 0},
             },
             "required": [],
-        }
+        },
     )
 
     async def call(
@@ -474,19 +469,19 @@ class ListSkillReleasesTool(NeoSkillToolBase):
         )
 
 
-@builtin_tool(config=_SHIPYARD_NEO_TOOL_CONFIG)
+@builtin_tool
 @dataclass
 class RollbackSkillReleaseTool(NeoSkillToolBase):
     name: str = "astrbot_rollback_skill_release"
     description: str = "Rollback one skill release."
-    parameters: dict = field(
+    parameters: ParametersType | None = field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
                 "release_id": {"type": "string"},
             },
             "required": ["release_id"],
-        }
+        },
     )
 
     async def call(
@@ -501,14 +496,14 @@ class RollbackSkillReleaseTool(NeoSkillToolBase):
         )
 
 
-@builtin_tool(config=_SHIPYARD_NEO_TOOL_CONFIG)
+@builtin_tool
 @dataclass
 class SyncSkillReleaseTool(NeoSkillToolBase):
     name: str = "astrbot_sync_skill_release"
     description: str = (
         "Sync stable Neo release payload to local SKILL.md and update mapping metadata."
     )
-    parameters: dict = field(
+    parameters: ParametersType | None = field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -517,7 +512,7 @@ class SyncSkillReleaseTool(NeoSkillToolBase):
                 "require_stable": {"type": "boolean", "default": True},
             },
             "required": [],
-        }
+        },
     )
 
     async def call(

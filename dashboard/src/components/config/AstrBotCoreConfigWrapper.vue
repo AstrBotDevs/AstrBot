@@ -33,10 +33,10 @@
         >
           <header class="config-standard-section__heading">
             <h2 class="config-standard-section__title">
-              {{ sharedTm('pluginSetSelector.title') }}
+              {{ sharedTm("pluginSetSelector.title") }}
             </h2>
             <p class="config-plugin-section__subtitle">
-              {{ sharedTm('pluginSetSelector.subtitle') }}
+              {{ sharedTm("pluginSetSelector.subtitle") }}
             </p>
           </header>
 
@@ -72,76 +72,80 @@
 
       <div v-if="visibleSections.length === 0" class="config-workspace__empty">
         <v-icon size="34">mdi-magnify-close</v-icon>
-        <span>{{ tm('search.noResult') }}</span>
+        <span>{{ tm("search.noResult") }}</span>
       </div>
 
       <footer v-if="visibleSections.length > 0" class="config-workspace__help">
-        {{ tm('help.helpPrefix') }}
-        <a href="https://docs.astrbot.app/" target="_blank" rel="noopener noreferrer">
-          {{ tm('help.documentation') }}
+        {{ tm("help.helpPrefix") }}
+        <a
+          href="https://docs.astrbot.app/"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          {{ tm("help.documentation") }}
         </a>
-        {{ tm('help.helpMiddle') }}
+        {{ tm("help.helpMiddle") }}
         <a
           href="https://qm.qq.com/cgi-bin/qm/qr?k=EYGsuUTfe00_iOu9JTXS7_TEpMkXOvwv&jump_from=webapi&authKey=uUEMKCROfsseS+8IzqPjzV3y1tzy4AkykwTib2jNkOFdzezF9s9XknqnIaf3CDft"
           target="_blank"
           rel="noopener noreferrer"
         >
-          {{ tm('help.support') }}
-        </a>{{ tm('help.helpSuffix') }}
+          {{ tm("help.support") }} </a
+        >{{ tm("help.helpSuffix") }}
       </footer>
     </main>
   </div>
 </template>
 
 <script>
-import AiConfigPanel from '@/components/config/AiConfigPanel.vue';
-import AstrBotConfigV4 from '@/components/shared/AstrBotConfigV4.vue';
-import PluginSetSelector from '@/components/shared/PluginSetSelector.vue';
-import { useModuleI18n } from '@/i18n/composables';
+import AiConfigPanel from "@/components/config/AiConfigPanel.vue";
+import AstrBotConfigV4 from "@/components/shared/AstrBotConfigV4.vue";
+import PluginSetSelector from "@/components/shared/PluginSetSelector.vue";
+import { useModuleI18n } from "@/i18n/composables";
 
-const SECTION_ORDER = ['ai_group', 'plugin_group', 'platform_group', 'ext_group'];
+const SECTION_ORDER = ["ai_group", "plugin_group", "platform_group", "ext_group"];
 const SECTION_ICONS = {
-  ai_group: 'mdi-auto-fix',
-  plugin_group: 'mdi-puzzle-outline',
-  platform_group: 'mdi-robot-outline',
-  ext_group: 'mdi-tune-variant'
+  ai_group: "mdi-auto-fix",
+  plugin_group: "mdi-puzzle-outline",
+  platform_group: "mdi-robot-outline",
+  ext_group: "mdi-tune-variant",
 };
 
 export default {
-  name: 'AstrBotCoreConfigWrapper',
+  name: "AstrBotCoreConfigWrapper",
   components: {
     AiConfigPanel,
     AstrBotConfigV4,
-    PluginSetSelector
+    PluginSetSelector,
   },
   props: {
     metadata: {
       type: Object,
       required: true,
-      default: () => ({})
+      default: () => ({}),
     },
     config_data: {
       type: Object,
       required: true,
-      default: () => ({})
+      default: () => ({}),
     },
     readonly: {
       type: Boolean,
-      default: false
+      default: false,
     },
     searchKeyword: {
       type: String,
-      default: ''
-    }
+      default: "",
+    },
   },
   setup() {
-    const { tm: tmConfig } = useModuleI18n('features/config');
-    const { tm: tmMetadata } = useModuleI18n('features/config-metadata');
-    const { tm: sharedTm } = useModuleI18n('core/shared');
+    const { tm: tmConfig } = useModuleI18n("features/config");
+    const { tm: tmMetadata } = useModuleI18n("features/config-metadata");
+    const { tm: sharedTm } = useModuleI18n("core/shared");
 
     const tm = (key) => {
       const metadataResult = tmMetadata(key);
-      if (!metadataResult.startsWith('[MISSING:') && !metadataResult.startsWith('[INVALID:')) {
+      if (!metadataResult.startsWith("[MISSING:") && !metadataResult.startsWith("[INVALID:")) {
         return metadataResult;
       }
       return tmConfig(key);
@@ -151,15 +155,17 @@ export default {
   },
   data() {
     return {
-      tab: null
+      tab: null,
     };
   },
   computed: {
     normalizedSearchKeyword() {
-      return String(this.searchKeyword || '').trim().toLowerCase();
+      return String(this.searchKeyword || "")
+        .trim()
+        .toLowerCase();
     },
     visibleSections() {
-      if (!this.metadata || typeof this.metadata !== 'object') {
+      if (!this.metadata || typeof this.metadata !== "object") {
         return [];
       }
       const allSections = Object.entries(this.metadata)
@@ -167,17 +173,19 @@ export default {
         .sort((left, right) => {
           const leftIndex = SECTION_ORDER.indexOf(left.key);
           const rightIndex = SECTION_ORDER.indexOf(right.key);
-          return (leftIndex === -1 ? SECTION_ORDER.length : leftIndex)
-            - (rightIndex === -1 ? SECTION_ORDER.length : rightIndex);
+          return (
+            (leftIndex === -1 ? SECTION_ORDER.length : leftIndex) -
+            (rightIndex === -1 ? SECTION_ORDER.length : rightIndex)
+          );
         });
       if (!this.normalizedSearchKeyword) {
         return allSections;
       }
-      return allSections.filter((section) => (
-        (section.key === 'plugin_group' && this.tab === 'plugin_group')
-        || this.sectionHasSearchMatch(section.value)
-      ));
-    }
+      return allSections.filter(
+        (section) =>
+          (section.key === "plugin_group" && this.tab === "plugin_group") || this.sectionHasSearchMatch(section.value),
+      );
+    },
   },
   watch: {
     visibleSections(newSections) {
@@ -185,14 +193,14 @@ export default {
       if (!sectionKeys.includes(this.tab)) {
         this.tab = sectionKeys[0] ?? null;
       }
-    }
+    },
   },
   mounted() {
     this.tab = this.visibleSections[0]?.key ?? null;
   },
   methods: {
     getSectionIcon(sectionKey) {
-      return SECTION_ICONS[sectionKey] || 'mdi-cog-outline';
+      return SECTION_ICONS[sectionKey] || "mdi-cog-outline";
     },
     sectionHasSearchMatch(section) {
       const keyword = this.normalizedSearchKeyword;
@@ -200,27 +208,24 @@ export default {
         return true;
       }
       const sectionMetadata = section?.metadata || {};
-      return Object.values(sectionMetadata).some((metaItem) => (
-        this.metaObjectHasSearchMatch(metaItem, keyword)
-      ));
+      return Object.values(sectionMetadata).some((metaItem) => this.metaObjectHasSearchMatch(metaItem, keyword));
     },
     metaObjectHasSearchMatch(metaObject, keyword) {
-      if (!metaObject || typeof metaObject !== 'object') {
+      if (!metaObject || typeof metaObject !== "object") {
         return false;
       }
-      const directText = [
-        this.tm(metaObject.description || ''),
-        this.tm(metaObject.hint || '')
-      ].join(' ').toLowerCase();
+      const directText = [this.tm(metaObject.description || ""), this.tm(metaObject.hint || "")]
+        .join(" ")
+        .toLowerCase();
       if (directText.includes(keyword)) {
         return true;
       }
-      return Object.entries(metaObject.items || {}).some(([itemKey, itemMeta]) => (
-        itemKey.toLowerCase().includes(keyword)
-        || this.metaObjectHasSearchMatch(itemMeta, keyword)
-      ));
-    }
-  }
+      return Object.entries(metaObject.items || {}).some(
+        ([itemKey, itemMeta]) =>
+          itemKey.toLowerCase().includes(keyword) || this.metaObjectHasSearchMatch(itemMeta, keyword),
+      );
+    },
+  },
 };
 </script>
 
@@ -283,7 +288,7 @@ export default {
   width: 2px;
   border-radius: 999px;
   background: rgba(var(--v-theme-on-surface), 0.52);
-  content: '';
+  content: "";
 }
 
 .config-workspace__main {
@@ -402,7 +407,8 @@ export default {
   padding: 0;
 }
 
-.config-standard-section__groups :deep(.config-input > :not(.config-field--full-width)),
+.config-standard-section__groups
+  :deep(.config-input > :not(.config-field--full-width)),
 :deep(.config-product-groups .config-input > :not(.config-field--full-width)) {
   width: 100%;
   max-width: 270px;
@@ -415,12 +421,14 @@ export default {
   margin-left: auto;
 }
 
-.config-standard-section__groups :deep(.config-input .v-switch .v-input__control),
+.config-standard-section__groups
+  :deep(.config-input .v-switch .v-input__control),
 :deep(.config-product-groups .config-input .v-switch .v-input__control) {
   margin-left: auto;
 }
 
-.config-standard-section__groups :deep(.config-input .v-switch .v-selection-control),
+.config-standard-section__groups
+  :deep(.config-input .v-switch .v-selection-control),
 :deep(.config-product-groups .config-input .v-switch .v-selection-control) {
   justify-content: flex-end;
 }

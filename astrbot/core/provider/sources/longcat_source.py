@@ -1,9 +1,11 @@
-from ..register import register_provider_adapter
+from astrbot.core.provider.register import register_provider_adapter
+
 from .openai_source import ProviderOpenAIOfficial
 
 
 @register_provider_adapter(
-    "longcat_chat_completion", "LongCat Chat Completion Provider Adapter"
+    "longcat_chat_completion",
+    "LongCat Chat Completion Provider Adapter",
 )
 class ProviderLongCat(ProviderOpenAIOfficial):
     def __init__(

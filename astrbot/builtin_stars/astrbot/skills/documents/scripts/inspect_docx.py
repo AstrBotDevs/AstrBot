@@ -25,7 +25,7 @@ def inspect_docx(path: Path, sample_paragraphs: int) -> dict:
     Returns:
         JSON-serializable inspection data.
     """
-    document = Document(path)
+    document = Document(str(path))
     paragraphs = [
         paragraph for paragraph in document.paragraphs if paragraph.text.strip()
     ]
@@ -92,7 +92,10 @@ def inspect_docx(path: Path, sample_paragraphs: int) -> dict:
         "paragraphs": len(document.paragraphs),
         "nonempty_paragraphs": len(paragraphs),
         "paragraph_sample": [
-            {"style": paragraph.style.name, "text": paragraph.text}
+            {
+                "style": paragraph.style.name if paragraph.style is not None else "",
+                "text": paragraph.text,
+            }
             for paragraph in paragraphs[:sample_paragraphs]
         ],
         "headings": headings,

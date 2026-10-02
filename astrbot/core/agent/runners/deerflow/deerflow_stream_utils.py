@@ -44,6 +44,10 @@ def extract_messages_from_values_data(data: T.Any) -> list[T.Any]:
     return []
 
 
+def _is_message_dict(value: object) -> T.TypeGuard[dict[str, T.Any]]:
+    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+
+
 def is_ai_message(message: dict[str, T.Any]) -> bool:
     role = str(message.get("role", "")).lower()
     if role in {"assistant", "ai"}:
@@ -68,9 +72,7 @@ def extract_latest_ai_text(messages: Iterable[T.Any]) -> str:
         iterable = reversed(list(messages))
 
     for msg in iterable:
-        if not isinstance(msg, dict):
-            continue
-        if is_ai_message(msg):
+        if _is_message_dict(msg) and is_ai_message(msg):
             text = extract_text(msg.get("content"))
             if text:
                 return text
@@ -84,9 +86,7 @@ def extract_latest_ai_message(messages: Iterable[T.Any]) -> dict[str, T.Any] | N
         iterable = reversed(list(messages))
 
     for msg in iterable:
-        if not isinstance(msg, dict):
-            continue
-        if is_ai_message(msg):
+        if _is_message_dict(msg) and is_ai_message(msg):
             return msg
     return None
 
@@ -104,9 +104,7 @@ def extract_latest_clarification_text(messages: Iterable[T.Any]) -> str:
         iterable = reversed(list(messages))
 
     for msg in iterable:
-        if not isinstance(msg, dict):
-            continue
-        if is_clarification_tool_message(msg):
+        if _is_message_dict(msg) and is_clarification_tool_message(msg):
             text = extract_text(msg.get("content"))
             if text:
                 return text

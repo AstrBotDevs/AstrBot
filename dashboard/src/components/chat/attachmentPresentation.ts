@@ -84,13 +84,7 @@ const codeFileTypes = new Set([
 ]);
 
 export function attachmentName(part: AttachmentPresentationInput) {
-  return (
-    part.embedded_file?.filename ||
-    part.original_name ||
-    part.filename ||
-    part.type ||
-    "file"
-  );
+  return part.embedded_file?.filename || part.original_name || part.filename || part.type || "file";
 }
 
 export function attachmentExtension(part: AttachmentPresentationInput) {
@@ -99,9 +93,7 @@ export function attachmentExtension(part: AttachmentPresentationInput) {
   return extension === name.toLowerCase() ? "" : extension;
 }
 
-export function attachmentPresentation(
-  part: AttachmentPresentationInput,
-): AttachmentPresentation {
+export function attachmentPresentation(part: AttachmentPresentationInput): AttachmentPresentation {
   if (part.type === "image") {
     return { color: "#c1467a", icon: "mdi-file-image", label: "IMAGE" };
   }

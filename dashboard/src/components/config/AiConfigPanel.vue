@@ -196,35 +196,35 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue';
-import AstrBotLogo from '@/components/chat/ChatUILogo.vue';
-import AstrBotConfigV4 from '@/components/shared/AstrBotConfigV4.vue';
-import StyledMenu from '@/components/shared/StyledMenu.vue';
-import { useModuleI18n } from '@/i18n/composables';
+import { computed, ref, watch } from "vue";
+import AstrBotLogo from "@/components/chat/ChatUILogo.vue";
+import AstrBotConfigV4 from "@/components/shared/AstrBotConfigV4.vue";
+import StyledMenu from "@/components/shared/StyledMenu.vue";
+import { useModuleI18n } from "@/i18n/composables";
 
 const props = defineProps({
   metadata: {
     type: Object,
     required: true,
-    default: () => ({})
+    default: () => ({}),
   },
   configData: {
     type: Object,
     required: true,
-    default: () => ({})
+    default: () => ({}),
   },
   searchKeyword: {
     type: String,
-    default: ''
-  }
+    default: "",
+  },
 });
 
-const { tm } = useModuleI18n('features/config');
+const { tm } = useModuleI18n("features/config");
 
 const runnerDialog = ref(false);
-const pendingRunnerType = ref('local');
+const pendingRunnerType = ref("local");
 const runnerChangeAcknowledged = ref(false);
-const activeLocalTab = ref('model');
+const activeLocalTab = ref("model");
 
 const aiEnabled = computed({
   get() {
@@ -235,56 +235,46 @@ const aiEnabled = computed({
       props.configData.provider_settings = {};
     }
     props.configData.provider_settings.enable = value;
-  }
+  },
 });
 
-const runnerType = computed(() => props.configData?.agent_runner?.runner_type || 'local');
-const runnerTypeMetadata = computed(() => (
-  props.metadata?.agent_runner?.items?.['agent_runner.runner_type'] || {}
-));
+const runnerType = computed(() => props.configData?.agent_runner?.runner_type || "local");
+const runnerTypeMetadata = computed(() => props.metadata?.agent_runner?.items?.["agent_runner.runner_type"] || {});
 
 const runnerOptions = computed(() => {
-  const availableTypes = runnerTypeMetadata.value.options || [
-    'local',
-    'dify',
-    'coze',
-    'dashscope',
-    'deerflow'
-  ];
+  const availableTypes = runnerTypeMetadata.value.options || ["local", "dify", "coze", "dashscope", "deerflow"];
   return availableTypes.map((value) => ({
     value,
     title: tm(`aiSettings.runners.${value}.title`),
     description: tm(`aiSettings.runners.${value}.description`),
-    summary: tm(`aiSettings.runners.${value}.summary`)
+    summary: tm(`aiSettings.runners.${value}.summary`),
   }));
 });
 
-const currentRunner = computed(() => (
-  runnerOptions.value.find((runner) => runner.value === runnerType.value)
-  || runnerOptions.value[0]
-  || { value: 'local', title: 'AI', description: '', summary: '' }
-));
+const currentRunner = computed(
+  () =>
+    runnerOptions.value.find((runner) => runner.value === runnerType.value) ||
+    runnerOptions.value[0] || { value: "local", title: "AI", description: "", summary: "" },
+);
 
-const runnerSettingsTitle = computed(() => (
-  runnerType.value === 'local'
-    ? tm('aiSettings.localSettingsTitle')
-    : `${currentRunner.value.title} ${tm('aiSettings.settingsSuffix')}`
-));
+const runnerSettingsTitle = computed(() =>
+  runnerType.value === "local"
+    ? tm("aiSettings.localSettingsTitle")
+    : `${currentRunner.value.title} ${tm("aiSettings.settingsSuffix")}`,
+);
 
 const localTabs = computed(() => [
-  { value: 'model', label: tm('aiSettings.tabs.model') },
-  { value: 'persona', label: tm('aiSettings.tabs.persona') },
-  { value: 'capabilities', label: tm('aiSettings.tabs.capabilities') },
-  { value: 'advanced', label: tm('aiSettings.tabs.advanced') }
+  { value: "model", label: tm("aiSettings.tabs.model") },
+  { value: "persona", label: tm("aiSettings.tabs.persona") },
+  { value: "capabilities", label: tm("aiSettings.tabs.capabilities") },
+  { value: "advanced", label: tm("aiSettings.tabs.advanced") },
 ]);
 
 function filterMetadataGroup(groupKey, itemFilter, overrides = {}) {
   const source = props.metadata?.[groupKey];
   if (!source) return null;
   const items = Object.fromEntries(
-    Object.entries(source.items || {}).filter(([itemKey, itemMeta]) => (
-      itemFilter(itemKey, itemMeta)
-    ))
+    Object.entries(source.items || {}).filter(([itemKey, itemMeta]) => itemFilter(itemKey, itemMeta)),
   );
   if (Object.keys(items).length === 0) return null;
   return {
@@ -292,84 +282,61 @@ function filterMetadataGroup(groupKey, itemFilter, overrides = {}) {
     metadata: {
       ...source,
       ...overrides,
-      items
-    }
+      items,
+    },
   };
 }
 
 const localTabGroups = computed(() => {
-  const modelGroup = filterMetadataGroup(
-    'ai',
-    (itemKey) => itemKey.startsWith('agent_runner.config.model.'),
-    {
-      description: tm('aiSettings.groups.model'),
-      hint: tm('aiSettings.groups.modelHint')
-    }
-  );
-  const executionGroup = filterMetadataGroup(
-    'others',
-    (itemKey) => itemKey.startsWith('agent_runner.config.misc.'),
-    {
-      description: tm('aiSettings.groups.execution'),
-      hint: tm('aiSettings.groups.executionHint')
-    }
-  );
+  const modelGroup = filterMetadataGroup("ai", (itemKey) => itemKey.startsWith("agent_runner.config.model."), {
+    description: tm("aiSettings.groups.model"),
+    hint: tm("aiSettings.groups.modelHint"),
+  });
+  const executionGroup = filterMetadataGroup("others", (itemKey) => itemKey.startsWith("agent_runner.config.misc."), {
+    description: tm("aiSettings.groups.execution"),
+    hint: tm("aiSettings.groups.executionHint"),
+  });
 
   return {
     model: [modelGroup].filter(Boolean),
-    persona: props.metadata?.persona
-      ? [{ key: 'persona', metadata: props.metadata.persona }]
-      : [],
-    capabilities: [
-      'knowledgebase',
-      'websearch',
-      'agent_computer_use',
-      'proactive_capability'
-    ].filter((key) => props.metadata?.[key]).map((key) => ({
-      key,
-      metadata: props.metadata[key]
-    })),
+    persona: props.metadata?.persona ? [{ key: "persona", metadata: props.metadata.persona }] : [],
+    capabilities: ["knowledgebase", "websearch", "agent_computer_use", "proactive_capability"]
+      .filter((key) => props.metadata?.[key])
+      .map((key) => ({
+        key,
+        metadata: props.metadata[key],
+      })),
     advanced: [
       props.metadata?.truncate_and_compress
-        ? { key: 'truncate_and_compress', metadata: props.metadata.truncate_and_compress }
+        ? { key: "truncate_and_compress", metadata: props.metadata.truncate_and_compress }
         : null,
-      executionGroup
-    ].filter(Boolean)
+      executionGroup,
+    ].filter(Boolean),
   };
 });
 
-const activeLocalGroups = computed(() => (
-  localTabGroups.value[activeLocalTab.value] || localTabGroups.value.model
-));
+const activeLocalGroups = computed(() => localTabGroups.value[activeLocalTab.value] || localTabGroups.value.model);
 
 const thirdPartyRunnerGroup = computed(() => {
   const key = `${runnerType.value}_runner`;
-  return props.metadata?.[key]
-    ? { key, metadata: props.metadata[key] }
-    : null;
+  return props.metadata?.[key] ? { key, metadata: props.metadata[key] } : null;
 });
 
-const commonGroups = computed(() => [
-  filterMetadataGroup(
-    'ai',
-    (itemKey) => !itemKey.startsWith('agent_runner.config.'),
-    {
-      description: tm('aiSettings.groups.media'),
-      hint: tm('aiSettings.groups.mediaHint')
-    }
-  ),
-  filterMetadataGroup(
-    'others',
-    (itemKey) => !itemKey.startsWith('agent_runner.config.'),
-    {
-      description: tm('aiSettings.groups.behavior'),
-      hint: tm('aiSettings.groups.behaviorHint')
-    }
-  )
-].filter(Boolean));
+const commonGroups = computed(() =>
+  [
+    filterMetadataGroup("ai", (itemKey) => !itemKey.startsWith("agent_runner.config."), {
+      description: tm("aiSettings.groups.media"),
+      hint: tm("aiSettings.groups.mediaHint"),
+    }),
+    filterMetadataGroup("others", (itemKey) => !itemKey.startsWith("agent_runner.config."), {
+      description: tm("aiSettings.groups.behavior"),
+      hint: tm("aiSettings.groups.behaviorHint"),
+    }),
+  ].filter(Boolean),
+);
 
 watch(runnerType, () => {
-  activeLocalTab.value = 'model';
+  activeLocalTab.value = "model";
 });
 
 watch(pendingRunnerType, () => {

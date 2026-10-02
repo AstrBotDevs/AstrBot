@@ -1,20 +1,12 @@
 <script setup>
-import {
-  computed,
-  nextTick,
-  onBeforeUnmount,
-  onMounted,
-  ref,
-  watch,
-} from "vue";
-import axios from "axios";
 import DOMPurify from "dompurify";
 import MarkdownIt from "markdown-it";
-import defaultPluginIcon from "/favicon.svg";
-import { pluginApi } from "@/api/v1";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import PluginPlatformChip from "@/components/shared/PluginPlatformChip.vue";
 import { useI18n } from "@/i18n/composables";
 import { usePluginI18n } from "@/utils/pluginI18n";
-import PluginPlatformChip from "@/components/shared/PluginPlatformChip.vue";
+import axios from "@/utils/request";
+import defaultPluginIcon from "/favicon.svg";
 
 const props = defineProps({
   plugin: {
@@ -37,12 +29,7 @@ const props = defineProps({
 
 const { tm, router } = props.state;
 const { locale } = useI18n();
-const {
-  pluginName,
-  pluginDesc: resolvePluginDesc,
-  pluginPageTitle,
-  pluginPageDescription,
-} = usePluginI18n();
+const { pluginName, pluginDesc: resolvePluginDesc, pluginPageTitle, pluginPageDescription } = usePluginI18n();
 
 const markdown = new MarkdownIt({
   html: true,
@@ -104,24 +91,15 @@ const pluginDetail = ref(null);
 
 const pluginData = computed(() => pluginDetail.value || props.plugin);
 const displayName = computed(() => pluginName(pluginData.value));
-const detailSourceTab = computed(() =>
-  props.sourceTab === "market" ? "market" : "installed",
-);
+const detailSourceTab = computed(() => (props.sourceTab === "market" ? "market" : "installed"));
 const isMarketDetail = computed(() => detailSourceTab.value === "market");
 const detailParentTitle = computed(() =>
-  isMarketDetail.value
-    ? tm("tabs.market")
-    : tm("titles.installedAstrBotPlugins"),
+  isMarketDetail.value ? tm("tabs.market") : tm("titles.installedAstrBotPlugins"),
 );
 
 const pluginDesc = computed(() => {
   const plugin = pluginData.value || {};
-  const desc =
-    plugin.desc ||
-    plugin.description ||
-    props.marketPlugin?.desc ||
-    props.marketPlugin?.description ||
-    "";
+  const desc = plugin.desc || plugin.description || props.marketPlugin?.desc || props.marketPlugin?.description || "";
   return String(resolvePluginDesc(plugin, desc) || "").trim();
 });
 
@@ -130,9 +108,7 @@ const logoSrc = computed(() => {
   if (logoLoadFailed.value) {
     return defaultPluginIcon;
   }
-  return typeof logo === "string" && logo.trim().length
-    ? logo
-    : defaultPluginIcon;
+  return typeof logo === "string" && logo.trim().length ? logo : defaultPluginIcon;
 });
 
 const authorDisplay = computed(() => {
@@ -156,8 +132,7 @@ const authorDisplay = computed(() => {
 });
 
 const categoryDisplay = computed(() => {
-  const rawCategory =
-    pluginData.value?.category || props.marketPlugin?.category || "";
+  const rawCategory = pluginData.value?.category || props.marketPlugin?.category || "";
   const category = String(rawCategory || "").trim();
   if (!category) return "";
 
@@ -180,57 +155,34 @@ const authorWebsite = computed(() => {
   );
 });
 
-const repoUrl = computed(
-  () => pluginData.value?.repo || props.marketPlugin?.repo || "",
-);
+const repoUrl = computed(() => pluginData.value?.repo || props.marketPlugin?.repo || "");
 
 const firstPresentValue = (...values) =>
   values.find(
-    (value) =>
-      value !== undefined &&
-      value !== null &&
-      value !== "" &&
-      (!Array.isArray(value) || value.length > 0),
+    (value) => value !== undefined && value !== null && value !== "" && (!Array.isArray(value) || value.length > 0),
   );
 
 const versionDisplay = computed(() =>
-  String(
-    firstPresentValue(pluginData.value?.version, props.marketPlugin?.version) ||
-      "",
-  ).trim(),
+  String(firstPresentValue(pluginData.value?.version, props.marketPlugin?.version) || "").trim(),
 );
 
 const starsDisplay = computed(() => {
-  const value = firstPresentValue(
-    pluginData.value?.stars,
-    props.marketPlugin?.stars,
-  );
+  const value = firstPresentValue(pluginData.value?.stars, props.marketPlugin?.stars);
   return value === undefined ? "" : String(value);
 });
 
 const tagsDisplay = computed(() => {
-  const tags = firstPresentValue(
-    pluginData.value?.tags,
-    props.marketPlugin?.tags,
-  );
+  const tags = firstPresentValue(pluginData.value?.tags, props.marketPlugin?.tags);
   if (!Array.isArray(tags)) return [];
   return tags.filter((tag) => typeof tag === "string" && tag.trim().length > 0);
 });
 
 const astrbotVersionDisplay = computed(() =>
-  String(
-    firstPresentValue(
-      pluginData.value?.astrbot_version,
-      props.marketPlugin?.astrbot_version,
-    ) || "",
-  ).trim(),
+  String(firstPresentValue(pluginData.value?.astrbot_version, props.marketPlugin?.astrbot_version) || "").trim(),
 );
 
 const supportPlatformsDisplay = computed(() => {
-  const platforms = firstPresentValue(
-    pluginData.value?.support_platforms,
-    props.marketPlugin?.support_platforms,
-  );
+  const platforms = firstPresentValue(pluginData.value?.support_platforms, props.marketPlugin?.support_platforms);
   if (!Array.isArray(platforms)) return [];
   return platforms.filter((platform) => typeof platform === "string");
 });
@@ -238,10 +190,7 @@ const supportPlatformsDisplay = computed(() => {
 const updatedAtDisplay = computed(() => {
   if (!isMarketDetail.value) return "";
 
-  const value = firstPresentValue(
-    pluginData.value?.updated_at,
-    props.marketPlugin?.updated_at,
-  );
+  const value = firstPresentValue(pluginData.value?.updated_at, props.marketPlugin?.updated_at);
   if (!value) return "";
 
   const updatedAt = new Date(value);
@@ -312,49 +261,28 @@ const infoRows = computed(() => {
     },
   ];
 
-  return rows.filter(
-    (row) =>
-      !row.optional ||
-      (Array.isArray(row.value) ? row.value.length > 0 : row.value),
-  );
+  return rows.filter((row) => !row.optional || (Array.isArray(row.value) ? row.value.length > 0 : row.value));
 });
 
 const normalizeHandlerList = (source) => {
   if (!source || typeof source !== "object") return [];
   if (Array.isArray(source.handlers)) {
-    return source.handlers.filter(
-      (handler) => handler && typeof handler === "object",
-    );
+    return source.handlers.filter((handler) => handler && typeof handler === "object");
   }
   if (Array.isArray(source.command_handlers)) {
-    return source.command_handlers.filter(
-      (handler) => handler && typeof handler === "object",
-    );
+    return source.command_handlers.filter((handler) => handler && typeof handler === "object");
   }
   if (Array.isArray(source.commands)) {
     return source.commands
-      .filter(
-        (command) =>
-          command &&
-          (typeof command === "string" || typeof command === "object"),
-      )
+      .filter((command) => command && (typeof command === "string" || typeof command === "object"))
       .map((command) =>
-        typeof command === "string"
-          ? { cmd: command, type: "指令" }
-          : { type: command.type || "指令", ...command },
+        typeof command === "string" ? { cmd: command, type: "指令" } : { type: command.type || "指令", ...command },
       );
   }
   return [];
 };
 
-const componentGroupOrder = [
-  "page",
-  "skill",
-  "command",
-  "llm_tool",
-  "listener",
-  "hook",
-];
+const componentGroupOrder = ["page", "skill", "command", "llm_tool", "listener", "hook"];
 
 const componentGroupIcons = {
   page: "mdi-monitor-dashboard",
@@ -365,7 +293,7 @@ const componentGroupIcons = {
   hook: "mdi-hook",
 };
 
-const getFallbackHandlerGroupKey = (handler) => {
+const getLegacyHandlerGroupKey = (handler) => {
   const type = String(handler?.type || "").trim();
   const eventType = String(handler?.event_type || "").trim();
   const eventTypeH = String(handler?.event_type_h || "").trim();
@@ -383,11 +311,9 @@ const getFallbackHandlerGroupKey = (handler) => {
 };
 
 const getComponentGroupKey = (component) => {
-  const type = String(
-    component?.type || component?.component_type || "",
-  ).trim();
+  const type = String(component?.type || component?.component_type || "").trim();
   if (componentGroupOrder.includes(type)) return type;
-  return getFallbackHandlerGroupKey(component);
+  return getLegacyHandlerGroupKey(component);
 };
 
 const normalizeComponent = (component, fallbackType = "") => {
@@ -403,11 +329,7 @@ const normalizeComponentList = (source) => {
   if (!source || typeof source !== "object") return [];
   const { components } = source;
 
-  if (
-    components &&
-    typeof components === "object" &&
-    !Array.isArray(components)
-  ) {
+  if (components && typeof components === "object" && !Array.isArray(components)) {
     return componentGroupOrder.flatMap((key) =>
       Array.isArray(components[key])
         ? components[key]
@@ -425,7 +347,7 @@ const normalizeComponentList = (source) => {
 
   return normalizeHandlerList(source).map((handler) => ({
     ...handler,
-    type: getFallbackHandlerGroupKey(handler),
+    type: getLegacyHandlerGroupKey(handler),
   }));
 };
 
@@ -454,22 +376,14 @@ const groupedComponentSections = computed(() => {
 });
 
 const getHandlerCommand = (handler) =>
-  String(
-    handler?.name ||
-      handler?.cmd ||
-      handler?.handler_name ||
-      tm("status.unknown"),
-  ).trim();
+  String(handler?.name || handler?.cmd || handler?.handler_name || tm("status.unknown")).trim();
 
 const getHandlerDisplayName = (handler, groupKey) => {
   if (groupKey === "page") {
     return pluginPageTitle(
       pluginData.value,
       handler,
-      handler?.title ||
-        handler?.name ||
-        handler?.page_name ||
-        tm("status.unknown"),
+      handler?.title || handler?.name || handler?.page_name || tm("status.unknown"),
     );
   }
   if (handler?.name) {
@@ -481,8 +395,7 @@ const getHandlerDisplayName = (handler, groupKey) => {
   return handler?.cmd || handler?.handler_name || tm("status.unknown");
 };
 
-const getHandlerTiming = (handler) =>
-  String(handler?.event_type_h || handler?.event_type || "").trim();
+const getHandlerTiming = (handler) => String(handler?.event_type_h || handler?.event_type || "").trim();
 
 const isCommandGroupExpanded = (key) => expandedCommandGroups.value.has(key);
 
@@ -497,12 +410,9 @@ const toggleCommandGroup = (key) => {
 };
 
 const getComponentDescription = (component) => {
-  const fallback =
-    component?.description || component?.desc || tm("status.unknown");
+  const fallback = component?.description || component?.desc || tm("status.unknown");
   if (getComponentGroupKey(component) === "page") {
-    return String(
-      pluginPageDescription(pluginData.value, component, fallback),
-    ).trim();
+    return String(pluginPageDescription(pluginData.value, component, fallback)).trim();
   }
   return String(fallback).trim();
 };
@@ -520,8 +430,7 @@ const openComponentPage = (component) => {
   });
 };
 
-const getCommandRowKey = (component, path) =>
-  component?.handler_full_name || component?.path || path.join(" ");
+const getCommandRowKey = (component, path) => component?.handler_full_name || component?.path || path.join(" ");
 
 const buildCommandComponentRows = (commandComponents) => {
   const rows = [];
@@ -531,14 +440,11 @@ const buildCommandComponentRows = (commandComponents) => {
     const nextPath = [...path, name];
     const key = getCommandRowKey(component, nextPath);
     const children = Array.isArray(component?.subcommands)
-      ? component.subcommands.filter(
-          (child) => child && typeof child === "object",
-        )
+      ? component.subcommands.filter((child) => child && typeof child === "object")
       : [];
 
     rows.push({
-      kind:
-        children.length > 0 ? "group" : depth > 0 ? "subCommand" : "handler",
+      kind: children.length > 0 ? "group" : depth > 0 ? "subCommand" : "handler",
       key,
       component,
       displayCommand: name,
@@ -561,10 +467,7 @@ const openExternal = (url) => {
 
 const goBack = () => {
   router.push({
-    name:
-      detailSourceTab.value === "market"
-        ? "ExtensionMarketplace"
-        : "Extensions",
+    name: detailSourceTab.value === "market" ? "ExtensionMarketplace" : "Extensions",
   });
 };
 
@@ -589,11 +492,7 @@ const renderMarkdown = (source) => {
 };
 
 const updateHeaderStuckState = () => {
-  const scrollTop =
-    document.scrollingElement?.scrollTop ||
-    document.documentElement.scrollTop ||
-    window.scrollY ||
-    0;
+  const scrollTop = document.scrollingElement?.scrollTop || document.documentElement.scrollTop || window.scrollY || 0;
   isHeaderStuck.value = scrollTop > 0;
 };
 
@@ -611,7 +510,9 @@ const fetchPluginDetail = async () => {
   if (isMarketDetail.value || !props.plugin?.name) return;
 
   try {
-    const res = await pluginApi.get(props.plugin.name);
+    const res = await axios.get("/api/plugin/detail", {
+      params: { name: props.plugin.name },
+    });
     if (res.data.status === "ok" && res.data.data) {
       pluginDetail.value = res.data.data;
       await scrollToHashTarget();
@@ -685,7 +586,9 @@ const fetchReadme = async () => {
   }
 
   try {
-    const res = await pluginApi.readme(plugin.name);
+    const res = await axios.get("/api/plugin/readme", {
+      params: { name: plugin.name },
+    });
 
     if (res.data.status !== "ok") {
       readmeError.value = res.data.message || tm("messages.operationFailed");
@@ -739,7 +642,9 @@ const fetchChangelog = async () => {
   }
 
   try {
-    const res = await pluginApi.changelog(plugin.name);
+    const res = await axios.get("/api/plugin/changelog", {
+      params: { name: plugin.name },
+    });
 
     if (res.data.status !== "ok") {
       changelogError.value = res.data.message || tm("messages.operationFailed");
@@ -760,21 +665,12 @@ const fetchChangelog = async () => {
   }
 };
 
-const showDocsSection = computed(
-  () => !isMarketDetail.value || !!getDocumentUrl("readme_url"),
-);
+const showDocsSection = computed(() => !isMarketDetail.value || !!getDocumentUrl("readme_url"));
 
-const showChangelogSection = computed(
-  () => !isMarketDetail.value || !!getDocumentUrl("changelog_url"),
-);
+const showChangelogSection = computed(() => !isMarketDetail.value || !!getDocumentUrl("changelog_url"));
 
 watch(
-  () => [
-    props.plugin?.name,
-    props.sourceTab,
-    props.marketPlugin?.readme_url,
-    props.marketPlugin?.changelog_url,
-  ],
+  () => [props.plugin?.name, props.sourceTab, props.marketPlugin?.readme_url, props.marketPlugin?.changelog_url],
   async () => {
     logoLoadFailed.value = false;
     await fetchPluginDetail();

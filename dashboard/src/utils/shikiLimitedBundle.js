@@ -2,9 +2,9 @@ import { createHighlighterCore } from "shiki/core";
 import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
 import bash from "shiki/langs/bash.mjs";
 import c from "shiki/langs/c.mjs";
-import css from "shiki/langs/css.mjs";
 import cpp from "shiki/langs/cpp.mjs";
 import csharp from "shiki/langs/csharp.mjs";
+import css from "shiki/langs/css.mjs";
 import dart from "shiki/langs/dart.mjs";
 import diff from "shiki/langs/diff.mjs";
 import dockerfile from "shiki/langs/dockerfile.mjs";
@@ -123,10 +123,7 @@ export const LIMITED_SHIKI_LANGUAGE_ALIASES = {
 
 export const LIMITED_SHIKI_SUPPORTED_LANGUAGES = new Set([
   ...BUILT_IN_LANGUAGES,
-  ...LIMITED_SHIKI_LANGUAGES.flatMap((language) => [
-    language.name,
-    ...(language.aliases || []),
-  ]),
+  ...LIMITED_SHIKI_LANGUAGES.flatMap((language) => [language.name, ...(language.aliases || [])]),
 ]);
 
 function getThemeName(theme) {
@@ -206,7 +203,9 @@ function wrapLimitedHighlighter(highlighter) {
     loadLanguage() {
       return Promise.resolve();
     },
-    loadLanguageSync() {},
+    loadLanguageSync() {
+      return undefined;
+    },
     async loadTheme(...themes) {
       const resolved = uniqueThemes(themes.flat());
       if (resolved.length && loadTheme) await loadTheme(...resolved);

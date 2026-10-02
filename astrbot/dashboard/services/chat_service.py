@@ -6,6 +6,7 @@ import os
 import re
 import uuid
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
@@ -61,6 +62,29 @@ def sanitize_upload_filename(filename: str | None) -> str:
     if name in ("", ".", ".."):
         return generate_timestamp_id()
     return name
+
+
+@asynccontextmanager
+async def track_conversation(convs: dict, conv_id: str):
+    convs[conv_id] = True
+    try:
+        yield
+    finally:
+        convs.pop(conv_id, None)
+
+
+async def poll_webchat_stream_result(back_queue, username: str):
+    try:
+        result = await asyncio.wait_for(back_queue.get(), timeout=1)
+    except TimeoutError:
+        return None, False
+    except asyncio.CancelledError:
+        logger.debug(f"[WebChat] 用户 {username} 断开聊天长连接。")
+        return None, True
+    except Exception as e:
+        logger.error(f"WebChat stream error: {e}")
+        return None, False
+    return result, False
 
 
 class LocalUploadFile:
@@ -242,9 +266,9 @@ class BotMessageAccumulator:
         if not tool_call_id:
             return
 
-        tool_call = self.pending_tool_calls.pop(tool_call_id, None) or {
-            "id": tool_call_id
-        }
+        tool_call: dict[str, object] = self.pending_tool_calls.pop(
+            tool_call_id, None
+        ) or {"id": tool_call_id}
         tool_call["result"] = tool_result.get("result")
         tool_call["finished_ts"] = tool_result.get("ts")
         self.parts.append({"type": "tool_call", "tool_calls": [tool_call]})
@@ -372,11 +396,13 @@ def serialize_history_entry(history) -> dict:
         history: A PlatformMessageHistory instance. Must not be None.
 
     Returns:
-        Dict with all model fields plus created_at/updated_at serialized as
-        UTC-aware ISO strings (e.g. ``2026-07-06T04:00:00+00:00``).
+        Public history fields with UTC-aware ISO timestamps. Internal
+        idempotency keys are not part of the dashboard response contract.
     """
+    data = history.model_dump()
+    data.pop("idempotency_key", None)
     return {
-        **history.model_dump(),
+        **data,
         "created_at": to_utc_isoformat(history.created_at),
         "updated_at": to_utc_isoformat(history.updated_at),
     }
@@ -1013,7 +1039,7 @@ class ChatService:
                 while True:
                     try:
                         item = await asyncio.wait_for(subscriber.get(), timeout=1)
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         yield SSE_HEARTBEAT
                         continue
                     if item is None:
@@ -1618,7 +1644,7 @@ class ChatService:
             creator=username,
         )
 
-        response_data = {
+        response_data: dict[str, object] = {
             "session": {
                 "session_id": session.session_id,
                 "platform_id": session.platform_id,

@@ -74,34 +74,34 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue';
-import { useModuleI18n } from '@/i18n/composables';
+import { computed, ref, watch } from "vue";
+import { useModuleI18n } from "@/i18n/composables";
 
 const props = defineProps({
   modelValue: {
     type: String,
-    default: ''
+    default: "",
   },
   items: {
     type: Array,
-    default: () => []
+    default: () => [],
   },
   disabled: {
     type: Boolean,
-    default: false
-  }
+    default: false,
+  },
 });
 
-const emit = defineEmits(['select', 'manage']);
-const { tm } = useModuleI18n('features/config');
+const emit = defineEmits(["select", "manage"]);
+const { tm } = useModuleI18n("features/config");
 const menuOpen = ref(false);
-const searchQuery = ref('');
+const searchQuery = ref("");
 
 function displayName(item) {
-  if (item?.id === 'default') {
-    return tm('configSelection.defaultConfig');
+  if (item?.id === "default") {
+    return tm("configSelection.defaultConfig");
   }
-  return item?.name || item?.id || tm('configSelection.selectConfig');
+  return item?.name || item?.id || tm("configSelection.selectConfig");
 }
 
 const selectedName = computed(() => {
@@ -109,10 +109,10 @@ const selectedName = computed(() => {
   if (selected) {
     return displayName(selected);
   }
-  if (props.modelValue === 'default') {
-    return tm('configSelection.defaultConfig');
+  if (props.modelValue === "default") {
+    return tm("configSelection.defaultConfig");
   }
-  return props.modelValue || tm('configSelection.selectConfig');
+  return props.modelValue || tm("configSelection.selectConfig");
 });
 
 const filteredItems = computed(() => {
@@ -120,25 +120,28 @@ const filteredItems = computed(() => {
   if (!query) {
     return props.items;
   }
-  return props.items.filter((item) => (
-    displayName(item).toLowerCase().includes(query)
-    || String(item.id || '').toLowerCase().includes(query)
-  ));
+  return props.items.filter(
+    (item) =>
+      displayName(item).toLowerCase().includes(query) ||
+      String(item.id || "")
+        .toLowerCase()
+        .includes(query),
+  );
 });
 
 watch(menuOpen, (isOpen) => {
   if (!isOpen) {
-    searchQuery.value = '';
+    searchQuery.value = "";
   }
 });
 
 function selectProfile(id) {
-  emit('select', id);
+  emit("select", id);
   menuOpen.value = false;
 }
 
 function openManager() {
-  emit('manage');
+  emit("manage");
   menuOpen.value = false;
 }
 </script>

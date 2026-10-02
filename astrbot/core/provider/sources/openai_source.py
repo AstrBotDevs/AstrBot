@@ -1,19 +1,31 @@
 import asyncio
+import base64
+import binascii
 import copy
 import inspect
 import json
 import random
 import re
+import uuid
 from collections.abc import AsyncGenerator
-from typing import Any, Literal
+from io import BytesIO
+from pathlib import Path, PurePath
+from typing import Any, Literal, cast
+from urllib.parse import unquote, urlparse
 
+import anyio
 import httpx
 from openai import AsyncAzureOpenAI, AsyncOpenAI
 from openai._exceptions import NotFoundError
 from openai.lib.streaming.chat._completions import ChatCompletionStreamState
 from openai.types.chat.chat_completion import ChatCompletion
 from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
+from openai.types.chat.chat_completion_message_function_tool_call import (
+    ChatCompletionMessageFunctionToolCall,
+)
 from openai.types.completion_usage import CompletionUsage
+from PIL import Image as PILImage
+from PIL import UnidentifiedImageError
 
 import astrbot.core.message.components as Comp
 from astrbot import logger
@@ -29,10 +41,11 @@ from astrbot.core.agent.tool import ToolSet
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, TokenUsage, ToolCallsResult
-from astrbot.core.utils.media_utils import (
-    describe_media_ref,
-    resolve_media_ref_to_base64_data,
-)
+from astrbot.core.provider.headers import build_conversation_headers
+from astrbot.core.provider.register import register_provider_adapter
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.io import download_file
+from astrbot.core.utils.media_utils import resolve_media_ref_to_base64_data
 from astrbot.core.utils.network_utils import (
     create_proxy_client,
     is_connection_error,
@@ -40,8 +53,6 @@ from astrbot.core.utils.network_utils import (
 )
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
-from ..headers import build_conversation_headers
-from ..register import register_provider_adapter
 from .request_retry import retry_provider_request
 
 
@@ -51,6 +62,17 @@ from .request_retry import retry_provider_request
 )
 class ProviderOpenAIOfficial(Provider):
     _ERROR_TEXT_CANDIDATE_MAX_CHARS = 4096
+    # 部分 OpenAI 兼容中转站会校验 data URL 的 MIME 类型是否和图片字节一致。
+    # 这里统一维护格式映射，确保本地文件和 `base64://` 图片引用使用相同声明。
+    _IMAGE_FORMAT_MIME_TYPES = {
+        "JPEG": "image/jpeg",
+        "PNG": "image/png",
+        "GIF": "image/gif",
+        "WEBP": "image/webp",
+        "BMP": "image/bmp",
+        "TIFF": "image/tiff",
+        "AVIF": "image/avif",
+    }
 
     @classmethod
     def _truncate_error_text_candidate(cls, text: str) -> str:
@@ -91,7 +113,7 @@ class ProviderOpenAIOfficial(Provider):
             if not text:
                 return
             candidates.append(
-                ProviderOpenAIOfficial._truncate_error_text_candidate(text)
+                ProviderOpenAIOfficial._truncate_error_text_candidate(text),
             )
 
         _append_candidate(str(error))
@@ -100,7 +122,7 @@ class ProviderOpenAIOfficial(Provider):
         if isinstance(body, dict):
             err_obj = body.get("error")
             body_text = ProviderOpenAIOfficial._safe_json_dump(
-                {"error": err_obj} if isinstance(err_obj, dict) else body
+                {"error": err_obj} if isinstance(err_obj, dict) else body,
             )
             _append_candidate(body_text)
             if isinstance(err_obj, dict):
@@ -177,6 +199,90 @@ class ProviderOpenAIOfficial(Provider):
             return True
         return False
 
+    @classmethod
+    def _encode_image_file_to_data_url(
+        cls,
+        image_path: str,
+        *,
+        mode: Literal["safe", "strict"],
+    ) -> str | None:
+        try:
+            image_bytes = Path(image_path).read_bytes()
+        except OSError:
+            if mode == "strict":
+                raise
+            return None
+
+        image_format = cls._detect_image_format(image_bytes)
+        if image_format is None:
+            if mode == "strict":
+                raise ValueError(f"Invalid image file: {image_path}") from None
+            return None
+
+        mime_type = cls._image_format_to_mime_type(image_format)
+        image_bs64 = base64.b64encode(image_bytes).decode("utf-8")
+        return f"data:{mime_type};base64,{image_bs64}"
+
+    @classmethod
+    def _detect_image_format(cls, image_bytes: bytes) -> str | None:
+        """返回 Pillow 校验后的图片格式，非法图片返回 None。"""
+        try:
+            # verify() 只校验图片容器，不完整解码像素。
+            # 这里仅需要可信的格式标签，因此这种方式足够且开销较小。
+            with PILImage.open(BytesIO(image_bytes)) as image:
+                image.verify()
+                return str(image.format or "").upper()
+        except (OSError, UnidentifiedImageError):
+            return None
+
+    @classmethod
+    def _image_format_to_mime_type(cls, image_format: str | None) -> str:
+        """将 Pillow 图片格式映射为 data URL 使用的 MIME 类型。"""
+        # 未识别格式保持历史 JPEG 兜底，兼容传入任意 `base64://` 内容的旧调用方。
+        return cls._IMAGE_FORMAT_MIME_TYPES.get(
+            str(image_format or "").upper(), "image/jpeg"
+        )
+
+    @classmethod
+    def _base64_image_ref_to_data_url(cls, image_ref: str) -> str:
+        """将 `base64://` 图片引用转换为带真实 MIME 的 data URL。"""
+        raw_base64 = image_ref.removeprefix("base64://")
+        mime_type = "image/jpeg"
+        try:
+            # 平台适配器可能通过 `base64://` 传入 PNG/GIF/WebP 等图片字节，
+            # 但不会额外携带 MIME 元数据。发送 OpenAI 请求前先识别真实格式，
+            # 避免把 PNG 等图片错误声明为 JPEG。
+            image_bytes = base64.b64decode(raw_base64)
+        except (binascii.Error, ValueError):
+            # 对错误或非图片 base64 保持旧行为：继续返回 JPEG data URL，
+            # 避免让历史调用方因为格式识别失败而直接抛异常。
+            pass
+        else:
+            image_format = cls._detect_image_format(image_bytes)
+            mime_type = cls._image_format_to_mime_type(image_format)
+        return f"data:{mime_type};base64,{raw_base64}"
+
+    @staticmethod
+    def _file_uri_to_path(file_uri: str) -> str:
+        """Normalize file URIs to paths.
+
+        `file://localhost/...` and drive-letter forms are treated as local paths.
+        Other non-empty hosts are preserved as UNC-style paths.
+        """
+        parsed = urlparse(file_uri)
+        if parsed.scheme != "file":
+            return file_uri
+
+        netloc = unquote(parsed.netloc or "")
+        path = unquote(parsed.path or "")
+        if re.fullmatch(r"[A-Za-z]:", netloc):
+            return str(Path(f"{netloc}{path}"))
+        if re.match(r"^/[A-Za-z]:/", path):
+            path = path[1:]
+        if netloc and netloc != "localhost":
+            path = f"//{netloc}{path}"
+        return str(Path(path))
+
     async def _image_ref_to_data_url(
         self,
         image_ref: str,
@@ -196,11 +302,14 @@ class ProviderOpenAIOfficial(Provider):
         *,
         image_detail: str | None = None,
     ) -> dict | None:
-        image_data = await self._image_ref_to_data_url(image_url, mode="safe")
-        if not image_data:
-            logger.warning("图片预处理结果为空，将忽略。")
-            return None
-        image_payload = {"url": image_data}
+        if image_url.startswith("data:"):
+            image_payload = {"url": image_url}
+        else:
+            image_data = await self._image_ref_to_data_url(image_url, mode="safe")
+            if not image_data:
+                logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
+                return None
+            image_payload = {"url": image_data}
 
         if image_detail:
             image_payload["detail"] = image_detail
@@ -244,12 +353,27 @@ class ProviderOpenAIOfficial(Provider):
 
         return url
 
+    async def _audio_ref_to_local_path(self, audio_ref: str) -> tuple[str, list[Path]]:
+        cleanup_paths: list[Path] = []
+        if audio_ref.startswith("http"):
+            suffix = PurePath(urlparse(audio_ref).path).suffix or ".wav"
+            temp_path = anyio.Path(get_astrbot_temp_path())
+            await temp_path.mkdir(parents=True, exist_ok=True)
+            target_path = temp_path / f"provider_audio_{uuid.uuid4().hex}{suffix}"
+            await download_file(audio_ref, str(target_path))
+            cleanup_paths.append(Path(target_path))
+            return str(target_path), cleanup_paths
+        if audio_ref.startswith("file://"):
+            return self._file_uri_to_path(audio_ref), cleanup_paths
+        return audio_ref, cleanup_paths
+
     async def _resolve_audio_part(self, audio_ref: str) -> dict | None:
         try:
             audio_data = await resolve_media_ref_to_base64_data(
                 audio_ref,
                 media_type="audio",
                 strict=True,
+                preserve_mp3=True,
             )
         except Exception as exc:
             logger.warning("音频预处理失败，将忽略。错误: %s", exc)
@@ -278,7 +402,8 @@ class ProviderOpenAIOfficial(Provider):
 
             try:
                 resolved_part = await self._resolve_image_part(
-                    url, image_detail=image_detail
+                    url,
+                    image_detail=image_detail,
                 )
             except Exception as exc:
                 logger.warning(
@@ -308,7 +433,8 @@ class ProviderOpenAIOfficial(Provider):
         return {**message, "content": new_content}
 
     async def _materialize_context_image_parts(
-        self, context_query: list[dict]
+        self,
+        context_query: list[dict],
     ) -> list[dict]:
         return [
             await self._materialize_message_image_parts(message)
@@ -327,7 +453,7 @@ class ProviderOpenAIOfficial(Provider):
         image_fallback_used: bool = False,
     ) -> tuple:
         logger.warning(
-            "检测到图片请求失败（%s），已移除图片并重试（保留文本内容）。",
+            "检测到图片请求失败(%s),已移除图片并重试(保留文本内容)｡",
             reason,
         )
         new_contexts = await self._remove_image_from_context(context_query)
@@ -364,6 +490,7 @@ class ProviderOpenAIOfficial(Provider):
         if isinstance(self.timeout, str):
             self.timeout = int(self.timeout)
 
+        self.client: AsyncAzureOpenAI | AsyncOpenAI
         if "api_version" in provider_config:
             # Using Azure OpenAI API
             self.client = AsyncAzureOpenAI(
@@ -447,7 +574,7 @@ class ProviderOpenAIOfficial(Provider):
                 models_str.append(model.id)
             return models_str
         except NotFoundError as e:
-            raise Exception(f"获取模型列表失败：{e}")
+            raise Exception(f"获取模型列表失败:{e}") from e
 
     @staticmethod
     def _sanitize_assistant_messages(payloads: dict) -> None:
@@ -467,12 +594,16 @@ class ProviderOpenAIOfficial(Provider):
 
         cleaned: list[Any] = []
         for idx, msg in enumerate(messages):
-            if not isinstance(msg, dict) or msg.get("role") != "assistant":
+            if not isinstance(msg, dict):
+                cleaned.append(msg)
+                continue
+            msg = cast("dict[str, Any]", msg)
+            if msg.get("role") != "assistant":
                 cleaned.append(msg)
                 continue
 
-            content = msg.get("content")
-            tool_calls = msg.get("tool_calls")
+            content: Any = msg.get("content")
+            tool_calls: Any = msg.get("tool_calls")
             reasoning_content = msg.get("reasoning_content")
 
             if _is_empty(content) and not tool_calls:
@@ -575,12 +706,13 @@ class ProviderOpenAIOfficial(Provider):
                 extra_body=extra_body,
                 extra_headers=build_conversation_headers(conversation_id),
             ),
+            retry_rate_limits=False,
             max_attempts=request_max_retries,
         )
 
         if not isinstance(completion, ChatCompletion):
             raise Exception(
-                f"API 返回的 completion 类型错误：{type(completion)}: {completion}。",
+                f"API 返回的 completion 类型错误:{type(completion)}: {completion}｡",
             )
 
         logger.debug(f"completion: {completion}")
@@ -597,7 +729,7 @@ class ProviderOpenAIOfficial(Provider):
         request_max_retries: int | None = None,
         conversation_id: str | None = None,
     ) -> AsyncGenerator[LLMResponse, None]:
-        """流式查询API，逐步返回结果"""
+        """流式查询API,逐步返回结果"""
         if tools:
             model = payloads.get("model", "").lower()
             omit_empty_param_field = "gemini" in model
@@ -636,6 +768,7 @@ class ProviderOpenAIOfficial(Provider):
                 extra_headers=build_conversation_headers(conversation_id),
                 stream_options={"include_usage": True},
             ),
+            retry_rate_limits=False,
             max_attempts=request_max_retries,
         )
 
@@ -760,6 +893,7 @@ class ProviderOpenAIOfficial(Provider):
 
         Returns:
             Normalized plain text string.
+
         """
         # Handle dict format (e.g., {"type": "text", "text": "..."})
         if isinstance(raw_content, dict):
@@ -826,7 +960,7 @@ class ProviderOpenAIOfficial(Provider):
                                 text_val = part.get("text", "")
                                 # Coerce to str in case text is null or non-string
                                 text_parts.append(
-                                    str(text_val) if text_val is not None else ""
+                                    str(text_val) if text_val is not None else "",
                                 )
                         if text_parts:
                             return "".join(text_parts)
@@ -836,7 +970,9 @@ class ProviderOpenAIOfficial(Provider):
         return str(raw_content) if raw_content is not None else ""
 
     async def _parse_openai_completion(
-        self, completion: ChatCompletion, tools: ToolSet | None
+        self,
+        completion: ChatCompletion,
+        tools: ToolSet | None,
     ) -> LLMResponse:
         """Parse OpenAI ChatCompletion into LLMResponse"""
         llm_response = LLMResponse("assistant")
@@ -852,7 +988,7 @@ class ProviderOpenAIOfficial(Provider):
 
         if not completion.choices:
             raise EmptyModelOutputError(
-                f"OpenAI completion has no choices. response_id={completion.id}"
+                f"OpenAI completion has no choices. response_id={completion.id}",
             )
         choice = completion.choices[0]
 
@@ -893,27 +1029,32 @@ class ProviderOpenAIOfficial(Provider):
             for tool_call in choice.message.tool_calls:
                 if isinstance(tool_call, str):
                     # workaround for #1359
-                    tool_call = json.loads(tool_call)
+                    tool_call = (
+                        ChatCompletionMessageFunctionToolCall.model_validate_json(
+                            tool_call
+                        )
+                    )
                 if tools is None:
                     # 工具集未提供
                     # Should be unreachable
                     raise Exception("工具集未提供")
 
-                if tool_call.type == "function":
-                    # workaround for #1454
-                    if isinstance(tool_call.function.arguments, str):
+                if isinstance(tool_call, ChatCompletionMessageFunctionToolCall):
+                    # Work around providers returning non-string arguments.
+                    func = tool_call.function
+                    if isinstance(func.arguments, str):
                         try:
-                            args = json.loads(tool_call.function.arguments)
+                            args = json.loads(func.arguments)
                         except json.JSONDecodeError as e:
                             logger.error(f"解析参数失败: {e}")
                             args = {}
                     else:
-                        args = tool_call.function.arguments
+                        args = func.arguments
                     # Some API may return None for tools with no parameters
                     if args is None:
                         args = {}
                     args_ls.append(args)
-                    func_name_ls.append(tool_call.function.name)
+                    func_name_ls.append(func.name)
                     tool_call_ids.append(tool_call.id)
 
                     # gemini-2.5 / gemini-3 series extra_content handling
@@ -929,7 +1070,7 @@ class ProviderOpenAIOfficial(Provider):
         # specially handle finish reason
         if choice.finish_reason == "content_filter":
             raise Exception(
-                "API 返回的 completion 由于内容安全过滤被拒绝(非 AstrBot)。",
+                "API 返回的 completion 由于内容安全过滤被拒绝(非 AstrBot)｡",
             )
         has_text_output = bool((llm_response.completion_text or "").strip())
         has_reasoning_output = bool((llm_response.reasoning_content or "").strip())
@@ -941,7 +1082,7 @@ class ProviderOpenAIOfficial(Provider):
             logger.error(f"OpenAI completion has no usable output: {completion}.")
             raise EmptyModelOutputError(
                 "OpenAI completion has no usable output. "
-                f"response_id={completion.id}, finish_reason={choice.finish_reason}"
+                f"response_id={completion.id}, finish_reason={choice.finish_reason}",
             )
 
         llm_response.raw_completion = completion
@@ -998,8 +1139,8 @@ class ProviderOpenAIOfficial(Provider):
             context_query = await self._materialize_context_image_parts(context_query)
 
         model = model or self.get_model()
-
-        payloads = {"messages": context_query, "model": model}
+        payloads = {**kwargs, "messages": context_query, "model": model}
+        payloads.pop("abort_signal", None)
 
         self._finally_convert_payload(payloads)
 
@@ -1028,7 +1169,8 @@ class ProviderOpenAIOfficial(Provider):
         is_mimo_reasoning = model in mimo_reasoning_models
         for message in payloads.get("messages", []):
             if message.get("role") == "assistant" and isinstance(
-                message.get("content"), list
+                message.get("content"),
+                list,
             ):
                 reasoning_content = ""
                 reasoning_content_present = False
@@ -1036,7 +1178,9 @@ class ProviderOpenAIOfficial(Provider):
                 for part in message["content"]:
                     if part.get("type") == "think":
                         reasoning_content_present = True
-                        reasoning_content += str(part.get("think"))
+                        reasoning_content = (reasoning_content or "") + str(
+                            part.get("think"),
+                        )
                     else:
                         new_content.append(part)
                 # Some providers (Grok, etc.) reject empty content lists.
@@ -1072,7 +1216,8 @@ class ProviderOpenAIOfficial(Provider):
                         json.loads(content)
                     except (json.JSONDecodeError, ValueError):
                         message["content"] = json.dumps(
-                            {"result": content}, ensure_ascii=False
+                            {"result": content},
+                            ensure_ascii=False,
                         )
 
     async def _handle_api_error(
@@ -1090,7 +1235,7 @@ class ProviderOpenAIOfficial(Provider):
         """处理API错误并尝试恢复"""
         if "429" in str(e):
             logger.warning(
-                f"API 调用过于频繁，尝试使用其他 Key 重试。当前 Key: {chosen_key[:12]}",
+                "API 调用过于频繁,尝试使用其他 Key 重试｡",
             )
             # 最后一次不等待
             if retry_cnt < max_retries - 1:
@@ -1111,7 +1256,7 @@ class ProviderOpenAIOfficial(Provider):
             raise e
         if "maximum context length" in str(e) or "context length" in str(e).lower():
             logger.warning(
-                f"上下文长度超过限制。尝试弹出最早的记录然后重试。当前记录条数: {len(context_query)}",
+                f"上下文长度超过限制｡尝试弹出最早的记录然后重试｡当前记录条数: {len(context_query)}",
             )
             await self.pop_record(context_query)
             payloads["messages"] = context_query
@@ -1181,7 +1326,7 @@ class ProviderOpenAIOfficial(Provider):
                 None,
                 image_fallback_used,
             )
-        # logger.error(f"发生了错误。Provider 配置如下: {self.provider_config}")
+        # logger.error(f"发生了错误｡Provider 配置如下: {self.provider_config}")
 
         if is_connection_error(e):
             proxy = self.provider_config.get("proxy", "")
@@ -1266,7 +1411,7 @@ class ProviderOpenAIOfficial(Provider):
                     break
 
         if retry_cnt == max_retries - 1 or llm_response is None:
-            logger.error(f"API 调用失败，重试 {max_retries} 次仍然失败。")
+            logger.error(f"API 调用失败,重试 {max_retries} 次仍然失败｡")
             if last_exception is None:
                 raise Exception("未知错误")
             raise last_exception
@@ -1283,6 +1428,7 @@ class ProviderOpenAIOfficial(Provider):
         system_prompt=None,
         tool_calls_result=None,
         model=None,
+        extra_user_content_parts: list[ContentPart] | None = None,
         tool_choice: Literal["auto", "required"] = "auto",
         request_max_retries: int | None = None,
         **kwargs,
@@ -1348,7 +1494,7 @@ class ProviderOpenAIOfficial(Provider):
                     break
 
         if retry_cnt == max_retries - 1:
-            logger.error(f"API 调用失败，重试 {max_retries} 次仍然失败。")
+            logger.error(f"API 调用失败,重试 {max_retries} 次仍然失败｡")
             if last_exception is None:
                 raise Exception("未知错误")
             raise last_exception
@@ -1389,11 +1535,10 @@ class ProviderOpenAIOfficial(Provider):
         extra_user_content_parts: list[ContentPart] | None = None,
     ) -> dict:
         """组装成符合 OpenAI 格式的 role 为 user 的消息段"""
-
         # 构建内容块列表
         content_blocks = []
 
-        # 1. 用户原始发言（OpenAI 建议：用户发言在前）
+        # 1. 用户原始发言(OpenAI 建议:用户发言在前)
         if text:
             content_blocks.append({"type": "text", "text": text})
         elif image_urls:
@@ -1402,10 +1547,10 @@ class ProviderOpenAIOfficial(Provider):
         elif audio_urls:
             content_blocks.append({"type": "text", "text": "[Audio]"})
         elif extra_user_content_parts:
-            # 如果只有额外内容块，也需要添加占位文本
+            # 如果只有额外内容块,也需要添加占位文本
             content_blocks.append({"type": "text", "text": " "})
 
-        # 2. 额外的内容块（系统提醒、指令等）
+        # 2. 额外的内容块(系统提醒､指令等)
         if extra_user_content_parts:
             for part in extra_user_content_parts:
                 if isinstance(part, TextPart):
@@ -1454,9 +1599,7 @@ class ProviderOpenAIOfficial(Provider):
         """将图片转换为 base64"""
         image_data = await self._image_ref_to_data_url(image_url, mode="strict")
         if image_data is None:
-            raise RuntimeError(
-                f"Failed to encode image data: {describe_media_ref(image_url)}"
-            )
+            raise RuntimeError(f"Failed to encode image data: {image_url}")
         return image_data
 
     async def terminate(self):

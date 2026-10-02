@@ -1,7 +1,6 @@
 <template>
   <BaseFolderItemSelector
     :model-value="modelValue"
-    @update:model-value="handleUpdate"
     :folder-tree="folderTree"
     :items="currentPersonas as any"
     :tree-loading="treeLoading"
@@ -14,6 +13,7 @@
     item-name-field="persona_id"
     item-description-field="system_prompt"
     :display-value-formatter="formatDisplayValue"
+    @update:model-value="handleUpdate"
     @navigate="handleNavigate"
     @create="openCreatePersona"
     @edit="openEditPersona"
@@ -31,12 +31,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from "vue";
-import { personaApi } from "@/api/v1";
+import { computed, onMounted, ref } from "vue";
 import BaseFolderItemSelector from "@/components/folder/BaseFolderItemSelector.vue";
-import PersonaForm from "./PersonaForm.vue";
-import { useI18n, useModuleI18n } from "@/i18n/composables";
 import type { FolderTreeNode, SelectableItem } from "@/components/folder/types";
+import { useI18n, useModuleI18n } from "@/i18n/composables";
+import axios from "@/utils/request";
+import PersonaForm from "./PersonaForm.vue";
 
 interface Persona {
   persona_id: string;
@@ -79,10 +79,7 @@ const defaultPersona: SelectableItem = {
 };
 
 // 递归查找文件夹名称
-function findFolderName(
-  nodes: FolderTreeNode[],
-  folderId: string,
-): string | null {
+function findFolderName(nodes: FolderTreeNode[], folderId: string): string | null {
   for (const node of nodes) {
     if (node.folder_id === folderId) {
       return node.name;
@@ -136,7 +133,7 @@ function handleUpdate(value: string) {
 async function loadFolderTree() {
   treeLoading.value = true;
   try {
-    const response = await personaApi.tree();
+    const response = await axios.get("/api/persona/folder/tree");
     if (response.data.status === "ok") {
       folderTree.value = response.data.data || [];
     }
@@ -152,7 +149,15 @@ async function loadFolderTree() {
 async function loadPersonasInFolder(folderId: string | null) {
   itemsLoading.value = true;
   try {
-    const response = await personaApi.list(folderId);
+    // 使用 /api/persona/list 端点，通过 folder_id 参数筛选
+    const params = new URLSearchParams();
+    if (folderId !== null) {
+      params.set("folder_id", folderId);
+    } else {
+      // 根目录：folder_id 为空字符串表示获取根目录下的人格
+      params.set("folder_id", "");
+    }
+    const response = await axios.get(`/api/persona/list?${params.toString()}`);
     if (response.data.status === "ok") {
       currentPersonas.value = response.data.data || [];
     }
@@ -184,7 +189,7 @@ function openEditPersona(persona: Persona) {
 
 // 人格保存成功（创建或编辑）
 async function handlePersonaSaved(message: string) {
-  console.log("人格保存成功:", message);
+  console.info("人格保存成功:", message);
   const savedPersonaId = editingPersona.value?.persona_id || "";
   showPersonaDialog.value = false;
   editingPersona.value = null;

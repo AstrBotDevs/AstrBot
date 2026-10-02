@@ -4,9 +4,10 @@ import json
 import re
 import time
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 from uuid import uuid4
 
+import anyio
 import lark_oapi as lark
 from lark_oapi.api.contact.v3 import GetUserRequest
 from lark_oapi.api.im.v1 import (
@@ -27,11 +28,10 @@ from astrbot.api.platform import (
 )
 from astrbot.core import sp
 from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.platform.register import register_platform_adapter
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-from astrbot.core.utils.media_utils import MediaResolver
 from astrbot.core.utils.webhook_utils import log_webhook_info
 
-from ...register import register_platform_adapter
 from .bot_info import request_lark_bot_info
 from .lark_event import LarkMessageEvent
 from .server import LarkWebhookServer
@@ -43,7 +43,9 @@ USER_NAME_LOOKUP_TIMEOUT_SECONDS = 5
 
 
 @register_platform_adapter(
-    "lark", "飞书机器人官方 API 适配器", support_streaming_message=True
+    "lark",
+    "飞书机器人官方 API 适配器",
+    support_streaming_message=True,
 )
 class LarkPlatformAdapter(Platform):
     def __init__(
@@ -53,12 +55,13 @@ class LarkPlatformAdapter(Platform):
         event_queue: asyncio.Queue,
     ) -> None:
         super().__init__(platform_config, event_queue)
-
         self.appid = platform_config["app_id"]
         self.appsecret = platform_config["app_secret"]
         self.domain = platform_config.get("domain", lark.FEISHU_DOMAIN)
-        self.bot_name = "astrbot"
+        self.bot_name = platform_config.get("lark_bot_name", "astrbot")
         self.bot_open_id = ""
+        if not self.bot_name:
+            logger.warning("未设置飞书机器人名称,@ 机器人可能得不到回复｡")
 
         # socket or webhook
         self.connection_mode = platform_config.get("lark_connection_mode", "socket")
@@ -75,9 +78,7 @@ class LarkPlatformAdapter(Platform):
             .register_p2_im_message_receive_v1(do_v2_msg_event)
             .build()
         )
-
         self.do_v2_msg_event = do_v2_msg_event
-
         self.client = lark.ws.Client(
             app_id=self.appid,
             app_secret=self.appsecret,
@@ -85,7 +86,6 @@ class LarkPlatformAdapter(Platform):
             domain=self.domain,
             event_handler=self.event_handler,
         )
-
         self.lark_api = (
             lark.Client.builder()
             .app_id(self.appid)
@@ -94,12 +94,10 @@ class LarkPlatformAdapter(Platform):
             .domain(self.domain)
             .build()
         )
-
         self.webhook_server = None
         if self.connection_mode == "webhook":
             self.webhook_server = LarkWebhookServer(platform_config, event_queue)
             self.webhook_server.set_callback(self.handle_webhook_event)
-
         self.event_id_timestamps: dict[str, float] = {}
         self._user_name_cache: dict[str, tuple[str, float]] = {}
 
@@ -113,7 +111,6 @@ class LarkPlatformAdapter(Platform):
         if self.lark_api.im is None:
             logger.error("[Lark] API Client im 模块未初始化")
             return None
-
         request = (
             GetMessageResourceRequest.builder()
             .message_id(message_id)
@@ -124,15 +121,12 @@ class LarkPlatformAdapter(Platform):
         response = await self.lark_api.im.v1.message_resource.aget(request)
         if not response.success():
             logger.error(
-                f"[Lark] 下载消息资源失败 type={resource_type}, key={file_key}, "
-                f"code={response.code}, msg={response.msg}",
+                f"[Lark] 下载消息资源失败 type={resource_type}, key={file_key}, code={response.code}, msg={response.msg}",
             )
             return None
-
         if response.file is None:
             logger.error(f"[Lark] 消息资源响应中不包含文件流: {file_key}")
             return None
-
         return response.file.read()
 
     @staticmethod
@@ -188,7 +182,6 @@ class LarkPlatformAdapter(Platform):
                 parts.append("[audio]")
             elif isinstance(comp, Comp.Video):
                 parts.append("[video]")
-
         return " ".join(parts).strip()
 
     @staticmethod
@@ -208,12 +201,10 @@ class LarkPlatformAdapter(Platform):
         at_map: dict[str, Comp.At] = {}
         if not mentions:
             return at_map
-
         for mention in mentions:
             key = getattr(mention, "key", None)
             if not key:
                 continue
-
             mention_id = getattr(mention, "id", None)
             open_id = ""
             if mention_id is not None:
@@ -221,10 +212,8 @@ class LarkPlatformAdapter(Platform):
                     open_id = getattr(mention_id, "open_id", "") or ""
                 else:
                     open_id = str(mention_id)
-
             mention_name = str(getattr(mention, "name", "") or "")
             at_map[key] = Comp.At(qq=open_id, name=mention_name)
-
         return at_map
 
     async def _parse_message_components(
@@ -236,10 +225,9 @@ class LarkPlatformAdapter(Platform):
         at_map: dict[str, Comp.At],
     ) -> list[Comp.BaseMessageComponent]:
         components: list[Comp.BaseMessageComponent] = []
-
         if message_type == "text":
             message_str_raw = str(content.get("text", ""))
-            at_pattern = r"(@_user_\d+)"
+            at_pattern = "(@_user_\\d+)"
             parts = re.split(at_pattern, message_str_raw)
             for part in parts:
                 segment = part.strip()
@@ -250,18 +238,11 @@ class LarkPlatformAdapter(Platform):
                 else:
                     components.append(Comp.Plain(segment))
             return components
-
         if message_type in ("post", "image"):
             if message_type == "image":
-                comp_list = [
-                    {
-                        "tag": "img",
-                        "image_key": content.get("image_key"),
-                    },
-                ]
+                comp_list = [{"tag": "img", "image_key": content.get("image_key")}]
             else:
                 comp_list = self._parse_post_content(content)
-
             for comp in comp_list:
                 tag = comp.get("tag")
                 if tag == "at":
@@ -314,9 +295,7 @@ class LarkPlatformAdapter(Platform):
                     )
                     if file_path:
                         components.append(Comp.Video(file=file_path, path=file_path))
-
             return components
-
         if message_type == "file":
             file_key = str(content.get("file_key", "")).strip()
             file_name = str(content.get("file_name", "")).strip() or "lark_file"
@@ -335,7 +314,6 @@ class LarkPlatformAdapter(Platform):
             if file_path:
                 components.append(Comp.File(name=file_name, file=file_path))
             return components
-
         if message_type == "audio":
             file_key = str(content.get("file_key", "")).strip()
             if not message_id:
@@ -351,14 +329,8 @@ class LarkPlatformAdapter(Platform):
                 default_suffix=".opus",
             )
             if file_path:
-                path_wav = await MediaResolver(
-                    file_path,
-                    media_type="audio",
-                    default_suffix=".wav",
-                ).to_path(target_format="wav")
-                components.append(Comp.Record(file=path_wav, url=path_wav))
+                components.append(Comp.Record(file=file_path, url=file_path))
             return components
-
         if message_type == "media":
             file_key = str(content.get("file_key", "")).strip()
             file_name = str(content.get("file_name", "")).strip() or "lark_media.mp4"
@@ -378,7 +350,6 @@ class LarkPlatformAdapter(Platform):
             if file_path:
                 components.append(Comp.Video(file=file_path, path=file_path))
             return components
-
         return components
 
     async def _build_reply_from_parent_id(
@@ -388,22 +359,16 @@ class LarkPlatformAdapter(Platform):
         if self.lark_api.im is None:
             logger.error("[Lark] API Client im 模块未初始化")
             return None
-
         request = GetMessageRequest.builder().message_id(parent_message_id).build()
         response = await self.lark_api.im.v1.message.aget(request)
         if not response.success():
             logger.error(
-                f"[Lark] 获取引用消息失败 id={parent_message_id}, "
-                f"code={response.code}, msg={response.msg}",
+                f"[Lark] 获取引用消息失败 id={parent_message_id}, code={response.code}, msg={response.msg}",
             )
             return None
-
         if response.data is None or not response.data.items:
-            logger.error(
-                f"[Lark] 引用消息响应为空 id={parent_message_id}",
-            )
+            logger.error(f"[Lark] 引用消息响应为空 id={parent_message_id}")
             return None
-
         parent_message = response.data.items[0]
         quoted_message_id = parent_message.message_id or parent_message_id
         quoted_sender_id = (
@@ -428,10 +393,7 @@ class LarkPlatformAdapter(Platform):
                 if isinstance(parsed, dict):
                     quoted_content_json = parsed
             except json.JSONDecodeError:
-                logger.warning(
-                    f"[Lark] 解析引用消息内容失败 id={quoted_message_id}",
-                )
-
+                logger.warning(f"[Lark] 解析引用消息内容失败 id={quoted_message_id}")
         quoted_at_map = self._build_at_map(parent_message.mentions)
         quoted_chain = await self._parse_message_components(
             message_id=quoted_message_id,
@@ -443,7 +405,6 @@ class LarkPlatformAdapter(Platform):
         sender_nickname = (
             quoted_sender_id[:8] if quoted_sender_id != "unknown" else "unknown"
         )
-
         return Comp.Reply(
             id=quoted_message_id,
             chain=quoted_chain,
@@ -470,15 +431,14 @@ class LarkPlatformAdapter(Platform):
         )
         if file_bytes is None:
             return None
-
         suffix = Path(file_name).suffix if file_name else default_suffix
-        temp_dir = Path(get_astrbot_temp_path())
-        temp_dir.mkdir(parents=True, exist_ok=True)
+        temp_dir = anyio.Path(get_astrbot_temp_path())
+        await temp_dir.mkdir(parents=True, exist_ok=True)
         temp_path = (
             temp_dir / f"lark_{message_type}_{file_name}_{uuid4().hex[:4]}{suffix}"
         )
-        temp_path.write_bytes(file_bytes)
-        return str(temp_path.resolve())
+        await temp_path.write_bytes(file_bytes)
+        return str(await temp_path.resolve())
 
     def _clean_expired_events(self) -> None:
         """清理超过 30 分钟的事件记录"""
@@ -498,7 +458,8 @@ class LarkPlatformAdapter(Platform):
             event_id: 事件ID
 
         Returns:
-            True 表示重复事件，False 表示新事件
+            True 表示重复事件,False 表示新事件
+
         """
         self._clean_expired_events()
         if event_id in self.event_id_timestamps:
@@ -538,14 +499,13 @@ class LarkPlatformAdapter(Platform):
             receive_id_type=id_type,
             fallback_chat_id=fallback_chat_id,
         )
-
         await super().send_by_session(session, message_chain)
 
     def meta(self) -> PlatformMetadata:
         return PlatformMetadata(
             name="lark",
             description="飞书机器人官方 API 适配器",
-            id=cast(str, self.config.get("id")),
+            id=str(self.config.get("id") or "lark"),
             support_streaming_message=True,
         )
 
@@ -557,9 +517,7 @@ class LarkPlatformAdapter(Platform):
         if message is None:
             logger.debug("[Lark] 事件中没有消息体(message is None)")
             return
-
         abm = AstrBotMessage()
-
         if message.create_time:
             abm.timestamp = int(message.create_time) // 1000
         else:
@@ -574,40 +532,33 @@ class LarkPlatformAdapter(Platform):
             abm.group_id = message.chat_id
         abm.self_id = self.bot_open_id or self.bot_name
         abm.message_str = ""
-
-        at_list = {}
+        at_list: dict[str, Comp.At] = {}
         if message.parent_id:
             reply_seg = await self._build_reply_from_parent_id(message.parent_id)
             if reply_seg:
                 abm.message.append(reply_seg)
-
         if message.mentions:
             for m in message.mentions:
-                if m.id is None:
+                if m.id is None or m.key is None:
                     continue
-                # 飞书 open_id 可能是 None，这里做个防护
-                open_id = m.id.open_id if m.id.open_id else ""
+                open_id = m.id.open_id or ""
                 at_list[m.key] = Comp.At(qq=open_id, name=m.name)
 
                 if (self.bot_open_id and open_id == self.bot_open_id) or (
                     m.name == self.bot_name
                 ):
                     abm.self_id = open_id or self.bot_open_id or self.bot_name
-
         if message.content is None:
             logger.warning("[Lark] 消息内容为空")
             return
-
         try:
             content_json_b = json.loads(message.content)
         except json.JSONDecodeError:
             logger.error(f"[Lark] 解析消息内容失败: {message.content}")
             return
-
         if not isinstance(content_json_b, dict):
             logger.error(f"[Lark] 消息内容不是 JSON Object: {message.content}")
             return
-
         logger.debug(f"[Lark] 解析消息内容: {content_json_b}")
         parsed_components = await self._parse_message_components(
             message_id=message.message_id,
@@ -625,7 +576,6 @@ class LarkPlatformAdapter(Platform):
         if message.message_id is None:
             logger.error("[Lark] 消息缺少 message_id")
             return
-
         if (
             event.event.sender is None
             or event.event.sender.sender_id is None
@@ -633,7 +583,6 @@ class LarkPlatformAdapter(Platform):
         ):
             logger.error("[Lark] 消息发送者信息不完整")
             return
-
         abm.message_id = message.message_id
         abm.raw_message = message
         sender_open_id = event.event.sender.sender_id.open_id
@@ -657,8 +606,11 @@ class LarkPlatformAdapter(Platform):
                         .user_id_type("open_id")
                         .build()
                     )
+                    contact = self.lark_api.contact
+                    if contact is None:
+                        raise RuntimeError("Lark contact service is unavailable")
                     response = await asyncio.wait_for(
-                        self.lark_api.contact.v3.user.aget(request),
+                        contact.v3.user.aget(request),
                         timeout=USER_NAME_LOOKUP_TIMEOUT_SECONDS,
                     )
                     if response.success() and response.data and response.data.user:
@@ -729,6 +681,7 @@ class LarkPlatformAdapter(Platform):
 
         Args:
             event_data: Webhook 事件数据
+
         """
         try:
             header = event_data.get("header", {})
@@ -739,7 +692,7 @@ class LarkPlatformAdapter(Platform):
             event_type = header.get("event_type", "")
             if event_type == "im.message.receive_v1":
                 processor = P2ImMessageReceiveV1Processor(self.do_v2_msg_event)
-                data = (processor.type())(event_data)
+                data = processor.type()(event_data)
                 processor.do(data)
             else:
                 logger.debug(f"[Lark Webhook] 未处理的事件类型: {event_type}")
@@ -753,25 +706,21 @@ class LarkPlatformAdapter(Platform):
             logger.error(f"[Lark] 启动时获取机器人信息失败: {e}", exc_info=True)
 
         if self.connection_mode == "webhook":
-            # Webhook 模式
             if self.webhook_server is None:
-                logger.error("[Lark] Webhook 模式已启用，但 webhook_server 未初始化")
+                logger.error("[Lark] Webhook 模式已启用,但 webhook_server 未初始化")
                 return
-
             webhook_uuid = self.config.get("webhook_uuid")
             if webhook_uuid:
                 log_webhook_info(f"{self.meta().id}(飞书 Webhook)", webhook_uuid)
             else:
-                logger.warning("[Lark] Webhook 模式已启用，但未配置 webhook_uuid")
+                logger.warning("[Lark] Webhook 模式已启用,但未配置 webhook_uuid")
         else:
-            # 长连接模式
             await self.client._connect()
 
     async def webhook_callback(self, request: Any) -> Any:
         """统一 Webhook 回调入口"""
         if not self.webhook_server:
-            return {"error": "Webhook server not initialized"}, 500
-
+            return ({"error": "Webhook server not initialized"}, 500)
         return await self.webhook_server.handle_callback(request)
 
     async def _refresh_bot_info(self) -> None:
@@ -796,5 +745,5 @@ class LarkPlatformAdapter(Platform):
     def unified_webhook(self) -> bool:
         return bool(
             self.config.get("lark_connection_mode", "") == "webhook"
-            and self.config.get("webhook_uuid")
+            and self.config.get("webhook_uuid"),
         )

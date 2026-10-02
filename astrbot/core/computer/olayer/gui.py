@@ -1,6 +1,4 @@
-"""
-GUI automation component.
-"""
+"""GUI automation component."""
 
 from typing import Any, Protocol
 

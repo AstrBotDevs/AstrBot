@@ -45,29 +45,19 @@ export function usePluginI18n() {
   };
 
   const pluginName = (plugin) => {
-    const fallback = plugin?.display_name?.length
-      ? plugin.display_name
-      : plugin?.name;
+    const fallback = plugin?.display_name?.length ? plugin.display_name : plugin?.name;
     return resolve(plugin?.i18n, "metadata.display_name", fallback || "");
   };
 
   const pluginDesc = (plugin, fallback = "") => {
-    return resolve(
-      plugin?.i18n,
-      "metadata.desc",
-      fallback || plugin?.desc || plugin?.description || "",
-    );
+    return resolve(plugin?.i18n, "metadata.desc", fallback || plugin?.desc || plugin?.description || "");
   };
 
   const pluginShortDesc = (plugin, fallback = "") => {
     return resolve(
       plugin?.i18n,
       "metadata.short_desc",
-      fallback ||
-        plugin?.short_desc ||
-        plugin?.desc ||
-        plugin?.description ||
-        "",
+      fallback || plugin?.short_desc || plugin?.desc || plugin?.description || "",
     );
   };
 
@@ -81,19 +71,12 @@ export function usePluginI18n() {
 
   const pluginPageTitle = (plugin, page, fallback = "") => {
     const pageFallback =
-      fallback ||
-      (page && typeof page === "object"
-        ? page.title || page.name || page.page_name
-        : page) ||
-      "";
+      fallback || (page && typeof page === "object" ? page.title || page.name || page.page_name : page) || "";
     return pluginPageText(plugin, page, "title", pageFallback);
   };
 
   const pluginPageDescription = (plugin, page, fallback = "") => {
-    const pageFallback =
-      fallback ||
-      (page && typeof page === "object" ? page.description || page.desc : "") ||
-      "";
+    const pageFallback = fallback || (page && typeof page === "object" ? page.description || page.desc : "") || "";
     return pluginPageText(plugin, page, "description", pageFallback);
   };
 

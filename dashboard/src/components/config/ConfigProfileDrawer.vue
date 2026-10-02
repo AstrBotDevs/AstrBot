@@ -1,7 +1,7 @@
 <script setup>
-import { computed } from 'vue';
-import { useModuleI18n } from '@/i18n/composables';
-import ConfigPage from '@/views/ConfigPage.vue';
+import { computed } from "vue";
+import { useModuleI18n } from "@/i18n/composables";
+import ConfigPage from "@/views/ConfigPage.vue";
 
 const props = defineProps({
   modelValue: {
@@ -10,16 +10,16 @@ const props = defineProps({
   },
   configId: {
     type: String,
-    default: '',
+    default: "",
   },
 });
-const emit = defineEmits(['update:modelValue']);
+const emit = defineEmits(["update:modelValue"]);
 
-const { tm } = useModuleI18n('core/shared');
+const { tm } = useModuleI18n("core/shared");
 
 const open = computed({
   get: () => props.modelValue,
-  set: (value) => emit('update:modelValue', value),
+  set: (value) => emit("update:modelValue", value),
 });
 
 function close() {

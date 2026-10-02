@@ -216,8 +216,6 @@
 
 <script setup lang="ts">
 import "@/components/chat/chatPanelTransition.css";
-import { computed, ref, watch } from "vue";
-import { useTheme } from "vuetify";
 import {
   ChevronDown,
   ChevronRight,
@@ -230,6 +228,8 @@ import {
   Search,
   X,
 } from "@lucide/vue";
+import { computed, ref, watch } from "vue";
+import { useTheme } from "vuetify";
 import { chatApi } from "@/api/v1";
 import { useModuleI18n } from "@/i18n/composables";
 
@@ -277,11 +277,7 @@ const visibleEntries = computed(() => {
 
   const visit = (entries: WorkspaceEntry[], depth: number) => {
     entries.forEach((entry) => {
-      if (
-        !query ||
-        entry.type === "directory" ||
-        entry.name.toLocaleLowerCase().includes(query)
-      ) {
+      if (!query || entry.type === "directory" || entry.name.toLocaleLowerCase().includes(query)) {
         flattened.push({ entry, depth });
       }
       if (entry.type === "directory" && entry.expanded && entry.children) {
@@ -299,10 +295,7 @@ watch(
   async ([open, projectId], previous) => {
     if (!open || !projectId) return;
     const previousProjectId = previous?.[1];
-    if (
-      projectId !== previousProjectId ||
-      loadedProjectId.value !== projectId
-    ) {
+    if (projectId !== previousProjectId || loadedProjectId.value !== projectId) {
       resetPanel();
       await loadDirectory("");
     }
@@ -321,22 +314,13 @@ watch(
     if (!content || !path) return;
 
     try {
-      const { getShikiHighlighter, renderShikiCode } = await import(
-        "@/utils/shiki"
-      );
+      const { getShikiHighlighter, renderShikiCode } = await import("@/utils/shiki");
       const highlighter = await getShikiHighlighter();
       if (cancelled) return;
 
       const name = path.split("/").pop()?.toLowerCase() || "";
-      const language = name.startsWith("dockerfile.")
-        ? "dockerfile"
-        : name.split(".").pop();
-      highlightedContent.value = renderShikiCode(
-        highlighter,
-        content,
-        language,
-        dark ? "dark" : "light",
-      );
+      const language = name.startsWith("dockerfile.") ? "dockerfile" : name.split(".").pop();
+      highlightedContent.value = renderShikiCode(highlighter, content, language, dark ? "dark" : "light");
     } catch (error) {
       if (!cancelled) console.warn("Failed to highlight workspace file", error);
     }
@@ -389,13 +373,9 @@ async function loadDirectory(path: string, parent?: WorkspaceEntry) {
       return;
     }
     if (response.data?.status !== "ok") {
-      throw new Error(
-        response.data?.message || tm("workspaceFiles.loadFailed"),
-      );
+      throw new Error(response.data?.message || tm("workspaceFiles.loadFailed"));
     }
-    const entries = (
-      (response.data?.data?.entries || []) as WorkspaceEntry[]
-    ).map((entry) => ({ ...entry }));
+    const entries = ((response.data?.data?.entries || []) as WorkspaceEntry[]).map((entry) => ({ ...entry }));
     if (parent) {
       parent.children = entries;
     } else {
@@ -407,9 +387,7 @@ async function loadDirectory(path: string, parent?: WorkspaceEntry) {
       return;
     }
     treeError.value =
-      (error as any)?.response?.data?.message ||
-      (error as Error)?.message ||
-      tm("workspaceFiles.loadFailed");
+      (error as any)?.response?.data?.message || (error as Error)?.message || tm("workspaceFiles.loadFailed");
     if (parent) {
       parent.expanded = false;
     }
@@ -447,17 +425,12 @@ async function openEntry(entry: WorkspaceEntry) {
 
   fileLoading.value = true;
   try {
-    const response = await chatApi.getProjectWorkspaceFile(
-      projectId,
-      entry.path,
-    );
+    const response = await chatApi.getProjectWorkspaceFile(projectId, entry.path);
     if (generation !== fileGeneration.value || projectId !== props.projectId) {
       return;
     }
     if (response.data?.status !== "ok") {
-      throw new Error(
-        response.data?.message || tm("workspaceFiles.previewFailed"),
-      );
+      throw new Error(response.data?.message || tm("workspaceFiles.previewFailed"));
     }
     fileContent.value = response.data?.data?.content || "";
   } catch (error) {
@@ -465,9 +438,7 @@ async function openEntry(entry: WorkspaceEntry) {
       return;
     }
     fileError.value =
-      (error as any)?.response?.data?.message ||
-      (error as Error)?.message ||
-      tm("workspaceFiles.previewFailed");
+      (error as any)?.response?.data?.message || (error as Error)?.message || tm("workspaceFiles.previewFailed");
   } finally {
     if (generation === fileGeneration.value && projectId === props.projectId) {
       fileLoading.value = false;
@@ -481,10 +452,7 @@ async function downloadSelectedFile() {
   }
   fileDownloading.value = true;
   try {
-    const response = await chatApi.downloadProjectWorkspaceFile(
-      props.projectId,
-      selectedFilePath.value,
-    );
+    const response = await chatApi.downloadProjectWorkspaceFile(props.projectId, selectedFilePath.value);
     const url = URL.createObjectURL(response.data);
     const anchor = document.createElement("a");
     anchor.href = url;

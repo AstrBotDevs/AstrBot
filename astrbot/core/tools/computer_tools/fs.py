@@ -31,39 +31,39 @@ Local path resolution rule:
 - In sandbox runtime, relative paths are passed through unchanged.
 """
 
+import asyncio
 import os
 import stat
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Protocol, runtime_checkable
 
 from astrbot.api import FunctionTool, logger
 from astrbot.api.event import MessageChain
 from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.agent.tool import ToolExecResult
+from astrbot.core.agent.tool import ParametersType, ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.computer.computer_client import get_booter
 from astrbot.core.computer.file_read_utils import read_file_tool_result
 from astrbot.core.computer.local_file_security import open_file_in_allowed_roots
 from astrbot.core.message.components import File, Image
-from astrbot.core.utils.astrbot_path import (
-    get_astrbot_builtin_plugin_path,
-    get_astrbot_plugin_path,
-    get_astrbot_skills_path,
-    get_astrbot_system_tmp_path,
-    get_astrbot_temp_path,
-)
-
-from ..registry import builtin_tool
-from . import util as computer_util
-from .util import (
+from astrbot.core.tools.computer_tools import util as computer_util
+from astrbot.core.tools.computer_tools.util import (
     check_admin_permission,
     check_local_file_permission,
     get_local_permission_policy,
     is_local_runtime,
     normalize_umo_for_workspace,
     workspace_root_for_context,
+)
+from astrbot.core.tools.registry import builtin_tool
+from astrbot.core.utils.astrbot_path import (
+    get_astrbot_builtin_plugin_path,
+    get_astrbot_plugin_path,
+    get_astrbot_skills_path,
+    get_astrbot_system_tmp_path,
+    get_astrbot_temp_path,
 )
 
 _COMPUTER_RUNTIME_TOOL_CONFIG = {
@@ -73,6 +73,45 @@ _SANDBOX_RUNTIME_TOOL_CONFIG = {
     "provider_settings.computer_use_runtime": "sandbox",
 }
 _IMAGE_FILE_SUFFIXES = {".bmp", ".gif", ".jpeg", ".jpg", ".png", ".webp"}
+
+
+@runtime_checkable
+class _DescriptorWritableFileSystem(Protocol):
+    async def write_file(
+        self,
+        path: str,
+        content: str,
+        mode: str = "w",
+        encoding: str = "utf-8",
+        file_descriptor: int | None = None,
+    ) -> dict[str, Any]: ...
+
+
+@runtime_checkable
+class _DescriptorEditableFileSystem(Protocol):
+    async def edit_file(
+        self,
+        path: str,
+        old_string: str,
+        new_string: str,
+        replace_all: bool = False,
+        encoding: str = "utf-8",
+        file_descriptor: int | None = None,
+    ) -> dict[str, Any]: ...
+
+
+@runtime_checkable
+class _SandboxSearchableFileSystem(Protocol):
+    async def search_files(
+        self,
+        pattern: str,
+        path: str | None = None,
+        glob: str | None = None,
+        after_context: int | None = None,
+        before_context: int | None = None,
+        sandboxed: bool = False,
+        sandbox_root: str | None = None,
+    ) -> dict[str, Any]: ...
 
 
 def _remote_basename(path: str) -> str:
@@ -104,7 +143,7 @@ def _restricted_env_path_labels(
             str(current_workspace_root or _workspace_root(umo)),
             get_astrbot_system_tmp_path(),
             get_astrbot_temp_path(),
-        ]
+        ],
     )
     return labels
 
@@ -278,17 +317,18 @@ def _normalize_rw_path(
     )
     if not normalized_path:
         raise ValueError("`path` must be a non-empty string.")
-    if restricted:
-        allowed_roots = (
-            _write_allowed_roots(
-                umo,
-                current_workspace_root,
-                include_installed_skills=allow_installed_skill_write,
-            )
-            if write
-            else _read_allowed_roots(umo, current_workspace_root)
+    if not restricted:
+        return normalized_path
+    allowed_roots = (
+        _write_allowed_roots(
+            umo,
+            current_workspace_root,
+            include_installed_skills=allow_installed_skill_write,
         )
-    if restricted and not _is_path_within_allowed_roots(
+        if write
+        else _read_allowed_roots(umo, current_workspace_root)
+    )
+    if not _is_path_within_allowed_roots(
         normalized_path,
         umo=umo,
         allowed_roots=allowed_roots,
@@ -305,7 +345,7 @@ def _normalize_rw_path(
         access = "Write" if write else "Read"
         raise PermissionError(
             f"{access} access is restricted for this user. "
-            f"Allowed directories: {allowed}. Blocked path: {normalized_path}."
+            f"Allowed directories: {allowed}. Blocked path: {normalized_path}.",
         )
     if restricted:
         _reject_multi_link_file(normalized_path)
@@ -327,7 +367,7 @@ def _decode_escaped_text(value: str) -> str:
 class FileReadTool(FunctionTool):
     name: str = "astrbot_file_read_tool"
     description: str = "read file content. Supports text, image, and PDF (text extraction), docx and epub files."
-    parameters: dict = field(
+    parameters: ParametersType | None = field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -347,7 +387,7 @@ class FileReadTool(FunctionTool):
                 },
             },
             "required": ["path"],
-        }
+        },
     )
 
     def _validate_read_window(
@@ -448,7 +488,7 @@ class FileReadTool(FunctionTool):
 class FileWriteTool(FunctionTool):
     name: str = "astrbot_file_write_tool"
     description: str = "Write UTF-8 text content to a file."
-    parameters: dict = field(
+    parameters: ParametersType | None = field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -462,7 +502,7 @@ class FileWriteTool(FunctionTool):
                 },
             },
             "required": ["path", "content"],
-        }
+        },
     )
 
     async def call(
@@ -524,7 +564,11 @@ class FileWriteTool(FunctionTool):
                         encoding="utf-8",
                     )
                 else:
-                    result = await cast(Any, sb.fs).write_file(
+                    if not isinstance(sb.fs, _DescriptorWritableFileSystem):
+                        raise TypeError(
+                            "Filesystem does not support descriptor writes."
+                        )
+                    result = await sb.fs.write_file(
                         path=normalized_path,
                         content=content,
                         mode="w",
@@ -553,7 +597,7 @@ class FileWriteTool(FunctionTool):
 class FileEditTool(FunctionTool):
     name: str = "astrbot_file_edit_tool"
     description: str = "Editing files."
-    parameters: dict = field(
+    parameters: ParametersType | None = field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -575,7 +619,7 @@ class FileEditTool(FunctionTool):
                 },
             },
             "required": ["path", "old", "new"],
-        }
+        },
     )
 
     async def call(
@@ -647,7 +691,11 @@ class FileEditTool(FunctionTool):
                             encoding="utf-8",
                         )
                     else:
-                        result = await cast(Any, sb.fs).edit_file(
+                        if not isinstance(sb.fs, _DescriptorEditableFileSystem):
+                            raise TypeError(
+                                "Filesystem does not support descriptor edits."
+                            )
+                        result = await sb.fs.edit_file(
                             path=normalized_path,
                             old_string=old_string,
                             new_string=new_string,
@@ -684,7 +732,7 @@ class FileEditTool(FunctionTool):
 class GrepTool(FunctionTool):
     name: str = "astrbot_grep_tool"
     description: str = "Search and read file contents using ripgrep."
-    parameters: dict = field(
+    parameters: ParametersType | None = field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -722,7 +770,7 @@ class GrepTool(FunctionTool):
                 },
             },
             "required": ["pattern"],
-        }
+        },
     )
 
     def _resolve_context_options(
@@ -838,7 +886,7 @@ class GrepTool(FunctionTool):
                 blocked = ", ".join(disallowed)
                 raise PermissionError(
                     "Read access is restricted for this user. "
-                    f"Allowed directories: {allowed}. Blocked paths: {blocked}."
+                    f"Allowed directories: {allowed}. Blocked paths: {blocked}.",
                 )
             for path in normalized:
                 _reject_multi_link_file(path)
@@ -909,7 +957,11 @@ class GrepTool(FunctionTool):
                     sandbox_root = str(
                         max(matching_roots, key=lambda root: len(root.parts))
                     )
-                    result = await cast(Any, sb.fs).search_files(
+                    if not isinstance(sb.fs, _SandboxSearchableFileSystem):
+                        raise TypeError(
+                            "Filesystem does not support sandboxed searches."
+                        )
+                    result = await sb.fs.search_files(
                         pattern=normalized_pattern,
                         path=search_path,
                         glob=glob,
@@ -959,7 +1011,7 @@ class FileUploadTool(FunctionTool):
         "need to process it inside the sandbox. The local_path must point to an "
         "existing file on the host filesystem."
     )
-    parameters: dict = field(
+    parameters: ParametersType | None = field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -973,14 +1025,14 @@ class FileUploadTool(FunctionTool):
                 # },
             },
             "required": ["local_path"],
-        }
+        },
     )
 
     async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
         local_path: str,
-    ) -> str | None:
+    ) -> str:
         if permission_error := check_admin_permission(context, "File upload/download"):
             return permission_error
         sb = await get_booter(
@@ -989,10 +1041,10 @@ class FileUploadTool(FunctionTool):
         )
         try:
             # Check if file exists
-            if not os.path.exists(local_path):
+            if not await asyncio.to_thread(os.path.exists, local_path):
                 return f"Error: File does not exist: {local_path}"
 
-            if not os.path.isfile(local_path):
+            if not await asyncio.to_thread(os.path.isfile, local_path):
                 return f"Error: Path is not a file: {local_path}"
 
             # Use basename if sandbox_filename is not provided
@@ -1012,7 +1064,7 @@ class FileUploadTool(FunctionTool):
             return f"File uploaded successfully to {file_path}"
         except Exception as e:
             logger.error(f"Error uploading file {local_path}: {e}")
-            return f"Error uploading file: {str(e)}"
+            return f"Error uploading file: {e!s}"
 
 
 @builtin_tool(config=_SANDBOX_RUNTIME_TOOL_CONFIG)
@@ -1024,7 +1076,7 @@ class FileDownloadTool(FunctionTool):
         "to the user. Use this ONLY when the user asks to retrieve/export a file "
         "that was created or modified inside the sandbox."
     )
-    parameters: dict = field(
+    parameters: ParametersType | None = field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -1038,7 +1090,7 @@ class FileDownloadTool(FunctionTool):
                 },
             },
             "required": ["remote_path"],
-        }
+        },
     )
 
     async def call(
@@ -1057,7 +1109,8 @@ class FileDownloadTool(FunctionTool):
             name = _remote_basename(remote_path) or os.path.basename(remote_path)
 
             local_path = os.path.join(
-                get_astrbot_temp_path(), f"sandbox_{uuid.uuid4().hex[:4]}_{name}"
+                get_astrbot_temp_path(),
+                f"sandbox_{uuid.uuid4().hex[:4]}_{name}",
             )
 
             # Download file from sandbox
@@ -1074,7 +1127,7 @@ class FileDownloadTool(FunctionTool):
                         message_component = File(name=name, file=local_path)
                         sent_as = "file"
                     await context.context.event.send(
-                        MessageChain(chain=[message_component])
+                        MessageChain(chain=[message_component]),
                     )
                 except Exception as e:
                     logger.error(f"Error sending file message: {e}")
@@ -1097,4 +1150,4 @@ class FileDownloadTool(FunctionTool):
             return f"File downloaded successfully to {local_path}"
         except Exception as e:
             logger.error(f"Error downloading file {remote_path}: {e}")
-            return f"Error downloading file: {str(e)}"
+            return f"Error downloading file: {e!s}"

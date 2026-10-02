@@ -1,7 +1,6 @@
 from astrbot import logger
+from astrbot.core.provider.register import register_provider_adapter
 from astrbot.core.provider.sources.anthropic_source import ProviderAnthropic
-
-from ..register import register_provider_adapter
 
 XIAOMI_TOKEN_PLAN_MODELS = [
     "mimo-v2.5-pro",
@@ -49,7 +48,7 @@ class ProviderXiaomiTokenPlan(ProviderAnthropic):
                 f"({', '.join(XIAOMI_TOKEN_PLAN_MODELS)}). "
                 f"The model may still work if your plan supports it. "
                 f"If you encounter errors, please check your plan's "
-                f"model availability."
+                f"model availability.",
             )
 
         self.set_model(configured_model)

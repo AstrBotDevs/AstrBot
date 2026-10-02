@@ -347,15 +347,16 @@ async def _compress_image_bytes_to_base64(data: bytes) -> dict[str, str | int]:
     def _run() -> dict[str, str | int]:
         temp_dir = Path(get_astrbot_temp_path())
         temp_dir.mkdir(parents=True, exist_ok=True)
-        compressed_path = Path(
-            _compress_image_sync(
-                data,
-                temp_dir,
-                IMAGE_COMPRESS_DEFAULT_MAX_SIZE,
-                IMAGE_COMPRESS_DEFAULT_QUALITY,
-                IMAGE_COMPRESS_DEFAULT_OPTIMIZE,
-            )
+        compressed_file = _compress_image_sync(
+            data,
+            temp_dir,
+            IMAGE_COMPRESS_DEFAULT_MAX_SIZE,
+            IMAGE_COMPRESS_DEFAULT_QUALITY,
+            IMAGE_COMPRESS_DEFAULT_OPTIMIZE,
         )
+        if compressed_file is None:
+            raise ValueError("Image compression did not produce an output file.")
+        compressed_path = Path(compressed_file)
         try:
             compressed_bytes = compressed_path.read_bytes()
         finally:
@@ -532,7 +533,7 @@ def _validate_text_output(content: str) -> str | None:
         )
 
     content_tokens = _TOKEN_COUNTER.count_tokens(
-        [Message(role="user", content=content)]
+        [Message(role="user", content=content)],
     )
     if content_tokens > _MAX_FILE_READ_TOKENS:
         return (
@@ -781,10 +782,10 @@ async def read_file_tool_result(
                     type="image",
                     data=compressed_base64_data,
                     mimeType=str(
-                        compressed_payload.get("mime_type", "") or "image/jpeg"
+                        compressed_payload.get("mime_type", "") or "image/jpeg",
                     ),
-                )
-            ]
+                ),
+            ],
         )
 
     if offset is None and limit is None:

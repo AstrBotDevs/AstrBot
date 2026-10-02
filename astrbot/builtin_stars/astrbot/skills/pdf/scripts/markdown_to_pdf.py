@@ -296,7 +296,8 @@ def _register_fonts(font_path: Path | None, source: str) -> tuple[str, str]:
         if not resolved.is_file():
             raise FileNotFoundError(f"Font not found: {resolved}")
         try:
-            pdfmetrics.registerFont(TTFont("AstrBotPDF", str(resolved)))
+            custom_font = TTFont("AstrBotPDF", str(resolved))
+            pdfmetrics.registerFont(custom_font)
         except Exception as exc:
             raise ValueError(f"Unable to load TrueType font {resolved}: {exc}") from exc
         pdfmetrics.registerFontFamily(
@@ -306,7 +307,7 @@ def _register_fonts(font_path: Path | None, source: str) -> tuple[str, str]:
             italic="AstrBotPDF",
             boldItalic="AstrBotPDF",
         )
-        glyphs = pdfmetrics.getFont("AstrBotPDF").face.charToGlyph
+        glyphs = custom_font.face.charToGlyph or {}
         for character in source:
             if character not in "\n\r\t" and ord(character) not in glyphs:
                 raise ValueError(
@@ -335,10 +336,11 @@ def _register_fonts(font_path: Path | None, source: str) -> tuple[str, str]:
             continue
         font_name = f"AstrBotPDFSystem{index}"
         try:
-            pdfmetrics.registerFont(TTFont(font_name, str(candidate)))
+            candidate_font = TTFont(font_name, str(candidate))
+            pdfmetrics.registerFont(candidate_font)
         except Exception:
             continue
-        glyphs = pdfmetrics.getFont(font_name).face.charToGlyph
+        glyphs = candidate_font.face.charToGlyph or {}
         if any(
             character not in "\n\r\t" and ord(character) not in glyphs
             for character in source
@@ -537,7 +539,7 @@ def _build_story(
                     start=start if list_kind == "ordered-list" else "bulletchar",
                     leftIndent=20,
                     bulletFontName="Helvetica",
-                    bulletFontSize=styles["body"].fontSize,
+                    bulletFontSize=float(getattr(styles["body"], "fontSize")),
                     spaceAfter=6,
                 )
             )

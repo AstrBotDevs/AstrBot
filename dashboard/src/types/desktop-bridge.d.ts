@@ -47,7 +47,7 @@ declare global {
         reason: string | null;
       }>;
       pickDirectory?: (defaultPath?: string | null) => Promise<string | null>;
-      setWindowTheme?: (theme: 'dark' | 'light' | null) => Promise<{
+      setWindowTheme?: (theme: "dark" | "light" | null) => Promise<{
         ok: boolean;
         reason: string | null;
       }>;

@@ -54,6 +54,7 @@ async def test_gemini_37_minimal_thinking_level_falls_back_to_medium():
 @pytest.mark.asyncio
 async def test_gemini_prepare_conversation_removes_leading_model_content():
     provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    provider.provider_config = {}
 
     contents = await provider._prepare_conversation(
         {
@@ -73,6 +74,7 @@ async def test_gemini_prepare_conversation_removes_leading_model_content():
 @pytest.mark.asyncio
 async def test_gemini_prepare_conversation_keeps_normal_user_first_history():
     provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    provider.provider_config = {}
 
     contents = await provider._prepare_conversation(
         {
@@ -96,6 +98,7 @@ async def test_gemini_prepare_conversation_keeps_normal_user_first_history():
 @pytest.mark.asyncio
 async def test_gemini_prepare_conversation_preserves_user_model_history():
     provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    provider.provider_config = {}
 
     contents = await provider._prepare_conversation(
         {
@@ -123,6 +126,7 @@ async def test_gemini_prepare_conversation_resolves_local_history_image(tmp_path
     )
     image_path.write_bytes(image_bytes)
     provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    provider.provider_config = {}
 
     contents = await provider._prepare_conversation(
         {

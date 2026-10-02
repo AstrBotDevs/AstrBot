@@ -20,6 +20,7 @@ from astrbot.api.event import MessageChain
 from astrbot.api.message_components import Plain
 from astrbot.api.platform import (
     AstrBotMessage,
+    Group,
     MessageMember,
     MessageType,
     PlatformMetadata,
@@ -137,6 +138,23 @@ def test_append_stream_delta_old_reference_style_loses_first_char() -> None:
     joined = "".join(c.text for c in event.send_buffer.chain if isinstance(c, Plain))
     assert "不" not in joined
     assert joined.startswith("稀")
+
+
+@pytest.mark.asyncio
+async def test_event_contract_uses_current_metadata_and_group_id_fallback() -> None:
+    group_event = _make_group_event()
+    current_group = group_event.message_obj.group
+
+    await group_event.send_typing()
+    await group_event.stop_typing()
+    assert await group_event.get_group() is current_group
+    assert await group_event.get_group("group-1") is current_group
+    assert await group_event.get_group("different-group") == Group(
+        group_id="different-group"
+    )
+
+    private_event = _make_c2c_event()
+    assert await private_event.get_group() is None
 
 
 @pytest.mark.asyncio

@@ -16,7 +16,7 @@ from .stage_order import STAGES_ORDER
 
 
 class PipelineScheduler:
-    """管道调度器，负责调度各个阶段的执行"""
+    """管道调度器,负责调度各个阶段的执行"""
 
     def __init__(self, context: PipelineContext) -> None:
         ensure_builtin_stages_registered()
@@ -68,6 +68,9 @@ class PipelineScheduler:
                             f"Stage {stage.__class__.__name__} stopped event propagation.",
                         )
                         break
+
+                if event.is_stopped():
+                    break
             else:
                 # 如果返回的是普通协程(不含yield的async函数), 则不进入下一层(基线条件)
                 # 简单地等待它执行完成, 然后继续执行下一个阶段
@@ -96,5 +99,12 @@ class PipelineScheduler:
 
             logger.debug("pipeline execution completed.")
         finally:
+            sdk_plugin_bridge = getattr(
+                self.ctx.plugin_manager.context,
+                "sdk_plugin_bridge",
+                None,
+            )
+            if sdk_plugin_bridge is not None:
+                sdk_plugin_bridge.close_request_overlay_for_event(event)
             event.cleanup_temporary_local_files()
             active_event_registry.unregister(event)

@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  LIMITED_SHIKI_SUPPORTED_LANGUAGES,
   createHighlighter,
+  LIMITED_SHIKI_SUPPORTED_LANGUAGES,
   normalizeLimitedShikiLanguage,
 } from "../src/utils/shikiLimitedBundle.js";
 

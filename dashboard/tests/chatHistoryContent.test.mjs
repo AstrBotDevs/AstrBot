@@ -5,16 +5,8 @@ import vm from "node:vm";
 import ts from "typescript";
 
 test("history pages retain reasoning boundaries and complete tool results", () => {
-  const source = readFileSync(
-    new URL("../src/composables/useMessages.ts", import.meta.url),
-    "utf8",
-  );
-  const ast = ts.createSourceFile(
-    "messages.ts",
-    source,
-    ts.ScriptTarget.Latest,
-    true,
-  );
+  const source = readFileSync(new URL("../src/composables/useMessages.ts", import.meta.url), "utf8");
+  const ast = ts.createSourceFile("messages.ts", source, ts.ScriptTarget.Latest, true);
   const names = new Set([
     "normalizeHistoryRecord",
     "normalizeMessageParts",
@@ -34,7 +26,7 @@ test("history pages retain reasoning boundaries and complete tool results", () =
   visit(ast);
   assert.equal(functions.length, names.size);
   const context = vm.createContext({ exports: {} });
-  vm.runInContext(ts.transpile(functions.join("\n")), context);
+  vm.runInContext(ts.transpile(functions.join("\n"), { module: ts.ModuleKind.CommonJS }), context);
 
   const parts = [
     { type: "think", think: "Before the tool" },

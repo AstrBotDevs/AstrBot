@@ -142,67 +142,80 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue'
-import { Heart } from '@lucide/vue'
-import { loadSponsorCatalog } from '@/utils/sponsorCatalog'
+import { Heart } from "@lucide/vue";
+import { computed, ref, watch } from "vue";
+import { loadSponsorCatalog } from "@/utils/sponsorCatalog";
 
 const props = defineProps({
   sourceTypes: { type: Array, default: () => [] },
-  tm: { type: Function, required: true }
-})
-const emit = defineEmits(['select'])
-const open = ref(false)
-const search = ref('')
+  tm: { type: Function, required: true },
+});
+const emit = defineEmits(["select"]);
+const open = ref(false);
+const search = ref("");
 
-watch(open, value => {
-  if (value) void loadSponsorCatalog()
-})
+watch(open, (value) => {
+  if (value) void loadSponsorCatalog();
+});
 
 const groups = computed(() => {
-  const sponsorKeys = ['MiraRouter', 'SSYCloud(胜算云)']
+  const sponsorKeys = ["MiraRouter", "SSYCloud(胜算云)"];
   const preferredKeys = [
-    'OpenAI Compatible', 'OpenAI Responses', 'Google Gemini', 'Anthropic',
-    'DeepSeek', 'DeepSeek Responses', 'Moonshot', 'Kimi Coding Plan',
-    'MiniMax', 'MiniMax Token Plan', 'Zhipu', 'Xiaomi', 'Xiaomi Token Plan',
-    'xAI', 'LongCat'
-  ]
+    "OpenAI Compatible",
+    "OpenAI Responses",
+    "Google Gemini",
+    "Anthropic",
+    "DeepSeek",
+    "DeepSeek Responses",
+    "Moonshot",
+    "Kimi Coding Plan",
+    "MiniMax",
+    "MiniMax Token Plan",
+    "Zhipu",
+    "Xiaomi",
+    "Xiaomi Token Plan",
+    "xAI",
+    "LongCat",
+  ];
   const labels = {
-    'Google Gemini': 'Gemini Compatible',
-    Anthropic: 'Anthropic Compatible',
-    Moonshot: 'Kimi',
-    'SSYCloud(胜算云)': props.tm('providerSources.selector.ssycloud'),
-    Gemini_OpenAI_API: 'Gemini OpenAI API'
-  }
+    "Google Gemini": "Gemini Compatible",
+    Anthropic: "Anthropic Compatible",
+    Moonshot: "Kimi",
+    "SSYCloud(胜算云)": props.tm("providerSources.selector.ssycloud"),
+    Gemini_OpenAI_API: "Gemini OpenAI API",
+  };
   const domains = {
-    MiraRouter: 'mirarouter.com',
-    'SSYCloud(胜算云)': 'shengsuanyun.com'
-  }
+    MiraRouter: "mirarouter.com",
+    "SSYCloud(胜算云)": "shengsuanyun.com",
+  };
   const sponsors = [
-    ...props.sourceTypes.filter(source => source.isSponsor && !sponsorKeys.includes(source.value)),
-    ...sponsorKeys.map(key => props.sourceTypes.find(source => source.value === key)).filter(Boolean)
-  ]
-  const providers = props.sourceTypes.filter(source => !sponsors.includes(source))
-  const query = (search.value || '').trim().toLowerCase()
+    ...props.sourceTypes.filter((source) => source.isSponsor && !sponsorKeys.includes(source.value)),
+    ...sponsorKeys.map((key) => props.sourceTypes.find((source) => source.value === key)).filter(Boolean),
+  ];
+  const providers = props.sourceTypes.filter((source) => !sponsors.includes(source));
+  const query = (search.value || "").trim().toLowerCase();
   const sources = [
     ...sponsors,
-    ...preferredKeys.map(key => providers.find(source => source.value === key)).filter(Boolean),
-    ...providers.filter(source => !preferredKeys.includes(source.value))
-  ].map(source => ({
-    ...source,
-    label: labels[source.value] || source.label,
-    subtitle: source.subtitle ?? domains[source.value] ?? '',
-    isSponsor: source.isSponsor || sponsorKeys.includes(source.value)
-  })).filter(source => `${source.value} ${source.label} ${source.subtitle}`.toLowerCase().includes(query))
+    ...preferredKeys.map((key) => providers.find((source) => source.value === key)).filter(Boolean),
+    ...providers.filter((source) => !preferredKeys.includes(source.value)),
+  ]
+    .map((source) => ({
+      ...source,
+      label: labels[source.value] || source.label,
+      subtitle: source.subtitle ?? domains[source.value] ?? "",
+      isSponsor: source.isSponsor || sponsorKeys.includes(source.value),
+    }))
+    .filter((source) => `${source.value} ${source.label} ${source.subtitle}`.toLowerCase().includes(query));
 
   return [
-    { id: 'sponsors', items: sources.filter(source => source.isSponsor) },
-    { id: 'providers', items: sources.filter(source => !source.isSponsor) }
-  ].filter(group => group.items.length > 0)
-})
+    { id: "sponsors", items: sources.filter((source) => source.isSponsor) },
+    { id: "providers", items: sources.filter((source) => !source.isSponsor) },
+  ].filter((group) => group.items.length > 0);
+});
 
 function selectSource(value) {
-  open.value = false
-  emit('select', value)
+  open.value = false;
+  emit("select", value);
 }
 </script>
 

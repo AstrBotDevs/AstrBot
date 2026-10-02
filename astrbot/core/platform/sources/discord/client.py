@@ -1,14 +1,9 @@
-import sys
 from collections.abc import Awaitable, Callable
+from typing import override
 
 import discord
 
 from astrbot import logger
-
-if sys.version_info >= (3, 12):
-    from typing import override
-else:
-    from typing_extensions import override
 
 
 # Discord Bot客户端
@@ -16,13 +11,16 @@ class DiscordBotClient(discord.Bot):
     """Discord客户端封装"""
 
     def __init__(
-        self, token: str, proxy: str | None = None, allow_bot_messages: bool = False
+        self,
+        token: str,
+        proxy: str | None = None,
+        allow_bot_messages: bool = False,
     ) -> None:
         self.token = token
         self.proxy = proxy
         self.allow_bot_messages = allow_bot_messages
 
-        # 设置Intent权限，遵循权限最小化原则
+        # 设置Intent权限,遵循权限最小化原则
         intents = discord.Intents.default()
         intents.message_content = True  # 订阅消息内容事件 (Privileged)
         intents.members = True  # 订阅成员事件 (Privileged)
@@ -134,7 +132,7 @@ class DiscordBotClient(discord.Bot):
         return str(interaction_data)
 
     async def start_polling(self) -> None:
-        """开始轮询消息，这是个阻塞方法"""
+        """开始轮询消息,这是个阻塞方法"""
         await self.start(self.token)
 
     @override

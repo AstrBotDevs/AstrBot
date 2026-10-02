@@ -213,7 +213,7 @@ def test_name_command_requires_admin_permission():
         sys.modules.pop(BUILTIN_MAIN_MODULE, None)
         reloaded_main = importlib.import_module(BUILTIN_MAIN_MODULE)
         handler = star_handlers_registry.get_handler_by_full_name(
-            f"{reloaded_main.Main.name.__module__}_{reloaded_main.Main.name.__name__}"
+            f"{reloaded_main.Main.set_name.__module__}_{reloaded_main.Main.set_name.__name__}"
         )
 
         assert handler is not None

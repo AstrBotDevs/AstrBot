@@ -16,16 +16,14 @@ class HelpCommand:
             async with aiohttp.ClientSession(trust_env=True) as session:
                 async with session.get(
                     "https://astrbot.app/notice.json",
-                    timeout=2,
+                    timeout=aiohttp.ClientTimeout(total=2),
                 ) as resp:
                     return (await resp.json())["notice"]
         except BaseException:
             return ""
 
     async def _build_reserved_command_lines(self) -> list[str]:
-        """
-        使用实时指令配置生成内置指令清单，确保重命名/禁用后与实际生效状态保持一致。
-        """
+        """使用实时指令配置生成内置指令清单,确保重命名/禁用后与实际生效状态保持一致｡"""
         try:
             commands = await command_management.list_commands()
         except BaseException:

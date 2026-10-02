@@ -1,12 +1,16 @@
 <template>
   <v-dialog v-model="isOpen" max-width="480" persistent>
     <v-card>
-      <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex align-center justify-space-between">
+      <v-card-title
+        class="dialog-title text-h3 pa-4 pb-0 pl-6 d-flex align-center justify-space-between"
+      >
         <span>{{ title }}</span>
-        <v-btn icon="mdi-close" variant="text" @click="handleClose"></v-btn>
+        <v-btn icon="mdi-close" variant="text" @click="handleClose" />
       </v-card-title>
       <v-card-text>
-        <div class="message-text">{{ message }}</div>
+        <div class="message-text">
+          {{ message }}
+        </div>
         <div class="action-hints">
           <span class="hint-item">{{ confirmHint }}</span>
           <span class="hint-item">{{ cancelHint }}</span>
@@ -14,17 +18,21 @@
         </div>
       </v-card-text>
       <v-card-actions>
-        <v-spacer></v-spacer>
-        <v-btn color="gray" variant="text" @click="handleCancel">{{ t('core.common.dialog.cancelButton') }}</v-btn>
-        <v-btn color="red" variant="tonal" @click="handleConfirm" class="confirm-button">{{ t('core.common.dialog.confirmButton') }}</v-btn>
+        <v-spacer />
+        <v-btn color="gray" variant="text" @click="handleCancel">
+          {{ t("core.common.dialog.cancelButton") }}
+        </v-btn>
+        <v-btn color="red" variant="tonal" class="confirm-button" @click="handleConfirm">
+          {{ t("core.common.dialog.confirmButton") }}
+        </v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref } from "vue";
-import { useI18n } from '@/i18n/composables';
+import { useI18n } from "@/i18n/composables";
 
 const { t } = useI18n();
 
@@ -34,39 +42,43 @@ const message = ref("");
 const confirmHint = ref("");
 const cancelHint = ref("");
 const closeHint = ref("");
-let resolvePromise = null;
+interface UnsavedChangesOptions {
+  title?: string;
+  message?: string;
+  confirmHint?: string;
+  cancelHint?: string;
+  closeHint?: string;
+}
 
-const open = (options) => {
-  title.value = options.title || t('core.common.dialog.confirmTitle');
-  message.value = options.message || t('core.common.dialog.confirmMessage');
+type UnsavedChangesResult = boolean | "close";
+let resolvePromise: ((result: UnsavedChangesResult) => void) | null = null;
+
+const open = (options: UnsavedChangesOptions = {}): Promise<UnsavedChangesResult> => {
+  title.value = options.title || t("core.common.dialog.confirmTitle");
+  message.value = options.message || t("core.common.dialog.confirmMessage");
   confirmHint.value = options.confirmHint || "";
   cancelHint.value = options.cancelHint || "";
   closeHint.value = options.closeHint || "";
   isOpen.value = true;
 
-  return new Promise((resolve) => {
+  return new Promise<UnsavedChangesResult>((resolve) => {
     resolvePromise = resolve;
   });
 };
 
-const handleConfirm = () => {
+const settle = (result: UnsavedChangesResult) => {
   isOpen.value = false;
-  if (resolvePromise) resolvePromise(true);
+  const resolve = resolvePromise;
+  resolvePromise = null;
+  resolve?.(result);
 };
 
-const handleCancel = () => {
-  isOpen.value = false;
-  if (resolvePromise) resolvePromise(false);
-};
-
-const handleClose = () => {
-  isOpen.value = false;
-  if (resolvePromise) resolvePromise('close');
-};
+const handleConfirm = () => settle(true);
+const handleCancel = () => settle(false);
+const handleClose = () => settle("close");
 
 defineExpose({ open });
 </script>
-
 
 <style scoped>
 .message-text {

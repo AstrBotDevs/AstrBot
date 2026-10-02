@@ -51,51 +51,51 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { useModuleI18n } from '@/i18n/composables'
+import { computed, ref } from "vue";
+import { useModuleI18n } from "@/i18n/composables";
 
 defineProps<{
-  modelValue: string
-}>()
+  modelValue: string;
+}>();
 
 const emit = defineEmits<{
-  'update:modelValue': [value: string]
-}>()
+  "update:modelValue": [value: string];
+}>();
 
-const { tm } = useModuleI18n('features/knowledge-base/index')
-const menuOpen = ref(false)
-const activeCategory = ref('books')
+const { tm } = useModuleI18n("features/knowledge-base/index");
+const menuOpen = ref(false);
+const activeCategory = ref("books");
 
 const emojiCategories = [
   {
-    key: 'books',
-    icon: '📚',
-    emojis: ['📚', '📖', '📕', '📗', '📘', '📙', '📓', '📔', '📒', '📑', '🗂️', '📂', '📁', '🗃️', '🗄️']
+    key: "books",
+    icon: "📚",
+    emojis: ["📚", "📖", "📕", "📗", "📘", "📙", "📓", "📔", "📒", "📑", "🗂️", "📂", "📁", "🗃️", "🗄️"],
   },
   {
-    key: 'emotions',
-    icon: '🙂',
-    emojis: ['😀', '😃', '😄', '😁', '😆', '😅', '🤣', '😂', '🙂', '🙃', '😉', '😊', '😇', '🥰', '😍']
+    key: "emotions",
+    icon: "🙂",
+    emojis: ["😀", "😃", "😄", "😁", "😆", "😅", "🤣", "😂", "🙂", "🙃", "😉", "😊", "😇", "🥰", "😍"],
   },
   {
-    key: 'objects',
-    icon: '💡',
-    emojis: ['💡', '🔬', '🔭', '🗿', '🏆', '🎯', '🎓', '🔑', '🔒', '🔓', '🔔', '🔕', '🔨', '🛠️', '⚙️']
+    key: "objects",
+    icon: "💡",
+    emojis: ["💡", "🔬", "🔭", "🗿", "🏆", "🎯", "🎓", "🔑", "🔒", "🔓", "🔔", "🔕", "🔨", "🛠️", "⚙️"],
   },
   {
-    key: 'symbols',
-    icon: '⭐',
-    emojis: ['❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '🤎', '⭐', '🌟', '✨', '💫', '⚡', '🔥']
-  }
-]
+    key: "symbols",
+    icon: "⭐",
+    emojis: ["❤️", "🧡", "💛", "💚", "💙", "💜", "🖤", "🤍", "🤎", "⭐", "🌟", "✨", "💫", "⚡", "🔥"],
+  },
+];
 
-const activeEmojis = computed(() =>
-  emojiCategories.find((category) => category.key === activeCategory.value)?.emojis || []
-)
+const activeEmojis = computed(
+  () => emojiCategories.find((category) => category.key === activeCategory.value)?.emojis || [],
+);
 
 function selectEmoji(emoji: string) {
-  emit('update:modelValue', emoji)
-  menuOpen.value = false
+  emit("update:modelValue", emoji);
+  menuOpen.value = false;
 }
 </script>
 

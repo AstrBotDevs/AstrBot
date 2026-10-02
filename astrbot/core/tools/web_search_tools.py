@@ -9,7 +9,7 @@ from pydantic import Field
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from astrbot.core import logger, sp
-from astrbot.core.agent.tool import FunctionTool, ToolExecResult
+from astrbot.core.agent.tool import FunctionTool, ParametersType, ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.tools.registry import builtin_tool
 
@@ -91,7 +91,7 @@ class _KeyRotator:
         keys = provider_settings.get(self.setting_name, [])
         if not keys:
             raise ValueError(
-                f"Error: {self.provider_name} API key is not configured in AstrBot."
+                f"Error: {self.provider_name} API key is not configured in AstrBot.",
             )
 
         async with self.lock:
@@ -126,7 +126,7 @@ def normalize_legacy_web_search_config(cfg) -> None:
 
     changed = False
     if provider_settings.get(
-        "websearch_provider"
+        "websearch_provider",
     ) == "default" and provider_settings.get("web_search", False):
         provider_settings["web_search"] = False
         changed = True
@@ -176,7 +176,7 @@ def _search_result_payload(results: list[SearchResult]) -> str:
                 "url": f"{result.url}",
                 "snippet": f"{result.snippet}",
                 "index": index,
-            }
+            },
         )
         _cache_favicon(result.url, result.favicon)
     return json.dumps({"results": ret_ls}, ensure_ascii=False)
@@ -567,29 +567,31 @@ async def _baidu_search(
         "X-Appbuilder-Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
-    async with aiohttp.ClientSession(trust_env=True) as session:
-        async with session.post(
+    async with (
+        aiohttp.ClientSession(trust_env=True) as session,
+        session.post(
             "https://qianfan.baidubce.com/v2/ai_search/web_search",
             json=payload,
             headers=headers,
-        ) as response:
-            if response.status != 200:
-                reason = await response.text()
-                raise Exception(
-                    f"Baidu AI Search failed: {reason}, status: {response.status}",
-                )
-            data = await response.json()
-            references = data.get("references", [])
-            return [
-                SearchResult(
-                    title=item.get("title", ""),
-                    url=item.get("url", ""),
-                    snippet=item.get("content", ""),
-                    favicon=item.get("icon"),
-                )
-                for item in references
-                if item.get("url")
-            ]
+        ) as response,
+    ):
+        if response.status != 200:
+            reason = await response.text()
+            raise Exception(
+                f"Baidu AI Search failed: {reason}, status: {response.status}",
+            )
+        data = await response.json()
+        references = data.get("references", [])
+        return [
+            SearchResult(
+                title=item.get("title", ""),
+                url=item.get("url", ""),
+                snippet=item.get("content", ""),
+                favicon=item.get("icon"),
+            )
+            for item in references
+            if item.get("url")
+        ]
 
 
 @builtin_tool(config=_TAVILY_WEB_SEARCH_TOOL_CONFIG)
@@ -600,7 +602,7 @@ class TavilyWebSearchTool(FunctionTool[AstrAgentContext]):
         "A web search tool that uses Tavily to search the web for relevant content. "
         "Ideal for gathering current information, news, and detailed web content analysis."
     )
-    parameters: dict = Field(
+    parameters: ParametersType | None = Field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -635,7 +637,7 @@ class TavilyWebSearchTool(FunctionTool[AstrAgentContext]):
                 },
             },
             "required": ["query"],
-        }
+        },
     )
 
     async def call(self, context, **kwargs) -> ToolExecResult:
@@ -684,7 +686,7 @@ class TavilyWebSearchTool(FunctionTool[AstrAgentContext]):
 class TavilyExtractWebPageTool(FunctionTool[AstrAgentContext]):
     name: str = "tavily_extract_web_page"
     description: str = "Extract the content of a web page using Tavily."
-    parameters: dict = Field(
+    parameters: ParametersType | None = Field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -698,7 +700,7 @@ class TavilyExtractWebPageTool(FunctionTool[AstrAgentContext]):
                 },
             },
             "required": ["url"],
-        }
+        },
     )
 
     async def call(self, context, **kwargs) -> ToolExecResult:
@@ -734,7 +736,7 @@ class BochaWebSearchTool(FunctionTool[AstrAgentContext]):
         "A web search tool based on Bocha Search API, used to retrieve web pages "
         "related to the user's query."
     )
-    parameters: dict = Field(
+    parameters: ParametersType | None = Field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -764,7 +766,7 @@ class BochaWebSearchTool(FunctionTool[AstrAgentContext]):
                 },
             },
             "required": ["query"],
-        }
+        },
     )
 
     async def call(self, context, **kwargs) -> ToolExecResult:
@@ -795,7 +797,7 @@ class BochaWebSearchTool(FunctionTool[AstrAgentContext]):
 class BraveWebSearchTool(FunctionTool[AstrAgentContext]):
     name: str = "web_search_brave"
     description: str = "A web search tool based on Brave Search API."
-    parameters: dict = Field(
+    parameters: ParametersType | None = Field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -818,7 +820,7 @@ class BraveWebSearchTool(FunctionTool[AstrAgentContext]):
                 },
             },
             "required": ["query"],
-        }
+        },
     )
 
     async def call(self, context, **kwargs) -> ToolExecResult:
@@ -827,10 +829,8 @@ class BraveWebSearchTool(FunctionTool[AstrAgentContext]):
             return "Error: Brave API key is not configured in AstrBot."
 
         count = int(kwargs.get("count", 10))
-        if count < 1:
-            count = 1
-        if count > 20:
-            count = 20
+        count = max(count, 1)
+        count = min(count, 20)
 
         payload = {
             "q": kwargs["query"],
@@ -856,7 +856,7 @@ class FirecrawlWebSearchTool(FunctionTool[AstrAgentContext]):
         "A web search tool based on Firecrawl Search API, used to retrieve web "
         "pages related to the user's query."
     )
-    parameters: dict = Field(
+    parameters: ParametersType | None = Field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -879,7 +879,7 @@ class FirecrawlWebSearchTool(FunctionTool[AstrAgentContext]):
                 },
             },
             "required": ["query"],
-        }
+        },
     )
 
     async def call(self, context, **kwargs) -> ToolExecResult:
@@ -907,7 +907,7 @@ class FirecrawlWebSearchTool(FunctionTool[AstrAgentContext]):
 class FirecrawlExtractWebPageTool(FunctionTool[AstrAgentContext]):
     name: str = "firecrawl_extract_web_page"
     description: str = "Extract the content of a web page using Firecrawl."
-    parameters: dict = Field(
+    parameters: ParametersType | None = Field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -933,7 +933,7 @@ class FirecrawlExtractWebPageTool(FunctionTool[AstrAgentContext]):
                 },
             },
             "required": ["url"],
-        }
+        },
     )
 
     async def call(self, context, **kwargs) -> ToolExecResult:
@@ -974,7 +974,7 @@ class BaiduWebSearchTool(FunctionTool[AstrAgentContext]):
         "A web search tool based on Baidu AI Search. "
         "Use this for real-time web retrieval when Baidu AI Search is configured."
     )
-    parameters: dict = Field(
+    parameters: ParametersType | None = Field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -993,7 +993,7 @@ class BaiduWebSearchTool(FunctionTool[AstrAgentContext]):
                 },
             },
             "required": ["query"],
-        }
+        },
     )
 
     async def call(self, context, **kwargs) -> ToolExecResult:
@@ -1002,10 +1002,8 @@ class BaiduWebSearchTool(FunctionTool[AstrAgentContext]):
             return "Error: Baidu AI Search API key is not configured in AstrBot."
 
         top_k = int(kwargs.get("top_k", 10))
-        if top_k < 1:
-            top_k = 1
-        if top_k > 50:
-            top_k = 50
+        top_k = max(top_k, 1)
+        top_k = min(top_k, 50)
 
         payload = {
             "messages": [{"role": "user", "content": str(kwargs["query"])[:72]}],
@@ -1021,7 +1019,7 @@ class BaiduWebSearchTool(FunctionTool[AstrAgentContext]):
         if site:
             sites = [s.strip() for s in site.replace("|", ",").split(",") if s.strip()]
             if sites:
-                payload["search_filter"] = {"match": {"site": sites[:100]}}
+                payload["search_filter"] = {"match": {"site": sites[:100]}}  # type: ignore
 
         results = await _baidu_search(provider_settings, payload)
         if not results:
@@ -1101,7 +1099,7 @@ class ExaWebSearchTool(FunctionTool[AstrAgentContext]):
         "A web search tool powered by Exa, an AI-native search engine. "
         "Supports keyword and semantic search with domain, date, and category filters."
     )
-    parameters: dict = Field(
+    parameters: ParametersType | None = Field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -1203,7 +1201,7 @@ class ExaGetContentsTool(FunctionTool[AstrAgentContext]):
 
     name: str = "exa_get_contents"
     description: str = "Extract the content of a web page using Exa."
-    parameters: dict = Field(
+    parameters: ParametersType | None = Field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -1359,7 +1357,7 @@ class AnySearchWebSearchTool(FunctionTool[AstrAgentContext]):
         "security(vuln/noise/intel/scan), social_media, "
         "travel(flight/flight_status), agriculture(fao), and general web search."
     )
-    parameters: dict = Field(
+    parameters: ParametersType | None = Field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -1443,6 +1441,7 @@ class AnySearchWebSearchTool(FunctionTool[AstrAgentContext]):
 
 
 __all__ = [
+    "WEB_SEARCH_TOOL_NAMES",
     "AnySearchWebSearchTool",
     "BaiduWebSearchTool",
     "BochaWebSearchTool",
@@ -1451,6 +1450,5 @@ __all__ = [
     "ExaWebSearchTool",
     "TavilyExtractWebPageTool",
     "TavilyWebSearchTool",
-    "WEB_SEARCH_TOOL_NAMES",
     "normalize_legacy_web_search_config",
 ]

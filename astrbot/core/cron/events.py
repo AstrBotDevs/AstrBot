@@ -5,7 +5,7 @@ from typing import Any
 from astrbot.core.message.components import Plain
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
-from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
+from astrbot.core.platform.astrbot_message import AstrBotMessage, Group, MessageMember
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.platform_metadata import PlatformMetadata
@@ -62,6 +62,21 @@ class CronMessageEvent(AstrMessageEvent):
     async def send_streaming(self, generator, use_fallback: bool = False) -> None:
         async for chain in generator:
             await self.send(chain)
+
+    async def send_typing(self) -> None:
+        return None
+
+    async def stop_typing(self) -> None:
+        return None
+
+    async def _pre_send(self) -> None:
+        return None
+
+    async def _post_send(self) -> None:
+        return None
+
+    async def get_group(self, group_id: str | None = None, **kwargs) -> Group | None:
+        return None
 
 
 __all__ = ["CronMessageEvent"]

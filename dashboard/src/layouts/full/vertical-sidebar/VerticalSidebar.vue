@@ -1,15 +1,15 @@
 <script setup>
-import { ref, shallowRef, computed, watch } from 'vue';
-import { useCustomizerStore } from '../../../stores/customizer';
-import { useMobileDrawerStore } from '@/stores/mobileDrawer';
-import { useI18n } from '@/i18n/composables';
-import sidebarItems, { EXTENSION_GROUP_KEY } from './sidebarItem';
-import NavItem from './NavItem.vue';
-import { usePluginSidebarItems } from '@/composables/usePluginSidebarItems';
-import { useDisplay } from 'vuetify';
-import { ChevronDown, ChevronRight, PanelLeft, Settings } from '@lucide/vue';
-import ChatUILogo from '@/components/chat/ChatUILogo.vue';
-import { useCommonStore } from '@/stores/common';
+import { ChevronDown, ChevronRight, PanelLeft, Settings } from "@lucide/vue";
+import { computed, ref, shallowRef, watch } from "vue";
+import { useDisplay } from "vuetify";
+import ChatUILogo from "@/components/chat/ChatUILogo.vue";
+import { usePluginSidebarItems } from "@/composables/usePluginSidebarItems";
+import { useI18n } from "@/i18n/composables";
+import { useCommonStore } from "@/stores/common";
+import { useMobileDrawerStore } from "@/stores/mobileDrawer";
+import { useCustomizerStore } from "../../../stores/customizer";
+import NavItem from "./NavItem.vue";
+import sidebarItems, { EXTENSION_GROUP_KEY } from "./sidebarItem";
 
 const { t } = useI18n();
 
@@ -20,16 +20,14 @@ const { pluginItems, pluginGroups } = usePluginSidebarItems();
 
 function buildSidebarMenu() {
   // Plugin pages are flattened into the extension group section.
-  const tail = groupByPlugin.value
-    ? pluginGroups.value
-    : (pluginItems.value?.children ?? []);
+  const tail = groupByPlugin.value ? pluginGroups.value : (pluginItems.value?.children ?? []);
   return [...sidebarItems, ...tail];
 }
 
 // Group plugin views by plugin under the extensions group; off by default.
-const groupByPlugin = ref(localStorage.getItem('sidebar_group_by_plugin') === '1');
+const groupByPlugin = ref(localStorage.getItem("sidebar_group_by_plugin") === "1");
 watch(groupByPlugin, (val) => {
-  localStorage.setItem('sidebar_group_by_plugin', val ? '1' : '0');
+  localStorage.setItem("sidebar_group_by_plugin", val ? "1" : "0");
   sidebarMenu.value = buildSidebarMenu();
   openedItems.value = sanitizeOpenedItems(openedItems.value, sidebarMenu.value);
 });
@@ -54,12 +52,12 @@ function sanitizeOpenedItems(items, menuItems) {
   }
 
   const groupValues = collectGroupValues(menuItems);
-  return items.filter((item) => typeof item === 'string' && groupValues.has(item));
+  return items.filter((item) => typeof item === "string" && groupValues.has(item));
 }
 
 function getInitialOpenedItems(menuItems) {
   try {
-    const stored = JSON.parse(localStorage.getItem('sidebar_openedItems') || '[]');
+    const stored = JSON.parse(localStorage.getItem("sidebar_openedItems") || "[]");
     return sanitizeOpenedItems(stored, menuItems);
   } catch {
     return [];
@@ -69,10 +67,14 @@ function getInitialOpenedItems(menuItems) {
 const sidebarMenu = shallowRef(buildSidebarMenu());
 
 // Collapsed group headers, persisted across sessions.
-const collapsedGroups = ref(JSON.parse(localStorage.getItem('sidebar_collapsed_groups') || '[]'));
-watch(collapsedGroups, (val) => {
-  localStorage.setItem('sidebar_collapsed_groups', JSON.stringify(val));
-}, { deep: true });
+const collapsedGroups = ref(JSON.parse(localStorage.getItem("sidebar_collapsed_groups") || "[]"));
+watch(
+  collapsedGroups,
+  (val) => {
+    localStorage.setItem("sidebar_collapsed_groups", JSON.stringify(val));
+  },
+  { deep: true },
+);
 
 function toggleGroup(header) {
   const idx = collapsedGroups.value.indexOf(header);
@@ -84,10 +86,14 @@ function toggleGroup(header) {
 }
 
 // Pinned items (by `to`), lifted to the top of the sidebar; persisted locally.
-const pinnedItems = ref(JSON.parse(localStorage.getItem('sidebar_pinned_items') || '[]'));
-watch(pinnedItems, (val) => {
-  localStorage.setItem('sidebar_pinned_items', JSON.stringify(val));
-}, { deep: true });
+const pinnedItems = ref(JSON.parse(localStorage.getItem("sidebar_pinned_items") || "[]"));
+watch(
+  pinnedItems,
+  (val) => {
+    localStorage.setItem("sidebar_pinned_items", JSON.stringify(val));
+  },
+  { deep: true },
+);
 
 function togglePin(item) {
   const idx = pinnedItems.value.indexOf(item.to);
@@ -118,9 +124,13 @@ const extensionTos = computed(() => {
 
 // 侧边栏分组展开状态持久化
 const openedItems = ref(getInitialOpenedItems(sidebarMenu.value));
-watch(openedItems, (val) => {
-  localStorage.setItem('sidebar_openedItems', JSON.stringify(sanitizeOpenedItems(val, sidebarMenu.value)));
-}, { deep: true });
+watch(
+  openedItems,
+  (val) => {
+    localStorage.setItem("sidebar_openedItems", JSON.stringify(sanitizeOpenedItems(val, sidebarMenu.value)));
+  },
+  { deep: true },
+);
 
 // 当插件项变化时（如插件启用/停用），刷新菜单
 watch(pluginItems, () => {
@@ -130,9 +140,7 @@ watch(pluginItems, () => {
 
 const { smAndDown: isMobile } = useDisplay();
 
-const isRailSidebar = computed(
-  () => !isMobile.value && customizer.mini_sidebar,
-);
+const isRailSidebar = computed(() => !isMobile.value && customizer.mini_sidebar);
 
 // Items visible in the sidebar: pinned extension items are lifted to the top
 // of the extensions group; entries under a collapsed header are hidden
@@ -182,7 +190,7 @@ const visibleMenu = computed(() => {
   }
   return result;
 });
-const botVersion = computed(() => commonStore.astrbotVersion ? `v${commonStore.astrbotVersion}` : '');
+const botVersion = computed(() => (commonStore.astrbotVersion ? `v${commonStore.astrbotVersion}` : ""));
 
 function toggleSidebar() {
   if (isMobile.value) {
@@ -191,7 +199,6 @@ function toggleSidebar() {
   }
   customizer.SET_MINI_SIDEBAR(!customizer.mini_sidebar);
 }
-
 </script>
 
 <template>
@@ -316,7 +323,7 @@ function toggleSidebar() {
       </div>
     </div>
   </v-navigation-drawer>
-  
+
 </template>
 
 <style scoped>

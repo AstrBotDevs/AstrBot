@@ -1,13 +1,4 @@
 <script setup lang="ts">
-import {
-  computed,
-  nextTick,
-  onBeforeUnmount,
-  onMounted,
-  ref,
-  watch,
-} from "vue";
-import { RouterLink, useRoute, useRouter } from "vue-router";
 import { VueMonacoEditor } from "@guolao/vue-monaco-editor";
 import {
   Bot,
@@ -26,15 +17,14 @@ import {
   Trash2,
   X,
 } from "@lucide/vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { RouterLink, useRoute, useRouter } from "vue-router";
 import { conversationApi } from "@/api/v1";
 import ConversationHistoryPreview from "@/components/conversation/ConversationHistoryPreview.vue";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { useCustomizerStore } from "@/stores/customizer";
 import { copyToClipboard } from "@/utils/clipboard";
-import {
-  askForConfirmation as askForConfirmationDialog,
-  useConfirmDialog,
-} from "@/utils/confirmDialog";
+import { askForConfirmation as askForConfirmationDialog, useConfirmDialog } from "@/utils/confirmDialog";
 import { getPlatformIcon } from "@/utils/platformUtils";
 
 type UmoInfo = {
@@ -86,18 +76,14 @@ const router = useRouter();
 const customizerStore = useCustomizerStore();
 const confirmDialog = useConfirmDialog();
 
-const initialUmoQuery = Array.isArray(route.query.umo)
-  ? route.query.umo[0]
-  : route.query.umo;
+const initialUmoQuery = Array.isArray(route.query.umo) ? route.query.umo[0] : route.query.umo;
 
 const conversations = ref<Conversation[]>([]);
 const availableBots = ref<BotOption[]>([]);
 const keyword = ref("");
 const selectedBotIds = ref<string[]>([]);
 const selectedTypes = ref<string[]>([]);
-const umoQuery = ref(
-  typeof initialUmoQuery === "string" ? initialUmoQuery : "",
-);
+const umoQuery = ref(typeof initialUmoQuery === "string" ? initialUmoQuery : "");
 const sortValue = ref("updated_at:desc");
 const groupBySession = ref(false);
 const mobileFiltersOpen = ref(false);
@@ -139,17 +125,10 @@ const hasFilters = computed(
 const selectedItems = computed(() => Object.values(selectedByKey.value));
 const allPageSelected = computed(
   () =>
-    conversations.value.length > 0 &&
-    conversations.value.every(
-      (item) => selectedByKey.value[conversationKey(item)],
-    ),
+    conversations.value.length > 0 && conversations.value.every((item) => selectedByKey.value[conversationKey(item)]),
 );
 const somePageSelected = computed(
-  () =>
-    !allPageSelected.value &&
-    conversations.value.some(
-      (item) => selectedByKey.value[conversationKey(item)],
-    ),
+  () => !allPageSelected.value && conversations.value.some((item) => selectedByKey.value[conversationKey(item)]),
 );
 const sessionGroups = computed<SessionGroup[]>(() => {
   const groups = new Map<string, Conversation[]>();
@@ -162,9 +141,7 @@ const sessionGroups = computed<SessionGroup[]>(() => {
     userId,
     sample: items[0],
     items,
-    selectedCount: items.filter(
-      (item) => selectedByKey.value[conversationKey(item)],
-    ).length,
+    selectedCount: items.filter((item) => selectedByKey.value[conversationKey(item)]).length,
   }));
 });
 const conversationListEntries = computed<ConversationListEntry[]>(() => {
@@ -193,9 +170,7 @@ const conversationListEntries = computed<ConversationListEntry[]>(() => {
   }
   return entries;
 });
-const botTypes = computed(() =>
-  Object.fromEntries(availableBots.value.map((bot) => [bot.id, bot.type])),
-);
+const botTypes = computed(() => Object.fromEntries(availableBots.value.map((bot) => [bot.id, bot.type])));
 const sortItems = computed(() => [
   {
     title: tm("workspace.filters.updatedDesc"),
@@ -228,9 +203,7 @@ watch([selectedBotIds, selectedTypes, sortValue, groupBySession], () => {
   cancelScheduledFetch();
   page.value = 1;
   expandedSessions.value =
-    groupBySession.value && activeConversation.value
-      ? { [activeConversation.value.user_id]: true }
-      : {};
+    groupBySession.value && activeConversation.value ? { [activeConversation.value.user_id]: true } : {};
   void fetchConversations();
 });
 
@@ -302,8 +275,7 @@ function messageTypeLabel(item: Conversation | null) {
 
 function platformIcon(item: Conversation | BotOption) {
   const platformId = "platform_id" in item ? item.platform_id : item.id;
-  const platformType =
-    "type" in item ? item.type : botTypes.value[platformId] || platformId;
+  const platformType = "type" in item ? item.type : botTypes.value[platformId] || platformId;
   return getPlatformIcon(platformType);
 }
 
@@ -342,10 +314,7 @@ async function fetchConversations() {
   listLoading.value = true;
   listError.value = false;
 
-  const [sortBy, sortOrder] = sortValue.value.split(":") as [
-    "created_at" | "updated_at",
-    "asc" | "desc",
-  ];
+  const [sortBy, sortOrder] = sortValue.value.split(":") as ["created_at" | "updated_at", "asc" | "desc"];
   const params: Record<string, string | number | boolean> = {
     page: page.value,
     page_size: pageSize,
@@ -373,15 +342,12 @@ async function fetchConversations() {
     }
 
     const data = response.data.data || {};
-    conversations.value = Array.isArray(data.conversations)
-      ? data.conversations
-      : [];
+    conversations.value = Array.isArray(data.conversations) ? data.conversations : [];
     total.value = data.pagination?.total || 0;
     totalPages.value = Math.max(data.pagination?.total_pages || 1, 1);
     if (activeConversation.value) {
       const current = conversations.value.find(
-        (item) =>
-          conversationKey(item) === conversationKey(activeConversation.value!),
+        (item) => conversationKey(item) === conversationKey(activeConversation.value!),
       );
       if (current) {
         activeConversation.value = {
@@ -393,12 +359,7 @@ async function fetchConversations() {
   } catch (error: any) {
     if (controller.signal.aborted || requestId !== listRequestId.value) return;
     listError.value = true;
-    notify(
-      error?.response?.data?.message ||
-        error?.message ||
-        tm("messages.fetchError"),
-      "error",
-    );
+    notify(error?.response?.data?.message || error?.message || tm("messages.fetchError"), "error");
   } finally {
     if (requestId === listRequestId.value) {
       listLoading.value = false;
@@ -479,8 +440,7 @@ async function openConversation(item: Conversation) {
     const detail = response.data.data || {};
     activeConversation.value = { ...item, ...detail };
     const history = detail.history || [];
-    const parsedHistory =
-      typeof history === "string" ? JSON.parse(history) : history;
+    const parsedHistory = typeof history === "string" ? JSON.parse(history) : history;
     if (!Array.isArray(parsedHistory)) {
       throw new Error(tm("messages.historyError"));
     }
@@ -488,12 +448,7 @@ async function openConversation(item: Conversation) {
   } catch (error: any) {
     if (requestId !== previewRequestId.value) return;
     conversationHistory.value = [];
-    notify(
-      error?.response?.data?.message ||
-        error?.message ||
-        tm("messages.historyError"),
-      "error",
-    );
+    notify(error?.response?.data?.message || error?.message || tm("messages.historyError"), "error");
   } finally {
     if (requestId === previewRequestId.value) {
       previewLoading.value = false;
@@ -538,21 +493,13 @@ async function saveTitle() {
         conversation.title = editedTitle.value.trim();
       }
     }
-    if (
-      activeConversation.value &&
-      conversationKey(activeConversation.value) === conversationKey(item)
-    ) {
+    if (activeConversation.value && conversationKey(activeConversation.value) === conversationKey(item)) {
       activeConversation.value.title = editedTitle.value.trim();
     }
     editDialog.value = false;
     notify(tm("messages.saveSuccess"));
   } catch (error: any) {
-    notify(
-      error?.response?.data?.message ||
-        error?.message ||
-        tm("messages.saveError"),
-      "error",
-    );
+    notify(error?.response?.data?.message || error?.message || tm("messages.saveError"), "error");
   } finally {
     actionLoading.value = false;
   }
@@ -571,21 +518,14 @@ async function exportSelected() {
     const url = window.URL.createObjectURL(response.data);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `astrbot_conversations_${new Date()
-      .toISOString()
-      .replace(/[:.]/g, "-")}.jsonl`;
+    link.download = `astrbot_conversations_${new Date().toISOString().replace(/[:.]/g, "-")}.jsonl`;
     document.body.appendChild(link);
     link.click();
     link.remove();
     window.URL.revokeObjectURL(url);
     notify(tm("messages.exportSuccess"));
   } catch (error: any) {
-    notify(
-      error?.response?.data?.message ||
-        error?.message ||
-        tm("messages.exportError"),
-      "error",
-    );
+    notify(error?.response?.data?.message || error?.message || tm("messages.exportError"), "error");
   } finally {
     actionLoading.value = false;
   }
@@ -614,10 +554,7 @@ async function deleteSelected() {
     }
     const result = response.data.data || {};
     selectedByKey.value = {};
-    if (
-      activeConversation.value &&
-      deletingKeys.has(conversationKey(activeConversation.value))
-    ) {
+    if (activeConversation.value && deletingKeys.has(conversationKey(activeConversation.value))) {
       closePreview();
     }
     if (conversations.value.length === selectedCount && page.value > 1) {
@@ -640,12 +577,7 @@ async function deleteSelected() {
       );
     }
   } catch (error: any) {
-    notify(
-      error?.response?.data?.message ||
-        error?.message ||
-        tm("messages.batchDeleteError"),
-      "error",
-    );
+    notify(error?.response?.data?.message || error?.message || tm("messages.batchDeleteError"), "error");
   } finally {
     actionLoading.value = false;
   }
@@ -654,19 +586,13 @@ async function deleteSelected() {
 async function copyUmo() {
   if (!activeConversation.value) return;
   const copied = await copyToClipboard(activeConversation.value.user_id);
-  notify(
-    copied ? tm("messages.copySuccess") : tm("messages.copyError"),
-    copied ? "success" : "error",
-  );
+  notify(copied ? tm("messages.copySuccess") : tm("messages.copyError"), copied ? "success" : "error");
 }
 
 async function copyRawData() {
   if (!rawHistoryText.value) return;
   const copied = await copyToClipboard(rawHistoryText.value);
-  notify(
-    copied ? tm("messages.copySuccess") : tm("messages.copyError"),
-    copied ? "success" : "error",
-  );
+  notify(copied ? tm("messages.copySuccess") : tm("messages.copyError"), copied ? "success" : "error");
 }
 
 function changePage(nextPage: number) {

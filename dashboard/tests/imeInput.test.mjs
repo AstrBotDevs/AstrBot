@@ -14,23 +14,9 @@ test("does not treat normal Enter as IME composition", () => {
 });
 
 test("detects Enter fired immediately after composition ended", () => {
-  assert.equal(
-    isComposingEnter(
-      { key: "Enter", isComposing: false, timeStamp: 105 },
-      false,
-      100,
-    ),
-    true,
-  );
+  assert.equal(isComposingEnter({ key: "Enter", isComposing: false, timeStamp: 105 }, false, 100), true);
 });
 
 test("does not treat delayed Enter after composition ended as IME composition", () => {
-  assert.equal(
-    isComposingEnter(
-      { key: "Enter", isComposing: false, timeStamp: 250 },
-      false,
-      100,
-    ),
-    false,
-  );
+  assert.equal(isComposingEnter({ key: "Enter", isComposing: false, timeStamp: 250 }, false, 100), false);
 });

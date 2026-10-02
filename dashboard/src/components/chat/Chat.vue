@@ -520,6 +520,7 @@
 </template>
 
 <script setup lang="ts">
+import { ArrowDown, Box, PanelLeft, Pencil, Settings, SquarePen, Trash2 } from "@lucide/vue";
 import {
   computed,
   markRaw,
@@ -534,70 +535,62 @@ import {
 } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useDisplay } from "vuetify";
-import { isAxiosError } from "axios";
-import {
-  ArrowDown,
-  Box,
-  PanelLeft,
-  Pencil,
-  Settings,
-  SquarePen,
-  Trash2,
-} from "@lucide/vue";
 import { chatApi, providerApi } from "@/api/v1";
+import type ChatInput from "@/components/chat/ChatInput.vue";
+import ChatLoadError from "@/components/chat/ChatLoadError.vue";
+import ChatMessageList from "@/components/chat/ChatMessageList.vue";
 import ChatSettingsDialog from "@/components/chat/ChatSettingsDialog.vue";
 import ChatToolbarContext from "@/components/chat/ChatToolbarContext.vue";
-import ProjectDialog, {
-  type ProjectFormData,
-} from "@/components/chat/ProjectDialog.vue";
-import ProjectList, { type Project } from "@/components/chat/ProjectList.vue";
-import ProjectView from "@/components/chat/ProjectView.vue";
-import ChatInput from "@/components/chat/ChatInput.vue";
-import ChatMessageList from "@/components/chat/ChatMessageList.vue";
 import ChatUILogo from "@/components/chat/ChatUILogo.vue";
-import type { RegenerateModelSelection } from "@/components/chat/RegenerateMenu.vue";
-import ChatLoadError from "@/components/chat/ChatLoadError.vue";
+import RefsSidebar from "@/components/chat/message_list_comps/RefsSidebar.vue";
+import ProjectDialog, { type ProjectFormData } from "@/components/chat/ProjectDialog.vue";
+import type ProjectList from "@/components/chat/ProjectList.vue";
+import type { Project } from "@/components/chat/ProjectList.vue";
+import ProjectView from "@/components/chat/ProjectView.vue";
 import ReasoningSidebar from "@/components/chat/ReasoningSidebar.vue";
+import type { RegenerateModelSelection } from "@/components/chat/RegenerateMenu.vue";
 import ThreadPanel from "@/components/chat/ThreadPanel.vue";
 import WorkspaceFilesPanel from "@/components/chat/WorkspaceFilesPanel.vue";
-import RefsSidebar from "@/components/chat/message_list_comps/RefsSidebar.vue";
-import { useSessions, type Session } from "@/composables/useSessions";
+import ProviderChatCompletionPanel from "@/components/provider/ProviderChatCompletionPanel.vue";
+import { useDragUpload } from "@/composables/useDragUpload";
+import { useMediaHandling } from "@/composables/useMediaHandling";
 import {
   messageBlocks as buildMessageBlocks,
-  useMessages,
   type ChatRecord,
   type ChatThread,
   type MessagePart,
   type TransportMode,
+  useMessages,
 } from "@/composables/useMessages";
-import { useMediaHandling } from "@/composables/useMediaHandling";
-import { useRecording } from "@/composables/useRecording";
 import { useProjects } from "@/composables/useProjects";
-import { useDragUpload } from "@/composables/useDragUpload";
 import { useProviderModelSelection } from "@/composables/useProviderModelSelection";
+import { useRecording } from "@/composables/useRecording";
+import { type Session, useSessions } from "@/composables/useSessions";
+import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { useChatHeaderStore } from "@/stores/chatHeader";
+import { useCustomizerStore } from "@/stores/customizer";
 import { useHeaderContextStore } from "@/stores/headerContext";
 import { useMobileDrawerStore } from "@/stores/mobileDrawer";
-import { useCustomizerStore } from "@/stores/customizer";
-import ProviderChatCompletionPanel from "@/components/provider/ProviderChatCompletionPanel.vue";
-import { useI18n, useModuleI18n } from "@/i18n/composables";
+import { readChatDraft, writeChatDraft } from "@/utils/chatDraftStorage.mjs";
 import { askForConfirmation, useConfirmDialog } from "@/utils/confirmDialog";
 import {
   contextLimit,
   formatTokenCount,
-  type ProviderModelMetadata,
   type ProviderMetadataSource,
+  type ProviderModelMetadata,
 } from "@/utils/providerMetadata";
 import { useToast } from "@/utils/toast";
-import { readChatDraft, writeChatDraft } from "@/utils/chatDraftStorage.mjs";
 
-const props = withDefaults(
-  defineProps<{ chatboxMode?: boolean; active?: boolean }>(),
-  {
-    chatboxMode: false,
-    active: true,
-  },
-);
+function chatRequestErrorMessage(error: unknown, fallback: string): string {
+  const responseMessage = (error as { response?: { data?: { message?: unknown } } } | null)?.response?.data?.message;
+  if (typeof responseMessage === "string" && responseMessage.trim()) return responseMessage;
+  return error instanceof Error && error.message ? error.message : fallback;
+}
+
+const props = withDefaults(defineProps<{ chatboxMode?: boolean; active?: boolean }>(), {
+  chatboxMode: false,
+  active: true,
+});
 
 const route = useRoute();
 const router = useRouter();
@@ -609,8 +602,7 @@ const mobileDrawer = useMobileDrawerStore();
    top toolbar only while the chat page is actually visible. */
 watch(
   () => props.active,
-  (active) =>
-    headerContext.SET_COMPONENT(active ? markRaw(ChatToolbarContext) : null),
+  (active) => headerContext.SET_COMPONENT(active ? markRaw(ChatToolbarContext) : null),
   { immediate: true },
 );
 onUnmounted(() => headerContext.SET_COMPONENT(null));
@@ -696,9 +688,7 @@ const selectedTokenProviderId = ref("");
 const messagesContainer = ref<HTMLElement | null>(null);
 const sidebarContent = ref<HTMLElement | null>(null);
 const sidebarProjects = ref<InstanceType<typeof ProjectList> | null>(null);
-const sidebarProjectElement = computed<HTMLElement | null>(
-  () => sidebarProjects.value?.$el || null,
-);
+const sidebarProjectElement = computed<HTMLElement | null>(() => sidebarProjects.value?.$el || null);
 const messagesContent = ref<HTMLElement | null>(null);
 const composerShell = ref<HTMLElement | null>(null);
 const inputRef = ref<InstanceType<typeof ChatInput> | null>(null);
@@ -746,19 +736,11 @@ let activeDraftSessionId = currSessionId.value;
 let draftSaveTimer: number | null = null;
 let chatResizeObserver: ResizeObserver | null = null;
 let chatMutationObserver: MutationObserver | null = null;
-const {
-  isRecording,
-  startRecording: startRecorder,
-  stopRecording: stopRecorder,
-} = useRecording();
+const { isRecording, startRecording: startRecorder, stopRecording: stopRecorder } = useRecording();
 const { smAndDown: isMobile } = useDisplay();
 
-const isSidebarCollapsed = computed(
-  () => !isMobile.value && customizer.chatSidebarCollapsed,
-);
-const isProviderWorkspace = computed(
-  () => activeWorkspace.value === "providers",
-);
+const isSidebarCollapsed = computed(() => !isMobile.value && customizer.chatSidebarCollapsed);
+const isProviderWorkspace = computed(() => activeWorkspace.value === "providers");
 
 function toggleChatSidebar() {
   if (isMobile.value) {
@@ -770,9 +752,7 @@ function toggleChatSidebar() {
 
 const activeReasoningParts = computed<MessagePart[]>(() => {
   if (!activeReasoningTarget.value) return [];
-  const blocks = buildMessageBlocks(
-    activeReasoningTarget.value.message.content || { type: "bot", message: [] },
-  );
+  const blocks = buildMessageBlocks(activeReasoningTarget.value.message.content || { type: "bot", message: [] });
   const block = blocks[activeReasoningTarget.value.blockIndex];
   return block?.kind === "thinking" ? block.parts : [];
 });
@@ -817,9 +797,7 @@ const activeSessionPagination = computed(() =>
 );
 
 const transportMode = ref<TransportMode>(
-  (localStorage.getItem("chat.transportMode") as TransportMode) === "websocket"
-    ? "websocket"
-    : "sse",
+  (localStorage.getItem("chat.transportMode") as TransportMode) === "websocket" ? "websocket" : "sse",
 );
 
 watch(transportMode, (mode) => {
@@ -842,27 +820,18 @@ watch(currSessionId, (sessionId) => {
 });
 
 const isDark = computed(() => customizer.uiTheme === "PurpleThemeDark");
-const canSend = computed(
-  () =>
-    Boolean(draft.value.trim() || stagedFiles.value.length) && !sending.value,
-);
+const canSend = computed(() => Boolean(draft.value.trim() || stagedFiles.value.length) && !sending.value);
 const currentSession = computed(
   () =>
-    sessions.value.find(
-      (session) => session.session_id === currSessionId.value,
-    ) ||
-    projectSessions.value.find(
-      (session) => session.session_id === currSessionId.value,
-    ) ||
+    sessions.value.find((session) => session.session_id === currSessionId.value) ||
+    projectSessions.value.find((session) => session.session_id === currSessionId.value) ||
     Object.values(projectSessionsById.value)
       .flat()
       .find((session) => session.session_id === currSessionId.value) ||
     sessionDetails[currSessionId.value] ||
     null,
 );
-const sessionProject = computed(() =>
-  currSessionId.value ? sessionProjects[currSessionId.value] : null,
-);
+const sessionProject = computed(() => (currSessionId.value ? sessionProjects[currSessionId.value] : null));
 const sidebarSessions = computed(() => {
   const current = currentSession.value;
   if (
@@ -874,37 +843,22 @@ const sidebarSessions = computed(() => {
   }
   return sessions.value;
 });
-const currentSessionTitle = computed(() =>
-  currentSession.value ? sessionTitle(currentSession.value) : "",
-);
+const currentSessionTitle = computed(() => (currentSession.value ? sessionTitle(currentSession.value) : ""));
 const selectedProject = computed(
-  () =>
-    projects.value.find(
-      (project) => project.project_id === selectedProjectId.value,
-    ) || null,
+  () => projects.value.find((project) => project.project_id === selectedProjectId.value) || null,
 );
 const activeProject = computed(() => {
   if (isProviderWorkspace.value) return null;
   if (selectedProject.value) return selectedProject.value;
   const projectId = sessionProject.value?.project_id;
-  return (
-    projects.value.find((project) => project.project_id === projectId) || null
-  );
+  return projects.value.find((project) => project.project_id === projectId) || null;
 });
 const isEmptyChat = computed(
-  () =>
-    !isProviderWorkspace.value &&
-    !selectedProject.value &&
-    !loadingMessages.value &&
-    !activeMessages.value.length,
+  () => !isProviderWorkspace.value && !selectedProject.value && !loadingMessages.value && !activeMessages.value.length,
 );
-const chatHeaderTitle = computed(
-  () => currentSessionTitle.value || selectedProject.value?.title || "",
-);
+const chatHeaderTitle = computed(() => currentSessionTitle.value || selectedProject.value?.title || "");
 const chatHeaderSubtitle = computed(() =>
-  currentSessionTitle.value
-    ? sessionProject.value?.title || selectedProject.value?.title || ""
-    : "",
+  currentSessionTitle.value ? sessionProject.value?.title || selectedProject.value?.title || "" : "",
 );
 const chatInputReplyTarget = computed(() =>
   replyTarget.value?.id == null
@@ -915,9 +869,7 @@ const chatInputReplyTarget = computed(() =>
       },
 );
 const currentTokenProvider = computed(() => {
-  const selectedProvider = tokenProviderConfigs.value.find(
-    (provider) => provider.id === selectedTokenProviderId.value,
-  );
+  const selectedProvider = tokenProviderConfigs.value.find((provider) => provider.id === selectedTokenProviderId.value);
   return selectedProvider || tokenProviderConfigs.value[0] || null;
 });
 const currentTokenMetadata = computed(() => {
@@ -935,20 +887,13 @@ const latestContextTokens = computed(() => {
     }
     const usage = stats.token_usage;
     if (!usage) continue;
-    return (
-      readTokenCount(usage.input_other) +
-      readTokenCount(usage.input_cached) +
-      readTokenCount(usage.output)
-    );
+    return readTokenCount(usage.input_other) + readTokenCount(usage.input_cached) + readTokenCount(usage.output);
   }
   return 0;
 });
 const tokenUsageIndicator = computed(() => {
   const used = latestContextTokens.value;
-  const limit = contextLimit(
-    currentTokenProvider.value,
-    currentTokenMetadata.value,
-  );
+  const limit = contextLimit(currentTokenProvider.value, currentTokenMetadata.value);
   if (used <= 0 || limit <= 0) return null;
 
   const percent = (used / limit) * 100;
@@ -990,9 +935,7 @@ const SESSION_PROVIDER_STORAGE_PREFIX = "chat.sessionProvider.";
 
 function readSessionProviderSelection(sessionId: string) {
   try {
-    const raw = localStorage.getItem(
-      SESSION_PROVIDER_STORAGE_PREFIX + sessionId,
-    );
+    const raw = localStorage.getItem(SESSION_PROVIDER_STORAGE_PREFIX + sessionId);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (parsed && typeof parsed.providerId === "string" && parsed.providerId) {
@@ -1067,11 +1010,7 @@ onMounted(async () => {
   if (typeof ResizeObserver !== "undefined") {
     chatResizeObserver = new ResizeObserver((entries) => {
       if (
-        entries.some(
-          (entry) =>
-            entry.target === sidebarContent.value ||
-            entry.target === sidebarProjectElement.value,
-        )
+        entries.some((entry) => entry.target === sidebarContent.value || entry.target === sidebarProjectElement.value)
       ) {
         loadMoreSessions();
       }
@@ -1094,27 +1033,17 @@ onMounted(async () => {
       if (shouldStickToBottom.value && !autoScrollPaused.value) {
         scrollToBottom();
       } else {
-        isAwayFromBottom.value =
-          container.scrollHeight -
-            container.scrollTop -
-            container.clientHeight >
-          2;
+        isAwayFromBottom.value = container.scrollHeight - container.scrollTop - container.clientHeight > 2;
       }
     });
     if (composerShell.value) chatResizeObserver.observe(composerShell.value);
     if (sidebarContent.value) chatResizeObserver.observe(sidebarContent.value);
-    if (sidebarProjectElement.value)
-      chatResizeObserver.observe(sidebarProjectElement.value);
-    if (messagesContent.value)
-      chatResizeObserver.observe(messagesContent.value);
+    if (sidebarProjectElement.value) chatResizeObserver.observe(sidebarProjectElement.value);
+    if (messagesContent.value) chatResizeObserver.observe(messagesContent.value);
   }
   if (typeof MutationObserver !== "undefined") {
     chatMutationObserver = new MutationObserver(() => {
-      if (
-        !suppressAutoScroll.value &&
-        shouldStickToBottom.value &&
-        !autoScrollPaused.value
-      ) {
+      if (!suppressAutoScroll.value && shouldStickToBottom.value && !autoScrollPaused.value) {
         scrollToBottom();
       }
     });
@@ -1168,11 +1097,7 @@ watch(
   { flush: "post" },
 );
 
-watch(
-  [() => sessionsPagination.loading, () => mobileDrawer.open],
-  () => loadMoreSessions(),
-  { flush: "post" },
-);
+watch([() => sessionsPagination.loading, () => mobileDrawer.open], () => loadMoreSessions(), { flush: "post" });
 
 watch(
   messagesContent,
@@ -1244,7 +1169,7 @@ async function openProviderWorkspace() {
   activeWorkspace.value = "providers";
   const targetPath = `${basePath()}/models`;
   if (route.path !== targetPath) {
-  await router.push(targetPath);
+    await router.push(targetPath);
   }
 }
 
@@ -1254,8 +1179,7 @@ function sessionTitle(session: Session) {
 
 function syncSelectedTokenProvider() {
   if (typeof window === "undefined") return;
-  selectedTokenProviderId.value =
-    localStorage.getItem("selectedProvider") || "";
+  selectedTokenProviderId.value = localStorage.getItem("selectedProvider") || "";
 }
 
 async function loadTokenProviders() {
@@ -1263,11 +1187,10 @@ async function loadTokenProviders() {
   try {
     const response = await providerApi.listByProviderType("chat_completion");
     if (response.data.status === "ok") {
-      tokenModelMetadata.value = ((response.data as any).model_metadata ||
-        {}) as Record<string, ProviderModelMetadata>;
-      tokenProviderConfigs.value = (
-        (response.data.data || []) as unknown as TokenProviderConfig[]
-      ).filter((provider) => provider.enable !== false);
+      tokenModelMetadata.value = ((response.data as any).model_metadata || {}) as Record<string, ProviderModelMetadata>;
+      tokenProviderConfigs.value = ((response.data.data || []) as unknown as TokenProviderConfig[]).filter(
+        (provider) => provider.enable !== false,
+      );
     }
   } catch (error) {
     console.error("Failed to load provider context metadata:", error);
@@ -1335,16 +1258,11 @@ async function loadProjectSessions(projectId = selectedProjectId.value) {
 async function handleProjectToggle(projectId: string, expanded: boolean) {
   if (!expanded || projectSessionsById.value[projectId]) return;
   if (loadingProjectSessionIds.value.includes(projectId)) return;
-  loadingProjectSessionIds.value = [
-    ...loadingProjectSessionIds.value,
-    projectId,
-  ];
+  loadingProjectSessionIds.value = [...loadingProjectSessionIds.value, projectId];
   try {
     await loadProjectSessions(projectId);
   } finally {
-    loadingProjectSessionIds.value = loadingProjectSessionIds.value.filter(
-      (item) => item !== projectId,
-    );
+    loadingProjectSessionIds.value = loadingProjectSessionIds.value.filter((item) => item !== projectId);
   }
 }
 
@@ -1353,20 +1271,14 @@ async function handleDeleteProject(projectId: string) {
   const nextSessionsById = { ...projectSessionsById.value };
   delete nextSessionsById[projectId];
   projectSessionsById.value = nextSessionsById;
-  loadingProjectSessionIds.value = loadingProjectSessionIds.value.filter(
-    (item) => item !== projectId,
-  );
+  loadingProjectSessionIds.value = loadingProjectSessionIds.value.filter((item) => item !== projectId);
   if (selectedProjectId.value === projectId) {
     selectedProjectId.value = null;
     projectSessions.value = [];
   }
 }
 
-function openSessionTitleDialog(
-  sessionId: string,
-  title: string,
-  refreshProjectSessions = false,
-) {
+function openSessionTitleDialog(sessionId: string, title: string, refreshProjectSessions = false) {
   editingSessionTitleId.value = sessionId;
   sessionTitleDraft.value = title;
   refreshProjectSessionsAfterTitleSave.value = refreshProjectSessions;
@@ -1387,16 +1299,12 @@ async function saveSessionTitleDialog() {
     if (sessionDetails[sessionId]) {
       sessionDetails[sessionId].display_name = displayName;
     }
-    const projectSession = projectSessions.value.find(
-      (session) => session.session_id === sessionId,
-    );
+    const projectSession = projectSessions.value.find((session) => session.session_id === sessionId);
     if (projectSession) {
       projectSession.display_name = displayName;
     }
     Object.values(projectSessionsById.value).forEach((projectSessionList) => {
-      const cachedProjectSession = projectSessionList.find(
-        (session) => session.session_id === sessionId,
-      );
+      const cachedProjectSession = projectSessionList.find((session) => session.session_id === sessionId);
       if (cachedProjectSession) {
         cachedProjectSession.display_name = displayName;
       }
@@ -1438,10 +1346,7 @@ async function editProjectSessionTitle(sessionId: string, title: string) {
   openSessionTitleDialog(sessionId, title, true);
 }
 
-async function deleteProjectSession(
-  sessionId: string,
-  projectId = selectedProjectId.value,
-) {
+async function deleteProjectSession(sessionId: string, projectId = selectedProjectId.value) {
   await deleteSession(sessionId);
   if (projectId) {
     await loadProjectSessions(projectId);
@@ -1475,8 +1380,7 @@ async function saveProject(formData: ProjectFormData, projectId?: string) {
     projectDialogOpen.value = false;
     editingProject.value = null;
   } catch (error) {
-    projectDialogError.value =
-      error instanceof Error ? error.message : "Failed to save project";
+    projectDialogError.value = error instanceof Error ? error.message : "Failed to save project";
   } finally {
     savingProject.value = false;
   }
@@ -1616,9 +1520,7 @@ function buildOutgoingParts(text: string): MessagePart[] {
 
 function updateTitleFromText(sessionId: string, text: string) {
   const session = sessions.value.find((item) => item.session_id === sessionId);
-  const projectSession = projectSessions.value.find(
-    (item) => item.session_id === sessionId,
-  );
+  const projectSession = projectSessions.value.find((item) => item.session_id === sessionId);
   const cachedProjectSessions = Object.values(projectSessionsById.value)
     .flat()
     .filter((item) => item.session_id === sessionId);
@@ -1642,9 +1544,7 @@ function updateTitleFromText(sessionId: string, text: string) {
 
 function replyPreview(messageId?: string | number, fallback?: string) {
   if (fallback) return truncate(fallback, 80);
-  const found = activeMessages.value.find(
-    (message) => String(message.id) === String(messageId),
-  );
+  const found = activeMessages.value.find((message) => String(message.id) === String(messageId));
   const text = found ? plainTextFromMessage(found) : "";
   return text ? truncate(text, 80) : tm("reply.replyTo");
 }
@@ -1662,9 +1562,7 @@ function truncate(value: string, max: number) {
 
 function scrollToMessage(messageId?: string | number) {
   if (!messageId) return;
-  const index = activeMessages.value.findIndex(
-    (message) => String(message.id) === String(messageId),
-  );
+  const index = activeMessages.value.findIndex((message) => String(message.id) === String(messageId));
   if (index < 0) return;
   shouldStickToBottom.value = false;
   const rows = messagesContainer.value?.querySelectorAll(".message-row");
@@ -1689,10 +1587,7 @@ async function saveMessageEdit() {
   savingMessageEdit.value = true;
   try {
     const result = await editMessage(sessionId, target, messageEditDraft.value);
-    if (
-      currSessionId.value !== sessionId ||
-      !activeMessages.value.includes(target)
-    ) {
+    if (currSessionId.value !== sessionId || !activeMessages.value.includes(target)) {
       cancelMessageEdit();
       return;
     }
@@ -1710,12 +1605,8 @@ async function saveMessageEdit() {
       });
       scrollToBottom(true);
     } else if (result.needsRegenerate) {
-      const index = activeMessages.value.findIndex(
-        (message) => String(message.id) === String(target.id),
-      );
-      const nextBot = activeMessages.value
-        .slice(index + 1)
-        .find((message) => !isUserMessage(message));
+      const index = activeMessages.value.findIndex((message) => String(message.id) === String(target.id));
+      const nextBot = activeMessages.value.slice(index + 1).find((message) => !isUserMessage(message));
       if (nextBot) {
         await handleRegenerateMessage(nextBot);
       }
@@ -1727,10 +1618,7 @@ async function saveMessageEdit() {
   }
 }
 
-async function handleRegenerateMessage(
-  message: ChatRecord,
-  selection?: RegenerateModelSelection,
-) {
+async function handleRegenerateMessage(message: ChatRecord, selection?: RegenerateModelSelection) {
   if (!currSessionId.value || isUserMessage(message)) return;
   message.threads = [];
   const effectiveSelection = selection ?? getSelectedProviderSelection();
@@ -1755,11 +1643,7 @@ function handleBotTextSelection(event: MouseEvent, message: ChatRecord) {
       threadSelection.visible = false;
       return;
     }
-    if (
-      !container ||
-      !container.contains(selection.anchorNode) ||
-      !container.contains(selection.focusNode)
-    ) {
+    if (!container || !container.contains(selection.anchorNode) || !container.contains(selection.focusNode)) {
       threadSelection.visible = false;
       return;
     }
@@ -1767,10 +1651,7 @@ function handleBotTextSelection(event: MouseEvent, message: ChatRecord) {
     const rect = range.getBoundingClientRect();
     threadSelection.message = message;
     threadSelection.selectedText = selectedText;
-    threadSelection.left = Math.min(
-      window.innerWidth - 180,
-      Math.max(12, rect.left + rect.width / 2 - 70),
-    );
+    threadSelection.left = Math.min(window.innerWidth - 180, Math.max(12, rect.left + rect.width / 2 - 70));
     threadSelection.top = Math.max(12, rect.top - 42);
     threadSelection.visible = true;
   }, 0);
@@ -1778,8 +1659,7 @@ function handleBotTextSelection(event: MouseEvent, message: ChatRecord) {
 
 async function createThreadFromSelection() {
   const message = threadSelection.message;
-  if (!currSessionId.value || !message?.id || !threadSelection.selectedText)
-    return;
+  if (!currSessionId.value || !message?.id || !threadSelection.selectedText) return;
   try {
     const response = await chatApi.createThread({
       session_id: currSessionId.value,
@@ -1802,11 +1682,7 @@ async function createThreadFromSelection() {
     openThreadPanel(thread);
     window.getSelection()?.removeAllRanges();
   } catch (error) {
-    toast.error(
-      isAxiosError(error)
-        ? error.response?.data?.message || error.message
-        : tm("thread.createFailed"),
-    );
+    toast.error(chatRequestErrorMessage(error, tm("thread.createFailed")));
     console.error("Failed to create thread:", error);
   } finally {
     threadSelection.visible = false;
@@ -1828,15 +1704,11 @@ function openRefsSidebar(refs: unknown) {
   activeThread.value = null;
   reasoningPanelOpen.value = false;
   activeReasoningTarget.value = null;
-  selectedRefs.value =
-    refs && typeof refs === "object" ? (refs as Record<string, unknown>) : null;
+  selectedRefs.value = refs && typeof refs === "object" ? (refs as Record<string, unknown>) : null;
   refsSidebarOpen.value = true;
 }
 
-function openReasoningPanel(payload: {
-  message: ChatRecord;
-  blockIndex: number;
-}) {
+function openReasoningPanel(payload: { message: ChatRecord; blockIndex: number }) {
   chatHeader.SET_WORKSPACE_FILES_OPEN(false);
   threadPanelOpen.value = false;
   activeThread.value = null;
@@ -1854,11 +1726,7 @@ async function loadEarlierWithAnchor() {
   const firstId = firstMessage?.id == null ? "" : String(firstMessage.id);
   const beforeScrollTop = Math.max(0, container?.scrollTop || 0);
   const beforeTop = firstId
-    ? container
-        ?.querySelector<HTMLElement>(
-          `[data-message-id="${CSS.escape(firstId)}"]`,
-        )
-        ?.getBoundingClientRect().top
+    ? container?.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(firstId)}"]`)?.getBoundingClientRect().top
     : undefined;
   suppressAutoScroll.value = true;
   try {
@@ -1866,14 +1734,11 @@ async function loadEarlierWithAnchor() {
     if (currSessionId.value !== sessionId) return;
     await nextTick();
     if (beforeTop == null || !container || !firstId) return;
-    const row = container.querySelector<HTMLElement>(
-      `[data-message-id="${CSS.escape(firstId)}"]`,
-    );
+    const row = container.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(firstId)}"]`);
     if (row) {
       const currentScrollTop = Math.max(0, container.scrollTop);
       const userScrollDelta = currentScrollTop - beforeScrollTop;
-      container.scrollTop +=
-        row.getBoundingClientRect().top - beforeTop + userScrollDelta;
+      container.scrollTop += row.getBoundingClientRect().top - beforeTop + userScrollDelta;
       lastMessagesScrollTop = Math.max(0, container.scrollTop);
       lastMessagesScrollHeight = container.scrollHeight;
       lastMessagesClientHeight = container.clientHeight;
@@ -1895,8 +1760,7 @@ async function retryCurrentSessionLoad() {
 
 async function deleteThread(thread: ChatThread) {
   if (deletingThread.value) return;
-  if (!(await askForConfirmation(tm("thread.confirmDelete"), confirmDialog)))
-    return;
+  if (!(await askForConfirmation(tm("thread.confirmDelete"), confirmDialog))) return;
   deletingThread.value = true;
   try {
     await chatApi.deleteThread(thread.thread_id);
@@ -1915,9 +1779,7 @@ async function deleteThread(thread: ChatThread) {
 function removeThreadFromMessages(threadId: string) {
   for (const message of activeMessages.value) {
     if (!message.threads?.length) continue;
-    message.threads = message.threads.filter(
-      (thread) => thread.thread_id !== threadId,
-    );
+    message.threads = message.threads.filter((thread) => thread.thread_id !== threadId);
   }
 }
 
@@ -1954,9 +1816,7 @@ async function stopRecording() {
   }
 }
 
-function handleMessagesInteraction(
-  event: WheelEvent | TouchEvent | PointerEvent | KeyboardEvent,
-) {
+function handleMessagesInteraction(event: WheelEvent | TouchEvent | PointerEvent | KeyboardEvent) {
   if (event instanceof WheelEvent) {
     if (event.ctrlKey || event.deltaY === 0) return;
     autoScrollPaused.value = true;
@@ -1973,15 +1833,10 @@ function handleMessagesInteraction(
     touchScrollY = touch.clientY;
   } else if (event instanceof KeyboardEvent) {
     const target = event.target as HTMLElement;
-    if (
-      target.closest("input, textarea, select, [contenteditable], button, a")
-    ) {
+    if (target.closest("input, textarea, select, [contenteditable], button, a")) {
       return;
     }
-    if (
-      ["ArrowUp", "PageUp", "Home"].includes(event.key) ||
-      (event.key === " " && event.shiftKey)
-    ) {
+    if (["ArrowUp", "PageUp", "Home"].includes(event.key) || (event.key === " " && event.shiftKey)) {
       scrollIntent = -1;
     } else if (["ArrowDown", "PageDown", "End", " "].includes(event.key)) {
       scrollIntent = 1;
@@ -2001,30 +1856,19 @@ function handleMessagesScroll() {
   threadSelection.visible = false;
   const container = messagesContainer.value;
   if (!container) return;
-  const maxScrollTop = Math.max(
-    0,
-    container.scrollHeight - container.clientHeight,
-  );
+  const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
   const scrollTop = Math.max(0, container.scrollTop);
   const previousTop = Math.min(lastMessagesScrollTop, maxScrollTop);
   const contentGrew = container.scrollHeight > lastMessagesScrollHeight + 1;
   const wasAtBottom =
-    lastMessagesScrollHeight > 0 &&
-    lastMessagesScrollHeight -
-      lastMessagesScrollTop -
-      lastMessagesClientHeight <=
-      2;
+    lastMessagesScrollHeight > 0 && lastMessagesScrollHeight - lastMessagesScrollTop - lastMessagesClientHeight <= 2;
   isAwayFromBottom.value = maxScrollTop - scrollTop > 2;
 
   // A growing message list can emit a scroll event before the browser has
   // adjusted scrollTop. Keep following when we were already at the bottom;
   // only explicit user interaction should pause auto-scroll.
   const causedByContentGrowth =
-    contentGrew &&
-    wasAtBottom &&
-    !autoScrollPaused.value &&
-    scrollIntent >= 0 &&
-    scrollTop >= previousTop;
+    contentGrew && wasAtBottom && !autoScrollPaused.value && scrollIntent >= 0 && scrollTop >= previousTop;
 
   if (causedByContentGrowth) {
     shouldStickToBottom.value = true;
@@ -2033,11 +1877,7 @@ function handleMessagesScroll() {
   } else if (isAwayFromBottom.value || scrollTop < previousTop) {
     autoScrollPaused.value = true;
     shouldStickToBottom.value = false;
-  } else if (
-    scrollTop > previousTop &&
-    !isAwayFromBottom.value &&
-    scrollIntent >= 0
-  ) {
+  } else if (scrollTop > previousTop && !isAwayFromBottom.value && scrollIntent >= 0) {
     autoScrollPaused.value = false;
     shouldStickToBottom.value = true;
   }
@@ -2058,10 +1898,7 @@ function loadMoreSessions() {
     sessionsPagination.error
   )
     return;
-  if (
-    container.scrollHeight - container.scrollTop - container.clientHeight > 120
-  )
-    return;
+  if (container.scrollHeight - container.scrollTop - container.clientHeight > 120) return;
   void getSessions(true);
 }
 
@@ -2087,13 +1924,7 @@ function scrollToBottom(resumeFollowing = false) {
     autoScrollFrame = null;
     const container = messagesContainer.value;
     // Recheck after rendering so queued stream updates cannot override user intent.
-    if (
-      !container ||
-      suppressAutoScroll.value ||
-      autoScrollPaused.value ||
-      !shouldStickToBottom.value
-    )
-      return;
+    if (!container || suppressAutoScroll.value || autoScrollPaused.value || !shouldStickToBottom.value) return;
     container.scrollTop = container.scrollHeight;
     lastMessagesScrollTop = Math.max(0, container.scrollTop);
     lastMessagesScrollHeight = container.scrollHeight;

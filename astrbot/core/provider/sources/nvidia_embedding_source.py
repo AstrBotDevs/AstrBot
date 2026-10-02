@@ -1,10 +1,9 @@
 import aiohttp
 
 from astrbot import logger
-
-from ..entities import ProviderType
-from ..provider import EmbeddingProvider
-from ..register import register_provider_adapter
+from astrbot.core.provider.entities import ProviderType
+from astrbot.core.provider.provider import EmbeddingProvider
+from astrbot.core.provider.register import register_provider_adapter
 
 
 @register_provider_adapter(
@@ -21,7 +20,8 @@ class NvidiaEmbeddingProvider(EmbeddingProvider):
         self.api_key = provider_config.get("embedding_api_key", "")
         self.base_url = (
             provider_config.get(
-                "embedding_api_base", "https://integrate.api.nvidia.com/v1"
+                "embedding_api_base",
+                "https://integrate.api.nvidia.com/v1",
             )
             .rstrip("/")
             .removesuffix("/embeddings")
@@ -89,15 +89,17 @@ class NvidiaEmbeddingProvider(EmbeddingProvider):
 
         try:
             async with client.post(
-                request_url, json=payload, proxy=self.proxy or None
+                request_url,
+                json=payload,
+                proxy=self.proxy or None,
             ) as response:
                 if response.status != 200:
                     error_text = await response.text()
                     logger.error(
-                        f"[NVIDIA Embedding] API Error: {response.status} - {error_text}"
+                        f"[NVIDIA Embedding] API Error: {response.status} - {error_text}",
                     )
                     raise Exception(
-                        f"NVIDIA Embedding API request failed: HTTP {response.status} - {error_text}"
+                        f"NVIDIA Embedding API request failed: HTTP {response.status} - {error_text}",
                     )
 
                 response_data = await response.json()
@@ -124,7 +126,7 @@ class NvidiaEmbeddingProvider(EmbeddingProvider):
             except (ValueError, TypeError):
                 logger.warning(
                     f"embedding_dimensions in embedding configs is not a valid integer: "
-                    f"'{self.provider_config['embedding_dimensions']}', ignored."
+                    f"'{self.provider_config['embedding_dimensions']}', ignored.",
                 )
         return 0
 

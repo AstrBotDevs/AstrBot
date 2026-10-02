@@ -28,7 +28,7 @@ class HtmlRenderer:
         @param options: 渲染选项。
         @param endpoint: 可选的本次调用渲染服务地址。为空时使用配置的端点。
 
-        @return: 图片 URL 或者文件路径，取决于 return_url 参数。
+        @return: 图片 URL 或者文件路径,取决于 return_url 参数｡
 
         @example: 参见 https://docs.astrbot.app 插件开发部分。
         """
@@ -48,7 +48,7 @@ class HtmlRenderer:
         template_name: str | None = None,
         endpoint: str | None = None,
     ):
-        """使用默认文转图模板。"""
+        """使用默认文转图模板｡"""
         if use_network:
             try:
                 return await self.network_strategy.render(

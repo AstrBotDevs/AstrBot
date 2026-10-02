@@ -319,29 +319,22 @@
 </template>
 
 <script setup lang="ts">
-import {
-  ref,
-  computed,
-  watch,
-  nextTick,
-  onMounted,
-  onBeforeUnmount,
-} from "vue";
-import { useDisplay } from "vuetify";
 import { ArrowUp, CircleStop, Mic, Plus, Square } from "@lucide/vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { useDisplay } from "vuetify";
+import { commandApi } from "@/api/v1";
+import type { CommandItem } from "@/components/extension/componentPanel/types";
+import StyledMenu from "@/components/shared/StyledMenu.vue";
+import type { ActiveUploadView, FailedUploadView } from "@/composables/useMediaHandling";
+import type { Session } from "@/composables/useSessions";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { useCustomizerStore } from "@/stores/customizer";
 import { isComposingEnter } from "@/utils/imeInput.mjs";
-import { commandApi } from "@/api/v1";
-import type { CommandItem } from "@/components/extension/componentPanel/types";
-import ConfigSelector from "./ConfigSelector.vue";
-import ProviderModelMenu from "./ProviderModelMenu.vue";
-import StyledMenu from "@/components/shared/StyledMenu.vue";
-import CommandSuggestion from "./CommandSuggestion.vue";
 import { attachmentPresentation } from "./attachmentPresentation";
-import type { Session } from "@/composables/useSessions";
-import type { FailedUploadView, ActiveUploadView } from "@/composables/useMediaHandling";
 import type { SuggestionCommand } from "./CommandSuggestion.vue";
+import CommandSuggestion from "./CommandSuggestion.vue";
+import ConfigSelector from "./ConfigSelector.vue";
+import type ProviderModelMenu from "./ProviderModelMenu.vue";
 
 interface StagedFileInfo {
   attachment_id: string;
@@ -419,15 +412,11 @@ const emit = defineEmits<{
 
 const { tm } = useModuleI18n("features/chat");
 const { t } = useI18n();
-const isDark = computed(
-  () => useCustomizerStore().uiTheme === "PurpleThemeDark",
-);
+const isDark = computed(() => useCustomizerStore().uiTheme === "PurpleThemeDark");
 
 const inputField = ref<HTMLTextAreaElement | null>(null);
 const imageInputRef = ref<HTMLInputElement | null>(null);
-const providerModelMenuRef = ref<InstanceType<typeof ProviderModelMenu> | null>(
-  null,
-);
+const providerModelMenuRef = ref<InstanceType<typeof ProviderModelMenu> | null>(null);
 const providerSelectorAvailable = ref(true);
 const isReplyClosing = ref(false);
 const isComposing = ref(false);
@@ -494,12 +483,8 @@ const enabledCommands = computed(() => {
     }
     // 同时加入别名（别名也需要加上唤醒词前缀）
     cmd.aliases?.forEach((alias) => {
-      const aliasBase = cmd.parent_signature
-        ? `${cmd.parent_signature} ${alias}`
-        : alias;
-      const aliasKey = hasWakePrefix(aliasBase)
-        ? aliasBase
-        : `${displayPrefix}${aliasBase}`;
+      const aliasBase = cmd.parent_signature ? `${cmd.parent_signature} ${alias}` : alias;
+      const aliasKey = hasWakePrefix(aliasBase) ? aliasBase : `${displayPrefix}${aliasBase}`;
       if (!seen.has(aliasKey)) {
         seen.add(aliasKey);
         result.push({
@@ -535,13 +520,10 @@ const filteredCommands = computed(() => {
 
   for (const cmd of enabledCommands.value) {
     const commandText = normalizeCommandSearchText(cmd.effective_command);
-    const pluginText = normalizeCommandSearchText(
-      cmd.plugin_display_name || "",
-    );
+    const pluginText = normalizeCommandSearchText(cmd.plugin_display_name || "");
     const descriptionText = normalizeCommandSearchText(cmd.description || "");
     const matchesCommand = commandText.includes(query);
-    const matchesMetadata =
-      pluginText.includes(query) || descriptionText.includes(query);
+    const matchesMetadata = pluginText.includes(query) || descriptionText.includes(query);
 
     if (commandText.startsWith(query)) {
       startsWithMatches.push(cmd);
@@ -550,10 +532,7 @@ const filteredCommands = computed(() => {
     }
   }
 
-  return [
-    ...sortSystemPluginCommandsFirst(startsWithMatches),
-    ...sortSystemPluginCommandsFirst(containsMatches),
-  ];
+  return [...sortSystemPluginCommandsFirst(startsWithMatches), ...sortSystemPluginCommandsFirst(containsMatches)];
 });
 
 const localPrompt = computed({
@@ -568,9 +547,7 @@ const localPrompt = computed({
   },
 });
 
-const sessionPlatformId = computed(
-  () => props.currentSession?.platform_id || "webchat",
-);
+const sessionPlatformId = computed(() => props.currentSession?.platform_id || "webchat");
 const sessionIsGroup = computed(() => Boolean(props.currentSession?.is_group));
 
 const canSend = computed(() => {
@@ -623,11 +600,7 @@ const { mobile } = useDisplay();
 const tokenUsageVisible = computed(() => {
   const usage = props.tokenUsage;
   return Boolean(
-    usage &&
-      Number.isFinite(usage.used) &&
-      Number.isFinite(usage.limit) &&
-      usage.used > 0 &&
-      usage.limit > 0,
+    usage && Number.isFinite(usage.used) && Number.isFinite(usage.limit) && usage.used > 0 && usage.limit > 0,
   );
 });
 
@@ -638,27 +611,21 @@ const tokenUsagePercent = computed(() => {
 });
 
 const tokenUsageColor = computed(() =>
-  isDark.value
-    ? "rgba(var(--v-theme-on-surface), 0.82)"
-    : "rgba(var(--v-theme-on-surface), 0.72)",
+  isDark.value ? "rgba(var(--v-theme-on-surface), 0.82)" : "rgba(var(--v-theme-on-surface), 0.72)",
 );
 
 // Auto-resize textarea
 function autoResize() {
   const el = inputField.value;
   if (!el) return;
-  const isMobileViewport =
-    typeof window !== "undefined" &&
-    window.matchMedia("(max-width: 768px)").matches;
-  const viewportHeight =
-    typeof window !== "undefined" ? window.innerHeight : 900;
+  const isMobileViewport = typeof window !== "undefined" && window.matchMedia("(max-width: 768px)").matches;
+  const viewportHeight = typeof window !== "undefined" ? window.innerHeight : 900;
   const minHeight = 48;
   const maxHeight = isMobileViewport
     ? Math.min(220, Math.round(viewportHeight * 0.42))
     : Math.min(420, Math.round(viewportHeight * 0.48));
   el.style.height = "auto";
-  el.style.height =
-    Math.min(Math.max(el.scrollHeight, minHeight), maxHeight) + "px";
+  el.style.height = Math.min(Math.max(el.scrollHeight, minHeight), maxHeight) + "px";
 }
 
 watch(
@@ -671,15 +638,13 @@ function handleKeyDown(e: KeyboardEvent) {
   if (showCommandSuggestion.value && filteredCommands.value.length > 0) {
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      selectedCommandIndex.value =
-        (selectedCommandIndex.value + 1) % filteredCommands.value.length;
+      selectedCommandIndex.value = (selectedCommandIndex.value + 1) % filteredCommands.value.length;
       return;
     }
     if (e.key === "ArrowUp") {
       e.preventDefault();
       selectedCommandIndex.value =
-        (selectedCommandIndex.value - 1 + filteredCommands.value.length) %
-        filteredCommands.value.length;
+        (selectedCommandIndex.value - 1 + filteredCommands.value.length) % filteredCommands.value.length;
       return;
     }
     if (e.key === "Enter") {
@@ -718,10 +683,7 @@ function handleKeyDown(e: KeyboardEvent) {
     return;
   }
 
-  const isSendHotkey =
-    e.ctrlKey ||
-    e.metaKey ||
-    (props.sendShortcut === "enter" ? !e.shiftKey : e.shiftKey);
+  const isSendHotkey = e.ctrlKey || e.metaKey || (props.sendShortcut === "enter" ? !e.shiftKey : e.shiftKey);
 
   if (isSendHotkey) {
     e.preventDefault();
@@ -772,9 +734,7 @@ async function fetchCommands() {
   commandSuggestionLoading.value = true;
   try {
     const cid = currentConfigId.value;
-    const res = await commandApi.list(
-      cid && cid !== "default" ? cid : undefined,
-    );
+    const res = await commandApi.list(cid && cid !== "default" ? cid : undefined);
     if (res.data.status === "ok") {
       allCommands.value = res.data.data.items || [];
       // 读取当前配置的唤醒词列表，用于指令候选的触发前缀
@@ -883,10 +843,7 @@ function handleRecordClick() {
   }
 }
 
-function handleConfigChange(payload: {
-  configId: string;
-  agentRunnerType: string;
-}) {
+function handleConfigChange(payload: { configId: string; agentRunnerType: string }) {
   const runnerType = (payload.agentRunnerType || "").toLowerCase();
   const isInternal = runnerType === "internal" || runnerType === "local";
   providerSelectorAvailable.value = isInternal;

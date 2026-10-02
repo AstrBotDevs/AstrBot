@@ -2313,8 +2313,7 @@ paths:
               type: object
               properties:
                 level:
-                  type: string
-                  nullable: true
+                  type: [string, "null"]
                   enum: [DEBUG, INFO, WARNING, ERROR, CRITICAL, null]
                   description: Log level name, or null to follow the global level.
               additionalProperties: true

@@ -7,6 +7,7 @@ import time
 import zipfile
 from pathlib import Path
 
+import anyio
 import certifi
 import httpx
 
@@ -80,7 +81,7 @@ class _RepoZipUpdater:
         self,
         url: str,
         path: str,
-        timeout: float = 1800.0,
+        request_timeout: float = 1800.0,
         progress_callback=None,
     ) -> None:
         target_path = Path(path)
@@ -94,7 +95,7 @@ class _RepoZipUpdater:
                 await result
 
         try:
-            async with self._create_httpx_client(timeout=timeout) as client:
+            async with self._create_httpx_client(timeout=request_timeout) as client:
                 async with client.stream("GET", url) as response:
                     response.raise_for_status()
                     headers = getattr(response, "headers", {})
@@ -110,9 +111,9 @@ class _RepoZipUpdater:
                             "speed": 0,
                         },
                     )
-                    with target_path.open("wb") as file:
+                    async with await anyio.open_file(target_path, "wb") as file:
                         async for chunk in response.aiter_bytes(8192):
-                            file.write(chunk)
+                            await file.write(chunk)
                             downloaded_size += len(chunk)
                             elapsed_time = max(time.time() - start_time, 1)
                             await _emit_progress(
@@ -227,7 +228,10 @@ class _RepoZipUpdater:
         )
 
     async def _download_repository(
-        self, target_path: str, repo_url: str, proxy=""
+        self,
+        target_path: str,
+        repo_url: str,
+        proxy="",
     ) -> None:
         repository = GitHubRepository.parse(repo_url)
 
@@ -270,7 +274,10 @@ class _RepoZipUpdater:
         root_candidates: list[str] = []
 
         for raw_entry, normalized_entry, portable_entry in zip(
-            entries, normalized_entries, portable_entries
+            entries,
+            normalized_entries,
+            portable_entries,
+            strict=False,
         ):
             if normalized_entry == ".":
                 continue

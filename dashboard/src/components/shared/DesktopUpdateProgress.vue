@@ -8,18 +8,11 @@ const props = defineProps<{
 const { t } = useI18n();
 const downloaded = computed(() => {
   const bytes = props.progress?.downloadedBytes;
-  return typeof bytes === "number" && Number.isFinite(bytes)
-    ? Math.max(0, bytes)
-    : 0;
+  return typeof bytes === "number" && Number.isFinite(bytes) ? Math.max(0, bytes) : 0;
 });
 const percentage = computed(() => {
   const total = props.progress?.totalBytes;
-  if (
-    props.progress?.phase !== "downloading" ||
-    !total ||
-    !Number.isFinite(total) ||
-    total <= 0
-  ) {
+  if (props.progress?.phase !== "downloading" || !total || !Number.isFinite(total) || total <= 0) {
     return null;
   }
   return Math.min(100, Math.floor((downloaded.value / total) * 100));
@@ -27,19 +20,13 @@ const percentage = computed(() => {
 const status = computed(() => {
   const phase = props.progress?.phase;
   const key =
-    phase === "downloading" || phase === "verifying"
-      ? phase
-      : phase === "installing"
-      ? "applying"
-      : "installing";
+    phase === "downloading" || phase === "verifying" ? phase : phase === "installing" ? "applying" : "installing";
   return t(`core.header.updateDialog.desktopApp.${key}`);
 });
 const transfer = computed(() => {
   const amount = (downloaded.value / 1024 / 1024).toFixed(1);
   const total = props.progress?.totalBytes;
-  return percentage.value !== null && total
-    ? `${amount} / ${(total / 1024 / 1024).toFixed(1)} MiB`
-    : `${amount} MiB`;
+  return percentage.value !== null && total ? `${amount} / ${(total / 1024 / 1024).toFixed(1)} MiB` : `${amount} MiB`;
 });
 </script>
 

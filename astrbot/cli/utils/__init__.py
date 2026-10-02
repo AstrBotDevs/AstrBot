@@ -1,8 +1,5 @@
-from .basic import (
-    check_astrbot_root,
-    check_dashboard,
-    get_astrbot_root,
-)
+from .basic import check_astrbot_root, check_dashboard, get_astrbot_root
+from .dashboard import DashboardManager
 from .plugin import (
     PluginStatus,
     build_plug_list,
@@ -13,6 +10,7 @@ from .plugin import (
 from .version_comparator import VersionComparator
 
 __all__ = [
+    "DashboardManager",
     "PluginStatus",
     "VersionComparator",
     "build_plug_list",

@@ -1,7 +1,7 @@
 import base64
 from io import BytesIO
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -9,7 +9,6 @@ from astrbot.api.message_components import Image, Record
 from astrbot.api.platform import Group, MessageType
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.sources.discord import (
-    discord_platform_adapter,
     discord_platform_event,
 )
 from astrbot.core.platform.sources.discord.discord_platform_adapter import (
@@ -187,12 +186,11 @@ async def test_discord_get_group_enriches_guild_metadata_from_complete_cache():
         members=members,
         chunked=True,
     )
-    channel = SimpleNamespace(
-        id=123,
-        name="general",
-        guild=guild,
-        permissions_for=lambda member: SimpleNamespace(view_channel=True),
-    )
+    channel = MagicMock(spec=discord_platform_event.discord.TextChannel)
+    channel.id = 123
+    channel.name = "general"
+    channel.guild = guild
+    channel.permissions_for.return_value = SimpleNamespace(view_channel=True)
     client = SimpleNamespace(
         get_channel=lambda channel_id: channel,
         fetch_channel=AsyncMock(),
@@ -253,22 +251,7 @@ async def test_discord_get_group_keeps_basic_metadata_when_channel_fetch_fails()
 
 
 @pytest.mark.asyncio
-async def test_discord_audio_attachment_resolves_to_wav_record(monkeypatch):
-    class FakeMediaResolver:
-        def __init__(self, media_ref: str, **kwargs) -> None:
-            assert media_ref == "https://cdn.example/voice.ogg"
-            assert kwargs["media_type"] == "audio"
-
-        async def to_path(self, **kwargs) -> str:
-            assert kwargs["target_format"] == "wav"
-            return _WAV_PATH
-
-    monkeypatch.setattr(
-        discord_platform_adapter,
-        "MediaResolver",
-        FakeMediaResolver,
-    )
-
+async def test_discord_audio_attachment_defers_conversion_to_preprocess():
     adapter = DiscordPlatformAdapter.__new__(DiscordPlatformAdapter)
     adapter.bot_self_id = "1"
     adapter.client = SimpleNamespace(user=SimpleNamespace(id=1))
@@ -293,9 +276,8 @@ async def test_discord_audio_attachment_resolves_to_wav_record(monkeypatch):
 
     assert len(abm.message) == 1
     assert isinstance(abm.message[0], Record)
-    assert abm.message[0].file == _WAV_PATH
-    assert abm.message[0].url == _WAV_PATH
-    assert abm.message[0].path == _WAV_PATH
+    assert abm.message[0].file == "https://cdn.example/voice.ogg"
+    assert abm.message[0].url == "https://cdn.example/voice.ogg"
 
 
 @pytest.mark.asyncio

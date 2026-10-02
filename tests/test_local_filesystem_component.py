@@ -14,6 +14,7 @@ from astrbot.core.computer.booters.local import LocalFileSystemComponent
 
 def _allow_tmp_root(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(local_booter, "get_astrbot_root", lambda: str(tmp_path))
+    monkeypatch.setattr(local_booter, "_ensure_safe_path", lambda path: path)
 
 
 def test_local_file_system_component_prefers_utf8_before_windows_locale(
@@ -62,6 +63,7 @@ def test_local_file_system_component_falls_back_to_gbk_on_windows(
 
 def test_local_file_system_component_searches_with_rg_glob_and_context(monkeypatch):
     calls = []
+    monkeypatch.setattr(local_booter, "_ensure_safe_path", lambda path: path)
 
     def fake_run(command, **kwargs):
         calls.append((command, kwargs))
@@ -184,6 +186,7 @@ def test_local_file_system_component_requires_rg_on_python_314(monkeypatch):
 
 def test_local_file_system_component_preserves_python_ripgrep_before_314(monkeypatch):
     calls = []
+    monkeypatch.setattr(local_booter, "_ensure_safe_path", lambda path: path)
 
     def fake_search(**kwargs):
         calls.append(kwargs)

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { RouterLink } from "vue-router";
-import ConversationPage from "@/views/ConversationPage.vue";
 import { useModuleI18n } from "@/i18n/composables";
+import ConversationPage from "@/views/ConversationPage.vue";
 
 const { tm } = useModuleI18n("features/conversation");
 </script>

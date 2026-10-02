@@ -4,6 +4,7 @@ import asyncio
 import base64
 import hashlib
 import io
+import sys
 import time
 import uuid
 from collections import deque
@@ -31,7 +32,6 @@ from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.media_utils import (
     MEDIA_MIME_EXTENSIONS,
-    MediaResolver,
     detect_image_mime_type_async,
 )
 
@@ -155,7 +155,7 @@ class WeixinOCAdapter(Platform):
         self.metadata = PlatformMetadata(
             name="weixin_oc",
             description="个人微信",
-            id=cast(str, self.config.get("id", "weixin_oc")),
+            id=str(self.config.get("id", "weixin_oc")),
             support_streaming_message=False,
         )
 
@@ -412,11 +412,10 @@ class WeixinOCAdapter(Platform):
             )
         finally:
             state = self._typing_states.get(user_id)
-            if state is None:
-                return
-            async with state.lock:
-                if state.cancel_task is current_task:
-                    state.cancel_task = None
+            if state is not None:
+                async with state.lock:
+                    if state.cancel_task is current_task:
+                        state.cancel_task = None
 
     async def start_typing(self, user_id: str, owner_id: str) -> None:
         state = self._get_typing_state(user_id)
@@ -560,7 +559,8 @@ class WeixinOCAdapter(Platform):
             self._context_tokens = self._normalize_context_tokens(raw_context_tokens)
 
     def _normalize_context_tokens(
-        self, raw_context_tokens: Mapping[object, object]
+        self,
+        raw_context_tokens: Mapping[str, object],
     ) -> dict[str, str]:
         normalized_context_tokens: dict[str, str] = {}
         for user_id, context_token in raw_context_tokens.items():
@@ -654,7 +654,7 @@ class WeixinOCAdapter(Platform):
         item_type: int,
         file_name: str,
     ) -> dict[str, Any]:
-        raw_bytes = media_path.read_bytes()
+        raw_bytes = await asyncio.to_thread(media_path.read_bytes)
         raw_size = len(raw_bytes)
         raw_md5 = hashlib.md5(raw_bytes).hexdigest()
         file_key = uuid.uuid4().hex
@@ -844,17 +844,13 @@ class WeixinOCAdapter(Platform):
                 file_name="voice.silk",
                 fallback_suffix=".silk",
             )
-            path_wav = await MediaResolver(
-                str(voice_path),
-                media_type="audio",
-                default_suffix=".wav",
-            ).to_path(target_format="wav")
-            return Record(file=path_wav, url=path_wav)
+            return Record.fromFileSystem(str(voice_path))
 
         return None
 
     async def _resolve_media_file_path(
-        self, segment: Image | Video | File
+        self,
+        segment: Image | Video | File,
     ) -> Path | None:
         try:
             if isinstance(segment, File):
@@ -866,11 +862,12 @@ class WeixinOCAdapter(Platform):
         except Exception as e:
             logger.warning("weixin_oc(%s): media resolve failed: %s", self.meta().id, e)
             return None
-
         if not path:
             return None
         media_path = Path(path)
-        if not media_path.exists() or not media_path.is_file():
+        path_exists = await asyncio.to_thread(media_path.exists)
+        path_is_file = await asyncio.to_thread(media_path.is_file)
+        if not path_exists or not path_is_file:
             return None
         return media_path
 
@@ -1072,37 +1069,43 @@ class WeixinOCAdapter(Platform):
             endpoint,
             params=params,
             token_required=False,
-            timeout_ms=15_000,
+            timeout_ms=15000,
         )
         qrcode = str(data.get("qrcode", "")).strip()
         qrcode_url = str(data.get("qrcode_img_content", "")).strip()
         if not qrcode or not qrcode_url:
             raise RuntimeError("qrcode response missing qrcode or qrcode_img_content")
-        qr_console_url = (
-            f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data="
-            f"{quote(qrcode_url)}"
-        )
-        logger.info(
-            "weixin_oc(%s): QR session started, qr_link=%s 请使用手机微信扫码登录，二维码有效期 5 分钟，过期后会自动刷新。",
-            self.meta().id,
-            qr_console_url,
-        )
-        try:
-            qr = qrcode_lib.QRCode(border=1)
-            qr.add_data(qrcode_url)
-            qr.make(fit=True)
-            qr_buffer = io.StringIO()
-            qr.print_ascii(out=qr_buffer, tty=False)
+        qr_console_url = f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={quote(qrcode_url)}"
+        # Only show QR code login info in interactive terminal
+        if sys.stdout.isatty():
             logger.info(
-                "weixin_oc(%s): terminal QR code:\n%s",
+                "weixin_oc(%s): QR session started, qr_link=%s 请使用手机微信扫码登录,二维码有效期 5 分钟,过期后会自动刷新｡",
                 self.meta().id,
-                qr_buffer.getvalue(),
+                qr_console_url,
             )
-        except Exception as e:
-            logger.warning(
-                "weixin_oc(%s): failed to render terminal QR code: %s",
+            try:
+                qr = qrcode_lib.QRCode(border=1)
+                qr.add_data(qrcode_url)
+                qr.make(fit=True)
+                qr_buffer = io.StringIO()
+                qr.print_ascii(out=qr_buffer, tty=False)
+                logger.info(
+                    "weixin_oc(%s): terminal QR code:\n%s",
+                    self.meta().id,
+                    qr_buffer.getvalue(),
+                )
+            except Exception as e:
+                logger.warning(
+                    "weixin_oc(%s): failed to render terminal QR code: %s",
+                    self.meta().id,
+                    e,
+                )
+        else:
+            # Non-interactive mode: just show the QR code link
+            logger.info(
+                "weixin_oc(%s): QR login link: %s",
                 self.meta().id,
-                e,
+                qr_console_url,
             )
         login_session = OpenClawLoginSession(
             session_key=str(uuid.uuid4()),
@@ -1740,7 +1743,7 @@ class WeixinOCAdapter(Platform):
 
                     try:
                         await self._poll_qr_status(current_login)
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         logger.debug(
                             "weixin_oc(%s): qr status long-poll timeout",
                             self.meta().id,
@@ -1770,7 +1773,7 @@ class WeixinOCAdapter(Platform):
 
                 try:
                     await self._poll_inbound_updates()
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     logger.debug(
                         "weixin_oc(%s): inbound long-poll timeout",
                         self.meta().id,

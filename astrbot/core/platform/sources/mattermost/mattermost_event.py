@@ -5,9 +5,17 @@ from collections.abc import AsyncGenerator
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import Plain
-from astrbot.api.platform import Group, MessageMember
+from astrbot.api.platform import AstrBotMessage, Group, MessageMember, PlatformMetadata
 
 from .client import MattermostClient
+
+
+class MattermostMessage(AstrBotMessage):
+    """Incoming post with downloaded attachments owned by its event."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.temporary_file_paths: list[str] = []
 
 
 class MattermostMessageEvent(AstrMessageEvent):
@@ -15,10 +23,10 @@ class MattermostMessageEvent(AstrMessageEvent):
 
     def __init__(
         self,
-        message_str,
-        message_obj,
-        platform_meta,
-        session_id,
+        message_str: str,
+        message_obj: AstrBotMessage,
+        platform_meta: PlatformMetadata,
+        session_id: str,
         client: MattermostClient,
     ) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id)
@@ -43,10 +51,10 @@ class MattermostMessageEvent(AstrMessageEvent):
                 else:
                     message_buffer.chain.extend(chain.chain)
             if not message_buffer:
-                return None
+                return
             message_buffer.squash_plain()
             await self.send(message_buffer)
-            return None
+            return
 
         text_buffer = ""
 
@@ -66,7 +74,7 @@ class MattermostMessageEvent(AstrMessageEvent):
 
         if text_buffer.strip():
             await self.send(MessageChain([Plain(text_buffer)]))
-        return None
+        return
 
     async def get_group(self, group_id=None, **kwargs):
         """Gets Mattermost channel information and all visible members.

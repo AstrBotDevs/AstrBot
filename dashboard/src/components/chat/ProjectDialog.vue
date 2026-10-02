@@ -135,54 +135,54 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
-import { useI18n, useModuleI18n } from '@/i18n/composables';
-import { getDesktopRuntimeInfo } from '@/utils/desktopRuntime';
-import EmojiPicker from '@/components/shared/EmojiPicker.vue';
+import { computed, ref, watch } from "vue";
+import EmojiPicker from "@/components/shared/EmojiPicker.vue";
+import { useI18n, useModuleI18n } from "@/i18n/composables";
+import { getDesktopRuntimeInfo } from "@/utils/desktopRuntime";
 
-export type WorkspaceType = 'session' | 'project' | 'custom';
+export type WorkspaceType = "session" | "project" | "custom";
 
 export interface Project {
-    project_id: string;
-    title: string;
-    emoji?: string;
-    description?: string;
-    workspace_type?: WorkspaceType;
-    workspace_path?: string | null;
-    resolved_workspace_path?: string | null;
-    created_at: string;
-    updated_at: string;
+  project_id: string;
+  title: string;
+  emoji?: string;
+  description?: string;
+  workspace_type?: WorkspaceType;
+  workspace_path?: string | null;
+  resolved_workspace_path?: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface ProjectFormData {
-    emoji: string;
-    title: string;
-    description: string;
-    workspace_type: WorkspaceType;
-    workspace_path: string;
+  emoji: string;
+  title: string;
+  description: string;
+  workspace_type: WorkspaceType;
+  workspace_path: string;
 }
 
 interface Props {
-    modelValue: boolean;
-    project?: Project | null;
-    errorMessage?: string;
-    saving?: boolean;
+  modelValue: boolean;
+  project?: Project | null;
+  errorMessage?: string;
+  saving?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
-    modelValue: false,
-    project: null,
-    errorMessage: '',
-    saving: false
+  modelValue: false,
+  project: null,
+  errorMessage: "",
+  saving: false,
 });
 
 const emit = defineEmits<{
-    'update:modelValue': [value: boolean];
-    save: [formData: ProjectFormData, projectId?: string];
+  "update:modelValue": [value: boolean];
+  save: [formData: ProjectFormData, projectId?: string];
 }>();
 
 const { t } = useI18n();
-const { tm } = useModuleI18n('features/chat');
+const { tm } = useModuleI18n("features/chat");
 
 const isOpen = ref(props.modelValue);
 const isEditing = ref(false);
@@ -190,115 +190,124 @@ const moreSettingsOpen = ref(false);
 const canPickWorkspaceDirectory = ref(false);
 const pickingWorkspaceDirectory = ref(false);
 const form = ref<ProjectFormData>({
-    emoji: '📁',
-    title: '',
-    description: '',
-    workspace_type: 'project',
-    workspace_path: ''
+  emoji: "📁",
+  title: "",
+  description: "",
+  workspace_type: "project",
+  workspace_path: "",
 });
 const workspaceTypeItems = computed<{ label: string; value: WorkspaceType }[]>(() => [
-    { label: tm('project.workspace.project'), value: 'project' },
-    { label: tm('project.workspace.session'), value: 'session' },
-    { label: tm('project.workspace.custom'), value: 'custom' }
+  { label: tm("project.workspace.project"), value: "project" },
+  { label: tm("project.workspace.session"), value: "session" },
+  { label: tm("project.workspace.custom"), value: "custom" },
 ]);
-const currentWorkspaceLabel = computed(() =>
-    workspaceTypeItems.value.find((item) => item.value === form.value.workspace_type)?.label || ''
+const currentWorkspaceLabel = computed(
+  () => workspaceTypeItems.value.find((item) => item.value === form.value.workspace_type)?.label || "",
 );
 const workspaceSelectTrigger = ref<HTMLElement | null>(null);
 const workspaceMenuWidth = ref(0);
 
 // The dropdown is teleported to the body, so its width has to be synced from the trigger.
 function syncWorkspaceMenuWidth() {
-    workspaceMenuWidth.value = workspaceSelectTrigger.value?.getBoundingClientRect().width ?? 0;
+  workspaceMenuWidth.value = workspaceSelectTrigger.value?.getBoundingClientRect().width ?? 0;
 }
 
 const canSave = computed(() => {
-    if (!form.value.title.trim()) return false;
-    if (form.value.workspace_type !== 'custom') return true;
-    return form.value.workspace_path.trim().length > 0;
+  if (!form.value.title.trim()) return false;
+  if (form.value.workspace_type !== "custom") return true;
+  return form.value.workspace_path.trim().length > 0;
 });
 
-watch(() => props.modelValue, async (newVal) => {
+watch(
+  () => props.modelValue,
+  async (newVal) => {
     isOpen.value = newVal;
     moreSettingsOpen.value = false;
     canPickWorkspaceDirectory.value = false;
     if (newVal) {
-        if (props.project) {
-            isEditing.value = true;
-            form.value = {
-                emoji: props.project.emoji || '📁',
-                title: props.project.title,
-                description: props.project.description || '',
-                workspace_type: props.project.workspace_type || 'session',
-                workspace_path: props.project.workspace_path || ''
-            };
-        } else {
-            isEditing.value = false;
-            form.value = {
-                emoji: '📁',
-                title: '',
-                description: '',
-                workspace_type: 'project',
-                workspace_path: ''
-            };
-        }
+      if (props.project) {
+        isEditing.value = true;
+        form.value = {
+          emoji: props.project.emoji || "📁",
+          title: props.project.title,
+          description: props.project.description || "",
+          workspace_type: props.project.workspace_type || "session",
+          workspace_path: props.project.workspace_path || "",
+        };
+      } else {
+        isEditing.value = false;
+        form.value = {
+          emoji: "📁",
+          title: "",
+          description: "",
+          workspace_type: "project",
+          workspace_path: "",
+        };
+      }
 
-        const runtimeInfo = await getDesktopRuntimeInfo();
-        canPickWorkspaceDirectory.value = runtimeInfo.isDesktopRuntime &&
-            typeof runtimeInfo.bridge?.pickDirectory === 'function';
+      const runtimeInfo = await getDesktopRuntimeInfo();
+      canPickWorkspaceDirectory.value =
+        runtimeInfo.isDesktopRuntime && typeof runtimeInfo.bridge?.pickDirectory === "function";
     }
-});
+  },
+);
 
-watch(() => form.value.workspace_type, (workspaceType) => {
-    if (workspaceType !== 'custom') {
-        form.value.workspace_path = '';
+watch(
+  () => form.value.workspace_type,
+  (workspaceType) => {
+    if (workspaceType !== "custom") {
+      form.value.workspace_path = "";
     }
-});
+  },
+);
 
 function handleDialogChange(value: boolean) {
-    emit('update:modelValue', value);
+  emit("update:modelValue", value);
 }
 
 function handleCancel() {
-    isOpen.value = false;
-    emit('update:modelValue', false);
+  isOpen.value = false;
+  emit("update:modelValue", false);
 }
 
 async function handlePickWorkspaceDirectory() {
-    const pickDirectory = window.astrbotDesktop?.pickDirectory;
-    if (!canPickWorkspaceDirectory.value || !pickDirectory || pickingWorkspaceDirectory.value) {
-        return;
-    }
+  const pickDirectory = window.astrbotDesktop?.pickDirectory;
+  if (!canPickWorkspaceDirectory.value || !pickDirectory || pickingWorkspaceDirectory.value) {
+    return;
+  }
 
-    pickingWorkspaceDirectory.value = true;
-    try {
-        const selectedPath = await pickDirectory(form.value.workspace_path || null);
-        if (selectedPath) {
-            form.value.workspace_path = selectedPath;
-            const normalizedPath = selectedPath.replace(/[\\/]+$/, '');
-            const folderName = normalizedPath.split(/[\\/]/).pop();
-            if (folderName) {
-                form.value.title = folderName;
-            }
-        }
-    } catch (error) {
-        console.warn('[chat-project] Failed to pick workspace directory.', error);
-    } finally {
-        pickingWorkspaceDirectory.value = false;
+  pickingWorkspaceDirectory.value = true;
+  try {
+    const selectedPath = await pickDirectory(form.value.workspace_path || null);
+    if (selectedPath) {
+      form.value.workspace_path = selectedPath;
+      const normalizedPath = selectedPath.replace(/[\\/]+$/, "");
+      const folderName = normalizedPath.split(/[\\/]/).pop();
+      if (folderName) {
+        form.value.title = folderName;
+      }
     }
+  } catch (error) {
+    console.warn("[chat-project] Failed to pick workspace directory.", error);
+  } finally {
+    pickingWorkspaceDirectory.value = false;
+  }
 }
 
 function handleSave() {
-    if (!canSave.value) {
-        return;
-    }
+  if (!canSave.value) {
+    return;
+  }
 
-    emit('save', {
-        ...form.value,
-        workspace_path: form.value.workspace_path.trim()
-    }, props.project?.project_id);
+  emit(
+    "save",
+    {
+      ...form.value,
+      workspace_path: form.value.workspace_path.trim(),
+    },
+    props.project?.project_id,
+  );
 }
-
 </script>
 
 <style scoped>

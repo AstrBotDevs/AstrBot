@@ -141,7 +141,7 @@ def test_load_plugin_metadata_includes_i18n(tmp_path: Path):
 
     assert metadata is not None
     assert metadata.short_desc == "Local test short description"
-    assert metadata.pages == []
+    assert metadata.views == []
     assert metadata.i18n == {"zh-CN": {"metadata": {"display_name": "你好世界"}}}
 
 
@@ -156,7 +156,7 @@ def test_load_plugin_metadata_includes_pages(tmp_path: Path):
     loaded_metadata = PluginManager._load_plugin_metadata(str(plugin_path))
 
     assert loaded_metadata is not None
-    assert loaded_metadata.pages == [{"name": "dashboard", "title": "Dashboard"}]
+    assert loaded_metadata.views == [{"name": "dashboard", "title": "Dashboard"}]
 
 
 def test_load_plugin_metadata_accepts_yml_suffix(tmp_path: Path):
@@ -1656,6 +1656,10 @@ async def test_import_reserved_plugin_skips_preloading_user_site_dependencies(
         "astrbot.core.star.star_manager.pip_installer.prefer_installed_dependencies",
         lambda *, requirements_path: events.append(("prefer", requirements_path)),
     )
+    monkeypatch.setattr(
+        "astrbot.core.star.star_manager.plan_missing_requirements_install",
+        lambda requirements_path: None,
+    )
 
     def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
         del globals, locals, level
@@ -1669,7 +1673,6 @@ async def test_import_reserved_plugin_skips_preloading_user_site_dependencies(
         module_str="main",
         root_dir_name="web_searcher",
         requirements_path=str(requirements_path),
-        reserved=True,
     )
 
     assert imported_module is sentinel_module

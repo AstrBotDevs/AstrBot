@@ -6,7 +6,7 @@
 import json
 import os
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypedDict
 
 from astrbot.core.knowledge_base.kb_db_sqlite import KBSQLiteDatabase
 from astrbot.core.knowledge_base.retrieval.tokenizer import (
@@ -16,6 +16,14 @@ from astrbot.core.knowledge_base.retrieval.tokenizer import (
 
 if TYPE_CHECKING:
     from astrbot.core.db.vec_db.faiss_impl import FaissVecDB
+
+
+class _SparseChunk(TypedDict):
+    chunk_id: str
+    chunk_index: int
+    doc_id: str
+    kb_id: str
+    text: str
 
 
 @dataclass
@@ -74,10 +82,13 @@ class SparseRetriever:
         fallback_kb_ids = []
         query_tokens = tokenize_text(query, self.hit_stopwords)
         for kb_id in kb_ids:
-            vec_db: FaissVecDB | None = kb_options.get(kb_id, {}).get("vec_db")
+            kb_config = kb_options.get(kb_id)
+            if not isinstance(kb_config, dict):
+                continue
+            vec_db: FaissVecDB | None = kb_config.get("vec_db")
             if not vec_db:
                 continue
-            top_k_sparse = kb_options.get(kb_id, {}).get("top_k_sparse", 50)
+            top_k_sparse = kb_config.get("top_k_sparse", 50)
             result = await vec_db.document_storage.search_sparse(
                 query_tokens=query_tokens,
                 limit=top_k_sparse,
@@ -120,9 +131,12 @@ class SparseRetriever:
         kb_options: dict,
     ) -> list[SparseResult]:
         top_k_sparse = 0
-        chunks = []
+        chunks: list[_SparseChunk] = []
         for kb_id in kb_ids:
-            vec_db: FaissVecDB | None = kb_options.get(kb_id, {}).get("vec_db")
+            kb_config = kb_options.get(kb_id)
+            if not isinstance(kb_config, dict):
+                continue
+            vec_db: FaissVecDB | None = kb_config.get("vec_db")
             if not vec_db:
                 continue
             result = await vec_db.document_storage.get_documents(
@@ -131,7 +145,7 @@ class SparseRetriever:
                 offset=None,
             )
             chunk_mds = [json.loads(doc["metadata"]) for doc in result]
-            result = [
+            mapped_chunks: list[_SparseChunk] = [
                 {
                     "chunk_id": doc["doc_id"],
                     "chunk_index": chunk_md["chunk_index"],
@@ -139,10 +153,10 @@ class SparseRetriever:
                     "kb_id": kb_id,
                     "text": doc["text"],
                 }
-                for doc, chunk_md in zip(result, chunk_mds)
+                for doc, chunk_md in zip(result, chunk_mds, strict=False)
             ]
-            chunks.extend(result)
-            top_k_sparse += kb_options.get(kb_id, {}).get("top_k_sparse", 50)
+            chunks.extend(mapped_chunks)
+            top_k_sparse += kb_config.get("top_k_sparse", 50)
 
         if not chunks:
             return []

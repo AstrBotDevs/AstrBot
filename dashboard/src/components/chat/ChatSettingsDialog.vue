@@ -147,13 +147,9 @@
 
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import {
-  useI18n,
-  useLanguageSwitcher,
-  useModuleI18n,
-} from "@/i18n/composables";
-import { useCustomizerStore } from "@/stores/customizer";
 import type { TransportMode } from "@/composables/useMessages";
+import { useI18n, useLanguageSwitcher, useModuleI18n } from "@/i18n/composables";
+import { useCustomizerStore } from "@/stores/customizer";
 
 defineProps<{
   modelValue: boolean;

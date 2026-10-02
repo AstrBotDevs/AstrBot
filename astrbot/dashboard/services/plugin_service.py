@@ -34,6 +34,7 @@ from astrbot.core.star.star_manager import (
     PluginVersionUnsupportedError,
 )
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_temp_path
+from astrbot.dashboard.validation import is_json_object, is_string_list, string_field
 
 PLUGIN_UPDATE_CONCURRENCY = 3
 PLUGIN_OPERATION_FAILED_MESSAGE = "插件操作失败，请查看服务端日志。"
@@ -110,8 +111,15 @@ class PluginService:
         self._logo_cache: dict[str, str] = {}
 
     @staticmethod
-    def _payload(data: object) -> dict[str, Any]:
-        return data if isinstance(data, dict) else {}
+    def _payload(data: object) -> dict[str, object]:
+        return data if is_json_object(data) else {}
+
+    @staticmethod
+    def _plugin_name(payload: dict[str, object]) -> str:
+        name = payload["name"]
+        if not isinstance(name, str):
+            raise PluginServiceError("Invalid plugin name")
+        return name
 
     @staticmethod
     def _ensure_not_demo() -> None:
@@ -128,7 +136,7 @@ class PluginService:
 
     async def check_plugin_version_support(self, data: object) -> dict:
         payload = self._payload(data)
-        version_spec = payload.get("astrbot_version", "")
+        version_spec = string_field(payload, "astrbot_version", "")
         is_valid, message = self.plugin_manager._validate_astrbot_version_specifier(
             version_spec
         )
@@ -140,9 +148,9 @@ class PluginService:
 
     async def reload_failed_plugin(self, data: object) -> tuple[None, str]:
         self._ensure_not_demo()
-        payload = data if isinstance(data, dict) else {}
+        payload = data if is_json_object(data) else {}
         dir_name = payload.get("dir_name")
-        if not dir_name:
+        if not isinstance(dir_name, str) or not dir_name:
             raise PluginServiceError("缺少插件目录名")
 
         success, err = await self.plugin_manager.reload_failed_plugin(dir_name)
@@ -153,8 +161,8 @@ class PluginService:
 
     async def reload_plugin(self, data: object) -> tuple[None, str]:
         self._ensure_not_demo()
-        payload = data if isinstance(data, dict) else {}
-        plugin_name = payload.get("name", None)
+        payload = data if is_json_object(data) else {}
+        plugin_name = string_field(payload, "name")
         success, message = await self.plugin_manager.reload(plugin_name)
         if not success:
             raise PluginServiceError(
@@ -1171,11 +1179,11 @@ class PluginService:
         Yields:
             Tuples of market identifier and plugin entry.
         """
-        if isinstance(market_data, dict):
+        if is_json_object(market_data):
             for key, value in market_data.items():
                 if key == "$meta":
                     continue
-                if isinstance(value, dict):
+                if is_json_object(value):
                     entry = value
                     if "/" not in str(key) and not str(value.get("name") or "").strip():
                         entry = {**value, "name": str(key)}
@@ -1183,7 +1191,7 @@ class PluginService:
             return
         if isinstance(market_data, list):
             for value in market_data:
-                if not isinstance(value, dict):
+                if not is_json_object(value):
                     continue
                 identifier = PluginService.get_market_plugin_id(value)
                 yield identifier, value
@@ -1387,7 +1395,7 @@ class PluginService:
             PluginServiceError: If the plugin or marketplace entry cannot be matched.
         """
         self._ensure_not_demo()
-        payload = data if isinstance(data, dict) else {}
+        payload = data if is_json_object(data) else {}
         plugin_name = str(payload.get("name") or "").strip()
         plugin = self.find_plugin_by_name(plugin_name)
         if not plugin or not plugin.root_dir_name:
@@ -1562,7 +1570,7 @@ class PluginService:
 
     async def install_plugin(self, data: object) -> tuple[dict, str]:
         self._ensure_not_demo()
-        payload = data if isinstance(data, dict) else {}
+        payload = data if is_json_object(data) else {}
         repo_url = str(payload.get("url") or "").strip()
         download_url = str(payload.get("download_url") or "").strip()
         ignore_version_check = bool(payload.get("ignore_version_check", False))
@@ -1601,7 +1609,7 @@ class PluginService:
                 public_message="该地址应通过 GitHub 仓库安装入口处理。",
             )
 
-        proxy: str | None = payload.get("proxy", None)
+        proxy = string_field(payload, "proxy")
         if proxy:
             proxy = proxy.removesuffix("/")
 
@@ -1736,10 +1744,10 @@ class PluginService:
 
     async def uninstall_plugin(self, data: object) -> tuple[None, str]:
         self._ensure_not_demo()
-        payload = data if isinstance(data, dict) else {}
-        plugin_name = payload["name"]
-        delete_config = payload.get("delete_config", False)
-        delete_data = payload.get("delete_data", False)
+        payload = data if is_json_object(data) else {}
+        plugin_name = self._plugin_name(payload)
+        delete_config = bool(payload.get("delete_config", False))
+        delete_data = bool(payload.get("delete_data", False))
         logger.info(f"Uninstalling plugin {plugin_name}")
         plugin = self.find_plugin_by_name(plugin_name)
         root_dir_name = plugin.root_dir_name if plugin else None
@@ -1755,11 +1763,11 @@ class PluginService:
 
     async def uninstall_failed_plugin(self, data: object) -> tuple[None, str]:
         self._ensure_not_demo()
-        payload = data if isinstance(data, dict) else {}
+        payload = data if is_json_object(data) else {}
         dir_name = payload.get("dir_name", "")
-        delete_config = payload.get("delete_config", False)
-        delete_data = payload.get("delete_data", False)
-        if not dir_name:
+        delete_config = bool(payload.get("delete_config", False))
+        delete_data = bool(payload.get("delete_data", False))
+        if not isinstance(dir_name, str) or not dir_name:
             raise PluginServiceError("缺少失败插件目录名")
 
         logger.info(f"Uninstalling failed plugin {dir_name}")
@@ -1774,9 +1782,9 @@ class PluginService:
 
     async def update_plugin(self, data: object) -> tuple[None, str]:
         self._ensure_not_demo()
-        payload = data if isinstance(data, dict) else {}
-        plugin_name = payload["name"]
-        proxy: str | None = payload.get("proxy", None)
+        payload = data if is_json_object(data) else {}
+        plugin_name = self._plugin_name(payload)
+        proxy = string_field(payload, "proxy")
         update_info = await self.resolve_market_update_info(plugin_name)
         download_url = str(update_info.get("download_url") or "").strip()
         repo_url = str(update_info.get("repo") or "").strip()
@@ -1795,11 +1803,11 @@ class PluginService:
 
     async def update_all_plugins(self, data: object) -> tuple[dict, str]:
         self._ensure_not_demo()
-        payload = data if isinstance(data, dict) else {}
-        plugin_names: list[str] = payload.get("names") or []
-        proxy: str = payload.get("proxy", "")
+        payload = data if is_json_object(data) else {}
+        plugin_names = payload.get("names") or []
+        proxy = string_field(payload, "proxy", "") or ""
 
-        if not isinstance(plugin_names, list) or not plugin_names:
+        if not is_string_list(plugin_names) or not plugin_names:
             raise PluginServiceError("插件列表不能为空")
 
         results = []
@@ -1880,8 +1888,8 @@ class PluginService:
         self, data: object, *, enabled: bool
     ) -> tuple[None, str]:
         self._ensure_not_demo()
-        payload = data if isinstance(data, dict) else {}
-        plugin_name = payload["name"]
+        payload = data if is_json_object(data) else {}
+        plugin_name = self._plugin_name(payload)
         if enabled:
             await self.plugin_manager.turn_on_plugin(plugin_name)
             message = "启用成功。"
@@ -1993,7 +2001,7 @@ class PluginService:
 
     @staticmethod
     async def save_custom_sources(data: object) -> tuple[None, str]:
-        payload = data if isinstance(data, dict) else {}
+        payload = data if is_json_object(data) else {}
         sources = PluginService._custom_sources_from_payload(payload)
         await sp.global_put("custom_plugin_sources", sources)
         return None, "保存成功"
@@ -2011,7 +2019,7 @@ class PluginService:
 
     @staticmethod
     async def create_custom_source(data: object) -> list:
-        source = data if isinstance(data, dict) else {}
+        source = data if is_json_object(data) else {}
         sources = await PluginService.get_custom_sources()
         sources.append(source)
         await sp.global_put("custom_plugin_sources", sources)
@@ -2019,7 +2027,7 @@ class PluginService:
 
     @staticmethod
     async def replace_custom_sources(data: object) -> list:
-        payload = data if isinstance(data, dict) else {}
+        payload = data if is_json_object(data) else {}
         sources = PluginService._custom_sources_from_payload(payload)
         await sp.global_put("custom_plugin_sources", sources)
         return sources

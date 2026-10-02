@@ -1,80 +1,80 @@
-import type { AxiosRequestConfig, AxiosResponse } from 'axios';
-
-import * as openApiV1 from './generated/openapi-v1';
-import {
-  type BackupChunkUploadRequest,
-  client as openApiV1Client,
-  type BackupExportRequest,
-  type BackupRenameRequest,
-  type BackupUploadInitRequest,
-  type BackupUploadRequest,
-  type BackupUploadSessionRequest,
-  type BotConfigRequest,
-  type BotRegistrationRequest,
-  type ChatChunkUploadRequest,
-  type ChatMessagePatchRequest,
-  type ChatMessageRegenerateRequest,
-  type ChatProjectRequest,
-  type ChatRequest,
-  type ChatSessionBatchDeleteRequest,
-  type ChatSessionPatchRequest,
-  type ChatThreadCreateRequest,
-  type ChatThreadMessageRequest,
-  type ChatUploadInitRequest,
-  type ChatUploadSessionRequest,
-  type CommandPatchRequest,
-  type ConfigRouteUpsertRequest,
-  type ConfigRoutesReplaceRequest,
-  type ConversationBatchDeleteRequest,
-  type ConversationExportRequest,
-  type ConversationMessagesReplaceRequest,
-  type ConversationPatchRequest,
-  type CreateApiKeyRequest,
-  type CronJobPatchRequest,
-  type CronJobRequest,
-  type DynamicConfig,
-  type EnabledPatch,
-  type GhproxyTestRequest,
-  type KnowledgeBaseCreateRequest,
-  type KnowledgeBaseRequest,
-  type LoginRequest,
-  type ListConversationsData,
-  type McpServerConfig,
-  type ModelScopeSyncRequest,
-  type PipInstallRequest,
-  type PluginVersionSupportRequest,
-  type PluginValidateRepoRequest,
-  type PluginConfigFileDeleteRequest,
-  type ProviderConfigRequest,
-  type RuntimeInfo,
-  type BatchSessionProviderRequest,
-  type BatchSessionServiceRequest,
-  type SetupAuthRequest,
-  type SessionGroupRequest,
-  type SessionRuleRequest,
-  type UmoListRequest,
-  type SuccessEnvelope,
-  type T2iTemplateRequest,
-  type TotpSetupRequest,
-  type TraceSettingsRequest,
-  type UpdateAccountRequest,
-  type UpdateRequest,
-} from './generated/openapi-v1';
-import { apiV1Client, fetchWithAuth, httpClient } from './http';
+import type { AxiosRequestConfig, AxiosResponse } from "axios";
+import type {
+  BackupChunkUploadRequest,
+  BackupExportRequest,
+  BackupRenameRequest,
+  BackupUploadInitRequest,
+  BackupUploadRequest,
+  BackupUploadSessionRequest,
+  BatchSessionProviderRequest,
+  BatchSessionServiceRequest,
+  BotConfigRequest,
+  BotRegistrationRequest,
+  ChatChunkUploadRequest,
+  ChatMessagePatchRequest,
+  ChatMessageRegenerateRequest,
+  ChatProjectRequest,
+  ChatRequest,
+  ChatSessionBatchDeleteRequest,
+  ChatSessionPatchRequest,
+  ChatThreadCreateRequest,
+  ChatThreadMessageRequest,
+  ChatUploadInitRequest,
+  ChatUploadSessionRequest,
+  CommandPatchRequest,
+  ConfigRoutesReplaceRequest,
+  ConfigRouteUpsertRequest,
+  ConversationBatchDeleteRequest,
+  ConversationExportRequest,
+  ConversationMessagesReplaceRequest,
+  ConversationPatchRequest,
+  CreateApiKeyRequest,
+  CronJobPatchRequest,
+  CronJobRequest,
+  DynamicConfig,
+  EnabledPatch,
+  GhproxyTestRequest,
+  KnowledgeBaseCreateRequest,
+  KnowledgeBaseRequest,
+  ListConversationsData,
+  LoginRequest,
+  McpServerConfig,
+  ModelScopeSyncRequest,
+  PipInstallRequest,
+  PluginConfigFileDeleteRequest,
+  PluginValidateRepoRequest,
+  PluginVersionSupportRequest,
+  ProviderConfigRequest,
+  RuntimeInfo,
+  SessionGroupRequest,
+  SessionRuleRequest,
+  SetupAuthRequest,
+  SuccessEnvelope,
+  T2iTemplateRequest,
+  TotpSetupRequest,
+  TraceSettingsRequest,
+  UmoListRequest,
+  UpdateAccountRequest,
+  UpdateRequest,
+} from "./generated/openapi-v1";
+import * as openApiV1 from "./generated/openapi-v1";
+import { client as openApiV1Client } from "./generated/openapi-v1/client.gen";
+import { apiV1Client, fetchWithAuth, generatedHttpClient, httpClient } from "./http";
 
 openApiV1Client.setConfig({
-  axios: httpClient,
+  axios: generatedHttpClient,
+  baseURL: undefined,
   throwOnError: true,
 });
 
 export interface ApiEnvelope<T> {
-  status: 'ok' | 'error';
+  status: "ok" | "error";
   message?: string | null;
   data: T;
 }
 
-export const UPGRADE_RECOVERY_EVENT = 'astrbot-upgrade-recovery';
-export const UPGRADE_RECOVERY_TOKEN_KEY = 'astrbot-upgrade-recovery-token';
+export const UPGRADE_RECOVERY_EVENT = "astrbot-upgrade-recovery";
+export const UPGRADE_RECOVERY_TOKEN_KEY = "astrbot-upgrade-recovery-token";
 
 export type OpenConfig = DynamicConfig;
 
@@ -122,7 +122,7 @@ export interface VersionData {
   version?: string;
   dashboard_version?: string;
   change_pwd_hint?: boolean;
-  md5_pwd_hint?: boolean;
+  legacy_pwd_hint?: boolean;
   password_upgrade_required?: boolean;
   runtime?: RuntimeInfo;
   [key: string]: unknown;
@@ -156,13 +156,13 @@ export interface BotListParams {
 }
 
 export interface ProviderListParams {
-  capability?: 'chat' | 'stt' | 'tts' | 'embedding' | 'rerank';
+  capability?: "chat" | "stt" | "tts" | "embedding" | "rerank";
   source_id?: string;
   enabled?: boolean;
 }
 
 export interface ToolListParams {
-  origin?: 'builtin' | 'plugin' | 'mcp';
+  origin?: "builtin" | "plugin" | "mcp";
   enabled?: boolean;
 }
 
@@ -181,7 +181,7 @@ export interface SessionListParams {
   page_size?: number;
   search?: string;
   platform?: string;
-  message_type?: 'all' | 'group' | 'private';
+  message_type?: "all" | "group" | "private";
 }
 
 export interface SessionRuleListParams {
@@ -205,20 +205,18 @@ export interface CronJobListParams {
   type?: string;
 }
 
-type ProviderCapability = NonNullable<ProviderListParams['capability']>;
+type ProviderCapability = NonNullable<ProviderListParams["capability"]>;
 
 const PROVIDER_TYPE_TO_CAPABILITY: Record<string, ProviderCapability> = {
-  chat_completion: 'chat',
-  speech_to_text: 'stt',
-  text_to_speech: 'tts',
-  embedding: 'embedding',
-  rerank: 'rerank',
+  chat_completion: "chat",
+  speech_to_text: "stt",
+  text_to_speech: "tts",
+  embedding: "embedding",
+  rerank: "rerank",
 };
 
-type V1Response<T> = Promise<
-  AxiosResponse<ApiEnvelope<T>> & { legacyFallback?: boolean }
->;
-type ListConversationsQuery = NonNullable<ListConversationsData['query']>;
+type V1Response<T> = Promise<AxiosResponse<ApiEnvelope<T>> & { legacyFallback?: boolean }>;
+type ListConversationsQuery = NonNullable<ListConversationsData["query"]>;
 
 function typed<T>(response: Promise<unknown>): V1Response<T> {
   return response as unknown as V1Response<T>;
@@ -234,9 +232,8 @@ export function isLegacyFallbackError(error: unknown): boolean {
   }
 
   const data = axiosError.response?.data;
-  const message =
-    typeof data === 'string' ? data : data?.message || axiosError.message || '';
-  return message.toLowerCase().includes('missing api key');
+  const message = typeof data === "string" ? data : data?.message || axiosError.message || "";
+  return message.toLowerCase().includes("missing api key");
 }
 
 function withLegacyFallback<T>(
@@ -252,26 +249,23 @@ function withLegacyFallback<T>(
       return legacyResponse;
     });
 
-  return typed<T>(primary).then((response) => {
-    const message = response.data?.message || '';
-    if (
-      response.data?.status === 'error' &&
-      message.toLowerCase().includes('missing api key')
-    ) {
-      return legacyRequest();
-    }
-    return response;
-  }).catch((error) => {
-    if (isLegacyFallbackError(error)) {
-      return legacyRequest();
-    }
-    throw error;
-  });
+  return typed<T>(primary)
+    .then((response) => {
+      const message = response.data?.message || "";
+      if (response.data?.status === "error" && message.toLowerCase().includes("missing api key")) {
+        return legacyRequest();
+      }
+      return response;
+    })
+    .catch((error) => {
+      if (isLegacyFallbackError(error)) {
+        return legacyRequest();
+      }
+      throw error;
+    });
 }
 
-function firstSuccessfulResponse<T>(
-  requests: Array<Promise<AxiosResponse<ApiEnvelope<T>>>>,
-): V1Response<T> {
+function firstSuccessfulResponse<T>(requests: Array<Promise<AxiosResponse<ApiEnvelope<T>>>>): V1Response<T> {
   return new Promise<AxiosResponse<ApiEnvelope<T>>>((resolve, reject) => {
     let pending = requests.length;
     let firstError: unknown;
@@ -289,21 +283,16 @@ function firstSuccessfulResponse<T>(
   });
 }
 
-function generatedOptions(
-  options: Record<string, unknown>,
-  requestConfig?: AxiosRequestConfig,
-) {
+function generatedOptions(options: Record<string, unknown>, requestConfig?: AxiosRequestConfig) {
   return { ...options, ...(requestConfig || {}) } as any;
 }
 
-function generatedQuery<T extends object>(
-  params?: T,
-): (T & Record<string, unknown>) | undefined {
+function generatedQuery<T extends object>(params?: T): (T & Record<string, unknown>) | undefined {
   return params as (T & Record<string, unknown>) | undefined;
 }
 
 function generatedFormData(formData: FormData | Record<string, unknown>) {
-  if (typeof FormData !== 'undefined' && formData instanceof FormData) {
+  if (typeof FormData !== "undefined" && formData instanceof FormData) {
     const body: Record<string, unknown> = {};
     formData.forEach((value, key) => {
       const existing = body[key];
@@ -322,12 +311,12 @@ function generatedFormData(formData: FormData | Record<string, unknown>) {
 
 function botConfig(config: OpenConfig): BotConfigRequest {
   return {
-    id: typeof config.id === 'string' ? config.id : undefined,
-    type: typeof config.type === 'string' ? config.type : '',
+    id: typeof config.id === "string" ? config.id : undefined,
+    type: typeof config.type === "string" ? config.type : "",
     enabled:
-      typeof config.enable === 'boolean'
+      typeof config.enable === "boolean"
         ? config.enable
-        : typeof config.enabled === 'boolean'
+        : typeof config.enabled === "boolean"
           ? config.enabled
           : undefined,
     config,
@@ -340,7 +329,7 @@ function providerConfig(config: OpenConfig): ProviderConfigRequest {
 
 function providerTypeToCapabilities(providerType: string): ProviderCapability[] {
   return providerType
-    .split(',')
+    .split(",")
     .map((item) => item.trim())
     .filter(Boolean)
     .map((item) => PROVIDER_TYPE_TO_CAPABILITY[item] || (item as ProviderCapability));
@@ -348,11 +337,11 @@ function providerTypeToCapabilities(providerType: string): ProviderCapability[] 
 
 function pluginExtensionPath(pluginPath: string): string {
   return pluginPath
-    .replace(/^\/+/, '')
-    .split('/')
+    .replace(/^\/+/, "")
+    .split("/")
     .filter(Boolean)
     .map((segment) => encodeURIComponent(segment))
-    .join('/');
+    .join("/");
 }
 
 export const configProfileApi = {
@@ -373,15 +362,9 @@ export const configProfileApi = {
     );
   },
   get(configId: string) {
-    return typed<OpenConfig>(
-      openApiV1.getConfigProfile({ path: { config_id: configId } }),
-    );
+    return typed<OpenConfig>(openApiV1.getConfigProfile({ path: { config_id: configId } }));
   },
-  update(
-    configId: string,
-    config: OpenConfig,
-    requestConfig?: AxiosRequestConfig,
-  ) {
+  update(configId: string, config: OpenConfig, requestConfig?: AxiosRequestConfig) {
     return typed<OpenConfig>(
       openApiV1.updateConfigProfileContent(
         generatedOptions(
@@ -398,14 +381,12 @@ export const configProfileApi = {
     return typed<OpenConfig>(
       openApiV1.renameConfigProfile({
         path: { config_id: configId },
-        body: { name: name ?? '' },
+        body: { name: name ?? "" },
       }),
     );
   },
   delete(configId: string) {
-    return typed<OpenConfig>(
-      openApiV1.deleteConfigProfile({ path: { config_id: configId } }),
-    );
+    return typed<OpenConfig>(openApiV1.deleteConfigProfile({ path: { config_id: configId } }));
   },
 };
 
@@ -420,11 +401,7 @@ export const systemConfigApi = {
     return typed<OpenConfig>(openApiV1.getSystemConfigRuntime());
   },
   update(config: OpenConfig, requestConfig?: AxiosRequestConfig) {
-    return typed<OpenConfig>(
-      openApiV1.updateSystemConfig(
-        generatedOptions({ body: config }, requestConfig),
-      ),
-    );
+    return typed<OpenConfig>(openApiV1.updateSystemConfig(generatedOptions({ body: config }, requestConfig)));
   },
 };
 
@@ -436,14 +413,10 @@ export const configRouteApi = {
     return typed<OpenConfig>(openApiV1.replaceConfigRoutes({ body: payload }));
   },
   upsert(umo: string, payload: ConfigRouteUpsertRequest) {
-    return typed<OpenConfig>(
-      openApiV1.upsertConfigRoute({ path: { umo }, body: payload }),
-    );
+    return typed<OpenConfig>(openApiV1.upsertConfigRoute({ path: { umo }, body: payload }));
   },
   delete(umo: string) {
-    return typed<OpenConfig>(
-      openApiV1.deleteConfigRoute({ path: { umo } }),
-    );
+    return typed<OpenConfig>(openApiV1.deleteConfigRoute({ path: { umo } }));
   },
 };
 
@@ -452,9 +425,7 @@ export const botApi = {
     return typed<{ bot_types: OpenConfig[] }>(openApiV1.listBotTypes());
   },
   list(params?: BotListParams) {
-    return typed<{ bots: OpenConfig[] }>(
-      openApiV1.listBots({ query: generatedQuery(params) }),
-    );
+    return typed<{ bots: OpenConfig[] }>(openApiV1.listBots({ query: generatedQuery(params) }));
   },
   stats() {
     return typed<{ platforms: OpenConfig[] }>(openApiV1.listBotStats());
@@ -471,9 +442,7 @@ export const botApi = {
     return typed<OpenConfig>(openApiV1.createBot({ body: botConfig(config) }));
   },
   get(botId: string) {
-    return typed<{ bot: OpenConfig }>(
-      openApiV1.getBotById({ query: { bot_id: botId } }),
-    );
+    return typed<{ bot: OpenConfig }>(openApiV1.getBotById({ query: { bot_id: botId } }));
   },
   update(botId: string, config: OpenConfig) {
     return typed<OpenConfig>(
@@ -490,9 +459,7 @@ export const botApi = {
     );
   },
   delete(botId: string) {
-    return typed<OpenConfig>(
-      openApiV1.deleteBotById({ query: { bot_id: botId } }),
-    );
+    return typed<OpenConfig>(openApiV1.deleteBotById({ query: { bot_id: botId } }));
   },
 };
 
@@ -501,9 +468,7 @@ export const providerApi = {
     return typed<ProviderSchemaData>(openApiV1.getProviderSchema());
   },
   sources() {
-    return typed<{ provider_sources: OpenConfig[] }>(
-      openApiV1.listProviderSources(),
-    );
+    return typed<{ provider_sources: OpenConfig[] }>(openApiV1.listProviderSources());
   },
   upsertSource(sourceId: string, config: OpenConfig) {
     return typed<OpenConfig>(
@@ -513,9 +478,7 @@ export const providerApi = {
     );
   },
   deleteSource(sourceId: string) {
-    return typed<OpenConfig>(
-      openApiV1.deleteProviderSourceById({ query: { source_id: sourceId } }),
-    );
+    return typed<OpenConfig>(openApiV1.deleteProviderSourceById({ query: { source_id: sourceId } }));
   },
   sourceModels(sourceId: string) {
     return typed<ProviderSourceModelsData>(
@@ -525,13 +488,9 @@ export const providerApi = {
     );
   },
   list(params?: ProviderListParams) {
-    return typed<ProviderListData>(
-      openApiV1.listProviders({ query: generatedQuery(params) }),
-    );
+    return typed<ProviderListData>(openApiV1.listProviders({ query: generatedQuery(params) }));
   },
-  async listByProviderType(
-    providerType: string,
-  ): Promise<AxiosResponse<ProviderByTypeEnvelope>> {
+  async listByProviderType(providerType: string): Promise<AxiosResponse<ProviderByTypeEnvelope>> {
     const capabilities = providerTypeToCapabilities(providerType);
     if (capabilities.length === 0) {
       const response = await providerApi.list();
@@ -545,9 +504,7 @@ export const providerApi = {
       };
     }
 
-    const responses = await Promise.all(
-      capabilities.map((capability) => providerApi.list({ capability })),
-    );
+    const responses = await Promise.all(capabilities.map((capability) => providerApi.list({ capability })));
     const first = responses[0];
     const modelMetadata = responses.reduce<Record<string, unknown>>(
       (acc, response) => ({
@@ -560,19 +517,15 @@ export const providerApi = {
       ...first,
       data: {
         ...first.data,
-        data: responses.flatMap(
-          (response) => response.data.data.providers || [],
-        ),
+        data: responses.flatMap((response) => response.data.data.providers || []),
         model_metadata: modelMetadata,
       },
     };
   },
   create(config: OpenConfig) {
-    return typed<OpenConfig>(
-      openApiV1.createProvider({ body: providerConfig(config) }),
-    );
+    return typed<OpenConfig>(openApiV1.createProvider({ body: providerConfig(config) }));
   },
-  listBySource(sourceId: string, params?: Pick<ProviderListParams, 'capability'>) {
+  listBySource(sourceId: string, params?: Pick<ProviderListParams, "capability">) {
     return typed<{ providers: OpenConfig[] }>(
       openApiV1.listProvidersBySourceId({
         query: { source_id: sourceId, ...params },
@@ -608,14 +561,10 @@ export const providerApi = {
     );
   },
   delete(providerId: string) {
-    return typed<OpenConfig>(
-      openApiV1.deleteProviderById({ query: { provider_id: providerId } }),
-    );
+    return typed<OpenConfig>(openApiV1.deleteProviderById({ query: { provider_id: providerId } }));
   },
   test(providerId: string) {
-    return typed<ProviderTestData>(
-      openApiV1.testProviderById({ body: { provider_id: providerId } }),
-    );
+    return typed<ProviderTestData>(openApiV1.testProviderById({ body: { provider_id: providerId } }));
   },
   embeddingDimension(providerId: string, providerConfig?: OpenConfig) {
     return typed<ProviderEmbeddingDimensionData>(
@@ -632,38 +581,37 @@ export const providerApi = {
 export const authApi = {
   login(payload: LoginRequest) {
     return withLegacyFallback<any>(openApiV1.login({ body: payload }), () =>
-      httpClient.post<ApiEnvelope<any>>('/api/auth/login', payload),
+      httpClient.post<ApiEnvelope<any>>("/api/auth/login", payload),
     );
   },
   logout() {
     return withLegacyFallback<OpenConfig>(openApiV1.logout(), () =>
-      httpClient.post<ApiEnvelope<OpenConfig>>('/api/auth/logout'),
+      httpClient.post<ApiEnvelope<OpenConfig>>("/api/auth/logout"),
     );
   },
   setupStatus() {
     return withLegacyFallback<any>(openApiV1.getAuthSetupStatus(), () =>
-      httpClient.get<ApiEnvelope<any>>('/api/auth/setup-status'),
+      httpClient.get<ApiEnvelope<any>>("/api/auth/setup-status"),
     );
   },
   setup(payload: SetupAuthRequest) {
     return withLegacyFallback<OpenConfig>(openApiV1.setupAuth({ body: payload }), () =>
-      httpClient.post<ApiEnvelope<OpenConfig>>('/api/auth/setup', payload),
+      httpClient.post<ApiEnvelope<OpenConfig>>("/api/auth/setup", payload),
     );
   },
   setupTotp(payload?: TotpSetupRequest) {
     return withLegacyFallback<any>(openApiV1.setupTotp({ body: payload }), () =>
-      httpClient.post<ApiEnvelope<any>>('/api/auth/totp/setup', payload),
+      httpClient.post<ApiEnvelope<any>>("/api/auth/totp/setup", payload),
     );
   },
   recoverTotp() {
     return withLegacyFallback<any>(openApiV1.recoverTotp(), () =>
-      httpClient.post<ApiEnvelope<any>>('/api/auth/totp/recovery'),
+      httpClient.post<ApiEnvelope<any>>("/api/auth/totp/recovery"),
     );
   },
   updateAccount(payload: UpdateAccountRequest) {
-    return withLegacyFallback<OpenConfig>(
-      openApiV1.updateAuthAccount({ body: payload }),
-      () => httpClient.post<ApiEnvelope<OpenConfig>>('/api/auth/account/edit', payload),
+    return withLegacyFallback<OpenConfig>(openApiV1.updateAuthAccount({ body: payload }), () =>
+      httpClient.post<ApiEnvelope<OpenConfig>>("/api/auth/account/edit", payload),
     );
   },
 };
@@ -676,14 +624,10 @@ export const apiKeyApi = {
     return typed<{ api_key?: string }>(openApiV1.createApiKey({ body: payload }));
   },
   revoke(keyId: string) {
-    return typed<OpenConfig>(
-      openApiV1.revokeApiKey({ path: { key_id: keyId } }),
-    );
+    return typed<OpenConfig>(openApiV1.revokeApiKey({ path: { key_id: keyId } }));
   },
   delete(keyId: string) {
-    return typed<OpenConfig>(
-      openApiV1.deleteApiKey({ path: { key_id: keyId } }),
-    );
+    return typed<OpenConfig>(openApiV1.deleteApiKey({ path: { key_id: keyId } }));
   },
 };
 
@@ -692,53 +636,47 @@ export const traceApi = {
     return typed<OpenConfig>(openApiV1.getTraceSettings());
   },
   updateSettings(settings: TraceSettingsRequest) {
-    return typed<OpenConfig>(
-      openApiV1.updateTraceSettings({ body: settings }),
-    );
+    return typed<OpenConfig>(openApiV1.updateTraceSettings({ body: settings }));
   },
 };
 
 export const updatesApi = {
   check() {
     return withLegacyFallback<any>(openApiV1.checkUpdate(), () =>
-      httpClient.get<ApiEnvelope<any>>('/api/update/check'),
+      httpClient.get<ApiEnvelope<any>>("/api/update/check"),
     );
   },
-  releases(type?: 'core' | 'dashboard') {
+  releases(type?: "core" | "dashboard") {
     return withLegacyFallback<any[]>(
       openApiV1.listReleases({
         query: type ? { type } : undefined,
       }),
       () =>
-        httpClient.get<ApiEnvelope<any[]>>('/api/update/releases', {
+        httpClient.get<ApiEnvelope<any[]>>("/api/update/releases", {
           params: type ? { type } : undefined,
         }),
     );
   },
   core(payload?: UpdateRequest) {
     return withLegacyFallback<OpenConfig>(openApiV1.updateCore({ body: payload }), () =>
-      httpClient.post<ApiEnvelope<OpenConfig>>('/api/update/do', payload),
+      httpClient.post<ApiEnvelope<OpenConfig>>("/api/update/do", payload),
     );
   },
   dashboard(payload?: UpdateRequest) {
-    return withLegacyFallback<OpenConfig>(
-      openApiV1.updateDashboard({ body: payload }),
-      () => httpClient.post<ApiEnvelope<OpenConfig>>('/api/update/dashboard', payload),
+    return withLegacyFallback<OpenConfig>(openApiV1.updateDashboard({ body: payload }), () =>
+      httpClient.post<ApiEnvelope<OpenConfig>>("/api/update/dashboard", payload),
     );
   },
   progress(taskId: string) {
-    return withLegacyFallback<any>(
-      openApiV1.getUpdateProgress({ path: { task_id: taskId } }),
-      () =>
-        httpClient.get<ApiEnvelope<any>>('/api/update/progress', {
-          params: { id: taskId },
-        }),
+    return withLegacyFallback<any>(openApiV1.getUpdateProgress({ path: { task_id: taskId } }), () =>
+      httpClient.get<ApiEnvelope<any>>("/api/update/progress", {
+        params: { id: taskId },
+      }),
     );
   },
   installPip(payload: PipInstallRequest) {
-    return withLegacyFallback<OpenConfig>(
-      openApiV1.installPipPackage({ body: payload }),
-      () => httpClient.post<ApiEnvelope<OpenConfig>>('/api/update/pip-install', payload),
+    return withLegacyFallback<OpenConfig>(openApiV1.installPipPackage({ body: payload }), () =>
+      httpClient.post<ApiEnvelope<OpenConfig>>("/api/update/pip-install", payload),
     );
   },
 };
@@ -751,22 +689,16 @@ export const backupApi = {
     return typed<any>(openApiV1.createBackup({ body: payload }));
   },
   progress(taskId: string) {
-    return typed<any>(
-      openApiV1.getBackupProgress({ path: { task_id: taskId } }),
-    );
+    return typed<any>(openApiV1.getBackupProgress({ path: { task_id: taskId } }));
   },
   upload(formData: FormData | BackupUploadRequest) {
-    return typed<any>(
-      openApiV1.uploadBackup({ body: generatedFormData(formData) }),
-    );
+    return typed<any>(openApiV1.uploadBackup({ body: generatedFormData(formData) }));
   },
   initUpload(payload: BackupUploadInitRequest) {
     return typed<any>(openApiV1.initBackupUpload({ body: payload }));
   },
   uploadChunk(formData: FormData | BackupChunkUploadRequest) {
-    return typed<any>(
-      openApiV1.uploadBackupChunk({ body: generatedFormData(formData) }),
-    );
+    return typed<any>(openApiV1.uploadBackupChunk({ body: generatedFormData(formData) }));
   },
   completeUpload(payload: BackupUploadSessionRequest) {
     return typed<any>(openApiV1.completeBackupUpload({ body: payload }));
@@ -778,9 +710,7 @@ export const backupApi = {
     return typed<any>(openApiV1.statusBackupUpload({ body: payload }));
   },
   check(filename: string) {
-    return typed<any>(
-      openApiV1.checkBackup({ path: { filename } }),
-    );
+    return typed<any>(openApiV1.checkBackup({ path: { filename } }));
   },
   import(filename: string, confirmed = true) {
     return typed<any>(
@@ -791,14 +721,10 @@ export const backupApi = {
     );
   },
   delete(filename: string) {
-    return typed<OpenConfig>(
-      openApiV1.deleteBackup({ path: { filename } }),
-    );
+    return typed<OpenConfig>(openApiV1.deleteBackup({ path: { filename } }));
   },
   rename(filename: string, payload: BackupRenameRequest) {
-    return typed<any>(
-      openApiV1.renameBackup({ path: { filename }, body: payload }),
-    );
+    return typed<any>(openApiV1.renameBackup({ path: { filename }, body: payload }));
   },
   downloadUrl(filename: string, token: string) {
     return `/api/v1/backups/${encodeURIComponent(filename)}?token=${encodeURIComponent(token)}`;
@@ -810,23 +736,21 @@ export const chatApi = {
     return typed<any>(openApiV1.sendChatMessage({ body: payload }));
   },
   sendStreamUrl() {
-    return '/api/v1/chat';
+    return "/api/v1/chat";
   },
   resumeRunStreamUrl(runId: string) {
     return `/api/v1/chat/runs/${encodeURIComponent(runId)}/stream`;
   },
   liveWebSocketUrl(token: string, host = window.location.host) {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     return `${protocol}//${host}/api/v1/live-chat/ws?token=${encodeURIComponent(token)}`;
   },
   unifiedWebSocketUrl(token: string, host = window.location.host) {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     return `${protocol}//${host}/api/v1/unified-chat/ws?token=${encodeURIComponent(token)}`;
   },
   listSessions(params?: ChatSessionListParams) {
-    return typed<any>(
-      openApiV1.listChatSessions({ query: generatedQuery(params) }),
-    );
+    return typed<any>(openApiV1.listChatSessions({ query: generatedQuery(params) }));
   },
   createSession(platformId?: string) {
     return typed<any>(
@@ -852,23 +776,15 @@ export const chatApi = {
     );
   },
   deleteSession(sessionId: string) {
-    return typed<any>(
-      openApiV1.deleteChatSession({ path: { session_id: sessionId } }),
-    );
+    return typed<any>(openApiV1.deleteChatSession({ path: { session_id: sessionId } }));
   },
   batchDeleteSessions(payload: ChatSessionBatchDeleteRequest) {
     return typed<any>(openApiV1.batchDeleteChatSessions({ body: payload }));
   },
   stopSession(sessionId: string) {
-    return typed<any>(
-      openApiV1.stopChatSession({ path: { session_id: sessionId } }),
-    );
+    return typed<any>(openApiV1.stopChatSession({ path: { session_id: sessionId } }));
   },
-  updateMessage(
-    sessionId: string,
-    messageId: string | number,
-    payload: ChatMessagePatchRequest,
-  ) {
+  updateMessage(sessionId: string, messageId: string | number, payload: ChatMessagePatchRequest) {
     return typed<any>(
       openApiV1.updateChatMessage({
         path: { session_id: sessionId, message_id: String(messageId) },
@@ -876,11 +792,7 @@ export const chatApi = {
       }),
     );
   },
-  regenerateMessage(
-    sessionId: string,
-    messageId: string | number,
-    payload?: ChatMessageRegenerateRequest,
-  ) {
+  regenerateMessage(sessionId: string, messageId: string | number, payload?: ChatMessageRegenerateRequest) {
     return typed<any>(
       openApiV1.regenerateChatMessage({
         path: { session_id: sessionId, message_id: String(messageId) },
@@ -895,14 +807,10 @@ export const chatApi = {
     return typed<any>(openApiV1.createChatThread({ body: payload }));
   },
   getThread(threadId: string) {
-    return typed<any>(
-      openApiV1.getChatThread({ path: { thread_id: threadId } }),
-    );
+    return typed<any>(openApiV1.getChatThread({ path: { thread_id: threadId } }));
   },
   deleteThread(threadId: string) {
-    return typed<any>(
-      openApiV1.deleteChatThread({ path: { thread_id: threadId } }),
-    );
+    return typed<any>(openApiV1.deleteChatThread({ path: { thread_id: threadId } }));
   },
   sendThreadMessage(threadId: string, payload: ChatThreadMessageRequest) {
     return typed<any>(
@@ -922,9 +830,7 @@ export const chatApi = {
     return typed<any>(openApiV1.createChatProject({ body: payload }));
   },
   getProject(projectId: string) {
-    return typed<any>(
-      openApiV1.getChatProject({ path: { project_id: projectId } }),
-    );
+    return typed<any>(openApiV1.getChatProject({ path: { project_id: projectId } }));
   },
   updateProject(projectId: string, payload: ChatProjectRequest) {
     return typed<any>(
@@ -935,16 +841,12 @@ export const chatApi = {
     );
   },
   deleteProject(projectId: string) {
-    return typed<any>(
-      openApiV1.deleteChatProject({ path: { project_id: projectId } }),
-    );
+    return typed<any>(openApiV1.deleteChatProject({ path: { project_id: projectId } }));
   },
   listProjectSessions(projectId: string) {
-    return typed<any>(
-      openApiV1.listChatProjectSessions({ path: { project_id: projectId } }),
-    );
+    return typed<any>(openApiV1.listChatProjectSessions({ path: { project_id: projectId } }));
   },
-  listProjectWorkspaceFiles(projectId: string, path = '') {
+  listProjectWorkspaceFiles(projectId: string, path = "") {
     return typed<any>(
       openApiV1.listChatProjectWorkspaceFiles({
         path: { project_id: projectId },
@@ -964,7 +866,7 @@ export const chatApi = {
     return openApiV1.downloadChatProjectWorkspaceFile({
       path: { project_id: projectId },
       query: { path },
-      responseType: 'blob',
+      responseType: "blob",
     }) as Promise<AxiosResponse<Blob>>;
   },
   addProjectSession(projectId: string, sessionId: string) {
@@ -975,25 +877,19 @@ export const chatApi = {
     );
   },
   removeProjectSession(sessionId: string) {
-    return typed<any>(
-      openApiV1.removeChatProjectSession({ path: { session_id: sessionId } }),
-    );
+    return typed<any>(openApiV1.removeChatProjectSession({ path: { session_id: sessionId } }));
   },
 };
 
 export const fileApi = {
   upload(formData: FormData) {
-    return typed<any>(
-      openApiV1.uploadFile({ body: generatedFormData(formData) }),
-    );
+    return typed<any>(openApiV1.uploadFile({ body: generatedFormData(formData) }));
   },
   initUpload(payload: ChatUploadInitRequest) {
     return typed<any>(openApiV1.initFileUpload({ body: payload }));
   },
   uploadChunk(formData: FormData | ChatChunkUploadRequest) {
-    return typed<any>(
-      openApiV1.uploadFileChunk({ body: generatedFormData(formData) }),
-    );
+    return typed<any>(openApiV1.uploadFileChunk({ body: generatedFormData(formData) }));
   },
   completeUpload(payload: ChatUploadSessionRequest) {
     return typed<any>(openApiV1.completeFileUpload({ body: payload }));
@@ -1007,7 +903,7 @@ export const fileApi = {
   getByName(filename: string) {
     return openApiV1.getFileByName({
       query: { filename },
-      responseType: 'blob',
+      responseType: "blob",
     }) as Promise<AxiosResponse<Blob>>;
   },
   byNameUrl(filename: string) {
@@ -1029,9 +925,7 @@ export const sessionApi = {
     return typed<any>(openApiV1.listActiveUmos());
   },
   listRules(params?: SessionRuleListParams) {
-    return typed<any>(
-      openApiV1.listSessionRules({ query: generatedQuery(params) }),
-    );
+    return typed<any>(openApiV1.listSessionRules({ query: generatedQuery(params) }));
   },
   upsertRule(payload: SessionRuleRequest) {
     return typed<any>(openApiV1.upsertSessionRule({ body: payload }));
@@ -1040,14 +934,10 @@ export const sessionApi = {
     return typed<any>(openApiV1.deleteSessionRules({ body: payload }));
   },
   batchUpdateProvider(payload: BatchSessionProviderRequest) {
-    return typed<any>(
-      openApiV1.batchUpdateSessionProvider({ body: payload }),
-    );
+    return typed<any>(openApiV1.batchUpdateSessionProvider({ body: payload }));
   },
   batchUpdateService(payload: BatchSessionServiceRequest) {
-    return typed<any>(
-      openApiV1.batchUpdateSessionService({ body: payload }),
-    );
+    return typed<any>(openApiV1.batchUpdateSessionService({ body: payload }));
   },
   listGroups() {
     return typed<any>(openApiV1.listSessionGroups());
@@ -1064,9 +954,7 @@ export const sessionApi = {
     );
   },
   deleteGroup(groupId: string) {
-    return typed<any>(
-      openApiV1.deleteSessionGroup({ path: { group_id: groupId } }),
-    );
+    return typed<any>(openApiV1.deleteSessionGroup({ path: { group_id: groupId } }));
   },
 };
 
@@ -1078,9 +966,7 @@ export const cronApi = {
     return typed<any>(openApiV1.createCronJob({ body: payload }));
   },
   update(jobId: string, payload: CronJobPatchRequest) {
-    return typed<any>(
-      openApiV1.updateCronJob({ path: { job_id: jobId }, body: payload }),
-    );
+    return typed<any>(openApiV1.updateCronJob({ path: { job_id: jobId }, body: payload }));
   },
   delete(jobId: string) {
     return typed<any>(openApiV1.deleteCronJob({ path: { job_id: jobId } }));
@@ -1095,9 +981,7 @@ export const subagentApi = {
     return typed<OpenConfig>(openApiV1.getSubagentConfig());
   },
   updateConfig(config: OpenConfig) {
-    return typed<OpenConfig>(
-      openApiV1.updateSubagentConfig({ body: config }),
-    );
+    return typed<OpenConfig>(openApiV1.updateSubagentConfig({ body: config }));
   },
   availableTools() {
     return typed<any>(openApiV1.listSubagentAvailableTools());
@@ -1137,7 +1021,7 @@ export const toolApi = {
       }),
     );
   },
-  setPermission(toolId: string, permission: 'admin' | 'member') {
+  setPermission(toolId: string, permission: "admin" | "member") {
     return typed<OpenConfig>(
       openApiV1.setToolPermission({
         path: { tool_id: toolId },
@@ -1162,9 +1046,7 @@ export const mcpApi = {
     );
   },
   delete(serverName: string) {
-    return typed<OpenConfig>(
-      openApiV1.deleteMcpServerByName({ query: { server_name: serverName } }),
-    );
+    return typed<OpenConfig>(openApiV1.deleteMcpServerByName({ query: { server_name: serverName } }));
   },
   setEnabled(serverName: string, enabled: boolean) {
     return typed<OpenConfig>(
@@ -1184,9 +1066,7 @@ export const mcpApi = {
     );
   },
   syncModelScope(payload?: ModelScopeSyncRequest) {
-    return typed<OpenConfig>(
-      openApiV1.syncModelScopeMcpServers({ body: payload }),
-    );
+    return typed<OpenConfig>(openApiV1.syncModelScopeMcpServers({ body: payload }));
   },
 };
 
@@ -1195,14 +1075,10 @@ export const t2iApi = {
     return typed<OpenConfig[]>(openApiV1.listT2iTemplates());
   },
   getTemplate(name: string) {
-    return typed<{ name: string; content: string }>(
-      openApiV1.getT2iTemplate({ path: { name } }),
-    );
+    return typed<{ name: string; content: string }>(openApiV1.getT2iTemplate({ path: { name } }));
   },
   createTemplate(payload: T2iTemplateRequest) {
-    return typed<OpenConfig>(
-      openApiV1.createT2iTemplate({ body: payload }),
-    );
+    return typed<OpenConfig>(openApiV1.createT2iTemplate({ body: payload }));
   },
   updateTemplate(name: string, content: string) {
     return typed<OpenConfig>(
@@ -1213,17 +1089,13 @@ export const t2iApi = {
     );
   },
   deleteTemplate(name: string) {
-    return typed<OpenConfig>(
-      openApiV1.deleteT2iTemplate({ path: { name } }),
-    );
+    return typed<OpenConfig>(openApiV1.deleteT2iTemplate({ path: { name } }));
   },
   getActiveTemplate() {
     return typed<{ active_template?: string }>(openApiV1.getActiveT2iTemplate());
   },
   setActiveTemplate(name: string) {
-    return typed<OpenConfig>(
-      openApiV1.setActiveT2iTemplate({ body: { name } }),
-    );
+    return typed<OpenConfig>(openApiV1.setActiveT2iTemplate({ body: { name } }));
   },
   resetDefaultTemplate() {
     return typed<OpenConfig>(openApiV1.resetDefaultT2iTemplate());
@@ -1235,7 +1107,7 @@ export const logApi = {
     return typed<{ logs?: OpenConfig[] }>(openApiV1.getLogHistory());
   },
   liveUrl() {
-    return '/api/v1/logs/live';
+    return "/api/v1/logs/live";
   },
 };
 
@@ -1244,22 +1116,15 @@ export const pluginApi = {
     return typed<any[]>(openApiV1.listPlugins({ query: params }));
   },
   get(pluginId: string) {
-    return typed<OpenConfig>(
-      openApiV1.getPluginById({ query: { plugin_id: pluginId } }),
-    );
+    return typed<OpenConfig>(openApiV1.getPluginById({ query: { plugin_id: pluginId } }));
   },
   failed() {
     return typed<Record<string, OpenConfig>>(openApiV1.listFailedPlugins());
   },
   reloadFailed(pluginId: string) {
-    return typed<OpenConfig>(
-      openApiV1.reloadFailedPlugin({ path: { plugin_id: pluginId } }),
-    );
+    return typed<OpenConfig>(openApiV1.reloadFailedPlugin({ path: { plugin_id: pluginId } }));
   },
-  uninstallFailed(
-    pluginId: string,
-    options?: { delete_config?: boolean; delete_data?: boolean },
-  ) {
+  uninstallFailed(pluginId: string, options?: { delete_config?: boolean; delete_data?: boolean }) {
     return typed<OpenConfig>(
       openApiV1.uninstallFailedPlugin({
         path: { plugin_id: pluginId },
@@ -1267,10 +1132,7 @@ export const pluginApi = {
       }),
     );
   },
-  uninstall(
-    pluginId: string,
-    options?: { delete_config?: boolean; delete_data?: boolean },
-  ) {
+  uninstall(pluginId: string, options?: { delete_config?: boolean; delete_data?: boolean }) {
     return typed<OpenConfig>(
       openApiV1.uninstallPluginById({
         query: { plugin_id: pluginId },
@@ -1279,9 +1141,7 @@ export const pluginApi = {
     );
   },
   reload(pluginId: string) {
-    return typed<OpenConfig>(
-      openApiV1.reloadPluginById({ body: { plugin_id: pluginId } }),
-    );
+    return typed<OpenConfig>(openApiV1.reloadPluginById({ body: { plugin_id: pluginId } }));
   },
   setEnabled(pluginId: string, enabled: boolean) {
     return typed<OpenConfig>(
@@ -1298,19 +1158,13 @@ export const pluginApi = {
     );
   },
   updateMany(body: OpenConfig) {
-    return typed<OpenConfig>(
-      openApiV1.updatePlugins({ body: body as any }),
-    );
+    return typed<OpenConfig>(openApiV1.updatePlugins({ body: body as any }));
   },
   checkVersionSupport(payload: PluginVersionSupportRequest) {
-    return typed<any>(
-      openApiV1.checkPluginVersionSupport({ body: payload }),
-    );
+    return typed<any>(openApiV1.checkPluginVersionSupport({ body: payload }));
   },
   config(pluginId: string) {
-    return typed<OpenConfig>(
-      openApiV1.getPluginConfigById({ query: { plugin_id: pluginId } }),
-    );
+    return typed<OpenConfig>(openApiV1.getPluginConfigById({ query: { plugin_id: pluginId } }));
   },
   updateConfig(pluginId: string, config: OpenConfig) {
     return typed<OpenConfig>(
@@ -1319,10 +1173,7 @@ export const pluginApi = {
       }),
     );
   },
-  updateLogLevel(
-    pluginId: string,
-    level: "DEBUG" | "INFO" | "WARNING" | "ERROR" | "CRITICAL" | null,
-  ) {
+  updateLogLevel(pluginId: string, level: "DEBUG" | "INFO" | "WARNING" | "ERROR" | "CRITICAL" | null) {
     return typed<OpenConfig>(
       openApiV1.updatePluginLogLevel({
         path: { plugin_id: pluginId },
@@ -1354,20 +1205,16 @@ export const pluginApi = {
     );
   },
   readme(pluginId: string) {
-    return typed<OpenConfig>(
-      openApiV1.getPluginReadmeById({ query: { plugin_id: pluginId } }),
-    );
+    return typed<OpenConfig>(openApiV1.getPluginReadmeById({ query: { plugin_id: pluginId } }));
   },
   changelog(pluginId: string) {
-    return typed<OpenConfig>(
-      openApiV1.getPluginChangelogById({ query: { plugin_id: pluginId } }),
-    );
+    return typed<OpenConfig>(openApiV1.getPluginChangelogById({ query: { plugin_id: pluginId } }));
   },
   market(params?: {
     page?: number;
     page_size?: number;
     category?: string;
-    sort?: 'recommended' | 'downloads' | 'updated' | 'name';
+    sort?: "recommended" | "downloads" | "updated" | "name";
     keyword?: string;
     force_refresh?: boolean;
     custom_registry?: string;
@@ -1378,42 +1225,30 @@ export const pluginApi = {
     return typed<any>(openApiV1.listPluginSources());
   },
   replaceSources(sources: OpenConfig[]) {
-    return typed<OpenConfig>(
-      openApiV1.replacePluginSources({ body: { sources: sources as any } }),
-    );
+    return typed<OpenConfig>(openApiV1.replacePluginSources({ body: { sources: sources as any } }));
   },
   async installUpload(formData: FormData) {
-    const response = await fetchWithAuth('/api/v1/plugins/install/upload', {
-      method: 'POST',
+    const response = await fetchWithAuth("/api/v1/plugins/install/upload", {
+      method: "POST",
       body: formData,
     });
     const data = await response.json();
     if (!response.ok) {
-      throw new Error(
-        data?.message || `Plugin upload failed (${response.status})`,
-      );
+      throw new Error(data?.message || `Plugin upload failed (${response.status})`);
     }
     return { data } as AxiosResponse<ApiEnvelope<OpenConfig>>;
   },
   installGithub(body: OpenConfig) {
-    return typed<OpenConfig>(
-      openApiV1.installPluginFromGithub({ body: body as any }),
-    );
+    return typed<OpenConfig>(openApiV1.installPluginFromGithub({ body: body as any }));
   },
   installGit(body: OpenConfig) {
-    return typed<OpenConfig>(
-      openApiV1.installPluginFromGit({ body: body as any }),
-    );
+    return typed<OpenConfig>(openApiV1.installPluginFromGit({ body: body as any }));
   },
   installUrl(body: OpenConfig) {
-    return typed<OpenConfig>(
-      openApiV1.installPluginFromUrl({ body: body as any }),
-    );
+    return typed<OpenConfig>(openApiV1.installPluginFromUrl({ body: body as any }));
   },
   validateRepo(body: PluginValidateRepoRequest) {
-    return typed<OpenConfig>(
-      openApiV1.validatePluginRepo({ body }),
-    );
+    return typed<OpenConfig>(openApiV1.validatePluginRepo({ body }));
   },
   bindSource(pluginId: string, body: OpenConfig) {
     return typed<OpenConfig>(
@@ -1434,41 +1269,19 @@ export const pluginApi = {
 
 export const pluginExtensionApi = {
   get<T = any>(pluginPath: string, config?: AxiosRequestConfig) {
-    return apiV1Client.get<ApiEnvelope<T>>(
-      `/plugins/extensions/${pluginExtensionPath(pluginPath)}`,
-      config,
-    );
+    return apiV1Client.get<ApiEnvelope<T>>(`/plugins/extensions/${pluginExtensionPath(pluginPath)}`, config);
   },
-  post<T = any>(
-    pluginPath: string,
-    data?: unknown,
-    config?: AxiosRequestConfig,
-  ) {
-    return apiV1Client.post<ApiEnvelope<T>>(
-      `/plugins/extensions/${pluginExtensionPath(pluginPath)}`,
-      data,
-      config,
-    );
+  post<T = any>(pluginPath: string, data?: unknown, config?: AxiosRequestConfig) {
+    return apiV1Client.post<ApiEnvelope<T>>(`/plugins/extensions/${pluginExtensionPath(pluginPath)}`, data, config);
   },
   put<T = any>(pluginPath: string, data?: unknown, config?: AxiosRequestConfig) {
-    return apiV1Client.put<ApiEnvelope<T>>(
-      `/plugins/extensions/${pluginExtensionPath(pluginPath)}`,
-      data,
-      config,
-    );
+    return apiV1Client.put<ApiEnvelope<T>>(`/plugins/extensions/${pluginExtensionPath(pluginPath)}`, data, config);
   },
   patch<T = any>(pluginPath: string, data?: unknown, config?: AxiosRequestConfig) {
-    return apiV1Client.patch<ApiEnvelope<T>>(
-      `/plugins/extensions/${pluginExtensionPath(pluginPath)}`,
-      data,
-      config,
-    );
+    return apiV1Client.patch<ApiEnvelope<T>>(`/plugins/extensions/${pluginExtensionPath(pluginPath)}`, data, config);
   },
   delete<T = any>(pluginPath: string, config?: AxiosRequestConfig) {
-    return apiV1Client.delete<ApiEnvelope<T>>(
-      `/plugins/extensions/${pluginExtensionPath(pluginPath)}`,
-      config,
-    );
+    return apiV1Client.delete<ApiEnvelope<T>>(`/plugins/extensions/${pluginExtensionPath(pluginPath)}`, config);
   },
 };
 
@@ -1477,14 +1290,10 @@ export const knowledgeApi = {
     return typed<any>(openApiV1.listKnowledgeBases({ query: params }));
   },
   get(kbId: string) {
-    return typed<OpenConfig>(
-      openApiV1.getKnowledgeBase({ path: { kb_id: kbId } }),
-    );
+    return typed<OpenConfig>(openApiV1.getKnowledgeBase({ path: { kb_id: kbId } }));
   },
   create(config: KnowledgeBaseCreateRequest) {
-    return typed<OpenConfig>(
-      openApiV1.createKnowledgeBase({ body: config }),
-    );
+    return typed<OpenConfig>(openApiV1.createKnowledgeBase({ body: config }));
   },
   update(kbId: string, config: KnowledgeBaseRequest) {
     return typed<OpenConfig>(
@@ -1495,9 +1304,7 @@ export const knowledgeApi = {
     );
   },
   delete(kbId: string) {
-    return typed<OpenConfig>(
-      openApiV1.deleteKnowledgeBase({ path: { kb_id: kbId } }),
-    );
+    return typed<OpenConfig>(openApiV1.deleteKnowledgeBase({ path: { kb_id: kbId } }));
   },
   documents(kbId: string, params?: { page?: number; page_size?: number; search?: string }) {
     return typed<any>(
@@ -1524,9 +1331,7 @@ export const knowledgeApi = {
     );
   },
   task(taskId: string) {
-    return typed<any>(
-      openApiV1.getKnowledgeTask({ path: { task_id: taskId } }),
-    );
+    return typed<any>(openApiV1.getKnowledgeTask({ path: { task_id: taskId } }));
   },
   document(kbId: string, documentId: string) {
     return typed<OpenConfig>(
@@ -1542,10 +1347,7 @@ export const knowledgeApi = {
       }),
     );
   },
-  chunks(
-    kbId: string,
-    params?: { document_id?: string; page?: number; page_size?: number },
-  ) {
+  chunks(kbId: string, params?: { document_id?: string; page?: number; page_size?: number }) {
     return typed<any>(
       openApiV1.listKnowledgeChunks({
         path: { kb_id: kbId },
@@ -1576,9 +1378,7 @@ export const skillApi = {
     return typed<any>(openApiV1.listSkills({ query: params }));
   },
   uploadBatch(files: File[]) {
-    return typed<any>(
-      openApiV1.uploadSkillsBatch({ body: { files } }),
-    );
+    return typed<any>(openApiV1.uploadSkillsBatch({ body: { files } }));
   },
   setEnabled(skillName: string, enabled: boolean) {
     return typed<OpenConfig>(
@@ -1588,17 +1388,15 @@ export const skillApi = {
     );
   },
   delete(skillName: string) {
-    return typed<OpenConfig>(
-      openApiV1.deleteSkillByName({ query: { skill_name: skillName } }),
-    );
+    return typed<OpenConfig>(openApiV1.deleteSkillByName({ query: { skill_name: skillName } }));
   },
   download(skillName: string) {
     return openApiV1.downloadSkillByName({
       query: { skill_name: skillName },
-      responseType: 'blob',
+      responseType: "blob",
     });
   },
-  listFiles(skillName: string, path = '') {
+  listFiles(skillName: string, path = "") {
     return typed<any>(
       openApiV1.listSkillFilesByName({
         query: { skill_name: skillName, ...(path ? { path } : {}) },
@@ -1626,39 +1424,25 @@ export const skillApi = {
     return typed<any>(openApiV1.listNeoSkillReleases({ query: params }));
   },
   neoPayload(payloadRef: string) {
-    return typed<any>(
-      openApiV1.getNeoSkillPayload({ query: { payload_ref: payloadRef } }),
-    );
+    return typed<any>(openApiV1.getNeoSkillPayload({ query: { payload_ref: payloadRef } }));
   },
   evaluateNeoCandidate(body: OpenConfig) {
-    return typed<OpenConfig>(
-      openApiV1.evaluateNeoSkillCandidate({ body: body as any }),
-    );
+    return typed<OpenConfig>(openApiV1.evaluateNeoSkillCandidate({ body: body as any }));
   },
   promoteNeoCandidate(body: OpenConfig) {
-    return typed<OpenConfig>(
-      openApiV1.promoteNeoSkillCandidate({ body: body as any }),
-    );
+    return typed<OpenConfig>(openApiV1.promoteNeoSkillCandidate({ body: body as any }));
   },
   rollbackNeoRelease(body: OpenConfig) {
-    return typed<OpenConfig>(
-      openApiV1.rollbackNeoSkillRelease({ body: body as any }),
-    );
+    return typed<OpenConfig>(openApiV1.rollbackNeoSkillRelease({ body: body as any }));
   },
   syncNeoRelease(body: OpenConfig) {
-    return typed<OpenConfig>(
-      openApiV1.syncNeoSkillRelease({ body: body as any }),
-    );
+    return typed<OpenConfig>(openApiV1.syncNeoSkillRelease({ body: body as any }));
   },
   deleteNeoCandidate(body: OpenConfig) {
-    return typed<OpenConfig>(
-      openApiV1.deleteNeoSkillCandidate({ body: body as any }),
-    );
+    return typed<OpenConfig>(openApiV1.deleteNeoSkillCandidate({ body: body as any }));
   },
   deleteNeoRelease(body: OpenConfig) {
-    return typed<OpenConfig>(
-      openApiV1.deleteNeoSkillRelease({ body: body as any }),
-    );
+    return typed<OpenConfig>(openApiV1.deleteNeoSkillRelease({ body: body as any }));
   },
 };
 
@@ -1669,15 +1453,12 @@ export const personaApi = {
   folders(parentId?: string | null) {
     return typed<any[]>(
       openApiV1.listPersonaFolders({
-        query:
-          parentId === undefined ? undefined : { parent_id: parentId ?? '' },
+        query: parentId === undefined ? undefined : { parent_id: parentId ?? "" },
       }),
     );
   },
   createFolder(folder: OpenConfig) {
-    return typed<OpenConfig>(
-      openApiV1.createPersonaFolder({ body: folder as any }),
-    );
+    return typed<OpenConfig>(openApiV1.createPersonaFolder({ body: folder as any }));
   },
   updateFolder(folderId: string, folder: OpenConfig) {
     return typed<OpenConfig>(
@@ -1688,27 +1469,20 @@ export const personaApi = {
     );
   },
   deleteFolder(folderId: string) {
-    return typed<OpenConfig>(
-      openApiV1.deletePersonaFolder({ path: { folder_id: folderId } }),
-    );
+    return typed<OpenConfig>(openApiV1.deletePersonaFolder({ path: { folder_id: folderId } }));
   },
   list(folderId?: string | null) {
     return typed<any[]>(
       openApiV1.listPersonas({
-        query:
-          folderId === undefined ? undefined : { folder_id: folderId ?? '' },
+        query: folderId === undefined ? undefined : { folder_id: folderId ?? "" },
       }),
     );
   },
   get(personaId: string) {
-    return typed<OpenConfig>(
-      openApiV1.getPersonaById({ query: { persona_id: personaId } }),
-    );
+    return typed<OpenConfig>(openApiV1.getPersonaById({ query: { persona_id: personaId } }));
   },
   create(persona: OpenConfig) {
-    return typed<OpenConfig>(
-      openApiV1.createPersona({ body: persona as any }),
-    );
+    return typed<OpenConfig>(openApiV1.createPersona({ body: persona as any }));
   },
   update(personaId: string, persona: OpenConfig) {
     return typed<OpenConfig>(
@@ -1718,9 +1492,7 @@ export const personaApi = {
     );
   },
   delete(personaId: string) {
-    return typed<OpenConfig>(
-      openApiV1.deletePersonaById({ query: { persona_id: personaId } }),
-    );
+    return typed<OpenConfig>(openApiV1.deletePersonaById({ query: { persona_id: personaId } }));
   },
   move(personaId: string, folderId: string | null) {
     return typed<OpenConfig>(
@@ -1730,27 +1502,16 @@ export const personaApi = {
     );
   },
   reorder(items: any[]) {
-    return typed<OpenConfig>(
-      openApiV1.reorderPersonaItems({ body: { items } as any }),
-    );
+    return typed<OpenConfig>(openApiV1.reorderPersonaItems({ body: { items } as any }));
   },
 };
 
 export const conversationApi = {
   filterOptions() {
-    return typed<{ bots: Array<{ id: string; type: string }> }>(
-      openApiV1.getConversationFilterOptions(),
-    );
+    return typed<{ bots: Array<{ id: string; type: string }> }>(openApiV1.getConversationFilterOptions());
   },
   list(params?: ListConversationsQuery, requestConfig?: AxiosRequestConfig) {
-    return typed<any>(
-      openApiV1.listConversations(
-        generatedOptions(
-          { query: generatedQuery(params) },
-          requestConfig,
-        ),
-      ),
-    );
+    return typed<any>(openApiV1.listConversations(generatedOptions({ query: generatedQuery(params) }, requestConfig)));
   },
   get(userId: string, cid: string) {
     return typed<any>(
@@ -1769,11 +1530,7 @@ export const conversationApi = {
       }),
     );
   },
-  replaceMessages(
-    userId: string,
-    cid: string,
-    payload: ConversationMessagesReplaceRequest,
-  ) {
+  replaceMessages(userId: string, cid: string, payload: ConversationMessagesReplaceRequest) {
     return typed<any>(
       openApiV1.replaceConversationMessages({
         path: { conversation_id: cid },
@@ -1796,7 +1553,7 @@ export const conversationApi = {
   export(payload: ConversationExportRequest) {
     return openApiV1.exportConversations({
       body: payload,
-      responseType: 'blob',
+      responseType: "blob",
     }) as Promise<AxiosResponse<Blob>>;
   },
 };
@@ -1818,7 +1575,7 @@ export const statsApi = {
   },
   version() {
     return withLegacyFallback<VersionData>(openApiV1.getVersion(), () =>
-      httpClient.get<ApiEnvelope<VersionData>>('/api/stat/version'),
+      httpClient.get<ApiEnvelope<VersionData>>("/api/stat/version"),
     );
   },
   firstNotice(locale?: string) {
@@ -1829,27 +1586,20 @@ export const statsApi = {
     );
   },
   testGhproxy(payload: GhproxyTestRequest) {
-    return withLegacyFallback<{ latency?: number }>(
-      openApiV1.testGhproxyConnection({ body: payload }),
-      () =>
-        httpClient.post<ApiEnvelope<{ latency?: number }>>(
-          '/api/stat/test-ghproxy-connection',
-          payload,
-        ),
+    return withLegacyFallback<{ latency?: number }>(openApiV1.testGhproxyConnection({ body: payload }), () =>
+      httpClient.post<ApiEnvelope<{ latency?: number }>>("/api/stat/test-ghproxy-connection", payload),
     );
   },
   startTime() {
     const v1Request = typed<StartTimeData>(openApiV1.getStartTime());
-    const legacyRequest = httpClient.get<ApiEnvelope<StartTimeData>>(
-      '/api/stat/start-time',
-    );
+    const legacyRequest = httpClient.get<ApiEnvelope<StartTimeData>>("/api/stat/start-time");
 
     // Restart polling must also work after downgrading to backends without v1 stats routes.
     return firstSuccessfulResponse<StartTimeData>([v1Request, legacyRequest]);
   },
   restart() {
     return withLegacyFallback<OpenConfig>(openApiV1.restartCore(), () =>
-      httpClient.post<ApiEnvelope<OpenConfig>>('/api/stat/restart-core'),
+      httpClient.post<ApiEnvelope<OpenConfig>>("/api/stat/restart-core"),
     );
   },
   storage() {
@@ -1866,9 +1616,8 @@ export const statsApi = {
 
 export const publicApi = {
   versions() {
-    return withLegacyFallback<PublicVersionData>(
-      openApiV1.getPublicVersions(),
-      () => httpClient.get<ApiEnvelope<PublicVersionData>>('/api/stat/versions'),
+    return withLegacyFallback<PublicVersionData>(openApiV1.getPublicVersions(), () =>
+      httpClient.get<ApiEnvelope<PublicVersionData>>("/api/stat/versions"),
     );
   },
 };
@@ -1878,8 +1627,6 @@ export const changelogApi = {
     return typed<{ versions?: string[] }>(openApiV1.listChangelogVersions());
   },
   get(version: string) {
-    return typed<{ content?: string }>(
-      openApiV1.getChangelog({ path: { version } }),
-    );
+    return typed<{ content?: string }>(openApiV1.getChangelog({ path: { version } }));
   },
 };

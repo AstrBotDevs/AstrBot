@@ -60,6 +60,6 @@ __all__ = [
     "RunBrowserSkillTool",
     "ShellSessionTool",
     "SyncSkillReleaseTool",
-    "normalize_umo_for_workspace",
     "check_admin_permission",
+    "normalize_umo_for_workspace",
 ]

@@ -82,7 +82,7 @@ class Metric:
                 (key, Metric._format_group_value(value))
                 for key, value in kwargs.items()
                 if key not in Metric._counter_fields
-            )
+            ),
         )
 
     @staticmethod
@@ -206,7 +206,9 @@ class Metric:
 
         try:
             async with aiohttp.ClientSession(trust_env=True) as session:
-                async with session.post(base_url, json=payload, timeout=3) as response:
+                async with session.post(
+                    base_url, json=payload, timeout=aiohttp.ClientTimeout(total=3)
+                ) as response:
                     if response.status != 200:
                         pass
         except Exception:

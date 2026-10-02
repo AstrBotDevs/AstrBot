@@ -13,6 +13,7 @@ from astrbot.core.agent.message import (
     dump_messages_with_checkpoints,
 )
 from astrbot.core.agent.response import AgentStats
+from astrbot.core.astr_agent_run_util import AgentRunner, run_agent, run_live_agent
 from astrbot.core.astr_main_agent import (
     LLM_ERROR_MESSAGE_EXTRA_KEY,
     MainAgentBuildConfig,
@@ -31,6 +32,15 @@ from astrbot.core.message.message_event_result import (
 from astrbot.core.persona_error_reply import (
     extract_persona_custom_error_message_from_event,
 )
+from astrbot.core.pipeline.context import PipelineContext, call_event_hook
+from astrbot.core.pipeline.process_stage.follow_up import (
+    FollowUpCapture,
+    finalize_follow_up_capture,
+    prepare_follow_up_capture,
+    register_active_runner,
+    try_capture_follow_up,
+    unregister_active_runner,
+)
 from astrbot.core.pipeline.stage import Stage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider.entities import (
@@ -43,17 +53,6 @@ from astrbot.core.utils.image_input import prepare_request_images
 from astrbot.core.utils.media_utils import normalize_model_image_max_size
 from astrbot.core.utils.metrics import Metric
 from astrbot.core.utils.session_lock import session_lock_manager
-
-from .....astr_agent_run_util import AgentRunner, run_agent, run_live_agent
-from ....context import PipelineContext, call_event_hook
-from ...follow_up import (
-    FollowUpCapture,
-    finalize_follow_up_capture,
-    prepare_follow_up_capture,
-    register_active_runner,
-    try_capture_follow_up,
-    unregister_active_runner,
-)
 
 
 async def _prepare_file_attachments(event: AstrMessageEvent) -> None:
@@ -105,6 +104,7 @@ class InternalAgentSubStage(Stage):
             "buffer_intermediate_messages",
             False,
         )
+        self.provider_wake_prefix: str = settings.get("wake_prefix", "")
         self.show_reasoning = settings.get("display_reasoning_text", False)
         self.sanitize_context_by_modalities: bool = misc_config.get(
             "sanitize_context_by_modalities",
@@ -116,7 +116,8 @@ class InternalAgentSubStage(Stage):
         self.file_extract_enabled: bool = file_extract_conf.get("enable", False)
         self.file_extract_prov: str = file_extract_conf.get("provider", "moonshotai")
         self.file_extract_msh_api_key: str = file_extract_conf.get(
-            "moonshotai_api_key", ""
+            "moonshotai_api_key",
+            "",
         )
 
         self.llm_safety_mode = persona_config.get("safety_mode", True)
@@ -159,13 +160,19 @@ class InternalAgentSubStage(Stage):
         )
 
     async def _send_llm_error_message(
-        self, event: AstrMessageEvent, message: object
+        self,
+        event: AstrMessageEvent,
+        message: object,
     ) -> None:
         await event.send(MessageChain().message(str(message)))
 
     async def process(
-        self, event: AstrMessageEvent, provider_wake_prefix: str
+        self,
+        event: AstrMessageEvent,
+        provider_wake_prefix: str | None = None,
     ) -> AsyncGenerator[None, None]:
+        if provider_wake_prefix is None:
+            provider_wake_prefix = self.provider_wake_prefix
         follow_up_capture: FollowUpCapture | None = None
         follow_up_consumed_marked = False
         follow_up_activated = False
@@ -271,7 +278,7 @@ class InternalAgentSubStage(Stage):
 
                     if build_result is None:
                         if llm_error_message := event.get_extra(
-                            LLM_ERROR_MESSAGE_EXTRA_KEY
+                            LLM_ERROR_MESSAGE_EXTRA_KEY,
                         ):
                             await self._send_llm_error_message(
                                 event,
@@ -447,7 +454,7 @@ class InternalAgentSubStage(Stage):
                             req,
                             agent_runner,
                             final_resp,
-                        )
+                        ),
                     )
 
                     # 检查事件是否被停止，如果被停止则不保存历史记录
@@ -475,9 +482,9 @@ class InternalAgentSubStage(Stage):
                         unregister_active_runner(event.unified_msg_origin, agent_runner)
 
         except Exception as e:
-            logger.error(f"Error occurred while processing agent: {e}")
+            logger.error(f"Error occurred while processing agent: {e}", exc_info=True)
             custom_error_message = extract_persona_custom_error_message_from_event(
-                event
+                event,
             )
             error_text = custom_error_message or (
                 f"Error occurred while processing agent request: {e}"
@@ -562,7 +569,7 @@ class InternalAgentSubStage(Stage):
             message_to_save.append(
                 CheckpointMessageSegment(
                     content=CheckpointData(id=checkpoint_id),
-                ).model_dump()
+                ).model_dump(),
             )
 
         # if user_aborted:

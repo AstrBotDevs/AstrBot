@@ -1,4 +1,3 @@
-import { markRaw, type Component } from 'vue';
 import {
   BookSearch,
   Bot,
@@ -11,7 +10,8 @@ import {
   Puzzle,
   SlidersHorizontal,
   Workflow,
-} from '@lucide/vue';
+} from "@lucide/vue";
+import { type Component, markRaw } from "vue";
 
 export interface menu {
   header?: string;
@@ -38,12 +38,12 @@ export interface menu {
   groupToggle?: boolean;
 }
 
-export const SYSTEM_GROUP_KEY = 'core.navigation.groups.system';
-export const EXTENSION_GROUP_KEY = 'core.navigation.groups.extension';
+export const SYSTEM_GROUP_KEY = "core.navigation.groups.system";
+export const EXTENSION_GROUP_KEY = "core.navigation.groups.extension";
 
 // Kept for the legacy sidebar customization storage; the default layout no
 // longer uses a collapsible "more" group.
-export const MORE_GROUP_KEY = 'core.navigation.groups.more';
+export const MORE_GROUP_KEY = "core.navigation.groups.more";
 
 // 注意：这个文件现在包含i18n键值而不是直接的文本
 // 在组件中使用时需要通过t()函数进行翻译
@@ -53,39 +53,39 @@ const sidebarItem: menu[] = [
     header: SYSTEM_GROUP_KEY,
   },
   {
-    title: 'core.navigation.welcome',
+    title: "core.navigation.welcome",
     icon: markRaw(Hand),
-    to: '/welcome',
+    to: "/welcome",
   },
   {
-    title: 'core.navigation.platforms',
+    title: "core.navigation.platforms",
     icon: markRaw(Bot),
-    to: '/platforms',
+    to: "/platforms",
   },
   {
-    title: 'core.navigation.providers',
+    title: "core.navigation.providers",
     icon: markRaw(Box),
-    to: '/providers',
+    to: "/providers",
   },
   {
-    title: 'core.navigation.extension',
+    title: "core.navigation.extension",
     icon: markRaw(Puzzle),
-    to: '/extension',
+    to: "/extension",
   },
   {
-    title: 'core.navigation.config',
+    title: "core.navigation.config",
     icon: markRaw(SlidersHorizontal),
-    to: '/config',
+    to: "/config",
   },
   {
-    title: 'core.navigation.data',
+    title: "core.navigation.data",
     icon: markRaw(Database),
-    to: '/data'
+    to: "/data",
   },
   {
-    title: 'core.navigation.sessionManagement',
+    title: "core.navigation.sessionManagement",
     icon: markRaw(PencilRuler),
-    to: '/session-management'
+    to: "/session-management",
   },
   {
     header: EXTENSION_GROUP_KEY,
@@ -93,24 +93,24 @@ const sidebarItem: menu[] = [
     groupToggle: true,
   },
   {
-    title: 'core.navigation.persona',
+    title: "core.navigation.persona",
     icon: markRaw(Heart),
-    to: '/persona'
+    to: "/persona",
   },
   {
-    title: 'core.navigation.knowledgeBase',
+    title: "core.navigation.knowledgeBase",
     icon: markRaw(BookSearch),
-    to: '/knowledge-base',
+    to: "/knowledge-base",
   },
   {
-    title: 'core.navigation.cron',
+    title: "core.navigation.cron",
     icon: markRaw(Clock3),
-    to: '/cron'
+    to: "/cron",
   },
   {
-    title: 'core.navigation.subagent',
+    title: "core.navigation.subagent",
     icon: markRaw(Workflow),
-    to: '/subagent'
+    to: "/subagent",
   },
 ];
 

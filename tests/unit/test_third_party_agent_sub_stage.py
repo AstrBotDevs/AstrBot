@@ -1,11 +1,12 @@
+from importlib import import_module
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from astrbot.core.message.message_event_result import MessageChain
-from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.pipeline.process_stage.method.agent_sub_stages import third_party
+from astrbot.core.provider.entities import LLMResponse
 
 
 @pytest.mark.asyncio
@@ -51,7 +52,10 @@ async def test_third_party_runner_receives_inline_profile_config(
             runner_factory_calls.append(True)
             return runner
 
-    monkeypatch.setattr(third_party, runner_class_name, RunnerFactory)
+    runner_module = import_module(
+        f"astrbot.core.agent.runners.{runner_type}.{runner_type}_agent_runner"
+    )
+    monkeypatch.setattr(runner_module, runner_class_name, RunnerFactory)
     monkeypatch.setattr(
         third_party, "AstrAgentContext", MagicMock(return_value=object())
     )
@@ -64,6 +68,7 @@ async def test_third_party_runner_receives_inline_profile_config(
     config = {
         "agent_runner": {"runner_type": runner_type, "config": inline_config},
         "provider_settings": {
+            "wake_prefix": "",
             "streaming_response": False,
             "unsupported_streaming_strategy": "turn_off",
             "third_party_stream_consumption_close_timeout_sec": 30,
@@ -77,6 +82,7 @@ async def test_third_party_runner_receives_inline_profile_config(
                 context=SimpleNamespace(
                     conversation_manager=MagicMock(),
                     persona_manager=MagicMock(),
+                    get_using_provider=MagicMock(return_value=MagicMock()),
                 )
             ),
         )

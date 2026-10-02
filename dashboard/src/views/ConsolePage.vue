@@ -1,22 +1,18 @@
 <script setup lang="ts">
-import { reactive, ref, watch } from "vue";
 import { PackagePlus } from "@lucide/vue";
+import { reactive, ref, watch } from "vue";
+import { updatesApi } from "@/api/v1";
 import ConsoleDisplayer from "@/components/shared/ConsoleDisplayer.vue";
 import { useModuleI18n } from "@/i18n/composables";
 import { useCustomizerStore } from "@/stores/customizer";
-import { updatesApi } from "@/api/v1";
 import { useToast } from "@/utils/toast";
 
 const { tm } = useModuleI18n("features/console");
 const toast = useToast();
 const customizerStore = useCustomizerStore();
 
-const autoScrollEnabled = ref(
-  localStorage.getItem("console_auto_scroll") !== "false",
-);
-const hideUserChatEnabled = ref(
-  localStorage.getItem("console_hide_user_chat") === "true",
-);
+const autoScrollEnabled = ref(localStorage.getItem("console_auto_scroll") !== "false");
+const hideUserChatEnabled = ref(localStorage.getItem("console_hide_user_chat") === "true");
 const pipDialog = ref(false);
 const pipInstallPayload = reactive({ package: "", mirror: "" });
 const loading = ref(false);
@@ -39,11 +35,7 @@ async function pipInstall() {
     toast.success(response.data.message || tm("pipInstall.installSuccess"));
     pipDialog.value = false;
   } catch (error: any) {
-    toast.error(
-      error?.response?.data?.message ||
-        error?.message ||
-        tm("pipInstall.requestFailed"),
-    );
+    toast.error(error?.response?.data?.message || error?.message || tm("pipInstall.requestFailed"));
   } finally {
     loading.value = false;
   }

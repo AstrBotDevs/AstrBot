@@ -1,52 +1,75 @@
 <template>
   <div class="folder-item-selector">
-    <!-- 触发按钮区域 -->
+    <!-- Trigger area -->
     <div class="d-flex align-center justify-space-between">
-      <span v-if="!modelValue" class="text-medium-emphasis">
+      <span v-if="!modelValue" style="color: rgb(var(--v-theme-primaryText))">
         {{ labels.notSelected || "未选择" }}
       </span>
+
       <span v-else>
         {{ displayValue }}
       </span>
+
       <v-btn size="small" color="primary" variant="tonal" @click="openDialog">
         {{ labels.buttonText || "选择..." }}
       </v-btn>
     </div>
 
-    <!-- 选择对话框 -->
+    <!-- Selection dialog -->
     <v-dialog
       v-model="dialog"
       :max-width="isCompactLayout ? '96vw' : '1000px'"
       :min-width="isCompactLayout ? undefined : '800px'"
     >
       <v-card class="selector-dialog-card">
-        <v-card-title class="selector-dialog-title text-h3">
-          {{ labels.dialogTitle || "选择项目" }}
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex align-center">
+          <v-icon class="mr-3" color="primary"> mdi-account-circle </v-icon>
+          <span>{{ labels.dialogTitle || "选择项目" }}</span>
         </v-card-title>
+
+        <v-divider />
 
         <v-card-text class="pa-0 selector-content">
           <div class="selector-layout">
-            <!-- 左侧文件夹树 -->
-            <div v-if="!isCompactLayout && hasFolders" class="folder-sidebar">
-              <div
-                class="sidebar-header d-flex align-center justify-space-between"
-              >
-                <span>文件夹</span>
+            <!-- Left: folder tree -->
+            <div v-if="!isCompactLayout" class="folder-sidebar">
+              <div class="sidebar-header pa-3 pb-2">
+                <span
+                  class="text-caption text-medium-emphasis font-weight-medium"
+                >
+                  <v-icon size="small" class="mr-1">mdi-folder-multiple</v-icon>
+                  文件夹
+                </span>
               </div>
-              <div class="tree-list">
-                <!-- 根目录 -->
-                <button
-                  type="button"
-                  class="folder-tree-root"
-                  :class="{
-                    'folder-tree-root--active': currentFolderId === null,
-                  }"
+
+              <v-list
+                density="compact"
+                nav
+                class="tree-list pa-2"
+                bg-color="transparent"
+              >
+                <!-- Root -->
+                <v-list-item
+                  :active="currentFolderId === null"
+                  rounded="lg"
+                  class="mb-1 root-item"
                   @click="navigateToFolder(null)"
                 >
-                  <span>{{ labels.rootFolder || "根目录" }}</span>
-                </button>
+                  <template #prepend>
+                    <v-icon
+                      size="20"
+                      :color="currentFolderId === null ? 'primary' : ''"
+                    >
+                      mdi-home
+                    </v-icon>
+                  </template>
 
-                <!-- 文件夹树 -->
+                  <v-list-item-title class="text-body-2">
+                    {{ labels.rootFolder || "根目录" }}
+                  </v-list-item-title>
+                </v-list-item>
+
+                <!-- Folder tree nodes -->
                 <template v-if="!treeLoading">
                   <BaseMoveTargetNode
                     v-for="folder in folderTree"
@@ -60,17 +83,18 @@
                 </template>
 
                 <div v-if="treeLoading" class="text-center pa-4">
-                  <v-progress-circular indeterminate size="20" color="grey" />
+                  <v-progress-circular
+                    indeterminate
+                    size="20"
+                    color="primary"
+                  />
                 </div>
-              </div>
+              </v-list>
             </div>
 
-            <!-- 右侧项目列表 -->
+            <!-- Right: items -->
             <div class="items-panel">
-              <div
-                v-if="isCompactLayout && hasFolders"
-                class="mobile-folder-bar px-4 py-2"
-              >
+              <div v-if="isCompactLayout" class="mobile-folder-bar px-4 py-2">
                 <v-btn
                   icon="mdi-arrow-left"
                   size="small"
@@ -81,7 +105,8 @@
                 <v-btn
                   size="small"
                   variant="tonal"
-                  prepend-icon="mdi-home-outline"
+                  color="primary"
+                  prepend-icon="mdi-home"
                   @click="navigateToFolder(null)"
                 >
                   {{ labels.rootFolder || "根目录" }}
@@ -93,41 +118,54 @@
                 </span>
               </div>
 
-              <!-- 面包屑导航 -->
-              <div v-if="hasFolders" class="breadcrumb-bar px-4 py-3">
+              <v-divider v-if="isCompactLayout" />
+
+              <!-- Breadcrumbs -->
+              <div class="breadcrumb-bar px-4 py-3">
                 <v-breadcrumbs
                   :items="breadcrumbItems"
                   density="compact"
                   class="pa-0"
                 >
-                  <template v-slot:item="{ item }">
+                  <template #item="{ item }">
                     <v-breadcrumbs-item
                       :disabled="(item as any).disabled"
+                      :class="{ 'breadcrumb-link': !(item as any).disabled }"
                       @click="
                         !(item as any).disabled &&
-                          navigateToFolder((item as any).folderId)
+                        navigateToFolder((item as any).folderId)
                       "
-                      :class="{ 'breadcrumb-link': !(item as any).disabled }"
                     >
+                      <v-icon
+                        v-if="(item as any).isRoot"
+                        size="small"
+                        class="mr-1"
+                      >
+                        mdi-home
+                      </v-icon>
                       {{ item.title }}
                     </v-breadcrumbs-item>
                   </template>
-                  <template v-slot:divider>
-                    <v-icon size="small" color="grey">mdi-chevron-right</v-icon>
+
+                  <template #divider>
+                    <v-icon size="small" color="grey">
+                      mdi-chevron-right
+                    </v-icon>
                   </template>
                 </v-breadcrumbs>
               </div>
 
-              <!-- 项目列表 -->
+              <v-divider />
+
+              <!-- Items list -->
               <div class="items-list">
                 <v-progress-linear
                   v-if="itemsLoading"
                   indeterminate
-                  color="grey"
+                  color="primary"
                   height="2"
-                ></v-progress-linear>
+                />
 
-                <!-- 子文件夹 -->
                 <v-list
                   v-if="!itemsLoading"
                   lines="two"
@@ -139,30 +177,38 @@
                     >
                       子文件夹
                     </div>
+
                     <v-list-item
                       v-for="folder in currentSubFolders"
                       :key="'folder-' + folder.folder_id"
-                      @click="navigateToFolder(folder.folder_id)"
-                      rounded="md"
+                      rounded="lg"
                       class="mb-1 folder-item"
+                      @click="navigateToFolder(folder.folder_id)"
                     >
-                      <template v-slot:prepend>
-                        <v-icon size="18" class="item-leading-icon"
-                          >mdi-folder-outline</v-icon
+                      <template #prepend>
+                        <v-avatar
+                          size="36"
+                          color="amber-lighten-4"
+                          class="mr-3"
                         >
+                          <v-icon color="amber-darken-2" size="20">
+                            mdi-folder
+                          </v-icon>
+                        </v-avatar>
                       </template>
-                      <v-list-item-title class="font-weight-medium">{{
-                        folder.name
-                      }}</v-list-item-title>
-                      <template v-slot:append>
-                        <v-icon size="20" color="grey"
-                          >mdi-chevron-right</v-icon
-                        >
+
+                      <v-list-item-title class="font-weight-medium">
+                        {{ folder.name }}
+                      </v-list-item-title>
+
+                      <template #append>
+                        <v-icon size="20" color="grey">
+                          mdi-chevron-right
+                        </v-icon>
                       </template>
                     </v-list-item>
                   </template>
 
-                  <!-- 项目列表 -->
                   <template v-if="currentItems.length > 0">
                     <div
                       class="section-label text-caption text-medium-emphasis mb-2 px-2"
@@ -170,19 +216,46 @@
                     >
                       可选项目
                     </div>
+
                     <v-list-item
                       v-for="item in currentItems"
                       :key="'item-' + getItemId(item)"
-                      @click="selectItem(item)"
-                      rounded="md"
+                      :value="getItemId(item)"
+                      rounded="lg"
                       class="mb-1 persona-item"
                       :class="{
                         'selected-item': selectedItemId === getItemId(item),
                       }"
+                      :active="selectedItemId === getItemId(item)"
+                      @click="selectItem(item)"
                     >
-                      <v-list-item-title class="font-weight-medium">{{
-                        getItemName(item)
-                      }}</v-list-item-title>
+                      <template #prepend>
+                        <v-avatar
+                          size="36"
+                          :color="
+                            selectedItemId === getItemId(item)
+                              ? 'primary-lighten-4'
+                              : 'grey-lighten-3'
+                          "
+                          class="mr-3"
+                        >
+                          <v-icon
+                            :color="
+                              selectedItemId === getItemId(item)
+                                ? 'primary'
+                                : 'grey-darken-1'
+                            "
+                            size="20"
+                          >
+                            mdi-account
+                          </v-icon>
+                        </v-avatar>
+                      </template>
+
+                      <v-list-item-title class="font-weight-medium">
+                        {{ getItemName(item) }}
+                      </v-list-item-title>
+
                       <v-list-item-subtitle
                         v-if="getItemDescription(item)"
                         class="text-truncate"
@@ -190,27 +263,28 @@
                         {{ truncateText(getItemDescription(item), 80) }}
                       </v-list-item-subtitle>
 
-                      <template v-slot:append>
+                      <template #append>
                         <div class="d-flex align-center ga-1">
                           <v-btn
                             v-if="showEditButton && !isDefaultItem(item)"
                             icon="mdi-pencil"
                             size="small"
                             variant="text"
-                            @click.stop="handleEditItem(item)"
                             :title="labels.editButton || 'Edit'"
+                            @click.stop="handleEditItem(item)"
                           />
                           <v-icon
                             v-if="selectedItemId === getItemId(item)"
-                            size="18"
-                            >mdi-check</v-icon
+                            color="primary"
+                            size="22"
                           >
+                            mdi-check-circle
+                          </v-icon>
                         </div>
                       </template>
                     </v-list-item>
                   </template>
 
-                  <!-- 空状态 -->
                   <div
                     v-if="
                       currentSubFolders.length === 0 &&
@@ -218,9 +292,9 @@
                     "
                     class="empty-state text-center py-12"
                   >
-                    <v-icon size="64" color="grey-lighten-2"
-                      >mdi-folder-open-outline</v-icon
-                    >
+                    <v-icon size="64" color="grey-lighten-2">
+                      mdi-folder-open-outline
+                    </v-icon>
                     <p class="text-grey mt-4 text-body-2">
                       {{
                         labels.emptyFolder || labels.noItems || "此文件夹为空"
@@ -237,19 +311,24 @@
           <v-btn
             v-if="showCreateButton"
             variant="text"
+            color="primary"
             prepend-icon="mdi-plus"
             @click="$emit('create')"
           >
             {{ labels.createButton || "新建" }}
           </v-btn>
-          <v-spacer></v-spacer>
-          <v-btn variant="text" @click="cancelSelection">{{
-            labels.cancelButton || "取消"
-          }}</v-btn>
+
+          <v-spacer />
+
+          <v-btn variant="text" @click="cancelSelection">
+            {{ labels.cancelButton || "取消" }}
+          </v-btn>
+
           <v-btn
+            color="primary"
             variant="tonal"
-            @click="confirmSelection"
             :disabled="!selectedItemId"
+            @click="confirmSelection"
           >
             {{ labels.confirmButton || "确认" }}
           </v-btn>
@@ -262,75 +341,33 @@
 <script lang="ts">
 import { defineComponent, type PropType } from "vue";
 import BaseMoveTargetNode from "./BaseMoveTargetNode.vue";
-import type {
-  FolderTreeNode,
-  FolderItemSelectorLabels,
-  SelectableItem,
-} from "./types";
+import type { FolderItemSelectorLabels, FolderTreeNode, SelectableItem } from "./types";
 
 export default defineComponent({
   name: "BaseFolderItemSelector",
-  components: {
-    BaseMoveTargetNode,
-  },
+  components: { BaseMoveTargetNode },
   props: {
-    modelValue: {
-      type: String,
-      default: "",
-    },
-    // 文件夹树数据
+    modelValue: { type: String, default: "" },
     folderTree: {
       type: Array as PropType<FolderTreeNode[]>,
       default: () => [],
     },
-    // 当前项目列表
-    items: {
-      type: Array as PropType<SelectableItem[]>,
-      default: () => [],
-    },
-    // 加载状态
-    treeLoading: {
-      type: Boolean,
-      default: false,
-    },
-    itemsLoading: {
-      type: Boolean,
-      default: false,
-    },
-    // 标签配置
+    items: { type: Array as PropType<SelectableItem[]>, default: () => [] },
+    treeLoading: { type: Boolean, default: false },
+    itemsLoading: { type: Boolean, default: false },
     labels: {
       type: Object as PropType<Partial<FolderItemSelectorLabels>>,
       default: () => ({}),
     },
-    // 是否显示创建按钮
-    showCreateButton: {
-      type: Boolean,
-      default: false,
-    },
-    // 是否显示编辑按钮
-    showEditButton: {
-      type: Boolean,
-      default: false,
-    },
-    // 默认项（如 "默认人格"）
+    showCreateButton: { type: Boolean, default: false },
+    showEditButton: { type: Boolean, default: false },
     defaultItem: {
       type: Object as PropType<SelectableItem | null>,
       default: null,
     },
-    // 项目字段映射
-    itemIdField: {
-      type: String,
-      default: "id",
-    },
-    itemNameField: {
-      type: String,
-      default: "name",
-    },
-    itemDescriptionField: {
-      type: String,
-      default: "description",
-    },
-    // 显示值的格式化函数（用于显示选中项的名称）
+    itemIdField: { type: String, default: "id" },
+    itemNameField: { type: String, default: "name" },
+    itemDescriptionField: { type: String, default: "description" },
     displayValueFormatter: {
       type: Function as unknown as PropType<((value: string) => string) | null>,
       default: null,
@@ -346,61 +383,64 @@ export default defineComponent({
     };
   },
   computed: {
+    // Single computed which builds maps for quick lookups and paths
+    folderMaps(): {
+      map: Map<string, FolderTreeNode>;
+      pathMap: Map<string, FolderTreeNode[]>;
+      parentMap: Map<string, string | null>;
+    } {
+      const map = new Map<string, FolderTreeNode>();
+      const pathMap = new Map<string, FolderTreeNode[]>();
+      const parentMap = new Map<string, string | null>();
+
+      const walk = (
+        nodes: FolderTreeNode[] | undefined,
+        acc: FolderTreeNode[] = [],
+        parentId: string | null = null,
+      ) => {
+        if (!nodes) return;
+        for (const node of nodes) {
+          map.set(node.folder_id, node);
+          parentMap.set(node.folder_id, parentId);
+          const path = [...acc, node];
+          pathMap.set(node.folder_id, path);
+          if (node.children && node.children.length > 0) {
+            walk(node.children, path, node.folder_id);
+          }
+        }
+      };
+
+      walk(this.folderTree, [], null);
+      return { map, pathMap, parentMap };
+    },
+
     isCompactLayout(): boolean {
       return this.$vuetify.display.smAndDown;
     },
 
-    hasFolders(): boolean {
-      return this.folderTree.length > 0;
-    },
-
     currentFolderLabel(): string {
-      if (this.currentFolderId === null) {
-        return this.labels.rootFolder || "根目录";
-      }
+      if (this.currentFolderId === null) return this.labels.rootFolder || "根目录";
       const currentFolder = this.breadcrumbPath[this.breadcrumbPath.length - 1];
       return currentFolder?.name || this.labels.rootFolder || "根目录";
     },
 
     displayValue(): string {
-      if (this.displayValueFormatter) {
-        return this.displayValueFormatter(this.modelValue);
-      }
-      // 如果是默认项
-      if (
-        this.defaultItem &&
-        this.modelValue === this.getItemId(this.defaultItem)
-      ) {
+      if (this.displayValueFormatter) return this.displayValueFormatter(this.modelValue);
+      if (this.defaultItem && this.modelValue === this.getItemId(this.defaultItem))
         return this.labels.defaultItem || this.getItemName(this.defaultItem);
-      }
       return this.modelValue;
     },
 
     currentItems(): SelectableItem[] {
       const items: SelectableItem[] = [];
-      const defaultItemId = this.defaultItem
-        ? this.getItemId(this.defaultItem)
-        : null;
-
-      // 如果在根目录且有默认项，添加到列表开头
-      if (this.currentFolderId === null && this.defaultItem) {
-        items.push(this.defaultItem);
-      }
-
-      // 添加当前文件夹的项目
-      items.push(
-        ...this.items.filter((item) => this.getItemId(item) !== defaultItemId),
-      );
-
+      if (this.currentFolderId === null && this.defaultItem) items.push(this.defaultItem);
+      items.push(...this.items);
       return items;
     },
 
     currentSubFolders(): FolderTreeNode[] {
-      if (this.currentFolderId === null) {
-        return this.folderTree;
-      }
-      const folder = this.findFolderInTree(this.currentFolderId);
-      return folder?.children || [];
+      if (this.currentFolderId === null) return this.folderTree;
+      return this.folderMaps.map.get(this.currentFolderId as string)?.children || [];
     },
 
     breadcrumbItems(): any[] {
@@ -413,36 +453,34 @@ export default defineComponent({
         },
       ];
 
-      this.breadcrumbPath.forEach((folder, index) => {
+      this.breadcrumbPath.forEach((folder, index) =>
         items.push({
           title: folder.name,
           folderId: folder.folder_id,
           disabled: index === this.breadcrumbPath.length - 1,
           isRoot: false,
-        });
-      });
+        }),
+      );
 
       return items;
     },
   },
   methods: {
     getItemId(item: SelectableItem): string {
-      return String(item[this.itemIdField] || item.id || "");
+      return String((item as any)[this.itemIdField] ?? (item as any).id ?? "");
     },
 
     getItemName(item: SelectableItem): string {
-      return String(item[this.itemNameField] || item.name || "");
+      return String((item as any)[this.itemNameField] ?? (item as any).name ?? "");
     },
 
     getItemDescription(item: SelectableItem): string {
-      return String(item[this.itemDescriptionField] || item.description || "");
+      return String((item as any)[this.itemDescriptionField] ?? (item as any).description ?? "");
     },
 
     truncateText(text: string, maxLength: number): string {
       if (!text) return "";
-      return text.length > maxLength
-        ? text.substring(0, maxLength) + "..."
-        : text;
+      return text.length > maxLength ? `${text.substring(0, maxLength)}...` : text;
     },
 
     openDialog() {
@@ -460,60 +498,28 @@ export default defineComponent({
     },
 
     navigateToParentFolder() {
-      if (this.currentFolderId === null) {
-        return;
-      }
-
+      if (this.currentFolderId === null) return;
       if (this.breadcrumbPath.length <= 1) {
         this.navigateToFolder(null);
         return;
       }
-
       const parent = this.breadcrumbPath[this.breadcrumbPath.length - 2];
       this.navigateToFolder(parent?.folder_id ?? null);
     },
 
     findFolderInTree(folderId: string): FolderTreeNode | null {
-      const findNode = (nodes: FolderTreeNode[]): FolderTreeNode | null => {
-        for (const node of nodes) {
-          if (node.folder_id === folderId) {
-            return node;
-          }
-          if (node.children && node.children.length > 0) {
-            const found = findNode(node.children);
-            if (found) return found;
-          }
-        }
-        return null;
-      };
-      return findNode(this.folderTree);
+      if (!folderId) return null;
+      return this.folderMaps.map.get(folderId) ?? null;
     },
 
     findPathToFolder(folderId: string): FolderTreeNode[] {
-      const findPath = (
-        nodes: FolderTreeNode[],
-        path: FolderTreeNode[],
-      ): FolderTreeNode[] | null => {
-        for (const node of nodes) {
-          if (node.folder_id === folderId) {
-            return [...path, node];
-          }
-          if (node.children && node.children.length > 0) {
-            const result = findPath(node.children, [...path, node]);
-            if (result) return result;
-          }
-        }
-        return null;
-      };
-      return findPath(this.folderTree, []) || [];
+      if (!folderId) return [];
+      return this.folderMaps.pathMap.get(folderId) ?? [];
     },
 
     updateBreadcrumb(folderId: string | null) {
-      if (folderId === null) {
-        this.breadcrumbPath = [];
-      } else {
-        this.breadcrumbPath = this.findPathToFolder(folderId);
-      }
+      if (folderId === null) this.breadcrumbPath = [];
+      else this.breadcrumbPath = this.findPathToFolder(folderId);
     },
 
     selectItem(item: SelectableItem) {
@@ -531,9 +537,7 @@ export default defineComponent({
     },
 
     isDefaultItem(item: SelectableItem): boolean {
-      if (this.defaultItem === null) {
-        return false;
-      }
+      if (this.defaultItem === null) return false;
       return this.getItemId(item) === this.getItemId(this.defaultItem);
     },
 
@@ -550,10 +554,9 @@ export default defineComponent({
   overflow: hidden;
 }
 
-.selector-dialog-title {
-  min-height: auto;
-  padding: 20px 24px 12px;
-  font-weight: 600;
+.dialog-title {
+  font-size: 1.25rem;
+  font-weight: 500;
 }
 
 .selector-layout {
@@ -569,19 +572,15 @@ export default defineComponent({
 }
 
 .folder-sidebar {
-  width: 232px;
-  margin: 8px 0 8px 24px;
+  width: 280px;
+  border-right: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   overflow-y: auto;
   flex-shrink: 0;
-  border-radius: 8px;
-  background: rgba(var(--v-theme-on-surface), 0.025);
+  background-color: transparent;
 }
 
 .sidebar-header {
-  padding: 12px 16px 6px;
-  color: rgba(var(--v-theme-on-surface), 0.52);
-  font-size: 0.72rem;
-  font-weight: 500;
+  border-bottom: 1px solid rgba(var(--v-border-color), 0.5);
 }
 
 .items-panel {
@@ -594,10 +593,9 @@ export default defineComponent({
 
 .breadcrumb-bar {
   background-color: transparent;
-  min-height: 44px;
+  min-height: 56px;
   display: flex;
   align-items: center;
-  color: rgba(var(--v-theme-on-surface), 0.58);
 }
 
 .items-list {
@@ -622,31 +620,7 @@ export default defineComponent({
 }
 
 .tree-list {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 2px 8px 10px;
-}
-
-.folder-tree-root {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  height: 30px;
-  padding: 0 16px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-  font: inherit;
-  font-size: 13px;
-  text-align: left;
-}
-
-.folder-tree-root:hover,
-.folder-tree-root--active {
-  background: rgba(var(--v-theme-on-surface), 0.07);
+  padding: 0;
 }
 
 .section-label {
@@ -657,37 +631,37 @@ export default defineComponent({
 
 .breadcrumb-link {
   cursor: pointer;
+  transition: color 0.2s;
+}
+
+.breadcrumb-link:hover {
+  color: rgb(var(--v-theme-primary));
+}
+
+.root-item {
+  margin-bottom: 4px;
 }
 
 .folder-item {
-  min-height: 44px;
-  transition: background-color 0.15s ease;
+  transition: all 0.15s ease;
 }
 
 .folder-item:hover {
-  background-color: rgba(var(--v-theme-on-surface), 0.05);
+  background-color: rgba(var(--v-theme-primary), 0.06);
 }
 
 .persona-item {
-  min-height: 52px;
-  transition: background-color 0.15s ease;
+  transition: all 0.15s ease;
+  border: 1px solid transparent;
 }
 
 .persona-item:hover {
-  background-color: rgba(var(--v-theme-on-surface), 0.035);
+  background-color: rgba(var(--v-theme-primary), 0.04);
 }
 
 .persona-item.selected-item {
-  background-color: rgba(var(--v-theme-on-surface), 0.055);
-}
-
-.persona-item :deep(.v-list-item__overlay) {
-  opacity: 0 !important;
-}
-
-.item-leading-icon {
-  margin-inline-end: 12px;
-  color: rgba(var(--v-theme-on-surface), 0.58);
+  background-color: rgba(var(--v-theme-primary), 0.08);
+  border-color: rgba(var(--v-theme-primary), 0.3);
 }
 
 .empty-state {
@@ -698,9 +672,16 @@ export default defineComponent({
   min-height: 200px;
 }
 
-.selector-dialog-card :deep(.v-btn--variant-tonal) {
-  background: rgba(var(--v-theme-on-surface), 0.07);
-  color: rgb(var(--v-theme-on-surface));
+.v-list-item {
+  transition: all 0.15s ease;
+}
+
+.v-list-item:hover {
+  background-color: rgba(var(--v-theme-primary), 0.04);
+}
+
+.v-list-item.v-list-item--active {
+  background-color: rgba(var(--v-theme-primary), 0.08);
 }
 
 @media (max-width: 960px) {
@@ -722,7 +703,7 @@ export default defineComponent({
     overflow-x: auto;
   }
 
-  .breadcrumb-bar :deep(.v-breadcrumbs) {
+  .breadcrumb-bar ::v-deep(.v-breadcrumbs) {
     flex-wrap: nowrap;
     min-width: max-content;
   }

@@ -13,7 +13,7 @@
 
 <script setup lang="ts">
 import { ref } from "vue";
-import ProviderSelectMenu from "@/components/shared/ProviderSelectMenu.vue";
+import type ProviderSelectMenu from "@/components/shared/ProviderSelectMenu.vue";
 import { useProviderModelSelection } from "@/composables/useProviderModelSelection";
 
 interface ProviderSelection {
@@ -30,11 +30,8 @@ const props = withDefaults(
   },
 );
 
-const { selectedProviderId, selectedModelName, setSelection } =
-  useProviderModelSelection();
-const providerSelectMenuRef = ref<InstanceType<
-  typeof ProviderSelectMenu
-> | null>(null);
+const { selectedProviderId, selectedModelName, setSelection } = useProviderModelSelection();
+const providerSelectMenuRef = ref<InstanceType<typeof ProviderSelectMenu> | null>(null);
 const variant = props.variant;
 
 function updateSelection(value: string | string[]) {

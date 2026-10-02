@@ -19,10 +19,13 @@ from astrbot.api.platform import (
     PlatformMetadata,
 )
 from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.platform.register import register_platform_adapter
+from astrbot.core.platform.sources.mattermost.mattermost_event import (
+    MattermostMessage,
+    MattermostMessageEvent,
+)
 
-from ...register import register_platform_adapter
 from .client import MattermostClient
-from .mattermost_event import MattermostMessageEvent
 
 
 @register_platform_adapter(
@@ -42,7 +45,7 @@ class MattermostPlatformAdapter(Platform):
         self.base_url = str(platform_config.get("mattermost_url", "")).rstrip("/")
         self.bot_token = str(platform_config.get("mattermost_bot_token", "")).strip()
         self.reconnect_delay = float(
-            platform_config.get("mattermost_reconnect_delay", 5.0)
+            platform_config.get("mattermost_reconnect_delay", 5.0),
         )
 
         if not self.base_url:
@@ -54,7 +57,7 @@ class MattermostPlatformAdapter(Platform):
         self.metadata = PlatformMetadata(
             name="mattermost",
             description="Mattermost 平台适配器",
-            id=cast(str, self.config.get("id", "mattermost")),
+            id=cast("str", self.config.get("id", "mattermost")),
             support_streaming_message=False,
         )
         self.bot_self_id = ""
@@ -113,7 +116,7 @@ class MattermostPlatformAdapter(Platform):
                     "seq": 1,
                     "action": "authentication_challenge",
                     "data": {"token": self.bot_token},
-                }
+                },
             )
 
             async for message in ws:
@@ -209,7 +212,7 @@ class MattermostPlatformAdapter(Platform):
             if str(file_id).strip()
         ]
 
-        abm = AstrBotMessage()
+        abm = MattermostMessage()
         abm.self_id = self.bot_self_id
         abm.sender = MessageMember(user_id=sender_id, nickname=sender_name)
         abm.session_id = channel_id
@@ -230,10 +233,12 @@ class MattermostPlatformAdapter(Platform):
             )
 
         if file_ids:
-            attachment_components, _ = await self.client.parse_post_attachments(
-                file_ids
-            )
+            (
+                attachment_components,
+                temp_paths,
+            ) = await self.client.parse_post_attachments(file_ids)
             abm.message.extend(attachment_components)
+            abm.temporary_file_paths = temp_paths
 
         abm.message_str = self._build_message_str(
             abm.message,

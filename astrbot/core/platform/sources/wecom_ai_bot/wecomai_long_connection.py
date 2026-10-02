@@ -1,4 +1,4 @@
-"""企业微信智能机器人长连接客户端。"""
+"""企业微信智能机器人长连接客户端｡"""
 
 import asyncio
 import json
@@ -12,7 +12,7 @@ from astrbot.api import logger
 
 
 class WecomAIBotLongConnectionClient:
-    """企业微信智能机器人 WebSocket 长连接客户端。"""
+    """企业微信智能机器人 WebSocket 长连接客户端｡"""
 
     def __init__(
         self,
@@ -41,7 +41,7 @@ class WecomAIBotLongConnectionClient:
         return uuid.uuid4().hex
 
     async def start(self) -> None:
-        """启动长连接并自动重连。"""
+        """启动长连接并自动重连｡"""
         reconnect_delay = 1
         while not self._shutdown_event.is_set():
             try:
@@ -62,11 +62,13 @@ class WecomAIBotLongConnectionClient:
             self._session = session
             logger.info("[WecomAI][LongConn] 正在连接: %s", self.ws_url)
             async with session.ws_connect(
-                self.ws_url, heartbeat=None, autoping=True
+                self.ws_url,
+                heartbeat=None,
+                autoping=True,
             ) as ws:
                 self._ws = ws
                 await self._subscribe()
-                logger.info("[WecomAI][LongConn] 订阅成功，已建立长连接")
+                logger.info("[WecomAI][LongConn] 订阅成功,已建立长连接")
 
                 heartbeat_task = asyncio.create_task(self._heartbeat_loop())
                 try:
@@ -89,7 +91,7 @@ class WecomAIBotLongConnectionClient:
                     self._ws = None
 
     async def _subscribe(self) -> None:
-        """发送 aibot_subscribe，并等待响应。"""
+        """发送 aibot_subscribe,并等待响应｡"""
         req_id = self.gen_req_id()
         payload = {
             "cmd": "aibot_subscribe",
@@ -108,7 +110,7 @@ class WecomAIBotLongConnectionClient:
         data = json.loads(reply.data)
         if data.get("errcode") != 0:
             raise RuntimeError(
-                f"订阅失败 errcode={data.get('errcode')} errmsg={data.get('errmsg')}"
+                f"订阅失败 errcode={data.get('errcode')} errmsg={data.get('errmsg')}",
             )
 
     async def _heartbeat_loop(self) -> None:
@@ -141,7 +143,7 @@ class WecomAIBotLongConnectionClient:
         if cmd in {"aibot_msg_callback", "aibot_event_callback"}:
             # Keep the receive loop available for command acknowledgements sent by
             # the callback handler, such as the configured initial response.
-            task = asyncio.create_task(self.message_handler(payload))
+            task = asyncio.create_task(self._dispatch_message(payload))
             self._message_handler_tasks.add(task)
             task.add_done_callback(self._on_message_handler_done)
             return
@@ -152,6 +154,10 @@ class WecomAIBotLongConnectionClient:
                 payload.get("errcode"),
                 payload.get("errmsg"),
             )
+
+    async def _dispatch_message(self, payload: dict[str, Any]) -> None:
+        """Wrap arbitrary awaitable handlers in a task-compatible coroutine."""
+        await self.message_handler(payload)
 
     def _on_message_handler_done(self, task: asyncio.Task[None]) -> None:
         """Release a completed callback task and report its exception."""
@@ -170,7 +176,7 @@ class WecomAIBotLongConnectionClient:
         req_id: str,
         body: dict[str, Any] | None,
     ) -> bool:
-        """发送长连接命令。"""
+        """发送长连接命令｡"""
         headers = {"req_id": req_id}
         payload: dict[str, Any] = {"cmd": cmd, "headers": headers}
         if body is not None:
@@ -193,7 +199,7 @@ class WecomAIBotLongConnectionClient:
                 if errcode == 6000 and attempt < max_retries:
                     backoff = min(0.2 * (2**attempt), 2.0)
                     logger.warning(
-                        "[WecomAI][LongConn] 命令冲突(errcode=6000)，将重试。cmd=%s req_id=%s attempt=%d",
+                        "[WecomAI][LongConn] 命令冲突(errcode=6000),将重试｡cmd=%s req_id=%s attempt=%d",
                         cmd,
                         req_id,
                         attempt + 1,

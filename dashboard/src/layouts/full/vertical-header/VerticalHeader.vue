@@ -1,30 +1,29 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from "vue";
-import { useChatHeaderStore } from "@/stores/chatHeader";
-import { useHeaderContextStore } from "@/stores/headerContext";
-import { useMobileDrawerStore } from "@/stores/mobileDrawer";
-import { useCustomizerStore } from "@/stores/customizer";
-import axios from "axios";
+import { enableKatex, enableMermaid, MarkdownRender } from "markstream-vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import Logo from "@/components/shared/Logo.vue";
 import { useAuthStore } from "@/stores/auth";
+import { useChatHeaderStore } from "@/stores/chatHeader";
 import { useCommonStore } from "@/stores/common";
-import { MarkdownRender, enableKatex, enableMermaid } from "markstream-vue";
+import { useCustomizerStore } from "@/stores/customizer";
+import { useHeaderContextStore } from "@/stores/headerContext";
+import { useMobileDrawerStore } from "@/stores/mobileDrawer";
+import axios from "@/utils/request";
 import "markstream-vue/index.css";
 import "katex/dist/katex.min.css";
 import "highlight.js/styles/github.css";
-import { useI18n, useModuleI18n } from "@/i18n/composables";
-import { router } from "@/router";
+import { Menu, Minus, Square, X } from "@lucide/vue";
 import { useRoute } from "vue-router";
 import { useDisplay, useTheme } from "vuetify";
-import StyledMenu from "@/components/shared/StyledMenu.vue";
-import { Menu } from "@lucide/vue";
-import { Minus, Square, X } from "@lucide/vue";
-import DesktopUpdateProgress from "@/components/shared/DesktopUpdateProgress.vue";
-import { useLanguageSwitcher } from "@/i18n/composables";
-import type { Locale } from "@/i18n/types";
-import AboutPage from "@/views/AboutPage.vue";
 import { authApi, isLegacyFallbackError, statsApi, updatesApi } from "@/api/v1";
+import DesktopUpdateProgress from "@/components/shared/DesktopUpdateProgress.vue";
+import StyledMenu from "@/components/shared/StyledMenu.vue";
+import { useI18n, useLanguageSwitcher, useModuleI18n } from "@/i18n/composables";
+import type { Locale } from "@/i18n/types";
+import { router } from "@/router";
+import { DARK_THEME_NAME, LIGHT_THEME_NAME } from "@/theme/constants";
 import { getDesktopRuntimeInfo } from "@/utils/desktopRuntime";
+import AboutPage from "@/views/AboutPage.vue";
 
 enableKatex();
 enableMermaid();
@@ -49,7 +48,7 @@ const LAST_CHAT_ROUTE_KEY = "astrbot:last_chat_route";
 const SHOW_PRE_RELEASES_KEY = "astrbot:updateDialog:showPreReleases";
 let dialog = ref(false);
 let accountWarning = ref(false);
-let accountWarningMd5 = ref(false);
+let accountWarningLegacy = ref(false);
 let accountWarningUpgrade = ref(false);
 let updateStatusDialog = ref(false);
 let aboutDialog = ref(false);
@@ -68,9 +67,7 @@ let dashboardCurrentVersion = ref("");
 let releases = ref<any[]>([]);
 let releasesLoading = ref(false);
 const showPreReleases = ref(
-  typeof window === "undefined"
-    ? false
-    : localStorage.getItem(SHOW_PRE_RELEASES_KEY) === "true",
+  typeof window === "undefined" ? false : localStorage.getItem(SHOW_PRE_RELEASES_KEY) === "true",
 );
 let updatingDashboardLoading = ref(false);
 let installLoading = ref(false);
@@ -100,9 +97,7 @@ type UpdateProgress = {
   overall_percent: number;
   stages: Record<string, DownloadStage>;
 };
-const createEmptyDownloadStage = (
-  status: DownloadStageStatus = "pending",
-): DownloadStage => ({
+const createEmptyDownloadStage = (status: DownloadStageStatus = "pending"): DownloadStage => ({
   status,
   downloaded: 0,
   total: 0,
@@ -123,9 +118,7 @@ const createEmptyUpdateProgress = (): UpdateProgress => ({
 });
 let updateProgress = ref<UpdateProgress>(createEmptyUpdateProgress());
 let updateProgressTimer: ReturnType<typeof setInterval> | null = null;
-const isDesktopReleaseMode = ref(
-  typeof window !== "undefined" && !!window.astrbotDesktop?.isDesktop,
-);
+const isDesktopReleaseMode = ref(typeof window !== "undefined" && !!window.astrbotDesktop?.isDesktop);
 const desktopUpdateDialog = ref(false);
 const desktopUpdateChecking = ref(false);
 const desktopUpdateInstalling = ref(false);
@@ -134,19 +127,11 @@ const desktopUpdateCurrentVersion = ref("-");
 const desktopUpdateLatestVersion = ref("-");
 const desktopUpdateStatus = ref("");
 const desktopDownloadProgress = ref<AstrBotDesktopAppUpdateProgress | null>(null);
-const isChatPath = computed(
-  () => route.path === "/chat" || route.path.startsWith("/chat/"),
-);
-const isDarkTheme = computed(
-  () => theme.global.current.value.dark || customizer.uiTheme.includes("Dark"),
-);
+const isChatPath = computed(() => route.path === "/chat" || route.path.startsWith("/chat/"));
+const isDarkTheme = computed(() => theme.global.current.value.dark || customizer.isDarkTheme);
 const chatHeaderStyle = computed(() => {
   if (!isChatPath.value) return undefined;
-  const sidebarWidth = smAndDown.value
-    ? 0
-    : customizer.chatSidebarCollapsed
-      ? 56
-      : 245;
+  const sidebarWidth = smAndDown.value ? 0 : customizer.chatSidebarCollapsed ? 56 : 245;
   return {
     // The chat toolbar is window chrome, so it must paint the full window. The
     // sidebar width remains available to contextual content through this CSS
@@ -162,11 +147,7 @@ const getAppUpdaterBridge = (): AstrBotAppUpdaterBridge | null => {
     return null;
   }
   const bridge = window.astrbotAppUpdater;
-  if (
-    bridge &&
-    typeof bridge.checkForAppUpdate === "function" &&
-    typeof bridge.installAppUpdate === "function"
-  ) {
+  if (bridge && typeof bridge.checkForAppUpdate === "function" && typeof bridge.installAppUpdate === "function") {
     return bridge;
   }
   return null;
@@ -174,9 +155,7 @@ const getAppUpdaterBridge = (): AstrBotAppUpdaterBridge | null => {
 
 const getSelectedGitHubProxy = () => {
   if (typeof window === "undefined" || !window.localStorage) return "";
-  return localStorage.getItem("githubProxyRadioValue") === "1"
-    ? localStorage.getItem("selectedGitHubProxy") || ""
-    : "";
+  return localStorage.getItem("githubProxyRadioValue") === "1" ? localStorage.getItem("selectedGitHubProxy") || "" : "";
 };
 
 // Release Notes Modal
@@ -194,9 +173,7 @@ const releasesHeader = computed(() => [
   { title: t("core.header.updateDialog.table.actions"), key: "switch" },
 ]);
 const visibleReleases = computed(() =>
-  showPreReleases.value
-    ? releases.value
-    : releases.value.filter((item: any) => !isPreRelease(item.tag_name)),
+  showPreReleases.value ? releases.value : releases.value.filter((item: any) => !isPreRelease(item.tag_name)),
 );
 const firstReleasePageItems = computed(() => visibleReleases.value.slice(0, 6));
 const firstReleasePageHasPreRelease = computed(() =>
@@ -206,8 +183,7 @@ const updateStageItems = computed(() => [
   {
     key: "dashboard",
     title: t("core.header.updateDialog.progress.dashboard"),
-    progress:
-      updateProgress.value.stages.dashboard || createEmptyDownloadStage(),
+    progress: updateProgress.value.stages.dashboard || createEmptyDownloadStage(),
   },
   {
     key: "core",
@@ -217,16 +193,10 @@ const updateStageItems = computed(() => [
 ]);
 const updateProgressMessage = computed(() => {
   if (updateProgress.value.status === "error") {
-    return (
-      updateProgress.value.message ||
-      t("core.header.updateDialog.progress.failed")
-    );
+    return updateProgress.value.message || t("core.header.updateDialog.progress.failed");
   }
   if (updateProgress.value.status === "success") {
-    return (
-      updateProgress.value.message ||
-      t("core.header.updateDialog.progress.completed")
-    );
+    return updateProgress.value.message || t("core.header.updateDialog.progress.completed");
   }
   if (updateProgress.value.stage === "dependencies") {
     return t("core.header.updateDialog.progress.dependencies");
@@ -234,43 +204,24 @@ const updateProgressMessage = computed(() => {
   if (updateProgress.value.stage === "restart") {
     return t("core.header.updateDialog.progress.restart");
   }
-  return (
-    updateProgress.value.message ||
-    t("core.header.updateDialog.progress.preparing")
-  );
+  return updateProgress.value.message || t("core.header.updateDialog.progress.preparing");
 });
 // Form validation
 const formValid = ref(true);
 const passwordRules = computed(() => [
-  (v: string) =>
-    !!v || t("core.header.accountDialog.validation.passwordRequired"),
-  (v: string) =>
-    v.length >= 8 ||
-    t("core.header.accountDialog.validation.passwordMinLength"),
-  (v: string) =>
-    /[A-Z]/.test(v) ||
-    t("core.header.accountDialog.validation.passwordUppercase"),
-  (v: string) =>
-    /[a-z]/.test(v) ||
-    t("core.header.accountDialog.validation.passwordLowercase"),
-  (v: string) =>
-    /\d/.test(v) || t("core.header.accountDialog.validation.passwordDigit"),
+  (v: string) => !!v || t("core.header.accountDialog.validation.passwordRequired"),
+  (v: string) => v.length >= 8 || t("core.header.accountDialog.validation.passwordMinLength"),
+  (v: string) => /[A-Z]/.test(v) || t("core.header.accountDialog.validation.passwordUppercase"),
+  (v: string) => /[a-z]/.test(v) || t("core.header.accountDialog.validation.passwordLowercase"),
+  (v: string) => /\d/.test(v) || t("core.header.accountDialog.validation.passwordDigit"),
 ]);
 const confirmPasswordRules = computed(() => [
+  (v: string) => !newPassword.value || !!v || t("core.header.accountDialog.validation.passwordRequired"),
   (v: string) =>
-    !newPassword.value ||
-    !!v ||
-    t("core.header.accountDialog.validation.passwordRequired"),
-  (v: string) =>
-    !newPassword.value ||
-    v === newPassword.value ||
-    t("core.header.accountDialog.validation.passwordMatch"),
+    !newPassword.value || v === newPassword.value || t("core.header.accountDialog.validation.passwordMatch"),
 ]);
 const usernameRules = computed(() => [
-  (v: string) =>
-    !v ||
-    v.length >= 3 ||
-    t("core.header.accountDialog.validation.usernameMinLength"),
+  (v: string) => !v || v.length >= 3 || t("core.header.accountDialog.validation.usernameMinLength"),
 ]);
 
 // 显示密码相关
@@ -311,9 +262,7 @@ async function openDesktopUpdateDialog() {
   const bridge = getAppUpdaterBridge();
   if (!bridge) {
     desktopUpdateChecking.value = false;
-    desktopUpdateStatus.value = t(
-      "core.header.updateDialog.desktopApp.checkFailed",
-    );
+    desktopUpdateStatus.value = t("core.header.updateDialog.desktopApp.checkFailed");
     return;
   }
 
@@ -321,25 +270,20 @@ async function openDesktopUpdateDialog() {
     const result = await bridge.checkForAppUpdate();
     if (!result?.ok) {
       desktopUpdateCurrentVersion.value = result?.currentVersion || "-";
-      desktopUpdateLatestVersion.value =
-        result?.latestVersion || result?.currentVersion || "-";
-      desktopUpdateStatus.value =
-        result?.reason || t("core.header.updateDialog.desktopApp.checkFailed");
+      desktopUpdateLatestVersion.value = result?.latestVersion || result?.currentVersion || "-";
+      desktopUpdateStatus.value = result?.reason || t("core.header.updateDialog.desktopApp.checkFailed");
       return;
     }
 
     desktopUpdateCurrentVersion.value = result.currentVersion || "-";
-    desktopUpdateLatestVersion.value =
-      result.latestVersion || result.currentVersion || "-";
+    desktopUpdateLatestVersion.value = result.latestVersion || result.currentVersion || "-";
     desktopUpdateHasNewVersion.value = !!result.hasUpdate;
     desktopUpdateStatus.value = result.hasUpdate
       ? t("core.header.updateDialog.desktopApp.hasNewVersion")
       : t("core.header.updateDialog.desktopApp.isLatest");
   } catch (error) {
     console.error(error);
-    desktopUpdateStatus.value = t(
-      "core.header.updateDialog.desktopApp.checkFailed",
-    );
+    desktopUpdateStatus.value = t("core.header.updateDialog.desktopApp.checkFailed");
   } finally {
     desktopUpdateChecking.value = false;
   }
@@ -352,24 +296,17 @@ async function confirmDesktopUpdate() {
 
   const bridge = getAppUpdaterBridge();
   if (!bridge) {
-    desktopUpdateStatus.value = t(
-      "core.header.updateDialog.desktopApp.installFailed",
-    );
+    desktopUpdateStatus.value = t("core.header.updateDialog.desktopApp.installFailed");
     return;
   }
 
   desktopUpdateInstalling.value = true;
   desktopDownloadProgress.value = null;
-  desktopUpdateStatus.value = t(
-    "core.header.updateDialog.desktopApp.installing",
-  );
+  desktopUpdateStatus.value = t("core.header.updateDialog.desktopApp.installing");
 
   try {
     const result = await bridge.installAppUpdate((progress) => {
-      if (
-        desktopUpdateInstalling.value &&
-        ["downloading", "verifying", "installing"].includes(progress?.phase)
-      ) {
+      if (desktopUpdateInstalling.value && ["downloading", "verifying", "installing"].includes(progress?.phase)) {
         desktopDownloadProgress.value = progress;
       }
     });
@@ -377,13 +314,10 @@ async function confirmDesktopUpdate() {
       desktopUpdateDialog.value = false;
       return;
     }
-    desktopUpdateStatus.value =
-      result?.reason || t("core.header.updateDialog.desktopApp.installFailed");
+    desktopUpdateStatus.value = result?.reason || t("core.header.updateDialog.desktopApp.installFailed");
   } catch (error) {
     console.error(error);
-    desktopUpdateStatus.value = t(
-      "core.header.updateDialog.desktopApp.installFailed",
-    );
+    desktopUpdateStatus.value = t("core.header.updateDialog.desktopApp.installFailed");
   } finally {
     desktopUpdateInstalling.value = false;
   }
@@ -414,9 +348,7 @@ function accountEdit() {
 
   const currentPasswordValue = password.value ? password.value : "";
   const newPasswordValue = newPassword.value ? newPassword.value : "";
-  const confirmPasswordValue = confirmPassword.value
-    ? confirmPassword.value
-    : "";
+  const confirmPasswordValue = confirmPassword.value ? confirmPassword.value : "";
 
   authApi
     .updateAccount({
@@ -426,7 +358,7 @@ function accountEdit() {
       new_username: newUsername.value || username || undefined,
     })
     .then((res) => {
-      if (res.data.status == "error") {
+      if (res.data.status === "error") {
         accountEditStatus.value.error = true;
         accountEditStatus.value.message = res.data.message || "";
         password.value = "";
@@ -445,9 +377,7 @@ function accountEdit() {
       console.log(err);
       accountEditStatus.value.error = true;
       accountEditStatus.value.message =
-        typeof err === "string"
-          ? err
-          : t("core.header.accountDialog.messages.updateFailed");
+        typeof err === "string" ? err : t("core.header.accountDialog.messages.updateFailed");
       password.value = "";
       newPassword.value = "";
       confirmPassword.value = "";
@@ -463,32 +393,24 @@ function getVersion() {
     .then((res) => {
       botCurrVersion.value = "v" + (res.data.data.version || "");
       dashboardCurrentVersion.value = res.data.data?.dashboard_version || "";
-      commonStore.setAstrBotVersion(
-        res.data.data.version || "",
-        res.data.data?.dashboard_version || undefined,
-      );
+      commonStore.setAstrBotVersion(res.data.data.version || "", res.data.data?.dashboard_version || undefined);
       const change_pwd_hint = res.data.data?.change_pwd_hint;
-      const md5_pwd_hint = res.data.data?.md5_pwd_hint;
-      const password_upgrade_required =
-        res.data.data?.password_upgrade_required;
-      if (change_pwd_hint || md5_pwd_hint || password_upgrade_required) {
+      const legacy_pwd_hint = res.data.data?.legacy_pwd_hint;
+      const password_upgrade_required = res.data.data?.password_upgrade_required;
+      if (change_pwd_hint || legacy_pwd_hint || password_upgrade_required) {
         dialog.value = true;
         accountWarning.value = true;
         accountWarningUpgrade.value = !!password_upgrade_required;
-        accountWarningMd5.value =
-          !!md5_pwd_hint && !password_upgrade_required;
-        if (
-          change_pwd_hint ||
-          (md5_pwd_hint && !password_upgrade_required)
-        ) {
+        accountWarningLegacy.value = !!legacy_pwd_hint && !password_upgrade_required;
+        if (change_pwd_hint || (legacy_pwd_hint && !password_upgrade_required)) {
           localStorage.setItem("change_pwd_hint", "true");
         } else {
           localStorage.removeItem("change_pwd_hint");
         }
-        if (md5_pwd_hint && !password_upgrade_required) {
-          localStorage.setItem("md5_pwd_hint", "true");
+        if (legacy_pwd_hint && !password_upgrade_required) {
+          localStorage.setItem("legacy_pwd_hint", "true");
         } else {
-          localStorage.removeItem("md5_pwd_hint");
+          localStorage.removeItem("legacy_pwd_hint");
         }
         if (password_upgrade_required) {
           localStorage.setItem("password_upgrade_required", "true");
@@ -496,10 +418,10 @@ function getVersion() {
           localStorage.removeItem("password_upgrade_required");
         }
       } else {
-        accountWarningMd5.value = false;
+        accountWarningLegacy.value = false;
         accountWarningUpgrade.value = false;
         localStorage.removeItem("change_pwd_hint");
-        localStorage.removeItem("md5_pwd_hint");
+        localStorage.removeItem("legacy_pwd_hint");
         localStorage.removeItem("password_upgrade_required");
       }
     })
@@ -510,16 +432,13 @@ function getVersion() {
 
 function initPasswordWarningFromStorage() {
   const hasChangePwdHint = localStorage.getItem("change_pwd_hint") === "true";
-  const hasMd5PwdHint =
-    localStorage.getItem("md5_pwd_hint") === "true";
-  const hasPasswordUpgradeRequired =
-    localStorage.getItem("password_upgrade_required") === "true";
-  if (hasChangePwdHint || hasMd5PwdHint || hasPasswordUpgradeRequired) {
+  const hasLegacyPwdHint = localStorage.getItem("legacy_pwd_hint") === "true";
+  const hasPasswordUpgradeRequired = localStorage.getItem("password_upgrade_required") === "true";
+  if (hasChangePwdHint || hasLegacyPwdHint || hasPasswordUpgradeRequired) {
     dialog.value = true;
     accountWarning.value = true;
     accountWarningUpgrade.value = hasPasswordUpgradeRequired;
-    accountWarningMd5.value =
-      hasMd5PwdHint && !hasPasswordUpgradeRequired;
+    accountWarningLegacy.value = hasLegacyPwdHint && !hasPasswordUpgradeRequired;
   }
 }
 
@@ -537,16 +456,14 @@ function checkUpdate() {
       } else {
         updateStatus.value = res.data.message || "";
       }
-      dashboardHasNewVersion.value = isDesktopReleaseMode.value
-        ? false
-        : res.data.data.dashboard_has_new_version;
+      dashboardHasNewVersion.value = isDesktopReleaseMode.value ? false : res.data.data.dashboard_has_new_version;
     })
     .catch((err) => {
       if (isLegacyFallbackError(err)) {
         console.log(err);
         return;
       }
-      if (err.response && err.response.status == 401) {
+      if (err.response && err.response.status === 401) {
         console.log("401");
         authStore.logout();
         return;
@@ -652,8 +569,7 @@ function resetRestartFeedbackState() {
 async function fetchAstrBotStartTime() {
   const res = await statsApi.startTime();
   const rawStartTime = res.data?.data?.start_time;
-  const parsedStartTime =
-    typeof rawStartTime === "number" ? rawStartTime : Number(rawStartTime || 0);
+  const parsedStartTime = typeof rawStartTime === "number" ? rawStartTime : Number(rawStartTime || 0);
   const startTime = Number.isFinite(parsedStartTime) ? parsedStartTime : 0;
   commonStore.startTime = startTime;
   return startTime;
@@ -695,10 +611,7 @@ function showRestartCompleted() {
   }, 1000);
 }
 
-function waitForAstrBotRestart(
-  initialStartTime: number | string | null,
-  showWaiting = true,
-) {
+function waitForAstrBotRestart(initialStartTime: number | string | null, showWaiting = true) {
   if (restartCompleted.value) {
     return;
   }
@@ -722,11 +635,7 @@ function waitForAstrBotRestart(
   const poll = async () => {
     try {
       const currentStartTime = await fetchAstrBotStartTime();
-      if (
-        initialStartTime !== null &&
-        currentStartTime !== null &&
-        currentStartTime !== initialStartTime
-      ) {
+      if (initialStartTime !== null && currentStartTime !== null && currentStartTime !== initialStartTime) {
         stopRestartPolling();
         showRestartCompleted();
       }
@@ -742,11 +651,7 @@ function waitForAstrBotRestart(
 }
 
 function applyUpdateProgress(payload: UpdateProgress) {
-  if (
-    payload.status === "idle" &&
-    payload.id === updateProgress.value.id &&
-    updateProgress.value.status !== "idle"
-  ) {
+  if (payload.status === "idle" && payload.id === updateProgress.value.id && updateProgress.value.status !== "idle") {
     return;
   }
   updateProgress.value = {
@@ -836,9 +741,7 @@ async function switchVersion(targetVersion: string) {
         updateProgress.value = {
           ...updateProgress.value,
           status: "error",
-          message:
-            res.data.message ||
-            t("core.header.updateDialog.progress.failed"),
+          message: res.data.message || t("core.header.updateDialog.progress.failed"),
         };
       }
     })
@@ -855,10 +758,7 @@ async function switchVersion(targetVersion: string) {
       updateProgress.value = {
         ...updateProgress.value,
         status: "error",
-        message:
-          err?.response?.data?.message ||
-          err?.message ||
-          t("core.header.updateDialog.progress.failed"),
+        message: err?.response?.data?.message || err?.message || t("core.header.updateDialog.progress.failed"),
       };
     })
     .finally(() => {
@@ -873,7 +773,7 @@ function updateDashboard() {
     .dashboard()
     .then((res) => {
       updateStatus.value = res.data.message || "";
-      if (res.data.status == "ok") {
+      if (res.data.status === "ok") {
         setTimeout(() => {
           reloadWithCacheBuster();
         }, 1000);
@@ -890,14 +790,20 @@ function updateDashboard() {
 
 // 主题选项配置
 const themeOptions = [
-  { mode: 'light' as const,  icon: 'mdi-white-balance-sunny', labelKey: 'core.header.buttons.theme.light'  },
-  { mode: 'dark'  as const,  icon: 'mdi-weather-night',       labelKey: 'core.header.buttons.theme.dark'   },
-  { mode: 'system' as const, icon: 'mdi-sync',                labelKey: 'core.header.buttons.theme.system' },
+  { mode: "light" as const, icon: "mdi-white-balance-sunny", labelKey: "core.header.buttons.theme.light" },
+  { mode: "dark" as const, icon: "mdi-weather-night", labelKey: "core.header.buttons.theme.dark" },
+  { mode: "system" as const, icon: "mdi-sync", labelKey: "core.header.buttons.theme.system" },
 ] as const;
 
-function setThemeMode(mode: 'light' | 'dark' | 'system') {
-  customizer.SET_THEME_MODE(mode);
-  theme.global.name.value = customizer.uiTheme;
+const themeMode = computed(() => (customizer.autoSwitchTheme ? "system" : customizer.isDarkTheme ? "dark" : "light"));
+
+function setThemeMode(mode: "light" | "dark" | "system") {
+  customizer.SET_AUTO_SYNC(mode === "system");
+  if (mode === "system") {
+    customizer.APPLY_SYSTEM_THEME();
+  } else {
+    customizer.SET_UI_THEME(mode === "dark" ? DARK_THEME_NAME : LIGHT_THEME_NAME);
+  }
 }
 
 function openReleaseNotesDialog(body: string, tag: string) {
@@ -921,8 +827,7 @@ onUnmounted(() => {
 
 // 视图模式切换
 onMounted(() => {
-  isWindowsDesktop.value =
-    document.documentElement.dataset.astrbotDesktopPlatform === "windows";
+  isWindowsDesktop.value = document.documentElement.dataset.astrbotDesktopPlatform === "windows";
   // 初次加載時保存當前路由
   if (typeof window !== "undefined") {
     if (isChatPath.value) {
@@ -987,10 +892,7 @@ const currentMode = computed({
   set: (val: "chat" | "bot") => {
     try {
       // 檢查 window 和 sessionStorage 是否存在
-      if (
-        typeof window === "undefined" ||
-        typeof sessionStorage === "undefined"
-      ) {
+      if (typeof window === "undefined" || typeof sessionStorage === "undefined") {
         // 如果在非瀏覽器環境中，不做任何 sessionStorage 操作
         console.warn("sessionStorage is not available in this environment");
         return;
@@ -1014,9 +916,7 @@ const currentMode = computed({
 });
 
 const mainMenuOpen = ref(false);
-const nextMode = computed<"chat" | "bot">(() =>
-  isChatPath.value ? "bot" : "chat",
-);
+const nextMode = computed<"chat" | "bot">(() => (isChatPath.value ? "bot" : "chat"));
 
 function switchMode() {
   currentMode.value = nextMode.value;
@@ -1024,8 +924,7 @@ function switchMode() {
 }
 
 // 语言切换相关
-const { languageOptions, currentLanguage, switchLanguage, locale } =
-  useLanguageSwitcher();
+const { languageOptions, currentLanguage, switchLanguage, locale } = useLanguageSwitcher();
 const languages = computed(() =>
   languageOptions.value.map((lang) => ({
     code: lang.value,
@@ -1049,9 +948,7 @@ onMounted(async () => {
   // The toolbar band doubles as the window drag region on desktop (no native title bar).
   // Interactive children stay clickable because the handler only fires when the hit
   // target itself carries the attribute.
-  document
-    .querySelector(".top-header .v-toolbar__content")
-    ?.setAttribute("data-tauri-drag-region", "");
+  document.querySelector(".top-header .v-toolbar__content")?.setAttribute("data-tauri-drag-region", "");
 });
 </script>
 
@@ -1273,9 +1170,9 @@ onMounted(async () => {
             <template v-slot:append>
               <span class="theme-group-current">
                 <v-icon size="16">{{
-                  customizer.themeMode === 'dark'
+                  themeMode === 'dark'
                     ? 'mdi-weather-night'
-                    : customizer.themeMode === 'system'
+                    : themeMode === 'system'
                       ? 'mdi-theme-light-dark'
                       : 'mdi-white-balance-sunny'
                 }}</v-icon>
@@ -1297,7 +1194,7 @@ onMounted(async () => {
               :key="option.mode"
               @click="setThemeMode(option.mode)"
               :class="{
-                'styled-menu-item-active': customizer.themeMode === option.mode,
+                'styled-menu-item-active': themeMode === option.mode,
               }"
               class="styled-menu-item"
               rounded="md"
@@ -1869,8 +1766,8 @@ onMounted(async () => {
               t(
                 accountWarningUpgrade
                   ? "core.header.accountDialog.securityWarningUpgrade"
-                  : accountWarningMd5
-                  ? "core.header.accountDialog.securityWarningMd5"
+                  : accountWarningLegacy
+                  ? "core.header.accountDialog.securityWarningLegacy"
                   : "core.header.accountDialog.securityWarning",
               )
             }}</strong>

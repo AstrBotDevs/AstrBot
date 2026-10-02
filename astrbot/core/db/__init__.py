@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 
 from deprecated import deprecated
+from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from astrbot.core.db.po import (
@@ -42,7 +43,9 @@ class BaseDatabase(abc.ABC):
         # second write is attempted.  Setting timeout=30 tells SQLite to
         # wait up to 30 s for the lock, which is enough to ride out brief
         # write bursts from concurrent agent/metrics/session operations.
-        is_sqlite = "sqlite" in self.DATABASE_URL
+        self.inited = False
+        db_url = make_url(self.DATABASE_URL)
+        is_sqlite = db_url.get_backend_name() == "sqlite"
         connect_args = {"timeout": 30} if is_sqlite else {}
         self.engine = create_async_engine(
             self.DATABASE_URL,
@@ -56,6 +59,7 @@ class BaseDatabase(abc.ABC):
             expire_on_commit=False,
         )
 
+    @abc.abstractmethod
     async def initialize(self) -> None:
         """初始化数据库连接"""
 
@@ -137,7 +141,7 @@ class BaseDatabase(abc.ABC):
         ...
 
     @abc.abstractmethod
-    async def get_conversation_by_id(self, cid: str) -> ConversationV2:
+    async def get_conversation_by_id(self, cid: str) -> ConversationV2 | None:
         """Get a specific conversation by its ID."""
         ...
 
@@ -202,10 +206,11 @@ class BaseDatabase(abc.ABC):
         cid: str,
         title: str | None = None,
         persona_id: str | None = None,
+        clear_persona: bool = False,
         content: list[dict] | None = None,
         token_usage: int | None = None,
-    ) -> None:
-        """Update a conversation's history."""
+    ) -> ConversationV2 | None:
+        """Update a conversation's history, or return None if it does not exist."""
         ...
 
     @abc.abstractmethod
@@ -270,19 +275,60 @@ class BaseDatabase(abc.ABC):
 
     @abc.abstractmethod
     async def count_platform_message_history(
+        self, platform_id: str, user_id: str
+    ) -> int:
+        """Count platform message history records for a scope."""
+        ...
+
+    @abc.abstractmethod
+    async def list_sdk_platform_message_history(
+        self,
+        platform_id: str,
+        user_id: str,
+        cursor_id: int | None = None,
+        limit: int = 50,
+        include_total: bool = False,
+    ) -> tuple[list[PlatformMessageHistory], int | None]:
+        """List SDK message history records ordered by descending id."""
+        ...
+
+    @abc.abstractmethod
+    async def delete_platform_message_before(
+        self,
+        platform_id: str,
+        user_id: str,
+        before: datetime.datetime,
+    ) -> int:
+        """Delete platform message history records strictly older than ``before``."""
+        ...
+
+    @abc.abstractmethod
+    async def delete_platform_message_after(
+        self,
+        platform_id: str,
+        user_id: str,
+        after: datetime.datetime,
+    ) -> int:
+        """Delete platform message history records strictly newer than ``after``."""
+        ...
+
+    @abc.abstractmethod
+    async def delete_all_platform_message_history(
         self,
         platform_id: str,
         user_id: str,
     ) -> int:
-        """Count platform message history records for a scope.
+        """Delete all platform message history records for a specific user."""
+        ...
 
-        Args:
-            platform_id: Platform identifier used to partition history.
-            user_id: Platform user or session identifier.
-
-        Returns:
-            Number of records belonging to the platform/user scope.
-        """
+    @abc.abstractmethod
+    async def find_platform_message_history_by_idempotency_key(
+        self,
+        platform_id: str,
+        user_id: str,
+        idempotency_key: str,
+    ) -> PlatformMessageHistory | None:
+        """Find one message history record by the SDK idempotency key."""
         ...
 
     @abc.abstractmethod
@@ -361,12 +407,12 @@ class BaseDatabase(abc.ABC):
         path: str,
         type: str,
         mime_type: str,
-    ):
+    ) -> Attachment:
         """Insert a new attachment record."""
         ...
 
     @abc.abstractmethod
-    async def get_attachment_by_id(self, attachment_id: str) -> Attachment:
+    async def get_attachment_by_id(self, attachment_id: str) -> Attachment | None:
         """Get an attachment by its ID."""
         ...
 
@@ -463,11 +509,12 @@ class BaseDatabase(abc.ABC):
             custom_error_message: Optional persona-level fallback error message
             folder_id: Optional folder ID to place the persona in (None means root)
             sort_order: Sort order within the folder (default 0)
+
         """
         ...
 
     @abc.abstractmethod
-    async def get_persona_by_id(self, persona_id: str) -> Persona:
+    async def get_persona_by_id(self, persona_id: str) -> Persona | None:
         """Get a persona by its ID."""
         ...
 
@@ -528,7 +575,8 @@ class BaseDatabase(abc.ABC):
 
     @abc.abstractmethod
     async def get_persona_folders(
-        self, parent_id: str | None = None
+        self,
+        parent_id: str | None = None,
     ) -> list[PersonaFolder]:
         """Get all persona folders, optionally filtered by parent_id."""
         ...
@@ -557,14 +605,17 @@ class BaseDatabase(abc.ABC):
 
     @abc.abstractmethod
     async def move_persona_to_folder(
-        self, persona_id: str, folder_id: str | None
+        self,
+        persona_id: str,
+        folder_id: str | None,
     ) -> Persona | None:
         """Move a persona to a folder (or root if folder_id is None)."""
         ...
 
     @abc.abstractmethod
     async def get_personas_by_folder(
-        self, folder_id: str | None = None
+        self,
+        folder_id: str | None = None,
     ) -> list[Persona]:
         """Get all personas in a specific folder."""
         ...
@@ -581,6 +632,7 @@ class BaseDatabase(abc.ABC):
                 - id: The persona_id or folder_id
                 - type: Either "persona" or "folder"
                 - sort_order: The new sort_order value
+
         """
         ...
 
@@ -596,7 +648,9 @@ class BaseDatabase(abc.ABC):
         ...
 
     @abc.abstractmethod
-    async def get_preference(self, scope: str, scope_id: str, key: str) -> Preference:
+    async def get_preference(
+        self, scope: str, scope_id: str, key: str
+    ) -> Preference | None:
         """Get a preference by scope ID and key."""
         ...
 
@@ -796,14 +850,16 @@ class BaseDatabase(abc.ABC):
 
     @abc.abstractmethod
     async def get_platform_session_by_id(
-        self, session_id: str
+        self,
+        session_id: str,
     ) -> PlatformSession | None:
         """Get a Platform session by its ID."""
         ...
 
     @abc.abstractmethod
     async def get_platform_sessions_by_ids(
-        self, session_ids: list[str]
+        self,
+        session_ids: list[str],
     ) -> list[PlatformSession]:
         """Get platform sessions by IDs."""
         ...
@@ -835,6 +891,7 @@ class BaseDatabase(abc.ABC):
 
         Returns:
             tuple[list[dict], int]: (sessions_with_project_info, total_count)
+
         """
         ...
 
@@ -969,7 +1026,9 @@ class BaseDatabase(abc.ABC):
 
     @abc.abstractmethod
     async def get_project_by_session(
-        self, session_id: str, creator: str
+        self,
+        session_id: str,
+        creator: str,
     ) -> ChatUIProject | None:
         """Get the project that a session belongs to."""
         ...

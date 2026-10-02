@@ -20,7 +20,7 @@
 6.  **配置部署**:
     *   **Production Branch**: 保持默认 (`main`) 即可。
     *   **Entrypoint**: **这是关键步骤！** 点击下拉框，找到并选择 `deno_index.ts` 文件作为入口点。
-    *   **Project Name**: Deno 会自动生成一个项目名称，这将是你的服务地址的一部分。你可以保留自动生成的名称 (例如 `fluffy-donkey-12`)，也可以自定义名称 (例如 `my-astrbot-proxy`)。 
+    *   **Project Name**: Deno 会自动生成一个项目名称，这将是你的服务地址的一部分。你可以保留自动生成的名称 (例如 `fluffy-donkey-12`)，也可以自定义名称 (例如 `my-astrbot-proxy`)。
 7.  **开始部署**: 确认设置无误后，点击 **Link** 或 **Deploy** 按钮。稍等片刻即可完成。
 8.  **获取服务地址**: 部署成功后，页面会显示你的服务地址，格式为 `https://<第6步设置的项目名>.deno.dev`。复制这个地址。
 9.  **配置 AstrBot**:

@@ -212,42 +212,28 @@
 </template>
 
 <script setup lang="ts">
-import MessageContentTransition from "@/components/chat/MessageContentTransition.vue";
-import {
-  computed,
-  nextTick,
-  onBeforeUnmount,
-  onMounted,
-  reactive,
-  ref,
-  watch,
-} from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { chatApi, configRouteApi, fileApi } from "@/api/v1";
+import { attachmentName, attachmentPresentation } from "@/components/chat/attachmentPresentation";
+import type ChatInput from "@/components/chat/ChatInput.vue";
 import ChatSettingsDialog from "@/components/chat/ChatSettingsDialog.vue";
-import ChatInput from "@/components/chat/ChatInput.vue";
-import { useDragUpload } from "@/composables/useDragUpload";
-import {
-  CHAT_MARKDOWN_CUSTOM_TAGS,
-  registerChatMarkdownComponents,
-} from "@/components/chat/chatMarkdownComponents";
+import { CHAT_MARKDOWN_CUSTOM_TAGS, registerChatMarkdownComponents } from "@/components/chat/chatMarkdownComponents";
+import MessageContentTransition from "@/components/chat/MessageContentTransition.vue";
 import IPythonToolBlock from "@/components/chat/message_list_comps/IPythonToolBlock.vue";
 import MarkdownMessagePart from "@/components/chat/message_list_comps/MarkdownMessagePart.vue";
 import ReasoningBlock from "@/components/chat/message_list_comps/ReasoningBlock.vue";
 import ToolCallCard from "@/components/chat/message_list_comps/ToolCallCard.vue";
 import ToolCallItem from "@/components/chat/message_list_comps/ToolCallItem.vue";
-import {
-  attachmentName,
-  attachmentPresentation,
-} from "@/components/chat/attachmentPresentation";
+import { useDragUpload } from "@/composables/useDragUpload";
 import { useMediaHandling } from "@/composables/useMediaHandling";
 import {
-  displayParts as displayMessageParts,
   messageBlocks as buildMessageBlocks,
-  type MessageDisplayBlock,
-  useMessages,
   type ChatRecord,
+  displayParts as displayMessageParts,
+  type MessageDisplayBlock,
   type MessagePart,
   type TransportMode,
+  useMessages,
 } from "@/composables/useMessages";
 import type { Session } from "@/composables/useSessions";
 import { useModuleI18n } from "@/i18n/composables";
@@ -315,9 +301,7 @@ const {
 });
 
 const transportMode = ref<TransportMode>(
-  (localStorage.getItem("chat.transportMode") as TransportMode) === "websocket"
-    ? "websocket"
-    : "sse",
+  (localStorage.getItem("chat.transportMode") as TransportMode) === "websocket" ? "websocket" : "sse",
 );
 
 watch(transportMode, (mode) => {

@@ -7,20 +7,9 @@ import { computed, nextTick, reactive, ref, watch } from "vue";
 
 function setup() {
   const requests = [];
-  const source = readFileSync(
-    new URL("../src/composables/useSessions.ts", import.meta.url),
-    "utf8",
-  );
-  const ast = ts.createSourceFile(
-    "sessions.ts",
-    source,
-    ts.ScriptTarget.Latest,
-    true,
-  );
-  const definition = ast.statements.find(
-    (node) =>
-      ts.isFunctionDeclaration(node) && node.name.text === "useSessions",
-  );
+  const source = readFileSync(new URL("../src/composables/useSessions.ts", import.meta.url), "utf8");
+  const ast = ts.createSourceFile("sessions.ts", source, ts.ScriptTarget.Latest, true);
+  const definition = ast.statements.find((node) => ts.isFunctionDeclaration(node) && node.name.text === "useSessions");
   const context = vm.createContext({
     exports: {},
     ref,
@@ -30,6 +19,7 @@ function setup() {
     sidebarContent: ref(null),
     sidebarProjectElement: ref(null),
     messagesContainer: ref(null),
+    chatResizeObserver: null,
     ResizeObserver: class {
       constructor(callback) {
         this.callback = callback;
@@ -40,10 +30,7 @@ function setup() {
     useRouter: () => ({ push() {} }),
     console: { error() {} },
     chatApi: {
-      listSessions: (params) =>
-        new Promise((resolve, reject) =>
-          requests.push({ params, resolve, reject }),
-        ),
+      listSessions: (params) => new Promise((resolve, reject) => requests.push({ params, resolve, reject })),
     },
   });
   vm.runInContext(
@@ -56,29 +43,16 @@ function setup() {
   const state = context.exports.useSessions();
   context.sessionsPagination = state.sessionsPagination;
   context.getSessions = state.getSessions;
-  const chat = readFileSync(
-    new URL("../src/components/chat/Chat.vue", import.meta.url),
-    "utf8",
-  )
+  const chat = readFileSync(new URL("../src/components/chat/Chat.vue", import.meta.url), "utf8")
     .split('<script setup lang="ts">')[1]
     .split("</script>")[0];
-  const chatAst = ts.createSourceFile(
-    "chat.ts",
-    chat,
-    ts.ScriptTarget.Latest,
-    true,
-  );
+  const chatAst = ts.createSourceFile("chat.ts", chat, ts.ScriptTarget.Latest, true);
   for (const name of ["loadMoreSessions", "saveSessionTitleDialog"]) {
-    const handler = chatAst.statements.find(
-      (node) => ts.isFunctionDeclaration(node) && node.name.text === name,
-    );
+    const handler = chatAst.statements.find((node) => ts.isFunctionDeclaration(node) && node.name.text === name);
     vm.runInContext(ts.transpile(handler.getText(chatAst)), context);
   }
   const visit = (node) => {
-    if (
-      ts.isBinaryExpression(node) &&
-      node.left.getText(chatAst) === "chatResizeObserver"
-    ) {
+    if (ts.isBinaryExpression(node) && node.left.getText(chatAst) === "chatResizeObserver") {
       vm.runInContext(ts.transpile(node.getText(chatAst)), context);
     }
     ts.forEachChild(node, visit);
@@ -90,10 +64,7 @@ function setup() {
       node.getText(chatAst).startsWith("watch(") &&
       node.getText(chatAst).includes("() => loadMoreSessions()"),
   );
-  const stopWatching = vm.runInContext(
-    ts.transpile(loadingWatcher.getText(chatAst)),
-    context,
-  );
+  const stopWatching = vm.runInContext(ts.transpile(loadingWatcher.getText(chatAst)), context);
   return {
     state,
     requests,
@@ -131,12 +102,7 @@ test("load every session beyond 100, deduplicate requests, and stop at the last 
     pending = state.getSessions(true);
     await state.getSessions(true);
     assert.equal(requests.length, page);
-    resolvePage(
-      requests[page - 1],
-      (page - 1) * 30,
-      Math.min(page * 30, 125),
-      125,
-    );
+    resolvePage(requests[page - 1], (page - 1) * 30, Math.min(page * 30, 125), 125);
     await pending;
   }
   assert.equal(state.sessions.value.length, 125);
@@ -199,20 +165,12 @@ test("sidebar scrolling pauses after failure until retry, matching message histo
   const container = { scrollTop: 0, scrollHeight: 1000, clientHeight: 400 };
   const event = { currentTarget: container };
   scroll(event);
-  assert.equal(
-    requests.length,
-    1,
-    "scrolling away from the bottom does not fetch",
-  );
+  assert.equal(requests.length, 1, "scrolling away from the bottom does not fetch");
   container.scrollTop = 481;
   scroll(event);
   assert.equal(requests.length, 2);
   for (let i = 0; i < 10; i++) scroll(event);
-  assert.equal(
-    requests.length,
-    2,
-    "scrolling during loading does not duplicate requests",
-  );
+  assert.equal(requests.length, 2, "scrolling during loading does not duplicate requests");
   requests[1].reject(new Error("Offline"));
   await new Promise(setImmediate);
   for (let i = 0; i < 10; i++) scroll(event);
@@ -223,11 +181,7 @@ test("sidebar scrolling pauses after failure until retry, matching message histo
   resolvePage(requests[2], 30, 60, 65);
   await retry;
   scroll(event);
-  assert.equal(
-    requests[3].params.page,
-    3,
-    "automatic loading resumes after retry",
-  );
+  assert.equal(requests[3].params.page, 3, "automatic loading resumes after retry");
   resolvePage(requests[3], 60, 65, 65);
   await new Promise(setImmediate);
   scroll(event);
@@ -247,19 +201,11 @@ test("an underfilled sidebar loads after rendering, pauses on failure, and skips
   resolvePage(requests[0], 0, 30, 125);
   await initial;
   await nextTick();
-  assert.equal(
-    requests.length,
-    2,
-    "first render must load without a scroll event",
-  );
+  assert.equal(requests.length, 2, "first render must load without a scroll event");
   requests[1].reject(new Error("Offline"));
   await new Promise(setImmediate);
   await nextTick();
-  assert.equal(
-    requests.length,
-    2,
-    "underfill must not repeatedly retry a failed request",
-  );
+  assert.equal(requests.length, 2, "underfill must not repeatedly retry a failed request");
   const retry = state.getSessions(true);
   context.sidebarContent.value.scrollHeight = 2400;
   resolvePage(requests[2], 30, 60, 125);
@@ -270,11 +216,7 @@ test("an underfilled sidebar loads after rendering, pauses on failure, and skips
   context.loadMoreSessions();
   context.sidebarContent.value = null;
   context.loadMoreSessions();
-  assert.equal(
-    requests.length,
-    3,
-    "collapsed or unmounted sidebar must not load",
-  );
+  assert.equal(requests.length, 3, "collapsed or unmounted sidebar must not load");
   context.sidebarContent.value = {
     scrollTop: 0,
     scrollHeight: 2500,
@@ -285,11 +227,7 @@ test("an underfilled sidebar loads after rendering, pauses on failure, and skips
   assert.equal(requests.length, 3, "closed mobile drawer must not load");
   context.mobileDrawer.open = true;
   await nextTick();
-  assert.equal(
-    requests[3].params.page,
-    3,
-    "opening an underfilled drawer resumes pagination",
-  );
+  assert.equal(requests[3].params.page, 3, "opening an underfilled drawer resumes pagination");
   resolvePage(requests[3], 60, 90, 90);
   await new Promise(setImmediate);
   await nextTick();
@@ -297,37 +235,21 @@ test("an underfilled sidebar loads after rendering, pauses on failure, and skips
 });
 
 test("deep-linked session metadata restores title and selection without fetching intervening pages", async () => {
-  const messages = readFileSync(
-    new URL("../src/composables/useMessages.ts", import.meta.url),
-    "utf8",
-  );
-  const chat = readFileSync(
-    new URL("../src/components/chat/Chat.vue", import.meta.url),
-    "utf8",
-  )
+  const messages = readFileSync(new URL("../src/composables/useMessages.ts", import.meta.url), "utf8");
+  const chat = readFileSync(new URL("../src/components/chat/Chat.vue", import.meta.url), "utf8")
     .split('<script setup lang="ts">')[1]
     .split("</script>")[0];
   const definitions = [];
   for (const source of [messages, chat]) {
-    const ast = ts.createSourceFile(
-      "source.ts",
-      source,
-      ts.ScriptTarget.Latest,
-      true,
-    );
+    const ast = ts.createSourceFile("source.ts", source, ts.ScriptTarget.Latest, true);
     const visit = (node) => {
-      if (
-        ts.isFunctionDeclaration(node) &&
-        node.name?.text === "loadSessionMessages"
-      ) {
+      if (ts.isFunctionDeclaration(node) && node.name?.text === "loadSessionMessages") {
         definitions.push(node.getText(ast));
       }
       if (
         ts.isVariableStatement(node) &&
         node.declarationList.declarations.some((declaration) =>
-          ["currentSession", "sessionProject", "sidebarSessions"].includes(
-            declaration.name.getText(ast),
-          ),
+          ["currentSession", "sessionProject", "sidebarSessions"].includes(declaration.name.getText(ast)),
         )
       )
         definitions.push(node.getText(ast));
@@ -366,19 +288,9 @@ test("deep-linked session metadata restores title and selection without fetching
   });
   vm.runInContext(ts.transpile(definitions.join("\n")), context);
   await context.loadSessionMessages("90");
-  assert.equal(
-    vm.runInContext("currentSession.value.display_name", context),
-    "Older session",
-  );
-  assert.equal(
-    vm.runInContext("sidebarSessions.value[0].session_id", context),
-    "90",
-  );
-  assert.equal(
-    context.sessions.value.length,
-    1,
-    "metadata must not change the paginated list",
-  );
+  assert.equal(vm.runInContext("currentSession.value.display_name", context), "Older session");
+  assert.equal(vm.runInContext("sidebarSessions.value[0].session_id", context), "90");
+  assert.equal(context.sessions.value.length, 1, "metadata must not change the paginated list");
   context.sessions.value.push(older);
   assert.equal(
     vm.runInContext("sidebarSessions.value.length", context),
@@ -411,23 +323,11 @@ test("collapsing project content fills the sidebar without resizing its containe
   await nextTick();
   assert.equal(requests.length, 1);
   context.sidebarContent.value.scrollHeight = 1260;
-  context.chatResizeObserver.callback([
-    { target: context.sidebarProjectElement.value },
-  ]);
-  assert.equal(
-    requests.length,
-    2,
-    "project collapse must request the next page",
-  );
+  context.chatResizeObserver.callback([{ target: context.sidebarProjectElement.value }]);
+  assert.equal(requests.length, 2, "project collapse must request the next page");
   assert.equal(requests[1].params.page, 2);
-  context.chatResizeObserver.callback([
-    { target: context.sidebarProjectElement.value },
-  ]);
-  assert.equal(
-    requests.length,
-    2,
-    "resize notifications must not duplicate the pending request",
-  );
+  context.chatResizeObserver.callback([{ target: context.sidebarProjectElement.value }]);
+  assert.equal(requests.length, 2, "resize notifications must not duplicate the pending request");
   context.sidebarContent.value.scrollHeight = 2000;
   resolvePage(requests[1], 30, 60, 100);
   await new Promise(setImmediate);
@@ -449,9 +349,7 @@ test("renaming an unloaded session refreshes page boundaries so traversal loses 
       data: {
         status: "ok",
         data: {
-          sessions: structuredClone(
-            rows.slice((page - 1) * page_size, page * page_size),
-          ),
+          sessions: structuredClone(rows.slice((page - 1) * page_size, page * page_size)),
           page,
           page_size,
           total: rows.length,
@@ -486,10 +384,7 @@ test("renaming an unloaded session refreshes page boundaries so traversal loses 
   state.currSessionId.value = "1";
   while (state.sessionsPagination.hasMore) await state.getSessions(true);
   assert.equal(state.sessions.value.length, 100);
-  assert.equal(
-    new Set(state.sessions.value.map((row) => row.session_id)).size,
-    100,
-  );
+  assert.equal(new Set(state.sessions.value.map((row) => row.session_id)).size, 100);
   assert.equal(
     state.sessions.value.some((row) => row.session_id === "90"),
     true,

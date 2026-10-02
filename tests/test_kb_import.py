@@ -1,14 +1,14 @@
 import asyncio
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import pytest_asyncio
 
 from astrbot.core import LogBroker
-from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
+from astrbot.core.core_lifecycle import AstrBotCoreLifecycle, LifecycleState
 from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.exceptions import KnowledgeBaseUploadError
-from astrbot.core.knowledge_base.kb_helper import KBHelper
 from astrbot.core.knowledge_base.models import KBDocument
 from astrbot.core.utils.auth_password import (
     hash_dashboard_password,
@@ -30,9 +30,23 @@ async def core_lifecycle_td(tmp_path_factory):
     core_lifecycle = AstrBotCoreLifecycle(log_broker, db)
     await core_lifecycle.initialize()
 
+    # Override the dashboard password with a known test value so that
+    # _resolve_dashboard_password can return "astrbot-test-password"
+    # and the login endpoint will verify correctly regardless of what
+    # the real config file contains.
+    core_lifecycle.astrbot_config["dashboard"]["password"] = hash_dashboard_password(
+        "astrbot-test-password"
+    )
+
+    # Mark runtime as ready so the dashboard's runtime guard allows
+    # API requests through.  The full initialize() path only reaches
+    # CORE_READY; the test mocks kb_manager and does not need the
+    # heavy bootstrap_runtime() step.
+    core_lifecycle._set_lifecycle_state(LifecycleState.RUNTIME_READY)
+
     # Mock kb_manager and kb_helper
-    kb_manager = MagicMock()
-    kb_helper = AsyncMock(spec=KBHelper)
+    kb_manager: Any = MagicMock()
+    kb_helper: Any = AsyncMock()
 
     # Configure get_kb to be an async mock that returns kb_helper
     kb_manager.get_kb = AsyncMock(return_value=kb_helper)
@@ -127,7 +141,7 @@ async def test_import_documents(
 ):
     """Tests the import documents functionality."""
     test_client = app.test_client()
-    kb_helper = await core_lifecycle_td.kb_manager.get_kb("test_kb_id")
+    kb_helper: Any = await core_lifecycle_td.kb_manager.get_kb("test_kb_id")
     kb_helper.upload_document.reset_mock()
     kb_helper.upload_document.side_effect = None
 
@@ -192,7 +206,7 @@ async def test_import_documents(
 async def test_import_documents_returns_friendly_failure_message(
     core_lifecycle_td: AstrBotCoreLifecycle,
 ):
-    kb_helper = await core_lifecycle_td.kb_manager.get_kb("test_kb_id")
+    kb_helper: Any = await core_lifecycle_td.kb_manager.get_kb("test_kb_id")
     kb_helper.upload_document.reset_mock()
     kb_helper.upload_document.side_effect = KnowledgeBaseUploadError(
         stage="embedding",

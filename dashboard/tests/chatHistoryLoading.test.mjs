@@ -5,16 +5,10 @@ import vm from "node:vm";
 import ts from "typescript";
 
 test("failed history loading pauses scroll requests until an explicit retry", async () => {
-  const chat = readFileSync(
-    new URL("../src/components/chat/Chat.vue", import.meta.url),
-    "utf8",
-  )
+  const chat = readFileSync(new URL("../src/components/chat/Chat.vue", import.meta.url), "utf8")
     .split('<script setup lang="ts">')[1]
     .split("</script>")[0];
-  const messages = readFileSync(
-    new URL("../src/composables/useMessages.ts", import.meta.url),
-    "utf8",
-  );
+  const messages = readFileSync(new URL("../src/composables/useMessages.ts", import.meta.url), "utf8");
   const names = new Set([
     "maybeLoadEarlierOnScroll",
     "loadEarlierWithAnchor",
@@ -23,12 +17,7 @@ test("failed history loading pauses scroll requests until an explicit retry", as
   ]);
   const functions = [];
   for (const source of [chat, messages]) {
-    const ast = ts.createSourceFile(
-      "source.ts",
-      source,
-      ts.ScriptTarget.Latest,
-      true,
-    );
+    const ast = ts.createSourceFile("source.ts", source, ts.ScriptTarget.Latest, true);
     const visit = (node) => {
       if (ts.isFunctionDeclaration(node) && names.has(node.name?.text)) {
         functions.push(node.getText(ast));
@@ -65,6 +54,8 @@ test("failed history loading pauses scroll requests until an explicit retry", as
     suppressAutoScroll: { value: false },
     LOAD_EARLIER_SCROLL_THRESHOLD: 120,
     lastMessagesScrollTop: 0,
+    lastMessagesScrollHeight: container.scrollHeight,
+    lastMessagesClientHeight: container.clientHeight,
     CSS: { escape: (value) => value },
     nextTick: async () => {},
     paginationBySession: { session: state },
@@ -94,20 +85,12 @@ test("failed history loading pauses scroll requests until an explicit retry", as
   assert.equal(state.page, 1);
   assert.deepEqual(records.session, [current]);
   for (let i = 0; i < 10; i++) context.maybeLoadEarlierOnScroll(container);
-  assert.equal(
-    requests.length,
-    1,
-    "scroll events must not retry a failed page",
-  );
+  assert.equal(requests.length, 1, "scroll events must not retry a failed page");
 
   container.scrollTop = 80;
   const retry = context.retryCurrentSessionLoad();
   assert.equal(requests.length, 2);
-  assert.equal(
-    requests[1].params.page,
-    2,
-    "retry must request the failed page again",
-  );
+  assert.equal(requests[1].params.page, 2, "retry must request the failed page again");
   assert.equal(state.error, undefined);
   container.scrollTop = 20;
   anchorTop = 360;
@@ -125,21 +108,13 @@ test("failed history loading pauses scroll requests until an explicit retry", as
     },
   });
   await retry;
-  assert.equal(
-    container.scrollTop,
-    220,
-    "prepending history must preserve scrolling that continues during loading",
-  );
+  assert.equal(container.scrollTop, 220, "prepending history must preserve scrolling that continues during loading");
   assert.equal(state.page, 2);
   assert.equal(state.error, undefined);
   assert.equal(records.session.length, 2);
   container.scrollTop = 0;
   context.maybeLoadEarlierOnScroll(container);
-  assert.equal(
-    requests.length,
-    3,
-    "successful retry must restore automatic pagination",
-  );
+  assert.equal(requests.length, 3, "successful retry must restore automatic pagination");
   requests[2].reject(new Error("Network Error"));
   await new Promise(setImmediate);
 });

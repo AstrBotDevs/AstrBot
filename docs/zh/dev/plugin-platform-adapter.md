@@ -65,7 +65,7 @@ from astrbot.api.message_components import (
     Image,
     Record,
 )  # 消息链中的组件，可以根据需要导入
-from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.platform.message_session import MessageSession
 from astrbot.api.platform import register_platform_adapter
 from astrbot import logger
 from .client import FakeClient
@@ -87,7 +87,7 @@ class FakePlatformAdapter(Platform):
         self.settings = platform_settings  # platform_settings 平台设置。
 
     async def send_by_session(
-        self, session: MessageSesion, message_chain: MessageChain
+        self, session: MessageSession, message_chain: MessageChain
     ):
         # 必须实现
         await super().send_by_session(session, message_chain)
@@ -105,7 +105,7 @@ class FakePlatformAdapter(Platform):
         # FakeClient 是我们自己定义的，这里只是示例。这个是其回调函数
         async def on_received(data):
             logger.info(data)
-            abm = await self.convert_message(data=data)  # 转换成 AstrBotMessage
+            abm = await self.convert_message(data=data)  # Convert to AstrBotMessage
             await self.handle_msg(abm)
 
         # 初始化 FakeClient
@@ -131,7 +131,7 @@ class FakePlatformAdapter(Platform):
         abm.raw_message = data  # 原始消息。
         abm.self_id = data["bot_id"]
         abm.session_id = data["userid"]  # 会话 ID。重要！
-        abm.message_id = data["message_id"]  # 消息 ID。
+        abm.message_id = data["message_id"]  # Message ID.
 
         return abm
 
@@ -146,7 +146,6 @@ class FakePlatformAdapter(Platform):
         )
         self.commit_event(message_event)  # 提交事件到事件队列。不要忘记！
 ```
-
 
 `fake_platform_event.py`：
 
@@ -262,6 +261,5 @@ class MyPlugin(Star):
 启动后，可以看到正常工作：
 
 ![image](https://files.astrbot.app/docs/source/images/plugin-platform-adapter/QQ_1738156166893.png)
-
 
 有任何疑问欢迎加群询问~

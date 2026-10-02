@@ -1,28 +1,48 @@
 import asyncio
 import os
 import subprocess
+from importlib import import_module
+from typing import NotRequired, Protocol, TypedDict, runtime_checkable
 
-import edge_tts
-from edge_tts.constants import WSS_HEADERS
+import anyio
 
 from astrbot.core import logger
+from astrbot.core.provider.entities import ProviderType
 from astrbot.core.provider.headers import DEFAULT_USER_AGENT
+from astrbot.core.provider.provider import TTSProvider
+from astrbot.core.provider.register import register_provider_adapter
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.datetime_utils import generate_timestamp_id
 
-from ..entities import ProviderType
-from ..provider import TTSProvider
-from ..register import register_provider_adapter
+edge_tts = import_module("edge_tts")
+# The SDK uses a shared WebSocket header default.
+import_module("edge_tts.constants").WSS_HEADERS["User-Agent"] = DEFAULT_USER_AGENT
 
-# Edge TTS exposes synthesis headers as a shared SDK default, not a client option.
-WSS_HEADERS["User-Agent"] = DEFAULT_USER_AGENT
+
+class EdgeSpeechOptions(TypedDict):
+    text: str
+    voice: str
+    rate: NotRequired[str]
+    volume: NotRequired[str]
+    pitch: NotRequired[str]
+
+
+@runtime_checkable
+class EdgeCommunicator(Protocol):
+    async def save(self, audio_fname: str) -> None: ...
+
+
+@runtime_checkable
+class FFmpegConverter(Protocol):
+    def convert(self, *, input_file: str, output_file: str) -> object: ...
+
 
 """
-edge_tts 方式，能够免费、快速生成语音，使用需要先安装edge-tts库
+edge_tts 方式,能够免费､快速生成语音,使用需要先安装edge-tts库
 ```
 pip install edge_tts
 ```
-Windows 如果提示找不到指定文件，以管理员身份运行命令行窗口，然后再次运行 AstrBot
+Windows 如果提示找不到指定文件,以管理员身份运行命令行窗口,然后再次运行 AstrBot
 """
 
 
@@ -39,7 +59,7 @@ class ProviderEdgeTTS(TTSProvider):
     ) -> None:
         super().__init__(provider_config, provider_settings)
 
-        # 设置默认语音，如果没有指定则使用中文小萱
+        # 设置默认语音,如果没有指定则使用中文小萱
         self.voice = provider_config.get("edge-tts-voice", "zh-CN-XiaoxiaoNeural")
         self.rate = provider_config.get("rate")
         self.volume = provider_config.get("volume")
@@ -53,12 +73,16 @@ class ProviderEdgeTTS(TTSProvider):
     async def get_audio(self, text: str) -> str:
         temp_dir = get_astrbot_temp_path()
         mp3_path = os.path.join(
-            temp_dir, f"edge_tts_temp_{generate_timestamp_id()}.mp3"
+            temp_dir,
+            f"edge_tts_temp_{generate_timestamp_id()}.mp3",
         )
-        wav_path = os.path.join(temp_dir, f"edge_tts_{generate_timestamp_id()}.wav")
+        wav_path = os.path.join(
+            temp_dir,
+            f"edge_tts_{generate_timestamp_id()}.wav",
+        )
 
         # 构建 Edge TTS 参数
-        kwargs = {"text": text, "voice": self.voice}
+        kwargs: EdgeSpeechOptions = {"text": text, "voice": self.voice}
         if self.rate:
             kwargs["rate"] = self.rate
         if self.volume:
@@ -68,12 +92,14 @@ class ProviderEdgeTTS(TTSProvider):
 
         try:
             communicate = edge_tts.Communicate(proxy=self.proxy, **kwargs)
+            if not isinstance(communicate, EdgeCommunicator):
+                raise TypeError("The installed Edge TTS SDK has no async save method.")
             await communicate.save(mp3_path)
 
             try:
-                from pyffmpeg import FFmpeg
-
-                ff = FFmpeg()
+                ff = import_module("pyffmpeg").FFmpeg()
+                if not isinstance(ff, FFmpegConverter):
+                    raise TypeError("The installed pyffmpeg has no conversion method.")
                 ff.convert(input_file=mp3_path, output_file=wav_path)
             except Exception as e:
                 logger.debug(f"pyffmpeg 转换失败: {e}, 尝试使用 ffmpeg 命令行进行转换")
@@ -106,8 +132,9 @@ class ProviderEdgeTTS(TTSProvider):
                 logger.debug(f"FFmpeg错误输出: {stderr.decode().strip()}")
                 logger.info(f"[EdgeTTS] 返回值(0代表成功): {p.returncode}")
 
-            os.remove(mp3_path)
-            if os.path.exists(wav_path) and os.path.getsize(wav_path) > 0:
+            await anyio.Path(mp3_path).unlink()
+            wav_path_obj = anyio.Path(wav_path)
+            if await wav_path_obj.exists() and (await wav_path_obj.stat()).st_size > 0:
                 return wav_path
             logger.error("生成的WAV文件不存在或为空")
             raise RuntimeError("生成的WAV文件不存在或为空")
@@ -117,17 +144,19 @@ class ProviderEdgeTTS(TTSProvider):
                 f"FFmpeg 转换失败: {e.stderr.decode() if e.stderr else str(e)}",
             )
             try:
-                if os.path.exists(mp3_path):
-                    os.remove(mp3_path)
+                mp3_path_obj = anyio.Path(mp3_path)
+                if await mp3_path_obj.exists():
+                    await mp3_path_obj.unlink()
             except Exception:
                 pass
-            raise RuntimeError(f"FFmpeg 转换失败: {e!s}")
+            raise RuntimeError(f"FFmpeg 转换失败: {e!s}") from e
 
         except Exception as e:
             logger.error(f"音频生成失败: {e!s}")
             try:
-                if os.path.exists(mp3_path):
-                    os.remove(mp3_path)
+                mp3_path_obj = anyio.Path(mp3_path)
+                if await mp3_path_obj.exists():
+                    await mp3_path_obj.unlink()
             except Exception:
                 pass
-            raise RuntimeError(f"音频生成失败: {e!s}")
+            raise RuntimeError(f"音频生成失败: {e!s}") from e
