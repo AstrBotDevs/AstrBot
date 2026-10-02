@@ -141,11 +141,26 @@ def test_load_plugin_metadata_includes_i18n(tmp_path: Path):
 
     assert metadata is not None
     assert metadata.short_desc == "Local test short description"
-    assert metadata.pages == []
+    assert metadata.views == []
     assert metadata.i18n == {"zh-CN": {"metadata": {"display_name": "你好世界"}}}
 
 
-def test_load_plugin_metadata_includes_pages(tmp_path: Path):
+def test_load_plugin_metadata_includes_views(tmp_path: Path):
+    plugin_path = tmp_path / "helloworld"
+    _write_local_test_plugin(plugin_path, TEST_PLUGIN_REPO)
+    metadata_path = plugin_path / "metadata.yaml"
+    metadata = yaml.safe_load(metadata_path.read_text(encoding="utf-8"))
+    metadata["views"] = [{"name": "dashboard", "title": "Dashboard"}]
+    metadata_path.write_text(yaml.dump(metadata), encoding="utf-8")
+
+    loaded_metadata = PluginManager._load_plugin_metadata(str(plugin_path))
+
+    assert loaded_metadata is not None
+    assert loaded_metadata.views == [{"name": "dashboard", "title": "Dashboard"}]
+
+
+def test_load_plugin_metadata_pages_alias_maps_to_views(tmp_path: Path):
+    # "pages" stays a compatible alias for "views" in metadata.yaml.
     plugin_path = tmp_path / "helloworld"
     _write_local_test_plugin(plugin_path, TEST_PLUGIN_REPO)
     metadata_path = plugin_path / "metadata.yaml"
@@ -156,7 +171,7 @@ def test_load_plugin_metadata_includes_pages(tmp_path: Path):
     loaded_metadata = PluginManager._load_plugin_metadata(str(plugin_path))
 
     assert loaded_metadata is not None
-    assert loaded_metadata.pages == [{"name": "dashboard", "title": "Dashboard"}]
+    assert loaded_metadata.views == [{"name": "dashboard", "title": "Dashboard"}]
 
 
 def test_load_plugin_metadata_accepts_yml_suffix(tmp_path: Path):
