@@ -73,19 +73,38 @@ function setupThemeSync(pinia: ReturnType<typeof createPinia>) {
     // 2. 将 Vuetify 主题对齐到 store
     vuetify.theme.global.name.value = customizer.uiTheme;
 
-    // 3. 应用用户自定义色
-    const storedPrimary = localStorage.getItem('themePrimary');
+    // 3. 应用用户自定义色（深浅主题分别保存；兼容旧版共享键 themePrimary）
+    const legacyPrimary = localStorage.getItem('themePrimary');
     const storedSecondary = localStorage.getItem('themeSecondary');
-    if (storedPrimary || storedSecondary) {
-      const themes = vuetify.theme.themes.value;
-      ['PurpleTheme', 'PurpleThemeDark'].forEach((name) => {
-        const theme = themes[name];
-        if (!theme?.colors) return;
-        if (storedPrimary) theme.colors.primary = storedPrimary;
-        if (storedSecondary) theme.colors.secondary = storedSecondary;
-        if (storedPrimary && theme.colors.darkprimary) theme.colors.darkprimary = storedPrimary;
-        if (storedSecondary && theme.colors.darksecondary) theme.colors.darksecondary = storedSecondary;
-      });
+    const storedByTheme = {
+      PurpleTheme: {
+        primary: localStorage.getItem('themePrimaryLight') || legacyPrimary,
+        secondary: storedSecondary,
+      },
+      PurpleThemeDark: {
+        primary: localStorage.getItem('themePrimaryDark') || legacyPrimary,
+        secondary: storedSecondary,
+      },
+    };
+    Object.entries(storedByTheme).forEach(([name, stored]) => {
+      const theme = vuetify.theme.themes.value[name];
+      if (!theme?.colors) return;
+      if (stored.primary) theme.colors.primary = stored.primary;
+      if (stored.secondary) theme.colors.secondary = stored.secondary;
+      if (stored.primary && theme.colors.darkprimary) theme.colors.darkprimary = stored.primary;
+      if (stored.secondary && theme.colors.darksecondary) theme.colors.darksecondary = stored.secondary;
+    });
+
+    // 3.1 应用用户自定义背景色（侧栏/顶栏 chrome，深浅主题分别保存）
+    const storedChromeLight =
+      localStorage.getItem('themeChromeLight') || localStorage.getItem('themeChrome');
+    const storedChromeDark =
+      localStorage.getItem('themeChromeDark') || localStorage.getItem('themeChrome');
+    if (storedChromeLight) {
+      document.documentElement.style.setProperty('--astrbot-chrome-color-light', storedChromeLight);
+    }
+    if (storedChromeDark) {
+      document.documentElement.style.setProperty('--astrbot-chrome-color-dark', storedChromeDark);
     }
 
     // 4. 全局唯一 matchMedia 监听器：仅在 system 模式下响应系统切换

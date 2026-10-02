@@ -324,7 +324,7 @@ function toggleSidebar() {
   top: 0 !important;
   height: 100vh !important;
   border-right: 0 !important;
-  background: rgb(var(--v-theme-surface)) !important;
+  background: var(--astrbot-chrome-surface, rgb(var(--v-theme-surface))) !important;
   user-select: none;
 }
 
@@ -424,7 +424,7 @@ function toggleSidebar() {
 /* A temporary (mobile) drawer floats above the page, so the vibrancy
    transparency would let content bleed through; keep it opaque instead. */
 :global(html[data-astrbot-desktop-platform='macos'] .leftSidebar.v-navigation-drawer--temporary) {
-  background: rgb(var(--v-theme-surface)) !important;
+  background: var(--astrbot-chrome-surface, rgb(var(--v-theme-surface))) !important;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16) !important;
   z-index: 1007 !important;
 }
@@ -630,10 +630,16 @@ function toggleSidebar() {
   text-transform: none;
 }
 
-.sidebar-footer-btn:hover,
-.sidebar-footer-btn.v-btn--active {
+.sidebar-footer-btn:hover {
   background: rgba(var(--v-theme-on-surface), 0.08) !important;
   color: rgb(var(--v-theme-on-surface));
+}
+
+/* The active state matches the nav items above: foreground-color tinted pill
+   and foreground-color label/icon. */
+.sidebar-footer-btn.v-btn--active {
+  background: rgba(var(--v-theme-primary), 0.09) !important;
+  color: rgb(var(--v-theme-primary)) !important;
 }
 
 /* Icon-to-label spacing matches the nav items above (10px); the v-btn grid

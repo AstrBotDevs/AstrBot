@@ -91,12 +91,12 @@
   },
   "theme": {
     "title": "Theme",
-    "subtitle": "Customize theme primary and secondary colors. Changes apply immediately and are stored locally in your browser.",
+    "subtitle": "Customize the theme primary and background (sidebar & header) colors, saved separately for light and dark themes. Stored locally in your browser.",
     "customize": {
       "title": "Theme Colors",
-      "primary": "Primary Color",
-      "secondary": "Secondary Color",
-      "reset": "Reset to Default"
+      "primary": "Foreground Color",
+      "reset": "Reset to Default",
+      "chrome": "Background Color"
     }
   },
   "system": {

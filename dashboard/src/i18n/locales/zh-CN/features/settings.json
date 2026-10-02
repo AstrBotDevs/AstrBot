@@ -91,12 +91,12 @@
   },
   "theme": {
     "title": "主题",
-    "subtitle": "自定义主题主色与辅助色，数据保存在浏览器本地。",
+    "subtitle": "自定义主题前景（主色）与背景（侧栏与顶栏）颜色，按浅色/深色主题分别保存，数据保存在浏览器本地。",
     "customize": {
       "title": "主题颜色",
-      "primary": "主色",
-      "secondary": "辅助色",
-      "reset": "恢复默认"
+      "primary": "前景色",
+      "reset": "恢复默认",
+      "chrome": "背景色"
     }
   },
   "system": {

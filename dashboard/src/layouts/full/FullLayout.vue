@@ -315,22 +315,32 @@ onMounted(() => {
    transparent. Only the content area keeps an opaque background. */
 :global(html) {
   /* Shared chrome background for the top toolbar and the sidebars, so the
-     header and sidebar always read as one surface in both themes. */
-  --astrbot-chrome-bg: #fdfcfc;
+     header and sidebar always read as one surface in both themes. A small
+     dose of the theme's primary color is mixed in, so the whole chrome
+     follows when the user recolors the theme. */
+  /* Foreground colors (primary/secondary) accent the content. The chrome
+     background is an independent "background" pick, always softened into the
+     neutral surface so it reads as a quiet tint instead of a solid paint.
+     Unset means the plain neutral surface. chrome-surface shares the same
+     value so the header and the sidebar are pixel-identical. */
+  --astrbot-chrome-bg: color-mix(in srgb, var(--astrbot-chrome-color-light, rgb(var(--v-theme-surface))) 10%, rgb(var(--v-theme-surface)));
+  --astrbot-chrome-surface: color-mix(in srgb, var(--astrbot-chrome-color-light, rgb(var(--v-theme-surface))) 10%, rgb(var(--v-theme-surface)));
 }
 
 :global(html .v-application.v-theme--PurpleThemeDark) {
-  --astrbot-chrome-bg: rgb(var(--v-theme-background));
+  --astrbot-chrome-bg: color-mix(in srgb, var(--astrbot-chrome-color-dark, rgb(var(--v-theme-surface))) 12%, rgb(var(--v-theme-surface)));
+  --astrbot-chrome-surface: color-mix(in srgb, var(--astrbot-chrome-color-dark, rgb(var(--v-theme-surface))) 12%, rgb(var(--v-theme-surface)));
 }
 
 :global(html[data-astrbot-desktop-platform='macos']) {
   /* Bias the native window material toward white in light mode, black in dark mode.
-     Mostly opaque so the chrome reads as light even when the material behind is dark. */
-  --astrbot-vibrancy-tint: rgba(253, 252, 252, 0.92);
+     Mostly opaque so the chrome reads as light even when the material behind is dark.
+     The primary infusion keeps the translucent chrome on-theme as well. */
+  --astrbot-vibrancy-tint: color-mix(in srgb, var(--astrbot-chrome-color-light, rgb(253, 252, 252)) 10%, rgba(253, 252, 252, 0.92));
 }
 
 :global(html[data-astrbot-desktop-platform='macos'] .v-application.v-theme--PurpleThemeDark) {
-  --astrbot-vibrancy-tint: rgba(26, 26, 26, 0.92);
+  --astrbot-vibrancy-tint: color-mix(in srgb, var(--astrbot-chrome-color-dark, rgb(26, 26, 26)) 12%, rgba(26, 26, 26, 0.92));
 }
 
 /* Off macOS the chrome is opaque; paint the whole main background with the
@@ -338,7 +348,7 @@ onMounted(() => {
    right of the floating card read as the same surface as the sidebar. The
    card's own background still covers the content area on top of it. */
 :global(html:not([data-astrbot-desktop-platform='macos']) .v-main) {
-  background: rgb(var(--v-theme-surface)) !important;
+  background: var(--astrbot-chrome-surface, rgb(var(--v-theme-surface))) !important;
 }
 
 :global(html[data-astrbot-desktop-platform='macos']),
@@ -356,10 +366,11 @@ onMounted(() => {
   background: var(--astrbot-vibrancy-tint, transparent) !important;
 }
 
-/* Vuetify paints its own surface behind every list, which would sit on top of the
-   translucent sidebar, so keep the navigation lists transparent on macOS. */
-:global(html[data-astrbot-desktop-platform='macos'] .leftSidebar .v-list),
-:global(html[data-astrbot-desktop-platform='macos'] .chat-sidebar .v-list) {
+/* Vuetify paints its own surface behind every list, which would sit on top of
+   the sidebar's (primary-infused) chrome background, so keep the navigation
+   lists transparent on every platform. */
+:global(.leftSidebar .v-list),
+:global(.chat-sidebar .v-list) {
   background: transparent !important;
 }
 </style>
