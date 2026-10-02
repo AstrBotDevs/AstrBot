@@ -2603,23 +2603,25 @@ async function stopCurrentSession() {
   padding-top: 50px;
 }
 
-/* Lift the conversation page over the chat sidebar with a faint leftward
-   shadow, mirroring the outer floating card. Desktop only: on small screens
-   the temporary drawer (z-index 1007) must keep sliding over the content. */
+/* The conversation page floats over the chat sidebar with the exact same
+   ambient shadow as the outer floating card. It needs to stack above the
+   sidebar for the shadow to land on it. Desktop only: on small screens the
+   temporary drawer (z-index 1007) must keep sliding over the content. */
 @media (min-width: 960px) {
   .chat-main {
     z-index: 1008;
-    /* Light-on-light needs a touch more presence than the outer card shadow
-       to read at all; keep it tight rather than diffuse. */
+    /* Slightly deeper than the outer card's ambient shadow: the card reads
+       thanks to its 6px gaps and the window-edge contrast, while this seam
+       is white-on-white, so it needs the extra notch to stay perceptible. */
     box-shadow:
-      -1px 0 4px rgba(0, 0, 0, 0.08),
-      -4px 0 16px rgba(0, 0, 0, 0.07);
+      -1px 0 4px rgba(0, 0, 0, 0.06),
+      -4px 0 20px rgba(0, 0, 0, 0.05);
   }
 
   .chat-ui.is-dark .chat-main {
     box-shadow:
-      -1px 0 4px rgba(0, 0, 0, 0.16),
-      -4px 0 16px rgba(0, 0, 0, 0.14);
+      -1px 0 4px rgba(0, 0, 0, 0.12),
+      -4px 0 20px rgba(0, 0, 0, 0.1);
   }
 }
 
