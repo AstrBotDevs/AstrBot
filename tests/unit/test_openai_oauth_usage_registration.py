@@ -1,4 +1,7 @@
 import json
+import subprocess
+import sys
+from functools import partial
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -10,11 +13,31 @@ from astrbot.core.star.star_handler import star_handlers_registry
 
 
 def test_core_quota_command_and_tool_registration():
+    # Other lifecycle tests intentionally clear the process-wide registries.
+    # Inspect initial registration in a fresh interpreter, as on core startup.
+    subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import runpy,sys; runpy.run_path(sys.argv[1])['_assert_registration']()",
+            __file__,
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+
+def _assert_registration():
     tools = [t for t in llm_tools.func_list if t.name == "codex_oauth_usage"]
     assert len(tools) == 1
     assert tools[0].parameters.get("properties", {}) == {}
-    # The loader fills handler_module_path when binding the runtime instance.
-    assert tools[0].handler.__module__ == "astrbot.builtin_stars.astrbot.main"
+    # Registration can be inspected before or after the loader binds an instance.
+    handler = tools[0].handler
+    while isinstance(handler, partial):
+        handler = handler.func
+    assert handler.__module__ == "astrbot.builtin_stars.astrbot.main"
+    assert handler.__qualname__ == "Main.codex_oauth_usage"
     handlers = star_handlers_registry.get_handlers_by_module_name(
         "astrbot.builtin_stars.astrbot.main"
     )

@@ -18,7 +18,9 @@ from astrbot.core.tools.computer_tools.util import LOCAL_NETWORK_POLICY_NOTICE
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("tool_class", [LocalExecuteShellTool, LocalPythonTool, ShellSessionTool])
+@pytest.mark.parametrize(
+    "tool_class", [LocalExecuteShellTool, LocalPythonTool, ShellSessionTool]
+)
 @pytest.mark.parametrize(
     ("runtime", "allow_network", "tool_state", "existing_notice", "expected_count"),
     [
@@ -32,7 +34,12 @@ from astrbot.core.tools.computer_tools.util import LOCAL_NETWORK_POLICY_NOTICE
     ],
 )
 async def test_tool_loop_agent_adds_network_policy_to_system_prompt(
-    monkeypatch, runtime, allow_network, tool_state, existing_notice, expected_count,
+    monkeypatch,
+    runtime,
+    allow_network,
+    tool_state,
+    existing_notice,
+    expected_count,
     tool_class,
 ):
     async def finished_steps(_max_steps):
@@ -42,28 +49,30 @@ async def test_tool_loop_agent_adds_network_policy_to_system_prompt(
     runner = MagicMock()
     runner.reset = AsyncMock()
     runner.step_until_done = finished_steps
-    monkeypatch.setattr(
-        "astrbot.core.star.context.ToolLoopAgentRunner", lambda: runner
-    )
+    monkeypatch.setattr("astrbot.core.star.context.ToolLoopAgentRunner", lambda: runner)
     context = SimpleNamespace(
         provider_manager=SimpleNamespace(
             get_provider_by_id=AsyncMock(return_value=MagicMock(spec=Provider))
         ),
-        get_config=MagicMock(side_effect=AssertionError("Caller policy must not be used")),
+        get_config=MagicMock(
+            side_effect=AssertionError("Caller policy must not be used")
+        ),
     )
     agent_config = SimpleNamespace(
-        get_config=MagicMock(return_value={
-            "provider_settings": {
-                "computer_use_runtime": runtime,
-                "computer_use_local_permissions": {
-                    "member": {
-                        "allow_execution": True,
-                        "allow_network": allow_network,
-                        "filesystem_scope": "workspace",
-                    }
-                },
+        get_config=MagicMock(
+            return_value={
+                "provider_settings": {
+                    "computer_use_runtime": runtime,
+                    "computer_use_local_permissions": {
+                        "member": {
+                            "allow_execution": True,
+                            "allow_network": allow_network,
+                            "filesystem_scope": "workspace",
+                        }
+                    },
+                }
             }
-        }),
+        ),
     )
     event = SimpleNamespace(role="admin", unified_msg_origin="caller-test")
     agent_event = SimpleNamespace(role="member", unified_msg_origin="agent-test")

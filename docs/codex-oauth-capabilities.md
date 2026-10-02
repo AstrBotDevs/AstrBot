@@ -6,6 +6,13 @@ adapter is not evidence that a particular account is entitled to the endpoint.
 
 ## Text and hosted search
 
+The local fallback catalog includes `gpt-6.1-sol`. It defaults to medium reasoning
+and accepts `low`, `medium`, `high`, `xhigh`, and `max`; `none`, `off`, and
+`minimal` are rejected. The provider sends Codex client metadata `0.159.2` so
+the backend can expose this model. GPT-6 Sol and Luna retain their existing
+reasoning levels, including `none`. Unsupported GPT-6.1 sampling and output
+log-probability options are removed without changing function tools or search.
+
 The provider implements incremental text, reasoning and function-call streams.
 Chunks have `is_chunk=True`; the final response contains complete text, tools,
 raw response and usage. Consumers must not append the final full text to chunks.

@@ -98,7 +98,8 @@ async def test_source_model_catalog_includes_gpt_6_astra():
     result = await service.list_provider_source_models("openai_oauth")
 
     assert result["provider_source_id"] == "openai_oauth"
-    assert result["models"][0] == "gpt-6-astra"
+    assert result["models"][0] == "gpt-6.1-sol"
+    assert "gpt-6-astra" in result["models"]
 
 
 @pytest.mark.asyncio

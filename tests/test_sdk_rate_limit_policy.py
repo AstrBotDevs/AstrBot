@@ -76,6 +76,53 @@ async def _query(provider, kind: str, *, attempts: int):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+async def test_anthropic_disabled_retries_preserve_conversation_header(streaming):
+    sdk_httpx = _sdk_httpx("anthropic")
+    requests = []
+
+    async def handler(request):
+        requests.append(request)
+        return sdk_httpx.Response(
+            429,
+            request=request,
+            json={"error": {"type": "rate_limit_error", "message": "limited"}},
+        )
+
+    provider, client, http_client = _make_provider(
+        "anthropic", sdk_httpx.MockTransport(handler)
+    )
+    payload = {
+        "model": "claude-test",
+        "messages": [{"role": "user", "content": "hello"}],
+        "max_tokens": 1024,
+    }
+    token = request_retry.provider_retry_rate_limits.set(False)
+    stream = None
+    try:
+        with pytest.raises(Exception) as caught:
+            if streaming:
+                stream = provider._query_stream(
+                    payload, None, conversation_id="conversation-test"
+                )
+                await anext(stream)
+            else:
+                await provider._query(
+                    payload, None, conversation_id="conversation-test"
+                )
+    finally:
+        if stream is not None:
+            await stream.aclose()
+        request_retry.provider_retry_rate_limits.reset(token)
+        await http_client.aclose()
+
+    assert getattr(caught.value, "status_code", None) == 429
+    assert len(requests) == 1
+    assert requests[0].headers["x-astrbot-conversation-id"] == "conversation-test"
+    assert client.max_retries == 2
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("kind", ["openai", "responses", "anthropic"])
 async def test_disabled_rate_limit_retries_send_one_sdk_request(kind, monkeypatch):
     httpx = _sdk_httpx(kind)
