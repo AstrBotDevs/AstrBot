@@ -139,3 +139,11 @@ pre, code, .markdown pre, .markdown code, .release-notes pre, .release-notes cod
 .v-theme--PurpleThemeDark img[src*="/mirarouter"] {
   filter: invert(1);
 }
+
+// Invert the black Mattermost and Matrix logos on dark surfaces.
+// The leading slash keeps these selectors from matching inline SVG data URIs,
+// where words like "matrix" also appear in transform functions.
+.v-theme--PurpleThemeDark img[src*="/mattermost"],
+.v-theme--PurpleThemeDark img[src*="/matrix"] {
+  filter: brightness(0) invert(1);
+}

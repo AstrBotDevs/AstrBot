@@ -61,10 +61,6 @@
       "tempStorage": {
         "title": "缓存",
         "subtitle": "临时目录自动清理阈值。"
-      },
-      "t2iRendering": {
-        "title": "文本转图像",
-        "subtitle": "文本转图像渲染策略、端点和自定义模板。"
       }
     },
     "timePreview": {
@@ -209,6 +205,7 @@
       "restartNow": "立即重启",
       "failed": "导入失败",
       "retry": "重试",
+      "resumeUpload": "继续上传",
       "version": {
         "backupVersion": "备份版本",
         "currentVersion": "当前版本",

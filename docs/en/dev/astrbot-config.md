@@ -10,7 +10,7 @@ AstrBot's configuration file is a JSON format file. AstrBot reads this file at s
 
 > Since AstrBot v4.0.0, we introduced the concept of [multiple configuration files](https://blog.astrbot.app/posts/what-is-changed-in-4.0.0/#%E5%A4%9A%E9%85%8D%E7%BD%AE%E6%96%87%E4%BB%B6). `data/cmd_config.json` serves as the default configuration `default`. Other configuration files you create in the WebUI are stored in the `data/config/` directory, starting with `abconf_`.
 
-In the WebUI, manage bot and session behavior profiles under `Config`. Global runtime, logging, network, WebUI security, and text-to-image service settings are under `Settings`. Model connections and bot connections are managed under `Providers` and `Platforms`, respectively.
+In the WebUI, manage bot and session behavior profiles (including text-to-image) under `Config`. Global runtime, logging, network, and WebUI security settings are under `System Settings`. Model connections and bot connections are managed under `Providers` and `Platforms`, respectively.
 
 The default AstrBot configuration is as follows:
 
@@ -77,7 +77,7 @@ The default AstrBot configuration is as follows:
         "streaming_response": False,
         "show_tool_use_status": False,
         "streaming_segmented": False,
-        "max_agent_step": 30,
+        "max_agent_step": 128,
         "tool_call_timeout": 120,
     },
     "provider_stt_settings": {
@@ -368,7 +368,7 @@ Whether platforms that don't support streaming responses should fall back to seg
 
 #### `provider_settings.max_agent_step`
 
-Limit on the maximum number of Agent steps. Default is `30`. Each tool call by the model counts as one step.
+Limit on the maximum number of Agent steps. Default is `128`. Each tool call by the model counts as one step.
 
 #### `provider_settings.tool_call_timeout`
 
@@ -489,7 +489,7 @@ Whether to enable the file service. Default is `false`. When enabled, the bot pr
 
 ### `http_proxy`
 
-HTTP proxy. E.g., `http://localhost:7890`.
+HTTP proxy. E.g., `http://localhost:7890`. When AstrBot runs in Docker, use an address reachable from the AstrBot container. See [Deploy with Docker](/en/deploy/astrbot/docker.md).
 
 ### `no_proxy`
 

@@ -2,7 +2,7 @@
   <div class="logo-container">
     <div class="logo-content">
       <div class="logo-image">
-        <img width="80" src="@/assets/images/plugin_icon.png" alt="AstrBot Logo">
+        <img width="80" src="/favicon.svg" alt="AstrBot Logo">
       </div>
       <div class="logo-text">
         <h2 
