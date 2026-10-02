@@ -3,11 +3,12 @@ import { usePluginI18n } from '@/utils/pluginI18n'
 
 export function useConfigTextResolver(props = {}) {
   const { tm, getRaw } = useModuleI18n('features/config-metadata')
+  const { tm: configTm, getRaw: configRaw } = useModuleI18n('features/config')
   const { configText } = usePluginI18n()
 
   const translateIfKey = (value) => {
     if (!value || typeof value !== 'string') return value
-    return getRaw(value) ? tm(value) : value
+    return getRaw(value) ? tm(value) : configRaw(value) ? configTm(value) : value
   }
 
   const hasPluginI18n = () => {

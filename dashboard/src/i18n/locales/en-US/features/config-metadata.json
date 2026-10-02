@@ -1144,10 +1144,10 @@
       "description": "Group Chat Context Awareness",
       "provider_ltm_settings": {
         "group_icl_enable": {
-          "description": "Inject Group Chat Records into Context"
+          "description": "Collect Group Messages for Context"
         },
         "group_message_max_cnt": {
-          "description": "Maximum Messages Injected into Context"
+          "description": "Maximum Buffered Group Context Messages"
         },
         "image_caption": {
           "description": "Auto-understand Images",
@@ -1155,7 +1155,7 @@
         },
         "image_caption_provider_id": {
           "description": "Group Chat Image Caption Model",
-          "hint": "Used to understand images injected from group chat records, configured separately from the default image caption model."
+          "hint": "Captions images while collecting group messages. Configured separately from the built-in runner image caption model."
         },
         "group_message_history_enable": {
           "description": "Persist Group Chat Messages",

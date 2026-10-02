@@ -35,20 +35,35 @@ Platforms like Dify, Coze, Bailian Application, and DeerFlow have this loop buil
 
 ## Usage
 
-AstrBot uses its built-in AI by default. Select a chat model under **Config → AI → Model**, and configure personas, knowledge bases, and tools as needed.
+AstrBot uses its built-in runner by default. Select a chat model under **Config → AI → Models**, and configure personas, knowledge bases, and tools as needed.
 
 To connect an external application, select the execution mode and enter its connection settings directly in the current configuration profile:
 
 1. Open **Config** in the WebUI sidebar, select the profile to edit, and open **AI**.
-2. Click **More actions** (`…`) beside the AI heading, then **Change Execution Mode**.
+2. Open the AI page’s top-right **⋯** menu and select **Switch Runner…**.
 3. Choose Dify, Coze, Alibaba Cloud Bailian, or DeerFlow, read and check the configuration reset acknowledgement, then click **Use This Mode**.
-4. Make sure **Enable AI** is on. Enter the API key, application ID, API endpoint, and other settings shown for that mode. See the integration guides below for the fields.
+4. Make sure **Enable conversational AI** is on. Enter the API key, application ID, API endpoint, and other settings under **AI → Connection / Application & Execution below the runner name**. See the integration guides below for the fields.
 5. Click **Save Configuration** at the bottom right to apply the changes.
 
 > [!IMPORTANT]
 > Switching modes replaces the current execution mode's settings with the new mode's defaults. Switching back requires configuring it again. To preserve the original settings, copy the profile through **Manage Configurations...** before switching.
 
 The current WebUI does not require creating an Agent Runner under **Providers** or selecting a runner provider ID. Each profile stores its own execution mode and connection settings. Use separate profiles when different bots need different applications.
+
+## Settings supported by each runner
+
+The built-in runner supports AstrBot's chat models and fallback policy, persona and prompts, input understanding, knowledge and tools, context management, and tool execution settings. External runners use their application's models, prompts, knowledge, and tools rather than these built-in settings.
+
+| External runner | Connection settings | Application & execution settings |
+| --- | --- | --- |
+| Dify | API key, endpoint, request timeout | API type, variables; workflow input/output variable names |
+| Coze | API key, endpoint, request timeout | Bot ID, automatic conversation history |
+| Alibaba Cloud Bailian | API key | Application ID/type, variables, RAG pipeline/file IDs, reference output |
+| DeerFlow | Endpoint, API key, custom auth header, request timeout, proxy | Assistant ID, model name, thinking/plan modes, subagents, concurrency, recursion limit |
+
+Dify, Coze, and Bailian hide unsupported per-runner proxy settings; Bailian also hides the request timeout. Saved values are retained. Configure per-runner proxies separately from the global proxy under System Settings.
+
+Configure speech recognition, speech replies, and group collection under `Messages & Replies`, and message delivery under `Platform`; see [WebUI Visual Configuration](./webui.md#visual-configuration). Proactive replies still require an available chat model and an existing conversation; an external application alone is insufficient.
 
 ## Integration Guides
 

@@ -3,10 +3,12 @@ import MarkdownIt from 'markdown-it'
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
 import { ref, computed } from 'vue'
 import ConfigItemRenderer from './ConfigItemRenderer.vue'
+import ConfigEffectNotice from './ConfigEffectNotice.vue'
 import TemplateListEditor from './TemplateListEditor.vue'
 import PersonaQuickPreview from './PersonaQuickPreview.vue'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
 import { useConfigTextResolver } from '@/composables/useConfigTextResolver'
+import { isConfigFieldVisible } from '@/utils/configVisibility.mjs'
 
 
 const props = defineProps({
@@ -25,6 +27,10 @@ const props = defineProps({
   searchKeyword: {
     type: String,
     default: ''
+  },
+  showAllFields: {
+    type: Boolean,
+    default: false
   },
   pluginName: {
     type: String,
@@ -151,19 +157,19 @@ function saveEditedContent() {
 }
 
 function shouldShowItem(itemMeta, itemKey) {
-  if (itemMeta?.condition) {
-    for (const [conditionKey, expectedValue] of Object.entries(itemMeta.condition)) {
-      const actualValue = getValueBySelector(props.iterable, conditionKey)
-      if (actualValue !== expectedValue) {
-        return false
-      }
-    }
-  }
+  if (!isConfigFieldVisible(itemMeta, itemKey, props.iterable, {}, !props.pluginName)) return false
 
   const keyword = String(props.searchKeyword || '').trim().toLowerCase()
   if (!keyword) {
     return true
   }
+
+  const sectionMeta = props.metadata?.[props.metadataKey]
+  const sectionText = [
+    translateIfKey(sectionMeta?.description || ''),
+    translateIfKey(sectionMeta?.hint || '')
+  ].join(' ').toLowerCase()
+  if (sectionText.includes(keyword)) return true
 
   const searchableText = [
     itemKey,
@@ -177,7 +183,7 @@ function shouldShowItem(itemMeta, itemKey) {
 function getVisibleItemEntries(collapsed = false) {
   const sectionItems = props.metadata?.[props.metadataKey]?.items || {}
   return Object.entries(sectionItems).filter(([itemKey, itemMeta]) => {
-    const isCollapsed = Boolean(itemMeta?.collapsed)
+    const isCollapsed = Boolean(itemMeta?.collapsed) && !props.showAllFields
     return isCollapsed === collapsed && !itemMeta?.invisible && shouldShowItem(itemMeta, itemKey)
   })
 }
@@ -207,19 +213,14 @@ function toggleCollapsedItems() {
 // 检查最外层的 object 是否应该显示
 function shouldShowSection() {
   const sectionMeta = props.metadata[props.metadataKey]
-  if (!sectionMeta?.condition) {
-    return true
-  }
-  for (const [conditionKey, expectedValue] of Object.entries(sectionMeta.condition)) {
+  for (const [conditionKey, expectedValue] of Object.entries(sectionMeta?.condition || {})) {
     const actualValue = getValueBySelector(props.iterable, conditionKey)
     if (actualValue !== expectedValue) {
       return false
     }
   }
 
-  const sectionItems = props.metadata?.[props.metadataKey]?.items || {}
-  const hasVisibleItems = Object.entries(sectionItems).some(([itemKey, itemMeta]) => shouldShowItem(itemMeta, itemKey))
-  return hasVisibleItems
+  return getVisibleItemEntries(false).length > 0 || getVisibleItemEntries(true).length > 0
 }
 
 function hasVisibleItemsAfter(items, currentIndex) {
@@ -291,6 +292,7 @@ function getSpecialSubtype(value) {
                 <span v-if="itemMeta?.obvious_hint && itemMeta?.hint" class="important-hint">‼️</span>
                 <span v-html="renderHint(getItemHint(itemKey, itemMeta))"></span>
               </v-list-item-subtitle>
+              <ConfigEffectNotice :field="itemKey" :config="iterable" :plugin-name="pluginName" />
             </v-list-item>
           </v-col>
           <v-col cols="12" :sm="itemMeta?.full_width ? 12 : 6" class="config-input">
@@ -344,6 +346,8 @@ function getSpecialSubtype(value) {
           </v-col>
         </v-row>
 
+        <slot name="after-field" :field-key="itemKey" />
+
         <v-divider class="config-divider"
           v-if="hasVisibleEntriesAfter(getVisibleItemEntries(false), index)"></v-divider>
       </div>
@@ -378,6 +382,7 @@ function getSpecialSubtype(value) {
                       <span v-if="itemMeta?.obvious_hint && itemMeta?.hint" class="important-hint">‼️</span>
                       <span v-html="renderHint(getItemHint(itemKey, itemMeta))"></span>
                     </v-list-item-subtitle>
+                    <ConfigEffectNotice :field="itemKey" :config="iterable" :plugin-name="pluginName" />
                   </v-list-item>
                 </v-col>
                 <v-col cols="12" sm="6" class="config-input">

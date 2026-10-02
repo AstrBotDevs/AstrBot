@@ -206,7 +206,7 @@ export async function runMdiSubset() {
         }
 
         // Step 1: Scan source files for mdi-* icon names
-        const sourceFiles = collectFiles(SRC, [".vue", ".ts", ".js"]);
+        const sourceFiles = collectFiles(SRC, [".vue", ".ts", ".js", ".mjs"]);
         const usedIcons = scanUsedIcons(sourceFiles);
         if (usedIcons.size === 0) {
             throw new Error("No mdi-* icons found in source files. Something is wrong with scanning.");
