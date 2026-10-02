@@ -125,7 +125,7 @@
         },
         "provider_id": {
           "description": "默认语音转文本模型",
-          "hint": "用户也可使用 /provider 指令单独选择会话的 STT 模型。"
+          "hint": "用户也可使用 /provider stt <序号> 指令单独选择会话的 STT 模型。"
         }
       },
       "provider_tts_settings": {
@@ -1279,7 +1279,7 @@
       },
       "disable_metrics": {
         "description": "禁用用户体验改进计划",
-        "hint": "开启后，AstrBot 将不再上传用户体验改进计划所需的匿名使用数据。"
+        "hint": "开启后，AstrBot 将不再上传匿名的使用数据。"
       },
       "dashboard": {
         "trust_proxy_headers": {

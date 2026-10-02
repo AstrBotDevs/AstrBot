@@ -113,7 +113,7 @@
         },
         "provider_id": {
           "description": "Default Speech-to-Text Model",
-          "hint": "Users can also select session-specific STT models using the /provider command."
+          "hint": "Users can also select session-specific STT models with /provider stt <idx>."
         }
       },
       "provider_tts_settings": {
@@ -1258,7 +1258,7 @@
       },
       "disable_metrics": {
         "description": "Disable User Experience Improvement Program",
-        "hint": "When enabled, AstrBot stops uploading the anonymous usage data used by the User Experience Improvement Program."
+        "hint": "When enabled, AstrBot stops uploading anonymous usage data."
       },
       "dashboard": {
         "trust_proxy_headers": {

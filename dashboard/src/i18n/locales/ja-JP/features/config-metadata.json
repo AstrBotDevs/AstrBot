@@ -195,7 +195,7 @@
         },
         "provider_id": {
           "description": "デフォルト音声認識モデル",
-          "hint": "ユーザーは /provider コマンドを使用して、セッションごとに STT モデルを選択することもできます。"
+          "hint": "ユーザーは /provider stt <番号> コマンドで、セッションごとに STT モデルを選択することもできます。"
         }
       },
       "provider_tts_settings": {
@@ -1355,7 +1355,7 @@
       },
       "disable_metrics": {
         "description": "ユーザー体験改善プログラムを無効化",
-        "hint": "有効にすると、AstrBot はユーザー体験改善プログラムで使用する匿名の利用データを送信しなくなります。"
+        "hint": "有効にすると、AstrBot は匿名の利用データを送信しなくなります。"
       },
       "dashboard": {
         "trust_proxy_headers": {
