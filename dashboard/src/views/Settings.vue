@@ -67,7 +67,7 @@
                                 <div class="system-config-group__heading">
                                     <div>
                                         <div class="system-config-group__title">{{ group.title }}</div>
-                                        <div class="system-config-group__subtitle">{{ group.subtitle }}</div>
+                                        <div class="system-config-group__subtitle" v-if="group.subtitle">{{ group.subtitle }}</div>
                                     </div>
                                     <div
                                         v-if="group.key === 'runtime' && timezoneTimePreview"
@@ -161,7 +161,7 @@
                                 <div class="system-config-group__heading">
                                     <div>
                                         <div class="system-config-group__title">{{ group.title }}</div>
-                                        <div class="system-config-group__subtitle">{{ group.subtitle }}</div>
+                                        <div class="system-config-group__subtitle" v-if="group.subtitle">{{ group.subtitle }}</div>
                                     </div>
                                 </div>
                                 <AstrBotConfigV4
@@ -201,7 +201,7 @@
                                 <div class="system-config-group__heading">
                                     <div>
                                         <div class="system-config-group__title">{{ group.title }}</div>
-                                        <div class="system-config-group__subtitle">{{ group.subtitle }}</div>
+                                        <div class="system-config-group__subtitle" v-if="group.subtitle">{{ group.subtitle }}</div>
                                     </div>
                                 </div>
                                 <AstrBotConfigV4
@@ -731,6 +731,10 @@ const timezoneTimePreview = computed(() => {
 const systemConfigGroups = computed(() => {
     const systemSection = systemConfigMetadata.value?.system_group?.metadata?.system || {};
     const systemItems = systemSection.items || {};
+    const groupSubtitle = (key) => {
+        const text = tm(`systemConfig.groups.${key}.subtitle`);
+        return typeof text === 'string' && text.startsWith('[MISSING:') ? '' : text;
+    };
     const createGroup = (key, itemKeys) => {
         const items = {};
         itemKeys.forEach((itemKey) => {
@@ -741,7 +745,9 @@ const systemConfigGroups = computed(() => {
         return {
             key,
             title: tm(`systemConfig.groups.${key}.title`),
-            subtitle: tm(`systemConfig.groups.${key}.subtitle`),
+            // Groups without a subtitle must stay empty: tm() returns a
+            // '[MISSING: ...]' placeholder, which must never reach the UI.
+            subtitle: groupSubtitle(key),
             metadata: {
                 [key]: {
                     type: 'object',
