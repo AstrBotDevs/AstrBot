@@ -101,6 +101,11 @@
   },
   "system": {
     "title": "システム",
+    "onboarding": {
+      "title": "初回セットアップ",
+      "subtitle": "既存の設定をリセットせずに、モデル、チャットサービス、プラグイン、コンピューターのアクセス権を見直します。",
+      "button": "セットアップを再開"
+    },
     "restart": {
       "title": "再起動",
       "subtitle": "AstrBot を再起動",
