@@ -60,15 +60,6 @@ class PersonaManager:
                 system_prompt=DEFAULT_PERSONALITY["prompt"],
             )
             self.personas.append(default_persona)
-            logger.info(
-                "Seeded the built-in system default persona (id=%r).",
-                SYSTEM_DEFAULT_PERSONA_ID,
-            )
-        else:
-            logger.info(
-                "Using the existing persona %r as the system default persona.",
-                SYSTEM_DEFAULT_PERSONA_ID,
-            )
         self.get_v3_persona_data()
         logger.info("Loaded %s personas.", len(self.personas))
 
