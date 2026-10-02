@@ -1149,9 +1149,12 @@ onUnmounted(() => {
 .settings-page {
     --settings-border: rgba(17, 24, 39, 0.13);
     --settings-divider: rgba(17, 24, 39, 0.09);
+    display: flex;
+    flex-direction: column;
     width: min(100%, 940px);
+    height: 100%;
     margin: 0 auto;
-    padding: 36px 18px 48px;
+    padding: 36px 18px 8px;
 }
 
 .settings-page__header {
@@ -1170,21 +1173,28 @@ onUnmounted(() => {
 .settings-layout {
     display: grid;
     grid-template-columns: 126px minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
     gap: 34px;
-    align-items: start;
+    align-items: stretch;
+    flex: 1;
+    min-height: 0;
 }
 
 .settings-main {
     min-width: 0;
+    height: 100%;
+    overflow-y: auto;
 }
 
 .settings-nav {
-    position: sticky;
-    top: 76px;
+    /* The layout pins the nav in place; no stickiness needed. */
+    position: static;
     display: flex;
     flex-direction: column;
     gap: 5px;
+    height: 100%;
     padding-top: 2px;
+    overflow-y: auto;
 }
 
 .settings-nav__item {
@@ -1763,7 +1773,7 @@ onUnmounted(() => {
 
 @media (max-width: 720px) {
     .settings-page {
-        padding: 32px 14px 44px;
+        padding: 32px 14px 8px;
     }
 
     .settings-page__header {
@@ -1776,6 +1786,7 @@ onUnmounted(() => {
 
     .settings-layout {
         grid-template-columns: 1fr;
+        grid-template-rows: auto minmax(0, 1fr);
         gap: 22px;
     }
 
@@ -1783,6 +1794,8 @@ onUnmounted(() => {
         position: static;
         flex-flow: row wrap;
         gap: 6px;
+        height: auto;
+        overflow-y: hidden;
     }
 
     .settings-nav__item {

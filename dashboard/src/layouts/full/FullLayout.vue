@@ -156,10 +156,19 @@ onMounted(() => {
           }"
         >
           <div
+            class="page-content"
             :style="{
               height: '100%',
               width: '100%',
               overflow: isViewportLockedRoute ? 'hidden' : undefined,
+              overflowY:
+                !isViewportLockedRoute && !isPluginPageRoute
+                  ? 'auto'
+                  : undefined,
+              padding:
+                !isViewportLockedRoute && !isPluginPageRoute
+                  ? '8px'
+                  : undefined,
               position: isPluginPageRoute ? 'relative' : undefined,
             }"
           >
@@ -187,13 +196,11 @@ onMounted(() => {
 <style scoped>
 .chat-mode-container {
   min-height: unset !important;
-  height: 100% !important;
   overflow: hidden !important;
 }
 
 .viewport-locked-container {
   min-height: unset !important;
-  height: 100% !important;
   overflow: hidden !important;
 }
 
@@ -219,44 +226,76 @@ onMounted(() => {
 :global(.v-main) {
   height: calc(100vh - var(--astrbot-toolbar-height, 40px)) !important;
   padding-top: 0 !important;
-  overflow-x: hidden !important;
-  overflow-y: auto !important;
-  scrollbar-width: none;
+  /* Scrolling happens inside the card, so v-main itself must not clip: the
+     card's shadow is meant to spill softly onto the header and sidebar. */
+  overflow: visible !important;
   /* The document no longer scrolls; the content area does. Sticky offsets that were
      written for the document layout must be measured from the content area's own top. */
   --v-layout-top: 0px !important;
 }
 
-:global(.v-main::-webkit-scrollbar) {
-  width: 0;
-  background: transparent;
+/* The content area is the opaque card floating between the sidebar, the
+   header, and the window edges. No hairlines: rounded corners plus a faint
+   ambient shadow separate it from the chrome; the sidebar tint painted behind
+   v-main fills the corner notches. */
+:global(.page-wrapper) {
+  border-radius: 12px;
+  /* No drawn hairlines: the card separates from the chrome through a faint,
+     wide ambient shadow alone (Linear/Notion-style elevation). */
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.04),
+    0 4px 24px rgba(0, 0, 0, 0.035);
+  /* Above the sidebar/header chrome (z-index ~1004) so the shadow can fall on
+     them; still far below teleported overlays (2400+). */
+  position: relative;
+  z-index: 1010;
 }
 
-/* The content area is the opaque card next to the sidebar. */
-:global(.page-wrapper) {
-  border-left: 1px solid rgba(var(--v-theme-on-surface), 0.1);
-  border-top-left-radius: 12px;
+/* On the dark surface the same faint lift needs a deeper shadow to stay
+   visible; keep it soft rather than turning into a glow. */
+:global(.v-application.v-theme--PurpleThemeDark .page-wrapper) {
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.12),
+    0 4px 24px rgba(0, 0, 0, 0.1);
 }
 
 /* On small screens there is no permanent sidebar to separate from, so the
-   card's left edge treatments would only read as stray lines. */
+   card's edge treatments would only read as stray lines. */
 @media (max-width: 959.98px) {
   :global(.page-wrapper) {
-    border-left: 0;
-    border-top-left-radius: 0;
+    border-radius: 0;
+    box-shadow: none;
+    /* The temporary drawer must slide over the content on small screens. */
+    position: static;
+    z-index: auto;
   }
 }
 
-/* Off macOS the card also carries the hairline under the toolbar, so the line
-   follows the rounded corner instead of cutting across the notch. */
-:global(html:not([data-astrbot-desktop-platform='macos']) .page-wrapper) {
-  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+/* Normal pages are pinned to the viewport as well: the card frame (borders and
+   rounded corners) never moves, and the page content scrolls inside the card
+   via .page-content instead of scrolling the whole main area. */
+:global(.page-wrapper:not(.viewport-locked-container):not(.chat-mode-container):not(.fullscreen-container)) {
+  height: calc(100vh - var(--astrbot-toolbar-height, 40px) - 6px) !important;
+  width: calc(100% - 6px) !important;
+  margin-left: 0 !important;
+  overflow: hidden;
+  /* The frame itself carries no inset: the historical 8px padding lives on
+     .page-content so it scrolls away together with the page content. */
+  padding: 0;
 }
 
-/* Normal pages grow with their content so the main area has something to scroll. */
-:global(.page-wrapper:not(.viewport-locked-container):not(.chat-mode-container):not(.fullscreen-container)) {
-  height: auto !important;
-  min-height: calc(100vh - var(--astrbot-toolbar-height, 40px));
+/* Keep the in-card scroller's scrollbar hidden, matching the main area's
+   established look. */
+:global(.page-content) {
+  /* overflow-y: auto (set inline) would silently turn the other axis into
+     auto as well; pin overflow-x so nothing inside the card can scroll
+     sideways. */
+  overflow-x: hidden;
+  scrollbar-width: none;
+}
+:global(.page-content::-webkit-scrollbar) {
+  width: 0;
+  background: transparent;
 }
 
 /* Viewport-locked and full-screen pages keep a fixed height and scroll internally.
@@ -264,7 +303,11 @@ onMounted(() => {
 :global(.viewport-locked-container),
 :global(.chat-mode-container),
 :global(.fullscreen-container) {
-  height: calc(100vh - var(--astrbot-toolbar-height, 40px)) !important;
+  /* The extra 6px lifts the card off the window's bottom edge and right edge
+     so the dividers get the same breathing room the rounded corners enjoy. */
+  height: calc(100vh - var(--astrbot-toolbar-height, 40px) - 6px) !important;
+  width: calc(100% - 6px) !important;
+  margin-left: 0 !important;
   overflow: hidden !important;
 }
 
@@ -290,14 +333,12 @@ onMounted(() => {
   --astrbot-vibrancy-tint: rgba(26, 26, 26, 0.92);
 }
 
-/* Off macOS the sidebar column is opaque; extend its color behind the content
-   card's rounded corner so the notch does not contrast with the sidebar. */
+/* Off macOS the chrome is opaque; paint the whole main background with the
+   sidebar's surface color so the corner notches and the 6px gaps under and
+   right of the floating card read as the same surface as the sidebar. The
+   card's own background still covers the content area on top of it. */
 :global(html:not([data-astrbot-desktop-platform='macos']) .v-main) {
-  background-image: linear-gradient(
-    to right,
-    rgb(var(--v-theme-surface)) 0 calc(var(--v-layout-left) + 12px),
-    transparent calc(var(--v-layout-left) + 12px) 100%
-  ) !important;
+  background: rgb(var(--v-theme-surface)) !important;
 }
 
 :global(html[data-astrbot-desktop-platform='macos']),
@@ -307,14 +348,12 @@ onMounted(() => {
   background: transparent !important;
 }
 
-/* The sidebar tint lives on the main area's own background (behind everything), covering
-   the sidebar column plus a small overhang that reaches the content corner. */
+/* The sidebar tint lives on the main area's own background (behind everything).
+   Cover the whole width, not just the sidebar column, so the card's breathing
+   gaps read as the same light chrome instead of showing the raw (darker)
+   window material straight through. */
 :global(html[data-astrbot-desktop-platform='macos'] .v-main) {
-  background: linear-gradient(
-    to right,
-    var(--astrbot-vibrancy-tint, transparent) 0 calc(var(--v-layout-left) + 12px),
-    transparent calc(var(--v-layout-left) + 12px) 100%
-  ) !important;
+  background: var(--astrbot-vibrancy-tint, transparent) !important;
 }
 
 /* Vuetify paints its own surface behind every list, which would sit on top of the
