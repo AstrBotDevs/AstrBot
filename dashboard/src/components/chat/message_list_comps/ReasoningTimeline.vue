@@ -27,7 +27,8 @@
           :fade="false"
           :typewriter="false"
           :is-dark="isDark"
-          :max-live-nodes="MARKDOWN_RENDER_MAX_LIVE_NODES"
+          :node-virtual="false"
+          :max-live-nodes="isStreaming ? MARKDOWN_RENDER_MAX_LIVE_NODES : 0"
           :style="CHAT_MARKDOWN_HEADING_STYLE"
         />
 

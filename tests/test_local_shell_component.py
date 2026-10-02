@@ -1452,7 +1452,8 @@ async def test_managed_shell_rejects_cross_user_session_access():
 
 
 @pytest.mark.asyncio
-async def test_managed_shell_accepts_stdin_and_polls_incremental_output():
+@pytest.mark.parametrize("yield_time_ms", [5_000, 300_000])
+async def test_managed_shell_accepts_stdin_and_polls_incremental_output(yield_time_ms):
     shell = LocalShellComponent()
     result = await shell.exec_managed(
         _python_command("value = input(); print(f'got:{value}', flush=True)"),
@@ -1478,7 +1479,7 @@ async def test_managed_shell_accepts_stdin_and_polls_incremental_output():
             requester_id="user-a",
             requester_is_admin=False,
             session_id=result["session_id"],
-            yield_time_ms=5_000,
+            yield_time_ms=yield_time_ms,
         )
         output = completed["stdout"]
         if completed["status"] == "running":
@@ -1496,6 +1497,19 @@ async def test_managed_shell_accepts_stdin_and_polls_incremental_output():
         assert completed["session_closed"] is True
     finally:
         await shell.shutdown_sessions()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("yield_time_ms", [-1, 300_001])
+async def test_managed_shell_rejects_invalid_poll_wait(yield_time_ms):
+    with pytest.raises(ValueError, match="must be between 0 and 300000"):
+        await LocalShellComponent().poll_session(
+            owner_id="owner-a",
+            requester_id="user-a",
+            requester_is_admin=False,
+            session_id="missing",
+            yield_time_ms=yield_time_ms,
+        )
 
 
 @pytest.mark.asyncio

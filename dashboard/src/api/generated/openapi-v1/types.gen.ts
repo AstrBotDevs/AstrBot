@@ -67,6 +67,12 @@ export type BotRegistrationRequest = {
 
 export type action = 'start' | 'poll';
 
+export type ChatChunkUploadRequest = {
+    upload_id: string;
+    chunk_index: number;
+    chunk: (Blob | File);
+};
+
 /**
  * Per-request ChatUI feature flags. A value here takes priority over its legacy top-level field, followed by the documented default.
  */
@@ -188,6 +194,16 @@ export type ChatThreadMessageRequest = {
      */
     enable_streaming?: boolean;
     flags?: ChatFlags;
+};
+
+export type ChatUploadInitRequest = {
+    filename: string;
+    total_size: number;
+    content_type?: string;
+};
+
+export type ChatUploadSessionRequest = {
+    upload_id: string;
 };
 
 export type CommandPatchRequest = {
@@ -1666,6 +1682,46 @@ export type UploadFileResponse = (SuccessEnvelope);
 
 export type UploadFileError = unknown;
 
+export type InitFileUploadData = {
+    body: ChatUploadInitRequest;
+};
+
+export type InitFileUploadResponse = (SuccessEnvelope);
+
+export type InitFileUploadError = unknown;
+
+export type UploadFileChunkData = {
+    body: ChatChunkUploadRequest;
+};
+
+export type UploadFileChunkResponse = (SuccessEnvelope);
+
+export type UploadFileChunkError = unknown;
+
+export type CompleteFileUploadData = {
+    body: ChatUploadSessionRequest;
+};
+
+export type CompleteFileUploadResponse = (SuccessEnvelope);
+
+export type CompleteFileUploadError = unknown;
+
+export type AbortFileUploadData = {
+    body: ChatUploadSessionRequest;
+};
+
+export type AbortFileUploadResponse = (SuccessEnvelope);
+
+export type AbortFileUploadError = unknown;
+
+export type StatusFileUploadData = {
+    body: ChatUploadSessionRequest;
+};
+
+export type StatusFileUploadResponse = (SuccessEnvelope);
+
+export type StatusFileUploadError = unknown;
+
 export type UploadOpenApiFileData = {
     body: FileUploadRequest;
 };
@@ -2276,6 +2332,75 @@ export type GetPluginPageAssetData = {
 export type GetPluginPageAssetResponse = (unknown);
 
 export type GetPluginPageAssetError = unknown;
+
+export type ListPluginViewsByIdData = {
+    query: {
+        plugin_id: string;
+    };
+};
+
+export type ListPluginViewsByIdResponse = (SuccessEnvelope);
+
+export type ListPluginViewsByIdError = unknown;
+
+export type GetPluginViewByIdData = {
+    query: {
+        page_name: string;
+        plugin_id: string;
+    };
+};
+
+export type GetPluginViewByIdResponse = (string);
+
+export type GetPluginViewByIdError = unknown;
+
+export type GetPluginViewAssetByIdData = {
+    query: {
+        asset_path: string;
+        page_name: string;
+        plugin_id: string;
+    };
+};
+
+export type GetPluginViewAssetByIdResponse = (unknown);
+
+export type GetPluginViewAssetByIdError = unknown;
+
+export type ListPluginViewsData = {
+    path: {
+        plugin_id: string;
+    };
+};
+
+export type ListPluginViewsResponse = (SuccessEnvelope);
+
+export type ListPluginViewsError = unknown;
+
+export type GetPluginViewData = {
+    path: {
+        page_name: string;
+        plugin_id: string;
+    };
+};
+
+export type GetPluginViewResponse = (string);
+
+export type GetPluginViewError = unknown;
+
+export type GetPluginViewAssetData = {
+    path: {
+        /**
+         * URL-encoded relative asset path.
+         */
+        asset_path: string;
+        page_name: string;
+        plugin_id: string;
+    };
+};
+
+export type GetPluginViewAssetResponse = (unknown);
+
+export type GetPluginViewAssetError = unknown;
 
 export type GetPluginPageBridgeSdkResponse = (string);
 
@@ -3447,6 +3572,14 @@ export type AbortBackupUploadData = {
 export type AbortBackupUploadResponse = (SuccessEnvelope);
 
 export type AbortBackupUploadError = unknown;
+
+export type StatusBackupUploadData = {
+    body: BackupUploadSessionRequest;
+};
+
+export type StatusBackupUploadResponse = (SuccessEnvelope);
+
+export type StatusBackupUploadError = unknown;
 
 export type GetBackupProgressData = {
     path: {

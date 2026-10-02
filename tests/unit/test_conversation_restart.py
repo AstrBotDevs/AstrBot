@@ -122,21 +122,30 @@ async def test_restart_permission_matrix(
     assert allowed == (admin or not group or isolated)
     if allowed:
         await handler.handler(restart.plugin, restart.event)
-    restart.manager.update_conversation.assert_not_awaited()
     if not allowed:
         restart.stop.assert_not_called()
         restart.manager.get_curr_conversation_id.assert_not_awaited()
         restart.manager.new_conversation.assert_not_awaited()
+        restart.manager.update_conversation.assert_not_awaited()
         assert restart.extras == {"_session_isolated": isolated}
     else:
         restart.stop.assert_called_once_with(
             restart.event.unified_msg_origin, exclude=restart.event
         )
-        restart.manager.new_conversation.assert_awaited_once_with(
-            restart.event.unified_msg_origin,
-            "qq",
-            persona_id="persona",
-        )
+        if entry == "reset":
+            restart.manager.update_conversation.assert_awaited_once_with(
+                restart.event.unified_msg_origin,
+                "old-id",
+                history=[],
+            )
+            restart.manager.new_conversation.assert_not_awaited()
+        else:
+            restart.manager.new_conversation.assert_awaited_once_with(
+                restart.event.unified_msg_origin,
+                "qq",
+                persona_id="persona",
+            )
+            restart.manager.update_conversation.assert_not_awaited()
         assert restart.extras["_clean_group_context_session"] is True
 
 
@@ -222,13 +231,24 @@ async def test_restart_permissions_follow_pipeline_isolation(
         )
         assert permission.permission_type == original_permission
         restart.manager.new_conversation.reset_mock()
+        restart.manager.update_conversation.reset_mock()
         if allowed:
             await handler.handler(restart.plugin, event)
-            restart.manager.new_conversation.assert_awaited_once_with(
-                event.unified_msg_origin, "qq", persona_id="persona"
-            )
+            if entry == "reset":
+                restart.manager.update_conversation.assert_awaited_once_with(
+                    event.unified_msg_origin,
+                    "old-id",
+                    history=[],
+                )
+                restart.manager.new_conversation.assert_not_awaited()
+            else:
+                restart.manager.new_conversation.assert_awaited_once_with(
+                    event.unified_msg_origin, "qq", persona_id="persona"
+                )
+                restart.manager.update_conversation.assert_not_awaited()
         else:
             restart.manager.new_conversation.assert_not_awaited()
+            restart.manager.update_conversation.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -237,16 +257,39 @@ async def test_restart_without_provider_or_current_conversation(restart, entry):
     restart.manager.get_curr_conversation_id.return_value = None
     restart.context.get_using_provider_async = AsyncMock(return_value=None)
     await getattr(restart.plugin, entry)(restart.event)
-    restart.manager.new_conversation.assert_awaited_once_with(
-        restart.event.unified_msg_origin,
-        "qq",
-        persona_id=None,
+    restart.stop.assert_called_once_with(
+        restart.event.unified_msg_origin, exclude=restart.event
     )
+    if entry == "new_conv":
+        restart.manager.new_conversation.assert_awaited_once_with(
+            restart.event.unified_msg_origin,
+            "qq",
+            persona_id=None,
+        )
+        restart.manager.update_conversation.assert_not_awaited()
+    else:
+        restart.manager.new_conversation.assert_not_awaited()
+        restart.manager.update_conversation.assert_not_awaited()
+        result = restart.event.set_result.call_args.args[0]
+        assert result.get_plain_text() == (
+            "✅ The current conversation context has been cleared."
+        )
+    assert restart.extras["_clean_group_context_session"] is True
     restart.context.get_using_provider_async.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_restart_order_and_creation_failure(restart):
+async def test_reset_reports_context_cleared(restart):
+    await restart.plugin.reset(restart.event)
+
+    result = restart.event.set_result.call_args.args[0]
+    assert result.get_plain_text() == (
+        "✅ The current conversation context has been cleared."
+    )
+
+
+@pytest.mark.asyncio
+async def test_reset_order_and_clearing_failure(restart):
     calls = []
     restart.stop.side_effect = lambda *a, **kw: calls.append("stop")
     restart.manager.get_curr_conversation_id.side_effect = lambda *a: (
@@ -254,13 +297,13 @@ async def test_restart_order_and_creation_failure(restart):
     )
 
     async def fail(*args, **kwargs):
-        calls.append("create")
+        calls.append("clear")
         raise RuntimeError("database unavailable")
 
-    restart.manager.new_conversation.side_effect = fail
+    restart.manager.update_conversation.side_effect = fail
     with pytest.raises(RuntimeError, match="database unavailable"):
         await restart.plugin.reset(restart.event)
-    assert calls == ["stop", "read", "create"]
+    assert calls == ["stop", "read", "clear"]
     restart.event.set_result.assert_not_called()
     assert not restart.extras
 
@@ -281,12 +324,20 @@ async def test_external_runner_restart(restart, monkeypatch, entry, runner):
         key=commands.THIRD_PARTY_AGENT_RUNNER_KEY[runner],
     )
     assert cleanup.await_count == (runner == commands.DEERFLOW_PROVIDER_TYPE)
-    restart.manager.new_conversation.assert_not_awaited()
     restart.manager.update_conversation.assert_not_awaited()
+    if entry == "new_conv":
+        restart.manager.new_conversation.assert_awaited_once_with(
+            restart.event.unified_msg_origin,
+            "qq",
+            persona_id="persona",
+        )
+    else:
+        restart.manager.new_conversation.assert_not_awaited()
+    assert restart.extras["_clean_group_context_session"] is True
 
 
 @pytest.mark.asyncio
-async def test_restart_preserves_history_and_late_writes(restart, temp_db, monkeypatch):
+async def test_new_preserves_history_and_late_writes(restart, temp_db, monkeypatch):
     await temp_db.initialize()
     selections = {}
     monkeypatch.setattr(
@@ -314,7 +365,7 @@ async def test_restart_preserves_history_and_late_writes(restart, temp_db, monke
     old_id = await manager.new_conversation(
         umo, "qq", content=history, persona_id="persona"
     )
-    await restart.plugin.reset(restart.event)
+    await restart.plugin.new_conv(restart.event)
     new_id = await manager.get_curr_conversation_id(umo)
     assert new_id != old_id
     assert json.loads((await manager.get_conversation(umo, old_id)).history) == history
@@ -332,7 +383,113 @@ async def test_restart_preserves_history_and_late_writes(restart, temp_db, monke
 
 
 @pytest.mark.asyncio
-async def test_restart_cleans_only_target_group_cache(restart):
+async def test_reset_clears_history_but_preserves_conversation_metadata(
+    restart, temp_db, monkeypatch
+):
+    await temp_db.initialize()
+    selections = {}
+    monkeypatch.setattr(
+        conversation_mgr.sp,
+        "session_put",
+        AsyncMock(
+            side_effect=lambda umo, key, value: selections.__setitem__(
+                (umo, key), value
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        conversation_mgr.sp,
+        "session_get",
+        AsyncMock(
+            side_effect=lambda umo, key, default=None: selections.get(
+                (umo, key), default
+            ),
+        ),
+    )
+    manager = conversation_mgr.ConversationManager(temp_db)
+    restart.context.conversation_manager = manager
+    umo = restart.event.unified_msg_origin
+    history = [{"role": "user", "content": "Clear this history"}]
+    old_id = await manager.new_conversation(
+        umo,
+        "qq",
+        content=history,
+        title="Keep this title",
+        persona_id="persona",
+    )
+    await temp_db.update_conversation(cid=old_id, token_usage=42)
+
+    await restart.plugin.reset(restart.event)
+
+    assert await manager.get_curr_conversation_id(umo) == old_id
+    conversation = await manager.get_conversation(umo, old_id)
+    assert conversation is not None
+    assert json.loads(conversation.history) == []
+    assert conversation.title == "Keep this title"
+    assert conversation.persona_id == "persona"
+    assert conversation.token_usage == 42
+
+
+@pytest.mark.asyncio
+async def test_external_new_creates_local_conversation_and_keeps_old_record(
+    restart, temp_db, monkeypatch
+):
+    await temp_db.initialize()
+    selections = {}
+    monkeypatch.setattr(
+        conversation_mgr.sp,
+        "session_put",
+        AsyncMock(
+            side_effect=lambda umo, key, value: selections.__setitem__(
+                (umo, key), value
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        conversation_mgr.sp,
+        "session_get",
+        AsyncMock(
+            side_effect=lambda umo, key, default=None: selections.get(
+                (umo, key), default
+            ),
+        ),
+    )
+    remove = AsyncMock()
+    monkeypatch.setattr(commands.sp, "remove_async", remove)
+    manager = conversation_mgr.ConversationManager(temp_db)
+    restart.context.conversation_manager = manager
+    restart.config["agent_runner"]["runner_type"] = "dify"
+    umo = restart.event.unified_msg_origin
+    history = [{"role": "user", "content": "Keep this record"}]
+    old_id = await manager.new_conversation(
+        umo,
+        "qq",
+        content=history,
+        title="Old conversation",
+        persona_id="persona",
+    )
+
+    await restart.plugin.new_conv(restart.event)
+
+    new_id = await manager.get_curr_conversation_id(umo)
+    assert new_id != old_id
+    remove.assert_awaited_once_with(
+        scope="umo",
+        scope_id=umo,
+        key="dify_conversation_id",
+    )
+    old = await manager.get_conversation(umo, old_id)
+    new = await manager.get_conversation(umo, new_id)
+    assert old is not None and new is not None
+    assert json.loads(old.history) == history
+    assert old.title == "Old conversation"
+    assert new.persona_id == "persona"
+    assert json.loads(new.history) == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("entry", ["reset", "new_conv"])
+async def test_restart_cleans_only_target_group_cache(restart, entry):
     cache = GroupChatContext(MagicMock(), restart.context)
     target = restart.event.unified_msg_origin
     other = "qq:GroupMessage:another-member_group"
@@ -341,11 +498,22 @@ async def test_restart_cleans_only_target_group_cache(restart):
     core = CorePlugin.__new__(CorePlugin)
     core.group_chat_context = cache
     core.group_context_enabled = lambda event: True
-    await restart.plugin.reset(restart.event)
+    await getattr(restart.plugin, entry)(restart.event)
     assert target in cache.raw_records
     await core.after_message_sent(restart.event)
     assert target not in cache.raw_records
     assert list(cache.raw_records[other]) == ["other context"]
+
+
+@pytest.mark.parametrize(
+    ("entry", "description"),
+    [
+        ("reset", "Clear the context of the current conversation."),
+        ("new_conv", "Create a new conversation."),
+    ],
+)
+def test_restart_command_descriptions(restart_handlers, entry, description):
+    assert restart_handlers[entry].desc == description
 
 
 def test_config_preserves_isolation(tmp_path):
@@ -414,3 +582,11 @@ def test_restart_docs_use_current_permission_labels(locale, language):
     assert "allow_member_new_conversation" not in guide
     assert "Allow Non-Administrators to Start Group Conversations" not in guide
     assert "允许非管理员在群聊中新建对话" not in guide
+    if language == "zh":
+        assert "清空当前对话的上下文" in guide
+        assert "创建并切换到一个新对话" in guide
+        assert "执行相同的新建对话流程" not in guide
+    else:
+        assert "Clear the context of the current conversation." in guide
+        assert "Create and switch to a new conversation." in guide
+        assert "use the same restart flow" not in guide
