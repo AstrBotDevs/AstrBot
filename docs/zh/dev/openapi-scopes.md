@@ -256,14 +256,14 @@ outline: deep
 | `GET` | `/api/v1/plugins/page-bridge-sdk.js` | — |
 | `GET` | `/api/v1/plugins/page/assets` | — |
 | `GET` | `/api/v1/plugins/pages` | — |
-| `GET` | `/api/v1/plugins/views` | — |
-| `GET` | `/api/v1/plugins/view` | — |
-| `GET` | `/api/v1/plugins/view/assets` | — |
 | `GET` | `/api/v1/plugins/readme` | — |
 | `POST` | `/api/v1/plugins/reload` | — |
 | `POST` | `/api/v1/plugins/update` | — |
 | `POST` | `/api/v1/plugins/validate/repo` | — |
 | `POST` | `/api/v1/plugins/version-support/check` | — |
+| `GET` | `/api/v1/plugins/view` | — |
+| `GET` | `/api/v1/plugins/view/assets` | — |
+| `GET` | `/api/v1/plugins/views` | — |
 | `GET` | `/api/v1/plugins/{plugin_id}` | — |
 | `DELETE` | `/api/v1/plugins/{plugin_id}` | — |
 | `GET` | `/api/v1/plugins/{plugin_id}/changelog` | — |
@@ -278,13 +278,13 @@ outline: deep
 | `GET` | `/api/v1/plugins/{plugin_id}/pages` | — |
 | `GET` | `/api/v1/plugins/{plugin_id}/pages/{page_name}` | — |
 | `GET` | `/api/v1/plugins/{plugin_id}/pages/{page_name}/assets/{asset_path}` | — |
-| `GET` | `/api/v1/plugins/{plugin_id}/views` | — |
-| `GET` | `/api/v1/plugins/{plugin_id}/views/{page_name}` | — |
-| `GET` | `/api/v1/plugins/{plugin_id}/views/{page_name}/assets/{asset_path}` | — |
 | `GET` | `/api/v1/plugins/{plugin_id}/readme` | — |
 | `POST` | `/api/v1/plugins/{plugin_id}/reload` | — |
 | `POST` | `/api/v1/plugins/{plugin_id}/source` | — |
 | `POST` | `/api/v1/plugins/{plugin_id}/update` | — |
+| `GET` | `/api/v1/plugins/{plugin_id}/views` | — |
+| `GET` | `/api/v1/plugins/{plugin_id}/views/{page_name}` | — |
+| `GET` | `/api/v1/plugins/{plugin_id}/views/{page_name}/assets/{asset_path}` | — |
 
 ## `mcp`
 
