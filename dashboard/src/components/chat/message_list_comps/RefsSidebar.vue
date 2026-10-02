@@ -86,7 +86,7 @@ export default defineComponent({
       const refs = this.refs;
       const used = Array.isArray(refs) ? refs : refs?.used || [];
       return used
-        .map(ref => ({ ...ref, title: ref.title || ref.url || "Reference" }))
+        .map((ref) => ({ ...ref, title: ref.title || ref.url || "Reference" }))
         .filter((ref): ref is Reference & { url: string; title: string } => Boolean(ref.url));
     },
   },

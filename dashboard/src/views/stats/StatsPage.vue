@@ -268,8 +268,8 @@
 </template>
 
 <script setup lang="ts">
-import type { ApexOptions } from "apexcharts";
 import { Check, Copy, MessageCircle, MessageSquareText } from "@lucide/vue";
+import type { ApexOptions } from "apexcharts";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
 import { useTheme } from "vuetify";
@@ -346,18 +346,18 @@ interface ProviderTokenStatsResponse {
   today_by_provider: ProviderRankingItem[];
 }
 
-const { locale, t: globalT } = useI18n()
-const { tm: t } = useModuleI18n('features/stats')
-const theme = useTheme()
-const loading = ref(true)
-const errorMessage = ref('')
-const baseStats = ref<BaseStatsResponse | null>(null)
-const providerStats = ref<ProviderTokenStatsResponse | null>(null)
-const selectedRange = ref<TokenRange>(1)
-const currentTimeMs = ref(Date.now())
-const copiedUmo = ref('')
-const failedCopyUmo = ref('')
-const isDark = computed(() => theme.global.current.value.dark)
+const { locale, t: globalT } = useI18n();
+const { tm: t } = useModuleI18n("features/stats");
+const theme = useTheme();
+const loading = ref(true);
+const errorMessage = ref("");
+const baseStats = ref<BaseStatsResponse | null>(null);
+const providerStats = ref<ProviderTokenStatsResponse | null>(null);
+const selectedRange = ref<TokenRange>(1);
+const currentTimeMs = ref(Date.now());
+const copiedUmo = ref("");
+const failedCopyUmo = ref("");
+const isDark = computed(() => theme.global.current.value.dark);
 const themePalette = computed(() => {
   const colors = theme.global.current.value.colors as Record<string, string>;
   return {
@@ -374,10 +374,10 @@ const themePalette = computed(() => {
   };
 });
 
-let refreshTimer: number | null = null
-let uptimeTimer: number | null = null
-let copyFeedbackTimer: number | null = null
-let isUnmounted = false
+let refreshTimer: number | null = null;
+let uptimeTimer: number | null = null;
+let copyFeedbackTimer: number | null = null;
+let isUnmounted = false;
 
 function formatNumber(value: number): string {
   return new Intl.NumberFormat(locale.value).format(value);
@@ -409,16 +409,16 @@ function formatTpm(value: number): string {
 }
 
 async function copyUmo(umo: string): Promise<void> {
-  const copied = await copyToClipboard(umo)
-  copiedUmo.value = copied ? umo : ''
-  failedCopyUmo.value = copied ? '' : umo
+  const copied = await copyToClipboard(umo);
+  copiedUmo.value = copied ? umo : "";
+  failedCopyUmo.value = copied ? "" : umo;
   if (copyFeedbackTimer !== null) {
-    window.clearTimeout(copyFeedbackTimer)
+    window.clearTimeout(copyFeedbackTimer);
   }
   copyFeedbackTimer = window.setTimeout(() => {
-    copiedUmo.value = ''
-    failedCopyUmo.value = ''
-  }, 2000)
+    copiedUmo.value = "";
+    failedCopyUmo.value = "";
+  }, 2000);
 }
 
 function hexToRgba(color: string | undefined, alpha: number): string {
@@ -512,16 +512,16 @@ const rangeLabel = computed(() => {
 });
 
 const uptimeLabel = computed(() => {
-  const startTime = baseStats.value?.start_time
-  if (!startTime) return '—'
+  const startTime = baseStats.value?.start_time;
+  if (!startTime) return "—";
 
-  const elapsedSeconds = Math.max(0, Math.floor(currentTimeMs.value / 1000) - startTime)
+  const elapsedSeconds = Math.max(0, Math.floor(currentTimeMs.value / 1000) - startTime);
   return formatRunningTime({
     hours: Math.floor(elapsedSeconds / 3600),
     minutes: Math.floor((elapsedSeconds % 3600) / 60),
-    seconds: elapsedSeconds % 60
-  })
-})
+    seconds: elapsedSeconds % 60,
+  });
+});
 
 const overviewCards = computed(() => [
   {
@@ -547,14 +547,14 @@ const overviewCards = computed(() => [
   {
     label: t("overviewCards.memory.label"),
     value: formatMemory(baseStats.value?.memory?.process ?? 0),
-    icon: 'mdi-memory'
+    icon: "mdi-memory",
   },
   {
-    label: t('overviewCards.uptime.label'),
+    label: t("overviewCards.uptime.label"),
     value: uptimeLabel.value,
-    icon: 'mdi-timer-outline'
-  }
-])
+    icon: "mdi-timer-outline",
+  },
+]);
 
 const messageChartSeries = computed<ChartSeries>(() => [
   {
@@ -575,9 +575,9 @@ const rangeProviderRanking = computed(() => providerStats.value?.range_by_provid
 const rangeUmoRanking = computed(() =>
   (providerStats.value?.range_by_umo ?? []).slice(0, 10).map((item) => ({
     ...item,
-    icon: getPlatformIcon(item.platform_type)
-  }))
-)
+    icon: getPlatformIcon(item.platform_type),
+  })),
+);
 
 const rangeAvgTtftLabel = computed(() => formatDurationMs(providerStats.value?.range_avg_ttft_ms ?? 0));
 
@@ -728,29 +728,29 @@ watch(selectedRange, async () => {
 });
 
 onMounted(async () => {
-  await refreshStats()
+  await refreshStats();
   // The initial request may settle after this component has unmounted.
-  if (isUnmounted) return
+  if (isUnmounted) return;
   refreshTimer = window.setInterval(() => {
-    void refreshStats()
-  }, 60_000)
+    void refreshStats();
+  }, 60_000);
   uptimeTimer = window.setInterval(() => {
-    currentTimeMs.value = Date.now()
-  }, 1_000)
-})
+    currentTimeMs.value = Date.now();
+  }, 1_000);
+});
 
 onBeforeUnmount(() => {
-  isUnmounted = true
+  isUnmounted = true;
   if (refreshTimer !== null) {
     window.clearInterval(refreshTimer);
   }
   if (uptimeTimer !== null) {
-    window.clearInterval(uptimeTimer)
+    window.clearInterval(uptimeTimer);
   }
   if (copyFeedbackTimer !== null) {
-    window.clearTimeout(copyFeedbackTimer)
+    window.clearTimeout(copyFeedbackTimer);
   }
-})
+});
 </script>
 
 <style scoped>

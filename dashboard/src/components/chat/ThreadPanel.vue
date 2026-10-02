@@ -157,22 +157,19 @@ async function send() {
   sending.value = true;
   try {
     const selection = props.getProviderSelection();
-    const response = await fetchWithAuth(
-      chatApi.sendThreadMessageUrl(props.thread.thread_id),
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          message: [{ type: "plain", text }],
-          flags: buildChatRequestFlags(),
-          selected_provider: selection.providerId,
-          selected_model: selection.modelName,
-        }),
-        signal: abort.signal,
+    const response = await fetchWithAuth(chatApi.sendThreadMessageUrl(props.thread.thread_id), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
       },
-    );
+      body: JSON.stringify({
+        message: [{ type: "plain", text }],
+        flags: buildChatRequestFlags(),
+        selected_provider: selection.providerId,
+        selected_model: selection.modelName,
+      }),
+      signal: abort.signal,
+    });
     if (!response.ok || !response.body) {
       throw new Error(`Thread request failed: ${response.status}`);
     }
@@ -196,10 +193,7 @@ function normalizeRecord(record: any): ChatRecord {
     content: {
       type: content.type || (record.sender_id === "bot" ? "bot" : "user"),
       message: normalizedMessage,
-      reasoning: extractReasoningText(
-        normalizedMessage,
-        content.reasoning || "",
-      ),
+      reasoning: extractReasoningText(normalizedMessage, content.reasoning || ""),
       agentStats: content.agentStats || content.agent_stats,
       refs: content.refs,
     },
@@ -232,15 +226,8 @@ async function readSseStream(stream: ReadableStream<Uint8Array>, onPayload: (pay
   }
 }
 
-function processPayload(
-  botRecord: ChatRecord,
-  userRecord: ChatRecord,
-  payload: any,
-) {
-  const normalized =
-    payload?.ct === "chat"
-      ? { ...payload, type: payload.type || payload.t }
-      : payload;
+function processPayload(botRecord: ChatRecord, userRecord: ChatRecord, payload: any) {
+  const normalized = payload?.ct === "chat" ? { ...payload, type: payload.type || payload.t } : payload;
   const type = normalized?.type || normalized?.t;
   const chainType = normalized?.chain_type;
   const data = normalized?.data ?? "";
@@ -324,12 +311,8 @@ function processPayload(
       .replace("[FILE]", "")
       .replace("[VIDEO]", "");
     const separatorIndex = rawFilename.indexOf("|");
-    const storedFilename =
-      separatorIndex >= 0 ? rawFilename.slice(0, separatorIndex) : rawFilename;
-    const displayFilename =
-      separatorIndex >= 0
-        ? rawFilename.slice(separatorIndex + 1)
-        : storedFilename;
+    const storedFilename = separatorIndex >= 0 ? rawFilename.slice(0, separatorIndex) : rawFilename;
+    const displayFilename = separatorIndex >= 0 ? rawFilename.slice(separatorIndex + 1) : storedFilename;
     const filename = displayFilename || storedFilename;
     const mediaPart: MessagePart = { type, filename };
     if (storedFilename && storedFilename !== filename) {

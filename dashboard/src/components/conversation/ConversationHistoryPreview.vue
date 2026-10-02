@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
 import { ChevronRight, Minus, Plus } from "@lucide/vue";
-import MarkdownIt from "markdown-it";
 import DOMPurify from "dompurify";
+import MarkdownIt from "markdown-it";
+import { computed, ref, watch } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
 
 const props = defineProps<{ messages: unknown[] }>();
@@ -13,13 +13,8 @@ const settingsKey = "conversation.preview.reading";
 
 try {
   const saved = JSON.parse(localStorage.getItem(settingsKey) || "null");
-  if (typeof saved?.markdown === "boolean")
-    markdownEnabled.value = saved.markdown;
-  if (
-    Number.isInteger(saved?.fontSize) &&
-    saved.fontSize >= 12 &&
-    saved.fontSize <= 18
-  ) {
+  if (typeof saved?.markdown === "boolean") markdownEnabled.value = saved.markdown;
+  if (Number.isInteger(saved?.fontSize) && saved.fontSize >= 12 && saved.fontSize <= 18) {
     fontSize.value = saved.fontSize;
   }
 } catch {
@@ -41,14 +36,7 @@ watch([markdownEnabled, fontSize], () => {
 });
 
 const markdown = new MarkdownIt({ html: false, breaks: true, linkify: true });
-const knownRoles = [
-  "user",
-  "assistant",
-  "system",
-  "developer",
-  "tool",
-  "function",
-];
+const knownRoles = ["user", "assistant", "system", "developer", "tool", "function"];
 type PreviewPart = {
   kind: "text" | "image" | "data";
   text: string;
@@ -58,13 +46,7 @@ type PreviewPart = {
 
 const records = computed(() =>
   props.messages
-    .filter(
-      (entry) =>
-        !entry ||
-        typeof entry !== "object" ||
-        !("role" in entry) ||
-        entry.role !== "_checkpoint",
-    )
+    .filter((entry) => !entry || typeof entry !== "object" || !("role" in entry) || entry.role !== "_checkpoint")
     .map((entry) => {
       const message =
         entry && typeof entry === "object" && !Array.isArray(entry)
@@ -72,17 +54,12 @@ const records = computed(() =>
           : { content: entry };
       const role = typeof message.role === "string" ? message.role : "unknown";
       const parts: PreviewPart[] = [];
-      const content = Array.isArray(message.content)
-        ? message.content
-        : [message.content];
+      const content = Array.isArray(message.content) ? message.content : [message.content];
 
       // Preserve unsupported content as data instead of silently dropping it.
       for (const item of content) {
         if (item == null) continue;
-        if (
-          typeof item === "string" ||
-          (item?.type === "text" && typeof item.text === "string")
-        ) {
+        if (typeof item === "string" || (item?.type === "text" && typeof item.text === "string")) {
           const text = typeof item === "string" ? item : item.text;
           if (text.length) {
             parts.push({
@@ -98,9 +75,7 @@ const records = computed(() =>
         } else if (
           item?.type === "image_url" &&
           typeof item.image_url?.url === "string" &&
-          /^(https?:\/\/|data:image\/(png|jpeg|jpg|gif|webp);base64,)/i.test(
-            item.image_url.url,
-          )
+          /^(https?:\/\/|data:image\/(png|jpeg|jpg|gif|webp);base64,)/i.test(item.image_url.url)
         ) {
           parts.push({ kind: "image", text: item.image_url.url });
         } else {
@@ -108,10 +83,7 @@ const records = computed(() =>
         }
       }
 
-      if (
-        typeof message.reasoning_content === "string" &&
-        message.reasoning_content
-      ) {
+      if (typeof message.reasoning_content === "string" && message.reasoning_content) {
         parts.push({
           kind: "data",
           label: tm("workspace.preview.reasoning"),
@@ -135,18 +107,13 @@ const records = computed(() =>
           }
           parts.push({
             kind: "data",
-            label: `${tm("workspace.preview.toolCall")}${
-              typeof fn?.name === "string" ? ` · ${fn.name}` : ""
-            }`,
+            label: `${tm("workspace.preview.toolCall")}${typeof fn?.name === "string" ? ` · ${fn.name}` : ""}`,
             text: JSON.stringify(data, null, 2),
           });
         }
       }
 
-      if (
-        !parts.length &&
-        !Object.prototype.hasOwnProperty.call(message, "content")
-      ) {
+      if (!parts.length && !Object.hasOwn(message, "content")) {
         parts.push({ kind: "data", text: JSON.stringify(entry, null, 2) });
       }
 
@@ -155,11 +122,10 @@ const records = computed(() =>
         label: knownRoles.includes(role)
           ? tm(`workspace.preview.roles.${role}`)
           : role === "unknown"
-          ? tm("status.unknown")
-          : role,
+            ? tm("status.unknown")
+            : role,
         name: typeof message.name === "string" ? message.name : "",
-        toolCallId:
-          typeof message.tool_call_id === "string" ? message.tool_call_id : "",
+        toolCallId: typeof message.tool_call_id === "string" ? message.tool_call_id : "",
         parts,
       };
     }),

@@ -40,6 +40,44 @@ import enUSWelcome from "./locales/en-US/features/welcome.json";
 import enUSErrors from "./locales/en-US/messages/errors.json";
 import enUSSuccess from "./locales/en-US/messages/success.json";
 import enUSValidation from "./locales/en-US/messages/validation.json";
+import jaJPActions from "./locales/ja-JP/core/actions.json";
+// Japanese translation
+import jaJPCommon from "./locales/ja-JP/core/common.json";
+import jaJPHeader from "./locales/ja-JP/core/header.json";
+import jaJPNavigation from "./locales/ja-JP/core/navigation.json";
+import jaJPShared from "./locales/ja-JP/core/shared.json";
+import jaJPStatus from "./locales/ja-JP/core/status.json";
+import jaJPAbout from "./locales/ja-JP/features/about.json";
+import jaJPAlkaidIndex from "./locales/ja-JP/features/alkaid/index.json";
+import jaJPAlkaidKnowledgeBase from "./locales/ja-JP/features/alkaid/knowledge-base.json";
+import jaJPAlkaidMemory from "./locales/ja-JP/features/alkaid/memory.json";
+import jaJPAuth from "./locales/ja-JP/features/auth.json";
+import jaJPChart from "./locales/ja-JP/features/chart.json";
+import jaJPChat from "./locales/ja-JP/features/chat.json";
+import jaJPCommand from "./locales/ja-JP/features/command.json";
+import jaJPConfig from "./locales/ja-JP/features/config.json";
+import jaJPConfigMetadata from "./locales/ja-JP/features/config-metadata.json";
+import jaJPConsole from "./locales/ja-JP/features/console.json";
+import jaJPConversation from "./locales/ja-JP/features/conversation.json";
+import jaJPCron from "./locales/ja-JP/features/cron.json";
+import jaJPDashboard from "./locales/ja-JP/features/dashboard.json";
+import jaJPExtension from "./locales/ja-JP/features/extension.json";
+import jaJPKnowledgeBaseDetail from "./locales/ja-JP/features/knowledge-base/detail.json";
+import jaJPKnowledgeBaseDocument from "./locales/ja-JP/features/knowledge-base/document.json";
+import jaJPKnowledgeBaseIndex from "./locales/ja-JP/features/knowledge-base/index.json";
+import jaJPPersona from "./locales/ja-JP/features/persona.json";
+import jaJPPlatform from "./locales/ja-JP/features/platform.json";
+import jaJPProvider from "./locales/ja-JP/features/provider.json";
+import jaJPSessionManagement from "./locales/ja-JP/features/session-management.json";
+import jaJPSettings from "./locales/ja-JP/features/settings.json";
+import jaJPStats from "./locales/ja-JP/features/stats.json";
+import jaJPSubagent from "./locales/ja-JP/features/subagent.json";
+import jaJPToolUse from "./locales/ja-JP/features/tool-use.json";
+import jaJPTrace from "./locales/ja-JP/features/trace.json";
+import jaJPWelcome from "./locales/ja-JP/features/welcome.json";
+import jaJPErrors from "./locales/ja-JP/messages/errors.json";
+import jaJPSuccess from "./locales/ja-JP/messages/success.json";
+import jaJPValidation from "./locales/ja-JP/messages/validation.json";
 import ruRUActions from "./locales/ru-RU/core/actions.json";
 // Russian translation
 import ruRUCommon from "./locales/ru-RU/core/common.json";
@@ -118,47 +156,6 @@ import zhCNWelcome from "./locales/zh-CN/features/welcome.json";
 import zhCNErrors from "./locales/zh-CN/messages/errors.json";
 import zhCNSuccess from "./locales/zh-CN/messages/success.json";
 import zhCNValidation from "./locales/zh-CN/messages/validation.json";
-
-// Japanese translation
-import jaJPCommon from "./locales/ja-JP/core/common.json";
-import jaJPActions from "./locales/ja-JP/core/actions.json";
-import jaJPStatus from "./locales/ja-JP/core/status.json";
-import jaJPNavigation from "./locales/ja-JP/core/navigation.json";
-import jaJPHeader from "./locales/ja-JP/core/header.json";
-import jaJPShared from "./locales/ja-JP/core/shared.json";
-
-import jaJPChat from "./locales/ja-JP/features/chat.json";
-import jaJPExtension from "./locales/ja-JP/features/extension.json";
-import jaJPConversation from "./locales/ja-JP/features/conversation.json";
-import jaJPSessionManagement from "./locales/ja-JP/features/session-management.json";
-import jaJPToolUse from "./locales/ja-JP/features/tool-use.json";
-import jaJPProvider from "./locales/ja-JP/features/provider.json";
-import jaJPPlatform from "./locales/ja-JP/features/platform.json";
-import jaJPConfig from "./locales/ja-JP/features/config.json";
-import jaJPConfigMetadata from "./locales/ja-JP/features/config-metadata.json";
-import jaJPConsole from "./locales/ja-JP/features/console.json";
-import jaJPTrace from "./locales/ja-JP/features/trace.json";
-import jaJPAbout from "./locales/ja-JP/features/about.json";
-import jaJPSettings from "./locales/ja-JP/features/settings.json";
-import jaJPAuth from "./locales/ja-JP/features/auth.json";
-import jaJPChart from "./locales/ja-JP/features/chart.json";
-import jaJPDashboard from "./locales/ja-JP/features/dashboard.json";
-import jaJPCron from "./locales/ja-JP/features/cron.json";
-import jaJPStats from "./locales/ja-JP/features/stats.json";
-import jaJPAlkaidIndex from "./locales/ja-JP/features/alkaid/index.json";
-import jaJPAlkaidKnowledgeBase from "./locales/ja-JP/features/alkaid/knowledge-base.json";
-import jaJPAlkaidMemory from "./locales/ja-JP/features/alkaid/memory.json";
-import jaJPKnowledgeBaseIndex from "./locales/ja-JP/features/knowledge-base/index.json";
-import jaJPKnowledgeBaseDetail from "./locales/ja-JP/features/knowledge-base/detail.json";
-import jaJPKnowledgeBaseDocument from "./locales/ja-JP/features/knowledge-base/document.json";
-import jaJPPersona from "./locales/ja-JP/features/persona.json";
-import jaJPCommand from "./locales/ja-JP/features/command.json";
-import jaJPSubagent from "./locales/ja-JP/features/subagent.json";
-import jaJPWelcome from "./locales/ja-JP/features/welcome.json";
-
-import jaJPErrors from "./locales/ja-JP/messages/errors.json";
-import jaJPSuccess from "./locales/ja-JP/messages/success.json";
-import jaJPValidation from "./locales/ja-JP/messages/validation.json";
 
 // 组装翻译对象
 export const translations = {

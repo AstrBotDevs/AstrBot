@@ -1191,11 +1191,7 @@ export default defineComponent({
         this.showSnackbar(this.tm("messages.pleaseEnterKnowledgeBaseName"), "warning");
         return;
       }
-      this.createCollection(
-        this.newKB.name,
-        this.newKB.emoji || "🙂",
-        this.newKB.description,
-      );
+      this.createCollection(this.newKB.name, this.newKB.emoji || "🙂", this.newKB.description);
     },
 
     resetNewKB() {
@@ -1502,7 +1498,8 @@ export default defineComponent({
             await this.handleImportResult(taskData);
           } else if (taskStatus === "failed") {
             this.stopPolling();
-            const failureReason = typeof taskData.result === "string" ? taskData.result : taskData.message || "Unknown reason.";
+            const failureReason =
+              typeof taskData.result === "string" ? taskData.result : taskData.message || "Unknown reason.";
             this.showSnackbar(`${this.tm("importFromUrl.importFailed")}: ${failureReason}`, "error");
             this.importing = false;
           }

@@ -946,15 +946,15 @@ const formatFileSize = (bytes: number) => {
 };
 
 const formatDate = (dateStr: string) => {
-  if (!dateStr) return '-'
+  if (!dateStr) return "-";
   return new Date(dateStr).toLocaleString(locale.value, {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
-}
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
 
 // 加载LLM providers
 const loadLlmProviders = async () => {

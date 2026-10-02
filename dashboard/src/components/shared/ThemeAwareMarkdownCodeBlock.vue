@@ -14,10 +14,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, inject, type Ref, useAttrs } from "vue";
 import { MarkdownCodeBlockNode } from "markstream-vue";
+import { computed, inject, type Ref, useAttrs } from "vue";
 import { copyToClipboard } from "@/utils/clipboard";
-import { LIMITED_SHIKI_LANGUAGES, LIMITED_SHIKI_LANGUAGE_ALIASES } from "@/utils/shikiLimitedBundle";
+import { LIMITED_SHIKI_LANGUAGE_ALIASES, LIMITED_SHIKI_LANGUAGES } from "@/utils/shikiLimitedBundle";
 
 defineOptions({
   inheritAttrs: false,
@@ -36,9 +36,7 @@ const emit = defineEmits<MarkdownCodeBlockEmits>();
 
 const shouldUseClipboardFallback =
   typeof window !== "undefined" &&
-  (!window.isSecureContext ||
-    typeof navigator === "undefined" ||
-    !navigator.clipboard?.writeText);
+  (!window.isSecureContext || typeof navigator === "undefined" || !navigator.clipboard?.writeText);
 
 function handleCopy(payload: MarkdownCodeBlockEmits["copy"][0]) {
   if (typeof payload !== "string") return;
@@ -61,10 +59,12 @@ const attrs = useAttrs();
 const forwardedBindings = computed(() => ({
   ...attrs,
   ...props,
-  langs: Array.from(new Set([
-    ...LIMITED_SHIKI_LANGUAGES.map((language) => language.name),
-    ...Object.values(LIMITED_SHIKI_LANGUAGE_ALIASES),
-  ])),
+  langs: Array.from(
+    new Set([
+      ...LIMITED_SHIKI_LANGUAGES.map((language) => language.name),
+      ...Object.values(LIMITED_SHIKI_LANGUAGE_ALIASES),
+    ]),
+  ),
   isDark: effectiveIsDark.value,
 }));
 const themeRenderKey = computed(() => (effectiveIsDark.value ? "dark" : "light"));

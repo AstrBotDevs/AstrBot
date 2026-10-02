@@ -583,6 +583,7 @@ class TestRunActiveAgentJob:
 
         ctx = MagicMock()
         ctx.get_config.return_value = session_config
+        ctx.sdk_plugin_bridge = None
         cron_manager.ctx = ctx
         registry = StarHandlerRegistry()
         monkeypatch.setattr(context_utils, "star_handlers_registry", registry)
@@ -643,7 +644,7 @@ class TestRunActiveAgentJob:
         req.func_tool = tools
         _plugin_tool_fix(event, req)
         await MAIN_AGENT_HOOKS.on_agent_done(
-            SimpleNamespace(context=SimpleNamespace(event=event)),
+            SimpleNamespace(context=SimpleNamespace(event=event, context=ctx)),
             SimpleNamespace(reasoning_content=""),
         )
 

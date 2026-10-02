@@ -216,8 +216,6 @@
 
 <script setup lang="ts">
 import "@/components/chat/chatPanelTransition.css";
-import { computed, ref, watch } from "vue";
-import { useTheme } from "vuetify";
 import {
   ChevronDown,
   ChevronRight,
@@ -230,6 +228,8 @@ import {
   Search,
   X,
 } from "@lucide/vue";
+import { computed, ref, watch } from "vue";
+import { useTheme } from "vuetify";
 import { chatApi } from "@/api/v1";
 import { useModuleI18n } from "@/i18n/composables";
 
@@ -314,22 +314,13 @@ watch(
     if (!content || !path) return;
 
     try {
-      const { getShikiHighlighter, renderShikiCode } = await import(
-        "@/utils/shiki"
-      );
+      const { getShikiHighlighter, renderShikiCode } = await import("@/utils/shiki");
       const highlighter = await getShikiHighlighter();
       if (cancelled) return;
 
       const name = path.split("/").pop()?.toLowerCase() || "";
-      const language = name.startsWith("dockerfile.")
-        ? "dockerfile"
-        : name.split(".").pop();
-      highlightedContent.value = renderShikiCode(
-        highlighter,
-        content,
-        language,
-        dark ? "dark" : "light",
-      );
+      const language = name.startsWith("dockerfile.") ? "dockerfile" : name.split(".").pop();
+      highlightedContent.value = renderShikiCode(highlighter, content, language, dark ? "dark" : "light");
     } catch (error) {
       if (!cancelled) console.warn("Failed to highlight workspace file", error);
     }

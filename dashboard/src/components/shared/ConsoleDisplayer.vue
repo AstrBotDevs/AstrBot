@@ -44,8 +44,8 @@
 <script lang="ts">
 import {
   EventSourcePolyfill,
-  type MessageEvent as SseMessageEvent,
   type Event as SseEvent,
+  type MessageEvent as SseMessageEvent,
 } from "event-source-polyfill";
 import { useCommonStore } from "@/stores/common";
 import axios, { resolveApiUrl } from "@/utils/request";
@@ -134,10 +134,7 @@ export default {
     document.addEventListener("fullscreenchange", this.handleFullscreenChange);
   },
   beforeUnmount() {
-    document.removeEventListener(
-      "fullscreenchange",
-      this.handleFullscreenChange,
-    );
+    document.removeEventListener("fullscreenchange", this.handleFullscreenChange);
     if (this.eventSource) {
       this.eventSource.close();
       this.eventSource = null;
@@ -155,22 +152,17 @@ export default {
         this.eventSource = null;
       }
 
-      console.info(
-        `Connecting to the log stream (attempt: ${this.retryAttempts})`,
-      );
+      console.info(`Connecting to the log stream (attempt: ${this.retryAttempts})`);
 
       const token = localStorage.getItem("token");
 
-      this.eventSource = new EventSourcePolyfill(
-        resolveApiUrl("/api/live-log"),
-        {
-          headers: {
-            Authorization: token ? `Bearer ${token}` : "",
-          },
-          heartbeatTimeout: 300000,
-          withCredentials: true,
+      this.eventSource = new EventSourcePolyfill(resolveApiUrl("/api/live-log"), {
+        headers: {
+          Authorization: token ? `Bearer ${token}` : "",
         },
-      );
+        heartbeatTimeout: 300000,
+        withCredentials: true,
+      });
 
       this.eventSource.onopen = () => {
         console.info("Log stream connected successfully.");
@@ -211,13 +203,8 @@ export default {
           return;
         }
 
-        const delay = Math.min(
-          this.baseRetryDelay * 2 ** this.retryAttempts,
-          30000,
-        );
-        console.info(
-          `Retrying log stream in ${delay}ms (attempt: ${this.retryAttempts + 1})`,
-        );
+        const delay = Math.min(this.baseRetryDelay * 2 ** this.retryAttempts, 30000);
+        console.info(`Retrying log stream in ${delay}ms (attempt: ${this.retryAttempts + 1})`);
 
         if (this.retryTimer) {
           clearTimeout(this.retryTimer);
@@ -247,20 +234,14 @@ export default {
 
       newLogs.forEach((log) => {
         const exists = this.localLogCache.some(
-          (existing) =>
-            existing.time === log.time &&
-            existing.data === log.data &&
-            existing.level === log.level,
+          (existing) => existing.time === log.time && existing.data === log.data && existing.level === log.level,
         );
 
         if (!exists) {
           this.localLogCache.push(log);
           hasUpdate = true;
 
-          if (
-            this.isLevelSelected(log.level) &&
-            !this.isHiddenByCategory(log)
-          ) {
+          if (this.isLevelSelected(log.level) && !this.isHiddenByCategory(log)) {
             if (fragment) {
               fragment.appendChild(this.buildLogElement(log.data));
             }
@@ -323,10 +304,7 @@ export default {
 
       const fragment = document.createDocumentFragment();
       this.localLogCache.forEach((logItem) => {
-        if (
-          this.isLevelSelected(logItem.level) &&
-          !this.isHiddenByCategory(logItem)
-        ) {
+        if (this.isLevelSelected(logItem.level) && !this.isHiddenByCategory(logItem)) {
           fragment.appendChild(this.buildLogElement(logItem.data));
         }
       });
@@ -340,9 +318,7 @@ export default {
       const container = document.getElementById("console-wrapper");
       if (!document.fullscreenElement) {
         container?.requestFullscreen().catch((err: Error) => {
-          console.error(
-            `Error attempting to enable full-screen mode: ${err.message}`,
-          );
+          console.error(`Error attempting to enable full-screen mode: ${err.message}`);
         });
       } else {
         document.exitFullscreen();
@@ -354,9 +330,7 @@ export default {
     },
 
     appendLogContent(element: HTMLElement, log: string) {
-      const levelMatch = log.match(
-        /\[(DEBG|INFO|WARN|ERRO|CRIT|DEBUG|WARNING|ERROR|CRITICAL)\]/,
-      );
+      const levelMatch = log.match(/\[(DEBG|INFO|WARN|ERRO|CRIT|DEBUG|WARNING|ERROR|CRITICAL)\]/);
       if (!levelMatch) {
         element.textContent = `${log}`;
         return;

@@ -170,9 +170,7 @@ const knowledgeBaseList = ref<KnowledgeBaseItem[]>([]);
 const loading = ref(false);
 const selectedKnowledgeBases = ref<string[]>([]);
 const configuredKnowledgeBases = computed(() =>
-  Array.isArray(props.modelValue)
-    ? props.modelValue.filter((name): name is string => typeof name === "string")
-    : [],
+  Array.isArray(props.modelValue) ? props.modelValue.filter((name): name is string => typeof name === "string") : [],
 );
 
 // 监听 modelValue 变化，同步到 selectedKnowledgeBases

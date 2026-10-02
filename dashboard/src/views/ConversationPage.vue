@@ -619,10 +619,10 @@ import { VueMonacoEditor } from "@guolao/vue-monaco-editor";
 import type { editor } from "monaco-editor";
 import { defineComponent, markRaw, useTemplateRef } from "vue";
 import type { VForm } from "vuetify/components";
-import { conversationApi, type ApiEnvelope } from "@/api/v1";
-import type { ChatRecord, MessagePart, ToolCall } from "@/composables/useMessages";
+import { type ApiEnvelope, conversationApi } from "@/api/v1";
 import MessageList from "@/components/chat/MessageList.vue";
 import UmoDisplay from "@/components/shared/UmoDisplay.vue";
+import type { ChatRecord, MessagePart, ToolCall } from "@/composables/useMessages";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { useCustomizerStore } from "@/stores/customizer";
 import { askForConfirmation as askForConfirmationDialog, useConfirmDialog } from "@/utils/confirmDialog";
@@ -665,7 +665,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function parseHistory(value: unknown): HistoryMessage[] {
   const history: unknown = typeof value === "string" ? JSON.parse(value) : value;
-  if (!Array.isArray(history) || !history.every((entry): entry is HistoryMessage => isRecord(entry) && typeof entry.role === "string")) {
+  if (
+    !Array.isArray(history) ||
+    !history.every((entry): entry is HistoryMessage => isRecord(entry) && typeof entry.role === "string")
+  ) {
     throw new Error("Conversation history must be an array of messages with roles.");
   }
   return history;
@@ -1144,10 +1147,13 @@ export default defineComponent({
 
       try {
         console.info(`正在请求对话详情，user_id=${item.user_id}, cid=${item.cid}`);
-        const response = await axios.post<ApiEnvelope<ConversationItem & { history?: unknown }>>("/api/conversation/detail", {
-          user_id: item.user_id,
-          cid: item.cid,
-        });
+        const response = await axios.post<ApiEnvelope<ConversationItem & { history?: unknown }>>(
+          "/api/conversation/detail",
+          {
+            user_id: item.user_id,
+            cid: item.cid,
+          },
+        );
 
         if (response.data.status === "ok") {
           try {

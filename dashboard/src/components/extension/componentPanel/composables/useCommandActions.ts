@@ -4,8 +4,8 @@
 import { reactive } from "vue";
 import axios from "@/utils/request";
 import type {
-  CommandPermission,
   CommandItem,
+  CommandPermission,
   DetailsDialogState,
   RenameDialogState,
   StatusInfo,
@@ -34,11 +34,7 @@ export function useCommandActions(
   /**
    * 切换指令启用/禁用状态
    */
-  const toggleCommand = async (
-    cmd: CommandItem,
-    successMessage: string,
-    errorMessage: string,
-  ) => {
+  const toggleCommand = async (cmd: CommandItem, successMessage: string, errorMessage: string) => {
     try {
       const res = await axios.post("/api/commands/toggle", {
         command_key: cmd.command_key,
@@ -69,10 +65,7 @@ export function useCommandActions(
   /**
    * 确认重命名
    */
-  const confirmRename = async (
-    successMessage: string,
-    errorMessage: string,
-  ) => {
+  const confirmRename = async (successMessage: string, errorMessage: string) => {
     if (!renameDialog.command || !renameDialog.newName.trim()) return;
 
     renameDialog.loading = true;

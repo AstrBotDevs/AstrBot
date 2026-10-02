@@ -269,37 +269,27 @@
 </template>
 
 <script setup lang="ts">
-import MessageContentTransition from "@/components/chat/MessageContentTransition.vue";
 import { computed, nextTick, reactive, ref } from "vue";
-import axios from "@/utils/request";
-import {
-  CHAT_MARKDOWN_CUSTOM_TAGS,
-  registerChatMarkdownComponents,
-} from "@/components/chat/chatMarkdownComponents";
 import { fileApi } from "@/api/v1";
+import { attachmentName, attachmentPresentation } from "@/components/chat/attachmentPresentation";
+import { CHAT_MARKDOWN_CUSTOM_TAGS, registerChatMarkdownComponents } from "@/components/chat/chatMarkdownComponents";
+import MessageContentTransition from "@/components/chat/MessageContentTransition.vue";
+import ActionRef from "@/components/chat/message_list_comps/ActionRef.vue";
 import IPythonToolBlock from "@/components/chat/message_list_comps/IPythonToolBlock.vue";
 import MarkdownMessagePart from "@/components/chat/message_list_comps/MarkdownMessagePart.vue";
 import ReasoningBlock from "@/components/chat/message_list_comps/ReasoningBlock.vue";
 import RefsSidebar from "@/components/chat/message_list_comps/RefsSidebar.vue";
 import ToolCallCard from "@/components/chat/message_list_comps/ToolCallCard.vue";
 import ToolCallItem from "@/components/chat/message_list_comps/ToolCallItem.vue";
-import ActionRef from "@/components/chat/message_list_comps/ActionRef.vue";
+import type { ChatContent, ChatRecord, MessagePart } from "@/composables/useMessages";
 import {
-  attachmentName,
-  attachmentPresentation,
-} from "@/components/chat/attachmentPresentation";
-import {
-  displayParts as displayMessageParts,
   messageBlocks as buildMessageBlocks,
+  displayParts as displayMessageParts,
   type MessageDisplayBlock,
-} from "@/composables/useMessages";
-import type {
-  ChatContent,
-  ChatRecord,
-  MessagePart,
 } from "@/composables/useMessages";
 import { useModuleI18n } from "@/i18n/composables";
 import { copyToClipboard } from "@/utils/clipboard";
+import axios from "@/utils/request";
 
 const props = withDefaults(
   defineProps<{
@@ -389,9 +379,7 @@ function formatJson(value: unknown) {
 
 function replyPreview(messageId?: string | number, fallback?: string) {
   if (fallback) return truncate(fallback, 80);
-  const found = messages.value.find(
-    (message) => String(message.id) === String(messageId),
-  );
+  const found = messages.value.find((message) => String(message.id) === String(messageId));
   const text = found ? plainTextFromMessage(found) : "";
   return text ? truncate(text, 80) : tm("reply.replyTo");
 }
@@ -409,9 +397,7 @@ function truncate(value: string, max: number) {
 
 function scrollToMessage(messageId?: string | number) {
   if (!messageId) return;
-  const index = messages.value.findIndex(
-    (message) => String(message.id) === String(messageId),
-  );
+  const index = messages.value.findIndex((message) => String(message.id) === String(messageId));
   if (index < 0) return;
   nextTick(() => {
     const rows = messageListRoot.value?.querySelectorAll(".message-row");
@@ -434,11 +420,7 @@ function resolvedMessageRefs(message: ChatRecord) {
 function normalizeRefs(refs: unknown) {
   if (!refs) return { used: [] as Array<Record<string, unknown>> };
   const refsValue = refs as { used?: unknown };
-  const used = Array.isArray(refsValue.used)
-    ? refsValue.used
-    : Array.isArray(refs)
-    ? refs
-    : [];
+  const used = Array.isArray(refsValue.used) ? refsValue.used : Array.isArray(refs) ? refs : [];
 
   return {
     used: normalizeRefItems(used),
@@ -458,16 +440,13 @@ function normalizeRefItems(items: unknown[]) {
 }
 
 function openRefsSidebar(refs: unknown) {
-  selectedRefs.value =
-    refs && typeof refs === "object" ? (refs as Record<string, unknown>) : null;
+  selectedRefs.value = refs && typeof refs === "object" ? (refs as Record<string, unknown>) : null;
   refsSidebarOpen.value = true;
 }
 
 function normalizeToolCall(tool: Record<string, unknown>) {
   const normalized = { ...tool };
-  normalized.args = parseJsonSafe(
-    normalized.args ?? normalized.arguments ?? {},
-  );
+  normalized.args = parseJsonSafe(normalized.args ?? normalized.arguments ?? {});
   normalized.result = parseJsonSafe(normalized.result);
   normalized.ts = normalized.ts ?? Date.now() / 1000;
   if (normalized.result && typeof normalized.result === "object") {
@@ -551,10 +530,7 @@ function cachedInputTokens(stats: any) {
 }
 
 function agentDuration(stats: any) {
-  const directDuration = readPositiveNumber(stats, [
-    "duration",
-    "total_duration",
-  ]);
+  const directDuration = readPositiveNumber(stats, ["duration", "total_duration"]);
   if (directDuration !== null) return formatDuration(directDuration);
 
   const startTime = readPositiveNumber(stats, ["start_time"]);
@@ -564,11 +540,7 @@ function agentDuration(stats: any) {
 }
 
 function agentTtft(stats: any) {
-  const ttft = readPositiveNumber(stats, [
-    "time_to_first_token",
-    "ttft",
-    "first_token_latency",
-  ]);
+  const ttft = readPositiveNumber(stats, ["time_to_first_token", "ttft", "first_token_latency"]);
   if (ttft === null) return "";
   return formatDuration(ttft);
 }

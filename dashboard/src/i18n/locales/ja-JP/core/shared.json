@@ -1,9 +1,9 @@
 {
   "configProfileDrawer": {
-      "title": "設定ファイルを編集",
-      "loadFailed": "設定ファイルの読み込みに失敗しました",
-      "close": "閉じる"
-    },
+    "title": "設定ファイルを編集",
+    "loadFailed": "設定ファイルの読み込みに失敗しました",
+    "close": "閉じる"
+  },
   "knowledgeBaseSelector": {
     "notSelected": "未選択",
     "buttonText": "ナレッジベースを選択…",

@@ -201,17 +201,12 @@ export const useCommonStore = defineStore("common", {
         if (!sourceKey && this.pluginMarketData.length > 0) {
           return Promise.resolve(this.pluginMarketData);
         }
-        if (
-          sourceKey &&
-          Array.isArray(this.pluginMarketDataBySource[sourceKey])
-        ) {
+        if (sourceKey && Array.isArray(this.pluginMarketDataBySource[sourceKey])) {
           return Promise.resolve(this.pluginMarketDataBySource[sourceKey]);
         }
       }
 
-      let url = force
-        ? "/api/plugin/market_list?force_refresh=true"
-        : "/api/plugin/market_list";
+      let url = force ? "/api/plugin/market_list?force_refresh=true" : "/api/plugin/market_list";
       if (sourceKey) {
         url += `${url.includes("?") ? "&" : "?"}custom_registry=${encodeURIComponent(sourceKey)}`;
       }
@@ -224,12 +219,9 @@ export const useCommonStore = defineStore("common", {
             if (key === "$meta") continue;
 
             const pluginData = res.data.data[key];
-            const fallbackPluginName = String(key || "").includes("/")
-              ? ""
-              : String(key || "").trim();
+            const fallbackPluginName = String(key || "").includes("/") ? "" : String(key || "").trim();
             const pluginAuthor = String(pluginData?.author || "").trim();
-            const pluginName =
-              String(pluginData?.name || "").trim() || fallbackPluginName;
+            const pluginName = String(pluginData?.name || "").trim() || fallbackPluginName;
             const displayPluginName = pluginName || key;
             const marketPluginId =
               String(pluginData?.market_plugin_id || "").trim() ||
@@ -262,10 +254,7 @@ export const useCommonStore = defineStore("common", {
               updated_at: pluginData?.updated_at || "",
               download_url: pluginData?.download_url || "",
               display_name: pluginData?.display_name || "",
-              i18n:
-                pluginData?.i18n && typeof pluginData.i18n === "object"
-                  ? pluginData.i18n
-                  : {},
+              i18n: pluginData?.i18n && typeof pluginData.i18n === "object" ? pluginData.i18n : {},
               astrbot_version: pluginData?.astrbot_version || "",
               category: pluginData?.category || "",
               support_platforms: Array.isArray(pluginData?.support_platforms)

@@ -1,5 +1,5 @@
 import { createPinia, type Pinia } from "pinia";
-import { createApp, watch, type App as VueApp } from "vue";
+import { createApp, type App as VueApp, watch } from "vue";
 import App from "./App.vue";
 import { setupI18n } from "./i18n/composables";
 import confirmPlugin from "./plugins/confirmPlugin";
@@ -29,9 +29,9 @@ import editorWorker from "monaco-editor/esm/vs/editor/editor.worker.js?worker";
 import cssWorker from "monaco-editor/esm/vs/language/css/css.worker.js?worker";
 import htmlWorker from "monaco-editor/esm/vs/language/html/html.worker.js?worker";
 import jsonWorker from "monaco-editor/esm/vs/language/json/json.worker.js?worker";
+import { setupHttpClient } from "@/api/http";
 import { DARK_THEME_NAME, LIGHT_THEME_NAME } from "@/theme/constants";
 import { resolvePublicUrl, setApiBaseUrl } from "@/utils/request";
-import { setupHttpClient } from "@/api/http";
 import { waitForRouterReadyInBackground } from "./utils/routerReadiness.mjs";
 
 // Monaco worker configuration
@@ -92,7 +92,7 @@ async function mountApp(app: VueApp, pinia: Pinia, waitForRouter = true) {
     });
   }
   if (customizer.autoSwitchTheme) customizer.APPLY_SYSTEM_THEME();
-  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
     if (customizer.autoSwitchTheme) customizer.APPLY_SYSTEM_THEME();
   });
   const syncDesktopWindowTheme = () => {

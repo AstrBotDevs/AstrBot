@@ -378,10 +378,8 @@ const capabilityBadges = (entry) => {
   }));
 };
 
-const isProviderTesting = (providerId) =>
-  props.testingProviders.includes(providerId);
-const isProviderSaving = (providerId) =>
-  props.savingProviders.includes(providerId);
+const isProviderTesting = (providerId) => props.testingProviders.includes(providerId);
+const isProviderSaving = (providerId) => props.savingProviders.includes(providerId);
 </script>
 
 <style scoped>

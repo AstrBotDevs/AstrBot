@@ -324,10 +324,7 @@ import PlatformEditor from "@/components/platform/PlatformEditor.vue";
 import QrCodeViewer from "@/components/shared/QrCodeViewer.vue";
 import { mergeDynamicTranslations, useModuleI18n } from "@/i18n/composables";
 import { copyToClipboard } from "@/utils/clipboard";
-import {
-  askForConfirmation as askForConfirmationDialog,
-  useConfirmDialog,
-} from "@/utils/confirmDialog";
+import { askForConfirmation as askForConfirmationDialog, useConfirmDialog } from "@/utils/confirmDialog";
 import { getPlatformIcon } from "@/utils/platformUtils";
 
 const { tm } = useModuleI18n("features/platform");
@@ -352,7 +349,11 @@ interface PlatformStat {
   weixin_oc?: PlatformQrStat;
   [key: string]: unknown;
 }
-interface PlatformTemplate { id?: string; type?: string; logo_token?: string }
+interface PlatformTemplate {
+  id?: string;
+  type?: string;
+  logo_token?: string;
+}
 interface PlatformMetadata {
   platform_group?: { metadata?: { platform?: { config_template?: Record<string, PlatformTemplate> } } };
 }
@@ -360,7 +361,10 @@ interface RuntimeConfig {
   platform?: PlatformConfig[];
   callback_api_base?: string;
 }
-interface ToastMessage { message: string; type: "success" | "error" }
+interface ToastMessage {
+  message: string;
+  type: "success" | "error";
+}
 
 const configData = ref<RuntimeConfig>({});
 const metadata = ref<PlatformMetadata>({});
@@ -380,10 +384,7 @@ let statsRefreshInterval: number | null = null;
 const platforms = computed(() => configData.value.platform || []);
 
 const selectedPlatform = computed(
-  () =>
-    platforms.value.find(
-      (platform) => platform.id === selectedPlatformId.value,
-    ) || null,
+  () => platforms.value.find((platform) => platform.id === selectedPlatformId.value) || null,
 );
 
 const platformOptions = computed(() =>
@@ -395,9 +396,7 @@ const platformOptions = computed(() =>
   })),
 );
 
-const currentWebhookUrl = computed(() =>
-  getWebhookUrl(currentWebhookUuid.value),
-);
+const currentWebhookUrl = computed(() => getWebhookUrl(currentWebhookUuid.value));
 
 onMounted(() => {
   getConfig();
@@ -423,7 +422,10 @@ async function getConfig(preferredPlatformId: string | null = null) {
 
     const platformI18n = response.data.data.platform_i18n_translations;
     if (platformI18n && typeof platformI18n === "object") {
-      mergeDynamicTranslations("features.config-metadata", platformI18n as Parameters<typeof mergeDynamicTranslations>[1]);
+      mergeDynamicTranslations(
+        "features.config-metadata",
+        platformI18n as Parameters<typeof mergeDynamicTranslations>[1],
+      );
     }
 
     const nextSelectedId = preferredPlatformId || selectedPlatformId.value;
@@ -458,8 +460,7 @@ function handleLocaleChange() {
 }
 
 function getPlatformIconFor(platform: PlatformConfig) {
-  const templates =
-    metadata.value["platform_group"]?.metadata?.platform?.config_template || {};
+  const templates = metadata.value["platform_group"]?.metadata?.platform?.config_template || {};
   const template =
     (platform.type && templates[platform.type]) ||
     templates[platform.id] ||
@@ -522,13 +523,15 @@ function getPlatformQrLoginStat(platformId: string): PlatformQrStat | null {
   const stat = getPlatformStat(platformId);
   if (stat?.weixin_oc) return stat.weixin_oc;
   if (stat && typeof stat === "object") {
-    return Object.values(stat).find(
-      (value): value is PlatformQrStat =>
-        value !== null &&
-        typeof value === "object" &&
-        (("qrcode_img_content" in value && typeof value.qrcode_img_content === "string") ||
-          ("qrcode" in value && typeof value.qrcode === "string")),
-    ) || null;
+    return (
+      Object.values(stat).find(
+        (value): value is PlatformQrStat =>
+          value !== null &&
+          typeof value === "object" &&
+          (("qrcode_img_content" in value && typeof value.qrcode_img_content === "string") ||
+            ("qrcode" in value && typeof value.qrcode === "string")),
+      ) || null
+    );
   }
   return null;
 }
@@ -551,12 +554,8 @@ function showErrorDetails(platform: PlatformConfig) {
 }
 
 function getWebhookUrl(webhookUuid: string) {
-  const callbackBase =
-    configData.value.callback_api_base || "http(s)://<your-domain-or-ip>";
-  return `${callbackBase.replace(
-    /\/$/,
-    "",
-  )}/api/v1/webhooks/platforms/${webhookUuid}`;
+  const callbackBase = configData.value.callback_api_base || "http(s)://<your-domain-or-ip>";
+  return `${callbackBase.replace(/\/$/, "")}/api/v1/webhooks/platforms/${webhookUuid}`;
 }
 
 function openWebhookDialog(webhookUuid: string) {
@@ -587,8 +586,7 @@ function showSuccess(message: string) {
 
 function showError(error: unknown) {
   const apiError = error as { response?: { data?: { message?: string } }; message?: string } | null;
-  const message =
-    apiError?.response?.data?.message || apiError?.message || String(error);
+  const message = apiError?.response?.data?.message || apiError?.message || String(error);
   showToast({ message, type: "error" });
 }
 </script>

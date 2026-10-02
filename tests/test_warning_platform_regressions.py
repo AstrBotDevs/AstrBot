@@ -220,7 +220,7 @@ async def test_dingtalk_shutdown_keeps_a_bound_connection_method() -> None:
     websocket.close.assert_awaited_once_with(code=1000, reason="Graceful shutdown")
 
 
-def test_mattermost_message_declares_and_tracks_downloaded_attachments(
+def test_mattermost_message_preserves_downloaded_attachment_metadata(
     tmp_path: Path,
 ) -> None:
     from astrbot.core.platform.sources.mattermost.mattermost_event import (
@@ -244,7 +244,12 @@ def test_mattermost_message_declares_and_tracks_downloaded_attachments(
         MagicMock(),
     )
 
-    assert event._temporary_local_files == [str(path)]
+    assert isinstance(event.message_obj, MattermostMessage)
+    assert event.message_obj.temporary_file_paths == [str(path)]
+    assert event._temporary_local_files == []
+    event.cleanup_temporary_local_files()
+    assert path.read_text(encoding="utf-8") == "attachment"
+    assert event.message_obj.temporary_file_paths == [str(path)]
     assert MattermostMessage().temporary_file_paths == []
 
 

@@ -1,9 +1,9 @@
 {
   "configProfileDrawer": {
-      "title": "编辑配置文件",
-      "loadFailed": "加载配置文件失败",
-      "close": "关闭"
-    },
+    "title": "编辑配置文件",
+    "loadFailed": "加载配置文件失败",
+    "close": "关闭"
+  },
   "knowledgeBaseSelector": {
     "notSelected": "未选择",
     "buttonText": "选择知识库...",

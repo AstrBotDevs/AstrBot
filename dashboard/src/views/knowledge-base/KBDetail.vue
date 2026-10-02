@@ -267,16 +267,16 @@ const loadKB = async () => {
 
 // 格式化日期
 const formatDate = (dateStr: string) => {
-  if (!dateStr) return '-'
-  const date = new Date(dateStr)
+  if (!dateStr) return "-";
+  const date = new Date(dateStr);
   return date.toLocaleString(locale.value, {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
-}
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
 
 onMounted(() => {
   loadKB();

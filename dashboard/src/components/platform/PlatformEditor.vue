@@ -395,18 +395,12 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from "vue";
-import {
-  botApi,
-  configProfileApi,
-  configRouteApi,
-  fileApi,
-  sessionApi,
-} from "@/api/v1";
-import AstrBotConfig from "@/components/shared/AstrBotConfig.vue";
-import ConfigProfileDrawer from "@/components/config/ConfigProfileDrawer.vue";
-import UmoDisplay from "@/components/shared/UmoDisplay.vue";
 import { ArrowUpRight } from "@lucide/vue";
+import { computed, ref, watch } from "vue";
+import { botApi, configProfileApi, configRouteApi, fileApi, sessionApi } from "@/api/v1";
+import ConfigProfileDrawer from "@/components/config/ConfigProfileDrawer.vue";
+import AstrBotConfig from "@/components/shared/AstrBotConfig.vue";
+import UmoDisplay from "@/components/shared/UmoDisplay.vue";
 import { useModuleI18n } from "@/i18n/composables";
 import { getPlatformIcon, getTutorialLink } from "@/utils/platformUtils";
 
@@ -431,13 +425,7 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits([
-  "saved",
-  "show-toast",
-  "show-error",
-  "show-qr",
-  "show-webhook",
-]);
+const emit = defineEmits(["saved", "show-toast", "show-error", "show-qr", "show-webhook"]);
 
 const { tm } = useModuleI18n("features/platform");
 const { tm: sharedTm } = useModuleI18n("core/shared");
@@ -473,19 +461,14 @@ const pendingConfigId = ref("default");
 let routeKey = 0;
 let loadVersion = 0;
 
-const platformTemplates = computed(
-  () =>
-    props.metadata["platform_group"]?.metadata?.platform?.config_template || {},
-);
+const platformTemplates = computed(() => props.metadata["platform_group"]?.metadata?.platform?.config_template || {});
 
 const platformIcon = computed(() => {
   const template = findPlatformTemplate(draft.value);
   if (template?.logo_token) {
     return fileApi.tokenUrl(template.logo_token);
   }
-  return getPlatformIcon(
-    draft.value.type || props.platform.type || props.platform.id,
-  );
+  return getPlatformIcon(draft.value.type || props.platform.type || props.platform.id);
 });
 
 const defaultConfigOptions = computed(() => [
@@ -496,13 +479,9 @@ const defaultConfigOptions = computed(() => [
   ...configProfiles.value,
 ]);
 
-const boundSessionSet = computed(
-  () => new Set(simpleBindings.value.map((binding) => binding.umo)),
-);
+const boundSessionSet = computed(() => new Set(simpleBindings.value.map((binding) => binding.umo)));
 
-const availableSessionUmos = computed(() =>
-  knownSessionUmos.value.filter((umo) => !boundSessionSet.value.has(umo)),
-);
+const availableSessionUmos = computed(() => knownSessionUmos.value.filter((umo) => !boundSessionSet.value.has(umo)));
 
 const currentRouteSnapshot = computed(() =>
   JSON.stringify({
@@ -525,18 +504,10 @@ const isModified = computed(
 );
 
 const hasInvalidAdvancedRoute = computed(() =>
-  advancedRoutes.value.some(
-    (route) => getPatternError(route.pattern) || !route.configId,
-  ),
+  advancedRoutes.value.some((route) => getPatternError(route.pattern) || !route.configId),
 );
 
-const canSave = computed(
-  () =>
-    isModified.value &&
-    !loading.value &&
-    !saving.value &&
-    !hasInvalidAdvancedRoute.value,
-);
+const canSave = computed(() => isModified.value && !loading.value && !saving.value && !hasInvalidAdvancedRoute.value);
 
 watch(
   () => props.platform,
@@ -565,24 +536,15 @@ function findPlatformTemplate(platform) {
   if (platform?.id && platformTemplates.value[platform.id]) {
     return platformTemplates.value[platform.id];
   }
-  return Object.values(platformTemplates.value).find(
-    (template) => template?.type === platform?.type,
-  );
+  return Object.values(platformTemplates.value).find((template) => template?.type === platform?.type);
 }
 
 function mergeConfigWithTemplate(sourceConfig, templateConfig) {
-  const clone = (value) =>
-    value === undefined ? undefined : JSON.parse(JSON.stringify(value));
+  const clone = (value) => (value === undefined ? undefined : JSON.parse(JSON.stringify(value)));
   const merge = (source, reference) => {
     const target = {};
-    const sourceObject =
-      source && typeof source === "object" && !Array.isArray(source)
-        ? source
-        : {};
-    const referenceObject =
-      reference && typeof reference === "object" && !Array.isArray(reference)
-        ? reference
-        : null;
+    const sourceObject = source && typeof source === "object" && !Array.isArray(source) ? source : {};
+    const referenceObject = reference && typeof reference === "object" && !Array.isArray(reference) ? reference : null;
 
     if (!referenceObject) {
       return clone(sourceObject);
@@ -590,13 +552,9 @@ function mergeConfigWithTemplate(sourceConfig, templateConfig) {
 
     for (const [key, referenceValue] of Object.entries(referenceObject)) {
       const sourceValue = sourceObject[key];
-      if (
-        referenceValue &&
-        typeof referenceValue === "object" &&
-        !Array.isArray(referenceValue)
-      ) {
+      if (referenceValue && typeof referenceValue === "object" && !Array.isArray(referenceValue)) {
         target[key] = merge(sourceValue, referenceValue);
-      } else if (Object.prototype.hasOwnProperty.call(sourceObject, key)) {
+      } else if (Object.hasOwn(sourceObject, key)) {
         target[key] = clone(sourceValue);
       } else {
         target[key] = clone(referenceValue);
@@ -604,7 +562,7 @@ function mergeConfigWithTemplate(sourceConfig, templateConfig) {
     }
 
     for (const [key, value] of Object.entries(sourceObject)) {
-      if (!Object.prototype.hasOwnProperty.call(referenceObject, key)) {
+      if (!Object.hasOwn(referenceObject, key)) {
         target[key] = clone(value);
       }
     }
@@ -622,27 +580,18 @@ async function initialize(platform) {
   originalPlatformId.value = platform?.id || "";
   const platformCopy = JSON.parse(JSON.stringify(platform || {}));
   const template = findPlatformTemplate(platformCopy);
-  draft.value = template
-    ? mergeConfigWithTemplate(platformCopy, template)
-    : platformCopy;
+  draft.value = template ? mergeConfigWithTemplate(platformCopy, template) : platformCopy;
   simpleBindings.value = [];
   advancedRoutes.value = [];
   fallbackConfigId.value = SYSTEM_DEFAULT_CONFIG;
   pendingSessionUmo.value = null;
 
-  const [profilesResult, routesResult] = await Promise.allSettled([
-    configProfileApi.list(),
-    configRouteApi.list(),
-  ]);
+  const [profilesResult, routesResult] = await Promise.allSettled([configProfileApi.list(), configRouteApi.list()]);
   if (version !== loadVersion) return;
 
   if (profilesResult.status === "fulfilled") {
     configProfiles.value = profilesResult.value.data.data.info_list || [];
-    if (
-      !configProfiles.value.some(
-        (profile) => profile.id === pendingConfigId.value,
-      )
-    ) {
+    if (!configProfiles.value.some((profile) => profile.id === pendingConfigId.value)) {
       pendingConfigId.value = configProfiles.value[0]?.id || "";
     }
   } else {
@@ -667,9 +616,7 @@ async function initialize(platform) {
         (umo) => parseUmo(umo)?.platform === originalPlatformId.value,
       );
       knownSessionInfo.value = Object.fromEntries(
-        (sessionsResponse.data.data?.umo_infos || [])
-          .filter((info) => info?.umo)
-          .map((info) => [info.umo, info]),
+        (sessionsResponse.data.data?.umo_infos || []).filter((info) => info?.umo).map((info) => [info.umo, info]),
       );
     }
   } catch (error) {
@@ -736,10 +683,7 @@ function hasGlob(value) {
 }
 
 function isBotFallbackPattern(parsed) {
-  return (
-    ["", "*"].includes(parsed.messageType) &&
-    ["", "*"].includes(parsed.sessionId)
-  );
+  return ["", "*"].includes(parsed.messageType) && ["", "*"].includes(parsed.sessionId);
 }
 
 function isExactSessionPattern(parsed) {
@@ -754,11 +698,7 @@ function getSessionDisplayProps(umo) {
   let sessionType = tm("workspace.routes.sessionTypes.other");
   if (["GroupMessage", "group"].includes(messageType)) {
     sessionType = tm("workspace.routes.sessionTypes.group");
-  } else if (
-    ["FriendMessage", "PrivateMessage", "friend", "private"].includes(
-      messageType,
-    )
-  ) {
+  } else if (["FriendMessage", "PrivateMessage", "friend", "private"].includes(messageType)) {
     sessionType = tm("workspace.routes.sessionTypes.friend");
   }
   return {
@@ -768,8 +708,7 @@ function getSessionDisplayProps(umo) {
     sessionId,
     autoName: info.auto_name || "",
     userAlias: info.user_alias || "",
-    customName:
-      info.auto_name || info.user_alias ? "" : `${sessionType} · ${sessionId}`,
+    customName: info.auto_name || info.user_alias ? "" : `${sessionType} · ${sessionId}`,
   };
 }
 
@@ -788,10 +727,7 @@ function addAdvancedRoute() {
   advancedRoutes.value.push({
     key: `pattern-${routeKey++}`,
     pattern: `${platformId}:GroupMessage:*`,
-    configId:
-      configProfiles.value.find((profile) => profile.id === "default")?.id ||
-      configProfiles.value[0]?.id ||
-      "",
+    configId: configProfiles.value.find((profile) => profile.id === "default")?.id || configProfiles.value[0]?.id || "",
   });
 }
 
@@ -807,10 +743,7 @@ function getPatternError(pattern) {
   if (!pattern) return tm("workspace.routes.patternRequired");
   const parsed = parseUmo(pattern);
   if (!parsed) return tm("workspace.routes.patternInvalid");
-  const validPlatformIds = new Set([
-    originalPlatformId.value,
-    draft.value.id || originalPlatformId.value,
-  ]);
+  const validPlatformIds = new Set([originalPlatformId.value, draft.value.id || originalPlatformId.value]);
   if (!validPlatformIds.has(parsed.platform)) {
     return tm("workspace.routes.patternPlatformMismatch");
   }
@@ -831,14 +764,10 @@ async function save() {
     const newPlatformId = draft.value.id || oldPlatformId;
     let nextRoutingTable = null;
     if (routesReady.value) {
-      const retainedEntries = Object.entries(fullRoutingTable.value).filter(
-        ([pattern]) => {
-          const parsed = parseUmo(pattern);
-          return (
-            !parsed || ![oldPlatformId, newPlatformId].includes(parsed.platform)
-          );
-        },
-      );
+      const retainedEntries = Object.entries(fullRoutingTable.value).filter(([pattern]) => {
+        const parsed = parseUmo(pattern);
+        return !parsed || ![oldPlatformId, newPlatformId].includes(parsed.platform);
+      });
       const botEntries = [];
       const routePatterns = new Set();
 
@@ -869,17 +798,12 @@ async function save() {
         botEntries.push([pattern, fallbackConfigId.value]);
       }
 
-      nextRoutingTable = Object.fromEntries([
-        ...botEntries,
-        ...retainedEntries,
-      ]);
+      nextRoutingTable = Object.fromEntries([...botEntries, ...retainedEntries]);
     }
 
     const response = await botApi.update(oldPlatformId, draft.value);
     if (response.data.status === "error") {
-      throw new Error(
-        response.data.message || tm("messages.platformUpdateFailed"),
-      );
+      throw new Error(response.data.message || tm("messages.platformUpdateFailed"));
     }
 
     if (nextRoutingTable) {
@@ -907,8 +831,7 @@ function showSuccess(message) {
 }
 
 function showError(error) {
-  const message =
-    error?.response?.data?.message || error?.message || String(error);
+  const message = error?.response?.data?.message || error?.message || String(error);
   emit("show-toast", { message, type: "error" });
 }
 </script>

@@ -7,7 +7,6 @@
   "buttons": {
     "update": "Обновить",
     "account": "Аккаунт",
-    "logout": "Выйти",
     "theme": {
       "light": "Светлая тема",
       "dark": "Темная тема"

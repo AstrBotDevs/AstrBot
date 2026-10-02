@@ -1,10 +1,10 @@
 /**
  * Tool actions composable
  */
-import { ref, computed, type Ref } from "vue";
+import { computed, type Ref, ref } from "vue";
 import { toolApi } from "@/api/v1";
-import { normalizeTextInput } from "@/utils/inputValue";
 import { resolveErrorMessage } from "@/utils/errorUtils.js";
+import { normalizeTextInput } from "@/utils/inputValue";
 import type { ToolItem, ToolSummary } from "../types";
 
 export function useToolActions(tools: Ref<ToolItem[]>, toast: (message: string, color?: string) => void) {

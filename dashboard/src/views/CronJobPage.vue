@@ -436,16 +436,16 @@
 </template>
 
 <script setup lang="ts">
-import axios from "@/utils/request";
-import { resolveErrorMessage } from "@/utils/errorUtils.js";
-import type { ApiEnvelope } from "@/api/v1";
-import type { CronJobRequest } from "@/api/generated/openapi-v1";
 import { computed, onMounted, ref } from "vue";
 import { useTheme } from "vuetify";
+import type { CronJobRequest } from "@/api/generated/openapi-v1";
+import type { ApiEnvelope } from "@/api/v1";
 import OutlinedActionListItem from "@/components/shared/OutlinedActionListItem.vue";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
 import UmoDisplay from "@/components/shared/UmoDisplay.vue";
 import { useModuleI18n } from "@/i18n/composables";
+import { resolveErrorMessage } from "@/utils/errorUtils.js";
+import axios from "@/utils/request";
 
 const { tm } = useModuleI18n("features/cron");
 const theme = useTheme();

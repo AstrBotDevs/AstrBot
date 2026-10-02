@@ -282,9 +282,9 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
+import EmojiPicker from "@/components/shared/EmojiPicker.vue";
 import OutlinedActionListItem from "@/components/shared/OutlinedActionListItem.vue";
 import { useModuleI18n } from "@/i18n/composables";
-import EmojiPicker from "@/components/shared/EmojiPicker.vue";
 import axios from "@/utils/request";
 
 interface KnowledgeBaseItem {
@@ -329,8 +329,8 @@ const embeddingProviders = ref<ProviderInfo[]>([]);
 const rerankProviders = ref<ProviderInfo[]>([]);
 
 // 对话框
-const showCreateDialog = ref(false)
-const showDeleteDialog = ref(false)
+const showCreateDialog = ref(false);
+const showDeleteDialog = ref(false);
 
 // Snackbar 通知
 const snackbar = ref({

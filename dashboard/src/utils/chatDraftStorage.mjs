@@ -10,9 +10,7 @@ export const CHAT_DRAFT_STORAGE_PREFIX = "astrbot.chat.draft.";
 export function readChatDraft(sessionId, storage) {
   try {
     const target = storage ?? globalThis.localStorage;
-    return (
-      target?.getItem(`${CHAT_DRAFT_STORAGE_PREFIX}${sessionId || "new"}`) || ""
-    );
+    return target?.getItem(`${CHAT_DRAFT_STORAGE_PREFIX}${sessionId || "new"}`) || "";
   } catch {
     return "";
   }

@@ -54,10 +54,7 @@ const normalizePlatformList = (platforms: unknown): string[] => {
 const platformDisplayList = computed(() => normalizePlatformList(props.plugin?.support_platforms));
 
 const cardDescription = computed(() =>
-  pluginShortDesc(
-    props.plugin,
-    props.plugin?.short_desc || props.plugin?.desc || "",
-  ),
+  pluginShortDesc(props.plugin, props.plugin?.short_desc || props.plugin?.desc || ""),
 );
 
 const canInstallPlugin = computed(() => {
@@ -65,10 +62,7 @@ const canInstallPlugin = computed(() => {
 });
 
 const hasDownloadCount = computed(() => {
-  return (
-    props.plugin?.download_count !== undefined &&
-    props.plugin?.download_count !== null
-  );
+  return props.plugin?.download_count !== undefined && props.plugin?.download_count !== null;
 });
 
 const handleInstall = (plugin: typeof props.plugin) => {

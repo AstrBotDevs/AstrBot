@@ -94,8 +94,7 @@ const isPluginEntry = (value: unknown): value is PluginEntry => {
   );
 };
 
-const toPluginEntries = (value: unknown): PluginEntry[] =>
-  Array.isArray(value) ? value.filter(isPluginEntry) : [];
+const toPluginEntries = (value: unknown): PluginEntry[] => (Array.isArray(value) ? value.filter(isPluginEntry) : []);
 
 const filteredPlugins = computed(() => toPluginEntries(unref(rawFilteredPlugins)));
 
@@ -228,7 +227,9 @@ const pinnedPlugins = computed(() => {
     );
   };
 
-  return pinnedNames.value.map((name) => findByName(name)).filter((plugin): plugin is PluginEntry => plugin !== undefined);
+  return pinnedNames.value
+    .map((name) => findByName(name))
+    .filter((plugin): plugin is PluginEntry => plugin !== undefined);
 });
 </script>
 

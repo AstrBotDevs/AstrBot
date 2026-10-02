@@ -448,44 +448,31 @@
 </template>
 
 <script setup lang="ts">
-import MessageContentTransition from "@/components/chat/MessageContentTransition.vue";
-import { computed, nextTick, reactive, ref } from "vue";
 import { Copy, Info, SquarePen } from "@lucide/vue";
-import axios from "@/utils/request";
+import { computed, nextTick, reactive, ref } from "vue";
 import { fileApi } from "@/api/v1";
-import RegenerateMenu, {
-  type RegenerateModelSelection,
-} from "@/components/chat/RegenerateMenu.vue";
-import ThreadedMarkdownMessagePart from "@/components/chat/ThreadedMarkdownMessagePart.vue";
+import { attachmentName, attachmentPresentation } from "@/components/chat/attachmentPresentation";
+import { CHAT_MARKDOWN_CUSTOM_TAGS, registerChatMarkdownComponents } from "@/components/chat/chatMarkdownComponents";
+import MessageContentTransition from "@/components/chat/MessageContentTransition.vue";
+import ActionRef from "@/components/chat/message_list_comps/ActionRef.vue";
+import IPythonToolBlock from "@/components/chat/message_list_comps/IPythonToolBlock.vue";
+import MarkdownMessagePart from "@/components/chat/message_list_comps/MarkdownMessagePart.vue";
 import ReasoningBlock from "@/components/chat/message_list_comps/ReasoningBlock.vue";
+import RefsSidebar from "@/components/chat/message_list_comps/RefsSidebar.vue";
 import ToolCallCard from "@/components/chat/message_list_comps/ToolCallCard.vue";
 import ToolCallItem from "@/components/chat/message_list_comps/ToolCallItem.vue";
-import IPythonToolBlock from "@/components/chat/message_list_comps/IPythonToolBlock.vue";
-import RefsSidebar from "@/components/chat/message_list_comps/RefsSidebar.vue";
-import ActionRef from "@/components/chat/message_list_comps/ActionRef.vue";
-import MarkdownMessagePart from "@/components/chat/message_list_comps/MarkdownMessagePart.vue";
+import RegenerateMenu, { type RegenerateModelSelection } from "@/components/chat/RegenerateMenu.vue";
+import ThreadedMarkdownMessagePart from "@/components/chat/ThreadedMarkdownMessagePart.vue";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
+import type { ChatContent, ChatRecord, ChatThread, MessagePart } from "@/composables/useMessages";
 import {
-  CHAT_MARKDOWN_CUSTOM_TAGS,
-  registerChatMarkdownComponents,
-} from "@/components/chat/chatMarkdownComponents";
-import {
-  attachmentName,
-  attachmentPresentation,
-} from "@/components/chat/attachmentPresentation";
-import {
-  displayParts as displayMessageParts,
   messageBlocks as buildMessageBlocks,
+  displayParts as displayMessageParts,
   type MessageDisplayBlock,
-} from "@/composables/useMessages";
-import type {
-  ChatContent,
-  ChatRecord,
-  ChatThread,
-  MessagePart,
 } from "@/composables/useMessages";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { copyToClipboard } from "@/utils/clipboard";
+import axios from "@/utils/request";
 
 const props = withDefaults(
   defineProps<{
@@ -523,10 +510,7 @@ const emit = defineEmits<{
   cancelEdit: [];
   saveEdit: [];
   regenerate: [message: ChatRecord];
-  regenerateWithModel: [
-    message: ChatRecord,
-    selection: RegenerateModelSelection,
-  ];
+  regenerateWithModel: [message: ChatRecord, selection: RegenerateModelSelection];
   selectBotText: [event: MouseEvent, message: ChatRecord];
   openThread: [thread: ChatThread];
   openReasoning: [payload: { message: ChatRecord; blockIndex: number }];
@@ -571,14 +555,11 @@ function userAttachmentParts(message: ChatRecord) {
 
 function hasImageOnlyAttachments(message: ChatRecord) {
   const attachments = userAttachmentParts(message);
-  return (
-    attachments.length > 0 && attachments.every((part) => part.type === "image")
-  );
+  return attachments.length > 0 && attachments.every((part) => part.type === "image");
 }
 
 function bubbleParts(message: ChatRecord) {
-  if (!isUserMessage(message))
-    return displayMessageParts(messageContent(message));
+  if (!isUserMessage(message)) return displayMessageParts(messageContent(message));
   return messageParts(message).filter((part) => !isAttachmentPart(part));
 }
 
@@ -592,19 +573,11 @@ function shouldShowMessageBubble(message: ChatRecord) {
 }
 
 function isMessageStreaming(message: ChatRecord, messageIndex: number) {
-  return (
-    props.isStreaming &&
-    !isUserMessage(message) &&
-    messageIndex === props.messages.length - 1
-  );
+  return props.isStreaming && !isUserMessage(message) && messageIndex === props.messages.length - 1;
 }
 
 function isEditingMessage(message: ChatRecord) {
-  return (
-    props.editingMessageId != null &&
-    message.id != null &&
-    String(props.editingMessageId) === String(message.id)
-  );
+  return props.editingMessageId != null && message.id != null && String(props.editingMessageId) === String(message.id);
 }
 
 function canEditMessage(message: ChatRecord, messageIndex: number) {
@@ -620,11 +593,7 @@ function canEditMessage(message: ChatRecord, messageIndex: number) {
 function latestEditableUserIndex() {
   for (let index = props.messages.length - 1; index >= 0; index -= 1) {
     const message = props.messages[index];
-    if (
-      isUserMessage(message) &&
-      message.id != null &&
-      !String(message.id).startsWith("local-")
-    ) {
+    if (isUserMessage(message) && message.id != null && !String(message.id).startsWith("local-")) {
       return index;
     }
   }
@@ -642,10 +611,7 @@ function canRegenerateMessage(message: ChatRecord, messageIndex: number) {
 }
 
 function showMessageMeta(message: ChatRecord, messageIndex: number) {
-  return (
-    !messageContent(message).isLoading &&
-    !isMessageStreaming(message, messageIndex)
-  );
+  return !messageContent(message).isLoading && !isMessageStreaming(message, messageIndex);
 }
 
 function hasNonReasoningContent(message: ChatRecord) {
@@ -706,9 +672,7 @@ function plainTextFromMessage(message: ChatRecord) {
 
 function replyPreview(messageId?: string | number, fallback?: string) {
   if (fallback) return truncate(fallback, 80);
-  const found = props.messages.find(
-    (message) => String(message.id) === String(messageId),
-  );
+  const found = props.messages.find((message) => String(message.id) === String(messageId));
   const text = found ? plainTextFromMessage(found) : "";
   return text ? truncate(text, 80) : tm("reply.replyTo");
 }
@@ -719,14 +683,10 @@ function truncate(value: string, max: number) {
 
 function scrollToMessage(messageId?: string | number) {
   if (!messageId) return;
-  const index = props.messages.findIndex(
-    (message) => String(message.id) === String(messageId),
-  );
+  const index = props.messages.findIndex((message) => String(message.id) === String(messageId));
   if (index < 0) return;
   nextTick(() => {
-    listRoot.value
-      ?.querySelectorAll(".message-row")
-      [index]?.scrollIntoView({ behavior: "smooth", block: "center" });
+    listRoot.value?.querySelectorAll(".message-row")[index]?.scrollIntoView({ behavior: "smooth", block: "center" });
   });
 }
 
@@ -762,11 +722,7 @@ function resolvedMessageRefs(message: ChatRecord) {
 
 function normalizeRefs(refs: unknown) {
   if (!refs) return { used: [] as Array<Record<string, unknown>> };
-  const used = Array.isArray((refs as any)?.used)
-    ? (refs as any).used
-    : Array.isArray(refs)
-    ? refs
-    : [];
+  const used = Array.isArray((refs as any)?.used) ? (refs as any).used : Array.isArray(refs) ? refs : [];
   return { used: normalizeRefItems(used) };
 }
 
@@ -787,8 +743,7 @@ function handleOpenRefs(refs: unknown) {
     emit("openRefs", refs);
     return;
   }
-  selectedRefs.value =
-    refs && typeof refs === "object" ? (refs as Record<string, unknown>) : null;
+  selectedRefs.value = refs && typeof refs === "object" ? (refs as Record<string, unknown>) : null;
   refsSidebarOpen.value = true;
 }
 
@@ -867,10 +822,7 @@ function cachedInputTokens(stats: any) {
 }
 
 function agentDuration(stats: any) {
-  const directDuration = readPositiveNumber(stats, [
-    "duration",
-    "total_duration",
-  ]);
+  const directDuration = readPositiveNumber(stats, ["duration", "total_duration"]);
   if (directDuration !== null) return formatDuration(directDuration);
 
   const startTime = readPositiveNumber(stats, ["start_time"]);
@@ -880,11 +832,7 @@ function agentDuration(stats: any) {
 }
 
 function agentTtft(stats: any) {
-  const ttft = readPositiveNumber(stats, [
-    "time_to_first_token",
-    "ttft",
-    "first_token_latency",
-  ]);
+  const ttft = readPositiveNumber(stats, ["time_to_first_token", "ttft", "first_token_latency"]);
   if (ttft === null) return "";
   return formatDuration(ttft);
 }

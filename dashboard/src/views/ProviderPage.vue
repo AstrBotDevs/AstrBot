@@ -301,15 +301,15 @@
 </template>
 
 <script setup>
-import { computed, nextTick, ref, watch } from 'vue'
-import { providerApi } from '@/api/v1'
-import { useModuleI18n } from '@/i18n/composables'
-import AstrBotConfig from '@/components/shared/AstrBotConfig.vue'
-import ProviderModelsPanel from '@/components/provider/ProviderModelsPanel.vue'
-import ProviderSourceSubtitle from '@/components/provider/ProviderSourceSubtitle.vue'
-import ProviderSourcesPanel from '@/components/provider/ProviderSourcesPanel.vue'
-import { useProviderModelConfigDialog } from '@/composables/useProviderModelConfigDialog'
-import { useProviderSources } from '@/composables/useProviderSources'
+import { computed, nextTick, ref, watch } from "vue";
+import { providerApi } from "@/api/v1";
+import ProviderModelsPanel from "@/components/provider/ProviderModelsPanel.vue";
+import ProviderSourceSubtitle from "@/components/provider/ProviderSourceSubtitle.vue";
+import ProviderSourcesPanel from "@/components/provider/ProviderSourcesPanel.vue";
+import AstrBotConfig from "@/components/shared/AstrBotConfig.vue";
+import { useProviderModelConfigDialog } from "@/composables/useProviderModelConfigDialog";
+import { useProviderSources } from "@/composables/useProviderSources";
+import { useModuleI18n } from "@/i18n/composables";
 
 const props = defineProps({
   defaultTab: {
@@ -318,7 +318,7 @@ const props = defineProps({
   },
 });
 
-const { tm } = useModuleI18n('features/provider')
+const { tm } = useModuleI18n("features/provider");
 
 const snackbar = ref({
   show: false,
@@ -380,23 +380,21 @@ const {
   showMessage,
 });
 
-const unsavedLegacyProviderMarker = Symbol('unsavedLegacyProvider')
-const legacyProviderDrafts = ref([])
-const selectedLegacyProvider = ref(null)
-const newSelectedProviderConfig = ref({})
-const newProviderOriginalId = ref('')
-const updatingMode = ref(false)
-const loading = ref(false)
-const isLegacyProviderModified = ref(false)
-const showManualModelDialog = ref(false)
-let suppressLegacyProviderWatch = false
+const unsavedLegacyProviderMarker = Symbol("unsavedLegacyProvider");
+const legacyProviderDrafts = ref([]);
+const selectedLegacyProvider = ref(null);
+const newSelectedProviderConfig = ref({});
+const newProviderOriginalId = ref("");
+const updatingMode = ref(false);
+const loading = ref(false);
+const isLegacyProviderModified = ref(false);
+const showManualModelDialog = ref(false);
+let suppressLegacyProviderWatch = false;
 
 const displayedLegacyProviders = computed(() => [
   ...filteredProviders.value,
-  ...legacyProviderDrafts.value.filter(
-    (provider) => provider.provider_type === selectedProviderType.value
-  )
-])
+  ...legacyProviderDrafts.value.filter((provider) => provider.provider_type === selectedProviderType.value),
+]);
 
 const {
   showProviderEditDialog,
@@ -452,73 +450,70 @@ watch(
 );
 
 watch(selectedProviderType, () => {
-  selectedLegacyProvider.value = null
-  newProviderOriginalId.value = ''
-  updatingMode.value = false
-  isLegacyProviderModified.value = false
-  suppressLegacyProviderWatch = true
-  newSelectedProviderConfig.value = {}
+  selectedLegacyProvider.value = null;
+  newProviderOriginalId.value = "";
+  updatingMode.value = false;
+  isLegacyProviderModified.value = false;
+  suppressLegacyProviderWatch = true;
+  newSelectedProviderConfig.value = {};
   nextTick(() => {
-    suppressLegacyProviderWatch = false
-  })
-})
+    suppressLegacyProviderWatch = false;
+  });
+});
 
-watch(newSelectedProviderConfig, (config) => {
-  if (suppressLegacyProviderWatch || !selectedLegacyProvider.value) return
+watch(
+  newSelectedProviderConfig,
+  (config) => {
+    if (suppressLegacyProviderWatch || !selectedLegacyProvider.value) return;
 
-  isLegacyProviderModified.value = true
-  if (selectedLegacyProvider.value[unsavedLegacyProviderMarker]) {
-    Object.assign(
-      selectedLegacyProvider.value,
-      JSON.parse(JSON.stringify(config))
-    )
-  }
-}, { deep: true })
+    isLegacyProviderModified.value = true;
+    if (selectedLegacyProvider.value[unsavedLegacyProviderMarker]) {
+      Object.assign(selectedLegacyProvider.value, JSON.parse(JSON.stringify(config)));
+    }
+  },
+  { deep: true },
+);
 
 function getEmptyText() {
-  const selectedType = providerTypes.value.find(
-    (type) => type.value === selectedProviderType.value
-  )
-  return tm('providers.empty.typed', {
-    type: selectedType?.label || selectedProviderType.value
-  })
+  const selectedType = providerTypes.value.find((type) => type.value === selectedProviderType.value);
+  return tm("providers.empty.typed", {
+    type: selectedType?.label || selectedProviderType.value,
+  });
 }
 
 function addLegacyProvider(name) {
-  const template = configSchema.value.provider?.config_template?.[name]
+  const template = configSchema.value.provider?.config_template?.[name];
   if (!template) {
-    showMessage(tm('dialogs.addProvider.noTemplates'), 'error')
-    return
+    showMessage(tm("dialogs.addProvider.noTemplates"), "error");
+    return;
   }
 
-  const draft = JSON.parse(JSON.stringify(template))
+  const draft = JSON.parse(JSON.stringify(template));
   const existingIds = new Set([
     ...providers.value.map((provider) => provider.id),
-    ...legacyProviderDrafts.value.map((provider) => provider.id)
-  ])
-  const baseId = String(draft.id || name)
-  let nextId = baseId
-  let counter = 1
+    ...legacyProviderDrafts.value.map((provider) => provider.id),
+  ]);
+  const baseId = String(draft.id || name);
+  let nextId = baseId;
+  let counter = 1;
   while (existingIds.has(nextId)) {
-    nextId = `${baseId}_${counter}`
-    counter += 1
+    nextId = `${baseId}_${counter}`;
+    counter += 1;
   }
-  draft.id = nextId
-  draft[unsavedLegacyProviderMarker] = true
-  legacyProviderDrafts.value.push(draft)
-  selectLegacyProvider(draft)
+  draft.id = nextId;
+  draft[unsavedLegacyProviderMarker] = true;
+  legacyProviderDrafts.value.push(draft);
+  selectLegacyProvider(draft);
 }
 
 function selectLegacyProvider(provider) {
-  selectedLegacyProvider.value = provider
-  newProviderOriginalId.value = provider[unsavedLegacyProviderMarker]
-    ? ''
-    : provider.id
-  suppressLegacyProviderWatch = true
-  newSelectedProviderConfig.value = {}
+  selectedLegacyProvider.value = provider;
+  newProviderOriginalId.value = provider[unsavedLegacyProviderMarker] ? "" : provider.id;
+  suppressLegacyProviderWatch = true;
+  newSelectedProviderConfig.value = {};
 
-  const templates = configSchema.value.provider?.config_template || {}
-  let defaultConfig = {}
+  const templates = configSchema.value.provider?.config_template || {};
+  let defaultConfig = {};
   for (const key in templates) {
     if (templates[key]?.type === provider.type) {
       defaultConfig = templates[key];
@@ -527,11 +522,11 @@ function selectLegacyProvider(provider) {
   }
 
   const mergeConfigWithOrder = (target, source, reference) => {
-    if (source && typeof source === 'object' && !Array.isArray(source)) {
+    if (source && typeof source === "object" && !Array.isArray(source)) {
       for (const key in source) {
-        if (Object.prototype.hasOwnProperty.call(source, key)) {
-          if (typeof source[key] === 'object' && source[key] !== null) {
-            target[key] = Array.isArray(source[key]) ? [...source[key]] : { ...source[key] }
+        if (Object.hasOwn(source, key)) {
+          if (typeof source[key] === "object" && source[key] !== null) {
+            target[key] = Array.isArray(source[key]) ? [...source[key]] : { ...source[key] };
           } else {
             target[key] = source[key];
           }
@@ -540,7 +535,7 @@ function selectLegacyProvider(provider) {
     }
 
     for (const key in reference) {
-      if (typeof reference[key] === 'object' && reference[key] !== null) {
+      if (typeof reference[key] === "object" && reference[key] !== null) {
         if (!(key in target)) {
           if (Array.isArray(reference[key])) {
             target[key] = [...reference[key]];
@@ -561,46 +556,41 @@ function selectLegacyProvider(provider) {
     mergeConfigWithOrder(newSelectedProviderConfig.value, provider, defaultConfig);
   }
 
-  updatingMode.value = !provider[unsavedLegacyProviderMarker]
-  isLegacyProviderModified.value = Boolean(provider[unsavedLegacyProviderMarker])
+  updatingMode.value = !provider[unsavedLegacyProviderMarker];
+  isLegacyProviderModified.value = Boolean(provider[unsavedLegacyProviderMarker]);
   nextTick(() => {
-    suppressLegacyProviderWatch = false
-  })
+    suppressLegacyProviderWatch = false;
+  });
 }
 
 async function saveLegacyProvider() {
-  if (!selectedLegacyProvider.value) return
+  if (!selectedLegacyProvider.value) return;
 
-  loading.value = true
-  const wasUpdating = updatingMode.value
-  const selectedDraft = selectedLegacyProvider.value
-  const savedId = newSelectedProviderConfig.value.id
+  loading.value = true;
+  const wasUpdating = updatingMode.value;
+  const selectedDraft = selectedLegacyProvider.value;
+  const savedId = newSelectedProviderConfig.value.id;
   try {
     if (wasUpdating) {
-      const res = await providerApi.update(
-        newProviderOriginalId.value,
-        newSelectedProviderConfig.value
-      )
-      if (res.data.status === 'error') {
-        throw new Error(res.data.message || '更新失败!')
+      const res = await providerApi.update(newProviderOriginalId.value, newSelectedProviderConfig.value);
+      if (res.data.status === "error") {
+        throw new Error(res.data.message || "更新失败!");
       }
-      showMessage(res.data.message || '更新成功!')
+      showMessage(res.data.message || "更新成功!");
     } else {
-      const res = await providerApi.create(newSelectedProviderConfig.value)
-      if (res.data.status === 'error') {
-        throw new Error(res.data.message || '添加失败!')
+      const res = await providerApi.create(newSelectedProviderConfig.value);
+      if (res.data.status === "error") {
+        throw new Error(res.data.message || "添加失败!");
       }
-      showMessage(res.data.message || '添加成功!')
-      legacyProviderDrafts.value = legacyProviderDrafts.value.filter(
-        (provider) => provider !== selectedDraft
-      )
+      showMessage(res.data.message || "添加成功!");
+      legacyProviderDrafts.value = legacyProviderDrafts.value.filter((provider) => provider !== selectedDraft);
     }
 
-    await loadConfig()
-    const savedProvider = providers.value.find((provider) => provider.id === savedId)
+    await loadConfig();
+    const savedProvider = providers.value.find((provider) => provider.id === savedId);
     if (savedProvider) {
-      selectLegacyProvider(savedProvider)
-      isLegacyProviderModified.value = false
+      selectLegacyProvider(savedProvider);
+      isLegacyProviderModified.value = false;
     }
   } catch (err) {
     showMessage(err.response?.data?.message || err.message, "error");
@@ -611,26 +601,24 @@ async function saveLegacyProvider() {
 
 async function deleteLegacyProvider(provider) {
   if (provider[unsavedLegacyProviderMarker]) {
-    legacyProviderDrafts.value = legacyProviderDrafts.value.filter(
-      (draft) => draft !== provider
-    )
+    legacyProviderDrafts.value = legacyProviderDrafts.value.filter((draft) => draft !== provider);
     if (selectedLegacyProvider.value === provider) {
-      selectedLegacyProvider.value = null
-      newSelectedProviderConfig.value = {}
-      newProviderOriginalId.value = ''
-      updatingMode.value = false
-      isLegacyProviderModified.value = false
+      selectedLegacyProvider.value = null;
+      newSelectedProviderConfig.value = {};
+      newProviderOriginalId.value = "";
+      updatingMode.value = false;
+      isLegacyProviderModified.value = false;
     }
-    return
+    return;
   }
 
-  const deleted = await deleteProvider(provider)
+  const deleted = await deleteProvider(provider);
   if (deleted && selectedLegacyProvider.value?.id === provider.id) {
-    selectedLegacyProvider.value = null
-    newSelectedProviderConfig.value = {}
-    newProviderOriginalId.value = ''
-    updatingMode.value = false
-    isLegacyProviderModified.value = false
+    selectedLegacyProvider.value = null;
+    newSelectedProviderConfig.value = {};
+    newProviderOriginalId.value = "";
+    updatingMode.value = false;
+    isLegacyProviderModified.value = false;
   }
 }
 
@@ -639,12 +627,12 @@ function isProviderTesting(providerId) {
 }
 
 async function testSingleProvider(provider) {
-  if (isProviderTesting(provider.id)) return
+  if (isProviderTesting(provider.id)) return;
   if (provider.enable === false) {
-    showMessage('该提供商未被用户启用', 'error')
-    return
+    showMessage("该提供商未被用户启用", "error");
+    return;
   }
-  await testProvider(provider)
+  await testProvider(provider);
 }
 </script>
 

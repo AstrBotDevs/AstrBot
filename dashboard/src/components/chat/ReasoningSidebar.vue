@@ -34,13 +34,9 @@
 <script setup lang="ts">
 import "@/components/chat/chatPanelTransition.css";
 import { computed, nextTick, ref, watch } from "vue";
-import {
-  reasoningActivityCounts,
-  reasoningActivityTitle,
-  type MessagePart,
-} from "@/composables/useMessages";
-import { useModuleI18n } from "@/i18n/composables";
 import ReasoningTimeline from "@/components/chat/message_list_comps/ReasoningTimeline.vue";
+import { type MessagePart, reasoningActivityCounts, reasoningActivityTitle } from "@/composables/useMessages";
+import { useModuleI18n } from "@/i18n/composables";
 
 const props = defineProps<{
   modelValue: boolean;
@@ -79,9 +75,7 @@ function scrollToLatestActivity() {
   });
 }
 
-function handleSidebarInteraction(
-  event: WheelEvent | TouchEvent | PointerEvent | KeyboardEvent,
-) {
+function handleSidebarInteraction(event: WheelEvent | TouchEvent | PointerEvent | KeyboardEvent) {
   if (event instanceof WheelEvent) {
     if (event.ctrlKey || event.deltaY === 0) return;
     scrollIntent = Math.sign(event.deltaY);
@@ -96,15 +90,10 @@ function handleSidebarInteraction(
     touchScrollY = touch.clientY;
   } else if (event instanceof KeyboardEvent) {
     const target = event.target as HTMLElement;
-    if (
-      target.closest("input, textarea, select, [contenteditable], button, a")
-    ) {
+    if (target.closest("input, textarea, select, [contenteditable], button, a")) {
       return;
     }
-    if (
-      ["ArrowUp", "PageUp", "Home"].includes(event.key) ||
-      (event.key === " " && event.shiftKey)
-    ) {
+    if (["ArrowUp", "PageUp", "Home"].includes(event.key) || (event.key === " " && event.shiftKey)) {
       scrollIntent = -1;
     } else if (["ArrowDown", "PageDown", "End", " "].includes(event.key)) {
       scrollIntent = 1;
@@ -128,11 +117,7 @@ function handleSidebarScroll() {
   const isAwayFromBottom = maxScrollTop - scrollTop > 2;
   if (scrollTop < previousTop) {
     shouldStickToBottom.value = false;
-  } else if (
-    scrollTop > previousTop &&
-    !isAwayFromBottom &&
-    scrollIntent >= 0
-  ) {
+  } else if (scrollTop > previousTop && !isAwayFromBottom && scrollIntent >= 0) {
     shouldStickToBottom.value = true;
   }
   lastSidebarScrollTop = scrollTop;

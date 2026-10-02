@@ -58,12 +58,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
 import { MarkdownRender } from "markstream-vue";
-import {
-  CHAT_MARKDOWN_HEADING_STYLE,
-  MARKDOWN_RENDER_MAX_LIVE_NODES,
-} from "@/components/chat/markdownRenderConfig";
+import { computed } from "vue";
+import { CHAT_MARKDOWN_HEADING_STYLE, MARKDOWN_RENDER_MAX_LIVE_NODES } from "@/components/chat/markdownRenderConfig";
 import IPythonToolBlock from "@/components/chat/message_list_comps/IPythonToolBlock.vue";
 import ToolCallCard from "@/components/chat/message_list_comps/ToolCallCard.vue";
 import ToolCallItem from "@/components/chat/message_list_comps/ToolCallItem.vue";
@@ -124,9 +121,7 @@ const timelineEntries = computed<TimelineEntry[]>(() => {
     part.tool_calls.forEach((tool, toolIndex) => {
       const normalizedTool = normalizeToolCall(tool);
       entries.push({
-        key: `tool-${String(
-          tool.id || tool.name || `${partIndex}-${toolIndex}`,
-        )}`,
+        key: `tool-${String(tool.id || tool.name || `${partIndex}-${toolIndex}`)}`,
         kind: "tool_call",
         title: tm("reasoning.toolUsed"),
         tool: normalizedTool,
@@ -139,9 +134,7 @@ const timelineEntries = computed<TimelineEntry[]>(() => {
 
 function normalizeToolCall(tool: Record<string, unknown>) {
   const normalized = { ...tool };
-  normalized.args = parseJsonSafe(
-    normalized.args ?? normalized.arguments ?? {},
-  );
+  normalized.args = parseJsonSafe(normalized.args ?? normalized.arguments ?? {});
   normalized.result = parseJsonSafe(normalized.result);
   normalized.ts = normalized.ts ?? Date.now() / 1000;
   if (normalized.result && typeof normalized.result === "object") {

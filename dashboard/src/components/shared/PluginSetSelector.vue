@@ -208,7 +208,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch, type PropType } from "vue";
+import { computed, onMounted, type PropType, ref, watch } from "vue";
 import { pluginApi } from "@/api/v1";
 import { useModuleI18n } from "@/i18n/composables";
 import { usePluginI18n } from "@/utils/pluginI18n";
@@ -254,17 +254,12 @@ const selectionMode = ref("custom"); // 'all', 'none', 'custom'
 const selectedPlugins = ref<string[]>([]);
 const pluginSearchKeyword = ref("");
 
-const pluginDisplayName = (plugin: PluginEntry) =>
-  pluginName(plugin) || plugin.name;
+const pluginDisplayName = (plugin: PluginEntry) => pluginName(plugin) || plugin.name;
 const pluginDescription = (plugin: PluginEntry) => pluginDesc(plugin);
 
 // 判断是否为"所有插件"模式
 const isAllPlugins = computed(() => {
-  return (
-    props.modelValue &&
-    props.modelValue.length === 1 &&
-    props.modelValue[0] === "*"
-  );
+  return props.modelValue && props.modelValue.length === 1 && props.modelValue[0] === "*";
 });
 
 const filteredPluginList = computed(() => {
@@ -277,11 +272,7 @@ const filteredPluginList = computed(() => {
     .filter(Boolean);
   if (keywords.length === 0) return pluginList.value;
   return pluginList.value.filter((plugin) => {
-    const searchableText = [
-      plugin.name,
-      pluginDisplayName(plugin),
-      pluginDescription(plugin),
-    ]
+    const searchableText = [plugin.name, pluginDisplayName(plugin), pluginDescription(plugin)]
       .filter(Boolean)
       .join(" ")
       .toLowerCase();
@@ -296,14 +287,10 @@ const selectedPluginCount = computed(() => {
 });
 
 const allPluginsSelected = computed(
-  () =>
-    pluginList.value.length > 0 &&
-    selectedPluginCount.value === pluginList.value.length,
+  () => pluginList.value.length > 0 && selectedPluginCount.value === pluginList.value.length,
 );
 
-const somePluginsSelected = computed(
-  () => selectedPluginCount.value > 0 && !allPluginsSelected.value,
-);
+const somePluginsSelected = computed(() => selectedPluginCount.value > 0 && !allPluginsSelected.value);
 
 // 移除插件
 function removePlugin(pluginName: string) {
@@ -351,9 +338,7 @@ async function loadPlugins() {
           const nameB = pluginDisplayName(b) || b.name || "";
           return nameA.localeCompare(nameB);
         });
-      pluginList.value = props.inline
-        ? activatedPlugins
-        : activatedPlugins.filter((plugin) => !plugin.reserved);
+      pluginList.value = props.inline ? activatedPlugins : activatedPlugins.filter((plugin) => !plugin.reserved);
     }
   } catch (error) {
     console.error("加载插件列表失败:", error);
@@ -368,25 +353,16 @@ function inlinePluginEnabled(plugin: PluginEntry) {
 }
 
 function toggleInlinePlugin(plugin: PluginEntry) {
-  const selected = new Set(
-    isAllPlugins.value
-      ? pluginList.value.map((item) => item.name)
-      : props.modelValue || [],
-  );
+  const selected = new Set(isAllPlugins.value ? pluginList.value.map((item) => item.name) : props.modelValue || []);
   if (selected.has(plugin.name)) {
     selected.delete(plugin.name);
   } else {
     selected.add(plugin.name);
   }
-  const nextSelection = pluginList.value
-    .map((item) => item.name)
-    .filter((name) => selected.has(name));
+  const nextSelection = pluginList.value.map((item) => item.name).filter((name) => selected.has(name));
   emit(
     "update:modelValue",
-    nextSelection.length === pluginList.value.length &&
-      pluginList.value.length > 0
-      ? ["*"]
-      : nextSelection,
+    nextSelection.length === pluginList.value.length && pluginList.value.length > 0 ? ["*"] : nextSelection,
   );
 }
 

@@ -103,12 +103,7 @@ import AstrBotConfigV4 from "@/components/shared/AstrBotConfigV4.vue";
 import PluginSetSelector from "@/components/shared/PluginSetSelector.vue";
 import { useModuleI18n } from "@/i18n/composables";
 
-const SECTION_ORDER = [
-  "ai_group",
-  "plugin_group",
-  "platform_group",
-  "ext_group",
-];
+const SECTION_ORDER = ["ai_group", "plugin_group", "platform_group", "ext_group"];
 const SECTION_ICONS = {
   ai_group: "mdi-auto-fix",
   plugin_group: "mdi-puzzle-outline",
@@ -150,10 +145,7 @@ export default {
 
     const tm = (key) => {
       const metadataResult = tmMetadata(key);
-      if (
-        !metadataResult.startsWith("[MISSING:") &&
-        !metadataResult.startsWith("[INVALID:")
-      ) {
+      if (!metadataResult.startsWith("[MISSING:") && !metadataResult.startsWith("[INVALID:")) {
         return metadataResult;
       }
       return tmConfig(key);
@@ -191,8 +183,7 @@ export default {
       }
       return allSections.filter(
         (section) =>
-          (section.key === "plugin_group" && this.tab === "plugin_group") ||
-          this.sectionHasSearchMatch(section.value),
+          (section.key === "plugin_group" && this.tab === "plugin_group") || this.sectionHasSearchMatch(section.value),
       );
     },
   },
@@ -217,18 +208,13 @@ export default {
         return true;
       }
       const sectionMetadata = section?.metadata || {};
-      return Object.values(sectionMetadata).some((metaItem) =>
-        this.metaObjectHasSearchMatch(metaItem, keyword),
-      );
+      return Object.values(sectionMetadata).some((metaItem) => this.metaObjectHasSearchMatch(metaItem, keyword));
     },
     metaObjectHasSearchMatch(metaObject, keyword) {
       if (!metaObject || typeof metaObject !== "object") {
         return false;
       }
-      const directText = [
-        this.tm(metaObject.description || ""),
-        this.tm(metaObject.hint || ""),
-      ]
+      const directText = [this.tm(metaObject.description || ""), this.tm(metaObject.hint || "")]
         .join(" ")
         .toLowerCase();
       if (directText.includes(keyword)) {
@@ -236,8 +222,7 @@ export default {
       }
       return Object.entries(metaObject.items || {}).some(
         ([itemKey, itemMeta]) =>
-          itemKey.toLowerCase().includes(keyword) ||
-          this.metaObjectHasSearchMatch(itemMeta, keyword),
+          itemKey.toLowerCase().includes(keyword) || this.metaObjectHasSearchMatch(itemMeta, keyword),
       );
     },
   },

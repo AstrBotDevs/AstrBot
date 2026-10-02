@@ -136,9 +136,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import { useI18n } from "@/i18n/composables";
-import sidebarItems, {
-  type menu,
-} from "@/layouts/full/vertical-sidebar/sidebarItem";
+import sidebarItems, { type menu } from "@/layouts/full/vertical-sidebar/sidebarItem";
 import {
   clearSidebarCustomization,
   getSidebarCustomization,
@@ -163,10 +161,8 @@ const draggedItem = ref<DraggedItem | null>(null);
 
 function initializeItems() {
   const customization = getSidebarCustomization();
-  const { mainItems: resolvedMain, moreItems: resolvedMore } =
-    resolveSidebarItems(sidebarItems, customization);
-  const hasTitle = (item: menu): item is SidebarItem =>
-    typeof item.title === "string";
+  const { mainItems: resolvedMain, moreItems: resolvedMore } = resolveSidebarItems(sidebarItems, customization);
+  const hasTitle = (item: menu): item is SidebarItem => typeof item.title === "string";
   mainItems.value = resolvedMain.filter(hasTitle);
   moreItems.value = resolvedMore.filter(hasTitle);
 }
@@ -180,22 +176,14 @@ function getList(listType: SidebarList) {
   return listType === "main" ? mainItems.value : moreItems.value;
 }
 
-function handleDragStart(
-  event: DragEvent,
-  listType: SidebarList,
-  index: number,
-) {
+function handleDragStart(event: DragEvent, listType: SidebarList, index: number) {
   const item = getList(listType)[index];
   if (!item) return;
   draggedItem.value = { type: listType, index, item };
   if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
 }
 
-function handleDrop(
-  event: DragEvent,
-  targetListType: SidebarList,
-  targetIndex?: number,
-) {
+function handleDrop(event: DragEvent, targetListType: SidebarList, targetIndex?: number) {
   event.preventDefault();
   if (!draggedItem.value) return;
 

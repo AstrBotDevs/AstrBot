@@ -569,16 +569,13 @@
 import { VueMonacoEditor } from "@guolao/vue-monaco-editor";
 import { defineComponent } from "vue";
 import type { ApiEnvelope } from "@/api/v1";
+import { mcpApi } from "@/api/v1";
 import OutlinedActionListItem from "@/components/shared/OutlinedActionListItem.vue";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
-import { buildSearchQuery, matchesText } from "@/utils/pluginSearch";
-import {
-  askForConfirmation as askForConfirmationDialog,
-  useConfirmDialog,
-} from "@/utils/confirmDialog";
+import { askForConfirmation as askForConfirmationDialog, useConfirmDialog } from "@/utils/confirmDialog";
 import { resolveErrorMessage } from "@/utils/errorUtils.js";
+import { buildSearchQuery, matchesText } from "@/utils/pluginSearch";
 import axios from "@/utils/request";
-import { mcpApi } from "@/api/v1";
 
 interface McpServer extends Record<string, unknown> {
   name: string;
@@ -697,21 +694,13 @@ export default defineComponent({
       return this.mcpServers.filter((server) => {
         const args = Array.isArray(server.args) ? server.args.join(" ") : "";
         const tools = Array.isArray(server.tools) ? server.tools.join(" ") : "";
-        return [
-          server.name,
-          server.transport,
-          server.command,
-          args,
-          tools,
-        ].some((field) => matchesText(field, query));
+        return [server.name, server.transport, server.command, args, tools].some((field) => matchesText(field, query));
       });
     },
     allMcpServersSelected(): boolean {
       return (
         this.filteredMcpServers.length > 0 &&
-        this.filteredMcpServers.every((server) =>
-          this.selectedMcpServerNames.includes(server.name),
-        )
+        this.filteredMcpServers.every((server) => this.selectedMcpServerNames.includes(server.name))
       );
     },
     getServerConfigSummary() {
@@ -722,9 +711,7 @@ export default defineComponent({
         if (server.command) {
           return `${server.command} ${(server.args || []).join(" ")}`;
         }
-        const configKeys = Object.keys(server).filter(
-          (key) => !["name", "active", "tools"].includes(key),
-        );
+        const configKeys = Object.keys(server).filter((key) => !["name", "active", "tools"].includes(key));
         if (configKeys.length > 0) {
           return this.tm("mcpServers.status.configSummary", {
             keys: configKeys.join(", "),
@@ -765,9 +752,7 @@ export default defineComponent({
     filteredMcpServers(visibleServers: McpServer[]) {
       if (!this.batchSelectionEnabled) return;
       const visibleNames = new Set(visibleServers.map((server) => server.name));
-      this.selectedMcpServerNames = this.selectedMcpServerNames.filter((name) =>
-        visibleNames.has(name),
-      );
+      this.selectedMcpServerNames = this.selectedMcpServerNames.filter((name) => visibleNames.has(name));
     },
   },
   methods: {
@@ -780,10 +765,7 @@ export default defineComponent({
         .list()
         .then((response) => {
           if (response.data.status === "error") {
-            this.showError(
-              response.data.message ||
-                this.tm("messages.getServersError", { error: "Unknown error" }),
-            );
+            this.showError(response.data.message || this.tm("messages.getServersError", { error: "Unknown error" }));
             return;
           }
           const servers: unknown = response.data.data ?? [];
@@ -791,12 +773,8 @@ export default defineComponent({
             throw new Error("Invalid MCP server list response");
           }
           this.mcpServers = servers;
-          const availableNames = new Set(
-            this.mcpServers.map((server) => server.name),
-          );
-          this.selectedMcpServerNames = this.selectedMcpServerNames.filter(
-            (name) => availableNames.has(name),
-          );
+          const availableNames = new Set(this.mcpServers.map((server) => server.name));
+          this.selectedMcpServerNames = this.selectedMcpServerNames.filter((name) => availableNames.has(name));
           if (this.batchSelectionEnabled && availableNames.size === 0) {
             this.cancelBatchSelection();
           }
@@ -874,26 +852,19 @@ export default defineComponent({
         if (this.isEditMode && this.originalServerName) {
           serverData.oldName = this.originalServerName;
         }
-        const endpoint = this.isEditMode
-          ? "/api/tools/mcp/update"
-          : "/api/tools/mcp/add";
+        const endpoint = this.isEditMode ? "/api/tools/mcp/update" : "/api/tools/mcp/add";
         axios
           .post<ApiEnvelope<unknown>>(endpoint, serverData)
           .then((response) => {
             this.loading = false;
             if (response.data.status === "error") {
-              this.showError(
-                response.data.message ||
-                  this.tm("messages.saveError", { error: "Unknown error" }),
-              );
+              this.showError(response.data.message || this.tm("messages.saveError", { error: "Unknown error" }));
               return;
             }
             this.showMcpServerDialog = false;
             this.addServerDialogMessage = "";
             this.getServers();
-            this.showSuccess(
-              response.data.message || this.tm("messages.saveSuccess"),
-            );
+            this.showSuccess(response.data.message || this.tm("messages.saveSuccess"));
             this.resetForm();
           })
           .catch((error: unknown) => {
@@ -926,9 +897,7 @@ export default defineComponent({
         })
         .then((response) => {
           this.getServers();
-          this.showSuccess(
-            response.data.message || this.tm("messages.deleteSuccess"),
-          );
+          this.showSuccess(response.data.message || this.tm("messages.deleteSuccess"));
         })
         .catch((error: unknown) => {
           this.showError(
@@ -955,9 +924,7 @@ export default defineComponent({
         this.selectedMcpServerNames = [];
         return;
       }
-      this.selectedMcpServerNames = this.filteredMcpServers.map(
-        (server) => server.name,
-      );
+      this.selectedMcpServerNames = this.filteredMcpServers.map((server) => server.name);
     },
     confirmBatchDelete() {
       this.batchDeleteTargets = this.selectedMcpServerNames.filter((name) =>
@@ -989,20 +956,14 @@ export default defineComponent({
         }
 
         await this.getServers();
-        const currentNames = new Set(
-          this.mcpServers.map((server) => server.name),
-        );
-        this.selectedMcpServerNames = failed.filter((name) =>
-          currentNames.has(name),
-        );
+        const currentNames = new Set(this.mcpServers.map((server) => server.name));
+        this.selectedMcpServerNames = failed.filter((name) => currentNames.has(name));
         this.batchDeleteDialog = false;
         this.batchDeleteTargets = [];
 
         if (failed.length === 0) {
           this.batchSelectionEnabled = false;
-          this.showSuccess(
-            this.tm("mcpServers.batchDeleteSuccess", { count: succeeded }),
-          );
+          this.showSuccess(this.tm("mcpServers.batchDeleteSuccess", { count: succeeded }));
         } else {
           this.showError(
             this.tm("mcpServers.batchDeletePartial", {
@@ -1039,9 +1000,7 @@ export default defineComponent({
         .post<ApiEnvelope<unknown>>("/api/tools/mcp/update", server)
         .then((response) => {
           this.getServers();
-          this.showSuccess(
-            response.data.message || this.tm("messages.updateSuccess"),
-          );
+          this.showSuccess(response.data.message || this.tm("messages.updateSuccess"));
         })
         .catch((error: unknown) => {
           this.showError(
@@ -1133,15 +1092,9 @@ export default defineComponent({
           }
           requestData.access_token = this.mcpProviderToken.trim();
         }
-        const response = await axios.post<ApiEnvelope<unknown>>(
-          "/api/tools/mcp/sync-provider",
-          requestData,
-        );
+        const response = await axios.post<ApiEnvelope<unknown>>("/api/tools/mcp/sync-provider", requestData);
         if (response.data.status === "ok") {
-          this.showSuccess(
-            response.data.message ||
-              this.tm("syncProvider.messages.syncSuccess"),
-          );
+          this.showSuccess(response.data.message || this.tm("syncProvider.messages.syncSuccess"));
           this.showSyncMcpServerDialog = false;
           this.mcpProviderToken = "";
           this.getServers();

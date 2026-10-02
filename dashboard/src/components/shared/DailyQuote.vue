@@ -75,6 +75,10 @@ const quotes: Record<Locale, Quote[]> = {
       author: "Alan Kay",
     },
   ],
+  "ja-JP": [
+    { text: "まず動かし、次に正しくし、そして速くする。", author: "Kent Beck" },
+    { text: "単純さは効率の魂である。", author: "Austin Freeman" },
+  ],
   "zh-CN": [
     { text: "预测未来的最好方式是创造未来。", author: "彼得·德鲁克" },
     {

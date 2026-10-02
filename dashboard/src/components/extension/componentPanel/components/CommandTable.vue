@@ -1,13 +1,8 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
-import { commandPermissions, commandPermissionOptions } from "../permissions";
-import type {
-  CommandPermission,
-  CommandItem,
-  TypeInfo,
-  StatusInfo,
-} from "../types";
+import { commandPermissionOptions, commandPermissions } from "../permissions";
+import type { CommandItem, CommandPermission, StatusInfo, TypeInfo } from "../types";
 
 const { tm } = useModuleI18n("features/command");
 
@@ -24,11 +19,7 @@ const emit = defineEmits<{
   (e: "toggle-command", cmd: CommandItem): void;
   (e: "rename", cmd: CommandItem): void;
   (e: "view-details", cmd: CommandItem): void;
-  (
-    e: "update-permission",
-    cmd: CommandItem,
-    permission: CommandPermission,
-  ): void;
+  (e: "update-permission", cmd: CommandItem, permission: CommandPermission): void;
 }>();
 
 // 表格表头
@@ -137,12 +128,9 @@ const getRowProps = ({ item }: { item: CommandItem }) => {
   return classes.length > 0 ? { class: classes.join(" ") } : {};
 };
 
-const canToggle = (cmd: CommandItem): boolean =>
-  !isPluginInactive(cmd) && cmd.supports_toggle !== false;
-const canRename = (cmd: CommandItem): boolean =>
-  !isPluginInactive(cmd) && cmd.supports_rename !== false;
-const canEditPermission = (cmd: CommandItem): boolean =>
-  !isPluginInactive(cmd) && cmd.supports_permission !== false;
+const canToggle = (cmd: CommandItem): boolean => !isPluginInactive(cmd) && cmd.supports_toggle !== false;
+const canRename = (cmd: CommandItem): boolean => !isPluginInactive(cmd) && cmd.supports_rename !== false;
+const canEditPermission = (cmd: CommandItem): boolean => !isPluginInactive(cmd) && cmd.supports_permission !== false;
 </script>
 
 <template>

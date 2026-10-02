@@ -1,11 +1,8 @@
 <script setup lang="ts">
-import {
-  EventSourcePolyfill,
-  type MessageEvent as SseMessageEvent,
-} from "event-source-polyfill";
+import { EventSourcePolyfill, type MessageEvent as SseMessageEvent } from "event-source-polyfill";
 import { onBeforeUnmount, onMounted, shallowRef } from "vue";
-import { useModuleI18n } from "@/i18n/composables";
 import { logApi } from "@/api/v1";
+import { useModuleI18n } from "@/i18n/composables";
 
 interface TraceLog {
   type: string;
@@ -179,20 +176,14 @@ function processNewTraces(newTraces: TraceLog[]) {
       key: recordKey,
     });
     if (trace.action === "astr_agent_prepare") event.hasAgentPrepare = true;
-    if (!event.first_time || trace.time < event.first_time)
-      event.first_time = trace.time;
-    if (!event.last_time || trace.time > event.last_time)
-      event.last_time = trace.time;
-    if (!event.sender_name && trace.sender_name)
-      event.sender_name = trace.sender_name;
-    if (!event.message_outline && trace.message_outline)
-      event.message_outline = trace.message_outline;
+    if (!event.first_time || trace.time < event.first_time) event.first_time = trace.time;
+    if (!event.last_time || trace.time > event.last_time) event.last_time = trace.time;
+    if (!event.sender_name && trace.sender_name) event.sender_name = trace.sender_name;
+    if (!event.message_outline && trace.message_outline) event.message_outline = trace.message_outline;
     touched.add(trace.span_id);
   });
   if (!touched.size) return;
-  currentEvents.forEach((event) =>
-    event.records.sort((a, b) => b.time - a.time),
-  );
+  currentEvents.forEach((event) => event.records.sort((a, b) => b.time - a.time));
   currentEvents.sort((a, b) => b.first_time - a.first_time);
   if (currentEvents.length > props.maxItems) {
     currentEvents.splice(props.maxItems).forEach((event) => {

@@ -255,7 +255,9 @@ export default defineComponent({
 
       try {
         const offsetSec = this.selectedTimeRange?.value ?? 86400;
-        const response = await axios.get<ApiEnvelope<{ message_time_series: [number, number][] }>>(`/api/stat/get?offset_sec=${offsetSec}`);
+        const response = await axios.get<ApiEnvelope<{ message_time_series: [number, number][] }>>(
+          `/api/stat/get?offset_sec=${offsetSec}`,
+        );
         const data = response.data.data;
 
         if (data && data.message_time_series) {

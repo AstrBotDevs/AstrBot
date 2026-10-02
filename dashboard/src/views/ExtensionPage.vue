@@ -205,11 +205,8 @@ const selectedMarketPlugin = computed(() => {
   // Resolve by the unique market plugin key first; the `name` match is a
   // fallback for legacy deep links, since multiple market entries can share
   // the same metadata name.
-  const marketKeyMatch =
-    market.find((item) => getMarketPluginKey(item) === selectedPluginId.value) ||
-      null;
-  const marketNameMatch =
-    market.find((item) => item.name === selectedPluginId.value) || null;
+  const marketKeyMatch = market.find((item) => getMarketPluginKey(item) === selectedPluginId.value) || null;
+  const marketNameMatch = market.find((item) => item.name === selectedPluginId.value) || null;
   const marketMatch = marketKeyMatch || marketNameMatch;
 
   if (selectedDetailTab.value === "market" || !installedPlugin) {

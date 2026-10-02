@@ -1,12 +1,7 @@
 <script setup lang="ts">
+import { ChartNoAxesColumnIncreasing, Logs, MessageSquareText, Waypoints } from "@lucide/vue";
 import { computed } from "vue";
 import { RouterLink, RouterView, useRoute } from "vue-router";
-import {
-  ChartNoAxesColumnIncreasing,
-  Logs,
-  MessageSquareText,
-  Waypoints,
-} from "@lucide/vue";
 import { useI18n } from "@/i18n/composables";
 
 const { t } = useI18n();

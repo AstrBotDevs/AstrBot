@@ -615,13 +615,13 @@ class AstrBotDashboard:
 
     def _build_dashboard_credentials_display(self) -> str:
         username = self.config["dashboard"].get("username", "astrbot")
-            "   ➜  Initial password: [REDACTED - not logged]\n"
+        generated_password = getattr(self.config, "_generated_dashboard_password", None)
         if not generated_password:
             return f"   ➜  Username: {username}\n ✨✨✨\n"
 
         credentials_display = (
             f"   ➜  Initial username: {username}\n"
-            f"   ➜  Initial password: {generated_password}\n"
+            "   ➜  Initial password: [REDACTED - not logged]\n"
             "   ➜  Change it after logging in\n ✨✨✨\n"
         )
         object.__setattr__(self.config, "_generated_dashboard_password", None)

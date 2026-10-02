@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import test from "node:test";
 import { setImmediate } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { compileFunction } from "node:vm";
-import test from "node:test";
-import { compileScript, parse } from "vue/compiler-sfc";
 import ts from "typescript";
 import * as vue from "vue";
+import { compileScript, parse } from "vue/compiler-sfc";
+import * as pluginSearch from "../src/utils/pluginSearch.js";
 
 // Execute the real component scripts without mounting their visual dependencies.
 function loadScript(path, dependencies = {}, storage = undefined) {
@@ -58,6 +59,8 @@ function createMcpModel(request) {
       askForConfirmation: async () => true,
     },
     "@/utils/errorUtils.js": errorUtils,
+    "@/utils/pluginSearch": pluginSearch,
+    "@/api/v1": { mcpApi: { list: () => request.get("/api/tools/mcp/servers") } },
     "@/utils/request": request,
   });
   const model = vue.reactive({ ...component.data(), ...component.setup() });

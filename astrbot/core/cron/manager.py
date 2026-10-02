@@ -456,7 +456,6 @@ class CronJobManager:
             build_main_agent,
         )
         from astrbot.core.astr_main_agent_resources import (
-            CONVERSATION_HISTORY_INJECT_PREFIX,
             CRON_TASK_WOKE_USER_PROMPT,
             PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT,
         )
@@ -531,14 +530,7 @@ class CronJobManager:
         req = ProviderRequest()
         conv = await _get_session_conv(event=cron_event, plugin_context=self.ctx)
         req.conversation = conv
-        context = json.loads(conv.history)
-        if context:
-            req.contexts = context
-            context_dump = req._print_friendly_context()
-            req.contexts = []
-            req.system_prompt += (
-                CONVERSATION_HISTORY_INJECT_PREFIX + f"---\n{context_dump}\n---\n"
-            )
+        req.contexts = json.loads(conv.history)
         cron_job_str = json.dumps(extras.get("cron_job", {}), ensure_ascii=False)
         req.system_prompt += PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT.format(
             cron_job=cron_job_str,

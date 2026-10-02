@@ -18,12 +18,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, provide } from "vue";
 import { MarkdownRender } from "markstream-vue";
-import {
-  CHAT_MARKDOWN_HEADING_STYLE,
-  MARKDOWN_RENDER_MAX_LIVE_NODES,
-} from "@/components/chat/markdownRenderConfig";
+import { computed, provide } from "vue";
+import { CHAT_MARKDOWN_HEADING_STYLE, MARKDOWN_RENDER_MAX_LIVE_NODES } from "@/components/chat/markdownRenderConfig";
 
 const props = defineProps<{
   content: string;

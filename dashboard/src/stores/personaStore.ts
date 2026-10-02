@@ -253,8 +253,7 @@ export const usePersonaStore = defineStore("persona", {
     async deleteFolder(folderId: string): Promise<void> {
       const deletedFolder = this.findFolderInTree(folderId);
       const isCurrentFolderDeleted =
-        this.currentFolderId === folderId ||
-        this.breadcrumbPath.some(folder => folder.folder_id === folderId);
+        this.currentFolderId === folderId || this.breadcrumbPath.some((folder) => folder.folder_id === folderId);
       const response = await axios.post("/api/persona/folder/delete", { folder_id: folderId });
 
       if (response.data.status !== "ok") {
@@ -263,9 +262,7 @@ export const usePersonaStore = defineStore("persona", {
 
       // If the active folder was deleted, return to its parent instead of
       // keeping a stale folder ID that would hide moved personas and folders.
-      const targetFolderId = isCurrentFolderDeleted
-        ? deletedFolder?.parent_id ?? null
-        : this.currentFolderId;
+      const targetFolderId = isCurrentFolderDeleted ? (deletedFolder?.parent_id ?? null) : this.currentFolderId;
       await this.loadFolderTree();
       await this.navigateToFolder(targetFolderId);
     },

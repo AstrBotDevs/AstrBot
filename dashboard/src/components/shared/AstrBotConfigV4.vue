@@ -141,13 +141,7 @@ function getItemPath(key) {
 }
 
 function getItemDescription(itemKey, itemMeta) {
-  return (
-    resolveConfigText(
-      getItemPath(itemKey),
-      "description",
-      itemMeta?.description,
-    ) || itemKey
-  );
+  return resolveConfigText(getItemPath(itemKey), "description", itemMeta?.description) || itemKey;
 }
 
 function getItemHint(itemKey, itemMeta) {
@@ -168,9 +162,7 @@ function saveEditedContent() {
 
 function shouldShowItem(itemMeta, itemKey) {
   if (itemMeta?.condition) {
-    for (const [conditionKey, expectedValue] of Object.entries(
-      itemMeta.condition,
-    )) {
+    for (const [conditionKey, expectedValue] of Object.entries(itemMeta.condition)) {
       const actualValue = getValueBySelector(props.iterable, conditionKey);
       if (actualValue !== expectedValue) {
         return false;
@@ -185,11 +177,7 @@ function shouldShowItem(itemMeta, itemKey) {
     return true;
   }
 
-  const searchableText = [
-    itemKey,
-    getItemDescription(itemKey, itemMeta),
-    getItemHint(itemKey, itemMeta),
-  ]
+  const searchableText = [itemKey, getItemDescription(itemKey, itemMeta), getItemHint(itemKey, itemMeta)]
     .join(" ")
     .toLowerCase();
 
@@ -200,11 +188,7 @@ function getVisibleItemEntries(collapsed = false) {
   const sectionItems = props.metadata?.[props.metadataKey]?.items || {};
   return Object.entries(sectionItems).filter(([itemKey, itemMeta]) => {
     const isCollapsed = Boolean(itemMeta?.collapsed);
-    return (
-      isCollapsed === collapsed &&
-      !itemMeta?.invisible &&
-      shouldShowItem(itemMeta, itemKey)
-    );
+    return isCollapsed === collapsed && !itemMeta?.invisible && shouldShowItem(itemMeta, itemKey);
   });
 }
 
@@ -236,9 +220,7 @@ function shouldShowSection() {
   if (!sectionMeta?.condition) {
     return true;
   }
-  for (const [conditionKey, expectedValue] of Object.entries(
-    sectionMeta.condition,
-  )) {
+  for (const [conditionKey, expectedValue] of Object.entries(sectionMeta.condition)) {
     const actualValue = getValueBySelector(props.iterable, conditionKey);
     if (actualValue !== expectedValue) {
       return false;
@@ -246,9 +228,7 @@ function shouldShowSection() {
   }
 
   const sectionItems = props.metadata?.[props.metadataKey]?.items || {};
-  const hasVisibleItems = Object.entries(sectionItems).some(
-    ([itemKey, itemMeta]) => shouldShowItem(itemMeta, itemKey),
-  );
+  const hasVisibleItems = Object.entries(sectionItems).some(([itemKey, itemMeta]) => shouldShowItem(itemMeta, itemKey));
   return hasVisibleItems;
 }
 

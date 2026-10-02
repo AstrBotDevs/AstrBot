@@ -337,21 +337,19 @@
 <script setup lang="ts">
 import { VueMonacoEditor } from "@guolao/vue-monaco-editor";
 import { computed, type PropType, ref } from "vue";
+import { statsApi } from "@/api/v1";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { usePluginI18n } from "@/utils/pluginI18n";
 import DashboardTotpManager from "./DashboardTotpManager.vue";
 import FileConfigItem from "./FileConfigItem.vue";
 import KnowledgeBaseSelector from "./KnowledgeBaseSelector.vue";
 import ListConfigItem from "./ListConfigItem.vue";
-import ObjectEditor from "./ObjectEditor.vue";
+import LocalPermissionMatrix, { windowsPermissionDefaults } from "./LocalPermissionMatrix.vue";
+import type ObjectEditor from "./ObjectEditor.vue";
 import PersonaSelector from "./PersonaSelector.vue";
 import PluginSetSelector from "./PluginSetSelector.vue";
 import ProviderSelector from "./ProviderSelector.vue";
 import T2ITemplateEditor from "./T2ITemplateEditor.vue";
-import LocalPermissionMatrix, {
-  windowsPermissionDefaults,
-} from "./LocalPermissionMatrix.vue";
-import { statsApi } from "@/api/v1";
 
 interface SliderConfig {
   min: number;
@@ -360,9 +358,7 @@ interface SliderConfig {
 }
 
 interface ItemMeta {
-  template_schema?: NonNullable<
-    InstanceType<typeof ObjectEditor>["$props"]["itemMeta"]
-  >["template_schema"];
+  template_schema?: NonNullable<InstanceType<typeof ObjectEditor>["$props"]["itemMeta"]>["template_schema"];
   _special?: string;
   runner_defaults?: Record<string, unknown>;
   type?: string;
@@ -384,15 +380,9 @@ const numericTemp = ref<number | string | null>(null);
 const secretVisible = ref(false);
 const secretField = computed(() => props.itemMeta?.secret === true);
 const secretToggleIcon = computed(() =>
-  secretField.value
-    ? secretVisible.value
-      ? "mdi-eye-off"
-      : "mdi-eye"
-    : undefined,
+  secretField.value ? (secretVisible.value ? "mdi-eye-off" : "mdi-eye") : undefined,
 );
-const stringInputType = computed(() =>
-  secretField.value && !secretVisible.value ? "password" : "text",
-);
+const stringInputType = computed(() => (secretField.value && !secretVisible.value ? "password" : "text"));
 const listSearchText = ref("");
 
 const props = defineProps({
@@ -432,28 +422,16 @@ const props = defineProps({
   },
 });
 
-const modelString = computed(() =>
-  typeof props.modelValue === "string" ? props.modelValue : "",
-);
-const modelArray = computed<unknown[]>(() =>
-  Array.isArray(props.modelValue) ? props.modelValue : [],
-);
-const modelStrings = computed(() =>
-  modelArray.value.filter(
-    (value): value is string => typeof value === "string",
-  ),
-);
+const modelString = computed(() => (typeof props.modelValue === "string" ? props.modelValue : ""));
+const modelArray = computed<unknown[]>(() => (Array.isArray(props.modelValue) ? props.modelValue : []));
+const modelStrings = computed(() => modelArray.value.filter((value): value is string => typeof value === "string"));
 const modelObject = computed<Record<string, unknown>>(() =>
-  props.modelValue !== null &&
-  typeof props.modelValue === "object" &&
-  !Array.isArray(props.modelValue)
+  props.modelValue !== null && typeof props.modelValue === "object" && !Array.isArray(props.modelValue)
     ? props.modelValue
     : {},
 );
 const providerModelValue = computed(() =>
-  props.itemMeta?._special === "select_providers"
-    ? modelStrings.value
-    : modelString.value,
+  props.itemMeta?._special === "select_providers" ? modelStrings.value : modelString.value,
 );
 
 const emit = defineEmits<{
@@ -477,26 +455,18 @@ async function emitUpdate(val: unknown) {
     typeof val === "string" &&
     props.itemMeta?.runner_defaults?.[val]
   ) {
-    props.configRoot.agent_runner.config = JSON.parse(
-      JSON.stringify(props.itemMeta.runner_defaults[val]),
-    );
+    props.configRoot.agent_runner.config = JSON.parse(JSON.stringify(props.itemMeta.runner_defaults[val]));
   }
   emit("update:modelValue", val);
   if (enablingLocal && props.configRoot?.provider_settings) {
     const settings = props.configRoot.provider_settings;
     try {
       const response = await statsApi.version();
-      if (
-        response.data?.data?.runtime?.os === "windows" &&
-        settings.computer_use_runtime === "local"
-      ) {
+      if (response.data?.data?.runtime?.os === "windows" && settings.computer_use_runtime === "local") {
         const permissions = { ...settings.computer_use_local_permissions };
-        for (const [role, defaults] of Object.entries(
-          windowsPermissionDefaults,
-        )) {
+        for (const [role, defaults] of Object.entries(windowsPermissionDefaults)) {
           const policy = permissions[role];
-          if (!policy || policy.filesystem_scope === "workspace")
-            permissions[role] = { ...defaults };
+          if (!policy || policy.filesystem_scope === "workspace") permissions[role] = { ...defaults };
         }
         settings.computer_use_local_permissions = permissions;
       }
@@ -507,9 +477,7 @@ async function emitUpdate(val: unknown) {
 }
 
 const listSelectItems = computed(() =>
-  props.itemMeta?.type === "list" && props.itemMeta?.options
-    ? getSelectItems(props.itemMeta)
-    : [],
+  props.itemMeta?.type === "list" && props.itemMeta?.options ? getSelectItems(props.itemMeta) : [],
 );
 
 function toNumber(val: unknown): number {
@@ -517,10 +485,7 @@ function toNumber(val: unknown): number {
   return Number.isNaN(n) ? 0 : n;
 }
 
-function validateNumericConfig(
-  modelType: string | undefined,
-  rawValue: unknown,
-): unknown {
+function validateNumericConfig(modelType: string | undefined, rawValue: unknown): unknown {
   if (modelType === "int" || modelType === "float") {
     // Clamp numeric values to the configured slider bounds.
     const slider = props.itemMeta?.slider;
@@ -536,16 +501,10 @@ function validateNumericConfig(
       const templatesSchema = props.itemMeta?.template_schema;
       const templateType = templatesSchema?.[key]?.type;
       const templateSlider = templatesSchema?.[key]?.slider;
-      if (
-        (templateType === "int" || templateType === "float") &&
-        templateSlider
-      ) {
+      if ((templateType === "int" || templateType === "float") && templateSlider) {
         const min = templateSlider.min ?? 0;
         const max = templateSlider.max ?? 100;
-        (rawValue as Record<string, unknown>)[key] = Math.max(
-          min,
-          Math.min(max, toNumber(value)),
-        );
+        (rawValue as Record<string, unknown>)[key] = Math.max(min, Math.min(max, toNumber(value)));
       }
     });
     return rawValue;
@@ -560,17 +519,8 @@ function getLabel(itemMeta: ItemMeta, index: number, option: unknown): string {
 }
 
 function getTranslatedLabels(itemMeta: ItemMeta): string[] | null {
-  if (
-    props.pluginName &&
-    props.configKey &&
-    props.pluginI18n &&
-    Object.keys(props.pluginI18n).length > 0
-  ) {
-    const translatedLabels = configText(
-      props.pluginI18n,
-      props.configKey,
-      "labels",
-    );
+  if (props.pluginName && props.configKey && props.pluginI18n && Object.keys(props.pluginI18n).length > 0) {
+    const translatedLabels = configText(props.pluginI18n, props.configKey, "labels");
     if (Array.isArray(translatedLabels)) {
       return translatedLabels as string[];
     }

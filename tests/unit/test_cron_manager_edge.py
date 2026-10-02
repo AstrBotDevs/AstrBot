@@ -276,6 +276,9 @@ class TestUpdateAndSyncEdgeCases:
             cron_expression="0 9 * * *",
             enabled=True,  # Now enabled
         )
+        mock_db.get_cron_job.return_value = updated_job.model_copy(
+            update={"enabled": not updated_job.enabled}
+        )
         mock_db.update_cron_job.return_value = updated_job
 
         with patch.object(cron_manager, "_schedule_job") as mock_schedule:
@@ -296,6 +299,9 @@ class TestUpdateAndSyncEdgeCases:
             job_type="basic",
             cron_expression="0 9 * * *",
             enabled=False,  # Now disabled, should not schedule
+        )
+        mock_db.get_cron_job.return_value = updated_job.model_copy(
+            update={"enabled": not updated_job.enabled}
         )
         mock_db.update_cron_job.return_value = updated_job
 

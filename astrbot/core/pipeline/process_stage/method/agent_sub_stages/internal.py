@@ -171,7 +171,8 @@ class InternalAgentSubStage(Stage):
         event: AstrMessageEvent,
         provider_wake_prefix: str | None = None,
     ) -> AsyncGenerator[None, None]:
-        provider_wake_prefix = provider_wake_prefix or self.provider_wake_prefix
+        if provider_wake_prefix is None:
+            provider_wake_prefix = self.provider_wake_prefix
         follow_up_capture: FollowUpCapture | None = None
         follow_up_consumed_marked = False
         follow_up_activated = False

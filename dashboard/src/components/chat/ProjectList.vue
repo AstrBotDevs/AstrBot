@@ -133,8 +133,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from "vue";
 import { ChevronDown, ChevronRight, Pencil, Plus, Trash2 } from "@lucide/vue";
+import { ref, watch } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
 import { askForConfirmation, useConfirmDialog } from "@/utils/confirmDialog";
 
@@ -201,9 +201,7 @@ watch(
 watch(
   () => props.projects.map((project) => project.project_id).join(","),
   () => {
-    const validProjectIds = new Set(
-      props.projects.map((project) => project.project_id),
-    );
+    const validProjectIds = new Set(props.projects.map((project) => project.project_id));
     expandedProjectIds.value.forEach((projectId) => {
       if (validProjectIds.has(projectId)) {
         emit("toggleProject", projectId, true);
@@ -227,11 +225,7 @@ function readExpandedProjectIds() {
   try {
     const raw = localStorage.getItem("chat.projectExpandedIds");
     const parsed: unknown = raw ? JSON.parse(raw) : [];
-    return new Set(
-      Array.isArray(parsed)
-        ? parsed.filter((item): item is string => typeof item === "string")
-        : [],
-    );
+    return new Set(Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : []);
   } catch {
     return new Set<string>();
   }
@@ -243,10 +237,7 @@ function toggleExpanded() {
 }
 
 function persistExpandedProjectIds() {
-  localStorage.setItem(
-    "chat.projectExpandedIds",
-    JSON.stringify([...expandedProjectIds.value]),
-  );
+  localStorage.setItem("chat.projectExpandedIds", JSON.stringify([...expandedProjectIds.value]));
 }
 
 function isProjectExpanded(projectId: string) {

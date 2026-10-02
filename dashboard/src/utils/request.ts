@@ -183,5 +183,6 @@ service.interceptors.response.use(
   },
 );
 
+export { axios as axiosStatic };
 export default service;
 export * from "axios";

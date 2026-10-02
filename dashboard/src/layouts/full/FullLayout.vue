@@ -8,8 +8,8 @@ import ReadmeDialog from "@/components/shared/ReadmeDialog.vue";
 import { useI18n } from "@/i18n/composables";
 import { useCommonStore } from "@/stores/common";
 import { useCustomizerStore } from "@/stores/customizer";
-import { useRouterLoadingStore } from "@/stores/routerLoading";
 import { useMobileDrawerStore } from "@/stores/mobileDrawer";
+import { useRouterLoadingStore } from "@/stores/routerLoading";
 import axios from "@/utils/request";
 import VerticalHeaderVue from "./vertical-header/VerticalHeader.vue";
 import VerticalSidebarVue from "./vertical-sidebar/VerticalSidebar.vue";
@@ -22,23 +22,16 @@ const mobileDrawer = useMobileDrawerStore();
 const { locale } = useI18n();
 const route = useRoute();
 const routerLoadingStore = useRouterLoadingStore();
-const isCurrentChatRoute = computed(
-  () => route.path === "/chat" || route.path.startsWith("/chat/"),
-);
+const isCurrentChatRoute = computed(() => route.path === "/chat" || route.path.startsWith("/chat/"));
 const isPluginPageRoute = computed(
   () => route.path.startsWith("/plugin-view/") || route.path.startsWith("/plugin-page/"),
 );
 const isProviderPageRoute = computed(() => route.path === "/providers");
 const isPlatformPageRoute = computed(() => route.path === "/platforms");
 const isViewportLockedRoute = computed(
-  () =>
-    isCurrentChatRoute.value ||
-    isProviderPageRoute.value ||
-    isPlatformPageRoute.value,
+  () => isCurrentChatRoute.value || isProviderPageRoute.value || isPlatformPageRoute.value,
 );
-const isFullScreenRoute = computed(
-  () => isCurrentChatRoute.value || isPluginPageRoute.value,
-);
+const isFullScreenRoute = computed(() => isCurrentChatRoute.value || isPluginPageRoute.value);
 const shouldMountChat = ref(isCurrentChatRoute.value);
 
 const showSidebar = computed(() => !isCurrentChatRoute.value);
@@ -70,7 +63,7 @@ const checkMigration = async (): Promise<boolean> => {
     if (response.data.status === "ok" && response.data.data.need_migration) {
       if (migrationDialog.value && typeof migrationDialog.value.open === "function") {
         const result = await migrationDialog.value.open();
-        if (result.success) {
+        if (result?.success) {
           console.log("Migration completed successfully:", result.message);
           window.location.reload();
         }

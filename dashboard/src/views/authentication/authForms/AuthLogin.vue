@@ -84,7 +84,7 @@ async function submitAccountStage() {
     const res = await authStore.login(username.value, password.value);
     if (res === "totp_required") {
       goToTotpStage();
-    } else if (res === 'upgrade_recovery_required') {
+    } else if (res === "upgrade_recovery_required") {
       return;
     }
   } catch (err) {

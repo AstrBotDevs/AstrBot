@@ -194,9 +194,9 @@
 
 <script>
 export const windowsPermissionDefaults = {
-  member: { filesystem_scope: 'none', allow_execution: false, allow_network: false },
-  admin: { filesystem_scope: 'host', allow_execution: true, allow_network: true }
-}
+  member: { filesystem_scope: "none", allow_execution: false, allow_network: false },
+  admin: { filesystem_scope: "host", allow_execution: true, allow_network: true },
+};
 </script>
 
 <script setup>

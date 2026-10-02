@@ -141,7 +141,7 @@ def test_load_plugin_metadata_includes_i18n(tmp_path: Path):
 
     assert metadata is not None
     assert metadata.short_desc == "Local test short description"
-    assert metadata.pages == []
+    assert metadata.views == []
     assert metadata.i18n == {"zh-CN": {"metadata": {"display_name": "你好世界"}}}
 
 
@@ -156,7 +156,7 @@ def test_load_plugin_metadata_includes_pages(tmp_path: Path):
     loaded_metadata = PluginManager._load_plugin_metadata(str(plugin_path))
 
     assert loaded_metadata is not None
-    assert loaded_metadata.pages == [{"name": "dashboard", "title": "Dashboard"}]
+    assert loaded_metadata.views == [{"name": "dashboard", "title": "Dashboard"}]
 
 
 def test_load_plugin_metadata_accepts_yml_suffix(tmp_path: Path):

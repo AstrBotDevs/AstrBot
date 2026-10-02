@@ -107,11 +107,7 @@ const currentEditingKeyIterable = ref<Record<string, unknown>>({});
 const currentEditingValue = computed({
   get: (): string => {
     const value = currentEditingKeyIterable.value[currentEditingKey.value];
-    return typeof value === "string"
-      ? value
-      : value == null
-        ? ""
-        : JSON.stringify(value);
+    return typeof value === "string" ? value : value == null ? "" : JSON.stringify(value);
   },
   set: (value: string) => {
     currentEditingKeyIterable.value[currentEditingKey.value] = value;
@@ -119,12 +115,7 @@ const currentEditingValue = computed({
 });
 const loadingEmbeddingDim = ref(false);
 
-function openEditorDialog(
-  key: string,
-  value: Record<string, unknown>,
-  theme?: string,
-  language?: string,
-) {
+function openEditorDialog(key: string, value: Record<string, unknown>, theme?: string, language?: string) {
   currentEditingKey.value = key;
   currentEditingLanguage.value = language || "json";
   currentEditingTheme.value = theme || "vs-light";
@@ -146,21 +137,12 @@ async function getEmbeddingDimensions(providerConfig: Record<string, unknown>) {
       useToast().error("缺少提供商 ID");
       return;
     }
-    const response = await providerApi.embeddingDimension(
-      providerId,
-      providerConfig,
-    );
+    const response = await providerApi.embeddingDimension(providerId, providerConfig);
 
-    if (
-      response.data.status !== "error" &&
-      response.data.data?.embedding_dimensions
-    ) {
+    if (response.data.status !== "error" && response.data.data?.embedding_dimensions) {
       console.info(response.data.data.embedding_dimensions);
-      providerConfig.embedding_dimensions =
-        response.data.data.embedding_dimensions;
-      useToast().success(
-        `获取成功: ${response.data.data.embedding_dimensions}`,
-      );
+      providerConfig.embedding_dimensions = response.data.data.embedding_dimensions;
+      useToast().success(`获取成功: ${response.data.data.embedding_dimensions}`);
     } else {
       useToast().error(response.data.message);
     }
@@ -184,16 +166,11 @@ function getValueBySelector(obj: unknown, selector: string): unknown {
   return current;
 }
 
-function shouldShowItem(
-  itemMeta: ConfigItemMeta | undefined,
-  _itemKey: string,
-): boolean {
+function shouldShowItem(itemMeta: ConfigItemMeta | undefined, _itemKey: string): boolean {
   if (!itemMeta?.condition) {
     return true;
   }
-  for (const [conditionKey, expectedValue] of Object.entries(
-    itemMeta.condition,
-  )) {
+  for (const [conditionKey, expectedValue] of Object.entries(itemMeta.condition)) {
     const actualValue = getValueBySelector(props.iterable, conditionKey);
     if (actualValue !== expectedValue) {
       return false;
@@ -210,10 +187,7 @@ function setIterableValue(key: string, value: unknown) {
   Reflect.set(props.iterable, key, value);
 }
 
-function hasVisibleItemsAfter(
-  items: Record<string, unknown>,
-  currentIndex: number,
-): boolean {
+function hasVisibleItemsAfter(items: Record<string, unknown>, currentIndex: number): boolean {
   const itemEntries = Object.entries(items);
 
   // 检查当前索引之后是否还有可见的配置项

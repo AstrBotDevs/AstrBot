@@ -1,5 +1,5 @@
 <template>
-  <div class="html-genui-node" :class="{ 'is-dark': isDark, 'is-loading': isLoading }">
+  <div class="html-genui-node" :class="{ 'is-dark': darkMode, 'is-loading': isLoading }">
     <div class="html-genui-header">
       <div class="html-genui-title">{{ panelTitle }}</div>
       <div class="html-genui-toggle" role="tablist" aria-label="HTML GenUI view">
@@ -42,8 +42,7 @@
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 
 const RENDER_THROTTLE_MS = 500;
-const sandboxPolicy =
-  "allow-forms allow-modals allow-pointer-lock allow-popups allow-scripts";
+const sandboxPolicy = "allow-forms allow-modals allow-pointer-lock allow-popups allow-scripts";
 
 const props = defineProps<{
   node?: {
@@ -62,17 +61,13 @@ const viewMode = ref<"preview" | "source">("preview");
 let pendingTimer: ReturnType<typeof setTimeout> | null = null;
 let lastRenderAt = 0;
 
-const htmlContent = computed(() =>
-  stripHtmlGenUiWrapper(String(props.node?.content || props.node?.raw || "")),
-);
+const htmlContent = computed(() => stripHtmlGenUiWrapper(String(props.node?.content || props.node?.raw || "")));
 const isLoading = computed(() => Boolean(props.loading || props.node?.loading));
-const isDark = computed(() => Boolean(props.isDark));
-const panelTitle = computed(
-  () => props.title?.trim() || attrValue("title") || "HTML UI",
-);
+const darkMode = computed(() => Boolean(props.isDark));
+const panelTitle = computed(() => props.title?.trim() || attrValue("title") || "HTML UI");
 
 watch(
-  [htmlContent, isLoading, isDark],
+  [htmlContent, isLoading, darkMode],
   () => {
     scheduleRender(!isLoading.value);
   },
@@ -109,7 +104,7 @@ function renderNow() {
     pendingTimer = null;
   }
   lastRenderAt = Date.now();
-  renderedSrcdoc.value = buildSrcdoc(htmlContent.value, isDark.value);
+  renderedSrcdoc.value = buildSrcdoc(htmlContent.value, darkMode.value);
 }
 
 function stripHtmlGenUiWrapper(value: string) {
@@ -120,9 +115,7 @@ function stripHtmlGenUiWrapper(value: string) {
 }
 
 function attrValue(name: string) {
-  const attr = props.node?.attrs?.find(
-    ([key]) => key.toLowerCase() === name.toLowerCase(),
-  );
+  const attr = props.node?.attrs?.find(([key]) => key.toLowerCase() === name.toLowerCase());
   return attr?.[1]?.trim() || "";
 }
 

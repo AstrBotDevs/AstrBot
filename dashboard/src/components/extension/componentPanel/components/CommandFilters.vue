@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { commandPermissionOptions, commandPermissions } from "../permissions";
 import { computed } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
 import { normalizeTextInput } from "@/utils/inputValue";
+import { commandPermissionOptions, commandPermissions } from "../permissions";
 
 const { tm } = useModuleI18n("features/command");
 

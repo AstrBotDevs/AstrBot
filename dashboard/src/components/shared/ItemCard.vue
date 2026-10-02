@@ -135,9 +135,7 @@ export default {
       default: false,
     },
     variant: {
-      type: String as PropType<
-        "text" | "plain" | "flat" | "elevated" | "outlined" | "tonal"
-      >,
+      type: String as PropType<"text" | "plain" | "flat" | "elevated" | "outlined" | "tonal">,
       default: undefined,
     },
   },

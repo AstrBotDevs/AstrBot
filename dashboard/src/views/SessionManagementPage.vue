@@ -1701,7 +1701,11 @@ export default defineComponent({
 
           for (const type of providerTypes) {
             const value = providerConfig[type];
-            this.updateLocalRule(target, `provider_perf_${type}`, value && value !== FOLLOW_CONFIG_VALUE ? value : undefined);
+            this.updateLocalRule(
+              target,
+              `provider_perf_${type}`,
+              value && value !== FOLLOW_CONFIG_VALUE ? value : undefined,
+            );
           }
         } else {
           this.showSuccess(this.tm("messages.noChanges"));
@@ -2148,8 +2152,7 @@ export default defineComponent({
       const result: string[] = [];
       const infoMap: Record<string, ActiveUmoInfo> = {};
       for (const entry of umos) {
-        const info =
-          typeof entry === "string" ? this.parseUmo(entry) : { ...this.parseUmo(entry.umo), ...entry };
+        const info = typeof entry === "string" ? this.parseUmo(entry) : { ...this.parseUmo(entry.umo), ...entry };
         if (!info.umo) continue;
         result.push(info.umo);
         infoMap[info.umo] = info;

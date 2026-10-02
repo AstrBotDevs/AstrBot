@@ -970,8 +970,8 @@
 
 <script lang="ts">
 import { VueMonacoEditor } from "@guolao/vue-monaco-editor";
-import { computed, nextTick, onMounted, reactive, ref, watch } from "vue";
 import type { editor } from "monaco-editor";
+import { computed, nextTick, onMounted, reactive, ref, watch } from "vue";
 import OutlinedActionListItem from "@/components/shared/OutlinedActionListItem.vue";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { useCustomizerStore } from "@/stores/customizer";
@@ -1053,6 +1053,7 @@ interface SkillsListPayload {
   };
   skills?: Skill[];
 }
+
 import { buildSearchQuery, matchesText } from "@/utils/pluginSearch";
 
 const STATUS_WAITING = "waiting";
@@ -1151,10 +1152,7 @@ export default {
       { title: "stable", value: "stable" },
     ]);
 
-    const activeReleaseCount = computed(
-      () =>
-        neoReleases.value.filter((item: NeoRelease) => item?.is_active).length,
-    );
+    const activeReleaseCount = computed(() => neoReleases.value.filter((item: NeoRelease) => item?.is_active).length);
     const editorLanguage = computed(() => {
       const path = String(editorDialog.filePath || "").toLowerCase();
       if (path.endsWith(".json")) return "json";
@@ -1169,21 +1167,17 @@ export default {
       if (path.endsWith(".md") || path.endsWith(".txt")) return "markdown";
       return "plaintext";
     });
-    const editorTheme = computed(() =>
-      customizer.isDark ? "vs-dark" : "vs-light",
-    );
-    const editorOptions = computed<editor.IStandaloneEditorConstructionOptions>(
-      () => ({
-        automaticLayout: true,
-        fontSize: 13,
-        lineNumbers: "on",
-        minimap: { enabled: false },
-        readOnly: !editorDialog.fileEditable || editorDialog.loadingFile,
-        scrollBeyondLastLine: false,
-        tabSize: 2,
-        wordWrap: "on",
-      }),
-    );
+    const editorTheme = computed(() => (customizer.isDark ? "vs-dark" : "vs-light"));
+    const editorOptions = computed<editor.IStandaloneEditorConstructionOptions>(() => ({
+      automaticLayout: true,
+      fontSize: 13,
+      lineNumbers: "on",
+      minimap: { enabled: false },
+      readOnly: !editorDialog.fileEditable || editorDialog.loadingFile,
+      scrollBeyondLastLine: false,
+      tabSize: 2,
+      wordWrap: "on",
+    }));
     const uploadStateCounts = computed(() =>
       uploadItems.value.reduce<UploadStateCounts>(
         (counts, item) => {
@@ -1202,10 +1196,7 @@ export default {
       ),
     );
     const hasUploadableItems = computed(() =>
-      uploadItems.value.some(
-        (item: UploadItem) =>
-          item.status === STATUS_WAITING || item.status === STATUS_ERROR,
-      ),
+      uploadItems.value.some((item: UploadItem) => item.status === STATUS_WAITING || item.status === STATUS_ERROR),
     );
 
     const candidateHeaders = computed(() => [
@@ -1241,9 +1232,7 @@ export default {
       snackbar.show = true;
     };
 
-    const normalizeSkillsPayload = (res: {
-      data?: { data?: Skill[] | SkillsListPayload };
-    }): Skill[] => {
+    const normalizeSkillsPayload = (res: { data?: { data?: Skill[] | SkillsListPayload } }): Skill[] => {
       const payload = res?.data?.data || [];
       if (Array.isArray(payload)) {
         runtime.value = "local";
@@ -1260,25 +1249,19 @@ export default {
       return payload.skills || [];
     };
 
-    const isSandboxPresetSkill = (skill: Skill): boolean =>
-      skill.source_type === "sandbox_only";
-    const isPluginProvidedSkill = (skill: Skill): boolean =>
-      skill.source_type === "plugin";
+    const isSandboxPresetSkill = (skill: Skill): boolean => skill.source_type === "sandbox_only";
+    const isPluginProvidedSkill = (skill: Skill): boolean => skill.source_type === "plugin";
     const isInactivePluginSkill = (skill: Skill): boolean =>
       isPluginProvidedSkill(skill) && skill.plugin_active === false;
     const isReadOnlySourceSkill = (skill: Skill): boolean =>
       isSandboxPresetSkill(skill) || isPluginProvidedSkill(skill);
-    const deletableSkills = computed(() =>
-      skills.value.filter((skill) => !isReadOnlySourceSkill(skill)),
-    );
+    const deletableSkills = computed(() => skills.value.filter((skill) => !isReadOnlySourceSkill(skill)));
 
     const filteredSkills = computed(() => {
       const query = buildSearchQuery(skillSearch.value);
       if (!query) return skills.value;
       return skills.value.filter((skill) =>
-        [skill.name, skill.description, skill.path].some((field) =>
-          matchesText(field, query),
-        ),
+        [skill.name, skill.description, skill.path].some((field) => matchesText(field, query)),
       );
     });
 
@@ -1289,14 +1272,10 @@ export default {
     const allDeletableSelected = computed(
       () =>
         visibleDeletableSkills.value.length > 0 &&
-        visibleDeletableSkills.value.every((skill) =>
-          selectedSkillNames.value.includes(skill.name),
-        ),
+        visibleDeletableSkills.value.every((skill) => selectedSkillNames.value.includes(skill.name)),
     );
 
-    const normalizeNeoItemsPayload = <T,>(res: {
-      data?: { data?: T[] | { items?: T[] } };
-    }): T[] => {
+    const normalizeNeoItemsPayload = <T>(res: { data?: { data?: T[] | { items?: T[] } } }): T[] => {
       const payload = res?.data?.data || [];
       if (Array.isArray(payload)) return payload;
       if (Array.isArray(payload.items)) return payload.items;
@@ -1315,11 +1294,7 @@ export default {
         .trim()
         .toLowerCase();
 
-    const buildUploadItem = (
-      file: File,
-      status: UploadStatus,
-      validationMessage: string,
-    ): UploadItem => ({
+    const buildUploadItem = (file: File, status: UploadStatus, validationMessage: string): UploadItem => ({
       id: `upload-${nextUploadItemId++}`,
       file,
       name: file.name,
@@ -1337,8 +1312,7 @@ export default {
       return tm("skills.statusWaiting");
     };
 
-    const statusChipClass = (status: string): string =>
-      `skills-status-chip skills-status-chip--${status}`;
+    const statusChipClass = (status: string): string => `skills-status-chip skills-status-chip--${status}`;
 
     const resetUploadState = (): void => {
       uploadItems.value = [];
@@ -1363,9 +1337,7 @@ export default {
     };
 
     const addUploadFiles = (filesToAdd: File[]): void => {
-      const existingNames = new Set(
-        uploadItems.value.map((item: UploadItem) => item.filenameKey),
-      );
+      const existingNames = new Set(uploadItems.value.map((item: UploadItem) => item.filenameKey));
       const nextItems: UploadItem[] = [];
 
       for (const file of filesToAdd) {
@@ -1373,31 +1345,17 @@ export default {
         const filenameKey = normalizeUploadName(file.name);
 
         if (existingNames.has(filenameKey)) {
-          nextItems.push(
-            buildUploadItem(
-              file,
-              STATUS_SKIPPED,
-              tm("skills.validationDuplicate"),
-            ),
-          );
+          nextItems.push(buildUploadItem(file, STATUS_SKIPPED, tm("skills.validationDuplicate")));
           continue;
         }
 
         existingNames.add(filenameKey);
         if (!/\.zip$/i.test(file.name)) {
-          nextItems.push(
-            buildUploadItem(
-              file,
-              STATUS_SKIPPED,
-              tm("skills.validationZipOnly"),
-            ),
-          );
+          nextItems.push(buildUploadItem(file, STATUS_SKIPPED, tm("skills.validationZipOnly")));
           continue;
         }
 
-        nextItems.push(
-          buildUploadItem(file, STATUS_WAITING, tm("skills.validationReady")),
-        );
+        nextItems.push(buildUploadItem(file, STATUS_WAITING, tm("skills.validationReady")));
       }
 
       if (nextItems.length > 0) {
@@ -1423,9 +1381,7 @@ export default {
     };
 
     const removeUploadItem = (itemId: string): void => {
-      uploadItems.value = uploadItems.value.filter(
-        (item: UploadItem) => item.id !== itemId,
-      );
+      uploadItems.value = uploadItems.value.filter((item: UploadItem) => item.id !== itemId);
     };
 
     const takeFirstMatch = (
@@ -1440,9 +1396,7 @@ export default {
       return entry;
     };
 
-    const buildResultMap = (
-      items: UploadResultEntry[] = [],
-    ): Map<string, UploadResultEntry[]> => {
+    const buildResultMap = (items: UploadResultEntry[] = []): Map<string, UploadResultEntry[]> => {
       const resultMap = new Map<string, UploadResultEntry[]>();
       for (const item of items) {
         const filenameKey = normalizeUploadName(item?.filename || "");
@@ -1480,16 +1434,14 @@ export default {
         const skippedEntry = takeFirstMatch(skippedMap, item.filenameKey);
         if (skippedEntry) {
           item.status = STATUS_SKIPPED;
-          item.validationMessage =
-            skippedEntry.error || tm("skills.validationDuplicate");
+          item.validationMessage = skippedEntry.error || tm("skills.validationDuplicate");
           continue;
         }
 
         const failedEntry = takeFirstMatch(failedMap, item.filenameKey);
         if (failedEntry) {
           item.status = STATUS_ERROR;
-          item.validationMessage =
-            failedEntry.error || tm("skills.validationUploadFailed");
+          item.validationMessage = failedEntry.error || tm("skills.validationUploadFailed");
           continue;
         }
 
@@ -1504,13 +1456,9 @@ export default {
         const res = await axios.get("/api/skills");
         skills.value = normalizeSkillsPayload(res);
         const deletableNames = new Set(
-          skills.value
-            .filter((skill) => !isReadOnlySourceSkill(skill))
-            .map((skill) => skill.name),
+          skills.value.filter((skill) => !isReadOnlySourceSkill(skill)).map((skill) => skill.name),
         );
-        selectedSkillNames.value = selectedSkillNames.value.filter((name) =>
-          deletableNames.has(name),
-        );
+        selectedSkillNames.value = selectedSkillNames.value.filter((name) => deletableNames.has(name));
         if (batchSelectionEnabled.value && deletableNames.size === 0) {
           batchSelectionEnabled.value = false;
         }
@@ -1533,16 +1481,14 @@ export default {
         showMessage(successMessage, "success");
         if (onSuccess) onSuccess();
       } else {
-        const msg =
-          (res && res.data && res.data.message) || failureMessageDefault;
+        const msg = (res && res.data && res.data.message) || failureMessageDefault;
         showMessage(msg, "error");
       }
     };
 
     const uploadSkillBatch = async (): Promise<void> => {
       const attemptedItems = uploadItems.value.filter(
-        (item: UploadItem) =>
-          item.status === STATUS_WAITING || item.status === STATUS_ERROR,
+        (item: UploadItem) => item.status === STATUS_WAITING || item.status === STATUS_ERROR,
       );
       if (attemptedItems.length === 0) return;
 
@@ -1565,22 +1511,10 @@ export default {
         const payload = res?.data?.data || {};
         applyUploadResults(attemptedItems, payload);
 
-        const succeededCount = Array.isArray(payload.succeeded)
-          ? payload.succeeded.length
-          : 0;
-        const failedCount = Array.isArray(payload.failed)
-          ? payload.failed.length
-          : 0;
-        const responseColor =
-          res?.data?.status === "error"
-            ? "error"
-            : failedCount > 0
-              ? "warning"
-              : "success";
-        showMessage(
-          res?.data?.message || tm("skills.uploadSuccess"),
-          responseColor,
-        );
+        const succeededCount = Array.isArray(payload.succeeded) ? payload.succeeded.length : 0;
+        const failedCount = Array.isArray(payload.failed) ? payload.failed.length : 0;
+        const responseColor = res?.data?.status === "error" ? "error" : failedCount > 0 ? "warning" : "success";
+        showMessage(res?.data?.message || tm("skills.uploadSuccess"), responseColor);
 
         if (succeededCount > 0) {
           await fetchSkills();
@@ -1615,18 +1549,14 @@ export default {
         selectedSkillNames.value = [];
         return;
       }
-      selectedSkillNames.value = visibleDeletableSkills.value.map(
-        (skill) => skill.name,
-      );
+      selectedSkillNames.value = visibleDeletableSkills.value.map((skill) => skill.name);
     };
 
     const confirmBatchDelete = () => {
       const selectedNames = new Set(selectedSkillNames.value);
       batchDeleteTargets.value = [
         ...new Set(
-          visibleDeletableSkills.value
-            .filter((skill) => selectedNames.has(skill.name))
-            .map((skill) => skill.name),
+          visibleDeletableSkills.value.filter((skill) => selectedNames.has(skill.name)).map((skill) => skill.name),
         ),
       ];
       if (batchDeleteTargets.value.length === 0) return;
@@ -1658,13 +1588,9 @@ export default {
         const refreshed = await fetchSkills();
         if (refreshed) {
           const currentDeletableNames = new Set(
-            skills.value
-              .filter((skill) => !isReadOnlySourceSkill(skill))
-              .map((skill) => skill.name),
+            skills.value.filter((skill) => !isReadOnlySourceSkill(skill)).map((skill) => skill.name),
           );
-          selectedSkillNames.value = failed.filter((name) =>
-            currentDeletableNames.has(name),
-          );
+          selectedSkillNames.value = failed.filter((name) => currentDeletableNames.has(name));
         } else {
           selectedSkillNames.value = failed;
           batchSelectionEnabled.value = failed.length > 0;
@@ -1676,10 +1602,7 @@ export default {
 
         if (failed.length === 0) {
           batchSelectionEnabled.value = false;
-          showMessage(
-            tm("skills.batchDeleteSuccess", { count: succeeded }),
-            "success",
-          );
+          showMessage(tm("skills.batchDeleteSuccess", { count: succeeded }), "success");
         } else {
           showMessage(
             tm("skills.batchDeletePartial", {
@@ -1710,14 +1633,9 @@ export default {
           name: skill.name,
           active: nextActive,
         });
-        handleApiResponse(
-          res,
-          tm("skills.updateSuccess"),
-          tm("skills.updateFailed"),
-          () => {
-            skill.active = nextActive;
-          },
-        );
+        handleApiResponse(res, tm("skills.updateSuccess"), tm("skills.updateFailed"), () => {
+          skill.active = nextActive;
+        });
       } catch (_err: unknown) {
         showMessage(tm("skills.updateFailed"), "error");
       } finally {
@@ -1745,15 +1663,10 @@ export default {
         const res = await axios.post("/api/skills/delete", {
           name: skillToDelete.value.name,
         });
-        handleApiResponse(
-          res,
-          tm("skills.deleteSuccess"),
-          tm("skills.deleteFailed"),
-          async () => {
-            deleteDialog.value = false;
-            await fetchSkills();
-          },
-        );
+        handleApiResponse(res, tm("skills.deleteSuccess"), tm("skills.deleteFailed"), async () => {
+          deleteDialog.value = false;
+          await fetchSkills();
+        });
       } catch (_err: unknown) {
         showMessage(tm("skills.deleteFailed"), "error");
       } finally {
@@ -1816,15 +1729,12 @@ export default {
           params: { name: editorDialog.skillName, path },
         });
         if (res?.data?.status !== "ok") {
-          editorDialog.error =
-            res?.data?.message || tm("skills.editorLoadFailed");
+          editorDialog.error = res?.data?.message || tm("skills.editorLoadFailed");
           return [];
         }
         const payload = res.data.data || {};
         editorDialog.currentDir = payload.path || "";
-        editorDialog.entries = Array.isArray(payload.entries)
-          ? payload.entries
-          : [];
+        editorDialog.entries = Array.isArray(payload.entries) ? payload.entries : [];
         return editorDialog.entries;
       } catch (_err) {
         editorDialog.error = tm("skills.editorLoadFailed");
@@ -1836,10 +1746,7 @@ export default {
 
     const loadSkillFile = async (path: string): Promise<void> => {
       if (!editorDialog.skillName || !path) return;
-      if (
-        editorDialog.fileDirty &&
-        !window.confirm(tm("skills.discardChanges"))
-      ) {
+      if (editorDialog.fileDirty && !window.confirm(tm("skills.discardChanges"))) {
         return;
       }
       editorDialog.loadingFile = true;
@@ -1849,8 +1756,7 @@ export default {
           params: { name: editorDialog.skillName, path },
         });
         if (res?.data?.status !== "ok") {
-          editorDialog.error =
-            res?.data?.message || tm("skills.editorLoadFailed");
+          editorDialog.error = res?.data?.message || tm("skills.editorLoadFailed");
           return;
         }
         const payload = res.data.data || {};
@@ -1883,10 +1789,7 @@ export default {
 
     const closeSkillEditor = () => {
       if (editorDialog.saving) return;
-      if (
-        editorDialog.fileDirty &&
-        !window.confirm(tm("skills.discardChanges"))
-      ) {
+      if (editorDialog.fileDirty && !window.confirm(tm("skills.discardChanges"))) {
         return;
       }
       editorDialog.show = false;
@@ -1896,10 +1799,7 @@ export default {
     const openSkillEntry = async (entry: SkillEntry): Promise<void> => {
       if (!entry) return;
       if (entry.type === "directory") {
-        if (
-          editorDialog.fileDirty &&
-          !window.confirm(tm("skills.discardChanges"))
-        ) {
+        if (editorDialog.fileDirty && !window.confirm(tm("skills.discardChanges"))) {
           return;
         }
         await loadSkillDir(entry.path);
@@ -1910,10 +1810,7 @@ export default {
 
     const openParentSkillDir = async () => {
       if (!editorDialog.currentDir) return;
-      if (
-        editorDialog.fileDirty &&
-        !window.confirm(tm("skills.discardChanges"))
-      ) {
+      if (editorDialog.fileDirty && !window.confirm(tm("skills.discardChanges"))) {
         return;
       }
       const parts = editorDialog.currentDir.split("/").filter(Boolean);
@@ -1922,11 +1819,7 @@ export default {
     };
 
     const saveSkillFile = async () => {
-      if (
-        !editorDialog.skillName ||
-        !editorDialog.filePath ||
-        !editorDialog.fileEditable
-      ) {
+      if (!editorDialog.skillName || !editorDialog.filePath || !editorDialog.fileEditable) {
         return;
       }
       editorDialog.saving = true;
@@ -1938,8 +1831,7 @@ export default {
           content: editorDialog.content,
         });
         if (res?.data?.status !== "ok") {
-          editorDialog.error =
-            res?.data?.message || tm("skills.editorSaveFailed");
+          editorDialog.error = res?.data?.message || tm("skills.editorSaveFailed");
           showMessage(editorDialog.error, "error");
           return;
         }
@@ -1969,17 +1861,15 @@ export default {
         stage: neoFilters.stage || undefined,
       };
       const res = await axios.get("/api/skills/neo/releases", { params });
-      neoReleases.value = normalizeNeoItemsPayload<NeoRelease>(res).map(
-        (item: NeoRelease) => {
-          if (!item || typeof item !== "object") {
-            return item;
-          }
-          return {
-            ...item,
-            is_active: item.is_active ?? item.active ?? false,
-          };
-        },
-      );
+      neoReleases.value = normalizeNeoItemsPayload<NeoRelease>(res).map((item: NeoRelease) => {
+        if (!item || typeof item !== "object") {
+          return item;
+        }
+        return {
+          ...item,
+          is_active: item.is_active ?? item.active ?? false,
+        };
+      });
     };
 
     const loadNeoAvailability = async (): Promise<void> => {
@@ -1989,8 +1879,7 @@ export default {
         const providerSettings = config?.provider_settings || {};
         const currentRuntime = providerSettings?.computer_use_runtime || "none";
         const booter = providerSettings?.sandbox?.booter || "";
-        neoEnabled.value =
-          currentRuntime === "sandbox" && booter === "shipyard_neo";
+        neoEnabled.value = currentRuntime === "sandbox" && booter === "shipyard_neo";
       } catch (_err: unknown) {
         neoEnabled.value = false;
       }
@@ -2012,10 +1901,7 @@ export default {
       }
     };
 
-    const evaluateCandidate = async (
-      candidate: NeoCandidate,
-      passed: boolean,
-    ): Promise<void> => {
+    const evaluateCandidate = async (candidate: NeoCandidate, passed: boolean): Promise<void> => {
       try {
         const res = await axios.post("/api/skills/neo/evaluate", {
           candidate_id: candidate.id,
@@ -2023,36 +1909,21 @@ export default {
           score: passed ? 1.0 : 0.0,
           report: passed ? "approved_from_webui" : "rejected_from_webui",
         });
-        handleApiResponse(
-          res,
-          tm("skills.neoEvaluateSuccess"),
-          tm("skills.neoEvaluateFailed"),
-          async () => {
-            await fetchNeoCandidates();
-          },
-        );
+        handleApiResponse(res, tm("skills.neoEvaluateSuccess"), tm("skills.neoEvaluateFailed"), async () => {
+          await fetchNeoCandidates();
+        });
       } catch (_err: unknown) {
         showMessage(tm("skills.neoEvaluateFailed"), "error");
       }
     };
 
-    const candidatePromoteLoadingKey = (
-      candidateId: string,
-      stage: string,
-    ): string => `${candidateId}:${stage}`;
-    const isCandidatePromoteLoading = (
-      candidateId: string,
-      stage: string,
-    ): boolean =>
+    const candidatePromoteLoadingKey = (candidateId: string, stage: string): string => `${candidateId}:${stage}`;
+    const isCandidatePromoteLoading = (candidateId: string, stage: string): boolean =>
       !!candidatePromoteLoading[candidatePromoteLoadingKey(candidateId, stage)];
     const isCandidatePromoting = (candidateId: string): boolean =>
-      isCandidatePromoteLoading(candidateId, "canary") ||
-      isCandidatePromoteLoading(candidateId, "stable");
+      isCandidatePromoteLoading(candidateId, "canary") || isCandidatePromoteLoading(candidateId, "stable");
 
-    const promoteCandidate = async (
-      candidate: NeoCandidate,
-      stage: "canary" | "stable",
-    ): Promise<void> => {
+    const promoteCandidate = async (candidate: NeoCandidate, stage: "canary" | "stable"): Promise<void> => {
       const candidateId = candidate?.id;
       if (!candidateId) return;
       const loadingKey = candidatePromoteLoadingKey(candidateId, stage);
@@ -2066,10 +1937,7 @@ export default {
         });
         const ok = res?.data?.status === "ok";
         if (!ok) {
-          showMessage(
-            res?.data?.message || tm("skills.neoPromoteFailed"),
-            "error",
-          );
+          showMessage(res?.data?.message || tm("skills.neoPromoteFailed"), "error");
         } else {
           showMessage(tm("skills.neoPromoteSuccess"), "success");
         }
@@ -2089,14 +1957,9 @@ export default {
         const res = await axios.post("/api/skills/neo/rollback", {
           release_id: release.id,
         });
-        handleApiResponse(
-          res,
-          tm("skills.neoRollbackSuccess"),
-          tm("skills.neoRollbackFailed"),
-          async () => {
-            await fetchNeoData();
-          },
-        );
+        handleApiResponse(res, tm("skills.neoRollbackSuccess"), tm("skills.neoRollbackFailed"), async () => {
+          await fetchNeoData();
+        });
       } catch (_err: unknown) {
         showMessage(tm("skills.neoRollbackFailed"), "error");
       }
@@ -2107,22 +1970,15 @@ export default {
         const res = await axios.post("/api/skills/neo/rollback", {
           release_id: release.id,
         });
-        handleApiResponse(
-          res,
-          tm("skills.neoDeactivateSuccess"),
-          tm("skills.neoDeactivateFailed"),
-          async () => {
-            await fetchNeoData();
-          },
-        );
+        handleApiResponse(res, tm("skills.neoDeactivateSuccess"), tm("skills.neoDeactivateFailed"), async () => {
+          await fetchNeoData();
+        });
       } catch (_err: unknown) {
         showMessage(tm("skills.neoDeactivateFailed"), "error");
       }
     };
 
-    const handleReleaseLifecycleAction = async (
-      release: NeoRelease,
-    ): Promise<void> => {
+    const handleReleaseLifecycleAction = async (release: NeoRelease): Promise<void> => {
       if (release?.is_active) {
         await deactivateRelease(release);
         return;
@@ -2135,14 +1991,9 @@ export default {
         const res = await axios.post("/api/skills/neo/sync", {
           release_id: release.id,
         });
-        handleApiResponse(
-          res,
-          tm("skills.neoSyncSuccess"),
-          tm("skills.neoSyncFailed"),
-          async () => {
-            await fetchSkills();
-          },
-        );
+        handleApiResponse(res, tm("skills.neoSyncSuccess"), tm("skills.neoSyncFailed"), async () => {
+          await fetchSkills();
+        });
       } catch (_err: unknown) {
         showMessage(tm("skills.neoSyncFailed"), "error");
       }
@@ -2155,10 +2006,7 @@ export default {
           params: { payload_ref: payloadRef },
         });
         if (res?.data?.status !== "ok") {
-          showMessage(
-            res?.data?.message || tm("skills.neoPayloadFailed"),
-            "error",
-          );
+          showMessage(res?.data?.message || tm("skills.neoPayloadFailed"), "error");
           return;
         }
         const payload = res?.data?.data || {};
@@ -2175,14 +2023,9 @@ export default {
           candidate_id: candidate.id,
           reason: "deleted_from_webui",
         });
-        handleApiResponse(
-          res,
-          tm("skills.neoDeleteSuccess"),
-          tm("skills.neoDeleteFailed"),
-          async () => {
-            await fetchNeoData();
-          },
-        );
+        handleApiResponse(res, tm("skills.neoDeleteSuccess"), tm("skills.neoDeleteFailed"), async () => {
+          await fetchNeoData();
+        });
       } catch (_err: unknown) {
         showMessage(tm("skills.neoDeleteFailed"), "error");
       }
@@ -2194,14 +2037,9 @@ export default {
           release_id: release.id,
           reason: "deleted_from_webui",
         });
-        handleApiResponse(
-          res,
-          tm("skills.neoDeleteSuccess"),
-          tm("skills.neoDeleteFailed"),
-          async () => {
-            await fetchNeoData();
-          },
-        );
+        handleApiResponse(res, tm("skills.neoDeleteSuccess"), tm("skills.neoDeleteFailed"), async () => {
+          await fetchNeoData();
+        });
       } catch (_err: unknown) {
         showMessage(tm("skills.neoDeleteFailed"), "error");
       }
@@ -2237,9 +2075,7 @@ export default {
     watch(visibleDeletableSkills, (visibleSkills) => {
       if (!batchSelectionEnabled.value) return;
       const visibleNames = new Set(visibleSkills.map((skill) => skill.name));
-      selectedSkillNames.value = selectedSkillNames.value.filter((name) =>
-        visibleNames.has(name),
-      );
+      selectedSkillNames.value = selectedSkillNames.value.filter((name) => visibleNames.has(name));
     });
 
     watch(uploadDialog, (isOpen: boolean) => {

@@ -94,21 +94,21 @@ const MainRoutes = {
       ],
     },
     {
-      name: 'PluginView',
-      path: '/plugin-view/:pluginName/:pageName',
-      component: () => import('@/views/PluginPagePage.vue')
+      name: "PluginView",
+      path: "/plugin-view/:pluginName/:pageName",
+      component: () => import("@/views/PluginPagePage.vue"),
     },
     {
       // Legacy alias of the plugin view route.
-      path: '/plugin-page/:pluginName/:pageName',
+      path: "/plugin-page/:pluginName/:pageName",
       redirect: (to: RouteLocationGeneric) => ({
-        name: 'PluginView',
+        name: "PluginView",
         params: to.params,
         query: to.query,
-      })
+      }),
     },
     {
-      path: '/extension/:pluginId',
+      path: "/extension/:pluginId",
       redirect: (to: RouteLocationGeneric) => ({
         name:
           String(to.hash || "").replace(/^#/, "") === "market"
@@ -159,9 +159,9 @@ const MainRoutes = {
       redirect: "/settings#system-config",
     },
     {
-      name: 'SessionManagement',
-      path: '/session-management',
-      component: () => import('@/views/SessionManagementPage.vue')
+      name: "SessionManagement",
+      path: "/session-management",
+      component: () => import("@/views/SessionManagementPage.vue"),
     },
     {
       name: "Persona",
@@ -237,9 +237,9 @@ const MainRoutes = {
       component: () => import("@/views/CronJobPage.vue"),
     },
     {
-      name: 'NativeKnowledgeBase',
-      path: '/knowledge-base',
-      component: () => import('@/views/knowledge-base/index.vue'),
+      name: "NativeKnowledgeBase",
+      path: "/knowledge-base",
+      component: () => import("@/views/knowledge-base/index.vue"),
       children: [
         {
           path: "",

@@ -232,7 +232,10 @@ async function getAgentRunnerType(confId: string): Promise<string> {
     if (res.data.status !== "ok") throw new Error(res.data.message || "Failed to load profile");
     const config = res.data.data.config;
     const runner = config && typeof config === "object" && "agent_runner" in config ? config.agent_runner : null;
-    const type = runner && typeof runner === "object" && "runner_type" in runner && typeof runner.runner_type === "string" ? runner.runner_type : "local";
+    const type =
+      runner && typeof runner === "object" && "runner_type" in runner && typeof runner.runner_type === "string"
+        ? runner.runner_type
+        : "local";
     configCache.value[confId] = type;
     return type;
   } catch (error) {

@@ -24,7 +24,7 @@ export default createVuetify({
     },
     VSnackbar: {
       elevation: 6,
-      rounded: 'lg'
+      rounded: "lg",
     },
     VTextField: {
       rounded: "lg",

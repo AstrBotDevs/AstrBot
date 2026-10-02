@@ -220,7 +220,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, watch, type PropType } from "vue";
+import { computed, nextTick, type PropType, ref, watch } from "vue";
 import { useI18n } from "@/i18n/composables";
 import { normalizeTextInput } from "@/utils/inputValue";
 
@@ -260,12 +260,8 @@ const props = defineProps({
 const emit = defineEmits<{ "update:modelValue": [value: string[]] }>();
 
 const secretVisible = ref(false);
-const secretInputType = computed(() =>
-  props.secret && !secretVisible.value ? "password" : "text",
-);
-const secretToggleIcon = computed(() =>
-  props.secret ? (secretVisible.value ? "mdi-eye-off" : "mdi-eye") : undefined,
-);
+const secretInputType = computed(() => (props.secret && !secretVisible.value ? "password" : "text"));
+const secretToggleIcon = computed(() => (props.secret ? (secretVisible.value ? "mdi-eye-off" : "mdi-eye") : undefined));
 const dialog = ref(false);
 const localItems = ref<string[]>([]);
 const originalItems = ref<string[]>([]);
@@ -274,9 +270,7 @@ const editIndex = ref(-1);
 const editItem = ref("");
 const showBatchImport = ref(false);
 const batchImportText = ref("");
-const isSingleItemMode = computed(
-  () => (props.modelValue?.length ?? 0) <= 1 && props.preferSingleItem,
-);
+const isSingleItemMode = computed(() => (props.modelValue?.length ?? 0) <= 1 && props.preferSingleItem);
 const singleItemValue = computed({
   get: (): string => props.modelValue[0] ?? "",
   set: (input: string | null) => {
@@ -320,9 +314,7 @@ watch(
 
     // 自动清理只包含空字符串的数组
     if (newValue && newValue.length > 0) {
-      const filtered = newValue.filter((item) =>
-        typeof item === "string" ? item.trim() !== "" : true,
-      );
+      const filtered = newValue.filter((item) => (typeof item === "string" ? item.trim() !== "" : true));
       if (filtered.length !== newValue.length) {
         // 使用 nextTick 确保父组件已准备好接收更新
         nextTick(() => {
@@ -375,9 +367,7 @@ function cancelEdit() {
 
 function confirmDialog() {
   // 过滤空字符串，同时处理非字符串类型
-  const filteredItems = localItems.value.filter((item) =>
-    typeof item === "string" ? item.trim() !== "" : true,
-  );
+  const filteredItems = localItems.value.filter((item) => (typeof item === "string" ? item.trim() !== "" : true));
   emit("update:modelValue", filteredItems);
   dialog.value = false;
 }

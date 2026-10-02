@@ -49,16 +49,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { ChevronRight } from "@lucide/vue";
-import {
-  reasoningActivityCounts,
-  reasoningActivityTitle,
-  type MessagePart,
-} from "@/composables/useMessages";
-import { useModuleI18n } from "@/i18n/composables";
-import ThinkingIndicator from "@/components/chat/ThinkingIndicator.vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import ReasoningTimeline from "@/components/chat/message_list_comps/ReasoningTimeline.vue";
+import ThinkingIndicator from "@/components/chat/ThinkingIndicator.vue";
+import { type MessagePart, reasoningActivityCounts, reasoningActivityTitle } from "@/composables/useMessages";
+import { useModuleI18n } from "@/i18n/composables";
 
 const props = defineProps<{
   parts?: MessagePart[];

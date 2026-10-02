@@ -11,13 +11,13 @@
 </template>
 
 <script setup lang="ts">
-import type { SponsorPreset } from '@/utils/sponsorCatalog'
+import type { SponsorPreset } from "@/utils/sponsorCatalog";
 
 defineProps<{
-  apiBase?: string
-  sponsor?: SponsorPreset
-  tm: (key: string) => string
-}>()
+  apiBase?: string;
+  sponsor?: SponsorPreset;
+  tm: (key: string) => string;
+}>();
 </script>
 
 <style scoped>

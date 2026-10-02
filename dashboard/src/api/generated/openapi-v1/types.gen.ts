@@ -4,649 +4,680 @@
  * The AstrBot backend runtime, including when running inside a container. Values are captured at application startup.
  */
 export type RuntimeInfo = {
+  /**
+   * Lowercase platform.system() value, commonly linux, darwin, or windows.
+   */
+  os: string;
+  /**
+   * Unmodified platform.machine() value, such as x86_64, AMD64, arm64, or aarch64. May be empty if unknown.
+   */
+  arch: string;
+  /**
+   * Local process sandbox startup check, captured when AstrBot starts. It does not verify DNS resolution or every permitted operation.
+   */
+  sandbox: {
+    backend: "bubblewrap" | "seatbelt" | null;
     /**
-     * Lowercase platform.system() value, commonly linux, darwin, or windows.
+     * detected means the executable was found and a minimal workspace sandbox launched successfully; missing means the corresponding executable was not found; unavailable means it was found but sandbox startup failed; unsupported means this platform has no Local process sandbox backend. These identifiers are independent of the UI language.
      */
-    os: string;
+    status: "detected" | "missing" | "unavailable" | "unsupported";
     /**
-     * Unmodified platform.machine() value, such as x86_64, AMD64, arm64, or aarch64. May be empty if unknown.
+     * Bounded startup error detail, included when status is unavailable. Restart AstrBot after fixing the environment to refresh the check.
      */
-    arch: string;
-    /**
-     * Local process sandbox startup check, captured when AstrBot starts. It does not verify DNS resolution or every permitted operation.
-     */
-    sandbox: {
-        backend: 'bubblewrap' | 'seatbelt' | null;
-        /**
-         * detected means the executable was found and a minimal workspace sandbox launched successfully; missing means the corresponding executable was not found; unavailable means it was found but sandbox startup failed; unsupported means this platform has no Local process sandbox backend. These identifiers are independent of the UI language.
-         */
-        status: 'detected' | 'missing' | 'unavailable' | 'unsupported';
-        /**
-         * Bounded startup error detail, included when status is unavailable. Restart AstrBot after fixing the environment to refresh the check.
-         */
-        error?: string;
-    };
+    error?: string;
+  };
 };
 
 export type SuccessEnvelope = {
-    status: 'ok';
-    message?: string;
-    data: unknown;
+  status: "ok";
+  message?: string;
+  data: unknown;
 };
 
 export type ErrorEnvelope = {
-    status: 'error';
-    message: string;
-    data?: unknown;
+  status: "error";
+  message: string;
+  data?: unknown;
 };
 
 export type DynamicConfig = {
-    [key: string]: unknown;
+  [key: string]: unknown;
 };
 
 export type JsonSchema = {
-    [key: string]: unknown;
+  [key: string]: unknown;
 };
 
-export type ProviderCapability = 'chat' | 'agent' | 'stt' | 'tts' | 'embedding' | 'rerank';
+export type ProviderCapability = "chat" | "agent" | "stt" | "tts" | "embedding" | "rerank";
 
 export type LoginRequest = {
-    username: string;
-    password: string;
-    /**
-     * TOTP code or recovery code when two-factor authentication is required.
-     */
-    code?: string;
-    trust_device_flag?: boolean;
+  username: string;
+  password: string;
+  /**
+   * TOTP code or recovery code when two-factor authentication is required.
+   */
+  code?: string;
+  trust_device_flag?: boolean;
 };
 
 export type SetupAuthRequest = {
-    username: string;
-    password: string;
-    confirm_password: string;
+  username: string;
+  password: string;
+  confirm_password: string;
 };
 
 export type UpdateAccountRequest = {
-    password: string;
-    new_password?: string;
-    confirm_password?: string;
-    new_username?: string;
+  password: string;
+  new_password?: string;
+  confirm_password?: string;
+  new_username?: string;
 };
 
 export type TotpSetupRequest = {
-    code?: string;
-    secret?: string;
+  code?: string;
+  secret?: string;
 };
 
 export type CreateApiKeyRequest = {
-    name: string;
-    scopes?: Array<'bot' | 'provider' | 'persona' | 'im' | 'config' | 'config:edit_admin' | 'chat' | 'chat:admin' | 'data' | 'file' | 'plugin' | 'mcp' | 'skill'>;
-    expires_at?: string;
-    expires_in_days?: number;
+  name: string;
+  scopes?: Array<
+    | "bot"
+    | "provider"
+    | "persona"
+    | "im"
+    | "config"
+    | "config:edit_admin"
+    | "chat"
+    | "chat:admin"
+    | "data"
+    | "file"
+    | "plugin"
+    | "mcp"
+    | "skill"
+  >;
+  expires_at?: string;
+  expires_in_days?: number;
 };
 
 export type CreateConfigProfileRequest = {
-    name?: string;
-    config?: DynamicConfig;
+  name?: string;
+  config?: DynamicConfig;
 };
 
 export type RenameRequest = {
-    name: string;
+  name: string;
 };
 
 export type NameRequest = {
-    name: string;
+  name: string;
 };
 
 export type ConfigRoutesReplaceRequest = {
-    routing: {
-        [key: string]: string;
-    };
+  routing: {
+    [key: string]: string;
+  };
 };
 
 export type ConfigRouteUpsertRequest = {
-    /**
-     * Use "default" to remove a custom route and fall back.
-     */
-    config_id: string;
+  /**
+   * Use "default" to remove a custom route and fall back.
+   */
+  config_id: string;
 };
 
 export type BotConfigRequest = {
-    id?: string;
-    name?: string;
-    /**
-     * Platform adapter type, such as aiocqhttp, telegram, lark.
-     */
-    type: string;
-    enabled?: boolean;
-    config: DynamicConfig;
+  id?: string;
+  name?: string;
+  /**
+   * Platform adapter type, such as aiocqhttp, telegram, lark.
+   */
+  type: string;
+  enabled?: boolean;
+  config: DynamicConfig;
 };
 
 export type BotRegistrationRequest = {
-    action: 'start' | 'poll';
-    platform_config?: DynamicConfig;
-    registration_code?: string;
-    device_code?: string;
-    qrcode?: string;
-    [key: string]: unknown | ('start' | 'poll') | DynamicConfig | string | undefined;
+  action: "start" | "poll";
+  platform_config?: DynamicConfig;
+  registration_code?: string;
+  device_code?: string;
+  qrcode?: string;
+  [key: string]: unknown | ("start" | "poll") | DynamicConfig | string | undefined;
 };
 
 export type EnabledPatch = {
-    enabled: boolean;
+  enabled: boolean;
 };
 
 export type ToolPermissionPatch = {
-    permission: 'admin' | 'member';
+  permission: "admin" | "member";
 };
 
 export type ProviderSourceConfigRequest = {
-    id?: string;
-    config: DynamicConfig;
+  id?: string;
+  config: DynamicConfig;
 };
 
 export type ProviderConfigRequest = {
-    id?: string;
-    provider_source_id?: string;
-    capability?: ProviderCapability;
-    enabled?: boolean;
-    config: DynamicConfig;
+  id?: string;
+  provider_source_id?: string;
+  capability?: ProviderCapability;
+  enabled?: boolean;
+  config: DynamicConfig;
 };
 
 /**
  * Per-request ChatUI feature flags. A value here takes priority over its legacy top-level field, followed by the documented default.
  */
 export type ChatFlags = {
-    /**
-     * Inject the inline HTML GenUI system prompt for this request.
-     */
-    enable_inline_genui?: boolean;
-    /**
-     * Allow the ChatUI default system prompt when no persona overrides it.
-     */
-    enable_default_system_prompt?: boolean;
-    /**
-     * Enable streaming model output for this request. This value takes priority over the legacy top-level enable_streaming field.
-     */
-    enable_streaming?: boolean;
-    /**
-     * Display reasoning content for this WebChat request independently of the global display_reasoning_text setting.
-     */
-    enable_reasoning?: boolean;
+  /**
+   * Inject the inline HTML GenUI system prompt for this request.
+   */
+  enable_inline_genui?: boolean;
+  /**
+   * Allow the ChatUI default system prompt when no persona overrides it.
+   */
+  enable_default_system_prompt?: boolean;
+  /**
+   * Enable streaming model output for this request. This value takes priority over the legacy top-level enable_streaming field.
+   */
+  enable_streaming?: boolean;
+  /**
+   * Display reasoning content for this WebChat request independently of the global display_reasoning_text setting.
+   */
+  enable_reasoning?: boolean;
 };
 
 export type ChatRequest = {
-    /**
-     * Caller-declared WebChat sender/session owner. Configured AstrBot administrator IDs require the chat:admin API key sub-scope.
-     */
-    username?: string;
-    session_id?: string;
-    /**
-     * Deprecated alias for session_id.
-     */
-    conversation_id?: string;
-    message: string | Array<MessagePart>;
-    config_id?: string;
-    config_name?: string;
-    selected_provider?: string;
-    selected_model?: string;
-    /**
-     * Deprecated compatibility field. It is used only when flags.enable_streaming is absent; otherwise flags.enable_streaming takes priority.
-     * @deprecated
-     */
-    enable_streaming?: boolean;
-    flags?: ChatFlags;
-    /**
-     * Internal WebUI flag for edit/regenerate flows.
-     */
-    _skip_user_history?: boolean;
-    /**
-     * Internal WebUI checkpoint override.
-     */
-    _llm_checkpoint_id?: string;
-    /**
-     * Internal WebUI platform history override.
-     */
-    _platform_history_id?: string;
-    /**
-     * Internal WebUI side-thread context.
-     */
-    _thread_selected_text?: string;
+  /**
+   * Caller-declared WebChat sender/session owner. Configured AstrBot administrator IDs require the chat:admin API key sub-scope.
+   */
+  username?: string;
+  session_id?: string;
+  /**
+   * Deprecated alias for session_id.
+   */
+  conversation_id?: string;
+  message: string | Array<MessagePart>;
+  config_id?: string;
+  config_name?: string;
+  selected_provider?: string;
+  selected_model?: string;
+  /**
+   * Deprecated compatibility field. It is used only when flags.enable_streaming is absent; otherwise flags.enable_streaming takes priority.
+   * @deprecated
+   */
+  enable_streaming?: boolean;
+  flags?: ChatFlags;
+  /**
+   * Internal WebUI flag for edit/regenerate flows.
+   */
+  _skip_user_history?: boolean;
+  /**
+   * Internal WebUI checkpoint override.
+   */
+  _llm_checkpoint_id?: string;
+  /**
+   * Internal WebUI platform history override.
+   */
+  _platform_history_id?: string;
+  /**
+   * Internal WebUI side-thread context.
+   */
+  _thread_selected_text?: string;
 };
 
 export type ChatSessionBatchDeleteRequest = {
-    session_ids: Array<string>;
+  session_ids: Array<string>;
 };
 
 export type ChatSessionPatchRequest = {
-    display_name?: string;
+  display_name?: string;
 };
 
 export type ChatMessagePatchRequest = {
-    content: {
-        [key: string]: unknown;
-    };
+  content: {
+    [key: string]: unknown;
+  };
 };
 
 export type ChatMessageRegenerateRequest = {
-    selected_provider?: string;
-    selected_model?: string;
-    /**
-     * Deprecated compatibility field. It is used only when flags.enable_streaming is absent; otherwise flags.enable_streaming takes priority.
-     * @deprecated
-     */
-    enable_streaming?: boolean;
-    flags?: ChatFlags;
+  selected_provider?: string;
+  selected_model?: string;
+  /**
+   * Deprecated compatibility field. It is used only when flags.enable_streaming is absent; otherwise flags.enable_streaming takes priority.
+   * @deprecated
+   */
+  enable_streaming?: boolean;
+  flags?: ChatFlags;
 };
 
 export type ChatThreadCreateRequest = {
-    session_id: string;
-    parent_message_id: string | number;
-    selected_text: string;
+  session_id: string;
+  parent_message_id: string | number;
+  selected_text: string;
 };
 
 export type ChatThreadMessageRequest = {
-    message: string | Array<MessagePart>;
-    selected_provider?: string;
-    selected_model?: string;
-    /**
-     * Deprecated compatibility field. It is used only when flags.enable_streaming is absent; otherwise flags.enable_streaming takes priority.
-     * @deprecated
-     */
-    enable_streaming?: boolean;
-    flags?: ChatFlags;
+  message: string | Array<MessagePart>;
+  selected_provider?: string;
+  selected_model?: string;
+  /**
+   * Deprecated compatibility field. It is used only when flags.enable_streaming is absent; otherwise flags.enable_streaming takes priority.
+   * @deprecated
+   */
+  enable_streaming?: boolean;
+  flags?: ChatFlags;
 };
 
 export type ChatProjectRequest = {
-    title?: string;
-    emoji?: string;
-    description?: string;
-    /**
-     * Workspace mode. API key callers may use only session or project; project is the default.
-     */
-    workspace_type?: 'session' | 'project' | 'custom';
-    /**
-     * Dashboard-only custom workspace path. API key callers cannot set this field.
-     */
-    workspace_path?: string;
+  title?: string;
+  emoji?: string;
+  description?: string;
+  /**
+   * Workspace mode. API key callers may use only session or project; project is the default.
+   */
+  workspace_type?: "session" | "project" | "custom";
+  /**
+   * Dashboard-only custom workspace path. API key callers cannot set this field.
+   */
+  workspace_path?: string;
 };
 
 export type MessagePart = {
-    type: 'text' | 'plain' | 'image' | 'file' | 'audio' | 'record' | 'video' | 'reply';
-    text?: string;
-    attachment_id?: string;
-    url?: string;
-    filename?: string;
-    stored_filename?: string;
-    mime_type?: string;
-    [key: string]: unknown | ('text' | 'plain' | 'image' | 'file' | 'audio' | 'record' | 'video' | 'reply') | string | undefined;
+  type: "text" | "plain" | "image" | "file" | "audio" | "record" | "video" | "reply";
+  text?: string;
+  attachment_id?: string;
+  url?: string;
+  filename?: string;
+  stored_filename?: string;
+  mime_type?: string;
+  [key: string]:
+    | unknown
+    | ("text" | "plain" | "image" | "file" | "audio" | "record" | "video" | "reply")
+    | string
+    | undefined;
 };
 
 export type ImMessageRequest = {
-    umo: string;
-    message: string | Array<MessagePart>;
+  umo: string;
+  message: string | Array<MessagePart>;
 };
 
 export type FileUploadRequest = {
-    file: Blob | File;
+  file: Blob | File;
 };
 
 export type PluginUpdateRequest = {
-    reinstall?: boolean;
+  reinstall?: boolean;
 };
 
 export type PluginSourceBindRequest = {
-    install_method?: string;
-    registry_url?: string;
-    market_plugin_id?: string;
+  install_method?: string;
+  registry_url?: string;
+  market_plugin_id?: string;
 };
 
 export type PluginBatchUpdateRequest = {
-    /**
-     * When set, update this single plugin instead of a batch.
-     */
-    plugin_id?: string;
-    plugin_ids?: Array<string>;
-    reinstall?: boolean;
-    update_all?: boolean;
-    [key: string]: unknown | string | Array<string> | boolean | undefined;
+  /**
+   * When set, update this single plugin instead of a batch.
+   */
+  plugin_id?: string;
+  plugin_ids?: Array<string>;
+  reinstall?: boolean;
+  update_all?: boolean;
+  [key: string]: unknown | string | Array<string> | boolean | undefined;
 };
 
 export type PluginVersionSupportRequest = {
-    astrbot_version?: string;
+  astrbot_version?: string;
 };
 
 export type PluginRepositoryInstallRequest = {
-    /**
-     * GitHub shorthand, HTTP(S), SSH, or SCP-style Git repository locator.
-     */
-    repository: string;
-    ref?: string;
-    /**
-     * Optional downloadable ZIP URL to use instead of repository archive resolution.
-     */
-    download_url?: string;
-    proxy?: string;
-    ignore_version_check?: boolean;
-    install_method?: string;
-    registry_url?: string;
-    market_plugin_id?: string;
+  /**
+   * GitHub shorthand, HTTP(S), SSH, or SCP-style Git repository locator.
+   */
+  repository: string;
+  ref?: string;
+  /**
+   * Optional downloadable ZIP URL to use instead of repository archive resolution.
+   */
+  download_url?: string;
+  proxy?: string;
+  ignore_version_check?: boolean;
+  install_method?: string;
+  registry_url?: string;
+  market_plugin_id?: string;
 };
 
 export type PluginUrlInstallRequest = {
-    url: string;
-    /**
-     * Optional downloadable ZIP URL when url is the plugin source page or repository.
-     */
-    download_url?: string;
-    proxy?: string;
-    ignore_version_check?: boolean;
-    install_method?: string;
-    registry_url?: string;
-    market_plugin_id?: string;
+  url: string;
+  /**
+   * Optional downloadable ZIP URL when url is the plugin source page or repository.
+   */
+  download_url?: string;
+  proxy?: string;
+  ignore_version_check?: boolean;
+  install_method?: string;
+  registry_url?: string;
+  market_plugin_id?: string;
 };
 
 export type PluginValidateRepoRequest = {
-    repository?: string;
-    url?: string;
-    proxy?: string;
+  repository?: string;
+  url?: string;
+  proxy?: string;
 };
 
 export type PluginUploadInstallRequest = {
-    file: Blob | File;
+  file: Blob | File;
 };
 
 export type PluginConfigFileDeleteRequest = {
-    path: string;
+  path: string;
 };
 
 export type PluginSourceRequest = {
-    id?: string;
-    name?: string;
-    url: string;
+  id?: string;
+  name?: string;
+  url: string;
 };
 
 export type CommandPatchRequest = {
-    enabled?: boolean;
-    alias?: string;
-    aliases?: Array<string>;
-    permission_group?: string;
+  enabled?: boolean;
+  alias?: string;
+  aliases?: Array<string>;
+  permission_group?: string;
 };
 
 export type McpServerConfig = {
-    name: string;
-    enabled?: boolean;
-    transport?: 'stdio' | 'sse' | 'streamable_http';
-    command?: string;
-    args?: Array<string>;
-    url?: string;
-    headers?: {
+  name: string;
+  enabled?: boolean;
+  transport?: "stdio" | "sse" | "streamable_http";
+  command?: string;
+  args?: Array<string>;
+  url?: string;
+  headers?: {
+    [key: string]: string;
+  };
+  timeout?: number;
+  [key: string]:
+    | unknown
+    | string
+    | boolean
+    | ("stdio" | "sse" | "streamable_http")
+    | Array<string>
+    | {
         [key: string]: string;
-    };
-    timeout?: number;
-    [key: string]: unknown | string | boolean | ('stdio' | 'sse' | 'streamable_http') | Array<string> | {
-        [key: string]: string;
-    } | number | undefined;
+      }
+    | number
+    | undefined;
 };
 
 export type ModelScopeSyncRequest = {
-    access_token?: string;
+  access_token?: string;
 };
 
 export type SkillUploadRequest = {
-    file: Blob | File;
-    overwrite?: boolean;
+  file: Blob | File;
+  overwrite?: boolean;
 };
 
 export type SkillPatchRequest = {
-    enabled?: boolean;
-    display_name?: string;
-    description?: string;
+  enabled?: boolean;
+  display_name?: string;
+  description?: string;
 };
 
 export type NeoCandidateActionRequest = {
-    candidate_id: string;
-    [key: string]: unknown | string;
+  candidate_id: string;
+  [key: string]: unknown | string;
 };
 
 export type NeoReleaseActionRequest = {
-    release_id: string;
-    [key: string]: unknown | string;
+  release_id: string;
+  [key: string]: unknown | string;
 };
 
 export type KnowledgeBaseRequest = {
-    kb_name?: string;
-    description?: string;
-    emoji?: string;
-    embedding_provider_id?: string | null;
-    rerank_provider_id?: string | null;
-    chunk_size?: number;
-    chunk_overlap?: number;
-    top_k_dense?: number;
-    top_k_sparse?: number;
-    top_m_final?: number;
+  kb_name?: string;
+  description?: string;
+  emoji?: string;
+  embedding_provider_id?: string | null;
+  rerank_provider_id?: string | null;
+  chunk_size?: number;
+  chunk_overlap?: number;
+  top_k_dense?: number;
+  top_k_sparse?: number;
+  top_m_final?: number;
 };
 
 export type KnowledgeBaseCreateRequest = KnowledgeBaseRequest & {
-    kb_name: string;
-    embedding_provider_id: string;
+  kb_name: string;
+  embedding_provider_id: string;
 };
 
 export type KnowledgeDocumentUploadRequest = {
-    file: Blob | File;
+  file: Blob | File;
 };
 
 export type KnowledgeDocumentImportRequest = {
-    paths: Array<string>;
-    parser?: string;
+  paths: Array<string>;
+  parser?: string;
 };
 
 export type KnowledgeDocumentUrlImportRequest = {
-    url: string;
-    parser?: string;
+  url: string;
+  parser?: string;
 };
 
 export type KnowledgeRetrieveRequest = {
-    query: string;
-    top_k?: number;
-    score_threshold?: number;
+  query: string;
+  top_k?: number;
+  score_threshold?: number;
 };
 
 export type PersonaRequest = {
-    persona_id: string;
-    system_prompt: string;
-    begin_dialogs?: Array<string>;
-    folder_id?: string;
-    tools?: Array<string>;
-    skills?: Array<string>;
-    custom_error_message?: string;
-    [key: string]: unknown | string | Array<string> | Array<string> | Array<string> | undefined;
+  persona_id: string;
+  system_prompt: string;
+  begin_dialogs?: Array<string>;
+  folder_id?: string;
+  tools?: Array<string>;
+  skills?: Array<string>;
+  custom_error_message?: string;
+  [key: string]: unknown | string | Array<string> | Array<string> | Array<string> | undefined;
 };
 
 export type PersonaFolderRequest = {
-    name?: string;
-    parent_id?: string;
-    description?: string;
-    [key: string]: unknown | string | undefined;
+  name?: string;
+  parent_id?: string;
+  description?: string;
+  [key: string]: unknown | string | undefined;
 };
 
 export type PersonaMoveRequest = {
-    persona_id: string;
-    folder_id?: string;
-    [key: string]: unknown | string | undefined;
+  persona_id: string;
+  folder_id?: string;
+  [key: string]: unknown | string | undefined;
 };
 
 export type ReorderRequest = {
-    items: Array<{
-        id: string;
-        type: 'persona' | 'folder';
-        sort_order: number;
-    }>;
+  items: Array<{
+    id: string;
+    type: "persona" | "folder";
+    sort_order: number;
+  }>;
 };
 
 export type SessionRuleRequest = {
-    umo: string;
-    rule_key: string;
-    rule_value?: DynamicConfig;
-    [key: string]: unknown | string | DynamicConfig | undefined;
+  umo: string;
+  rule_key: string;
+  rule_value?: DynamicConfig;
+  [key: string]: unknown | string | DynamicConfig | undefined;
 };
 
 export type UmoListRequest = {
-    umo?: string;
-    umos?: Array<string>;
-    scope?: 'all' | 'group' | 'private' | 'custom_group';
-    group_id?: string;
-    rule_key?: string;
+  umo?: string;
+  umos?: Array<string>;
+  scope?: "all" | "group" | "private" | "custom_group";
+  group_id?: string;
+  rule_key?: string;
 };
 
 export type BatchSessionProviderRequest = UmoListRequest & {
-    provider_id: string;
-    provider_type: 'chat_completion' | 'speech_to_text' | 'text_to_speech';
+  provider_id: string;
+  provider_type: "chat_completion" | "speech_to_text" | "text_to_speech";
 };
 
 export type BatchSessionServiceRequest = UmoListRequest & {
-    session_enabled?: boolean;
-    llm_enabled?: boolean;
-    tts_enabled?: boolean;
+  session_enabled?: boolean;
+  llm_enabled?: boolean;
+  tts_enabled?: boolean;
 };
 
 export type SessionGroupRequest = {
-    name?: string;
-    umos?: Array<string>;
-    add_umos?: Array<string>;
-    remove_umos?: Array<string>;
+  name?: string;
+  umos?: Array<string>;
+  add_umos?: Array<string>;
+  remove_umos?: Array<string>;
 };
 
 export type ConversationPatchRequest = {
-    title?: string;
-    persona_id?: string;
+  title?: string;
+  persona_id?: string;
 };
 
 export type ConversationMessagesReplaceRequest = {
-    user_id?: string;
-    messages?: Array<{
-        [key: string]: unknown;
-    }>;
-    history?: Array<{
-        [key: string]: unknown;
-    }>;
+  user_id?: string;
+  messages?: Array<{
+    [key: string]: unknown;
+  }>;
+  history?: Array<{
+    [key: string]: unknown;
+  }>;
 };
 
 export type ConversationRef = {
-    user_id: string;
-    cid: string;
+  user_id: string;
+  cid: string;
 };
 
 export type ConversationBatchDeleteRequest = {
-    conversations: Array<ConversationRef>;
+  conversations: Array<ConversationRef>;
 };
 
 export type ConversationExportRequest = {
-    conversations?: Array<ConversationRef>;
-    conversation_ids?: Array<string>;
-    format?: 'json' | 'markdown';
+  conversations?: Array<ConversationRef>;
+  conversation_ids?: Array<string>;
+  format?: "json" | "markdown";
 };
 
 export type CronJobRequest = {
-    name?: string;
-    cron_expression?: string;
-    timezone?: string;
-    session?: string;
-    note?: string;
-    description?: string;
-    persona_id?: string;
-    provider_id?: string;
-    enabled?: boolean;
-    run_once?: boolean;
-    run_at?: string;
-    payload?: {
+  name?: string;
+  cron_expression?: string;
+  timezone?: string;
+  session?: string;
+  note?: string;
+  description?: string;
+  persona_id?: string;
+  provider_id?: string;
+  enabled?: boolean;
+  run_once?: boolean;
+  run_at?: string;
+  payload?: {
+    [key: string]: unknown;
+  };
+  [key: string]:
+    | unknown
+    | string
+    | boolean
+    | {
         [key: string]: unknown;
-    };
-    [key: string]: unknown | string | boolean | {
-        [key: string]: unknown;
-    } | undefined;
+      }
+    | undefined;
 };
 
 export type CronJobPatchRequest = CronJobRequest;
 
 export type BackupExportRequest = {
-    include?: Array<string>;
-    exclude?: Array<string>;
+  include?: Array<string>;
+  exclude?: Array<string>;
 };
 
 export type BackupUploadRequest = {
-    file: Blob | File;
+  file: Blob | File;
 };
 
 export type BackupUploadInitRequest = {
-    filename: string;
-    total_size: number;
+  filename: string;
+  total_size: number;
 };
 
 export type BackupUploadSessionRequest = {
-    upload_id: string;
+  upload_id: string;
 };
 
 export type BackupChunkUploadRequest = {
-    upload_id: string;
-    chunk_index: number;
-    chunk: Blob | File;
+  upload_id: string;
+  chunk_index: number;
+  chunk: Blob | File;
 };
 
 export type ChatUploadInitRequest = {
-    filename: string;
-    total_size: number;
-    content_type?: string;
+  filename: string;
+  total_size: number;
+  content_type?: string;
 };
 
 export type ChatUploadSessionRequest = {
-    upload_id: string;
+  upload_id: string;
 };
 
 export type ChatChunkUploadRequest = {
-    upload_id: string;
-    chunk_index: number;
-    chunk: Blob | File;
+  upload_id: string;
+  chunk_index: number;
+  chunk: Blob | File;
 };
 
 export type BackupRenameRequest = {
-    new_name: string;
+  new_name: string;
 };
 
 export type BackupImportRequest = {
-    confirmed?: boolean;
+  confirmed?: boolean;
 };
 
 export type UpdateRequest = {
-    version?: string;
-    proxy?: string;
-    reboot?: boolean;
-    progress_id?: string;
+  version?: string;
+  proxy?: string;
+  reboot?: boolean;
+  progress_id?: string;
 };
 
 export type PipInstallRequest = {
-    package: string;
-    mirror?: string;
+  package: string;
+  mirror?: string;
 };
 
 export type GhproxyTestRequest = {
-    proxy_url: string;
+  proxy_url: string;
 };
 
 export type TraceSettingsRequest = {
-    enabled?: boolean;
-    level?: string;
-    [key: string]: unknown | boolean | string | undefined;
+  enabled?: boolean;
+  level?: string;
+  [key: string]: unknown | boolean | string | undefined;
 };
 
 export type T2iTemplateRequest = {
-    name: string;
-    content: string;
-    [key: string]: unknown | string;
+  name: string;
+  content: string;
+  [key: string]: unknown | string;
 };
 
 export type T2iTemplateContentRequest = {
-    content: string;
-    [key: string]: unknown | string;
+  content: string;
+  [key: string]: unknown | string;
 };
 
 export type AttachmentId = string;
@@ -715,5789 +746,5825 @@ export type Umo = string;
 export type WebhookUuid = string;
 
 export type LoginData = {
-    body: LoginRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/auth/login';
+  body: LoginRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/auth/login";
 };
 
 export type LoginErrors = {
-    /**
-     * Standard AstrBot error response
-     */
-    401: ErrorEnvelope;
+  /**
+   * Standard AstrBot error response
+   */
+  401: ErrorEnvelope;
 };
 
 export type LoginError = LoginErrors[keyof LoginErrors];
 
 export type LoginResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type LoginResponse = LoginResponses[keyof LoginResponses];
 
 export type LogoutData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/v1/auth/logout';
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/api/v1/auth/logout";
 };
 
 export type LogoutResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type LogoutResponse = LogoutResponses[keyof LogoutResponses];
 
 export type GetAuthSetupStatusData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/v1/auth/setup-status';
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/api/v1/auth/setup-status";
 };
 
 export type GetAuthSetupStatusResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type GetAuthSetupStatusResponse = GetAuthSetupStatusResponses[keyof GetAuthSetupStatusResponses];
 
 export type SetupAuthData = {
-    body: SetupAuthRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/auth/setup';
+  body: SetupAuthRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/auth/setup";
 };
 
 export type SetupAuthResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type SetupAuthResponse = SetupAuthResponses[keyof SetupAuthResponses];
 
 export type SetupTotpData = {
-    body?: TotpSetupRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/auth/totp/setup';
+  body?: TotpSetupRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/auth/totp/setup";
 };
 
 export type SetupTotpResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type SetupTotpResponse = SetupTotpResponses[keyof SetupTotpResponses];
 
 export type RecoverTotpData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/v1/auth/totp/recovery';
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/api/v1/auth/totp/recovery";
 };
 
 export type RecoverTotpResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type RecoverTotpResponse = RecoverTotpResponses[keyof RecoverTotpResponses];
 
 export type UpdateAuthAccountData = {
-    body: UpdateAccountRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/auth/account';
+  body: UpdateAccountRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/auth/account";
 };
 
 export type UpdateAuthAccountResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type UpdateAuthAccountResponse = UpdateAuthAccountResponses[keyof UpdateAuthAccountResponses];
 
 export type ListApiKeysData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/v1/api-keys';
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/api/v1/api-keys";
 };
 
 export type ListApiKeysResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ListApiKeysResponse = ListApiKeysResponses[keyof ListApiKeysResponses];
 
 export type CreateApiKeyData = {
-    body: CreateApiKeyRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/api-keys';
+  body: CreateApiKeyRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/api-keys";
 };
 
 export type CreateApiKeyResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type CreateApiKeyResponse = CreateApiKeyResponses[keyof CreateApiKeyResponses];
 
 export type RevokeApiKeyData = {
-    body?: never;
-    path: {
-        key_id: string;
-    };
-    query?: never;
-    url: '/api/v1/api-keys/{key_id}/revoke';
+  body?: never;
+  path: {
+    key_id: string;
+  };
+  query?: never;
+  url: "/api/v1/api-keys/{key_id}/revoke";
 };
 
 export type RevokeApiKeyResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type RevokeApiKeyResponse = RevokeApiKeyResponses[keyof RevokeApiKeyResponses];
 
 export type DeleteApiKeyData = {
-    body?: never;
-    path: {
-        key_id: string;
-    };
-    query?: never;
-    url: '/api/v1/api-keys/{key_id}';
+  body?: never;
+  path: {
+    key_id: string;
+  };
+  query?: never;
+  url: "/api/v1/api-keys/{key_id}";
 };
 
 export type DeleteApiKeyResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type DeleteApiKeyResponse = DeleteApiKeyResponses[keyof DeleteApiKeyResponses];
 
 export type GetSystemConfigSchemaData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/v1/system-config/schema';
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/api/v1/system-config/schema";
 };
 
 export type GetSystemConfigSchemaResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type GetSystemConfigSchemaResponse = GetSystemConfigSchemaResponses[keyof GetSystemConfigSchemaResponses];
 
 export type GetSystemConfigData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/v1/system-config';
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/api/v1/system-config";
 };
 
 export type GetSystemConfigResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type GetSystemConfigResponse = GetSystemConfigResponses[keyof GetSystemConfigResponses];
 
 export type UpdateSystemConfigData = {
-    body: DynamicConfig;
-    path?: never;
-    query?: never;
-    url: '/api/v1/system-config';
+  body: DynamicConfig;
+  path?: never;
+  query?: never;
+  url: "/api/v1/system-config";
 };
 
 export type UpdateSystemConfigResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type UpdateSystemConfigResponse = UpdateSystemConfigResponses[keyof UpdateSystemConfigResponses];
 
 export type GetSystemConfigRuntimeData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/v1/system-config/runtime';
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/api/v1/system-config/runtime";
 };
 
 export type GetSystemConfigRuntimeResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type GetSystemConfigRuntimeResponse = GetSystemConfigRuntimeResponses[keyof GetSystemConfigRuntimeResponses];
 
 export type GetConfigProfileSchemaData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/v1/config-profiles/schema';
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/api/v1/config-profiles/schema";
 };
 
 export type GetConfigProfileSchemaResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type GetConfigProfileSchemaResponse = GetConfigProfileSchemaResponses[keyof GetConfigProfileSchemaResponses];
 
 export type ListConfigProfilesData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/v1/config-profiles';
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/api/v1/config-profiles";
 };
 
 export type ListConfigProfilesResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ListConfigProfilesResponse = ListConfigProfilesResponses[keyof ListConfigProfilesResponses];
 
 export type CreateConfigProfileData = {
-    body: CreateConfigProfileRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/config-profiles';
+  body: CreateConfigProfileRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/config-profiles";
 };
 
 export type CreateConfigProfileResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type CreateConfigProfileResponse = CreateConfigProfileResponses[keyof CreateConfigProfileResponses];
 
 export type DeleteConfigProfileData = {
-    body?: never;
-    path: {
-        config_id: string;
-    };
-    query?: never;
-    url: '/api/v1/config-profiles/{config_id}';
+  body?: never;
+  path: {
+    config_id: string;
+  };
+  query?: never;
+  url: "/api/v1/config-profiles/{config_id}";
 };
 
 export type DeleteConfigProfileResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type DeleteConfigProfileResponse = DeleteConfigProfileResponses[keyof DeleteConfigProfileResponses];
 
 export type GetConfigProfileData = {
-    body?: never;
-    path: {
-        config_id: string;
-    };
-    query?: never;
-    url: '/api/v1/config-profiles/{config_id}';
+  body?: never;
+  path: {
+    config_id: string;
+  };
+  query?: never;
+  url: "/api/v1/config-profiles/{config_id}";
 };
 
 export type GetConfigProfileResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type GetConfigProfileResponse = GetConfigProfileResponses[keyof GetConfigProfileResponses];
 
 export type RenameConfigProfileData = {
-    body: RenameRequest;
-    path: {
-        config_id: string;
-    };
-    query?: never;
-    url: '/api/v1/config-profiles/{config_id}';
+  body: RenameRequest;
+  path: {
+    config_id: string;
+  };
+  query?: never;
+  url: "/api/v1/config-profiles/{config_id}";
 };
 
 export type RenameConfigProfileResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type RenameConfigProfileResponse = RenameConfigProfileResponses[keyof RenameConfigProfileResponses];
 
 export type UpdateConfigProfileContentData = {
-    body: DynamicConfig;
-    path: {
-        config_id: string;
-    };
-    query?: never;
-    url: '/api/v1/config-profiles/{config_id}';
+  body: DynamicConfig;
+  path: {
+    config_id: string;
+  };
+  query?: never;
+  url: "/api/v1/config-profiles/{config_id}";
 };
 
 export type UpdateConfigProfileContentResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
-export type UpdateConfigProfileContentResponse = UpdateConfigProfileContentResponses[keyof UpdateConfigProfileContentResponses];
+export type UpdateConfigProfileContentResponse =
+  UpdateConfigProfileContentResponses[keyof UpdateConfigProfileContentResponses];
 
 export type ListConfigRoutesData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/v1/config-routes';
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/api/v1/config-routes";
 };
 
 export type ListConfigRoutesResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ListConfigRoutesResponse = ListConfigRoutesResponses[keyof ListConfigRoutesResponses];
 
 export type ReplaceConfigRoutesData = {
-    body: ConfigRoutesReplaceRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/config-routes';
+  body: ConfigRoutesReplaceRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/config-routes";
 };
 
 export type ReplaceConfigRoutesResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ReplaceConfigRoutesResponse = ReplaceConfigRoutesResponses[keyof ReplaceConfigRoutesResponses];
 
 export type DeleteConfigRouteData = {
-    body?: never;
-    path: {
-        /**
-         * URL-encoded unified message origin.
-         */
-        umo: string;
-    };
-    query?: never;
-    url: '/api/v1/config-routes/{umo}';
+  body?: never;
+  path: {
+    /**
+     * URL-encoded unified message origin.
+     */
+    umo: string;
+  };
+  query?: never;
+  url: "/api/v1/config-routes/{umo}";
 };
 
 export type DeleteConfigRouteResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type DeleteConfigRouteResponse = DeleteConfigRouteResponses[keyof DeleteConfigRouteResponses];
 
 export type UpsertConfigRouteData = {
-    body: ConfigRouteUpsertRequest;
-    path: {
-        /**
-         * URL-encoded unified message origin.
-         */
-        umo: string;
-    };
-    query?: never;
-    url: '/api/v1/config-routes/{umo}';
+  body: ConfigRouteUpsertRequest;
+  path: {
+    /**
+     * URL-encoded unified message origin.
+     */
+    umo: string;
+  };
+  query?: never;
+  url: "/api/v1/config-routes/{umo}";
 };
 
 export type UpsertConfigRouteResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type UpsertConfigRouteResponse = UpsertConfigRouteResponses[keyof UpsertConfigRouteResponses];
 
 export type ListBotTypesData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/v1/bot-types';
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/api/v1/bot-types";
 };
 
 export type ListBotTypesResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ListBotTypesResponse = ListBotTypesResponses[keyof ListBotTypesResponses];
 
 export type RegisterBotTypeData = {
-    body: BotRegistrationRequest;
-    path: {
-        bot_type: string;
-    };
-    query?: never;
-    url: '/api/v1/bot-types/{bot_type}/registration';
+  body: BotRegistrationRequest;
+  path: {
+    bot_type: string;
+  };
+  query?: never;
+  url: "/api/v1/bot-types/{bot_type}/registration";
 };
 
 export type RegisterBotTypeResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type RegisterBotTypeResponse = RegisterBotTypeResponses[keyof RegisterBotTypeResponses];
 
 export type ListBotsData = {
-    body?: never;
-    path?: never;
-    query?: {
-        enabled?: boolean;
-        type?: string;
-    };
-    url: '/api/v1/bots';
+  body?: never;
+  path?: never;
+  query?: {
+    enabled?: boolean;
+    type?: string;
+  };
+  url: "/api/v1/bots";
 };
 
 export type ListBotsResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ListBotsResponse = ListBotsResponses[keyof ListBotsResponses];
 
 export type CreateBotData = {
-    body: BotConfigRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/bots';
+  body: BotConfigRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/bots";
 };
 
 export type CreateBotResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type CreateBotResponse = CreateBotResponses[keyof CreateBotResponses];
 
 export type ListBotStatsData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/v1/bots/stats';
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/api/v1/bots/stats";
 };
 
 export type ListBotStatsResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ListBotStatsResponse = ListBotStatsResponses[keyof ListBotStatsResponses];
 
 export type DeleteBotByIdData = {
-    body?: never;
-    path?: never;
-    query: {
-        bot_id: string;
-    };
-    url: '/api/v1/bots/by-id';
+  body?: never;
+  path?: never;
+  query: {
+    bot_id: string;
+  };
+  url: "/api/v1/bots/by-id";
 };
 
 export type DeleteBotByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type DeleteBotByIdResponse = DeleteBotByIdResponses[keyof DeleteBotByIdResponses];
 
 export type GetBotByIdData = {
-    body?: never;
-    path?: never;
-    query: {
-        bot_id: string;
-    };
-    url: '/api/v1/bots/by-id';
+  body?: never;
+  path?: never;
+  query: {
+    bot_id: string;
+  };
+  url: "/api/v1/bots/by-id";
 };
 
 export type GetBotByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type GetBotByIdResponse = GetBotByIdResponses[keyof GetBotByIdResponses];
 
 export type UpdateBotByIdData = {
-    body: {
-        bot_id: string;
-        config: DynamicConfig;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/v1/bots/by-id';
+  body: {
+    bot_id: string;
+    config: DynamicConfig;
+  };
+  path?: never;
+  query?: never;
+  url: "/api/v1/bots/by-id";
 };
 
 export type UpdateBotByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type UpdateBotByIdResponse = UpdateBotByIdResponses[keyof UpdateBotByIdResponses];
 
 export type SetBotEnabledByIdData = {
-    body: {
-        bot_id: string;
-        enabled: boolean;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/v1/bots/enabled';
+  body: {
+    bot_id: string;
+    enabled: boolean;
+  };
+  path?: never;
+  query?: never;
+  url: "/api/v1/bots/enabled";
 };
 
 export type SetBotEnabledByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type SetBotEnabledByIdResponse = SetBotEnabledByIdResponses[keyof SetBotEnabledByIdResponses];
 
 export type TestBotByIdData = {
-    body: {
-        bot_id: string;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/v1/bots/test';
+  body: {
+    bot_id: string;
+  };
+  path?: never;
+  query?: never;
+  url: "/api/v1/bots/test";
 };
 
 export type TestBotByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type TestBotByIdResponse = TestBotByIdResponses[keyof TestBotByIdResponses];
 
 export type DeleteBotData = {
-    body?: never;
-    path: {
-        bot_id: string;
-    };
-    query?: never;
-    url: '/api/v1/bots/{bot_id}';
+  body?: never;
+  path: {
+    bot_id: string;
+  };
+  query?: never;
+  url: "/api/v1/bots/{bot_id}";
 };
 
 export type DeleteBotResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type DeleteBotResponse = DeleteBotResponses[keyof DeleteBotResponses];
 
 export type GetBotData = {
-    body?: never;
-    path: {
-        bot_id: string;
-    };
-    query?: never;
-    url: '/api/v1/bots/{bot_id}';
+  body?: never;
+  path: {
+    bot_id: string;
+  };
+  query?: never;
+  url: "/api/v1/bots/{bot_id}";
 };
 
 export type GetBotResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type GetBotResponse = GetBotResponses[keyof GetBotResponses];
 
 export type UpdateBotData = {
-    body: BotConfigRequest;
-    path: {
-        bot_id: string;
-    };
-    query?: never;
-    url: '/api/v1/bots/{bot_id}';
+  body: BotConfigRequest;
+  path: {
+    bot_id: string;
+  };
+  query?: never;
+  url: "/api/v1/bots/{bot_id}";
 };
 
 export type UpdateBotResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type UpdateBotResponse = UpdateBotResponses[keyof UpdateBotResponses];
 
 export type SetBotEnabledData = {
-    body: EnabledPatch;
-    path: {
-        bot_id: string;
-    };
-    query?: never;
-    url: '/api/v1/bots/{bot_id}/enabled';
+  body: EnabledPatch;
+  path: {
+    bot_id: string;
+  };
+  query?: never;
+  url: "/api/v1/bots/{bot_id}/enabled";
 };
 
 export type SetBotEnabledResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type SetBotEnabledResponse = SetBotEnabledResponses[keyof SetBotEnabledResponses];
 
 export type TestBotData = {
-    body?: never;
-    path: {
-        bot_id: string;
-    };
-    query?: never;
-    url: '/api/v1/bots/{bot_id}/test';
+  body?: never;
+  path: {
+    bot_id: string;
+  };
+  query?: never;
+  url: "/api/v1/bots/{bot_id}/test";
 };
 
 export type TestBotResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type TestBotResponse = TestBotResponses[keyof TestBotResponses];
 
 export type GetProviderSchemaData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/v1/providers/schema';
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/api/v1/providers/schema";
 };
 
 export type GetProviderSchemaResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type GetProviderSchemaResponse = GetProviderSchemaResponses[keyof GetProviderSchemaResponses];
 
 export type ListProviderSourcesData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/v1/provider-sources';
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/api/v1/provider-sources";
 };
 
 export type ListProviderSourcesResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ListProviderSourcesResponse = ListProviderSourcesResponses[keyof ListProviderSourcesResponses];
 
 export type CreateProviderSourceData = {
-    body: ProviderSourceConfigRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/provider-sources';
+  body: ProviderSourceConfigRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/provider-sources";
 };
 
 export type CreateProviderSourceResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type CreateProviderSourceResponse = CreateProviderSourceResponses[keyof CreateProviderSourceResponses];
 
 export type DeleteProviderSourceByIdData = {
-    body?: never;
-    path?: never;
-    query: {
-        source_id: string;
-    };
-    url: '/api/v1/provider-sources/by-id';
+  body?: never;
+  path?: never;
+  query: {
+    source_id: string;
+  };
+  url: "/api/v1/provider-sources/by-id";
 };
 
 export type DeleteProviderSourceByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
-export type DeleteProviderSourceByIdResponse = DeleteProviderSourceByIdResponses[keyof DeleteProviderSourceByIdResponses];
+export type DeleteProviderSourceByIdResponse =
+  DeleteProviderSourceByIdResponses[keyof DeleteProviderSourceByIdResponses];
 
 export type GetProviderSourceByIdData = {
-    body?: never;
-    path?: never;
-    query: {
-        source_id: string;
-    };
-    url: '/api/v1/provider-sources/by-id';
+  body?: never;
+  path?: never;
+  query: {
+    source_id: string;
+  };
+  url: "/api/v1/provider-sources/by-id";
 };
 
 export type GetProviderSourceByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type GetProviderSourceByIdResponse = GetProviderSourceByIdResponses[keyof GetProviderSourceByIdResponses];
 
 export type UpsertProviderSourceByIdData = {
-    body: {
-        source_id: string;
-        config: DynamicConfig;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/v1/provider-sources/by-id';
+  body: {
+    source_id: string;
+    config: DynamicConfig;
+  };
+  path?: never;
+  query?: never;
+  url: "/api/v1/provider-sources/by-id";
 };
 
 export type UpsertProviderSourceByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
-export type UpsertProviderSourceByIdResponse = UpsertProviderSourceByIdResponses[keyof UpsertProviderSourceByIdResponses];
+export type UpsertProviderSourceByIdResponse =
+  UpsertProviderSourceByIdResponses[keyof UpsertProviderSourceByIdResponses];
 
 export type ListProviderSourceModelsByIdData = {
-    body?: never;
-    path?: never;
-    query: {
-        source_id: string;
-        capability?: ProviderCapability;
-    };
-    url: '/api/v1/provider-sources/models';
+  body?: never;
+  path?: never;
+  query: {
+    source_id: string;
+    capability?: ProviderCapability;
+  };
+  url: "/api/v1/provider-sources/models";
 };
 
 export type ListProviderSourceModelsByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
-export type ListProviderSourceModelsByIdResponse = ListProviderSourceModelsByIdResponses[keyof ListProviderSourceModelsByIdResponses];
+export type ListProviderSourceModelsByIdResponse =
+  ListProviderSourceModelsByIdResponses[keyof ListProviderSourceModelsByIdResponses];
 
 export type ListProvidersBySourceIdData = {
-    body?: never;
-    path?: never;
-    query: {
-        source_id: string;
-        capability?: ProviderCapability;
-    };
-    url: '/api/v1/provider-sources/providers';
+  body?: never;
+  path?: never;
+  query: {
+    source_id: string;
+    capability?: ProviderCapability;
+  };
+  url: "/api/v1/provider-sources/providers";
 };
 
 export type ListProvidersBySourceIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ListProvidersBySourceIdResponse = ListProvidersBySourceIdResponses[keyof ListProvidersBySourceIdResponses];
 
 export type CreateProviderInSourceByIdData = {
-    body: {
-        source_id: string;
-        config: DynamicConfig;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/v1/provider-sources/providers';
+  body: {
+    source_id: string;
+    config: DynamicConfig;
+  };
+  path?: never;
+  query?: never;
+  url: "/api/v1/provider-sources/providers";
 };
 
 export type CreateProviderInSourceByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
-export type CreateProviderInSourceByIdResponse = CreateProviderInSourceByIdResponses[keyof CreateProviderInSourceByIdResponses];
+export type CreateProviderInSourceByIdResponse =
+  CreateProviderInSourceByIdResponses[keyof CreateProviderInSourceByIdResponses];
 
 export type DeleteProviderSourceData = {
-    body?: never;
-    path: {
-        source_id: string;
-    };
-    query?: never;
-    url: '/api/v1/provider-sources/{source_id}';
+  body?: never;
+  path: {
+    source_id: string;
+  };
+  query?: never;
+  url: "/api/v1/provider-sources/{source_id}";
 };
 
 export type DeleteProviderSourceResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type DeleteProviderSourceResponse = DeleteProviderSourceResponses[keyof DeleteProviderSourceResponses];
 
 export type GetProviderSourceData = {
-    body?: never;
-    path: {
-        source_id: string;
-    };
-    query?: never;
-    url: '/api/v1/provider-sources/{source_id}';
+  body?: never;
+  path: {
+    source_id: string;
+  };
+  query?: never;
+  url: "/api/v1/provider-sources/{source_id}";
 };
 
 export type GetProviderSourceResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type GetProviderSourceResponse = GetProviderSourceResponses[keyof GetProviderSourceResponses];
 
 export type UpsertProviderSourceData = {
-    body: ProviderSourceConfigRequest;
-    path: {
-        source_id: string;
-    };
-    query?: never;
-    url: '/api/v1/provider-sources/{source_id}';
+  body: ProviderSourceConfigRequest;
+  path: {
+    source_id: string;
+  };
+  query?: never;
+  url: "/api/v1/provider-sources/{source_id}";
 };
 
 export type UpsertProviderSourceResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type UpsertProviderSourceResponse = UpsertProviderSourceResponses[keyof UpsertProviderSourceResponses];
 
 export type ListProviderSourceModelsData = {
-    body?: never;
-    path: {
-        source_id: string;
-    };
-    query?: {
-        capability?: ProviderCapability;
-    };
-    url: '/api/v1/provider-sources/{source_id}/models';
+  body?: never;
+  path: {
+    source_id: string;
+  };
+  query?: {
+    capability?: ProviderCapability;
+  };
+  url: "/api/v1/provider-sources/{source_id}/models";
 };
 
 export type ListProviderSourceModelsResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
-export type ListProviderSourceModelsResponse = ListProviderSourceModelsResponses[keyof ListProviderSourceModelsResponses];
+export type ListProviderSourceModelsResponse =
+  ListProviderSourceModelsResponses[keyof ListProviderSourceModelsResponses];
 
 export type ListProvidersBySourceData = {
-    body?: never;
-    path: {
-        source_id: string;
-    };
-    query?: {
-        capability?: ProviderCapability;
-    };
-    url: '/api/v1/provider-sources/{source_id}/providers';
+  body?: never;
+  path: {
+    source_id: string;
+  };
+  query?: {
+    capability?: ProviderCapability;
+  };
+  url: "/api/v1/provider-sources/{source_id}/providers";
 };
 
 export type ListProvidersBySourceResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ListProvidersBySourceResponse = ListProvidersBySourceResponses[keyof ListProvidersBySourceResponses];
 
 export type CreateProviderInSourceData = {
-    body: ProviderConfigRequest;
-    path: {
-        source_id: string;
-    };
-    query?: never;
-    url: '/api/v1/provider-sources/{source_id}/providers';
+  body: ProviderConfigRequest;
+  path: {
+    source_id: string;
+  };
+  query?: never;
+  url: "/api/v1/provider-sources/{source_id}/providers";
 };
 
 export type CreateProviderInSourceResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type CreateProviderInSourceResponse = CreateProviderInSourceResponses[keyof CreateProviderInSourceResponses];
 
 export type ListProvidersData = {
-    body?: never;
-    path?: never;
-    query?: {
-        capability?: ProviderCapability;
-        source_id?: string;
-        enabled?: boolean;
-    };
-    url: '/api/v1/providers';
+  body?: never;
+  path?: never;
+  query?: {
+    capability?: ProviderCapability;
+    source_id?: string;
+    enabled?: boolean;
+  };
+  url: "/api/v1/providers";
 };
 
 export type ListProvidersResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ListProvidersResponse = ListProvidersResponses[keyof ListProvidersResponses];
 
 export type CreateProviderData = {
-    body: ProviderConfigRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/providers';
+  body: ProviderConfigRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/providers";
 };
 
 export type CreateProviderResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type CreateProviderResponse = CreateProviderResponses[keyof CreateProviderResponses];
 
 export type DeleteProviderByIdData = {
-    body?: never;
-    path?: never;
-    query: {
-        provider_id: string;
-    };
-    url: '/api/v1/providers/by-id';
+  body?: never;
+  path?: never;
+  query: {
+    provider_id: string;
+  };
+  url: "/api/v1/providers/by-id";
 };
 
 export type DeleteProviderByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type DeleteProviderByIdResponse = DeleteProviderByIdResponses[keyof DeleteProviderByIdResponses];
 
 export type GetProviderByIdData = {
-    body?: never;
-    path?: never;
-    query: {
-        provider_id: string;
-        merged?: boolean;
-    };
-    url: '/api/v1/providers/by-id';
+  body?: never;
+  path?: never;
+  query: {
+    provider_id: string;
+    merged?: boolean;
+  };
+  url: "/api/v1/providers/by-id";
 };
 
 export type GetProviderByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type GetProviderByIdResponse = GetProviderByIdResponses[keyof GetProviderByIdResponses];
 
 export type UpdateProviderByIdData = {
-    body: {
-        provider_id: string;
-        config: DynamicConfig;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/v1/providers/by-id';
+  body: {
+    provider_id: string;
+    config: DynamicConfig;
+  };
+  path?: never;
+  query?: never;
+  url: "/api/v1/providers/by-id";
 };
 
 export type UpdateProviderByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type UpdateProviderByIdResponse = UpdateProviderByIdResponses[keyof UpdateProviderByIdResponses];
 
 export type SetProviderEnabledByIdData = {
-    body: {
-        provider_id: string;
-        enabled: boolean;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/v1/providers/enabled';
+  body: {
+    provider_id: string;
+    enabled: boolean;
+  };
+  path?: never;
+  query?: never;
+  url: "/api/v1/providers/enabled";
 };
 
 export type SetProviderEnabledByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type SetProviderEnabledByIdResponse = SetProviderEnabledByIdResponses[keyof SetProviderEnabledByIdResponses];
 
 export type TestProviderByIdData = {
-    body: {
-        provider_id: string;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/v1/providers/test';
+  body: {
+    provider_id: string;
+  };
+  path?: never;
+  query?: never;
+  url: "/api/v1/providers/test";
 };
 
 export type TestProviderByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type TestProviderByIdResponse = TestProviderByIdResponses[keyof TestProviderByIdResponses];
 
 export type GetProviderEmbeddingDimensionByIdData = {
-    body: {
-        provider_id: string;
-        provider_config?: DynamicConfig;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/v1/providers/embedding-dimension';
+  body: {
+    provider_id: string;
+    provider_config?: DynamicConfig;
+  };
+  path?: never;
+  query?: never;
+  url: "/api/v1/providers/embedding-dimension";
 };
 
 export type GetProviderEmbeddingDimensionByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
-export type GetProviderEmbeddingDimensionByIdResponse = GetProviderEmbeddingDimensionByIdResponses[keyof GetProviderEmbeddingDimensionByIdResponses];
+export type GetProviderEmbeddingDimensionByIdResponse =
+  GetProviderEmbeddingDimensionByIdResponses[keyof GetProviderEmbeddingDimensionByIdResponses];
 
 export type DeleteProviderData = {
-    body?: DynamicConfig;
-    path: {
-        provider_id: string;
-    };
-    query?: never;
-    url: '/api/v1/providers/{provider_id}';
+  body?: DynamicConfig;
+  path: {
+    provider_id: string;
+  };
+  query?: never;
+  url: "/api/v1/providers/{provider_id}";
 };
 
 export type DeleteProviderResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type DeleteProviderResponse = DeleteProviderResponses[keyof DeleteProviderResponses];
 
 export type GetProviderData = {
-    body?: never;
-    path: {
-        provider_id: string;
-    };
-    query?: {
-        merged?: boolean;
-    };
-    url: '/api/v1/providers/{provider_id}';
+  body?: never;
+  path: {
+    provider_id: string;
+  };
+  query?: {
+    merged?: boolean;
+  };
+  url: "/api/v1/providers/{provider_id}";
 };
 
 export type GetProviderResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type GetProviderResponse = GetProviderResponses[keyof GetProviderResponses];
 
 export type UpdateProviderData = {
-    body: ProviderConfigRequest;
-    path: {
-        provider_id: string;
-    };
-    query?: never;
-    url: '/api/v1/providers/{provider_id}';
+  body: ProviderConfigRequest;
+  path: {
+    provider_id: string;
+  };
+  query?: never;
+  url: "/api/v1/providers/{provider_id}";
 };
 
 export type UpdateProviderResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type UpdateProviderResponse = UpdateProviderResponses[keyof UpdateProviderResponses];
 
 export type SetProviderEnabledData = {
-    body: EnabledPatch;
-    path: {
-        provider_id: string;
-    };
-    query?: never;
-    url: '/api/v1/providers/{provider_id}/enabled';
+  body: EnabledPatch;
+  path: {
+    provider_id: string;
+  };
+  query?: never;
+  url: "/api/v1/providers/{provider_id}/enabled";
 };
 
 export type SetProviderEnabledResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type SetProviderEnabledResponse = SetProviderEnabledResponses[keyof SetProviderEnabledResponses];
 
 export type TestProviderData = {
-    body?: never;
-    path: {
-        provider_id: string;
-    };
-    query?: never;
-    url: '/api/v1/providers/{provider_id}/test';
+  body?: never;
+  path: {
+    provider_id: string;
+  };
+  query?: never;
+  url: "/api/v1/providers/{provider_id}/test";
 };
 
 export type TestProviderResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type TestProviderResponse = TestProviderResponses[keyof TestProviderResponses];
 
 export type GetProviderEmbeddingDimensionData = {
-    body?: DynamicConfig;
-    path: {
-        provider_id: string;
-    };
-    query?: never;
-    url: '/api/v1/providers/{provider_id}/embedding-dimension';
+  body?: DynamicConfig;
+  path: {
+    provider_id: string;
+  };
+  query?: never;
+  url: "/api/v1/providers/{provider_id}/embedding-dimension";
 };
 
 export type GetProviderEmbeddingDimensionResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
-export type GetProviderEmbeddingDimensionResponse = GetProviderEmbeddingDimensionResponses[keyof GetProviderEmbeddingDimensionResponses];
+export type GetProviderEmbeddingDimensionResponse =
+  GetProviderEmbeddingDimensionResponses[keyof GetProviderEmbeddingDimensionResponses];
 
 export type SendChatMessageData = {
-    body: ChatRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/chat';
+  body: ChatRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/chat";
 };
 
 export type SendChatMessageResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type SendChatMessageResponse = SendChatMessageResponses[keyof SendChatMessageResponses];
 
 export type OpenChatWebSocketData = {
-    body?: never;
-    path?: never;
-    query?: {
-        api_key?: string;
-        key?: string;
-    };
-    url: '/api/v1/chat/ws';
+  body?: never;
+  path?: never;
+  query?: {
+    api_key?: string;
+    key?: string;
+  };
+  url: "/api/v1/chat/ws";
 };
 
 export type OpenLiveChatWebSocketData = {
-    body?: never;
-    path?: never;
-    query: {
-        token: string;
-    };
-    url: '/api/v1/live-chat/ws';
+  body?: never;
+  path?: never;
+  query: {
+    token: string;
+  };
+  url: "/api/v1/live-chat/ws";
 };
 
 export type OpenUnifiedChatWebSocketData = {
-    body?: never;
-    path?: never;
-    query: {
-        token: string;
-    };
-    url: '/api/v1/unified-chat/ws';
+  body?: never;
+  path?: never;
+  query: {
+    token: string;
+  };
+  url: "/api/v1/unified-chat/ws";
 };
 
 export type ListChatSessionsData = {
-    body?: never;
-    path?: never;
-    query?: {
-        page?: number;
-        page_size?: number;
-        username?: string;
-    };
-    url: '/api/v1/chat/sessions';
+  body?: never;
+  path?: never;
+  query?: {
+    page?: number;
+    page_size?: number;
+    username?: string;
+  };
+  url: "/api/v1/chat/sessions";
 };
 
 export type ListChatSessionsResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ListChatSessionsResponse = ListChatSessionsResponses[keyof ListChatSessionsResponses];
 
 export type CreateChatSessionData = {
-    body?: never;
-    path?: never;
-    query?: {
-        platform_id?: string;
-    };
-    url: '/api/v1/chat/sessions/new';
+  body?: never;
+  path?: never;
+  query?: {
+    platform_id?: string;
+  };
+  url: "/api/v1/chat/sessions/new";
 };
 
 export type CreateChatSessionResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type CreateChatSessionResponse = CreateChatSessionResponses[keyof CreateChatSessionResponses];
 
 export type BatchDeleteChatSessionsData = {
-    body: ChatSessionBatchDeleteRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/chat/sessions/batch-delete';
+  body: ChatSessionBatchDeleteRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/chat/sessions/batch-delete";
 };
 
 export type BatchDeleteChatSessionsResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type BatchDeleteChatSessionsResponse = BatchDeleteChatSessionsResponses[keyof BatchDeleteChatSessionsResponses];
 
 export type DeleteChatSessionData = {
-    body?: never;
-    path: {
-        session_id: string;
-    };
-    query?: never;
-    url: '/api/v1/chat/sessions/{session_id}';
+  body?: never;
+  path: {
+    session_id: string;
+  };
+  query?: never;
+  url: "/api/v1/chat/sessions/{session_id}";
 };
 
 export type DeleteChatSessionResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type DeleteChatSessionResponse = DeleteChatSessionResponses[keyof DeleteChatSessionResponses];
 
 export type GetChatSessionData = {
-    body?: never;
-    path: {
-        session_id: string;
-    };
-    query?: {
-        page?: number;
-        page_size?: number;
-    };
-    url: '/api/v1/chat/sessions/{session_id}';
+  body?: never;
+  path: {
+    session_id: string;
+  };
+  query?: {
+    page?: number;
+    page_size?: number;
+  };
+  url: "/api/v1/chat/sessions/{session_id}";
 };
 
 export type GetChatSessionResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type GetChatSessionResponse = GetChatSessionResponses[keyof GetChatSessionResponses];
 
 export type UpdateChatSessionData = {
-    body: ChatSessionPatchRequest;
-    path: {
-        session_id: string;
-    };
-    query?: never;
-    url: '/api/v1/chat/sessions/{session_id}';
+  body: ChatSessionPatchRequest;
+  path: {
+    session_id: string;
+  };
+  query?: never;
+  url: "/api/v1/chat/sessions/{session_id}";
 };
 
 export type UpdateChatSessionResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type UpdateChatSessionResponse = UpdateChatSessionResponses[keyof UpdateChatSessionResponses];
 
 export type StopChatSessionData = {
-    body?: never;
-    path: {
-        session_id: string;
-    };
-    query?: never;
-    url: '/api/v1/chat/sessions/{session_id}/stop';
+  body?: never;
+  path: {
+    session_id: string;
+  };
+  query?: never;
+  url: "/api/v1/chat/sessions/{session_id}/stop";
 };
 
 export type StopChatSessionResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type StopChatSessionResponse = StopChatSessionResponses[keyof StopChatSessionResponses];
 
 export type ResumeChatRunData = {
-    body?: never;
-    path: {
-        run_id: string;
-    };
-    query?: never;
-    url: '/api/v1/chat/runs/{run_id}/stream';
+  body?: never;
+  path: {
+    run_id: string;
+  };
+  query?: never;
+  url: "/api/v1/chat/runs/{run_id}/stream";
 };
 
 export type ResumeChatRunResponses = {
-    /**
-     * Resumed server-sent chat stream or an error envelope
-     */
-    200: unknown;
+  /**
+   * Resumed server-sent chat stream or an error envelope
+   */
+  200: unknown;
 };
 
 export type UpdateChatMessageData = {
-    body: ChatMessagePatchRequest;
-    path: {
-        session_id: string;
-        message_id: string;
-    };
-    query?: never;
-    url: '/api/v1/chat/sessions/{session_id}/messages/{message_id}';
+  body: ChatMessagePatchRequest;
+  path: {
+    session_id: string;
+    message_id: string;
+  };
+  query?: never;
+  url: "/api/v1/chat/sessions/{session_id}/messages/{message_id}";
 };
 
 export type UpdateChatMessageResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type UpdateChatMessageResponse = UpdateChatMessageResponses[keyof UpdateChatMessageResponses];
 
 export type RegenerateChatMessageData = {
-    body?: ChatMessageRegenerateRequest;
-    path: {
-        session_id: string;
-        message_id: string;
-    };
-    query?: never;
-    url: '/api/v1/chat/sessions/{session_id}/messages/{message_id}/regenerate';
+  body?: ChatMessageRegenerateRequest;
+  path: {
+    session_id: string;
+    message_id: string;
+  };
+  query?: never;
+  url: "/api/v1/chat/sessions/{session_id}/messages/{message_id}/regenerate";
 };
 
 export type RegenerateChatMessageResponses = {
-    /**
-     * Server-sent chat stream or an error envelope
-     */
-    200: unknown;
+  /**
+   * Server-sent chat stream or an error envelope
+   */
+  200: unknown;
 };
 
 export type ListChatConfigsData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/v1/chat/configs';
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/api/v1/chat/configs";
 };
 
 export type ListChatConfigsResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ListChatConfigsResponse = ListChatConfigsResponses[keyof ListChatConfigsResponses];
 
 export type CreateChatThreadData = {
-    body: ChatThreadCreateRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/chat/threads';
+  body: ChatThreadCreateRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/chat/threads";
 };
 
 export type CreateChatThreadResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type CreateChatThreadResponse = CreateChatThreadResponses[keyof CreateChatThreadResponses];
 
 export type DeleteChatThreadData = {
-    body?: never;
-    path: {
-        thread_id: string;
-    };
-    query?: never;
-    url: '/api/v1/chat/threads/{thread_id}';
+  body?: never;
+  path: {
+    thread_id: string;
+  };
+  query?: never;
+  url: "/api/v1/chat/threads/{thread_id}";
 };
 
 export type DeleteChatThreadResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type DeleteChatThreadResponse = DeleteChatThreadResponses[keyof DeleteChatThreadResponses];
 
 export type GetChatThreadData = {
-    body?: never;
-    path: {
-        thread_id: string;
-    };
-    query?: never;
-    url: '/api/v1/chat/threads/{thread_id}';
+  body?: never;
+  path: {
+    thread_id: string;
+  };
+  query?: never;
+  url: "/api/v1/chat/threads/{thread_id}";
 };
 
 export type GetChatThreadResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type GetChatThreadResponse = GetChatThreadResponses[keyof GetChatThreadResponses];
 
 export type SendChatThreadMessageData = {
-    body: ChatThreadMessageRequest;
-    path: {
-        thread_id: string;
-    };
-    query?: never;
-    url: '/api/v1/chat/threads/{thread_id}/messages';
+  body: ChatThreadMessageRequest;
+  path: {
+    thread_id: string;
+  };
+  query?: never;
+  url: "/api/v1/chat/threads/{thread_id}/messages";
 };
 
 export type SendChatThreadMessageResponses = {
-    /**
-     * Server-sent chat stream or an error envelope
-     */
-    200: unknown;
+  /**
+   * Server-sent chat stream or an error envelope
+   */
+  200: unknown;
 };
 
 export type ListChatProjectsData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/v1/chat/projects';
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/api/v1/chat/projects";
 };
 
 export type ListChatProjectsResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ListChatProjectsResponse = ListChatProjectsResponses[keyof ListChatProjectsResponses];
 
 export type CreateChatProjectData = {
-    body: ChatProjectRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/chat/projects';
+  body: ChatProjectRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/chat/projects";
 };
 
 export type CreateChatProjectResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type CreateChatProjectResponse = CreateChatProjectResponses[keyof CreateChatProjectResponses];
 
 export type DeleteChatProjectData = {
-    body?: never;
-    path: {
-        project_id: string;
-    };
-    query?: never;
-    url: '/api/v1/chat/projects/{project_id}';
+  body?: never;
+  path: {
+    project_id: string;
+  };
+  query?: never;
+  url: "/api/v1/chat/projects/{project_id}";
 };
 
 export type DeleteChatProjectResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type DeleteChatProjectResponse = DeleteChatProjectResponses[keyof DeleteChatProjectResponses];
 
 export type GetChatProjectData = {
-    body?: never;
-    path: {
-        project_id: string;
-    };
-    query?: never;
-    url: '/api/v1/chat/projects/{project_id}';
+  body?: never;
+  path: {
+    project_id: string;
+  };
+  query?: never;
+  url: "/api/v1/chat/projects/{project_id}";
 };
 
 export type GetChatProjectResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type GetChatProjectResponse = GetChatProjectResponses[keyof GetChatProjectResponses];
 
 export type UpdateChatProjectData = {
-    body: ChatProjectRequest;
-    path: {
-        project_id: string;
-    };
-    query?: never;
-    url: '/api/v1/chat/projects/{project_id}';
+  body: ChatProjectRequest;
+  path: {
+    project_id: string;
+  };
+  query?: never;
+  url: "/api/v1/chat/projects/{project_id}";
 };
 
 export type UpdateChatProjectResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type UpdateChatProjectResponse = UpdateChatProjectResponses[keyof UpdateChatProjectResponses];
 
 export type ListChatProjectSessionsData = {
-    body?: never;
-    path: {
-        project_id: string;
-    };
-    query?: never;
-    url: '/api/v1/chat/projects/{project_id}/sessions';
+  body?: never;
+  path: {
+    project_id: string;
+  };
+  query?: never;
+  url: "/api/v1/chat/projects/{project_id}/sessions";
 };
 
 export type ListChatProjectSessionsResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ListChatProjectSessionsResponse = ListChatProjectSessionsResponses[keyof ListChatProjectSessionsResponses];
 
 export type ListChatProjectWorkspaceFilesData = {
-    body?: never;
-    path: {
-        project_id: string;
-    };
-    query?: {
-        path?: string;
-    };
-    url: '/api/v1/chat/projects/{project_id}/workspace/files';
+  body?: never;
+  path: {
+    project_id: string;
+  };
+  query?: {
+    path?: string;
+  };
+  url: "/api/v1/chat/projects/{project_id}/workspace/files";
 };
 
 export type ListChatProjectWorkspaceFilesResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
-export type ListChatProjectWorkspaceFilesResponse = ListChatProjectWorkspaceFilesResponses[keyof ListChatProjectWorkspaceFilesResponses];
+export type ListChatProjectWorkspaceFilesResponse =
+  ListChatProjectWorkspaceFilesResponses[keyof ListChatProjectWorkspaceFilesResponses];
 
 export type GetChatProjectWorkspaceFileData = {
-    body?: never;
-    path: {
-        project_id: string;
-    };
-    query: {
-        path: string;
-    };
-    url: '/api/v1/chat/projects/{project_id}/workspace/file';
+  body?: never;
+  path: {
+    project_id: string;
+  };
+  query: {
+    path: string;
+  };
+  url: "/api/v1/chat/projects/{project_id}/workspace/file";
 };
 
 export type GetChatProjectWorkspaceFileResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
-export type GetChatProjectWorkspaceFileResponse = GetChatProjectWorkspaceFileResponses[keyof GetChatProjectWorkspaceFileResponses];
+export type GetChatProjectWorkspaceFileResponse =
+  GetChatProjectWorkspaceFileResponses[keyof GetChatProjectWorkspaceFileResponses];
 
 export type DownloadChatProjectWorkspaceFileData = {
-    body?: never;
-    path: {
-        project_id: string;
-    };
-    query: {
-        path: string;
-    };
-    url: '/api/v1/chat/projects/{project_id}/workspace/file/download';
+  body?: never;
+  path: {
+    project_id: string;
+  };
+  query: {
+    path: string;
+  };
+  url: "/api/v1/chat/projects/{project_id}/workspace/file/download";
 };
 
 export type DownloadChatProjectWorkspaceFileResponses = {
-    /**
-     * Workspace file content
-     */
-    200: Blob | File;
+  /**
+   * Workspace file content
+   */
+  200: Blob | File;
 };
 
-export type DownloadChatProjectWorkspaceFileResponse = DownloadChatProjectWorkspaceFileResponses[keyof DownloadChatProjectWorkspaceFileResponses];
+export type DownloadChatProjectWorkspaceFileResponse =
+  DownloadChatProjectWorkspaceFileResponses[keyof DownloadChatProjectWorkspaceFileResponses];
 
 export type AddChatProjectSessionData = {
-    body?: never;
-    path: {
-        project_id: string;
-        session_id: string;
-    };
-    query?: never;
-    url: '/api/v1/chat/projects/{project_id}/sessions/{session_id}';
+  body?: never;
+  path: {
+    project_id: string;
+    session_id: string;
+  };
+  query?: never;
+  url: "/api/v1/chat/projects/{project_id}/sessions/{session_id}";
 };
 
 export type AddChatProjectSessionResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type AddChatProjectSessionResponse = AddChatProjectSessionResponses[keyof AddChatProjectSessionResponses];
 
 export type RemoveChatProjectSessionData = {
-    body?: never;
-    path: {
-        session_id: string;
-    };
-    query?: never;
-    url: '/api/v1/chat/projects/sessions/{session_id}';
+  body?: never;
+  path: {
+    session_id: string;
+  };
+  query?: never;
+  url: "/api/v1/chat/projects/sessions/{session_id}";
 };
 
 export type RemoveChatProjectSessionResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
-export type RemoveChatProjectSessionResponse = RemoveChatProjectSessionResponses[keyof RemoveChatProjectSessionResponses];
+export type RemoveChatProjectSessionResponse =
+  RemoveChatProjectSessionResponses[keyof RemoveChatProjectSessionResponses];
 
 export type SendImMessageData = {
-    body: ImMessageRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/im/messages';
+  body: ImMessageRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/im/messages";
 };
 
 export type SendImMessageResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type SendImMessageResponse = SendImMessageResponses[keyof SendImMessageResponses];
 
 export type ListImBotsData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/v1/im/bots';
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/api/v1/im/bots";
 };
 
 export type ListImBotsResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ListImBotsResponse = ListImBotsResponses[keyof ListImBotsResponses];
 
 export type UploadFileData = {
-    body: FileUploadRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/files';
+  body: FileUploadRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/files";
 };
 
 export type UploadFileResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type UploadFileResponse = UploadFileResponses[keyof UploadFileResponses];
 
 export type InitFileUploadData = {
-    body: ChatUploadInitRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/files/upload/init';
+  body: ChatUploadInitRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/files/upload/init";
 };
 
 export type InitFileUploadResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type InitFileUploadResponse = InitFileUploadResponses[keyof InitFileUploadResponses];
 
 export type UploadFileChunkData = {
-    body: ChatChunkUploadRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/files/upload/chunk';
+  body: ChatChunkUploadRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/files/upload/chunk";
 };
 
 export type UploadFileChunkResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type UploadFileChunkResponse = UploadFileChunkResponses[keyof UploadFileChunkResponses];
 
 export type CompleteFileUploadData = {
-    body: ChatUploadSessionRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/files/upload/complete';
+  body: ChatUploadSessionRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/files/upload/complete";
 };
 
 export type CompleteFileUploadResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type CompleteFileUploadResponse = CompleteFileUploadResponses[keyof CompleteFileUploadResponses];
 
 export type AbortFileUploadData = {
-    body: ChatUploadSessionRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/files/upload/abort';
+  body: ChatUploadSessionRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/files/upload/abort";
 };
 
 export type AbortFileUploadResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type AbortFileUploadResponse = AbortFileUploadResponses[keyof AbortFileUploadResponses];
 
 export type StatusFileUploadData = {
-    body: ChatUploadSessionRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/files/upload/status';
+  body: ChatUploadSessionRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/files/upload/status";
 };
 
 export type StatusFileUploadResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type StatusFileUploadResponse = StatusFileUploadResponses[keyof StatusFileUploadResponses];
 
 export type DownloadOpenApiFileData = {
-    body?: never;
-    path?: never;
-    query: {
-        attachment_id: string;
-    };
-    url: '/api/v1/file';
+  body?: never;
+  path?: never;
+  query: {
+    attachment_id: string;
+  };
+  url: "/api/v1/file";
 };
 
 export type DownloadOpenApiFileResponses = {
-    /**
-     * File content or an error envelope
-     */
-    200: Blob | File;
+  /**
+   * File content or an error envelope
+   */
+  200: Blob | File;
 };
 
 export type DownloadOpenApiFileResponse = DownloadOpenApiFileResponses[keyof DownloadOpenApiFileResponses];
 
 export type UploadOpenApiFileData = {
-    body: FileUploadRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/file';
+  body: FileUploadRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/file";
 };
 
 export type UploadOpenApiFileResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type UploadOpenApiFileResponse = UploadOpenApiFileResponses[keyof UploadOpenApiFileResponses];
 
 export type GetFileByNameData = {
-    body?: never;
-    path?: never;
-    query: {
-        filename: string;
-    };
-    url: '/api/v1/files/content';
+  body?: never;
+  path?: never;
+  query: {
+    filename: string;
+  };
+  url: "/api/v1/files/content";
 };
 
 export type GetFileByNameResponses = {
-    /**
-     * File bytes or an error envelope
-     */
-    200: Blob | File;
+  /**
+   * File bytes or an error envelope
+   */
+  200: Blob | File;
 };
 
 export type GetFileByNameResponse = GetFileByNameResponses[keyof GetFileByNameResponses];
 
 export type GetTokenFileData = {
-    body?: never;
-    path: {
-        file_token: string;
-    };
-    query?: never;
-    url: '/api/v1/files/tokens/{file_token}';
+  body?: never;
+  path: {
+    file_token: string;
+  };
+  query?: never;
+  url: "/api/v1/files/tokens/{file_token}";
 };
 
 export type GetTokenFileResponses = {
-    /**
-     * Tokenized file bytes or an error envelope
-     */
-    200: Blob | File;
+  /**
+   * Tokenized file bytes or an error envelope
+   */
+  200: Blob | File;
 };
 
 export type GetTokenFileResponse = GetTokenFileResponses[keyof GetTokenFileResponses];
 
 export type DeleteAttachmentData = {
-    body?: never;
-    path: {
-        attachment_id: string;
-    };
-    query?: never;
-    url: '/api/v1/files/{attachment_id}';
+  body?: never;
+  path: {
+    attachment_id: string;
+  };
+  query?: never;
+  url: "/api/v1/files/{attachment_id}";
 };
 
 export type DeleteAttachmentResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type DeleteAttachmentResponse = DeleteAttachmentResponses[keyof DeleteAttachmentResponses];
 
 export type GetAttachmentData = {
-    body?: never;
-    path: {
-        attachment_id: string;
-    };
-    query?: never;
-    url: '/api/v1/files/{attachment_id}';
+  body?: never;
+  path: {
+    attachment_id: string;
+  };
+  query?: never;
+  url: "/api/v1/files/{attachment_id}";
 };
 
 export type GetAttachmentResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type GetAttachmentResponse = GetAttachmentResponses[keyof GetAttachmentResponses];
 
 export type DownloadAttachmentData = {
-    body?: never;
-    path: {
-        attachment_id: string;
-    };
-    query?: never;
-    url: '/api/v1/files/{attachment_id}/content';
+  body?: never;
+  path: {
+    attachment_id: string;
+  };
+  query?: never;
+  url: "/api/v1/files/{attachment_id}/content";
 };
 
 export type DownloadAttachmentResponses = {
-    /**
-     * File content
-     */
-    200: Blob | File;
+  /**
+   * File content
+   */
+  200: Blob | File;
 };
 
 export type DownloadAttachmentResponse = DownloadAttachmentResponses[keyof DownloadAttachmentResponses];
 
 export type ListPluginsData = {
-    body?: never;
-    path?: never;
-    query?: {
-        include_reserved?: boolean;
-        enabled?: boolean;
-    };
-    url: '/api/v1/plugins';
+  body?: never;
+  path?: never;
+  query?: {
+    include_reserved?: boolean;
+    enabled?: boolean;
+  };
+  url: "/api/v1/plugins";
 };
 
 export type ListPluginsResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ListPluginsResponse = ListPluginsResponses[keyof ListPluginsResponses];
 
 export type UninstallPluginByIdData = {
-    body?: {
-        delete_config?: boolean;
-        delete_data?: boolean;
-        [key: string]: unknown | boolean | undefined;
-    };
-    path?: never;
-    query: {
-        plugin_id: string;
-    };
-    url: '/api/v1/plugins/by-id';
+  body?: {
+    delete_config?: boolean;
+    delete_data?: boolean;
+    [key: string]: unknown | boolean | undefined;
+  };
+  path?: never;
+  query: {
+    plugin_id: string;
+  };
+  url: "/api/v1/plugins/by-id";
 };
 
 export type UninstallPluginByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type UninstallPluginByIdResponse = UninstallPluginByIdResponses[keyof UninstallPluginByIdResponses];
 
 export type GetPluginByIdData = {
-    body?: never;
-    path?: never;
-    query: {
-        plugin_id: string;
-    };
-    url: '/api/v1/plugins/by-id';
+  body?: never;
+  path?: never;
+  query: {
+    plugin_id: string;
+  };
+  url: "/api/v1/plugins/by-id";
 };
 
 export type GetPluginByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type GetPluginByIdResponse = GetPluginByIdResponses[keyof GetPluginByIdResponses];
 
 export type GetPluginConfigByIdData = {
-    body?: never;
-    path?: never;
-    query: {
-        plugin_id: string;
-    };
-    url: '/api/v1/plugins/config';
+  body?: never;
+  path?: never;
+  query: {
+    plugin_id: string;
+  };
+  url: "/api/v1/plugins/config";
 };
 
 export type GetPluginConfigByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type GetPluginConfigByIdResponse = GetPluginConfigByIdResponses[keyof GetPluginConfigByIdResponses];
 
 export type UpdatePluginConfigByIdData = {
-    body: {
-        plugin_id: string;
-        config: DynamicConfig;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/v1/plugins/config';
+  body: {
+    plugin_id: string;
+    config: DynamicConfig;
+  };
+  path?: never;
+  query?: never;
+  url: "/api/v1/plugins/config";
 };
 
 export type UpdatePluginConfigByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type UpdatePluginConfigByIdResponse = UpdatePluginConfigByIdResponses[keyof UpdatePluginConfigByIdResponses];
 
 export type GetPluginConfigSchemaByIdData = {
-    body?: never;
-    path?: never;
-    query: {
-        plugin_id: string;
-    };
-    url: '/api/v1/plugins/config/schema';
+  body?: never;
+  path?: never;
+  query: {
+    plugin_id: string;
+  };
+  url: "/api/v1/plugins/config/schema";
 };
 
 export type GetPluginConfigSchemaByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
-export type GetPluginConfigSchemaByIdResponse = GetPluginConfigSchemaByIdResponses[keyof GetPluginConfigSchemaByIdResponses];
+export type GetPluginConfigSchemaByIdResponse =
+  GetPluginConfigSchemaByIdResponses[keyof GetPluginConfigSchemaByIdResponses];
 
 export type DeletePluginConfigFileByIdData = {
-    body: PluginConfigFileDeleteRequest;
-    path?: never;
-    query: {
-        plugin_id: string;
-    };
-    url: '/api/v1/plugins/config-files';
+  body: PluginConfigFileDeleteRequest;
+  path?: never;
+  query: {
+    plugin_id: string;
+  };
+  url: "/api/v1/plugins/config-files";
 };
 
 export type DeletePluginConfigFileByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
-export type DeletePluginConfigFileByIdResponse = DeletePluginConfigFileByIdResponses[keyof DeletePluginConfigFileByIdResponses];
+export type DeletePluginConfigFileByIdResponse =
+  DeletePluginConfigFileByIdResponses[keyof DeletePluginConfigFileByIdResponses];
 
 export type ListPluginConfigFilesByIdData = {
-    body?: never;
-    path?: never;
-    query: {
-        plugin_id: string;
-        config_key: string;
-    };
-    url: '/api/v1/plugins/config-files';
+  body?: never;
+  path?: never;
+  query: {
+    plugin_id: string;
+    config_key: string;
+  };
+  url: "/api/v1/plugins/config-files";
 };
 
 export type ListPluginConfigFilesByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
-export type ListPluginConfigFilesByIdResponse = ListPluginConfigFilesByIdResponses[keyof ListPluginConfigFilesByIdResponses];
+export type ListPluginConfigFilesByIdResponse =
+  ListPluginConfigFilesByIdResponses[keyof ListPluginConfigFilesByIdResponses];
 
 export type UploadPluginConfigFilesByIdData = {
-    body: {
-        [key: string]: unknown;
-    };
-    path?: never;
-    query: {
-        plugin_id: string;
-        config_key: string;
-    };
-    url: '/api/v1/plugins/config-files';
+  body: {
+    [key: string]: unknown;
+  };
+  path?: never;
+  query: {
+    plugin_id: string;
+    config_key: string;
+  };
+  url: "/api/v1/plugins/config-files";
 };
 
 export type UploadPluginConfigFilesByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
-export type UploadPluginConfigFilesByIdResponse = UploadPluginConfigFilesByIdResponses[keyof UploadPluginConfigFilesByIdResponses];
+export type UploadPluginConfigFilesByIdResponse =
+  UploadPluginConfigFilesByIdResponses[keyof UploadPluginConfigFilesByIdResponses];
 
 export type GetPluginReadmeByIdData = {
-    body?: never;
-    path?: never;
-    query: {
-        plugin_id: string;
-    };
-    url: '/api/v1/plugins/readme';
+  body?: never;
+  path?: never;
+  query: {
+    plugin_id: string;
+  };
+  url: "/api/v1/plugins/readme";
 };
 
 export type GetPluginReadmeByIdResponses = {
-    /**
-     * Text response
-     */
-    200: string;
+  /**
+   * Text response
+   */
+  200: string;
 };
 
 export type GetPluginReadmeByIdResponse = GetPluginReadmeByIdResponses[keyof GetPluginReadmeByIdResponses];
 
 export type GetPluginChangelogByIdData = {
-    body?: never;
-    path?: never;
-    query: {
-        plugin_id: string;
-    };
-    url: '/api/v1/plugins/changelog';
+  body?: never;
+  path?: never;
+  query: {
+    plugin_id: string;
+  };
+  url: "/api/v1/plugins/changelog";
 };
 
 export type GetPluginChangelogByIdResponses = {
-    /**
-     * Text response
-     */
-    200: string;
+  /**
+   * Text response
+   */
+  200: string;
 };
 
 export type GetPluginChangelogByIdResponse = GetPluginChangelogByIdResponses[keyof GetPluginChangelogByIdResponses];
 
 export type ReloadPluginByIdData = {
-    body: {
-        plugin_id: string;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/v1/plugins/reload';
+  body: {
+    plugin_id: string;
+  };
+  path?: never;
+  query?: never;
+  url: "/api/v1/plugins/reload";
 };
 
 export type ReloadPluginByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ReloadPluginByIdResponse = ReloadPluginByIdResponses[keyof ReloadPluginByIdResponses];
 
 export type SetPluginEnabledByIdData = {
-    body: {
-        plugin_id: string;
-        enabled: boolean;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/v1/plugins/enabled';
+  body: {
+    plugin_id: string;
+    enabled: boolean;
+  };
+  path?: never;
+  query?: never;
+  url: "/api/v1/plugins/enabled";
 };
 
 export type SetPluginEnabledByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type SetPluginEnabledByIdResponse = SetPluginEnabledByIdResponses[keyof SetPluginEnabledByIdResponses];
 
 export type ListPluginPagesByIdData = {
-    body?: never;
-    path?: never;
-    query: {
-        plugin_id: string;
-    };
-    url: '/api/v1/plugins/pages';
+  body?: never;
+  path?: never;
+  query: {
+    plugin_id: string;
+  };
+  url: "/api/v1/plugins/pages";
 };
 
 export type ListPluginPagesByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ListPluginPagesByIdResponse = ListPluginPagesByIdResponses[keyof ListPluginPagesByIdResponses];
 
 export type GetPluginPageByIdData = {
-    body?: never;
-    path?: never;
-    query: {
-        plugin_id: string;
-        page_name: string;
-    };
-    url: '/api/v1/plugins/page';
+  body?: never;
+  path?: never;
+  query: {
+    plugin_id: string;
+    page_name: string;
+  };
+  url: "/api/v1/plugins/page";
 };
 
 export type GetPluginPageByIdResponses = {
-    /**
-     * HTML response
-     */
-    200: string;
+  /**
+   * HTML response
+   */
+  200: string;
 };
 
 export type GetPluginPageByIdResponse = GetPluginPageByIdResponses[keyof GetPluginPageByIdResponses];
 
 export type GetPluginPageAssetByIdData = {
-    body?: never;
-    path?: never;
-    query: {
-        plugin_id: string;
-        page_name: string;
-        asset_path: string;
-    };
-    url: '/api/v1/plugins/page/assets';
+  body?: never;
+  path?: never;
+  query: {
+    plugin_id: string;
+    page_name: string;
+    asset_path: string;
+  };
+  url: "/api/v1/plugins/page/assets";
 };
 
 export type GetPluginPageAssetByIdResponses = {
-    /**
-     * Plugin asset content
-     */
-    200: unknown;
+  /**
+   * Plugin asset content
+   */
+  200: unknown;
 };
 
 export type UninstallPluginData = {
-    body?: {
-        delete_config?: boolean;
-        delete_data?: boolean;
-        [key: string]: unknown | boolean | undefined;
-    };
-    path: {
-        plugin_id: string;
-    };
-    query?: never;
-    url: '/api/v1/plugins/{plugin_id}';
+  body?: {
+    delete_config?: boolean;
+    delete_data?: boolean;
+    [key: string]: unknown | boolean | undefined;
+  };
+  path: {
+    plugin_id: string;
+  };
+  query?: never;
+  url: "/api/v1/plugins/{plugin_id}";
 };
 
 export type UninstallPluginResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type UninstallPluginResponse = UninstallPluginResponses[keyof UninstallPluginResponses];
 
 export type GetPluginData = {
-    body?: {
-        delete_config?: boolean;
-        delete_data?: boolean;
-        [key: string]: unknown | boolean | undefined;
-    };
-    path: {
-        plugin_id: string;
-    };
-    query?: never;
-    url: '/api/v1/plugins/{plugin_id}';
+  body?: {
+    delete_config?: boolean;
+    delete_data?: boolean;
+    [key: string]: unknown | boolean | undefined;
+  };
+  path: {
+    plugin_id: string;
+  };
+  query?: never;
+  url: "/api/v1/plugins/{plugin_id}";
 };
 
 export type GetPluginResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type GetPluginResponse = GetPluginResponses[keyof GetPluginResponses];
 
 export type GetPluginConfigData = {
-    body?: never;
-    path: {
-        plugin_id: string;
-    };
-    query?: never;
-    url: '/api/v1/plugins/{plugin_id}/config';
+  body?: never;
+  path: {
+    plugin_id: string;
+  };
+  query?: never;
+  url: "/api/v1/plugins/{plugin_id}/config";
 };
 
 export type GetPluginConfigResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type GetPluginConfigResponse = GetPluginConfigResponses[keyof GetPluginConfigResponses];
 
 export type UpdatePluginConfigData = {
-    body: DynamicConfig;
-    path: {
-        plugin_id: string;
-    };
-    query?: never;
-    url: '/api/v1/plugins/{plugin_id}/config';
+  body: DynamicConfig;
+  path: {
+    plugin_id: string;
+  };
+  query?: never;
+  url: "/api/v1/plugins/{plugin_id}/config";
 };
 
 export type UpdatePluginConfigResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type UpdatePluginConfigResponse = UpdatePluginConfigResponses[keyof UpdatePluginConfigResponses];
 
 export type UpdatePluginLogLevelData = {
-    body: {
-        /**
-         * Log level name, or null to follow the global level.
-         */
-        level?: 'DEBUG' | 'INFO' | 'WARNING' | 'ERROR' | 'CRITICAL';
-        [key: string]: unknown | ('DEBUG' | 'INFO' | 'WARNING' | 'ERROR' | 'CRITICAL') | undefined;
-    };
-    path: {
-        plugin_id: string;
-    };
-    query?: never;
-    url: '/api/v1/plugins/{plugin_id}/log-level';
+  body: {
+    /**
+     * Log level name, or null to follow the global level.
+     */
+    level?: "DEBUG" | "INFO" | "WARNING" | "ERROR" | "CRITICAL" | null;
+    [key: string]: unknown | ("DEBUG" | "INFO" | "WARNING" | "ERROR" | "CRITICAL" | null) | undefined;
+  };
+  path: {
+    plugin_id: string;
+  };
+  query?: never;
+  url: "/api/v1/plugins/{plugin_id}/log-level";
 };
 
 export type UpdatePluginLogLevelResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type UpdatePluginLogLevelResponse = UpdatePluginLogLevelResponses[keyof UpdatePluginLogLevelResponses];
 
 export type GetPluginConfigSchemaData = {
-    body?: never;
-    path: {
-        plugin_id: string;
-    };
-    query?: never;
-    url: '/api/v1/plugins/{plugin_id}/config/schema';
+  body?: never;
+  path: {
+    plugin_id: string;
+  };
+  query?: never;
+  url: "/api/v1/plugins/{plugin_id}/config/schema";
 };
 
 export type GetPluginConfigSchemaResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type GetPluginConfigSchemaResponse = GetPluginConfigSchemaResponses[keyof GetPluginConfigSchemaResponses];
 
 export type ListPluginConfigFilesData = {
-    body?: never;
-    path: {
-        plugin_id: string;
-        /**
-         * URL-encoded configuration key path.
-         */
-        config_key: string;
-    };
-    query?: never;
-    url: '/api/v1/plugins/{plugin_id}/config-files/{config_key}';
+  body?: never;
+  path: {
+    plugin_id: string;
+    /**
+     * URL-encoded configuration key path.
+     */
+    config_key: string;
+  };
+  query?: never;
+  url: "/api/v1/plugins/{plugin_id}/config-files/{config_key}";
 };
 
 export type ListPluginConfigFilesResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ListPluginConfigFilesResponse = ListPluginConfigFilesResponses[keyof ListPluginConfigFilesResponses];
 
 export type UploadPluginConfigFilesData = {
-    body: {
-        [key: string]: unknown;
-    };
-    path: {
-        plugin_id: string;
-        /**
-         * URL-encoded configuration key path.
-         */
-        config_key: string;
-    };
-    query?: never;
-    url: '/api/v1/plugins/{plugin_id}/config-files/{config_key}';
+  body: {
+    [key: string]: unknown;
+  };
+  path: {
+    plugin_id: string;
+    /**
+     * URL-encoded configuration key path.
+     */
+    config_key: string;
+  };
+  query?: never;
+  url: "/api/v1/plugins/{plugin_id}/config-files/{config_key}";
 };
 
 export type UploadPluginConfigFilesResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type UploadPluginConfigFilesResponse = UploadPluginConfigFilesResponses[keyof UploadPluginConfigFilesResponses];
 
 export type DeletePluginConfigFileData = {
-    body: PluginConfigFileDeleteRequest;
-    path: {
-        plugin_id: string;
-    };
-    query?: never;
-    url: '/api/v1/plugins/{plugin_id}/config-files';
+  body: PluginConfigFileDeleteRequest;
+  path: {
+    plugin_id: string;
+  };
+  query?: never;
+  url: "/api/v1/plugins/{plugin_id}/config-files";
 };
 
 export type DeletePluginConfigFileResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type DeletePluginConfigFileResponse = DeletePluginConfigFileResponses[keyof DeletePluginConfigFileResponses];
 
 export type GetPluginReadmeData = {
-    body?: never;
-    path: {
-        plugin_id: string;
-    };
-    query?: never;
-    url: '/api/v1/plugins/{plugin_id}/readme';
+  body?: never;
+  path: {
+    plugin_id: string;
+  };
+  query?: never;
+  url: "/api/v1/plugins/{plugin_id}/readme";
 };
 
 export type GetPluginReadmeResponses = {
-    /**
-     * Text response
-     */
-    200: string;
+  /**
+   * Text response
+   */
+  200: string;
 };
 
 export type GetPluginReadmeResponse = GetPluginReadmeResponses[keyof GetPluginReadmeResponses];
 
 export type GetPluginChangelogData = {
-    body?: never;
-    path: {
-        plugin_id: string;
-    };
-    query?: never;
-    url: '/api/v1/plugins/{plugin_id}/changelog';
+  body?: never;
+  path: {
+    plugin_id: string;
+  };
+  query?: never;
+  url: "/api/v1/plugins/{plugin_id}/changelog";
 };
 
 export type GetPluginChangelogResponses = {
-    /**
-     * Text response
-     */
-    200: string;
+  /**
+   * Text response
+   */
+  200: string;
 };
 
 export type GetPluginChangelogResponse = GetPluginChangelogResponses[keyof GetPluginChangelogResponses];
 
 export type ReloadPluginData = {
-    body?: never;
-    path: {
-        plugin_id: string;
-    };
-    query?: never;
-    url: '/api/v1/plugins/{plugin_id}/reload';
+  body?: never;
+  path: {
+    plugin_id: string;
+  };
+  query?: never;
+  url: "/api/v1/plugins/{plugin_id}/reload";
 };
 
 export type ReloadPluginResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ReloadPluginResponse = ReloadPluginResponses[keyof ReloadPluginResponses];
 
 export type BindPluginSourceData = {
-    body: PluginSourceBindRequest;
-    path: {
-        plugin_id: string;
-    };
-    query?: never;
-    url: '/api/v1/plugins/{plugin_id}/source';
+  body: PluginSourceBindRequest;
+  path: {
+    plugin_id: string;
+  };
+  query?: never;
+  url: "/api/v1/plugins/{plugin_id}/source";
 };
 
 export type BindPluginSourceResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type BindPluginSourceResponse = BindPluginSourceResponses[keyof BindPluginSourceResponses];
 
 export type SetPluginEnabledData = {
-    body: EnabledPatch;
-    path: {
-        plugin_id: string;
-    };
-    query?: never;
-    url: '/api/v1/plugins/{plugin_id}/enabled';
+  body: EnabledPatch;
+  path: {
+    plugin_id: string;
+  };
+  query?: never;
+  url: "/api/v1/plugins/{plugin_id}/enabled";
 };
 
 export type SetPluginEnabledResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type SetPluginEnabledResponse = SetPluginEnabledResponses[keyof SetPluginEnabledResponses];
 
 export type UpdatePluginData = {
-    body?: PluginUpdateRequest;
-    path: {
-        plugin_id: string;
-    };
-    query?: never;
-    url: '/api/v1/plugins/{plugin_id}/update';
+  body?: PluginUpdateRequest;
+  path: {
+    plugin_id: string;
+  };
+  query?: never;
+  url: "/api/v1/plugins/{plugin_id}/update";
 };
 
 export type UpdatePluginResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type UpdatePluginResponse = UpdatePluginResponses[keyof UpdatePluginResponses];
 
 export type UpdatePluginsData = {
-    body: PluginBatchUpdateRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/plugins/update';
+  body: PluginBatchUpdateRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/plugins/update";
 };
 
 export type UpdatePluginsResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type UpdatePluginsResponse = UpdatePluginsResponses[keyof UpdatePluginsResponses];
 
 export type CheckPluginVersionSupportData = {
-    body: PluginVersionSupportRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/plugins/version-support/check';
+  body: PluginVersionSupportRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/plugins/version-support/check";
 };
 
 export type CheckPluginVersionSupportResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
-export type CheckPluginVersionSupportResponse = CheckPluginVersionSupportResponses[keyof CheckPluginVersionSupportResponses];
+export type CheckPluginVersionSupportResponse =
+  CheckPluginVersionSupportResponses[keyof CheckPluginVersionSupportResponses];
 
 export type ValidatePluginRepoData = {
-    body: PluginValidateRepoRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/plugins/validate/repo';
+  body: PluginValidateRepoRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/plugins/validate/repo";
 };
 
 export type ValidatePluginRepoResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ValidatePluginRepoResponse = ValidatePluginRepoResponses[keyof ValidatePluginRepoResponses];
 
 export type ListFailedPluginsData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/v1/plugins/failed';
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/api/v1/plugins/failed";
 };
 
 export type ListFailedPluginsResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ListFailedPluginsResponse = ListFailedPluginsResponses[keyof ListFailedPluginsResponses];
 
 export type UninstallFailedPluginData = {
-    body?: {
-        delete_config?: boolean;
-        delete_data?: boolean;
-        [key: string]: unknown | boolean | undefined;
-    };
-    path: {
-        plugin_id: string;
-    };
-    query?: never;
-    url: '/api/v1/plugins/failed/{plugin_id}';
+  body?: {
+    delete_config?: boolean;
+    delete_data?: boolean;
+    [key: string]: unknown | boolean | undefined;
+  };
+  path: {
+    plugin_id: string;
+  };
+  query?: never;
+  url: "/api/v1/plugins/failed/{plugin_id}";
 };
 
 export type UninstallFailedPluginResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type UninstallFailedPluginResponse = UninstallFailedPluginResponses[keyof UninstallFailedPluginResponses];
 
 export type ReloadFailedPluginData = {
-    body?: never;
-    path: {
-        plugin_id: string;
-    };
-    query?: never;
-    url: '/api/v1/plugins/failed/{plugin_id}/reload';
+  body?: never;
+  path: {
+    plugin_id: string;
+  };
+  query?: never;
+  url: "/api/v1/plugins/failed/{plugin_id}/reload";
 };
 
 export type ReloadFailedPluginResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ReloadFailedPluginResponse = ReloadFailedPluginResponses[keyof ReloadFailedPluginResponses];
 
 export type InstallPluginFromGithubData = {
-    body: PluginRepositoryInstallRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/plugins/install/github';
+  body: PluginRepositoryInstallRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/plugins/install/github";
 };
 
 export type InstallPluginFromGithubResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type InstallPluginFromGithubResponse = InstallPluginFromGithubResponses[keyof InstallPluginFromGithubResponses];
 
 export type InstallPluginFromGitData = {
-    body: PluginRepositoryInstallRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/plugins/install/git';
+  body: PluginRepositoryInstallRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/plugins/install/git";
 };
 
 export type InstallPluginFromGitResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type InstallPluginFromGitResponse = InstallPluginFromGitResponses[keyof InstallPluginFromGitResponses];
 
 export type InstallPluginFromUrlData = {
-    body: PluginUrlInstallRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/plugins/install/url';
+  body: PluginUrlInstallRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/plugins/install/url";
 };
 
 export type InstallPluginFromUrlResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type InstallPluginFromUrlResponse = InstallPluginFromUrlResponses[keyof InstallPluginFromUrlResponses];
 
 export type InstallPluginFromUploadData = {
-    body: PluginUploadInstallRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/plugins/install/upload';
+  body: PluginUploadInstallRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/plugins/install/upload";
 };
 
 export type InstallPluginFromUploadResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type InstallPluginFromUploadResponse = InstallPluginFromUploadResponses[keyof InstallPluginFromUploadResponses];
 
 export type ListPluginMarketData = {
-    body?: never;
-    path?: never;
-    query?: {
-        page?: number;
-        page_size?: number;
-        category?: string;
-        sort?: 'recommended' | 'downloads' | 'updated' | 'name';
-        keyword?: string;
-        force_refresh?: boolean;
-        custom_registry?: string;
-    };
-    url: '/api/v1/plugins/market';
+  body?: never;
+  path?: never;
+  query?: {
+    page?: number;
+    page_size?: number;
+    category?: string;
+    sort?: "recommended" | "downloads" | "updated" | "name";
+    keyword?: string;
+    force_refresh?: boolean;
+    custom_registry?: string;
+  };
+  url: "/api/v1/plugins/market";
 };
 
 export type ListPluginMarketResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ListPluginMarketResponse = ListPluginMarketResponses[keyof ListPluginMarketResponses];
 
 export type ListPluginMarketCategoriesData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/v1/plugins/market/categories';
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/api/v1/plugins/market/categories";
 };
 
 export type ListPluginMarketCategoriesResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
-export type ListPluginMarketCategoriesResponse = ListPluginMarketCategoriesResponses[keyof ListPluginMarketCategoriesResponses];
+export type ListPluginMarketCategoriesResponse =
+  ListPluginMarketCategoriesResponses[keyof ListPluginMarketCategoriesResponses];
 
 export type ListPluginSourcesData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/v1/plugin-sources';
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/api/v1/plugin-sources";
 };
 
 export type ListPluginSourcesResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ListPluginSourcesResponse = ListPluginSourcesResponses[keyof ListPluginSourcesResponses];
 
 export type CreatePluginSourceData = {
-    body: PluginSourceRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/plugin-sources';
+  body: PluginSourceRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/plugin-sources";
 };
 
 export type CreatePluginSourceResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type CreatePluginSourceResponse = CreatePluginSourceResponses[keyof CreatePluginSourceResponses];
 
 export type ReplacePluginSourcesData = {
-    body: {
-        sources: Array<PluginSourceRequest>;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/v1/plugin-sources';
+  body: {
+    sources: Array<PluginSourceRequest>;
+  };
+  path?: never;
+  query?: never;
+  url: "/api/v1/plugin-sources";
 };
 
 export type ReplacePluginSourcesResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ReplacePluginSourcesResponse = ReplacePluginSourcesResponses[keyof ReplacePluginSourcesResponses];
 
 export type DeletePluginSourceData = {
-    body?: never;
-    path: {
-        source_id: string;
-    };
-    query?: never;
-    url: '/api/v1/plugin-sources/{source_id}';
+  body?: never;
+  path: {
+    source_id: string;
+  };
+  query?: never;
+  url: "/api/v1/plugin-sources/{source_id}";
 };
 
 export type DeletePluginSourceResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type DeletePluginSourceResponse = DeletePluginSourceResponses[keyof DeletePluginSourceResponses];
 
 export type DeletePluginSourceByIdData = {
-    body?: never;
-    path?: never;
-    query: {
-        source_id: string;
-    };
-    url: '/api/v1/plugin-sources/by-id';
+  body?: never;
+  path?: never;
+  query: {
+    source_id: string;
+  };
+  url: "/api/v1/plugin-sources/by-id";
 };
 
 export type DeletePluginSourceByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type DeletePluginSourceByIdResponse = DeletePluginSourceByIdResponses[keyof DeletePluginSourceByIdResponses];
 
 export type ListPluginPagesData = {
-    body?: never;
-    path: {
-        plugin_id: string;
-    };
-    query?: never;
-    url: '/api/v1/plugins/{plugin_id}/pages';
+  body?: never;
+  path: {
+    plugin_id: string;
+  };
+  query?: never;
+  url: "/api/v1/plugins/{plugin_id}/pages";
 };
 
 export type ListPluginPagesResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ListPluginPagesResponse = ListPluginPagesResponses[keyof ListPluginPagesResponses];
 
 export type GetPluginPageData = {
-    body?: never;
-    path: {
-        plugin_id: string;
-        page_name: string;
-    };
-    query?: never;
-    url: '/api/v1/plugins/{plugin_id}/pages/{page_name}';
+  body?: never;
+  path: {
+    plugin_id: string;
+    page_name: string;
+  };
+  query?: never;
+  url: "/api/v1/plugins/{plugin_id}/pages/{page_name}";
 };
 
 export type GetPluginPageResponses = {
-    /**
-     * HTML response
-     */
-    200: string;
+  /**
+   * HTML response
+   */
+  200: string;
 };
 
 export type GetPluginPageResponse = GetPluginPageResponses[keyof GetPluginPageResponses];
 
 export type GetPluginPageAssetData = {
-    body?: never;
-    path: {
-        plugin_id: string;
-        page_name: string;
-        /**
-         * URL-encoded relative asset path.
-         */
-        asset_path: string;
-    };
-    query?: never;
-    url: '/api/v1/plugins/{plugin_id}/pages/{page_name}/assets/{asset_path}';
+  body?: never;
+  path: {
+    plugin_id: string;
+    page_name: string;
+    /**
+     * URL-encoded relative asset path.
+     */
+    asset_path: string;
+  };
+  query?: never;
+  url: "/api/v1/plugins/{plugin_id}/pages/{page_name}/assets/{asset_path}";
 };
 
 export type GetPluginPageAssetResponses = {
-    /**
-     * Plugin asset content
-     */
-    200: unknown;
+  /**
+   * Plugin asset content
+   */
+  200: unknown;
 };
 
 export type ListPluginViewsByIdData = {
-    body?: never;
-    path?: never;
-    query: {
-        plugin_id: string;
-    };
-    url: '/api/v1/plugins/views';
+  body?: never;
+  path?: never;
+  query: {
+    plugin_id: string;
+  };
+  url: "/api/v1/plugins/views";
 };
 
 export type ListPluginViewsByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ListPluginViewsByIdResponse = ListPluginViewsByIdResponses[keyof ListPluginViewsByIdResponses];
 
 export type GetPluginViewByIdData = {
-    body?: never;
-    path?: never;
-    query: {
-        plugin_id: string;
-        page_name: string;
-    };
-    url: '/api/v1/plugins/view';
+  body?: never;
+  path?: never;
+  query: {
+    plugin_id: string;
+    page_name: string;
+  };
+  url: "/api/v1/plugins/view";
 };
 
 export type GetPluginViewByIdResponses = {
-    /**
-     * HTML response
-     */
-    200: string;
+  /**
+   * HTML response
+   */
+  200: string;
 };
 
 export type GetPluginViewByIdResponse = GetPluginViewByIdResponses[keyof GetPluginViewByIdResponses];
 
 export type GetPluginViewAssetByIdData = {
-    body?: never;
-    path?: never;
-    query: {
-        plugin_id: string;
-        page_name: string;
-        asset_path: string;
-    };
-    url: '/api/v1/plugins/view/assets';
+  body?: never;
+  path?: never;
+  query: {
+    plugin_id: string;
+    page_name: string;
+    asset_path: string;
+  };
+  url: "/api/v1/plugins/view/assets";
 };
 
 export type GetPluginViewAssetByIdResponses = {
-    /**
-     * Plugin asset content
-     */
-    200: unknown;
+  /**
+   * Plugin asset content
+   */
+  200: unknown;
 };
 
 export type ListPluginViewsData = {
-    body?: never;
-    path: {
-        plugin_id: string;
-    };
-    query?: never;
-    url: '/api/v1/plugins/{plugin_id}/views';
+  body?: never;
+  path: {
+    plugin_id: string;
+  };
+  query?: never;
+  url: "/api/v1/plugins/{plugin_id}/views";
 };
 
 export type ListPluginViewsResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ListPluginViewsResponse = ListPluginViewsResponses[keyof ListPluginViewsResponses];
 
 export type GetPluginViewData = {
-    body?: never;
-    path: {
-        plugin_id: string;
-        page_name: string;
-    };
-    query?: never;
-    url: '/api/v1/plugins/{plugin_id}/views/{page_name}';
+  body?: never;
+  path: {
+    plugin_id: string;
+    page_name: string;
+  };
+  query?: never;
+  url: "/api/v1/plugins/{plugin_id}/views/{page_name}";
 };
 
 export type GetPluginViewResponses = {
-    /**
-     * HTML response
-     */
-    200: string;
+  /**
+   * HTML response
+   */
+  200: string;
 };
 
 export type GetPluginViewResponse = GetPluginViewResponses[keyof GetPluginViewResponses];
 
 export type GetPluginViewAssetData = {
-    body?: never;
-    path: {
-        plugin_id: string;
-        page_name: string;
-        /**
-         * URL-encoded relative asset path.
-         */
-        asset_path: string;
-    };
-    query?: never;
-    url: '/api/v1/plugins/{plugin_id}/views/{page_name}/assets/{asset_path}';
+  body?: never;
+  path: {
+    plugin_id: string;
+    page_name: string;
+    /**
+     * URL-encoded relative asset path.
+     */
+    asset_path: string;
+  };
+  query?: never;
+  url: "/api/v1/plugins/{plugin_id}/views/{page_name}/assets/{asset_path}";
 };
 
 export type GetPluginViewAssetResponses = {
-    /**
-     * Plugin asset content
-     */
-    200: unknown;
+  /**
+   * Plugin asset content
+   */
+  200: unknown;
 };
 
 export type GetPluginPageBridgeSdkData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/v1/plugins/page-bridge-sdk.js';
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/api/v1/plugins/page-bridge-sdk.js";
 };
 
 export type GetPluginPageBridgeSdkResponses = {
-    /**
-     * JavaScript bridge SDK
-     */
-    200: string;
+  /**
+   * JavaScript bridge SDK
+   */
+  200: string;
 };
 
 export type GetPluginPageBridgeSdkResponse = GetPluginPageBridgeSdkResponses[keyof GetPluginPageBridgeSdkResponses];
 
 export type DeletePluginExtensionRouteData = {
-    body?: never;
-    path: {
-        plugin_path: string;
-    };
-    query?: never;
-    url: '/api/v1/plugins/extensions/{plugin_path}';
+  body?: never;
+  path: {
+    plugin_path: string;
+  };
+  query?: never;
+  url: "/api/v1/plugins/extensions/{plugin_path}";
 };
 
 export type DeletePluginExtensionRouteResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
-export type DeletePluginExtensionRouteResponse = DeletePluginExtensionRouteResponses[keyof DeletePluginExtensionRouteResponses];
+export type DeletePluginExtensionRouteResponse =
+  DeletePluginExtensionRouteResponses[keyof DeletePluginExtensionRouteResponses];
 
 export type GetPluginExtensionRouteData = {
-    body?: never;
-    path: {
-        /**
-         * Plugin extension path after /api/plug/. It may contain slash-separated segments.
-         */
-        plugin_path: string;
-    };
-    query?: never;
-    url: '/api/v1/plugins/extensions/{plugin_path}';
+  body?: never;
+  path: {
+    /**
+     * Plugin extension path after /api/plug/. It may contain slash-separated segments.
+     */
+    plugin_path: string;
+  };
+  query?: never;
+  url: "/api/v1/plugins/extensions/{plugin_path}";
 };
 
 export type GetPluginExtensionRouteResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type GetPluginExtensionRouteResponse = GetPluginExtensionRouteResponses[keyof GetPluginExtensionRouteResponses];
 
 export type PatchPluginExtensionRouteData = {
-    body?: DynamicConfig;
-    path: {
-        plugin_path: string;
-    };
-    query?: never;
-    url: '/api/v1/plugins/extensions/{plugin_path}';
+  body?: DynamicConfig;
+  path: {
+    plugin_path: string;
+  };
+  query?: never;
+  url: "/api/v1/plugins/extensions/{plugin_path}";
 };
 
 export type PatchPluginExtensionRouteResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
-export type PatchPluginExtensionRouteResponse = PatchPluginExtensionRouteResponses[keyof PatchPluginExtensionRouteResponses];
+export type PatchPluginExtensionRouteResponse =
+  PatchPluginExtensionRouteResponses[keyof PatchPluginExtensionRouteResponses];
 
 export type PostPluginExtensionRouteData = {
-    body?: DynamicConfig;
-    path: {
-        /**
-         * Plugin extension path after /api/plug/. It may contain slash-separated segments.
-         */
-        plugin_path: string;
-    };
-    query?: never;
-    url: '/api/v1/plugins/extensions/{plugin_path}';
+  body?: DynamicConfig;
+  path: {
+    /**
+     * Plugin extension path after /api/plug/. It may contain slash-separated segments.
+     */
+    plugin_path: string;
+  };
+  query?: never;
+  url: "/api/v1/plugins/extensions/{plugin_path}";
 };
 
 export type PostPluginExtensionRouteResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
-export type PostPluginExtensionRouteResponse = PostPluginExtensionRouteResponses[keyof PostPluginExtensionRouteResponses];
+export type PostPluginExtensionRouteResponse =
+  PostPluginExtensionRouteResponses[keyof PostPluginExtensionRouteResponses];
 
 export type PutPluginExtensionRouteData = {
-    body?: DynamicConfig;
-    path: {
-        plugin_path: string;
-    };
-    query?: never;
-    url: '/api/v1/plugins/extensions/{plugin_path}';
+  body?: DynamicConfig;
+  path: {
+    plugin_path: string;
+  };
+  query?: never;
+  url: "/api/v1/plugins/extensions/{plugin_path}";
 };
 
 export type PutPluginExtensionRouteResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type PutPluginExtensionRouteResponse = PutPluginExtensionRouteResponses[keyof PutPluginExtensionRouteResponses];
 
 export type ListCommandsData = {
-    body?: never;
-    path?: never;
-    query?: {
-        config_id?: string;
-    };
-    url: '/api/v1/commands';
+  body?: never;
+  path?: never;
+  query?: {
+    config_id?: string;
+  };
+  url: "/api/v1/commands";
 };
 
 export type ListCommandsResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ListCommandsResponse = ListCommandsResponses[keyof ListCommandsResponses];
 
 export type UpdateCommandData = {
-    body: CommandPatchRequest;
-    path: {
-        /**
-         * URL-encoded command handler full name.
-         */
-        command_id: string;
-    };
-    query?: never;
-    url: '/api/v1/commands/{command_id}';
+  body: CommandPatchRequest;
+  path: {
+    /**
+     * URL-encoded command handler full name.
+     */
+    command_id: string;
+  };
+  query?: never;
+  url: "/api/v1/commands/{command_id}";
 };
 
 export type UpdateCommandResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type UpdateCommandResponse = UpdateCommandResponses[keyof UpdateCommandResponses];
 
 export type ListCommandConflictsData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/v1/commands/conflicts';
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/api/v1/commands/conflicts";
 };
 
 export type ListCommandConflictsResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ListCommandConflictsResponse = ListCommandConflictsResponses[keyof ListCommandConflictsResponses];
 
 export type ListToolsData = {
-    body?: never;
-    path?: never;
-    query?: {
-        origin?: 'builtin' | 'plugin' | 'mcp';
-        enabled?: boolean;
-    };
-    url: '/api/v1/tools';
+  body?: never;
+  path?: never;
+  query?: {
+    origin?: "builtin" | "plugin" | "mcp";
+    enabled?: boolean;
+  };
+  url: "/api/v1/tools";
 };
 
 export type ListToolsResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ListToolsResponse = ListToolsResponses[keyof ListToolsResponses];
 
 export type SetToolEnabledData = {
-    body: EnabledPatch;
-    path: {
-        tool_id: string;
-    };
-    query?: never;
-    url: '/api/v1/tools/{tool_id}/enabled';
+  body: EnabledPatch;
+  path: {
+    tool_id: string;
+  };
+  query?: never;
+  url: "/api/v1/tools/{tool_id}/enabled";
 };
 
 export type SetToolEnabledResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type SetToolEnabledResponse = SetToolEnabledResponses[keyof SetToolEnabledResponses];
 
 export type SetToolPermissionData = {
-    body: ToolPermissionPatch;
-    path: {
-        tool_id: string;
-    };
-    query?: never;
-    url: '/api/v1/tools/{tool_id}/permission';
+  body: ToolPermissionPatch;
+  path: {
+    tool_id: string;
+  };
+  query?: never;
+  url: "/api/v1/tools/{tool_id}/permission";
 };
 
 export type SetToolPermissionResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type SetToolPermissionResponse = SetToolPermissionResponses[keyof SetToolPermissionResponses];
 
 export type ListMcpServersData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/v1/mcp/servers';
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/api/v1/mcp/servers";
 };
 
 export type ListMcpServersResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ListMcpServersResponse = ListMcpServersResponses[keyof ListMcpServersResponses];
 
 export type CreateMcpServerData = {
-    body: McpServerConfig;
-    path?: never;
-    query?: never;
-    url: '/api/v1/mcp/servers';
+  body: McpServerConfig;
+  path?: never;
+  query?: never;
+  url: "/api/v1/mcp/servers";
 };
 
 export type CreateMcpServerResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type CreateMcpServerResponse = CreateMcpServerResponses[keyof CreateMcpServerResponses];
 
 export type DeleteMcpServerByNameData = {
-    body?: never;
-    path?: never;
-    query: {
-        server_name: string;
-    };
-    url: '/api/v1/mcp/servers/by-name';
+  body?: never;
+  path?: never;
+  query: {
+    server_name: string;
+  };
+  url: "/api/v1/mcp/servers/by-name";
 };
 
 export type DeleteMcpServerByNameResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type DeleteMcpServerByNameResponse = DeleteMcpServerByNameResponses[keyof DeleteMcpServerByNameResponses];
 
 export type UpdateMcpServerByNameData = {
-    body: {
-        server_name: string;
-        config?: DynamicConfig;
-        enabled?: boolean;
-        [key: string]: unknown | string | DynamicConfig | boolean | undefined;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/v1/mcp/servers/by-name';
+  body: {
+    server_name: string;
+    config?: DynamicConfig;
+    enabled?: boolean;
+    [key: string]: unknown | string | DynamicConfig | boolean | undefined;
+  };
+  path?: never;
+  query?: never;
+  url: "/api/v1/mcp/servers/by-name";
 };
 
 export type UpdateMcpServerByNameResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type UpdateMcpServerByNameResponse = UpdateMcpServerByNameResponses[keyof UpdateMcpServerByNameResponses];
 
 export type SetMcpServerEnabledByNameData = {
-    body: {
-        server_name: string;
-        enabled: boolean;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/v1/mcp/servers/enabled';
+  body: {
+    server_name: string;
+    enabled: boolean;
+  };
+  path?: never;
+  query?: never;
+  url: "/api/v1/mcp/servers/enabled";
 };
 
 export type SetMcpServerEnabledByNameResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
-export type SetMcpServerEnabledByNameResponse = SetMcpServerEnabledByNameResponses[keyof SetMcpServerEnabledByNameResponses];
+export type SetMcpServerEnabledByNameResponse =
+  SetMcpServerEnabledByNameResponses[keyof SetMcpServerEnabledByNameResponses];
 
 export type TestMcpServerByNameData = {
-    body: {
-        server_name: string;
-        mcp_server_config?: DynamicConfig;
-        config?: DynamicConfig;
-        [key: string]: unknown | string | DynamicConfig | undefined;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/v1/mcp/servers/test';
+  body: {
+    server_name: string;
+    mcp_server_config?: DynamicConfig;
+    config?: DynamicConfig;
+    [key: string]: unknown | string | DynamicConfig | undefined;
+  };
+  path?: never;
+  query?: never;
+  url: "/api/v1/mcp/servers/test";
 };
 
 export type TestMcpServerByNameResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type TestMcpServerByNameResponse = TestMcpServerByNameResponses[keyof TestMcpServerByNameResponses];
 
 export type DeleteMcpServerData = {
-    body?: never;
-    path: {
-        server_name: string;
-    };
-    query?: never;
-    url: '/api/v1/mcp/servers/{server_name}';
+  body?: never;
+  path: {
+    server_name: string;
+  };
+  query?: never;
+  url: "/api/v1/mcp/servers/{server_name}";
 };
 
 export type DeleteMcpServerResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type DeleteMcpServerResponse = DeleteMcpServerResponses[keyof DeleteMcpServerResponses];
 
 export type UpdateMcpServerData = {
-    body: McpServerConfig;
-    path: {
-        server_name: string;
-    };
-    query?: never;
-    url: '/api/v1/mcp/servers/{server_name}';
+  body: McpServerConfig;
+  path: {
+    server_name: string;
+  };
+  query?: never;
+  url: "/api/v1/mcp/servers/{server_name}";
 };
 
 export type UpdateMcpServerResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type UpdateMcpServerResponse = UpdateMcpServerResponses[keyof UpdateMcpServerResponses];
 
 export type SetMcpServerEnabledData = {
-    body: EnabledPatch;
-    path: {
-        server_name: string;
-    };
-    query?: never;
-    url: '/api/v1/mcp/servers/{server_name}/enabled';
+  body: EnabledPatch;
+  path: {
+    server_name: string;
+  };
+  query?: never;
+  url: "/api/v1/mcp/servers/{server_name}/enabled";
 };
 
 export type SetMcpServerEnabledResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type SetMcpServerEnabledResponse = SetMcpServerEnabledResponses[keyof SetMcpServerEnabledResponses];
 
 export type TestMcpServerData = {
-    body?: {
-        mcp_server_config?: {
-            [key: string]: unknown;
-        };
-        [key: string]: unknown | {
-            [key: string]: unknown;
-        } | undefined;
+  body?: {
+    mcp_server_config?: {
+      [key: string]: unknown;
     };
-    path: {
-        server_name: string;
-    };
-    query?: never;
-    url: '/api/v1/mcp/servers/{server_name}/test';
+    [key: string]:
+      | unknown
+      | {
+          [key: string]: unknown;
+        }
+      | undefined;
+  };
+  path: {
+    server_name: string;
+  };
+  query?: never;
+  url: "/api/v1/mcp/servers/{server_name}/test";
 };
 
 export type TestMcpServerResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type TestMcpServerResponse = TestMcpServerResponses[keyof TestMcpServerResponses];
 
 export type SyncModelScopeMcpServersData = {
-    body?: ModelScopeSyncRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/mcp/providers/modelscope/sync';
+  body?: ModelScopeSyncRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/mcp/providers/modelscope/sync";
 };
 
 export type SyncModelScopeMcpServersResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
-export type SyncModelScopeMcpServersResponse = SyncModelScopeMcpServersResponses[keyof SyncModelScopeMcpServersResponses];
+export type SyncModelScopeMcpServersResponse =
+  SyncModelScopeMcpServersResponses[keyof SyncModelScopeMcpServersResponses];
 
 export type ListSkillsData = {
-    body?: never;
-    path?: never;
-    query?: {
-        enabled?: boolean;
-        source?: string;
-    };
-    url: '/api/v1/skills';
+  body?: never;
+  path?: never;
+  query?: {
+    enabled?: boolean;
+    source?: string;
+  };
+  url: "/api/v1/skills";
 };
 
 export type ListSkillsResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ListSkillsResponse = ListSkillsResponses[keyof ListSkillsResponses];
 
 export type UploadSkillData = {
-    body: SkillUploadRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/skills';
+  body: SkillUploadRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/skills";
 };
 
 export type UploadSkillResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type UploadSkillResponse = UploadSkillResponses[keyof UploadSkillResponses];
 
 export type UploadSkillsBatchData = {
-    body: {
-        files: Array<Blob | File>;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/v1/skills/batch';
+  body: {
+    files: Array<Blob | File>;
+  };
+  path?: never;
+  query?: never;
+  url: "/api/v1/skills/batch";
 };
 
 export type UploadSkillsBatchResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type UploadSkillsBatchResponse = UploadSkillsBatchResponses[keyof UploadSkillsBatchResponses];
 
 export type DeleteSkillByNameData = {
-    body?: never;
-    path?: never;
-    query: {
-        skill_name: string;
-    };
-    url: '/api/v1/skills/by-name';
+  body?: never;
+  path?: never;
+  query: {
+    skill_name: string;
+  };
+  url: "/api/v1/skills/by-name";
 };
 
 export type DeleteSkillByNameResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type DeleteSkillByNameResponse = DeleteSkillByNameResponses[keyof DeleteSkillByNameResponses];
 
 export type UpdateSkillByNameData = {
-    body: {
-        skill_name: string;
-        enabled?: boolean;
-        active?: boolean;
-        [key: string]: unknown | string | boolean | undefined;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/v1/skills/by-name';
+  body: {
+    skill_name: string;
+    enabled?: boolean;
+    active?: boolean;
+    [key: string]: unknown | string | boolean | undefined;
+  };
+  path?: never;
+  query?: never;
+  url: "/api/v1/skills/by-name";
 };
 
 export type UpdateSkillByNameResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type UpdateSkillByNameResponse = UpdateSkillByNameResponses[keyof UpdateSkillByNameResponses];
 
 export type DownloadSkillByNameData = {
-    body?: never;
-    path?: never;
-    query: {
-        skill_name: string;
-    };
-    url: '/api/v1/skills/archive';
+  body?: never;
+  path?: never;
+  query: {
+    skill_name: string;
+  };
+  url: "/api/v1/skills/archive";
 };
 
 export type DownloadSkillByNameResponses = {
-    /**
-     * Skill archive
-     */
-    200: Blob | File;
+  /**
+   * Skill archive
+   */
+  200: Blob | File;
 };
 
 export type DownloadSkillByNameResponse = DownloadSkillByNameResponses[keyof DownloadSkillByNameResponses];
 
 export type ListSkillFilesByNameData = {
-    body?: never;
-    path?: never;
-    query: {
-        skill_name: string;
-        path?: string;
-    };
-    url: '/api/v1/skills/files';
+  body?: never;
+  path?: never;
+  query: {
+    skill_name: string;
+    path?: string;
+  };
+  url: "/api/v1/skills/files";
 };
 
 export type ListSkillFilesByNameResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ListSkillFilesByNameResponse = ListSkillFilesByNameResponses[keyof ListSkillFilesByNameResponses];
 
 export type GetSkillFileByNameData = {
-    body?: never;
-    path?: never;
-    query: {
-        skill_name: string;
-        path: string;
-    };
-    url: '/api/v1/skills/file';
+  body?: never;
+  path?: never;
+  query: {
+    skill_name: string;
+    path: string;
+  };
+  url: "/api/v1/skills/file";
 };
 
 export type GetSkillFileByNameResponses = {
-    /**
-     * Text response
-     */
-    200: string;
+  /**
+   * Text response
+   */
+  200: string;
 };
 
 export type GetSkillFileByNameResponse = GetSkillFileByNameResponses[keyof GetSkillFileByNameResponses];
 
 export type UpdateSkillFileByNameData = {
-    body: {
-        skill_name: string;
-        path: string;
-        content: string;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/v1/skills/file';
+  body: {
+    skill_name: string;
+    path: string;
+    content: string;
+  };
+  path?: never;
+  query?: never;
+  url: "/api/v1/skills/file";
 };
 
 export type UpdateSkillFileByNameResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type UpdateSkillFileByNameResponse = UpdateSkillFileByNameResponses[keyof UpdateSkillFileByNameResponses];
 
 export type DeleteSkillData = {
-    body?: never;
-    path: {
-        skill_name: string;
-    };
-    query?: never;
-    url: '/api/v1/skills/{skill_name}';
+  body?: never;
+  path: {
+    skill_name: string;
+  };
+  query?: never;
+  url: "/api/v1/skills/{skill_name}";
 };
 
 export type DeleteSkillResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type DeleteSkillResponse = DeleteSkillResponses[keyof DeleteSkillResponses];
 
 export type UpdateSkillData = {
-    body: SkillPatchRequest;
-    path: {
-        skill_name: string;
-    };
-    query?: never;
-    url: '/api/v1/skills/{skill_name}';
+  body: SkillPatchRequest;
+  path: {
+    skill_name: string;
+  };
+  query?: never;
+  url: "/api/v1/skills/{skill_name}";
 };
 
 export type UpdateSkillResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type UpdateSkillResponse = UpdateSkillResponses[keyof UpdateSkillResponses];
 
 export type DownloadSkillData = {
-    body?: never;
-    path: {
-        skill_name: string;
-    };
-    query?: never;
-    url: '/api/v1/skills/{skill_name}/archive';
+  body?: never;
+  path: {
+    skill_name: string;
+  };
+  query?: never;
+  url: "/api/v1/skills/{skill_name}/archive";
 };
 
 export type DownloadSkillResponses = {
-    /**
-     * Skill archive
-     */
-    200: Blob | File;
+  /**
+   * Skill archive
+   */
+  200: Blob | File;
 };
 
 export type DownloadSkillResponse = DownloadSkillResponses[keyof DownloadSkillResponses];
 
 export type ListSkillFilesData = {
-    body?: never;
-    path: {
-        skill_name: string;
-    };
-    query?: {
-        path?: string;
-    };
-    url: '/api/v1/skills/{skill_name}/files';
+  body?: never;
+  path: {
+    skill_name: string;
+  };
+  query?: {
+    path?: string;
+  };
+  url: "/api/v1/skills/{skill_name}/files";
 };
 
 export type ListSkillFilesResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ListSkillFilesResponse = ListSkillFilesResponses[keyof ListSkillFilesResponses];
 
 export type GetSkillFileData = {
-    body?: never;
-    path: {
-        skill_name: string;
-        /**
-         * URL-encoded relative file path.
-         */
-        file_path: string;
-    };
-    query?: never;
-    url: '/api/v1/skills/{skill_name}/files/{file_path}';
+  body?: never;
+  path: {
+    skill_name: string;
+    /**
+     * URL-encoded relative file path.
+     */
+    file_path: string;
+  };
+  query?: never;
+  url: "/api/v1/skills/{skill_name}/files/{file_path}";
 };
 
 export type GetSkillFileResponses = {
-    /**
-     * Text response
-     */
-    200: string;
+  /**
+   * Text response
+   */
+  200: string;
 };
 
 export type GetSkillFileResponse = GetSkillFileResponses[keyof GetSkillFileResponses];
 
 export type UpdateSkillFileData = {
-    body: string;
-    path: {
-        skill_name: string;
-        /**
-         * URL-encoded relative file path.
-         */
-        file_path: string;
-    };
-    query?: never;
-    url: '/api/v1/skills/{skill_name}/files/{file_path}';
+  body: string;
+  path: {
+    skill_name: string;
+    /**
+     * URL-encoded relative file path.
+     */
+    file_path: string;
+  };
+  query?: never;
+  url: "/api/v1/skills/{skill_name}/files/{file_path}";
 };
 
 export type UpdateSkillFileResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type UpdateSkillFileResponse = UpdateSkillFileResponses[keyof UpdateSkillFileResponses];
 
 export type ListNeoSkillCandidatesData = {
-    body?: never;
-    path?: never;
-    query?: {
-        skill_key?: string;
-        status?: string;
-    };
-    url: '/api/v1/skills/neo/candidates';
+  body?: never;
+  path?: never;
+  query?: {
+    skill_key?: string;
+    status?: string;
+  };
+  url: "/api/v1/skills/neo/candidates";
 };
 
 export type ListNeoSkillCandidatesResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ListNeoSkillCandidatesResponse = ListNeoSkillCandidatesResponses[keyof ListNeoSkillCandidatesResponses];
 
 export type ListNeoSkillReleasesData = {
-    body?: never;
-    path?: never;
-    query?: {
-        skill_key?: string;
-        stage?: string;
-    };
-    url: '/api/v1/skills/neo/releases';
+  body?: never;
+  path?: never;
+  query?: {
+    skill_key?: string;
+    stage?: string;
+  };
+  url: "/api/v1/skills/neo/releases";
 };
 
 export type ListNeoSkillReleasesResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ListNeoSkillReleasesResponse = ListNeoSkillReleasesResponses[keyof ListNeoSkillReleasesResponses];
 
 export type GetNeoSkillPayloadData = {
-    body?: never;
-    path?: never;
-    query: {
-        payload_ref: string;
-    };
-    url: '/api/v1/skills/neo/payload';
+  body?: never;
+  path?: never;
+  query: {
+    payload_ref: string;
+  };
+  url: "/api/v1/skills/neo/payload";
 };
 
 export type GetNeoSkillPayloadResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type GetNeoSkillPayloadResponse = GetNeoSkillPayloadResponses[keyof GetNeoSkillPayloadResponses];
 
 export type EvaluateNeoSkillCandidateData = {
-    body: NeoCandidateActionRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/skills/neo/evaluate';
+  body: NeoCandidateActionRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/skills/neo/evaluate";
 };
 
 export type EvaluateNeoSkillCandidateResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
-export type EvaluateNeoSkillCandidateResponse = EvaluateNeoSkillCandidateResponses[keyof EvaluateNeoSkillCandidateResponses];
+export type EvaluateNeoSkillCandidateResponse =
+  EvaluateNeoSkillCandidateResponses[keyof EvaluateNeoSkillCandidateResponses];
 
 export type PromoteNeoSkillCandidateData = {
-    body: NeoCandidateActionRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/skills/neo/promote';
+  body: NeoCandidateActionRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/skills/neo/promote";
 };
 
 export type PromoteNeoSkillCandidateResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
-export type PromoteNeoSkillCandidateResponse = PromoteNeoSkillCandidateResponses[keyof PromoteNeoSkillCandidateResponses];
+export type PromoteNeoSkillCandidateResponse =
+  PromoteNeoSkillCandidateResponses[keyof PromoteNeoSkillCandidateResponses];
 
 export type RollbackNeoSkillReleaseData = {
-    body: NeoReleaseActionRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/skills/neo/rollback';
+  body: NeoReleaseActionRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/skills/neo/rollback";
 };
 
 export type RollbackNeoSkillReleaseResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type RollbackNeoSkillReleaseResponse = RollbackNeoSkillReleaseResponses[keyof RollbackNeoSkillReleaseResponses];
 
 export type SyncNeoSkillReleaseData = {
-    body: NeoReleaseActionRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/skills/neo/sync';
+  body: NeoReleaseActionRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/skills/neo/sync";
 };
 
 export type SyncNeoSkillReleaseResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type SyncNeoSkillReleaseResponse = SyncNeoSkillReleaseResponses[keyof SyncNeoSkillReleaseResponses];
 
 export type DeleteNeoSkillCandidateData = {
-    body: NeoCandidateActionRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/skills/neo/candidates/delete';
+  body: NeoCandidateActionRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/skills/neo/candidates/delete";
 };
 
 export type DeleteNeoSkillCandidateResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type DeleteNeoSkillCandidateResponse = DeleteNeoSkillCandidateResponses[keyof DeleteNeoSkillCandidateResponses];
 
 export type DeleteNeoSkillReleaseData = {
-    body: NeoReleaseActionRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/skills/neo/releases/delete';
+  body: NeoReleaseActionRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/skills/neo/releases/delete";
 };
 
 export type DeleteNeoSkillReleaseResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type DeleteNeoSkillReleaseResponse = DeleteNeoSkillReleaseResponses[keyof DeleteNeoSkillReleaseResponses];
 
 export type ListKnowledgeBasesData = {
-    body?: never;
-    path?: never;
-    query?: {
-        page?: number;
-        page_size?: number;
-        refresh_stats?: boolean;
-    };
-    url: '/api/v1/knowledge-bases';
+  body?: never;
+  path?: never;
+  query?: {
+    page?: number;
+    page_size?: number;
+    refresh_stats?: boolean;
+  };
+  url: "/api/v1/knowledge-bases";
 };
 
 export type ListKnowledgeBasesResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ListKnowledgeBasesResponse = ListKnowledgeBasesResponses[keyof ListKnowledgeBasesResponses];
 
 export type CreateKnowledgeBaseData = {
-    body: KnowledgeBaseCreateRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/knowledge-bases';
+  body: KnowledgeBaseCreateRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/knowledge-bases";
 };
 
 export type CreateKnowledgeBaseResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type CreateKnowledgeBaseResponse = CreateKnowledgeBaseResponses[keyof CreateKnowledgeBaseResponses];
 
 export type DeleteKnowledgeBaseData = {
-    body?: never;
-    path: {
-        kb_id: string;
-    };
-    query?: never;
-    url: '/api/v1/knowledge-bases/{kb_id}';
+  body?: never;
+  path: {
+    kb_id: string;
+  };
+  query?: never;
+  url: "/api/v1/knowledge-bases/{kb_id}";
 };
 
 export type DeleteKnowledgeBaseResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type DeleteKnowledgeBaseResponse = DeleteKnowledgeBaseResponses[keyof DeleteKnowledgeBaseResponses];
 
 export type GetKnowledgeBaseData = {
-    body?: never;
-    path: {
-        kb_id: string;
-    };
-    query?: never;
-    url: '/api/v1/knowledge-bases/{kb_id}';
+  body?: never;
+  path: {
+    kb_id: string;
+  };
+  query?: never;
+  url: "/api/v1/knowledge-bases/{kb_id}";
 };
 
 export type GetKnowledgeBaseResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type GetKnowledgeBaseResponse = GetKnowledgeBaseResponses[keyof GetKnowledgeBaseResponses];
 
 export type UpdateKnowledgeBaseData = {
-    body: KnowledgeBaseRequest;
-    path: {
-        kb_id: string;
-    };
-    query?: never;
-    url: '/api/v1/knowledge-bases/{kb_id}';
+  body: KnowledgeBaseRequest;
+  path: {
+    kb_id: string;
+  };
+  query?: never;
+  url: "/api/v1/knowledge-bases/{kb_id}";
 };
 
 export type UpdateKnowledgeBaseResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type UpdateKnowledgeBaseResponse = UpdateKnowledgeBaseResponses[keyof UpdateKnowledgeBaseResponses];
 
 export type GetKnowledgeBaseStatsData = {
-    body?: never;
-    path: {
-        kb_id: string;
-    };
-    query?: never;
-    url: '/api/v1/knowledge-bases/{kb_id}/stats';
+  body?: never;
+  path: {
+    kb_id: string;
+  };
+  query?: never;
+  url: "/api/v1/knowledge-bases/{kb_id}/stats";
 };
 
 export type GetKnowledgeBaseStatsResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type GetKnowledgeBaseStatsResponse = GetKnowledgeBaseStatsResponses[keyof GetKnowledgeBaseStatsResponses];
 
 export type ListKnowledgeDocumentsData = {
-    body?: never;
-    path: {
-        kb_id: string;
-    };
-    query?: {
-        page?: number;
-        page_size?: number;
-        /**
-         * Filter documents by name (case-insensitive partial match).
-         */
-        search?: string;
-    };
-    url: '/api/v1/knowledge-bases/{kb_id}/documents';
+  body?: never;
+  path: {
+    kb_id: string;
+  };
+  query?: {
+    page?: number;
+    page_size?: number;
+    /**
+     * Filter documents by name (case-insensitive partial match).
+     */
+    search?: string;
+  };
+  url: "/api/v1/knowledge-bases/{kb_id}/documents";
 };
 
 export type ListKnowledgeDocumentsResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ListKnowledgeDocumentsResponse = ListKnowledgeDocumentsResponses[keyof ListKnowledgeDocumentsResponses];
 
 export type UploadKnowledgeDocumentData = {
-    body: KnowledgeDocumentUploadRequest;
-    path: {
-        kb_id: string;
-    };
-    query?: never;
-    url: '/api/v1/knowledge-bases/{kb_id}/documents';
+  body: KnowledgeDocumentUploadRequest;
+  path: {
+    kb_id: string;
+  };
+  query?: never;
+  url: "/api/v1/knowledge-bases/{kb_id}/documents";
 };
 
 export type UploadKnowledgeDocumentResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type UploadKnowledgeDocumentResponse = UploadKnowledgeDocumentResponses[keyof UploadKnowledgeDocumentResponses];
 
 export type ImportKnowledgeDocumentsData = {
-    body: KnowledgeDocumentImportRequest;
-    path: {
-        kb_id: string;
-    };
-    query?: never;
-    url: '/api/v1/knowledge-bases/{kb_id}/documents/import';
+  body: KnowledgeDocumentImportRequest;
+  path: {
+    kb_id: string;
+  };
+  query?: never;
+  url: "/api/v1/knowledge-bases/{kb_id}/documents/import";
 };
 
 export type ImportKnowledgeDocumentsResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
-export type ImportKnowledgeDocumentsResponse = ImportKnowledgeDocumentsResponses[keyof ImportKnowledgeDocumentsResponses];
+export type ImportKnowledgeDocumentsResponse =
+  ImportKnowledgeDocumentsResponses[keyof ImportKnowledgeDocumentsResponses];
 
 export type ImportKnowledgeDocumentFromUrlData = {
-    body: KnowledgeDocumentUrlImportRequest;
-    path: {
-        kb_id: string;
-    };
-    query?: never;
-    url: '/api/v1/knowledge-bases/{kb_id}/documents/import-url';
+  body: KnowledgeDocumentUrlImportRequest;
+  path: {
+    kb_id: string;
+  };
+  query?: never;
+  url: "/api/v1/knowledge-bases/{kb_id}/documents/import-url";
 };
 
 export type ImportKnowledgeDocumentFromUrlResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
-export type ImportKnowledgeDocumentFromUrlResponse = ImportKnowledgeDocumentFromUrlResponses[keyof ImportKnowledgeDocumentFromUrlResponses];
+export type ImportKnowledgeDocumentFromUrlResponse =
+  ImportKnowledgeDocumentFromUrlResponses[keyof ImportKnowledgeDocumentFromUrlResponses];
 
 export type DeleteKnowledgeDocumentData = {
-    body?: never;
-    path: {
-        kb_id: string;
-        document_id: string;
-    };
-    query?: never;
-    url: '/api/v1/knowledge-bases/{kb_id}/documents/{document_id}';
+  body?: never;
+  path: {
+    kb_id: string;
+    document_id: string;
+  };
+  query?: never;
+  url: "/api/v1/knowledge-bases/{kb_id}/documents/{document_id}";
 };
 
 export type DeleteKnowledgeDocumentResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type DeleteKnowledgeDocumentResponse = DeleteKnowledgeDocumentResponses[keyof DeleteKnowledgeDocumentResponses];
 
 export type GetKnowledgeDocumentData = {
-    body?: never;
-    path: {
-        kb_id: string;
-        document_id: string;
-    };
-    query?: never;
-    url: '/api/v1/knowledge-bases/{kb_id}/documents/{document_id}';
+  body?: never;
+  path: {
+    kb_id: string;
+    document_id: string;
+  };
+  query?: never;
+  url: "/api/v1/knowledge-bases/{kb_id}/documents/{document_id}";
 };
 
 export type GetKnowledgeDocumentResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type GetKnowledgeDocumentResponse = GetKnowledgeDocumentResponses[keyof GetKnowledgeDocumentResponses];
 
 export type ListKnowledgeChunksData = {
-    body?: never;
-    path: {
-        kb_id: string;
-    };
-    query?: {
-        document_id?: string;
-        page?: number;
-        page_size?: number;
-    };
-    url: '/api/v1/knowledge-bases/{kb_id}/chunks';
+  body?: never;
+  path: {
+    kb_id: string;
+  };
+  query?: {
+    document_id?: string;
+    page?: number;
+    page_size?: number;
+  };
+  url: "/api/v1/knowledge-bases/{kb_id}/chunks";
 };
 
 export type ListKnowledgeChunksResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ListKnowledgeChunksResponse = ListKnowledgeChunksResponses[keyof ListKnowledgeChunksResponses];
 
 export type DeleteKnowledgeChunkData = {
-    body?: never;
-    path: {
-        kb_id: string;
-        chunk_id: string;
-    };
-    query: {
-        document_id: string;
-    };
-    url: '/api/v1/knowledge-bases/{kb_id}/chunks/{chunk_id}';
+  body?: never;
+  path: {
+    kb_id: string;
+    chunk_id: string;
+  };
+  query: {
+    document_id: string;
+  };
+  url: "/api/v1/knowledge-bases/{kb_id}/chunks/{chunk_id}";
 };
 
 export type DeleteKnowledgeChunkResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type DeleteKnowledgeChunkResponse = DeleteKnowledgeChunkResponses[keyof DeleteKnowledgeChunkResponses];
 
 export type RetrieveKnowledgeBaseData = {
-    body: KnowledgeRetrieveRequest;
-    path: {
-        kb_id: string;
-    };
-    query?: never;
-    url: '/api/v1/knowledge-bases/{kb_id}/retrieve';
+  body: KnowledgeRetrieveRequest;
+  path: {
+    kb_id: string;
+  };
+  query?: never;
+  url: "/api/v1/knowledge-bases/{kb_id}/retrieve";
 };
 
 export type RetrieveKnowledgeBaseResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type RetrieveKnowledgeBaseResponse = RetrieveKnowledgeBaseResponses[keyof RetrieveKnowledgeBaseResponses];
 
 export type GetKnowledgeTaskData = {
-    body?: never;
-    path: {
-        task_id: string;
-    };
-    query?: never;
-    url: '/api/v1/knowledge-bases/tasks/{task_id}';
+  body?: never;
+  path: {
+    task_id: string;
+  };
+  query?: never;
+  url: "/api/v1/knowledge-bases/tasks/{task_id}";
 };
 
 export type GetKnowledgeTaskResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type GetKnowledgeTaskResponse = GetKnowledgeTaskResponses[keyof GetKnowledgeTaskResponses];
 
 export type GetPersonaTreeData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/v1/personas/tree';
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/api/v1/personas/tree";
 };
 
 export type GetPersonaTreeResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type GetPersonaTreeResponse = GetPersonaTreeResponses[keyof GetPersonaTreeResponses];
 
 export type ListPersonasData = {
-    body?: never;
-    path?: never;
-    query?: {
-        folder_id?: string;
-    };
-    url: '/api/v1/personas';
+  body?: never;
+  path?: never;
+  query?: {
+    folder_id?: string;
+  };
+  url: "/api/v1/personas";
 };
 
 export type ListPersonasResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ListPersonasResponse = ListPersonasResponses[keyof ListPersonasResponses];
 
 export type CreatePersonaData = {
-    body: PersonaRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/personas';
+  body: PersonaRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/personas";
 };
 
 export type CreatePersonaResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type CreatePersonaResponse = CreatePersonaResponses[keyof CreatePersonaResponses];
 
 export type DeletePersonaByIdData = {
-    body?: never;
-    path?: never;
-    query: {
-        persona_id: string;
-    };
-    url: '/api/v1/personas/by-id';
+  body?: never;
+  path?: never;
+  query: {
+    persona_id: string;
+  };
+  url: "/api/v1/personas/by-id";
 };
 
 export type DeletePersonaByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type DeletePersonaByIdResponse = DeletePersonaByIdResponses[keyof DeletePersonaByIdResponses];
 
 export type GetPersonaByIdData = {
-    body?: never;
-    path?: never;
-    query: {
-        persona_id: string;
-    };
-    url: '/api/v1/personas/by-id';
+  body?: never;
+  path?: never;
+  query: {
+    persona_id: string;
+  };
+  url: "/api/v1/personas/by-id";
 };
 
 export type GetPersonaByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type GetPersonaByIdResponse = GetPersonaByIdResponses[keyof GetPersonaByIdResponses];
 
 export type UpdatePersonaByIdData = {
-    body: {
-        persona_id: string;
-        [key: string]: unknown | string;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/v1/personas/by-id';
+  body: {
+    persona_id: string;
+    [key: string]: unknown | string;
+  };
+  path?: never;
+  query?: never;
+  url: "/api/v1/personas/by-id";
 };
 
 export type UpdatePersonaByIdResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type UpdatePersonaByIdResponse = UpdatePersonaByIdResponses[keyof UpdatePersonaByIdResponses];
 
 export type DeletePersonaData = {
-    body?: never;
-    path: {
-        persona_id: string;
-    };
-    query?: never;
-    url: '/api/v1/personas/{persona_id}';
+  body?: never;
+  path: {
+    persona_id: string;
+  };
+  query?: never;
+  url: "/api/v1/personas/{persona_id}";
 };
 
 export type DeletePersonaResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type DeletePersonaResponse = DeletePersonaResponses[keyof DeletePersonaResponses];
 
 export type GetPersonaData = {
-    body?: never;
-    path: {
-        persona_id: string;
-    };
-    query?: never;
-    url: '/api/v1/personas/{persona_id}';
+  body?: never;
+  path: {
+    persona_id: string;
+  };
+  query?: never;
+  url: "/api/v1/personas/{persona_id}";
 };
 
 export type GetPersonaResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type GetPersonaResponse = GetPersonaResponses[keyof GetPersonaResponses];
 
 export type UpdatePersonaData = {
-    body: PersonaRequest;
-    path: {
-        persona_id: string;
-    };
-    query?: never;
-    url: '/api/v1/personas/{persona_id}';
+  body: PersonaRequest;
+  path: {
+    persona_id: string;
+  };
+  query?: never;
+  url: "/api/v1/personas/{persona_id}";
 };
 
 export type UpdatePersonaResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type UpdatePersonaResponse = UpdatePersonaResponses[keyof UpdatePersonaResponses];
 
 export type ListPersonaFoldersData = {
-    body?: never;
-    path?: never;
-    query?: {
-        parent_id?: string;
-    };
-    url: '/api/v1/persona-folders';
+  body?: never;
+  path?: never;
+  query?: {
+    parent_id?: string;
+  };
+  url: "/api/v1/persona-folders";
 };
 
 export type ListPersonaFoldersResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ListPersonaFoldersResponse = ListPersonaFoldersResponses[keyof ListPersonaFoldersResponses];
 
 export type CreatePersonaFolderData = {
-    body: PersonaFolderRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/persona-folders';
+  body: PersonaFolderRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/persona-folders";
 };
 
 export type CreatePersonaFolderResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type CreatePersonaFolderResponse = CreatePersonaFolderResponses[keyof CreatePersonaFolderResponses];
 
 export type DeletePersonaFolderData = {
-    body?: never;
-    path: {
-        folder_id: string;
-    };
-    query?: never;
-    url: '/api/v1/persona-folders/{folder_id}';
+  body?: never;
+  path: {
+    folder_id: string;
+  };
+  query?: never;
+  url: "/api/v1/persona-folders/{folder_id}";
 };
 
 export type DeletePersonaFolderResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type DeletePersonaFolderResponse = DeletePersonaFolderResponses[keyof DeletePersonaFolderResponses];
 
 export type UpdatePersonaFolderData = {
-    body: PersonaFolderRequest;
-    path: {
-        folder_id: string;
-    };
-    query?: never;
-    url: '/api/v1/persona-folders/{folder_id}';
+  body: PersonaFolderRequest;
+  path: {
+    folder_id: string;
+  };
+  query?: never;
+  url: "/api/v1/persona-folders/{folder_id}";
 };
 
 export type UpdatePersonaFolderResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type UpdatePersonaFolderResponse = UpdatePersonaFolderResponses[keyof UpdatePersonaFolderResponses];
 
 export type MovePersonaItemData = {
-    body: PersonaMoveRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/personas/move';
+  body: PersonaMoveRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/personas/move";
 };
 
 export type MovePersonaItemResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type MovePersonaItemResponse = MovePersonaItemResponses[keyof MovePersonaItemResponses];
 
 export type ReorderPersonaItemsData = {
-    body: ReorderRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/personas/reorder';
+  body: ReorderRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/personas/reorder";
 };
 
 export type ReorderPersonaItemsResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ReorderPersonaItemsResponse = ReorderPersonaItemsResponses[keyof ReorderPersonaItemsResponses];
 
 export type ListSessionsData = {
-    body?: never;
-    path?: never;
-    query?: {
-        page?: number;
-        page_size?: number;
-        search?: string;
-        platform?: string;
-        message_type?: 'all' | 'group' | 'private';
-    };
-    url: '/api/v1/sessions';
+  body?: never;
+  path?: never;
+  query?: {
+    page?: number;
+    page_size?: number;
+    search?: string;
+    platform?: string;
+    message_type?: "all" | "group" | "private";
+  };
+  url: "/api/v1/sessions";
 };
 
 export type ListSessionsResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ListSessionsResponse = ListSessionsResponses[keyof ListSessionsResponses];
 
 export type ListActiveUmosData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/v1/sessions/active-umos';
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/api/v1/sessions/active-umos";
 };
 
 export type ListActiveUmosResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ListActiveUmosResponse = ListActiveUmosResponses[keyof ListActiveUmosResponses];
 
 export type ListSessionRulesData = {
-    body?: never;
-    path?: never;
-    query?: {
-        page?: number;
-        page_size?: number;
-        search?: string;
-    };
-    url: '/api/v1/sessions/rules';
+  body?: never;
+  path?: never;
+  query?: {
+    page?: number;
+    page_size?: number;
+    search?: string;
+  };
+  url: "/api/v1/sessions/rules";
 };
 
 export type ListSessionRulesResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ListSessionRulesResponse = ListSessionRulesResponses[keyof ListSessionRulesResponses];
 
 export type UpsertSessionRuleData = {
-    body: SessionRuleRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/sessions/rules';
+  body: SessionRuleRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/sessions/rules";
 };
 
 export type UpsertSessionRuleResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type UpsertSessionRuleResponse = UpsertSessionRuleResponses[keyof UpsertSessionRuleResponses];
 
 export type DeleteSessionRulesData = {
-    body: UmoListRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/sessions/rules/delete';
+  body: UmoListRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/sessions/rules/delete";
 };
 
 export type DeleteSessionRulesResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type DeleteSessionRulesResponse = DeleteSessionRulesResponses[keyof DeleteSessionRulesResponses];
 
 export type BatchUpdateSessionProviderData = {
-    body: BatchSessionProviderRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/sessions/provider';
+  body: BatchSessionProviderRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/sessions/provider";
 };
 
 export type BatchUpdateSessionProviderResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
-export type BatchUpdateSessionProviderResponse = BatchUpdateSessionProviderResponses[keyof BatchUpdateSessionProviderResponses];
+export type BatchUpdateSessionProviderResponse =
+  BatchUpdateSessionProviderResponses[keyof BatchUpdateSessionProviderResponses];
 
 export type BatchUpdateSessionServiceData = {
-    body: BatchSessionServiceRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/sessions/service';
+  body: BatchSessionServiceRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/sessions/service";
 };
 
 export type BatchUpdateSessionServiceResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
-export type BatchUpdateSessionServiceResponse = BatchUpdateSessionServiceResponses[keyof BatchUpdateSessionServiceResponses];
+export type BatchUpdateSessionServiceResponse =
+  BatchUpdateSessionServiceResponses[keyof BatchUpdateSessionServiceResponses];
 
 export type ListSessionGroupsData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/v1/session-groups';
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/api/v1/session-groups";
 };
 
 export type ListSessionGroupsResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ListSessionGroupsResponse = ListSessionGroupsResponses[keyof ListSessionGroupsResponses];
 
 export type CreateSessionGroupData = {
-    body: SessionGroupRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/session-groups';
+  body: SessionGroupRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/session-groups";
 };
 
 export type CreateSessionGroupResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type CreateSessionGroupResponse = CreateSessionGroupResponses[keyof CreateSessionGroupResponses];
 
 export type DeleteSessionGroupData = {
-    body?: never;
-    path: {
-        group_id: string;
-    };
-    query?: never;
-    url: '/api/v1/session-groups/{group_id}';
+  body?: never;
+  path: {
+    group_id: string;
+  };
+  query?: never;
+  url: "/api/v1/session-groups/{group_id}";
 };
 
 export type DeleteSessionGroupResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type DeleteSessionGroupResponse = DeleteSessionGroupResponses[keyof DeleteSessionGroupResponses];
 
 export type UpdateSessionGroupData = {
-    body: SessionGroupRequest;
-    path: {
-        group_id: string;
-    };
-    query?: never;
-    url: '/api/v1/session-groups/{group_id}';
+  body: SessionGroupRequest;
+  path: {
+    group_id: string;
+  };
+  query?: never;
+  url: "/api/v1/session-groups/{group_id}";
 };
 
 export type UpdateSessionGroupResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type UpdateSessionGroupResponse = UpdateSessionGroupResponses[keyof UpdateSessionGroupResponses];
 
 export type ListConversationsData = {
-    body?: never;
-    path?: never;
-    query?: {
-        page?: number;
-        page_size?: number;
-        platform_id?: string;
-        user_id?: string;
-        search?: string;
-        /**
-         * Comma-separated platform IDs.
-         */
-        platforms?: string;
-        /**
-         * Comma-separated message types.
-         */
-        message_types?: string;
-        /**
-         * Comma-separated user IDs to exclude.
-         */
-        exclude_ids?: string;
-        /**
-         * Comma-separated platforms to exclude.
-         */
-        exclude_platforms?: string;
-        /**
-         * Match conversation titles or message content.
-         */
-        keyword?: string;
-        /**
-         * Match the unified message origin.
-         */
-        umo?: string;
-        sort_by?: 'created_at' | 'updated_at';
-        sort_order?: 'asc' | 'desc';
-        /**
-         * Paginate by UMO and return all conversation summaries for each selected session.
-         */
-        group_by_session?: boolean;
-        /**
-         * Include full message history in each conversation.
-         */
-        include_history?: boolean;
-    };
-    url: '/api/v1/conversations';
+  body?: never;
+  path?: never;
+  query?: {
+    page?: number;
+    page_size?: number;
+    platform_id?: string;
+    user_id?: string;
+    search?: string;
+    /**
+     * Comma-separated platform IDs.
+     */
+    platforms?: string;
+    /**
+     * Comma-separated message types.
+     */
+    message_types?: string;
+    /**
+     * Comma-separated user IDs to exclude.
+     */
+    exclude_ids?: string;
+    /**
+     * Comma-separated platforms to exclude.
+     */
+    exclude_platforms?: string;
+    /**
+     * Match conversation titles or message content.
+     */
+    keyword?: string;
+    /**
+     * Match the unified message origin.
+     */
+    umo?: string;
+    sort_by?: "created_at" | "updated_at";
+    sort_order?: "asc" | "desc";
+    /**
+     * Paginate by UMO and return all conversation summaries for each selected session.
+     */
+    group_by_session?: boolean;
+    /**
+     * Include full message history in each conversation.
+     */
+    include_history?: boolean;
+  };
+  url: "/api/v1/conversations";
 };
 
 export type ListConversationsResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ListConversationsResponse = ListConversationsResponses[keyof ListConversationsResponses];
 
 export type GetConversationFilterOptionsData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/v1/conversations/filter-options';
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/api/v1/conversations/filter-options";
 };
 
 export type GetConversationFilterOptionsResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
-export type GetConversationFilterOptionsResponse = GetConversationFilterOptionsResponses[keyof GetConversationFilterOptionsResponses];
+export type GetConversationFilterOptionsResponse =
+  GetConversationFilterOptionsResponses[keyof GetConversationFilterOptionsResponses];
 
 export type BatchDeleteConversationsData = {
-    body: ConversationBatchDeleteRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/conversations/batch-delete';
+  body: ConversationBatchDeleteRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/conversations/batch-delete";
 };
 
 export type BatchDeleteConversationsResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
-export type BatchDeleteConversationsResponse = BatchDeleteConversationsResponses[keyof BatchDeleteConversationsResponses];
+export type BatchDeleteConversationsResponse =
+  BatchDeleteConversationsResponses[keyof BatchDeleteConversationsResponses];
 
 export type DeleteConversationData = {
-    body?: never;
-    path: {
-        conversation_id: string;
-    };
-    query: {
-        user_id: string;
-    };
-    url: '/api/v1/conversations/{conversation_id}';
+  body?: never;
+  path: {
+    conversation_id: string;
+  };
+  query: {
+    user_id: string;
+  };
+  url: "/api/v1/conversations/{conversation_id}";
 };
 
 export type DeleteConversationResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type DeleteConversationResponse = DeleteConversationResponses[keyof DeleteConversationResponses];
 
 export type GetConversationData = {
-    body?: never;
-    path: {
-        conversation_id: string;
-    };
-    query: {
-        user_id: string;
-    };
-    url: '/api/v1/conversations/{conversation_id}';
+  body?: never;
+  path: {
+    conversation_id: string;
+  };
+  query: {
+    user_id: string;
+  };
+  url: "/api/v1/conversations/{conversation_id}";
 };
 
 export type GetConversationResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type GetConversationResponse = GetConversationResponses[keyof GetConversationResponses];
 
 export type UpdateConversationData = {
-    body: ConversationPatchRequest;
-    path: {
-        conversation_id: string;
-    };
-    query: {
-        user_id: string;
-    };
-    url: '/api/v1/conversations/{conversation_id}';
+  body: ConversationPatchRequest;
+  path: {
+    conversation_id: string;
+  };
+  query: {
+    user_id: string;
+  };
+  url: "/api/v1/conversations/{conversation_id}";
 };
 
 export type UpdateConversationResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type UpdateConversationResponse = UpdateConversationResponses[keyof UpdateConversationResponses];
 
 export type ReplaceConversationMessagesData = {
-    body: ConversationMessagesReplaceRequest;
-    path: {
-        conversation_id: string;
-    };
-    query: {
-        user_id: string;
-    };
-    url: '/api/v1/conversations/{conversation_id}/messages';
+  body: ConversationMessagesReplaceRequest;
+  path: {
+    conversation_id: string;
+  };
+  query: {
+    user_id: string;
+  };
+  url: "/api/v1/conversations/{conversation_id}/messages";
 };
 
 export type ReplaceConversationMessagesResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
-export type ReplaceConversationMessagesResponse = ReplaceConversationMessagesResponses[keyof ReplaceConversationMessagesResponses];
+export type ReplaceConversationMessagesResponse =
+  ReplaceConversationMessagesResponses[keyof ReplaceConversationMessagesResponses];
 
 export type ExportConversationsData = {
-    body: ConversationExportRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/conversations/export';
+  body: ConversationExportRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/conversations/export";
 };
 
 export type ExportConversationsResponses = {
-    /**
-     * Exported conversation data
-     */
-    200: unknown;
+  /**
+   * Exported conversation data
+   */
+  200: unknown;
 };
 
 export type GetStatsData = {
-    body?: never;
-    path?: never;
-    query?: {
-        offset_sec?: number;
-    };
-    url: '/api/v1/stats';
+  body?: never;
+  path?: never;
+  query?: {
+    offset_sec?: number;
+  };
+  url: "/api/v1/stats";
 };
 
 export type GetStatsResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type GetStatsResponse = GetStatsResponses[keyof GetStatsResponses];
 
 export type GetProviderTokenStatsData = {
-    body?: never;
-    path?: never;
-    query?: {
-        days?: number;
-    };
-    url: '/api/v1/stats/provider-tokens';
+  body?: never;
+  path?: never;
+  query?: {
+    days?: number;
+  };
+  url: "/api/v1/stats/provider-tokens";
 };
 
 export type GetProviderTokenStatsResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type GetProviderTokenStatsResponse = GetProviderTokenStatsResponses[keyof GetProviderTokenStatsResponses];
 
 export type GetVersionData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/v1/stats/version';
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/api/v1/stats/version";
 };
 
 export type GetVersionResponses = {
-    /**
-     * Version information with a backend runtime snapshot
-     */
-    200: SuccessEnvelope & {
-        data?: {
-            runtime: RuntimeInfo;
-        };
+  /**
+   * Version information with a backend runtime snapshot
+   */
+  200: SuccessEnvelope & {
+    data?: {
+      runtime: RuntimeInfo;
     };
+  };
 };
 
 export type GetVersionResponse = GetVersionResponses[keyof GetVersionResponses];
 
 export type GetPublicVersionsData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/v1/stats/versions';
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/api/v1/stats/versions";
 };
 
 export type GetPublicVersionsResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type GetPublicVersionsResponse = GetPublicVersionsResponses[keyof GetPublicVersionsResponses];
 
 export type GetFirstNoticeData = {
-    body?: never;
-    path?: never;
-    query?: {
-        locale?: string;
-    };
-    url: '/api/v1/stats/first-notice';
+  body?: never;
+  path?: never;
+  query?: {
+    locale?: string;
+  };
+  url: "/api/v1/stats/first-notice";
 };
 
 export type GetFirstNoticeResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type GetFirstNoticeResponse = GetFirstNoticeResponses[keyof GetFirstNoticeResponses];
 
 export type TestGhproxyConnectionData = {
-    body: GhproxyTestRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/stats/ghproxy/test';
+  body: GhproxyTestRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/stats/ghproxy/test";
 };
 
 export type TestGhproxyConnectionResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type TestGhproxyConnectionResponse = TestGhproxyConnectionResponses[keyof TestGhproxyConnectionResponses];
 
 export type ListChangelogVersionsData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/v1/changelogs';
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/api/v1/changelogs";
 };
 
 export type ListChangelogVersionsResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ListChangelogVersionsResponse = ListChangelogVersionsResponses[keyof ListChangelogVersionsResponses];
 
 export type GetChangelogData = {
-    body?: never;
-    path: {
-        version: string;
-    };
-    query?: never;
-    url: '/api/v1/changelogs/{version}';
+  body?: never;
+  path: {
+    version: string;
+  };
+  query?: never;
+  url: "/api/v1/changelogs/{version}";
 };
 
 export type GetChangelogErrors = {
-    /**
-     * Standard AstrBot error response
-     */
-    404: ErrorEnvelope;
+  /**
+   * Standard AstrBot error response
+   */
+  404: ErrorEnvelope;
 };
 
 export type GetChangelogError = GetChangelogErrors[keyof GetChangelogErrors];
 
 export type GetChangelogResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type GetChangelogResponse = GetChangelogResponses[keyof GetChangelogResponses];
 
 export type GetStartTimeData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/v1/stats/start-time';
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/api/v1/stats/start-time";
 };
 
 export type GetStartTimeResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type GetStartTimeResponse = GetStartTimeResponses[keyof GetStartTimeResponses];
 
 export type GetStorageStatusData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/v1/stats/storage';
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/api/v1/stats/storage";
 };
 
 export type GetStorageStatusResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type GetStorageStatusResponse = GetStorageStatusResponses[keyof GetStorageStatusResponses];
 
 export type CleanupStorageData = {
-    body?: DynamicConfig;
-    path?: never;
-    query?: never;
-    url: '/api/v1/stats/storage/cleanup';
+  body?: DynamicConfig;
+  path?: never;
+  query?: never;
+  url: "/api/v1/stats/storage/cleanup";
 };
 
 export type CleanupStorageResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type CleanupStorageResponse = CleanupStorageResponses[keyof CleanupStorageResponses];
 
 export type RestartCoreData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/v1/system/restart';
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/api/v1/system/restart";
 };
 
 export type RestartCoreResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type RestartCoreResponse = RestartCoreResponses[keyof RestartCoreResponses];
 
 export type ListBackupsData = {
-    body?: never;
-    path?: never;
-    query?: {
-        page?: number;
-        page_size?: number;
-    };
-    url: '/api/v1/backups';
+  body?: never;
+  path?: never;
+  query?: {
+    page?: number;
+    page_size?: number;
+  };
+  url: "/api/v1/backups";
 };
 
 export type ListBackupsResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ListBackupsResponse = ListBackupsResponses[keyof ListBackupsResponses];
 
 export type CreateBackupData = {
-    body?: BackupExportRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/backups';
+  body?: BackupExportRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/backups";
 };
 
 export type CreateBackupResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type CreateBackupResponse = CreateBackupResponses[keyof CreateBackupResponses];
 
 export type UploadBackupData = {
-    body: BackupUploadRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/backups/upload';
+  body: BackupUploadRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/backups/upload";
 };
 
 export type UploadBackupResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type UploadBackupResponse = UploadBackupResponses[keyof UploadBackupResponses];
 
 export type InitBackupUploadData = {
-    body: BackupUploadInitRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/backups/upload/init';
+  body: BackupUploadInitRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/backups/upload/init";
 };
 
 export type InitBackupUploadResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type InitBackupUploadResponse = InitBackupUploadResponses[keyof InitBackupUploadResponses];
 
 export type UploadBackupChunkData = {
-    body: BackupChunkUploadRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/backups/upload/chunk';
+  body: BackupChunkUploadRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/backups/upload/chunk";
 };
 
 export type UploadBackupChunkResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type UploadBackupChunkResponse = UploadBackupChunkResponses[keyof UploadBackupChunkResponses];
 
 export type CompleteBackupUploadData = {
-    body: BackupUploadSessionRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/backups/upload/complete';
+  body: BackupUploadSessionRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/backups/upload/complete";
 };
 
 export type CompleteBackupUploadResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type CompleteBackupUploadResponse = CompleteBackupUploadResponses[keyof CompleteBackupUploadResponses];
 
 export type AbortBackupUploadData = {
-    body: BackupUploadSessionRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/backups/upload/abort';
+  body: BackupUploadSessionRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/backups/upload/abort";
 };
 
 export type AbortBackupUploadResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type AbortBackupUploadResponse = AbortBackupUploadResponses[keyof AbortBackupUploadResponses];
 
 export type StatusBackupUploadData = {
-    body: BackupUploadSessionRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/backups/upload/status';
+  body: BackupUploadSessionRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/backups/upload/status";
 };
 
 export type StatusBackupUploadResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type StatusBackupUploadResponse = StatusBackupUploadResponses[keyof StatusBackupUploadResponses];
 
 export type GetBackupProgressData = {
-    body?: never;
-    path: {
-        task_id: string;
-    };
-    query?: never;
-    url: '/api/v1/backups/tasks/{task_id}';
+  body?: never;
+  path: {
+    task_id: string;
+  };
+  query?: never;
+  url: "/api/v1/backups/tasks/{task_id}";
 };
 
 export type GetBackupProgressResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type GetBackupProgressResponse = GetBackupProgressResponses[keyof GetBackupProgressResponses];
 
 export type DeleteBackupData = {
-    body?: never;
-    path: {
-        filename: string;
-    };
-    query?: never;
-    url: '/api/v1/backups/{filename}';
+  body?: never;
+  path: {
+    filename: string;
+  };
+  query?: never;
+  url: "/api/v1/backups/{filename}";
 };
 
 export type DeleteBackupResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type DeleteBackupResponse = DeleteBackupResponses[keyof DeleteBackupResponses];
 
 export type DownloadBackupData = {
-    body?: never;
-    path: {
-        filename: string;
-    };
-    query?: never;
-    url: '/api/v1/backups/{filename}';
+  body?: never;
+  path: {
+    filename: string;
+  };
+  query?: never;
+  url: "/api/v1/backups/{filename}";
 };
 
 export type DownloadBackupResponses = {
-    /**
-     * Backup archive
-     */
-    200: unknown;
+  /**
+   * Backup archive
+   */
+  200: unknown;
 };
 
 export type RenameBackupData = {
-    body: BackupRenameRequest;
-    path: {
-        filename: string;
-    };
-    query?: never;
-    url: '/api/v1/backups/{filename}';
+  body: BackupRenameRequest;
+  path: {
+    filename: string;
+  };
+  query?: never;
+  url: "/api/v1/backups/{filename}";
 };
 
 export type RenameBackupResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type RenameBackupResponse = RenameBackupResponses[keyof RenameBackupResponses];
 
 export type CheckBackupData = {
-    body?: never;
-    path: {
-        filename: string;
-    };
-    query?: never;
-    url: '/api/v1/backups/{filename}/check';
+  body?: never;
+  path: {
+    filename: string;
+  };
+  query?: never;
+  url: "/api/v1/backups/{filename}/check";
 };
 
 export type CheckBackupResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type CheckBackupResponse = CheckBackupResponses[keyof CheckBackupResponses];
 
 export type ImportBackupData = {
-    body?: BackupImportRequest;
-    path: {
-        filename: string;
-    };
-    query?: never;
-    url: '/api/v1/backups/{filename}/import';
+  body?: BackupImportRequest;
+  path: {
+    filename: string;
+  };
+  query?: never;
+  url: "/api/v1/backups/{filename}/import";
 };
 
 export type ImportBackupResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ImportBackupResponse = ImportBackupResponses[keyof ImportBackupResponses];
 
 export type CheckUpdateData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/v1/updates/check';
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/api/v1/updates/check";
 };
 
 export type CheckUpdateResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type CheckUpdateResponse = CheckUpdateResponses[keyof CheckUpdateResponses];
 
 export type ListReleasesData = {
-    body?: never;
-    path?: never;
-    query?: {
-        type?: 'core' | 'dashboard';
-    };
-    url: '/api/v1/updates/releases';
+  body?: never;
+  path?: never;
+  query?: {
+    type?: "core" | "dashboard";
+  };
+  url: "/api/v1/updates/releases";
 };
 
 export type ListReleasesResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ListReleasesResponse = ListReleasesResponses[keyof ListReleasesResponses];
 
 export type UpdateCoreData = {
-    body?: UpdateRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/updates/core';
+  body?: UpdateRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/updates/core";
 };
 
 export type UpdateCoreResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type UpdateCoreResponse = UpdateCoreResponses[keyof UpdateCoreResponses];
 
 export type UpdateDashboardData = {
-    body?: UpdateRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/updates/dashboard';
+  body?: UpdateRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/updates/dashboard";
 };
 
 export type UpdateDashboardResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type UpdateDashboardResponse = UpdateDashboardResponses[keyof UpdateDashboardResponses];
 
 export type GetUpdateProgressData = {
-    body?: never;
-    path: {
-        task_id: string;
-    };
-    query?: never;
-    url: '/api/v1/updates/progress/{task_id}';
+  body?: never;
+  path: {
+    task_id: string;
+  };
+  query?: never;
+  url: "/api/v1/updates/progress/{task_id}";
 };
 
 export type GetUpdateProgressResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type GetUpdateProgressResponse = GetUpdateProgressResponses[keyof GetUpdateProgressResponses];
 
 export type InstallPipPackageData = {
-    body: PipInstallRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/pip/install';
+  body: PipInstallRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/pip/install";
 };
 
 export type InstallPipPackageResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type InstallPipPackageResponse = InstallPipPackageResponses[keyof InstallPipPackageResponses];
 
 export type ListCronJobsData = {
-    body?: never;
-    path?: never;
-    query?: {
-        type?: string;
-    };
-    url: '/api/v1/cron/jobs';
+  body?: never;
+  path?: never;
+  query?: {
+    type?: string;
+  };
+  url: "/api/v1/cron/jobs";
 };
 
 export type ListCronJobsResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ListCronJobsResponse = ListCronJobsResponses[keyof ListCronJobsResponses];
 
 export type CreateCronJobData = {
-    body: CronJobRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/cron/jobs';
+  body: CronJobRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/cron/jobs";
 };
 
 export type CreateCronJobResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type CreateCronJobResponse = CreateCronJobResponses[keyof CreateCronJobResponses];
 
 export type DeleteCronJobData = {
-    body?: never;
-    path: {
-        job_id: string;
-    };
-    query?: never;
-    url: '/api/v1/cron/jobs/{job_id}';
+  body?: never;
+  path: {
+    job_id: string;
+  };
+  query?: never;
+  url: "/api/v1/cron/jobs/{job_id}";
 };
 
 export type DeleteCronJobResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type DeleteCronJobResponse = DeleteCronJobResponses[keyof DeleteCronJobResponses];
 
 export type UpdateCronJobData = {
-    body: CronJobPatchRequest;
-    path: {
-        job_id: string;
-    };
-    query?: never;
-    url: '/api/v1/cron/jobs/{job_id}';
+  body: CronJobPatchRequest;
+  path: {
+    job_id: string;
+  };
+  query?: never;
+  url: "/api/v1/cron/jobs/{job_id}";
 };
 
 export type UpdateCronJobResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type UpdateCronJobResponse = UpdateCronJobResponses[keyof UpdateCronJobResponses];
 
 export type RunCronJobData = {
-    body?: never;
-    path: {
-        job_id: string;
-    };
-    query?: never;
-    url: '/api/v1/cron/jobs/{job_id}/run';
+  body?: never;
+  path: {
+    job_id: string;
+  };
+  query?: never;
+  url: "/api/v1/cron/jobs/{job_id}/run";
 };
 
 export type RunCronJobResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type RunCronJobResponse = RunCronJobResponses[keyof RunCronJobResponses];
 
 export type StreamLiveLogsData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/v1/logs/live';
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/api/v1/logs/live";
 };
 
 export type StreamLiveLogsResponses = {
-    /**
-     * Server-sent log stream
-     */
-    200: string;
+  /**
+   * Server-sent log stream
+   */
+  200: string;
 };
 
 export type StreamLiveLogsResponse = StreamLiveLogsResponses[keyof StreamLiveLogsResponses];
 
 export type GetLogHistoryData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/v1/logs/history';
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/api/v1/logs/history";
 };
 
 export type GetLogHistoryResponses = {
-    /**
-     * Text response
-     */
-    200: string;
+  /**
+   * Text response
+   */
+  200: string;
 };
 
 export type GetLogHistoryResponse = GetLogHistoryResponses[keyof GetLogHistoryResponses];
 
 export type GetTraceSettingsData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/v1/trace/settings';
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/api/v1/trace/settings";
 };
 
 export type GetTraceSettingsResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type GetTraceSettingsResponse = GetTraceSettingsResponses[keyof GetTraceSettingsResponses];
 
 export type UpdateTraceSettingsData = {
-    body: TraceSettingsRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/trace/settings';
+  body: TraceSettingsRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/trace/settings";
 };
 
 export type UpdateTraceSettingsResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type UpdateTraceSettingsResponse = UpdateTraceSettingsResponses[keyof UpdateTraceSettingsResponses];
 
 export type ListT2iTemplatesData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/v1/t2i/templates';
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/api/v1/t2i/templates";
 };
 
 export type ListT2iTemplatesResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ListT2iTemplatesResponse = ListT2iTemplatesResponses[keyof ListT2iTemplatesResponses];
 
 export type CreateT2iTemplateData = {
-    body: T2iTemplateRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/t2i/templates';
+  body: T2iTemplateRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/t2i/templates";
 };
 
 export type CreateT2iTemplateResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type CreateT2iTemplateResponse = CreateT2iTemplateResponses[keyof CreateT2iTemplateResponses];
 
 export type GetActiveT2iTemplateData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/v1/t2i/templates/active';
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/api/v1/t2i/templates/active";
 };
 
 export type GetActiveT2iTemplateResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type GetActiveT2iTemplateResponse = GetActiveT2iTemplateResponses[keyof GetActiveT2iTemplateResponses];
 
 export type SetActiveT2iTemplateData = {
-    body: NameRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/t2i/templates/active';
+  body: NameRequest;
+  path?: never;
+  query?: never;
+  url: "/api/v1/t2i/templates/active";
 };
 
 export type SetActiveT2iTemplateResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type SetActiveT2iTemplateResponse = SetActiveT2iTemplateResponses[keyof SetActiveT2iTemplateResponses];
 
 export type ResetDefaultT2iTemplateData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/v1/t2i/templates/default/reset';
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/api/v1/t2i/templates/default/reset";
 };
 
 export type ResetDefaultT2iTemplateResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type ResetDefaultT2iTemplateResponse = ResetDefaultT2iTemplateResponses[keyof ResetDefaultT2iTemplateResponses];
 
 export type DeleteT2iTemplateData = {
-    body?: never;
-    path: {
-        name: string;
-    };
-    query?: never;
-    url: '/api/v1/t2i/templates/{name}';
+  body?: never;
+  path: {
+    name: string;
+  };
+  query?: never;
+  url: "/api/v1/t2i/templates/{name}";
 };
 
 export type DeleteT2iTemplateResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type DeleteT2iTemplateResponse = DeleteT2iTemplateResponses[keyof DeleteT2iTemplateResponses];
 
 export type GetT2iTemplateData = {
-    body?: never;
-    path: {
-        name: string;
-    };
-    query?: never;
-    url: '/api/v1/t2i/templates/{name}';
+  body?: never;
+  path: {
+    name: string;
+  };
+  query?: never;
+  url: "/api/v1/t2i/templates/{name}";
 };
 
 export type GetT2iTemplateResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type GetT2iTemplateResponse = GetT2iTemplateResponses[keyof GetT2iTemplateResponses];
 
 export type UpdateT2iTemplateData = {
-    body: T2iTemplateContentRequest;
-    path: {
-        name: string;
-    };
-    query?: never;
-    url: '/api/v1/t2i/templates/{name}';
+  body: T2iTemplateContentRequest;
+  path: {
+    name: string;
+  };
+  query?: never;
+  url: "/api/v1/t2i/templates/{name}";
 };
 
 export type UpdateT2iTemplateResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type UpdateT2iTemplateResponse = UpdateT2iTemplateResponses[keyof UpdateT2iTemplateResponses];
 
 export type GetSubagentConfigData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/v1/subagents/config';
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/api/v1/subagents/config";
 };
 
 export type GetSubagentConfigResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type GetSubagentConfigResponse = GetSubagentConfigResponses[keyof GetSubagentConfigResponses];
 
 export type UpdateSubagentConfigData = {
-    body: DynamicConfig;
-    path?: never;
-    query?: never;
-    url: '/api/v1/subagents/config';
+  body: DynamicConfig;
+  path?: never;
+  query?: never;
+  url: "/api/v1/subagents/config";
 };
 
 export type UpdateSubagentConfigResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
 export type UpdateSubagentConfigResponse = UpdateSubagentConfigResponses[keyof UpdateSubagentConfigResponses];
 
 export type ListSubagentAvailableToolsData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/v1/subagents/available-tools';
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/api/v1/subagents/available-tools";
 };
 
 export type ListSubagentAvailableToolsResponses = {
-    /**
-     * Standard AstrBot success response
-     */
-    200: SuccessEnvelope;
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
 };
 
-export type ListSubagentAvailableToolsResponse = ListSubagentAvailableToolsResponses[keyof ListSubagentAvailableToolsResponses];
+export type ListSubagentAvailableToolsResponse =
+  ListSubagentAvailableToolsResponses[keyof ListSubagentAvailableToolsResponses];
 
 export type VerifyPlatformWebhookData = {
-    body?: never;
-    path: {
-        webhook_uuid: string;
-    };
-    query?: never;
-    url: '/api/v1/webhooks/platforms/{webhook_uuid}';
+  body?: never;
+  path: {
+    webhook_uuid: string;
+  };
+  query?: never;
+  url: "/api/v1/webhooks/platforms/{webhook_uuid}";
 };
 
 export type VerifyPlatformWebhookResponses = {
-    /**
-     * Webhook verification response
-     */
-    200: unknown;
+  /**
+   * Webhook verification response
+   */
+  200: unknown;
 };
 
 export type ReceivePlatformWebhookData = {
-    body?: DynamicConfig;
-    path: {
-        webhook_uuid: string;
-    };
-    query?: never;
-    url: '/api/v1/webhooks/platforms/{webhook_uuid}';
+  body?: DynamicConfig;
+  path: {
+    webhook_uuid: string;
+  };
+  query?: never;
+  url: "/api/v1/webhooks/platforms/{webhook_uuid}";
 };
 
 export type ReceivePlatformWebhookResponses = {
-    /**
-     * Webhook accepted
-     */
-    200: unknown;
+  /**
+   * Webhook accepted
+   */
+  200: unknown;
 };
 
 export type ClientOptions = {
-    baseURL: 'http://localhost:6185' | (string & {});
+  baseURL: "http://localhost:6185" | (string & {});
 };

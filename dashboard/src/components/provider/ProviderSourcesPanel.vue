@@ -165,9 +165,9 @@
 
 <script setup>
 import { computed } from "vue";
+import ProviderSourceDialog from "@/components/provider/ProviderSourceDialog.vue";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
 import { isMonochromeProviderIcon } from "@/utils/providerUtils";
-import ProviderSourceDialog from "@/components/provider/ProviderSourceDialog.vue";
 
 const props = defineProps({
   displayedProviderSources: {
@@ -212,10 +212,7 @@ const props = defineProps({
   },
   isMonochromeSourceIcon: {
     type: Function,
-    default: (source) =>
-      isMonochromeProviderIcon(
-        typeof source?.provider === "string" ? source.provider : "",
-      ),
+    default: (source) => isMonochromeProviderIcon(typeof source?.provider === "string" ? source.provider : ""),
   },
   getSourceDisplayName: {
     type: Function,
@@ -223,17 +220,11 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits([
-  "add-provider-source",
-  "select-provider-source",
-  "delete-provider-source",
-]);
+const emit = defineEmits(["add-provider-source", "select-provider-source", "delete-provider-source"]);
 
 const selectedId = computed(() => props.selectedProviderSource?.id || null);
 const canDeleteSelectedSource = computed(() =>
-  Boolean(
-    props.selectedProviderSource && !props.selectedProviderSource.isPlaceholder,
-  ),
+  Boolean(props.selectedProviderSource && !props.selectedProviderSource.isPlaceholder),
 );
 
 const isActive = (source) => {
@@ -241,13 +232,9 @@ const isActive = (source) => {
   return selectedId.value !== null && selectedId.value === source.id;
 };
 
-const sourceBadge = (source) =>
-  source.provider || source.templateKey || "source";
+const sourceBadge = (source) => source.provider || source.templateKey || "source";
 
-const sourceValue = (source) =>
-  source.isPlaceholder
-    ? `template:${source.templateKey}`
-    : `source:${source.id}`;
+const sourceValue = (source) => (source.isPlaceholder ? `template:${source.templateKey}` : `source:${source.id}`);
 
 const sourceOptions = computed(() =>
   props.displayedProviderSources.map((source) => ({

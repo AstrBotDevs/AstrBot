@@ -458,7 +458,7 @@ class LocalShellComponent(ShellComponent):
                             asyncio.shield(wait_task),
                             timeout=timeout,
                         )
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         session.timed_out = True
                         logger.warning(
                             "Managed local shell session timed out: session_id=%s pid=%s",
@@ -942,7 +942,7 @@ class LocalShellComponent(ShellComponent):
                 asyncio.shield(session.wait_task),
                 timeout=5,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pass
         # The leader may have exited while children remain in its process group.
         if session.sandboxed:
@@ -1139,7 +1139,15 @@ class LocalFileSystemComponent(FileSystemComponent):
         sandbox_root: str | None = None,
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
-            search_path = _ensure_safe_path(path) if path else get_astrbot_root()
+            # Restricted searches are confined by the supplied OS sandbox root.
+            # Keep the path unresolved so its symlinks are followed inside it.
+            search_path = (
+                path or "."
+                if sandboxed
+                else _ensure_safe_path(path)
+                if path
+                else get_astrbot_root()
+            )
             if not sandboxed and sys.version_info < (3, 14):
                 results = search(
                     patterns=[pattern],

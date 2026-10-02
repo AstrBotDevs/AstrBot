@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
 import { Waypoints } from "@lucide/vue";
+import { computed, onMounted, ref } from "vue";
 import { useTheme } from "vuetify";
-import TraceDisplayer from "@/components/shared/TraceDisplayer.vue";
 import { traceApi } from "@/api/v1";
+import TraceDisplayer from "@/components/shared/TraceDisplayer.vue";
 import { useModuleI18n } from "@/i18n/composables";
 
 const { tm } = useModuleI18n("features/trace");

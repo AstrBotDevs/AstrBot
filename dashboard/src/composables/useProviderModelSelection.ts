@@ -13,8 +13,7 @@ function syncFromStorage() {
   if (syncedFromStorage || typeof window === "undefined") return;
   syncedFromStorage = true;
   selectedProviderId.value = localStorage.getItem(SELECTED_PROVIDER_KEY) || "";
-  selectedModelName.value =
-    localStorage.getItem(SELECTED_PROVIDER_MODEL_KEY) || "";
+  selectedModelName.value = localStorage.getItem(SELECTED_PROVIDER_MODEL_KEY) || "";
 }
 
 export function useProviderModelSelection() {

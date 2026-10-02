@@ -13,13 +13,7 @@
       "agent_runner": {
         "runner_type": {
           "description": "ランナー",
-          "labels": [
-            "組み込みエージェント",
-            "Dify",
-            "Coze",
-            "Alibaba Cloud Bailianアプリケーション",
-            "DeerFlow"
-          ]
+          "labels": ["組み込みエージェント", "Dify", "Coze", "Alibaba Cloud Bailianアプリケーション", "DeerFlow"]
         }
       }
     },
@@ -462,10 +456,7 @@
             },
             "overflow_strategy": {
               "description": "履歴の上限超過時またはコンテキスト上限接近時の処理方式",
-              "labels": [
-                "会話ターン数で切り捨て",
-                "LLM でコンテキストを圧縮"
-              ],
+              "labels": ["会話ターン数で切り捨て", "LLM でコンテキストを圧縮"],
               "hint": "通常の会話履歴では、「圧縮前に保持する最大会話ターン数」を超えた場合にのみこの方式を適用します。リクエスト送信前にも、コンテキストのトークン数がモデルのウィンドウ上限に近づいた場合、同じ方式でコンテキストを縮小し、リクエストがモデルの上限を超えないようにします。"
             },
             "instruction": {
@@ -499,10 +490,7 @@
             "tool_schema_mode": {
               "description": "ツールスキーマモード",
               "hint": "skills-like は最初にツール名と説明を渡し、その後にパラメーターを渡します。full は完全なパラメーターを一度に渡します。",
-              "labels": [
-                "Skills-like（2 段階）",
-                "Full（完全なパラメーター）"
-              ]
+              "labels": ["Skills-like（2 段階）", "Full（完全なパラメーター）"]
             },
             "tool_call_timeout": {
               "description": "ツール呼び出しタイムアウト（秒）"
@@ -569,10 +557,7 @@
         "unsupported_streaming_strategy": {
           "description": "ストリーミング返信に未対応のプラットフォーム",
           "hint": "ストリーミング返信に対応していないプラットフォームでの処理方法を選択します。リアルタイム分割返信では、ストリーミング応答の受信中に句読点などの分割位置を検出すると、受信済みの内容を直ちに送信します。",
-          "labels": [
-            "リアルタイム分割返信",
-            "ストリーミング返信を無効化"
-          ]
+          "labels": ["リアルタイム分割返信", "ストリーミング返信を無効化"]
         },
         "wake_prefix": {
           "description": "LLM チャット用の追加呼び出しプレフィックス",
@@ -734,10 +719,7 @@
       },
       "lark_connection_mode": {
         "description": "接続方式",
-        "labels": [
-          "常時接続モード",
-          "Webhook サーバーモード"
-        ]
+        "labels": ["常時接続モード", "Webhook サーバーモード"]
       },
       "lark_encrypt_key": {
         "description": "Encrypt Key",
@@ -1217,10 +1199,7 @@
           "split_mode": {
             "description": "分割モード",
             "hint": "メッセージの分割に使用します。デフォルトでは句点や疑問符などの句読点に基づいて分割します。`[。？！]` を入力すると、すべての句点、疑問符、感嘆符が削除されます。re.findall(r'<regex>', text)",
-            "labels": [
-              "正規表現",
-              "分割語句一覧"
-            ]
+            "labels": ["正規表現", "分割語句一覧"]
           },
           "regex": {
             "description": "分割用正規表現",
@@ -1540,12 +1519,7 @@
       "modalities": {
         "description": "モデル機能",
         "hint": "モデルが対応するモダリティと機能です。",
-        "labels": [
-          "テキスト",
-          "画像",
-          "音声",
-          "ツール使用"
-        ]
+        "labels": ["テキスト", "画像", "音声", "ツール使用"]
       },
 
       "custom_headers": {

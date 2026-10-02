@@ -376,15 +376,15 @@ import { computed, nextTick, ref, shallowRef, watch } from "vue";
 import { useDisplay } from "vuetify";
 import { providerApi } from "@/api/v1";
 import ProviderChatCompletionPanel from "@/components/provider/ProviderChatCompletionPanel.vue";
-import ProviderPage from "@/views/ProviderPage.vue";
 import { useModuleI18n } from "@/i18n/composables";
-import { useToast } from "@/utils/toast";
 import {
   formatContextLimit,
-  providerCapabilityBadges,
-  type ProviderModelMetadata,
   type ProviderMetadataSource,
+  type ProviderModelMetadata,
+  providerCapabilityBadges,
 } from "@/utils/providerMetadata";
+import { useToast } from "@/utils/toast";
+import ProviderPage from "@/views/ProviderPage.vue";
 
 interface ProviderConfig extends ProviderMetadataSource {
   id: string;
@@ -436,9 +436,7 @@ const sourceMenuOpen = ref(false);
 const selectedSourceId = ref("");
 const providerScrollTop = ref(0);
 const { height: displayHeight } = useDisplay();
-const providerListHeight = computed(() =>
-  Math.min(360, displayHeight.value * 0.58),
-);
+const providerListHeight = computed(() => Math.min(360, displayHeight.value * 0.58));
 // Keep these sizes in sync with the model rows and sticky source headers below.
 const PROVIDER_ROW_HEIGHT = 56;
 const SOURCE_HEADER_HEIGHT = 32;
@@ -455,10 +453,7 @@ const selectedProviderIds = computed(() =>
 );
 
 const selectedProvider = computed(() =>
-  providerConfigs.value.find(
-    (provider) =>
-      !Array.isArray(props.modelValue) && provider.id === props.modelValue,
-  ),
+  providerConfigs.value.find((provider) => !Array.isArray(props.modelValue) && provider.id === props.modelValue),
 );
 
 const triggerTitle = computed(() => {
@@ -473,8 +468,7 @@ const triggerTitle = computed(() => {
   if (typeof props.modelValue === "string" && props.modelValue) {
     return props.modelValue;
   }
-  if (props.variant === "header")
-    return sharedTm("providerSelector.defaultModel");
+  if (props.variant === "header") return sharedTm("providerSelector.defaultModel");
   if (props.variant === "input") return sharedTm("providerSelector.model");
   return sharedTm("providerSelector.notSelected");
 });
@@ -496,8 +490,7 @@ const filteredProviders = computed(() => {
   return providerConfigs.value.filter(
     (provider) =>
       (!selectedSourceId.value ||
-        (provider.provider_source_id || provider.type || provider.id) ===
-          selectedSourceId.value) &&
+        (provider.provider_source_id || provider.type || provider.id) === selectedSourceId.value) &&
       (!query ||
         provider.id.toLowerCase().includes(query) ||
         (provider.provider_source_id || "").toLowerCase().includes(query) ||
@@ -528,8 +521,7 @@ const providerSources = computed(() => {
 const providerGroups = computed(() => {
   const groups = new Map<string, ProviderConfig[]>();
   for (const provider of filteredProviders.value) {
-    const sourceId =
-      provider.provider_source_id || provider.type || provider.id;
+    const sourceId = provider.provider_source_id || provider.type || provider.id;
     const group = groups.get(sourceId);
     if (group) group.push(provider);
     else groups.set(sourceId, [provider]);
@@ -544,10 +536,7 @@ const providerGroups = computed(() => {
 
 const visibleProviderGroups = computed(() => {
   // Spacers preserve full group heights for sticky headers while only nearby rows mount.
-  const clearHeight =
-    !props.multiple && props.allowEmpty && !searchQuery.value
-      ? PROVIDER_ROW_HEIGHT
-      : 0;
+  const clearHeight = !props.multiple && props.allowEmpty && !searchQuery.value ? PROVIDER_ROW_HEIGHT : 0;
   const scrollTop = providerScrollTop.value - clearHeight;
   const start = Math.max(0, scrollTop - PROVIDER_ROW_HEIGHT * 3);
   const end = scrollTop + providerListHeight.value + PROVIDER_ROW_HEIGHT * 3;
@@ -556,21 +545,11 @@ const visibleProviderGroups = computed(() => {
     .map((group) => {
       const first = Math.max(
         0,
-        Math.min(
-          group.providers.length,
-          Math.floor(
-            (start - group.top - SOURCE_HEADER_HEIGHT) / PROVIDER_ROW_HEIGHT,
-          ),
-        ),
+        Math.min(group.providers.length, Math.floor((start - group.top - SOURCE_HEADER_HEIGHT) / PROVIDER_ROW_HEIGHT)),
       );
       const last = Math.max(
         first,
-        Math.min(
-          group.providers.length,
-          Math.ceil(
-            (end - group.top - SOURCE_HEADER_HEIGHT) / PROVIDER_ROW_HEIGHT,
-          ),
-        ),
+        Math.min(group.providers.length, Math.ceil((end - group.top - SOURCE_HEADER_HEIGHT) / PROVIDER_ROW_HEIGHT)),
       );
       return {
         ...group,
@@ -587,20 +566,12 @@ async function loadProviderConfigs(force = false) {
   try {
     const response = await providerApi.listByProviderType(props.providerType);
     if (response.data.status === "ok") {
-      modelMetadata.value = (response.data.model_metadata || {}) as Record<
-        string,
-        ProviderModelMetadata
-      >;
-      providerConfigs.value = (
-        (response.data.data || []) as unknown as ProviderConfig[]
-      ).filter((provider) => provider.enable !== false);
+      modelMetadata.value = (response.data.model_metadata || {}) as Record<string, ProviderModelMetadata>;
+      providerConfigs.value = ((response.data.data || []) as unknown as ProviderConfig[]).filter(
+        (provider) => provider.enable !== false,
+      );
       providersLoaded.value = true;
-      if (
-        selectedSourceId.value &&
-        !providerSources.value.some(
-          (source) => source.id === selectedSourceId.value,
-        )
-      ) {
+      if (selectedSourceId.value && !providerSources.value.some((source) => source.id === selectedSourceId.value)) {
         selectedSourceId.value = "";
       }
     }
@@ -636,9 +607,7 @@ function clearSelection() {
 }
 
 function isProviderSelected(providerId: string) {
-  return props.multiple
-    ? selectedProviderIds.value.includes(providerId)
-    : props.modelValue === providerId;
+  return props.multiple ? selectedProviderIds.value.includes(providerId) : props.modelValue === providerId;
 }
 
 function removeSelected(providerId: string) {
@@ -660,11 +629,7 @@ function moveSelected(index: number, delta: number) {
 }
 
 function capabilityBadges(provider: ProviderConfig) {
-  return providerCapabilityBadges(
-    provider,
-    metadataForProvider(provider),
-    providerTm,
-  );
+  return providerCapabilityBadges(provider, metadataForProvider(provider), providerTm);
 }
 
 function metadataForProvider(provider: ProviderConfig) {
@@ -686,20 +651,12 @@ async function testProvider(provider: ProviderConfig) {
         }),
       );
     } else {
-      throw new Error(
-        response.data.data.error || providerTm("models.testError"),
-      );
+      throw new Error(response.data.data.error || providerTm("models.testError"));
     }
   } catch (error: any) {
-    toastError(
-      error.response?.data?.message ||
-        error.message ||
-        providerTm("models.testError"),
-    );
+    toastError(error.response?.data?.message || error.message || providerTm("models.testError"));
   } finally {
-    testingProviderIds.value = testingProviderIds.value.filter(
-      (providerId) => providerId !== provider.id,
-    );
+    testingProviderIds.value = testingProviderIds.value.filter((providerId) => providerId !== provider.id);
   }
 }
 
@@ -723,14 +680,9 @@ watch(
       scrollToSelectionPending = false;
       let target = 0;
       for (const group of providerGroups.value) {
-        const index = group.providers.findIndex((provider) =>
-          isProviderSelected(provider.id),
-        );
+        const index = group.providers.findIndex((provider) => isProviderSelected(provider.id));
         if (index < 0) continue;
-        const clearHeight =
-          !props.multiple && props.allowEmpty && !query
-            ? PROVIDER_ROW_HEIGHT
-            : 0;
+        const clearHeight = !props.multiple && props.allowEmpty && !query ? PROVIDER_ROW_HEIGHT : 0;
         target = Math.max(
           0,
           clearHeight +

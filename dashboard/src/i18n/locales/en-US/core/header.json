@@ -7,7 +7,6 @@
   "buttons": {
     "update": "Update",
     "account": "Account",
-    "logout": "Log out",
     "theme": {
       "light": "Light Mode",
       "dark": "Dark Mode"

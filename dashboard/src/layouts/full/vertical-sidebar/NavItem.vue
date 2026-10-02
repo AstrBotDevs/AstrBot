@@ -1,36 +1,36 @@
 <script setup>
-import { useI18n } from '@/i18n/composables';
-import { computed } from 'vue';
-import { useRoute } from 'vue-router';
-import { AppWindow, Pin, PinOff, Puzzle, User } from '@lucide/vue';
+import { AppWindow, Pin, PinOff, Puzzle, User } from "@lucide/vue";
+import { computed } from "vue";
+import { useRoute } from "vue-router";
+import { useI18n } from "@/i18n/composables";
 
 const props = defineProps({ item: Object, level: Number, rail: Boolean, pinnable: Boolean, pinnedTos: Array });
-const emit = defineEmits(['togglePin']);
+const emit = defineEmits(["togglePin"]);
 const { t } = useI18n();
 const route = useRoute();
 
 const itemStyle = computed(() => {
   const lvl = props.level ?? 0;
-  const indent = props.rail ? '0px' : `${lvl * 24}px`;
-  return { '--indent-padding': indent };
+  const indent = props.rail ? "0px" : `${lvl * 24}px`;
+  return { "--indent-padding": indent };
 });
 
 const isItemActive = computed(() => {
-  if (!props.item || props.item.type === 'external' || !props.item.to) return false;
-  if (typeof props.item.to !== 'string') return false;
-  if (props.item.to.includes('#')) {
-    const [path, hash] = props.item.to.split('#');
+  if (!props.item || props.item.type === "external" || !props.item.to) return false;
+  if (typeof props.item.to !== "string") return false;
+  if (props.item.to.includes("#")) {
+    const [path, hash] = props.item.to.split("#");
     return route.path === path && route.hash === `#${hash}`;
   }
-  const targetPath = props.item.to.replace(/\/$/, '') || '/';
-  if (targetPath === '/') {
+  const targetPath = props.item.to.replace(/\/$/, "") || "/";
+  if (targetPath === "/") {
     return route.path === targetPath;
   }
   return route.path === targetPath || route.path.startsWith(`${targetPath}/`);
 });
 
 const itemTitle = computed(() => {
-  if (!props.item?.title) return '';
+  if (!props.item?.title) return "";
   return props.item.isRawTitle ? props.item.title : t(props.item.title);
 });
 
@@ -38,16 +38,15 @@ const itemTitle = computed(() => {
 // in parentheses; plugins without a display name show only the id.
 const pluginDisplayName = computed(() => {
   const info = props.item?.pluginInfo;
-  if (!info) return '';
+  if (!info) return "";
   if (info.displayName) return info.displayName;
-  if (!props.item.isRawTitle) return '';
-  return props.item.title !== info.id ? props.item.title : '';
+  if (!props.item.isRawTitle) return "";
+  return props.item.title !== info.id ? props.item.title : "";
 });
 
 const isPinned = computed(() => Boolean(props.pinnedTos?.includes(props.item?.to)));
 
-const isVuetifyIcon = computed(() => typeof props.item?.icon === 'string');
-
+const isVuetifyIcon = computed(() => typeof props.item?.icon === "string");
 </script>
 
 <template>

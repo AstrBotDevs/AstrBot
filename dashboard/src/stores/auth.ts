@@ -1,15 +1,15 @@
 import { defineStore } from "pinia";
-import { router } from "@/router";
+import { httpClient } from "@/api/http";
 import {
+  type ApiEnvelope,
   authApi,
   providerApi,
   systemConfigApi,
   UPGRADE_RECOVERY_EVENT,
   UPGRADE_RECOVERY_TOKEN_KEY,
-  type ApiEnvelope,
   type VersionData,
 } from "@/api/v1";
-import { httpClient } from "@/api/http";
+import { router } from "@/router";
 
 export const useAuthStore = defineStore("auth", {
   state: () => ({
@@ -73,15 +73,12 @@ export const useAuthStore = defineStore("auth", {
 
         const legacyToken = String(res.data.data?.token || "");
         if (res.legacyFallback && legacyToken) {
-          const versionRes = await httpClient.get<ApiEnvelope<VersionData>>(
-            "/api/stat/version",
-            {
-              headers: {
-                Authorization: `Bearer ${legacyToken}`,
-              },
-              validateStatus: () => true,
+          const versionRes = await httpClient.get<ApiEnvelope<VersionData>>("/api/stat/version", {
+            headers: {
+              Authorization: `Bearer ${legacyToken}`,
             },
-          );
+            validateStatus: () => true,
+          });
           const versionData = versionRes.data?.data || {};
           const coreVersion = String(versionData.version || "")
             .trim()
@@ -89,12 +86,7 @@ export const useAuthStore = defineStore("auth", {
           const dashboardVersion = String(versionData.dashboard_version || "")
             .trim()
             .replace(/^v/i, "");
-          if (
-            versionRes.status < 400 &&
-            coreVersion &&
-            dashboardVersion &&
-            coreVersion !== dashboardVersion
-          ) {
+          if (versionRes.status < 400 && coreVersion && dashboardVersion && coreVersion !== dashboardVersion) {
             sessionStorage.setItem(UPGRADE_RECOVERY_TOKEN_KEY, legacyToken);
             window.dispatchEvent(
               new CustomEvent(UPGRADE_RECOVERY_EVENT, {
@@ -117,11 +109,7 @@ export const useAuthStore = defineStore("auth", {
         return Promise.reject(error?.response?.data?.message || error);
       }
     },
-    async setup(
-      username: string,
-      password: string,
-      confirmPassword: string,
-    ): Promise<void> {
+    async setup(username: string, password: string, confirmPassword: string): Promise<void> {
       try {
         const res = await authApi.setup({
           username,
