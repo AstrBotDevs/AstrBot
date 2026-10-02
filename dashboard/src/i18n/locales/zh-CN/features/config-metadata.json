@@ -1050,15 +1050,6 @@
         }
       }
     },
-    "t2i": {
-      "description": "文本转图像",
-      "t2i": {
-        "description": "文本转图像输出"
-      },
-      "t2i_word_threshold": {
-        "description": "文本转图像字数阈值"
-      }
-    },
     "others": {
       "description": "其他配置",
       "platform_settings": {
@@ -1115,7 +1106,7 @@
       "description": "插件",
       "plugin_set": {
         "description": "可用插件",
-        "hint": "默认启用全部未被禁用的插件。若插件在插件页面被禁用,则此处的选择不会生效。"
+        "hint": "默认启用全部未被禁用的插件。若插件在插件管理页被禁用,则此处的选择不会生效。"
       }
     }
   },
@@ -1211,12 +1202,15 @@
           }
         }
       }
-    }
-  },
-  "system_group": {
-    "name": "系统配置",
-    "system": {
-      "description": "系统配置",
+    },
+    "t2i": {
+      "description": "文本转图像",
+      "t2i": {
+        "description": "文本转图像输出"
+      },
+      "t2i_word_threshold": {
+        "description": "文本转图像字数阈值"
+      },
       "t2i_strategy": {
         "description": "文本转图像策略",
         "hint": "文本转图像策略。`remote` 为使用远程基于 HTML 的渲染服务,`local` 为使用 PIL 本地渲染。当使用 local 时,将 ttf 字体命名为 'font.ttf' 放在 data/ 目录下可自定义字体。"
@@ -1232,7 +1226,13 @@
       "t2i_active_template": {
         "description": "当前应用的文转图渲染模板",
         "hint": "此处的值由文转图模板管理页面进行维护。"
-      },
+      }
+    }
+  },
+  "system_group": {
+    "name": "系统配置",
+    "system": {
+      "description": "系统配置",
       "log_level": {
         "description": "控制台日志级别",
         "hint": "控制台输出日志的级别。"

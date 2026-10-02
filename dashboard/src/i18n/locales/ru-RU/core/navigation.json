@@ -34,7 +34,11 @@
     "alkaid": "Alkaid Lab",
     "knowledgeBase": "База знаний",
     "about": "О программе",
-    "settings": "Настройки",
+    "settings": "Системные настройки",
+    "pin": "Закрепить",
+    "unpin": "Открепить",
+    "groupByPlugin": "Группировать по плагинам",
+    "ungroupByPlugin": "Отменить группировку",
     "expandSidebar": "Развернуть боковую панель",
     "collapseSidebar": "Свернуть боковую панель",
     "changelog": "Журнал изменений",
@@ -43,7 +47,9 @@
     "github": "GitHub",
     "drag": "Перетащить",
     "groups": {
-        "more": "Дополнительно"
+        "more": "Дополнительно",
+        "system": "Система",
+        "extension": "Расширения"
     },
     "changelogDialog": {
         "title": "Журнал изменений",
@@ -57,5 +63,6 @@
         "normal": "Обычная конфигурация",
         "system": "Системная конфигурация"
     },
-    "pluginWebui": "Страницы плагинов"
+    "pluginWebui": "Представления плагинов",
+    "pluginPageType": "Представление плагина"
 }

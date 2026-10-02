@@ -34,7 +34,11 @@
   "alkaid": "Alkaid",
   "knowledgeBase": "ナレッジベース",
   "about": "概要",
-  "settings": "設定",
+  "settings": "システム設定",
+  "pin": "トップに固定",
+  "unpin": "固定を解除",
+  "groupByPlugin": "プラグイン別にグループ化",
+  "ungroupByPlugin": "グループ化を解除",
   "expandSidebar": "サイドバーを展開",
   "collapseSidebar": "サイドバーを折りたたむ",
   "changelog": "変更履歴",
@@ -43,7 +47,9 @@
   "github": "GitHub",
   "drag": "ドラッグ",
   "groups": {
-    "more": "その他の機能"
+    "more": "その他の機能",
+    "system": "システム",
+    "extension": "拡張機能"
   },
   "changelogDialog": {
     "title": "変更履歴",
@@ -57,5 +63,6 @@
     "normal": "一般設定",
     "system": "システム設定"
   },
-  "pluginWebui": "プラグインページ"
+  "pluginWebui": "プラグインビュー",
+  "pluginPageType": "プラグインビュー"
 }

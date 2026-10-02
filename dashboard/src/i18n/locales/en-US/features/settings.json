@@ -62,10 +62,6 @@
         "title": "Cache",
         "subtitle": "Automatic cleanup threshold for the temporary directory."
       },
-      "t2iRendering": {
-        "title": "Text-to-Image",
-        "subtitle": "Rendering strategy, endpoint, and custom templates for text-to-image."
-      },
       "telemetry": {
         "title": "User Experience Improvement Program",
         "subtitle": "When enabled, anonymous usage data is collected to help improve AstrBot."

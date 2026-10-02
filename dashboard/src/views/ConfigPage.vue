@@ -1,7 +1,11 @@
 <template>
 
   <div class="config-page-shell">
-    <div v-if="selectedConfigID || isSystemConfig" class="config-panel">
+    <div
+      v-if="selectedConfigID || isSystemConfig"
+      class="config-panel"
+      :class="{ 'config-panel--embedded': initialConfigId !== null }"
+    >
 
       <div class="config-toolbar-sticky">
         <div
@@ -54,7 +58,6 @@
           </div>
         </div>
         <div class="config-toolbar-separator">
-          <v-divider />
           <v-progress-linear
             v-if="!fetched"
             indeterminate
@@ -96,7 +99,7 @@
         <v-tooltip text="测试当前配置" location="left" v-if="!isSystemConfig">
           <template v-slot:activator="{ props }">
             <v-btn v-bind="props" icon="mdi-chat-processing" size="x-large"
-              style="position: fixed; right: 52px; bottom: 196px;" color="secondary"
+              style="position: fixed; right: 52px; bottom: 196px;" color="primary"
               @click="openTestChat">
             </v-btn>
           </template>
@@ -162,7 +165,12 @@
 
         <!-- Config List -->
         <v-list lines="two">
-          <v-list-item v-for="config in configInfoList" :key="config.id" :title="configDisplayName(config)">
+          <v-list-item
+            v-for="config in configInfoList"
+            :key="config.id"
+            :title="configDisplayName(config)"
+            :subtitle="config.id"
+          >
             <template v-slot:append>
               <div class="d-flex align-center" style="gap: 8px;">
                 <v-btn icon="mdi-content-copy" size="small" variant="text" color="primary"
@@ -1031,12 +1039,19 @@ export default {
   z-index: -1;
   top: 0;
   bottom: 0;
-  left: 50%;
-  width: calc(100vw - var(--v-layout-left, 0px));
-  max-width: 100vw;
-  transform: translateX(-50%);
+  left: 0;
+  width: 100%;
   background: rgb(var(--v-theme-containerBg));
   content: '';
+}
+
+/* Embedded in the config drawer: stick to the drawer's top, not the app bar. */
+.config-panel--embedded .config-toolbar-sticky {
+  /* Cover the drawer's 16px top padding as well, so scrolled content does not
+     bleed through the strip above the bar. */
+  top: -16px;
+  padding-top: 16px;
+  background: rgb(var(--v-theme-containerBg));
 }
 
 .config-toolbar {
@@ -1088,11 +1103,9 @@ export default {
 
 .config-toolbar-separator {
   position: relative;
-  width: calc(100vw - var(--v-layout-left, 0px));
-  max-width: 100vw;
+  width: 100%;
   height: 1px;
-  margin-left: 50%;
-  transform: translateX(-50%);
+  margin-left: 0;
 }
 
 .config-toolbar-separator :is(.v-divider) {

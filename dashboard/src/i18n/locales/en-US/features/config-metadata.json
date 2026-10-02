@@ -1029,15 +1029,6 @@
         }
       }
     },
-    "t2i": {
-      "description": "Text-to-Image",
-      "t2i": {
-        "description": "Text-to-Image Output"
-      },
-      "t2i_word_threshold": {
-        "description": "Text-to-Image Word Count Threshold"
-      }
-    },
     "others": {
       "description": "Other Settings",
       "platform_settings": {
@@ -1190,12 +1181,15 @@
           }
         }
       }
-    }
-  },
-  "system_group": {
-    "name": "System",
-    "system": {
-      "description": "System Settings",
+    },
+    "t2i": {
+      "description": "Text-to-Image",
+      "t2i": {
+        "description": "Text-to-Image Output"
+      },
+      "t2i_word_threshold": {
+        "description": "Text-to-Image Word Count Threshold"
+      },
       "t2i_strategy": {
         "description": "Text-to-Image Strategy",
         "hint": "Text-to-image strategy. `remote` uses a remote HTML-based rendering service, `local` uses PIL for local rendering. When using local, place a TTF font named 'font.ttf' in the data/ directory to customize the font."
@@ -1211,7 +1205,13 @@
       "t2i_active_template": {
         "description": "Currently Active Text-to-Image Rendering Template",
         "hint": "This value is maintained by the text-to-image template management page."
-      },
+      }
+    }
+  },
+  "system_group": {
+    "name": "System",
+    "system": {
+      "description": "System Settings",
       "log_level": {
         "description": "Console Log Level",
         "hint": "Log level for console output."

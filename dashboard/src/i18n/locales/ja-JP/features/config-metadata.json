@@ -1126,15 +1126,6 @@
         }
       }
     },
-    "t2i": {
-      "description": "長文の画像化",
-      "t2i": {
-        "description": "長文を画像として出力"
-      },
-      "t2i_word_threshold": {
-        "description": "画像化する文字数のしきい値"
-      }
-    },
     "others": {
       "description": "その他の設定",
       "platform_settings": {
@@ -1287,12 +1278,15 @@
           }
         }
       }
-    }
-  },
-  "system_group": {
-    "name": "システム設定",
-    "system": {
-      "description": "システム設定",
+    },
+    "t2i": {
+      "description": "長文の画像化",
+      "t2i": {
+        "description": "長文を画像として出力"
+      },
+      "t2i_word_threshold": {
+        "description": "画像化する文字数のしきい値"
+      },
       "t2i_strategy": {
         "description": "テキスト画像化方式",
         "hint": "長文を画像としてレンダリングする方式です。`remote` はリモートの HTML ベースのレンダリングサービス、`local` は PIL によるローカルレンダリングを使用します。`local` を使用する場合、`font.ttf` という名前の TTF フォントを data ディレクトリに配置すると、フォントをカスタマイズできます。"
@@ -1308,7 +1302,13 @@
       "t2i_active_template": {
         "description": "現在適用中のテキスト画像化テンプレート",
         "hint": "この値は、テキスト画像化テンプレート管理ページで管理されます。"
-      },
+      }
+    }
+  },
+  "system_group": {
+    "name": "システム設定",
+    "system": {
+      "description": "システム設定",
       "log_level": {
         "description": "コンソールログレベル",
         "hint": "コンソールへ出力するログのレベルです。"
