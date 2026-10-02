@@ -1,22 +1,14 @@
 from types import SimpleNamespace
-<<<<<<< HEAD
-from unittest.mock import AsyncMock
-=======
 from unittest.mock import AsyncMock, MagicMock
->>>>>>> 9f65a019e5f64b42bd66859ec1d0f1af71a9e1dd
 
 import pytest
 from sqlmodel import select
 
-<<<<<<< HEAD
 import astrbot.core.provider.provider as provider_module
 from astrbot.core.agent.response import AgentStats
-from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.db.po import ProviderStat
 from astrbot.core.provider.entities import LLMResponse, ProviderMeta, TokenUsage
-=======
 from astrbot.core.agent.tool import FunctionTool, ToolSet
->>>>>>> 9f65a019e5f64b42bd66859ec1d0f1af71a9e1dd
 from astrbot.core.provider.func_tool_manager import FunctionToolManager
 from astrbot.core.provider.provider import Provider
 from astrbot.core.star.context import Context

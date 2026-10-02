@@ -37,11 +37,8 @@ from astrbot.core.provider.entities import (
     LLMResponse,
     ProviderRequest,
 )
-<<<<<<< HEAD
 from astrbot.core.provider.stats import record_agent_runner_stats
-=======
 from astrbot.core.star.session_llm_manager import SessionServiceManager
->>>>>>> 9f65a019e5f64b42bd66859ec1d0f1af71a9e1dd
 from astrbot.core.star.star_handler import EventType
 from astrbot.core.utils.image_input import prepare_request_images
 from astrbot.core.utils.media_utils import normalize_model_image_max_size
