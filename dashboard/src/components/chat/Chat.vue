@@ -842,6 +842,22 @@ watch(sendShortcut, (shortcut) => {
   localStorage.setItem("chat.sendShortcut", shortcut);
 });
 
+// Chat stays mounted while other pages can update its saved preferences.
+watch(
+  () => props.active,
+  (active) => {
+    if (!active) return;
+    enableStreaming.value =
+      localStorage.getItem("chat.enableStreaming") !== "false";
+    enableReasoning.value =
+      localStorage.getItem("chat.enableReasoning") !== "false";
+    sendShortcut.value =
+      localStorage.getItem("chat.sendShortcut") === "shift_enter"
+        ? "shift_enter"
+        : "enter";
+  },
+);
+
 watch(transportMode, (mode) => {
   localStorage.setItem("chat.transportMode", mode);
 });

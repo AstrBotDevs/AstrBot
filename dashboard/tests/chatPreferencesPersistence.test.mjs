@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
 import ts from "typescript";
-import { effectScope, nextTick, ref, watch } from "vue";
+import { effectScope, nextTick, reactive, ref, watch } from "vue";
 
 const components = ["Chat.vue", "StandaloneChat.vue"];
 const preferences = ["enableStreaming", "enableReasoning", "sendShortcut"];
@@ -31,12 +31,17 @@ function mountPreferences(component, storage, t) {
       ts.isExpressionStatement(node) &&
       ts.isCallExpression(node.expression) &&
       node.expression.expression.getText(ast) === "watch" &&
-      preferences.includes(node.expression.arguments[0]?.getText(ast))
+      (preferences.includes(node.expression.arguments[0]?.getText(ast)) ||
+        (node.expression.arguments[0]?.getText(ast) === "() => props.active" &&
+          node.expression.arguments[1]
+            ?.getText(ast)
+            .includes("enableStreaming.value")))
     );
   });
   const context = vm.createContext({
     ref,
     watch,
+    props: reactive({ active: true }),
     localStorage: {
       getItem: (key) => storage.get(key) ?? null,
       setItem: (key, value) => storage.set(key, value),
@@ -48,12 +53,36 @@ function mountPreferences(component, storage, t) {
     vm.runInContext(
       ts.transpile(
         statements.map((node) => node.getText(ast)).join("\n") +
-          "\n({ enableStreaming, enableReasoning, sendShortcut });",
+          "\n({ enableStreaming, enableReasoning, sendShortcut, props });",
       ),
       context,
     ),
   );
 }
+
+test("retained Chat.vue refreshes preferences when it becomes active again", async (t) => {
+  const storage = new Map([["chat.transportMode", "websocket"]]);
+  const mainChat = mountPreferences("Chat.vue", storage, t);
+  for (const [streaming, reasoning, shortcut] of [
+    [false, false, "shift_enter"],
+    [true, true, "enter"],
+  ]) {
+    mainChat.props.active = false;
+    await nextTick();
+    const testChat = mountPreferences("StandaloneChat.vue", storage, t);
+    testChat.enableStreaming.value = streaming;
+    testChat.enableReasoning.value = reasoning;
+    testChat.sendShortcut.value = shortcut;
+    await nextTick();
+
+    mainChat.props.active = true;
+    await nextTick();
+    assert.equal(mainChat.enableStreaming.value, streaming);
+    assert.equal(mainChat.enableReasoning.value, reasoning);
+    assert.equal(mainChat.sendShortcut.value, shortcut);
+    assert.equal(storage.get("chat.transportMode"), "websocket");
+  }
+});
 
 for (const component of components) {
   test(`${component} preserves the default chat preferences`, (t) => {
