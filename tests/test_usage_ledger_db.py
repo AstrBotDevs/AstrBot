@@ -1,4 +1,5 @@
 import sqlite3
+from contextlib import closing
 
 import pytest
 from sqlmodel import select
@@ -10,7 +11,7 @@ from astrbot.core.db.sqlite import SQLiteDatabase
 @pytest.mark.asyncio
 async def test_old_stats_migrate_without_changing_old_rows(tmp_path):
     path = tmp_path / "old.db"
-    with sqlite3.connect(path) as conn:
+    with closing(sqlite3.connect(path)) as conn, conn:
         conn.execute(
             "CREATE TABLE provider_stats ("
             "id INTEGER PRIMARY KEY, created_at DATETIME, updated_at DATETIME, "
@@ -29,7 +30,7 @@ async def test_old_stats_migrate_without_changing_old_rows(tmp_path):
     try:
         await db.initialize()
         await db.initialize()
-        with sqlite3.connect(path) as conn:
+        with closing(sqlite3.connect(path)) as conn, conn:
             conn.execute(
                 "INSERT INTO provider_stats "
                 "(created_at, updated_at, agent_type, status, umo, provider_id, "
@@ -84,7 +85,7 @@ async def test_request_id_is_idempotent_and_nullable_for_legacy(temp_db):
 @pytest.mark.asyncio
 async def test_fresh_database_accepts_old_insert_columns(temp_db):
     await temp_db.initialize()
-    with sqlite3.connect(temp_db.db_path) as conn:
+    with closing(sqlite3.connect(temp_db.db_path)) as conn, conn:
         conn.execute(
             "INSERT INTO provider_stats "
             "(created_at, updated_at, agent_type, status, umo, provider_id, "
