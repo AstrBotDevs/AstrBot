@@ -1,5 +1,6 @@
 """Tests for astr_main_agent module."""
 
+import asyncio
 import datetime
 import os
 from contextlib import nullcontext
@@ -20,7 +21,7 @@ from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.config.agent_runner import resolve_context_compression_config
 from astrbot.core.conversation_mgr import Conversation
 from astrbot.core.cron.manager import CronJobManager
-from astrbot.core.message.components import File, Image, Plain, Reply, Video
+from astrbot.core.message.components import File, Image, Plain, Record, Reply, Video
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.provider import Provider
@@ -2438,6 +2439,164 @@ class TestBuildMainAgent:
             "Error processing quoted video attachment" in call[0][0]
             for call in mock_logger.error.call_args_list
         )
+
+    @pytest.mark.asyncio
+    async def test_build_main_agent_with_voice_attachments(
+        self, mock_event, mock_context, mock_provider
+    ):
+        """Test that resolvable voice attachments keep their local paths."""
+        module = ama
+        direct_path = str(Path("/path/to/voice.wav"))
+        quoted_path = str(Path("/path/to/quoted.wav"))
+        mock_record = Record(file="direct.amr")
+        mock_quoted_record = Record(file="quoted.amr")
+        mock_reply = Reply(
+            id="reply-1",
+            chain=[mock_quoted_record],
+            sender_nickname="",
+            message_str="quoted message",
+        )
+        mock_event.message_obj.message = [mock_record, mock_reply]
+
+        mock_context.get_provider_by_id.return_value = None
+        mock_context.get_using_provider.return_value = mock_provider
+        mock_context.get_config.return_value = {}
+
+        conv_mgr = mock_context.conversation_manager
+        _setup_conversation_for_build(conv_mgr)
+
+        async def _resolve_voice(self):
+            return quoted_path if self.file == "quoted.amr" else direct_path
+
+        with (
+            patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
+            patch("astrbot.core.astr_main_agent.AstrAgentContext"),
+            patch.object(
+                Record,
+                "convert_to_file_path",
+                _resolve_voice,
+            ),
+        ):
+            mock_runner = MagicMock()
+            mock_runner.reset = AsyncMock()
+            mock_runner_cls.return_value = mock_runner
+
+            result = await module.build_main_agent(
+                event=mock_event,
+                plugin_context=mock_context,
+                config=module.MainAgentBuildConfig(tool_call_timeout=60),
+            )
+
+        assert result is not None
+        assert result.provider_request.audio_urls == [direct_path, quoted_path]
+        extra_texts = [
+            part.text for part in result.provider_request.extra_user_content_parts
+        ]
+        assert f"[Audio Attachment: path {direct_path}]" in extra_texts
+        assert (
+            f"[Audio Attachment in quoted message: path {quoted_path}]" in extra_texts
+        )
+        assert "[Voice unavailable]" not in extra_texts
+
+    @pytest.mark.asyncio
+    async def test_build_main_agent_skips_unavailable_voice_attachments(
+        self, mock_event, mock_context, mock_provider
+    ):
+        """Unresolvable voice attachments degrade instead of failing the turn.
+
+        Both the current message and the quoted chain raise a bare ``Exception``,
+        which ``is_recoverable_image_error`` rejects, so the branches must degrade
+        unconditionally rather than re-raise.
+        """
+        module = ama
+        mock_record = Record(file="")
+        mock_quoted_record = Record(file="")
+        mock_reply = Reply(
+            id="reply-1",
+            chain=[Plain(text="quoted text"), mock_quoted_record],
+            sender_nickname="",
+            message_str="quoted text",
+        )
+        mock_event.message_obj.message = [Plain(text="Hello"), mock_reply, mock_record]
+
+        mock_context.get_provider_by_id.return_value = None
+        mock_context.get_using_provider.return_value = mock_provider
+        mock_context.get_config.return_value = {}
+
+        conv_mgr = mock_context.conversation_manager
+        _setup_conversation_for_build(conv_mgr)
+
+        async def _raise_unavailable_voice(self):
+            raise Exception(f"not a valid file: {self.file}")
+
+        with (
+            patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
+            patch("astrbot.core.astr_main_agent.AstrAgentContext"),
+            patch.object(
+                Record,
+                "convert_to_file_path",
+                _raise_unavailable_voice,
+            ),
+        ):
+            mock_runner = MagicMock()
+            mock_runner.reset = AsyncMock()
+            mock_runner_cls.return_value = mock_runner
+
+            result = await module.build_main_agent(
+                event=mock_event,
+                plugin_context=mock_context,
+                config=module.MainAgentBuildConfig(tool_call_timeout=60),
+            )
+
+        assert result is not None
+        assert result.provider_request.audio_urls == []
+        extra_texts = [
+            part.text for part in result.provider_request.extra_user_content_parts
+        ]
+        assert extra_texts.count("[Voice unavailable]") == 2
+        assert not any("Audio Attachment" in part for part in extra_texts)
+
+    @pytest.mark.asyncio
+    async def test_build_main_agent_propagates_voice_cancellation(
+        self, mock_event, mock_context, mock_provider
+    ):
+        """Cancellation must not be swallowed by the voice degrade path."""
+        module = ama
+        mock_quoted_record = Record(file="quoted.amr")
+        mock_reply = Reply(
+            id="reply-1",
+            chain=[mock_quoted_record],
+            sender_nickname="",
+            message_str="quoted message",
+        )
+        mock_event.message_obj.message = [Plain(text="Hello"), mock_reply]
+
+        mock_context.get_provider_by_id.return_value = None
+        mock_context.get_using_provider.return_value = mock_provider
+        mock_context.get_config.return_value = {}
+
+        conv_mgr = mock_context.conversation_manager
+        _setup_conversation_for_build(conv_mgr)
+
+        with (
+            patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
+            patch("astrbot.core.astr_main_agent.AstrAgentContext"),
+            patch.object(
+                Record,
+                "convert_to_file_path",
+                AsyncMock(side_effect=asyncio.CancelledError),
+            ),
+        ):
+            mock_runner = MagicMock()
+            mock_runner.reset = AsyncMock()
+            mock_runner_cls.return_value = mock_runner
+
+            with pytest.raises(asyncio.CancelledError):
+                await module.build_main_agent(
+                    event=mock_event,
+                    plugin_context=mock_context,
+                    config=module.MainAgentBuildConfig(tool_call_timeout=60),
+                )
 
     @pytest.mark.asyncio
     async def test_build_main_agent_no_prompt_no_images(
