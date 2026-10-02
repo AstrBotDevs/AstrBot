@@ -27,7 +27,7 @@ from astrbot.core.dashboard_assets import (
     get_dashboard_version,
 )
 from astrbot.core.db import BaseDatabase
-from astrbot.core.db.po import PlatformStat, ProviderStat
+from astrbot.core.db.po import ConversationV2, PlatformStat, ProviderStat
 from astrbot.core.desktop_runtime import (
     DESKTOP_MANAGED_RESTART_MESSAGE,
     is_desktop_managed_backend,
@@ -365,10 +365,10 @@ class StatService:
                 days = 1
 
             local_tz = datetime.now().astimezone().tzinfo or timezone.utc
-            now_local = datetime.now(local_tz)
-            range_start_local = (now_local - timedelta(days=days)).replace(
-                minute=0, second=0, microsecond=0
-            )
+            now_utc = datetime.now(timezone.utc)
+            now_local = now_utc.astimezone(local_tz)
+            range_start_utc = now_utc - timedelta(days=days)
+            range_start_local = range_start_utc.astimezone(local_tz)
             today_start_local = now_local.replace(
                 hour=0, minute=0, second=0, microsecond=0
             )
@@ -378,16 +378,35 @@ class StatService:
             async with self.db_helper.get_db() as session:
                 result = await session.execute(
                     select(ProviderStat)
-                    .where(
-                        col(ProviderStat.agent_type).in_(("internal", "provider")),
-                        ProviderStat.created_at >= query_start_utc,
-                    )
+                    .where(ProviderStat.created_at >= query_start_utc)
                     .order_by(col(ProviderStat.created_at).asc())
                 )
                 records = result.scalars().all()
+                legacy_umos = {
+                    record.umo
+                    for record in records
+                    if not getattr(record, "stat_version", 0) and record.umo
+                }
+                known_legacy_sessions: set[str] = set()
+                if legacy_umos:
+                    result = await session.execute(
+                        select(ConversationV2.user_id, ConversationV2.platform_id)
+                        .where(col(ConversationV2.user_id).in_(legacy_umos))
+                        .distinct()
+                    )
+                    for user_id, platform_id in result.all():
+                        parts = user_id.split(":", 2)
+                        if (
+                            len(parts) == 3
+                            and parts[0] == platform_id
+                            and parts[1]
+                            in ("GroupMessage", "FriendMessage", "OtherMessage")
+                            and parts[2]
+                        ):
+                            known_legacy_sessions.add(user_id)
 
             bucket_timestamps: list[int] = []
-            bucket_cursor = range_start_local
+            bucket_cursor = range_start_local.replace(minute=0, second=0, microsecond=0)
             while bucket_cursor <= now_local:
                 bucket_timestamps.append(int(bucket_cursor.timestamp() * 1000))
                 bucket_cursor += timedelta(hours=1)
@@ -410,6 +429,29 @@ class StatService:
             today_by_provider: dict[str, int] = defaultdict(int)
             today_total_tokens = 0
             today_total_calls = 0
+            stat_categories = ("agent", "provider", "test", "other")
+            range_call_counts = dict.fromkeys(stat_categories, 0)
+            range_token_totals = dict.fromkeys(stat_categories, 0)
+            today_call_counts = dict.fromkeys(stat_categories, 0)
+            today_token_totals = dict.fromkeys(stat_categories, 0)
+            usage_fields = (
+                "input_other",
+                "input_cached",
+                "output",
+                "reported_tokens",
+                "legacy_tokens",
+                "reported_calls",
+                "partial_calls",
+                "missing_calls",
+                "legacy_calls",
+                "new_calls",
+            )
+            range_usage = dict.fromkeys(usage_fields, 0)
+            today_usage = dict.fromkeys(usage_fields, 0)
+            dimensions = ("session", "source", "provider", "model", "plugin", "kind")
+            breakdowns: dict[str, dict[str | None, dict]] = {
+                dimension: {} for dimension in dimensions
+            }
 
             for record in records:
                 created_at_utc = self._ensure_aware_utc(record.created_at)
@@ -421,8 +463,33 @@ class StatService:
                 )
                 provider_id = record.provider_id or "unknown"
                 provider_model = record.provider_model or "Unknown"
+                stat_category = {
+                    "internal": "agent",
+                    "provider": "provider",
+                    "test": "test",
+                }.get(record.agent_type, "other")
+                usage_status = "legacy"
+                if getattr(record, "stat_version", 0) >= 1:
+                    if record.request_kind == "test" or record.origin_type == "test":
+                        stat_category = "test"
+                    elif record.origin_type == "chat":
+                        stat_category = "agent"
+                    else:
+                        stat_category = "provider"
+                    usage_status = (
+                        record.usage_status
+                        if record.usage_status in ("reported", "partial", "missing")
+                        else "missing"
+                    )
+                session_umo = (
+                    record.session_umo
+                    if getattr(record, "stat_version", 0) >= 1
+                    else record.umo
+                    if record.umo in known_legacy_sessions
+                    else None
+                )
 
-                if created_at_local >= range_start_local:
+                if created_at_utc >= range_start_utc:
                     bucket_local = created_at_local.replace(
                         minute=0, second=0, microsecond=0
                     )
@@ -433,6 +500,55 @@ class StatService:
                     total_by_bucket[bucket_ts] += token_total
                     range_total_tokens += token_total
                     range_total_calls += 1
+                    range_total_output_tokens += record.token_output
+                    range_call_counts[stat_category] += 1
+                    range_token_totals[stat_category] += token_total
+                    range_usage["input_other"] += record.token_input_other
+                    range_usage["input_cached"] += record.token_input_cached
+                    range_usage["output"] += record.token_output
+                    range_usage[f"{usage_status}_calls"] += 1
+                    if usage_status == "legacy":
+                        range_usage["legacy_tokens"] += token_total
+                    else:
+                        range_usage["new_calls"] += 1
+                        if usage_status != "missing":
+                            range_usage["reported_tokens"] += token_total
+                    keys = {
+                        "session": session_umo,
+                        "source": record.source_id
+                        if getattr(record, "stat_version", 0) >= 1
+                        else None,
+                        "provider": record.provider_id or None,
+                        "model": record.provider_model or None,
+                        "plugin": record.plugin_id
+                        if getattr(record, "stat_version", 0) >= 1
+                        else None,
+                        "kind": record.request_kind
+                        if getattr(record, "stat_version", 0) >= 1
+                        else None,
+                    }
+                    for dimension, key in keys.items():
+                        if not key:
+                            key = None
+                        entry = breakdowns[dimension].setdefault(
+                            key,
+                            {
+                                "key": key,
+                                "tokens": 0,
+                                "calls": 0,
+                                "missing_calls": 0,
+                                "legacy_calls": 0,
+                                "reported_tokens": 0,
+                            },
+                        )
+                        entry["tokens"] += token_total
+                        entry["calls"] += 1
+                        if usage_status == "missing":
+                            entry["missing_calls"] += 1
+                        elif usage_status == "legacy":
+                            entry["legacy_calls"] += 1
+                        else:
+                            entry["reported_tokens"] += token_total
                     if record.status == "completed":
                         range_success_calls += 1
                     if record.time_to_first_token > 0:
@@ -443,13 +559,30 @@ class StatService:
                             record.end_time - record.start_time
                         ) * 1000
                         range_duration_samples += 1
-                        range_total_output_tokens += record.token_output
 
                 if created_at_local >= today_start_local:
                     today_total_calls += 1
                     today_total_tokens += token_total
                     today_by_model[provider_model] += token_total
                     today_by_provider[provider_id] += token_total
+                    today_usage["input_other"] += record.token_input_other
+                    today_usage["input_cached"] += record.token_input_cached
+                    today_usage["output"] += record.token_output
+                    today_usage[f"{usage_status}_calls"] += 1
+                    if usage_status == "legacy":
+                        today_usage["legacy_tokens"] += token_total
+                    else:
+                        today_usage["new_calls"] += 1
+                        if usage_status != "missing":
+                            today_usage["reported_tokens"] += token_total
+
+            for summary in (range_usage, today_usage):
+                summary["coverage"] = (
+                    (summary["reported_calls"] + summary["partial_calls"])
+                    / summary["new_calls"]
+                    if summary["new_calls"]
+                    else None
+                )
 
             sorted_provider_ids = sorted(
                 total_by_provider.keys(),
@@ -505,8 +638,37 @@ class StatService:
                 if platform_id and platform_type:
                     platform_type_by_id[str(platform_id)] = str(platform_type)
             alias_map = build_umo_alias_map(
-                await self.db_helper.get_umo_aliases(list(total_by_umo))
+                await self.db_helper.get_umo_aliases(
+                    list((set(total_by_umo) | set(breakdowns["session"])) - {None})
+                )
             )
+            range_breakdowns = {}
+            for dimension, grouped in breakdowns.items():
+                entries = sorted(
+                    grouped.values(),
+                    key=lambda item: (
+                        -item["tokens"],
+                        -item["calls"],
+                        item["key"] or "",
+                    ),
+                )
+                for entry in entries:
+                    key = entry["key"]
+                    entry["display_name"] = (
+                        serialize_umo_alias(alias_map.get(key), key)["display_name"]
+                        if dimension == "session" and key
+                        else key
+                    )
+                    if dimension == "session":
+                        entry["can_open_conversation"] = bool(key)
+                        entry["platform_type"] = (
+                            platform_type_by_id.get(
+                                key.split(":", 1)[0], key.split(":", 1)[0]
+                            )
+                            if key
+                            else None
+                        )
+                range_breakdowns[dimension] = entries
             range_by_umo_data = []
             for umo, tokens in sorted(
                 total_by_umo.items(),
@@ -554,10 +716,13 @@ class StatService:
                 ),
                 "range_by_provider": range_by_provider_data,
                 "range_by_umo": range_by_umo_data,
+                "range_usage": range_usage,
+                "range_breakdowns": range_breakdowns,
                 "today_total_tokens": today_total_tokens,
                 "today_total_calls": today_total_calls,
                 "today_by_model": today_by_model_data,
                 "today_by_provider": today_by_provider_data,
+                "today_usage": today_usage,
             }
         except Exception as exc:
             logger.error(traceback.format_exc())

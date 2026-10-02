@@ -771,10 +771,8 @@ async def test_query_handles_none_usage_when_content_filtered(monkeypatch):
     llm_response = await provider.text_chat(prompt="test")
 
     assert llm_response.completion_text == content_filter_message
-    assert llm_response.usage is not None
-    assert llm_response.usage.input_other == 0
-    assert llm_response.usage.input_cached == 0
-    assert llm_response.usage.output == 0
+    # Missing upstream usage must not be recorded as a reported zero-token call.
+    assert llm_response.usage is None
 
 
 @pytest.mark.asyncio

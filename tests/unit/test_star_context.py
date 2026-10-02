@@ -113,6 +113,22 @@ def make_context() -> Context:
     return context
 
 
+@pytest.mark.asyncio
+async def test_dynamically_registered_provider_is_recorded_once():
+    context = make_context()
+    writer = AsyncMock()
+    context._db = SimpleNamespace(insert_provider_stat=writer)
+    context.provider_manager.provider_insts = []
+    provider = StatsProvider()
+    context.register_provider(provider)
+    context.register_provider(provider)
+    await provider.text_chat(prompt="test")
+    assert writer.await_count == 1
+    row = writer.await_args.kwargs
+    assert row["stats"]["stat_version"] == 1
+    assert row["stats"]["session_umo"] is None
+
+
 def make_tool(name: str, module_path: str) -> FunctionTool:
     tool = FunctionTool(
         name=name,

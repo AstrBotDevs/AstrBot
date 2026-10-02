@@ -5,7 +5,7 @@ import time
 import traceback
 import typing as T
 import uuid
-from contextlib import contextmanager, suppress
+from contextlib import aclosing, contextmanager, suppress
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
@@ -48,6 +48,7 @@ from astrbot.core.provider.modalities import (
 )
 from astrbot.core.provider.provider import Provider, provider_stats_managed_by_agent
 from astrbot.core.provider.stats import ProviderStatSegment
+from astrbot.core.provider.usage_attribution import iter_with_usage
 
 from ..context.compressor import ContextCompressor
 from ..context.config import ContextConfig
@@ -671,40 +672,42 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     has_stream_output = False
                     with attempt:
                         try:
-                            async for resp in self._iter_llm_responses(
-                                include_model=idx == 0
-                            ):
-                                if resp.is_chunk:
-                                    has_stream_output = True
+                            async with aclosing(
+                                self._iter_llm_responses(include_model=idx == 0)
+                            ) as responses:
+                                async for resp in responses:
+                                    if resp.is_chunk:
+                                        has_stream_output = True
+                                        candidate_has_stream_output = True
+                                        yield resp
+                                        continue
+
+                                    if (
+                                        resp.role == "err"
+                                        and not has_stream_output
+                                        and (not is_last_candidate)
+                                    ):
+                                        last_err_response = resp
+                                        last_exception = None
+                                        failed_usage = resp.usage or TokenUsage()
+                                        self._accumulate_token_usage(
+                                            failed_usage,
+                                            candidate,
+                                        )
+                                        self._settle_provider_stat_segment(
+                                            candidate,
+                                            fallback_start_time=candidate_start_time,
+                                            end_time=time.time(),
+                                        )
+                                        logger.warning(
+                                            "Chat Model %s returns error response, trying fallback to next provider.",
+                                            candidate_id,
+                                        )
+                                        break
+
+                                    self._sanitize_malformed_tool_calls(resp)
                                     yield resp
-                                    continue
-
-                                if (
-                                    resp.role == "err"
-                                    and not has_stream_output
-                                    and (not is_last_candidate)
-                                ):
-                                    last_err_response = resp
-                                    last_exception = None
-                                    failed_usage = resp.usage or TokenUsage()
-                                    self._accumulate_token_usage(
-                                        failed_usage,
-                                        candidate,
-                                    )
-                                    self._settle_provider_stat_segment(
-                                        candidate,
-                                        fallback_start_time=candidate_start_time,
-                                        end_time=time.time(),
-                                    )
-                                    logger.warning(
-                                        "Chat Model %s returns error response, trying fallback to next provider.",
-                                        candidate_id,
-                                    )
-                                    break
-
-                                self._sanitize_malformed_tool_calls(resp)
-                                yield resp
-                                return
+                                    return
 
                             if has_stream_output:
                                 return
@@ -909,6 +912,23 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
     @override
     async def step(self):
+        event = getattr(getattr(self.run_context, "context", None), "event", None)
+        request = self.req
+        iterator = iter_with_usage(
+            self._step(),
+            event=event,
+            plugin_id=getattr(request, "usage_plugin_id", None),
+            conversation_id=(
+                request.conversation.cid if request and request.conversation else None
+            ),
+        )
+        try:
+            async for response in iterator:
+                yield response
+        finally:
+            await iterator.aclose()
+
+    async def _step(self):
         """Process a single step of the agent.
         This method should return the result of the step.
         """
@@ -943,56 +963,61 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.run_context.messages = processed_messages
         self._simple_print_message_role("[AftCompact]", self.run_context.messages)
 
-        async for llm_response in self._iter_llm_responses_with_fallback():
-            if llm_response.is_chunk:
-                if self.stats.time_to_first_token == 0:
-                    self.stats.time_to_first_token = time.time() - self.stats.start_time
+        async with aclosing(self._iter_llm_responses_with_fallback()) as responses:
+            async for llm_response in responses:
+                if llm_response.is_chunk:
+                    if self.stats.time_to_first_token == 0:
+                        self.stats.time_to_first_token = (
+                            time.time() - self.stats.start_time
+                        )
 
-                if llm_response.reasoning_content:
-                    yield AgentResponse(
-                        type="streaming_delta",
-                        data=AgentResponseData(
-                            chain=MessageChain(type="reasoning").message(
-                                llm_response.reasoning_content,
+                    if llm_response.reasoning_content:
+                        yield AgentResponse(
+                            type="streaming_delta",
+                            data=AgentResponseData(
+                                chain=MessageChain(type="reasoning").message(
+                                    llm_response.reasoning_content,
+                                ),
                             ),
-                        ),
-                    )
-                if llm_response.result_chain:
-                    yield AgentResponse(
-                        type="streaming_delta",
-                        data=AgentResponseData(chain=llm_response.result_chain),
-                    )
-                elif llm_response.completion_text:
-                    yield AgentResponse(
-                        type="streaming_delta",
-                        data=AgentResponseData(
-                            chain=MessageChain().message(llm_response.completion_text),
-                        ),
-                    )
-                if self._is_stop_requested():
-                    break
-                continue
-            llm_resp_result = llm_response
+                        )
+                    if llm_response.result_chain:
+                        yield AgentResponse(
+                            type="streaming_delta",
+                            data=AgentResponseData(chain=llm_response.result_chain),
+                        )
+                    elif llm_response.completion_text:
+                        yield AgentResponse(
+                            type="streaming_delta",
+                            data=AgentResponseData(
+                                chain=MessageChain().message(
+                                    llm_response.completion_text
+                                ),
+                            ),
+                        )
+                    if self._is_stop_requested():
+                        break
+                    continue
+                llm_resp_result = llm_response
 
-            # Chunk responses have already continued above. A missing usage report
-            # means the latest context occupancy is unknown.
-            self.stats.current_context_tokens = 0
-            if llm_response.usage:
-                # Keep cumulative usage for billing and expose the latest request
-                # input separately for context-window occupancy displays.
-                self._accumulate_token_usage(llm_response.usage)
-            # end_time must be set before the yield serializes to_dict().
-            self.stats.end_time = time.time()
-            yield AgentResponse(
-                type="agent_stats",
-                data=AgentResponseData(
-                    chain=MessageChain(
-                        type="agent_stats",
-                        chain=[Json(data=self.stats.to_dict())],
-                    )
-                ),
-            )
-            break  # got final response
+                # Chunk responses have already continued above. A missing usage report
+                # means the latest context occupancy is unknown.
+                self.stats.current_context_tokens = 0
+                if llm_response.usage:
+                    # Keep cumulative usage for billing and expose the latest request
+                    # input separately for context-window occupancy displays.
+                    self._accumulate_token_usage(llm_response.usage)
+                # end_time must be set before the yield serializes to_dict().
+                self.stats.end_time = time.time()
+                yield AgentResponse(
+                    type="agent_stats",
+                    data=AgentResponseData(
+                        chain=MessageChain(
+                            type="agent_stats",
+                            chain=[Json(data=self.stats.to_dict())],
+                        )
+                    ),
+                )
+                break  # got final response
 
         if self._is_stop_requested():
             yield await self._finalize_aborted_step()

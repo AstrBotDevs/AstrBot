@@ -67,7 +67,6 @@ async def record_agent_runner_stats(
     stats = getattr(agent_runner, "stats", None)
     if provider is None or stats is None:
         return
-
     try:
         conversation_id = (
             request.conversation.cid
@@ -80,6 +79,8 @@ async def record_agent_runner_stats(
         segmented_usage = TokenUsage()
         for segment in segments:
             segmented_usage += segment.usage
+            if getattr(segment.provider, "_usage_recording_enabled", False) is True:
+                continue
             await db.insert_provider_stat(
                 umo=umo,
                 conversation_id=conversation_id,
@@ -123,6 +124,8 @@ async def record_agent_runner_stats(
                 aggregate_stats["start_time"],
             )
 
+        if getattr(provider, "_usage_recording_enabled", False) is True:
+            return
         await db.insert_provider_stat(
             umo=umo,
             conversation_id=conversation_id,
@@ -153,6 +156,8 @@ async def record_llm_response_stats(
     usage: TokenUsage | None = None,
 ) -> None:
     """Persist stats for one direct provider request."""
+    if getattr(provider, "_usage_recording_enabled", False) is True:
+        return
     try:
         effective_usage = usage
         if effective_usage is None and response is not None:

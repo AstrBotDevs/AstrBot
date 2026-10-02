@@ -533,6 +533,51 @@ def runner():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+async def test_managed_ledger_records_tool_rounds_once_with_event_attribution(
+    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks, streaming
+):
+    from astrbot.core.provider.usage_recorder import instrument_provider
+
+    mock_provider.provider_config = {
+        "id": "provider-a",
+        "provider_source_id": "source-a",
+    }
+    mock_provider.max_calls_before_normal_response = 1
+    writer = AsyncMock()
+    db = SimpleNamespace(insert_provider_stat=writer)
+    instrument_provider(mock_provider, db)
+    event = SimpleNamespace(
+        unified_msg_origin="qq:GroupMessage:example",
+        trace=SimpleNamespace(span_id="trace-tool-rounds"),
+    )
+    provider_request.usage_plugin_id = "plugin-a"
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=SimpleNamespace(event=event)),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=streaming,
+    )
+    async for _ in runner.step_until_done(5):
+        pass
+    await record_agent_runner_stats(
+        db,
+        umo=event.unified_msg_origin,
+        request=provider_request,
+        agent_runner=runner,
+        final_response=runner.get_final_llm_resp(),
+    )
+    rows = [call.kwargs for call in writer.await_args_list]
+    assert len(rows) == mock_provider.call_count == 2
+    assert sum(row["stats"]["token_usage"]["output"] for row in rows) == 10
+    assert {row["stats"]["session_umo"] for row in rows} == {event.unified_msg_origin}
+    assert {row["stats"]["plugin_id"] for row in rows} == {"plugin-a"}
+    assert {row["stats"]["trace_id"] for row in rows} == {"trace-tool-rounds"}
+
+
+@pytest.mark.asyncio
 async def test_runner_marks_provider_stats_as_agent_managed_during_provider_call(
     runner, provider_request, mock_tool_executor, mock_hooks
 ):

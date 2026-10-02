@@ -860,6 +860,9 @@ class Context:
         Args:
             provider: 提供者实例。
         """
+        from astrbot.core.provider.usage_recorder import instrument_provider
+
+        instrument_provider(provider, self._db)
         self.provider_manager.provider_insts.append(provider)
 
     @deprecated(reason="Use decorator-based tool registration instead.")

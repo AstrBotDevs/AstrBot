@@ -6,6 +6,7 @@ import typing as T
 import uuid
 from collections.abc import Sequence
 from collections.abc import Set as AbstractSet
+from contextlib import aclosing
 
 import mcp
 
@@ -31,6 +32,8 @@ from astrbot.core.message.message_event_result import (
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.provider.entites import ProviderRequest
 from astrbot.core.provider.register import llm_tools
+from astrbot.core.provider.usage_attribution import iter_with_usage, plugin_for_handler
+from astrbot.core.provider.usage_recorder import event_usage_scope
 from astrbot.core.tools.computer_tools import (
     CuaKeyboardTypeTool,
     CuaMouseClickTool,
@@ -821,18 +824,24 @@ async def call_local_llm_tool(
     if inspect.isasyncgen(ready_to_call):
         _has_yielded = False
         try:
-            async for ret in ready_to_call:
-                # 这里逐步执行异步生成器, 对于每个 yield 返回的 ret, 执行下面的代码
-                # 返回值只能是 MessageEventResult 或者 None（无返回值）
-                _has_yielded = True
-                if isinstance(ret, MessageEventResult | CommandResult):
-                    # 如果返回值是 MessageEventResult, 设置结果并继续
-                    event.set_result(ret)
-                    yield
-                else:
-                    # 如果返回值是 None, 则不设置结果并继续
-                    # 继续执行后续阶段
-                    yield ret
+            async with aclosing(
+                iter_with_usage(
+                    ready_to_call,
+                    event=event,
+                    plugin_id=plugin_for_handler(handler),
+                    origin_type="tool",
+                )
+            ) as attributed_results:
+                async for ret in attributed_results:
+                    _has_yielded = True
+                    if isinstance(ret, MessageEventResult | CommandResult):
+                        # 如果返回值是 MessageEventResult, 设置结果并继续
+                        event.set_result(ret)
+                        yield
+                    else:
+                        # 如果返回值是 None, 则不设置结果并继续
+                        # 继续执行后续阶段
+                        yield ret
             if not _has_yielded:
                 # 如果这个异步生成器没有执行到 yield 分支
                 yield
@@ -841,7 +850,10 @@ async def call_local_llm_tool(
             raise e
     elif inspect.iscoroutine(ready_to_call):
         # 如果只是一个协程, 直接执行
-        ret = await ready_to_call
+        with event_usage_scope(
+            event, plugin_id=plugin_for_handler(handler), origin_type="tool"
+        ):
+            ret = await ready_to_call
         if isinstance(ret, MessageEventResult | CommandResult):
             event.set_result(ret)
             yield

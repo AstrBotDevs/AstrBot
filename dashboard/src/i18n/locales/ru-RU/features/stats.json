@@ -60,6 +60,13 @@
   "modelTotal": {
     "title": "{range} всего вызовов моделей",
     "callCount": "{count} вызовов",
+    "callBreakdown": "Агент {agent} · прямые {provider} · проверка {test} · прочие {other}",
+    "tokenBreakdown": "Ввод без кэша {input} · кэшированный ввод {cached} · вывод {output}",
+    "usageCoverage": "Покрытие новых вызовов {coverage} · частичные данные {partial} · без данных {missing}",
+    "recordedHistory": "Новые отчёты {newTokens} · прежние записи {legacyTokens}",
+    "quotaNote": "Учтённые токены отличаются от расхода лимита подписки OAuth. Исторические пропуски восстановить нельзя.",
+    "scopeLabel": "Область учёта",
+    "scopeNote": "Число вызовов отражает наблюдаемые обращения к Provider без внутренних повторов SDK. Токены берутся из поля usage ответа. Отдельные расходы инструментов и других клиентов общего аккаунта нельзя восстановить по локальным записям.",
     "avgTtft": "Средний TTFT",
     "avgDuration": "Среднее время ответа",
     "avgTpm": "Средний Output TPM",
@@ -69,8 +76,19 @@
     "title": "Рейтинг использования моделей"
   },
   "sessionRanking": {
-    "title": "{range} топ-10 сессий по использованию моделей",
+    "title": "{range} топ-10 по измерению «{dimension}»",
     "openConversation": "Открыть диалог"
+  },
+  "usageDimensions": {
+    "session": "Сессия",
+    "source": "Источник",
+    "provider": "Provider",
+    "model": "Модель",
+    "plugin": "Плагин",
+    "kind": "Тип вызова",
+    "unknownSession": "Без привязки к сессии",
+    "unknownOther": "Неизвестно",
+    "sameCallsNote": "Каждое измерение группирует одни и те же вызовы; складывать их нельзя."
   },
   "empty": {
     "platformStats": "Статистика сообщений по платформам отсутствует.",
