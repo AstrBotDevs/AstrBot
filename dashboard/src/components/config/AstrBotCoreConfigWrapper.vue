@@ -98,7 +98,7 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from "vue";
+import { computed, provide, ref, shallowRef, watch } from "vue";
 import AiConfigPanel from "@/components/config/AiConfigPanel.vue";
 import ConfigGroupTabs from "@/components/config/ConfigGroupTabs.vue";
 import PluginSetSelector from "@/components/shared/PluginSetSelector.vue";
@@ -123,6 +123,8 @@ const { tm: sharedTm } = useModuleI18n("core/shared");
 const translate = (value) =>
   getRaw(value) ? tm(value) : metadataRaw(value) ? metadataTm(value) : value;
 const tab = ref(null);
+// Keep model edits within this profile when filtering unmounts the editor.
+provide("modelParameterEditorState", shallowRef(null));
 const hierarchy = computed(() => buildConfigHierarchy(props.metadata));
 const visibleSections = computed(() => {
   const order = Object.keys(CONFIG_SECTIONS);

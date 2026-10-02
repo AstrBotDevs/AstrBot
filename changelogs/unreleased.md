@@ -1,5 +1,6 @@
 # Unreleased
 
+- Add model parameter controls under Config → AI → Models. Require an explicitly selected model and retain unsaved drafts across search and tab changes. Save changes separately for all profiles using the model, or clear overrides to restore provider defaults. Support Anthropic adaptive-thinking effort, native Responses API fields, and scientific notation for token limits. Full settings remain at Providers → Chat → Configured models → Gear.
 - Move AI → Current Runner / AI heading → Change Execution Mode to AI → top-right ⋯ → Switch Runner, rename Built-in AI to Built-in Runner, and move resource shortcuts to the sidebar.
 - Reorganize profiles: speech/reply settings from AI/Common Settings and Ext. → Messages & Replies; access/history from Platform/Ext. → Sessions & Access; delivery/feedback → platform-specific tabs. Group Context from Ext. / AI → Context & Execution → Messages & Replies → Reception & Input → Group Context Collection; shared image caption prompts from AI → Input Understanding / Reception & Input → Shared Image Captioning → Group Context Collection → Image Caption Prompt. Update Chinese/English guides and screenshots.
 - Rename AI → Context & Execution to Context and move Tool Execution to AI → Capabilities.

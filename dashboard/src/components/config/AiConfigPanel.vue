@@ -78,6 +78,14 @@
         :search-keyword="searchKeyword"
         :show-empty="!searchKeyword.trim()"
       >
+        <template #after-field="{ fieldKey }">
+          <ModelParameters
+            v-if="fieldKey === 'agent_runner.config.model.provider_id'"
+            :provider-id="
+              configData.agent_runner?.config?.model?.provider_id || ''
+            "
+          />
+        </template>
       </ConfigGroupTabs>
     </section>
 
@@ -175,6 +183,7 @@
 import { computed, ref, watch } from "vue";
 import AstrBotLogo from "@/components/chat/ChatUILogo.vue";
 import ConfigGroupTabs from "@/components/config/ConfigGroupTabs.vue";
+import ModelParameters from "@/components/config/ModelParameters.vue";
 import { useModuleI18n } from "@/i18n/composables";
 
 const props = defineProps({
@@ -228,7 +237,21 @@ const runnerGroups = computed(() =>
   Object.fromEntries(
     Object.entries(props.metadata)
       .filter(([, group]) => group.runner === runnerType.value)
-
+      .map(([key, group]) => [
+        key,
+        key === "local_model"
+          ? {
+              ...group,
+              items: {
+                ...group.items,
+                "agent_runner.config.model.provider_id": {
+                  ...group.items["agent_runner.config.model.provider_id"],
+                  hint: "",
+                },
+              },
+            }
+          : group,
+      ]),
   ),
 );
 const otherGroups = computed(() =>

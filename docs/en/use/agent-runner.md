@@ -37,6 +37,8 @@ Platforms like Dify, Coze, Bailian Application, and DeerFlow have this loop buil
 
 AstrBot uses its built-in runner by default. Select a chat model under **Config → AI → Models**, and configure personas, knowledge bases, and tools as needed.
 
+See [WebUI Visual Configuration](./webui.md#visual-configuration) for editing and saving model parameters.
+
 To connect an external application, select the execution mode and enter its connection settings directly in the current configuration profile:
 
 1. Open **Config** in the WebUI sidebar, select the profile to edit, and open **AI**.

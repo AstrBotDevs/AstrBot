@@ -94,6 +94,12 @@ The built-in runner’s `Context` tab manages context and sanitization. `Capabil
 
 ![Context](./images/config-context-en.jpg)
 
+After explicitly selecting a chat model under `AI → Models`, use `Current model parameters` below it to edit temperature, maximum output Tokens, reasoning effort, and capabilities / modalities. Parameter editing is unavailable with automatic model selection. `Save model parameters` immediately applies changes to every profile using that model. Search and tab changes retain unsaved drafts within the current profile; save before switching models or profiles, or leaving or reloading the page. Model selection, fallback policy, and other profile settings still require `Save Configuration`.
+
+Unset parameters show presets without saving them just by viewing. Clear a number or reasoning effort to restore the provider default. Reasoning effort accepts model-specific values; token limits accept scientific notation (for example, `1e5` means `100000`). Providers that do not support custom request-body parameters disable these controls. Anthropic-compatible models require adaptive thinking to be enabled before editing reasoning effort. Full settings and fallback-model parameters are under `Providers → Chat → Configured models → Gear`.
+
+![Current model parameters](./images/config-model-parameters-en.png)
+
 Use this mapping to find relocated settings:
 
 | Previous configuration entry | New configuration entry |

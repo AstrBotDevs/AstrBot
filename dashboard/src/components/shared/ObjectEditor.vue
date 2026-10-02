@@ -241,6 +241,7 @@
 </template>
 
 <script setup>
+import { getConfigTemplateValue, normalizeConfigValue } from '@/utils/configValue.mjs'
 import { ref, computed, watch } from 'vue'
 import { useI18n } from '@/i18n/composables'
 import { useToast } from '@/utils/toast'
@@ -458,7 +459,7 @@ function getTemplateValue(templateKey) {
     return pair.value
   }
   const template = templateSchema.value[templateKey]
-  return template?.default !== undefined ? template.default : getDefaultValueForType(template?.type || 'string')
+  return getConfigTemplateValue(undefined, template)
 }
 
 function updateTemplateValue(templateKey, newValue) {
@@ -488,56 +489,11 @@ function removeTemplateKey(templateKey) {
   }
 }
 
-function getDefaultValueForType(type) {
-  switch (type) {
-    case 'int':
-    case 'float':
-    case 'number':
-      return 0
-    case 'bool':
-    case 'boolean':
-      return false
-    case 'json':
-      return '{}'
-    case 'string':
-    default:
-      return ''
-  }
-}
-
 function confirmDialog() {
   const updatedValue = {}
   for (const pair of localKeyValuePairs.value) {
     if (pair.type === 'json' && pair.jsonError) return
-    let convertedValue = pair.value
-    // 根据声明的类型进行转换
-    switch (pair.type) {
-      case 'int':
-        convertedValue = parseInt(pair.value) || 0
-        break
-      case 'float':
-      case 'number':
-        // 尝试转换为数字，如果失败则保持原值（或设为默认值0）
-        convertedValue = Number(pair.value)
-        // 可选：检查是否为有效数字，无效则设为0或报错
-        // if (isNaN(convertedValue)) convertedValue = 0;
-        break
-      case 'bool':
-      case 'boolean':
-        // 布尔值通常由 v-switch 正确处理，但为保险起见可以显式转换
-        // 注意：在 JavaScript 中，只有严格的 false, 0, '', null, undefined, NaN 会被转换为 false
-        // 这里直接赋值 pair.value 应该是安全的，因为 v-model 绑定的就是布尔值
-        // convertedValue = Boolean(pair.value)
-        break
-      case 'json':
-        convertedValue = JSON.parse(pair.value)
-        break
-      case 'string':
-      default:
-        // 默认转换为字符串
-        convertedValue = String(pair.value)
-        break
-    }
+    const convertedValue = normalizeConfigValue(pair.value, { type: pair.type, slider: pair.slider })
     updatedValue[pair.key] = convertedValue
   }
   emit('update:modelValue', updatedValue)
