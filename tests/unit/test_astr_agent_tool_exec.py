@@ -9,6 +9,7 @@ import pytest
 from astrbot.core.agent.agent import Agent
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.message.components import Image
@@ -595,3 +596,34 @@ async def test_collect_handoff_image_urls_filters_extensionless_file_outside_tem
     )
 
     assert image_urls == []
+
+
+@pytest.mark.asyncio
+async def test_external_runner_cancel_closes_pending_tool_executor():
+    runner = ToolLoopAgentRunner()
+    runner._abort_signal = asyncio.Event()
+    started, release, closed, side_effect = (asyncio.Event() for _ in range(4))
+
+    async def execute():
+        started.set()
+        try:
+            await release.wait()
+            side_effect.set()
+            yield "done"
+        finally:
+            closed.set()
+
+    results = runner._iter_tool_executor_results(execute())
+    task = asyncio.create_task(anext(results))
+    try:
+        await asyncio.wait_for(started.wait(), timeout=1)
+        task.cancel()
+        await asyncio.wait_for(asyncio.gather(task, return_exceptions=True), timeout=1)
+        assert task.cancelled() and closed.is_set()
+        assert not side_effect.is_set()
+    finally:
+        release.set()
+        if not task.done():
+            task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        await results.aclose()
