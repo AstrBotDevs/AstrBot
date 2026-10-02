@@ -26,7 +26,7 @@ from astrbot.core.utils.network_utils import (
     log_connection_failure,
 )
 
-from ..headers import build_provider_headers
+from ..headers import build_conversation_headers, build_provider_headers
 from ..register import register_provider_adapter
 from .request_retry import (
     provider_retry_rate_limits,
@@ -519,6 +519,7 @@ class ProviderAnthropic(Provider):
         tools: ToolSet | None,
         *,
         request_max_retries: int | None = None,
+        conversation_id: str | None = None,
     ) -> LLMResponse:
         if tools:
             if tool_list := tools.get_func_desc_anthropic_style():
@@ -551,7 +552,10 @@ class ProviderAnthropic(Provider):
             completion = await retry_provider_request(
                 "Anthropic",
                 lambda: request_client.messages.create(
-                    **payloads, stream=False, extra_body=extra_body
+                    **payloads,
+                    stream=False,
+                    extra_body=extra_body,
+                    extra_headers=build_conversation_headers(conversation_id),
                 ),
                 max_attempts=request_max_retries,
             )
@@ -624,6 +628,7 @@ class ProviderAnthropic(Provider):
         tools: ToolSet | None,
         *,
         request_max_retries: int | None = None,
+        conversation_id: str | None = None,
     ) -> AsyncGenerator[LLMResponse, None]:
         if tools:
             if tool_list := tools.get_func_desc_anthropic_style():
@@ -663,7 +668,11 @@ class ProviderAnthropic(Provider):
 
         async with retry_provider_request_context(
             "Anthropic",
-            lambda: request_client.messages.stream(**payloads, extra_body=extra_body),
+            lambda: request_client.messages.stream(
+                **payloads,
+                extra_body=extra_body,
+                extra_headers=build_conversation_headers(conversation_id),
+            ),
             max_attempts=request_max_retries,
         ) as stream:
             assert isinstance(stream, anthropic.AsyncMessageStream)
@@ -806,6 +815,7 @@ class ProviderAnthropic(Provider):
         request_max_retries: int | None = None,
         **kwargs,
     ) -> LLMResponse:
+        conversation_id = kwargs.pop("conversation_id", None)
         if contexts is None:
             contexts = []
         new_record = None
@@ -853,10 +863,14 @@ class ProviderAnthropic(Provider):
 
         llm_response = None
         try:
+            query_kwargs = {}
+            if conversation_id:
+                query_kwargs["conversation_id"] = conversation_id
             llm_response = await self._query(
                 payloads,
                 func_tool,
                 request_max_retries=request_max_retries,
+                **query_kwargs,
             )
         except Exception as e:
             raise e
@@ -879,6 +893,7 @@ class ProviderAnthropic(Provider):
         request_max_retries: int | None = None,
         **kwargs,
     ):
+        conversation_id = kwargs.pop("conversation_id", None)
         if contexts is None:
             contexts = []
         new_record = None
@@ -923,10 +938,14 @@ class ProviderAnthropic(Provider):
                 else system_prompt
             )
 
+        query_kwargs = {}
+        if conversation_id:
+            query_kwargs["conversation_id"] = conversation_id
         async for llm_response in self._query_stream(
             payloads,
             func_tool,
             request_max_retries=request_max_retries,
+            **query_kwargs,
         ):
             yield llm_response
 

@@ -11,6 +11,7 @@ import {
   type BackupUploadSessionRequest,
   type BotConfigRequest,
   type BotRegistrationRequest,
+  type ChatChunkUploadRequest,
   type ChatMessagePatchRequest,
   type ChatMessageRegenerateRequest,
   type ChatProjectRequest,
@@ -19,6 +20,8 @@ import {
   type ChatSessionPatchRequest,
   type ChatThreadCreateRequest,
   type ChatThreadMessageRequest,
+  type ChatUploadInitRequest,
+  type ChatUploadSessionRequest,
   type CommandPatchRequest,
   type ConfigRouteUpsertRequest,
   type ConfigRoutesReplaceRequest,
@@ -771,6 +774,9 @@ export const backupApi = {
   abortUpload(payload: BackupUploadSessionRequest) {
     return typed<OpenConfig>(openApiV1.abortBackupUpload({ body: payload }));
   },
+  statusUpload(payload: BackupUploadSessionRequest) {
+    return typed<any>(openApiV1.statusBackupUpload({ body: payload }));
+  },
   check(filename: string) {
     return typed<any>(
       openApiV1.checkBackup({ path: { filename } }),
@@ -980,6 +986,23 @@ export const fileApi = {
     return typed<any>(
       openApiV1.uploadFile({ body: generatedFormData(formData) }),
     );
+  },
+  initUpload(payload: ChatUploadInitRequest) {
+    return typed<any>(openApiV1.initFileUpload({ body: payload }));
+  },
+  uploadChunk(formData: FormData | ChatChunkUploadRequest) {
+    return typed<any>(
+      openApiV1.uploadFileChunk({ body: generatedFormData(formData) }),
+    );
+  },
+  completeUpload(payload: ChatUploadSessionRequest) {
+    return typed<any>(openApiV1.completeFileUpload({ body: payload }));
+  },
+  abortUpload(payload: ChatUploadSessionRequest) {
+    return typed<any>(openApiV1.abortFileUpload({ body: payload }));
+  },
+  statusUpload(payload: ChatUploadSessionRequest) {
+    return typed<any>(openApiV1.statusFileUpload({ body: payload }));
   },
   getByName(filename: string) {
     return openApiV1.getFileByName({

@@ -20,7 +20,7 @@ async def test_webchat_upload_uses_detected_image_type(tmp_path):
         content_type = "image/png"
         content_length = None
 
-        async def save(self, destination):
+        async def save(self, destination, *, max_bytes=None):
             with open(destination, "wb") as output:
                 output.write(image_buffer.getvalue())
 

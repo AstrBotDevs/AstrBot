@@ -143,7 +143,7 @@ async def test_local_python_uses_sandbox_backend(
     monkeypatch,
     role,
 ):
-    """Preserve Python output and errors while reporting the active network policy."""
+    """Preserve Python output and errors without repeating the network policy."""
     from astrbot.core.tools.computer_tools import util as computer_util
 
     python_exec = AsyncMock(
@@ -188,8 +188,7 @@ async def test_local_python_uses_sandbox_backend(
 
     result = await LocalPythonTool().call(context, code="print('ok')", timeout=30)
     output = [part.text for part in result.content]
-    assert (computer_util.LOCAL_NETWORK_POLICY_NOTICE in output) is (role == "member")
-    assert output[-2:] == ["error: execution failed", "ok"]
+    assert output == ["error: execution failed", "ok"]
 
     python_exec.assert_awaited_once_with(
         "print('ok')",
@@ -202,6 +201,10 @@ async def test_local_python_uses_sandbox_backend(
         readable_roots=ANY,
         writable_roots=ANY,
     )
+
+    python_exec.side_effect = RuntimeError("execution failed")
+    result = await LocalPythonTool().call(context, code="print('ok')")
+    assert result == "Error executing code: execution failed"
 
 
 @pytest.mark.asyncio

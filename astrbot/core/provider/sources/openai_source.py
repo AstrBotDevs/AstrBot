@@ -40,6 +40,7 @@ from astrbot.core.utils.network_utils import (
 )
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
+from ..headers import build_conversation_headers
 from ..register import register_provider_adapter
 from .request_retry import (
     get_provider_request_status_code,
@@ -558,6 +559,7 @@ class ProviderOpenAIOfficial(Provider):
         tools: ToolSet | None,
         *,
         request_max_retries: int | None = None,
+        conversation_id: str | None = None,
     ) -> LLMResponse:
         if tools:
             model = payloads.get("model", "").lower()
@@ -597,6 +599,7 @@ class ProviderOpenAIOfficial(Provider):
                 **payloads,
                 stream=False,
                 extra_body=extra_body,
+                extra_headers=build_conversation_headers(conversation_id),
             ),
             max_attempts=request_max_retries,
         )
@@ -618,6 +621,7 @@ class ProviderOpenAIOfficial(Provider):
         tools: ToolSet | None,
         *,
         request_max_retries: int | None = None,
+        conversation_id: str | None = None,
     ) -> AsyncGenerator[LLMResponse, None]:
         """流式查询API，逐步返回结果"""
         if tools:
@@ -657,6 +661,7 @@ class ProviderOpenAIOfficial(Provider):
                 **payloads,
                 stream=True,
                 extra_body=extra_body,
+                extra_headers=build_conversation_headers(conversation_id),
                 stream_options={"include_usage": True},
             ),
             max_attempts=request_max_retries,
@@ -882,17 +887,19 @@ class ProviderOpenAIOfficial(Provider):
         # parse the text completion
         if choice.message.content is not None:
             completion_text = self._normalize_content(choice.message.content)
-            # specially, some providers may set <think> tags around reasoning content in the completion text,
+            # Some compatible providers wrap reasoning in <think> or <thinking> tags.
             # we use regex to remove them, and store then in reasoning_content field
-            reasoning_pattern = re.compile(r"<think>(.*?)</think>", re.DOTALL)
+            reasoning_pattern = re.compile(r"<(think|thinking)>(.*?)</\1>", re.DOTALL)
             matches = reasoning_pattern.findall(completion_text)
             if matches:
                 llm_response.reasoning_content = "\n".join(
-                    [match.strip() for match in matches],
+                    [match[1].strip() for match in matches],
                 )
                 completion_text = reasoning_pattern.sub("", completion_text).strip()
-            # Also clean up orphan </think> tags that may leak from some models
-            completion_text = re.sub(r"</think>\s*$", "", completion_text).strip()
+            # Also clean up trailing reasoning closing tags from some models.
+            completion_text = re.sub(
+                r"</(?:think|thinking)>\s*$", "", completion_text
+            ).strip()
             llm_response.result_chain = MessageChain().message(completion_text)
         elif refusal := getattr(choice.message, "refusal", None):
             refusal_text = self._normalize_content(refusal)
@@ -1228,6 +1235,7 @@ class ProviderOpenAIOfficial(Provider):
         request_max_retries: int | None = None,
         **kwargs,
     ) -> LLMResponse:
+        conversation_id = kwargs.pop("conversation_id", None)
         payloads, context_query = await self._prepare_chat_payload(
             prompt,
             image_urls,
@@ -1253,10 +1261,14 @@ class ProviderOpenAIOfficial(Provider):
         for retry_cnt in range(max_retries):
             try:
                 self.client.api_key = chosen_key
+                query_kwargs = {}
+                if conversation_id:
+                    query_kwargs["conversation_id"] = conversation_id
                 llm_response = await self._query(
                     payloads,
                     func_tool,
                     request_max_retries=request_max_retries,
+                    **query_kwargs,
                 )
                 break
             except Exception as e:
@@ -1306,6 +1318,7 @@ class ProviderOpenAIOfficial(Provider):
         **kwargs,
     ) -> AsyncGenerator[LLMResponse, None]:
         """流式对话，与服务商交互并逐步返回结果"""
+        conversation_id = kwargs.pop("conversation_id", None)
         payloads, context_query = await self._prepare_chat_payload(
             prompt,
             image_urls,
@@ -1329,10 +1342,14 @@ class ProviderOpenAIOfficial(Provider):
         for retry_cnt in range(max_retries):
             try:
                 self.client.api_key = chosen_key
+                query_kwargs = {}
+                if conversation_id:
+                    query_kwargs["conversation_id"] = conversation_id
                 async for response in self._query_stream(
                     payloads,
                     func_tool,
                     request_max_retries=request_max_retries,
+                    **query_kwargs,
                 ):
                     yield response
                 break
