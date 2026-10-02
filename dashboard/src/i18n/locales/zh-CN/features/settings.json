@@ -101,6 +101,11 @@
   },
   "system": {
     "title": "系统",
+    "onboarding": {
+      "title": "首次使用引导",
+      "subtitle": "重新配置模型、聊天平台、插件和电脑访问权限。现有配置会保留。",
+      "button": "重新进入首次引导"
+    },
     "restart": {
       "title": "重启",
       "subtitle": "重启 AstrBot",

@@ -1,5 +1,6 @@
 <script setup>
 import { ref, watch, computed, onUnmounted } from "vue";
+import { VDialog, VCard } from "vuetify/components";
 import { useTheme } from "vuetify";
 import MarkdownIt from "markdown-it";
 import DOMPurify from "dompurify";
@@ -35,6 +36,7 @@ const ICONS = {
 };
 
 const props = defineProps({
+  embedded: { type: Boolean, default: false },
   show: { type: Boolean, default: false },
   pluginName: { type: String, default: "" },
   repoUrl: { type: String, default: null },
@@ -335,7 +337,7 @@ async function fetchContent() {
 }
 
 watch(
-  [() => props.show, () => props.pluginName, () => props.mode],
+  [() => props.show, () => props.pluginName, () => props.mode, () => props.mode === "first-notice" ? locale.value : null],
   ([show, name]) => {
     if (!show) return;
     if (requiresPluginName.value && !name) return;
@@ -366,7 +368,8 @@ async function handleContainerClick(event) {
   const targetId = rawHref ? decodeURIComponent(rawHref.slice(1)) : "";
   if (!targetId) return;
 
-  const target = scrollContainer.value?.querySelector(
+  const container = scrollContainer.value?.$el || scrollContainer.value;
+  const target = container?.querySelector(
     `#${CSS.escape(targetId)}`,
   );
   if (!target) return;
@@ -409,15 +412,16 @@ const showActionArea = computed(() => {
 </script>
 
 <template>
-  <v-dialog v-model="_show" width="800">
-    <v-card>
-      <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex justify-space-between align-center">
+  <component :is="embedded ? 'section' : VDialog" v-bind="embedded ? {} : { modelValue: _show, width: 800 }"
+    @update:model-value="_show = $event">
+    <component :is="embedded ? 'div' : VCard">
+      <v-card-title v-if="!embedded" class="text-h3 pa-4 pb-0 pl-6 d-flex justify-space-between align-center">
         <span>{{ modeConfig.title }}</span>
         <v-btn icon @click="_show = false" variant="text">
           <v-icon>mdi-close</v-icon>
         </v-btn>
       </v-card-title>
-      <v-card-text ref="scrollContainer" style="overflow-y: auto">
+      <v-card-text ref="scrollContainer" :class="{ 'pa-0': embedded }" :style="{ overflowY: embedded ? 'visible' : 'auto' }">
         <div v-if="showActionArea" class="d-flex justify-space-between mb-4">
           <v-btn
             v-if="modeConfig.showGithubButton && repoUrl"
@@ -474,6 +478,9 @@ const showActionArea = computed(() => {
           <p class="text-body-2 text-center text-medium-emphasis">
             {{ error }}
           </p>
+          <v-btn v-if="embedded" variant="text" prepend-icon="mdi-refresh" class="mt-3" @click="fetchContent">
+            {{ t("core.common.readme.buttons.refresh") }}
+          </v-btn>
         </div>
 
         <div
@@ -492,14 +499,14 @@ const showActionArea = computed(() => {
           </p>
         </div>
       </v-card-text>
-      <v-card-actions>
+      <v-card-actions v-if="!embedded">
         <v-spacer></v-spacer>
         <v-btn color="primary" variant="tonal" @click="_show = false">
           {{ t("core.common.close") }}
         </v-btn>
       </v-card-actions>
-    </v-card>
-  </v-dialog>
+    </component>
+  </component>
 </template>
 
 <style scoped>
