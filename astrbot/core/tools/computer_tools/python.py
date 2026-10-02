@@ -14,7 +14,6 @@ from astrbot.core.message.message_event_result import MessageChain
 from ..registry import builtin_tool
 from .fs import _read_allowed_roots, _write_allowed_roots
 from .util import (
-    LOCAL_NETWORK_POLICY_NOTICE,
     check_admin_permission,
     check_local_execution_permission,
     workspace_root_for_context,
@@ -181,19 +180,6 @@ class LocalPythonTool(FunctionTool):
                 filesystem_scope=local_policy.filesystem_scope,
                 **sandbox_roots,
             )
-            response = await handle_result(result, context.context.event)
-            if not local_policy.allow_network:
-                response.content.insert(
-                    0,
-                    mcp.types.TextContent(
-                        type="text", text=LOCAL_NETWORK_POLICY_NOTICE
-                    ),
-                )
-            return response
+            return await handle_result(result, context.context.event)
         except Exception as e:
-            policy_notice = (
-                f"{LOCAL_NETWORK_POLICY_NOTICE}\n"
-                if not local_policy.allow_network
-                else ""
-            )
-            return f"{policy_notice}Error executing code: {str(e)}"
+            return f"Error executing code: {str(e)}"

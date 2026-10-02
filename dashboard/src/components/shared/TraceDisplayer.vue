@@ -287,8 +287,8 @@ export default {
       });
 
       if (hasUpdate) {
-        this.events.forEach((event) => {
-          event.records.sort((a, b) => b.time - a.time);
+        touched.forEach((spanId) => {
+          this.eventIndex[spanId].records.sort((a, b) => b.time - a.time);
         });
         this.events.sort((a, b) => b.first_time - a.first_time);
         if (this.events.length > this.maxItems) {
