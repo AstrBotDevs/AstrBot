@@ -1,4 +1,9 @@
 {
+  "configProfileDrawer": {
+      "title": "Edit Config Profile",
+      "loadFailed": "Failed to load the config profile",
+      "close": "Close"
+    },
   "knowledgeBaseSelector": {
     "notSelected": "Not selected",
     "buttonText": "Select Knowledge Base...",

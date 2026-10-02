@@ -22,7 +22,9 @@ from astrbot.core.star.star_manager import PluginManager
 
 PLUGIN_PAGE_ASSET_TOKEN_TYPE = "plugin_page_asset"
 PLUGIN_PAGE_ASSET_TOKEN_TTL_SECONDS = 60
-PLUGIN_PAGE_ROOT_DIR_NAME = "pages"
+# Directory names that hold plugin views inside a plugin package, in
+# preference order. "views" is preferred; "pages" stays as an alias.
+PLUGIN_PAGE_ROOT_DIR_NAMES = ("views", "pages")
 PLUGIN_PAGE_ENTRY_FILE_NAME = "index.html"
 PLUGIN_PAGE_BRIDGE_FILE = (
     Path(__file__).resolve().parent.parent / "plugin_page_bridge.js"
@@ -204,7 +206,10 @@ class PluginPageService:
             or plugin.name
         )
         page_title = (
-            self.get_by_path(locale_data, f"pages.{page_name}.title") or page_name
+            # "views" is the preferred i18n key prefix; "pages" stays as an alias.
+            self.get_by_path(locale_data, f"views.{page_name}.title")
+            or self.get_by_path(locale_data, f"pages.{page_name}.title")
+            or page_name
         )
 
         return {
@@ -335,7 +340,7 @@ class PluginPageService:
         if initial_context:
             context_json = json.dumps(initial_context, ensure_ascii=False)
             bridge_js += (
-                f"\n;window.AstrBotPluginPage?.__setInitialContext({context_json});\n"
+                f"\n;window.AstrBotPluginView?.__setInitialContext({context_json});\n"
             )
         return PluginPageContentPayload(
             content=bridge_js,
@@ -497,13 +502,14 @@ class PluginPageService:
 
     async def resolve_plugin_pages_root(self, plugin: StarMetadata) -> Path:
         plugin_root = self.get_plugin_root_dir(plugin)
-        pages_root = (plugin_root / PLUGIN_PAGE_ROOT_DIR_NAME).resolve(strict=False)
-        pages_root.relative_to(plugin_root)
-        if pages_root == plugin_root:
-            raise FileNotFoundError("Plugin Pages root directory is invalid")
-        if not await aio_ospath.isdir(str(pages_root)):
-            raise FileNotFoundError("Plugin Pages root directory does not exist")
-        return pages_root
+        for dir_name in PLUGIN_PAGE_ROOT_DIR_NAMES:
+            pages_root = (plugin_root / dir_name).resolve(strict=False)
+            pages_root.relative_to(plugin_root)
+            if pages_root == plugin_root:
+                continue
+            if await aio_ospath.isdir(str(pages_root)):
+                return pages_root
+        raise FileNotFoundError("Plugin views root directory does not exist")
 
     async def discover_plugin_pages(self, plugin: StarMetadata) -> list[PluginPage]:
         try:
@@ -923,7 +929,7 @@ __all__ = [
     "PLUGIN_PAGE_ASSET_TOKEN_TYPE",
     "PLUGIN_PAGE_BRIDGE_FILE",
     "PLUGIN_PAGE_ENTRY_FILE_NAME",
-    "PLUGIN_PAGE_ROOT_DIR_NAME",
+    "PLUGIN_PAGE_ROOT_DIR_NAMES",
     "PluginPage",
     "PluginPageContentPayload",
     "PluginPageService",

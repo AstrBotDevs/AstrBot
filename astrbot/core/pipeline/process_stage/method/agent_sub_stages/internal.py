@@ -17,6 +17,7 @@ from astrbot.core.astr_main_agent import (
     LLM_ERROR_MESSAGE_EXTRA_KEY,
     MainAgentBuildConfig,
     MainAgentBuildResult,
+    _matches_provider_wake_prefix,
     _provider_supports_modality,
     build_main_agent,
 )
@@ -36,7 +37,11 @@ from astrbot.core.provider.entities import (
     LLMResponse,
     ProviderRequest,
 )
+<<<<<<< HEAD
 from astrbot.core.provider.stats import record_agent_runner_stats
+=======
+from astrbot.core.star.session_llm_manager import SessionServiceManager
+>>>>>>> 9f65a019e5f64b42bd66859ec1d0f1af71a9e1dd
 from astrbot.core.star.star_handler import EventType
 from astrbot.core.utils.image_input import prepare_request_images
 from astrbot.core.utils.media_utils import normalize_model_image_max_size
@@ -55,6 +60,24 @@ from ...follow_up import (
 )
 
 
+async def _prepare_file_attachments(event: AstrMessageEvent) -> None:
+    """Download file attachments before acquiring the session lock.
+
+    Args:
+        event: Incoming event whose direct and quoted files should be prepared.
+
+    Returns:
+        None.
+    """
+    for component in event.message_obj.message:
+        if isinstance(component, File):
+            await component.get_file()
+        elif isinstance(component, Reply) and component.chain:
+            for reply_component in component.chain:
+                if isinstance(reply_component, File):
+                    await reply_component.get_file()
+
+
 class InternalAgentSubStage(Stage):
     async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
@@ -69,7 +92,7 @@ class InternalAgentSubStage(Stage):
         self.unsupported_streaming_strategy: str = settings[
             "unsupported_streaming_strategy"
         ]
-        self.max_step: int = misc_config.get("max_steps", 30)
+        self.max_step: int = misc_config.get("max_steps", 128)
         self.tool_call_timeout: int = misc_config.get("tool_call_timeout", 120)
         self.tool_schema_mode: str = misc_config.get("tool_schema_mode", "full")
         if self.tool_schema_mode not in ("skills_like", "full"):
@@ -79,7 +102,7 @@ class InternalAgentSubStage(Stage):
             )
             self.tool_schema_mode = "full"
         if isinstance(self.max_step, bool):  # workaround: #2622
-            self.max_step = 30
+            self.max_step = 128
         self.show_tool_use: bool = settings.get("show_tool_use_status", True)
         self.show_tool_call_result: bool = settings.get("show_tool_call_result", False)
         self.buffer_intermediate_messages: bool = settings.get(
@@ -206,8 +229,30 @@ class InternalAgentSubStage(Stage):
             if await call_event_hook(event, EventType.OnWaitingLLMRequestEvent):
                 return
 
+            if event.get_extra(
+                "provider_request"
+            ) is None and not _matches_provider_wake_prefix(
+                event,
+                provider_wake_prefix,
+            ):
+                return
+
+            await _prepare_file_attachments(event)
+
             async with session_lock_manager.acquire_lock(event.unified_msg_origin):
                 logger.debug("acquired session lock for llm request")
+                current_config = self.ctx.plugin_manager.context.get_config(
+                    umo=event.unified_msg_origin
+                )
+                if not current_config.get("provider_settings", {}).get(
+                    "enable", True
+                ) or not await SessionServiceManager.should_process_llm_request(event):
+                    logger.debug(
+                        "LLM was disabled while waiting for the session lock; "
+                        "skipping request for %s.",
+                        event.unified_msg_origin,
+                    )
+                    return
                 agent_runner: AgentRunner | None = None
                 req: ProviderRequest | None = None
                 runner_registered = False

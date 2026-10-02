@@ -1224,6 +1224,13 @@ paths:
       tags: [Chat]
       summary: List webchat sessions
       operationId: listChatSessions
+      description: >-
+        API-key requests return a paginated object and require username.
+        Dashboard requests with page or page_size return the same paginated
+        object (sessions, page, page_size, total), scoped to the authenticated
+        user. Dashboard requests without pagination parameters retain the
+        legacy array response, limited to 100 sessions. Paginated requests
+        default to page 1 and page_size 20, with page_size clamped to 1–100.
       x-astrbot-scope: chat
       parameters:
         - $ref: "#/components/parameters/Page"
@@ -1272,6 +1279,7 @@ paths:
     get:
       tags: [Chat]
       summary: Get a webchat session and its messages
+      description: Includes session metadata independently of the paginated session list.
       operationId: getChatSession
       x-astrbot-scope: chat
       parameters:
@@ -1697,6 +1705,86 @@ paths:
           multipart/form-data:
             schema:
               $ref: "#/components/schemas/FileUploadRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/files/upload/init:
+    post:
+      tags: [Files]
+      summary: Initialize chunked file upload
+      operationId: initFileUpload
+      x-astrbot-scope: file
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatUploadInitRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/files/upload/chunk:
+    post:
+      tags: [Files]
+      summary: Upload a file chunk
+      operationId: uploadFileChunk
+      x-astrbot-scope: file
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/ChatChunkUploadRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/files/upload/complete:
+    post:
+      tags: [Files]
+      summary: Complete chunked file upload
+      operationId: completeFileUpload
+      x-astrbot-scope: file
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatUploadSessionRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/files/upload/abort:
+    post:
+      tags: [Files]
+      summary: Abort chunked file upload
+      operationId: abortFileUpload
+      x-astrbot-scope: file
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatUploadSessionRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/files/upload/status:
+    post:
+      tags: [Files]
+      summary: Query chunked file upload status
+      operationId: statusFileUpload
+      x-astrbot-scope: file
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatUploadSessionRequest"
       responses:
         "200":
           $ref: "#/components/responses/Ok"
@@ -2701,6 +2789,123 @@ paths:
       tags: [Plugin Pages]
       summary: Get a plugin page asset
       operationId: getPluginPageAsset
+      x-astrbot-scope: plugin
+      parameters:
+        - $ref: "#/components/parameters/PluginId"
+        - name: page_name
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: asset_path
+          in: path
+          required: true
+          description: URL-encoded relative asset path.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Plugin asset content
+
+  # Views aliases. "views" is the preferred naming; the /pages routes above
+  # stay valid as aliases.
+  /api/v1/plugins/views:
+    get:
+      tags: [Plugin Pages]
+      summary: List plugin views by query ID (alias of /plugins/pages)
+      operationId: listPluginViewsById
+      x-astrbot-scope: plugin
+      parameters:
+        - name: plugin_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/plugins/view:
+    get:
+      tags: [Plugin Pages]
+      summary: Get plugin view entry HTML by query ID (alias of /plugins/page)
+      operationId: getPluginViewById
+      x-astrbot-scope: plugin
+      parameters:
+        - name: plugin_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: page_name
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Html"
+
+  /api/v1/plugins/view/assets:
+    get:
+      tags: [Plugin Pages]
+      summary: Get a plugin view asset by query ID (alias of /plugins/page/assets)
+      operationId: getPluginViewAssetById
+      x-astrbot-scope: plugin
+      parameters:
+        - name: plugin_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: page_name
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: asset_path
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Plugin asset content
+
+  /api/v1/plugins/{plugin_id}/views:
+    get:
+      tags: [Plugin Pages]
+      summary: List plugin views (alias of /plugins/{plugin_id}/pages)
+      operationId: listPluginViews
+      x-astrbot-scope: plugin
+      parameters:
+        - $ref: "#/components/parameters/PluginId"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/plugins/{plugin_id}/views/{page_name}:
+    get:
+      tags: [Plugin Pages]
+      summary: Get plugin view entry HTML (alias of /plugins/{plugin_id}/pages/{page_name})
+      operationId: getPluginView
+      x-astrbot-scope: plugin
+      parameters:
+        - $ref: "#/components/parameters/PluginId"
+        - name: page_name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Html"
+
+  /api/v1/plugins/{plugin_id}/views/{page_name}/assets/{asset_path}:
+    get:
+      tags: [Plugin Pages]
+      summary: Get a plugin view asset (alias of /plugins/{plugin_id}/pages/{page_name}/assets/{asset_path})
+      operationId: getPluginViewAsset
       x-astrbot-scope: plugin
       parameters:
         - $ref: "#/components/parameters/PluginId"
@@ -4645,6 +4850,22 @@ paths:
         "200":
           $ref: "#/components/responses/Ok"
 
+  /api/v1/backups/upload/status:
+    post:
+      tags: [Backups]
+      summary: Query chunked backup upload status
+      operationId: statusBackupUpload
+      x-astrbot-scope: system
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BackupUploadSessionRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
   /api/v1/backups/tasks/{task_id}:
     get:
       tags: [Backups]
@@ -6376,6 +6597,40 @@ components:
       additionalProperties: false
 
     BackupChunkUploadRequest:
+      type: object
+      required: [upload_id, chunk_index, chunk]
+      properties:
+        upload_id:
+          type: string
+        chunk_index:
+          type: integer
+          minimum: 0
+        chunk:
+          type: string
+          format: binary
+
+    ChatUploadInitRequest:
+      type: object
+      required: [filename, total_size]
+      properties:
+        filename:
+          type: string
+        total_size:
+          type: integer
+          minimum: 1
+        content_type:
+          type: string
+      additionalProperties: false
+
+    ChatUploadSessionRequest:
+      type: object
+      required: [upload_id]
+      properties:
+        upload_id:
+          type: string
+      additionalProperties: false
+
+    ChatChunkUploadRequest:
       type: object
       required: [upload_id, chunk_index, chunk]
       properties:

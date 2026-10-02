@@ -361,6 +361,7 @@ const themePalette = computed(() => {
 let refreshTimer: number | null = null
 let uptimeTimer: number | null = null
 let copyFeedbackTimer: number | null = null
+let isUnmounted = false
 
 function formatNumber(value: number): string {
   return new Intl.NumberFormat(locale.value).format(value)
@@ -712,6 +713,8 @@ watch(selectedRange, async () => {
 
 onMounted(async () => {
   await refreshStats()
+  // The initial request may settle after this component has unmounted.
+  if (isUnmounted) return
   refreshTimer = window.setInterval(() => {
     void refreshStats()
   }, 60_000)
@@ -721,6 +724,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  isUnmounted = true
   if (refreshTimer !== null) {
     window.clearInterval(refreshTimer)
   }
