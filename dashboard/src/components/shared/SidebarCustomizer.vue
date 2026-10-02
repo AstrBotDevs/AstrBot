@@ -26,7 +26,7 @@
           
           <v-row>
             <v-col cols="12" md="6">
-              <div class="mb-2 font-weight-medium">{{ t('features.settings.sidebar.customize.mainItems') }}</div>
+              <div class="mb-2 font-weight-medium">{{ t('core.navigation.groups.system') }}</div>
               <v-list 
                 density="compact"
                 class="custom-list"
@@ -39,6 +39,7 @@
                   class="mb-1 draggable-item"
                   draggable="true"
                   @dragstart="handleDragStart($event, 'main', index)"
+                  @dragend="draggedItem = null"
                   @dragover.prevent
                   @drop.stop="handleDrop($event, 'main', index)"
                 >
@@ -60,7 +61,7 @@
             </v-col>
             
             <v-col cols="12" md="6">
-              <div class="mb-2 font-weight-medium">{{ t('features.settings.sidebar.customize.moreItems') }}</div>
+              <div class="mb-2 font-weight-medium">{{ t('core.navigation.groups.extension') }}</div>
               <v-list 
                 density="compact"
                 class="custom-list"
@@ -73,6 +74,7 @@
                   class="mb-1 draggable-item"
                   draggable="true"
                   @dragstart="handleDragStart($event, 'more', index)"
+                  @dragend="draggedItem = null"
                   @dragover.prevent
                   @drop.stop="handleDrop($event, 'more', index)"
                 >
@@ -157,6 +159,7 @@ function handleDragStart(event, listType, index) {
     item: listType === 'main' ? mainItems.value[index] : moreItems.value[index]
   };
   event.dataTransfer.effectAllowed = 'move';
+  event.dataTransfer.setData('text/plain', draggedItem.value.item.title);
 }
 
 function handleDrop(event, targetListType, targetIndex) {
@@ -223,6 +226,7 @@ function moveToMain(index) {
 
 function saveCustomization() {
   const config = {
+    version: 2,
     mainItems: mainItems.value.map(item => item.title),
     moreItems: moreItems.value.map(item => item.title)
   };

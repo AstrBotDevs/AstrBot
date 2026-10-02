@@ -18,8 +18,9 @@ export function getSidebarCustomization() {
 /**
  * Save the sidebar customization to localStorage
  * @param {Object} config - The customization configuration
- * @param {Array} config.mainItems - Array of item titles for main sidebar
- * @param {Array} config.moreItems - Array of item titles for "More Features" group
+ * @param {Array} config.mainItems - System section title keys
+ * @param {Array} config.moreItems - Extension section title keys
+ * @param {number} config.version - Layout schema version (2 for sections)
  */
 export function setSidebarCustomization(config) {
   try {
@@ -41,15 +42,15 @@ export function clearSidebarCustomization() {
 }
 
 /**
- * 解析侧边栏默认项与用户定制，返回主区/更多区及可选的合并结果
- * @param {Array} defaultItems - 默认侧边栏结构
- * @param {Object|null} customization - 用户定制（mainItems/moreItems）
+ * Resolve navigable items and optionally assemble the customized menu.
+ * @param {Array} defaultItems - Default sidebar structure
+ * @param {Object|null} customization - Saved mainItems/moreItems title keys
  * @param {Object} options
- * @param {boolean} [options.cloneItems=false] - 是否克隆条目以避免外部引用被修改
- * @param {boolean} [options.assembleMoreGroup=false] - 是否组装带更多分组的整体数组
+ * @param {boolean} [options.cloneItems=false] - Clone items to avoid mutating defaults
+ * @param {boolean} [options.assembleMoreGroup=false] - Assemble the complete menu
  * @returns {{ mainItems: Array, moreItems: Array, merged?: Array }}
  */
-import { MORE_GROUP_KEY } from "@/layouts/full/vertical-sidebar/sidebarItem";
+import { MORE_GROUP_KEY, EXTENSION_GROUP_KEY } from "@/layouts/full/vertical-sidebar/sidebarItem";
 
 export function resolveSidebarItems(defaultItems, customization, options = {}) {
   const { cloneItems = false, assembleMoreGroup = false } = options;
@@ -73,9 +74,12 @@ export function resolveSidebarItems(defaultItems, customization, options = {}) {
   const defaultMain = [];
   const defaultMore = [];
   const defaultMoreGroup = defaultItems.find(item => item.children && item.title === MORE_GROUP_KEY);
+  let inExtension = false;
 
-  // 收集所有条目，按 title 建索引
+  // Section headers are layout metadata, not customizable navigation items.
   defaultItems.forEach(item => {
+    if (item.header) inExtension = item.header === EXTENSION_GROUP_KEY;
+    if (item.header || item.divider || !item.title) return;
     if (item.children && item.title === MORE_GROUP_KEY) {
       item.children.forEach(child => {
         all.set(child.title, cloneItems ? { ...child } : child);
@@ -83,7 +87,7 @@ export function resolveSidebarItems(defaultItems, customization, options = {}) {
       });
     } else {
       all.set(item.title, cloneItems ? { ...item } : item);
-      defaultMain.push(item.title);
+      (inExtension ? defaultMore : defaultMain).push(item.title);
     }
   });
 
@@ -91,13 +95,21 @@ export function resolveSidebarItems(defaultItems, customization, options = {}) {
   let mainKeys = hasCustomization ? normalizeKeys(customization.mainItems || []) : [...defaultMain];
   let moreKeys = hasCustomization ? normalizeKeys(customization.moreItems || []) : [...defaultMore];
 
+  if (hasCustomization && customization.version !== 2) {
+    // Legacy main mixed both sections; keep original extension membership.
+    const extensionKeys = new Set(defaultMore);
+    moreKeys = [...mainKeys.filter(title => extensionKeys.has(title)), ...moreKeys];
+    mainKeys = mainKeys.filter(title => !extensionKeys.has(title));
+    moreKeys = normalizeKeys(moreKeys);
+  }
+
   if (hasCustomization) {
     mainKeys = mainKeys.filter(title => all.has(title));
     moreKeys = moreKeys.filter(title => all.has(title));
   }
 
   if (hasCustomization) {
-    // 如果同一项同时出现在主区与更多区，主区优先。
+    // System takes precedence when an item appears in both lists.
     const mainSet = new Set(mainKeys);
     moreKeys = moreKeys.filter(title => !mainSet.has(title));
   }
@@ -111,7 +123,7 @@ export function resolveSidebarItems(defaultItems, customization, options = {}) {
     .filter(Boolean);
 
   if (hasCustomization) {
-    // 补充新增默认主区项
+    // Keep newly added default items accessible.
     defaultMain.forEach(title => {
       if (!used.has(title)) {
         const item = all.get(title);
@@ -125,7 +137,7 @@ export function resolveSidebarItems(defaultItems, customization, options = {}) {
     .filter(Boolean);
 
   if (hasCustomization) {
-    // 补充新增默认更多区项
+    // Keep newly added extension items in their default section.
     defaultMore.forEach(title => {
       if (!used.has(title)) {
         const item = all.get(title);
@@ -136,14 +148,21 @@ export function resolveSidebarItems(defaultItems, customization, options = {}) {
 
   let merged;
   if (assembleMoreGroup) {
-    const children = cloneItems ? moreItems.map(item => ({ ...item })) : [...moreItems];
-    if (children.length > 0) {
+    const headers = defaultItems.filter(item => item.header);
+    if (headers.length) {
+      // Section membership comes from the saved lists, never from list position.
+      merged = [];
+      headers.forEach(header => {
+        merged.push(cloneItems ? { ...header } : header);
+        merged.push(...(header.header === EXTENSION_GROUP_KEY ? moreItems : mainItems));
+      });
+    } else if (moreItems.length > 0) {
       merged = [
         ...mainItems,
         {
           title: MORE_GROUP_KEY,
           icon: defaultMoreGroup?.icon || 'mdi-dots-horizontal',
-          children
+          children: moreItems
         }
       ];
     } else {
@@ -155,15 +174,15 @@ export function resolveSidebarItems(defaultItems, customization, options = {}) {
     mainItems,
     moreItems,
     merged,
-    normalizedMainKeys: [...mainKeys],
-    normalizedMoreKeys: [...moreKeys]
+    normalizedMainKeys: mainItems.map(item => item.title),
+    normalizedMoreKeys: moreItems.map(item => item.title)
   };
 }
 
 /**
- * 应用侧边栏定制，返回包含更多分组的完整结构
- * @param {Array} defaultItems - 默认侧边栏结构
- * @returns {Array} 自定义后的结构（新数组，不修改入参）
+ * Apply saved customization to the default sidebar.
+ * @param {Array} defaultItems - Default sidebar structure
+ * @returns {Array} Customized structure without mutating the input
  */
 export function applySidebarCustomization(defaultItems) {
   const customization = getSidebarCustomization();
@@ -180,11 +199,13 @@ export function applySidebarCustomization(defaultItems) {
     const rawMainKeys = Array.isArray(customization.mainItems) ? customization.mainItems : [];
     const rawMoreKeys = Array.isArray(customization.moreItems) ? customization.moreItems : [];
     const hasChanged =
+      customization.version !== 2 ||
       JSON.stringify(rawMainKeys) !== JSON.stringify(normalizedMainKeys) ||
       JSON.stringify(rawMoreKeys) !== JSON.stringify(normalizedMoreKeys);
 
     if (hasChanged) {
       setSidebarCustomization({
+        version: 2,
         mainItems: normalizedMainKeys,
         moreItems: normalizedMoreKeys
       });

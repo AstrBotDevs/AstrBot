@@ -1,5 +1,5 @@
 <script setup>
-import { ref, shallowRef, computed, watch } from 'vue';
+import { ref, shallowRef, computed, watch, onMounted, onUnmounted } from 'vue';
 import { useCustomizerStore } from '../../../stores/customizer';
 import { useMobileDrawerStore } from '@/stores/mobileDrawer';
 import { useI18n } from '@/i18n/composables';
@@ -10,6 +10,7 @@ import { useDisplay } from 'vuetify';
 import { ChevronDown, ChevronRight, PanelLeft, Settings } from '@lucide/vue';
 import ChatUILogo from '@/components/chat/ChatUILogo.vue';
 import { useCommonStore } from '@/stores/common';
+import { applySidebarCustomization } from '@/utils/sidebarCustomization';
 
 const { t } = useI18n();
 
@@ -23,7 +24,7 @@ function buildSidebarMenu() {
   const tail = groupByPlugin.value
     ? pluginGroups.value
     : (pluginItems.value?.children ?? []);
-  return [...sidebarItems, ...tail];
+  return [...applySidebarCustomization(sidebarItems), ...tail];
 }
 
 // Group plugin views by plugin under the extensions group; off by default.
@@ -68,6 +69,18 @@ function getInitialOpenedItems(menuItems) {
 
 const sidebarMenu = shallowRef(buildSidebarMenu());
 
+function reloadSidebarCustomization() {
+  sidebarMenu.value = buildSidebarMenu();
+  openedItems.value = sanitizeOpenedItems(openedItems.value, sidebarMenu.value);
+}
+
+onMounted(() => {
+  window.addEventListener('sidebar-customization-changed', reloadSidebarCustomization);
+});
+onUnmounted(() => {
+  window.removeEventListener('sidebar-customization-changed', reloadSidebarCustomization);
+});
+
 // Collapsed group headers, persisted across sessions.
 const collapsedGroups = ref(JSON.parse(localStorage.getItem('sidebar_collapsed_groups') || '[]'));
 watch(collapsedGroups, (val) => {
@@ -98,7 +111,7 @@ function togglePin(item) {
   }
 }
 
-// `to` values of items under the extensions group header (incl. plugin pages).
+// Extension entries, including plugin views, can be pinned within their section.
 const extensionTos = computed(() => {
   const tos = new Set();
   let inExtension = false;

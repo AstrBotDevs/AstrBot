@@ -6,6 +6,12 @@ The AstrBot admin panel features plugin management, log viewing, visual configur
 
 These paths use the current default sidebar. If you customized it, open `System Settings → Appearance → Customize Sidebar` at the bottom of the sidebar to review or reset the layout.
 
+The customization dialog has two sections: `System / Extensions`. Drag to reorder modules; drag across sections or use the arrows to move built-in modules. Select `Save` to apply changes immediately; settings are stored in the current browser only. Select `Reset to Default` to restore default membership and order.
+
+Saved layouts migrate automatically: `Main Modules` entries are assigned to `System` or `Extensions` by purpose, and `More Features` merges into `Extensions`.
+
+![Sidebar customization](./images/sidebar-customization-en.png)
+
 | Previous entry point or name | Current entry point |
 | --- | --- |
 | Providers → Add Provider → Agent Runner | Config → Select a profile → AI → top-right ⋯ → Switch Runner |
