@@ -307,8 +307,8 @@
     "enterJsonUrl": "请输入返回插件列表JSON数据的URL地址",
     "pluginNotFound": "未找到该插件",
     "pluginDisabled": "该插件当前已关闭，请先打开后再访问页面",
-    "pluginPageNotFound": "未找到该插件页面",
-    "pluginPageLoadFailed": "加载插件页面失败",
+    "pluginPageNotFound": "未找到该插件可视化视图",
+    "pluginPageLoadFailed": "加载插件可视化视图失败",
     "missingMarketPluginId": "缺少合法的插件标识，无法从该插件市场源安装",
     "sourceBindSuccess": "插件源已更新",
     "validatingPlugin": "正在校验插件...",
@@ -322,6 +322,8 @@
     "enterUrl": "输入插件仓库链接"
   },
   "skills": {
+    "searchPlaceholder": "搜索技能...",
+    "noSearchResult": "未找到匹配的技能",
     "modeLocal": "本地技能",
     "modeNeo": "Neo 技能",
     "actions": "操作",

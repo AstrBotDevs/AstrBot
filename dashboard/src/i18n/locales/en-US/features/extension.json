@@ -307,8 +307,8 @@
     "enterJsonUrl": "Please enter a URL that returns plugin list JSON data",
     "pluginNotFound": "Plugin not found",
     "pluginDisabled": "This plugin is closed. Open it before accessing its page.",
-    "pluginPageNotFound": "Plugin page not found",
-    "pluginPageLoadFailed": "Failed to load the plugin page",
+    "pluginPageNotFound": "Plugin view not found",
+    "pluginPageLoadFailed": "Failed to load the plugin view",
     "missingMarketPluginId": "This source record is missing legal plugin identifiers, so it cannot be installed from the market",
     "sourceBindSuccess": "Plugin source updated",
     "validatingPlugin": "Validating plugin...",
@@ -322,6 +322,8 @@
     "enterUrl": "Enter extension repository URL"
   },
   "skills": {
+    "searchPlaceholder": "Search skills...",
+    "noSearchResult": "No matching skills found",
     "modeLocal": "Local Skills",
     "modeNeo": "Neo Skills",
     "actions": "Actions",
