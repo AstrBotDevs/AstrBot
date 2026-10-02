@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import io
+import json
 import shutil
 import subprocess
 import sys
@@ -23,6 +24,51 @@ def _write_wav(path: Path, frames: int = 1) -> None:
         output.setsampwidth(2)
         output.setframerate(16_000)
         output.writeframes(b"\x00\x00" * frames)
+
+
+def _converter_budget_supported() -> bool:
+    """Probe the production budget and validate success or kernel rejection.
+
+    Returns:
+        Whether the unchanged production budget can be applied and executed.
+        Platforms without POSIX resource limits retain their normal path.
+    """
+    if audio_input.os.name != "posix":
+        return True
+    memory_limit = 512 * 1024 * 1024
+    file_limit = 512 * 1024 + 64 * 1024
+    probe = (
+        "import json,resource;print(json.dumps({"
+        "'memory':resource.getrlimit(resource.RLIMIT_AS),"
+        "'file':resource.getrlimit(resource.RLIMIT_FSIZE)}))"
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            audio_input._LIMITED_EXEC_SCRIPT,
+            str(file_limit),
+            str(memory_limit),
+            sys.executable,
+            "-c",
+            probe,
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=5,
+    )
+    if result.returncode == 0:
+        limits = json.loads(result.stdout)
+        assert 0 < limits["memory"][0] == limits["memory"][1] <= memory_limit
+        assert 0 < limits["file"][0] == limits["file"][1] <= file_limit
+        return True
+    assert result.returncode == 1, result.stderr
+    assert "RLIMIT_AS soft=" in result.stderr
+    assert f"requested={memory_limit} target={memory_limit}" in result.stderr
+    assert "ValueError: current limit exceeds maximum limit" in result.stderr
+    assert not result.stdout.strip()
+    return False
 
 
 class _ChunkStream(httpx.AsyncByteStream):
@@ -335,6 +381,8 @@ async def test_converter_failure_keeps_bounded_diagnostic_cause(monkeypatch):
     [(1024 * 1024, 1024 * 1024), (512 * 1024, 1024 * 1024)],
 )
 def test_converter_respects_existing_resource_limits(soft_limit, hard_limit):
+    import resource
+
     outer_script = (
         "import resource,sys;"
         f"resource.setrlimit(resource.RLIMIT_FSIZE,({soft_limit},{hard_limit}));"
@@ -348,7 +396,9 @@ def test_converter_respects_existing_resource_limits(soft_limit, hard_limit):
             outer_script,
             audio_input._LIMITED_EXEC_SCRIPT,
             str(2 * 1024 * 1024),
-            str(512 * 1024 * 1024),
+            # Isolate file-limit inheritance from address-space availability.
+            # The production memory budget is probed independently below.
+            str(resource.getrlimit(resource.RLIMIT_AS)[0]),
             sys.executable,
             "-c",
             probe_script,
@@ -363,8 +413,13 @@ def test_converter_respects_existing_resource_limits(soft_limit, hard_limit):
     assert result.stdout.strip() == f"({soft_limit}, {soft_limit})"
 
 
+def test_converter_address_space_budget_is_enforced_or_rejected():
+    _converter_budget_supported()
+
+
 @pytest.mark.asyncio
-async def test_real_ffmpeg_ogg_conversion_produces_bounded_wav(tmp_path):
+async def test_real_ffmpeg_ogg_conversion_produces_bounded_wav(tmp_path, monkeypatch):
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
     ffmpeg = shutil.which("ffmpeg")
     assert ffmpeg is not None
     source_wav = tmp_path / "source.wav"
@@ -389,12 +444,24 @@ async def test_real_ffmpeg_ogg_conversion_produces_bounded_wav(tmp_path):
         timeout=5,
     )
 
+    if not _converter_budget_supported():
+        with pytest.raises(ValueError, match="OAuth 转录音频解码或格式转换失败") as exc:
+            async with resolver.as_wav_path():
+                pytest.fail("Conversion must not continue without the memory budget")
+        assert isinstance(exc.value.__cause__, RuntimeError)
+        assert "RLIMIT_AS soft=" in str(exc.value.__cause__)
+        assert "requested=536870912 target=536870912" in str(exc.value.__cause__)
+        assert list(tmp_path.glob("astrbot_oauth_audio_*")) == []
+        assert source_ogg.exists()
+        return
+
     async with resolver.as_wav_path() as resolved:
         with wave.open(str(resolved.path), "rb") as decoded:
             assert decoded.getnchannels() == 1
             assert decoded.getsampwidth() == 2
             assert decoded.getframerate() == 16000
             assert decoded.getnframes() > 0
+    assert list(tmp_path.glob("astrbot_oauth_audio_*")) == []
 
 
 @pytest.mark.asyncio
@@ -417,9 +484,10 @@ async def test_tencent_silk_uses_bounded_decoder_path(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_tencent_silk_is_decoded_in_bounded_child_process(tmp_path):
+async def test_tencent_silk_is_decoded_in_bounded_child_process(tmp_path, monkeypatch):
     import pysilk
 
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
     encoded = io.BytesIO()
     pysilk.encode(
         io.BytesIO(b"\x00\x00" * 2400),
@@ -436,12 +504,65 @@ async def test_tencent_silk_is_decoded_in_bounded_child_process(tmp_path):
         timeout=5,
     )
 
+    if not _converter_budget_supported():
+        with pytest.raises(ValueError, match="OAuth 转录音频解码或格式转换失败") as exc:
+            async with resolver.as_wav_path():
+                pytest.fail("Conversion must not continue without the memory budget")
+        assert isinstance(exc.value.__cause__, RuntimeError)
+        assert "RLIMIT_AS soft=" in str(exc.value.__cause__)
+        assert "requested=536870912 target=536870912" in str(exc.value.__cause__)
+        assert list(tmp_path.glob("astrbot_oauth_audio_*")) == []
+        assert source.exists()
+        return
+
     async with resolver.as_wav_path() as resolved:
         with wave.open(str(resolved.path), "rb") as decoded:
             assert decoded.getnchannels() == 1
             assert decoded.getsampwidth() == 2
             assert decoded.getframerate() == 24000
             assert decoded.getnframes() > 0
+    assert list(tmp_path.glob("astrbot_oauth_audio_*")) == []
+
+
+@pytest.mark.skipif(audio_input.os.name != "posix", reason="POSIX resource limits")
+@pytest.mark.parametrize(
+    ("suffix", "header"),
+    [("ogg", b"OggS"), ("silk", b"\x02#!SILK_V3")],
+)
+@pytest.mark.asyncio
+async def test_unavailable_address_space_budget_fails_closed_and_cleans(
+    tmp_path, monkeypatch, suffix, header
+):
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+    # Inject a kernel rejection in the child without changing resource policy.
+    reject_budget = (
+        "import resource\n"
+        "_original_setrlimit=resource.setrlimit\n"
+        "def _reject_address_space(kind,limits):\n"
+        " if kind==resource.RLIMIT_AS:\n"
+        "  raise ValueError('current limit exceeds maximum limit')\n"
+        " return _original_setrlimit(kind,limits)\n"
+        "resource.setrlimit=_reject_address_space\n"
+    )
+    monkeypatch.setattr(
+        audio_input,
+        "_LIMITED_EXEC_SCRIPT",
+        reject_budget + audio_input._LIMITED_EXEC_SCRIPT,
+    )
+    assert _converter_budget_supported() is False
+    source = tmp_path / f"voice.{suffix}"
+    source.write_bytes(header + b"test-payload")
+    resolver = BoundedOAuthAudioResolver(str(source), max_bytes=512 * 1024, timeout=5)
+
+    with pytest.raises(ValueError, match="OAuth 转录音频解码或格式转换失败") as exc:
+        async with resolver.as_wav_path():
+            pytest.fail("A rejected budget must prevent conversion")
+
+    assert isinstance(exc.value.__cause__, RuntimeError)
+    assert "RLIMIT_AS soft=" in str(exc.value.__cause__)
+    assert "requested=536870912 target=536870912" in str(exc.value.__cause__)
+    assert source.read_bytes() == header + b"test-payload"
+    assert list(tmp_path.glob("astrbot_oauth_audio_*")) == []
 
 
 @pytest.mark.asyncio
