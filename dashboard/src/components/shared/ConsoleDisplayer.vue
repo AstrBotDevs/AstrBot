@@ -368,7 +368,11 @@ export default {
         return;
       }
 
-      const lowerText = text.toLowerCase();
+      // Strip ANSI escape sequences first so highlight offsets line up with
+      // the same stripped text used by `matchesKeyword`, and so no control
+      // codes are rendered.
+      const cleanText = text.replace(/\u001b\[[0-9;]*m/g, "");
+      const lowerText = cleanText.toLowerCase();
       const lowerKeyword = keyword.toLowerCase();
       let cursor = 0;
       let index = lowerText.indexOf(lowerKeyword);
@@ -376,19 +380,19 @@ export default {
       while (index !== -1) {
         if (index > cursor) {
           element.appendChild(
-            document.createTextNode(text.slice(cursor, index)),
+            document.createTextNode(cleanText.slice(cursor, index)),
           );
         }
         const highlight = document.createElement("span");
         highlight.className = "console-log-highlight";
-        highlight.textContent = text.slice(index, index + keyword.length);
+        highlight.textContent = cleanText.slice(index, index + keyword.length);
         element.appendChild(highlight);
         cursor = index + keyword.length;
         index = lowerText.indexOf(lowerKeyword, cursor);
       }
 
-      if (cursor < text.length) {
-        element.appendChild(document.createTextNode(text.slice(cursor)));
+      if (cursor < cleanText.length) {
+        element.appendChild(document.createTextNode(cleanText.slice(cursor)));
       }
     },
 
