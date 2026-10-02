@@ -1448,7 +1448,13 @@ class TestEnsurePersonaAndSkills:
         [(True, False), (True, True), (False, False)],
     )
     async def test_persona_empty_tools_keeps_local_runtime_builtin_tools(
-        self, mock_event, mock_context, mock_provider, role, allow_execution, allow_network
+        self,
+        mock_event,
+        mock_context,
+        mock_provider,
+        role,
+        allow_execution,
+        allow_network,
     ):
         module = ama
         persona = {"name": "locked", "prompt": "No tools.", "tools": []}

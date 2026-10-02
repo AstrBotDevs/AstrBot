@@ -26,7 +26,10 @@ class _FakeAsyncAnthropic:
         ("https://api.anthropic.com/", "https://api.anthropic.com"),
         ("https://api.anthropic.com/v1", "https://api.anthropic.com"),
         ("https://api.anthropic.com/v1/", "https://api.anthropic.com"),
-        ("https://gateway.example.com/anthropic", "https://gateway.example.com/anthropic"),
+        (
+            "https://gateway.example.com/anthropic",
+            "https://gateway.example.com/anthropic",
+        ),
     ],
 )
 def test_anthropic_provider_normalizes_api_base(
