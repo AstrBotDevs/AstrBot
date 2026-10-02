@@ -98,6 +98,8 @@ After explicitly selecting a chat model under `AI → Models`, use `Current mode
 
 Unset parameters show presets without saving them just by viewing. Clear a number or reasoning effort to restore the provider default. Reasoning effort accepts model-specific values; token limits accept scientific notation (for example, `1e5` means `100000`). Providers that do not support custom request-body parameters disable these controls. Anthropic-compatible models require adaptive thinking to be enabled before editing reasoning effort. Full settings and fallback-model parameters are under `Providers → Chat → Configured models → Gear`.
 
+In a profile's chat-model and fallback-model selection menus, click the small gear beside a model to open its full settings. Clicking the gear preserves the selection and fallback order; saving model settings immediately affects every profile using that model.
+
 ![Current model parameters](./images/config-model-parameters-en.png)
 
 Use this mapping to find relocated settings:
