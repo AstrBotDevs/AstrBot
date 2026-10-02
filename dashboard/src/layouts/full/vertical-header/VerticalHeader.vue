@@ -78,6 +78,7 @@ let showAdvancedUpdateSettings = ref(false);
 let restartWaiting = ref(false);
 let restartUnconfirmed = ref(false);
 let restartTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
+let restartDeadline: number | null = null;
 let restartPollGeneration = 0;
 let restartStartTime = ref<number | string | null>(null);
 let restartPollTimer: ReturnType<typeof setInterval> | null = null;
@@ -655,6 +656,7 @@ function stopRestartReloadTimer() {
 function resetRestartFeedbackState() {
   stopRestartReloadTimer();
   stopRestartPolling();
+  restartDeadline = null;
   restartCompleted.value = false;
   restartUnconfirmed.value = false;
   restartReloadCountdown.value = RESTART_FEEDBACK_DELAY_SECONDS;
@@ -690,6 +692,7 @@ function showRestartCompleted() {
   stopUpdateProgressPolling();
   stopRestartReloadTimer();
   restartWaiting.value = false;
+  restartUnconfirmed.value = false;
   restartCompleted.value = true;
   restartReloadCountdown.value = RESTART_FEEDBACK_DELAY_SECONDS;
   updateProgress.value = {
@@ -712,15 +715,18 @@ function waitForAstrBotRestart(
   initialStartTime: number | string | null,
   showWaiting = true,
 ) {
-  if (restartCompleted.value || restartUnconfirmed.value) {
+  if (restartCompleted.value || (restartUnconfirmed.value && showWaiting)) {
     return;
   }
   if (showWaiting && !restartWaiting.value) {
+    restartDeadline ??= Date.now() + RESTART_CONFIRMATION_TIMEOUT_MS;
+    const remaining = restartDeadline - Date.now();
+    if (remaining <= 0) {
+      showRestartUnconfirmed();
+      return;
+    }
     restartWaiting.value = true;
-    restartTimeoutTimer = setTimeout(
-      showRestartUnconfirmed,
-      RESTART_CONFIRMATION_TIMEOUT_MS,
-    );
+    restartTimeoutTimer = setTimeout(showRestartUnconfirmed, remaining);
     restartStartTime.value = initialStartTime;
     updateProgress.value = {
       ...updateProgress.value,
@@ -738,6 +744,7 @@ function waitForAstrBotRestart(
 
   const generation = restartPollGeneration;
   const baseline = Number(initialStartTime);
+  const checkOnce = restartUnconfirmed.value;
   let polling = false;
   const poll = async () => {
     if (polling) return;
@@ -762,9 +769,11 @@ function waitForAstrBotRestart(
   };
 
   void poll();
-  restartPollTimer = setInterval(() => {
-    void poll();
-  }, RESTART_START_TIME_POLL_INTERVAL_MS);
+  if (!checkOnce) {
+    restartPollTimer = setInterval(() => {
+      void poll();
+    }, RESTART_START_TIME_POLL_INTERVAL_MS);
+  }
 }
 
 function showRestartUnconfirmed() {
@@ -775,8 +784,9 @@ function showRestartUnconfirmed() {
 }
 
 function retryRestartCheck() {
-  restartUnconfirmed.value = false;
-  waitForAstrBotRestart(restartStartTime.value);
+  if (!restartUnconfirmed.value) return;
+  stopRestartPolling();
+  waitForAstrBotRestart(restartStartTime.value, false);
 }
 
 function applyUpdateProgress(payload: UpdateProgress) {

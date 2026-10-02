@@ -68,11 +68,17 @@ function setup(response) {
     restartReloadTimer: null,
     updateProgressTimer: null,
     restartTimeoutTimer: null,
+    restartDeadline: null,
     restartPollGeneration: 0,
     updateProgressGeneration: 0,
     RESTART_FEEDBACK_DELAY_SECONDS: 3,
     RESTART_START_TIME_POLL_INTERVAL_MS: 2000,
     RESTART_CONFIRMATION_TIMEOUT_MS: 90000,
+    Date: class extends Date {
+      static now() {
+        return now;
+      }
+    },
     statsApi: {
       startTime: async () => ({
         data: { data: { start_time: await response() } },
@@ -282,6 +288,86 @@ test("closing during restart ignores late replies and reopening resumes checks",
   c.setDialogOpen(true);
   await settle();
   assert.equal(c.restartCompleted.value, true);
+});
+
+test("closing and reopening cannot extend the original restart deadline", async () => {
+  const { context: c, advance } = setup(() => 100);
+  c.waitForAstrBotRestart(100);
+  await advance(88000);
+  c.setDialogOpen(false);
+  await advance(1000);
+  c.setDialogOpen(true);
+  await advance(1000);
+  assert.equal(c.restartWaiting.value, false);
+  assert.equal(c.restartUnconfirmed.value, true);
+});
+
+test("reopening after the deadline immediately offers recovery", async () => {
+  const { context: c, timers, advance } = setup(() => 100);
+  c.waitForAstrBotRestart(100);
+  await advance(1000);
+  c.setDialogOpen(false);
+  await advance(90000);
+  c.setDialogOpen(true);
+  assert.equal(c.restartWaiting.value, false);
+  assert.equal(c.restartUnconfirmed.value, true);
+  assert.equal(timers.size, 0);
+});
+
+test("an unsuccessful recheck keeps recovery visible and does not resume polling", async () => {
+  let requests = 0;
+  let timestamp = 100;
+  const { context: c, timers, advance, settle } = setup(() => {
+    requests += 1;
+    return timestamp;
+  });
+  c.waitForAstrBotRestart(100);
+  await advance(90000);
+  const beforeRecheck = requests;
+  c.retryRestartCheck();
+  await settle();
+  assert.equal(c.restartWaiting.value, false);
+  assert.equal(c.restartUnconfirmed.value, true);
+  assert.equal(requests, beforeRecheck + 1);
+  assert.equal(timers.size, 0);
+  timestamp = 200;
+  await advance(5000);
+  assert.equal(c.restartCompleted.value, false);
+  assert.equal(requests, beforeRecheck + 1);
+  c.retryRestartCheck();
+  await settle();
+  assert.equal(c.restartCompleted.value, true);
+});
+
+test("a pending recheck leaves recovery available and is invalidated on close", async () => {
+  let resolve;
+  let pending;
+  const { context: c, advance, settle } = setup(() => pending ?? 100);
+  c.waitForAstrBotRestart(100);
+  await advance(90000);
+  pending = new Promise((done) => {
+    resolve = done;
+  });
+  c.retryRestartCheck();
+  assert.equal(c.restartUnconfirmed.value, true);
+  assert.equal(c.restartWaiting.value, false);
+  c.setDialogOpen(false);
+  resolve(200);
+  await settle();
+  assert.equal(c.restartCompleted.value, false);
+});
+
+test("a new update resets the old deadline", async () => {
+  const { context: c, advance } = setup(() => 100);
+  c.waitForAstrBotRestart(100);
+  await advance(90000);
+  c.resetRestartFeedbackState();
+  c.waitForAstrBotRestart(100);
+  await advance(89000);
+  assert.equal(c.restartWaiting.value, true);
+  assert.equal(c.restartUnconfirmed.value, false);
+  await advance(1000);
+  assert.equal(c.restartUnconfirmed.value, true);
 });
 
 test("an explicit update error stops restart waiting and preserves the error", async () => {
