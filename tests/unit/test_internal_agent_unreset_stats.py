@@ -29,7 +29,13 @@ async def test_unreset_runner_skips_stats_and_preserves_early_exit(
 
     stage = internal.InternalAgentSubStage()
     stage.ctx = SimpleNamespace(
-        plugin_manager=SimpleNamespace(context=SimpleNamespace())
+        plugin_manager=SimpleNamespace(
+            context=SimpleNamespace(get_config=MagicMock(return_value={}))
+        )
+    )
+    monkeypatch.setattr(
+        internal.SessionServiceManager, "should_process_llm_request",
+        AsyncMock(return_value=True),
     )
     stage.main_agent_cfg = MainAgentBuildConfig(tool_call_timeout=60)
     stage.streaming_response = False

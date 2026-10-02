@@ -6,9 +6,9 @@ from sqlmodel import select
 
 import astrbot.core.provider.provider as provider_module
 from astrbot.core.agent.response import AgentStats
+from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.db.po import ProviderStat
 from astrbot.core.provider.entities import LLMResponse, ProviderMeta, TokenUsage
-from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.provider.func_tool_manager import FunctionToolManager
 from astrbot.core.provider.provider import Provider
 from astrbot.core.star.context import Context
@@ -36,7 +36,7 @@ from astrbot.core.tools.computer_tools.util import LOCAL_NETWORK_POLICY_NOTICE
     ],
 )
 async def test_tool_loop_agent_adds_network_policy_to_system_prompt(
-    monkeypatch, runtime, allow_network, tool_state, existing_notice, expected_count,
+    monkeypatch, temp_db, runtime, allow_network, tool_state, existing_notice, expected_count,
     tool_class,
 ):
     async def finished_steps(_max_steps):
@@ -50,6 +50,7 @@ async def test_tool_loop_agent_adds_network_policy_to_system_prompt(
         "astrbot.core.star.context.ToolLoopAgentRunner", lambda: runner
     )
     context = SimpleNamespace(
+        _db=temp_db,
         provider_manager=SimpleNamespace(
             get_provider_by_id=AsyncMock(return_value=MagicMock(spec=Provider))
         ),

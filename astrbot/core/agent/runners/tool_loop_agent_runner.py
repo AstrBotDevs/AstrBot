@@ -678,7 +678,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                 async for resp in responses:
                                     if resp.is_chunk:
                                         has_stream_output = True
-                                        candidate_has_stream_output = True
                                         yield resp
                                         continue
 

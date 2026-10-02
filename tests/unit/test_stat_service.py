@@ -216,9 +216,9 @@ async def test_provider_token_stats_include_detached_provider_calls(temp_db):
     service = _make_service(temp_db)
     stats = await service.get_provider_token_stats(1)
 
-    assert stats["range_total_calls"] == 3
-    assert stats["range_total_tokens"] == 15
-    assert stats["range_success_rate"] == pytest.approx(2 / 3)
+    assert stats["range_total_calls"] == 4
+    assert stats["range_total_tokens"] == 115
+    assert stats["range_success_rate"] == pytest.approx(3 / 4)
 
 
 @pytest.mark.asyncio

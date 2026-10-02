@@ -562,6 +562,8 @@ class StatService:
 
                 if created_at_local >= today_start_local:
                     today_total_calls += 1
+                    today_call_counts[stat_category] += 1
+                    today_token_totals[stat_category] += token_total
                     today_total_tokens += token_total
                     today_by_model[provider_model] += token_total
                     today_by_provider[provider_id] += token_total
@@ -696,6 +698,8 @@ class StatService:
                 },
                 "range_total_tokens": range_total_tokens,
                 "range_total_calls": range_total_calls,
+                "range_call_counts": range_call_counts,
+                "range_token_totals": range_token_totals,
                 "range_avg_ttft_ms": (
                     range_ttft_total_ms / range_ttft_samples
                     if range_ttft_samples
@@ -720,6 +724,8 @@ class StatService:
                 "range_breakdowns": range_breakdowns,
                 "today_total_tokens": today_total_tokens,
                 "today_total_calls": today_total_calls,
+                "today_call_counts": today_call_counts,
+                "today_token_totals": today_token_totals,
                 "today_by_model": today_by_model_data,
                 "today_by_provider": today_by_provider_data,
                 "today_usage": today_usage,
