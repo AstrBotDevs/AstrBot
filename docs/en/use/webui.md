@@ -32,6 +32,25 @@ After starting AstrBot, you can access the admin panel by visiting `http://local
 
 For first-time login, AstrBot generates a random initial password and prints it in startup logs. Please read the startup log line containing the WebUI credential and use that password to log in (username is usually `astrbot`).
 
+## Getting Started
+
+After initial account setup succeeds, instances missing a chat model or platform continue directly to Getting Started. It uses the standalone account setup layout, with a step count such as "1 / 6" above the heading. Configured instances and regular logins go to the dashboard. Settings → Maintenance → Reopen setup opens the guide manually without resetting existing settings.
+
+![Chat model step in Getting Started](/webui-onboarding-en.png)
+
+1. Before we begin: read the original first-use notice inline, without a separate popup.
+2. Configure a chat model: select a provider, enter credentials and a model name, or use Fetch models to select from the available models. Next saves the provider and model together and fills an empty default with the selected model; an existing default is preserved. Advanced settings start collapsed, and failed saves retain your input.
+3. Say hello to AstrBot: entering this step automatically creates a session and embeds an unframed ChatUI below, without an extra click, navigation, or another tab. Returning to this step preserves the current session. Send a message to check the reply, then select Next. Automatically opening a session alone does not verify the connection.
+4. Connect an adapter: select QQ, Lark, Telegram, or another messaging platform and enter its connection details. Next advances to plugins; saving the configuration does not verify that the platform is online.
+5. Add a few useful extras: the default marketplace supplies separate official and community sections with GitHub Star counts. Official means maintained under `AstrBotDevs`; the community section shows the six highest-starred plugins. Both groups can be selected manually, with nothing preselected. Installation starts only after choosing plugins and selecting Next. Popularity is not a security review; check the source and permissions. Only selected plugins in the displayed groups are installed. GitHub repositories are validated and installed sequentially; failures are retryable and version checks are never overridden.
+6. Computer access: read the permissions before choosing. Access is off in fresh configurations; existing local or sandbox settings are preserved. Only changing the switch and selecting Next updates access before finishing the guide. Skip does not save changes. Chatting does not require this permission.
+
+The guide title sits beside the AstrBot brand. Content, the trial message composer, and bottom actions align with the header's left and right edges. Each subtitle briefly states the configuration purpose. Content scrolls independently. The primary actions previously labeled Save & continue, Chat tested, Install selected, and Save and finish now all read Next, with saving and installation behavior unchanged. Back and skip actions retain their labels. Plugins reuse marketplace cards, with checkboxes for batch installation; computer access uses the same switch style as Settings.
+
+Account setup cannot be skipped. Skip entire setup at the bottom of the first step goes directly to the dashboard without saving guide settings; it replaces the previous Set up later label. Skip on subsequent steps only skips the current step, proceeding directly to adapters when no model is configured. Completing the guide also opens the dashboard. Regular login does not automatically restart the guide. Plugin settings remain available on the Plugins page.
+
+Entry-point mapping: the welcome page and its sidebar item are removed; legacy `/welcome` links redirect to the dashboard. The first-use popup is now the first guide step, and the welcome-page computer access control is the last. Manual reentry is under Settings → Maintenance. Providers, Messaging Platforms, and Plugins remain independently accessible.
+
 ## Two-Factor Authentication
 
 AstrBot WebUI supports TOTP (Time-based One-Time Password) based two-factor authentication.

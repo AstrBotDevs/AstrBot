@@ -3,21 +3,16 @@ import { RouterView, useRoute } from "vue-router";
 import { ref, onMounted, computed, watch } from "vue";
 import VerticalSidebarVue from "./vertical-sidebar/VerticalSidebar.vue";
 import VerticalHeaderVue from "./vertical-header/VerticalHeader.vue";
-import ReadmeDialog from "@/components/shared/ReadmeDialog.vue";
 import Chat from "@/components/chat/Chat.vue";
 import { useCustomizerStore } from "@/stores/customizer";
 import { useRouterLoadingStore } from "@/stores/routerLoading";
 import { useCommonStore } from "@/stores/common";
 import { useMobileDrawerStore } from "@/stores/mobileDrawer";
 import { statsApi } from "@/api/v1";
-import { useI18n } from "@/i18n/composables";
-
-const FIRST_NOTICE_SEEN_KEY = "astrbot:first_notice_seen:v1";
 
 const customizer = useCustomizerStore();
 const commonStore = useCommonStore();
 const mobileDrawer = useMobileDrawerStore();
-const { locale } = useI18n();
 const route = useRoute();
 const routerLoadingStore = useRouterLoadingStore();
 const isCurrentChatRoute = computed(
@@ -41,8 +36,6 @@ const shouldMountChat = ref(isCurrentChatRoute.value);
 
 const showSidebar = computed(() => !isCurrentChatRoute.value);
 
-const showFirstNoticeDialog = ref(false);
-
 watch(isCurrentChatRoute, (isChatRoute) => {
   if (isChatRoute) {
     shouldMountChat.value = true;
@@ -58,36 +51,6 @@ watch(
   { immediate: true },
 );
 
-const maybeShowFirstNotice = async () => {
-  if (localStorage.getItem(FIRST_NOTICE_SEEN_KEY) === "1") {
-    return;
-  }
-
-  try {
-    const response = await statsApi.firstNotice(locale.value);
-    if (response.data.status !== "ok") {
-      return;
-    }
-
-    const content = response.data?.data?.content;
-    if (typeof content === "string" && content.trim().length > 0) {
-      showFirstNoticeDialog.value = true;
-      return;
-    }
-
-    localStorage.setItem(FIRST_NOTICE_SEEN_KEY, "1");
-  } catch (error) {
-    console.error("Failed to load first notice:", error);
-  }
-};
-
-const onFirstNoticeDialogUpdate = (visible: boolean) => {
-  showFirstNoticeDialog.value = visible;
-  if (!visible) {
-    localStorage.setItem(FIRST_NOTICE_SEEN_KEY, "1");
-  }
-};
-
 onMounted(() => {
   setTimeout(async () => {
     try {
@@ -101,7 +64,6 @@ onMounted(() => {
     } catch (error) {
       console.error("Failed to load version info:", error);
     }
-    await maybeShowFirstNotice();
   }, 1000);
 });
 </script>
@@ -174,12 +136,6 @@ onMounted(() => {
           </div>
         </v-container>
       </v-main>
-
-      <ReadmeDialog
-        :show="showFirstNoticeDialog"
-        mode="first-notice"
-        @update:show="onFirstNoticeDialogUpdate"
-      />
     </v-app>
   </v-locale-provider>
 </template>

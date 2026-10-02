@@ -18,7 +18,7 @@ export const useAuthStore = defineStore("auth", {
     returnUrl: null,
   }),
   actions: {
-    async finishAuthenticatedSession(data: any): Promise<void> {
+    async finishAuthenticatedSession(data: any, continueSetup = false): Promise<void> {
       this.username = data.username;
       localStorage.setItem('user', this.username);
       localStorage.setItem('token', data.token);
@@ -44,16 +44,16 @@ export const useAuthStore = defineStore("auth", {
         localStorage.removeItem('password_upgrade_required');
       }
 
-      const onboardingCompleted = await this.checkOnboardingCompleted();
+      const onboardingCompleted = !continueSetup || await this.checkOnboardingCompleted();
       this.returnUrl = null;
       if (passwordWarning) {
         router.push('/auth/setup');
         return;
       }
-      if (onboardingCompleted) {
-        router.push('/dashboard/default');
+      if (continueSetup && !onboardingCompleted) {
+        router.replace('/auth/onboarding');
       } else {
-        router.push('/welcome');
+        router.push('/dashboard/default');
       }
     },
     async login(
@@ -136,7 +136,7 @@ export const useAuthStore = defineStore("auth", {
           return Promise.reject(res.data.message);
         }
 
-        await this.finishAuthenticatedSession(res.data.data);
+        await this.finishAuthenticatedSession(res.data.data, true);
       } catch (error) {
         return Promise.reject(error);
       }

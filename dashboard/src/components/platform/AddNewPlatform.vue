@@ -1,12 +1,13 @@
 <template>
-  <v-dialog
-    v-model="showDialog"
-    max-width="800px"
-    max-height="90%"
+  <component
+    :is="embedded ? 'div' : 'v-dialog'"
+    :class="{ 'platform-embedded': embedded }"
+    v-bind="embedded ? {} : { modelValue: showDialog, maxWidth: '800px', maxHeight: '90%' }"
+    @update:model-value="showDialog = $event"
     @after-enter="prepareData"
   >
-    <v-card>
-      <v-card-title class="text-h3 pa-4 pb-0 pl-6">
+    <component :is="embedded ? 'div' : 'v-card'">
+      <v-card-title v-if="!embedded" class="text-h3 pa-4 pb-0 pl-6">
         {{
           updatingMode
             ? `${tm('dialog.edit')} ${updatingPlatformConfig.id} ${tm(
@@ -17,18 +18,18 @@
       </v-card-title>
       <v-card-text
         ref="dialogScrollContainer"
-        class="pa-4 ml-2"
-        style="overflow-y: auto"
+        :class="embedded ? 'pa-0' : 'pa-4 ml-2'"
+        :style="{ overflowY: embedded ? 'visible' : 'auto' }"
       >
         <div class="d-flex align-start" style="width: 100%">
-          <div>
+          <div v-if="!embedded">
             <v-icon icon="mdi-numeric-1-circle" class="mr-3"></v-icon>
           </div>
-          <div style="flex: 1">
-            <h3>
+          <div style="flex: 1; min-width: 0">
+            <h3 v-if="!embedded">
               {{ tm("createDialog.step1Title") }}
             </h3>
-            <small style="color: grey">{{
+            <small v-if="!embedded" style="color: grey">{{
               tm("createDialog.step1Hint")
             }}</small>
             <div>
@@ -43,8 +44,8 @@
                   rounded="md"
                   dense
                   hide-details
-                  class="mt-6"
-                  style="max-width: 30%; min-width: 300px"
+                  :class="{ 'mt-6': !embedded }"
+                  :style="embedded ? { width: '100%' } : { maxWidth: '30%', minWidth: '300px' }"
                 >
                   <template v-slot:item="{ props: itemProps, item }">
                     <v-list-item v-bind="itemProps">
@@ -350,13 +351,13 @@
         </div>
 
         <div class="d-flex align-start mt-6">
-          <div>
+          <div v-if="!embedded">
             <v-icon icon="mdi-numeric-2-circle" class="mr-3"></v-icon>
           </div>
-          <div style="flex: 1">
+          <div style="flex: 1; min-width: 0">
             <div class="d-flex align-center justify-space-between">
               <div>
-                <div class="d-flex align-center">
+                <div class="d-flex align-center flex-wrap ga-1">
                   <h3>
                     {{ tm("createDialog.configFileTitle") }}
                   </h3>
@@ -370,10 +371,10 @@
                     >{{ tm("createDialog.optional") }}</v-chip
                   >
                 </div>
-                <small style="color: grey">{{
+                <small v-if="!embedded" style="color: grey">{{
                   tm("createDialog.configHint")
                 }}</small>
-                <small style="color: grey" v-if="!updatingMode">{{
+                <small style="color: grey" v-if="!updatingMode && !embedded">{{
                   tm("createDialog.configDefaultHint")
                 }}</small>
               </div>
@@ -732,9 +733,9 @@
         </div>
       </v-card-text>
 
-      <v-card-actions>
+      <v-card-actions v-if="!embedded">
         <v-spacer></v-spacer>
-        <v-btn variant="text" @click="closeDialog">{{ tm("dialog.cancel") }}</v-btn>
+        <v-btn v-if="!embedded" variant="text" @click="closeDialog">{{ tm("dialog.cancel") }}</v-btn>
         <v-btn
           :disabled="!canSave"
           color="primary"
@@ -754,8 +755,8 @@
           >{{ tm("dialog.save") }}</v-btn
         >
       </v-card-actions>
-    </v-card>
-  </v-dialog>
+    </component>
+  </component>
 
   <!-- ID冲突确认对话框 -->
   <v-dialog v-model="showIdConflictDialog" max-width="450" persistent>
@@ -834,18 +835,25 @@ import AstrBotCoreConfigWrapper from "@/components/config/AstrBotCoreConfigWrapp
 import ConfigProfileDrawer from "@/components/config/ConfigProfileDrawer.vue";
 import PlatformRegistrationAction from "@/components/platform/PlatformRegistrationAction.vue";
 import UmoDisplay from "@/components/shared/UmoDisplay.vue";
+import { VCard, VDialog } from "vuetify/components";
 
 export default {
   name: "AddNewPlatform",
   components: {
+    VCard,
+    VDialog,
     AstrBotConfig,
     AstrBotCoreConfigWrapper,
     ConfigProfileDrawer,
     PlatformRegistrationAction,
     UmoDisplay,
   },
-  emits: ["update:show", "show-toast", "refresh-config"],
+  emits: ["update:show", "update:busy", "show-toast", "refresh-config"],
   props: {
+    embedded: {
+      type: Boolean,
+      default: false,
+    },
     show: {
       type: Boolean,
       default: false,
@@ -1101,7 +1109,13 @@ export default {
       return "";
     },
   },
+  mounted() {
+    if (this.embedded) this.prepareData();
+  },
   watch: {
+    loading(value) {
+      if (this.embedded) this.$emit("update:busy", value);
+    },
     selectedPlatformType(newType) {
       if (newType && this.platformTemplates[newType]) {
         this.selectedPlatformConfig = JSON.parse(
@@ -2009,5 +2023,11 @@ export default {
 
 .registration-platform-id-field {
   width: 300px;
+}
+
+.platform-embedded :deep(.v-input),
+.platform-embedded .registration-inline {
+  min-width: 0 !important;
+  max-width: 100%;
 }
 </style>
