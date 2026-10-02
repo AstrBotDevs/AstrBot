@@ -2058,7 +2058,8 @@ async def test_plugin_page_content_issues_scoped_asset_token(
     bridge_response = await anonymous_client.get(bridge_sdk_url.group(1))
     assert bridge_response.status_code == 200
     bridge_js = (await bridge_response.get_data()).decode("utf-8")
-    assert "window.AstrBotPluginPage?.__setInitialContext" in bridge_js
+    assert "window.AstrBotPluginView?.__setInitialContext" in bridge_js
+    assert "window.AstrBotPluginPage = window.AstrBotPluginView;" in bridge_js
     assert '"locale": "zh-CN"' in bridge_js
     assert '"displayName": "插件页面演示"' in bridge_js
     assert '"pageTitle": "Bridge 演示页"' in bridge_js
