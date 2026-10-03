@@ -87,7 +87,7 @@
                 <p class="mt-4 text-h6">{{ t('upload.dropzone') }}</p>
                 <p class="text-caption text-medium-emphasis mt-2">{{ t('upload.supportedFormats') }}</p>
                 <p class="text-caption text-medium-emphasis">{{ t('upload.maxSize') }}</p>
-                <input ref="fileInput" type="file" multiple hidden accept=".txt,.md,.markdown,.rst,.adoc,.pdf,.docx,.epub,.xls,.xlsx"
+                <input ref="fileInput" type="file" multiple hidden accept=".txt,.md,.markdown,.rst,.adoc,.pdf,.docx,.pptx,.epub,.xls,.xlsx"
                   @change="handleFileSelect" />
               </div>
 
@@ -730,6 +730,7 @@ const deleteDocument = async () => {
 const getFileIcon = (fileType: string) => {
   const type = fileType?.toLowerCase() || ''
   if (type.includes('pdf')) return 'mdi-file-pdf-box'
+  if (type.includes('ppt')) return 'mdi-file-powerpoint-box'
   if (type.includes('epub')) return 'mdi-book-open-page-variant'
   if (type.includes('rst') || type.includes('adoc')) return 'mdi-file-document-outline'
   if (type.includes('md') || type.includes('markdown')) return 'mdi-language-markdown'
