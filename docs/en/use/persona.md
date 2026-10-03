@@ -16,7 +16,7 @@ Open the `Persona` page in the WebUI:
 | --- | --- |
 | Persona ID (`persona_id`) | Unique identifier of the persona |
 | System Prompt (`system_prompt`) | System prompt sent to the model, defining the role and behavior |
-| Preset Dialogs (`begin_dialogs`) | Optional preset dialogs that help the model understand the role |
+| Preset Dialogs (`begin_dialogs`) | Optional preset dialogs. The count must be even; they alternate as user / assistant starting from user. They help the model understand the role |
 | Tools / Skills | Tools and Skills available to this persona |
 
 For tool and Skill configuration, see [Tool Use](./function-calling.md) and [Skills](./skills.md).
@@ -31,7 +31,7 @@ A format description dialog appears first, and the same information is provided 
 | --- | --- | --- |
 | `system_prompt` | Yes | System prompt. Import fails if it is missing. |
 | `persona_id` | No | Persona ID. Defaults to `imported_persona`. If it already exists, an `_imported` suffix is appended; on further conflicts, `_imported_1`, `_imported_2`, and so on are appended. |
-| `begin_dialogs` | No | Preset dialog list. Defaults to an empty array `[]`. |
+| `begin_dialogs` | No | Preset dialog list. Defaults to an empty array `[]`. The count must be even; entries alternate as user / assistant starting from user. An odd count is rejected by the API. |
 
 Minimal example:
 
