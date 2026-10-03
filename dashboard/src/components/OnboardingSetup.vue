@@ -2,7 +2,28 @@
   <section class="onboarding-setup">
     <div ref="scrollContainer" class="guide-scroll" :class="{ 'guide-scroll--complete': completed }">
     <OnboardingWelcome v-if="completed" />
-    <div v-else class="guide-content" :class="{ 'guide-content--chat': step === 3 }">
+    <div v-else-if="applying" class="guide-content" :aria-busy="busy">
+      <div class="guide-heading">
+        <h2>{{ tm('guide.applyTitle') }}</h2>
+        <p class="text-body-2 text-medium-emphasis mt-3">{{ tm('guide.applyHint') }}</p>
+      </div>
+      <p class="text-body-2 mb-3" role="status">{{ tm('guide.applyProgress', { done: applyTasks.filter(task => ['done', 'skipped'].includes(task.status)).length, total: applyTasks.length }) }}</p>
+      <v-progress-linear :model-value="applyTasks.filter(task => ['done', 'skipped'].includes(task.status)).length / applyTasks.length * 100" color="primary" :aria-label="tm('guide.applyTitle')" />
+      <v-list class="bg-transparent" lines="two">
+        <v-list-item v-for="task in applyTasks" :key="task.id" class="guide-apply-task px-0 py-4 border-b">
+          <template #prepend>
+            <v-avatar size="24" rounded="0">
+              <v-progress-circular v-if="task.status === 'running'" indeterminate size="24" width="2" color="primary" />
+              <v-icon v-else size="24" :icon="task.status === 'error' ? 'mdi-alert-circle-outline' : task.status === 'done' ? 'mdi-check-circle-outline' : 'mdi-minus-circle-outline'"
+                :color="task.status === 'error' ? 'error' : task.status === 'done' ? 'success' : undefined" />
+            </v-avatar>
+          </template>
+          <v-list-item-title>{{ task.title }}</v-list-item-title>
+          <p class="text-body-2 mt-1" :class="task.error ? 'text-error' : 'text-medium-emphasis'" :role="task.error ? 'alert' : undefined">{{ task.error || tm(`guide.applyStatus.${task.status}`) }}</p>
+        </v-list-item>
+      </v-list>
+    </div>
+    <div v-if="!completed" v-show="!applying" class="guide-content" :class="{ 'guide-content--chat': step === 3 }">
       <div class="guide-heading" aria-live="polite" aria-atomic="true">
         <span class="text-medium-emphasis text-caption">{{ step }} / {{ steps.length }}</span>
         <h2>{{ steps[step - 1] }}</h2>
@@ -25,13 +46,24 @@
       <v-window-item :value="4">
         <v-alert v-if="platformError" type="error" variant="tonal" class="mb-4" role="alert">{{ platformError }}</v-alert>
         <v-progress-linear v-if="platformLoading" indeterminate color="primary" />
-        <div v-else-if="platformReady" class="guide-ready">
-          <v-icon icon="mdi-check-circle-outline" color="success" />
-          <strong>{{ tm('guide.platformReady') }}</strong>
-        </div>
-        <AddNewPlatform v-else-if="!configError" ref="platformForm" embedded :show="true" :metadata="platformMetadata"
-          :config_data="platformConfig" @refresh-config="loadPlatforms" @update:busy="busy = $event"
-          @show-toast="platformError = $event.type === 'error' ? $event.message : ''" />
+        <template v-else-if="!configError">
+          <v-list v-if="configuredPlatforms.length" class="bg-transparent mb-4" role="list">
+            <v-list-item v-for="platform in configuredPlatforms" :key="platform.id" role="listitem"
+              class="guide-platform px-0 py-3 border-b" :title="platform.id" :subtitle="platform.type">
+              <template #prepend>
+                <v-avatar :image="getPlatformIcon(platform.type || platform.id)" size="28" rounded="0" />
+              </template>
+              <template #append>
+                <v-chip :color="platform.enable !== false ? 'success' : undefined" size="small" variant="tonal" class="ml-3">
+                  {{ tm(platform.enable !== false ? 'guide.adapterEnabled' : 'guide.adapterDisabled') }}
+                </v-chip>
+              </template>
+            </v-list-item>
+          </v-list>
+          <AddNewPlatform v-if="!platformReady" ref="platformForm" embedded :show="true" :metadata="platformMetadata"
+            :config_data="platformConfig" @refresh-config="loadPlatforms" @update:busy="busy = $event"
+            @show-toast="platformError = $event.type === 'error' ? $event.message : ''" />
+        </template>
         <v-btn v-else variant="text" @click="loadPlatforms">{{ tm('guide.retry') }}</v-btn>
       </v-window-item>
       <v-window-item :value="5">
@@ -80,6 +112,12 @@
     </div>
     <footer class="guide-actions">
       <v-btn v-if="completed" variant="tonal" color="primary" @click="close">{{ tm('guide.start') }}</v-btn>
+      <template v-else-if="applying">
+        <v-btn variant="text" prepend-icon="mdi-arrow-left" :disabled="busy" @click="applying = false">{{ tm('guide.back') }}</v-btn>
+        <v-spacer />
+        <v-btn v-if="applyTasks.some(task => task.status === 'error')" variant="tonal" color="primary" :loading="busy" @click="finish()">{{ tm('guide.retry') }}</v-btn>
+        <v-btn v-else variant="tonal" color="primary" append-icon="mdi-arrow-right" :loading="busy" :disabled="!applyReady" @click="showWelcome">{{ tm('guide.next') }}</v-btn>
+      </template>
       <template v-else>
       <p v-if="step === 4" id="guide-adapter-skip-hint" class="guide-skip-hint text-body-2 text-medium-emphasis">{{ tm('guide.adapterSkipHint') }}</p>
       <v-btn v-if="step > 1" variant="text" prepend-icon="mdi-arrow-left" :disabled="busy || platformLoading"
@@ -88,15 +126,11 @@
       <v-spacer />
       <v-btn v-if="step > 1" variant="text" :disabled="busy || platformLoading"
         :aria-describedby="step === 4 ? 'guide-adapter-skip-hint' : undefined" @click="skipStep">{{ tm('onboard.skip') }}</v-btn>
-      <v-btn v-if="step === 5 && selected.length" variant="tonal" color="primary"
-        :loading="busy" :disabled="loading || !!loadError" @click="installSelected">
+      <v-btn v-if="step < steps.length" variant="tonal" color="primary" append-icon="mdi-arrow-right" :loading="busy"
+        :disabled="platformLoading || (step === 2 && !modelForm?.ready) || (step === 3 && !modelReady) || (step === 4 && !platformReady && !platformForm?.canSave) || (step === 5 && (loading || !!loadError))" @click="nextStep">
         {{ tm('guide.next') }}
       </v-btn>
-      <v-btn v-else-if="step < steps.length" variant="tonal" color="primary" :loading="busy"
-        :disabled="platformLoading || (step === 2 && !modelForm?.ready) || (step === 3 && !modelReady) || (step === 4 && !platformReady && !platformForm?.canSave)" @click="nextStep">
-        {{ tm('guide.next') }}
-      </v-btn>
-      <v-btn v-else variant="tonal" color="primary" :loading="busy" :disabled="!computerForm?.ready" @click="finish">{{ tm('guide.next') }}</v-btn>
+      <v-btn v-else variant="tonal" color="primary" append-icon="mdi-arrow-right" :loading="busy" :disabled="!computerForm?.ready" @click="finish()">{{ tm('guide.next') }}</v-btn>
       </template>
     </footer>
   </section>
@@ -107,6 +141,7 @@ import { computed, nextTick, ref, watch } from 'vue';
 import { onBeforeRouteLeave, useRouter } from 'vue-router';
 import { configProfileApi, pluginApi, providerApi, systemConfigApi } from '@/api/v1';
 import { useModuleI18n } from '@/i18n/composables';
+import { getPlatformIcon } from '@/utils/platformUtils';
 import OnboardingModel from '@/components/OnboardingModel.vue';
 import AddNewPlatform from '@/components/platform/AddNewPlatform.vue';
 import StandaloneChat from '@/components/chat/StandaloneChat.vue';
@@ -129,6 +164,8 @@ const platformLoading = ref(false);
 const platformError = ref('');
 const platformMetadata = ref({});
 const platformConfig = ref<Record<string, any>>({});
+const configuredPlatforms = computed(() => Array.isArray(platformConfig.value.platform)
+  ? platformConfig.value.platform.filter((platform: any) => platform?.id) as { id: string; type?: string; enable?: boolean }[] : []);
 const configError = ref('');
 const step = ref(1);
 const completed = ref(false);
@@ -144,9 +181,19 @@ const loadError = ref('');
 const installing = ref('');
 const busy = ref(false);
 const installedCount = ref(0);
+const applying = ref(false);
+const settingsStatus = ref<'pending' | 'running' | 'done' | 'skipped' | 'error'>('pending');
+const settingsError = ref('');
+const queuedPlugins = ref<(typeof plugins.value)[number][]>([]);
+const applyTasks = computed(() => [
+  { id: 'settings', title: tm('guide.applySettings'), status: settingsStatus.value, error: settingsError.value },
+  ...queuedPlugins.value.map(plugin => ({ id: plugin.repo, title: plugin.display_name || plugin.name,
+    status: plugin.installed ? 'done' : installing.value === plugin.repo ? 'running' : plugin.error ? 'error' : 'pending', error: plugin.error })),
+]);
+const applyReady = computed(() => applying.value && !busy.value && applyTasks.value.every(task => ['done', 'skipped'].includes(task.status)));
 
 async function nextStep() {
-  if (busy.value || platformLoading.value) return;
+  if (busy.value || platformLoading.value || applying.value || (step.value === 5 && (loading.value || loadError.value))) return;
   if (step.value !== 2) {
     if (step.value === 4 && !platformReady.value) {
       await platformForm.value?.newPlatform();
@@ -193,13 +240,14 @@ async function loadPlatforms(savedId?: string) {
   busy.value = false;
   platformError.value = '';
   platformLoading.value = true;
+  platformReady.value = false;
   configError.value = '';
   try {
     const result = await systemConfigApi.runtime();
     if (result.data.status !== 'ok') throw new Error(result.data.message || tm('onboard.platformLoadFailed'));
     platformConfig.value = result.data.data?.config || {};
     platformMetadata.value = result.data.data?.metadata || {};
-    platformReady.value = (platformConfig.value.platform || []).length > 0;
+    platformReady.value = configuredPlatforms.value.some(platform => platform.enable !== false);
     if (savedId && platformReady.value) step.value = 5;
   } catch (error: any) {
     configError.value = error?.response?.data?.message || error?.message || tm('onboard.platformLoadFailed');
@@ -232,7 +280,6 @@ async function loadPlugins() {
   if (loading.value || busy.value) return;
   loading.value = true;
   loadError.value = '';
-  selected.value = [];
   try {
     const market = await pluginApi.market();
     const installed = await pluginApi.list();
@@ -253,6 +300,7 @@ async function loadPlugins() {
         stars: typeof entry.stars === 'number' && Number.isFinite(entry.stars) ? Math.max(0, Math.floor(entry.stars)) : 0,
         official: !!officialRepo(repo), installed: installedRepos.has(repo), error: '' }];
     }).sort((a, b) => b.stars - a.stars);
+    selected.value = selected.value.filter(repo => pluginGroups.value.some(group => group.items.some(plugin => plugin.repo === repo && !plugin.installed)));
   } catch (error: any) {
     loadError.value = error?.response?.data?.message || error?.message || tm('guide.loadFailed');
   } finally {
@@ -266,12 +314,31 @@ function togglePlugin(plugin: (typeof plugins.value)[number]) {
     ? selected.value.filter(repo => repo !== plugin.repo) : [...selected.value, plugin.repo];
 }
 
-async function installSelected() {
-  if (busy.value || loading.value || loadError.value) return;
+async function finish(skipComputer = false) {
+  if (busy.value || completed.value || loading.value || (!skipComputer && !(applying.value && ['done', 'skipped'].includes(settingsStatus.value)) && !computerForm.value?.ready)) return;
+  if (!applying.value) {
+    queuedPlugins.value = pluginGroups.value.flatMap(group => group.items).filter(p => selected.value.includes(p.repo) && !p.installed);
+    settingsStatus.value = skipComputer ? 'skipped' : 'pending';
+    settingsError.value = '';
+    applying.value = true;
+    void nextTick(() => scrollContainer.value?.scrollTo({ top: 0 }));
+  }
   busy.value = true;
   try {
+    if (!['done', 'skipped'].includes(settingsStatus.value)) {
+      settingsStatus.value = 'running';
+      settingsError.value = '';
+      try {
+        if (!await computerForm.value?.save()) throw new Error(computerForm.value?.error || tm('onboard.computerAccessUpdateFailed'));
+        settingsStatus.value = 'done';
+      } catch (error: any) {
+        settingsStatus.value = 'error';
+        settingsError.value = error?.response?.data?.message || error?.message || tm('onboard.computerAccessUpdateFailed');
+        return;
+      }
+    }
     // Install sequentially; never use a market-supplied download URL or bypass version checks.
-    for (const plugin of pluginGroups.value.flatMap(group => group.items).filter(p => selected.value.includes(p.repo) && !p.installed)) {
+    for (const plugin of queuedPlugins.value.filter(p => !p.installed)) {
       installing.value = plugin.repo;
       plugin.error = '';
       try {
@@ -299,23 +366,19 @@ function close() {
 }
 
 function skipStep() {
-  if (busy.value || platformLoading.value) return;
-  if (step.value === steps.value.length) close();
+  if (busy.value || platformLoading.value || applying.value) return;
+  if (step.value === steps.value.length) return finish(true);
   else if (step.value === 2 && !modelReady.value) step.value = 4;
-  else step.value++;
+  else {
+    if (step.value === 5) selected.value = [];
+    step.value++;
+  }
 }
 
-async function finish() {
-  if (busy.value || completed.value || !computerForm.value?.ready) return;
-  busy.value = true;
-  try {
-    if (await computerForm.value.save()) {
-      completed.value = true;
-      void nextTick(() => scrollContainer.value?.scrollTo({ top: 0 }));
-    }
-  } finally {
-    busy.value = false;
-  }
+function showWelcome() {
+  if (!applyReady.value) return;
+  completed.value = true;
+  void nextTick(() => scrollContainer.value?.scrollTo({ top: 0 }));
 }
 
 watch(step, value => {
@@ -331,7 +394,7 @@ onBeforeRouteLeave(() => !busy.value && !platformLoading.value);
 .onboarding-setup { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; }
 .guide-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 .guide-scroll--complete { display: flex; }
-.guide-content { width: 100%; padding: 32px 0 24px; }
+.guide-content { width: 100%; padding: 16px 0 24px; }
 .guide-content > .v-window { padding-top: 8px; margin-top: -8px; }
 .guide-heading { margin-bottom: 28px; }
 .guide-heading h2 { margin-top: 6px; font-size: 24px; line-height: 1.35; font-weight: 600; letter-spacing: 0; }
@@ -350,12 +413,15 @@ onBeforeRouteLeave(() => !busy.value && !platformLoading.value);
 .guide-chat :deep(.input-area) { padding-inline: 0; }
 .guide-chat :deep(.input-container) { width: 100% !important; max-width: 100% !important; margin-inline: 0 !important; }
 .guide-plugin-group + .guide-plugin-group { margin-top: 28px; }
-.guide-actions { display: flex; flex-shrink: 0; align-items: center; gap: 8px; flex-wrap: wrap; padding: 20px 0 max(20px, env(safe-area-inset-bottom)); border-top: 1px solid rgba(var(--v-theme-on-surface), .1); background: rgb(var(--v-theme-surface)); z-index: 1; }
+.guide-apply-task :deep(.v-list-item-title) { white-space: normal; overflow-wrap: anywhere; }
+.guide-apply-task p { overflow-wrap: anywhere; }
+.guide-platform :deep(.v-list-item-title), .guide-platform :deep(.v-list-item-subtitle) { white-space: normal; overflow-wrap: anywhere; }
+.guide-actions { display: flex; flex-shrink: 0; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 0 max(8px, env(safe-area-inset-bottom)); border-top: 1px solid rgba(var(--v-theme-on-surface), .1); background: rgb(var(--v-theme-surface)); z-index: 1; }
 .guide-actions :deep(.v-btn) { letter-spacing: 0; }
 .guide-skip-hint { flex-basis: 100%; margin: 0; text-align: end; overflow-wrap: anywhere; }
 .guide-actions > .v-btn:last-child { margin-inline-start: auto; }
 @media (max-width: 600px) {
-  .guide-actions { padding: 16px 0 max(16px, env(safe-area-inset-bottom)); gap: 4px; }
+  .guide-actions { gap: 4px; }
   .guide-actions :deep(.v-btn) { padding-inline: 10px; min-width: 0; }
 }
 </style>

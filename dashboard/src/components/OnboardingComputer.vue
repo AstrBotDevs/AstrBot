@@ -92,5 +92,5 @@ async function save() {
 }
 
 onMounted(load);
-defineExpose({ save, ready });
+defineExpose({ save, ready, error });
 </script>
