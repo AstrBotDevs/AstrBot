@@ -1,16 +1,21 @@
 import asyncio
 import os
 import subprocess
-import uuid
 
 import edge_tts
+from edge_tts.constants import WSS_HEADERS
 
 from astrbot.core import logger
+from astrbot.core.provider.headers import DEFAULT_USER_AGENT
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.datetime_utils import generate_timestamp_id
 
 from ..entities import ProviderType
 from ..provider import TTSProvider
 from ..register import register_provider_adapter
+
+# Edge TTS exposes synthesis headers as a shared SDK default, not a client option.
+WSS_HEADERS["User-Agent"] = DEFAULT_USER_AGENT
 
 """
 edge_tts 方式，能够免费、快速生成语音，使用需要先安装edge-tts库
@@ -47,8 +52,10 @@ class ProviderEdgeTTS(TTSProvider):
 
     async def get_audio(self, text: str) -> str:
         temp_dir = get_astrbot_temp_path()
-        mp3_path = os.path.join(temp_dir, f"edge_tts_temp_{uuid.uuid4()}.mp3")
-        wav_path = os.path.join(temp_dir, f"edge_tts_{uuid.uuid4()}.wav")
+        mp3_path = os.path.join(
+            temp_dir, f"edge_tts_temp_{generate_timestamp_id()}.mp3"
+        )
+        wav_path = os.path.join(temp_dir, f"edge_tts_{generate_timestamp_id()}.wav")
 
         # 构建 Edge TTS 参数
         kwargs = {"text": text, "voice": self.voice}

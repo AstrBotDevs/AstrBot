@@ -1,23 +1,46 @@
 """Tests for astr_main_agent module."""
 
+import asyncio
 import datetime
 import os
+from contextlib import nullcontext
+from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from astrbot.core import astr_main_agent as ama
+from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.message import Message, dump_messages_with_checkpoints
+from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.agent.runners.base import AgentState
 from astrbot.core.agent.tool import FunctionTool, ToolSet
+from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
+from astrbot.core.config.agent_runner import resolve_context_compression_config
 from astrbot.core.conversation_mgr import Conversation
-from astrbot.core.message.components import File, Image, Plain, Reply, Video
+from astrbot.core.cron.manager import CronJobManager
+from astrbot.core.message.components import File, Image, Plain, Record, Reply, Video
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.provider import Provider
-from astrbot.core.provider.entities import ProviderRequest
+from astrbot.core.provider import manager as provider_manager_module
+from astrbot.core.provider.entities import LLMResponse, ProviderRequest, ProviderType
+from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.skills.skill_manager import SkillInfo
+from astrbot.core.star.context import Context
 from astrbot.core.star.star import StarMetadata
+
+
+@pytest.fixture
+def valid_image_path(tmp_path):
+    """Create a real image for builder tests that exercise provider selection."""
+    from PIL import Image as PILImage
+
+    path = tmp_path / "input.jpg"
+    PILImage.new("RGB", (8, 8), "red").save(path)
+    return str(path)
 
 
 @pytest.fixture
@@ -37,6 +60,9 @@ def mock_context():
     """Create a mock Context."""
     ctx = MagicMock()
     ctx.get_config.return_value = {}
+    ctx.get_using_provider_async = AsyncMock(
+        side_effect=lambda *args, **kwargs: ctx.get_using_provider(*args, **kwargs)
+    )
     ctx.conversation_manager = MagicMock()
     ctx.persona_manager = MagicMock()
     ctx.persona_manager.personas_v3 = []
@@ -107,6 +133,119 @@ def test_provider_supports_modality_requires_explicit_list():
     assert not ama._provider_supports_modality(provider, "image")
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("entrypoint", ["cron", "background"])
+@pytest.mark.parametrize(
+    "scenario",
+    ["primary-success", "exception", "error-response", "all-fail", "unconfigured"],
+)
+async def test_proactive_agent_uses_session_fallback_models(
+    entrypoint, scenario, mock_context, mock_provider, mock_event, mock_conversation
+):
+    """Exercise real agent construction and failover from both wakeup entrypoints.
+
+    Args:
+        entrypoint: Proactive wakeup path to execute.
+        scenario: Provider outcomes and fallback configuration to exercise.
+        mock_context: Session context fixture.
+        mock_provider: Primary provider fixture.
+        mock_event: Originating message event fixture.
+        mock_conversation: Stored conversation fixture.
+    """
+    mock_context.mock_add_spec(Context)
+    calls = []
+    providers = {"primary": mock_provider}
+    for name in ("backup-1", "backup-2"):
+        providers[name] = MagicMock(spec=Provider)
+    for name, provider in providers.items():
+        provider.provider_config = {
+            "id": name,
+            "modalities": ["text", "tool_use"],
+            "max_context_tokens": 8192,
+        }
+        provider.get_model.return_value = name
+        if name == "primary" and scenario == "primary-success":
+            result = LLMResponse(role="assistant", completion_text="Primary completed.")
+        elif name == "primary" and scenario == "error-response":
+            result = LLMResponse(role="err", completion_text="Primary unavailable.")
+        elif name == "backup-2" and scenario != "all-fail":
+            result = LLMResponse(role="assistant", completion_text="Backup completed.")
+        else:
+            result = RuntimeError(f"{name} unavailable")
+        provider.text_chat = AsyncMock(side_effect=[result])
+        calls.append(provider.text_chat)
+
+    model = (
+        {}
+        if scenario == "unconfigured"
+        else {"fallback_provider_ids": ["backup-1", "backup-2"]}
+    )
+    mock_context.get_config.return_value = {
+        "agent_runner": {"config": {"model": model}},
+        "provider_settings": {},
+    }
+    mock_context.get_using_provider_async.side_effect = None
+    mock_context.get_using_provider_async.return_value = mock_provider
+    mock_context.get_provider_by_id.side_effect = providers.get
+    mock_event.unified_msg_origin = "test:FriendMessage:user123"
+    mock_event.role = "member"
+    runner = ama.AgentRunner()
+    failed = scenario in ("all-fail", "unconfigured")
+    expectation = (
+        pytest.raises(RuntimeError, match="Cron agent run ended in ERROR")
+        if entrypoint == "cron" and failed
+        else nullcontext()
+    )
+    with (
+        patch.object(
+            ama, "_get_session_conv", AsyncMock(return_value=mock_conversation)
+        ),
+        patch.object(ama, "_decorate_llm_request", AsyncMock()),
+        patch.object(ama, "_apply_kb", AsyncMock()),
+        patch.object(ama, "MAIN_AGENT_HOOKS", BaseAgentRunHooks()),
+        patch.object(ama, "AgentRunner", return_value=runner),
+        patch("astrbot.core.cron.manager.persist_agent_history", AsyncMock()),
+        patch("astrbot.core.astr_agent_tool_exec.persist_agent_history", AsyncMock()),
+        expectation,
+    ):
+        if entrypoint == "cron":
+            manager = CronJobManager(MagicMock())
+            manager.ctx = mock_context
+            await manager._woke_main_agent(
+                message="Run the scheduled task",
+                session_str=mock_event.unified_msg_origin,
+                extras={"cron_job": {"id": "job-1"}, "cron_payload": {}},
+            )
+        else:
+            await FunctionToolExecutor._wake_main_agent_for_background_result(
+                ContextWrapper(
+                    context=SimpleNamespace(event=mock_event, context=mock_context)
+                ),
+                task_id="task-1",
+                tool_name="background-tool",
+                result_text="Work finished.",
+                tool_args={},
+                note="Background task finished",
+                summary_name="BackgroundTask",
+            )
+
+    expected_calls = (
+        [1, 0, 0] if scenario in ("primary-success", "unconfigured") else [1, 1, 1]
+    )
+    assert [call.await_count for call in calls] == expected_calls
+    if failed:
+        assert runner.state == AgentState.ERROR
+    else:
+        assert runner.state == AgentState.DONE
+        response = runner.get_final_llm_resp()
+        assert response.role == "assistant"
+        assert response.completion_text == (
+            "Primary completed."
+            if scenario == "primary-success"
+            else "Backup completed."
+        )
+
+
 @pytest.fixture
 def sample_config():
     """Create a sample MainAgentBuildConfig."""
@@ -134,6 +273,95 @@ def _setup_conversation_for_build(conv_mgr, cid: str = "conv-id") -> MagicMock:
     conversation = _new_mock_conversation(cid=cid)
     conv_mgr.get_conversation = AsyncMock(return_value=conversation)
     return conversation
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("entrypoint", ["cron", "background"])
+@pytest.mark.parametrize("runtime", ["none", "local", "sandbox", None])
+@pytest.mark.parametrize("safety_mode", [True, False])
+async def test_proactive_agent_respects_runtime_and_safety_settings(
+    entrypoint,
+    runtime,
+    safety_mode,
+    mock_context,
+    mock_provider,
+    mock_event,
+    mock_conversation,
+    tmp_path,
+):
+    """Build real proactive requests without loading tools outside the runtime."""
+    provider_settings = {
+        "computer_use_require_admin": False,
+        "sandbox": {"booter": "cua"},
+    }
+    if runtime is not None:
+        provider_settings["computer_use_runtime"] = runtime
+    mock_context.get_config.return_value = {
+        "admins_id": [],
+        "provider_settings": provider_settings,
+        "agent_runner": {"config": {"persona": {"safety_mode": safety_mode}}},
+    }
+    mock_context.get_using_provider_async.return_value = mock_provider
+    mock_context.get_using_provider_async.side_effect = None
+    mock_event.unified_msg_origin = "test:FriendMessage:user123"
+    mock_event.role = "member"
+
+    with (
+        patch.object(
+            ama, "_get_session_conv", AsyncMock(return_value=mock_conversation)
+        ),
+        patch.object(ama, "_decorate_llm_request", AsyncMock()),
+        patch.object(ama, "_apply_kb", AsyncMock()),
+        patch.object(
+            ama, "_get_workspace_path_for_umo", AsyncMock(return_value=tmp_path)
+        ),
+        patch.object(ama, "AstrAgentContext"),
+        patch.object(ama, "AgentRunner") as runner_cls,
+        patch("astrbot.core.cron.manager.persist_agent_history", AsyncMock()),
+        patch("astrbot.core.astr_agent_tool_exec.persist_agent_history", AsyncMock()),
+    ):
+        runner = runner_cls.return_value
+        runner.reset = AsyncMock()
+        runner.step_until_done.return_value.__aiter__.return_value = []
+        runner.get_final_llm_resp.return_value = None
+
+        if entrypoint == "cron":
+            manager = CronJobManager(MagicMock())
+            manager.ctx = mock_context
+            await manager._woke_main_agent(
+                message="run scheduled task",
+                session_str=mock_event.unified_msg_origin,
+                delivery_session_str=mock_event.unified_msg_origin,
+                extras={"cron_job": {"id": "job-1"}, "cron_payload": {}},
+            )
+        else:
+            await FunctionToolExecutor._wake_main_agent_for_background_result(
+                ContextWrapper(
+                    context=MagicMock(context=mock_context, event=mock_event)
+                ),
+                task_id="task-1",
+                tool_name="long_tool",
+                result_text="done",
+                tool_args={},
+                note="task finished",
+                summary_name="BackgroundTask",
+            )
+
+        runner.reset.assert_awaited_once()
+        request = runner.reset.call_args.kwargs["request"]
+
+    tool_names = request.func_tool.names()
+    assert "send_message_to_user" in tool_names
+    assert "future_task" in tool_names
+    assert ("astrbot_execute_python" in tool_names) == (runtime == "local")
+    if runtime == "sandbox":
+        assert "astrbot_execute_ipython" in tool_names
+        assert "astrbot_cua_screenshot" in tool_names
+        assert "CUA Desktop Control" in request.system_prompt
+    else:
+        assert "astrbot_execute_ipython" not in tool_names
+    assert ("astrbot_execute_shell" in tool_names) == (runtime in {"local", "sandbox"})
+    assert (ama.LLM_SAFETY_MODE_SYSTEM_PROMPT in request.system_prompt) == safety_mode
 
 
 def test_append_system_reminders_includes_weekday(mock_event):
@@ -169,6 +397,60 @@ def test_append_system_reminders_includes_weekday(mock_event):
     ]
 
 
+def test_local_mode_prompt_uses_windows_powershell_51():
+    with (
+        patch("astrbot.core.astr_main_agent.platform.system", return_value="Windows"),
+        patch(
+            "astrbot.core.astr_main_agent.resolve_windows_shell",
+            return_value="powershell.exe",
+        ),
+    ):
+        prompt = ama._build_local_mode_prompt()
+
+    assert "Windows PowerShell 5.1 (powershell.exe)" in prompt
+    assert "PowerShell 7-only syntax" in prompt
+    assert "cmd.exe" not in prompt
+
+
+def test_local_mode_prompt_hints_pwsh_when_resolved():
+    with (
+        patch("astrbot.core.astr_main_agent.platform.system", return_value="Windows"),
+        patch(
+            "astrbot.core.astr_main_agent.resolve_windows_shell",
+            return_value="pwsh.exe",
+        ),
+    ):
+        prompt = ama._build_local_mode_prompt()
+
+    assert "PowerShell 7 (pwsh.exe)" in prompt
+    assert "Windows PowerShell 5.1" not in prompt
+    assert "Unix-like" not in prompt
+
+
+def test_local_mode_prompt_ignores_pwsh_on_non_windows():
+    with (
+        patch("astrbot.core.astr_main_agent.platform.system", return_value="Linux"),
+        patch(
+            "astrbot.core.astr_main_agent.resolve_windows_shell",
+            return_value="pwsh.exe",
+        ),
+    ):
+        prompt = ama._build_local_mode_prompt()
+
+    assert "Unix-like" in prompt
+    assert "POSIX-compatible" in prompt
+    assert "PowerShell" not in prompt
+
+
+def test_local_mode_prompt_keeps_posix_shell_guidance():
+    with patch("astrbot.core.astr_main_agent.platform.system", return_value="Linux"):
+        prompt = ama._build_local_mode_prompt()
+
+    assert "Unix-like" in prompt
+    assert "POSIX-compatible" in prompt
+    assert "PowerShell" not in prompt
+
+
 class TestMainAgentBuildConfig:
     """Tests for MainAgentBuildConfig dataclass."""
 
@@ -184,6 +466,7 @@ class TestMainAgentBuildConfig:
         assert config.kb_agentic_mode is False
         assert config.file_extract_enabled is False
         assert config.llm_safety_mode is True
+        assert config.computer_use_runtime == "none"
 
     def test_config_with_custom_values(self):
         """Test MainAgentBuildConfig with custom values."""
@@ -211,7 +494,13 @@ class TestMainAgentBuildConfig:
 class TestSelectProvider:
     """Tests for _select_provider function."""
 
-    def test_select_provider_by_id(self, mock_event, mock_context, mock_provider):
+    @pytest.mark.asyncio
+    async def test_select_provider_by_id(
+        self,
+        mock_event,
+        mock_context,
+        mock_provider,
+    ):
         """Test selecting provider by ID from event extra."""
         module = ama
         mock_event.get_extra.side_effect = lambda k: (
@@ -219,12 +508,13 @@ class TestSelectProvider:
         )
         mock_context.get_provider_by_id.return_value = mock_provider
 
-        result = module._select_provider(mock_event, mock_context)
+        result = await module._select_provider(mock_event, mock_context)
 
         assert result == mock_provider
         mock_context.get_provider_by_id.assert_called_once_with("test-provider")
 
-    def test_select_provider_not_found(self, mock_event, mock_context):
+    @pytest.mark.asyncio
+    async def test_select_provider_not_found(self, mock_event, mock_context):
         """Test selecting provider when ID is not found."""
         module = ama
         mock_event.get_extra.side_effect = lambda k: (
@@ -232,7 +522,7 @@ class TestSelectProvider:
         )
         mock_context.get_provider_by_id.return_value = None
 
-        result = module._select_provider(mock_event, mock_context)
+        result = await module._select_provider(mock_event, mock_context)
 
         assert result is None
         mock_event.set_extra.assert_called_with(
@@ -240,7 +530,8 @@ class TestSelectProvider:
             "LLM 请求失败：未找到指定的提供商 `non-existent`。请检查提供商配置或重新选择可用模型。",
         )
 
-    def test_select_provider_invalid_type(self, mock_event, mock_context):
+    @pytest.mark.asyncio
+    async def test_select_provider_invalid_type(self, mock_event, mock_context):
         """Test selecting provider when result is not a Provider instance."""
         module = ama
         mock_event.get_extra.side_effect = lambda k: (
@@ -248,7 +539,7 @@ class TestSelectProvider:
         )
         mock_context.get_provider_by_id.return_value = "not a provider"
 
-        result = module._select_provider(mock_event, mock_context)
+        result = await module._select_provider(mock_event, mock_context)
 
         assert result is None
         mock_event.set_extra.assert_called_with(
@@ -256,32 +547,63 @@ class TestSelectProvider:
             "LLM 请求失败：选择的提供商类型无效（str），已跳过本次请求。",
         )
 
-    def test_select_provider_fallback(self, mock_event, mock_context, mock_provider):
+    @pytest.mark.asyncio
+    async def test_select_provider_fallback(
+        self,
+        mock_event,
+        mock_context,
+        mock_provider,
+    ):
         """Test provider selection fallback to using provider."""
         module = ama
         mock_event.get_extra.return_value = None
         mock_context.get_using_provider.return_value = mock_provider
 
-        result = module._select_provider(mock_event, mock_context)
+        result = await module._select_provider(mock_event, mock_context)
 
         assert result == mock_provider
         mock_context.get_using_provider.assert_called_once_with(
             umo=mock_event.unified_msg_origin
         )
 
-    def test_select_provider_fallback_error(self, mock_event, mock_context):
+    @pytest.mark.asyncio
+    async def test_select_provider_fallback_error(self, mock_event, mock_context):
         """Test provider selection when fallback raises ValueError."""
         module = ama
         mock_event.get_extra.return_value = None
         mock_context.get_using_provider.side_effect = ValueError("Test error")
 
-        result = module._select_provider(mock_event, mock_context)
+        result = await module._select_provider(mock_event, mock_context)
 
         assert result is None
         mock_event.set_extra.assert_called_with(
             module.LLM_ERROR_MESSAGE_EXTRA_KEY,
             "LLM 请求失败：Test error",
         )
+
+
+@pytest.mark.asyncio
+async def test_provider_manager_async_selection_uses_session_preference(monkeypatch):
+    preferred_provider = object()
+    manager = ProviderManager.__new__(ProviderManager)
+    manager.inst_map = {"preferred": preferred_provider}
+    manager.acm = MagicMock()
+
+    get_async = AsyncMock(return_value="preferred")
+    monkeypatch.setattr(provider_manager_module.sp, "get_async", get_async)
+
+    result = await manager.get_using_provider_async(
+        ProviderType.CHAT_COMPLETION,
+        "session-1",
+    )
+
+    assert result is preferred_provider
+    get_async.assert_awaited_once_with(
+        "umo",
+        "session-1",
+        "provider_perf_chat_completion",
+        None,
+    )
 
 
 class TestGetSessionConv:
@@ -801,9 +1123,7 @@ class TestEnsurePersonaAndSkills:
         mock_context.persona_manager.resolve_selected_persona = AsyncMock(
             return_value=("conv-persona", persona, None, False)
         )
-        mock_event.get_extra.side_effect = (
-            lambda key: key == "enable_inline_genui"
-        )
+        mock_event.get_extra.side_effect = lambda key: key == "enable_inline_genui"
         req = ProviderRequest()
         req.conversation = MagicMock(persona_id="conv-persona")
 
@@ -818,9 +1138,7 @@ class TestEnsurePersonaAndSkills:
     ):
         """Test inline GenUI instructions are added before conversation setup."""
         module = ama
-        mock_event.get_extra.side_effect = (
-            lambda key: key == "enable_inline_genui"
-        )
+        mock_event.get_extra.side_effect = lambda key: key == "enable_inline_genui"
         req = ProviderRequest()
 
         await module._ensure_persona_and_skills(req, {}, mock_context, mock_event)
@@ -981,14 +1299,21 @@ class TestEnsurePersonaAndSkills:
         req = ProviderRequest()
         req.conversation = MagicMock(persona_id="no-skills")
 
-        await module._ensure_persona_and_skills(req, {}, mock_context, mock_event)
+        await module._ensure_persona_and_skills(
+            req, {"computer_use_runtime": "local"}, mock_context, mock_event
+        )
 
         assert "Workspace scoped skill." not in req.system_prompt
         assert "## Skills" not in req.system_prompt
 
     @pytest.mark.asyncio
-    async def test_ensure_skills_skips_workspace_skills_in_sandbox_runtime(
+    @pytest.mark.parametrize(
+        "runtime_settings",
+        [{}, {"computer_use_runtime": "none"}, {"computer_use_runtime": "sandbox"}],
+    )
+    async def test_ensure_skills_skips_workspace_skills_outside_local_runtime(
         self,
+        runtime_settings,
         monkeypatch,
         tmp_path,
         mock_event,
@@ -1035,7 +1360,7 @@ class TestEnsurePersonaAndSkills:
 
         await module._ensure_persona_and_skills(
             req,
-            {"computer_use_runtime": "sandbox"},
+            runtime_settings,
             mock_context,
             mock_event,
         )
@@ -1118,8 +1443,13 @@ class TestEnsurePersonaAndSkills:
                 result.reset_coro.close()
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("role", ["admin", "member"])
+    @pytest.mark.parametrize(
+        ("allow_execution", "allow_network"),
+        [(True, False), (True, True), (False, False)],
+    )
     async def test_persona_empty_tools_keeps_local_runtime_builtin_tools(
-        self, mock_event, mock_context, mock_provider
+        self, mock_event, mock_context, mock_provider, role, allow_execution, allow_network
     ):
         module = ama
         persona = {"name": "locked", "prompt": "No tools.", "tools": []}
@@ -1127,6 +1457,19 @@ class TestEnsurePersonaAndSkills:
             return_value=("locked", persona, None, False)
         )
         mock_event.platform_meta.support_proactive_message = False
+        mock_event.role = role
+        mock_context.get_config.return_value = {
+            "provider_settings": {
+                "computer_use_runtime": "local",
+                "computer_use_local_permissions": {
+                    role: {
+                        "allow_execution": allow_execution,
+                        "allow_network": allow_network,
+                        "filesystem_scope": "workspace",
+                    }
+                },
+            }
+        }
         config = module.MainAgentBuildConfig(
             tool_call_timeout=60,
             computer_use_runtime="local",
@@ -1137,7 +1480,10 @@ class TestEnsurePersonaAndSkills:
 
         with (
             patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
-            patch("astrbot.core.astr_main_agent.AstrAgentContext"),
+            patch(
+                "astrbot.core.astr_main_agent.AstrAgentContext",
+                return_value=SimpleNamespace(context=mock_context, event=mock_event),
+            ),
         ):
             mock_runner = MagicMock()
             mock_runner.reset = AsyncMock()
@@ -1156,7 +1502,17 @@ class TestEnsurePersonaAndSkills:
             assert result.provider_request.func_tool is not None
             tool_names = result.provider_request.func_tool.names()
             assert "astrbot_execute_shell" in tool_names
+            assert "astrbot_shell_session" in tool_names
             assert "astrbot_execute_python" in tool_names
+            shell_tool = result.provider_request.func_tool.get_tool(
+                "astrbot_execute_shell"
+            )
+            assert shell_tool is not None
+            assert "background" not in shell_tool.parameters["properties"]
+            assert "yield_time_ms" in shell_tool.parameters["properties"]
+            assert result.provider_request.system_prompt.count(
+                module.LOCAL_NETWORK_POLICY_NOTICE
+            ) == int(allow_execution and not allow_network)
         finally:
             if result.reset_coro:
                 result.reset_coro.close()
@@ -1437,6 +1793,54 @@ class TestBuildMainAgent:
         assert mock_runner.reset.await_args.kwargs["enforce_max_turns"] == 7
 
     @pytest.mark.asyncio
+    async def test_build_main_agent_passes_session_compression_to_runner(
+        self, mock_event, mock_context, mock_provider
+    ):
+        """Pass the summary provider, token budget and turn limits to the runner."""
+        compressor = MagicMock(spec=Provider)
+        mock_context.get_provider_by_id.side_effect = lambda provider_id: (
+            compressor if provider_id == "summary-model" else None
+        )
+        mock_context.get_using_provider.return_value = mock_provider
+        mock_provider.get_model.return_value = "unknown-model-for-compression-test"
+        _setup_conversation_for_build(mock_context.conversation_manager)
+
+        with (
+            patch("astrbot.core.astr_main_agent.AgentRunner") as runner_cls,
+            patch("astrbot.core.astr_main_agent.AstrAgentContext"),
+        ):
+            runner = runner_cls.return_value
+            runner.reset = AsyncMock()
+            result = await ama.build_main_agent(
+                event=mock_event,
+                plugin_context=mock_context,
+                config=ama.MainAgentBuildConfig(
+                    tool_call_timeout=60,
+                    **resolve_context_compression_config(
+                        {
+                            "overflow_strategy": "llm_compress",
+                            "provider_id": "summary-model",
+                            "instruction": "Keep unfinished tasks.",
+                            "keep_recent_ratio": 0.3,
+                            "max_turns": 12,
+                            "trim_turns": 3,
+                            "fallback_max_tokens": 16384,
+                        }
+                    ),
+                ),
+            )
+
+        assert result is not None
+        runner.reset.assert_awaited_once()
+        kwargs = runner.reset.await_args.kwargs
+        assert kwargs["llm_compress_provider"] is compressor
+        assert kwargs["llm_compress_instruction"] == "Keep unfinished tasks."
+        assert kwargs["llm_compress_keep_recent_ratio"] == 0.3
+        assert kwargs["enforce_max_turns"] == 12
+        assert kwargs["truncate_turns"] == 3
+        assert kwargs["provider"].provider_config["max_context_tokens"] == 16384
+
+    @pytest.mark.asyncio
     async def test_build_main_agent_no_provider(self, mock_event, mock_context):
         """Test building main agent when no provider is available."""
         module = ama
@@ -1504,14 +1908,33 @@ class TestBuildMainAgent:
         assert result is None
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("quoted", [False, True])
+    @pytest.mark.parametrize("compression_enabled", [False, True])
     async def test_build_main_agent_with_images(
-        self, mock_event, mock_context, mock_provider
+        self,
+        mock_event,
+        mock_context,
+        mock_provider,
+        tmp_path,
+        monkeypatch,
+        quoted,
+        compression_enabled,
     ):
-        """Test building main agent with image attachments."""
+        """Direct builders prepare both ordinary and quoted images before reset."""
+
+        from PIL import Image as PILImage
+
+        from astrbot.core.utils import image_input
+
         module = ama
-        mock_image = MagicMock(spec=Image)
-        mock_image.convert_to_file_path = AsyncMock(return_value="/path/to/image.jpg")
-        mock_event.message_obj.message = [mock_image]
+        monkeypatch.setattr(image_input, "get_astrbot_temp_path", lambda: str(tmp_path))
+        source_path = tmp_path / "image.jpg"
+        PILImage.new("RGB", (8, 8), (255, 0, 0)).save(source_path)
+        original = source_path.read_bytes()
+        image = Image.fromFileSystem(str(source_path))
+        mock_event.message_obj.message = (
+            [Reply(id="reply-1", chain=[image])] if quoted else [image]
+        )
 
         mock_context.get_provider_by_id.return_value = None
         mock_context.get_using_provider.return_value = mock_provider
@@ -1531,18 +1954,47 @@ class TestBuildMainAgent:
             result = await module.build_main_agent(
                 event=mock_event,
                 plugin_context=mock_context,
-                config=module.MainAgentBuildConfig(tool_call_timeout=60),
+                config=module.MainAgentBuildConfig(
+                    tool_call_timeout=60,
+                    provider_settings={
+                        "image_compress_enabled": compression_enabled,
+                        "image_compress_options": {"max_size": 4},
+                    },
+                ),
             )
 
         assert result is not None
+        request = result.provider_request
+        label = "Image 1 in quoted message" if quoted else "Image 1"
+        assert f"[{label}: original path {source_path}]" in [
+            part.text for part in request.extra_user_content_parts
+        ]
+        assert len(request.image_urls) == 1
+        visual_path = Path(request.image_urls[0])
+        assert visual_path != source_path
+        with PILImage.open(visual_path) as visual_image:
+            assert visual_image.size == (4, 4)
+        mock_event.track_temporary_local_file.assert_called_once_with(str(visual_path))
+        mock_event.untrack_temporary_local_file.assert_called_once_with(
+            str(source_path)
+        )
+        AstrMessageEvent.cleanup_temporary_local_files(
+            SimpleNamespace(
+                _temporary_local_files=[
+                    call.args[0]
+                    for call in mock_event.track_temporary_local_file.call_args_list
+                ]
+            )
+        )
+        assert source_path.read_bytes() == original
 
     @pytest.mark.asyncio
     async def test_build_main_agent_skips_caption_when_main_provider_supports_images(
-        self, mock_event, mock_context, mock_provider
+        self, mock_event, mock_context, mock_provider, valid_image_path
     ):
         """Test image-capable chat providers receive quoted images directly."""
         module = ama
-        mock_image = Image(file="file:///tmp/quoted.jpg")
+        mock_image = Image(file=Path(valid_image_path).as_uri())
         mock_reply = Reply(
             id="reply-1",
             chain=[Plain(text="quoted text"), mock_image],
@@ -1564,7 +2016,7 @@ class TestBuildMainAgent:
             patch.object(
                 Image,
                 "convert_to_file_path",
-                AsyncMock(return_value="/tmp/quoted.jpg"),
+                AsyncMock(return_value=valid_image_path),
             ),
         ):
             mock_runner = MagicMock()
@@ -1584,7 +2036,7 @@ class TestBuildMainAgent:
             )
 
         assert result is not None
-        assert result.provider_request.image_urls == ["/tmp/quoted.jpg"]
+        assert result.provider_request.image_urls == [valid_image_path]
         assert not any(
             "Image Caption" in part.text or "<image_caption>" in part.text
             for part in result.provider_request.extra_user_content_parts
@@ -1593,7 +2045,7 @@ class TestBuildMainAgent:
 
     @pytest.mark.asyncio
     async def test_build_main_agent_does_not_caption_quoted_image_twice(
-        self, mock_event, mock_context
+        self, mock_event, mock_context, valid_image_path
     ):
         """Quoted images should not be captioned again after request image captioning."""
         module = ama
@@ -1611,7 +2063,10 @@ class TestBuildMainAgent:
 
         mock_reply = Reply(
             id="reply-1",
-            chain=[Plain(text="quoted text"), Image(file="file:///tmp/quoted.jpg")],
+            chain=[
+                Plain(text="quoted text"),
+                Image(file=Path(valid_image_path).as_uri()),
+            ],
             sender_nickname="Alice",
             message_str="quoted text",
         )
@@ -1630,11 +2085,7 @@ class TestBuildMainAgent:
             patch.object(
                 Image,
                 "convert_to_file_path",
-                AsyncMock(return_value="/tmp/quoted.jpg"),
-            ),
-            patch(
-                "astrbot.core.astr_main_agent._compress_image_for_provider",
-                AsyncMock(side_effect=lambda path, _settings: path),
+                AsyncMock(return_value=valid_image_path),
             ),
         ):
             mock_runner = MagicMock()
@@ -1664,7 +2115,7 @@ class TestBuildMainAgent:
 
     @pytest.mark.asyncio
     async def test_build_main_agent_does_not_retry_quoted_image_caption_when_empty(
-        self, mock_event, mock_context
+        self, mock_event, mock_context, valid_image_path
     ):
         """Quoted images already sent to image captioning should not be retried."""
         module = ama
@@ -1682,7 +2133,10 @@ class TestBuildMainAgent:
 
         mock_reply = Reply(
             id="reply-1",
-            chain=[Plain(text="quoted text"), Image(file="file:///tmp/quoted.jpg")],
+            chain=[
+                Plain(text="quoted text"),
+                Image(file=Path(valid_image_path).as_uri()),
+            ],
             sender_nickname="Alice",
             message_str="quoted text",
         )
@@ -1701,11 +2155,7 @@ class TestBuildMainAgent:
             patch.object(
                 Image,
                 "convert_to_file_path",
-                AsyncMock(return_value="/tmp/quoted.jpg"),
-            ),
-            patch(
-                "astrbot.core.astr_main_agent._compress_image_for_provider",
-                AsyncMock(side_effect=lambda path, _settings: path),
+                AsyncMock(return_value=valid_image_path),
             ),
         ):
             mock_runner = MagicMock()
@@ -1735,7 +2185,7 @@ class TestBuildMainAgent:
 
     @pytest.mark.asyncio
     async def test_build_main_agent_uses_image_fallback_provider(
-        self, mock_event, mock_context
+        self, mock_event, mock_context, valid_image_path
     ):
         """Test image requests use a fallback provider that supports images."""
         module = ama
@@ -1757,7 +2207,7 @@ class TestBuildMainAgent:
 
         req = ProviderRequest(
             prompt="describe this",
-            image_urls=["/tmp/image.jpg"],
+            image_urls=[valid_image_path],
             model="text-model",
         )
         mock_context.get_provider_by_id.side_effect = lambda provider_id: (
@@ -1781,9 +2231,7 @@ class TestBuildMainAgent:
                     llm_safety_mode=False,
                     computer_use_runtime="none",
                     add_cron_tools=False,
-                    provider_settings={
-                        "fallback_chat_models": ["image-provider"],
-                    },
+                    fallback_provider_ids=["image-provider"],
                 ),
                 provider=text_provider,
                 req=req,
@@ -1791,14 +2239,14 @@ class TestBuildMainAgent:
 
         assert result is not None
         assert result.provider is image_provider
-        assert result.provider_request.image_urls == ["/tmp/image.jpg"]
+        assert result.provider_request.image_urls == [valid_image_path]
         assert result.provider_request.model is None
         assert mock_runner.reset.call_args.kwargs["provider"] is image_provider
         assert mock_runner.reset.call_args.kwargs["fallback_providers"] == []
 
     @pytest.mark.asyncio
     async def test_build_main_agent_keeps_text_provider_without_image_fallback(
-        self, mock_event, mock_context
+        self, mock_event, mock_context, valid_image_path
     ):
         """Test image requests fall back to existing sanitizing when no image provider exists."""
         module = ama
@@ -1812,7 +2260,7 @@ class TestBuildMainAgent:
 
         req = ProviderRequest(
             prompt="describe this",
-            image_urls=["/tmp/image.jpg"],
+            image_urls=[valid_image_path],
         )
         mock_context.get_provider_by_id.return_value = None
         mock_context.get_config.return_value = {}
@@ -1843,7 +2291,7 @@ class TestBuildMainAgent:
 
         assert result is not None
         assert result.provider is text_provider
-        assert result.provider_request.image_urls == ["/tmp/image.jpg"]
+        assert result.provider_request.image_urls == [valid_image_path]
         assert mock_runner.reset.call_args.kwargs["provider"] is text_provider
 
     @pytest.mark.asyncio
@@ -1852,6 +2300,7 @@ class TestBuildMainAgent:
     ):
         """Test building main agent with video attachments."""
         module = ama
+        video_path = str(Path("/path/to/video.mp4"))
         mock_video = Video(file="file:///path/to/video.mp4")
         mock_event.message_obj.message = [mock_video]
 
@@ -1879,7 +2328,7 @@ class TestBuildMainAgent:
         assert result is not None
         assert [
             part.text for part in result.provider_request.extra_user_content_parts
-        ] == ["[Video Attachment: name video.mp4, path /path/to/video.mp4]"]
+        ] == [f"[Video Attachment: name video.mp4, path {video_path}]"]
 
     @pytest.mark.asyncio
     async def test_build_main_agent_with_quoted_video_attachment(
@@ -1887,6 +2336,7 @@ class TestBuildMainAgent:
     ):
         """Test building main agent with quoted video attachments."""
         module = ama
+        video_path = str(Path("/path/to/quoted-video.mp4"))
         mock_video = Video(file="file:///path/to/quoted-video.mp4")
         mock_reply = Reply(
             id="reply-1",
@@ -1920,7 +2370,7 @@ class TestBuildMainAgent:
         assert result is not None
         assert (
             "[Video Attachment in quoted message: "
-            "name quoted-video.mp4, path /path/to/quoted-video.mp4]"
+            f"name quoted-video.mp4, path {video_path}]"
         ) in [part.text for part in result.provider_request.extra_user_content_parts]
 
     @pytest.mark.asyncio
@@ -1989,6 +2439,164 @@ class TestBuildMainAgent:
             "Error processing quoted video attachment" in call[0][0]
             for call in mock_logger.error.call_args_list
         )
+
+    @pytest.mark.asyncio
+    async def test_build_main_agent_with_voice_attachments(
+        self, mock_event, mock_context, mock_provider
+    ):
+        """Test that resolvable voice attachments keep their local paths."""
+        module = ama
+        direct_path = str(Path("/path/to/voice.wav"))
+        quoted_path = str(Path("/path/to/quoted.wav"))
+        mock_record = Record(file="direct.amr")
+        mock_quoted_record = Record(file="quoted.amr")
+        mock_reply = Reply(
+            id="reply-1",
+            chain=[mock_quoted_record],
+            sender_nickname="",
+            message_str="quoted message",
+        )
+        mock_event.message_obj.message = [mock_record, mock_reply]
+
+        mock_context.get_provider_by_id.return_value = None
+        mock_context.get_using_provider.return_value = mock_provider
+        mock_context.get_config.return_value = {}
+
+        conv_mgr = mock_context.conversation_manager
+        _setup_conversation_for_build(conv_mgr)
+
+        async def _resolve_voice(self):
+            return quoted_path if self.file == "quoted.amr" else direct_path
+
+        with (
+            patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
+            patch("astrbot.core.astr_main_agent.AstrAgentContext"),
+            patch.object(
+                Record,
+                "convert_to_file_path",
+                _resolve_voice,
+            ),
+        ):
+            mock_runner = MagicMock()
+            mock_runner.reset = AsyncMock()
+            mock_runner_cls.return_value = mock_runner
+
+            result = await module.build_main_agent(
+                event=mock_event,
+                plugin_context=mock_context,
+                config=module.MainAgentBuildConfig(tool_call_timeout=60),
+            )
+
+        assert result is not None
+        assert result.provider_request.audio_urls == [direct_path, quoted_path]
+        extra_texts = [
+            part.text for part in result.provider_request.extra_user_content_parts
+        ]
+        assert f"[Audio Attachment: path {direct_path}]" in extra_texts
+        assert (
+            f"[Audio Attachment in quoted message: path {quoted_path}]" in extra_texts
+        )
+        assert "[Voice unavailable]" not in extra_texts
+
+    @pytest.mark.asyncio
+    async def test_build_main_agent_skips_unavailable_voice_attachments(
+        self, mock_event, mock_context, mock_provider
+    ):
+        """Unresolvable voice attachments degrade instead of failing the turn.
+
+        Both the current message and the quoted chain raise a bare ``Exception``,
+        which ``is_recoverable_image_error`` rejects, so the branches must degrade
+        unconditionally rather than re-raise.
+        """
+        module = ama
+        mock_record = Record(file="")
+        mock_quoted_record = Record(file="")
+        mock_reply = Reply(
+            id="reply-1",
+            chain=[Plain(text="quoted text"), mock_quoted_record],
+            sender_nickname="",
+            message_str="quoted text",
+        )
+        mock_event.message_obj.message = [Plain(text="Hello"), mock_reply, mock_record]
+
+        mock_context.get_provider_by_id.return_value = None
+        mock_context.get_using_provider.return_value = mock_provider
+        mock_context.get_config.return_value = {}
+
+        conv_mgr = mock_context.conversation_manager
+        _setup_conversation_for_build(conv_mgr)
+
+        async def _raise_unavailable_voice(self):
+            raise Exception(f"not a valid file: {self.file}")
+
+        with (
+            patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
+            patch("astrbot.core.astr_main_agent.AstrAgentContext"),
+            patch.object(
+                Record,
+                "convert_to_file_path",
+                _raise_unavailable_voice,
+            ),
+        ):
+            mock_runner = MagicMock()
+            mock_runner.reset = AsyncMock()
+            mock_runner_cls.return_value = mock_runner
+
+            result = await module.build_main_agent(
+                event=mock_event,
+                plugin_context=mock_context,
+                config=module.MainAgentBuildConfig(tool_call_timeout=60),
+            )
+
+        assert result is not None
+        assert result.provider_request.audio_urls == []
+        extra_texts = [
+            part.text for part in result.provider_request.extra_user_content_parts
+        ]
+        assert extra_texts.count("[Voice unavailable]") == 2
+        assert not any("Audio Attachment" in part for part in extra_texts)
+
+    @pytest.mark.asyncio
+    async def test_build_main_agent_propagates_voice_cancellation(
+        self, mock_event, mock_context, mock_provider
+    ):
+        """Cancellation must not be swallowed by the voice degrade path."""
+        module = ama
+        mock_quoted_record = Record(file="quoted.amr")
+        mock_reply = Reply(
+            id="reply-1",
+            chain=[mock_quoted_record],
+            sender_nickname="",
+            message_str="quoted message",
+        )
+        mock_event.message_obj.message = [Plain(text="Hello"), mock_reply]
+
+        mock_context.get_provider_by_id.return_value = None
+        mock_context.get_using_provider.return_value = mock_provider
+        mock_context.get_config.return_value = {}
+
+        conv_mgr = mock_context.conversation_manager
+        _setup_conversation_for_build(conv_mgr)
+
+        with (
+            patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
+            patch("astrbot.core.astr_main_agent.AstrAgentContext"),
+            patch.object(
+                Record,
+                "convert_to_file_path",
+                AsyncMock(side_effect=asyncio.CancelledError),
+            ),
+        ):
+            mock_runner = MagicMock()
+            mock_runner.reset = AsyncMock()
+            mock_runner_cls.return_value = mock_runner
+
+            with pytest.raises(asyncio.CancelledError):
+                await module.build_main_agent(
+                    event=mock_event,
+                    plugin_context=mock_context,
+                    config=module.MainAgentBuildConfig(tool_call_timeout=60),
+                )
 
     @pytest.mark.asyncio
     async def test_build_main_agent_no_prompt_no_images(

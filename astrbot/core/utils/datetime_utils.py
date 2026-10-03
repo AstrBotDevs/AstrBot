@@ -1,4 +1,16 @@
+import uuid
 from datetime import datetime, timezone
+
+
+def generate_timestamp_id() -> str:
+    """Generate a compact timestamp-based identifier.
+
+    Returns:
+        The local time in ``YYYYMMDDHHMMSSmmm`` format followed by four random
+        hexadecimal characters.
+    """
+    timestamp = datetime.now().strftime("%Y%m%d%H%M%S%f")[:-3]
+    return f"{timestamp}_{uuid.uuid4().hex[:4]}"
 
 
 def normalize_datetime_utc(dt: datetime | None) -> datetime | None:

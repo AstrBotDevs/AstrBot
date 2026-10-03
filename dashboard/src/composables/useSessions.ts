@@ -1,4 +1,4 @@
-import { ref, computed } from 'vue';
+import { ref, computed, reactive } from 'vue';
 import { useRouter } from 'vue-router';
 import { chatApi, configRouteApi } from '@/api/v1';
 import { buildWebchatUmoDetails, getStoredSelectedChatConfigId } from '@/utils/chatConfigBinding';
@@ -16,6 +16,14 @@ export interface Session {
 export function useSessions(chatboxMode: boolean = false) {
     const router = useRouter();
     const sessions = ref<Session[]>([]);
+    const sessionsPagination = reactive({
+        page: 0,
+        hasMore: false,
+        loading: false,
+        error: false,
+        append: false,
+    });
+    let sessionsRequestId = 0;
     const selectedSessions = ref<string[]>([]);
     const currSessionId = ref('');
     const pendingSessionId = ref<string | null>(null);
@@ -29,21 +37,41 @@ export function useSessions(chatboxMode: boolean = false) {
         return sessions.value.find(s => s.session_id === currSessionId.value);
     });
 
-    
-
-    async function getSessions() {
+    async function getSessions(append = false) {
+        if (append && (sessionsPagination.loading || !sessionsPagination.hasMore)) return;
+        const requestId = ++sessionsRequestId;
+        const lastPage = append ? sessionsPagination.page + 1 : Math.max(1, sessionsPagination.page);
+        const loaded = append ? [...sessions.value] : [];
+        sessionsPagination.loading = true;
+        sessionsPagination.error = false;
+        sessionsPagination.append = append;
         try {
-            const response = await chatApi.listSessions();
-            sessions.value = response.data.data;
-
-
-
-    
+            // Refresh the loaded range after mutations so older visible sessions stay accessible.
+            for (let page = append ? lastPage : 1; page <= lastPage; page++) {
+                const response = await chatApi.listSessions({ page, page_size: 30 });
+                if (requestId !== sessionsRequestId) return;
+                if (response.data.status !== 'ok') {
+                    throw new Error(response.data.message || 'Failed to load sessions');
+                }
+                const payload = response.data.data;
+                loaded.push(...payload.sessions);
+                const hasMore = page * payload.page_size < payload.total;
+                if (page === lastPage || !hasMore) {
+                    sessions.value = [...new Map(loaded.map(session => [session.session_id, session])).values()];
+                    sessionsPagination.page = page;
+                    sessionsPagination.hasMore = hasMore;
+                    break;
+                }
+            }
         } catch (err: any) {
+            if (requestId !== sessionsRequestId) return;
+            sessionsPagination.error = true;
             if (err.response?.status === 401) {
                 router.push('/auth/login?redirect=/chatbox');
             }
             console.error(err);
+        } finally {
+            if (requestId === sessionsRequestId) sessionsPagination.loading = false;
         }
     }
 
@@ -68,9 +96,7 @@ export function useSessions(chatboxMode: boolean = false) {
             // 更新 URL
             const basePath = chatboxMode ? '/chatbox' : '/chat';
             router.push(`${basePath}/${sessionId}`);
-            
-            await getSessions();
-            
+
             // 确保新创建的会话被选中高亮
             selectedSessions.value = [sessionId];
             
@@ -206,6 +232,7 @@ export function useSessions(chatboxMode: boolean = false) {
 
     return {
         sessions,
+        sessionsPagination,
         selectedSessions,
         currSessionId,
         pendingSessionId,

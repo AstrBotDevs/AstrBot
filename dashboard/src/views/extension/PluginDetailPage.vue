@@ -10,8 +10,9 @@ import {
 import axios from "axios";
 import DOMPurify from "dompurify";
 import MarkdownIt from "markdown-it";
-import defaultPluginIcon from "@/assets/images/plugin_icon.png";
+import defaultPluginIcon from "/favicon.svg";
 import { pluginApi } from "@/api/v1";
+import { useI18n } from "@/i18n/composables";
 import { usePluginI18n } from "@/utils/pluginI18n";
 import PluginPlatformChip from "@/components/shared/PluginPlatformChip.vue";
 
@@ -35,6 +36,7 @@ const props = defineProps({
 });
 
 const { tm, router } = props.state;
+const { locale } = useI18n();
 const {
   pluginName,
   pluginDesc: resolvePluginDesc,
@@ -233,6 +235,29 @@ const supportPlatformsDisplay = computed(() => {
   return platforms.filter((platform) => typeof platform === "string");
 });
 
+const updatedAtDisplay = computed(() => {
+  if (!isMarketDetail.value) return "";
+
+  const value = firstPresentValue(
+    pluginData.value?.updated_at,
+    props.marketPlugin?.updated_at,
+  );
+  if (!value) return "";
+
+  const updatedAt = new Date(value);
+  if (Number.isNaN(updatedAt.getTime())) return "";
+
+  return new Intl.DateTimeFormat(locale.value, {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).format(updatedAt);
+});
+
 const infoRows = computed(() => {
   const rows = [
     {
@@ -249,6 +274,11 @@ const infoRows = computed(() => {
     {
       label: tm("detail.info.stars"),
       value: starsDisplay.value,
+      optional: true,
+    },
+    {
+      label: tm("detail.info.updatedAt"),
+      value: updatedAtDisplay.value,
       optional: true,
     },
     {
@@ -530,7 +560,12 @@ const openExternal = (url) => {
 };
 
 const goBack = () => {
-  router.push({ name: "Extensions", hash: `#${detailSourceTab.value}` });
+  router.push({
+    name:
+      detailSourceTab.value === "market"
+        ? "ExtensionMarketplace"
+        : "Extensions",
+  });
 };
 
 const renderMarkdown = (source) => {
@@ -542,6 +577,36 @@ const renderMarkdown = (source) => {
   const container = document.createElement("div");
   container.innerHTML = cleanHtml;
 
+  // Generate heading ids so README table-of-contents anchors can resolve.
+  const usedIds = new Set();
+  container.querySelectorAll("h1, h2, h3, h4, h5, h6").forEach((heading) => {
+    if (heading.id) {
+      usedIds.add(heading.id);
+      return;
+    }
+
+    const base = (heading.textContent || "")
+      .trim()
+      .toLowerCase()
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^\p{Letter}\p{Number}\s-]/gu, "")
+      .replace(/\s+/g, "-")
+      .replace(/-+/g, "-");
+    if (!base) return;
+
+    // Increment the suffix until the candidate no longer collides with any
+    // previously assigned id (including ids coming from raw HTML headings).
+    let slug = base;
+    let suffix = 1;
+    while (usedIds.has(slug)) {
+      slug = `${base}-${suffix}`;
+      suffix += 1;
+    }
+    usedIds.add(slug);
+    heading.id = slug;
+  });
+
   container.querySelectorAll("a").forEach((link) => {
     const href = link.getAttribute("href") || "";
     if (href.startsWith("http") || href.startsWith("//")) {
@@ -551,6 +616,33 @@ const renderMarkdown = (source) => {
   });
 
   return container.innerHTML;
+};
+
+const handleDocsClick = (event) => {
+  const target = event.target instanceof Element ? event.target : null;
+  const anchor = target?.closest('a[href^="#"]');
+  if (!anchor) return;
+
+  // Never let a local hash link reach the hash-mode router, even when the
+  // fragment is empty, malformed, or has no matching heading.
+  event.preventDefault();
+
+  const rawHref = anchor.getAttribute("href") || "";
+  let targetId = "";
+  try {
+    targetId = decodeURIComponent(rawHref.slice(1));
+  } catch {
+    return;
+  }
+  if (!targetId) return;
+
+  // Scope lookup to the rendered container so the hash router is never touched.
+  const scrollTarget = event.currentTarget.querySelector(
+    `#${CSS.escape(targetId)}`,
+  );
+  if (!scrollTarget) return;
+
+  scrollTarget.scrollIntoView({ behavior: "smooth", block: "start" });
 };
 
 const updateHeaderStuckState = () => {
@@ -1005,7 +1097,12 @@ onBeforeUnmount(() => {
           <div v-else-if="readmeEmpty" class="text-medium-emphasis">
             {{ tm("detail.docsEmpty") }}
           </div>
-          <div v-else class="docs-markdown" v-html="renderedReadme"></div>
+          <div
+            v-else
+            class="docs-markdown"
+            v-html="renderedReadme"
+            @click="handleDocsClick"
+          ></div>
         </v-card-text>
       </v-card>
     </section>
@@ -1025,7 +1122,12 @@ onBeforeUnmount(() => {
           <div v-else-if="changelogEmpty" class="text-medium-emphasis">
             {{ tm("detail.changelogEmpty") }}
           </div>
-          <div v-else class="docs-markdown" v-html="renderedChangelog"></div>
+          <div
+            v-else
+            class="docs-markdown"
+            v-html="renderedChangelog"
+            @click="handleDocsClick"
+          ></div>
         </v-card-text>
       </v-card>
     </section>
@@ -1035,7 +1137,7 @@ onBeforeUnmount(() => {
 <style scoped>
 .plugin-detail-page {
   margin: 0 auto;
-  max-width: 1040px;
+  max-width: 1200px;
   padding: 16px 24px 32px;
   width: 100%;
 }
@@ -1290,6 +1392,7 @@ onBeforeUnmount(() => {
   font-weight: 700;
   line-height: 1.3;
   margin: 1.4em 0 0.6em;
+  scroll-margin-top: calc(var(--v-layout-top, 64px) + 24px);
 }
 
 .docs-markdown :deep(h1:first-child),

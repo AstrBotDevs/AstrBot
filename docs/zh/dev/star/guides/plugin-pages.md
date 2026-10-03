@@ -1,17 +1,18 @@
-# 插件 Pages
+# 插件可视化视图
 
-插件 Pages 允许插件在 AstrBot WebUI 中提供自己的页面。页面文件放在插件目录的 `pages/` 下，由 Dashboard 以受限 iframe 的方式加载；页面里的脚本通过 `window.AstrBotPluginPage` bridge 和 Dashboard 通信，再由 Dashboard 转发到插件注册的后端 Web API。
 
-如果只是让用户填写少量配置项，优先使用 [`_conf_schema.json`](./plugin-config.md)。Pages 更适合复杂表单、运行状态面板、日志查看、文件上传下载、SSE 实时流、图表和其他需要自定义交互的场景。
+插件可视化视图允许插件在 AstrBot WebUI 中提供自己的页面。页面文件放在插件目录的 `views/` 下（兼容 `pages/`），由 Dashboard 以受限 iframe 的方式加载；页面里的脚本通过 `window.AstrBotPluginView` bridge（别名 `window.AstrBotPluginPage`）和 Dashboard 通信，再由 Dashboard 转发到插件注册的后端 Web API。
+
+如果只是让用户填写少量配置项，优先使用 [`_conf_schema.json`](./plugin-config.md)。可视化视图更适合复杂表单、运行状态面板、日志查看、文件上传下载、SSE 实时流、图表和其他需要自定义交互的场景。
 
 ## 目录结构
 
-`pages/` 下的每个一级子目录是一个独立 Page。AstrBot 只扫描 `pages/<page_name>/index.html`，没有 `index.html` 的目录会被忽略。
+`views/` 下的每个一级子目录是一个独立视图。AstrBot 只扫描 `views/<page_name>/index.html`，没有 `index.html` 的目录会被忽略。
 
 ```text
-astrbot_plugin_page_demo/
+astrbot_plugin_view_demo/
 ├─ main.py
-└─ pages/
+└─ views/
    ├─ bridge-demo/
    │  ├─ index.html
    │  ├─ app.js
@@ -24,15 +25,15 @@ astrbot_plugin_page_demo/
 
 `page_name` 应使用简单目录名，例如 `settings`、`bridge-demo`。不要使用空目录名、`.`、`..`、以 `.` 开头的目录名，或包含 `/`、`\` 的名称。
 
-用户可以在 WebUI 的插件页点击插件卡片进入插件详情页，然后打开插件声明的 Pages。
+用户可以在 WebUI 的插件页点击插件卡片进入插件详情页，然后打开插件声明的可视化视图。
 
 ## 开发流程
 
-1. 在插件目录下创建 `pages/<page_name>/index.html`。
-2. 在 Page 中通过 `window.AstrBotPluginPage` bridge 调用后端能力。
+1. 在插件目录下创建 `views/<page_name>/index.html`。
+2. 在视图中通过 `window.AstrBotPluginView` bridge 调用后端能力。
 3. 在 `main.py` 中使用 `context.register_web_api()` 注册插件后端 API。
 4. 后端 handler 使用 `astrbot.api.web` 读取请求并返回响应。
-5. 新增或删除 Page 目录后重载插件；修改静态资源通常刷新 Page 即可。
+5. 新增或删除视图目录后重载插件；修改静态资源通常刷新视图即可。
 
 ## 最小完整示例
 
@@ -44,7 +45,7 @@ astrbot_plugin_page_demo/
 from astrbot.api.star import Context, Star
 from astrbot.api.web import error_response, json_response, request
 
-PLUGIN_NAME = "astrbot_plugin_page_demo"
+PLUGIN_NAME = "astrbot_plugin_view_demo"
 
 
 class MyPlugin(Star):
@@ -54,13 +55,13 @@ class MyPlugin(Star):
             f"/{PLUGIN_NAME}/ping",
             self.page_ping,
             ["GET"],
-            "Page ping",
+            "View ping",
         )
         context.register_web_api(
             f"/{PLUGIN_NAME}/settings/save",
             self.save_settings,
             ["POST"],
-            "Save Page settings",
+            "Save view settings",
         )
 
     async def page_ping(self):
@@ -82,14 +83,14 @@ class MyPlugin(Star):
 
 ### 前端
 
-`pages/bridge-demo/index.html`
+`views/bridge-demo/index.html`
 
 ```html
 <!doctype html>
 <html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
-    <title>Plugin Page Demo</title>
+    <title>Plugin View Demo</title>
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
@@ -100,10 +101,10 @@ class MyPlugin(Star):
 </html>
 ```
 
-`pages/bridge-demo/app.js`
+`views/bridge-demo/app.js`
 
 ```js
-const bridge = window.AstrBotPluginPage;
+const bridge = window.AstrBotPluginView;
 const output = document.getElementById("output");
 
 const context = await bridge.ready();
@@ -115,7 +116,7 @@ document.getElementById("ping").addEventListener("click", async () => {
 });
 ```
 
-不需要手动引入 bridge SDK。AstrBot 返回 HTML 时会自动插入 `/api/plugin/page/bridge-sdk.js`。如果内联脚本必须同步访问 `window.AstrBotPluginPage`，请把脚本改成外部 module 文件，或在自己的脚本前显式引入：
+不需要手动引入 bridge SDK。AstrBot 返回 HTML 时会自动插入 `/api/plugin/page/bridge-sdk.js`。如果内联脚本必须同步访问 `window.AstrBotPluginView`，请把脚本改成外部 module 文件，或在自己的脚本前显式引入：
 
 ```html
 <script src="/api/plugin/page/bridge-sdk.js"></script>
@@ -136,7 +137,7 @@ context.register_web_api(
 )
 ```
 
-路由需要包含插件名作为前缀。Page 端的 bridge endpoint 不需要包含插件名：
+路由需要包含插件名作为前缀。视图端的 bridge endpoint 不需要包含插件名：
 
 ```js
 await bridge.apiGet("items/123");
@@ -307,10 +308,10 @@ from astrbot.api.web import json_response, request
 
 ## Bridge API
 
-Page iframe 不能直接访问 Dashboard cookies、LocalStorage 或父页面 DOM。页面脚本必须通过 `window.AstrBotPluginPage` bridge 调用后端和读取上下文。
+视图 iframe 不能直接访问 Dashboard cookies、LocalStorage 或父页面 DOM。页面脚本必须通过 `window.AstrBotPluginView` bridge 调用后端和读取上下文。
 
 ```js
-const bridge = window.AstrBotPluginPage;
+const bridge = window.AstrBotPluginView;
 ```
 
 ### 上下文
@@ -325,8 +326,8 @@ const context = await bridge.ready();
 
 ```json
 {
-  "pluginName": "astrbot_plugin_page_demo",
-  "displayName": "Plugin Page Demo",
+  "pluginName": "astrbot_plugin_view_demo",
+  "displayName": "Plugin View Demo",
   "pageName": "bridge-demo",
   "pageTitle": "Bridge Demo",
   "locale": "zh-CN",
@@ -350,7 +351,7 @@ const context = await bridge.ready();
 
 ```js
 function render() {
-  document.title = bridge.t("pages.bridge-demo.title", "Bridge Demo");
+  document.title = bridge.t("views.bridge-demo.title", "Bridge Demo");
   document.getElementById("locale").textContent = bridge.getLocale();
 }
 
@@ -379,7 +380,7 @@ bridge 对 JSON 类请求的返回值有一个兼容规则：
 - 如果后端返回普通 JSON，例如 `{ "message": "pong" }`，Promise resolve 为完整 JSON。
 - 如果后端返回 `{ "status": "error", "message": "..." }`，或 HTTP 请求失败，Promise reject 为 `Error`。
 
-因此 Page-only API 推荐直接返回业务 JSON：
+因此视图专用 API 推荐直接返回业务 JSON：
 
 ```python
 return json_response({"message": "pong"})
@@ -391,7 +392,7 @@ return json_response({"message": "pong"})
 return error_response("missing file", status_code=400)
 ```
 
-Page 端统一捕获错误：
+视图端统一捕获错误：
 
 ```js
 try {
@@ -537,31 +538,31 @@ window.addEventListener("beforeunload", () => {
 });
 ```
 
-## Page 国际化
+##视图国际化
 
-插件 Pages 复用插件 i18n 资源文件。给 `.astrbot-plugin/i18n/<locale>.json` 增加 `pages.<page_name>`：
+插件可视化视图复用插件 i18n 资源文件。给 `.astrbot-plugin/i18n/<locale>.json` 增加 `views.<page_name>`：
 
 ```json
 {
-  "pages": {
+  "views": {
     "bridge-demo": {
       "title": "Bridge 演示页",
-      "description": "演示插件页面如何读取 WebUI 语言和翻译资源。",
-      "heading": "插件页面",
+      "description": "演示插件可视化视图如何读取 WebUI 语言和翻译资源。",
+      "heading": "插件可视化视图",
       "refresh": "重新渲染"
     }
   }
 }
 ```
 
-`title` 用于 WebUI 外壳标题和插件详情页的 Page 组件名称；`description` 用于插件详情页的 Page 组件描述。Page 内部使用 `bridge.t()` 渲染文案，并通过 `onContext()` 响应语言切换。
+`title` 用于 WebUI 外壳标题和插件详情页的视图组件名称；`description` 用于插件详情页的视图组件描述。视图内部使用 `bridge.t()` 渲染文案，并通过 `onContext()` 响应语言切换。
 
 ```js
 function render() {
-  document.title = bridge.t("pages.bridge-demo.title", "Bridge Demo");
+  document.title = bridge.t("views.bridge-demo.title", "Bridge Demo");
   document.getElementById("heading").textContent = bridge.t(
-    "pages.bridge-demo.heading",
-    "Plugin Page",
+    "views.bridge-demo.heading",
+    "Plugin View",
   );
 }
 
@@ -572,12 +573,12 @@ bridge.onContext(render);
 
 ## 亮暗主题
 
-AstrBot 会把当前主题同步给插件 Page。bridge SDK 会维护 `<html>` 的 `data-theme` 属性：
+AstrBot 会把当前主题同步给插件视图。bridge SDK 会维护 `<html>` 的 `data-theme` 属性：
 
 - 亮色模式：`<html data-theme="light">`
 - 暗色模式：`<html data-theme="dark">`
 
-选择“跟随系统”时，Page 收到的值仍然是 `light` 或 `dark`。
+选择“跟随系统”时，视图收到的值仍然是 `light` 或 `dark`。
 
 推荐使用 CSS 变量：
 
@@ -610,7 +611,7 @@ body {
 <img src="./assets/logo.svg" alt="" />
 ```
 
-AstrBot 会重写相对资源路径并追加短期 `asset_token`。不要手动拼接 `/api/plugin/page/content/...`，不要自行追加 `asset_token`，也不要依赖 `..` 逃逸 Page 根目录。
+AstrBot 会重写相对资源路径并追加短期 `asset_token`。不要手动拼接 `/api/plugin/page/content/...`，不要自行追加 `asset_token`，也不要依赖 `..` 逃逸视图根目录。
 
 会被重写的资源引用包括：
 
@@ -624,13 +625,13 @@ AstrBot 会重写相对资源路径并追加短期 `asset_token`。不要手动�
 
 ## 安全约束
 
-插件 Pages 运行在受限 iframe 中：
+插件可视化视图运行在受限 iframe 中：
 
 ```text
 allow-scripts allow-forms allow-downloads
 ```
 
-Page 不能直接访问 Dashboard cookies、LocalStorage 或父页面 DOM，也不能绕过 bridge 复用 Dashboard auth。所有需要 Dashboard 身份的操作都应该走 bridge。
+视图不能直接访问 Dashboard cookies、LocalStorage 或父页面 DOM，也不能绕过 bridge 复用 Dashboard auth。所有需要 Dashboard 身份的操作都应该走 bridge。
 
 资源响应会带上安全头，包括：
 
@@ -639,14 +640,14 @@ Page 不能直接访问 Dashboard cookies、LocalStorage 或父页面 DOM，也�
 - `Cache-Control: no-store`
 - `X-Content-Type-Options: nosniff`
 
-后端 handler 仍然要验证输入。不要信任 Page 传来的路径、文件名、格式或数值范围；文件落盘时应使用安全目录，并对文件名做白名单或重新命名。
+后端 handler 仍然要验证输入。不要信任视图传来的路径、文件名、格式或数值范围；文件落盘时应使用安全目录，并对文件名做白名单或重新命名。
 
 ## 调试建议
 
-- Page 没出现：检查 `pages/<page_name>/index.html` 是否存在、插件是否启用、插件详情页是否已刷新。
+-视图没出现：检查 `views/<page_name>/index.html` 是否存在、插件是否启用、插件详情页是否已刷新。
 - bridge 不存在：确认脚本在 bridge SDK 注入之后运行；推荐使用外部 `type="module"` 脚本。
-- API 未匹配：确认注册路由包含插件名前缀，例如 `/{PLUGIN_NAME}/stats`，而 Page 端 endpoint 是 `stats`。
+- API 未匹配：确认注册路由包含插件名前缀，例如 `/{PLUGIN_NAME}/stats`，而视图端 endpoint 是 `stats`。
 - query 或 JSON 为空：GET 参数放到 `apiGet(endpoint, params)`，POST JSON 放到 `apiPost(endpoint, body)`。
 - 文件上传为空：`upload()` 字段名固定为 `file`，后端用 `(await request.files()).get("file")` 读取。
 - SSE 没消息：确认后端响应是 `text/event-stream`，每条消息以空行结尾，例如 `data: ...\n\n`。
-- SSE 401：不要在 Page 中直接 `new EventSource("/api/v1/...")`，原生 `EventSource` 不能携带 `Authorization` header；请通过 `bridge.subscribeSSE()` 调用。
+- SSE 401：不要在视图中直接 `new EventSource("/api/v1/...")`，原生 `EventSource` 不能携带 `Authorization` header；请通过 `bridge.subscribeSSE()` 调用。

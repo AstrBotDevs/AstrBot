@@ -2,7 +2,7 @@
 
 ## Create AstrBot Slack Platform Adapter
 
-Navigate to the `Bots` page, click `+ Create Bot`, find Slack and click to enter the Slack configuration page.
+Navigate to the `Platforms` page, click `Add Adapter`, find Slack and click to enter the Slack configuration page.
 
 ![image](https://files.astrbot.app/docs/source/images/slack/image-1.png)
 
@@ -64,9 +64,7 @@ After successfully creating the platform adapter, return to the Slack settings. 
 
 If you're using Webhook mode:
 
-- If `Unified Webhook Mode` is enabled, after clicking save, AstrBot will automatically generate a unique Webhook callback URL for you. You can find it in the logs or on the bot card in the WebUI's Bots page. Enter this URL in the `Request URL` field.
-
-![unified_webhook](https://files.astrbot.app/docs/source/images/use/unified-webhook.png)
+- If `Unified Webhook Mode` is enabled, after clicking save, AstrBot will automatically generate a unique Webhook callback URL for you. You can find it under `Data & Logs → Logs`, or select the bot in `Platforms` and click `View Webhook URL`. Enter this URL in the `Request URL` field.
 
 - If `Unified Webhook Mode` is not enabled, enter `https://your-domain/astrbot-slack-webhook/callback` in the `Request URL` field.
 

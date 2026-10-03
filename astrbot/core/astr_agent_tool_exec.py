@@ -20,6 +20,7 @@ from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.astr_main_agent_resources import (
     BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT,
 )
+from astrbot.core.config.agent_runner import resolve_context_compression_config
 from astrbot.core.cron.events import CronMessageEvent
 from astrbot.core.message.components import Image
 from astrbot.core.message.message_event_result import (
@@ -41,11 +42,15 @@ from astrbot.core.tools.computer_tools import (
     FileUploadTool,
     FileWriteTool,
     GrepTool,
+    LocalExecuteShellTool,
     LocalPythonTool,
     PythonTool,
+    ShellSessionTool,
 )
 from astrbot.core.tools.message_tools import SendMessageToUserTool
+from astrbot.core.utils.active_event_registry import active_event_registry
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.config_number import coerce_int_config
 from astrbot.core.utils.history_saver import persist_agent_history
 from astrbot.core.utils.image_ref_utils import is_supported_image_ref
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
@@ -155,6 +160,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             return
 
         elif tool.is_background_task:
+            event = run_context.context.event
+            if active_event_registry.get_background_stop_signal(event).is_set():
+                return
             task_id = uuid.uuid4().hex
 
             async def _run_in_background() -> None:
@@ -171,7 +179,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                         exc_info=True,
                     )
 
-            asyncio.create_task(_run_in_background())
+            task = asyncio.create_task(_run_in_background())
+            active_event_registry.register_background_task(event, task)
             text_content = mcp.types.TextContent(
                 type="text",
                 text=f"Background task submitted. task_id={task_id}",
@@ -224,7 +233,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 )
             return tools
         if runtime == "local":
-            shell_tool = tool_mgr.get_builtin_tool(ExecuteShellTool)
+            shell_tool = LocalExecuteShellTool()
+            shell_session_tool = tool_mgr.get_builtin_tool(ShellSessionTool)
             python_tool = tool_mgr.get_builtin_tool(LocalPythonTool)
             read_tool = tool_mgr.get_builtin_tool(FileReadTool)
             write_tool = tool_mgr.get_builtin_tool(FileWriteTool)
@@ -232,6 +242,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             grep_tool = tool_mgr.get_builtin_tool(GrepTool)
             return {
                 shell_tool.name: shell_tool,
+                shell_session_tool.name: shell_session_tool,
                 python_tool.name: python_tool,
                 read_tool.name: read_tool,
                 write_tool.name: write_tool,
@@ -250,7 +261,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         event = run_context.context.event
         cfg = ctx.get_config(umo=event.unified_msg_origin)
         provider_settings = cfg.get("provider_settings", {})
-        runtime = str(provider_settings.get("computer_use_runtime", "local"))
+        runtime = str(provider_settings.get("computer_use_runtime", "none"))
         tool_mgr = (
             ctx.get_llm_tool_manager()
             if hasattr(ctx, "get_llm_tool_manager")
@@ -353,8 +364,14 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 except Exception:
                     continue
 
-        prov_settings: dict = ctx.get_config(umo=umo).get("provider_settings", {})
-        agent_max_step = int(prov_settings.get("max_agent_step", 30))
+        config = ctx.get_config(umo=umo)
+        prov_settings: dict = config.get("provider_settings", {})
+        agent_max_step = int(
+            config.get("agent_runner", {})
+            .get("config", {})
+            .get("misc", {})
+            .get("max_steps", 128)
+        )
         stream = prov_settings.get("streaming_response", False)
         llm_resp = await ctx.tool_loop_agent(
             event=event,
@@ -387,6 +404,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         user of the result – the same pattern used by
         ``_execute_background`` for regular background tasks.
         """
+        event = run_context.context.event
+        if active_event_registry.get_background_stop_signal(event).is_set():
+            return
         task_id = uuid.uuid4().hex
 
         async def _run_handoff_in_background() -> None:
@@ -403,7 +423,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                     exc_info=True,
                 )
 
-        asyncio.create_task(_run_handoff_in_background())
+        task = asyncio.create_task(_run_handoff_in_background())
+        active_event_registry.register_background_task(event, task)
 
         text_content = mcp.types.TextContent(
             type="text",
@@ -522,6 +543,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         )
 
         event = run_context.context.event
+        stop_signal = active_event_registry.get_background_stop_signal(event)
+        if stop_signal.is_set():
+            return
         ctx = run_context.context.context
 
         task_result = {
@@ -532,7 +556,10 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         }
         if extra_result_fields:
             task_result.update(extra_result_fields)
-        extras = {"background_task_result": task_result}
+        extras = {
+            "background_task_result": task_result,
+            "_background_stop_signal": stop_signal,
+        }
 
         session = MessageSession.from_str(event.unified_msg_origin)
         cron_event = CronMessageEvent(
@@ -545,24 +572,43 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         cron_event.role = event.role
         cfg = ctx.get_config(umo=event.unified_msg_origin) or {}
         provider_settings = cfg.get("provider_settings") or {}
+        persona_config = (
+            cfg.get("agent_runner", {}).get("config", {}).get("persona", {})
+        )
+        agent_max_step = coerce_int_config(
+            cfg.get("agent_runner", {})
+            .get("config", {})
+            .get("misc", {})
+            .get("max_steps", 128),
+            default=128,
+            min_value=1,
+            field_name="agent_runner.config.misc.max_steps",
+        )
         config = MainAgentBuildConfig(
             tool_call_timeout=run_context.tool_call_timeout,
+            fallback_provider_ids=cfg.get("agent_runner", {})
+            .get("config", {})
+            .get("model", {})
+            .get("fallback_provider_ids", []),
+            **resolve_context_compression_config(
+                cfg.get("agent_runner", {}).get("config", {}).get("compression", {})
+            ),
             streaming_response=provider_settings.get("stream", False),
+            llm_safety_mode=persona_config.get("safety_mode", True),
+            safety_mode_strategy=persona_config.get(
+                "safety_mode_strategy", "system_prompt"
+            ),
+            computer_use_runtime=provider_settings.get("computer_use_runtime", "none"),
+            sandbox_cfg=provider_settings.get("sandbox", {}),
             provider_settings=provider_settings,
         )
 
         req = ProviderRequest()
         conv = await _get_session_conv(event=cron_event, plugin_context=ctx)
+        if stop_signal.is_set():
+            return
         req.conversation = conv
-        context = json.loads(conv.history)
-        if context:
-            req.contexts = context
-            context_dump = req._print_friendly_context()
-            req.contexts = []
-            req.system_prompt += (
-                "\n\nBellow is you and user previous conversation history:\n"
-                f"{context_dump}"
-            )
+        req.contexts = json.loads(conv.history)
 
         bg = json.dumps(extras["background_task_result"], ensure_ascii=False)
         req.system_prompt += BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT.format(
@@ -585,12 +631,14 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         result = await build_main_agent(
             event=cron_event, plugin_context=ctx, config=config, req=req
         )
+        if stop_signal.is_set():
+            return
         if not result:
             logger.error(f"Failed to build main agent for background task {tool_name}.")
             return
 
         runner = result.agent_runner
-        async for _ in runner.step_until_done(30):
+        async for _ in runner.step_until_done(agent_max_step):
             # agent will send message to user via using tools
             pass
         llm_resp = runner.get_final_llm_resp()
@@ -651,6 +699,18 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         if awaitable is None:
             raise ValueError("Tool must have a valid handler or override 'run' method.")
 
+        effective_timeout = tool_call_timeout or run_context.tool_call_timeout
+        if isinstance(tool, ShellSessionTool) and tool_args.get("action") in {
+            "poll",
+            "write",
+            "write_line",
+            "interrupt",
+        }:
+            yield_time_ms = tool_args.get("yield_time_ms", 5_000)
+            if isinstance(yield_time_ms, int) and 0 <= yield_time_ms <= 300_000:
+                # Allow the requested wait plus time to write input and collect output.
+                effective_timeout = max(effective_timeout, yield_time_ms / 1000 + 5)
+
         wrapper = call_local_llm_tool(
             context=run_context,
             handler=awaitable,
@@ -661,7 +721,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             try:
                 resp = await asyncio.wait_for(
                     anext(wrapper),
-                    timeout=tool_call_timeout or run_context.tool_call_timeout,
+                    timeout=effective_timeout,
                 )
                 if resp is not None:
                     if isinstance(resp, mcp.types.CallToolResult):
@@ -693,7 +753,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                     yield None
             except asyncio.TimeoutError:
                 raise Exception(
-                    f"tool {tool.name} execution timeout after {tool_call_timeout or run_context.tool_call_timeout} seconds.",
+                    f"tool {tool.name} execution timeout after {effective_timeout} seconds.",
                 )
             except StopAsyncIteration:
                 break

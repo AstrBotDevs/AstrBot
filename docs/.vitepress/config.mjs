@@ -130,7 +130,9 @@ export default defineConfig({
                 link: "/start",
                 collapsed: true,
                 items: [
+                  { text: "MiraRouter", link: "/mirarouter" },
                   { text: "NewAPI", link: "/newapi" },
+                  { text: "胜算云", link: "/shengsuanyun" },
                   { text: "AIHubMix", link: "/aihubmix" },
                   { text: "PPIO 派欧云", link: "/ppio" },
                   { text: "硅基流动", link: "/siliconflow" },
@@ -192,7 +194,7 @@ export default defineConfig({
                   { text: "接收消息事件", link: "/guides/listen-message-event" },
                   { text: "发送消息", link: "/guides/send-message" },
                   { text: "插件配置", link: "/guides/plugin-config" },
-                  { text: "插件 Pages", link: "/guides/plugin-pages" },
+                  { text: "插件可视化视图", link: "/guides/plugin-pages" },
                   { text: "插件国际化", link: "/guides/plugin-i18n" },
                   { text: "调用 AI", link: "/guides/ai" },
                   { text: "存储", link: "/guides/storage" },
@@ -219,6 +221,10 @@ export default defineConfig({
               {
                 text: "AstrBot HTTP API",
                 link: "/openapi",
+              },
+              {
+                text: "API Scope 与接口对照",
+                link: "/openapi-scopes",
               },
               {
                 text: "AstrBot 配置文件",
@@ -261,7 +267,7 @@ export default defineConfig({
           pattern: 'https://github.com/AstrBotdevs/AstrBot/edit/master/docs/:path',
           text: '发现文档有问题？在 GitHub 上编辑此页',
         },
-        logo: '/logo_prod.png',
+        logo: '/favicon.svg',
         socialLinks: [
           { icon: "github", link: "https://github.com/AstrBotDevs/AstrBot" },
         ],
@@ -385,7 +391,9 @@ export default defineConfig({
                 link: "/start",
                 collapsed: true,
                 items: [
+                  { text: "MiraRouter", link: "/mirarouter" },
                   { text: "NewAPI", link: "/newapi" },
+                  { text: "ShengSuanYun", link: "/shengsuanyun" },
                   { text: "AIHubMix", link: "/aihubmix" },
                   { text: "PPIO Cloud", link: "/ppio" },
                   { text: "SiliconFlow", link: "/siliconflow" },
@@ -448,7 +456,7 @@ export default defineConfig({
                   { text: "Listen to Message Events", link: "/guides/listen-message-event" },
                   { text: "Send Messages", link: "/guides/send-message" },
                   { text: "Plugin Configuration", link: "/guides/plugin-config" },
-                  { text: "Plugin Pages", link: "/guides/plugin-pages" },
+                  { text: "Plugin Views", link: "/guides/plugin-pages" },
                   { text: "Plugin Internationalization", link: "/guides/plugin-i18n" },
                   { text: "AI", link: "/guides/ai" },
                   { text: "Storage", link: "/guides/storage" },
@@ -473,6 +481,10 @@ export default defineConfig({
               {
                 text: "AstrBot HTTP API",
                 link: "/openapi",
+              },
+              {
+                text: "API Scope–Endpoint Reference",
+                link: "/openapi-scopes",
               },
               {
                 text: "AstrBot Configuration File",
@@ -511,7 +523,7 @@ export default defineConfig({
           pattern: 'https://github.com/AstrBotdevs/AstrBot/edit/master/docs/:path',
           text: 'Edit this page on GitHub',
         },
-        logo: '/logo_prod.png',
+        logo: '/favicon.svg',
         socialLinks: [
           { icon: "github", link: "https://github.com/AstrBotDevs/AstrBot" },
         ],

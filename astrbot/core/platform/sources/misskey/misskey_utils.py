@@ -2,6 +2,8 @@
 
 from typing import Any
 
+from deprecated import deprecated
+
 import astrbot.api.message_components as Comp
 from astrbot.api.platform import AstrBotMessage, MessageMember, MessageType
 from astrbot.core.utils.media_utils import MediaResolver
@@ -174,6 +176,7 @@ def resolve_message_visibility(
 
 
 # 保留旧函数名作为向后兼容的别名
+@deprecated(reason="Use resolve_message_visibility instead.")
 def resolve_visibility_from_raw_message(
     raw_message: dict[str, Any],
     self_id: str | None = None,

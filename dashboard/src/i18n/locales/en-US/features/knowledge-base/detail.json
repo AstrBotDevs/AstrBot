@@ -4,6 +4,10 @@
   "breadcrumb": {
     "list": "Knowledge Bases"
   },
+  "states": {
+    "loadError": "Failed to load knowledge base details",
+    "retry": "Retry"
+  },
   "tabs": {
     "overview": "Overview",
     "documents": "Documents",

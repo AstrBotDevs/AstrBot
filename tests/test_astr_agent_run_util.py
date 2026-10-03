@@ -1,9 +1,10 @@
+import asyncio
 from types import SimpleNamespace
 
 import pytest
 
 from astrbot.core.agent.response import AgentResponse
-from astrbot.core.astr_agent_run_util import run_agent
+from astrbot.core.astr_agent_run_util import _simulated_stream_tts, run_agent
 from astrbot.core.message.message_event_result import MessageChain
 
 
@@ -72,3 +73,25 @@ async def test_run_agent_replaces_malformed_streaming_provider_error():
 
     assert len(chains) == 1
     assert chains[0].get_plain_text() == "Error occurred during AI execution."
+
+
+@pytest.mark.asyncio
+async def test_simulated_stream_tts_leaves_audio_for_deferred_cleanup(tmp_path):
+    audio_path = tmp_path / "speech.wav"
+    audio_path.write_bytes(b"audio")
+
+    class _TTSProvider:
+        async def get_audio(self, text: str) -> str:
+            assert text == "hello"
+            return str(audio_path)
+
+    text_queue: asyncio.Queue[str | None] = asyncio.Queue()
+    audio_queue: asyncio.Queue[bytes | tuple[str, bytes] | None] = asyncio.Queue()
+    await text_queue.put("hello")
+    await text_queue.put(None)
+
+    await _simulated_stream_tts(_TTSProvider(), text_queue, audio_queue)
+
+    assert await audio_queue.get() == ("hello", b"audio")
+    assert await audio_queue.get() is None
+    assert audio_path.exists()

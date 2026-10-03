@@ -9,10 +9,7 @@ Matrix 是一个 IM 协议，有着丰富的服务端实现。
 
 请在 [Matrix Server](https://matrix.org/ecosystem/servers/)查看可用的服务端。
 
-
-
 ## 支持的基本消息类型
-
 
 | 消息类型     | 是否支持接收 | 是否支持发送 | 备注                                           |
 | ------------ | ------------ | ------------ | ---------------------------------------------- |
@@ -27,9 +24,9 @@ Matrix 是一个 IM 协议，有着丰富的服务端实现。
 
 ## 安装 astrbot_plugin_matrix_adapter 插件
 
-进入 AstrBot WebUI 的插件市场，搜索 `astrbot_plugin_matrix_adapter`，点击安装。
+进入 AstrBot WebUI 的 `插件 → 插件市场`，搜索 `astrbot_plugin_matrix_adapter`，点击安装。
 
-安装完成后，前往 机器人（旧版本为 `消息平台`） → 新增适配器 → 选择 Matrix（若选项缺失，尝试重启 AstrBot 或检查插件安装状态）。
+安装完成后，前往 `机器人` → `创建机器人` → 选择 Matrix（若选项缺失，尝试重启 AstrBot 或检查插件安装状态）。
 
 在弹出的配置对话框中点击 `启用`。
 

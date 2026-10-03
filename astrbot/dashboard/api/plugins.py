@@ -49,15 +49,14 @@ from astrbot.dashboard.services.plugin_service import (
     PluginServiceWarning,
 )
 
-from .auth import AuthContext, require_dashboard_user, require_scope
+from .auth import AuthContext, ScopeDependency, require_dashboard_user
 from .multipart import multipart_parts
 
 router = APIRouter(tags=["Plugins"])
 legacy_router = APIRouter(tags=["Dashboard Plugins"], include_in_schema=False)
 
 
-async def require_plugin_scope(request: Request) -> AuthContext:
-    return await require_scope(request, "plugin")
+require_plugin_scope = ScopeDependency("plugin")
 
 
 def get_service(request: Request) -> PluginService:
@@ -500,20 +499,30 @@ async def validate_plugin_repo(
     )
 
 
-@router.post("/plugins/install/github")
-async def install_plugin_from_github(
+@router.post(
+    "/plugins/install/github",
+    summary="Install a plugin from GitHub",
+    operation_id="installPluginFromGithub",
+)
+@router.post(
+    "/plugins/install/git",
+    summary="Install a plugin with a shallow Git clone",
+    operation_id="installPluginFromGit",
+)
+async def install_plugin_from_repository(
+    request: Request,
     payload: PluginInstallRequest,
     _auth: AuthContext = Depends(require_plugin_scope),
     service: PluginService = Depends(get_service),
 ):
     body = _model_dict(payload)
     repository = str(body.get("repository") or body.get("url") or "").strip()
-    if repository and not repository.startswith(("http://", "https://")):
-        repository = f"https://github.com/{repository}"
+    repository_transport = request.url.path.rsplit("/", 1)[-1]
     install_payload = {
         "url": repository,
         "proxy": body.get("proxy"),
         "ignore_version_check": body.get("ignore_version_check", False),
+        "repository_transport": repository_transport,
         **{
             key: body[key]
             for key in (
@@ -855,6 +864,7 @@ async def set_plugin_enabled_by_id(
 
 
 @router.get("/plugins/pages")
+@router.get("/plugins/views")
 async def list_plugin_pages_by_id(
     plugin_id: str = Query(...),
     _auth: AuthContext = Depends(require_plugin_scope),
@@ -869,6 +879,7 @@ async def list_plugin_pages_by_id(
 
 
 @router.get("/plugins/page")
+@router.get("/plugins/view")
 async def get_plugin_page_by_id(
     request: Request,
     plugin_id: str = Query(...),
@@ -886,6 +897,7 @@ async def get_plugin_page_by_id(
 
 
 @router.get("/plugins/page/assets")
+@router.get("/plugins/view/assets")
 async def get_plugin_page_asset_by_id(
     request: Request,
     plugin_id: str = Query(...),
@@ -1146,6 +1158,7 @@ async def update_plugin(
 
 
 @router.get("/plugins/{plugin_id}/pages")
+@router.get("/plugins/{plugin_id}/views")
 async def list_plugin_pages(
     plugin_id: str,
     _auth: AuthContext = Depends(require_plugin_scope),
@@ -1160,6 +1173,7 @@ async def list_plugin_pages(
 
 
 @router.get("/plugins/{plugin_id}/pages/{page_name}")
+@router.get("/plugins/{plugin_id}/views/{page_name}")
 async def get_plugin_page(
     plugin_id: str,
     page_name: str,
@@ -1177,6 +1191,7 @@ async def get_plugin_page(
 
 
 @router.get("/plugins/{plugin_id}/pages/{page_name}/assets/{asset_path:path}")
+@router.get("/plugins/{plugin_id}/views/{page_name}/assets/{asset_path:path}")
 async def get_plugin_page_asset(
     plugin_id: str,
     page_name: str,

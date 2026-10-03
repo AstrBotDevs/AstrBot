@@ -1,6 +1,11 @@
 {
   "title": "文档详情",
   "backToKB": "返回知识库",
+  "states": {
+    "loadError": "文档详情加载失败",
+    "chunksLoadError": "分块列表加载失败",
+    "retry": "重试"
+  },
   "info": {
     "title": "文档信息",
     "name": "文档名称",

@@ -15,7 +15,7 @@
 - `Shipyard`（旧方案，仍可继续使用）
 - `CUA`（本地或云端电脑使用沙盒，适合需要桌面操作的场景）
 
-在当前版本的 AstrBot 控制台中，可在“AI 配置” -> “Agent Computer Use”中选择：
+在当前版本的 AstrBot 控制台中，可在“配置文件” -> “AI 配置” -> “能力” -> “使用电脑能力”中选择：
 
 - `Computer Use Runtime` = `sandbox`
 - `沙箱环境驱动器` = `Shipyard Neo`、`Shipyard` 或 `CUA`
@@ -75,7 +75,7 @@ CUA 本身还依赖具体运行方式：
 
 进入 WebUI：
 
-- `配置 -> 普通配置 -> 使用电脑能力`
+- `配置文件 -> AI 配置 -> 能力 -> 使用电脑能力`
 
 然后设置：
 
@@ -415,7 +415,7 @@ docker pull soulter/shipyard-ship:latest
 > [!TIP]
 > 请确保您的 AstrBot 版本在 `v4.12.0` 及之后。
 
-在 AstrBot 控制台，进入 “AI 配置” -> “Agent Computer Use”。
+在 AstrBot 控制台，进入 “配置文件” -> “AI 配置” -> “能力” -> “使用电脑能力”。
 
 1. 将 `Computer Use Runtime` 设为 `sandbox`
 2. 在 `沙箱环境驱动器` 中选择 `Shipyard Neo` 或 `Shipyard`

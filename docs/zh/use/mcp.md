@@ -6,17 +6,13 @@ MCP(Model Context Protocol，模型上下文协议) 是一种新的开放标准�
 
 AstrBot v3.5.0 支持 MCP 协议，可以添加多个 MCP 服务器、使用 MCP 服务器的函数工具。
 
-![image](https://files.astrbot.app/docs/source/images/function-calling/image2.png)
+MCP 服务器在 WebUI 的 `插件 → MCP`（`/extension/mcp`）中管理。
 
 ## 初始状态配置
 
 MCP 服务器一般使用 `uv` 或者 `npm` 来启动，因此您需要安装这两个工具。
 
-对于 `uv`，您可以直接通过 pip 来安装。可在 AstrBot WebUI 快捷安装：
-
-![image](https://files.astrbot.app/docs/zh/use/image.png)
-
-输入 `uv` 即可。
+对于 `uv`，您可以直接通过 pip 来安装。在 AstrBot WebUI 打开 `数据与日志 → 日志`（`/data/logs`），点击 `安装 pip 库`，输入 `uv` 并安装。
 
 如果您使用 Docker 部署 AstrBot，也可以执行以下指令快捷安装。
 
@@ -89,11 +85,7 @@ npx -v
 }
 ```
 
-在 AstrBot WebUI 中设置:
-
-![image](https://files.astrbot.app/docs/zh/use/image-2.png)
-
-即可。
+在 AstrBot WebUI 打开 `插件 → MCP`，点击 `新增服务器`，填写服务器名称，将上面的 JSON 粘贴到 `服务器配置` 中。可先点击 `测试连接`；勾选 `保存后连接服务器` 后点击 `保存`，即可连接服务器。
 
 参考链接：
 

@@ -157,9 +157,28 @@ class BaseDatabase(abc.ABC):
         page_size: int = 20,
         platform_ids: list[str] | None = None,
         search_query: str = "",
+        include_history: bool = True,
         **kwargs,
     ) -> tuple[list[ConversationV2], int]:
-        """Get conversations filtered by platform IDs and search query."""
+        """Filter conversations by platform IDs and search text.
+
+        Args:
+            page: Page number.
+            page_size: Number of items per page.
+            platform_ids: Platform IDs to include, if any.
+            search_query: Search text, if any.
+            include_history: Whether to load the full history for returned rows.
+            **kwargs: Additional filters supported by the database backend.
+        """
+        ...
+
+    @abc.abstractmethod
+    async def get_conversation_platform_ids(self) -> list[str]:
+        """Return distinct platform IDs referenced by conversation history.
+
+        Returns:
+            Sorted platform IDs that have at least one conversation.
+        """
         ...
 
     @abc.abstractmethod
@@ -208,6 +227,7 @@ class BaseDatabase(abc.ABC):
         sender_id: str | None = None,
         sender_name: str | None = None,
         llm_checkpoint_id: str | None = None,
+        max_messages: int | None = None,
     ) -> PlatformMessageHistory:
         """Insert a new platform message history record."""
         ...
@@ -246,6 +266,23 @@ class BaseDatabase(abc.ABC):
         page_size: int = 20,
     ) -> list[PlatformMessageHistory]:
         """Get platform message history for a specific user."""
+        ...
+
+    @abc.abstractmethod
+    async def count_platform_message_history(
+        self,
+        platform_id: str,
+        user_id: str,
+    ) -> int:
+        """Count platform message history records for a scope.
+
+        Args:
+            platform_id: Platform identifier used to partition history.
+            user_id: Platform user or session identifier.
+
+        Returns:
+            Number of records belonging to the platform/user scope.
+        """
         ...
 
     @abc.abstractmethod
@@ -566,11 +603,11 @@ class BaseDatabase(abc.ABC):
     @abc.abstractmethod
     async def get_preferences(
         self,
-        scope: str,
+        scope: str | None = None,
         scope_id: str | None = None,
         key: str | None = None,
     ) -> list[Preference]:
-        """Get all preferences for a specific scope ID or key."""
+        """Get preferences, optionally filtered by scope, scope ID, or key."""
         ...
 
     @abc.abstractmethod
@@ -828,6 +865,22 @@ class BaseDatabase(abc.ABC):
         user_alias: str | None,
     ) -> UmoAlias:
         """Create or update the display alias metadata for a UMO."""
+        ...
+
+    @abc.abstractmethod
+    async def upsert_umo_auto_name(
+        self,
+        umo: str,
+        creator_sender_id: str,
+        auto_name: str,
+    ) -> None:
+        """Create or update only the automatically discovered UMO name.
+
+        Args:
+            umo: Unified message origin to name.
+            creator_sender_id: Sender that first caused the UMO to be recorded.
+            auto_name: Name discovered from the inbound platform message.
+        """
         ...
 
     @abc.abstractmethod

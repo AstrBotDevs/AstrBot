@@ -1,3 +1,5 @@
+import asyncio
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -7,6 +9,7 @@ import pytest
 from astrbot.core.agent.agent import Agent
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.message.components import Image
@@ -14,6 +17,8 @@ from astrbot.core.provider.func_tool_manager import (
     FunctionToolManager,
     _PermissionGuardedTool,
 )
+from astrbot.core.tools.computer_tools.shell import ShellSessionTool
+from astrbot.core.utils.active_event_registry import ActiveEventRegistry
 
 
 class _DummyEvent:
@@ -21,9 +26,13 @@ class _DummyEvent:
         self.unified_msg_origin = "webchat:FriendMessage:webchat!user!session"
         self.message_obj = SimpleNamespace(message=message_components or [])
         self.role = "member"
+        self.extras: dict[str, object] = {}
 
-    def get_extra(self, _key: str):
-        return None
+    def get_extra(self, key: str):
+        return self.extras.get(key)
+
+    def set_extra(self, key: str, value: object) -> None:
+        self.extras[key] = value
 
 
 class _DummyTool:
@@ -38,6 +47,41 @@ def _build_run_context(message_components: list[object] | None = None):
     return ContextWrapper(context=ctx)
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("action", ["poll", "write", "write_line", "interrupt"])
+@pytest.mark.parametrize(
+    ("yield_time_ms", "configured_timeout", "expected_timeout"),
+    [(300_000, 120, 305), (5_000, 120, 120), (300_000, 600, 600)],
+)
+async def test_shell_session_wait_fits_inside_tool_timeout(
+    monkeypatch, action, yield_time_ms, configured_timeout, expected_timeout
+):
+    from astrbot.core import astr_agent_tool_exec as tool_exec
+
+    tool = ShellSessionTool()
+    monkeypatch.setattr(tool, "call", AsyncMock(return_value="output"))
+    run_context = _build_run_context()
+    run_context.tool_call_timeout = configured_timeout
+    wait_for = AsyncMock(wraps=asyncio.wait_for)
+    monkeypatch.setattr(tool_exec.asyncio, "wait_for", wait_for)
+
+    results = [
+        result
+        async for result in FunctionToolExecutor._execute_local(
+            tool,
+            run_context,
+            action=action,
+            session_id="sh_test",
+            yield_time_ms=yield_time_ms,
+        )
+    ]
+
+    assert results[0].content[0].text == "output"
+    assert all(
+        call.kwargs["timeout"] == expected_timeout for call in wait_for.await_args_list
+    )
+
+
 class _DoneRunner:
     async def step_until_done(self, _max_step):
         for item in ():
@@ -47,7 +91,8 @@ class _DoneRunner:
         return SimpleNamespace(role="assistant", completion_text="done")
 
 
-def test_build_handoff_toolset_keeps_permission_guards_for_default_tools():
+@pytest.mark.parametrize("runtime", ["none", "local", "sandbox", None])
+def test_build_handoff_toolset_keeps_permission_guards_for_default_tools(runtime):
     mgr = FunctionToolManager()
     plugin_tool = FunctionTool(
         name="admin_only_mcp",
@@ -58,10 +103,9 @@ def test_build_handoff_toolset_keeps_permission_guards_for_default_tools():
     mgr.func_list = [plugin_tool, handoff]
 
     event = _DummyEvent()
+    provider_settings = {} if runtime is None else {"computer_use_runtime": runtime}
     context = SimpleNamespace(
-        get_config=lambda **_kwargs: {
-            "provider_settings": {"computer_use_runtime": "none"}
-        },
+        get_config=lambda **_kwargs: {"provider_settings": provider_settings},
         get_llm_tool_manager=lambda: mgr,
     )
     run_context = ContextWrapper(context=SimpleNamespace(event=event, context=context))
@@ -71,6 +115,15 @@ def test_build_handoff_toolset_keeps_permission_guards_for_default_tools():
     assert toolset is not None
     assert isinstance(toolset.get_tool("admin_only_mcp"), _PermissionGuardedTool)
     assert toolset.get_tool("transfer_to_child") is None
+    assert (toolset.get_tool("astrbot_execute_python") is not None) == (
+        runtime == "local"
+    )
+    assert (toolset.get_tool("astrbot_execute_ipython") is not None) == (
+        runtime == "sandbox"
+    )
+    assert (toolset.get_tool("astrbot_execute_shell") is not None) == (
+        runtime in {"local", "sandbox"}
+    )
 
 
 @pytest.mark.asyncio
@@ -366,22 +419,132 @@ async def test_execute_handoff_passes_tool_call_timeout_to_tool_loop_agent(
 
 
 @pytest.mark.asyncio
-async def test_background_wakeup_passes_provider_settings_to_main_agent(
+@pytest.mark.parametrize("stop_phase", [None, "before", "history", "build"])
+async def test_background_wakeup_passes_history_and_provider_settings_to_main_agent(
     monkeypatch: pytest.MonkeyPatch,
+    stop_phase,
 ):
+    """Test background wakeup keeps structured history and provider settings."""
     provider_settings = {
         "fallback_chat_models": ["fallback-provider"],
         "request_max_retries": 3,
         "stream": True,
     }
+    history = [
+        {"role": "user", "content": "old question"},
+        {"role": "assistant", "content": "old answer"},
+    ]
     captured: dict = {}
+
+    async def _fake_get_session_conv(**_kwargs):
+        if stop_phase == "history":
+            stop_signal.set()
+        return SimpleNamespace(history=json.dumps(history))
+
+    async def _fake_build_main_agent(**kwargs):
+        captured.update(kwargs)
+        if stop_phase == "build":
+            stop_signal.set()
+        return SimpleNamespace(agent_runner=_DoneRunner())
+
+    monkeypatch.setattr(
+        "astrbot.core.astr_main_agent._get_session_conv",
+        _fake_get_session_conv,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.astr_main_agent.build_main_agent",
+        _fake_build_main_agent,
+    )
+    persist = AsyncMock()
+    monkeypatch.setattr(
+        "astrbot.core.astr_agent_tool_exec.persist_agent_history",
+        persist,
+    )
+
+    send_tool = FunctionTool(
+        name="send_message_to_user",
+        description="send",
+        parameters={"type": "object", "properties": {}},
+    )
+    context = SimpleNamespace(
+        get_config=lambda **_kwargs: {"provider_settings": provider_settings},
+        get_llm_tool_manager=lambda: SimpleNamespace(
+            get_builtin_tool=lambda _tool_cls: send_tool
+        ),
+        conversation_manager=SimpleNamespace(),
+    )
+    run_context = ContextWrapper(
+        context=SimpleNamespace(event=_DummyEvent([]), context=context),
+        tool_call_timeout=456,
+    )
+    stop_signal = asyncio.Event()
+    run_context.context.event.set_extra("_background_stop_signal", stop_signal)
+    if stop_phase == "before":
+        stop_signal.set()
+
+    await FunctionToolExecutor._wake_main_agent_for_background_result(
+        run_context,
+        task_id="task-id",
+        tool_name="long_tool",
+        result_text="ok",
+        tool_args={},
+        note="task finished",
+        summary_name="BackgroundTask",
+    )
+
+    if stop_phase in ("before", "history"):
+        assert not captured
+        persist.assert_not_awaited()
+        return
+    config = captured["config"]
+    assert config.tool_call_timeout == 456
+    assert config.streaming_response == provider_settings["stream"]
+    assert config.provider_settings == provider_settings
+    assert config.provider_settings["fallback_chat_models"] == ["fallback-provider"]
+    request = captured["req"]
+    assert "old question" not in request.system_prompt
+    assert "old answer" not in request.system_prompt
+    assert request.contexts == history
+    assert captured["event"].get_extra("_background_stop_signal") is stop_signal
+    assert "_background_stop_signal" not in request.system_prompt
+    assert persist.await_count == (0 if stop_phase == "build" else 1)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("provider_settings", "expected_max_step"),
+    [
+        pytest.param({"max_agent_step": 50}, 50, id="configured"),
+        pytest.param({}, 128, id="missing_falls_back_to_default"),
+        pytest.param({"max_agent_step": True}, 128, id="boolean_falls_back_to_default"),
+        pytest.param({"max_agent_step": "50"}, 50, id="numeric_string_coerced"),
+        pytest.param({"max_agent_step": 0}, 1, id="zero_clamped_to_min"),
+    ],
+)
+async def test_background_wakeup_applies_max_agent_step(
+    monkeypatch: pytest.MonkeyPatch,
+    provider_settings: dict,
+    expected_max_step: int,
+):
+    class _StepCapturingRunner:
+        def __init__(self):
+            self.captured_max_step = None
+
+        async def step_until_done(self, max_step):
+            self.captured_max_step = max_step
+            if False:
+                yield
+
+        def get_final_llm_resp(self):
+            return SimpleNamespace(role="assistant", completion_text="done")
+
+    runner = _StepCapturingRunner()
 
     async def _fake_get_session_conv(**_kwargs):
         return SimpleNamespace(history="[]")
 
-    async def _fake_build_main_agent(**kwargs):
-        captured.update(kwargs)
-        return SimpleNamespace(agent_runner=_DoneRunner())
+    async def _fake_build_main_agent(**_kwargs):
+        return SimpleNamespace(agent_runner=runner)
 
     monkeypatch.setattr(
         "astrbot.core.astr_main_agent._get_session_conv",
@@ -402,7 +565,15 @@ async def test_background_wakeup_passes_provider_settings_to_main_agent(
         parameters={"type": "object", "properties": {}},
     )
     context = SimpleNamespace(
-        get_config=lambda **_kwargs: {"provider_settings": provider_settings},
+        get_config=lambda **_kwargs: {
+            "provider_settings": {},
+            "agent_runner": {
+                "runner_type": "local",
+                "config": {
+                    "misc": {"max_steps": provider_settings.get("max_agent_step", 128)}
+                },
+            },
+        },
         get_llm_tool_manager=lambda: SimpleNamespace(
             get_builtin_tool=lambda _tool_cls: send_tool
         ),
@@ -410,7 +581,7 @@ async def test_background_wakeup_passes_provider_settings_to_main_agent(
     )
     run_context = ContextWrapper(
         context=SimpleNamespace(event=_DummyEvent([]), context=context),
-        tool_call_timeout=456,
+        tool_call_timeout=120,
     )
 
     await FunctionToolExecutor._wake_main_agent_for_background_result(
@@ -423,11 +594,7 @@ async def test_background_wakeup_passes_provider_settings_to_main_agent(
         summary_name="BackgroundTask",
     )
 
-    config = captured["config"]
-    assert config.tool_call_timeout == 456
-    assert config.streaming_response == provider_settings["stream"]
-    assert config.provider_settings == provider_settings
-    assert config.provider_settings["fallback_chat_models"] == ["fallback-provider"]
+    assert runner.captured_max_step == expected_max_step
 
 
 @pytest.mark.asyncio
@@ -452,3 +619,120 @@ async def test_collect_handoff_image_urls_filters_extensionless_file_outside_tem
     )
 
     assert image_urls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["tool", "handoff"])
+@pytest.mark.parametrize("foreground_done", [False, True])
+@pytest.mark.parametrize("phase", ["tool", "wakeup", "complete", "failure"])
+async def test_background_execution_lifecycle(
+    monkeypatch, kind, foreground_done, phase
+):
+    registry = ActiveEventRegistry()
+    monkeypatch.setattr(
+        "astrbot.core.astr_agent_tool_exec.active_event_registry", registry
+    )
+    run_context = _build_run_context()
+    event = run_context.context.event
+    started, release, delivered = (asyncio.Event() for _ in range(3))
+
+    async def execute(cls, *args, **kwargs):
+        if phase == "failure":
+            raise RuntimeError("tool failed")
+        if phase == "tool":
+            started.set()
+            await release.wait()
+        yield mcp.types.CallToolResult(
+            content=[mcp.types.TextContent(type="text", text="done")]
+        )
+
+    async def wake(**kwargs):
+        started.set()
+        await release.wait()
+        delivered.set()
+
+    wakeup = AsyncMock(side_effect=wake)
+    monkeypatch.setattr(
+        FunctionToolExecutor, "_wake_main_agent_for_background_result", wakeup
+    )
+    monkeypatch.setattr(
+        FunctionToolExecutor,
+        "_execute_local" if kind == "tool" else "_execute_handoff",
+        classmethod(execute),
+    )
+    tool = (
+        FunctionTool(
+            name="slow",
+            description="slow tool",
+            parameters={"type": "object", "properties": {}},
+            is_background_task=True,
+        )
+        if kind == "tool"
+        else HandoffTool(Agent(name="worker"))
+    )
+    arguments = {} if kind == "tool" else {"background_task": True}
+    registry.register(event)
+    results = [
+        r async for r in FunctionToolExecutor.execute(tool, run_context, **arguments)
+    ]
+    task = next(iter(registry._background_tasks[event.unified_msg_origin]))
+    try:
+        assert "task_id=" in results[0].content[0].text
+        await asyncio.wait_for(started.wait(), timeout=1)
+        if foreground_done:
+            registry.unregister(event)
+        cancelled = phase in ("tool", "wakeup")
+        if cancelled:
+            assert registry.request_agent_stop_all(event.unified_msg_origin) == 1
+        release.set()
+        await asyncio.wait_for(asyncio.gather(task, return_exceptions=True), timeout=1)
+        assert task.cancelled() == cancelled
+        assert delivered.is_set() != cancelled
+        assert wakeup.await_count == (0 if phase == "tool" else 1)
+        if phase == "failure":
+            assert "tool failed" in wakeup.call_args.kwargs["result_text"]
+        assert not registry._background_tasks
+        if cancelled:
+            assert [
+                r
+                async for r in FunctionToolExecutor.execute(
+                    tool, run_context, **arguments
+                )
+            ] == []
+    finally:
+        release.set()
+        if not task.done():
+            task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        registry.unregister(event)
+
+
+@pytest.mark.asyncio
+async def test_external_runner_cancel_closes_pending_tool_executor():
+    runner = ToolLoopAgentRunner()
+    runner._abort_signal = asyncio.Event()
+    started, release, closed, side_effect = (asyncio.Event() for _ in range(4))
+
+    async def execute():
+        started.set()
+        try:
+            await release.wait()
+            side_effect.set()
+            yield "done"
+        finally:
+            closed.set()
+
+    results = runner._iter_tool_executor_results(execute())
+    task = asyncio.create_task(anext(results))
+    try:
+        await asyncio.wait_for(started.wait(), timeout=1)
+        task.cancel()
+        await asyncio.wait_for(asyncio.gather(task, return_exceptions=True), timeout=1)
+        assert task.cancelled() and closed.is_set()
+        assert not side_effect.is_set()
+    finally:
+        release.set()
+        if not task.done():
+            task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        await results.aclose()
