@@ -68,7 +68,10 @@ async def test_slack_remote_file_upload_uses_content_and_cleans_temp(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("file_uri", [False, True])
 @pytest.mark.parametrize("fail_upload", [False, True])
-async def test_slack_local_file_is_preserved(tmp_path, download, file_uri, fail_upload):
+@pytest.mark.parametrize("local_url", [False, True])
+async def test_slack_local_file_is_preserved(
+    tmp_path, download, file_uri, fail_upload, local_url
+):
     path = tmp_path / "local.md"
     path.write_bytes(b"local content")
     client = AsyncMock()
@@ -78,7 +81,8 @@ async def test_slack_local_file_is_preserved(tmp_path, download, file_uri, fail_
     }
     if fail_upload:
         client.files_upload_v2.side_effect = RuntimeError("upload failed")
-    segment = File(name="local.md", file=path.as_uri() if file_uri else str(path))
+    source = path.as_uri() if file_uri else str(path)
+    segment = File(name="local.md", file=source, url=source if local_url else "")
 
     if fail_upload:
         with pytest.raises(RuntimeError, match="upload failed"):
@@ -159,6 +163,7 @@ async def test_slack_cancelled_download_cleans_partial_file(download, tmp_path):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("missing_local_file", [False, True])
 @pytest.mark.parametrize(
     "url",
     [
@@ -168,11 +173,18 @@ async def test_slack_cancelled_download_cleans_partial_file(download, tmp_path):
         "data:text/plain;base64,eA==",
     ],
 )
-async def test_slack_invalid_file_url_fails_before_upload(download, url):
+async def test_slack_invalid_file_url_fails_before_upload(
+    download, tmp_path, url, missing_local_file
+):
     client = AsyncMock()
     with pytest.raises(ValueError, match="HTTP or HTTPS"):
         await SlackMessageEvent._from_segment_to_slack_block(
-            File(name="README.md", url=url), client
+            File(
+                name="README.md",
+                file=str(tmp_path / "missing.md") if missing_local_file else "",
+                url=url,
+            ),
+            client,
         )
     download[0].assert_not_awaited()
     client.files_upload_v2.assert_not_awaited()
