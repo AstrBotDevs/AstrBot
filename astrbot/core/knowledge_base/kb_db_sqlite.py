@@ -320,7 +320,18 @@ class KBSQLiteDatabase:
         return metadata_map
 
     async def delete_document_by_id(self, doc_id: str, vec_db: "FaissVecDB") -> None:
-        """删除单个文档及其相关数据（包括多媒体记录）"""
+        """Delete stored chunks before removing their document and media records.
+
+        Keep the document listed if vector or chunk deletion fails so the user
+        can retry. The stores do not share a transaction; a later metadata
+        failure also leaves the document available for an idempotent retry.
+
+        Args:
+            doc_id: ID of the document to delete.
+            vec_db: Vector store containing this document's chunks.
+        """
+        await vec_db.delete_documents(metadata_filters={"kb_doc_id": doc_id})
+
         async with self.get_db() as session, session.begin():
             # 删除多媒体记录
             delete_media_stmt = delete(KBMedia).where(col(KBMedia.doc_id) == doc_id)
@@ -329,9 +340,6 @@ class KBSQLiteDatabase:
             # 删除文档记录
             delete_stmt = delete(KBDocument).where(col(KBDocument.doc_id) == doc_id)
             await session.execute(delete_stmt)
-
-        # 在 vec db 中删除相关向量
-        await vec_db.delete_documents(metadata_filters={"kb_doc_id": doc_id})
 
     # ===== 多媒体查询 =====
 
