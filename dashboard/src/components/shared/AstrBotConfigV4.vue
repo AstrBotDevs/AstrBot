@@ -87,8 +87,16 @@ let currentEditingKeyIterable = null
 function getValueBySelector(obj, selector) {
   const keys = selector.split('.')
   let current = obj
+
   for (const key of keys) {
-    if (current && typeof current === 'object' && key in current) {
+    if (['__proto__', 'prototype', 'constructor'].includes(key)) {
+      return undefined
+    }
+    if (
+      current &&
+      typeof current === 'object' &&
+      Object.prototype.hasOwnProperty.call(current, key)
+    ) {
       current = current[key]
     } else {
       return undefined
@@ -104,6 +112,9 @@ function setValueBySelector(obj, selector, value) {
   // 创建嵌套对象路径
   for (let i = 0; i < keys.length - 1; i++) {
     const key = keys[i]
+    if (['__proto__', 'prototype', 'constructor'].includes(key)) {
+      return
+    }
     if (!current[key] || typeof current[key] !== 'object') {
       current[key] = {}
     }
@@ -111,7 +122,11 @@ function setValueBySelector(obj, selector, value) {
   }
 
   // 设置最终值
-  current[keys[keys.length - 1]] = value
+  const lastKey = keys[keys.length - 1]
+  if (['__proto__', 'prototype', 'constructor'].includes(lastKey)) {
+    return
+  }
+  current[lastKey] = value
 }
 
 // 创建一个计算属性来处理 JSON selector 的获取和设置
