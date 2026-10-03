@@ -67,9 +67,11 @@ def unique_attachment_filename(filename: str) -> str:
     # Pasted screenshots are all named "image.png", so prefix the stored name
     # to keep uploads apart, and stay within the 255-byte filename limit.
     prefix = f"{generate_timestamp_id()}_"
+    budget = 255 - len(prefix.encode())
     stem, suffix = os.path.splitext(filename)
-    budget = 255 - len(prefix.encode()) - len(suffix.encode())
-    stem = stem.encode()[: max(budget, 0)].decode(errors="ignore")
+    if len(suffix.encode()) >= budget:
+        stem, suffix = filename, ""
+    stem = stem.encode()[: budget - len(suffix.encode())].decode(errors="ignore")
     return f"{prefix}{stem}{suffix}"
 
 

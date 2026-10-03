@@ -93,3 +93,9 @@ def test_unique_attachment_filename_fits_in_255_bytes():
 
     assert len(name.encode()) <= 255
     assert name.endswith(".png")
+
+
+def test_unique_attachment_filename_with_long_suffix_fits_in_255_bytes():
+    name = unique_attachment_filename("v1." + "x" * 250)
+
+    assert len(name.encode()) <= 255
