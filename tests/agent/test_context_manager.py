@@ -12,7 +12,13 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from astrbot.core.agent.context.config import ContextConfig
 from astrbot.core.agent.context.manager import ContextManager
-from astrbot.core.agent.message import AudioURLPart, ImageURLPart, Message, TextPart
+from astrbot.core.agent.message import (
+    AudioURLPart,
+    ImageURLPart,
+    Message,
+    TextPart,
+    ToolCall,
+)
 from astrbot.core.provider.entities import LLMResponse
 
 
@@ -387,6 +393,36 @@ class TestContextManager:
         result = await manager.process([])
 
         assert result == []
+
+    @pytest.mark.asyncio
+    async def test_process_repairs_broken_tool_pairing_without_truncation(self):
+        """process() repairs a broken tool_calls chain even with both stages off.
+
+        With enforce_max_turns=-1 and max_context_tokens=0 neither truncation nor
+        compression runs; a receipt deleted by a plugin hook must still not reach
+        the provider, or every later request in the session 400s (#10338).
+        """
+        config = ContextConfig()
+        manager = ContextManager(config)
+
+        messages = [
+            self.create_message("user", "call both tools"),
+            Message(
+                role="assistant",
+                tool_calls=[
+                    ToolCall(
+                        id=cid,
+                        function=ToolCall.FunctionBody(name="f", arguments="{}"),
+                    )
+                    for cid in ("c1", "c2")
+                ],
+            ),
+            Message(role="tool", content="r1", tool_call_id="c1"),
+            self.create_message("user", "continue"),
+        ]
+        result = await manager.process(messages)
+
+        assert [m.role for m in result] == ["user", "user"]
 
     @pytest.mark.asyncio
     async def test_process_single_message(self):
