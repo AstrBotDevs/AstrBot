@@ -113,7 +113,11 @@ class TestCleanupOnce:
     def test_handles_unlink_os_error_gracefully(self, tmp_path: Path):
         temp_dir = tmp_path / "temp"
         temp_dir.mkdir(parents=True, exist_ok=True)
-        _write_file(temp_dir / "bad.bin", 9999, time.time() - 100)
+        _write_file(
+            temp_dir / "bad.bin",
+            9999,
+            time.time() - TempDirCleaner.MIN_FILE_AGE_SECONDS - 1,
+        )
 
         cleaner = TempDirCleaner(
             max_size_getter=lambda: "0.001",
