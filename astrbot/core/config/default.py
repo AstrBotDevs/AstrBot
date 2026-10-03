@@ -462,7 +462,7 @@ CONFIG_METADATA_2 = {
                         "id": "telegram",
                         "type": "telegram",
                         "enable": True,
-                        "telegram_token": "your_bot_token",
+                        "telegram_token": "",
                         "start_message": "Hello, I'm AstrBot!",
                         "telegram_api_base_url": "https://api.telegram.org/bot",
                         "telegram_file_base_url": "https://api.telegram.org/file/bot",
