@@ -51,7 +51,11 @@
     "title": "添加自定义规则",
     "description": "选择一个消息会话来源 (UMO) 来配置自定义规则。自定义规则的优先级高于该来源所属的配置文件中的全局规则。可以使用 /sid 指令获取该来源的 UMO 信息。",
     "selectUmo": "选择会话",
-    "noUmos": "暂无可用会话"
+    "noUmos": "暂无可用会话",
+    "manualEntry": "手动输入会话",
+    "enterUmo": "会话 UMO",
+    "umoHint": "粘贴 /sid 返回的完整 UMO，例如：my-bot:GroupMessage:123456",
+    "invalidUmo": "请使用 平台:消息类型:会话ID 格式，消息类型为 GroupMessage、FriendMessage 或 OtherMessage。"
   },
   "ruleEditor": {
     "title": "编辑自定义规则",
