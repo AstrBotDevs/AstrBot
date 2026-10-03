@@ -1,3 +1,4 @@
+import asyncio
 from pathlib import Path
 from unittest.mock import AsyncMock
 
@@ -123,6 +124,38 @@ async def test_slack_file_failure_cleans_download(download, failure):
     client.chat_postMessage.assert_not_awaited()
     if failure == "download":
         client.files_upload_v2.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_slack_cancelled_download_cleans_partial_file(download, tmp_path):
+    client = AsyncMock()
+    started = asyncio.Event()
+    original = download[0].side_effect
+    local_file = tmp_path / "keep.md"
+    local_file.write_bytes(b"local content")
+
+    async def interrupted_download(url, path):
+        await original(url, path)
+        started.set()
+        await asyncio.Event().wait()
+
+    download[0].side_effect = interrupted_download
+    task = asyncio.create_task(
+        SlackMessageEvent._from_segment_to_slack_block(
+            File(name="README.md", url="https://example.com/README.md"), client
+        )
+    )
+    try:
+        await asyncio.wait_for(started.wait(), timeout=5)
+    finally:
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    assert download[1]
+    assert all(not path.exists() for path in download[1])
+    assert local_file.read_bytes() == b"local content"
+    client.files_upload_v2.assert_not_awaited()
 
 
 @pytest.mark.asyncio
