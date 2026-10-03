@@ -1,4 +1,6 @@
 import asyncio
+import base64
+import pathlib
 import re
 from collections.abc import AsyncGenerator
 
@@ -46,11 +48,23 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
             }
         if isinstance(segment, File):
             # For File segments, we need to handle the file differently
+            try:
+                file_path = pathlib.Path(await segment.get_file())
+                if file_path.is_file():
+                    file_data = base64.b64encode(file_path.read_bytes()).decode()
+                    return {
+                        "type": "file",
+                        "data": {
+                            "name": segment.name or file_path.name,
+                            "file": f"base64://{file_data}",
+                        },
+                    }
+            except OSError:
+                # Fall back to a file reference if the contents are unavailable.
+                pass
             d = await segment.to_dict()
             file_val = d.get("data", {}).get("file", "")
             if file_val:
-                import pathlib
-
                 try:
                     # 使用 pathlib 处理路径，能更好地处理 Windows/Linux 差异
                     path_obj = pathlib.Path(file_val)
