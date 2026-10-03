@@ -1,7 +1,8 @@
 <template>
   <section class="onboarding-setup">
-    <div ref="scrollContainer" class="guide-scroll">
-    <div class="guide-content" :class="{ 'guide-content--chat': step === 3 }">
+    <div ref="scrollContainer" class="guide-scroll" :class="{ 'guide-scroll--complete': completed }">
+    <OnboardingWelcome v-if="completed" />
+    <div v-else class="guide-content" :class="{ 'guide-content--chat': step === 3 }">
       <div class="guide-heading" aria-live="polite" aria-atomic="true">
         <span class="text-medium-emphasis text-caption">{{ step }} / {{ steps.length }}</span>
         <h2>{{ steps[step - 1] }}</h2>
@@ -78,11 +79,15 @@
     </div>
     </div>
     <footer class="guide-actions">
+      <v-btn v-if="completed" variant="tonal" color="primary" @click="close">{{ tm('guide.start') }}</v-btn>
+      <template v-else>
+      <p v-if="step === 4" id="guide-adapter-skip-hint" class="guide-skip-hint text-body-2 text-medium-emphasis">{{ tm('guide.adapterSkipHint') }}</p>
       <v-btn v-if="step > 1" variant="text" prepend-icon="mdi-arrow-left" :disabled="busy || platformLoading"
         @click="step === 4 && !modelReady ? step = 2 : step--">{{ tm('guide.back') }}</v-btn>
       <v-btn v-else variant="text" :disabled="busy" @click="close">{{ tm('guide.skipAll') }}</v-btn>
       <v-spacer />
-      <v-btn v-if="step > 1" variant="text" :disabled="busy || platformLoading" @click="skipStep">{{ tm('onboard.skip') }}</v-btn>
+      <v-btn v-if="step > 1" variant="text" :disabled="busy || platformLoading"
+        :aria-describedby="step === 4 ? 'guide-adapter-skip-hint' : undefined" @click="skipStep">{{ tm('onboard.skip') }}</v-btn>
       <v-btn v-if="step === 5 && selected.length" variant="tonal" color="primary"
         :loading="busy" :disabled="loading || !!loadError" @click="installSelected">
         {{ tm('guide.next') }}
@@ -92,6 +97,7 @@
         {{ tm('guide.next') }}
       </v-btn>
       <v-btn v-else variant="tonal" color="primary" :loading="busy" :disabled="!computerForm?.ready" @click="finish">{{ tm('guide.next') }}</v-btn>
+      </template>
     </footer>
   </section>
 </template>
@@ -106,6 +112,7 @@ import AddNewPlatform from '@/components/platform/AddNewPlatform.vue';
 import StandaloneChat from '@/components/chat/StandaloneChat.vue';
 import ReadmeDialog from '@/components/shared/ReadmeDialog.vue';
 import OnboardingComputer from '@/components/OnboardingComputer.vue';
+import OnboardingWelcome from '@/components/OnboardingWelcome.vue';
 import MarketPluginCard from '@/components/extension/MarketPluginCard.vue';
 import defaultPluginIcon from '/favicon.svg';
 
@@ -124,6 +131,7 @@ const platformMetadata = ref({});
 const platformConfig = ref<Record<string, any>>({});
 const configError = ref('');
 const step = ref(1);
+const completed = ref(false);
 const steps = computed(() => [tm('guide.notice'), tm('guide.modelTitle'), tm('guide.chat'), tm('guide.platform'), tm('guide.plugins'), tm('onboard.step3Title')]);
 const plugins = ref<{ repo: string; name: string; display_name?: string; desc: string; author: string; logo?: string; support_platforms?: string[]; i18n?: Record<string, unknown>; stars: number; official: boolean; installed: boolean; error: string }[]>([]);
 const pluginGroups = computed(() => [
@@ -298,12 +306,12 @@ function skipStep() {
 }
 
 async function finish() {
-  if (busy.value || !computerForm.value?.ready) return;
+  if (busy.value || completed.value || !computerForm.value?.ready) return;
   busy.value = true;
   try {
     if (await computerForm.value.save()) {
-      busy.value = false;
-      close();
+      completed.value = true;
+      void nextTick(() => scrollContainer.value?.scrollTo({ top: 0 }));
     }
   } finally {
     busy.value = false;
@@ -322,6 +330,7 @@ onBeforeRouteLeave(() => !busy.value && !platformLoading.value);
 <style scoped>
 .onboarding-setup { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; }
 .guide-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.guide-scroll--complete { display: flex; }
 .guide-content { width: 100%; padding: 32px 0 24px; }
 .guide-content > .v-window { padding-top: 8px; margin-top: -8px; }
 .guide-heading { margin-bottom: 28px; }
@@ -343,6 +352,7 @@ onBeforeRouteLeave(() => !busy.value && !platformLoading.value);
 .guide-plugin-group + .guide-plugin-group { margin-top: 28px; }
 .guide-actions { display: flex; flex-shrink: 0; align-items: center; gap: 8px; flex-wrap: wrap; padding: 20px 0 max(20px, env(safe-area-inset-bottom)); border-top: 1px solid rgba(var(--v-theme-on-surface), .1); background: rgb(var(--v-theme-surface)); z-index: 1; }
 .guide-actions :deep(.v-btn) { letter-spacing: 0; }
+.guide-skip-hint { flex-basis: 100%; margin: 0; text-align: end; overflow-wrap: anywhere; }
 .guide-actions > .v-btn:last-child { margin-inline-start: auto; }
 @media (max-width: 600px) {
   .guide-actions { padding: 16px 0 max(16px, env(safe-area-inset-bottom)); gap: 4px; }
