@@ -183,7 +183,12 @@ class ProviderAnthropic(Provider):
         new_messages = []
         for message in messages:
             if message["role"] == "system":
-                system_prompt = message["content"] or "<empty system prompt>"
+                # Anthropic takes a single system prompt, so join every system
+                # message instead of keeping only the last one (e.g. file extracts).
+                content = message["content"] or "<empty system prompt>"
+                system_prompt = (
+                    f"{system_prompt}\n\n{content}" if system_prompt else content
+                )
             elif message["role"] == "assistant":
                 blocks = []
                 reasoning_content = ""
