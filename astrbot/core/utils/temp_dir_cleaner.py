@@ -1,4 +1,5 @@
 import asyncio
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -34,6 +35,7 @@ class TempDirCleaner:
     CONFIG_KEY = "temp_dir_max_size"
     DEFAULT_MAX_SIZE = 1024
     CHECK_INTERVAL_SECONDS = 10 * 60
+    MIN_FILE_AGE_SECONDS = CHECK_INTERVAL_SECONDS
     CLEANUP_RATIO = 0.30
 
     def __init__(
@@ -99,6 +101,17 @@ class TempDirCleaner:
 
         total_size, files = self._scan_temp_files()
         if total_size <= limit:
+            return
+
+        # Do not race with uploads, media conversion, or other short-lived
+        # operations that are still writing a newly-created temporary file.
+        cutoff = time.time() - self.MIN_FILE_AGE_SECONDS
+        files = [file_info for file_info in files if file_info.mtime <= cutoff]
+        if not files:
+            logger.warning(
+                f"Temp dir exceeded limit ({total_size} > {limit}), "
+                "but all files are within the cleanup protection window.",
+            )
             return
 
         target_release = max(int(total_size * self.CLEANUP_RATIO), 1)
