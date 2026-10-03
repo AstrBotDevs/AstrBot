@@ -432,3 +432,37 @@ class TestContextTruncator:
         # 多 user 场景下截断后仍有 user
         roles = [m.role for m in result_before]
         assert "user" in roles
+
+    def test_restores_current_user_after_long_tool_chain(self):
+        """A cut inside the current tool chain restores the current question,
+        not the oldest user message in the conversation."""
+        truncator = ContextTruncator()
+        msgs = self.create_messages(6, include_system=True)
+        msgs.append(self.create_message("user", "What's the weather in Paris?"))
+        for i in range(4):
+            msgs.append(
+                Message(
+                    role="assistant",
+                    tool_calls=[
+                        {
+                            "type": "function",
+                            "id": f"call_{i}",
+                            "function": {"name": "get_weather", "arguments": "{}"},
+                        }
+                    ],
+                )
+            )
+            msgs.append(
+                Message(role="tool", content=f"result {i}", tool_call_id=f"call_{i}")
+            )
+
+        results = [
+            truncator.truncate_by_turns(msgs, keep_most_recent_turns=3, drop_turns=1),
+            truncator.truncate_by_dropping_oldest_turns(msgs, drop_turns=4),
+            truncator.truncate_by_halving(msgs),
+        ]
+        for result in results:
+            users = [m.content for m in result if m.role == "user"]
+            assert users == ["What's the weather in Paris?"]
+            assert result[0].role == "system"
+            assert result[1].role == "user"
