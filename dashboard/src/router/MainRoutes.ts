@@ -264,12 +264,6 @@ const MainRoutes = {
       ]
     },
 
-    // 旧版本的知识库路由
-    {
-      name: 'KnowledgeBase',
-      path: '/alkaid/knowledge-base',
-      component: () => import('@/views/alkaid/KnowledgeBase.vue'),
-    },
     // {
     //   name: 'Alkaid',
     //   path: '/alkaid',
