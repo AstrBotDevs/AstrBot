@@ -1,7 +1,7 @@
 <template>
   <div class="onboarding-model">
     <v-alert v-if="error" type="error" variant="tonal" class="mb-4" role="alert">{{ error }}</v-alert>
-    <v-progress-linear v-if="loadingSources && !choices.length" indeterminate color="primary" />
+    <v-progress-linear v-if="loadingSources || loadingDefault" indeterminate color="primary" />
     <v-autocomplete v-model="choice" :items="choices" :label="t('guide.provider')" variant="outlined"
       :disabled="disabled || loadingModels" hide-details auto-select-first @update:model-value="choose">
       <template #prepend-inner>
@@ -47,7 +47,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import { providerApi } from '@/api/v1';
+import { configProfileApi, providerApi } from '@/api/v1';
 import { useModuleI18n } from '@/i18n/composables';
 import { useProviderSources } from '@/composables/useProviderSources';
 import AstrBotConfig from '@/components/shared/AstrBotConfig.vue';
@@ -60,9 +60,10 @@ const error = ref('');
 const choice = ref('');
 const model = ref('');
 const showKey = ref(false);
+const loadingDefault = ref(false);
 const {
   availableSourceTypes, displayedProviderSources, selectedProviderSource, editableProviderSource,
-  availableModels, loadingSources, loadingModels, isSourceModified, sourceProviders,
+  availableModels, loadingSources, loadingModels, isSourceModified, sourceProviders, providers,
   advancedSourceConfig, providerSourceSchema, resolveSourceIcon, isMonochromeSourceIcon, getSourceDisplayName,
   addProviderSource, selectProviderSource, saveProviderSource, fetchAvailableModels,
   buildModelProviderConfig, loadConfig,
@@ -77,8 +78,33 @@ const choices = computed(() => [
 const modelOptions = computed(() => [...new Set([
   ...sourceProviders.value.map(p => p.model), ...availableModels.value.map(m => m.name),
 ])]);
-const ready = computed(() => !!selectedProviderSource.value && !!String(model.value || '').trim() && !loadingModels.value);
+const ready = computed(() => !!selectedProviderSource.value && !!String(model.value || '').trim() && !loadingSources.value && !loadingDefault.value && !loadingModels.value);
 watch(loadingModels, value => emit('update:busy', value));
+watch(loadingSources, async (loading, _, onCleanup) => {
+  if (loading || choice.value) return;
+  let active = true;
+  onCleanup(() => { active = false; loadingDefault.value = false; });
+  const existing = providers.value.filter(provider => provider.enable !== false && provider.id && provider.model &&
+    displayedProviderSources.value.some(source => !source.isPlaceholder && source.enable !== false && source.id === provider.provider_source_id));
+  if (!existing.length) return;
+  loadingDefault.value = true;
+  try {
+    const response = await configProfileApi.get('default');
+    if (response.data.status !== 'ok') throw new Error(response.data.message || t('onboard.providerLoadFailed'));
+    if (!active || choice.value) return;
+    const config = response.data.data?.config as Record<string, any> | undefined;
+    const defaultId = config?.agent_runner?.config?.model?.provider_id;
+    const provider = defaultId ? existing.find(item => item.id === defaultId) : existing[0];
+    if (!provider) return;
+    choice.value = `source:${provider.provider_source_id}`;
+    choose(choice.value);
+    model.value = provider.model;
+  } catch (cause: any) {
+    if (active && !choice.value) error.value = cause?.response?.data?.message || cause?.message || t('onboard.providerLoadFailed');
+  } finally {
+    if (active) loadingDefault.value = false;
+  }
+}, { immediate: true });
 
 function choose(value: string | null) {
   if (!value) return;
@@ -126,6 +152,10 @@ defineExpose({ save, ready });
 .model-picker > :first-child { min-width: 0; }
 .model-advanced { border-top: 1px solid rgba(var(--v-theme-on-surface), .1); padding-top: 16px; }
 .model-advanced summary { cursor: pointer; color: rgba(var(--v-theme-on-surface), .65); }
+.model-advanced :deep(.config-row) { padding: 12px 0; row-gap: 8px; }
+.model-advanced :deep(.property-info), .model-advanced :deep(.config-input) { flex: 0 0 100%; max-width: 100%; padding: 0; }
+.model-advanced :deep(.property-info .v-list-item) { padding-inline: 0; }
+.model-advanced :deep(.config-divider) { margin-inline: 0; }
 @media (max-width: 600px) {
   .model-choices { grid-template-columns: 1fr; }
   .model-picker { flex-wrap: wrap; }

@@ -40,7 +40,8 @@ function setup(api = {}, overrides = {}) {
   });
   const body = ast.statements.filter(node => !ts.isImportDeclaration(node)).map(node => node.getText(ast)).join('\n');
   vm.runInContext(ts.transpile(body, { target: ts.ScriptTarget.ES2020 }), context);
-  const state = vm.runInContext('({ officialRepo, githubRepo, loadPlugins, togglePlugin, installSelected, close, skipStep, finish, computerForm, completed, plugins, pluginGroups, selected, loading, loadError, busy, step, steps, installedCount, nextStep, loadPlatforms, modelReady, platformReady, platformLoading, configError, modelForm, selectedModel })', context);
+  const state = vm.runInContext('({ officialRepo, githubRepo, loadPlugins, togglePlugin, close, skipStep, finish, showWelcome, applying, applyReady, applyTasks, settingsStatus, settingsError, computerForm, completed, plugins, pluginGroups, selected, loading, loadError, busy, step, steps, installedCount, nextStep, loadPlatforms, modelReady, platformReady, platformLoading, configuredPlatforms, configError, modelForm, selectedModel })', context);
+  state.computerForm.value = { ready: true, save: async () => true };
   return { ...state, emitted, watchers, leave: () => leave() };
 }
 
@@ -121,16 +122,17 @@ test('only manually selected visible community recommendations can be installed'
   assert.deepEqual(Array.from(popular, item => item.stars), [80, 70, 60, 50, 40, 30]);
   assert.ok(popular.every(item => !item.official));
   assert.equal(state.selected.value.length, 0);
-  await state.installSelected();
+  await state.finish();
   assert.equal(requests.length, 0);
+  state.applying.value = false;
   state.selected.value = [popular[0].repo, 'https://github.com/community/plugin-1', 'https://github.com/unlisted/plugin'];
-  await state.installSelected();
+  await state.finish();
   assert.equal(requests.length, 1);
   assert.equal(requests[0].url, popular[0].repo);
   assert.equal(requests[0].ignore_version_check, false);
   assert.equal(popular[0].installed, true);
   assert.equal(state.installedCount.value, 1);
-  await state.installSelected();
+  await state.finish();
   assert.equal(requests.length, 1);
 });
 
@@ -157,16 +159,16 @@ test('community installation validates first and preserves rejected or incompati
   });
   await state.loadPlugins();
   state.selected.value = [url];
-  await state.installSelected();
+  await state.finish();
   assert.equal(installs, 0);
   assert.equal(state.plugins.value[0].error, 'Invalid repository');
   valid = true;
-  await state.installSelected();
+  await state.finish();
   assert.equal(state.plugins.value[0].error, 'Unsupported version');
   assert.equal(state.plugins.value[0].installed, false);
   assert.deepEqual(Array.from(state.selected.value), [url]);
   compatible = true;
-  await state.installSelected();
+  await state.finish();
   assert.equal(validations, 3);
   assert.equal(installs, 2);
   assert.equal(state.plugins.value[0].installed, true);
@@ -185,11 +187,20 @@ test('trial opens embedded ChatUI automatically and keeps it mounted when revisi
   assert.match(source, /\.guide-chat :deep\(\.input-container\) \{ width: 100% !important; max-width: 100% !important; margin-inline: 0 !important;/);
 });
 
+test('execution status indicators share a fixed-size prepend container and spacing', () => {
+  const source = readFileSync(new URL('../src/components/OnboardingSetup.vue', import.meta.url), 'utf8');
+  const prepend = source.split('<template #prepend>')[1].split('</template>')[0];
+  assert.match(prepend, /<v-avatar size="24" rounded="0">[\s\S]*<v-progress-circular[\s\S]*<v-icon[\s\S]*<\/v-avatar>/);
+  assert.match(prepend, /<v-icon v-else size="24"/);
+  assert.doesNotMatch(prepend, /class="m[re]-/);
+});
+
 test('all primary footer actions use Next while retaining their handlers', () => {
   const source = readFileSync(new URL('../src/components/OnboardingSetup.vue', import.meta.url), 'utf8');
   const footer = source.split('<footer class="guide-actions">')[1].split('</footer>')[0];
-  for (const handler of ['installSelected', 'nextStep', 'finish']) {
+  for (const handler of ['showWelcome', 'nextStep', 'finish\\(\\)']) {
     assert.match(footer, new RegExp(`@click="${handler}">\\s*\\{\\{ tm\\('guide.next'\\) \\}\\}`));
+    assert.match(footer, new RegExp(`<v-btn[^>]*append-icon="mdi-arrow-right"[^>]*@click="${handler}">`));
   }
   assert.match(footer, /tm\('guide.back'\)/);
   assert.match(footer, /tm\('guide.skipAll'\)/);
@@ -230,13 +241,19 @@ test('onboarding reuses market cards and the settings switch, with the title bes
   const guide = read('components/OnboardingSetup.vue');
   assert.match(guide, /<MarketPluginCard/);
   assert.match(guide, /#install-action/);
-  assert.doesNotMatch(guide, /<v-list-item/);
+  const pluginStep = guide.split('<v-window-item :value="5">')[1].split('</v-window-item>')[0];
+  assert.doesNotMatch(pluginStep, /<v-list-item/);
   assert.match(read('components/extension/MarketPluginCard.vue'), /<slot name="install-action">[\s\S]*handleInstall\(plugin\)/);
   assert.match(read('components/OnboardingComputer.vue'), /<v-switch[\s\S]*inset density="compact" hide-details/);
   const header = read('views/authentication/auth/SetupPage.vue').split('class="setup-brand"')[1].split('</div>')[0];
   assert.match(header, /setup-wordmark/);
   assert.match(header, /<h1.*guide.title/);
-  assert.match(guide, /\.guide-content \{ width: 100%; padding: 32px 0 24px/);
+  assert.match(guide, /\.guide-content \{ width: 100%; padding: 16px 0 24px/);
+  assert.match(guide, /padding: 8px 0 max\(8px, env\(safe-area-inset-bottom\)\)/);
+  const page = read('views/authentication/auth/SetupPage.vue');
+  assert.match(page, /padding: 16px 20px 0/);
+  assert.match(page, /\.setup-card--onboarding > \.v-card-title \{ flex-shrink: 0; padding-bottom: 24px;/);
+  assert.match(read('components/OnboardingModel.vue'), /\.model-advanced :deep\(\.property-info\), \.model-advanced :deep\(\.config-input\) \{ flex: 0 0 100%; max-width: 100%; padding: 0;/);
 });
 
 test('market-card selection is manual and locked while installing or already installed', async () => {
@@ -278,13 +295,13 @@ test('partial failures stay selected; retry skips successes and never overrides 
   await state.loadPlugins();
   state.step.value = 5;
   state.selected.value = [repo('first'), repo('second')];
-  await state.installSelected();
+  await state.finish();
   assert.equal(state.step.value, 5);
   assert.equal(state.emitted.length, 0);
   assert.equal(state.plugins.value[0].error, 'Unsupported version');
   assert.equal(state.plugins.value[1].installed, true);
   fail = false;
-  await state.installSelected();
+  await state.finish();
   assert.equal(state.step.value, 5);
   assert.equal(state.emitted.length, 0);
   assert.equal(state.installedCount.value, 2);
@@ -301,9 +318,9 @@ test('an in-flight install blocks duplicate requests, dismissal and route change
   } });
   await state.loadPlugins();
   state.selected.value = [repo('first')];
-  const pending = state.installSelected();
+  const pending = state.finish();
   await new Promise(setImmediate);
-  await state.installSelected();
+  await state.finish();
   state.close();
   assert.equal(requests, 1);
   assert.equal(state.leave(), false);
@@ -338,23 +355,30 @@ test('model form failure stays in place; success selects the saved model instead
   assert.equal(state.selectedModel.value, 'chosen');
 });
 
-function modelSetup(overrides = {}, api = {}) {
+function modelSetup(overrides = {}, api = {}, profileApi = {}) {
   const source = readFileSync(new URL('../src/components/OnboardingModel.vue', import.meta.url), 'utf8')
     .split('<script setup lang="ts">')[1].split('</script>')[0];
   const ast = ts.createSourceFile('model.ts', source, ts.ScriptTarget.Latest, true);
   const calls = [];
+  const watchers = [];
   const state = {
     selectedProviderSource: ref({ id: 'source' }), editableProviderSource: ref({}),
     availableModels: ref([]), displayedProviderSources: ref([]), availableSourceTypes: ref([]),
-    loadingModels: ref(false), isSourceModified: ref(true), sourceProviders: ref([]),
+    loadingSources: ref(false), loadingModels: ref(false), isSourceModified: ref(true), sourceProviders: ref([]), providers: ref([]),
+    selectProviderSource: source => {
+      state.selectedProviderSource.value = source;
+      state.sourceProviders.value = state.providers.value.filter(provider => provider.provider_source_id === source.id);
+      state.isSourceModified.value = false;
+    },
     saveProviderSource: async () => { calls.push('source'); return true; },
     buildModelProviderConfig: name => ({ id: `source/${name}`, provider_source_id: 'source', model: name, enable: true }),
     loadConfig: async () => { calls.push('reload'); },
     ...overrides,
   };
   const context = vm.createContext({
-    computed, ref, watch() {}, defineProps() {}, defineEmits: () => () => {}, defineExpose() {},
+    computed, ref, watch: (source, callback) => watchers.push({ source, callback }), defineProps() {}, defineEmits: () => () => {}, defineExpose() {},
     useModuleI18n: () => ({ tm: key => key }), useProviderSources: () => state,
+    configProfileApi: { get: async () => ok({ config: {} }), ...profileApi },
     providerApi: {
       createInSource: async (id, config) => { calls.push(['create', id, config]); return ok({}); },
       update: async (id, config) => { calls.push(['update', id, config]); return ok({}); },
@@ -363,8 +387,82 @@ function modelSetup(overrides = {}, api = {}) {
   });
   const body = ast.statements.filter(node => !ts.isImportDeclaration(node)).map(node => node.getText(ast)).join('\n');
   vm.runInContext(ts.transpile(body, { target: ts.ScriptTarget.ES2020 }), context);
-  return { ...vm.runInContext('({ save, model, error, ready })', context), calls };
+  return { ...state, ...vm.runInContext('({ save, choose, choice, model, error, ready, loadingDefault })', context), calls, watchers };
 }
+
+test('existing default model and its source are prefilled without writes or remote model fetching', async () => {
+  const state = modelSetup({
+    selectedProviderSource: ref(null),
+    displayedProviderSources: ref([{ id: 'other' }, { id: 'preferred' }]),
+    providers: ref([
+      { id: 'first', model: 'first-model', provider_source_id: 'other' },
+      { id: 'default', model: 'default-model', provider_source_id: 'preferred' },
+    ]),
+  }, {}, { get: async () => ok({ config: { agent_runner: { config: { model: { provider_id: 'default' } } } } }) });
+  const initialize = state.watchers.find(watcher => watcher.source === state.loadingSources).callback;
+  await initialize(false, true, () => {});
+  assert.equal(state.choice.value, 'source:preferred');
+  assert.equal(state.model.value, 'default-model');
+  assert.equal(state.ready.value, true);
+  assert.equal(await state.save(), 'default');
+  assert.deepEqual(state.calls, []);
+});
+
+test('automatic model selection excludes disabled sources, disabled models and non-chat sources', async () => {
+  const state = modelSetup({
+    selectedProviderSource: ref(null),
+    displayedProviderSources: ref([{ id: 'disabled-source', enable: false }, { id: 'chat' }]),
+    providers: ref([
+      { id: 'disabled-source-model', model: 'bad', provider_source_id: 'disabled-source' },
+      { id: 'disabled-model', model: 'bad', provider_source_id: 'chat', enable: false },
+      { id: 'embedding-model', model: 'bad', provider_source_id: 'embedding' },
+      { id: 'usable', model: 'good', provider_source_id: 'chat' },
+    ]),
+  });
+  await state.watchers.find(watcher => watcher.source === state.loadingSources).callback(false, true, () => {});
+  assert.equal(state.model.value, 'good');
+  assert.equal(state.ready.value, true);
+  assert.deepEqual(state.calls, []);
+});
+
+test('missing configured defaults are not silently replaced with another model', async () => {
+  const state = modelSetup({
+    selectedProviderSource: ref(null), displayedProviderSources: ref([{ id: 'source' }]),
+    providers: ref([{ id: 'other', model: 'other', provider_source_id: 'source' }]),
+  }, {}, { get: async () => ok({ config: { agent_runner: { config: { model: { provider_id: 'missing' } } } } }) });
+  await state.watchers.find(watcher => watcher.source === state.loadingSources).callback(false, true, () => {});
+  assert.equal(state.choice.value, '');
+  assert.equal(state.ready.value, false);
+});
+
+test('late default responses cannot replace manual choices or leave loading stuck after cleanup', async () => {
+  for (const invalidate of [false, true]) {
+    let resolve, cleanup;
+    const state = modelSetup({
+      displayedProviderSources: ref([{ id: 'source' }]),
+      providers: ref([{ id: 'existing', model: 'saved', provider_source_id: 'source' }]),
+    }, {}, { get: () => new Promise(done => { resolve = done; }) });
+    const pending = state.watchers.find(watcher => watcher.source === state.loadingSources).callback(false, true, fn => { cleanup = fn; });
+    assert.equal(state.loadingDefault.value, true);
+    if (invalidate) cleanup();
+    else { state.choice.value = 'template:manual'; state.model.value = 'manual'; }
+    resolve(ok({ config: {} }));
+    await pending;
+    assert.equal(state.loadingDefault.value, false);
+    assert.equal(state.model.value, invalidate ? '' : 'manual');
+  }
+});
+
+test('default lookup failure is visible and does not mark the model ready', async () => {
+  const state = modelSetup({
+    selectedProviderSource: ref(null), displayedProviderSources: ref([{ id: 'source' }]),
+    providers: ref([{ id: 'existing', model: 'saved', provider_source_id: 'source' }]),
+  }, {}, { get: async () => { throw new Error('Unavailable'); } });
+  await state.watchers.find(watcher => watcher.source === state.loadingSources).callback(false, true, () => {});
+  assert.equal(state.error.value, 'Unavailable');
+  assert.equal(state.loadingDefault.value, false);
+  assert.equal(state.ready.value, false);
+});
 
 test('focused model form saves credentials and model together, trimming the model ID', async () => {
   const state = modelSetup();
@@ -454,6 +552,39 @@ test('platform metadata failures can be retried without marking configuration co
   await state.loadPlatforms();
   assert.equal(state.platformReady.value, true);
   assert.equal(state.configError.value, '');
+  fail = true;
+  await state.loadPlatforms();
+  assert.equal(state.platformReady.value, false);
+});
+
+test('existing adapters are listed and an enabled adapter makes Next ready without creating another', async () => {
+  const platforms = [
+    { id: 'qq-main', type: 'aiocqhttp', enable: true },
+    { id: 'telegram-backup', type: 'telegram', enable: false },
+  ];
+  const state = setup({}, { systemConfigApi: { runtime: async () => ok({ config: { platform: platforms } }) } });
+  await state.loadPlatforms();
+  assert.deepEqual(Array.from(state.configuredPlatforms.value, platform => platform.id), ['qq-main', 'telegram-backup']);
+  assert.equal(state.platformReady.value, true);
+  state.step.value = 4;
+  await state.nextStep();
+  assert.equal(state.step.value, 5);
+  const source = readFileSync(new URL('../src/components/OnboardingSetup.vue', import.meta.url), 'utf8');
+  assert.match(source, /v-for="platform in configuredPlatforms"/);
+  assert.match(source, /:title="platform.id" :subtitle="platform.type"/);
+  assert.match(source, /guide.adapterEnabled/);
+  assert.match(source, /guide.adapterDisabled/);
+});
+
+test('disabled-only and malformed adapter configurations do not count as ready', async () => {
+  for (const platform of [[{ id: 'disabled', type: 'telegram', enable: false }], [], {}, [null, {}]]) {
+    const state = setup({}, { systemConfigApi: { runtime: async () => ok({ config: { platform } }) } });
+    await state.loadPlatforms();
+    assert.equal(state.platformReady.value, false);
+    state.step.value = 4;
+    await state.nextStep();
+    assert.equal(state.step.value, 4);
+  }
 });
 
 test('only successful account setup continues onboarding; login and configured instances keep their destinations', async () => {
@@ -593,8 +724,10 @@ test('skipping never saves permissions; finish stays in place on failure and blo
   const skipped = setup();
   skipped.step.value = 6;
   skipped.computerForm.value = { ready: true, save: () => { throw new Error('Must not save on skip'); } };
-  skipped.skipStep();
-  assert.deepEqual(skipped.emitted, ['/dashboard/default']);
+  await skipped.skipStep();
+  assert.deepEqual(skipped.emitted, []);
+  assert.equal(skipped.settingsStatus.value, 'skipped');
+  assert.equal(skipped.applyReady.value, true);
   assert.equal(skipped.completed.value, false);
   const state = setup();
   state.step.value = 2;
@@ -616,13 +749,108 @@ test('skipping never saves permissions; finish stays in place on failure and blo
   let saves = 0;
   state.computerForm.value = { ready: true, save: async () => { saves++; return true; } };
   await state.finish();
-  assert.equal(state.completed.value, true);
+  assert.equal(state.completed.value, false);
+  assert.equal(state.applyReady.value, true);
   assert.equal(state.emitted.length, 0);
   assert.equal(state.leave(), true);
   await state.finish();
   assert.equal(saves, 1);
+  state.showWelcome();
+  assert.equal(state.completed.value, true);
   state.close();
   assert.deepEqual(state.emitted, ['/dashboard/default']);
+});
+
+test('plugin selection survives revisiting the market and installs only after step six', async () => {
+  const requests = [];
+  const state = setup({ installGithub: async body => { requests.push(body.url); return ok({}); } });
+  await state.loadPlugins();
+  state.selected.value = [repo('first')];
+  await state.loadPlugins();
+  assert.deepEqual(Array.from(state.selected.value), [repo('first')]);
+  state.step.value = 5;
+  await state.nextStep();
+  assert.equal(state.step.value, 6);
+  assert.equal(requests.length, 0);
+  await state.finish();
+  assert.equal(state.applying.value, true);
+  assert.equal(state.completed.value, false);
+  assert.deepEqual(requests, [repo('first')]);
+  assert.deepEqual(Array.from(state.applyTasks.value, task => task.status), ['done', 'done']);
+  state.showWelcome();
+  assert.equal(state.completed.value, true);
+});
+
+test('skipping plugins clears the queue; skipping permissions still installs selected plugins without granting access', async () => {
+  for (const skipPlugins of [true, false]) {
+    const requests = [];
+    const state = setup({ installGithub: async body => { requests.push(body.url); return ok({}); } });
+    await state.loadPlugins();
+    state.selected.value = [repo('first')];
+    state.step.value = 5;
+    if (skipPlugins) await state.skipStep();
+    else await state.nextStep();
+    state.computerForm.value = { ready: false, save: () => { throw new Error('Must not save skipped permissions'); } };
+    await state.skipStep();
+    assert.deepEqual(requests, skipPlugins ? [] : [repo('first')]);
+    assert.equal(state.settingsStatus.value, 'skipped');
+    assert.equal(state.applyReady.value, true);
+  }
+});
+
+test('apply failures stay visible, block the welcome screen and retry only unfinished work', async () => {
+  let saves = 0;
+  let rejected = true;
+  const requests = [];
+  const state = setup({ installGithub: async body => {
+    requests.push(body.url);
+    return body.url === repo('second') && rejected ? { data: { status: 'error', message: 'Install rejected' } } : ok({});
+  } });
+  await state.loadPlugins();
+  state.selected.value = [repo('first'), repo('second')];
+  state.computerForm.value = { ready: true, save: async () => { saves++; throw new Error('Settings rejected'); } };
+  await state.finish();
+  assert.equal(state.settingsError.value, 'Settings rejected');
+  assert.equal(requests.length, 0);
+  state.showWelcome();
+  assert.equal(state.completed.value, false);
+  state.computerForm.value = { ready: true, save: async () => { saves++; return true; } };
+  await state.finish();
+  assert.deepEqual(Array.from(state.applyTasks.value, task => task.status), ['done', 'done', 'error']);
+  assert.equal(state.applyTasks.value[2].error, 'Install rejected');
+  state.showWelcome();
+  assert.equal(state.completed.value, false);
+  rejected = false;
+  await state.finish();
+  assert.deepEqual(requests, [repo('first'), repo('second'), repo('second')]);
+  assert.equal(saves, 2);
+  assert.equal(state.applyReady.value, true);
+});
+
+test('skipped permissions remain skipped when retrying a plugin failure, even without loaded permissions', async () => {
+  let fail = true;
+  const state = setup({ installGithub: async () => fail ? { data: { status: 'error', message: 'Offline' } } : ok({}) });
+  await state.loadPlugins();
+  state.selected.value = [repo('first')];
+  state.step.value = 6;
+  state.computerForm.value = { ready: false, save: () => { throw new Error('Must remain skipped'); } };
+  await state.skipStep();
+  assert.equal(state.applyReady.value, false);
+  fail = false;
+  await state.finish();
+  assert.equal(state.applyReady.value, true);
+  assert.equal(state.settingsStatus.value, 'skipped');
+});
+
+test('welcome SVG turns once without changing layout and respects reduced motion', () => {
+  const source = readFileSync(new URL('../src/components/OnboardingWelcome.vue', import.meta.url), 'utf8');
+  assert.match(source, /import logo from '\/favicon.svg'/);
+  assert.match(source, /class="welcome-logo" width="72" height="72" alt=""/);
+  assert.match(source, /animation: welcome-logo-turn 2\.8s cubic-bezier/);
+  assert.match(source, /rotate\(-360deg\)/);
+  assert.match(source, /100% \{ opacity: 1; transform: rotate\(0deg\) scale\(1\); \}/);
+  assert.match(source, /@media \(prefers-reduced-motion: reduce\)\s*\{\s*\.welcome-logo \{ animation: none; \}/);
+  assert.doesNotMatch(source, /infinite/);
 });
 
 test('welcome celebrates from both sides once, respects reduced motion and cleans up its canvas', () => {
