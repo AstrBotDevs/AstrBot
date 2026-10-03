@@ -157,7 +157,15 @@
               <template #title-extra>
                 <div class="d-flex align-center ga-1">
                   <v-chip
-                    v-if="skill.preset || skill.source_type === 'sandbox_only'"
+                    v-if="skillSourceChip(skill)"
+                    size="x-small"
+                    variant="tonal"
+                    :color="skillSourceChip(skill).color"
+                  >
+                    {{ skillSourceChip(skill).text }}
+                  </v-chip>
+                  <v-chip
+                    v-if="skill.preset"
                     size="x-small"
                     variant="tonal"
                     color="secondary"
@@ -1157,6 +1165,29 @@ export default {
       isPluginProvidedSkill(skill) && skill?.plugin_active === false;
     const isReadOnlySourceSkill = (skill) =>
       isSandboxPresetSkill(skill) || isPluginProvidedSkill(skill);
+    // Resolve the origin chip for a skill. Plugin skills prefer the plugin's
+    // display name, then its internal source label / name.
+    const skillSourceChip = (skill) => {
+      if (!skill) return null;
+      if (isPluginProvidedSkill(skill)) {
+        const pluginName =
+          skill.plugin_display_name ||
+          skill.source_label ||
+          skill.plugin_name ||
+          "";
+        return {
+          text: tm("skills.sourcePlugin", { plugin: pluginName }),
+          color: "primary",
+        };
+      }
+      if (skill.source_type === "both") {
+        return { text: tm("skills.sourceBoth"), color: "secondary" };
+      }
+      if (skill.source_type === "sandbox_only") {
+        return { text: tm("skills.sourceSandboxOnly"), color: "secondary" };
+      }
+      return { text: tm("skills.sourceLocalOnly"), color: undefined };
+    };
     const deletableSkills = computed(() =>
       skills.value.filter((skill) => !isReadOnlySourceSkill(skill)),
     );
@@ -2177,6 +2208,7 @@ export default {
       isPluginProvidedSkill,
       isInactivePluginSkill,
       isReadOnlySourceSkill,
+      skillSourceChip,
     };
   },
 };
