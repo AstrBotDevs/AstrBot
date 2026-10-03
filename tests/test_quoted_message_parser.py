@@ -424,6 +424,58 @@ async def test_extract_quoted_message_images_fallback_resolve_file_id_with_get_i
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("refs", "expected_names"),
+    [
+        (["first-id", "https://img.example.com/second.jpg"], ["first", "second"]),
+        (
+            [
+                "https://img.example.com/second.jpg",
+                "first-id",
+                "https://img.example.com/third.jpg",
+            ],
+            ["second", "first", "third"],
+        ),
+        (
+            [
+                "first-id",
+                "https://img.example.com/second.jpg",
+                "https://img.example.com/first.jpg",
+                "first-id",
+            ],
+            ["first", "second"],
+        ),
+    ],
+)
+async def test_extract_quoted_images_preserves_mixed_reference_order(
+    refs: list[str], expected_names: list[str]
+) -> None:
+    """Resolving a platform image ID must not move it behind later URL images."""
+    reply = Reply(id="mixed-images", chain=None, message_str="")
+    event = _make_event(
+        reply,
+        responses={
+            ("get_msg", "mixed-images"): {
+                "data": {
+                    "message": [
+                        {"type": "image", "data": {"file": ref}} for ref in refs
+                    ]
+                }
+            }
+        },
+        param_responses={
+            ("get_image", (("file", "first-id"),)): {
+                "data": {"url": "https://img.example.com/first.jpg"}
+            }
+        },
+    )
+
+    images = await extract_quoted_message_images(event)
+
+    assert images == [f"https://img.example.com/{name}.jpg" for name in expected_names]
+
+
+@pytest.mark.asyncio
 async def test_extract_quoted_message_images_deduplicates_across_sources():
     dup_url = "https://img.example.com/dup.jpg"
     chain_only_url = "https://img.example.com/only-chain.jpg"
