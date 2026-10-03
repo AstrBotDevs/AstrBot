@@ -39,10 +39,10 @@ def test_anthropic_extract_usage_without_cache_breakpoints():
     assert usage.output == 10
 
 
-def test_anthropic_extract_usage_none_returns_empty():
+def test_anthropic_extract_usage_none_is_unknown():
     provider = _provider()
 
-    assert provider._extract_usage(None) == TokenUsage()
+    assert provider._extract_usage(None) is None
 
 
 def test_anthropic_update_usage_counts_cache_creation_input():

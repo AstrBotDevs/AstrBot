@@ -123,6 +123,37 @@
               <div class="card-label">{{ t('modelTotal.title', { range: rangeLabel }) }}</div>
               <div class="token-total-value">{{ formatNumber(providerStats?.range_total_tokens ?? 0) }} <span style="font-size: 18px;">{{ t('units.tokens') }}</span></div>
               <div class="card-note">{{ t('modelTotal.callCount', { count: formatNumber(providerStats?.range_total_calls ?? 0) }) }}</div>
+              <div class="card-note call-breakdown">
+                {{ t('modelTotal.callBreakdown', {
+                  agent: formatNumber(providerStats?.range_call_counts?.agent ?? 0),
+                  provider: formatNumber(providerStats?.range_call_counts?.provider ?? 0),
+                  test: formatNumber(providerStats?.range_call_counts?.test ?? 0),
+                  other: formatNumber(providerStats?.range_call_counts?.other ?? 0)
+                }) }}
+              </div>
+              <div class="card-note">{{ t('modelTotal.tokenBreakdown', {
+                input: formatNumber(providerStats?.range_usage?.input_other ?? 0),
+                cached: formatNumber(providerStats?.range_usage?.input_cached ?? 0),
+                output: formatNumber(providerStats?.range_usage?.output ?? 0)
+              }) }}</div>
+              <div class="card-note">{{ t('modelTotal.usageCoverage', {
+                coverage: rangeUsageCoverageLabel,
+                partial: formatNumber(providerStats?.range_usage?.partial_calls ?? 0),
+                missing: formatNumber(providerStats?.range_usage?.missing_calls ?? 0)
+              }) }}</div>
+              <div class="card-note">{{ t('modelTotal.recordedHistory', {
+                newTokens: formatNumber(providerStats?.range_usage?.reported_tokens ?? 0),
+                legacyTokens: formatNumber(providerStats?.range_usage?.legacy_tokens ?? 0)
+              }) }}</div>
+              <div class="card-note">
+                {{ t('modelTotal.quotaNote') }}
+                <v-tooltip location="top" max-width="420">
+                  <template #activator="{ props }">
+                    <v-icon v-bind="props" size="16" :aria-label="t('modelTotal.scopeLabel')">mdi-information-outline</v-icon>
+                  </template>
+                  {{ t('modelTotal.scopeNote') }}
+                </v-tooltip>
+              </div>
               <div class="token-meta-list">
                 <div class="token-meta-item">
                   <span>{{ t('modelTotal.avgTtft') }}</span>
@@ -170,25 +201,37 @@
         <section class="stat-card provider-list-card">
           <div class="card-head compact">
             <div>
-              <div class="section-title">{{ t('sessionRanking.title', { range: rangeLabel }) }}</div>
+              <div class="section-title">{{ t('sessionRanking.title', { range: rangeLabel, dimension: t(`usageDimensions.${selectedUsageDimension}`) }) }}</div>
+            </div>
+            <div class="range-switch usage-dimensions">
+              <button
+                v-for="dimension in usageDimensionOptions"
+                :key="dimension"
+                type="button"
+                class="range-chip"
+                :class="{ active: selectedUsageDimension === dimension }"
+                @click="selectedUsageDimension = dimension"
+              >
+                {{ t(`usageDimensions.${dimension}`) }}
+              </button>
             </div>
           </div>
-          <div v-if="rangeUmoRanking.length" class="provider-list">
+          <div v-if="rangeUsageRanking.length" class="provider-list">
             <div
-              v-for="item in rangeUmoRanking"
-              :key="item.umo"
+              v-for="item in rangeUsageRanking"
+              :key="item.key ?? 'unknown'"
               class="provider-row"
             >
               <div class="provider-identity provider-identity--umo">
                 <img
-                  v-if="item.icon"
-                  :src="item.icon"
+                  v-if="item.platform_type && getPlatformIcon(item.platform_type)"
+                  :src="getPlatformIcon(item.platform_type)"
                   alt=""
                   class="platform-icon"
                 />
                 <MessageCircle v-else :size="18" aria-hidden="true" />
                 <v-tooltip
-                  v-if="item.display_name && item.display_name !== item.umo"
+                  v-if="item.key && item.display_name && item.display_name !== item.key"
                   location="top"
                   max-width="520"
                 >
@@ -200,39 +243,39 @@
                       {{ item.display_name }}
                     </span>
                   </template>
-                  <span class="umo-tooltip">{{ item.umo }}</span>
+                  <span class="umo-tooltip">{{ item.key }}</span>
                 </v-tooltip>
-                <span v-else class="provider-name">{{ item.umo }}</span>
-                <v-tooltip location="top">
+                <span v-else class="provider-name">{{ item.key ?? t(selectedUsageDimension === 'session' ? 'usageDimensions.unknownSession' : 'usageDimensions.unknownOther') }}</span>
+                <v-tooltip v-if="item.key && selectedUsageDimension === 'session'" location="top">
                   <template #activator="{ props }">
                     <button
                       v-bind="props"
                       type="button"
                       class="umo-copy-button"
-                      :class="{ 'umo-copy-button--copied': copiedUmo === item.umo }"
-                      :aria-label="copiedUmo === item.umo
+                      :class="{ 'umo-copy-button--copied': copiedUmo === item.key }"
+                      :aria-label="copiedUmo === item.key
                         ? globalT('core.common.copied')
                         : globalT('core.common.copy')"
-                      @click="copyUmo(item.umo)"
+                      @click="copyUmo(item.key)"
                     >
-                      <Check v-if="copiedUmo === item.umo" :size="15" />
+                      <Check v-if="copiedUmo === item.key" :size="15" />
                       <Copy v-else :size="15" />
                     </button>
                   </template>
                   <span>
-                    {{ failedCopyUmo === item.umo
+                    {{ failedCopyUmo === item.key
                       ? globalT('core.common.copyFailed')
-                      : copiedUmo === item.umo
+                      : copiedUmo === item.key
                         ? globalT('core.common.copied')
                         : globalT('core.common.copy') }}
                   </span>
                 </v-tooltip>
-                <v-tooltip location="top">
+                <v-tooltip v-if="selectedUsageDimension === 'session' && item.can_open_conversation && item.key" location="top">
                   <template #activator="{ props }">
                     <RouterLink
                       v-bind="props"
                       class="umo-conversation-link"
-                      :to="{ name: 'Conversation', query: { umo: item.umo } }"
+                      :to="{ name: 'Conversation', query: { umo: item.key } }"
                       :aria-label="t('sessionRanking.openConversation')"
                     >
                       <MessageSquareText :size="15" aria-hidden="true" />
@@ -245,6 +288,7 @@
             </div>
           </div>
           <div v-else class="empty-state">{{ t('empty.sessionCalls', { range: rangeLabel }) }}</div>
+          <div class="card-note pa-4">{{ t('usageDimensions.sameCallsNote') }}</div>
         </section>
       </template>
     </v-container>
@@ -263,6 +307,7 @@ import { copyToClipboard } from '@/utils/clipboard'
 import { getPlatformIcon } from '@/utils/platformUtils'
 
 type TokenRange = 1 | 3 | 7
+type UsageDimension = 'session' | 'source' | 'provider' | 'model' | 'plugin' | 'kind'
 type ChartSeries = Array<{
   name: string
   data: unknown[]
@@ -311,6 +356,37 @@ interface UmoRankingItem {
   tokens: number
 }
 
+interface ModelRankingItem {
+  provider_model: string
+  tokens: number
+}
+
+interface UsageSummary {
+  input_other: number
+  input_cached: number
+  output: number
+  reported_tokens: number
+  legacy_tokens: number
+  reported_calls: number
+  partial_calls: number
+  missing_calls: number
+  legacy_calls: number
+  new_calls: number
+  coverage: number | null
+}
+
+interface UsageRankingItem {
+  key: string | null
+  display_name: string | null
+  tokens: number
+  calls: number
+  missing_calls: number
+  legacy_calls: number
+  reported_tokens: number
+  can_open_conversation?: boolean
+  platform_type?: string | null
+}
+
 interface ProviderTokenStatsResponse {
   days: TokenRange
   trend: {
@@ -319,15 +395,29 @@ interface ProviderTokenStatsResponse {
   }
   range_total_tokens: number
   range_total_calls: number
+  range_call_counts: {
+    agent: number
+    provider: number
+    test: number
+    other?: number
+  }
+  range_token_totals: {
+    agent: number
+    provider: number
+    test: number
+  }
   range_avg_ttft_ms: number
   range_avg_duration_ms: number
   range_avg_tpm: number
   range_success_rate: number
   range_by_provider: ProviderRankingItem[]
   range_by_umo: UmoRankingItem[]
+  range_usage?: UsageSummary
+  range_breakdowns?: Record<UsageDimension, UsageRankingItem[]>
   today_total_tokens: number
   today_total_calls: number
   today_by_provider: ProviderRankingItem[]
+  today_usage?: UsageSummary
 }
 
 const { locale, t: globalT } = useI18n()
@@ -338,6 +428,8 @@ const errorMessage = ref('')
 const baseStats = ref<BaseStatsResponse | null>(null)
 const providerStats = ref<ProviderTokenStatsResponse | null>(null)
 const selectedRange = ref<TokenRange>(1)
+const selectedUsageDimension = ref<UsageDimension>('session')
+const usageDimensionOptions: UsageDimension[] = ['session', 'source', 'provider', 'model', 'plugin', 'kind']
 const currentTimeMs = ref(Date.now())
 const copiedUmo = ref('')
 const failedCopyUmo = ref('')
@@ -551,12 +643,14 @@ const providerTrendSeries = computed<ChartSeries>(() =>
 
 const rangeProviderRanking = computed(() => providerStats.value?.range_by_provider ?? [])
 
-const rangeUmoRanking = computed(() =>
-  (providerStats.value?.range_by_umo ?? []).slice(0, 10).map((item) => ({
-    ...item,
-    icon: getPlatformIcon(item.platform_type)
-  }))
+const rangeUsageRanking = computed(() =>
+  (providerStats.value?.range_breakdowns?.[selectedUsageDimension.value] ?? []).slice(0, 10)
 )
+
+const rangeUsageCoverageLabel = computed(() => {
+  const coverage = providerStats.value?.range_usage?.coverage
+  return coverage == null ? '—' : `${(coverage * 100).toFixed(1)}%`
+})
 
 const rangeAvgTtftLabel = computed(() =>
   formatDurationMs(providerStats.value?.range_avg_ttft_ms ?? 0)
@@ -1014,6 +1108,16 @@ onBeforeUnmount(() => {
   border: 1px solid var(--stats-border);
   border-radius: 999px;
   background: var(--stats-surface);
+}
+
+.usage-dimensions {
+  flex-wrap: wrap;
+  max-width: 100%;
+  border-radius: 18px;
+}
+
+.usage-dimensions .range-chip {
+  white-space: nowrap;
 }
 
 .stats-page.is-dark .range-switch {

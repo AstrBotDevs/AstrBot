@@ -45,7 +45,9 @@ class StarRequestSubStage(Stage):
                 continue
             logger.debug(f"plugin -> {md.name} - {handler.handler_name}")
             try:
-                wrapper = call_handler(event, handler.handler, **params)
+                wrapper = call_handler(
+                    event, handler.handler, _usage_plugin_id=md.name, **params
+                )
                 async for ret in wrapper:
                     yield ret
                 if event.is_stopped():

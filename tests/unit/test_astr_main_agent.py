@@ -1449,7 +1449,13 @@ class TestEnsurePersonaAndSkills:
         [(True, False), (True, True), (False, False)],
     )
     async def test_persona_empty_tools_keeps_local_runtime_builtin_tools(
-        self, mock_event, mock_context, mock_provider, role, allow_execution, allow_network
+        self,
+        mock_event,
+        mock_context,
+        mock_provider,
+        role,
+        allow_execution,
+        allow_network,
     ):
         module = ama
         persona = {"name": "locked", "prompt": "No tools.", "tools": []}
@@ -1791,6 +1797,10 @@ class TestBuildMainAgent:
         assert result is not None
         mock_runner.reset.assert_awaited_once()
         assert mock_runner.reset.await_args.kwargs["enforce_max_turns"] == 7
+        assert (
+            mock_runner.reset.await_args.kwargs["provider_stats_managed_by_agent"]
+            is True
+        )
 
     @pytest.mark.asyncio
     async def test_build_main_agent_passes_session_compression_to_runner(

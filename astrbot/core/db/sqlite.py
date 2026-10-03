@@ -97,6 +97,7 @@ class SQLiteDatabase(BaseDatabase):
             await self._ensure_persona_custom_error_message_column(conn)
             await self._ensure_platform_message_history_checkpoint_column(conn)
             await self._ensure_chatui_project_workspace_columns(conn)
+            await self._ensure_provider_stat_usage_columns(conn)
             await self._ensure_conversation_indexes(conn)
             # The table-level unique constraint already provides an index for UMO
             # lookups. Older schemas also created this redundant explicit index.
@@ -221,6 +222,37 @@ class SQLiteDatabase(BaseDatabase):
             )
         )
 
+    async def _ensure_provider_stat_usage_columns(self, conn) -> None:
+        """Add usage-ledger metadata without rewriting historical rows.
+
+        Args:
+            conn: Active SQLAlchemy connection used during SQLite initialization.
+        """
+        result = await conn.execute(text("PRAGMA table_info(provider_stats)"))
+        columns = {row[1] for row in result.fetchall()}
+        definitions = {
+            "request_id": "VARCHAR",
+            "trace_id": "VARCHAR",
+            "session_umo": "VARCHAR",
+            "source_id": "VARCHAR",
+            "plugin_id": "VARCHAR",
+            "request_kind": "VARCHAR",
+            "usage_status": "VARCHAR",
+            "origin_type": "VARCHAR",
+            "stat_version": "INTEGER NOT NULL DEFAULT 0",
+        }
+        for column, definition in definitions.items():
+            if column not in columns:
+                await conn.execute(
+                    text(f"ALTER TABLE provider_stats ADD COLUMN {column} {definition}")
+                )
+        await conn.execute(
+            text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS "
+                "ix_provider_stats_request_id_unique ON provider_stats (request_id)"
+            )
+        )
+
     # ====
     # Platform Statistics
     # ====
@@ -310,23 +342,46 @@ class SQLiteDatabase(BaseDatabase):
         end_time = float(stats.get("end_time", 0.0) or 0.0)
         time_to_first_token = float(stats.get("time_to_first_token", 0.0) or 0.0)
 
+        request_id = stats.get("request_id")
+        record = ProviderStat(
+            agent_type=agent_type,
+            status=status,
+            umo=umo,
+            conversation_id=conversation_id,
+            provider_id=provider_id,
+            provider_model=provider_model,
+            token_input_other=token_input_other,
+            token_input_cached=token_input_cached,
+            token_output=token_output,
+            start_time=start_time,
+            end_time=end_time,
+            time_to_first_token=time_to_first_token,
+            request_id=request_id,
+            trace_id=stats.get("trace_id"),
+            session_umo=stats.get("session_umo"),
+            source_id=stats.get("source_id"),
+            plugin_id=stats.get("plugin_id"),
+            request_kind=stats.get("request_kind"),
+            usage_status=stats.get("usage_status"),
+            origin_type=stats.get("origin_type"),
+            stat_version=int(stats.get("stat_version", 0)),
+        )
+
         async with self.get_db() as session:
             session: AsyncSession
             async with session.begin():
-                record = ProviderStat(
-                    agent_type=agent_type,
-                    status=status,
-                    umo=umo,
-                    conversation_id=conversation_id,
-                    provider_id=provider_id,
-                    provider_model=provider_model,
-                    token_input_other=token_input_other,
-                    token_input_cached=token_input_cached,
-                    token_output=token_output,
-                    start_time=start_time,
-                    end_time=end_time,
-                    time_to_first_token=time_to_first_token,
-                )
+                if request_id is not None:
+                    await session.execute(
+                        sqlite_insert(ProviderStat)
+                        .values(**record.model_dump(exclude={"id"}))
+                        .on_conflict_do_nothing(index_elements=["request_id"])
+                    )
+                    result = await session.execute(
+                        select(ProviderStat).where(
+                            ProviderStat.request_id == request_id
+                        )
+                    )
+                    return result.scalar_one()
                 session.add(record)
                 await session.flush()
                 await session.refresh(record)

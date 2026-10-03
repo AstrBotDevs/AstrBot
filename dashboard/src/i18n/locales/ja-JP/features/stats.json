@@ -60,6 +60,13 @@
   "modelTotal": {
     "title": "{range}のモデル呼び出し合計",
     "callCount": "合計 {count} 回",
+    "callBreakdown": "エージェント {agent} · 直接 {provider} · テスト {test} · その他 {other}",
+    "tokenBreakdown": "非キャッシュ入力 {input} · キャッシュ入力 {cached} · 出力 {output}",
+    "usageCoverage": "新規呼び出しの使用量記録率 {coverage} · 部分報告 {partial} 件 · 未報告 {missing} 件",
+    "recordedHistory": "新規報告 {newTokens} · 過去の記録 {legacyTokens}",
+    "quotaNote": "記録トークン数は OAuth サブスクリプションの使用量と異なります。過去の未記録分は復元できません。",
+    "scopeLabel": "集計範囲の説明",
+    "scopeNote": "呼び出し回数は観測可能な Provider 呼び出しを数え、SDK 内部の再試行は含みません。トークン数は応答の usage に基づきます。別のツール課金や同じアカウントを使う他のクライアントの消費量はローカル記録から復元できません。",
     "avgTtft": "最初のトークンまでの平均時間（TTFT）",
     "avgDuration": "平均応答時間",
     "avgTpm": "平均出力速度（TPM）",
@@ -69,8 +76,19 @@
     "title": "モデル使用量ランキング"
   },
   "sessionRanking": {
-    "title": "{range}のセッション別モデル使用量上位 10 件",
+    "title": "{range}の{dimension}別モデル使用量上位 10 件",
     "openConversation": "会話を見る"
+  },
+  "usageDimensions": {
+    "session": "セッション",
+    "source": "ソース",
+    "provider": "Provider",
+    "model": "モデル",
+    "plugin": "プラグイン",
+    "kind": "呼び出し種別",
+    "unknownSession": "セッション未関連付け",
+    "unknownOther": "不明",
+    "sameCallsNote": "各項目は同じ呼び出しの分類です。項目間の数値を合算しないでください。"
   },
   "empty": {
     "platformStats": "プラットフォーム別メッセージ統計データはありません。",

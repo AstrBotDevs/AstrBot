@@ -444,9 +444,9 @@ class ProviderAnthropic(Provider):
             sanitized
         )
 
-    def _extract_usage(self, usage: Usage | None) -> TokenUsage:
+    def _extract_usage(self, usage: Usage | None) -> TokenUsage | None:
         if usage is None:
-            return TokenUsage()
+            return None
         # https://docs.claude.com/en/docs/build-with-claude/prompt-caching#tracking-cache-performance
         # Anthropic's input_tokens excludes cache served reads AND writes, so
         # cache_creation_input_tokens must be added back into input_other to
@@ -627,7 +627,7 @@ class ProviderAnthropic(Provider):
         final_text = ""
         final_tool_calls = []
         id = None
-        usage = TokenUsage()
+        usage = None
         extra_body = self.provider_config.get("custom_extra_body", {})
         reasoning_content = ""
         reasoning_signature = ""
@@ -744,6 +744,8 @@ class ProviderAnthropic(Provider):
 
                 elif event.type == "message_delta":
                     if event.usage:
+                        if usage is None:
+                            usage = TokenUsage(is_partial=True)
                         self._update_usage(usage, event.usage)
 
         # 返回最终的完整结果
