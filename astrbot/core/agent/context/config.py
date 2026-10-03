@@ -33,3 +33,5 @@ class ContextConfig:
     """Custom token counting method. If None, the default method is used."""
     custom_compressor: ContextCompressor | None = None
     """Custom context compression method. If None, the default method is used."""
+    llm_compress_preserve_latest_round: bool = False
+    """Whether to preserve the latest complete user-assistant round exactly."""
