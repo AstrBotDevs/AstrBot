@@ -293,6 +293,9 @@ class ThirdPartyAgentSubStage(Stage):
         req.prompt = event.message_str
         if provider_wake_prefix and event.message_str.startswith(provider_wake_prefix):
             req.prompt = event.message_str[len(provider_wake_prefix) :]
+        if wake_word := event.get_extra("_wake_word"):
+            # 按 platform_settings.keep_wake_word_in_prompt 的配置原样补回唤醒词
+            req.prompt = f"{wake_word} {req.prompt}".strip()
         for comp in event.message_obj.message:
             if isinstance(comp, Image):
                 try:
