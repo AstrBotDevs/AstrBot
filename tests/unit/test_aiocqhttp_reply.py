@@ -10,12 +10,19 @@ OneBot 协议的 message 数组中。OneBot V11 标准只期望
 协议端（napcat/Lagrange）查找消息时失败。
 """
 
+from types import SimpleNamespace
+from typing import Any, cast
 from unittest.mock import AsyncMock
 
 import pytest
 
 import astrbot.core.message.components as Comp
-from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.message.message_event_result import (
+    MessageChain,
+    MessageEventResult,
+    ResultContentType,
+)
+from astrbot.core.pipeline.result_decorate.stage import ResultDecorateStage
 from astrbot.core.pipeline.respond.stage import (
     RespondStage,  # noqa: F401 — 预加载避免循环导入
 )
@@ -196,3 +203,102 @@ def test_reply_to_dict_matches_onebot_v11_format():
     assert actual == expected, (
         f"Reply.toDict() 输出不符合 OneBot V11 标准。\n期望: {expected}\n实际: {actual}"
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("platform", "quote_enabled", "include_unsupported_component", "should_quote"),
+    [
+        ("aiocqhttp", True, False, True),
+        ("telegram", True, False, False),
+        ("aiocqhttp", True, True, False),
+        ("aiocqhttp", False, False, False),
+    ],
+)
+async def test_dual_text_record_result_quote_eligibility(
+    platform: str,
+    quote_enabled: bool,
+    include_unsupported_component: bool,
+    should_quote: bool,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    stage = ResultDecorateStage()
+    stage.reply_prefix = ""
+    stage.content_safe_check_reply = False
+    stage.enable_segmented_reply = False
+    stage.only_llm_result = False
+    stage.show_reasoning = False
+    stage.tts_trigger_probability = 0
+    stage.reply_with_mention = True
+    stage.reply_with_quote = quote_enabled
+    stage.forward_threshold = 1000
+    stage.ctx = SimpleNamespace(
+        plugin_manager=SimpleNamespace(
+            context=SimpleNamespace(
+                get_using_tts_provider_async=AsyncMock(return_value=None),
+            ),
+        ),
+        astrbot_config={
+            "provider_tts_settings": {
+                "enable": False,
+                "use_file_service": False,
+                "dual_output": False,
+            },
+            "callback_api_base": "",
+            "t2i": False,
+        },
+    )
+    text = Comp.Plain("hello")
+    voice = Comp.Record(file="voice.wav", url="voice.wav", text="hello")
+    unsupported = Comp.At(qq="another-user")
+    chain = [text, voice, *([unsupported] if include_unsupported_component else [])]
+    original_chain = list(chain)
+    result = MessageEventResult(
+        chain=chain,
+        result_content_type=ResultContentType.LLM_RESULT,
+    )
+    event = SimpleNamespace(
+        plugins_name=None,
+        unified_msg_origin=f"{platform}:group-1",
+        message_obj=SimpleNamespace(message_id="user-message-1"),
+        get_result=lambda: result,
+        get_platform_name=lambda: platform,
+        get_message_type=lambda: "GroupMessage",
+        get_sender_id=lambda: "sender-1",
+        get_sender_name=lambda: "sender",
+        is_stopped=lambda: False,
+        get_extra=lambda *_args, **_kwargs: None,
+    )
+
+    async for _ in stage.process(cast(Any, event)):
+        pass
+
+    if not should_quote:
+        assert result.chain == original_chain
+        return
+
+    assert isinstance(result.chain[0], Comp.Reply)
+    assert result.chain[0].id == "user-message-1"
+    assert result.chain[1:] == original_chain
+    monkeypatch.setattr(
+        Comp.Record,
+        "convert_to_base64",
+        AsyncMock(return_value="YXVkaW8="),
+    )
+    segments = await AiocqhttpMessageEvent._parse_onebot_json(result)
+    assert segments == [
+        {"type": "reply", "data": {"id": "user-message-1"}},
+        {"type": "text", "data": {"text": "hello"}},
+        {"type": "record", "data": {"file": "base64://YXVkaW8="}},
+    ]
+
+    bot = AsyncMock()
+    await AiocqhttpMessageEvent.send_message(
+        bot=bot,
+        message_chain=MessageChain(result.chain),
+        event=None,
+        is_group=True,
+        session_id="123456",
+    )
+    bot.send_group_msg.assert_awaited_once()
+    assert bot.send_group_msg.call_args.kwargs["message"] == segments
