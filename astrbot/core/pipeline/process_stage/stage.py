@@ -6,13 +6,16 @@ from astrbot.core.star.star_handler import StarHandlerMetadata
 
 from ..context import PipelineContext
 from ..stage import Stage, register_stage
-from .method.agent_request import AgentRequestSubStage
-from .method.star_request import StarRequestSubStage
 
 
 @register_stage
 class ProcessStage(Stage):
     async def initialize(self, ctx: PipelineContext) -> None:
+        # Imported lazily: agent_request/star_request import Stage from this
+        # module at top level, so a module-level import here would form a cycle.
+        from .method.agent_request import AgentRequestSubStage
+        from .method.star_request import StarRequestSubStage
+
         self.ctx = ctx
         self.config = ctx.astrbot_config
         self.plugin_manager = ctx.plugin_manager
