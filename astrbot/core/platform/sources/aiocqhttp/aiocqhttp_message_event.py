@@ -95,6 +95,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         is_group: bool,
         session_id: str | None,
         messages: list[dict],
+        self_id: str | int | None = None,
     ) -> None:
         # session_id 必须是纯数字字符串
         session_id_int = (
@@ -103,6 +104,10 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         routing_params = {}
         if isinstance(event, Event) and event.get("self_id"):
             routing_params["self_id"] = event["self_id"]
+        elif self_id:
+            # 主动发送（send_by_session）时没有 event，用调用方提供的
+            # self_id 显式路由到对应的反向 WebSocket 连接（多连接场景必需）
+            routing_params["self_id"] = self_id
 
         if is_group and isinstance(session_id_int, int):
             await bot.send_group_msg(
@@ -131,6 +136,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         event: Event | None = None,
         is_group: bool = False,
         session_id: str | None = None,
+        self_id: str | int | None = None,
     ) -> None:
         """发送消息至 QQ 协议端（aiocqhttp）。
 
@@ -140,6 +146,8 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
             event (Event | None, optional): aiocqhttp 事件对象.
             is_group (bool, optional): 是否为群消息.
             session_id (str | None, optional): 会话 ID（群号或 QQ 号
+            self_id (str | int | None, optional): 目标 bot 的 self_id，
+                在缺少 event 时用于显式路由 API 调用。
 
         """
         # 转发消息、文件消息不能和普通消息混在一起发送
@@ -150,7 +158,9 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
             ret = await cls._parse_onebot_json(message_chain)
             if not ret:
                 return
-            await cls._dispatch_send(bot, event, is_group, session_id, ret)
+            await cls._dispatch_send(
+                bot, event, is_group, session_id, ret, self_id=self_id
+            )
             return
         for seg in message_chain.chain:
             if isinstance(seg, Node | Nodes):
@@ -165,20 +175,28 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                     payload["group_id"] = session_id
                     if isinstance(event, Event) and event.get("self_id"):
                         payload["self_id"] = event["self_id"]
+                    elif self_id:
+                        payload["self_id"] = self_id
                     await bot.call_action("send_group_forward_msg", **payload)
                 else:
                     payload["user_id"] = session_id
                     if isinstance(event, Event) and event.get("self_id"):
                         payload["self_id"] = event["self_id"]
+                    elif self_id:
+                        payload["self_id"] = self_id
                     await bot.call_action("send_private_forward_msg", **payload)
             elif isinstance(seg, File):
                 d = await cls._from_segment_to_dict(seg)
-                await cls._dispatch_send(bot, event, is_group, session_id, [d])
+                await cls._dispatch_send(
+                    bot, event, is_group, session_id, [d], self_id=self_id
+                )
             else:
                 messages = await cls._parse_onebot_json(MessageChain([seg]))
                 if not messages:
                     continue
-                await cls._dispatch_send(bot, event, is_group, session_id, messages)
+                await cls._dispatch_send(
+                    bot, event, is_group, session_id, messages, self_id=self_id
+                )
                 await asyncio.sleep(0.5)
 
     async def send(self, message: MessageChain) -> None:
