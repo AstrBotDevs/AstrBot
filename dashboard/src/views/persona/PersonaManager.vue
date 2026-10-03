@@ -30,7 +30,7 @@
               />
             </template>
             <v-list density="compact">
-              <v-list-item prepend-icon="mdi-upload" @click="triggerImport">
+              <v-list-item prepend-icon="mdi-upload" @click="openImportDialog">
                 <v-list-item-title>
                   {{ tm("buttons.import") }}
                 </v-list-item-title>
@@ -348,6 +348,69 @@
       </v-card>
     </v-dialog>
 
+    <!-- Import persona format description dialog -->
+    <v-dialog v-model="showImportDialog" max-width="640px">
+      <v-card>
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">
+          {{ tm("importDialog.title") }}
+        </v-card-title>
+        <v-card-text>
+          <p class="text-body-2 mb-3">
+            {{ tm("importDialog.description") }}
+          </p>
+
+          <v-table density="compact" class="import-fields-table mb-2">
+            <thead>
+              <tr>
+                <th>{{ tm("importDialog.fieldColumn") }}</th>
+                <th>{{ tm("importDialog.requiredColumn") }}</th>
+                <th>{{ tm("importDialog.notesColumn") }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>system_prompt</code></td>
+                <td>{{ tm("importDialog.required") }}</td>
+                <td>{{ tm("importDialog.systemPromptNote") }}</td>
+              </tr>
+              <tr>
+                <td><code>persona_id</code></td>
+                <td>{{ tm("importDialog.optional") }}</td>
+                <td>{{ tm("importDialog.personaIdNote") }}</td>
+              </tr>
+              <tr>
+                <td><code>begin_dialogs</code></td>
+                <td>{{ tm("importDialog.optional") }}</td>
+                <td>{{ tm("importDialog.beginDialogsNote") }}</td>
+              </tr>
+            </tbody>
+          </v-table>
+
+          <p class="text-body-2 mb-2">{{ tm("importDialog.exampleTitle") }}</p>
+          <pre class="system-prompt-content import-example">{{
+            importExampleJson
+          }}</pre>
+
+          <v-alert
+            class="mt-4"
+            type="warning"
+            variant="tonal"
+            density="compact"
+            :text="tm('importDialog.toolsSkillsWarning')"
+          />
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="showImportDialog = false">
+            {{ tm("buttons.cancel") }}
+          </v-btn>
+          <v-btn color="primary" variant="tonal" @click="confirmImport">
+            {{ tm("importDialog.chooseFile") }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- 创建文件夹对话框 -->
     <CreateFolderDialog
       v-model="showCreateFolderDialog"
@@ -511,6 +574,7 @@ export default defineComponent({
       // Persona 相关
       showPersonaDialog: false,
       showViewDialog: false,
+      showImportDialog: false,
       editingPersona: null as Persona | null,
       viewingPersona: null as Persona | null,
 
@@ -567,6 +631,17 @@ export default defineComponent({
         return null;
       };
       return findName(this.folderTree, this.currentFolderId);
+    },
+    importExampleJson(): string {
+      return JSON.stringify(
+        {
+          persona_id: "my_persona",
+          system_prompt: "You are a helpful assistant.",
+          begin_dialogs: ["Hello", "Hi! How can I help you?"],
+        },
+        null,
+        2,
+      );
     },
   },
   watch: {
@@ -751,6 +826,15 @@ export default defineComponent({
       }
     },
 
+    openImportDialog() {
+      this.showImportDialog = true;
+    },
+
+    confirmImport() {
+      this.showImportDialog = false;
+      this.triggerImport();
+    },
+
     triggerImport() {
       const input = this.$refs.importFileInput as HTMLInputElement;
       if (input) {
@@ -931,6 +1015,15 @@ export default defineComponent({
   white-space: pre-wrap;
   word-break: break-word;
   background: rgba(var(--v-theme-on-surface), 0.035);
+}
+
+.import-example {
+  max-height: 220px;
+  font-family: monospace;
+}
+
+.import-fields-table {
+  font-size: 0.875rem;
 }
 
 .dialog-content {
