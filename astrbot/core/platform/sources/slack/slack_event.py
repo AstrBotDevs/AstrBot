@@ -15,6 +15,7 @@ from astrbot.api.message_components import (
     Plain,
 )
 from astrbot.api.platform import Group, MessageMember
+from astrbot.core.utils.media_utils import MediaResolver
 
 
 class SlackMessageEvent(AstrMessageEvent):
@@ -67,12 +68,19 @@ class SlackMessageEvent(AstrMessageEvent):
                 "alt_text": "图片",
             }
         if isinstance(segment, File):
-            # upload file
-            url = segment.url or segment.file
-            response = await web_client.files_upload_v2(
-                file=url,
-                filename=segment.name or "file",
-            )
+            if segment.url and not segment.url.startswith(("http://", "https://")):
+                raise ValueError("Slack file URLs must use HTTP or HTTPS.")
+            source = segment.url or await segment.get_file()
+            if not source:
+                raise ValueError(
+                    "Slack file upload requires a URL or an existing file."
+                )
+            # Resolve remote files and clean only resolver-owned temporary files.
+            async with MediaResolver(source).as_path() as resolved:
+                response = await web_client.files_upload_v2(
+                    file=await asyncio.to_thread(resolved.path.read_bytes),
+                    filename=segment.name or "file",
+                )
             if not response["ok"]:
                 logger.error(f"Slack file upload failed: {response['error']}")
                 return {
