@@ -346,7 +346,6 @@ function getSpecialSubtype(value) {
           </v-col>
         </v-row>
 
-        <slot name="after-field" :field-key="itemKey" />
 
         <v-divider class="config-divider"
           v-if="hasVisibleEntriesAfter(getVisibleItemEntries(false), index)"></v-divider>

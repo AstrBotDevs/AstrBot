@@ -77,16 +77,7 @@
         :label="runnerSettingsTitle"
         :search-keyword="searchKeyword"
         :show-empty="!searchKeyword.trim()"
-      >
-        <template #after-field="{ fieldKey }">
-          <ModelParameters
-            v-if="fieldKey === 'agent_runner.config.model.provider_id'"
-            :provider-id="
-              configData.agent_runner?.config?.model?.provider_id || ''
-            "
-          />
-        </template>
-      </ConfigGroupTabs>
+      />
     </section>
 
     <ConfigGroupTabs
@@ -183,7 +174,6 @@
 import { computed, ref, watch } from "vue";
 import AstrBotLogo from "@/components/chat/ChatUILogo.vue";
 import ConfigGroupTabs from "@/components/config/ConfigGroupTabs.vue";
-import ModelParameters from "@/components/config/ModelParameters.vue";
 import { useModuleI18n } from "@/i18n/composables";
 
 const props = defineProps({
@@ -464,6 +454,5 @@ function confirmRunnerChange() {
     flex-direction: column;
     gap: 14px;
   }
-
 }
 </style>

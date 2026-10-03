@@ -362,6 +362,31 @@
         </div>
       </v-card>
     </v-menu>
+    <v-tooltip
+      v-if="
+        variant === 'config' &&
+        !multiple &&
+        typeof modelValue === 'string' &&
+        modelValue
+      "
+      location="top"
+    >
+      <template #activator="{ props: editTooltipProps }">
+        <v-btn
+          v-bind="editTooltipProps"
+          icon="mdi-cog-outline"
+          size="x-small"
+          variant="text"
+          :aria-label="`${providerTm(
+            'dialogs.config.editTitle',
+          )} ${modelValue}`"
+          :loading="editingProviderId === modelValue"
+          :disabled="Boolean(editingProviderId)"
+          @click.stop="editProvider({ id: modelValue })"
+        />
+      </template>
+      <span>{{ providerTm("dialogs.config.editTitle") }}</span>
+    </v-tooltip>
   </div>
 
   <v-overlay
@@ -889,6 +914,7 @@ defineExpose({ getCurrentSelection });
 
 .provider-select-menu--config {
   display: flex;
+  align-items: center;
   width: 100%;
   justify-content: flex-end;
 }

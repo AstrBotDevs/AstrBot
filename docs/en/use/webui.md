@@ -100,13 +100,13 @@ The built-in runner’s `Context` tab manages context and sanitization. `Capabil
 
 ![Context](./images/config-context-en.jpg)
 
-After explicitly selecting a chat model under `AI → Models`, use `Current model parameters` below it to edit temperature, maximum output Tokens, reasoning effort, and capabilities / modalities. Parameter editing is unavailable with automatic model selection. `Save model parameters` immediately applies changes to every profile using that model. Search and tab changes retain unsaved drafts within the current profile; save before switching models or profiles, or leaving or reloading the page. Model selection, fallback policy, and other profile settings still require `Save Configuration`.
+After explicitly selecting a chat model under `AI → Models`, click the gear beside its name to open the model editor. Use the custom parameters button inside the editor for optional request parameters such as temperature, token limits, and reasoning effort; add only parameters supported by the model and provider. Automatic model selection has no gear. Saving model settings immediately applies to every profile using that model; model selection and fallback policy still require `Save Configuration`.
 
-Unset parameters show presets without saving them just by viewing. Clear a number or reasoning effort to restore the provider default. Reasoning effort accepts model-specific values; token limits accept scientific notation (for example, `1e5` means `100000`). Providers that do not support custom request-body parameters disable these controls. Anthropic-compatible models require adaptive thinking to be enabled before editing reasoning effort. Full settings and fallback-model parameters are under `Providers → Chat → Configured models → Gear`.
+The former `AI → Models → Current model parameters` panel is now `AI → Models → Gear beside model name → Custom parameters`. `Providers → Chat → Configured models → Gear` opens the same editor.
 
 In a profile's chat-model and fallback-model selection menus, click the small gear beside a model to open its full settings. Clicking the gear preserves the selection and fallback order; saving model settings immediately affects every profile using that model.
 
-![Current model parameters](./images/config-model-parameters-en.png)
+![Model editing entry](./images/config-model-edit-en.png)
 
 Use this mapping to find relocated settings:
 

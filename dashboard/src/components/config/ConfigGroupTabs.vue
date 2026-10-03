@@ -22,11 +22,7 @@
         :iterable="configData"
         :search-keyword="searchKeyword"
         show-all-fields
-      >
-        <template #after-field="slotProps">
-          <slot name="after-field" v-bind="slotProps" />
-        </template>
-      </AstrBotConfigV4>
+      />
     </div>
     <p
       v-if="showEmpty && !Object.keys(displayedGroups).length"
