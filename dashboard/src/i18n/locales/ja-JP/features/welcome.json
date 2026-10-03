@@ -9,6 +9,11 @@
   "announcement": {
     "title": "お知らせ"
   },
+  "pythonWarning": {
+    "title": "Python のバージョンが低すぎます",
+    "description": "現在実行中の Python は {current} で、推奨される Python {required} 以上を満たしていません。古いバージョンでは一部の新機能やプラグインが利用できない場合があります。Python をアップグレードして AstrBot を再起動することをおすすめします。",
+    "unknownVersion": "不明なバージョン"
+  },
   "onboard": {
     "title": "クイックガイド",
     "subtitle": "このページで初期設定を完了できます。",
