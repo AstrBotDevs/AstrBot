@@ -50,3 +50,15 @@ def test_cleanup_once_noop_when_below_limit(tmp_path):
     cleaner.cleanup_once()
 
     assert file_path.exists()
+
+
+def test_cleanup_once_protects_recent_files(tmp_path):
+    temp_dir = tmp_path / "temp"
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    file_path = temp_dir / "active-upload.bin"
+    file_path.write_bytes(b"x" * 1000)
+
+    cleaner = TempDirCleaner(max_size_getter=lambda: "0.0008", temp_dir=temp_dir)
+    cleaner.cleanup_once()
+
+    assert file_path.exists()
