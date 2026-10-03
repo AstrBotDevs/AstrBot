@@ -873,6 +873,7 @@ export default defineComponent({
 
         // 检查 persona_id 是否已存在
         let personaId = data.persona_id || "imported_persona";
+        const basePersonaId = personaId;
         const listRes = await personaApi.list();
         const existingIds =
           listRes.data.status === "ok"
@@ -881,11 +882,11 @@ export default defineComponent({
 
         let renamed = false;
         if (existingIds.includes(personaId)) {
-          personaId = `${personaId}_imported`;
+          personaId = `${basePersonaId}_imported`;
           // 如果 _imported 也存在，加数字后缀
           let counter = 1;
           while (existingIds.includes(personaId)) {
-            personaId = `${data.persona_id}_imported_${counter}`;
+            personaId = `${basePersonaId}_imported_${counter}`;
             counter++;
           }
           renamed = true;
