@@ -1,6 +1,6 @@
 <template>
-  <transition name="workspace-panel-slide">
-    <aside v-if="modelValue" class="workspace-files-panel">
+  <transition name="chat-panel">
+    <aside v-if="modelValue" class="workspace-files-panel chat-side-panel">
       <div class="workspace-toolbar">
         <div class="workspace-filter">
           <Search :size="17" />
@@ -152,13 +152,22 @@
         <div v-else-if="fileError" class="workspace-preview-state">
           {{ fileError }}
         </div>
+        <div
+          v-else-if="highlightedContent"
+          class="workspace-preview-content"
+          v-html="highlightedContent"
+        />
         <pre
           v-else
           class="workspace-preview-content"
         ><code>{{ fileContent }}</code></pre>
       </section>
 
-      <v-dialog v-model="previewDialog" max-width="1000" width="calc(100% - 32px)">
+      <v-dialog
+        v-model="previewDialog"
+        max-width="1000"
+        width="calc(100% - 32px)"
+      >
         <v-card class="workspace-dialog-preview">
           <header class="workspace-dialog-preview-header">
             <div class="workspace-preview-path" :title="selectedFilePath">
@@ -190,6 +199,11 @@
           <div v-else-if="fileError" class="workspace-preview-state">
             {{ fileError }}
           </div>
+          <div
+            v-else-if="highlightedContent"
+            class="workspace-preview-content workspace-dialog-preview-content"
+            v-html="highlightedContent"
+          />
           <pre
             v-else
             class="workspace-preview-content workspace-dialog-preview-content"
@@ -201,7 +215,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import "@/components/chat/chatPanelTransition.css";
 import {
   ChevronDown,
   ChevronRight,
@@ -214,6 +228,8 @@ import {
   Search,
   X,
 } from "@lucide/vue";
+import { computed, ref, watch } from "vue";
+import { useTheme } from "vuetify";
 import { chatApi } from "@/api/v1";
 import { useModuleI18n } from "@/i18n/composables";
 
@@ -239,6 +255,7 @@ const emit = defineEmits<{
 }>();
 
 const { tm } = useModuleI18n("features/chat");
+const theme = useTheme();
 const rootEntries = ref<WorkspaceEntry[]>([]);
 const loadedProjectId = ref("");
 const rootLoading = ref(false);
@@ -246,6 +263,7 @@ const treeError = ref("");
 const filterQuery = ref("");
 const selectedFilePath = ref("");
 const fileContent = ref("");
+const highlightedContent = ref("");
 const fileLoading = ref(false);
 const fileError = ref("");
 const fileDownloading = ref(false);
@@ -259,11 +277,7 @@ const visibleEntries = computed(() => {
 
   const visit = (entries: WorkspaceEntry[], depth: number) => {
     entries.forEach((entry) => {
-      if (
-        !query ||
-        entry.type === "directory" ||
-        entry.name.toLocaleLowerCase().includes(query)
-      ) {
+      if (!query || entry.type === "directory" || entry.name.toLocaleLowerCase().includes(query)) {
         flattened.push({ entry, depth });
       }
       if (entry.type === "directory" && entry.expanded && entry.children) {
@@ -281,15 +295,36 @@ watch(
   async ([open, projectId], previous) => {
     if (!open || !projectId) return;
     const previousProjectId = previous?.[1];
-    if (
-      projectId !== previousProjectId ||
-      loadedProjectId.value !== projectId
-    ) {
+    if (projectId !== previousProjectId || loadedProjectId.value !== projectId) {
       resetPanel();
       await loadDirectory("");
     }
   },
   { immediate: true },
+);
+
+watch(
+  [fileContent, selectedFilePath, () => theme.global.current.value.dark],
+  async ([content, path, dark], _, onCleanup) => {
+    let cancelled = false;
+    onCleanup(() => {
+      cancelled = true;
+    });
+    highlightedContent.value = "";
+    if (!content || !path) return;
+
+    try {
+      const { getShikiHighlighter, renderShikiCode } = await import("@/utils/shiki");
+      const highlighter = await getShikiHighlighter();
+      if (cancelled) return;
+
+      const name = path.split("/").pop()?.toLowerCase() || "";
+      const language = name.startsWith("dockerfile.") ? "dockerfile" : name.split(".").pop();
+      highlightedContent.value = renderShikiCode(highlighter, content, language, dark ? "dark" : "light");
+    } catch (error) {
+      if (!cancelled) console.warn("Failed to highlight workspace file", error);
+    }
+  },
 );
 
 function close() {
@@ -338,13 +373,9 @@ async function loadDirectory(path: string, parent?: WorkspaceEntry) {
       return;
     }
     if (response.data?.status !== "ok") {
-      throw new Error(
-        response.data?.message || tm("workspaceFiles.loadFailed"),
-      );
+      throw new Error(response.data?.message || tm("workspaceFiles.loadFailed"));
     }
-    const entries = (
-      (response.data?.data?.entries || []) as WorkspaceEntry[]
-    ).map((entry) => ({ ...entry }));
+    const entries = ((response.data?.data?.entries || []) as WorkspaceEntry[]).map((entry) => ({ ...entry }));
     if (parent) {
       parent.children = entries;
     } else {
@@ -356,9 +387,7 @@ async function loadDirectory(path: string, parent?: WorkspaceEntry) {
       return;
     }
     treeError.value =
-      (error as any)?.response?.data?.message ||
-      (error as Error)?.message ||
-      tm("workspaceFiles.loadFailed");
+      (error as any)?.response?.data?.message || (error as Error)?.message || tm("workspaceFiles.loadFailed");
     if (parent) {
       parent.expanded = false;
     }
@@ -396,17 +425,12 @@ async function openEntry(entry: WorkspaceEntry) {
 
   fileLoading.value = true;
   try {
-    const response = await chatApi.getProjectWorkspaceFile(
-      projectId,
-      entry.path,
-    );
+    const response = await chatApi.getProjectWorkspaceFile(projectId, entry.path);
     if (generation !== fileGeneration.value || projectId !== props.projectId) {
       return;
     }
     if (response.data?.status !== "ok") {
-      throw new Error(
-        response.data?.message || tm("workspaceFiles.previewFailed"),
-      );
+      throw new Error(response.data?.message || tm("workspaceFiles.previewFailed"));
     }
     fileContent.value = response.data?.data?.content || "";
   } catch (error) {
@@ -414,9 +438,7 @@ async function openEntry(entry: WorkspaceEntry) {
       return;
     }
     fileError.value =
-      (error as any)?.response?.data?.message ||
-      (error as Error)?.message ||
-      tm("workspaceFiles.previewFailed");
+      (error as any)?.response?.data?.message || (error as Error)?.message || tm("workspaceFiles.previewFailed");
   } finally {
     if (generation === fileGeneration.value && projectId === props.projectId) {
       fileLoading.value = false;
@@ -425,19 +447,12 @@ async function openEntry(entry: WorkspaceEntry) {
 }
 
 async function downloadSelectedFile() {
-  if (
-    !props.projectId ||
-    !selectedFilePath.value ||
-    fileDownloading.value
-  ) {
+  if (!props.projectId || !selectedFilePath.value || fileDownloading.value) {
     return;
   }
   fileDownloading.value = true;
   try {
-    const response = await chatApi.downloadProjectWorkspaceFile(
-      props.projectId,
-      selectedFilePath.value,
-    );
+    const response = await chatApi.downloadProjectWorkspaceFile(props.projectId, selectedFilePath.value);
     const url = URL.createObjectURL(response.data);
     const anchor = document.createElement("a");
     anchor.href = url;
@@ -462,7 +477,8 @@ function formatSize(size: number) {
 
 <style scoped>
 .workspace-files-panel {
-  width: clamp(340px, 29vw, 440px);
+  --chat-side-panel-width: clamp(340px, 29vw, 440px);
+  width: var(--chat-side-panel-width);
   height: calc(100% - var(--chat-panel-top-offset, 0px));
   margin-top: var(--chat-panel-top-offset, 0px);
   border-left: 1px solid var(--chat-border, rgba(var(--v-border-color), 0.14));
@@ -472,19 +488,6 @@ function formatSize(size: number) {
   flex-direction: column;
   flex: 0 0 auto;
   min-width: 0;
-}
-
-.workspace-panel-slide-enter-active,
-.workspace-panel-slide-leave-active {
-  transition:
-    transform 0.2s ease,
-    opacity 0.2s ease;
-}
-
-.workspace-panel-slide-enter-from,
-.workspace-panel-slide-leave-to {
-  transform: translateX(100%);
-  opacity: 0;
 }
 
 .workspace-preview-header {
@@ -691,6 +694,15 @@ function formatSize(size: number) {
   line-height: 1.55;
   tab-size: 2;
   white-space: pre;
+}
+
+.workspace-preview-content :deep(pre),
+.workspace-preview-content :deep(code) {
+  margin: 0;
+  padding: 0;
+  font: inherit;
+  tab-size: inherit;
+  background: transparent !important;
 }
 
 .workspace-dialog-preview {

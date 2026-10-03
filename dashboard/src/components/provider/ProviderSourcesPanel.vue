@@ -2,7 +2,9 @@
   <div class="provider-sources-panel">
     <div class="provider-sources-head">
       <div class="provider-sources-head__copy">
-        <h3 class="provider-sources-title">{{ tm('providerSources.title') }}</h3>
+        <h3 class="provider-sources-title">
+          {{ title || tm("providerSources.title") }}
+        </h3>
       </div>
 
       <div class="provider-sources-controls">
@@ -16,15 +18,20 @@
             variant="solo-filled"
             flat
             hide-details
-            :placeholder="tm('providerSources.selectHint')"
+            :placeholder="selectHint || tm('providerSources.selectHint')"
             @update:model-value="selectSourceByValue"
-        >
-            <template #selection="{ item }">
+          >
+            <template #selection="{ internalItem: item }">
               <div class="provider-source-select-value">
                 <v-avatar size="22" rounded="lg" class="provider-source-avatar">
                   <v-img
                     v-if="item.raw.source?.provider"
                     :src="resolveSourceIcon(item.raw.source)"
+                    :class="{
+                      'provider-icon--monochrome': isMonochromeSourceIcon(
+                        item.raw.source,
+                      ),
+                    }"
                     alt="provider logo"
                     cover
                   ></v-img>
@@ -34,16 +41,22 @@
               </div>
             </template>
 
-            <template #item="{ props: itemProps, item }">
-              <v-list-item
-                v-bind="itemProps"
-                :subtitle="item.raw.subtitle"
-              >
+            <template #item="{ props: itemProps, internalItem: item }">
+              <v-list-item v-bind="itemProps" :subtitle="item.raw.subtitle">
                 <template #prepend>
-                  <v-avatar size="24" rounded="lg" class="provider-source-avatar me-2">
+                  <v-avatar
+                    size="24"
+                    rounded="lg"
+                    class="provider-source-avatar me-2"
+                  >
                     <v-img
                       v-if="item.raw.source?.provider"
                       :src="resolveSourceIcon(item.raw.source)"
+                      :class="{
+                        'provider-icon--monochrome': isMonochromeSourceIcon(
+                          item.raw.source,
+                        ),
+                      }"
                       alt="provider logo"
                       cover
                     ></v-img>
@@ -62,65 +75,56 @@
           variant="text"
           size="small"
           color="error"
-          :aria-label="tm('providerSources.delete')"
-          :title="tm('providerSources.delete')"
+          :aria-label="deleteLabel || tm('providerSources.delete')"
+          :title="deleteLabel || tm('providerSources.delete')"
           @click.stop="deleteSelectedSource"
         ></v-btn>
 
-        <StyledMenu>
-          <template #activator="{ props }">
-            <v-btn
-              v-bind="props"
-              prepend-icon="mdi-plus"
-              color="primary"
-              variant="text"
-              size="small"
-              rounded="xl"
-            >
-              {{ tm('providerSources.add') }}
-            </v-btn>
-          </template>
-
-          <v-list-item
-            v-for="sourceType in availableSourceTypes"
-            :key="sourceType.value"
-            class="styled-menu-item"
-            @click="emitAddSource(sourceType.value)"
-          >
-            <template #prepend>
-              <v-avatar size="18" rounded="0" class="me-2 provider-source-avatar">
-                <v-img
-                  v-if="sourceType.icon"
-                  :src="sourceType.icon"
-                  alt="provider icon"
-                  cover
-                ></v-img>
-                <v-icon v-else size="16">mdi-shape-outline</v-icon>
-              </v-avatar>
-            </template>
-            <v-list-item-title>{{ sourceType.label }}</v-list-item-title>
-          </v-list-item>
-        </StyledMenu>
+        <ProviderSourceDialog
+          :source-types="availableSourceTypes"
+          :tm="tm"
+          @select="emitAddSource"
+        />
       </div>
+
+      <v-progress-linear
+        v-if="loading"
+        class="provider-sources-progress"
+        color="primary"
+        height="2"
+        indeterminate
+      />
     </div>
 
-    <div v-if="displayedProviderSources.length > 0" class="provider-sources-list">
+    <div
+      v-if="displayedProviderSources.length > 0"
+      class="provider-sources-list"
+    >
       <button
         v-for="source in displayedProviderSources"
-        :key="source.isPlaceholder ? `template-${source.templateKey}` : source.id"
+        :key="
+          source.isPlaceholder ? `template-${source.templateKey}` : source.id
+        "
         type="button"
         :class="[
           'provider-source-item',
           {
-            'provider-source-item--active': isActive(source)
-          }
+            'provider-source-item--active': isActive(source),
+          },
         ]"
         @click="emitSelectSource(source)"
       >
-        <v-avatar size="28" rounded="lg" class="provider-source-item__avatar provider-source-avatar">
+        <v-avatar
+          size="28"
+          rounded="lg"
+          class="provider-source-item__avatar provider-source-avatar"
+        >
           <v-img
             v-if="source?.provider"
             :src="resolveSourceIcon(source)"
+            :class="{
+              'provider-icon--monochrome': isMonochromeSourceIcon(source),
+            }"
             alt="provider logo"
             cover
           ></v-img>
@@ -142,104 +146,126 @@
             icon="mdi-delete-outline"
             variant="text"
             size="small"
-            :aria-label="tm('providerSources.delete')"
-            :title="tm('providerSources.delete')"
+            :aria-label="deleteLabel || tm('providerSources.delete')"
+            :title="deleteLabel || tm('providerSources.delete')"
             @click.stop="emitDeleteSource(source)"
           ></v-btn>
         </div>
       </button>
     </div>
 
-    <div v-else class="provider-sources-empty">
+    <div v-else-if="!loading" class="provider-sources-empty">
       <v-icon size="44" color="grey-lighten-1">mdi-api-off</v-icon>
-      <p class="provider-sources-empty__text">{{ tm('providerSources.empty') }}</p>
+      <p class="provider-sources-empty__text">
+        {{ emptyText || tm("providerSources.empty") }}
+      </p>
     </div>
   </div>
 </template>
 
 <script setup>
-import { computed } from 'vue'
-import StyledMenu from '@/components/shared/StyledMenu.vue'
+import { computed } from "vue";
+import ProviderSourceDialog from "@/components/provider/ProviderSourceDialog.vue";
+import StyledMenu from "@/components/shared/StyledMenu.vue";
+import { isMonochromeProviderIcon } from "@/utils/providerUtils";
 
 const props = defineProps({
   displayedProviderSources: {
     type: Array,
-    default: () => []
+    default: () => [],
   },
   selectedProviderSource: {
     type: Object,
-    default: null
+    default: null,
   },
   availableSourceTypes: {
     type: Array,
-    default: () => []
+    default: () => [],
+  },
+  title: {
+    type: String,
+    default: "",
+  },
+  emptyText: {
+    type: String,
+    default: "",
+  },
+  selectHint: {
+    type: String,
+    default: "",
+  },
+  deleteLabel: {
+    type: String,
+    default: "",
+  },
+  loading: {
+    type: Boolean,
+    default: false,
   },
   tm: {
     type: Function,
-    required: true
+    required: true,
   },
   resolveSourceIcon: {
     type: Function,
-    required: true
+    required: true,
+  },
+  isMonochromeSourceIcon: {
+    type: Function,
+    default: (source) => isMonochromeProviderIcon(typeof source?.provider === "string" ? source.provider : ""),
   },
   getSourceDisplayName: {
     type: Function,
-    required: true
-  }
-})
+    required: true,
+  },
+});
 
-const emit = defineEmits([
-  'add-provider-source',
-  'select-provider-source',
-  'delete-provider-source'
-])
+const emit = defineEmits(["add-provider-source", "select-provider-source", "delete-provider-source"]);
 
-const selectedId = computed(() => props.selectedProviderSource?.id || null)
+const selectedId = computed(() => props.selectedProviderSource?.id || null);
 const canDeleteSelectedSource = computed(() =>
-  Boolean(props.selectedProviderSource && !props.selectedProviderSource.isPlaceholder)
-)
+  Boolean(props.selectedProviderSource && !props.selectedProviderSource.isPlaceholder),
+);
 
 const isActive = (source) => {
-  if (source.isPlaceholder) return false
-  return selectedId.value !== null && selectedId.value === source.id
-}
+  if (source.isPlaceholder) return false;
+  return selectedId.value !== null && selectedId.value === source.id;
+};
 
-const sourceBadge = (source) => source.provider || source.templateKey || 'source'
+const sourceBadge = (source) => source.provider || source.templateKey || "source";
 
-const sourceValue = (source) => (
-  source.isPlaceholder ? `template:${source.templateKey}` : `source:${source.id}`
-)
+const sourceValue = (source) => (source.isPlaceholder ? `template:${source.templateKey}` : `source:${source.id}`);
 
 const sourceOptions = computed(() =>
   props.displayedProviderSources.map((source) => ({
     title: props.getSourceDisplayName(source),
     subtitle: source.api_base || sourceBadge(source),
     value: sourceValue(source),
-    source
-  }))
-)
+    source,
+  })),
+);
 
 const selectedSourceValue = computed(() => {
-  if (!props.selectedProviderSource) return null
-  return sourceValue(props.selectedProviderSource)
-})
+  if (!props.selectedProviderSource) return null;
+  return sourceValue(props.selectedProviderSource);
+});
 
-const emitAddSource = (type) => emit('add-provider-source', type)
-const emitSelectSource = (source) => emit('select-provider-source', source)
-const emitDeleteSource = (source) => emit('delete-provider-source', source)
+const emitAddSource = (type) => emit("add-provider-source", type);
+const emitSelectSource = (source) => emit("select-provider-source", source);
+const emitDeleteSource = (source) => emit("delete-provider-source", source);
 
 const deleteSelectedSource = () => {
   if (canDeleteSelectedSource.value) {
-    emitDeleteSource(props.selectedProviderSource)
+    emitDeleteSource(props.selectedProviderSource);
   }
-}
+};
 
 const selectSourceByValue = (value) => {
-  const option = sourceOptions.value.find((item) => item.value === value)
+  const option = sourceOptions.value.find((item) => item.value === value);
   if (option?.source) {
-    emitSelectSource(option.source)
+    emitSelectSource(option.source);
   }
-}
+};
 </script>
 
 <style scoped>
@@ -248,14 +274,24 @@ const selectSourceByValue = (value) => {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .provider-sources-head {
   display: flex;
   align-items: center;
+  flex: 0 0 auto;
   justify-content: space-between;
   gap: 12px;
   padding: 20px 20px 12px;
+  position: relative;
+}
+
+.provider-sources-progress {
+  bottom: 0;
+  left: 0;
+  position: absolute;
+  right: 0;
 }
 
 .provider-sources-head__copy {
@@ -308,6 +344,7 @@ const selectSourceByValue = (value) => {
 .provider-sources-list {
   flex: 1;
   min-height: 0;
+  overscroll-behavior: contain;
   overflow-y: auto;
   padding: 6px 12px 16px;
   display: flex;

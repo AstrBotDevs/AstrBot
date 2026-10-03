@@ -2,24 +2,30 @@
   <div class="reasoning-block" :class="{ 'reasoning-block--dark': isDark }">
     <button
       class="reasoning-header"
-      :class="{ 'reasoning-header--trigger': openInSidebar }"
+      :class="{ 'reasoning-header--trigger': shouldOpenInSidebar }"
       type="button"
       @click="handlePrimaryAction"
     >
       <span class="reasoning-title">
-        {{ reasoningTitle }}
+        <ThinkingIndicator v-if="isStreaming && !hasNonReasoningContent">
+          {{ reasoningTitle }}
+        </ThinkingIndicator>
+        <template v-else>{{ reasoningTitle }}</template>
       </span>
-      <v-icon
-        size="22"
+      <ChevronRight
+        :size="20"
+        :stroke-width="1.75"
+        aria-hidden="true"
         class="reasoning-icon"
-        :class="{ 'rotate-90': !openInSidebar && isExpanded }"
-      >
-        mdi-chevron-right
-      </v-icon>
+        :class="{
+          'rotate-90': !shouldOpenInSidebar && isExpanded,
+          'reasoning-icon--thinking': isStreaming && !hasNonReasoningContent,
+        }"
+      />
     </button>
 
     <div
-      v-if="!openInSidebar && isExpanded"
+      v-if="!shouldOpenInSidebar && isExpanded"
       class="reasoning-content animate-fade-in"
     >
       <ReasoningTimeline
@@ -31,7 +37,11 @@
     </div>
 
     <transition :name="previewTransitionName" mode="out-in">
-      <div v-if="showStreamingPreview" :key="previewKey" class="reasoning-preview">
+      <div
+        v-if="showStreamingPreview"
+        :key="previewKey"
+        class="reasoning-preview"
+      >
         {{ previewText }}
       </div>
     </transition>
@@ -39,14 +49,12 @@
 </template>
 
 <script setup lang="ts">
+import { ChevronRight } from "@lucide/vue";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
-import {
-  reasoningActivityCounts,
-  reasoningActivityTitle,
-  type MessagePart,
-} from "@/composables/useMessages";
-import { useModuleI18n } from "@/i18n/composables";
 import ReasoningTimeline from "@/components/chat/message_list_comps/ReasoningTimeline.vue";
+import ThinkingIndicator from "@/components/chat/ThinkingIndicator.vue";
+import { type MessagePart, reasoningActivityCounts, reasoningActivityTitle } from "@/composables/useMessages";
+import { useModuleI18n } from "@/i18n/composables";
 
 const props = defineProps<{
   parts?: MessagePart[];
@@ -77,15 +85,11 @@ const renderParts = computed<MessagePart[]>(() => {
   return [];
 });
 
-const openInSidebar = computed(() => Boolean(props.openInSidebar));
+const shouldOpenInSidebar = computed(() => Boolean(props.openInSidebar));
 
-const activityCounts = computed(() =>
-  reasoningActivityCounts(renderParts.value, props.reasoning || ""),
-);
+const activityCounts = computed(() => reasoningActivityCounts(renderParts.value, props.reasoning || ""));
 
-const reasoningTitle = computed(() =>
-  reasoningActivityTitle(activityCounts.value, tm),
-);
+const reasoningTitle = computed(() => reasoningActivityTitle(activityCounts.value, tm));
 
 const thinkingText = computed(() =>
   renderParts.value
@@ -97,19 +101,17 @@ const thinkingText = computed(() =>
 const showStreamingPreview = computed(
   () =>
     props.isStreaming &&
-    (openInSidebar.value || !isExpanded.value) &&
+    (shouldOpenInSidebar.value || !isExpanded.value) &&
     !props.hasNonReasoningContent &&
     previewText.value,
 );
 
 const previewTransitionName = computed(() =>
-  props.hasNonReasoningContent
-    ? "reasoning-preview-collapse"
-    : "reasoning-preview-fade",
+  props.hasNonReasoningContent ? "reasoning-preview-collapse" : "reasoning-preview-fade",
 );
 
 function handlePrimaryAction() {
-  if (openInSidebar.value) {
+  if (shouldOpenInSidebar.value) {
     emit("open");
     return;
   }
@@ -151,19 +153,11 @@ function startPreviewTimer() {
 }
 
 function syncPreviewTimer() {
-  if (
-    props.isStreaming &&
-    (openInSidebar.value || !isExpanded.value) &&
-    !props.hasNonReasoningContent
-  ) {
+  if (props.isStreaming && (shouldOpenInSidebar.value || !isExpanded.value) && !props.hasNonReasoningContent) {
     if (!previewTimer && !previewStartTimer) {
       previewStartTimer = setTimeout(() => {
         previewStartTimer = null;
-        if (
-          props.isStreaming &&
-          (openInSidebar.value || !isExpanded.value) &&
-          !props.hasNonReasoningContent
-        ) {
+        if (props.isStreaming && (shouldOpenInSidebar.value || !isExpanded.value) && !props.hasNonReasoningContent) {
           startPreviewTimer();
         }
       }, 2000);
@@ -184,7 +178,7 @@ watch(
     isExpanded.value,
     props.hasNonReasoningContent,
     thinkingText.value,
-    openInSidebar.value,
+    shouldOpenInSidebar.value,
   ],
   syncPreviewTimer,
   {
@@ -208,6 +202,7 @@ onBeforeUnmount(() => {
 }
 
 .reasoning-header {
+  width: fit-content;
   max-width: 100%;
   border: 0;
   padding: 0;
@@ -215,11 +210,20 @@ onBeforeUnmount(() => {
   color: inherit;
   cursor: pointer;
   user-select: none;
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 8px;
   font: inherit;
+  font-size: 1rem;
+  line-height: 1.7;
   text-align: left;
+}
+
+@media (min-width: 761px) {
+  .reasoning-header {
+    font-size: 0.9375rem;
+    line-height: 1.75;
+  }
 }
 
 .reasoning-header:hover {
@@ -231,6 +235,22 @@ onBeforeUnmount(() => {
   transition: transform 0.2s ease;
   flex-shrink: 0;
   align-self: center;
+}
+
+.reasoning-icon--thinking {
+  color: rgba(var(--v-theme-on-surface), 0.45);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reasoning-icon--thinking {
+    color: rgba(var(--v-theme-on-surface), 0.6);
+  }
+}
+
+@media (forced-colors: active) {
+  .reasoning-icon--thinking {
+    color: CanvasText;
+  }
 }
 
 .reasoning-title {

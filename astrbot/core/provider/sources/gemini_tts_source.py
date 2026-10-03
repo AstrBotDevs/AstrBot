@@ -5,12 +5,11 @@ from google import genai
 from google.genai import types
 
 from astrbot import logger
+from astrbot.core.provider.entities import ProviderType
+from astrbot.core.provider.provider import TTSProvider
+from astrbot.core.provider.register import register_provider_adapter
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.datetime_utils import generate_timestamp_id
-
-from ..entities import ProviderType
-from ..provider import TTSProvider
-from ..register import register_provider_adapter
 
 
 @register_provider_adapter(
@@ -28,7 +27,9 @@ class ProviderGeminiTTSAPI(TTSProvider):
         api_key: str = provider_config.get("gemini_tts_api_key", "")
         api_base: str | None = provider_config.get("gemini_tts_api_base")
         timeout: int = int(provider_config.get("gemini_tts_timeout", 20))
-        http_options = types.HttpOptions(timeout=timeout * 1000)
+        http_options = types.HttpOptions(
+            timeout=timeout * 1000, headers=self.request_headers
+        )
 
         if api_base:
             api_base = api_base.removesuffix("/")
@@ -39,6 +40,8 @@ class ProviderGeminiTTSAPI(TTSProvider):
             logger.info(f"[Gemini TTS] 使用代理: {proxy}")
 
         self.client = genai.Client(api_key=api_key, http_options=http_options).aio
+        # The SDK adds its own lower-case UA alongside our explicit header.
+        self.client._api_client._http_options.headers.pop("user-agent", None)
         self.model: str = provider_config.get(
             "gemini_tts_model",
             "gemini-2.5-flash-preview-tts",

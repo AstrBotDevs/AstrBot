@@ -1,17 +1,18 @@
-# Plugin Pages
+# Plugin Views
 
-Plugin Pages let a plugin provide its own pages inside the AstrBot WebUI. Page files live under the plugin's `pages/` directory and are loaded by the Dashboard in a restricted iframe. Page scripts communicate with the Dashboard through the `window.AstrBotPluginPage` bridge, and the Dashboard forwards backend calls to Web APIs registered by the plugin.
 
-If you only need a small set of editable settings, prefer [`_conf_schema.json`](./plugin-config.md). Pages are a better fit for complex forms, runtime dashboards, logs, file upload/download, SSE streams, charts, and other custom workflows.
+Plugin Views let a plugin ship its own pages inside the AstrBot WebUI. View files live under `views/` in the plugin directory (`pages/` is still accepted) and are loaded by the Dashboard in a restricted iframe. Scripts in a view talk to the Dashboard through the `window.AstrBotPluginView` bridge (alias `window.AstrBotPluginPage`), which the Dashboard forwards to the plugin's registered backend Web APIs.
+
+If you only need a small set of editable settings, prefer [`_conf_schema.json`](./plugin-config.md). Views are a better fit for complex forms, runtime dashboards, logs, file upload/download, SSE streams, charts, and other custom workflows.
 
 ## Directory Layout
 
-Each direct child directory under `pages/` is one Page. AstrBot only discovers `pages/<page_name>/index.html`; directories without `index.html` are ignored.
+Each direct child directory under `views/` is one View. AstrBot only discovers `views/<page_name>/index.html`; directories without `index.html` are ignored.
 
 ```text
-astrbot_plugin_page_demo/
+astrbot_plugin_view_demo/
 ├─ main.py
-└─ pages/
+└─ views/
    ├─ bridge-demo/
    │  ├─ index.html
    │  ├─ app.js
@@ -24,15 +25,15 @@ astrbot_plugin_page_demo/
 
 Use simple directory names for `page_name`, such as `settings` or `bridge-demo`. Do not use an empty name, `.`, `..`, a name starting with `.`, or a name containing `/` or `\`.
 
-Users open Pages from the plugin detail page in the WebUI.
+Users open views from the plugin detail page in the WebUI.
 
 ## Development Flow
 
-1. Create `pages/<page_name>/index.html` in the plugin directory.
-2. Use the `window.AstrBotPluginPage` bridge from the Page.
+1. Create `views/<page_name>/index.html` in the plugin directory.
+2. Use the `window.AstrBotPluginView` bridge from the View.
 3. Register backend APIs with `context.register_web_api()` in `main.py`.
 4. Read requests and return responses with `astrbot.api.web`.
-5. Reload the plugin after adding or removing Page directories; refreshing the Page is usually enough for static asset edits.
+5. Reload the plugin after adding or removing View directories; refreshing the View is usually enough for static asset edits.
 
 ## Minimal Complete Example
 
@@ -44,7 +45,7 @@ Plugin backend code should use `astrbot.api.web`. Avoid exposing raw FastAPI, St
 from astrbot.api.star import Context, Star
 from astrbot.api.web import error_response, json_response, request
 
-PLUGIN_NAME = "astrbot_plugin_page_demo"
+PLUGIN_NAME = "astrbot_plugin_view_demo"
 
 
 class MyPlugin(Star):
@@ -54,13 +55,13 @@ class MyPlugin(Star):
             f"/{PLUGIN_NAME}/ping",
             self.page_ping,
             ["GET"],
-            "Page ping",
+            "View ping",
         )
         context.register_web_api(
             f"/{PLUGIN_NAME}/settings/save",
             self.save_settings,
             ["POST"],
-            "Save Page settings",
+            "Save View settings",
         )
 
     async def page_ping(self):
@@ -82,14 +83,14 @@ class MyPlugin(Star):
 
 ### Frontend
 
-`pages/bridge-demo/index.html`
+`views/bridge-demo/index.html`
 
 ```html
 <!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>Plugin Page Demo</title>
+    <title>Plugin View Demo</title>
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
@@ -100,10 +101,10 @@ class MyPlugin(Star):
 </html>
 ```
 
-`pages/bridge-demo/app.js`
+`views/bridge-demo/app.js`
 
 ```js
-const bridge = window.AstrBotPluginPage;
+const bridge = window.AstrBotPluginView;
 const output = document.getElementById("output");
 
 const context = await bridge.ready();
@@ -115,7 +116,7 @@ document.getElementById("ping").addEventListener("click", async () => {
 });
 ```
 
-You do not need to import the bridge SDK manually. AstrBot injects `/api/plugin/page/bridge-sdk.js` into returned HTML. If an inline script must access `window.AstrBotPluginPage` synchronously, move it to an external module file or explicitly include the SDK before your script:
+You do not need to import the bridge SDK manually. AstrBot injects `/api/plugin/page/bridge-sdk.js` into returned HTML. If an inline script must access `window.AstrBotPluginView` synchronously, move it to an external module file or explicitly include the SDK before your script:
 
 ```html
 <script src="/api/plugin/page/bridge-sdk.js"></script>
@@ -136,7 +137,7 @@ context.register_web_api(
 )
 ```
 
-The registered route must include the plugin name prefix. The bridge endpoint used by the Page does not include the plugin name:
+The registered route must include the plugin name prefix. The bridge endpoint used by the View does not include the plugin name:
 
 ```js
 await bridge.apiGet("items/123");
@@ -307,10 +308,10 @@ Do not mix the two `request` proxies in the same handler. Migrate one handler at
 
 ## Bridge API
 
-The Page iframe cannot directly access Dashboard cookies, LocalStorage, or the parent DOM. Page scripts must use `window.AstrBotPluginPage` to call backend APIs and read context.
+The View iframe cannot directly access Dashboard cookies, LocalStorage, or the parent DOM. View scripts must use `window.AstrBotPluginView` to call backend APIs and read context.
 
 ```js
-const bridge = window.AstrBotPluginPage;
+const bridge = window.AstrBotPluginView;
 ```
 
 ### Context
@@ -325,8 +326,8 @@ The context usually contains:
 
 ```json
 {
-  "pluginName": "astrbot_plugin_page_demo",
-  "displayName": "Plugin Page Demo",
+  "pluginName": "astrbot_plugin_view_demo",
+  "displayName": "Plugin View Demo",
   "pageName": "bridge-demo",
   "pageTitle": "Bridge Demo",
   "locale": "en-US",
@@ -350,7 +351,7 @@ Respond to locale or theme changes:
 
 ```js
 function render() {
-  document.title = bridge.t("pages.bridge-demo.title", "Bridge Demo");
+  document.title = bridge.t("views.bridge-demo.title", "Bridge Demo");
   document.getElementById("locale").textContent = bridge.getLocale();
 }
 
@@ -379,7 +380,7 @@ Bridge JSON calls use this compatibility rule:
 - If the backend returns plain JSON, such as `{ "message": "pong" }`, the Promise resolves to that full JSON body.
 - If the backend returns `{ "status": "error", "message": "..." }`, or the HTTP request fails, the Promise rejects with `Error`.
 
-For Page-only APIs, prefer returning plain business JSON:
+For View-only APIs, prefer returning plain business JSON:
 
 ```python
 return json_response({"message": "pong"})
@@ -391,7 +392,7 @@ Use this for errors:
 return error_response("missing file", status_code=400)
 ```
 
-Handle errors on the Page:
+Handle errors on the View:
 
 ```js
 try {
@@ -537,31 +538,31 @@ window.addEventListener("beforeunload", () => {
 });
 ```
 
-## Page Internationalization
+## View Internationalization
 
-Plugin Pages reuse plugin i18n resource files. Add `pages.<page_name>` to `.astrbot-plugin/i18n/<locale>.json`:
+Plugin Views reuse plugin i18n resource files. Add `views.<page_name>` to `.astrbot-plugin/i18n/<locale>.json`:
 
 ```json
 {
-  "pages": {
+  "views": {
     "bridge-demo": {
       "title": "Bridge Demo",
       "description": "Shows how a plugin page reads the WebUI locale and translations.",
-      "heading": "Plugin Page",
+      "heading": "Plugin View",
       "refresh": "Render again"
     }
   }
 }
 ```
 
-`title` is used by the WebUI shell title and the Page component name on the plugin detail page. `description` is used by the Page component description. Inside the Page, render text with `bridge.t()` and react to locale changes with `onContext()`.
+`title` is used by the WebUI shell title and the view component name on the plugin detail page. `description` is used by the view component description. Inside the view, render text with `bridge.t()` and react to locale changes with `onContext()`.
 
 ```js
 function render() {
-  document.title = bridge.t("pages.bridge-demo.title", "Bridge Demo");
+  document.title = bridge.t("views.bridge-demo.title", "Bridge Demo");
   document.getElementById("heading").textContent = bridge.t(
-    "pages.bridge-demo.heading",
-    "Plugin Page",
+    "views.bridge-demo.heading",
+    "Plugin View",
   );
 }
 
@@ -572,12 +573,12 @@ bridge.onContext(render);
 
 ## Light/Dark Theme
 
-AstrBot syncs the current theme to Plugin Pages. The bridge SDK maintains a `data-theme` attribute on `<html>`:
+AstrBot syncs the current theme to Plugin Views. The bridge SDK maintains a `data-theme` attribute on `<html>`:
 
 - Light mode: `<html data-theme="light">`
 - Dark mode: `<html data-theme="dark">`
 
-When **Follow System** is selected, the Page still receives either `light` or `dark`.
+When **Follow System** is selected, the View still receives either `light` or `dark`.
 
 CSS variables are recommended:
 
@@ -610,7 +611,7 @@ Use normal relative paths:
 <img src="./assets/logo.svg" alt="" />
 ```
 
-AstrBot rewrites relative asset URLs and appends a short-lived `asset_token`. Do not hardcode `/api/plugin/page/content/...`, append `asset_token` yourself, or rely on `..` to escape the Page root.
+AstrBot rewrites relative asset URLs and appends a short-lived `asset_token`. Do not hardcode `/api/plugin/page/content/...`, append `asset_token` yourself, or rely on `..` to escape the View root.
 
 AstrBot rewrites:
 
@@ -624,13 +625,13 @@ If you build a SPA, prefer hash routing. The static asset server resolves real f
 
 ## Security Constraints
 
-Plugin Pages run inside a restricted iframe:
+Plugin Views run inside a restricted iframe:
 
 ```text
 allow-scripts allow-forms allow-downloads
 ```
 
-The Page cannot directly access Dashboard cookies, LocalStorage, or the parent DOM, and it cannot bypass the bridge to reuse Dashboard auth. All operations that need Dashboard identity should go through the bridge.
+The View cannot directly access Dashboard cookies, LocalStorage, or the parent DOM, and it cannot bypass the bridge to reuse Dashboard auth. All operations that need Dashboard identity should go through the bridge.
 
 Asset responses include security headers such as:
 
@@ -639,14 +640,14 @@ Asset responses include security headers such as:
 - `Cache-Control: no-store`
 - `X-Content-Type-Options: nosniff`
 
-Backend handlers must still validate input. Do not trust paths, filenames, formats, or numeric ranges sent by the Page. Store files only in safe directories and prefer whitelisted or regenerated filenames.
+Backend handlers must still validate input. Do not trust paths, filenames, formats, or numeric ranges sent by the View. Store files only in safe directories and prefer whitelisted or regenerated filenames.
 
 ## Debugging Tips
 
-- Page is missing: check that `pages/<page_name>/index.html` exists, the plugin is enabled, and the plugin detail page has been refreshed.
+- View is missing: check that `views/<page_name>/index.html` exists, the plugin is enabled, and the plugin detail page has been refreshed.
 - Bridge is missing: make sure your script runs after the bridge SDK is injected; external `type="module"` scripts are recommended.
-- API is not matched: make sure the registered route includes the plugin name prefix, such as `/{PLUGIN_NAME}/stats`, while the Page endpoint is `stats`.
+- API is not matched: make sure the registered route includes the plugin name prefix, such as `/{PLUGIN_NAME}/stats`, while the View endpoint is `stats`.
 - Query or JSON is empty: pass GET values through `apiGet(endpoint, params)` and POST JSON through `apiPost(endpoint, body)`.
 - Upload is empty: `upload()` always uses the field name `file`; read it with `(await request.files()).get("file")`.
 - SSE has no messages: make sure the backend response is `text/event-stream` and each message ends with a blank line, such as `data: ...\n\n`.
-- SSE returns 401: do not call `new EventSource("/api/v1/...")` directly from the Page. Native `EventSource` cannot send the `Authorization` header; call through `bridge.subscribeSSE()` instead.
+- SSE returns 401: do not call `new EventSource("/api/v1/...")` directly from the View. Native `EventSource` cannot send the `Authorization` header; call through `bridge.subscribeSSE()` instead.

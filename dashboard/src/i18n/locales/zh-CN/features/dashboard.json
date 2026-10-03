@@ -30,7 +30,7 @@
       "cpuLoad": "CPU 负载",
       "status": {
         "good": "良好",
-        "normal": "正常", 
+        "normal": "正常",
         "high": "偏高"
       }
     }
@@ -46,7 +46,7 @@
       "messageCount": "消息条数",
       "timeRanges": {
         "1day": "过去 1 天",
-        "3days": "过去 3 天", 
+        "3days": "过去 3 天",
         "1week": "过去 7 天",
         "1month": "过去 30 天"
       }
@@ -62,4 +62,4 @@
       "totalPercentage": "总消息占比"
     }
   }
-} 
+}

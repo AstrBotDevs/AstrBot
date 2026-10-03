@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import inspect
 from collections.abc import Awaitable, Callable
-from typing import Any, TypeVar, cast
+from typing import TypeVar, cast
 
 T = TypeVar("T")
 
@@ -16,5 +16,9 @@ async def resolve_maybe_awaitable(value: T | Awaitable[T]) -> T:
 async def run_maybe_async(
     operation: Callable[[], T | Awaitable[T]] | T | Awaitable[T],
 ) -> T:
-    result: Any = operation() if callable(operation) else operation
+    result = (
+        cast(Callable[[], T | Awaitable[T]], operation)()
+        if callable(operation)
+        else operation
+    )
     return await resolve_maybe_awaitable(result)

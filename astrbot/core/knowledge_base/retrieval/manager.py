@@ -1,23 +1,19 @@
 """检索管理器
 
-协调稠密检索、稀疏检索和 Rerank,提供统一的检索接口
+协调稠密检索､稀疏检索和 Rerank,提供统一的检索接口
 """
 
 import time
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
 from astrbot import logger
 from astrbot.core.db.vec_db.base import Result
+from astrbot.core.db.vec_db.faiss_impl import FaissVecDB
 from astrbot.core.knowledge_base.kb_db_sqlite import KBSQLiteDatabase
+from astrbot.core.knowledge_base.kb_helper import KBHelper
 from astrbot.core.knowledge_base.retrieval.rank_fusion import RankFusion
 from astrbot.core.knowledge_base.retrieval.sparse_retriever import SparseRetriever
 from astrbot.core.provider.provider import RerankProvider
-
-from ..kb_helper import KBHelper
-
-if TYPE_CHECKING:
-    from astrbot.core.db.vec_db.faiss_impl import FaissVecDB
 
 
 @dataclass
@@ -38,7 +34,7 @@ class RetrievalManager:
     """检索管理器
 
     职责:
-    - 协调稠密检索、稀疏检索和 Rerank
+    - 协调稠密检索､稀疏检索和 Rerank
     - 结果融合和排序
     """
 
@@ -200,7 +196,7 @@ class RetrievalManager:
     ):
         """稠密检索 (向量相似度)
 
-        为每个知识库使用独立的向量数据库进行检索,然后合并结果。
+        为每个知识库使用独立的向量数据库进行检索,然后合并结果｡
 
         Args:
             query: 查询文本

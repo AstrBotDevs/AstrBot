@@ -9,7 +9,7 @@ from pydantic import Field
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from astrbot.core import logger, sp
-from astrbot.core.agent.tool import FunctionTool, ToolExecResult
+from astrbot.core.agent.tool import FunctionTool, ParametersType, ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.tools.registry import builtin_tool
 
@@ -23,6 +23,7 @@ WEB_SEARCH_TOOL_NAMES = [
     "firecrawl_extract_web_page",
     "web_search_exa",
     "exa_get_contents",
+    "web_search_anysearch",
 ]
 _TAVILY_WEB_SEARCH_TOOL_CONFIG = {
     "provider_settings.web_search": True,
@@ -47,6 +48,10 @@ _BAIDU_WEB_SEARCH_TOOL_CONFIG = {
 _EXA_WEB_SEARCH_TOOL_CONFIG = {
     "provider_settings.web_search": True,
     "provider_settings.websearch_provider": "exa",
+}
+_ANYSEARCH_WEB_SEARCH_TOOL_CONFIG = {
+    "provider_settings.web_search": True,
+    "provider_settings.websearch_provider": "anysearch",
 }
 
 
@@ -86,7 +91,7 @@ class _KeyRotator:
         keys = provider_settings.get(self.setting_name, [])
         if not keys:
             raise ValueError(
-                f"Error: {self.provider_name} API key is not configured in AstrBot."
+                f"Error: {self.provider_name} API key is not configured in AstrBot.",
             )
 
         async with self.lock:
@@ -104,12 +109,14 @@ class _KeyRotator:
 # 429 - Rate limited.
 # 432 - Tavily quota exceeded.
 _RETRYABLE_HTTP_STATUSES: frozenset[int] = frozenset({401, 403, 429, 432})
+_ANYSEARCH_RETRYABLE_HTTP_STATUSES: frozenset[int] = frozenset({401, 402, 403, 429})
 
 _TAVILY_KEY_ROTATOR = _KeyRotator("websearch_tavily_key", "Tavily")
 _BOCHA_KEY_ROTATOR = _KeyRotator("websearch_bocha_key", "BoCha")
 _BRAVE_KEY_ROTATOR = _KeyRotator("websearch_brave_key", "Brave")
 _FIRECRAWL_KEY_ROTATOR = _KeyRotator("websearch_firecrawl_key", "Firecrawl")
 _EXA_KEY_ROTATOR = _KeyRotator("websearch_exa_key", "Exa")
+_ANYSEARCH_KEY_ROTATOR = _KeyRotator("websearch_anysearch_key", "AnySearch")
 
 
 def normalize_legacy_web_search_config(cfg) -> None:
@@ -119,7 +126,7 @@ def normalize_legacy_web_search_config(cfg) -> None:
 
     changed = False
     if provider_settings.get(
-        "websearch_provider"
+        "websearch_provider",
     ) == "default" and provider_settings.get("web_search", False):
         provider_settings["web_search"] = False
         changed = True
@@ -134,6 +141,7 @@ def normalize_legacy_web_search_config(cfg) -> None:
         "websearch_brave_key",
         "websearch_firecrawl_key",
         "websearch_exa_key",
+        "websearch_anysearch_key",
     ):
         value = provider_settings.get(setting_name)
         if isinstance(value, str):
@@ -168,7 +176,7 @@ def _search_result_payload(results: list[SearchResult]) -> str:
                 "url": f"{result.url}",
                 "snippet": f"{result.snippet}",
                 "index": index,
-            }
+            },
         )
         _cache_favicon(result.url, result.favicon)
     return json.dumps({"results": ret_ls}, ensure_ascii=False)
@@ -559,29 +567,31 @@ async def _baidu_search(
         "X-Appbuilder-Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
-    async with aiohttp.ClientSession(trust_env=True) as session:
-        async with session.post(
+    async with (
+        aiohttp.ClientSession(trust_env=True) as session,
+        session.post(
             "https://qianfan.baidubce.com/v2/ai_search/web_search",
             json=payload,
             headers=headers,
-        ) as response:
-            if response.status != 200:
-                reason = await response.text()
-                raise Exception(
-                    f"Baidu AI Search failed: {reason}, status: {response.status}",
-                )
-            data = await response.json()
-            references = data.get("references", [])
-            return [
-                SearchResult(
-                    title=item.get("title", ""),
-                    url=item.get("url", ""),
-                    snippet=item.get("content", ""),
-                    favicon=item.get("icon"),
-                )
-                for item in references
-                if item.get("url")
-            ]
+        ) as response,
+    ):
+        if response.status != 200:
+            reason = await response.text()
+            raise Exception(
+                f"Baidu AI Search failed: {reason}, status: {response.status}",
+            )
+        data = await response.json()
+        references = data.get("references", [])
+        return [
+            SearchResult(
+                title=item.get("title", ""),
+                url=item.get("url", ""),
+                snippet=item.get("content", ""),
+                favicon=item.get("icon"),
+            )
+            for item in references
+            if item.get("url")
+        ]
 
 
 @builtin_tool(config=_TAVILY_WEB_SEARCH_TOOL_CONFIG)
@@ -592,7 +602,7 @@ class TavilyWebSearchTool(FunctionTool[AstrAgentContext]):
         "A web search tool that uses Tavily to search the web for relevant content. "
         "Ideal for gathering current information, news, and detailed web content analysis."
     )
-    parameters: dict = Field(
+    parameters: ParametersType | None = Field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -627,7 +637,7 @@ class TavilyWebSearchTool(FunctionTool[AstrAgentContext]):
                 },
             },
             "required": ["query"],
-        }
+        },
     )
 
     async def call(self, context, **kwargs) -> ToolExecResult:
@@ -676,7 +686,7 @@ class TavilyWebSearchTool(FunctionTool[AstrAgentContext]):
 class TavilyExtractWebPageTool(FunctionTool[AstrAgentContext]):
     name: str = "tavily_extract_web_page"
     description: str = "Extract the content of a web page using Tavily."
-    parameters: dict = Field(
+    parameters: ParametersType | None = Field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -690,7 +700,7 @@ class TavilyExtractWebPageTool(FunctionTool[AstrAgentContext]):
                 },
             },
             "required": ["url"],
-        }
+        },
     )
 
     async def call(self, context, **kwargs) -> ToolExecResult:
@@ -726,7 +736,7 @@ class BochaWebSearchTool(FunctionTool[AstrAgentContext]):
         "A web search tool based on Bocha Search API, used to retrieve web pages "
         "related to the user's query."
     )
-    parameters: dict = Field(
+    parameters: ParametersType | None = Field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -756,7 +766,7 @@ class BochaWebSearchTool(FunctionTool[AstrAgentContext]):
                 },
             },
             "required": ["query"],
-        }
+        },
     )
 
     async def call(self, context, **kwargs) -> ToolExecResult:
@@ -787,7 +797,7 @@ class BochaWebSearchTool(FunctionTool[AstrAgentContext]):
 class BraveWebSearchTool(FunctionTool[AstrAgentContext]):
     name: str = "web_search_brave"
     description: str = "A web search tool based on Brave Search API."
-    parameters: dict = Field(
+    parameters: ParametersType | None = Field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -810,7 +820,7 @@ class BraveWebSearchTool(FunctionTool[AstrAgentContext]):
                 },
             },
             "required": ["query"],
-        }
+        },
     )
 
     async def call(self, context, **kwargs) -> ToolExecResult:
@@ -819,10 +829,8 @@ class BraveWebSearchTool(FunctionTool[AstrAgentContext]):
             return "Error: Brave API key is not configured in AstrBot."
 
         count = int(kwargs.get("count", 10))
-        if count < 1:
-            count = 1
-        if count > 20:
-            count = 20
+        count = max(count, 1)
+        count = min(count, 20)
 
         payload = {
             "q": kwargs["query"],
@@ -848,7 +856,7 @@ class FirecrawlWebSearchTool(FunctionTool[AstrAgentContext]):
         "A web search tool based on Firecrawl Search API, used to retrieve web "
         "pages related to the user's query."
     )
-    parameters: dict = Field(
+    parameters: ParametersType | None = Field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -871,7 +879,7 @@ class FirecrawlWebSearchTool(FunctionTool[AstrAgentContext]):
                 },
             },
             "required": ["query"],
-        }
+        },
     )
 
     async def call(self, context, **kwargs) -> ToolExecResult:
@@ -899,7 +907,7 @@ class FirecrawlWebSearchTool(FunctionTool[AstrAgentContext]):
 class FirecrawlExtractWebPageTool(FunctionTool[AstrAgentContext]):
     name: str = "firecrawl_extract_web_page"
     description: str = "Extract the content of a web page using Firecrawl."
-    parameters: dict = Field(
+    parameters: ParametersType | None = Field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -925,7 +933,7 @@ class FirecrawlExtractWebPageTool(FunctionTool[AstrAgentContext]):
                 },
             },
             "required": ["url"],
-        }
+        },
     )
 
     async def call(self, context, **kwargs) -> ToolExecResult:
@@ -966,7 +974,7 @@ class BaiduWebSearchTool(FunctionTool[AstrAgentContext]):
         "A web search tool based on Baidu AI Search. "
         "Use this for real-time web retrieval when Baidu AI Search is configured."
     )
-    parameters: dict = Field(
+    parameters: ParametersType | None = Field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -985,7 +993,7 @@ class BaiduWebSearchTool(FunctionTool[AstrAgentContext]):
                 },
             },
             "required": ["query"],
-        }
+        },
     )
 
     async def call(self, context, **kwargs) -> ToolExecResult:
@@ -994,10 +1002,8 @@ class BaiduWebSearchTool(FunctionTool[AstrAgentContext]):
             return "Error: Baidu AI Search API key is not configured in AstrBot."
 
         top_k = int(kwargs.get("top_k", 10))
-        if top_k < 1:
-            top_k = 1
-        if top_k > 50:
-            top_k = 50
+        top_k = max(top_k, 1)
+        top_k = min(top_k, 50)
 
         payload = {
             "messages": [{"role": "user", "content": str(kwargs["query"])[:72]}],
@@ -1013,7 +1019,7 @@ class BaiduWebSearchTool(FunctionTool[AstrAgentContext]):
         if site:
             sites = [s.strip() for s in site.replace("|", ",").split(",") if s.strip()]
             if sites:
-                payload["search_filter"] = {"match": {"site": sites[:100]}}
+                payload["search_filter"] = {"match": {"site": sites[:100]}}  # type: ignore
 
         results = await _baidu_search(provider_settings, payload)
         if not results:
@@ -1093,7 +1099,7 @@ class ExaWebSearchTool(FunctionTool[AstrAgentContext]):
         "A web search tool powered by Exa, an AI-native search engine. "
         "Supports keyword and semantic search with domain, date, and category filters."
     )
-    parameters: dict = Field(
+    parameters: ParametersType | None = Field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -1195,7 +1201,7 @@ class ExaGetContentsTool(FunctionTool[AstrAgentContext]):
 
     name: str = "exa_get_contents"
     description: str = "Extract the content of a web page using Exa."
-    parameters: dict = Field(
+    parameters: ParametersType | None = Field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
@@ -1240,7 +1246,203 @@ class ExaGetContentsTool(FunctionTool[AstrAgentContext]):
         return ret or "Error: Exa get contents does not return any results."
 
 
+async def _anysearch_search(
+    provider_settings: dict,
+    payload: dict,
+) -> list[SearchResult]:
+    """Call the AnySearch /v1/search endpoint and return normalized results.
+
+    AnySearch also serves anonymous traffic with a daily free quota, so an empty
+    key list is valid and results in a single unauthenticated request.
+
+    Args:
+        provider_settings: Provider settings containing AnySearch API keys.
+        payload: Request payload for the AnySearch search endpoint.
+
+    Returns:
+        Normalized search results.
+
+    Raises:
+        Exception: If the request fails after all configured keys are exhausted,
+            or if a non-retryable HTTP error is returned.
+    """
+    keys = provider_settings.get("websearch_anysearch_key", [])
+    # `None` marks the anonymous attempt used when no key is configured.
+    attempts: list[str | None] = list(keys) if keys else [None]
+
+    last_error = None
+    for _ in range(len(attempts)):
+        headers = {"Content-Type": "application/json"}
+        if keys:
+            anysearch_key = await _ANYSEARCH_KEY_ROTATOR.get(provider_settings)
+            headers["Authorization"] = f"Bearer {anysearch_key}"
+
+        async with aiohttp.ClientSession(trust_env=True) as session:
+            async with session.post(
+                "https://api.anysearch.com/v1/search",
+                json=payload,
+                headers=headers,
+            ) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    # AnySearch reports business errors (e.g. missing required vertical params)
+                    # with HTTP 200 and a non-zero code; surface the message to the LLM.
+                    code = data.get("code")
+                    if code not in (None, 0):
+                        raise Exception(
+                            f"AnySearch web search failed: {data.get('message') or code}"
+                        )
+                    body = data.get("data") or data
+                    results = []
+                    for item in body.get("results", []):
+                        if not item.get("url"):
+                            continue
+                        snippet = item.get("snippet") or item.get("content") or ""
+                        # Vertical searches (finance.quote, security.vuln, ...) return structured
+                        # fields instead of snippet/content; append them as text so they are not lost.
+                        extras = []
+                        for key, value in item.items():
+                            if (
+                                key in {"title", "url", "snippet", "content", "favicon"}
+                                or value is None
+                            ):
+                                continue
+                            if isinstance(value, dict | list):
+                                # Nested structures (e.g. security.vuln affected_products,
+                                # travel.flight segments) are serialized as JSON text
+                                # so no structured data is dropped.
+                                value = json.dumps(value, ensure_ascii=False)
+                            elif not isinstance(value, str | int | float | bool):
+                                continue
+                            extras.append(f"{key}: {value}")
+                        if extras:
+                            snippet = "\n".join([snippet, *extras]).strip()
+                        results.append(
+                            SearchResult(
+                                title=item.get("title", ""),
+                                url=item["url"],
+                                snippet=snippet,
+                            )
+                        )
+                    return results
+                reason = await response.text()
+                if response.status in _ANYSEARCH_RETRYABLE_HTTP_STATUSES:
+                    last_error = Exception(
+                        f"AnySearch web search failed: {reason}, status: {response.status}",
+                    )
+                    continue
+                raise Exception(
+                    f"AnySearch web search failed: {reason}, status: {response.status}",
+                )
+
+    if last_error is not None:
+        raise last_error
+    raise Exception("AnySearch web search failed with all configured keys.")
+
+
+@builtin_tool(config=_ANYSEARCH_WEB_SEARCH_TOOL_CONFIG)
+@pydantic_dataclass
+class AnySearchWebSearchTool(FunctionTool[AstrAgentContext]):
+    """Web search tool powered by the AnySearch API."""
+
+    name: str = "web_search_anysearch"
+    description: str = (
+        "A web search tool powered by AnySearch. Supports general web search and "
+        "16 vertical domains: academic(search/biomedical/citation/preprint/dataset), "
+        "business(company/jobs/people/trade), code(doc/snippet), "
+        "energy(production/electricity), environment(aqi), "
+        "finance(quote/fundamental/news/calendar/screen/macro), film(torrent), "
+        "gaming(esports/store), health(drug/stats/trial), ip(global), "
+        "legal(case/statute/legislation), resource(image), "
+        "security(vuln/noise/intel/scan), social_media, "
+        "travel(flight/flight_status), agriculture(fao), and general web search."
+    )
+    parameters: ParametersType | None = Field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Required. Search query."},
+                "max_results": {
+                    "type": "integer",
+                    "description": "Optional. The maximum number of results to return. Default is 10. Range is 1-10.",
+                },
+                "tag": {
+                    "type": "string",
+                    "description": (
+                        'Optional. Domain capability tag in "{domain}.{subdomain}" form, '
+                        'for example "finance.quote" or "academic.search". '
+                        "Available domains: general, resource, social_media, finance(quote/fundamental/news/calendar/screen/macro), "
+                        "academic(search/biomedical/citation/preprint/dataset), legal(case/statute/legislation), "
+                        "health(drug/stats/trial), business(company/jobs/people/trade), "
+                        "security(vuln/noise/intel/scan), ip(global), code(doc/snippet), "
+                        "energy(production/electricity), environment(aqi), agriculture(fao), "
+                        "travel(flight/flight_status), film(torrent), gaming(esports/store). "
+                        "Omit for general web search."
+                    ),
+                },
+                "zone": {
+                    "type": "string",
+                    "description": 'Optional. Result region, must be one of "cn", "intl", "global".',
+                },
+                "language": {
+                    "type": "string",
+                    "description": 'Optional. Preferred result language, for example "zh-CN" or "en".',
+                },
+                "params": {
+                    "type": "object",
+                    "description": (
+                        "Optional. Extra parameters required by specific vertical tags. "
+                        'Examples: {"symbol": "AAPL", "type": "stock"} for finance.quote, '
+                        '{"type": "cve", "value": "CVE-2021-44228"} for security.vuln, '
+                        '{"doi": "10.1038/s41586-021-03819-2"} for academic.search, '
+                        '{"departure": "SHA", "arrival": "PEK", "date": "2026-09-10"} for travel.flight.'
+                    ),
+                },
+            },
+            "required": ["query"],
+        }
+    )
+
+    async def call(self, context, **kwargs) -> ToolExecResult:
+        _, provider_settings, _ = _get_runtime(context)
+
+        try:
+            max_results = int(kwargs.get("max_results", 10))
+        except (TypeError, ValueError):
+            max_results = 10
+        max_results = min(max(max_results, 1), 10)
+
+        payload: dict = {
+            "query": kwargs["query"],
+            "max_results": max_results,
+            "format": "json",
+        }
+
+        tag = str(kwargs.get("tag", "")).strip()
+        if tag:
+            payload["tag"] = tag
+
+        zone = kwargs.get("zone", "")
+        if zone in ("cn", "intl", "global"):
+            payload["zone"] = zone
+
+        language = str(kwargs.get("language", "")).strip()
+        if language:
+            payload["language"] = language
+
+        params = kwargs.get("params")
+        if isinstance(params, dict):
+            payload["params"] = params
+
+        results = await _anysearch_search(provider_settings, payload)
+        if not results:
+            return "Error: AnySearch web search does not return any results."
+        return _search_result_payload(results)
+
+
 __all__ = [
+    "WEB_SEARCH_TOOL_NAMES",
+    "AnySearchWebSearchTool",
     "BaiduWebSearchTool",
     "BochaWebSearchTool",
     "BraveWebSearchTool",
@@ -1248,6 +1450,5 @@ __all__ = [
     "ExaWebSearchTool",
     "TavilyExtractWebPageTool",
     "TavilyWebSearchTool",
-    "WEB_SEARCH_TOOL_NAMES",
     "normalize_legacy_web_search_config",
 ]

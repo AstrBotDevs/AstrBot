@@ -1,6 +1,6 @@
 # CLI Commands
 
-The AstrBot CLI initializes instances, starts AstrBot, updates common config values, and manages plugins.
+The AstrBot CLI initializes instances, starts AstrBot, installs background services, reads logs, updates common config values, and manages plugins.
 
 If you install AstrBot with `uv`:
 
@@ -23,7 +23,7 @@ where.exe astrbot
 :::
 
 > [!TIP]
-> Run the commands below from the AstrBot working directory.
+> Run the commands below from the AstrBot working directory unless the command provides a `--workdir` option.
 
 ## Quick Start
 
@@ -42,11 +42,21 @@ astrbot run
 | --- | --- |
 | `astrbot init` | Initialize the current directory as an AstrBot working directory. |
 | `astrbot run` | Start AstrBot in the foreground. |
-| `astrbot conf` | Read or update common config values. |
+| `astrbot service` | Install and manage AstrBot as a background service. |
+| `astrbot config` | Read or update common config values. |
 | `astrbot password` | Change the WebUI login password interactively. |
-| `astrbot plug` | Create, install, update, remove, or search plugins. |
+| `astrbot plugin` | Create, install, update, remove, or search plugins. |
 | `astrbot help` | Show CLI help. |
 | `astrbot --version` | Show the AstrBot CLI version. |
+
+`conf` and `plug` are compatibility aliases and still work:
+
+```bash
+astrbot conf get
+astrbot plug list
+```
+
+Prefer `config` and `plugin` in new docs and scripts.
 
 ## Start AstrBot
 
@@ -60,38 +70,167 @@ Common options:
 | --- | --- |
 | `-p, --port <PORT>` | Set the WebUI port. |
 | `-r, --reload` | Enable plugin auto-reload for plugin development. |
-| `--reset-password` | Reset the WebUI initial password on startup and print the new password in startup logs. |
 
 Examples:
 
 ```bash
 astrbot run --port 6185
 astrbot run --reload
-astrbot run --reset-password
 ```
 
-If you forget the WebUI login password, run this from the AstrBot working directory:
+## Background Service
+
+`astrbot service` installs AstrBot as a user-level background service for long-running deployments.
+
+Each platform uses its native service manager:
+
+| Platform | Service manager |
+| --- | --- |
+| Linux | `systemd --user` |
+| macOS | LaunchAgent |
+| Windows | Task Scheduler |
+
+### Install
 
 ```bash
-astrbot run --reset-password
+astrbot service install --now
 ```
 
-AstrBot regenerates the initial password during startup and prints it in startup logs. After logging in, change the password in the WebUI immediately.
+By default, this command uses the `astrbot` executable found on `PATH` and the current directory as the AstrBot working directory. `--now` starts or restarts the service after installation.
 
-When starting directly from source, you can also run:
+Common options:
+
+| Option | Purpose |
+| --- | --- |
+| `--name <NAME>` | Service name. Default: `astrbot`. |
+| `--workdir <DIR>` | AstrBot working directory. |
+| `--executable <PATH>` | Path to the `astrbot` executable. |
+| `--force` | Overwrite an existing service definition. |
+| `--now` | Start or restart the service after installation. |
+
+If `astrbot` is not on `PATH`, pass the executable explicitly:
 
 ```bash
-python main.py --reset-password
+astrbot service install --workdir /path/to/astrbot-root --executable /path/to/astrbot --now
 ```
+
+### Manage
+
+```bash
+astrbot service start
+astrbot service stop
+astrbot service restart
+astrbot service uninstall
+```
+
+These commands support `--name <NAME>` for non-default service names:
+
+```bash
+astrbot service restart --name astrbot-test
+```
+
+To remove a service without an interactive confirmation:
+
+```bash
+astrbot service uninstall --force
+```
+
+### Status
+
+```bash
+astrbot service status
+```
+
+The status output includes:
+
+- Overall health.
+- Current platform and service manager.
+- Whether the service is installed, enabled, and running.
+- AstrBot working directory.
+- Dashboard port.
+- WebUI URL and accessibility.
+
+Common options:
+
+| Option | Purpose |
+| --- | --- |
+| `--name <NAME>` | Service name. Default: `astrbot`. |
+| `--workdir <DIR>` | AstrBot working directory used to read the port config. |
+| `--timeout <SECONDS>` | WebUI health probe timeout. Default: 2 seconds. |
+
+Example:
+
+```bash
+astrbot service status --timeout 5
+```
+
+## Logs
+
+The CLI exposes two kinds of logs:
+
+| Type | Command | Notes |
+| --- | --- | --- |
+| Service logs | `astrbot service logs` | Reads console output captured by the service manager. |
+| Application log file | `astrbot service logs --source app` | Reads `data/logs/astrbot.log`; file logging must be enabled first. |
+
+### Service Logs
+
+```bash
+astrbot service logs
+astrbot service logs -n 100
+astrbot service logs -f
+```
+
+Common options:
+
+| Option | Purpose |
+| --- | --- |
+| `--name <NAME>` | Service name. |
+| `-n, --lines <N>` | Show the latest N lines. Default: 200. |
+| `-f, --follow` | Follow log output. |
+| `--include-stderr` | Also show stderr logs on macOS and Windows. |
+
+On macOS and Windows, `astrbot service logs` shows stdout logs by default, which are the `.out.log` files. Add `--include-stderr` when you also need error output.
+
+### Application Log File
+
+`data/logs/astrbot.log` is not written by default. Enable application file logging first, then restart AstrBot:
+
+```bash
+astrbot service logs enable
+astrbot service restart
+astrbot service logs --source app
+```
+
+Inspect the application log file configuration:
+
+```bash
+astrbot service logs status
+```
+
+Disable the application log file:
+
+```bash
+astrbot service logs disable
+astrbot service restart
+```
+
+Use a custom application log path:
+
+```bash
+astrbot service logs enable --path logs/astrbot.log
+```
+
+Relative paths are resolved from the AstrBot data directory.
 
 ## Config
 
-`astrbot conf` reads and updates common config values.
+`astrbot config` reads and updates common config values.
 
 ```bash
-astrbot conf get
-astrbot conf get dashboard.port
-astrbot conf set dashboard.port 6185
+astrbot config get
+astrbot config get dashboard.port
+astrbot config set dashboard.port 6185
 ```
 
 Supported keys:
@@ -108,7 +247,7 @@ Supported keys:
 Changing the dashboard password writes the current password hashes automatically:
 
 ```bash
-astrbot conf set dashboard.password "new-password"
+astrbot config set dashboard.password "new-password"
 ```
 
 You can also use the dedicated interactive password command:
@@ -120,29 +259,29 @@ astrbot password --username admin
 
 ## Plugins
 
-`astrbot plug` manages plugins under `data/plugins`.
+`astrbot plugin` manages plugins under `data/plugins`.
 
 | Command | Purpose |
 | --- | --- |
-| `astrbot plug list` | List installed plugins. |
-| `astrbot plug list --all` | Also show uninstalled plugins. |
-| `astrbot plug search <QUERY>` | Search plugins. |
-| `astrbot plug install <NAME>` | Install a plugin. |
-| `astrbot plug update [NAME]` | Update one plugin, or all updatable plugins if no name is given. |
-| `astrbot plug remove <NAME>` | Remove an installed plugin. |
-| `astrbot plug new <NAME>` | Create a new plugin from the template. |
+| `astrbot plugin list` | List installed plugins. |
+| `astrbot plugin list --all` | Also show uninstalled plugins. |
+| `astrbot plugin search <QUERY>` | Search plugins. |
+| `astrbot plugin install <NAME>` | Install a plugin. |
+| `astrbot plugin update [NAME]` | Update one plugin, or all updatable plugins if no name is given. |
+| `astrbot plugin remove <NAME>` | Remove an installed plugin. |
+| `astrbot plugin new <NAME>` | Create a new plugin from the template. |
 
 Use a GitHub proxy when installing or updating plugins:
 
 ```bash
-astrbot plug install example-plugin --proxy https://gh-proxy.example.com/
-astrbot plug update --proxy https://gh-proxy.example.com/
+astrbot plugin install example-plugin --proxy https://gh-proxy.example.com/
+astrbot plugin update --proxy https://gh-proxy.example.com/
 ```
 
 Creating a new plugin asks for the author, description, version, and repository URL:
 
 ```bash
-astrbot plug new my-plugin
+astrbot plugin new my-plugin
 ```
 
 ## Help
@@ -156,10 +295,9 @@ astrbot help
 Show help for a specific command:
 
 ```bash
-astrbot help run
-astrbot run --help
-astrbot help conf
-astrbot plug --help
+astrbot help service
+astrbot service --help
+astrbot service logs --help
 ```
 
 Show the version:

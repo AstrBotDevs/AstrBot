@@ -1,15 +1,37 @@
-<script setup>
-import { computed } from "vue";
-import { useModuleI18n } from "@/i18n/composables";
+<script setup lang="ts">
+import { computed, type PropType } from "vue";
 import PluginPlatformChip from "@/components/shared/PluginPlatformChip.vue";
+import { useModuleI18n } from "@/i18n/composables";
 import { usePluginI18n } from "@/utils/pluginI18n";
 
 const { tm } = useModuleI18n("features/extension");
 const { pluginShortDesc } = usePluginI18n();
 
+interface MarketPlugin {
+  name: string;
+  market_plugin_id?: string | null;
+  display_name?: string | null;
+  trimmedName?: string;
+  author?: unknown;
+  logo?: string | null;
+  desc?: string | null;
+  short_desc?: string | null;
+  version?: string | null;
+  social_link?: string | null;
+  repo?: string | null;
+  tags?: string[];
+  support_platforms?: string[] | null;
+  stars?: number | null;
+  download_count?: number | null;
+  pinned?: boolean;
+  installed?: boolean;
+  astrbot_version_supported?: boolean;
+  i18n?: unknown;
+}
+
 const props = defineProps({
   plugin: {
-    type: Object,
+    type: Object as PropType<MarketPlugin>,
     required: true,
   },
   defaultPluginIcon: {
@@ -24,20 +46,15 @@ const props = defineProps({
 
 const emit = defineEmits(["install", "open"]);
 
-const normalizePlatformList = (platforms) => {
+const normalizePlatformList = (platforms: unknown): string[] => {
   if (!Array.isArray(platforms)) return [];
   return platforms.filter((item) => typeof item === "string");
 };
 
-const platformDisplayList = computed(() =>
-  normalizePlatformList(props.plugin?.support_platforms),
-);
+const platformDisplayList = computed(() => normalizePlatformList(props.plugin?.support_platforms));
 
 const cardDescription = computed(() =>
-  pluginShortDesc(
-    props.plugin,
-    props.plugin?.short_desc || props.plugin?.desc || "",
-  ),
+  pluginShortDesc(props.plugin, props.plugin?.short_desc || props.plugin?.desc || ""),
 );
 
 const canInstallPlugin = computed(() => {
@@ -45,13 +62,10 @@ const canInstallPlugin = computed(() => {
 });
 
 const hasDownloadCount = computed(() => {
-  return (
-    props.plugin?.download_count !== undefined &&
-    props.plugin?.download_count !== null
-  );
+  return props.plugin?.download_count !== undefined && props.plugin?.download_count !== null;
 });
 
-const handleInstall = (plugin) => {
+const handleInstall = (plugin: typeof props.plugin) => {
   if (!canInstallPlugin.value) return;
   emit("install", plugin);
 };
@@ -85,8 +99,8 @@ const handleOpen = () => {
               plugin.display_name?.length
                 ? plugin.display_name
                 : showPluginFullName
-                ? plugin.name
-                : plugin.trimmedName
+                  ? plugin.name
+                  : plugin.trimmedName
             }}
           </div>
           <v-chip
@@ -114,12 +128,11 @@ const handleOpen = () => {
             icon="mdi-account"
             size="x-small"
             style="color: rgba(var(--v-theme-on-surface), 0.5)"
-          ></v-icon>
+          />
           <a
             v-if="plugin?.social_link"
             :href="plugin.social_link"
             target="_blank"
-            @click.stop
             class="text-subtitle-2 font-weight-medium"
             style="
               text-decoration: none;
@@ -128,6 +141,7 @@ const handleOpen = () => {
               overflow: hidden;
               text-overflow: ellipsis;
             "
+            @click.stop
           >
             {{ plugin.author }}
           </a>
@@ -144,14 +158,21 @@ const handleOpen = () => {
             {{ plugin.author }}
           </span>
           <div
-            v-if="plugin.stars !== undefined"
             class="d-flex align-center text-subtitle-2 ml-2 market-stat"
           >
             <v-icon
-              icon="mdi-star"
+              icon="mdi-source-branch"
               size="x-small"
               style="margin-right: 2px"
-            ></v-icon>
+            />
+            <span>{{ plugin.version }}</span>
+          </div>
+          <div
+            v-if="plugin.stars !== undefined"
+            class="d-flex align-center text-subtitle-2 ml-2"
+            style="color: rgba(var(--v-theme-on-surface), 0.7)"
+          >
+            <v-icon icon="mdi-star" size="x-small" style="margin-right: 2px" />
             <span>{{ plugin.stars }}</span>
           </div>
           <div
@@ -171,7 +192,7 @@ const handleOpen = () => {
           {{ cardDescription }}
         </div>
 
-        <div class="plugin-stats"></div>
+        <div class="plugin-stats" />
       </div>
     </v-card-text>
 
@@ -179,9 +200,21 @@ const handleOpen = () => {
       style="gap: 6px; padding: 8px 12px; padding-top: 0"
       @click.stop
     >
-      <div v-if="platformDisplayList.length" class="plugin-badges">
+      <div
+        v-if="platformDisplayList.length || (plugin.tags && plugin.tags.length)"
+        class="plugin-badges"
+      >
+        <v-chip
+          v-for="tag in plugin.tags"
+          :key="tag"
+          :color="tag === 'danger' ? 'error' : 'primary'"
+          label
+          size="x-small"
+        >
+          {{ tag === "danger" ? tm("tags.danger") : tag }}
+        </v-chip>
         <PluginPlatformChip
-          :platforms="plugin.support_platforms"
+          :platforms="platformDisplayList"
           size="x-small"
           :chip-style="{ height: '20px' }"
         />
@@ -197,7 +230,7 @@ const handleOpen = () => {
         target="_blank"
         style="height: 32px"
       >
-        <v-icon icon="mdi-github" start size="small"></v-icon>
+        <v-icon icon="mdi-github" start size="small" />
         {{ tm("buttons.viewRepo") }}
       </v-btn>
       <v-tooltip

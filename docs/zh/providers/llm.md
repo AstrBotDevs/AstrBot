@@ -1,13 +1,11 @@
 # 大语言模型提供商
 
-你可在管理面板->服务提供商->+新增服务提供商 处配置各种大语言模型服务。
+在 WebUI 的「模型提供商」→「对话」中点击「新增」，选择模型服务类型。兼容 OpenAI API 的服务可选择 `OpenAI Compatible`，并填写服务商提供的 API Base URL 和 API Key。
 
-> [!TIP]
-> 如果没有你希望接入的模型服务，你可以试着查看您希望接入的服务提供商处是否支持 兼容 OpenAI API，如果支持，那么你可以选择上面截图中的第一项 `OpenAI` 然后通过修改 API Base URL 的方式接入。
+填写提供商名称和 `API Key`，确认 `API Base URL`，点击「保存并获取模型」。在模型列表中点击所需模型右侧的 `+`，确认模型已启用；也可先「保存配置」，再通过「自定义模型」填写准确的模型 ID。点击已配置模型旁的「测试模型」按钮可检查是否可用。
 
-![image](https://files.astrbot.app/docs/source/images/llm/image.png)
+进入「配置文件」，选择要使用的配置文件，在「AI 配置」→「模型」中将「对话模型」设为刚添加的模型，点击右下角「保存配置」。此项用于 AstrBot 内置 AI。
 
-![image](https://files.astrbot.app/docs/source/images/llm/image-1.png)
+详细步骤见 [接入模型服务](./start.md)。
 
-
-> 相应的配置保存在 `data/cmd_config.json` 的 `provider` 字段中。
+> 提供商连接配置保存在 `data/cmd_config.json` 的 `provider_sources` 字段，具体模型配置保存在 `provider` 字段。

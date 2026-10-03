@@ -20,13 +20,15 @@ class HtmlRenderer:
         tmpl_data: dict,
         return_url: bool = False,
         options: dict | None = None,
+        endpoint: str | None = None,
     ):
         """使用自定义文转图模板。该方法会通过网络调用 t2i 终结点图文渲染API。
         @param tmpl_str: HTML Jinja2 模板。
         @param tmpl_data: jinja2 模板数据。
         @param options: 渲染选项。
+        @param endpoint: 可选的本次调用渲染服务地址。为空时使用配置的端点。
 
-        @return: 图片 URL 或者文件路径，取决于 return_url 参数。
+        @return: 图片 URL 或者文件路径,取决于 return_url 参数｡
 
         @example: 参见 https://docs.astrbot.app 插件开发部分。
         """
@@ -35,6 +37,7 @@ class HtmlRenderer:
             tmpl_data,
             return_url,
             options,
+            endpoint=endpoint,
         )
 
     async def render_t2i(
@@ -43,14 +46,16 @@ class HtmlRenderer:
         use_network: bool = True,
         return_url: bool = False,
         template_name: str | None = None,
+        endpoint: str | None = None,
     ):
-        """使用默认文转图模板。"""
+        """使用默认文转图模板｡"""
         if use_network:
             try:
                 return await self.network_strategy.render(
                     text,
                     return_url=return_url,
                     template_name=template_name,
+                    endpoint=endpoint,
                 )
             except BaseException as e:
                 logger.error(

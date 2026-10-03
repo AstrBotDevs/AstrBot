@@ -26,10 +26,10 @@ class VLLMRerankProvider(RerankProvider):
         self.timeout = provider_config.get("timeout", 20)
         self.model = provider_config.get("rerank_model", "BAAI/bge-reranker-base")
 
-        h = {}
+        h = self.request_headers.copy()
         if self.auth_key:
             h["Authorization"] = f"Bearer {self.auth_key}"
-        self.client = aiohttp.ClientSession(
+        self.client: aiohttp.ClientSession | None = aiohttp.ClientSession(
             headers=h,
             timeout=aiohttp.ClientTimeout(total=self.timeout),
         )

@@ -33,9 +33,7 @@ const tabs = computed(() => [
   },
 ]);
 
-const activeTab = computed(() =>
-  String(route.meta.extensionTab || "installed"),
-);
+const activeTab = computed(() => String(route.meta.extensionTab || "installed"));
 </script>
 
 <template>

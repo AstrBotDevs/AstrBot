@@ -7,8 +7,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-WorkingDirectory=%h/.local/share/astrbot
-ExecStart=/usr/bin/sh -c '/usr/bin/astrbot run || { /usr/bin/astrbot init && /usr/bin/astrbot run; }'
+WorkingDirectory=%h/.astrbot
+ExecStart=/usr/bin/astrbot run --backend-only
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal
@@ -17,4 +17,4 @@ SyslogIdentifier=astrbot-%u
 Environment=PYTHONUNBUFFERED=1
 
 [Install]
-WantedBy=default.target
+WantedBy=multi-user.target

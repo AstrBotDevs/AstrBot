@@ -1,5 +1,5 @@
-import { createRequire } from "node:module";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -23,15 +23,28 @@ const shikiRequire = createRequire(require.resolve("shiki/package.json"));
 
 const languageSpecs = [
   ["bash", "bash"],
+  ["c", "c"],
   ["css", "css"],
+  ["cpp", "cpp"],
+  ["csharp", "csharp"],
+  ["dart", "dart"],
+  ["go", "go"],
   ["html", "html"],
   ["javascript", "javascript"],
   ["json", "json"],
   ["jsx", "jsx"],
+  ["kotlin", "kotlin"],
+  ["lua", "lua"],
   ["markdown", "markdown"],
+  ["php", "php"],
   ["powershell", "powershell"],
   ["python", "python"],
+  ["r", "r"],
+  ["ruby", "ruby"],
+  ["rust", "rust"],
+  ["scala", "scala"],
   ["sql", "sql"],
+  ["swift", "swift"],
   ["tsx", "tsx"],
   ["typescript", "typescript"],
   ["xml", "xml"],
@@ -49,13 +62,24 @@ const builtInLanguageSpecs = ["text"];
 
 const languageAliases = {
   bat: "powershell",
+  "c++": "cpp",
+  cc: "cpp",
   cjs: "javascript",
+  cxx: "cpp",
   console: "bash",
   cts: "typescript",
+  cs: "csharp",
   dockerfile: "bash",
+  golang: "go",
+  h: "c",
+  "h++": "cpp",
+  hh: "cpp",
+  hpp: "cpp",
   env: "bash",
   htm: "html",
   js: "javascript",
+  kt: "kotlin",
+  kts: "kotlin",
   md: "markdown",
   mjs: "javascript",
   mts: "typescript",
@@ -64,6 +88,7 @@ const languageAliases = {
   ps1: "powershell",
   pwsh: "powershell",
   py: "python",
+  rs: "rust",
   shell: "bash",
   shellscript: "bash",
   sh: "bash",
@@ -83,9 +108,7 @@ function resolveShikiModule(specifier) {
 }
 
 function buildVirtualSource() {
-  const shikiImport = JSON.stringify(
-    pathToFileURL(require.resolve("shiki")).href,
-  );
+  const shikiImport = JSON.stringify(pathToFileURL(require.resolve("shiki")).href);
   const languageImports = languageSpecs
     .map(
       ([, packageName], index) =>
@@ -100,10 +123,7 @@ function buildVirtualSource() {
     )
     .join("\n");
 
-  const supportedLanguages = [
-    ...builtInLanguageSpecs,
-    ...languageSpecs.map(([runtimeName]) => runtimeName),
-  ];
+  const supportedLanguages = [...builtInLanguageSpecs, ...languageSpecs.map(([runtimeName]) => runtimeName)];
 
   return `import { createHighlighterCoreSync, createJavaScriptRegexEngine } from ${shikiImport};
 ${languageImports}
@@ -222,8 +242,6 @@ async function main() {
   } finally {
     rmSync(tempDir, { force: true, recursive: true });
   }
-
-  console.log(`Built ${runtimeOutputFile}`);
 }
 
 main().catch((error) => {

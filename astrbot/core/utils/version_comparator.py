@@ -4,11 +4,11 @@ import re
 class VersionComparator:
     @staticmethod
     def compare_version(v1: str, v2: str) -> int:
-        """根据 Semver 语义版本规范来比较版本号的大小。支持不仅局限于 3 个数字的版本号，并处理预发布标签。
+        """根据 Semver 语义版本规范来比较版本号的大小｡支持不仅局限于 3 个数字的版本号,并处理预发布标签｡
 
         参考: https://semver.org/lang/zh-CN/
 
-        返回 1 表示 v1 > v2，返回 -1 表示 v1 < v2，返回 0 表示 v1 = v2。
+        返回 1 表示 v1 > v2,返回 -1 表示 v1 < v2,返回 0 表示 v1 = v2｡
         """
         v1 = v1.lower().replace("v", "")
         v2 = v2.lower().replace("v", "")

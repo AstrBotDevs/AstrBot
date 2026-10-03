@@ -4,12 +4,14 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any
 
-from astrbot.api import sp
-from astrbot.core import db_helper, logger
+from astrbot.core import db_helper, logger, sp
 from astrbot.core.db.po import CommandConfig
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
-from astrbot.core.star.filter.permission import PermissionType, PermissionTypeFilter
+from astrbot.core.star.filter.permission import (
+    COMMAND_PERMISSION_TYPES,
+    PermissionTypeFilter,
+)
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import StarHandlerMetadata, star_handlers_registry
 
@@ -46,7 +48,7 @@ class CommandDescriptor:
 
 
 async def sync_command_configs() -> None:
-    """同步指令配置，清理过期配置。"""
+    """同步指令配置,清理过期配置｡"""
     descriptors = _collect_descriptors(include_sub_commands=False)
     config_records = await db_helper.get_command_configs()
     config_map = _bind_configs_to_descriptors(descriptors, config_records)
@@ -60,7 +62,7 @@ async def sync_command_configs() -> None:
 async def toggle_command(handler_full_name: str, enabled: bool) -> CommandDescriptor:
     descriptor = _build_descriptor_by_full_name(handler_full_name)
     if not descriptor:
-        raise ValueError("指定的处理函数不存在或不是指令。")
+        raise ValueError("指定的处理函数不存在或不是指令｡")
 
     existing_cfg = await db_helper.get_command_config(handler_full_name)
     config = await db_helper.upsert_command_config(
@@ -95,16 +97,16 @@ async def rename_command(
 ) -> CommandDescriptor:
     descriptor = _build_descriptor_by_full_name(handler_full_name)
     if not descriptor:
-        raise ValueError("指定的处理函数不存在或不是指令。")
+        raise ValueError("指定的处理函数不存在或不是指令｡")
 
     new_fragment = new_fragment.strip()
     if not new_fragment:
-        raise ValueError("指令名不能为空。")
+        raise ValueError("指令名不能为空｡")
 
     # 校验主指令名
     candidate_full = _compose_command(descriptor.parent_signature, new_fragment)
     if _is_command_in_use(handler_full_name, candidate_full):
-        raise ValueError(f"指令名 '{candidate_full}' 已被其他指令占用。")
+        raise ValueError(f"指令名 '{candidate_full}' 已被其他指令占用｡")
 
     # 校验别名
     if aliases:
@@ -114,7 +116,7 @@ async def rename_command(
                 continue
             alias_full = _compose_command(descriptor.parent_signature, alias)
             if _is_command_in_use(handler_full_name, alias_full):
-                raise ValueError(f"别名 '{alias_full}' 已被其他指令占用。")
+                raise ValueError(f"别名 '{alias_full}' 已被其他指令占用｡")
 
     existing_cfg = await db_helper.get_command_config(handler_full_name)
     merged_extra = dict(existing_cfg.extra_data or {}) if existing_cfg else {}
@@ -146,18 +148,22 @@ async def update_command_permission(
 ) -> CommandDescriptor:
     descriptor = _build_descriptor_by_full_name(handler_full_name)
     if not descriptor:
-        raise ValueError("指定的处理函数不存在或不是指令。")
+        raise ValueError("指定的处理函数不存在或不是指令｡")
 
-    if permission_type not in ["admin", "member"]:
-        raise ValueError("权限类型必须为 admin 或 member。")
+    if permission_type not in COMMAND_PERMISSION_TYPES:
+        raise ValueError(
+            "Permission must be one of: " + ", ".join(COMMAND_PERMISSION_TYPES) + "."
+        )
 
     handler = descriptor.handler
     found_plugin = star_map.get(handler.handler_module_path)
-    if not found_plugin:
+    if not found_plugin or found_plugin.name is None:
         raise ValueError("未找到指令所属插件")
 
     # 1. Update Persistent Config (alter_cmd)
-    alter_cmd_cfg = await sp.global_get("alter_cmd", {})
+    alter_cmd_cfg: dict[str, dict[str, Any]] = (
+        await sp.global_get("alter_cmd", {}) or {}
+    )
     plugin_ = alter_cmd_cfg.get(found_plugin.name, {})
     cfg = plugin_.get(handler.handler_name, {})
     cfg["permission"] = permission_type
@@ -168,9 +174,7 @@ async def update_command_permission(
 
     # 2. Update Runtime Filter
     found_permission_filter = False
-    target_perm_type = (
-        PermissionType.ADMIN if permission_type == "admin" else PermissionType.MEMBER
-    )
+    target_perm_type = COMMAND_PERMISSION_TYPES[permission_type]
 
     for filter_ in handler.event_filters:
         if isinstance(filter_, PermissionTypeFilter):
@@ -195,7 +199,7 @@ async def list_commands() -> list[dict[str, Any]]:
         d.handler_full_name for group in conflict_groups.values() for d in group
     }
 
-    # 分类，设置冲突标志，将子指令挂载到父指令组
+    # 分类,设置冲突标志,将子指令挂载到父指令组
     group_map: dict[str, CommandDescriptor] = {}
     sub_commands: list[CommandDescriptor] = []
     root_commands: list[CommandDescriptor] = []
@@ -215,7 +219,7 @@ async def list_commands() -> list[dict[str, Any]]:
         else:
             root_commands.append(sub)
 
-    # 指令组 + 普通指令，按 effective_command 字母排序
+    # 指令组 + 普通指令,按 effective_command 字母排序
     all_commands = list(group_map.values()) + root_commands
     all_commands.sort(key=lambda d: (d.effective_command or "").lower())
 
@@ -224,7 +228,7 @@ async def list_commands() -> list[dict[str, Any]]:
 
 
 async def list_command_conflicts() -> list[dict[str, Any]]:
-    """列出所有冲突的指令组。"""
+    """列出所有冲突的指令组｡"""
     descriptors = _collect_descriptors(include_sub_commands=False)
     config_records = await db_helper.get_command_configs()
     _bind_configs_to_descriptors(descriptors, config_records)
@@ -250,8 +254,13 @@ async def list_command_conflicts() -> list[dict[str, Any]]:
 # Internal helpers ----------------------------------------------------------
 
 
+def _is_plugin_activated(desc: CommandDescriptor) -> bool:
+    plugin_meta = star_map.get(desc.module_path)
+    return bool(plugin_meta.activated) if plugin_meta else True
+
+
 def _collect_descriptors(include_sub_commands: bool) -> list[CommandDescriptor]:
-    """收集指令，按需包含子指令。"""
+    """收集指令,按需包含子指令｡"""
     descriptors: list[CommandDescriptor] = []
     for handler in star_handlers_registry:
         try:
@@ -286,18 +295,23 @@ def _build_descriptor(handler: StarHandlerMetadata) -> CommandDescriptor | None:
 
     if isinstance(filter_ref, CommandFilter):
         raw_fragment = getattr(
-            filter_ref, "_original_command_name", filter_ref.command_name
+            filter_ref,
+            "_original_command_name",
+            filter_ref.command_name,
         )
         current_fragment = filter_ref.command_name
         parent_signature = (filter_ref.parent_command_names or [""])[0].strip()
-        # 如果是子指令，尝试找到父指令组的 handler_full_name
+        # 如果是子指令,尝试找到父指令组的 handler_full_name
         if is_sub_command and parent_signature:
             parent_group_handler = _find_parent_group_handler(
-                handler.handler_module_path, parent_signature
+                handler.handler_module_path,
+                parent_signature,
             )
     else:
         raw_fragment = getattr(
-            filter_ref, "_original_group_name", filter_ref.group_name
+            filter_ref,
+            "_original_group_name",
+            filter_ref.group_name,
         )
         current_fragment = filter_ref.group_name
         parent_signature = _resolve_group_parent_signature(filter_ref)
@@ -358,10 +372,13 @@ def _locate_primary_filter(
 def _determine_permission(handler: StarHandlerMetadata) -> str:
     for filter_ref in handler.event_filters:
         if isinstance(filter_ref, PermissionTypeFilter):
-            return (
-                "admin"
-                if filter_ref.permission_type == PermissionType.ADMIN
-                else "member"
+            return next(
+                (
+                    name
+                    for name, permission in COMMAND_PERMISSION_TYPES.items()
+                    if filter_ref.permission_type == permission
+                ),
+                "member",
             )
     return "everyone"
 
@@ -376,7 +393,7 @@ def _resolve_group_parent_signature(group_filter: CommandGroupFilter) -> str:
 
 
 def _find_parent_group_handler(module_path: str, parent_signature: str) -> str:
-    """根据模块路径和父级签名，找到对应的指令组 handler_full_name。"""
+    """根据模块路径和父级签名,找到对应的指令组 handler_full_name｡"""
     parent_sig_normalized = parent_signature.strip()
     for handler in star_handlers_registry:
         if handler.handler_module_path != module_path:
@@ -465,7 +482,7 @@ def _group_conflicts(
 ) -> dict[str, list[CommandDescriptor]]:
     conflicts: dict[str, list[CommandDescriptor]] = defaultdict(list)
     for desc in descriptors:
-        if desc.effective_command and desc.enabled:
+        if desc.effective_command and desc.enabled and _is_plugin_activated(desc):
             conflicts[desc.effective_command].append(desc)
     return {k: v for k, v in conflicts.items() if len(v) > 1}
 
@@ -489,10 +506,10 @@ def _set_filter_aliases(
     filter_ref: CommandFilter | CommandGroupFilter,
     aliases: list[str],
 ) -> None:
-    current_aliases = getattr(filter_ref, "alias", set())
+    current_aliases: set[str] = getattr(filter_ref, "alias", set())
     if set(aliases) == current_aliases:
         return
-    setattr(filter_ref, "alias", set(aliases))
+    filter_ref.alias = set(aliases)
     if hasattr(filter_ref, "_cmpl_cmd_names"):
         filter_ref._cmpl_cmd_names = None
 
@@ -515,7 +532,7 @@ def _is_command_in_use(
 
 
 def _descriptor_to_dict(desc: CommandDescriptor) -> dict[str, Any]:
-    result = {
+    result: dict[str, Any] = {
         "handler_full_name": desc.handler_full_name,
         "handler_name": desc.handler_name,
         "plugin": desc.plugin_name,
@@ -531,11 +548,12 @@ def _descriptor_to_dict(desc: CommandDescriptor) -> dict[str, Any]:
         "aliases": desc.aliases,
         "permission": desc.permission,
         "enabled": desc.enabled,
+        "plugin_activated": _is_plugin_activated(desc),
         "is_group": desc.is_group,
         "has_conflict": desc.has_conflict,
         "reserved": desc.reserved,
     }
-    # 如果是指令组，包含子指令列表
+    # 如果是指令组,包含子指令列表
     if desc.is_group and desc.sub_commands:
         result["sub_commands"] = [_descriptor_to_dict(sub) for sub in desc.sub_commands]
     else:

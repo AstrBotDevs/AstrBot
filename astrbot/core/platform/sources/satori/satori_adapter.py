@@ -1,7 +1,7 @@
 import asyncio
 import json
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from xml.etree import ElementTree as ET
 
 import websockets
@@ -20,6 +20,7 @@ from astrbot.api.message_components import (
 )
 from astrbot.api.platform import (
     AstrBotMessage,
+    Group,
     MessageMember,
     MessageType,
     Platform,
@@ -27,14 +28,16 @@ from astrbot.api.platform import (
     register_platform_adapter,
 )
 from astrbot.core.platform.astr_message_event import MessageSession
-from astrbot.core.utils.media_utils import MediaResolver
+from astrbot.core.utils.config_number import coerce_int_config
 
 if TYPE_CHECKING:
     from .satori_event import SatoriPlatformEvent
 
 
 @register_platform_adapter(
-    "satori", "Satori 协议适配器", support_streaming_message=False
+    "satori",
+    "Satori 协议适配器",
+    support_streaming_message=False,
 )
 class SatoriPlatformAdapter(Platform):
     def __init__(
@@ -56,8 +59,20 @@ class SatoriPlatformAdapter(Platform):
             "ws://localhost:5140/satori/v1/events",
         )
         self.auto_reconnect = self.config.get("satori_auto_reconnect", True)
-        self.heartbeat_interval = self.config.get("satori_heartbeat_interval", 10)
-        self.reconnect_delay = self.config.get("satori_reconnect_delay", 5)
+        self.heartbeat_interval = coerce_int_config(
+            self.config.get("satori_heartbeat_interval", 10),
+            default=10,
+            min_value=1,
+            field_name="satori_heartbeat_interval",
+            source="Satori config",
+        )
+        self.reconnect_delay = coerce_int_config(
+            self.config.get("satori_reconnect_delay", 5),
+            default=5,
+            min_value=1,
+            field_name="satori_reconnect_delay",
+            source="Satori config",
+        )
 
         self.metadata = PlatformMetadata(
             name="satori",
@@ -69,7 +84,7 @@ class SatoriPlatformAdapter(Platform):
         self.ws: ClientConnection | None = None
         self.session: ClientSession | None = None
         self.sequence = 0
-        self.logins = []
+        self.logins: list[Any] = []
         self.running = False
         self.heartbeat_task: asyncio.Task | None = None
         self.ready_received = False
@@ -126,7 +141,7 @@ class SatoriPlatformAdapter(Platform):
                 break
 
             if retry_count >= max_retries:
-                logger.error(f"达到最大重试次数 ({max_retries})，停止重试")
+                logger.error(f"达到最大重试次数 ({max_retries}),停止重试")
                 break
 
             if not self.auto_reconnect:
@@ -163,7 +178,7 @@ class SatoriPlatformAdapter(Platform):
 
             async for message in websocket:
                 try:
-                    await self.handle_message(message)  # type: ignore
+                    await self.handle_message(message)
                 except Exception as e:
                     logger.error(f"Satori 处理消息异常: {e}")
 
@@ -193,11 +208,13 @@ class SatoriPlatformAdapter(Platform):
         if self._is_websocket_closed(self.ws):
             raise Exception("WebSocket连接已关闭")
 
-        identify_payload = {
+        identify_payload: dict[str, Any] = {
             "op": 3,  # IDENTIFY
-            "body": {
-                "token": str(self.token) if self.token else "",  # 字符串
-            },
+            "body": dict[str, Any](
+                {
+                    "token": str(self.token) if self.token else "",  # 字符串
+                },
+            ),
         }
 
         # 只有在有序列号时才添加sn字段
@@ -239,7 +256,7 @@ class SatoriPlatformAdapter(Platform):
         except Exception as e:
             logger.error(f"心跳任务异常: {e}")
 
-    async def handle_message(self, message: str) -> None:
+    async def handle_message(self, message: str | bytes) -> None:
         try:
             data = json.loads(message)
             op = data.get("op")
@@ -334,7 +351,11 @@ class SatoriPlatformAdapter(Platform):
 
             if guild and guild.get("id"):
                 abm.type = MessageType.GROUP_MESSAGE
-                abm.group_id = guild.get("id", "")
+                abm.group = Group(
+                    group_id=str(guild["id"]),
+                    group_name=guild.get("name"),
+                    group_avatar=guild.get("avatar"),
+                )
                 abm.session_id = channel.get("id", "")
             else:
                 abm.type = MessageType.FRIEND_MESSAGE
@@ -525,7 +546,7 @@ class SatoriPlatformAdapter(Platform):
 
             return None
         except ET.ParseError as e:
-            logger.warning(f"XML解析失败，使用正则提取: {e}")
+            logger.warning(f"XML解析失败,使用正则提取: {e}")
             return await self._extract_quote_with_regex(content)
         except Exception as e:
             logger.error(f"提取<quote>标签时发生错误: {e}")
@@ -568,7 +589,7 @@ class SatoriPlatformAdapter(Platform):
                     nickname=quote_author.get("nick", quote_author.get("name", "")),
                 )
             else:
-                # 如果没有作者信息，使用默认值
+                # 如果没有作者信息,使用默认值
                 quote_abm.sender = MessageMember(
                     user_id=quote.get("user_id", ""),
                     nickname="内容",
@@ -585,7 +606,7 @@ class SatoriPlatformAdapter(Platform):
 
             quote_abm.timestamp = int(quote.get("timestamp", time.time()))
 
-            # 如果没有任何内容，使用默认文本
+            # 如果没有任何内容,使用默认文本
             if not quote_abm.message_str.strip():
                 quote_abm.message_str = "[引用消息]"
 
@@ -596,7 +617,7 @@ class SatoriPlatformAdapter(Platform):
 
     async def parse_satori_elements(self, content: str) -> list:
         """解析 Satori 消息元素"""
-        elements = []
+        elements: list[Any] = []
 
         if not content:
             return elements
@@ -626,14 +647,14 @@ class SatoriPlatformAdapter(Platform):
             await self._parse_xml_node(root, elements)
         except ET.ParseError as e:
             logger.warning(f"解析 Satori 元素时发生解析错误: {e}, 错误内容: {content}")
-            # 如果解析失败，将整个内容当作纯文本
+            # 如果解析失败,将整个内容当作纯文本
             if content.strip():
                 elements.append(Plain(text=content))
         except Exception as e:
             logger.error(f"解析 Satori 元素时发生未知错误: {e}")
             raise e
 
-        # 如果没有解析到任何元素，将整个内容当作纯文本
+        # 如果没有解析到任何元素,将整个内容当作纯文本
         if not elements and content.strip():
             elements.append(Plain(text=content))
 
@@ -645,7 +666,7 @@ class SatoriPlatformAdapter(Platform):
             elements.append(Plain(text=node.text))
 
         for child in node:
-            # 获取标签名，去除命名空间前缀
+            # 获取标签名,去除命名空间前缀
             tag_name = child.tag
             if "}" in tag_name:
                 tag_name = tag_name.split("}")[1]
@@ -673,12 +694,7 @@ class SatoriPlatformAdapter(Platform):
                 src = attrs.get("src", "")
                 if not src:
                     continue
-                path_wav = await MediaResolver(
-                    src,
-                    media_type="audio",
-                    default_suffix=".wav",
-                ).to_path(target_format="wav")
-                elements.append(Record(file=path_wav, url=path_wav))
+                elements.append(Record(file=src))
 
             elif tag_name == "quote":
                 # quote标签已经被特殊处理
@@ -721,7 +737,7 @@ class SatoriPlatformAdapter(Platform):
                     elements.append(Plain(text="[JSON卡片]"))
 
             else:
-                # 未知标签，递归处理其内容
+                # 未知标签,递归处理其内容
                 if child.text and child.text.strip():
                     elements.append(Plain(text=child.text))
                 await self._parse_xml_node(child, elements)

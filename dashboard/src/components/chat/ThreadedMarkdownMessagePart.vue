@@ -1,5 +1,6 @@
 <template>
   <MarkdownRender
+    class="chat-markdown"
     custom-id="chat-message"
     :content="threadedContent"
     :is-dark="isDark"
@@ -8,14 +9,16 @@
     :smooth-streaming="isStreaming ? 'auto' : false"
     :fade="false"
     :typewriter="false"
-    :max-live-nodes="MARKDOWN_RENDER_MAX_LIVE_NODES"
+    :node-virtual="false"
+    :max-live-nodes="isStreaming ? MARKDOWN_RENDER_MAX_LIVE_NODES : 0"
+    :style="CHAT_MARKDOWN_HEADING_STYLE"
   />
 </template>
 
 <script setup lang="ts">
-import { computed, provide } from "vue";
 import { MarkdownRender } from "markstream-vue";
-import { MARKDOWN_RENDER_MAX_LIVE_NODES } from "@/components/chat/markdownRenderConfig";
+import { computed, provide } from "vue";
+import { CHAT_MARKDOWN_HEADING_STYLE, MARKDOWN_RENDER_MAX_LIVE_NODES } from "@/components/chat/markdownRenderConfig";
 import type { ChatThread } from "@/composables/useMessages";
 
 const props = defineProps<{
@@ -47,9 +50,7 @@ const threadMap = computed(() =>
     return acc;
   }, {}),
 );
-const threadedCustomHtmlTags = computed(() =>
-  Array.from(new Set([...props.customHtmlTags, "thread"])),
-);
+const threadedCustomHtmlTags = computed(() => Array.from(new Set([...props.customHtmlTags, "thread"])));
 
 const threadedContent = computed(() => {
   const source = props.text || "";
@@ -86,9 +87,6 @@ provide("chatThreadMap", () => threadMap.value);
 provide("openChatThread", (thread: ChatThread) => emit("openThread", thread));
 
 function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 </script>

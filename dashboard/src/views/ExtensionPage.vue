@@ -1,13 +1,13 @@
 <script setup>
+import { computed, defineAsyncComponent } from "vue";
 import AstrBotConfig from "@/components/shared/AstrBotConfig.vue";
 import ConsoleDisplayer from "@/components/shared/ConsoleDisplayer.vue";
-import ReadmeDialog from "@/components/shared/ReadmeDialog.vue";
 import ProxySelector from "@/components/shared/ProxySelector.vue";
+import ReadmeDialog from "@/components/shared/ReadmeDialog.vue";
 import UninstallConfirmDialog from "@/components/shared/UninstallConfirmDialog.vue";
-import { useExtensionPage } from "./extension/useExtensionPage";
-import { computed, defineAsyncComponent } from "vue";
-import defaultPluginIcon from "/favicon.svg";
 import { usePluginI18n } from "@/utils/pluginI18n";
+import defaultPluginIcon from "/favicon.svg";
+import { useExtensionPage } from "./extension/useExtensionPage";
 
 const props = defineProps({
   initialTab: {
@@ -16,15 +16,9 @@ const props = defineProps({
   },
 });
 
-const InstalledPluginsTab = defineAsyncComponent(
-  () => import("./extension/InstalledPluginsTab.vue"),
-);
-const MarketPluginsTab = defineAsyncComponent(
-  () => import("./extension/MarketPluginsTab.vue"),
-);
-const PluginDetailPage = defineAsyncComponent(
-  () => import("./extension/PluginDetailPage.vue"),
-);
+const InstalledPluginsTab = defineAsyncComponent(() => import("./extension/InstalledPluginsTab.vue"));
+const MarketPluginsTab = defineAsyncComponent(() => import("./extension/MarketPluginsTab.vue"));
+const PluginDetailPage = defineAsyncComponent(() => import("./extension/PluginDetailPage.vue"));
 
 const pageState = useExtensionPage(props.initialTab);
 const { pluginName, pluginDesc } = usePluginI18n();
@@ -42,8 +36,6 @@ const {
   fileInput,
   activeTab,
   extension_data,
-  getInitialShowReserved,
-  showReserved,
   snack_message,
   snack_show,
   snack_success,
@@ -58,8 +50,6 @@ const {
   updateConfirmDialog,
   updateAllConfirmDialog,
   changelogDialog,
-  getInitialListViewMode,
-  isListView,
   pluginSearch,
   loading_,
   currentPage,
@@ -99,10 +89,10 @@ const {
   normalizeStr,
   toPinyinText,
   toInitials,
-  pluginHeaders,
   filteredExtensions,
   filteredPlugins,
   filteredMarketPlugins,
+  getMarketPluginKey,
   sortedPlugins,
   RANDOM_PLUGINS_COUNT,
   randomPlugins,
@@ -112,7 +102,6 @@ const {
   totalPages,
   paginatedPlugins,
   updatableExtensions,
-  toggleShowReserved,
   toast,
   resetLoadingDialog,
   onLoadingDialogResult,
@@ -195,9 +184,7 @@ const selectedPluginId = computed(() => {
   return Array.isArray(pluginId) ? pluginId[0] : pluginId || "";
 });
 
-const selectedDetailTab = computed(() =>
-  props.initialTab === "market" ? "market" : "installed",
-);
+const selectedDetailTab = computed(() => (props.initialTab === "market" ? "market" : "installed"));
 
 const selectedInstalledPlugin = computed(() => {
   if (!selectedPluginId.value) return null;
@@ -213,23 +200,23 @@ const normalizeRepoUrl = (value) =>
     .replace(/\.git$/, "");
 
 const selectedMarketPlugin = computed(() => {
-  const market = Array.isArray(pluginMarketData.value)
-    ? pluginMarketData.value
-    : [];
+  const market = Array.isArray(pluginMarketData.value) ? pluginMarketData.value : [];
   const installedPlugin = selectedInstalledPlugin.value;
-  const marketNameMatch =
-    market.find((item) => item.name === selectedPluginId.value) || null;
+  // Resolve by the unique market plugin key first; the `name` match is a
+  // fallback for legacy deep links, since multiple market entries can share
+  // the same metadata name.
+  const marketKeyMatch = market.find((item) => getMarketPluginKey(item) === selectedPluginId.value) || null;
+  const marketNameMatch = market.find((item) => item.name === selectedPluginId.value) || null;
+  const marketMatch = marketKeyMatch || marketNameMatch;
 
   if (selectedDetailTab.value === "market" || !installedPlugin) {
-    return marketNameMatch;
+    return marketMatch;
   }
 
   const repo = normalizeRepoUrl(installedPlugin.repo);
   if (!repo) return null;
 
-  return (
-    market.find((item) => normalizeRepoUrl(item?.repo) === repo) || null
-  );
+  return market.find((item) => normalizeRepoUrl(item?.repo) === repo) || null;
 });
 
 const selectedDetailPlugin = computed(() => {
@@ -248,9 +235,7 @@ const installDialogPluginDesc = computed(() =>
     selectedInstallPlugin.value
       ? pluginDesc(
           selectedInstallPlugin.value,
-          selectedInstallPlugin.value.desc ||
-            selectedInstallPlugin.value.description ||
-            "",
+          selectedInstallPlugin.value.desc || selectedInstallPlugin.value.description || "",
         )
       : "",
   ).trim(),
@@ -268,25 +253,16 @@ const installDialogPluginLogo = computed(() => {
   return typeof logo === "string" && logo.trim() ? logo : defaultPluginIcon;
 });
 
-const updateDialogPlugin = computed(
-  () => selectedUpdateMarketPlugin.value || selectedUpdateExtension.value,
-);
+const updateDialogPlugin = computed(() => selectedUpdateMarketPlugin.value || selectedUpdateExtension.value);
 
-const updateDialogPluginName = computed(() =>
-  updateDialogPlugin.value ? pluginName(updateDialogPlugin.value) : "",
-);
+const updateDialogPluginName = computed(() => (updateDialogPlugin.value ? pluginName(updateDialogPlugin.value) : ""));
 
-const updateDialogCurrentVersion = computed(() =>
-  String(selectedUpdateExtension.value?.version || "").trim(),
-);
+const updateDialogCurrentVersion = computed(() => String(selectedUpdateExtension.value?.version || "").trim());
 
-const updateDialogTargetVersion = computed(() =>
-  String(selectedUpdateMarketPlugin.value?.version || "").trim(),
-);
+const updateDialogTargetVersion = computed(() => String(selectedUpdateMarketPlugin.value?.version || "").trim());
 
 const updateDialogPluginLogo = computed(() => {
-  const logo =
-    selectedUpdateMarketPlugin.value?.logo || selectedUpdateExtension.value?.logo;
+  const logo = selectedUpdateMarketPlugin.value?.logo || selectedUpdateExtension.value?.logo;
   return typeof logo === "string" && logo.trim() ? logo : defaultPluginIcon;
 });
 </script>

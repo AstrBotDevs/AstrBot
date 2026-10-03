@@ -2,24 +2,28 @@ import asyncio
 import base64
 import logging
 import os
+from typing import Any
 
+import aiofiles
 import aiohttp
 import dashscope
 from dashscope.audio.tts_v2 import AudioFormat, SpeechSynthesizer
 
-try:
-    from dashscope.aigc.multimodal_conversation import MultiModalConversation
-except (
-    ImportError
-):  # pragma: no cover - older dashscope versions without Qwen TTS support
-    MultiModalConversation = None
-
+from astrbot.core.provider.entities import ProviderType
+from astrbot.core.provider.provider import TTSProvider
+from astrbot.core.provider.register import register_provider_adapter
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.datetime_utils import generate_timestamp_id
 
-from ..entities import ProviderType
-from ..provider import TTSProvider
-from ..register import register_provider_adapter
+MultiModalConversation: Any = None
+try:
+    from dashscope.aigc.multimodal_conversation import (
+        MultiModalConversation,
+    )
+except (
+    ImportError
+):  # pragma: no cover - older dashscope versions without Qwen TTS support
+    pass
 
 
 @register_provider_adapter(
@@ -59,28 +63,28 @@ class ProviderDashscopeTTSAPI(TTSProvider):
             )
 
         path = os.path.join(temp_dir, f"dashscope_tts_{generate_timestamp_id()}{ext}")
-        with open(path, "wb") as f:
-            f.write(audio_bytes)
+        async with aiofiles.open(path, "wb") as f:
+            await f.write(audio_bytes)
         return path
 
-    def _call_qwen_tts(self, model: str, text: str):
+    def _call_qwen_tts(self, model: str, text: str) -> Any:
         if MultiModalConversation is None:
             raise RuntimeError(
                 "dashscope SDK missing MultiModalConversation. Please upgrade the dashscope package to use Qwen TTS models.",
             )
 
-        kwargs = {
-            "model": model,
-            "messages": None,
-            "api_key": self.chosen_api_key,
-            "voice": self.voice or "Cherry",
-            "text": text,
-        }
         if not self.voice:
             logging.warning(
                 "No voice specified for Qwen TTS model, using default 'Cherry'.",
             )
-        return MultiModalConversation.call(**kwargs)
+        return MultiModalConversation.call(
+            headers=self.request_headers.copy(),
+            model=model,
+            messages=[],
+            api_key=self.chosen_api_key,
+            voice=self.voice or "Cherry",
+            text=text,
+        )
 
     async def _synthesize_with_qwen_tts(
         self,
@@ -97,7 +101,7 @@ class ProviderDashscopeTTSAPI(TTSProvider):
         ext = ".wav"
         return audio_bytes, ext
 
-    async def _extract_audio_from_response(self, response) -> bytes | None:
+    async def _extract_audio_from_response(self, response: Any) -> bytes | None:
         output = getattr(response, "output", None)
         audio_obj = getattr(output, "audio", None) if output is not None else None
         if not audio_obj:
@@ -122,14 +126,16 @@ class ProviderDashscopeTTSAPI(TTSProvider):
         timeout = max(self.timeout_ms / 1000, 1) if self.timeout_ms else 20
         try:
             async with (
-                aiohttp.ClientSession() as session,
+                aiohttp.ClientSession(
+                    headers={"User-Agent": self.request_headers["User-Agent"]}
+                ) as session,
                 session.get(
                     url,
                     timeout=aiohttp.ClientTimeout(total=timeout),
                 ) as response,
             ):
                 return await response.read()
-        except (aiohttp.ClientError, asyncio.TimeoutError, OSError) as e:
+        except (aiohttp.ClientError, TimeoutError, OSError) as e:
             logging.exception(f"Failed to download audio from URL {url}: {e}")
             return None
 
@@ -139,6 +145,9 @@ class ProviderDashscopeTTSAPI(TTSProvider):
         text: str,
     ) -> tuple[bytes | None, str]:
         synthesizer = SpeechSynthesizer(
+            headers={
+                name.lower(): value for name, value in self.request_headers.items()
+            },
             model=model,
             voice=self.voice,
             format=AudioFormat.WAV_24000HZ_MONO_16BIT,

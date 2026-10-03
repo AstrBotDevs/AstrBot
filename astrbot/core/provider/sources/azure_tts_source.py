@@ -10,13 +10,12 @@ from xml.sax.saxutils import escape
 from httpx import AsyncClient, Timeout
 
 from astrbot import logger
-from astrbot.core.config.default import VERSION
+from astrbot.core.provider.entities import ProviderType
+from astrbot.core.provider.headers import build_provider_headers
+from astrbot.core.provider.provider import TTSProvider
+from astrbot.core.provider.register import register_provider_adapter
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.datetime_utils import generate_timestamp_id
-
-from ..entities import ProviderType
-from ..provider import TTSProvider
-from ..register import register_provider_adapter
 
 TEMP_DIR = Path(get_astrbot_temp_path()) / "azure_tts"
 TEMP_DIR.mkdir(parents=True, exist_ok=True)
@@ -25,6 +24,7 @@ AZURE_TTS_SUBSCRIPTION_KEY_PATTERN = r"^(?:[a-zA-Z0-9]{32}|[a-zA-Z0-9]{84})$"
 
 class OTTSProvider:
     def __init__(self, config: dict) -> None:
+        self.request_headers = build_provider_headers(config.get("custom_headers"))
         self.skey = config["OTTS_SKEY"]
         self.api_url = config["OTTS_URL"]
         self.auth_time_url = config["OTTS_AUTH_TIME"]
@@ -41,13 +41,15 @@ class OTTSProvider:
     def client(self) -> AsyncClient:
         if self._client is None:
             raise RuntimeError(
-                "Client not initialized. Please use 'async with' context."
+                "Client not initialized. Please use 'async with' context.",
             )
         return self._client
 
     async def __aenter__(self):
         self._client = AsyncClient(
-            timeout=self.timeout, proxy=self.proxy if self.proxy else None
+            headers=self.request_headers,
+            timeout=self.timeout,
+            proxy=self.proxy if self.proxy else None,
         )
         return self
 
@@ -93,7 +95,7 @@ class OTTSProvider:
                         "volume": voice_params["volume"],
                     },
                     headers={
-                        "User-Agent": f"AstrBot/{VERSION}",
+                        **self.request_headers,
                         "UAK": "AstrBot/AzureTTS",
                     },
                 )
@@ -124,8 +126,8 @@ class AzureNativeProvider(TTSProvider):
             f"https://{self.region}.tts.speech.microsoft.com/cognitiveservices/v1"
         )
         self._client: AsyncClient | None = None
-        self.token = None
-        self.token_expire = 0
+        self.token: str | None = None
+        self.token_expire: float = 0.0
         self.voice_params = {
             "voice": provider_config.get("azure_tts_voice", "zh-CN-YunxiaNeural"),
             "style": provider_config.get("azure_tts_style", "cheerful"),
@@ -141,18 +143,18 @@ class AzureNativeProvider(TTSProvider):
     def client(self) -> AsyncClient:
         if self._client is None:
             raise RuntimeError(
-                "Client not initialized. Please use 'async with' context."
+                "Client not initialized. Please use 'async with' context.",
             )
         return self._client
 
     async def __aenter__(self):
         self._client = AsyncClient(
             headers={
-                "User-Agent": f"AstrBot/{VERSION}",
+                **self.request_headers,
                 "Content-Type": "application/ssml+xml",
                 "X-Microsoft-OutputFormat": "riff-48khz-16bit-mono-pcm",
             },
-            proxy=self.proxy if self.proxy else None,
+            proxy=self.proxy or None,
         )
         return self
 
@@ -194,7 +196,7 @@ class AzureNativeProvider(TTSProvider):
             content=ssml,
             headers={
                 "Authorization": f"Bearer {self.token}",
-                "User-Agent": f"AstrBot/{VERSION}",
+                **self.request_headers,
             },
         )
         response.raise_for_status()
@@ -211,25 +213,29 @@ class AzureTTSProvider(TTSProvider):
         super().__init__(provider_config, provider_settings)
         key_value = provider_config.get("azure_tts_subscription_key", "")
         self.provider = self._parse_provider(key_value, provider_config)
+        self._synthesis_lock = asyncio.Lock()
 
     def _parse_provider(
-        self, key_value: str, config: dict
+        self,
+        key_value: str,
+        config: dict,
     ) -> OTTSProvider | AzureNativeProvider:
         if key_value.lower().startswith("other["):
             json_str = ""
             try:
                 match = re.match(r"other\[(.*)\]", key_value, re.DOTALL)
                 if not match:
-                    raise ValueError("无效的other[...]格式，应形如 other[{...}]")
+                    raise ValueError("无效的other[...]格式,应形如 other[{...}]")
                 json_str = match.group(1).strip()
                 otts_config = json.loads(json_str)
+                otts_config.setdefault("custom_headers", config.get("custom_headers"))
                 required = {"OTTS_SKEY", "OTTS_URL", "OTTS_AUTH_TIME"}
                 if missing := required - otts_config.keys():
                     raise ValueError(f"缺少OTTS参数: {', '.join(missing)}")
                 return OTTSProvider(otts_config)
             except json.JSONDecodeError as e:
                 error_msg = (
-                    f"JSON解析失败，请检查格式（错误位置：行 {e.lineno} 列 {e.colno}）\n"
+                    f"JSON解析失败,请检查格式(错误位置:行 {e.lineno} 列 {e.colno})\n"
                     f"错误详情: {e.msg}\n"
                     f"错误上下文: {json_str[max(0, e.pos - 30) : e.pos + 30]}"
                 )
@@ -238,11 +244,12 @@ class AzureTTSProvider(TTSProvider):
                 raise ValueError(f"配置错误: 缺少必要参数 {e}") from e
         if re.fullmatch(AZURE_TTS_SUBSCRIPTION_KEY_PATTERN, key_value):
             return AzureNativeProvider(config, self.provider_settings)
-        raise ValueError("订阅密钥格式无效，应为32位或84位字母数字或other[...]格式")
+        raise ValueError("订阅密钥格式无效,应为32位或84位字母数字或other[...]格式")
 
     async def get_audio(self, text: str) -> str:
-        if isinstance(self.provider, OTTSProvider):
-            async with self.provider as provider:
+        # Both backends keep one mutable client; protect its entire lifetime.
+        async with self._synthesis_lock, self.provider as provider:
+            if isinstance(provider, OTTSProvider):
                 return await provider.get_audio(
                     text,
                     {
@@ -253,6 +260,5 @@ class AzureTTSProvider(TTSProvider):
                         "volume": self.provider_config.get("azure_tts_volume"),
                     },
                 )
-        else:
-            async with self.provider as provider:
+            else:
                 return await provider.get_audio(text)

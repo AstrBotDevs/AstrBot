@@ -1,3 +1,4 @@
+import asyncio
 import inspect
 import os
 import re
@@ -6,6 +7,7 @@ import time
 import zipfile
 from pathlib import Path
 
+import anyio
 import certifi
 import httpx
 
@@ -59,7 +61,6 @@ class _RepoZipUpdater:
         Args:
             verify: TLS certificate verification configuration for HTTPX.
         """
-        self._rm_on_error = on_error
         self._httpx_verify = certifi.where() if verify is None else verify
 
     def _create_httpx_client(self, timeout: float = 30.0) -> httpx.AsyncClient:
@@ -76,77 +77,11 @@ class _RepoZipUpdater:
             return body
         return body[:max_len] + "...[truncated]"
 
-    async def _fetch_repository_default_branch(
-        self,
-        repository: GitHubRepository,
-    ) -> str | None:
-        """Fetch the default branch for a repository.
-
-        Args:
-            repository: Parsed GitHub repository.
-
-        Returns:
-            The default branch name, or None if it cannot be resolved.
-        """
-        url = repository.default_branch_api_url
-        try:
-            async with self._create_httpx_client(timeout=10.0) as client:
-                response = await client.get(url)
-                response.raise_for_status()
-                repo_info = response.json()
-        except Exception as exc:
-            logger.debug(
-                "Failed to get the default %s branch for %s/%s: %s",
-                "github",
-                repository.owner,
-                repository.name,
-                exc,
-            )
-            return None
-
-        default_branch = str(repo_info.get("default_branch") or "").strip()
-        return default_branch or None
-
-    async def _resolve_repository_source(
-        self,
-        repo_url: str,
-    ) -> GitHubRepository:
-        """Resolve a repository URL to a downloadable source archive.
-
-        Args:
-            repo_url: Repository URL, optionally with an explicit tree branch.
-
-        Returns:
-            Resolved provider adapter and repository branch.
-
-        Raises:
-            ValueError: If the repository URL is unsupported or invalid.
-        """
-        repository = GitHubRepository.parse(repo_url)
-        if repository.branch:
-            return repository
-
-        default_branch = await self._fetch_repository_default_branch(repository)
-        branch = default_branch or "main"
-        if not default_branch:
-            logger.info(
-                "Could not get the default %s branch for %s/%s; trying %s.",
-                "github",
-                repository.owner,
-                repository.name,
-                branch,
-            )
-        return GitHubRepository(
-            repository.owner,
-            repository.name,
-            branch,
-        )
-
     async def _download_file(
         self,
         url: str,
         path: str,
-        timeout: float = 1800.0,
+        request_timeout: float = 1800.0,
         progress_callback=None,
     ) -> None:
         target_path = Path(path)
@@ -160,7 +95,7 @@ class _RepoZipUpdater:
                 await result
 
         try:
-            async with self._create_httpx_client(timeout=timeout) as client:
+            async with self._create_httpx_client(timeout=request_timeout) as client:
                 async with client.stream("GET", url) as response:
                     response.raise_for_status()
                     headers = getattr(response, "headers", {})
@@ -176,9 +111,9 @@ class _RepoZipUpdater:
                             "speed": 0,
                         },
                     )
-                    with target_path.open("wb") as file:
+                    async with await anyio.open_file(target_path, "wb") as file:
                         async for chunk in response.aiter_bytes(8192):
-                            file.write(chunk)
+                            await file.write(chunk)
                             downloaded_size += len(chunk)
                             elapsed_time = max(time.time() - start_time, 1)
                             await _emit_progress(
@@ -201,10 +136,18 @@ class _RepoZipUpdater:
                             "speed": 0,
                         },
                     )
-        except Exception as e:
-            logger.error(f"Failed to download file: {url} -> {target_path}: {e}")
-            if self._rm_on_error and target_path.exists():
-                target_path.unlink()
+        except (asyncio.CancelledError, Exception) as error:
+            if not isinstance(error, asyncio.CancelledError):
+                logger.error(
+                    f"Failed to download file: {url} -> {target_path}: {error}"
+                )
+            try:
+                target_path.unlink(missing_ok=True)
+            except OSError as cleanup_error:
+                logger.warning(
+                    "Failed to remove partial download: "
+                    f"{url} -> {target_path}: {cleanup_error}"
+                )
             raise
 
     async def _fetch_release_info(self, url: str, latest: bool = True) -> list:
@@ -285,17 +228,21 @@ class _RepoZipUpdater:
         )
 
     async def _download_repository(
-        self, target_path: str, repo_url: str, proxy=""
+        self,
+        target_path: str,
+        repo_url: str,
+        proxy="",
     ) -> None:
-        repository = await self._resolve_repository_source(repo_url)
+        repository = GitHubRepository.parse(repo_url)
 
         logger.info(f"Downloading update for {repository.name} ...")
         logger.info(
-            "Downloading %s/%s from %s branch %s",
+            "Downloading %s/%s from github %s",
             repository.owner,
             repository.name,
-            "github",
-            repository.branch,
+            f"branch {repository.branch}"
+            if repository.branch
+            else "default reference HEAD",
         )
         release_url = repository.archive_url
 
@@ -327,7 +274,10 @@ class _RepoZipUpdater:
         root_candidates: list[str] = []
 
         for raw_entry, normalized_entry, portable_entry in zip(
-            entries, normalized_entries, portable_entries
+            entries,
+            normalized_entries,
+            portable_entries,
+            strict=False,
         ):
             if normalized_entry == ".":
                 continue

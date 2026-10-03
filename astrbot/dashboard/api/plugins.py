@@ -864,6 +864,7 @@ async def set_plugin_enabled_by_id(
 
 
 @router.get("/plugins/pages")
+@router.get("/plugins/views")
 async def list_plugin_pages_by_id(
     plugin_id: str = Query(...),
     _auth: AuthContext = Depends(require_plugin_scope),
@@ -878,6 +879,7 @@ async def list_plugin_pages_by_id(
 
 
 @router.get("/plugins/page")
+@router.get("/plugins/view")
 async def get_plugin_page_by_id(
     request: Request,
     plugin_id: str = Query(...),
@@ -895,6 +897,7 @@ async def get_plugin_page_by_id(
 
 
 @router.get("/plugins/page/assets")
+@router.get("/plugins/view/assets")
 async def get_plugin_page_asset_by_id(
     request: Request,
     plugin_id: str = Query(...),
@@ -1155,6 +1158,7 @@ async def update_plugin(
 
 
 @router.get("/plugins/{plugin_id}/pages")
+@router.get("/plugins/{plugin_id}/views")
 async def list_plugin_pages(
     plugin_id: str,
     _auth: AuthContext = Depends(require_plugin_scope),
@@ -1169,6 +1173,7 @@ async def list_plugin_pages(
 
 
 @router.get("/plugins/{plugin_id}/pages/{page_name}")
+@router.get("/plugins/{plugin_id}/views/{page_name}")
 async def get_plugin_page(
     plugin_id: str,
     page_name: str,
@@ -1186,6 +1191,7 @@ async def get_plugin_page(
 
 
 @router.get("/plugins/{plugin_id}/pages/{page_name}/assets/{asset_path:path}")
+@router.get("/plugins/{plugin_id}/views/{page_name}/assets/{asset_path:path}")
 async def get_plugin_page_asset(
     plugin_id: str,
     page_name: str,

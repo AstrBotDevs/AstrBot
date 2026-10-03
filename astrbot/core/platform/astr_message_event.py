@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import abc
 import asyncio
 import hashlib
@@ -64,7 +66,7 @@ class AstrMessageEvent(abc.ABC):
             except (ValueError, TypeError, AttributeError):
                 logger.warning(
                     f"Failed to convert message type {message_obj.type!r} to MessageType. "
-                    f"Falling back to FRIEND_MESSAGE."
+                    f"Falling back to FRIEND_MESSAGE.",
                 )
                 message_type = MessageType.FRIEND_MESSAGE
         self.session = MessageSession(
@@ -153,10 +155,10 @@ class AstrMessageEvent(abc.ABC):
                 parts.append("[图片]")
             elif isinstance(i, Face):
                 parts.append(f"[表情:{i.id}]")
-            elif isinstance(i, At):
-                parts.append(f"[At:{i.qq}]")
             elif isinstance(i, AtAll):
                 parts.append("[At:全体成员]")
+            elif isinstance(i, At):
+                parts.append(f"[At:{i.qq}]")
             elif isinstance(i, Forward):
                 # 转发消息
                 parts.append("[转发消息]")
@@ -238,6 +240,11 @@ class AstrMessageEvent(abc.ABC):
         if path and path not in self._temporary_local_files:
             self._temporary_local_files.append(path)
 
+    def untrack_temporary_local_file(self, path: str) -> None:
+        """Exclude a retained attachment from event-scoped cleanup."""
+        if path in self._temporary_local_files:
+            self._temporary_local_files.remove(path)
+
     def cleanup_temporary_local_files(self) -> None:
         paths = list(self._temporary_local_files)
         self._temporary_local_files.clear()
@@ -279,7 +286,7 @@ class AstrMessageEvent(abc.ABC):
 
     async def send_streaming(
         self,
-        generator: AsyncGenerator[MessageChain, None],
+        generator: AsyncGenerator[MessageChain],
         use_fallback: bool = False,
     ) -> None:
         """发送流式消息到消息平台，使用异步生成器。
@@ -504,9 +511,27 @@ class AstrMessageEvent(abc.ABC):
         await self.send(MessageChain([Plain(emoji)]))
 
     async def get_group(self, group_id: str | None = None, **kwargs) -> Group | None:
-        """获取一个群聊的数据, 如果不填写 group_id: 如果是私聊消息，返回 None。如果是群聊消息，返回当前群聊的数据。
+        """Get group information.
 
-        适配情况:
+        Platform event subclasses can enrich the result through their APIs. The
+        default implementation returns inbound group data, or an ID-only object
+        when an explicit group is queried.
 
-        - aiocqhttp(OneBotv11)
+        Args:
+            group_id: Group ID to query. Defaults to the current message group.
+            **kwargs: Extra platform-specific query options.
+
+        Returns:
+            Group information, or ``None`` for a private message without an
+            explicit group ID.
         """
+        resolved_group_id = group_id or self.get_group_id()
+        if not resolved_group_id:
+            return None
+        resolved_group_id = str(resolved_group_id)
+        if (
+            self.message_obj.group
+            and self.message_obj.group.group_id == resolved_group_id
+        ):
+            return self.message_obj.group
+        return Group(group_id=resolved_group_id)

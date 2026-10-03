@@ -48,17 +48,12 @@
 </template>
 
 <script setup lang="ts">
-import axios, { type AxiosRequestConfig } from 'axios';
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { useRoute } from "vue-router";
 
-import {
-  UPGRADE_RECOVERY_EVENT,
-  UPGRADE_RECOVERY_TOKEN_KEY,
-  type ApiEnvelope,
-  type VersionData,
-} from '@/api/v1';
-import { useI18n } from '@/i18n/composables';
+import { type ApiEnvelope, UPGRADE_RECOVERY_EVENT, UPGRADE_RECOVERY_TOKEN_KEY, type VersionData } from "@/api/v1";
+import { useI18n } from "@/i18n/composables";
+import request, { resolveApiUrl } from "@/utils/request";
 
 type StartTimeData = {
   start_time?: number | string | null;
@@ -74,59 +69,48 @@ const route = useRoute();
 const visible = ref(false);
 const restarting = ref(false);
 const blockingRecovery = ref(false);
-const statusMessage = ref('');
-const coreVersion = ref('');
-const dashboardVersion = ref('');
+const statusMessage = ref("");
+const coreVersion = ref("");
+const dashboardVersion = ref("");
 const initialStartTime = ref<number | string | null>(null);
 
 let restartTimer: ReturnType<typeof setInterval> | null = null;
 let detecting = false;
-const recoveryClient = axios.create();
+const recoveryClient = request;
 
 function normalizeVersion(version?: string | null) {
-  return (version || '').trim().replace(/^v/i, '');
+  return (version || "").trim().replace(/^v/i, "");
 }
 
 function displayVersion(version?: string | null) {
   const normalized = normalizeVersion(version);
-  return normalized ? `v${normalized}` : 'unknown';
+  return normalized ? `v${normalized}` : "unknown";
 }
 
 function versionsMismatch(core?: string | null, dashboard?: string | null) {
   const normalizedCore = normalizeVersion(core);
   const normalizedDashboard = normalizeVersion(dashboard);
-  return Boolean(
-    normalizedCore &&
-      normalizedDashboard &&
-      normalizedCore !== normalizedDashboard,
-  );
+  return Boolean(normalizedCore && normalizedDashboard && normalizedCore !== normalizedDashboard);
 }
 
-function isMissingApiKeyResponse(response: {
-  data?: { message?: string | null } | string;
-}) {
-  const message =
-    typeof response.data === 'string'
-      ? response.data
-      : response.data?.message || '';
-  return message.toLowerCase().includes('missing api key');
+function isMissingApiKeyResponse(response: { data?: { message?: string | null } | string }) {
+  const message = typeof response.data === "string" ? response.data : response.data?.message || "";
+  return message.toLowerCase().includes("missing api key");
 }
 
 function getDismissKey() {
   return `astrbot-upgrade-recovery-dismissed:${coreVersion.value}:${dashboardVersion.value}`;
 }
 
-function recoveryRequestConfig(validateStatus = false): AxiosRequestConfig {
+function recoveryRequestConfig(validateStatus = false) {
   const headers: Record<string, string> = {};
-  const token =
-    localStorage.getItem('token') ||
-    sessionStorage.getItem(UPGRADE_RECOVERY_TOKEN_KEY);
-  const locale = localStorage.getItem('astrbot-locale');
+  const token = localStorage.getItem("token") || sessionStorage.getItem(UPGRADE_RECOVERY_TOKEN_KEY);
+  const locale = localStorage.getItem("astrbot-locale");
   if (token) {
     headers.Authorization = `Bearer ${token}`;
   }
   if (locale) {
-    headers['Accept-Language'] = locale;
+    headers["Accept-Language"] = locale;
   }
   return {
     headers,
@@ -136,7 +120,7 @@ function recoveryRequestConfig(validateStatus = false): AxiosRequestConfig {
 
 async function fetchLegacyStartTime() {
   const response = await recoveryClient.get<ApiEnvelope<StartTimeData>>(
-    '/api/stat/start-time',
+    resolveApiUrl("/api/stat/start-time"),
     recoveryRequestConfig(),
   );
   return response.data?.data?.start_time ?? null;
@@ -150,7 +134,7 @@ function clearRestartTimer() {
 }
 
 function dismiss() {
-  sessionStorage.setItem(getDismissKey(), '1');
+  sessionStorage.setItem(getDismissKey(), "1");
   sessionStorage.removeItem(UPGRADE_RECOVERY_TOKEN_KEY);
   blockingRecovery.value = false;
   visible.value = false;
@@ -158,7 +142,7 @@ function dismiss() {
 
 function reloadWithCacheBuster() {
   const url = new URL(window.location.href);
-  url.searchParams.set('_r', Date.now().toString());
+  url.searchParams.set("_r", Date.now().toString());
   window.location.replace(url.toString());
 }
 
@@ -169,10 +153,7 @@ function waitForRestart() {
     attempts += 1;
     try {
       const nextStartTime = await fetchLegacyStartTime();
-      if (
-        nextStartTime !== null &&
-        String(nextStartTime) !== String(initialStartTime.value)
-      ) {
+      if (nextStartTime !== null && String(nextStartTime) !== String(initialStartTime.value)) {
         clearRestartTimer();
         sessionStorage.removeItem(UPGRADE_RECOVERY_TOKEN_KEY);
         reloadWithCacheBuster();
@@ -184,27 +165,26 @@ function waitForRestart() {
     if (attempts >= 90) {
       clearRestartTimer();
       restarting.value = false;
-      statusMessage.value = t('core.common.upgradeRecovery.failed');
+      statusMessage.value = t("core.common.upgradeRecovery.failed");
     }
   }, 1000);
 }
 
 async function restartCore() {
   restarting.value = true;
-  statusMessage.value = t('core.common.upgradeRecovery.restarting');
+  statusMessage.value = t("core.common.upgradeRecovery.restarting");
   try {
-    initialStartTime.value =
-      initialStartTime.value ?? (await fetchLegacyStartTime());
+    initialStartTime.value = initialStartTime.value ?? (await fetchLegacyStartTime());
     await recoveryClient.post<ApiEnvelope<unknown>>(
-      '/api/stat/restart-core',
+      resolveApiUrl("/api/stat/restart-core"),
       undefined,
       recoveryRequestConfig(),
     );
-    statusMessage.value = t('core.common.upgradeRecovery.waiting');
+    statusMessage.value = t("core.common.upgradeRecovery.waiting");
     waitForRestart();
   } catch (_error) {
     restarting.value = false;
-    statusMessage.value = t('core.common.upgradeRecovery.failed');
+    statusMessage.value = t("core.common.upgradeRecovery.failed");
   }
 }
 
@@ -239,7 +219,7 @@ async function detectUpgradeMismatch() {
   detecting = true;
   try {
     const v1Response = await recoveryClient.get<ApiEnvelope<unknown>>(
-      '/api/v1/auth/setup-status',
+      resolveApiUrl("/api/v1/auth/setup-status"),
       recoveryRequestConfig(true),
     );
     if (!isMissingApiKeyResponse(v1Response)) {
@@ -247,7 +227,7 @@ async function detectUpgradeMismatch() {
     }
 
     const legacyResponse = await recoveryClient.get<ApiEnvelope<VersionData>>(
-      '/api/stat/version',
+      resolveApiUrl("/api/stat/version"),
       recoveryRequestConfig(true),
     );
     if (legacyResponse.status === 401 || legacyResponse.status >= 400) {

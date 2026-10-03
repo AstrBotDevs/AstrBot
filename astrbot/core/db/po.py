@@ -1,17 +1,22 @@
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import TypedDict
+from typing import ClassVar, TypedDict
 
 from deprecated import deprecated
-from sqlalchemy import Index, desc
+from sqlalchemy import DateTime, Index, desc
 from sqlmodel import JSON, Field, SQLModel, Text, UniqueConstraint
 
 
 class TimestampMixin(SQLModel):
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    # Preserve legacy storage instead of SQLModel's inferred UTCDateTime type.
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_type=DateTime(timezone=False),
+    )
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
+        sa_type=DateTime(timezone=False),
         sa_column_kwargs={"onupdate": lambda: datetime.now(timezone.utc)},
     )
 
@@ -22,10 +27,10 @@ class PlatformStat(SQLModel, table=True):
     Note: In astrbot v4, we moved `platform` table to here.
     """
 
-    __tablename__: str = "platform_stats"
+    __tablename__: ClassVar[str] = "platform_stats"
 
     id: int = Field(primary_key=True, sa_column_kwargs={"autoincrement": True})
-    timestamp: datetime = Field(nullable=False)
+    timestamp: datetime = Field(nullable=False, sa_type=DateTime(timezone=False))
     platform_id: str = Field(nullable=False)
     platform_type: str = Field(nullable=False)  # such as "aiocqhttp", "slack", etc.
     count: int = Field(default=0, nullable=False)
@@ -43,7 +48,7 @@ class PlatformStat(SQLModel, table=True):
 class ProviderStat(TimestampMixin, SQLModel, table=True):
     """Per-response provider stats for internal agent runs."""
 
-    __tablename__: str = "provider_stats"
+    __tablename__: ClassVar[str] = "provider_stats"
 
     id: int | None = Field(
         default=None,
@@ -65,7 +70,7 @@ class ProviderStat(TimestampMixin, SQLModel, table=True):
 
 
 class ConversationV2(TimestampMixin, SQLModel, table=True):
-    __tablename__: str = "conversations"
+    __tablename__: ClassVar[str] = "conversations"
 
     inner_conversation_id: int | None = Field(
         default=None,
@@ -110,12 +115,12 @@ class ConversationV2(TimestampMixin, SQLModel, table=True):
 
 
 class PersonaFolder(TimestampMixin, SQLModel, table=True):
-    """Persona 文件夹，支持递归层级结构。
+    """Persona 文件夹,支持递归层级结构｡
 
-    用于组织和管理多个 Persona，类似于文件系统的目录结构。
+    用于组织和管理多个 Persona,类似于文件系统的目录结构｡
     """
 
-    __tablename__: str = "persona_folders"
+    __tablename__: ClassVar[str] = "persona_folders"
 
     id: int | None = Field(
         primary_key=True,
@@ -130,7 +135,7 @@ class PersonaFolder(TimestampMixin, SQLModel, table=True):
     )
     name: str = Field(max_length=255, nullable=False)
     parent_id: str | None = Field(default=None, max_length=36)
-    """父文件夹ID，NULL表示根目录"""
+    """父文件夹ID,NULL表示根目录"""
     description: str | None = Field(default=None, sa_type=Text)
     sort_order: int = Field(default=0)
 
@@ -148,7 +153,7 @@ class Persona(TimestampMixin, SQLModel, table=True):
     It can be used to customize the behavior of LLMs.
     """
 
-    __tablename__: str = "personas"
+    __tablename__: ClassVar[str] = "personas"
 
     id: int | None = Field(
         primary_key=True,
@@ -166,7 +171,7 @@ class Persona(TimestampMixin, SQLModel, table=True):
     custom_error_message: str | None = Field(default=None, sa_type=Text)
     """Optional custom error message sent to end users when the agent request fails."""
     folder_id: str | None = Field(default=None, max_length=36)
-    """所属文件夹ID，NULL 表示在根目录"""
+    """所属文件夹ID,NULL 表示在根目录"""
     sort_order: int = Field(default=0)
     """排序顺序"""
 
@@ -181,7 +186,7 @@ class Persona(TimestampMixin, SQLModel, table=True):
 class CronJob(TimestampMixin, SQLModel, table=True):
     """Cron job definition for scheduler and WebUI management."""
 
-    __tablename__: str = "cron_jobs"
+    __tablename__: ClassVar[str] = "cron_jobs"
 
     id: int | None = Field(
         default=None,
@@ -204,15 +209,17 @@ class CronJob(TimestampMixin, SQLModel, table=True):
     persistent: bool = Field(default=True)
     run_once: bool = Field(default=False)
     status: str = Field(default="scheduled", max_length=32)
-    last_run_at: datetime | None = Field(default=None)
-    next_run_time: datetime | None = Field(default=None)
+    last_run_at: datetime | None = Field(default=None, sa_type=DateTime(timezone=False))
+    next_run_time: datetime | None = Field(
+        default=None, sa_type=DateTime(timezone=False)
+    )
     last_error: str | None = Field(default=None, sa_type=Text)
 
 
 class Preference(TimestampMixin, SQLModel, table=True):
     """This class represents preferences for bots."""
 
-    __tablename__: str = "preferences"
+    __tablename__: ClassVar[str] = "preferences"
 
     id: int | None = Field(
         default=None,
@@ -243,7 +250,7 @@ class PlatformMessageHistory(TimestampMixin, SQLModel, table=True):
     conversation checkpoints.
     """
 
-    __tablename__: str = "platform_message_history"
+    __tablename__: ClassVar[str] = "platform_message_history"
 
     id: int | None = Field(
         primary_key=True,
@@ -258,6 +265,7 @@ class PlatformMessageHistory(TimestampMixin, SQLModel, table=True):
     )  # Name of the sender in the platform
     content: dict = Field(sa_type=JSON, nullable=False)  # a message chain list
     llm_checkpoint_id: str | None = Field(default=None, index=True)
+    idempotency_key: str | None = Field(default=None, index=True)
 
     __table_args__ = (
         Index(
@@ -306,7 +314,7 @@ class PlatformSession(TimestampMixin, SQLModel, table=True):
     Each session can have multiple conversations (对话) associated with it.
     """
 
-    __tablename__: str = "platform_sessions"
+    __tablename__: ClassVar[str] = "platform_sessions"
 
     inner_id: int | None = Field(
         primary_key=True,
@@ -346,7 +354,7 @@ class UmoAlias(TimestampMixin, SQLModel, table=True):
         sa_column_kwargs={"autoincrement": True},
         default=None,
     )
-    umo: str = Field(nullable=False, max_length=512, unique=True, index=True)
+    umo: str = Field(nullable=False, max_length=512)
     creator_sender_id: str = Field(nullable=False, max_length=255)
     auto_name: str | None = Field(default=None, max_length=255)
     user_alias: str | None = Field(default=None, max_length=255)
@@ -365,7 +373,7 @@ class Attachment(TimestampMixin, SQLModel, table=True):
     Attachments can be images, files, or other media types.
     """
 
-    __tablename__: str = "attachments"
+    __tablename__: ClassVar[str] = "attachments"
 
     inner_attachment_id: int | None = Field(
         primary_key=True,
@@ -393,7 +401,7 @@ class Attachment(TimestampMixin, SQLModel, table=True):
 class ApiKey(TimestampMixin, SQLModel, table=True):
     """API keys used by external developers to access Open APIs."""
 
-    __tablename__: str = "api_keys"
+    __tablename__: ClassVar[str] = "api_keys"
 
     inner_id: int | None = Field(
         primary_key=True,
@@ -411,9 +419,11 @@ class ApiKey(TimestampMixin, SQLModel, table=True):
     key_prefix: str = Field(max_length=24, nullable=False)
     scopes: list | None = Field(default=None, sa_type=JSON)
     created_by: str = Field(max_length=255, nullable=False)
-    last_used_at: datetime | None = Field(default=None)
-    expires_at: datetime | None = Field(default=None)
-    revoked_at: datetime | None = Field(default=None)
+    last_used_at: datetime | None = Field(
+        default=None, sa_type=DateTime(timezone=False)
+    )
+    expires_at: datetime | None = Field(default=None, sa_type=DateTime(timezone=False))
+    revoked_at: datetime | None = Field(default=None, sa_type=DateTime(timezone=False))
 
     __table_args__ = (
         UniqueConstraint(
@@ -439,7 +449,9 @@ class DashboardTrustedDevice(TimestampMixin, SQLModel, table=True):
     )
     token_hash: str = Field(max_length=64, nullable=False, unique=True, index=True)
     totp_secret_hash: str = Field(max_length=64, nullable=False, index=True)
-    expires_at: datetime = Field(nullable=False, index=True)
+    expires_at: datetime = Field(
+        nullable=False, index=True, sa_type=DateTime(timezone=False)
+    )
 
 
 class ChatUIProject(TimestampMixin, SQLModel, table=True):
@@ -448,7 +460,7 @@ class ChatUIProject(TimestampMixin, SQLModel, table=True):
     Projects allow users to group related conversations together.
     """
 
-    __tablename__: str = "chatui_projects"
+    __tablename__: ClassVar[str] = "chatui_projects"
 
     inner_id: int | None = Field(
         primary_key=True,
@@ -485,7 +497,7 @@ class ChatUIProject(TimestampMixin, SQLModel, table=True):
 class SessionProjectRelation(SQLModel, table=True):
     """This class represents the relationship between platform sessions and ChatUI projects."""
 
-    __tablename__: str = "session_project_relations"
+    __tablename__: ClassVar[str] = "session_project_relations"
 
     id: int | None = Field(
         primary_key=True,
@@ -508,7 +520,7 @@ class SessionProjectRelation(SQLModel, table=True):
 class CommandConfig(TimestampMixin, SQLModel, table=True):
     """Per-command configuration overrides for dashboard management."""
 
-    __tablename__ = "command_configs"  # type: ignore
+    __tablename__ = "command_configs"
 
     handler_full_name: str = Field(
         primary_key=True,
@@ -530,10 +542,12 @@ class CommandConfig(TimestampMixin, SQLModel, table=True):
 class CommandConflict(TimestampMixin, SQLModel, table=True):
     """Conflict tracking for duplicated command names."""
 
-    __tablename__ = "command_conflicts"  # type: ignore
+    __tablename__ = "command_conflicts"
 
     id: int | None = Field(
-        default=None, primary_key=True, sa_column_kwargs={"autoincrement": True}
+        default=None,
+        primary_key=True,
+        sa_column_kwargs={"autoincrement": True},
     )
     conflict_key: str = Field(nullable=False, max_length=255)
     handler_full_name: str = Field(nullable=False, max_length=512)
@@ -558,10 +572,10 @@ class CommandConflict(TimestampMixin, SQLModel, table=True):
 class Conversation:
     """LLM 对话类
 
-    对于 WebChat，history 存储了包括指令、回复、图片等在内的所有消息。
-    对于其他平台的聊天，不存储非 LLM 的回复（因为考虑到已经存储在各自的平台上）。
+    对于 WebChat,history 存储了包括指令､回复､图片等在内的所有消息｡
+    对于其他平台的聊天,不存储非 LLM 的回复(因为考虑到已经存储在各自的平台上)｡
 
-    在 v4.0.0 版本及之后，WebChat 的历史记录被迁移至 `PlatformMessageHistory` 表中，
+    在 v4.0.0 版本及之后,WebChat 的历史记录被迁移至 `PlatformMessageHistory` 表中,
     """
 
     platform_id: str
@@ -569,32 +583,32 @@ class Conversation:
     cid: str
     """对话 ID, 是 uuid 格式的字符串"""
     history: str = ""
-    """字符串格式的对话列表。"""
+    """字符串格式的对话列表｡"""
     title: str | None = ""
     persona_id: str | None = ""
     created_at: int = 0
     updated_at: int = 0
     token_usage: int = 0
-    """对话的总 token 数量。AstrBot 会保留最近一次 LLM 请求返回的总 token 数，方便统计。token_usage 可能为 0，表示未知。"""
+    """对话的总 token 数量｡AstrBot 会保留最近一次 LLM 请求返回的总 token 数,方便统计｡token_usage 可能为 0,表示未知｡"""
 
 
 class Personality(TypedDict):
-    """LLM 人格类。
+    """LLM 人格类｡
 
-    在 v4.0.0 版本及之后，推荐使用上面的 Persona 类。并且， mood_imitation_dialogs 字段已被废弃。
+    在 v4.0.0 版本及之后,推荐使用上面的 Persona 类｡并且, mood_imitation_dialogs 字段已被废弃｡
     """
 
     prompt: str
     name: str
     begin_dialogs: list[str]
     mood_imitation_dialogs: list[str]
-    """情感模拟对话预设。在 v4.0.0 版本及之后，已被废弃。"""
+    """情感模拟对话预设｡在 v4.0.0 版本及之后,已被废弃｡"""
     tools: list[str] | None
-    """工具列表。None 表示使用所有工具，空列表表示不使用任何工具"""
+    """工具列表｡None 表示使用所有工具,空列表表示不使用任何工具"""
     skills: list[str] | None
-    """Skills 列表。None 表示使用所有 Skills，空列表表示不使用任何 Skills"""
+    """Skills 列表｡None 表示使用所有 Skills,空列表表示不使用任何 Skills"""
     custom_error_message: str | None
-    """可选的人格自定义报错回复信息。配置后将优先发送给最终用户。"""
+    """可选的人格自定义报错回复信息｡配置后将优先发送给最终用户｡"""
 
     # cache
     _begin_dialogs_processed: list[dict]

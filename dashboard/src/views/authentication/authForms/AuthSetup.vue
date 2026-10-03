@@ -1,43 +1,46 @@
 <script setup lang="ts">
-import { ref } from 'vue';
-import { Form } from 'vee-validate';
-import { useModuleI18n } from '@/i18n/composables';
-import { useAuthStore } from '@/stores/auth';
+import { Form } from "vee-validate";
+import { ref } from "vue";
+import { useModuleI18n } from "@/i18n/composables";
+import { useAuthStore } from "@/stores/auth";
 
-const { tm: t } = useModuleI18n('features/auth');
+const { tm: t } = useModuleI18n("features/auth");
 
-const username = ref('astrbot');
-const password = ref('');
-const confirmPassword = ref('');
+const username = ref("astrbot");
+const password = ref("");
+const confirmPassword = ref("");
 const showPassword = ref(false);
 const showConfirmPassword = ref(false);
 const loading = ref(false);
 
 const usernameRules = [
-  (value: string) => !!value || t('setup.validation.usernameRequired'),
-  (value: string) => (value && value.length >= 3) || t('setup.validation.usernameMinLength'),
+  (value: string) => !!value || t("setup.validation.usernameRequired"),
+  (value: string) => (value && value.length >= 3) || t("setup.validation.usernameMinLength"),
 ];
 const passwordRules = [
-  (value: string) => !!value || t('setup.validation.passwordRequired'),
-  (value: string) => (value && value.length >= 8) || t('setup.validation.passwordMinLength'),
-  (value: string) => /[A-Z]/.test(value) || t('setup.validation.passwordUppercase'),
-  (value: string) => /[a-z]/.test(value) || t('setup.validation.passwordLowercase'),
-  (value: string) => /\d/.test(value) || t('setup.validation.passwordDigit'),
+  (value: string) => !!value || t("setup.validation.passwordRequired"),
+  (value: string) => (value && value.length >= 8) || t("setup.validation.passwordMinLength"),
+  (value: string) => /[A-Z]/.test(value) || t("setup.validation.passwordUppercase"),
+  (value: string) => /[a-z]/.test(value) || t("setup.validation.passwordLowercase"),
+  (value: string) => /\d/.test(value) || t("setup.validation.passwordDigit"),
 ];
 const confirmPasswordRules = [
-  (value: string) => !!value || t('setup.validation.confirmPasswordRequired'),
-  (value: string) => value === password.value || t('setup.validation.passwordMatch'),
+  (value: string) => !!value || t("setup.validation.confirmPasswordRequired"),
+  (value: string) => value === password.value || t("setup.validation.passwordMatch"),
 ];
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 async function validate(values: any, { setErrors }: any) {
   loading.value = true;
   const authStore = useAuthStore();
-  return authStore.setup(username.value, password.value, confirmPassword.value).catch((err) => {
-    setErrors({ apiError: err });
-  }).finally(() => {
-    loading.value = false;
-  });
+  return authStore
+    .setup(username.value, password.value, confirmPassword.value)
+    .catch((err) => {
+      setErrors({ apiError: err });
+    })
+    .finally(() => {
+      loading.value = false;
+    });
 }
 </script>
 

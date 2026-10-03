@@ -6,7 +6,7 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
 import { PersonaManager } from "@/views/persona";
 
 export default {

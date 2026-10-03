@@ -8,13 +8,11 @@ AstrBot 在 v4.13.0 之后引入了对 Anthropic Skills 的支持，使得用户
 
 - 按需加载 (Progressive Disclosure)：模型初始只加载技能名称和简短描述。只有当任务匹配时，才会加载详细的 SKILL.md 指令，从而节省上下文窗口并降低成本。
 - 高度可复用：技能可以在不同的 Claude API 项目、Claude Code 或 Claude.ai 中通用。
-- 执行能力：技能可以包含可执行代码脚本，配合 Anthropic 代码执行环境（Code Execution）直接生成或处理文件。 
+- 执行能力：技能可以包含可执行代码脚本，配合 Anthropic 代码执行环境（Code Execution）直接生成或处理文件。
 
 ## 上传 Skills 到 AstrBot
 
-进入 AstrBot 管理面板，导航到 `插件` 页面，找到 `Skills`。
-
-![Skills](https://files.astrbot.app/docs/source/images/skills/image.png)
+进入 AstrBot 管理面板，打开 `插件 → 技能`（`/extension/skills`），点击 `上传技能`。
 
 你可以上传 Skills，上传格式要求如下：
 
@@ -55,7 +53,7 @@ Skills 提供了 Agent 操作说明书，并且内容通常包含 Python 代码�
 - Local（Agent 将在你的 AstrBot 运行环境中运行。**请谨慎使用，因为这会允许 Agent 在你的环境执行任意代码，可能带来安全风险**）
 - Sandbox (Agent 在隔离化的沙盒环境中运行。**需要先启动 AstrBot 沙盒模式**，请参考：[沙盒模式](/use/astrbot-agent-sandbox)，如果这个模式下不启动沙盒模式，将不会将 Skills 传给 Agent)
 
-你可以在 `配置` 页面 - 使用电脑能力 中选择默认的执行环境。
+在 `配置文件` 页面选择要修改的配置文件，进入 `AI 配置 → 能力 → 使用电脑能力`，设置执行环境后点击右下角的 `保存配置`。
 
 > [!NOTE]
 > 需要说明的是，如果您使用 Local 作为执行环境，AstrBot 目前仅允许 **AstrBot 管理员**请求时才真正让 Agent 操作你的本地环境，普通用户将会被禁止，Agent 将无法通过 Shell、Python 等 Tool 在本地环境执行代码，会收到相应的权限限制提示，如 `Sorry, I cannot execute code on your local environment due to permission restrictions.`。

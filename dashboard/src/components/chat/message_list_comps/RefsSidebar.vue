@@ -1,6 +1,6 @@
 <template>
-  <transition name="slide-left">
-    <div v-if="isOpen" class="refs-sidebar">
+  <transition name="chat-panel">
+    <div v-if="isOpen" class="refs-sidebar chat-side-panel">
       <div class="sidebar-header">
         <h3 class="sidebar-title">{{ tm("refs.title") }}</h3>
         <v-btn
@@ -23,7 +23,7 @@
               v-if="ref.favicon"
               :src="ref.favicon"
               class="ref-item-favicon"
-              @error="(e) => (e.target.style.display = 'none')"
+              @error="handleImgError"
             />
             <div v-else class="ref-item-initial">
               {{ getRefInitial(ref.title) }}
@@ -43,10 +43,20 @@
   </transition>
 </template>
 
-<script>
+<script lang="ts">
+import "@/components/chat/chatPanelTransition.css";
+import { defineComponent, type PropType } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
 
-export default {
+interface Reference {
+  index?: string | number;
+  title?: string;
+  url?: string;
+  snippet?: string;
+  favicon?: string;
+}
+
+export default defineComponent({
   name: "RefsSidebar",
   props: {
     modelValue: {
@@ -54,7 +64,7 @@ export default {
       default: false,
     },
     refs: {
-      type: Object,
+      type: [Object, Array] as PropType<{ used?: Reference[] } | Reference[] | null>,
       default: null,
     },
   },
@@ -68,40 +78,34 @@ export default {
       get() {
         return this.modelValue;
       },
-      set(value) {
+      set(value: boolean) {
         this.$emit("update:modelValue", value);
       },
     },
-
     normalizedRefs() {
-      const used = Array.isArray(this.refs?.used)
-        ? this.refs.used
-        : Array.isArray(this.refs)
-        ? this.refs
-        : [];
-
+      const refs = this.refs;
+      const used = Array.isArray(refs) ? refs : refs?.used || [];
       return used
-        .map((ref) => ({
-          index: ref?.index,
-          title: ref?.title || ref?.url || "Reference",
-          url: ref?.url,
-          snippet: ref?.snippet,
-          favicon: ref?.favicon,
-        }))
-        .filter((ref) => ref.url);
+        .map((ref) => ({ ...ref, title: ref.title || ref.url || "Reference" }))
+        .filter((ref): ref is Reference & { url: string; title: string } => Boolean(ref.url));
     },
   },
   methods: {
-    close() {
+    handleImgError(e: Event): void {
+      const el = e.target as HTMLElement;
+      if (el) el.style.display = "none";
+    },
+
+    close(): void {
       this.isOpen = false;
     },
 
-    getRefInitial(title) {
+    getRefInitial(title: string): string {
       if (!title) return "?";
       return title.charAt(0).toUpperCase();
     },
 
-    formatUrl(url) {
+    formatUrl(url: string): string {
       if (!url) return "";
       try {
         const urlObj = new URL(url);
@@ -111,18 +115,19 @@ export default {
       }
     },
 
-    openLink(url) {
+    openLink(url: string): void {
       if (url) {
         window.open(url, "_blank");
       }
     },
   },
-};
+});
 </script>
 
 <style scoped>
 .refs-sidebar {
-  width: 360px;
+  --chat-side-panel-width: 360px;
+  width: var(--chat-side-panel-width);
   height: calc(100% - var(--chat-panel-top-offset, 0px));
   margin-top: var(--chat-panel-top-offset, 0px);
   background: var(--chat-page-bg, rgb(var(--v-theme-surface)));
@@ -130,22 +135,6 @@ export default {
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  color: rgb(var(--v-theme-on-surface));
-}
-
-.slide-left-enter-active,
-.slide-left-leave-active {
-  transition: all 0.3s ease;
-}
-
-.slide-left-enter-from {
-  transform: translateX(100%);
-  opacity: 0;
-}
-
-.slide-left-leave-to {
-  transform: translateX(100%);
-  opacity: 0;
 }
 
 .sidebar-header {

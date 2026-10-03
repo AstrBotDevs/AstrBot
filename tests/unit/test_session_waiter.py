@@ -67,7 +67,7 @@ def make_event(
     )
 
 
-def test_default_filter_separates_members_of_the_same_group():
+def test_default_filter_separates_members_of_the_same_group() -> None:
     """Two members of one group must map to different session identities."""
     session_filter = DefaultSessionFilter()
     event_a = make_event("member_a", "group_1")
@@ -76,7 +76,7 @@ def test_default_filter_separates_members_of_the_same_group():
     assert session_filter.filter(event_a) != session_filter.filter(event_b)
 
 
-def test_default_filter_is_stable_for_the_same_member():
+def test_default_filter_is_stable_for_the_same_member() -> None:
     """The same member in the same group must map to one session identity."""
     session_filter = DefaultSessionFilter()
     first = make_event("member_a", "group_1", text="one")
@@ -85,7 +85,7 @@ def test_default_filter_is_stable_for_the_same_member():
     assert session_filter.filter(first) == session_filter.filter(second)
 
 
-def test_default_filter_separates_sessions_of_the_same_member():
+def test_default_filter_separates_sessions_of_the_same_member() -> None:
     """One member must not share a waiter across groups or private chats."""
     session_filter = DefaultSessionFilter()
     in_group_1 = make_event("member_a", "group_1")
@@ -105,7 +105,7 @@ def test_default_filter_separates_sessions_of_the_same_member():
 
 
 @pytest.mark.asyncio
-async def test_waiter_ignores_other_members_and_accepts_the_owner():
+async def test_waiter_ignores_other_members_and_accepts_the_owner() -> None:
     """A registered waiter only fires for the member that created it."""
     USER_SESSIONS.clear()
     session_filter = DefaultSessionFilter()
@@ -133,3 +133,42 @@ async def test_waiter_ignores_other_members_and_accepts_the_owner():
 
     assert triggered == ["member_a"]
     assert USER_SESSIONS == {}
+
+
+@pytest.mark.asyncio
+async def test_waiter_times_out_and_ignores_other_members() -> None:
+    """An unanswered waiter ignores other members and cleans up on timeout."""
+    session_filter = DefaultSessionFilter()
+    owner_event = make_event("member_a", "timeout_group", text="@bot")
+    other_event = make_event("member_b", "timeout_group")
+    session_id = session_filter.filter(owner_event)
+    triggered: list[str] = []
+
+    @session_waiter(timeout=1)
+    async def waiter(controller: SessionController, event: AstrMessageEvent) -> None:
+        triggered.append(event.get_sender_id())
+        controller.stop()
+
+    waiting = asyncio.create_task(waiter(owner_event, session_filter))
+    try:
+        await asyncio.sleep(0)
+        registered = USER_SESSIONS[session_id]
+        await SessionWaiter.trigger(session_filter.filter(other_event), other_event)
+        assert triggered == []
+        assert not waiting.done()
+        assert USER_SESSIONS[session_id] is registered
+
+        # The outer deadline guards the test; the waiter's own future must time out.
+        async with asyncio.timeout(5):
+            with pytest.raises(TimeoutError):
+                await waiting
+
+        assert isinstance(
+            registered.session_controller.future.exception(), TimeoutError
+        )
+        assert session_id not in USER_SESSIONS
+        assert triggered == []
+    finally:
+        if not waiting.done():
+            waiting.cancel()
+        await asyncio.gather(waiting, return_exceptions=True)

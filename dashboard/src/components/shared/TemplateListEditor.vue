@@ -160,275 +160,273 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue'
-import ConfigItemRenderer from './ConfigItemRenderer.vue'
-import { useI18n } from '@/i18n/composables'
-import { useConfigTextResolver } from '@/composables/useConfigTextResolver'
+import { computed, ref, watch } from "vue";
+import { useConfigTextResolver } from "@/composables/useConfigTextResolver";
+import { useI18n } from "@/i18n/composables";
+import ConfigItemRenderer from "./ConfigItemRenderer.vue";
 
 const props = defineProps({
   modelValue: {
     type: Array,
-    default: () => []
+    default: () => [],
   },
   templates: {
     type: Object,
-    default: () => ({})
+    default: () => ({}),
   },
   pluginName: {
     type: String,
-    default: ''
+    default: "",
   },
   pluginI18n: {
     type: Object,
-    default: () => ({})
+    default: () => ({}),
   },
   configPath: {
     type: String,
-    default: ''
-  }
-})
+    default: "",
+  },
+});
 
-const emit = defineEmits(['update:modelValue'])
-const { t } = useI18n()
-const { resolveConfigText } = useConfigTextResolver(props)
+const emit = defineEmits(["update:modelValue"]);
+const { t } = useI18n();
+const { resolveConfigText } = useConfigTextResolver(props);
 
-const expandedEntries = ref({})
+const expandedEntries = ref({});
 
-const safeText = (val, fallback) => (val && typeof val === 'string' ? val : fallback)
-const addButtonText = computed(() => safeText(t('core.common.templateList.addEntry'), '添加条目'))
-const emptyHintText = computed(() => safeText(t('core.common.templateList.empty'), '暂无条目，请先选择模板并添加。'))
+const safeText = (val, fallback) => (val && typeof val === "string" ? val : fallback);
+const addButtonText = computed(() => safeText(t("core.common.templateList.addEntry"), "添加条目"));
+const emptyHintText = computed(() => safeText(t("core.common.templateList.empty"), "暂无条目，请先选择模板并添加。"));
 const defaultValueMap = {
   int: 0,
   float: 0.0,
   bool: false,
-  string: '',
-  text: '',
+  string: "",
+  text: "",
   list: [],
   file: [],
   object: {},
-  template_list: []
-}
+  template_list: [],
+};
 
 const templateOptions = computed(() => {
   return Object.entries(props.templates || {}).map(([value, meta]) => ({
-    label: templateText(value, 'name', meta?.name || value),
+    label: templateText(value, "name", meta?.name || value),
     value,
-    hint: templateText(value, 'hint', meta?.hint || meta?.description || '')
-  }))
-})
+    hint: templateText(value, "hint", meta?.hint || meta?.description || ""),
+  }));
+});
 
 function templateLabel(key) {
-  if (!key) return t('core.common.templateList.unknownTemplate') || '未指定模板'
-  return templateText(key, 'name', props.templates?.[key]?.name || key)
+  if (!key) return t("core.common.templateList.unknownTemplate") || "未指定模板";
+  return templateText(key, "name", props.templates?.[key]?.name || key);
 }
 
 function templatePath(templateKey) {
-  return props.configPath ? `${props.configPath}.templates.${templateKey}` : `templates.${templateKey}`
+  return props.configPath ? `${props.configPath}.templates.${templateKey}` : `templates.${templateKey}`;
 }
 
 function templateItemPath(templateKey, itemPath) {
-  return `${templatePath(templateKey)}.${itemPath}`
+  return `${templatePath(templateKey)}.${itemPath}`;
 }
 
 function templateText(templateKey, attr, fallback) {
-  return resolveConfigText(templatePath(templateKey), attr, fallback)
+  return resolveConfigText(templatePath(templateKey), attr, fallback);
 }
 
 function templateItemText(templateKey, itemPath, attr, fallback) {
-  return resolveConfigText(templateItemPath(templateKey, itemPath), attr, fallback)
+  return resolveConfigText(templateItemPath(templateKey, itemPath), attr, fallback);
 }
 
 function buildDefaults(itemsMeta = {}) {
-  const result = {}
+  const result = {};
   for (const [k, meta] of Object.entries(itemsMeta)) {
-    if (!meta || !meta.type) continue
-    const fallback = Object.prototype.hasOwnProperty.call(meta, 'default')
-      ? meta.default
-      : defaultValueMap[meta.type]
+    if (!meta || !meta.type) continue;
+    const fallback = Object.hasOwn(meta, "default") ? meta.default : defaultValueMap[meta.type];
 
-    if (meta.type === 'object') {
-      result[k] = buildDefaults(meta.items || {})
+    if (meta.type === "object") {
+      result[k] = buildDefaults(meta.items || {});
     } else {
-      result[k] = fallback
+      result[k] = fallback;
     }
   }
-  return result
+  return result;
 }
 
 function applyDefaults(target, itemsMeta = {}) {
-  let changed = false
+  let changed = false;
   for (const [k, meta] of Object.entries(itemsMeta)) {
-    if (!meta || !meta.type) continue
-    const hasDefault = Object.prototype.hasOwnProperty.call(meta, 'default')
-    const fallback = hasDefault ? meta.default : defaultValueMap[meta.type]
+    if (!meta || !meta.type) continue;
+    const hasDefault = Object.hasOwn(meta, "default");
+    const fallback = hasDefault ? meta.default : defaultValueMap[meta.type];
 
-    if (meta.type === 'object') {
-      if (!target[k] || typeof target[k] !== 'object') {
-        target[k] = buildDefaults(meta.items || {})
-        changed = true
+    if (meta.type === "object") {
+      if (!target[k] || typeof target[k] !== "object") {
+        target[k] = buildDefaults(meta.items || {});
+        changed = true;
       } else {
         if (applyDefaults(target[k], meta.items || {})) {
-          changed = true
+          changed = true;
         }
       }
     } else if (!(k in target)) {
-      target[k] = fallback
-      changed = true
+      target[k] = fallback;
+      changed = true;
     }
   }
-  return changed
+  return changed;
 }
 
 function ensureEntryDefaults() {
-  if (!Array.isArray(props.modelValue)) return
-  
-  let totalChanged = false
+  if (!Array.isArray(props.modelValue)) return;
+
+  let totalChanged = false;
   const nextValue = props.modelValue.map((entry, idx) => {
-    const template = getTemplate(entry)
-    if (!template || !template.items) return entry
-    
+    const template = getTemplate(entry);
+    if (!template || !template.items) return entry;
+
     // 我们必须克隆以避免就地修改
-    const newEntry = JSON.parse(JSON.stringify(entry))
-    let entryChanged = applyDefaults(newEntry, template.items)
-    
-    if (!Object.prototype.hasOwnProperty.call(newEntry, '__template_key')) {
-      newEntry.__template_key = ''
-      entryChanged = true
+    const newEntry = JSON.parse(JSON.stringify(entry));
+    let entryChanged = applyDefaults(newEntry, template.items);
+
+    if (!Object.hasOwn(newEntry, "__template_key")) {
+      newEntry.__template_key = "";
+      entryChanged = true;
     }
-    
+
     if (!(idx in expandedEntries.value)) {
-      expandedEntries.value[idx] = false
+      expandedEntries.value[idx] = false;
     }
-    
+
     if (entryChanged) {
-      totalChanged = true
+      totalChanged = true;
     }
-    return newEntry
-  })
-  
+    return newEntry;
+  });
+
   if (totalChanged) {
-    emit('update:modelValue', nextValue)
+    emit("update:modelValue", nextValue);
   }
 }
 
 watch(
   () => props.modelValue,
   () => ensureEntryDefaults(),
-  { immediate: true, deep: true }
-)
+  { immediate: true, deep: true },
+);
 
 function addEntry(templateKey) {
-  if (!templateKey) return
-  const template = props.templates?.[templateKey]
-  if (!template) return
+  if (!templateKey) return;
+  const template = props.templates?.[templateKey];
+  if (!template) return;
   const newEntry = {
     __template_key: templateKey,
-    ...buildDefaults(template.items || {})
-  }
-  emit('update:modelValue', [...(props.modelValue || []), newEntry])
-  expandedEntries.value[props.modelValue.length] = true
+    ...buildDefaults(template.items || {}),
+  };
+  emit("update:modelValue", [...(props.modelValue || []), newEntry]);
+  expandedEntries.value[props.modelValue.length] = true;
 }
 
 function removeEntry(index) {
-  const next = [...(props.modelValue || [])]
-  next.splice(index, 1)
-  const rebuilt = {}
+  const next = [...(props.modelValue || [])];
+  next.splice(index, 1);
+  const rebuilt = {};
   next.forEach((_, idx) => {
-    const sourceIdx = idx >= index ? idx + 1 : idx
-    rebuilt[idx] = expandedEntries.value[sourceIdx] ?? false
-  })
-  expandedEntries.value = rebuilt
-  emit('update:modelValue', next)
+    const sourceIdx = idx >= index ? idx + 1 : idx;
+    rebuilt[idx] = expandedEntries.value[sourceIdx] ?? false;
+  });
+  expandedEntries.value = rebuilt;
+  emit("update:modelValue", next);
 }
 
 function toggleEntry(index) {
-  expandedEntries.value[index] = !expandedEntries.value[index]
+  expandedEntries.value[index] = !expandedEntries.value[index];
 }
 
 function getTemplate(entry) {
-  if (!entry) return null
-  const key = entry.__template_key
-  if (!key) return null
-  return props.templates?.[key] || null
+  if (!entry) return null;
+  const key = entry.__template_key;
+  if (!key) return null;
+  return props.templates?.[key] || null;
 }
 
 function templateHintText(entry) {
-  const template = getTemplate(entry)
-  if (!template || template.hide_hint_in_list) return ''
-  return templateText(entry.__template_key, 'hint', template.hint || template.description || '')
+  const template = getTemplate(entry);
+  if (!template || template.hide_hint_in_list) return "";
+  return templateText(entry.__template_key, "hint", template.hint || template.description || "");
 }
 
-function getItemMetaBySelector(itemsMeta = {}, selector = '') {
-  const keys = selector.split('.').filter(Boolean)
-  let currentItems = itemsMeta
-  let currentMeta = null
+function getItemMetaBySelector(itemsMeta = {}, selector = "") {
+  const keys = selector.split(".").filter(Boolean);
+  let currentItems = itemsMeta;
+  let currentMeta = null;
 
   for (let i = 0; i < keys.length; i++) {
-    currentMeta = currentItems?.[keys[i]]
-    if (!currentMeta) return null
+    currentMeta = currentItems?.[keys[i]];
+    if (!currentMeta) return null;
     if (i < keys.length - 1) {
-      if (currentMeta.type !== 'object') return null
-      currentItems = currentMeta.items || {}
+      if (currentMeta.type !== "object") return null;
+      currentItems = currentMeta.items || {};
     }
   }
 
-  return currentMeta
+  return currentMeta;
 }
 
 function templateDisplayText(entry) {
-  const template = getTemplate(entry)
-  const displayItem = template?.display_item
-  if (!template || typeof displayItem !== 'string' || !displayItem) return ''
+  const template = getTemplate(entry);
+  const displayItem = template?.display_item;
+  if (!template || typeof displayItem !== "string" || !displayItem) return "";
 
-  const displayMeta = getItemMetaBySelector(template.items || {}, displayItem)
-  if (displayMeta?.type !== 'string') return ''
+  const displayMeta = getItemMetaBySelector(template.items || {}, displayItem);
+  if (displayMeta?.type !== "string") return "";
 
-  const value = getValueBySelector(entry, displayItem)
-  if (typeof value !== 'string' || !value.trim()) return ''
+  const value = getValueBySelector(entry, displayItem);
+  if (typeof value !== "string" || !value.trim()) return "";
 
   const label = templateItemText(
     entry.__template_key,
     displayItem,
-    'description',
+    "description",
     displayMeta.description || displayItem,
-  )
-  return `${label}: ${value.trim()}`
+  );
+  return `${label}: ${value.trim()}`;
 }
 
 function getValueBySelector(obj, selector) {
-  const keys = selector.split('.')
-  let current = obj
+  const keys = selector.split(".");
+  let current = obj;
   for (const key of keys) {
-    if (current && typeof current === 'object' && key in current) {
-      current = current[key]
+    if (current && typeof current === "object" && key in current) {
+      current = current[key];
     } else {
-      return undefined
+      return undefined;
     }
   }
-  return current
+  return current;
 }
 
 function shouldShowItem(itemMeta, entry) {
   if (!itemMeta?.condition) {
-    return true
+    return true;
   }
   for (const [conditionKey, expectedValue] of Object.entries(itemMeta.condition)) {
-    const actualValue = getValueBySelector(entry, conditionKey)
+    const actualValue = getValueBySelector(entry, conditionKey);
     if (actualValue !== expectedValue) {
-      return false
+      return false;
     }
   }
-  return true
+  return true;
 }
 
 function hasVisibleItemsAfter(entries, currentIndex, entry) {
   for (let i = currentIndex + 1; i < entries.length; i++) {
-    const [k, meta] = entries[i]
+    const [k, meta] = entries[i];
     if (!meta?.invisible && shouldShowItem(meta, entry)) {
-      return true
+      return true;
     }
   }
-  return false
+  return false;
 }
 </script>
 

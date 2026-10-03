@@ -6,14 +6,18 @@ import logging
 import os
 import tempfile
 import threading
+from _thread import LockType
+from pathlib import Path
+from typing import Any
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.auth_password import (
     generate_dashboard_password,
     hash_dashboard_password,
-    hash_md5_dashboard_password,
+    hash_legacy_dashboard_password,
     validate_dashboard_password,
 )
+from astrbot.core.utils.migra_helper import migrate_config_on_load
 
 from .default import DEFAULT_CONFIG, DEFAULT_VALUE_MAP
 
@@ -29,16 +33,20 @@ class RateLimitStrategy(enum.Enum):
 
 
 class AstrBotConfig(dict):
-    """从配置文件中加载的配置，支持直接通过点号操作符访问根配置项。
+    """从配置文件中加载的配置,支持直接通过点号操作符访问根配置项｡
 
-    - 初始化时会将传入的 default_config 与配置文件进行比对，如果配置文件中缺少配置项则会自动插入默认值并进行一次写入操作。会递归检查配置项。
-    - 如果配置文件路径对应的文件不存在，则会自动创建并写入默认配置。
-    - 如果传入了 schema，将会通过 schema 解析出 default_config，此时传入的 default_config 会被忽略。
+    - 初始化时会将传入的 default_config 与配置文件进行比对,如果配置文件中缺少配置项则会自动插入默认值并进行一次写入操作｡会递归检查配置项｡
+    - 如果配置文件路径对应的文件不存在,则会自动创建并写入默认配置｡
+    - 如果传入了 schema,将会通过 schema 解析出 default_config,此时传入的 default_config 会被忽略｡
     """
 
     config_path: str
     default_config: dict
     schema: dict | None
+    _save_state_lock: LockType
+    _save_commit_lock: LockType
+    _save_revision: int
+    _save_committed_revision: int
 
     def __init__(
         self,
@@ -48,7 +56,7 @@ class AstrBotConfig(dict):
     ) -> None:
         super().__init__()
 
-        # 调用父类的 __setattr__ 方法，防止保存配置时将此属性写入配置文件
+        # 调用父类的 __setattr__ 方法,防止保存配置时将此属性写入配置文件
         object.__setattr__(self, "config_path", config_path)
         object.__setattr__(self, "default_config", default_config)
         object.__setattr__(self, "schema", schema)
@@ -63,31 +71,54 @@ class AstrBotConfig(dict):
 
         if not self.check_exist():
             """不存在时载入默认配置"""
-            self.update(default_config)
-            self.save_config(indent=4)
-            object.__setattr__(self, "first_deploy", True)  # 标记第一次部署
+            with open(config_path, "w", encoding="utf-8-sig") as f:
+                json.dump(default_config, f, indent=4, ensure_ascii=False)
+                object.__setattr__(self, "first_deploy", True)  # 标记第一次部署
 
         with open(config_path, encoding="utf-8-sig") as f:
             conf_str = f.read()
             # Handle UTF-8 BOM if present
-            if conf_str.startswith("\ufeff"):
-                conf_str = conf_str[1:]
-            conf = json.loads(conf_str)
+            conf_str = conf_str.removeprefix("\ufeff")
+            conf = json.loads(conf_str) if conf_str.strip() else {}
         dashboard_conf = conf.get("dashboard")
-        stored_dashboard_password_change_required = bool(
+        legacy_dashboard_password_change_required = bool(
             isinstance(dashboard_conf, dict)
-            and dashboard_conf.get("password_change_required", False)
+            and dashboard_conf.get("password_change_required", False),
         )
-        if stored_dashboard_password_change_required:
+        if legacy_dashboard_password_change_required:
             object.__setattr__(
                 self,
                 "_dashboard_password_change_required_from_config",
                 True,
             )
+        config_migrated = False
+        if default_config is DEFAULT_CONFIG:
+            config_migrated = migrate_config_on_load(conf, Path(config_path))
+        provider_settings = conf.get("provider_settings")
+        default_provider_settings = default_config.get("provider_settings")
+        if (
+            isinstance(provider_settings, dict)
+            and isinstance(default_provider_settings, dict)
+            and "computer_use_local_permissions" in default_provider_settings
+            and "computer_use_local_permissions" not in provider_settings
+        ):
+            # Preserve legacy POSIX access; Windows uses its supported defaults.
+            permissions = copy.deepcopy(
+                default_provider_settings["computer_use_local_permissions"]
+            )
+            permissions["member"]["allow_execution"] = permissions["member"][
+                "filesystem_scope"
+            ] != "none" and not provider_settings.get(
+                "computer_use_require_admin", True
+            )
+            permissions["admin"]["filesystem_scope"] = "host"
+            provider_settings["computer_use_local_permissions"] = permissions
+            config_migrated = True
         # 检查配置完整性，并插入
-        has_new = self.check_config_integrity(default_config, conf)
+        has_new = self.check_config_integrity(default_config, conf, schema=schema)
+        has_new |= config_migrated
         reset_dashboard_password = self._consume_reset_dashboard_password_flag()
-        if reset_dashboard_password and "dashboard" in conf:
+        if reset_dashboard_password and isinstance(conf.get("dashboard"), dict):
             self._reset_generated_dashboard_password(conf)
             has_new = True
         elif (
@@ -102,14 +133,14 @@ class AstrBotConfig(dict):
         if has_new:
             self.save_config()
 
-        self.update(conf)
-
     def _reset_generated_dashboard_password(self, conf: dict) -> None:
         generated_password = self._resolve_initial_dashboard_password()
         conf["dashboard"]["pbkdf2_password"] = hash_dashboard_password(
-            generated_password
+            generated_password,
         )
-        conf["dashboard"]["password"] = hash_md5_dashboard_password(generated_password)
+        conf["dashboard"]["password"] = hash_legacy_dashboard_password(
+            generated_password,
+        )
         conf["dashboard"]["password_storage_upgraded"] = True
         conf["dashboard"]["password_change_required"] = True
         object.__setattr__(
@@ -138,13 +169,13 @@ class AstrBotConfig(dict):
 
     def _config_schema_to_default_config(self, schema: dict) -> dict:
         """将 Schema 转换成 Config"""
-        conf = {}
+        conf: dict[str, Any] = {}
 
         def _parse_schema(schema: dict, conf: dict) -> None:
             for k, v in schema.items():
                 if v["type"] not in DEFAULT_VALUE_MAP:
                     raise TypeError(
-                        f"不受支持的配置类型 {v['type']}。支持的类型有：{DEFAULT_VALUE_MAP.keys()}",
+                        f"不受支持的配置类型 {v['type']}｡支持的类型有:{DEFAULT_VALUE_MAP.keys()}",
                     )
                 if "default" in v:
                     default = v["default"]
@@ -163,8 +194,22 @@ class AstrBotConfig(dict):
 
         return conf
 
-    def check_config_integrity(self, refer_conf: dict, conf: dict, path=""):
-        """检查配置完整性，如果有新的配置项或顺序不一致则返回 True"""
+    def check_config_integrity(
+        self, refer_conf: dict, conf: dict, path="", schema: dict | None = None
+    ):
+        """Check the integrity of a user config against its reference defaults.
+
+        Args:
+            refer_conf: Reference configuration holding default values.
+            conf: User configuration, checked and normalized in place.
+            path: Dot-separated path of the current level, used for logging.
+            schema: Schema nodes parallel to ``refer_conf`` at this level. Entries
+                declared as ``"type": "dict"`` are free-form mappings, so their
+                user-added keys are preserved instead of being treated as stale.
+
+        Returns:
+            True if any items were added or the key order was fixed.
+        """
         has_new = False
 
         # 创建一个新的有序字典以保持参考配置的顺序
@@ -172,28 +217,45 @@ class AstrBotConfig(dict):
 
         # 先按照参考配置的顺序添加配置项
         for key, value in refer_conf.items():
+            child_schema = schema.get(key) if schema else None
             if key not in conf:
-                # 配置项不存在，插入默认值
+                # 配置项不存在,插入默认值
                 path_ = path + "." + key if path else key
                 logger.info("Config key missing; added default.")
                 new_conf[key] = value
                 has_new = True
             elif conf[key] is None:
-                # 配置项为 None，使用默认值
+                # 配置项为 None,使用默认值
                 new_conf[key] = value
                 has_new = True
             elif isinstance(value, dict):
                 # 递归检查子配置项
                 if not isinstance(conf[key], dict):
-                    # 类型不匹配，使用默认值
+                    # 类型不匹配,使用默认值
                     new_conf[key] = value
                     has_new = True
+                elif (
+                    isinstance(child_schema, dict)
+                    and child_schema.get("type") == "dict"
+                ):
+                    # Free-form mapping declared as "type": "dict": user-added
+                    # keys are data instead of stale entries, keep them as-is.
+                    new_conf[key] = conf[key]
+                elif (path + "." + key if path else key) == "agent_runner.config":
+                    # Runner config is normalized according to runner_type when saved.
+                    new_conf[key] = conf[key]
                 else:
                     # 递归检查并同步顺序
+                    child_items = (
+                        child_schema.get("items")
+                        if isinstance(child_schema, dict)
+                        else None
+                    )
                     child_has_new = self.check_config_integrity(
                         value,
                         conf[key],
                         path + "." + key if path else key,
+                        schema=child_items if isinstance(child_items, dict) else None,
                     )
                     new_conf[key] = conf[key]
                     has_new |= child_has_new
@@ -287,6 +349,10 @@ class AstrBotConfig(dict):
             Whether the snapshot replaced the current configuration file.
         """
         directory = os.path.dirname(os.path.abspath(self.config_path)) or "."
+        # The directory may not exist yet when a config profile is created for
+        # the first time (e.g. `create_conf` instantiates AstrBotConfig with a
+        # brand-new path). mkstemp would raise FileNotFoundError otherwise.
+        os.makedirs(directory, exist_ok=True)
         fd, temp_path = tempfile.mkstemp(
             dir=directory,
             prefix=f".{os.path.basename(self.config_path)}.",
@@ -325,8 +391,8 @@ class AstrBotConfig(dict):
         try:
             del self[key]
             self.save_config()
-        except KeyError:
-            raise AttributeError(f"没有找到 Key: '{key}'")
+        except KeyError as err:
+            raise AttributeError(f"没有找到 Key: '{key}'") from err
 
     def __setattr__(self, key, value) -> None:
         self[key] = value

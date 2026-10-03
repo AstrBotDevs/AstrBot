@@ -60,7 +60,7 @@ def _get_verified_totp_timecode(secret: str, code: str) -> int | None:
     code = code.strip()
     try:
         totp = pyotp.TOTP(secret.strip())
-        now = datetime.datetime.now(datetime.timezone.utc)
+        now = datetime.datetime.now(datetime.UTC)
         for offset in (-1, 0, 1):
             candidate_time = now + datetime.timedelta(seconds=offset * totp.interval)
             if hmac.compare_digest(str(totp.at(candidate_time)), code):
@@ -175,7 +175,7 @@ async def is_totp_trusted_device_valid(config, db, cookie_token: str) -> bool:
                 col(DashboardTrustedDevice.token_hash) == token_hash,
                 col(DashboardTrustedDevice.totp_secret_hash) == totp_secret_hash,
                 col(DashboardTrustedDevice.expires_at)
-                > datetime.datetime.now(datetime.timezone.utc),
+                > datetime.datetime.now(datetime.UTC),
             )
         )
         return result.scalar_one_or_none() is not None
@@ -189,7 +189,7 @@ async def issue_totp_trusted_device(config, db) -> str | None:
     if not token_hash or not totp_secret_hash:
         return None
 
-    expires_at = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(
+    expires_at = datetime.datetime.now(datetime.UTC) + datetime.timedelta(
         seconds=TOTP_TRUSTED_DEVICE_MAX_AGE
     )
     async with db.get_db() as session:
@@ -216,7 +216,7 @@ async def _cleanup_expired_totp_trusted_devices(db) -> None:
             await session.execute(
                 delete(DashboardTrustedDevice).where(
                     col(DashboardTrustedDevice.expires_at)
-                    <= datetime.datetime.now(datetime.timezone.utc)
+                    <= datetime.datetime.now(datetime.UTC)
                 )
             )
 

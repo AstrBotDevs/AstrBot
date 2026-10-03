@@ -1,6 +1,5 @@
 import asyncio
 import copy
-import sys
 import time
 import traceback
 import typing as T
@@ -8,6 +7,7 @@ import uuid
 from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from pathlib import Path
+from typing import override
 
 from mcp.types import (
     BlobResourceContents,
@@ -25,7 +25,7 @@ from tenacity import (
 )
 
 from astrbot import logger
-from astrbot.core.agent.message import ImageURLPart, TextPart, ThinkPart
+from astrbot.core.agent.message import ContentPart, ImageURLPart, TextPart, ThinkPart
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.agent.tool_image_cache import tool_image_cache
 from astrbot.core.exceptions import EmptyModelOutputError
@@ -63,11 +63,6 @@ from ..run_context import ContextWrapper, TContext
 from ..tool_executor import BaseFunctionToolExecutor
 from .base import AgentResponse, AgentState, BaseAgentRunner
 
-if sys.version_info >= (3, 12):
-    from typing import override
-else:
-    from typing_extensions import override
-
 
 @dataclass(slots=True)
 class _HandleFunctionToolsResult:
@@ -99,6 +94,16 @@ class FollowUpTicket:
     resolved: asyncio.Event = field(default_factory=asyncio.Event)
 
 
+class _ProviderCallPayload(T.TypedDict):
+    contexts: list[Message] | list[dict[str, T.Any]]
+    func_tool: ToolSet | None
+    session_id: str | None
+    extra_user_content_parts: list[ContentPart]
+    abort_signal: asyncio.Event
+    request_max_retries: int | None
+    model: T.NotRequired[str | None]
+
+
 class _ToolExecutionInterrupted(Exception):
     """Raised when a running tool call is interrupted by a stop request."""
 
@@ -123,9 +128,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         "{follow_up_lines}"
     )
     MAX_STEPS_REACHED_PROMPT = (
-        "Maximum tool call limit reached. "
-        "Stop calling tools, and based on the information you have gathered, "
-        "summarize your task and findings, and reply to the user directly."
+        "[SYSTEM NOTICE: Agent step budget exhausted] "
+        "Remaining steps: 0. Stop using tools; summarize results and unfinished work. "
+        "If unfinished, tell the user they can simply ask you to continue with a fresh "
+        "step budget. Optionally, they can raise the tool-call round limit in "
+        "AstrBot WebUI to allow longer runs."
     )
     SKILLS_LIKE_REQUERY_INSTRUCTION_TEMPLATE = (
         "You have decided to call tool(s): {tool_names}. Now call the tool(s) "
@@ -183,7 +190,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._transition_state(AgentState.DONE)
         self.stats.end_time = time.time()
 
-        parts = []
+        parts: list[ContentPart] = []
         if llm_resp.reasoning_content is not None or llm_resp.reasoning_signature:
             parts.append(
                 ThinkPart(
@@ -284,6 +291,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._last_tool_name: str | None = None
         self._last_tool_args: dict[str, T.Any] | None = None
         self._same_tool_streak = 0
+        self._step_budget_max: int | None = None
+        self._step_budget_used = 0
+        self._step_budget_notified: set[int] = set()
 
         # These two are used for tool schema mode handling
         # We now have two modes:
@@ -474,7 +484,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             asyncio.CancelledError: If the outer Agent task is cancelled.
             Exception: Any exception raised by the awaited operation.
         """
-        operation_task = asyncio.create_task(awaitable)
+        operation_task = asyncio.ensure_future(awaitable)
         abort_task = asyncio.create_task(self._abort_signal.wait())
         try:
             done, _ = await asyncio.wait(
@@ -501,10 +511,13 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self, *, include_model: bool = True
     ) -> T.AsyncGenerator[LLMResponse, None]:
         """Yields chunks *and* a final LLMResponse."""
-        payload = {
+        payload: _ProviderCallPayload = {
             "contexts": self._sanitize_contexts_for_provider(self.run_context.messages),
             "func_tool": self._func_tool_for_provider(),
             "session_id": self.req.session_id,
+            "conversation_id": (
+                self.req.conversation.cid if self.req.conversation else None
+            ),
             "extra_user_content_parts": self.req.extra_user_content_parts,  # list[ContentPart]
             "abort_signal": self._abort_signal,
             "request_max_retries": self.request_max_retries,
@@ -517,7 +530,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             try:
                 while True:
                     try:
-                        resp = await self._await_or_stop(anext(stream))  # type: ignore
+                        resp = await self._await_or_stop(anext(stream))
                     except StopAsyncIteration:
                         return
                     if resp is None:
@@ -534,6 +547,17 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self,
     ) -> T.AsyncGenerator[LLMResponse, None]:
         """Wrap _iter_llm_responses with provider fallback handling."""
+        if not self.run_context.messages:
+            logger.warning(
+                "Skipping LLM request because no messages remain after agent/request "
+                "hooks and context processing."
+            )
+            yield LLMResponse(
+                role="err",
+                completion_text="No messages remain for the LLM request.",
+            )
+            return
+
         candidates = [self.provider, *self.fallback_providers]
         total_candidates = len(candidates)
         last_exception: Exception | None = None
@@ -791,6 +815,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         if not self.req:
             raise ValueError("Request is not set. Please call reset() first.")
 
+        if self._step_budget_max is not None:
+            self._step_budget_used += 1
+
         if self._state == AgentState.IDLE:
             try:
                 await self.agent_hooks.on_agent_begin(self.run_context)
@@ -959,6 +986,26 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         )
 
                     await self._complete_with_assistant_response(llm_resp)
+                    # Re-query uses text_chat(), so its reply has no stream chunks.
+                    # Supply them after hooks without changing llm_result ordering.
+                    if self.streaming:
+                        if llm_resp.reasoning_content:
+                            yield AgentResponse(
+                                type="streaming_delta",
+                                data=AgentResponseData(
+                                    chain=MessageChain(type="reasoning").message(
+                                        llm_resp.reasoning_content,
+                                    ),
+                                ),
+                            )
+                        chain = llm_resp.result_chain
+                        if not chain and llm_resp.completion_text:
+                            chain = MessageChain().message(llm_resp.completion_text)
+                        if chain:
+                            yield AgentResponse(
+                                type="streaming_delta",
+                                data=AgentResponseData(chain=chain),
+                            )
                     return
                 else:
                     llm_resp.tools_call_name = requery_resp.tools_call_name
@@ -993,8 +1040,51 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 yield await self._finalize_aborted_step()
                 return
 
+            # Keep budget state outside messages so compression cannot reset it.
+            if tool_call_result_blocks and self._step_budget_max is not None:
+                notices = []
+                max_steps = self._step_budget_max
+                used_steps = self._step_budget_used
+                remaining = max(0, max_steps - used_steps)
+                if max_steps >= 16:
+                    for percent, guidance in (
+                        (80, "Focus on the core goal; avoid new exploration."),
+                        (
+                            90,
+                            "Wrap up; prioritize essential fixes and verification.",
+                        ),
+                        (
+                            95,
+                            "Finish verification and reply; report unfinished or unverified work.",
+                        ),
+                    ):
+                        if (
+                            used_steps * 100 >= max_steps * percent
+                            and percent not in self._step_budget_notified
+                        ):
+                            self._step_budget_notified.add(percent)
+                            notices.append(
+                                f"[SYSTEM NOTICE: Agent step budget {percent}%] "
+                                f"Steps used: {used_steps}/{max_steps}. Remaining steps: {remaining}. "
+                                f"{guidance}"
+                            )
+                if used_steps >= max_steps and 100 not in self._step_budget_notified:
+                    self._step_budget_notified.add(100)
+                    notices.append(self.MAX_STEPS_REACHED_PROMPT)
+                if notices:
+                    # Annotate only this round's final result, preserving tool-call IDs.
+                    notice = "\n\n" + "\n".join(notices)
+                    last_result = tool_call_result_blocks[-1]
+                    if isinstance(last_result.content, str):
+                        last_result.content += notice
+                    else:
+                        last_result.content = [
+                            *(last_result.content or []),
+                            TextPart(text=notice),
+                        ]
+
             # 将结果添加到上下文中
-            parts = []
+            parts: list[ContentPart] = []
             if llm_resp.reasoning_content is not None or llm_resp.reasoning_signature:
                 parts.append(
                     ThinkPart(
@@ -1004,12 +1094,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 )
             if llm_resp.completion_text:
                 parts.append(TextPart(text=llm_resp.completion_text))
-            if len(parts) == 0:
-                parts = None
             tool_calls_result = ToolCallsResult(
                 tool_calls_info=AssistantMessageSegment(
                     tool_calls=llm_resp.to_openai_tool_calls_model(),
-                    content=parts,
+                    content=parts or None,
                 ),
                 tool_calls_result=tool_call_result_blocks,
             )
@@ -1027,7 +1115,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 )  # Empty list is treated as unconfigured for backward compatibility
                 if supports_image:
                     # Build user message with images for LLM to review
-                    image_parts = []
+                    image_parts: list[ContentPart] = []
                     for cached_img in cached_images:
                         img_data = tool_image_cache.get_image_base64_by_path(
                             cached_img.file_path, cached_img.mime_type
@@ -1061,6 +1149,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self, max_step: int
     ) -> T.AsyncGenerator[AgentResponse, None]:
         """Process steps until the agent is done."""
+        self._step_budget_max = max_step
+        self._step_budget_used = 0
+        self._step_budget_notified = set()
         step_count = 0
         while not self.done() and step_count < max_step:
             step_count += 1
@@ -1371,11 +1462,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         )
         if extra_instruction:
             instruction = f"{instruction}\n{extra_instruction}"
-        if contexts and contexts[0].get("role") == "system":
-            content = contexts[0].get("content") or ""
-            contexts[0]["content"] = f"{content}\n{instruction}"
-        else:
-            contexts.insert(0, {"role": "system", "content": instruction})
+        contexts.append({"role": "user", "content": instruction})
         return contexts
 
     @staticmethod

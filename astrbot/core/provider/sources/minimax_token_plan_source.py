@@ -1,9 +1,8 @@
 import httpx
 
 from astrbot import logger
+from astrbot.core.provider.register import register_provider_adapter
 from astrbot.core.provider.sources.anthropic_source import ProviderAnthropic
-
-from ..register import register_provider_adapter
 
 
 @register_provider_adapter(
@@ -47,7 +46,7 @@ class ProviderMiniMaxTokenPlan(ProviderAnthropic):
             logger.warning("No API key configured for MiniMax Token Plan.")
             return []
         try:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(headers=self.request_headers) as client:
                 resp = await client.get(
                     "https://api.minimaxi.com/v1/models",
                     headers={"Authorization": f"Bearer {key}"},

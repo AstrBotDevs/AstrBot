@@ -796,7 +796,7 @@ def test_find_missing_requirements_honors_version_specifiers(monkeypatch, tmp_pa
 def test_find_missing_requirements_skips_unmatched_markers(monkeypatch, tmp_path):
     requirements_path = tmp_path / "requirements.txt"
     requirements_path.write_text(
-        'demo-package; sys_platform == "win32"\n',
+        'demo-package; sys_platform == "nonexistent_platform"\n',
         encoding="utf-8",
     )
 
@@ -971,8 +971,8 @@ def test_get_core_constraints_caches_fallback_resolution(monkeypatch):
     finally:
         core_constraints_module._get_core_constraints.cache_clear()
 
-    assert first == ("shared-lib==2.0",)
-    assert second == ("shared-lib==2.0",)
+    assert first == ("shared-lib>=1.0",)
+    assert second == ("shared-lib>=1.0",)
     assert distribution_calls == ["AstrBot", "AstrBot-App"]
     assert distributions_calls == ["scan"]
 
@@ -1034,7 +1034,7 @@ def test_get_core_constraints_skips_distributions_with_unreadable_top_level(
     finally:
         core_constraints_module._get_core_constraints.cache_clear()
 
-    assert constraints == ("shared-lib==2.0",)
+    assert constraints == ("shared-lib>=1.0",)
 
 
 def test_core_constraints_file_propagates_inner_conflict_without_fake_warning(

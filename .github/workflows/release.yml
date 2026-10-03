@@ -51,14 +51,14 @@ jobs:
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v6.0.10
+        uses: pnpm/action-setup@v6.1.0
         with:
           version: 10.28.2
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: '24.13.0'
+          node-version: "24.13.0"
           cache: "pnpm"
           cache-dependency-path: dashboard/pnpm-lock.yaml
 
@@ -156,7 +156,6 @@ jobs:
           name: Dashboard-${{ steps.tag.outputs.tag }}
           path: release-assets
 
-
       - name: Resolve release notes
         id: notes
         shell: bash
@@ -234,14 +233,14 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: Dashboard-${{ steps.tag.outputs.tag }}
-          path: dashboard-artifact
+          path: ${{ runner.temp }}/dashboard-artifact
 
       - name: Unpack dashboard dist into package tree
         shell: bash
         run: |
           mkdir -p astrbot/dashboard/dist
-          unzip -q "dashboard-artifact/AstrBot-${{ steps.tag.outputs.tag }}-dashboard.zip" -d dashboard-artifact/unpacked
-          cp -r dashboard-artifact/unpacked/dist/. astrbot/dashboard/dist/
+          unzip -q "${RUNNER_TEMP}/dashboard-artifact/AstrBot-${{ steps.tag.outputs.tag }}-dashboard.zip" -d "${RUNNER_TEMP}/dashboard-artifact/unpacked"
+          cp -r "${RUNNER_TEMP}/dashboard-artifact/unpacked/dist/." astrbot/dashboard/dist/
 
       - name: Set up Python
         uses: actions/setup-python@v7

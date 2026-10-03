@@ -1,7 +1,7 @@
 <template>
   <section class="sidebar-section project-list-shell">
     <div class="sidebar-section-header">
-      <span>{{ tm("project.title") }}</span>
+      <button type="button" class="project-section-toggle" @click="toggleExpanded">{{ tm("project.title") }}</button>
       <v-btn
         icon
         size="x-small"
@@ -14,7 +14,7 @@
       </v-btn>
     </div>
 
-    <div class="project-list-wrap">
+    <div v-show="expanded" class="project-list-wrap">
       <div v-for="project in projects" :key="project.project_id">
         <div
           class="project-row project-item"
@@ -133,14 +133,8 @@
 </template>
 
 <script setup lang="ts">
+import { ChevronDown, ChevronRight, Pencil, Plus, Trash2 } from "@lucide/vue";
 import { ref, watch } from "vue";
-import {
-  ChevronDown,
-  ChevronRight,
-  Pencil,
-  Plus,
-  Trash2,
-} from "@lucide/vue";
 import { useModuleI18n } from "@/i18n/composables";
 import { askForConfirmation, useConfirmDialog } from "@/utils/confirmDialog";
 
@@ -164,16 +158,20 @@ export interface ProjectSession {
 
 interface Props {
   projects: Project[];
-  projectSessions: Record<string, ProjectSession[]>;
-  loadingProjectIds: string[];
+  projectSessions?: Record<string, ProjectSession[]>;
+  loadingProjectIds?: string[];
   selectedProjectId?: string | null;
   activeSessionId?: string | null;
   isSessionRunning?: (sessionId: string) => boolean;
+  initialExpanded?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
+  projectSessions: () => ({}),
+  loadingProjectIds: () => [],
   selectedProjectId: null,
   activeSessionId: null,
+  initialExpanded: false,
 });
 
 const emit = defineEmits<{
@@ -190,23 +188,20 @@ const emit = defineEmits<{
 const { tm } = useModuleI18n("features/chat");
 const confirmDialog = useConfirmDialog();
 
+const expanded = ref(readProjectsExpanded());
 const expandedProjectIds = ref<Set<string>>(readExpandedProjectIds());
 
 watch(
   () => props.selectedProjectId,
   (projectId) => {
-    if (projectId) {
-      setProjectExpanded(projectId, true);
-    }
+    if (projectId) setProjectExpanded(projectId, true);
   },
 );
 
 watch(
   () => props.projects.map((project) => project.project_id).join(","),
   () => {
-    const validProjectIds = new Set(
-      props.projects.map((project) => project.project_id),
-    );
+    const validProjectIds = new Set(props.projects.map((project) => project.project_id));
     expandedProjectIds.value.forEach((projectId) => {
       if (validProjectIds.has(projectId)) {
         emit("toggleProject", projectId, true);
@@ -216,42 +211,55 @@ watch(
   { immediate: true },
 );
 
+function readProjectsExpanded() {
+  const savedState = localStorage.getItem("projectsExpanded");
+  if (savedState === null) return props.initialExpanded;
+  try {
+    return Boolean(JSON.parse(savedState));
+  } catch {
+    return props.initialExpanded;
+  }
+}
+
 function readExpandedProjectIds() {
   try {
     const raw = localStorage.getItem("chat.projectExpandedIds");
-    const parsed = raw ? JSON.parse(raw) : [];
-    return new Set(Array.isArray(parsed) ? parsed.filter(Boolean) : []);
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : []);
   } catch {
     return new Set<string>();
   }
 }
 
+function toggleExpanded() {
+  expanded.value = !expanded.value;
+  localStorage.setItem("projectsExpanded", JSON.stringify(expanded.value));
+}
+
 function persistExpandedProjectIds() {
-  localStorage.setItem(
-    "chat.projectExpandedIds",
-    JSON.stringify([...expandedProjectIds.value]),
-  );
+  localStorage.setItem("chat.projectExpandedIds", JSON.stringify([...expandedProjectIds.value]));
 }
 
 function isProjectExpanded(projectId: string) {
   return expandedProjectIds.value.has(projectId);
 }
 
-function setProjectExpanded(projectId: string, expanded: boolean) {
+function setProjectExpanded(projectId: string, nextExpanded: boolean) {
+  if (isProjectExpanded(projectId) === nextExpanded) return;
   const next = new Set(expandedProjectIds.value);
-  if (expanded) {
-    next.add(projectId);
-  } else {
-    next.delete(projectId);
-  }
+  if (nextExpanded) next.add(projectId);
+  else next.delete(projectId);
   expandedProjectIds.value = next;
   persistExpandedProjectIds();
-  emit("toggleProject", projectId, expanded);
+  emit("toggleProject", projectId, nextExpanded);
+}
+
+function toggleProject(projectId: string) {
+  setProjectExpanded(projectId, !isProjectExpanded(projectId));
 }
 
 function handleProjectClick(project: Project) {
-  const nextExpanded = !isProjectExpanded(project.project_id);
-  setProjectExpanded(project.project_id, nextExpanded);
+  setProjectExpanded(project.project_id, !isProjectExpanded(project.project_id));
   emit("selectProject", project.project_id);
 }
 
@@ -282,10 +290,10 @@ async function handleDeleteSession(projectId: string, session: ProjectSession) {
     emit("deleteSession", session.session_id, projectId);
   }
 }
-
 </script>
 
 <style scoped>
+.project-section-toggle { border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; text-align: left; }
 .project-list-shell {
   margin-top: 2px;
 }
@@ -350,10 +358,14 @@ async function handleDeleteSession(projectId: string, session: ProjectSession) {
 }
 
 .project-row:hover,
-.project-row.active,
-.project-session-row:hover,
-.project-session-row.active {
+.project-session-row:hover {
   background: var(--chat-session-active-bg);
+}
+
+/* Active session stays clearly highlighted (subtle in light mode otherwise). */
+.project-row.active,
+.project-session-row.active {
+  background: rgba(var(--v-theme-primary), 0.22);
 }
 
 .project-emoji {

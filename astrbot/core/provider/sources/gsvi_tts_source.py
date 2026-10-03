@@ -1,13 +1,13 @@
+import asyncio
 from pathlib import Path
 
 import aiohttp
 
+from astrbot.core.provider.entities import ProviderType
+from astrbot.core.provider.provider import TTSProvider
+from astrbot.core.provider.register import register_provider_adapter
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.datetime_utils import generate_timestamp_id
-
-from ..entities import ProviderType
-from ..provider import TTSProvider
-from ..register import register_provider_adapter
 
 
 @register_provider_adapter(
@@ -50,7 +50,7 @@ class ProviderGSVITTS(TTSProvider):
             "text_lang": self.text_lang,
         }
 
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(headers=self.request_headers) as session:
             async with session.post(url, json=data, headers=headers) as response:
                 if response.status == 200:
                     resp_json = await response.json()
@@ -60,8 +60,8 @@ class ProviderGSVITTS(TTSProvider):
                         raise Exception(f"GSVI TTS API 合成失败: {msg}")
                     async with session.get(audio_url) as audio_response:
                         if audio_response.status == 200:
-                            with open(path, "wb") as f:
-                                f.write(await audio_response.read())
+                            audio_bytes = await audio_response.read()
+                            await asyncio.to_thread(path.write_bytes, audio_bytes)
                         else:
                             error_text = await audio_response.text()
                             raise Exception(
@@ -70,7 +70,7 @@ class ProviderGSVITTS(TTSProvider):
                 else:
                     error_text = await response.text()
                     raise Exception(
-                        f"GSVI TTS API 请求失败，状态码: {response.status}，错误: {error_text}",
+                        f"GSVI TTS API 请求失败,状态码: {response.status},错误: {error_text}",
                     )
 
         return str(path)

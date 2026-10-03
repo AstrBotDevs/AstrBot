@@ -9,7 +9,7 @@
 
 ## Configure AstrBot
 
-Open the AstrBot dashboard and go to **Providers → Add Provider → OpenAI**. Enter the following values:
+Open the AstrBot dashboard and go to **Providers → Chat Completion → Add → OpenAI Compatible**. Enter the following values:
 
 | Field | Value |
 | --- | --- |
@@ -17,8 +17,8 @@ Open the AstrBot dashboard and go to **Providers → Add Provider → OpenAI**. 
 | API Base URL | `https://router.shengsuanyun.com/api/v1` |
 | API Key | The API key created in the ShengSuanYun console |
 
-Save the provider, then open its card and add the models you want to use from the model list in the ShengSuanYun console.
+Enter the provider name and `API Key`, check the `API Base URL`, then click **Save and Fetch Models**. Click `+` beside the desired model and make sure it is enabled. Alternatively, click **Save Configuration**, then **Custom Model** and enter the exact model ID. Use **Test Model** beside the configured model to check availability.
 
 ## Set as Default
 
-Go to **Settings → Provider Settings**, select the ShengSuanYun model you just added as the default chat model, and save the configuration.
+Open **Config**, select the profile to use, and go to **AI → Model**. Set **Chat Model** to the model you just added, then click **Save Configuration** at the bottom right. This setting is for AstrBot built-in AI.

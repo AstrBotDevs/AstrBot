@@ -3,10 +3,9 @@ from google.genai import types
 from google.genai.errors import APIError
 
 from astrbot import logger
-
-from ..entities import ProviderType
-from ..provider import EmbeddingProvider
-from ..register import register_provider_adapter
+from astrbot.core.provider.entities import ProviderType
+from astrbot.core.provider.provider import EmbeddingProvider
+from astrbot.core.provider.register import register_provider_adapter
 
 
 @register_provider_adapter(
@@ -19,12 +18,13 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
         super().__init__(provider_config, provider_settings)
         self.provider_config = provider_config
         self.provider_settings = provider_settings
-
         api_key: str = provider_config["embedding_api_key"]
         api_base: str = provider_config["embedding_api_base"]
         timeout: int = int(provider_config.get("timeout", 20))
 
-        http_options = types.HttpOptions(timeout=timeout * 1000)
+        http_options = types.HttpOptions(
+            timeout=timeout * 1000, headers=self.request_headers
+        )
         if api_base:
             api_base = api_base.removesuffix("/")
             http_options.base_url = api_base
@@ -32,8 +32,9 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
         if proxy:
             http_options.async_client_args = {"proxy": proxy}
             logger.info(f"[Gemini Embedding] 使用代理: {proxy}")
-
         self.client = genai.Client(api_key=api_key, http_options=http_options).aio
+        # The SDK adds its own lower-case UA alongside our explicit header.
+        self.client._api_client._http_options.headers.pop("user-agent", None)
 
         self.model = provider_config.get(
             "embedding_model",
@@ -46,20 +47,19 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
             result = await self.client.models.embed_content(
                 model=self.model,
                 contents=text,
-                config=types.EmbedContentConfig(
-                    output_dimensionality=self.get_dim(),
-                ),
+                config=types.EmbedContentConfig(output_dimensionality=self.get_dim()),
             )
             assert result.embeddings is not None
-            assert result.embeddings[0].values is not None
-            return result.embeddings[0].values
+            values = result.embeddings[0].values
+            assert values is not None
+            return values
         except APIError as e:
-            raise Exception(f"Gemini Embedding API请求失败: {e.message}")
+            raise Exception(f"Gemini Embedding API请求失败: {e.message}") from e
 
     async def get_embeddings(self, text: list[str]) -> list[list[float]]:
         """批量获取文本的嵌入"""
         try:
-            contents = [
+            contents: list[types.ContentUnion] = [
                 types.Content(parts=[types.Part.from_text(text=s)]) for s in text
             ]
             result = await self.client.models.embed_content(
@@ -70,14 +70,14 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
                 ),
             )
             assert result.embeddings is not None
-
             embeddings: list[list[float]] = []
             for embedding in result.embeddings:
-                assert embedding.values is not None
-                embeddings.append(embedding.values)
+                vals = embedding.values
+                assert vals is not None
+                embeddings.append(vals)
             return embeddings
         except APIError as e:
-            raise Exception(f"Gemini Embedding API批量请求失败: {e.message}")
+            raise Exception(f"Gemini Embedding API批量请求失败: {e.message}") from e
 
     def get_dim(self) -> int:
         """获取向量的维度"""

@@ -10,11 +10,6 @@ from astrbot.core.computer.computer_client import get_booter
 from astrbot.core.tools.computer_tools.util import check_admin_permission
 from astrbot.core.tools.registry import builtin_tool
 
-_SHIPYARD_NEO_TOOL_CONFIG = {
-    "provider_settings.computer_use_runtime": "sandbox",
-    "provider_settings.sandbox.booter": "shipyard_neo",
-}
-
 
 def _to_json(data: Any) -> str:
     return json.dumps(data, ensure_ascii=False, default=str)
@@ -29,12 +24,12 @@ async def _get_browser_component(context: ContextWrapper[AstrAgentContext]) -> A
     if browser is None:
         raise RuntimeError(
             "Current sandbox booter does not support browser capability. "
-            "Please switch to shipyard_neo."
+            "Please switch to shipyard_neo.",
         )
     return browser
 
 
-@builtin_tool(config=_SHIPYARD_NEO_TOOL_CONFIG)
+@builtin_tool
 @dataclass
 class BrowserExecTool(FunctionTool):
     name: str = "astrbot_execute_browser"
@@ -62,18 +57,19 @@ class BrowserExecTool(FunctionTool):
                 },
             },
             "required": ["cmd"],
-        }
+        },
     )
 
     async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
-        cmd: str,
+        cmd: str = "",
         timeout: int = 30,
         description: str | None = None,
         tags: str | None = None,
         learn: bool = False,
         include_trace: bool = False,
+        **kwargs: Any,
     ) -> ToolExecResult:
         if err := check_admin_permission(context, "Using browser tools"):
             return err
@@ -81,7 +77,7 @@ class BrowserExecTool(FunctionTool):
             browser = await _get_browser_component(context)
             result = await browser.exec(
                 cmd=cmd,
-                timeout=timeout,
+                timeout_seconds=timeout,
                 description=description,
                 tags=tags,
                 learn=learn,
@@ -89,10 +85,10 @@ class BrowserExecTool(FunctionTool):
             )
             return _to_json(result)
         except Exception as e:
-            return f"Error executing browser command: {str(e)}"
+            return f"Error executing browser command: {e!s}"
 
 
-@builtin_tool(config=_SHIPYARD_NEO_TOOL_CONFIG)
+@builtin_tool
 @dataclass
 class BrowserBatchExecTool(FunctionTool):
     name: str = "astrbot_execute_browser_batch"
@@ -125,19 +121,20 @@ class BrowserBatchExecTool(FunctionTool):
                 },
             },
             "required": ["commands"],
-        }
+        },
     )
 
     async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
-        commands: list[str],
+        commands: list[str] | None = None,
         timeout: int = 60,
         stop_on_error: bool = True,
         description: str | None = None,
         tags: str | None = None,
         learn: bool = False,
         include_trace: bool = False,
+        **kwargs: Any,
     ) -> ToolExecResult:
         if err := check_admin_permission(context, "Using browser tools"):
             return err
@@ -145,7 +142,7 @@ class BrowserBatchExecTool(FunctionTool):
             browser = await _get_browser_component(context)
             result = await browser.exec_batch(
                 commands=commands,
-                timeout=timeout,
+                timeout_seconds=timeout,
                 stop_on_error=stop_on_error,
                 description=description,
                 tags=tags,
@@ -154,10 +151,10 @@ class BrowserBatchExecTool(FunctionTool):
             )
             return _to_json(result)
         except Exception as e:
-            return f"Error executing browser batch command: {str(e)}"
+            return f"Error executing browser batch command: {e!s}"
 
 
-@builtin_tool(config=_SHIPYARD_NEO_TOOL_CONFIG)
+@builtin_tool
 @dataclass
 class RunBrowserSkillTool(FunctionTool):
     name: str = "astrbot_run_browser_skill"
@@ -174,18 +171,19 @@ class RunBrowserSkillTool(FunctionTool):
                 "tags": {"type": "string"},
             },
             "required": ["skill_key"],
-        }
+        },
     )
 
     async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
-        skill_key: str,
+        skill_key: str = "",
         timeout: int = 60,
         stop_on_error: bool = True,
         include_trace: bool = False,
         description: str | None = None,
         tags: str | None = None,
+        **kwargs: Any,
     ) -> ToolExecResult:
         if err := check_admin_permission(context, "Using browser tools"):
             return err
@@ -193,7 +191,7 @@ class RunBrowserSkillTool(FunctionTool):
             browser = await _get_browser_component(context)
             result = await browser.run_skill(
                 skill_key=skill_key,
-                timeout=timeout,
+                timeout_seconds=timeout,
                 stop_on_error=stop_on_error,
                 include_trace=include_trace,
                 description=description,
@@ -201,4 +199,4 @@ class RunBrowserSkillTool(FunctionTool):
             )
             return _to_json(result)
         except Exception as e:
-            return f"Error running browser skill: {str(e)}"
+            return f"Error running browser skill: {e!s}"

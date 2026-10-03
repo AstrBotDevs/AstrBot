@@ -1,23 +1,22 @@
 import asyncio
 import random
+import re
 import traceback
-from collections.abc import AsyncGenerator
 from pathlib import Path
 
 from astrbot.core import logger
 from astrbot.core.message.components import Image, Plain, Record, Reply
+from astrbot.core.pipeline.context import PipelineContext
+from astrbot.core.pipeline.stage import Stage, register_stage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.media_utils import (
     describe_media_ref,
-    ensure_jpeg,
+    detect_image_mime_type_async,
     ensure_wav,
     file_uri_to_path,
     is_file_uri,
 )
-
-from ..context import PipelineContext
-from ..stage import Stage, register_stage
 
 
 @register_stage
@@ -32,13 +31,7 @@ class PreProcessStage(Stage):
 
     @staticmethod
     def _track_temp_media(event: AstrMessageEvent, media_path: str) -> None:
-        """Track a media file owned by the current event.
-
-        Args:
-            event: Message event whose lifecycle owns the temporary file.
-            media_path: Local media path to track when it lives under AstrBot temp.
-        """
-
+        """Track files owned by this event when they live under AstrBot temp."""
         try:
             path = Path(media_path).resolve()
             temp_dir = Path(get_astrbot_temp_path()).resolve()
@@ -47,12 +40,60 @@ class PreProcessStage(Stage):
             return
         event.track_temporary_local_file(str(path))
 
+    @staticmethod
+    def _is_existing_local_image_ref(media_ref: str | None) -> bool:
+        """Return whether an image reference already points at a local file."""
+        if not media_ref:
+            return False
+        if is_file_uri(media_ref):
+            return True
+        if media_ref.startswith(("http://", "https://", "data:", "base64://")):
+            return False
+        try:
+            return Path(media_ref).exists()
+        except OSError:
+            return False
+
+    async def _normalize_image_component(
+        self,
+        event: AstrMessageEvent,
+        component: Image,
+    ) -> None:
+        """Resolve and validate an image while preserving cleanup ownership."""
+        media_ref = component.url or component.file
+        image_path: str | None = None
+        materialized = False
+        try:
+            image_path = await component.convert_to_file_path()
+            materialized = (
+                not self._is_existing_local_image_ref(media_ref)
+                and Path(image_path).is_file()
+            )
+            if materialized:
+                self._track_temp_media(event, image_path)
+                detected_mime_type = await detect_image_mime_type_async(
+                    image_path,
+                    default_mime_type=None,
+                )
+                if detected_mime_type is None:
+                    raise ValueError("image content could not be identified")
+        except Exception:
+            if image_path and not materialized:
+                event.untrack_temporary_local_file(image_path)
+            raise
+
+        component.file = image_path
+        component.path = image_path
+        # Image.convert_to_file_path() prefers url, so keep it aligned.
+        component.url = image_path
+        event.untrack_temporary_local_file(image_path)
+
     async def process(
         self,
         event: AstrMessageEvent,
-    ) -> None | AsyncGenerator[None, None]:
+    ) -> None:
         """在处理事件之前的预处理"""
-        # 平台特异配置：platform_specific.<platform>.pre_ack_emoji
+        # 平台特异配置:platform_specific.<platform>.pre_ack_emoji
         supported = {"telegram", "lark", "discord"}
         platform = event.get_platform_name()
         cfg = (
@@ -76,15 +117,32 @@ class PreProcessStage(Stage):
 
         # 路径映射
         if mappings := self.platform_settings.get("path_mapping", []):
-            # 支持 Record，Image 消息段的路径映射。
+            # 支持 Record,Image 消息段的路径映射｡
             message_chain = event.get_messages()
 
             for idx, component in enumerate(message_chain):
                 if isinstance(component, Record | Image) and component.url:
                     for mapping in mappings:
-                        from_, to_ = mapping.split(":")
-                        from_ = from_.removesuffix("/")
-                        to_ = to_.removesuffix("/")
+                        # ":" is ambiguous for Windows absolute paths. Parse
+                        # the separator after a drive-lettered source first,
+                        # then handle a drive-lettered target.
+                        drive_source_mapping = re.fullmatch(
+                            r"([A-Za-z]:[^:]+):(.+)", mapping
+                        )
+                        drive_target_mapping = re.fullmatch(
+                            r"(.+):([A-Za-z]:.+)", mapping
+                        )
+                        if drive_source_mapping:
+                            from_, to_ = drive_source_mapping.groups()
+                        elif drive_target_mapping:
+                            from_, to_ = drive_target_mapping.groups()
+                        else:
+                            from_, separator, to_ = mapping.partition(":")
+                            if not separator:
+                                logger.warning(f"Invalid path mapping: {mapping}")
+                                continue
+                        from_ = from_.removesuffix("/").removesuffix("\\")
+                        to_ = to_.removesuffix("/").removesuffix("\\")
 
                         url = (
                             file_uri_to_path(component.url)
@@ -96,7 +154,7 @@ class PreProcessStage(Stage):
                             logger.debug(f"Path mapping: {url} -> {component.url}")
                     message_chain[idx] = component
 
-        # Normalize provider-facing media early so downstream code sees local files.
+        # Localize source images and normalize audio for downstream processing.
         message_chain = event.get_messages()
         for idx, component in enumerate(message_chain):
             if isinstance(component, Record):
@@ -112,14 +170,7 @@ class PreProcessStage(Stage):
                     logger.warning(f"Voice processing failed: {e}")
             elif isinstance(component, Image):
                 try:
-                    original_path = await component.convert_to_file_path()
-                    self._track_temp_media(event, original_path)
-                    image_path = await ensure_jpeg(original_path)
-                    self._track_temp_media(event, image_path)
-                    component.file = image_path
-                    component.path = image_path
-                    # Image.convert_to_file_path() prefers url, so keep it aligned.
-                    component.url = image_path
+                    await self._normalize_image_component(event, component)
                     message_chain[idx] = component
                 except Exception as e:
                     media_ref = component.url or component.file
@@ -129,7 +180,7 @@ class PreProcessStage(Stage):
                         e,
                     )
 
-        # Also normalize media components inside Reply chains.
+        # Also process Record components inside Reply chains (wav conversion)
         for component in event.get_messages():
             if isinstance(component, Reply) and component.chain:
                 for idx, reply_comp in enumerate(component.chain):
@@ -148,14 +199,7 @@ class PreProcessStage(Stage):
                             )
                     elif isinstance(reply_comp, Image):
                         try:
-                            original_path = await reply_comp.convert_to_file_path()
-                            self._track_temp_media(event, original_path)
-                            image_path = await ensure_jpeg(original_path)
-                            self._track_temp_media(event, image_path)
-                            reply_comp.file = image_path
-                            reply_comp.path = image_path
-                            # Image.convert_to_file_path() prefers url, so keep it aligned.
-                            reply_comp.url = image_path
+                            await self._normalize_image_component(event, reply_comp)
                             component.chain[idx] = reply_comp
                         except Exception as e:
                             media_ref = reply_comp.url or reply_comp.file

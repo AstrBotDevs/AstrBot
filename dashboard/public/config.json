@@ -1,0 +1,13 @@
+{
+  "apiBaseUrl": "",
+  "presets": [
+    {
+      "name": "Default (Auto)",
+      "url": ""
+    },
+    {
+      "name": "Localhost",
+      "url": "http://localhost:6185"
+    }
+  ]
+}

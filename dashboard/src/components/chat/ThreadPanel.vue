@@ -1,6 +1,6 @@
 <template>
-  <transition name="slide-left">
-    <aside v-if="modelValue && thread" class="thread-panel">
+  <transition name="chat-panel">
+    <aside v-if="modelValue && thread" class="thread-panel chat-side-panel">
       <div class="thread-panel-header">
         <div class="thread-panel-title">{{ tm("thread.title") }}</div>
         <div class="thread-panel-actions">
@@ -55,33 +55,35 @@
 </template>
 
 <script setup lang="ts">
+import "@/components/chat/chatPanelTransition.css";
 import { nextTick, ref, watch } from "vue";
-import { chatApi } from "@/api/v1";
 import { fetchWithAuth } from "@/api/http";
+import { chatApi } from "@/api/v1";
+import ChatMessageList from "@/components/chat/ChatMessageList.vue";
 import {
   appendPlain,
   appendReasoningPart,
   buildChatRequestFlags,
+  type ChatRecord,
+  type ChatThread,
   extractReasoningText,
   finishToolCall,
   hasPlainText,
+  type MessagePart,
   markMessageStarted,
   normalizeMessageParts,
   parseJsonSafe,
   payloadText,
   upsertToolCall,
-  type ChatRecord,
-  type MessagePart,
-  type ChatThread,
 } from "@/composables/useMessages";
 import { useModuleI18n } from "@/i18n/composables";
-import ChatMessageList from "@/components/chat/ChatMessageList.vue";
 
 const props = defineProps<{
   modelValue: boolean;
   thread: ChatThread | null;
   isDark: boolean;
   deleting?: boolean;
+  getProviderSelection: () => { providerId: string; modelName: string };
 }>();
 
 const emit = defineEmits<{
@@ -154,6 +156,7 @@ async function send() {
   const abort = new AbortController();
   sending.value = true;
   try {
+    const selection = props.getProviderSelection();
     const response = await fetchWithAuth(chatApi.sendThreadMessageUrl(props.thread.thread_id), {
       method: "POST",
       headers: {
@@ -162,6 +165,8 @@ async function send() {
       body: JSON.stringify({
         message: [{ type: "plain", text }],
         flags: buildChatRequestFlags(),
+        selected_provider: selection.providerId,
+        selected_model: selection.modelName,
       }),
       signal: abort.signal,
     });
@@ -173,10 +178,7 @@ async function send() {
       scrollToBottom();
     });
   } catch (error) {
-    appendPlain(
-      threadBotRecord,
-      `\n\n${String((error as Error)?.message || error)}`,
-    );
+    appendPlain(threadBotRecord, `\n\n${String((error as Error)?.message || error)}`);
     console.error("Failed to send thread message:", error);
   } finally {
     sending.value = false;
@@ -185,10 +187,7 @@ async function send() {
 
 function normalizeRecord(record: any): ChatRecord {
   const content = record.content || {};
-  const normalizedMessage = normalizeMessageParts(
-    content.message || [],
-    content.reasoning || "",
-  );
+  const normalizedMessage = normalizeMessageParts(content.message || [], content.reasoning || "");
   return {
     ...record,
     content: {
@@ -201,10 +200,7 @@ function normalizeRecord(record: any): ChatRecord {
   };
 }
 
-async function readSseStream(
-  stream: ReadableStream<Uint8Array>,
-  onPayload: (payload: any) => void,
-) {
+async function readSseStream(stream: ReadableStream<Uint8Array>, onPayload: (payload: any) => void) {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
@@ -231,10 +227,7 @@ async function readSseStream(
 }
 
 function processPayload(botRecord: ChatRecord, userRecord: ChatRecord, payload: any) {
-  const normalized =
-    payload?.ct === "chat"
-      ? { ...payload, type: payload.type || payload.t }
-      : payload;
+  const normalized = payload?.ct === "chat" ? { ...payload, type: payload.type || payload.t } : payload;
   const type = normalized?.type || normalized?.t;
   const chainType = normalized?.chain_type;
   const data = normalized?.data ?? "";
@@ -244,8 +237,7 @@ function processPayload(botRecord: ChatRecord, userRecord: ChatRecord, payload: 
   if (type === "user_message_saved") {
     userRecord.id = data?.id || userRecord.id;
     userRecord.created_at = data?.created_at || userRecord.created_at;
-    userRecord.llm_checkpoint_id =
-      data?.llm_checkpoint_id || userRecord.llm_checkpoint_id;
+    userRecord.llm_checkpoint_id = data?.llm_checkpoint_id || userRecord.llm_checkpoint_id;
     return;
   }
 
@@ -253,8 +245,7 @@ function processPayload(botRecord: ChatRecord, userRecord: ChatRecord, payload: 
     markMessageStarted(botRecord);
     botRecord.id = data?.id || botRecord.id;
     botRecord.created_at = data?.created_at || botRecord.created_at;
-    botRecord.llm_checkpoint_id =
-      data?.llm_checkpoint_id || botRecord.llm_checkpoint_id;
+    botRecord.llm_checkpoint_id = data?.llm_checkpoint_id || botRecord.llm_checkpoint_id;
     if (data?.refs) {
       botRecord.content.refs = data.refs;
     }
@@ -281,11 +272,7 @@ function processPayload(botRecord: ChatRecord, userRecord: ChatRecord, payload: 
       .map((part) => part.text || "")
       .join("");
     const missingText = finalText.slice(existingText.length);
-    if (
-      type === "complete" &&
-      missingText &&
-      finalText.startsWith(existingText)
-    ) {
+    if (type === "complete" && missingText && finalText.startsWith(existingText)) {
       appendPlain(botRecord, missingText);
     } else if (finalText && !hasPlainText(botRecord)) {
       appendPlain(botRecord, finalText, false);
@@ -324,10 +311,8 @@ function processPayload(botRecord: ChatRecord, userRecord: ChatRecord, payload: 
       .replace("[FILE]", "")
       .replace("[VIDEO]", "");
     const separatorIndex = rawFilename.indexOf("|");
-    const storedFilename =
-      separatorIndex >= 0 ? rawFilename.slice(0, separatorIndex) : rawFilename;
-    const displayFilename =
-      separatorIndex >= 0 ? rawFilename.slice(separatorIndex + 1) : storedFilename;
+    const storedFilename = separatorIndex >= 0 ? rawFilename.slice(0, separatorIndex) : rawFilename;
+    const displayFilename = separatorIndex >= 0 ? rawFilename.slice(separatorIndex + 1) : storedFilename;
     const filename = displayFilename || storedFilename;
     const mediaPart: MessagePart = { type, filename };
     if (storedFilename && storedFilename !== filename) {
@@ -348,26 +333,17 @@ function scrollToBottom() {
 
 <style scoped>
 .thread-panel {
-  width: 380px;
+  --chat-side-panel-width: 380px;
+  width: var(--chat-side-panel-width);
   height: calc(100% - var(--chat-panel-top-offset, 0px));
   margin-top: var(--chat-panel-top-offset, 0px);
-  border-left: 1px solid var(--chat-border, rgba(var(--v-theme-on-surface), 0.1));
+  border-left: 1px solid
+    var(--chat-border, rgba(var(--v-theme-on-surface), 0.1));
   background: var(--chat-page-bg, rgb(var(--v-theme-surface)));
   color: rgb(var(--v-theme-on-surface));
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-}
-
-.slide-left-enter-active,
-.slide-left-leave-active {
-  transition: all 0.2s ease;
-}
-
-.slide-left-enter-from,
-.slide-left-leave-to {
-  transform: translateX(100%);
-  opacity: 0;
 }
 
 .thread-panel-header {
@@ -470,7 +446,8 @@ function scrollToBottom() {
   .thread-panel-header {
     min-height: 52px;
     padding: calc(10px + env(safe-area-inset-top)) 12px 8px;
-    border-bottom: 1px solid var(--chat-border, rgba(var(--v-border-color), 0.12));
+    border-bottom: 1px solid
+      var(--chat-border, rgba(var(--v-border-color), 0.12));
   }
 
   .thread-selected-text {
@@ -501,5 +478,4 @@ function scrollToBottom() {
     flex-shrink: 0;
   }
 }
-
 </style>

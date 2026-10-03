@@ -5,13 +5,15 @@
     :class="{ 'is-dark': isDark, 'sidebar-collapsed': isSidebarCollapsed }"
   >
     <v-navigation-drawer
-      v-model="chatSidebarDrawer"
       class="chat-sidebar"
       :class="{ collapsed: isSidebarCollapsed }"
-      :permanent="lgAndUp"
-      :temporary="!lgAndUp"
-      :rail="lgAndUp && customizer.chatSidebarCollapsed"
-      :width="280"
+      :model-value="isMobile ? mobileDrawer.open : true"
+      @update:model-value="isMobile && mobileDrawer.SET($event)"
+      :permanent="!isMobile"
+      :temporary="isMobile"
+      :mobile-breakpoint="0"
+      :rail="isSidebarCollapsed"
+      :width="245"
       :rail-width="56"
       location="left"
       floating
@@ -20,8 +22,12 @@
         <div
           class="chat-sidebar-brand"
           :class="{ collapsed: isSidebarCollapsed }"
+          data-tauri-drag-region
         >
-          <div v-if="!isSidebarCollapsed" class="chat-sidebar-brand-title Outfit">
+          <div
+            v-if="!isSidebarCollapsed"
+            class="chat-sidebar-brand-title Outfit"
+          >
             <ChatUILogo class="chat-sidebar-brand-logo" />
             <span class="chat-sidebar-brand-copy">
               <span class="chat-sidebar-brand-name">AstrBot</span>
@@ -36,11 +42,10 @@
             @click.stop="toggleChatSidebar"
           >
             <span class="chat-sidebar-rail-icon-stack">
-              <ChatUILogo class="chat-sidebar-brand-logo chat-sidebar-brand-logo--collapsed" />
-              <PanelLeft
-                :size="20"
-                class="sidebar-panel-toggle-icon"
+              <ChatUILogo
+                class="chat-sidebar-brand-logo chat-sidebar-brand-logo--collapsed"
               />
+              <PanelLeft :size="20" class="sidebar-panel-toggle-icon" />
             </span>
           </button>
           <v-btn
@@ -49,12 +54,10 @@
             icon
             rounded="sm"
             variant="text"
+            :ripple="false"
             @click.stop="toggleChatSidebar"
           >
-            <PanelLeft
-              :size="20"
-              class="sidebar-panel-toggle-icon"
-            />
+            <PanelLeft :size="20" class="sidebar-panel-toggle-icon" />
           </v-btn>
         </div>
 
@@ -88,20 +91,20 @@
         >
           <SquarePen :size="18" class="sidebar-action-icon" />
         </button>
-        <v-btn
-          v-else
-          class="new-chat-btn"
-          variant="text"
-          @click="startNewChat"
-        >
+        <v-btn v-else class="new-chat-btn" variant="text" @click="startNewChat">
           <SquarePen :size="18" class="sidebar-action-icon mr-2" />
           <span>{{ tm("actions.newChat") }}</span>
         </v-btn>
-
       </div>
 
-      <div v-if="!isSidebarCollapsed" class="sidebar-content">
+      <div
+        v-if="!isSidebarCollapsed"
+        ref="sidebarContent"
+        class="sidebar-content"
+        @scroll.passive="loadMoreSessions"
+      >
         <ProjectList
+          ref="sidebarProjects"
           :projects="projects"
           :project-sessions="projectSessionsById"
           :loading-project-ids="loadingProjectSessionIds"
@@ -123,11 +126,13 @@
             <span>{{ tm("conversation.title") }}</span>
           </div>
           <div
-            v-for="session in sessions"
+            v-for="session in sidebarSessions"
             :key="session.session_id"
             class="session-item"
             :class="{
-              active: !isProviderWorkspace && currSessionId === session.session_id,
+              active:
+                !isProviderWorkspace && currSessionId === session.session_id,
+              running: isSessionRunning(session.session_id),
             }"
             role="button"
             tabindex="0"
@@ -166,172 +171,67 @@
               width="2"
             />
           </div>
+          <v-progress-linear
+            v-if="sessionsPagination.loading"
+            color="primary"
+            height="2"
+            indeterminate
+            :aria-label="tm('conversation.loading')"
+          />
+          <ChatLoadError
+            v-if="sessionsPagination.error"
+            :message="tm('conversation.loadFailed')"
+            :loading="sessionsPagination.loading"
+            @retry="getSessions(sessionsPagination.append)"
+          />
         </section>
       </div>
 
       <div class="sidebar-footer">
-        <StyledMenu
-          location="top start"
-          offset="10"
-          :close-on-content-click="false"
+        <v-btn
+          class="settings-btn"
+          :class="{ 'icon-only': isSidebarCollapsed }"
+          variant="text"
+          :icon="isSidebarCollapsed"
+          :aria-label="t('core.common.settings')"
+          @click="settingsOpen = true"
         >
-          <template #activator="{ props: menuProps }">
-            <v-btn
-              v-bind="menuProps"
-              class="settings-btn"
-              :class="{ 'icon-only': isSidebarCollapsed }"
-              variant="text"
-              :icon="isSidebarCollapsed"
-            >
-              <Settings
-                :size="20"
-                :class="['sidebar-action-icon', { 'mr-2': !isSidebarCollapsed }]"
-              />
-              <span v-if="!isSidebarCollapsed">{{
-                t("core.common.settings")
-              }}</span>
-            </v-btn>
-          </template>
-
-          <div class="settings-menu-content">
-            <v-menu
-              location="end"
-              offset="8"
-              open-on-hover
-              :close-on-content-click="true"
-            >
-              <template #activator="{ props: transportMenuProps }">
-                <v-list-item
-                  v-bind="transportMenuProps"
-                  class="styled-menu-item settings-menu-item"
-                  rounded="md"
-                >
-                  <template #prepend>
-                    <Cable :size="18" class="styled-menu-lucide-icon" />
-                  </template>
-                  <v-list-item-title>{{
-                    tm("transport.title")
-                  }}</v-list-item-title>
-                  <template #append>
-                    <span class="settings-menu-value">{{
-                      currentTransportLabel
-                    }}</span>
-                    <ChevronRight :size="18" class="styled-menu-lucide-icon" />
-                  </template>
-                </v-list-item>
-              </template>
-
-              <v-card class="styled-menu-card" elevation="8" rounded="lg">
-                <v-list density="compact" class="styled-menu-list pa-1">
-                  <v-list-item
-                    v-for="item in transportOptions"
-                    :key="item.value"
-                    class="styled-menu-item"
-                    :class="{
-                      'styled-menu-item-active': transportMode === item.value,
-                    }"
-                    rounded="md"
-                    @click="transportMode = item.value"
-                  >
-                    <v-list-item-title>{{
-                      tm(item.labelKey)
-                    }}</v-list-item-title>
-                    <template #append>
-                      <Check
-                        v-if="transportMode === item.value"
-                        :size="18"
-                        class="styled-menu-lucide-icon"
-                      />
-                    </template>
-                  </v-list-item>
-                </v-list>
-              </v-card>
-            </v-menu>
-
-            <v-menu
-              location="end"
-              offset="8"
-              open-on-hover
-              :close-on-content-click="true"
-            >
-              <template #activator="{ props: languageMenuProps }">
-                <v-list-item
-                  v-bind="languageMenuProps"
-                  class="styled-menu-item settings-menu-item"
-                  rounded="md"
-                >
-                  <template #prepend>
-                    <Languages :size="18" class="styled-menu-lucide-icon" />
-                  </template>
-                  <v-list-item-title>{{
-                    t("core.common.language")
-                  }}</v-list-item-title>
-                  <template #append>
-                    <span class="settings-menu-value">{{
-                      currentLanguage?.label || locale
-                    }}</span>
-                    <ChevronRight :size="18" class="styled-menu-lucide-icon" />
-                  </template>
-                </v-list-item>
-              </template>
-
-              <v-card class="styled-menu-card" elevation="8" rounded="lg">
-                <v-list density="compact" class="styled-menu-list pa-1">
-                  <v-list-item
-                    v-for="lang in languageOptions"
-                    :key="lang.value"
-                    class="styled-menu-item"
-                    :class="{
-                      'styled-menu-item-active': locale === lang.value,
-                    }"
-                    rounded="md"
-                    @click="switchLanguage(lang.value as Locale)"
-                  >
-                    <template #prepend>
-                      <span class="language-flag">{{ lang.flag }}</span>
-                    </template>
-                    <v-list-item-title>{{ lang.label }}</v-list-item-title>
-                    <template #append>
-                      <Check
-                        v-if="locale === lang.value"
-                        :size="18"
-                        class="styled-menu-lucide-icon"
-                      />
-                    </template>
-                  </v-list-item>
-                </v-list>
-              </v-card>
-            </v-menu>
-
-            <v-list-item
-              class="styled-menu-item settings-menu-item"
-              rounded="md"
-              @click="toggleTheme"
-            >
-              <template #prepend>
-                <Sun
-                  v-if="isDark"
-                  :size="18"
-                  class="styled-menu-lucide-icon"
-                />
-                <Moon v-else :size="18" class="styled-menu-lucide-icon" />
-              </template>
-              <v-list-item-title>{{
-                isDark ? tm("modes.lightMode") : tm("modes.darkMode")
-              }}</v-list-item-title>
-            </v-list-item>
-          </div>
-        </StyledMenu>
+          <Settings
+            :size="20"
+            :class="['sidebar-action-icon', { 'mr-2': !isSidebarCollapsed }]"
+          />
+          <span v-if="!isSidebarCollapsed">{{
+            t("core.common.settings")
+          }}</span>
+        </v-btn>
       </div>
     </v-navigation-drawer>
 
+    <ChatSettingsDialog
+      v-model="settingsOpen"
+      v-model:enable-streaming="enableStreaming"
+      v-model:enable-reasoning="enableReasoning"
+      v-model:send-shortcut="sendShortcut"
+      v-model:transport-mode="transportMode"
+    />
+
     <main
       class="chat-main"
-      :class="{ 'empty-chat': isEmptyChat }"
+      :class="{
+        'empty-chat': isEmptyChat,
+        'has-side-panel':
+          threadPanelOpen ||
+          reasoningPanelOpen ||
+          refsSidebarOpen ||
+          chatHeader.workspaceFilesOpen,
+      }"
       v-on="dragEvents"
     >
       <transition name="drop-fade">
-        <div v-if="isDragging && !isProviderWorkspace" class="chat-drop-overlay">
+        <div
+          v-if="isDragging && !isProviderWorkspace"
+          class="chat-drop-overlay"
+        >
           <div class="chat-drop-overlay-content">
             <v-icon size="48" color="primary">mdi-cloud-upload</v-icon>
             <span class="chat-drop-text">{{ tm("input.dropToUpload") }}</span>
@@ -361,7 +261,6 @@
             :staged-audio-url="stagedAudioUrl"
             :staged-files="stagedNonImageFiles"
             :disabled="sending"
-            :enable-streaming="enableStreaming"
             :is-recording="isRecording"
             :is-running="
               Boolean(currSessionId && isSessionRunning(currSessionId))
@@ -372,13 +271,17 @@
             :reply-to="chatInputReplyTarget"
             :send-shortcut="sendShortcut"
             :show-provider-selector="false"
+            :failed-uploads="failedUploadViews"
+            :active-uploads="activeUploadViews"
             :placeholder="tm('input.projectPlaceholder')"
             @send="sendCurrentMessage"
             @stop="stopCurrentSession"
-            @toggle-streaming="toggleStreaming"
             @remove-image="removeImage"
             @remove-audio="removeAudio"
             @remove-file="removeFile"
+            @retry-failed-upload="retryFailedUpload"
+            @discard-failed-upload="discardFailedUpload"
+            @cancel-active-upload="cancelActiveUpload"
             @start-recording="startRecording"
             @stop-recording="stopRecording"
             @paste-image="handlePaste"
@@ -393,13 +296,41 @@
         class="conversation-stack"
         :class="{ 'is-empty': isEmptyChat }"
       >
+        <v-progress-linear
+          v-if="activeSessionPagination?.loading"
+          class="history-loading"
+          color="primary"
+          height="2"
+          indeterminate
+          absolute
+          location="top"
+          :aria-label="tm('history.loading')"
+        />
         <section
           ref="messagesContainer"
           class="messages-panel"
+          :class="{ 'history-anchor-locked': suppressAutoScroll }"
+          tabindex="0"
           @scroll="handleMessagesScroll"
+          @wheel.passive="handleMessagesInteraction"
+          @touchstart.passive="handleMessagesInteraction"
+          @touchmove.passive="handleMessagesInteraction"
+          @pointerdown="handleMessagesInteraction"
+          @keydown="handleMessagesInteraction"
         >
           <div v-if="loadingMessages" class="center-state">
             <v-progress-circular indeterminate size="32" width="3" />
+          </div>
+
+          <div
+            v-else-if="!activeMessages.length && activeSessionPagination?.error"
+            class="welcome-state"
+          >
+            <ChatLoadError
+              :message="tm('history.loadFailed')"
+              :loading="loadingMessages"
+              @retry="retryCurrentSessionLoad"
+            />
           </div>
 
           <div v-else-if="!activeMessages.length" class="welcome-state">
@@ -408,8 +339,16 @@
 
           <div
             v-if="!loadingMessages && activeMessages.length"
+            ref="messagesContent"
             class="messages-list-shell"
           >
+            <ChatLoadError
+              v-if="activeSessionPagination?.error"
+              class="history-load-error"
+              :message="tm('history.loadEarlierFailed')"
+              :loading="activeSessionPagination.loading"
+              @retry="retryCurrentSessionLoad"
+            />
             <ChatMessageList
               v-model:edit-draft="messageEditDraft"
               :messages="activeMessages"
@@ -439,6 +378,28 @@
         </section>
 
         <section ref="composerShell" class="composer-shell">
+          <button
+            v-if="isAwayFromBottom && !shouldStickToBottom"
+            class="scroll-to-bottom"
+            type="button"
+            :aria-label="tm('actions.scrollToBottom')"
+            :title="tm('actions.scrollToBottom')"
+            @click="scrollToBottom(true)"
+          >
+            <span
+              v-if="currSessionId && isSessionRunning(currSessionId)"
+              class="scroll-running-dots"
+              aria-hidden="true"
+            >
+              <span v-for="dot in 3" :key="dot" />
+            </span>
+            <ArrowDown
+              v-else
+              :size="20"
+              :stroke-width="1.75"
+              aria-hidden="true"
+            />
+          </button>
           <ChatInput
             ref="inputRef"
             v-model:prompt="draft"
@@ -446,7 +407,6 @@
             :staged-audio-url="stagedAudioUrl"
             :staged-files="stagedNonImageFiles"
             :disabled="sending"
-            :enable-streaming="enableStreaming"
             :is-recording="isRecording"
             :is-running="
               Boolean(currSessionId && isSessionRunning(currSessionId))
@@ -457,15 +417,19 @@
             :reply-to="chatInputReplyTarget"
             :send-shortcut="sendShortcut"
             :show-provider-selector="false"
+            :failed-uploads="failedUploadViews"
+            :active-uploads="activeUploadViews"
             :placeholder="
               activeProject ? tm('input.projectPlaceholder') : undefined
             "
             @send="sendCurrentMessage"
             @stop="stopCurrentSession"
-            @toggle-streaming="toggleStreaming"
             @remove-image="removeImage"
             @remove-audio="removeAudio"
             @remove-file="removeFile"
+            @retry-failed-upload="retryFailedUpload"
+            @discard-failed-upload="discardFailedUpload"
+            @cancel-active-upload="cancelActiveUpload"
             @start-recording="startRecording"
             @stop-recording="stopRecording"
             @paste-image="handlePaste"
@@ -537,6 +501,7 @@
       :thread="activeThread"
       :is-dark="isDark"
       :deleting="deletingThread"
+      :get-provider-selection="getSelectedProviderSelection"
       @delete="deleteThread"
     />
     <ReasoningSidebar
@@ -555,11 +520,14 @@
 </template>
 
 <script setup lang="ts">
+import { ArrowDown, Box, PanelLeft, Pencil, Settings, SquarePen, Trash2 } from "@lucide/vue";
 import {
   computed,
+  markRaw,
   nextTick,
   onBeforeUnmount,
   onMounted,
+  onUnmounted,
   provide,
   reactive,
   ref,
@@ -567,66 +535,57 @@ import {
 } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useDisplay } from "vuetify";
-import { isAxiosError } from "axios";
-import {
-  Box,
-  Cable,
-  Check,
-  ChevronRight,
-  Languages,
-  Moon,
-  PanelLeft,
-  Pencil,
-  Settings,
-  SquarePen,
-  Sun,
-  Trash2,
-} from "@lucide/vue";
 import { chatApi, providerApi } from "@/api/v1";
-import StyledMenu from "@/components/shared/StyledMenu.vue";
-import ProjectDialog, {
-  type ProjectFormData,
-} from "@/components/chat/ProjectDialog.vue";
-import ProjectList, { type Project } from "@/components/chat/ProjectList.vue";
-import ProjectView from "@/components/chat/ProjectView.vue";
-import ChatInput from "@/components/chat/ChatInput.vue";
+import type ChatInput from "@/components/chat/ChatInput.vue";
+import ChatLoadError from "@/components/chat/ChatLoadError.vue";
 import ChatMessageList from "@/components/chat/ChatMessageList.vue";
+import ChatSettingsDialog from "@/components/chat/ChatSettingsDialog.vue";
+import ChatToolbarContext from "@/components/chat/ChatToolbarContext.vue";
 import ChatUILogo from "@/components/chat/ChatUILogo.vue";
-import type { RegenerateModelSelection } from "@/components/chat/RegenerateMenu.vue";
+import RefsSidebar from "@/components/chat/message_list_comps/RefsSidebar.vue";
+import ProjectDialog, { type ProjectFormData } from "@/components/chat/ProjectDialog.vue";
+import type ProjectList from "@/components/chat/ProjectList.vue";
+import type { Project } from "@/components/chat/ProjectList.vue";
+import ProjectView from "@/components/chat/ProjectView.vue";
 import ReasoningSidebar from "@/components/chat/ReasoningSidebar.vue";
+import type { RegenerateModelSelection } from "@/components/chat/RegenerateMenu.vue";
 import ThreadPanel from "@/components/chat/ThreadPanel.vue";
 import WorkspaceFilesPanel from "@/components/chat/WorkspaceFilesPanel.vue";
-import RefsSidebar from "@/components/chat/message_list_comps/RefsSidebar.vue";
-import { useSessions, type Session } from "@/composables/useSessions";
+import ProviderChatCompletionPanel from "@/components/provider/ProviderChatCompletionPanel.vue";
+import { useDragUpload } from "@/composables/useDragUpload";
+import { useMediaHandling } from "@/composables/useMediaHandling";
 import {
   messageBlocks as buildMessageBlocks,
-  useMessages,
   type ChatRecord,
   type ChatThread,
   type MessagePart,
   type TransportMode,
+  useMessages,
 } from "@/composables/useMessages";
-import { useMediaHandling } from "@/composables/useMediaHandling";
-import { useRecording } from "@/composables/useRecording";
 import { useProjects } from "@/composables/useProjects";
-import { useDragUpload } from "@/composables/useDragUpload";
+import { useProviderModelSelection } from "@/composables/useProviderModelSelection";
+import { useRecording } from "@/composables/useRecording";
+import { type Session, useSessions } from "@/composables/useSessions";
+import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { useChatHeaderStore } from "@/stores/chatHeader";
 import { useCustomizerStore } from "@/stores/customizer";
-import ProviderChatCompletionPanel from "@/components/provider/ProviderChatCompletionPanel.vue";
-import {
-  useI18n,
-  useLanguageSwitcher,
-  useModuleI18n,
-} from "@/i18n/composables";
-import type { Locale } from "@/i18n/types";
+import { useHeaderContextStore } from "@/stores/headerContext";
+import { useMobileDrawerStore } from "@/stores/mobileDrawer";
+import { readChatDraft, writeChatDraft } from "@/utils/chatDraftStorage.mjs";
 import { askForConfirmation, useConfirmDialog } from "@/utils/confirmDialog";
 import {
   contextLimit,
   formatTokenCount,
-  type ProviderModelMetadata,
   type ProviderMetadataSource,
+  type ProviderModelMetadata,
 } from "@/utils/providerMetadata";
 import { useToast } from "@/utils/toast";
+
+function chatRequestErrorMessage(error: unknown, fallback: string): string {
+  const responseMessage = (error as { response?: { data?: { message?: unknown } } } | null)?.response?.data?.message;
+  if (typeof responseMessage === "string" && responseMessage.trim()) return responseMessage;
+  return error instanceof Error && error.message ? error.message : fallback;
+}
 
 const props = withDefaults(defineProps<{ chatboxMode?: boolean; active?: boolean }>(), {
   chatboxMode: false,
@@ -635,17 +594,26 @@ const props = withDefaults(defineProps<{ chatboxMode?: boolean; active?: boolean
 
 const route = useRoute();
 const router = useRouter();
-const { lgAndUp } = useDisplay();
 const chatHeader = useChatHeaderStore();
+const headerContext = useHeaderContextStore();
+const mobileDrawer = useMobileDrawerStore();
+
+/* Project the chat toolbar context (model selector + session title) into the
+   top toolbar only while the chat page is actually visible. */
+watch(
+  () => props.active,
+  (active) => headerContext.SET_COMPONENT(active ? markRaw(ChatToolbarContext) : null),
+  { immediate: true },
+);
+onUnmounted(() => headerContext.SET_COMPONENT(null));
 const customizer = useCustomizerStore();
 const { t } = useI18n();
 const { tm } = useModuleI18n("features/chat");
 const confirmDialog = useConfirmDialog();
 const toast = useToast();
-const { languageOptions, currentLanguage, switchLanguage, locale } =
-  useLanguageSwitcher();
 const {
   sessions,
+  sessionsPagination,
   currSessionId,
   getSessions,
   newSession,
@@ -669,12 +637,17 @@ const {
   stagedImagesUrl,
   stagedAudioUrl,
   stagedNonImageFiles,
+  failedUploadViews,
+  activeUploadViews,
   processAndUploadImage,
   processAndUploadFile,
   handlePaste,
   removeImage,
   removeAudio,
   removeFile,
+  retryFailedUpload,
+  discardFailedUpload,
+  cancelActiveUpload,
   clearStaged,
   cleanupMediaCache,
 } = useMediaHandling();
@@ -708,14 +681,28 @@ const projectSessions = ref<Session[]>([]);
 const projectSessionsById = ref<Record<string, Session[]>>({});
 const loadingProjectSessionIds = ref<string[]>([]);
 const loadingSessions = ref(false);
-const draft = ref("");
+const draft = ref(readChatDraft(currSessionId.value));
 const tokenProviderConfigs = ref<TokenProviderConfig[]>([]);
 const tokenModelMetadata = ref<Record<string, ProviderModelMetadata>>({});
 const selectedTokenProviderId = ref("");
 const messagesContainer = ref<HTMLElement | null>(null);
+const sidebarContent = ref<HTMLElement | null>(null);
+const sidebarProjects = ref<InstanceType<typeof ProjectList> | null>(null);
+const sidebarProjectElement = computed<HTMLElement | null>(() => sidebarProjects.value?.$el || null);
+const messagesContent = ref<HTMLElement | null>(null);
 const composerShell = ref<HTMLElement | null>(null);
 const inputRef = ref<InstanceType<typeof ChatInput> | null>(null);
 const shouldStickToBottom = ref(true);
+const autoScrollPaused = ref(false);
+const suppressAutoScroll = ref(false);
+const LOAD_EARLIER_SCROLL_THRESHOLD = 120;
+const isAwayFromBottom = ref(false);
+let lastMessagesScrollTop = 0;
+let lastMessagesScrollHeight = 0;
+let lastMessagesClientHeight = 0;
+let touchScrollY = 0;
+let scrollIntent = 0;
+let autoScrollFrame: number | null = null;
 const replyTarget = ref<ChatRecord | null>(null);
 const threadPanelOpen = ref(false);
 const activeThread = ref<ChatThread | null>(null);
@@ -740,42 +727,32 @@ const threadSelection = reactive<{
   message: null,
   selectedText: "",
 });
+const settingsOpen = ref(false);
 const enableStreaming = ref(true);
+const enableReasoning = ref(true);
 const sendShortcut = ref<"enter" | "shift_enter">("enter");
-let composerResizeObserver: ResizeObserver | null = null;
-const {
-  isRecording,
-  startRecording: startRecorder,
-  stopRecording: stopRecorder,
-} = useRecording();
-const chatSidebarDrawer = computed({
-  get: () => lgAndUp.value || customizer.chatSidebarOpen,
-  set: (value: boolean) => {
-    if (!lgAndUp.value) {
-      customizer.SET_CHAT_SIDEBAR(value);
-    }
-  },
-});
-const isSidebarCollapsed = computed(() =>
-  lgAndUp.value ? customizer.chatSidebarCollapsed : !customizer.chatSidebarOpen,
-);
-const isProviderWorkspace = computed(
-  () => activeWorkspace.value === "providers",
-);
+const DRAFT_SAVE_DELAY_MS = 300;
+let activeDraftSessionId = currSessionId.value;
+let draftSaveTimer: number | null = null;
+let chatResizeObserver: ResizeObserver | null = null;
+let chatMutationObserver: MutationObserver | null = null;
+const { isRecording, startRecording: startRecorder, stopRecording: stopRecorder } = useRecording();
+const { smAndDown: isMobile } = useDisplay();
+
+const isSidebarCollapsed = computed(() => !isMobile.value && customizer.chatSidebarCollapsed);
+const isProviderWorkspace = computed(() => activeWorkspace.value === "providers");
 
 function toggleChatSidebar() {
-  if (lgAndUp.value) {
-    customizer.SET_CHAT_SIDEBAR_COLLAPSED(!customizer.chatSidebarCollapsed);
+  if (isMobile.value) {
+    mobileDrawer.SET(false);
     return;
   }
-  customizer.TOGGLE_CHAT_SIDEBAR();
+  customizer.SET_CHAT_SIDEBAR_COLLAPSED(!customizer.chatSidebarCollapsed);
 }
 
 const activeReasoningParts = computed<MessagePart[]>(() => {
   if (!activeReasoningTarget.value) return [];
-  const blocks = buildMessageBlocks(
-    activeReasoningTarget.value.message.content || { type: "bot", message: [] },
-  );
+  const blocks = buildMessageBlocks(activeReasoningTarget.value.message.content || { type: "bot", message: [] });
   const block = blocks[activeReasoningTarget.value.blockIndex];
   return block?.kind === "thinking" ? block.parts : [];
 });
@@ -790,12 +767,15 @@ const {
   loadingMessages,
   sending,
   loadedSessions,
+  sessionDetails,
   sessionProjects,
   activeMessages,
+  paginationBySession,
   isSessionRunning,
   isUserMessage,
   messageParts,
   loadSessionMessages,
+  loadEarlierMessages,
   createLocalExchange,
   sendMessageStream,
   editMessage,
@@ -812,78 +792,73 @@ const {
   },
 });
 
-const transportMode = ref<TransportMode>(
-  (localStorage.getItem("chat.transportMode") as TransportMode) === "websocket"
-    ? "websocket"
-    : "sse",
+const activeSessionPagination = computed(() =>
+  currSessionId.value ? paginationBySession[currSessionId.value] : undefined,
 );
-const transportOptions: Array<{ value: TransportMode; labelKey: string }> = [
-  { value: "sse", labelKey: "transport.sse" },
-  { value: "websocket", labelKey: "transport.websocket" },
-];
-const currentTransportLabel = computed(() =>
-  tm(
-    transportOptions.find((item) => item.value === transportMode.value)
-      ?.labelKey || "transport.sse",
-  ),
+
+const transportMode = ref<TransportMode>(
+  (localStorage.getItem("chat.transportMode") as TransportMode) === "websocket" ? "websocket" : "sse",
 );
 
 watch(transportMode, (mode) => {
   localStorage.setItem("chat.transportMode", mode);
 });
 
+watch(draft, (value) => {
+  if (draftSaveTimer !== null) window.clearTimeout(draftSaveTimer);
+  const sessionId = activeDraftSessionId;
+  draftSaveTimer = window.setTimeout(() => {
+    writeChatDraft(sessionId, value);
+    draftSaveTimer = null;
+  }, DRAFT_SAVE_DELAY_MS);
+});
+
+watch(currSessionId, (sessionId) => {
+  flushDraft();
+  activeDraftSessionId = sessionId;
+  draft.value = readChatDraft(sessionId);
+});
+
 const isDark = computed(() => customizer.uiTheme === "PurpleThemeDark");
-const canSend = computed(
-  () =>
-    Boolean(draft.value.trim() || stagedFiles.value.length) && !sending.value,
-);
+const canSend = computed(() => Boolean(draft.value.trim() || stagedFiles.value.length) && !sending.value);
 const currentSession = computed(
   () =>
-    sessions.value.find(
-      (session) => session.session_id === currSessionId.value,
-    ) ||
-    projectSessions.value.find(
-      (session) => session.session_id === currSessionId.value,
-    ) ||
+    sessions.value.find((session) => session.session_id === currSessionId.value) ||
+    projectSessions.value.find((session) => session.session_id === currSessionId.value) ||
     Object.values(projectSessionsById.value)
       .flat()
       .find((session) => session.session_id === currSessionId.value) ||
+    sessionDetails[currSessionId.value] ||
     null,
 );
-const sessionProject = computed(() =>
-  currSessionId.value ? sessionProjects[currSessionId.value] : null,
-);
-const currentSessionTitle = computed(() =>
-  currentSession.value ? sessionTitle(currentSession.value) : "",
-);
+const sessionProject = computed(() => (currSessionId.value ? sessionProjects[currSessionId.value] : null));
+const sidebarSessions = computed(() => {
+  const current = currentSession.value;
+  if (
+    current &&
+    !sessionProject.value &&
+    !sessions.value.some((session) => session.session_id === current.session_id)
+  ) {
+    return [current, ...sessions.value];
+  }
+  return sessions.value;
+});
+const currentSessionTitle = computed(() => (currentSession.value ? sessionTitle(currentSession.value) : ""));
 const selectedProject = computed(
-  () =>
-    projects.value.find(
-      (project) => project.project_id === selectedProjectId.value,
-    ) || null,
+  () => projects.value.find((project) => project.project_id === selectedProjectId.value) || null,
 );
 const activeProject = computed(() => {
   if (isProviderWorkspace.value) return null;
   if (selectedProject.value) return selectedProject.value;
   const projectId = sessionProject.value?.project_id;
-  return (
-    projects.value.find((project) => project.project_id === projectId) || null
-  );
+  return projects.value.find((project) => project.project_id === projectId) || null;
 });
 const isEmptyChat = computed(
-  () =>
-    !isProviderWorkspace.value &&
-    !selectedProject.value &&
-    !loadingMessages.value &&
-    !activeMessages.value.length,
+  () => !isProviderWorkspace.value && !selectedProject.value && !loadingMessages.value && !activeMessages.value.length,
 );
-const chatHeaderTitle = computed(
-  () => currentSessionTitle.value || selectedProject.value?.title || "",
-);
+const chatHeaderTitle = computed(() => currentSessionTitle.value || selectedProject.value?.title || "");
 const chatHeaderSubtitle = computed(() =>
-  currentSessionTitle.value
-    ? sessionProject.value?.title || selectedProject.value?.title || ""
-    : "",
+  currentSessionTitle.value ? sessionProject.value?.title || selectedProject.value?.title || "" : "",
 );
 const chatInputReplyTarget = computed(() =>
   replyTarget.value?.id == null
@@ -894,9 +869,7 @@ const chatInputReplyTarget = computed(() =>
       },
 );
 const currentTokenProvider = computed(() => {
-  const selectedProvider = tokenProviderConfigs.value.find(
-    (provider) => provider.id === selectedTokenProviderId.value,
-  );
+  const selectedProvider = tokenProviderConfigs.value.find((provider) => provider.id === selectedTokenProviderId.value);
   return selectedProvider || tokenProviderConfigs.value[0] || null;
 });
 const currentTokenMetadata = computed(() => {
@@ -914,11 +887,7 @@ const latestContextTokens = computed(() => {
     }
     const usage = stats.token_usage;
     if (!usage) continue;
-    return (
-      readTokenCount(usage.input_other) +
-      readTokenCount(usage.input_cached) +
-      readTokenCount(usage.output)
-    );
+    return readTokenCount(usage.input_other) + readTokenCount(usage.input_cached) + readTokenCount(usage.output);
   }
   return 0;
 });
@@ -956,6 +925,58 @@ function getSelectedProviderSelection() {
   };
 }
 
+const {
+  selectedProviderId: currentProviderId,
+  selectedModelName: currentModelName,
+  setSelection: setProviderSelection,
+} = useProviderModelSelection();
+
+const SESSION_PROVIDER_STORAGE_PREFIX = "chat.sessionProvider.";
+
+function readSessionProviderSelection(sessionId: string) {
+  try {
+    const raw = localStorage.getItem(SESSION_PROVIDER_STORAGE_PREFIX + sessionId);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed.providerId === "string" && parsed.providerId) {
+      return {
+        providerId: parsed.providerId,
+        modelName: typeof parsed.modelName === "string" ? parsed.modelName : "",
+      };
+    }
+  } catch {
+    // Ignore corrupted entries.
+  }
+  return null;
+}
+
+function writeSessionProviderSelection(
+  sessionId: string,
+  selection: { providerId?: string; modelName?: string } | null,
+) {
+  if (!sessionId || !selection?.providerId) return;
+  try {
+    localStorage.setItem(
+      SESSION_PROVIDER_STORAGE_PREFIX + sessionId,
+      JSON.stringify({
+        providerId: selection.providerId,
+        modelName: selection.modelName || "",
+      }),
+    );
+  } catch {
+    // Session model persistence must not block chat flows.
+  }
+}
+
+// Remember the model picked by the user for the active session.
+watch([currentProviderId, currentModelName], ([providerId, modelName]) => {
+  if (!currSessionId.value || !providerId) return;
+  writeSessionProviderSelection(currSessionId.value, {
+    providerId,
+    modelName,
+  });
+});
+
 provide("isDark", isDark);
 
 watch(
@@ -985,16 +1006,53 @@ watch(
 );
 
 onMounted(async () => {
+  window.addEventListener("beforeunload", flushDraft);
   if (typeof ResizeObserver !== "undefined") {
-    composerResizeObserver = new ResizeObserver(([entry]) => {
+    chatResizeObserver = new ResizeObserver((entries) => {
+      if (
+        entries.some((entry) => entry.target === sidebarContent.value || entry.target === sidebarProjectElement.value)
+      ) {
+        loadMoreSessions();
+      }
       const container = messagesContainer.value;
-      if (!entry || !container) return;
-      const height = Math.ceil(entry.target.getBoundingClientRect().height);
-      container.style.setProperty("--chat-composer-height", `${height}px`);
-      if (shouldStickToBottom.value) scrollToBottom();
+      if (!container) return;
+      let composerResized = false;
+      let messagesResized = false;
+      for (const entry of entries) {
+        if (entry.target === composerShell.value) {
+          composerResized = true;
+          const height = Math.ceil(entry.target.getBoundingClientRect().height);
+          container.style.setProperty("--chat-composer-height", `${height}px`);
+        }
+        if (entry.target === messagesContent.value) {
+          messagesResized = true;
+        }
+      }
+      if (!composerResized && !messagesResized) return;
+
+      if (shouldStickToBottom.value && !autoScrollPaused.value) {
+        scrollToBottom();
+      } else {
+        isAwayFromBottom.value = container.scrollHeight - container.scrollTop - container.clientHeight > 2;
+      }
     });
-    if (composerShell.value) {
-      composerResizeObserver.observe(composerShell.value);
+    if (composerShell.value) chatResizeObserver.observe(composerShell.value);
+    if (sidebarContent.value) chatResizeObserver.observe(sidebarContent.value);
+    if (sidebarProjectElement.value) chatResizeObserver.observe(sidebarProjectElement.value);
+    if (messagesContent.value) chatResizeObserver.observe(messagesContent.value);
+  }
+  if (typeof MutationObserver !== "undefined") {
+    chatMutationObserver = new MutationObserver(() => {
+      if (!suppressAutoScroll.value && shouldStickToBottom.value && !autoScrollPaused.value) {
+        scrollToBottom();
+      }
+    });
+    if (messagesContent.value) {
+      chatMutationObserver.observe(messagesContent.value, {
+        childList: true,
+        characterData: true,
+        subtree: true,
+      });
     }
   }
 
@@ -1013,16 +1071,49 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
-  composerResizeObserver?.disconnect();
+  flushDraft();
+  window.removeEventListener("beforeunload", flushDraft);
+  chatResizeObserver?.disconnect();
+  chatMutationObserver?.disconnect();
+  if (autoScrollFrame !== null) {
+    window.cancelAnimationFrame(autoScrollFrame);
+    autoScrollFrame = null;
+  }
   chatHeader.CLEAR_CONTEXT();
   cleanupMediaCache();
 });
 
-watch(composerShell, (element, previousElement) => {
-  if (!composerResizeObserver) return;
-  if (previousElement) composerResizeObserver.unobserve(previousElement);
-  if (element) composerResizeObserver.observe(element);
-});
+watch(
+  [composerShell, messagesContent, sidebarContent, sidebarProjectElement],
+  (elements, previousElements) => {
+    if (!chatResizeObserver) return;
+    for (const element of previousElements) {
+      if (element) chatResizeObserver.unobserve(element);
+    }
+    for (const element of elements) {
+      if (element) chatResizeObserver.observe(element);
+    }
+  },
+  { flush: "post" },
+);
+
+watch([() => sessionsPagination.loading, () => mobileDrawer.open], () => loadMoreSessions(), { flush: "post" });
+
+watch(
+  messagesContent,
+  (element, previousElement) => {
+    if (!chatMutationObserver) return;
+    if (previousElement) chatMutationObserver.disconnect();
+    if (element) {
+      chatMutationObserver.observe(element, {
+        childList: true,
+        characterData: true,
+        subtree: true,
+      });
+    }
+  },
+  { flush: "post" },
+);
 
 watch(
   () => route.params.conversationId,
@@ -1044,7 +1135,7 @@ watch(
 );
 
 watch(activeMessages, () => {
-  if (shouldStickToBottom.value) {
+  if (!suppressAutoScroll.value && shouldStickToBottom.value) {
     scrollToBottom();
   }
 });
@@ -1056,12 +1147,6 @@ function getRouteSessionId() {
 
 function basePath() {
   return props.chatboxMode ? "/chatbox" : "/chat";
-}
-
-function closeMobileSidebar() {
-  if (!lgAndUp.value) {
-    customizer.SET_CHAT_SIDEBAR(false);
-  }
 }
 
 function closeSecondaryPanels() {
@@ -1086,7 +1171,6 @@ async function openProviderWorkspace() {
   if (route.path !== targetPath) {
     await router.push(targetPath);
   }
-  closeMobileSidebar();
 }
 
 function sessionTitle(session: Session) {
@@ -1103,12 +1187,10 @@ async function loadTokenProviders() {
   try {
     const response = await providerApi.listByProviderType("chat_completion");
     if (response.data.status === "ok") {
-      tokenModelMetadata.value = (
-        (response.data as any).model_metadata || {}
-      ) as Record<string, ProviderModelMetadata>;
-      tokenProviderConfigs.value = (
-        (response.data.data || []) as unknown as TokenProviderConfig[]
-      ).filter((provider) => provider.enable !== false);
+      tokenModelMetadata.value = ((response.data as any).model_metadata || {}) as Record<string, ProviderModelMetadata>;
+      tokenProviderConfigs.value = ((response.data.data || []) as unknown as TokenProviderConfig[]).filter(
+        (provider) => provider.enable !== false,
+      );
     }
   } catch (error) {
     console.error("Failed to load provider context metadata:", error);
@@ -1132,7 +1214,6 @@ async function startNewChat() {
   selectedProjectId.value = null;
   replyTarget.value = null;
   newChat();
-  closeMobileSidebar();
   await focusChatInput();
 }
 
@@ -1155,7 +1236,7 @@ async function selectProject(projectId: string) {
   replyTarget.value = null;
   await router.push(basePath());
   await loadProjectSessions(projectId);
-  closeMobileSidebar();
+  await focusChatInput();
 }
 
 async function loadProjectSessions(projectId = selectedProjectId.value) {
@@ -1181,9 +1262,7 @@ async function handleProjectToggle(projectId: string, expanded: boolean) {
   try {
     await loadProjectSessions(projectId);
   } finally {
-    loadingProjectSessionIds.value = loadingProjectSessionIds.value.filter(
-      (item) => item !== projectId,
-    );
+    loadingProjectSessionIds.value = loadingProjectSessionIds.value.filter((item) => item !== projectId);
   }
 }
 
@@ -1192,20 +1271,14 @@ async function handleDeleteProject(projectId: string) {
   const nextSessionsById = { ...projectSessionsById.value };
   delete nextSessionsById[projectId];
   projectSessionsById.value = nextSessionsById;
-  loadingProjectSessionIds.value = loadingProjectSessionIds.value.filter(
-    (item) => item !== projectId,
-  );
+  loadingProjectSessionIds.value = loadingProjectSessionIds.value.filter((item) => item !== projectId);
   if (selectedProjectId.value === projectId) {
     selectedProjectId.value = null;
     projectSessions.value = [];
   }
 }
 
-function openSessionTitleDialog(
-  sessionId: string,
-  title: string,
-  refreshProjectSessions = false,
-) {
+function openSessionTitleDialog(sessionId: string, title: string, refreshProjectSessions = false) {
   editingSessionTitleId.value = sessionId;
   sessionTitleDraft.value = title;
   refreshProjectSessionsAfterTitleSave.value = refreshProjectSessions;
@@ -1223,22 +1296,23 @@ async function saveSessionTitleDialog() {
       display_name: displayName,
     });
     updateSessionTitle(sessionId, displayName);
-    const projectSession = projectSessions.value.find(
-      (session) => session.session_id === sessionId,
-    );
+    if (sessionDetails[sessionId]) {
+      sessionDetails[sessionId].display_name = displayName;
+    }
+    const projectSession = projectSessions.value.find((session) => session.session_id === sessionId);
     if (projectSession) {
       projectSession.display_name = displayName;
     }
     Object.values(projectSessionsById.value).forEach((projectSessionList) => {
-      const cachedProjectSession = projectSessionList.find(
-        (session) => session.session_id === sessionId,
-      );
+      const cachedProjectSession = projectSessionList.find((session) => session.session_id === sessionId);
       if (cachedProjectSession) {
         cachedProjectSession.display_name = displayName;
       }
     });
     if (refreshProjectSessionsAfterTitleSave.value) {
       await loadProjectSessions();
+    } else {
+      await getSessions();
     }
     sessionTitleDialogOpen.value = false;
   } finally {
@@ -1272,10 +1346,7 @@ async function editProjectSessionTitle(sessionId: string, title: string) {
   openSessionTitleDialog(sessionId, title, true);
 }
 
-async function deleteProjectSession(
-  sessionId: string,
-  projectId = selectedProjectId.value,
-) {
+async function deleteProjectSession(sessionId: string, projectId = selectedProjectId.value) {
   await deleteSession(sessionId);
   if (projectId) {
     await loadProjectSessions(projectId);
@@ -1309,8 +1380,7 @@ async function saveProject(formData: ProjectFormData, projectId?: string) {
     projectDialogOpen.value = false;
     editingProject.value = null;
   } catch (error) {
-    projectDialogError.value =
-      error instanceof Error ? error.message : "Failed to save project";
+    projectDialogError.value = error instanceof Error ? error.message : "Failed to save project";
   } finally {
     savingProject.value = false;
   }
@@ -1330,18 +1400,27 @@ async function selectSession(sessionId: string, pushRoute = true) {
   replyTarget.value = null;
   if (pushRoute && route.path !== `${basePath()}/${sessionId}`) {
     await router.push(`${basePath()}/${sessionId}`);
+    if (currSessionId.value !== sessionId) return;
   }
   if (!loadedSessions[sessionId]) {
     await loadSessionMessages(sessionId);
+    if (currSessionId.value !== sessionId) return;
   }
-  scrollToBottom();
-  closeMobileSidebar();
+  const storedSelection = readSessionProviderSelection(sessionId);
+  if (storedSelection) {
+    setProviderSelection(storedSelection.providerId, storedSelection.modelName);
+  }
+  scrollToBottom(true);
   await focusChatInput();
 }
 
 async function sendCurrentMessage() {
   if (!canSend.value) return;
 
+  const draftSessionId = activeDraftSessionId;
+  const draftText = draft.value;
+  const text = draftText.trim();
+  const outgoingParts = buildOutgoingParts(text);
   sending.value = true;
   try {
     let sessionId = currSessionId.value;
@@ -1349,6 +1428,8 @@ async function sendCurrentMessage() {
     const targetProject = selectedProject.value;
     if (!sessionId) {
       sessionId = await newSession();
+      await nextTick();
+      draft.value = draftText;
       if (targetProjectId) {
         await addSessionToProject(sessionId, targetProjectId);
         sessionProjects[sessionId] = targetProject
@@ -1365,10 +1446,9 @@ async function sendCurrentMessage() {
       await getSessions();
     }
 
-    const text = draft.value.trim();
     const messageId = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
-    const outgoingParts = buildOutgoingParts(text);
     const selection = getSelectedProviderSelection();
+    writeSessionProviderSelection(sessionId, selection);
     const { userRecord, botRecord } = createLocalExchange({
       sessionId,
       messageId,
@@ -1376,10 +1456,16 @@ async function sendCurrentMessage() {
     });
     updateTitleFromText(sessionId, text);
 
+    if (draftSaveTimer !== null) {
+      window.clearTimeout(draftSaveTimer);
+      draftSaveTimer = null;
+    }
+    writeChatDraft(draftSessionId, "");
+    writeChatDraft(activeDraftSessionId, "");
     draft.value = "";
     replyTarget.value = null;
     clearStaged({ revokeUrls: false });
-    scrollToBottom();
+    scrollToBottom(true);
 
     sendMessageStream({
       sessionId,
@@ -1387,6 +1473,7 @@ async function sendCurrentMessage() {
       parts: outgoingParts,
       transport: transportMode.value,
       enableStreaming: enableStreaming.value,
+      enableReasoning: enableReasoning.value,
       selectedProvider: selection?.providerId || "",
       selectedModel: selection?.modelName || "",
       userRecord,
@@ -1398,6 +1485,14 @@ async function sendCurrentMessage() {
     sending.value = false;
     await focusChatInput();
   }
+}
+
+function flushDraft() {
+  if (draftSaveTimer !== null) {
+    window.clearTimeout(draftSaveTimer);
+    draftSaveTimer = null;
+  }
+  writeChatDraft(activeDraftSessionId, draft.value);
 }
 
 function buildOutgoingParts(text: string): MessagePart[] {
@@ -1425,9 +1520,7 @@ function buildOutgoingParts(text: string): MessagePart[] {
 
 function updateTitleFromText(sessionId: string, text: string) {
   const session = sessions.value.find((item) => item.session_id === sessionId);
-  const projectSession = projectSessions.value.find(
-    (item) => item.session_id === sessionId,
-  );
+  const projectSession = projectSessions.value.find((item) => item.session_id === sessionId);
   const cachedProjectSessions = Object.values(projectSessionsById.value)
     .flat()
     .filter((item) => item.session_id === sessionId);
@@ -1451,9 +1544,7 @@ function updateTitleFromText(sessionId: string, text: string) {
 
 function replyPreview(messageId?: string | number, fallback?: string) {
   if (fallback) return truncate(fallback, 80);
-  const found = activeMessages.value.find(
-    (message) => String(message.id) === String(messageId),
-  );
+  const found = activeMessages.value.find((message) => String(message.id) === String(messageId));
   const text = found ? plainTextFromMessage(found) : "";
   return text ? truncate(text, 80) : tm("reply.replyTo");
 }
@@ -1471,10 +1562,9 @@ function truncate(value: string, max: number) {
 
 function scrollToMessage(messageId?: string | number) {
   if (!messageId) return;
-  const index = activeMessages.value.findIndex(
-    (message) => String(message.id) === String(messageId),
-  );
+  const index = activeMessages.value.findIndex((message) => String(message.id) === String(messageId));
   if (index < 0) return;
+  shouldStickToBottom.value = false;
   const rows = messagesContainer.value?.querySelectorAll(".message-row");
   rows?.[index]?.scrollIntoView({ behavior: "smooth", block: "center" });
 }
@@ -1492,33 +1582,31 @@ function cancelMessageEdit() {
 
 async function saveMessageEdit() {
   if (!currSessionId.value || !editingMessage.value) return;
+  const sessionId = currSessionId.value;
+  const target = editingMessage.value;
   savingMessageEdit.value = true;
   try {
-    const target = editingMessage.value;
-    const result = await editMessage(
-      currSessionId.value,
-      target,
-      messageEditDraft.value,
-    );
+    const result = await editMessage(sessionId, target, messageEditDraft.value);
+    if (currSessionId.value !== sessionId || !activeMessages.value.includes(target)) {
+      cancelMessageEdit();
+      return;
+    }
     cancelMessageEdit();
 
     if (result.needsRegenerate && result.truncatedAfterMessage) {
       const selection = getSelectedProviderSelection();
       continueEditedMessage({
-        sessionId: currSessionId.value,
+        sessionId,
         sourceRecord: target,
         enableStreaming: enableStreaming.value,
+        enableReasoning: enableReasoning.value,
         selectedProvider: selection?.providerId || "",
         selectedModel: selection?.modelName || "",
       });
-      scrollToBottom();
+      scrollToBottom(true);
     } else if (result.needsRegenerate) {
-      const index = activeMessages.value.findIndex(
-        (message) => String(message.id) === String(target.id),
-      );
-      const nextBot = activeMessages.value
-        .slice(index + 1)
-        .find((message) => !isUserMessage(message));
+      const index = activeMessages.value.findIndex((message) => String(message.id) === String(target.id));
+      const nextBot = activeMessages.value.slice(index + 1).find((message) => !isUserMessage(message));
       if (nextBot) {
         await handleRegenerateMessage(nextBot);
       }
@@ -1530,19 +1618,18 @@ async function saveMessageEdit() {
   }
 }
 
-async function handleRegenerateMessage(
-  message: ChatRecord,
-  selection?: RegenerateModelSelection,
-) {
+async function handleRegenerateMessage(message: ChatRecord, selection?: RegenerateModelSelection) {
   if (!currSessionId.value || isUserMessage(message)) return;
   message.threads = [];
   const effectiveSelection = selection ?? getSelectedProviderSelection();
+  writeSessionProviderSelection(currSessionId.value, effectiveSelection);
   await regenerateMessage(
     currSessionId.value,
     message,
     effectiveSelection?.providerId || "",
     effectiveSelection?.modelName || "",
     enableStreaming.value,
+    enableReasoning.value,
   );
 }
 
@@ -1556,11 +1643,7 @@ function handleBotTextSelection(event: MouseEvent, message: ChatRecord) {
       threadSelection.visible = false;
       return;
     }
-    if (
-      !container ||
-      !container.contains(selection.anchorNode) ||
-      !container.contains(selection.focusNode)
-    ) {
+    if (!container || !container.contains(selection.anchorNode) || !container.contains(selection.focusNode)) {
       threadSelection.visible = false;
       return;
     }
@@ -1568,10 +1651,7 @@ function handleBotTextSelection(event: MouseEvent, message: ChatRecord) {
     const rect = range.getBoundingClientRect();
     threadSelection.message = message;
     threadSelection.selectedText = selectedText;
-    threadSelection.left = Math.min(
-      window.innerWidth - 180,
-      Math.max(12, rect.left + rect.width / 2 - 70),
-    );
+    threadSelection.left = Math.min(window.innerWidth - 180, Math.max(12, rect.left + rect.width / 2 - 70));
     threadSelection.top = Math.max(12, rect.top - 42);
     threadSelection.visible = true;
   }, 0);
@@ -1602,11 +1682,7 @@ async function createThreadFromSelection() {
     openThreadPanel(thread);
     window.getSelection()?.removeAllRanges();
   } catch (error) {
-    toast.error(
-      isAxiosError(error)
-        ? error.response?.data?.message || error.message
-        : tm("thread.createFailed"),
-    );
+    toast.error(chatRequestErrorMessage(error, tm("thread.createFailed")));
     console.error("Failed to create thread:", error);
   } finally {
     threadSelection.visible = false;
@@ -1628,15 +1704,11 @@ function openRefsSidebar(refs: unknown) {
   activeThread.value = null;
   reasoningPanelOpen.value = false;
   activeReasoningTarget.value = null;
-  selectedRefs.value =
-    refs && typeof refs === "object" ? (refs as Record<string, unknown>) : null;
+  selectedRefs.value = refs && typeof refs === "object" ? (refs as Record<string, unknown>) : null;
   refsSidebarOpen.value = true;
 }
 
-function openReasoningPanel(payload: {
-  message: ChatRecord;
-  blockIndex: number;
-}) {
+function openReasoningPanel(payload: { message: ChatRecord; blockIndex: number }) {
   chatHeader.SET_WORKSPACE_FILES_OPEN(false);
   threadPanelOpen.value = false;
   activeThread.value = null;
@@ -1644,6 +1716,46 @@ function openReasoningPanel(payload: {
   selectedRefs.value = null;
   activeReasoningTarget.value = payload;
   reasoningPanelOpen.value = true;
+}
+
+async function loadEarlierWithAnchor() {
+  const sessionId = currSessionId.value;
+  if (!sessionId || activeSessionPagination.value?.loading) return;
+  const container = messagesContainer.value;
+  const firstMessage = activeMessages.value[0];
+  const firstId = firstMessage?.id == null ? "" : String(firstMessage.id);
+  const beforeScrollTop = Math.max(0, container?.scrollTop || 0);
+  const beforeTop = firstId
+    ? container?.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(firstId)}"]`)?.getBoundingClientRect().top
+    : undefined;
+  suppressAutoScroll.value = true;
+  try {
+    await loadEarlierMessages(sessionId);
+    if (currSessionId.value !== sessionId) return;
+    await nextTick();
+    if (beforeTop == null || !container || !firstId) return;
+    const row = container.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(firstId)}"]`);
+    if (row) {
+      const currentScrollTop = Math.max(0, container.scrollTop);
+      const userScrollDelta = currentScrollTop - beforeScrollTop;
+      container.scrollTop += row.getBoundingClientRect().top - beforeTop + userScrollDelta;
+      lastMessagesScrollTop = Math.max(0, container.scrollTop);
+      lastMessagesScrollHeight = container.scrollHeight;
+      lastMessagesClientHeight = container.clientHeight;
+    }
+  } finally {
+    suppressAutoScroll.value = false;
+  }
+}
+
+async function retryCurrentSessionLoad() {
+  const sessionId = currSessionId.value;
+  if (!sessionId || activeSessionPagination.value?.loading) return;
+  if (activeMessages.value.length && activeSessionPagination.value?.has_more) {
+    await loadEarlierWithAnchor();
+    return;
+  }
+  await loadSessionMessages(sessionId, true, true);
 }
 
 async function deleteThread(thread: ChatThread) {
@@ -1667,9 +1779,7 @@ async function deleteThread(thread: ChatThread) {
 function removeThreadFromMessages(threadId: string) {
   for (const message of activeMessages.value) {
     if (!message.threads?.length) continue;
-    message.threads = message.threads.filter(
-      (thread) => thread.thread_id !== threadId,
-    );
+    message.threads = message.threads.filter((thread) => thread.thread_id !== threadId);
   }
 }
 
@@ -1682,10 +1792,6 @@ async function handleFilesSelected(files: FileList | File[]) {
       await processAndUploadFile(file);
     }
   }
-}
-
-function toggleStreaming() {
-  enableStreaming.value = !enableStreaming.value;
 }
 
 async function startRecording() {
@@ -1710,21 +1816,120 @@ async function stopRecording() {
   }
 }
 
+function handleMessagesInteraction(event: WheelEvent | TouchEvent | PointerEvent | KeyboardEvent) {
+  if (event instanceof WheelEvent) {
+    if (event.ctrlKey || event.deltaY === 0) return;
+    autoScrollPaused.value = true;
+    scrollIntent = Math.sign(event.deltaY);
+  } else if (event.type === "touchstart" || event.type === "touchmove") {
+    const touch = (event as TouchEvent).touches[0];
+    if (!touch) return;
+    if (event.type === "touchstart") {
+      touchScrollY = touch.clientY;
+      return;
+    }
+    autoScrollPaused.value = true;
+    scrollIntent = Math.sign(touchScrollY - touch.clientY);
+    touchScrollY = touch.clientY;
+  } else if (event instanceof KeyboardEvent) {
+    const target = event.target as HTMLElement;
+    if (target.closest("input, textarea, select, [contenteditable], button, a")) {
+      return;
+    }
+    if (["ArrowUp", "PageUp", "Home"].includes(event.key) || (event.key === " " && event.shiftKey)) {
+      scrollIntent = -1;
+    } else if (["ArrowDown", "PageDown", "End", " "].includes(event.key)) {
+      scrollIntent = 1;
+    } else {
+      return;
+    }
+    autoScrollPaused.value = true;
+  } else {
+    autoScrollPaused.value = true;
+    scrollIntent = 0;
+    shouldStickToBottom.value = false;
+  }
+  if (scrollIntent < 0) shouldStickToBottom.value = false;
+}
+
 function handleMessagesScroll() {
   threadSelection.visible = false;
   const container = messagesContainer.value;
   if (!container) return;
-  const distance =
-    container.scrollHeight - container.scrollTop - container.clientHeight;
-  shouldStickToBottom.value = distance < 80;
+  const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
+  const scrollTop = Math.max(0, container.scrollTop);
+  const previousTop = Math.min(lastMessagesScrollTop, maxScrollTop);
+  const contentGrew = container.scrollHeight > lastMessagesScrollHeight + 1;
+  const wasAtBottom =
+    lastMessagesScrollHeight > 0 && lastMessagesScrollHeight - lastMessagesScrollTop - lastMessagesClientHeight <= 2;
+  isAwayFromBottom.value = maxScrollTop - scrollTop > 2;
+
+  // A growing message list can emit a scroll event before the browser has
+  // adjusted scrollTop. Keep following when we were already at the bottom;
+  // only explicit user interaction should pause auto-scroll.
+  const causedByContentGrowth =
+    contentGrew && wasAtBottom && !autoScrollPaused.value && scrollIntent >= 0 && scrollTop >= previousTop;
+
+  if (causedByContentGrowth) {
+    shouldStickToBottom.value = true;
+    isAwayFromBottom.value = false;
+    scrollToBottom();
+  } else if (isAwayFromBottom.value || scrollTop < previousTop) {
+    autoScrollPaused.value = true;
+    shouldStickToBottom.value = false;
+  } else if (scrollTop > previousTop && !isAwayFromBottom.value && scrollIntent >= 0) {
+    autoScrollPaused.value = false;
+    shouldStickToBottom.value = true;
+  }
+  lastMessagesScrollTop = scrollTop;
+  lastMessagesScrollHeight = container.scrollHeight;
+  lastMessagesClientHeight = container.clientHeight;
+  maybeLoadEarlierOnScroll(container);
 }
 
-function scrollToBottom() {
-  nextTick(() => {
-    const container = messagesContainer.value;
-    if (!container) return;
-    container.scrollTop = container.scrollHeight;
+function loadMoreSessions() {
+  const container = sidebarContent.value;
+  if (
+    !container ||
+    container.clientHeight === 0 ||
+    (isMobile.value && !mobileDrawer.open) ||
+    !sessionsPagination.hasMore ||
+    sessionsPagination.loading ||
+    sessionsPagination.error
+  )
+    return;
+  if (container.scrollHeight - container.scrollTop - container.clientHeight > 120) return;
+  void getSessions(true);
+}
+
+function maybeLoadEarlierOnScroll(container: HTMLElement) {
+  const sessionId = currSessionId.value;
+  const pagination = activeSessionPagination.value;
+  if (!sessionId || !pagination) return;
+  if (!pagination.has_more || pagination.loading || pagination.error) return;
+  if (container.scrollHeight <= container.clientHeight) return;
+  if (container.scrollTop > LOAD_EARLIER_SCROLL_THRESHOLD) return;
+  void loadEarlierWithAnchor();
+}
+
+function scrollToBottom(resumeFollowing = false) {
+  if (resumeFollowing) {
+    autoScrollPaused.value = false;
     shouldStickToBottom.value = true;
+    scrollIntent = 0;
+  }
+  // Coalesce stream, mutation, and resize notifications into one scroll per frame.
+  if (autoScrollFrame !== null) return;
+  autoScrollFrame = window.requestAnimationFrame(() => {
+    autoScrollFrame = null;
+    const container = messagesContainer.value;
+    // Recheck after rendering so queued stream updates cannot override user intent.
+    if (!container || suppressAutoScroll.value || autoScrollPaused.value || !shouldStickToBottom.value) return;
+    container.scrollTop = container.scrollHeight;
+    lastMessagesScrollTop = Math.max(0, container.scrollTop);
+    lastMessagesScrollHeight = container.scrollHeight;
+    lastMessagesClientHeight = container.clientHeight;
+    isAwayFromBottom.value = false;
   });
 }
 
@@ -1743,16 +1948,13 @@ async function stopCurrentSession() {
     console.error("Failed to stop session:", error);
   }
 }
-
-function toggleTheme() {
-  customizer.SET_UI_THEME(isDark.value ? "PurpleTheme" : "PurpleThemeDark");
-}
 </script>
 
 <style scoped>
 .chat-ui {
-  --chat-panel-top-offset: 50px;
-  --chat-sidebar-bg: rgb(var(--v-theme-surface));
+  /* Side panels live inside .chat-main, which already starts below the 40px
+     window toolbar. Keep them flush with the content area's top edge. */
+  --chat-panel-top-offset: 0px;
   --chat-session-active-bg: #efefef;
   --chat-page-bg: #fdfcfc;
   --chat-border: #f2f2f2;
@@ -1781,29 +1983,84 @@ function toggleTheme() {
 }
 
 .chat-ui.is-dark {
-  --chat-sidebar-bg: #2d2d2d;
   --chat-session-active-bg: rgba(255, 255, 255, 0.08);
   --chat-page-bg: rgb(var(--v-theme-background));
   --chat-border: rgba(255, 255, 255, 0.1);
   --chat-section-label: rgba(255, 255, 255, 0.5);
 }
 
+.chat-ui.is-dark .chat-sidebar {
+  border-right-color: rgba(255, 255, 255, 0.06);
+}
+
 .chat-sidebar {
   top: 0 !important;
   height: 100vh !important;
-  background: var(--chat-sidebar-bg);
-  border-right: 1px solid var(--chat-border);
+  background: var(--astrbot-chrome-bg, rgb(var(--v-theme-surface)));
+  border-right: 0;
+  user-select: none;
 }
 
 .chat-sidebar.collapsed {
-  background: var(--chat-sidebar-bg);
-  border-right: 1px solid var(--chat-border);
+  background: var(--astrbot-chrome-bg, rgb(var(--v-theme-surface)));
+  border-right: 0;
 }
 
 .chat-sidebar :deep(.v-navigation-drawer__content) {
   display: flex;
   flex-direction: column;
   height: 100%;
+}
+
+/* The header draws across the whole width, above the full-height chat sidebar. */
+:global(.chat-sidebar .v-navigation-drawer__content) {
+  /* Seat the brand's top edge at the content area's top edge, fully below the toolbar. */
+  padding-top: calc(var(--astrbot-toolbar-height, 40px) - 10px);
+  box-sizing: border-box;
+}
+
+/* Off macOS the chat sidebar owns the top-left corner, so the brand sits in the
+   toolbar band itself instead of clearing it. */
+:global(html:not([data-astrbot-desktop-platform='macos']) .chat-sidebar .v-navigation-drawer__content) {
+  padding-top: 4px;
+}
+
+:global(html:not([data-astrbot-desktop-platform='macos']) .chat-sidebar .chat-sidebar-brand) {
+  min-height: var(--astrbot-toolbar-height, 40px);
+}
+
+/* On macOS the chat sidebar stays transparent; the shared tint is painted behind it. */
+:global(html[data-astrbot-desktop-platform='macos'] .chat-sidebar) {
+  background: transparent !important;
+}
+
+/* A temporary (mobile) drawer floats above the page, so the vibrancy
+   transparency would let content bleed through; keep it opaque instead. */
+:global(html[data-astrbot-desktop-platform='macos'] .chat-sidebar.v-navigation-drawer--temporary) {
+  background: var(--astrbot-chrome-bg, rgb(var(--v-theme-surface))) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16) !important;
+  z-index: 1007 !important;
+}
+
+/* Off macOS the chat sidebar is opaque and owns the top-left corner: it must paint
+   above the header's left zone so the brand stays visible in the toolbar band. */
+:global(html:not([data-astrbot-desktop-platform='macos']) .chat-sidebar) {
+  z-index: 1007 !important;
+}
+
+/* The dark chat sidebar uses its own palette; match the corner notch to it. */
+:global(html:not([data-astrbot-desktop-platform='macos']) .v-application.v-theme--PurpleThemeDark .v-main.chat-main) {
+  background-image: linear-gradient(
+    to right,
+    var(--astrbot-chrome-bg, #242424) 0 calc(var(--v-layout-left) + 12px),
+    transparent calc(var(--v-layout-left) + 12px) 100%
+  ) !important;
+}
+
+/* The chat header is in-flow, so the old absolute-header top offset is dead space;
+   drop it so the sub-header sits directly under the toolbar band. */
+:global(.chat-main) {
+  padding-top: 0 !important;
 }
 
 .sidebar-top {
@@ -1828,6 +2085,12 @@ function toggleTheme() {
   padding: 0 10px 2px;
 }
 
+/* Force the brand onto its own compositing layer: on the macOS vibrancy window
+   the inline SVG logo can fail to paint after a webview reload. */
+.chat-sidebar-brand .chat-sidebar-brand-logo {
+  transform: translateZ(0);
+}
+
 .chat-sidebar-brand.collapsed {
   width: 36px;
   justify-content: center;
@@ -1838,7 +2101,9 @@ function toggleTheme() {
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 8px;
+  /* The ChatUI brand has a 2px logo optical correction below, so its layout
+     gap is 6px to match the dashboard brand's resulting visual spacing. */
+  gap: 6px;
   color: rgb(var(--v-theme-on-surface));
   line-height: 1.05;
 }
@@ -1876,7 +2141,13 @@ function toggleTheme() {
   width: 36px;
   height: 36px;
   min-width: 36px;
+  background: transparent !important;
+  box-shadow: none !important;
   color: var(--chat-muted);
+}
+
+.chat-sidebar-brand-toggle :deep(.v-btn__overlay) {
+  opacity: 0 !important;
 }
 
 .chat-sidebar-rail-btn {
@@ -1891,8 +2162,8 @@ function toggleTheme() {
 }
 
 .chat-sidebar-brand-toggle:hover {
-  background: var(--chat-session-active-bg);
-  color: rgb(var(--v-theme-on-surface));
+  background: transparent !important;
+  color: rgba(var(--v-theme-on-surface), 0.9);
 }
 
 .chat-sidebar-rail-icon-stack {
@@ -2057,16 +2328,29 @@ function toggleTheme() {
   display: flex;
   align-items: center;
   gap: 7px;
-  padding: 4px 56px 4px 10px;
+  padding: 4px 10px;
   position: relative;
   box-sizing: border-box;
   cursor: pointer;
   text-align: left;
 }
 
-.session-item:hover,
-.session-item.active {
+.session-item:hover {
   background: var(--chat-session-active-bg);
+}
+
+/* Active session stays clearly highlighted (subtle in light mode otherwise). */
+.session-item.active {
+  background: rgba(var(--v-theme-primary), 0.22);
+}
+
+.session-item.running {
+  padding-right: 27px;
+}
+
+.session-item:hover,
+.session-item:focus-within {
+  padding-right: 56px;
 }
 
 .session-title {
@@ -2134,61 +2418,6 @@ function toggleTheme() {
   width: 56px;
   box-sizing: border-box;
   padding-inline: 10px;
-}
-
-.settings-menu-content {
-  min-width: 270px;
-  padding: 6px;
-}
-
-.settings-menu-item {
-  min-height: 42px;
-}
-
-.settings-menu-content :deep(.settings-menu-item .v-list-item__prepend) {
-  width: 28px;
-  margin-inline-end: 12px;
-  align-self: center;
-}
-
-.settings-menu-content :deep(.settings-menu-item .v-list-item__content) {
-  min-width: 0;
-}
-
-.settings-menu-content :deep(.settings-menu-item .v-list-item-title) {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.settings-menu-content :deep(.settings-menu-item .v-list-item__append) {
-  margin-inline-start: auto;
-  padding-inline-start: 18px;
-  gap: 8px;
-  align-self: center;
-}
-
-.styled-menu-lucide-icon {
-  flex: 0 0 auto;
-  color: currentcolor;
-  stroke-width: 2;
-}
-
-.settings-menu-value {
-  color: var(--chat-muted);
-  font-size: 12px;
-  margin-right: 4px;
-  max-width: 92px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.language-flag {
-  display: inline-block;
-  width: 20px;
-  margin-right: 8px;
 }
 
 .chat-main {
@@ -2272,8 +2501,19 @@ function toggleTheme() {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  overscroll-behavior-y: contain;
+  overflow-anchor: auto;
   padding: 24px 0 calc(var(--chat-composer-height, 82px) + 34px);
   scroll-padding-bottom: calc(var(--chat-composer-height, 82px) + 34px);
+}
+
+.messages-panel.history-anchor-locked {
+  overflow-anchor: none;
+}
+
+.history-loading {
+  z-index: 2;
+  pointer-events: none;
 }
 
 .conversation-stack.is-empty .messages-panel {
@@ -2298,6 +2538,10 @@ function toggleTheme() {
   align-items: center;
   justify-content: center;
   text-align: center;
+}
+
+.history-load-error {
+  margin: 0 auto 12px;
 }
 
 .conversation-stack.is-empty .welcome-state {
@@ -2343,6 +2587,67 @@ function toggleTheme() {
   padding: 0 0 18px;
 }
 
+.scroll-to-bottom {
+  position: absolute;
+  top: -48px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+  border-radius: 50%;
+  background: rgb(var(--v-theme-surface));
+  color: rgb(var(--v-theme-on-surface));
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.scroll-to-bottom:hover {
+  background: rgb(var(--v-theme-surface-variant));
+}
+
+.scroll-running-dots {
+  display: flex;
+  gap: 3px;
+}
+
+.scroll-running-dots span {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: scroll-dot-pulse 1.2s ease-in-out infinite;
+}
+
+.scroll-running-dots span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.scroll-running-dots span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes scroll-dot-pulse {
+  0%,
+  80%,
+  100% {
+    opacity: 0.3;
+  }
+  40% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scroll-running-dots span {
+    animation: none;
+  }
+}
+
 .conversation-stack:not(.is-empty) .composer-shell {
   position: absolute;
   right: 0;
@@ -2366,6 +2671,7 @@ function toggleTheme() {
 .composer-shell :deep(.input-area),
 .project-composer-shell :deep(.input-area) {
   padding-top: 0;
+  padding-inline: 0;
   border-top: 0;
 }
 
@@ -2391,29 +2697,36 @@ kbd {
   font: inherit;
 }
 
-:deep(.hr-node) {
-    margin-top: 1.25rem;
-    margin-bottom: 1.25rem;
-    opacity: 0.5;
-    border-top-width: .3px;
-}
-
 :deep(.paragraph-node) {
-    margin: .5rem 0;
-    line-height: 1.7;
+  margin: 0.5rem 0;
 }
 
 :deep(.list-node) {
-    margin-top: .5rem;
-    margin-bottom: .5rem;
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+@media (min-width: 761px) {
+  .chat-main.has-side-panel {
+    --chat-content-width: calc(100% - 40px);
+  }
+
+  .messages-list-shell,
+  .composer-shell :deep(.input-container) {
+    transition:
+      width 320ms cubic-bezier(0.22, 1, 0.36, 1),
+      max-width 320ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .messages-list-shell,
+  .composer-shell :deep(.input-container) {
+    transition: none;
+  }
 }
 
 @media (max-width: 760px) {
-  .chat-sidebar {
-    top: 50px !important;
-    height: calc(100vh - 50px) !important;
-  }
-
   .messages-panel {
     padding: 18px 0 calc(var(--chat-composer-height, 72px) + 20px);
     scroll-padding-bottom: calc(var(--chat-composer-height, 72px) + 20px);

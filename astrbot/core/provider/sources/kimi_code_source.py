@@ -1,9 +1,11 @@
-from ..register import register_provider_adapter
+from astrbot.core.provider.headers import DEFAULT_USER_AGENT
+from astrbot.core.provider.register import register_provider_adapter
+
 from .anthropic_source import ProviderAnthropic
 
 KIMI_CODE_API_BASE = "https://api.kimi.com/coding"
 KIMI_CODE_DEFAULT_MODEL = "kimi-for-coding"
-KIMI_CODE_USER_AGENT = "claude-code/0.1.0"
+KIMI_CODE_USER_AGENT = DEFAULT_USER_AGENT
 
 
 @register_provider_adapter(

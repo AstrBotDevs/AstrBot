@@ -13,12 +13,16 @@ from astrbot.core.agent.message import (
     dump_messages_with_checkpoints,
 )
 from astrbot.core.agent.response import AgentStats
+from astrbot.core.astr_agent_run_util import AgentRunner, run_agent, run_live_agent
 from astrbot.core.astr_main_agent import (
     LLM_ERROR_MESSAGE_EXTRA_KEY,
     MainAgentBuildConfig,
     MainAgentBuildResult,
+    _matches_provider_wake_prefix,
+    _provider_supports_modality,
     build_main_agent,
 )
+from astrbot.core.config.agent_runner import resolve_context_compression_config
 from astrbot.core.message.components import File, Image, Record, Reply, Video
 from astrbot.core.message.message_event_result import (
     MessageChain,
@@ -28,19 +32,8 @@ from astrbot.core.message.message_event_result import (
 from astrbot.core.persona_error_reply import (
     extract_persona_custom_error_message_from_event,
 )
-from astrbot.core.pipeline.stage import Stage
-from astrbot.core.platform.astr_message_event import AstrMessageEvent
-from astrbot.core.provider.entities import (
-    LLMResponse,
-    ProviderRequest,
-)
-from astrbot.core.star.star_handler import EventType
-from astrbot.core.utils.metrics import Metric
-from astrbot.core.utils.session_lock import session_lock_manager
-
-from .....astr_agent_run_util import AgentRunner, run_agent, run_live_agent
-from ....context import PipelineContext, call_event_hook
-from ...follow_up import (
+from astrbot.core.pipeline.context import PipelineContext, call_event_hook
+from astrbot.core.pipeline.process_stage.follow_up import (
     FollowUpCapture,
     finalize_follow_up_capture,
     prepare_follow_up_capture,
@@ -48,6 +41,36 @@ from ...follow_up import (
     try_capture_follow_up,
     unregister_active_runner,
 )
+from astrbot.core.pipeline.stage import Stage
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.provider.entities import (
+    LLMResponse,
+    ProviderRequest,
+)
+from astrbot.core.star.session_llm_manager import SessionServiceManager
+from astrbot.core.star.star_handler import EventType
+from astrbot.core.utils.image_input import prepare_request_images
+from astrbot.core.utils.media_utils import normalize_model_image_max_size
+from astrbot.core.utils.metrics import Metric
+from astrbot.core.utils.session_lock import session_lock_manager
+
+
+async def _prepare_file_attachments(event: AstrMessageEvent) -> None:
+    """Download file attachments before acquiring the session lock.
+
+    Args:
+        event: Incoming event whose direct and quoted files should be prepared.
+
+    Returns:
+        None.
+    """
+    for component in event.message_obj.message:
+        if isinstance(component, File):
+            await component.get_file()
+        elif isinstance(component, Reply) and component.chain:
+            for reply_component in component.chain:
+                if isinstance(reply_component, File):
+                    await reply_component.get_file()
 
 
 class InternalAgentSubStage(Stage):
@@ -55,13 +78,18 @@ class InternalAgentSubStage(Stage):
         self.ctx = ctx
         conf = ctx.astrbot_config
         settings = conf["provider_settings"]
+        runner_config = conf["agent_runner"]["config"]
+        model_config = runner_config["model"]
+        persona_config = runner_config["persona"]
+        compression_config = runner_config["compression"]
+        misc_config = runner_config["misc"]
         self.streaming_response: bool = settings["streaming_response"]
         self.unsupported_streaming_strategy: str = settings[
             "unsupported_streaming_strategy"
         ]
-        self.max_step: int = settings.get("max_agent_step", 30)
-        self.tool_call_timeout: int = settings.get("tool_call_timeout", 60)
-        self.tool_schema_mode: str = settings.get("tool_schema_mode", "full")
+        self.max_step: int = misc_config.get("max_steps", 128)
+        self.tool_call_timeout: int = misc_config.get("tool_call_timeout", 120)
+        self.tool_schema_mode: str = misc_config.get("tool_schema_mode", "full")
         if self.tool_schema_mode not in ("skills_like", "full"):
             logger.warning(
                 "Unsupported tool_schema_mode: %s, fallback to skills_like",
@@ -69,15 +97,16 @@ class InternalAgentSubStage(Stage):
             )
             self.tool_schema_mode = "full"
         if isinstance(self.max_step, bool):  # workaround: #2622
-            self.max_step = 30
+            self.max_step = 128
         self.show_tool_use: bool = settings.get("show_tool_use_status", True)
         self.show_tool_call_result: bool = settings.get("show_tool_call_result", False)
         self.buffer_intermediate_messages: bool = settings.get(
             "buffer_intermediate_messages",
             False,
         )
+        self.provider_wake_prefix: str = settings.get("wake_prefix", "")
         self.show_reasoning = settings.get("display_reasoning_text", False)
-        self.sanitize_context_by_modalities: bool = settings.get(
+        self.sanitize_context_by_modalities: bool = misc_config.get(
             "sanitize_context_by_modalities",
             False,
         )
@@ -87,39 +116,16 @@ class InternalAgentSubStage(Stage):
         self.file_extract_enabled: bool = file_extract_conf.get("enable", False)
         self.file_extract_prov: str = file_extract_conf.get("provider", "moonshotai")
         self.file_extract_msh_api_key: str = file_extract_conf.get(
-            "moonshotai_api_key", ""
+            "moonshotai_api_key",
+            "",
         )
 
-        # 上下文管理相关
-        self.context_limit_reached_strategy: str = settings.get(
-            "context_limit_reached_strategy", "truncate_by_turns"
-        )
-        self.llm_compress_instruction: str = settings.get(
-            "llm_compress_instruction", ""
-        )
-        self.llm_compress_keep_recent_ratio: float = settings.get(
-            "llm_compress_keep_recent_ratio", 0.15
-        )
-        self.llm_compress_provider_id: str = settings.get(
-            "llm_compress_provider_id", ""
-        )
-        self.max_context_length = settings["max_context_length"]  # int
-        self.dequeue_context_length: int = min(
-            max(1, settings["dequeue_context_length"]),
-            self.max_context_length - 1,
-        )
-        if self.dequeue_context_length <= 0:
-            self.dequeue_context_length = 1
-        self.fallback_max_context_tokens: int = settings.get(
-            "fallback_max_context_tokens", 128000
-        )
-
-        self.llm_safety_mode = settings.get("llm_safety_mode", True)
-        self.safety_mode_strategy = settings.get(
+        self.llm_safety_mode = persona_config.get("safety_mode", True)
+        self.safety_mode_strategy = persona_config.get(
             "safety_mode_strategy", "system_prompt"
         )
 
-        self.computer_use_runtime = settings.get("computer_use_runtime")
+        self.computer_use_runtime = settings.get("computer_use_runtime", "none")
         self.sandbox_cfg = settings.get("sandbox", {})
 
         # Proactive capability configuration
@@ -136,32 +142,37 @@ class InternalAgentSubStage(Stage):
             file_extract_enabled=self.file_extract_enabled,
             file_extract_prov=self.file_extract_prov,
             file_extract_msh_api_key=self.file_extract_msh_api_key,
-            context_limit_reached_strategy=self.context_limit_reached_strategy,
-            llm_compress_instruction=self.llm_compress_instruction,
-            llm_compress_keep_recent_ratio=self.llm_compress_keep_recent_ratio,
-            llm_compress_provider_id=self.llm_compress_provider_id,
-            max_context_length=self.max_context_length,
-            dequeue_context_length=self.dequeue_context_length,
-            fallback_max_context_tokens=self.fallback_max_context_tokens,
+            **resolve_context_compression_config(compression_config),
             llm_safety_mode=self.llm_safety_mode,
             safety_mode_strategy=self.safety_mode_strategy,
             computer_use_runtime=self.computer_use_runtime,
             sandbox_cfg=self.sandbox_cfg,
             add_cron_tools=self.add_cron_tools,
-            provider_settings=settings,
+            provider_settings={
+                **settings,
+                "default_personality": persona_config.get("persona_id", "default"),
+            },
+            fallback_provider_ids=model_config.get("fallback_provider_ids", []),
+            request_max_retries=model_config.get("request_max_retries", 5),
             subagent_orchestrator=conf.get("subagent_orchestrator", {}),
             timezone=self.ctx.plugin_manager.context.get_config().get("timezone"),
             max_quoted_fallback_images=settings.get("max_quoted_fallback_images", 20),
         )
 
     async def _send_llm_error_message(
-        self, event: AstrMessageEvent, message: object
+        self,
+        event: AstrMessageEvent,
+        message: object,
     ) -> None:
         await event.send(MessageChain().message(str(message)))
 
     async def process(
-        self, event: AstrMessageEvent, provider_wake_prefix: str
+        self,
+        event: AstrMessageEvent,
+        provider_wake_prefix: str | None = None,
     ) -> AsyncGenerator[None, None]:
+        if provider_wake_prefix is None:
+            provider_wake_prefix = self.provider_wake_prefix
         follow_up_capture: FollowUpCapture | None = None
         follow_up_consumed_marked = False
         follow_up_activated = False
@@ -170,6 +181,10 @@ class InternalAgentSubStage(Stage):
             streaming_response = self.streaming_response
             if (enable_streaming := event.get_extra("enable_streaming")) is not None:
                 streaming_response = bool(enable_streaming)
+
+            show_reasoning = self.show_reasoning
+            if (enable_reasoning := event.get_extra("enable_reasoning")) is not None:
+                show_reasoning = bool(enable_reasoning)
 
             has_provider_request = event.get_extra("provider_request") is not None
             has_valid_message = bool(event.message_str and event.message_str.strip())
@@ -217,10 +232,33 @@ class InternalAgentSubStage(Stage):
             if await call_event_hook(event, EventType.OnWaitingLLMRequestEvent):
                 return
 
+            if event.get_extra(
+                "provider_request"
+            ) is None and not _matches_provider_wake_prefix(
+                event,
+                provider_wake_prefix,
+            ):
+                return
+
+            await _prepare_file_attachments(event)
+
             async with session_lock_manager.acquire_lock(event.unified_msg_origin):
                 logger.debug("acquired session lock for llm request")
+                current_config = self.ctx.plugin_manager.context.get_config(
+                    umo=event.unified_msg_origin
+                )
+                if not current_config.get("provider_settings", {}).get(
+                    "enable", True
+                ) or not await SessionServiceManager.should_process_llm_request(event):
+                    logger.debug(
+                        "LLM was disabled while waiting for the session lock; "
+                        "skipping request for %s.",
+                        event.unified_msg_origin,
+                    )
+                    return
                 agent_runner: AgentRunner | None = None
                 runner_registered = False
+                reset_coro = None
                 try:
                     build_cfg = replace(
                         self.main_agent_cfg,
@@ -228,16 +266,19 @@ class InternalAgentSubStage(Stage):
                         streaming_response=streaming_response,
                     )
 
+                    plugin_context = self.ctx.plugin_manager.context
+                    prepared: dict[str, dict] = {}
                     build_result: MainAgentBuildResult | None = await build_main_agent(
                         event=event,
-                        plugin_context=self.ctx.plugin_manager.context,
+                        plugin_context=plugin_context,
                         config=build_cfg,
                         apply_reset=False,
+                        prepared_images=prepared,
                     )
 
                     if build_result is None:
                         if llm_error_message := event.get_extra(
-                            LLM_ERROR_MESSAGE_EXTRA_KEY
+                            LLM_ERROR_MESSAGE_EXTRA_KEY,
                         ):
                             await self._send_llm_error_message(
                                 event,
@@ -267,13 +308,26 @@ class InternalAgentSubStage(Stage):
                     )
 
                     if await call_event_hook(event, EventType.OnLLMRequestEvent, req):
-                        if reset_coro:
-                            reset_coro.close()
                         return
 
+                    options = build_cfg.provider_settings.get(
+                        "image_compress_options", {}
+                    )
+                    await prepare_request_images(
+                        req,
+                        event,
+                        max_size=normalize_model_image_max_size(
+                            options.get("max_size")
+                            if isinstance(options, dict)
+                            else None
+                        ),
+                        prepared=prepared,
+                        supports_image=_provider_supports_modality(provider, "image"),
+                    )
                     # apply reset
                     if reset_coro:
                         await reset_coro
+                        reset_coro = None
 
                     register_active_runner(event.unified_msg_origin, agent_runner)
                     runner_registered = True
@@ -319,7 +373,7 @@ class InternalAgentSubStage(Stage):
                                     self.max_step,
                                     self.show_tool_use,
                                     self.show_tool_call_result,
-                                    show_reasoning=self.show_reasoning,
+                                    show_reasoning=show_reasoning,
                                     buffer_intermediate_messages=self.buffer_intermediate_messages,
                                 ),
                             ),
@@ -350,7 +404,7 @@ class InternalAgentSubStage(Stage):
                                     self.max_step,
                                     self.show_tool_use,
                                     self.show_tool_call_result,
-                                    show_reasoning=self.show_reasoning,
+                                    show_reasoning=show_reasoning,
                                     buffer_intermediate_messages=self.buffer_intermediate_messages,
                                 ),
                             ),
@@ -381,7 +435,7 @@ class InternalAgentSubStage(Stage):
                             self.show_tool_use,
                             self.show_tool_call_result,
                             stream_to_general,
-                            show_reasoning=self.show_reasoning,
+                            show_reasoning=show_reasoning,
                             buffer_intermediate_messages=self.buffer_intermediate_messages,
                         ):
                             yield
@@ -400,7 +454,7 @@ class InternalAgentSubStage(Stage):
                             req,
                             agent_runner,
                             final_resp,
-                        )
+                        ),
                     )
 
                     # 检查事件是否被停止，如果被停止则不保存历史记录
@@ -422,13 +476,15 @@ class InternalAgentSubStage(Stage):
                         ),
                     )
                 finally:
+                    if reset_coro:
+                        reset_coro.close()
                     if runner_registered and agent_runner is not None:
                         unregister_active_runner(event.unified_msg_origin, agent_runner)
 
         except Exception as e:
-            logger.error(f"Error occurred while processing agent: {e}")
+            logger.error(f"Error occurred while processing agent: {e}", exc_info=True)
             custom_error_message = extract_persona_custom_error_message_from_event(
-                event
+                event,
             )
             error_text = custom_error_message or (
                 f"Error occurred while processing agent request: {e}"
@@ -513,7 +569,7 @@ class InternalAgentSubStage(Stage):
             message_to_save.append(
                 CheckpointMessageSegment(
                     content=CheckpointData(id=checkpoint_id),
-                ).model_dump()
+                ).model_dump(),
             )
 
         # if user_aborted:

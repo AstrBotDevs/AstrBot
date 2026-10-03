@@ -32,7 +32,7 @@ In AstrBot, web search, todo reminders, and code interpreter tools are provided 
 
 In addition to providing traditional command invocation, also offer function calling capabilities.
 
-Tool management (enable/disable) can be done in the WebUI.
+Open `Extensions → Handlers → Function Tools` (`/extension/components`) in the WebUI to view and manage tool enablement. Configure the tools available to each Persona on the `Persona` page, and manage MCP servers under `Extensions → MCP Servers`.
 
 Some models may not support function calling and will return errors such as `tool call is not supported`, `function calling is not supported`, `tool use is not supported`, etc. In most cases, AstrBot can detect these errors and automatically remove function calling tools for you. If you find that a model doesn't support function calling, you can also disable all calling tools in the WebUI and try again, or switch to a model that supports function calling.
 

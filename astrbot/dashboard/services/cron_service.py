@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
+from astrbot.dashboard.validation import is_json_object, string_field
 
 
 class CronServiceError(Exception):
@@ -54,12 +55,16 @@ class CronService:
     async def create_job(self, payload: object) -> dict:
         try:
             cron_mgr = self._get_cron_manager()
-            if not isinstance(payload, dict):
+            if not is_json_object(payload):
                 raise CronServiceError("Invalid payload")
 
-            name = payload.get("name") or "active_agent_task"
-            cron_expression = payload.get("cron_expression")
-            note = payload.get("note") or payload.get("description") or name
+            name = string_field(payload, "name") or "active_agent_task"
+            cron_expression = string_field(payload, "cron_expression")
+            note = (
+                string_field(payload, "note")
+                or string_field(payload, "description")
+                or name
+            )
             session = str(payload.get("session") or "").strip()
             persona_id = payload.get("persona_id")
             provider_id = payload.get("provider_id")
@@ -114,7 +119,7 @@ class CronService:
     async def update_job(self, job_id: str, payload: object) -> dict:
         try:
             cron_mgr = self._get_cron_manager()
-            if not isinstance(payload, dict):
+            if not is_json_object(payload):
                 raise CronServiceError("Invalid payload")
 
             job = await cron_mgr.db.get_cron_job(job_id)

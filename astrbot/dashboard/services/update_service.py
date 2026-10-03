@@ -16,6 +16,7 @@ from astrbot.core.desktop_runtime import (
     is_desktop_managed_backend,
 )
 from astrbot.core.updater import AstrBotUpdater, UpdateProgress
+from astrbot.dashboard.validation import is_json_object, string_field
 
 
 async def call_get_dashboard_version(*args, **kwargs):
@@ -50,6 +51,7 @@ class UpdateService:
         pip_install_func: Callable[..., Awaitable[Any]],
         demo_mode: bool,
         clear_site_data_headers: dict,
+        dashboard_static_folder: str | None = None,
     ) -> None:
         self._updater = astrbot_updater
         self.core_lifecycle = core_lifecycle
@@ -57,6 +59,7 @@ class UpdateService:
         self.pip_install = pip_install_func
         self.demo_mode = demo_mode
         self.clear_site_data_headers = clear_site_data_headers
+        self.dashboard_static_folder = dashboard_static_folder
         self.update_progress: dict[str, dict] = {}
         self._update_tasks: dict[str, asyncio.Task] = {}
 
@@ -73,7 +76,9 @@ class UpdateService:
 
     async def check_update(self, update_type: str | None) -> UpdateServiceResult:
         try:
-            dashboard_version = await self.get_dashboard_version()
+            dashboard_version = await self.get_dashboard_version(
+                self.dashboard_static_folder
+            )
             if update_type == "dashboard":
                 return UpdateServiceResult(
                     data={
@@ -124,14 +129,14 @@ class UpdateService:
                 code="desktop_managed",
             )
 
-        payload = data if isinstance(data, dict) else {}
-        version = payload.get("version", "")
-        reboot = payload.get("reboot", True)
-        progress_id = payload.get("progress_id") or uuid.uuid4().hex
+        payload = data if is_json_object(data) else {}
+        version = string_field(payload, "version", "")
+        reboot = bool(payload.get("reboot", True))
+        progress_id = string_field(payload, "progress_id") or uuid.uuid4().hex
         if version == "" or version == "latest":
             version = None
 
-        proxy: str | None = payload.get("proxy", None)
+        proxy = string_field(payload, "proxy")
         if proxy:
             proxy = proxy.removesuffix("/")
 
@@ -288,10 +293,10 @@ class UpdateService:
                 "You are not permitted to do this operation in demo mode"
             )
 
-        payload = data if isinstance(data, dict) else {}
+        payload = data if is_json_object(data) else {}
         package = payload.get("package", "")
-        mirror = payload.get("mirror", None)
-        if not package:
+        mirror = string_field(payload, "mirror")
+        if not isinstance(package, str) or not package:
             raise UpdateServiceError("缺少参数 package 或不合法。")
         try:
             await self.pip_install(package, mirror=mirror)

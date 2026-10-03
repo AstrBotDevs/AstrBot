@@ -93,14 +93,14 @@ class QuotedMessageExtractor:
         fetch_remote: bool,
     ) -> QuotedMessageContent | None:
         reply = reply_component or self._reply_parser.find_first_reply_component(
-            self._event
+            self._event,
         )
         if not reply:
             return None
 
         embedded_text = self._reply_parser.extract_text_from_reply_component(reply)
         embedded_image_refs = list(
-            self._reply_parser.extract_image_refs_from_reply_component(reply)
+            self._reply_parser.extract_image_refs_from_reply_component(reply),
         )
 
         reply_id = getattr(reply, "id", None)
@@ -156,7 +156,7 @@ class QuotedMessageExtractor:
         if (
             embedded_content.embedded_text
             and not self._reply_parser.is_forward_placeholder_only_text(
-                embedded_content.embedded_text
+                embedded_content.embedded_text,
             )
         ):
             return embedded_content.embedded_text
@@ -197,7 +197,7 @@ async def extract_quoted_message_text(
     settings: QuotedMessageParserSettings | None = None,
 ) -> str | None:
     return await QuotedMessageExtractor(event, settings=settings or SETTINGS).text(
-        reply_component
+        reply_component,
     )
 
 
@@ -207,5 +207,5 @@ async def extract_quoted_message_images(
     settings: QuotedMessageParserSettings | None = None,
 ) -> list[str]:
     return await QuotedMessageExtractor(event, settings=settings or SETTINGS).images(
-        reply_component
+        reply_component,
     )

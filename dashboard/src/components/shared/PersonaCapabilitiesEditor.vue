@@ -62,13 +62,9 @@ const selectionDialog = ref({
   selectedNames: [],
 });
 
-const selectableTools = computed(() =>
-  props.availableTools.filter((tool) => tool.origin !== "builtin"),
-);
+const selectableTools = computed(() => props.availableTools.filter((tool) => tool.origin !== "builtin"));
 const selectableToolNames = computed(() =>
-  selectableTools.value
-    .filter((tool) => tool.active !== false)
-    .map((tool) => tool.name),
+  selectableTools.value.filter((tool) => tool.active !== false).map((tool) => tool.name),
 );
 const selectableSkillNames = computed(() =>
   props.availableSkills
@@ -78,10 +74,7 @@ const selectableSkillNames = computed(() =>
 
 function isCapabilitySelected(field, name) {
   const configured = props[field];
-  return (
-    configured === null ||
-    (Array.isArray(configured) && configured.includes(name))
-  );
+  return configured === null || (Array.isArray(configured) && configured.includes(name));
 }
 
 const toolGroups = computed(() => {
@@ -90,8 +83,7 @@ const toolGroups = computed(() => {
     if (tool.origin !== "mcp" && tool.origin !== "plugin") {
       continue;
     }
-    const sourceId =
-      tool.origin_name || tm("personaQuickPreview.unknownSource");
+    const sourceId = tool.origin_name || tm("personaQuickPreview.unknownSource");
     const sourceName = tool.origin_display_name || sourceId;
     const key = `${tool.origin}:${sourceId}`;
     if (!groups.has(key)) {
@@ -107,13 +99,10 @@ const toolGroups = computed(() => {
 
   return [...groups.values()].map((group) => {
     const activeTools = group.tools.filter((tool) => tool.active !== false);
-    const selectedCount = activeTools.filter((tool) =>
-      isCapabilitySelected("tools", tool.name),
-    ).length;
+    const selectedCount = activeTools.filter((tool) => isCapabilitySelected("tools", tool.name)).length;
     return {
       ...group,
-      badge:
-        group.origin === "mcp" ? "MCP" : tm("personaQuickPreview.pluginSource"),
+      badge: group.origin === "mcp" ? "MCP" : tm("personaQuickPreview.pluginSource"),
       badgeTone: group.origin === "mcp" ? "mcp" : "plugin",
       meta: tm("personaQuickPreview.toolCount", {
         selected: selectedCount,
@@ -137,12 +126,8 @@ const skillItems = computed(() => {
       continue;
     }
     if (skill.source_type === "plugin") {
-      const sourceId =
-        skill.plugin_name ||
-        skill.source_label ||
-        tm("personaQuickPreview.unknownSource");
-      const sourceName =
-        skill.plugin_display_name || skill.source_label || sourceId;
+      const sourceId = skill.plugin_name || skill.source_label || tm("personaQuickPreview.unknownSource");
+      const sourceName = skill.plugin_display_name || skill.source_label || sourceId;
       const key = `plugin:${sourceId}`;
       if (!pluginGroups.has(key)) {
         const group = {
@@ -182,12 +167,8 @@ const skillItems = computed(() => {
     if (!item.skills) {
       return item;
     }
-    const activeSkills = item.skills.filter(
-      (skill) => skill.plugin_active !== false,
-    );
-    const selectedCount = activeSkills.filter((skill) =>
-      isCapabilitySelected("skills", skill.name),
-    ).length;
+    const activeSkills = item.skills.filter((skill) => skill.plugin_active !== false);
+    const selectedCount = activeSkills.filter((skill) => isCapabilitySelected("skills", skill.name)).length;
     return {
       ...item,
       badge: tm("personaQuickPreview.pluginSource"),
@@ -196,8 +177,7 @@ const skillItems = computed(() => {
         selected: selectedCount,
         total: activeSkills.length,
       }),
-      selected:
-        activeSkills.length > 0 && selectedCount === activeSkills.length,
+      selected: activeSkills.length > 0 && selectedCount === activeSkills.length,
       indeterminate: selectedCount > 0 && selectedCount < activeSkills.length,
       disabled: activeSkills.length === 0,
       configurable: activeSkills.length > 0,
@@ -206,32 +186,21 @@ const skillItems = computed(() => {
   });
 });
 
-const dialogSelectableItems = computed(() =>
-  selectionDialog.value.items.filter((item) => item.active !== false),
-);
+const dialogSelectableItems = computed(() => selectionDialog.value.items.filter((item) => item.active !== false));
 const dialogSelectedCount = computed(
-  () =>
-    dialogSelectableItems.value.filter((item) =>
-      selectionDialog.value.selectedNames.includes(item.name),
-    ).length,
+  () => dialogSelectableItems.value.filter((item) => selectionDialog.value.selectedNames.includes(item.name)).length,
 );
 const dialogAllSelected = computed(
-  () =>
-    dialogSelectableItems.value.length > 0 &&
-    dialogSelectedCount.value === dialogSelectableItems.value.length,
+  () => dialogSelectableItems.value.length > 0 && dialogSelectedCount.value === dialogSelectableItems.value.length,
 );
-const dialogPartiallySelected = computed(
-  () => dialogSelectedCount.value > 0 && !dialogAllSelected.value,
-);
+const dialogPartiallySelected = computed(() => dialogSelectedCount.value > 0 && !dialogAllSelected.value);
 
 async function applyCapabilityUpdate(field, nextValue, previousValue) {
   if (props.readonly || props.saving) {
     return false;
   }
   if (props.updateCapability) {
-    return (
-      (await props.updateCapability(field, nextValue, previousValue)) !== false
-    );
+    return (await props.updateCapability(field, nextValue, previousValue)) !== false;
   }
   emit(field === "tools" ? "update:tools" : "update:skills", nextValue);
   return true;
@@ -242,16 +211,11 @@ async function toggleCapabilities(field, names, toggleGroup = false) {
     return;
   }
 
-  const availableNames =
-    field === "tools" ? selectableToolNames.value : selectableSkillNames.value;
+  const availableNames = field === "tools" ? selectableToolNames.value : selectableSkillNames.value;
   const previousValue = props[field];
   const selectedNames =
-    previousValue === null
-      ? [...availableNames]
-      : [...(Array.isArray(previousValue) ? previousValue : [])];
-  const allTargetsSelected = names.every((name) =>
-    selectedNames.includes(name),
-  );
+    previousValue === null ? [...availableNames] : [...(Array.isArray(previousValue) ? previousValue : [])];
+  const allTargetsSelected = names.every((name) => selectedNames.includes(name));
 
   if (toggleGroup && !allTargetsSelected) {
     for (const name of names) {
@@ -271,10 +235,7 @@ async function toggleCapabilities(field, names, toggleGroup = false) {
   }
 
   const nextValue =
-    availableNames.length > 0 &&
-    availableNames.every((name) => selectedNames.includes(name))
-      ? null
-      : selectedNames;
+    availableNames.length > 0 && availableNames.every((name) => selectedNames.includes(name)) ? null : selectedNames;
   await applyCapabilityUpdate(field, nextValue, previousValue);
 }
 
@@ -287,22 +248,12 @@ function openSelectionDialog(field, group, items) {
     show: true,
     field,
     name: group.name,
-    titleKey: isToolDialog
-      ? "personaQuickPreview.toolDialogTitle"
-      : "personaQuickPreview.skillDialogTitle",
-    hintKey: isToolDialog
-      ? "personaQuickPreview.toolDialogHint"
-      : "personaQuickPreview.skillDialogHint",
-    selectAllKey: isToolDialog
-      ? "personaQuickPreview.selectAllTools"
-      : "personaQuickPreview.selectAllSkills",
-    inactiveKey: isToolDialog
-      ? "personaQuickPreview.toolInactive"
-      : "personaQuickPreview.skillInactive",
+    titleKey: isToolDialog ? "personaQuickPreview.toolDialogTitle" : "personaQuickPreview.skillDialogTitle",
+    hintKey: isToolDialog ? "personaQuickPreview.toolDialogHint" : "personaQuickPreview.skillDialogHint",
+    selectAllKey: isToolDialog ? "personaQuickPreview.selectAllTools" : "personaQuickPreview.selectAllSkills",
+    inactiveKey: isToolDialog ? "personaQuickPreview.toolInactive" : "personaQuickPreview.skillInactive",
     items,
-    selectedNames: items
-      .filter((item) => isCapabilitySelected(field, item.name))
-      .map((item) => item.name),
+    selectedNames: items.filter((item) => isCapabilitySelected(field, item.name)).map((item) => item.name),
   };
 }
 
@@ -313,9 +264,7 @@ function closeSelectionDialog() {
 }
 
 function toggleDialogItem(itemName) {
-  const item = selectionDialog.value.items.find(
-    (candidate) => candidate.name === itemName,
-  );
+  const item = selectionDialog.value.items.find((candidate) => candidate.name === itemName);
   if (!item || item.active === false || props.saving) {
     return;
   }
@@ -335,14 +284,11 @@ function toggleAllDialogItems() {
   }
   const selectableNames = dialogSelectableItems.value.map((item) => item.name);
   if (dialogAllSelected.value) {
-    selectionDialog.value.selectedNames =
-      selectionDialog.value.selectedNames.filter(
-        (name) => !selectableNames.includes(name),
-      );
+    selectionDialog.value.selectedNames = selectionDialog.value.selectedNames.filter(
+      (name) => !selectableNames.includes(name),
+    );
   } else {
-    selectionDialog.value.selectedNames = [
-      ...new Set([...selectionDialog.value.selectedNames, ...selectableNames]),
-    ];
+    selectionDialog.value.selectedNames = [...new Set([...selectionDialog.value.selectedNames, ...selectableNames])];
   }
 }
 
@@ -351,21 +297,14 @@ async function saveSelectionDialog() {
     return;
   }
   const field = selectionDialog.value.field;
-  const availableNames =
-    field === "tools" ? selectableToolNames.value : selectableSkillNames.value;
+  const availableNames = field === "tools" ? selectableToolNames.value : selectableSkillNames.value;
   const previousValue = props[field];
   const selectedNames =
-    previousValue === null
-      ? [...availableNames]
-      : [...(Array.isArray(previousValue) ? previousValue : [])];
+    previousValue === null ? [...availableNames] : [...(Array.isArray(previousValue) ? previousValue : [])];
   const dialogItemNames = selectionDialog.value.items.map((item) => item.name);
-  const nextSelectedNames = selectedNames.filter(
-    (name) => !dialogItemNames.includes(name),
-  );
+  const nextSelectedNames = selectedNames.filter((name) => !dialogItemNames.includes(name));
   nextSelectedNames.push(...selectionDialog.value.selectedNames);
-  const nextValue = availableNames.every((name) =>
-    nextSelectedNames.includes(name),
-  )
+  const nextValue = availableNames.every((name) => nextSelectedNames.includes(name))
     ? null
     : [...new Set(nextSelectedNames)];
   if (await applyCapabilityUpdate(field, nextValue, previousValue)) {

@@ -205,7 +205,7 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
                         return True, ""
                     return False, f"HTTP {response.status}: {response.reason}"
 
-    except asyncio.TimeoutError:
+    except TimeoutError:
         return False, f"连接超时: {timeout}秒"
     except Exception as e:
         return False, f"{e!s}"
@@ -753,7 +753,7 @@ class FunctionToolManager:
 
         try:
             await asyncio.wait_for(connect_done.wait(), timeout=timeout)
-        except (asyncio.TimeoutError, asyncio.CancelledError) as e:
+        except (TimeoutError, asyncio.CancelledError) as e:
             lifecycle_task.cancel()
             await asyncio.gather(lifecycle_task, return_exceptions=True)
             async with self._runtime_lock:
@@ -795,7 +795,7 @@ class FunctionToolManager:
                 asyncio.gather(*lifecycle_tasks, return_exceptions=True),
                 timeout=timeout,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pending_names = [
                 runtime.name
                 for runtime in runtimes
@@ -965,22 +965,19 @@ class FunctionToolManager:
 
     def get_func_desc_openai_style(self, omit_empty_parameter_field=False) -> list:
         """获得 OpenAI API 风格的**已经激活**的工具描述"""
-        tools = [f for f in self.func_list if f.active]
-        toolset = ToolSet(tools)
+        toolset = ToolSet([f for f in self.func_list if f.active])
         return toolset.openai_schema(
             omit_empty_parameter_field=omit_empty_parameter_field,
         )
 
     def get_func_desc_anthropic_style(self) -> list:
         """获得 Anthropic API 风格的**已经激活**的工具描述"""
-        tools = [f for f in self.func_list if f.active]
-        toolset = ToolSet(tools)
+        toolset = ToolSet([f for f in self.func_list if f.active])
         return toolset.anthropic_schema()
 
     def get_func_desc_google_genai_style(self) -> dict:
         """获得 Google GenAI API 风格的**已经激活**的工具描述"""
-        tools = [f for f in self.func_list if f.active]
-        toolset = ToolSet(tools)
+        toolset = ToolSet([f for f in self.func_list if f.active])
         return toolset.google_schema()
 
     @deprecated(reason="Use deactivate_llm_tool_async() instead.")
