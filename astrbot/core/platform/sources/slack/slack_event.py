@@ -3,6 +3,7 @@ import re
 from collections.abc import AsyncGenerator
 from pathlib import Path
 from typing import cast
+from urllib.parse import urlsplit
 
 from slack_sdk.web.async_client import AsyncWebClient
 
@@ -69,15 +70,19 @@ class SlackMessageEvent(AstrMessageEvent):
             }
         if isinstance(segment, File):
             source = segment.url
-            if source and not source.startswith(("http://", "https://")):
-                local_path = (
-                    Path(file_uri_to_path(segment.file_)) if segment.file_ else None
-                )
-                if local_path is None or not await asyncio.to_thread(
-                    local_path.is_file
-                ):
-                    raise ValueError("Slack file URLs must use HTTP or HTTPS.")
-                source = str(local_path.absolute())
+            if source:
+                if source.lower().startswith(("http://", "https://")):
+                    # MediaResolver expects lowercase HTTP(S) schemes.
+                    scheme, separator, remainder = source.partition(":")
+                    source = scheme.lower() + separator + remainder
+                else:
+                    scheme = urlsplit(source).scheme
+                    if scheme not in ("", "file") and not Path(source).drive:
+                        raise ValueError("Slack file URLs must use HTTP or HTTPS.")
+                    local_path = Path(file_uri_to_path(source))
+                    if not await asyncio.to_thread(local_path.is_file):
+                        raise ValueError("Slack file upload requires an existing file.")
+                    source = str(local_path.absolute())
             source = source or await segment.get_file()
             if not source:
                 raise ValueError(

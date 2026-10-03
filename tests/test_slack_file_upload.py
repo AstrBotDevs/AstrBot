@@ -20,7 +20,11 @@ def download(monkeypatch, tmp_path):
     paths = []
 
     async def fake_download(url, path):
-        assert url in {"http://example.com/README.md", "https://example.com/README.md"}
+        assert url in {
+            f"{scheme}://example.com/README.md{query}"
+            for scheme in ("http", "https")
+            for query in ("", "?Token=AbC")
+        }
         target = Path(path)
         target.write_bytes(b"# README\n")
         paths.append(target)
@@ -32,10 +36,11 @@ def download(monkeypatch, tmp_path):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("scheme", ["http", "https"])
+@pytest.mark.parametrize("scheme", ["http", "https", "HTTP", "Https"])
 @pytest.mark.parametrize("name", ["README.md", "说明文档.md", ""])
+@pytest.mark.parametrize("query", ["", "?Token=AbC"])
 async def test_slack_remote_file_upload_uses_content_and_cleans_temp(
-    download, scheme, name
+    download, scheme, name, query
 ):
     client = AsyncMock()
 
@@ -50,7 +55,7 @@ async def test_slack_remote_file_upload_uses_content_and_cleans_temp(
         return {"ok": True, "files": [{"permalink": "https://slack.test/file"}]}
 
     client.files_upload_v2.side_effect = upload
-    segment = File(name=name, url=f"{scheme}://example.com/README.md")
+    segment = File(name=name, url=f"{scheme}://example.com/README.md{query}")
     blocks, text = await SlackMessageEvent._parse_slack_blocks(
         MessageChain([Plain("Attached README"), segment]), client
     )
@@ -62,15 +67,18 @@ async def test_slack_remote_file_upload_uses_content_and_cleans_temp(
     assert text == ""
     assert not download[1][0].exists()
     assert segment.file_ == ""
+    download[0].assert_awaited_once_with(
+        f"{scheme.lower()}://example.com/README.md{query}", str(download[1][0])
+    )
     client.files_upload_v2.assert_awaited_once()
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("file_uri", [False, True])
 @pytest.mark.parametrize("fail_upload", [False, True])
-@pytest.mark.parametrize("local_url", [False, True])
+@pytest.mark.parametrize("source_fields", ["file", "url", "both", "different"])
 async def test_slack_local_file_is_preserved(
-    tmp_path, download, file_uri, fail_upload, local_url
+    tmp_path, download, file_uri, fail_upload, source_fields
 ):
     path = tmp_path / "local.md"
     path.write_bytes(b"local content")
@@ -82,7 +90,19 @@ async def test_slack_local_file_is_preserved(
     if fail_upload:
         client.files_upload_v2.side_effect = RuntimeError("upload failed")
     source = path.as_uri() if file_uri else str(path)
-    segment = File(name="local.md", file=source, url=source if local_url else "")
+    other_path = tmp_path / "other.md"
+    other_path.write_bytes(b"other content")
+    segment = File(
+        name="local.md",
+        file=(
+            str(other_path)
+            if source_fields == "different"
+            else source
+            if source_fields in {"file", "both"}
+            else ""
+        ),
+        url=source if source_fields != "file" else "",
+    )
 
     if fail_upload:
         with pytest.raises(RuntimeError, match="upload failed"):
@@ -94,6 +114,7 @@ async def test_slack_local_file_is_preserved(
         file=b"local content", filename="local.md"
     )
     assert path.read_bytes() == b"local content"
+    assert other_path.read_bytes() == b"other content"
     download[0].assert_not_awaited()
 
 
@@ -163,25 +184,27 @@ async def test_slack_cancelled_download_cleans_partial_file(download, tmp_path):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("missing_local_file", [False, True])
+@pytest.mark.parametrize("local_file", ["absent", "missing", "existing"])
 @pytest.mark.parametrize(
     "url",
     [
         "[README](https://example.com/README.md)",
         "ftp://example.com/file",
-        "file:///etc/passwd",
         "data:text/plain;base64,eA==",
     ],
 )
 async def test_slack_invalid_file_url_fails_before_upload(
-    download, tmp_path, url, missing_local_file
+    download, tmp_path, url, local_file
 ):
     client = AsyncMock()
-    with pytest.raises(ValueError, match="HTTP or HTTPS"):
+    path = tmp_path / "local.md"
+    if local_file == "existing":
+        path.write_bytes(b"local content")
+    with pytest.raises(ValueError):
         await SlackMessageEvent._from_segment_to_slack_block(
             File(
                 name="README.md",
-                file=str(tmp_path / "missing.md") if missing_local_file else "",
+                file=str(path) if local_file != "absent" else "",
                 url=url,
             ),
             client,
@@ -191,11 +214,30 @@ async def test_slack_invalid_file_url_fails_before_upload(
 
 
 @pytest.mark.asyncio
-async def test_slack_missing_file_fails_before_upload(tmp_path, download):
+@pytest.mark.parametrize("source_fields", ["file", "url", "different"])
+@pytest.mark.parametrize("file_uri", [False, True])
+async def test_slack_missing_file_fails_before_upload(
+    tmp_path, download, source_fields, file_uri
+):
     client = AsyncMock()
+    path = tmp_path / "missing"
+    source = path.as_uri() if file_uri else str(path)
+    other_path = tmp_path / "other.md"
+    other_path.write_bytes(b"other content")
     with pytest.raises(ValueError, match="existing file"):
         await SlackMessageEvent._from_segment_to_slack_block(
-            File(name="missing", file=str(tmp_path / "missing")), client
+            File(
+                name="missing",
+                file=(
+                    str(other_path)
+                    if source_fields == "different"
+                    else source
+                    if source_fields == "file"
+                    else ""
+                ),
+                url=source if source_fields != "file" else "",
+            ),
+            client,
         )
     download[0].assert_not_awaited()
     client.files_upload_v2.assert_not_awaited()
