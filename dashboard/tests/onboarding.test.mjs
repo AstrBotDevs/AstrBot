@@ -40,7 +40,7 @@ function setup(api = {}, overrides = {}) {
   });
   const body = ast.statements.filter(node => !ts.isImportDeclaration(node)).map(node => node.getText(ast)).join('\n');
   vm.runInContext(ts.transpile(body, { target: ts.ScriptTarget.ES2020 }), context);
-  const state = vm.runInContext('({ officialRepo, githubRepo, loadPlugins, togglePlugin, installSelected, close, skipStep, finish, computerForm, plugins, pluginGroups, selected, loading, loadError, busy, step, steps, installedCount, nextStep, loadPlatforms, modelReady, platformReady, platformLoading, configError, modelForm, selectedModel })', context);
+  const state = vm.runInContext('({ officialRepo, githubRepo, loadPlugins, togglePlugin, installSelected, close, skipStep, finish, computerForm, completed, plugins, pluginGroups, selected, loading, loadError, busy, step, steps, installedCount, nextStep, loadPlatforms, modelReady, platformReady, platformLoading, configError, modelForm, selectedModel })', context);
   return { ...state, emitted, watchers, leave: () => leave() };
 }
 
@@ -194,6 +194,23 @@ test('all primary footer actions use Next while retaining their handlers', () =>
   assert.match(footer, /tm\('guide.back'\)/);
   assert.match(footer, /tm\('guide.skipAll'\)/);
   assert.match(footer, /tm\('onboard.skip'\)/);
+});
+
+test('adapter skip explains ChatUI availability without blocking or saving', () => {
+  const source = readFileSync(new URL('../src/components/OnboardingSetup.vue', import.meta.url), 'utf8');
+  const footer = source.split('<footer class="guide-actions">')[1].split('</footer>')[0];
+  assert.match(footer, /v-if="step === 4" id="guide-adapter-skip-hint"/);
+  assert.match(footer, /tm\('guide.adapterSkipHint'\)/);
+  assert.match(footer, /:aria-describedby="step === 4 \? 'guide-adapter-skip-hint' : undefined" @click="skipStep"/);
+  const state = setup();
+  state.step.value = 4;
+  state.skipStep();
+  assert.equal(state.step.value, 5);
+  assert.equal(state.emitted.length, 0);
+  for (const locale of ['zh-CN', 'en-US', 'ja-JP', 'ru-RU']) {
+    const messages = JSON.parse(readFileSync(new URL(`../src/i18n/locales/${locale}/features/welcome.json`, import.meta.url), 'utf8'));
+    assert.match(messages.guide.adapterSkipHint, /ChatUI/);
+  }
 });
 
 test('the first-step footer can skip the entire guide without configuration writes', () => {
@@ -578,6 +595,7 @@ test('skipping never saves permissions; finish stays in place on failure and blo
   skipped.computerForm.value = { ready: true, save: () => { throw new Error('Must not save on skip'); } };
   skipped.skipStep();
   assert.deepEqual(skipped.emitted, ['/dashboard/default']);
+  assert.equal(skipped.completed.value, false);
   const state = setup();
   state.step.value = 2;
   state.skipStep();
@@ -594,9 +612,51 @@ test('skipping never saves permissions; finish stays in place on failure and blo
   assert.equal(state.busy.value, false);
   assert.equal(state.step.value, 6);
   assert.equal(state.emitted.length, 0);
-  state.computerForm.value = { ready: true, save: async () => true };
+  assert.equal(state.completed.value, false);
+  let saves = 0;
+  state.computerForm.value = { ready: true, save: async () => { saves++; return true; } };
   await state.finish();
+  assert.equal(state.completed.value, true);
+  assert.equal(state.emitted.length, 0);
+  assert.equal(state.leave(), true);
+  await state.finish();
+  assert.equal(saves, 1);
+  state.close();
   assert.deepEqual(state.emitted, ['/dashboard/default']);
+});
+
+test('welcome celebrates from both sides once, respects reduced motion and cleans up its canvas', () => {
+  const source = readFileSync(new URL('../src/components/OnboardingWelcome.vue', import.meta.url), 'utf8');
+  const script = source.split('<script setup lang="ts">')[1].split('</script>')[0];
+  const ast = ts.createSourceFile('welcome.ts', script, ts.ScriptTarget.Latest, true);
+  let mount, unmount, options, target, focused = false, resets = 0;
+  const bursts = [];
+  const celebrate = options => bursts.push(options);
+  celebrate.reset = () => { resets++; };
+  const context = vm.createContext({
+    ref, onMounted: callback => { mount = callback; }, onBeforeUnmount: callback => { unmount = callback; },
+    useModuleI18n: () => ({ tm: key => key }),
+    confetti: { create: (canvas, config) => { target = canvas; options = config; return celebrate; } },
+  });
+  const body = ast.statements.filter(node => !ts.isImportDeclaration(node)).map(node => node.getText(ast)).join('\n');
+  vm.runInContext(ts.transpile(body, { target: ts.ScriptTarget.ES2020 }), context);
+  const state = vm.runInContext('({ canvas, heading })', context);
+  state.canvas.value = {};
+  state.heading.value = { focus: () => { focused = true; } };
+  mount();
+  assert.equal(target, state.canvas.value);
+  assert.equal(focused, true);
+  assert.equal(options.resize, true);
+  assert.equal(options.disableForReducedMotion, true);
+  assert.deepEqual(bursts.map(burst => [burst.origin.x, burst.origin.y, burst.angle]), [[0, 0.68, 60], [1, 0.68, 120]]);
+  assert.ok(bursts.every(burst => burst.particleCount > 0 && burst.ticks <= 200));
+  unmount();
+  assert.equal(resets, 1);
+  assert.match(source, /aria-hidden="true"/);
+  assert.match(source, /pointer-events: none/);
+  const guide = readFileSync(new URL('../src/components/OnboardingSetup.vue', import.meta.url), 'utf8');
+  assert.match(guide, /<OnboardingWelcome v-if="completed"/);
+  assert.match(guide, /v-if="completed"[^>]*@click="close">\{\{ tm\('guide.start'\) \}\}/);
 });
 
 test('settings owns reentry, the legacy welcome URL redirects, and first notice is embedded only in onboarding', () => {

@@ -36,6 +36,9 @@ importers:
       axios-mock-adapter:
         specifier: ^1.22.0
         version: 1.22.0(axios@1.13.5)
+      canvas-confetti:
+        specifier: 1.9.4
+        version: 1.9.4
       chance:
         specifier: 1.1.11
         version: 1.1.11
@@ -121,6 +124,9 @@ importers:
       '@rushstack/eslint-patch':
         specifier: 1.3.3
         version: 1.3.3
+      '@types/canvas-confetti':
+        specifier: ^1.9.0
+        version: 1.9.0
       '@types/chance':
         specifier: 1.1.3
         version: 1.1.3
@@ -833,6 +839,9 @@ packages:
       '@tiptap/pm': ^2.0.0
       vue: ^3.0.0
 
+  '@types/canvas-confetti@1.9.0':
+    resolution: {integrity: sha512-aBGj/dULrimR1XDZLtG9JwxX1b4HPRF6CX9Yfwh3NvstZEm1ZL7RBnel4keCPSqs1ANRu1u2Aoz9R+VmtjYuTg==}
+
   '@types/chance@1.1.3':
     resolution: {integrity: sha512-X6c6ghhe4/sQh4XzcZWSFaTAUOda38GQHmq9BUanYkOE/EO7ZrkazwKmtsj3xzTjkLWmwULE++23g3d3CCWaWw==}
 
@@ -1342,6 +1351,9 @@ packages:
 
   caniuse-lite@1.0.30001778:
     resolution: {integrity: sha512-PN7uxFL+ExFJO61aVmP1aIEG4i9whQd4eoSCebav62UwDyp5OHh06zN4jqKSMePVgxHifCw1QJxdRkA1Pisekg==}
+
+  canvas-confetti@1.9.4:
+    resolution: {integrity: sha512-yxQbJkAVrFXWNbTUjPqjF7G+g6pDotOUHGbkZq2NELZUMDpiJ85rIEazVb8GTaAptNW2miJAXbs1BtioA251Pw==}
 
   ccount@2.0.1:
     resolution: {integrity: sha512-eyrF0jiFpY+3drT6383f1qhkbGsLSifNAjA61IUjZjmLCWjItY6LB9ft9YhoDgwfmclB2zhu51Lc7+95b8NRAg==}
@@ -3804,6 +3816,8 @@ snapshots:
       '@tiptap/pm': 2.27.2
       vue: 3.3.4
 
+  '@types/canvas-confetti@1.9.0': {}
+
   '@types/chance@1.1.3': {}
 
   '@types/d3-array@3.2.2': {}
@@ -4447,6 +4461,8 @@ snapshots:
   camelcase@5.3.1: {}
 
   caniuse-lite@1.0.30001778: {}
+
+  canvas-confetti@1.9.4: {}
 
   ccount@2.0.1: {}
 
