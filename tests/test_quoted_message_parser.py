@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from astrbot.core.message.components import Image, Plain, Reply
+from astrbot.core.message.components import Image, Json, Plain, Reply
 from astrbot.core.utils.quoted_message_parser import (
     extract_quoted_message_images,
     extract_quoted_message_text,
@@ -514,3 +514,192 @@ async def test_extract_quoted_message_nested_forward_id_is_resolved():
 
     images = await extract_quoted_message_images(event)
     assert images == [nested_image]
+
+
+@pytest.mark.asyncio
+async def test_extract_quoted_message_text_json_card_in_reply_chain():
+    reply = Reply(
+        id="500",
+        chain=[
+            Json(
+                data={
+                    "app": "com.tencent.miniapp_01",
+                    "prompt": "[QQ小程序]无穷小亮正式加入《洛克王国：世界》精灵调查团！",
+                    "meta": {
+                        "detail_1": {
+                            "title": "哔哩哔哩",
+                            "desc": "无穷小亮正式加入《洛克王国：世界》精灵调查团！",
+                            "qqdocurl": "https://b23.tv/2PFeKuq",
+                        }
+                    },
+                }
+            )
+        ],
+        message_str="",
+    )
+    event = SimpleNamespace(
+        message_obj=SimpleNamespace(message=[reply]),
+        bot=SimpleNamespace(api=_FailIfCalledAPI()),
+        get_group_id=lambda: "",
+    )
+
+    text = await extract_quoted_message_text(event)
+    assert text is not None
+    assert "无穷小亮正式加入《洛克王国：世界》精灵调查团！" in text
+    assert "Title: 哔哩哔哩" in text
+    assert "URL: https://b23.tv/2PFeKuq" in text
+
+
+@pytest.mark.asyncio
+async def test_extract_quoted_message_text_json_card_via_get_msg_fallback():
+    reply = Reply(id="501", chain=None, message_str="")
+    event = _make_event(
+        reply,
+        responses={
+            ("get_msg", "501"): {
+                "data": {
+                    "message": [
+                        {
+                            "type": "json",
+                            "data": {
+                                "data": (
+                                    '{"app":"com.tencent.miniapp_01",'
+                                    '"prompt":"[QQ小程序]卡片标题",'
+                                    '"meta":{"detail_1":{"title":"某App",'
+                                    '"desc":"卡片描述","jumpUrl":"https://example.com/x"}}}'
+                                )
+                            },
+                        }
+                    ]
+                }
+            }
+        },
+    )
+
+    text = await extract_quoted_message_text(event)
+    assert text is not None
+    assert "卡片标题" in text
+    assert "Title: 某App" in text
+    assert "卡片描述" in text
+    assert "https://example.com/x" in text
+
+
+@pytest.mark.asyncio
+async def test_extract_quoted_message_text_json_card_multimsg_still_extracts_news():
+    reply = Reply(id="502", chain=None, message_str="")
+    event = _make_event(
+        reply,
+        responses={
+            ("get_msg", "502"): {
+                "data": {
+                    "message": [
+                        {
+                            "type": "json",
+                            "data": {
+                                "data": (
+                                    '{"app":"com.tencent.multimsg",'
+                                    '"config":{"forward":1},'
+                                    '"meta":{"detail":{"news":['
+                                    '{"text":"Alice: hello"},{"text":"Bob: world"}]}}}'
+                                )
+                            },
+                        }
+                    ]
+                }
+            }
+        },
+    )
+
+    text = await extract_quoted_message_text(event)
+    assert text is not None
+    assert "Alice: hello" in text
+    assert "Bob: world" in text
+
+
+@pytest.mark.asyncio
+async def test_extract_quoted_message_text_json_card_html_entities_unescaped():
+    reply = Reply(id="503", chain=None, message_str="")
+    event = _make_event(
+        reply,
+        responses={
+            ("get_msg", "503"): {
+                "data": {
+                    "message": [
+                        {
+                            "type": "json",
+                            "data": {
+                                "data": (
+                                    '{"app":"com.tencent.miniapp_01",'
+                                    '"prompt":"&#91;QQ小程序&#93;实体测试",'
+                                    '"meta":{"detail_1":{"title":"T&amp;A"}}}'
+                                )
+                            },
+                        }
+                    ]
+                }
+            }
+        },
+    )
+
+    text = await extract_quoted_message_text(event)
+    assert text is not None
+    assert "[QQ小程序]实体测试" in text
+    assert "Title: T&A" in text
+    assert "&#91;" not in text
+    assert "&amp;" not in text
+
+
+@pytest.mark.asyncio
+async def test_extract_quoted_message_text_json_card_double_encoded_wrapper():
+    reply = Reply(
+        id="505",
+        chain=[
+            Json(
+                data={
+                    "data": (
+                        '{"app":"com.tencent.miniapp_01",'
+                        '"prompt":"包裹卡片","meta":{"detail_1":{"desc":"内层描述"}}}'
+                    )
+                }
+            )
+        ],
+        message_str="",
+    )
+    event = SimpleNamespace(
+        message_obj=SimpleNamespace(message=[reply]),
+        bot=SimpleNamespace(api=_FailIfCalledAPI()),
+        get_group_id=lambda: "",
+    )
+
+    text = await extract_quoted_message_text(event)
+    assert text is not None
+    assert "包裹卡片" in text
+    assert "内层描述" in text
+
+
+@pytest.mark.asyncio
+async def test_extract_quoted_message_text_json_card_length_capped():
+    long_desc = "字" * 5000
+    reply = Reply(
+        id="504",
+        chain=[
+            Json(
+                data={
+                    "app": "com.tencent.miniapp_01",
+                    "meta": {"detail_1": {"desc": long_desc}},
+                }
+            )
+        ],
+        message_str="",
+    )
+    event = SimpleNamespace(
+        message_obj=SimpleNamespace(message=[reply]),
+        bot=SimpleNamespace(api=_FailIfCalledAPI()),
+        get_group_id=lambda: "",
+    )
+
+    text = await extract_quoted_message_text(event)
+    assert text is not None
+    assert text.endswith("...")
+    assert len(text) < 1500
+    assert long_desc not in text
