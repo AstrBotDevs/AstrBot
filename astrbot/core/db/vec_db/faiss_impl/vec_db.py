@@ -6,6 +6,7 @@ import numpy as np
 from astrbot import logger
 from astrbot.core.exceptions import KnowledgeBaseUploadError
 from astrbot.core.provider.provider import EmbeddingProvider, RerankProvider
+from astrbot.core.utils.error_redaction import redact_sensitive_text
 
 from ..base import BaseVecDB, Result
 from .document_storage import DocumentStorage
@@ -125,13 +126,38 @@ class FaissVecDB(BaseVecDB):
 
         start = time.time()
         logger.debug(f"Generating embeddings for {len(contents)} contents...")
-        vectors = await self.embedding_provider.get_embeddings_batch(
-            embedding_contents,
-            batch_size=batch_size,
-            tasks_limit=tasks_limit,
-            max_retries=max_retries,
-            progress_callback=progress_callback,
-        )
+        try:
+            vectors = await self.embedding_provider.get_embeddings_batch(
+                embedding_contents,
+                batch_size=batch_size,
+                tasks_limit=tasks_limit,
+                max_retries=max_retries,
+                progress_callback=progress_callback,
+            )
+        except KnowledgeBaseUploadError:
+            raise
+        except Exception as exc:
+            # Attach the embedding stage here: otherwise the raw provider error
+            # escapes unlabelled and gets reported downstream as a storage
+            # failure, hiding the real cause (see kb_helper's stage mapping).
+            # Provider errors can quote the request they failed on, API key
+            # included ("Incorrect API key provided: sk-..."), and this text
+            # reaches the upload log and the dashboard's failure list, so redact
+            # it first. The summary shown to users is bounded; the log keeps the
+            # redacted error in full.
+            cause = redact_sensitive_text(str(exc)).strip() or type(exc).__name__
+            summary = cause if len(cause) <= 300 else cause[:300] + "…"
+            raise KnowledgeBaseUploadError(
+                stage="embedding",
+                user_message=f"向量化失败：调用嵌入模型时出错。原因：{summary}",
+                details={
+                    "cause": cause,
+                    "error_type": type(exc).__name__,
+                    "provider": type(self.embedding_provider).__name__,
+                    "content_count": content_count,
+                    "batch_size": batch_size,
+                },
+            ) from exc
         end = time.time()
         logger.debug(
             f"Generated embeddings for {len(contents)} contents in {end - start:.2f} seconds.",

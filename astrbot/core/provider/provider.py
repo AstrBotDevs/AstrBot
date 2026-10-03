@@ -1,9 +1,11 @@
 import abc
 import asyncio
 import os
+import re
 from collections.abc import AsyncGenerator
 from typing import Literal, TypeAlias, Union
 
+from astrbot import logger
 from astrbot.core.agent.message import ContentPart, Message, is_checkpoint_message
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.provider.entities import (
@@ -23,6 +25,129 @@ Providers: TypeAlias = Union[
     "EmbeddingProvider",
     "RerankProvider",
 ]
+
+
+# ---------------------------------------------------------------------------
+# Embedding batch-size rejections
+#
+# A request refused because it carried too many inputs fails deterministically:
+# the same request will be refused again however often it is retried. Such a
+# failure has to be recognised so the caller shrinks the request (which is what
+# adaptive splitting does) instead of spending the retry budget on it. All of
+# the matching below is deliberately narrow -- a misread makes AstrBot split a
+# batch that was never too large, so unrelated failures (token limits, rate
+# limits, bad credentials) must never qualify.
+# ---------------------------------------------------------------------------
+
+# Client error codes a provider may use to report "too many inputs in one request".
+_BATCH_SIZE_STATUS_CODES = frozenset({400, 413, 414, 422})
+
+# 4xx codes that are still worth retrying (timeouts / conflicts / throttling).
+_RETRYABLE_CLIENT_STATUS_CODES = frozenset({408, 409, 425, 429})
+
+_BATCH_SIZE_PATTERNS = tuple(
+    re.compile(pattern, re.IGNORECASE)
+    for pattern in (
+        r"batch[\s_-]*(?:size|length|count|limit)",
+        r"too many (?:inputs?|texts?|items?|sentences?|contents?|documents?|chunks?|rows?)",
+        r"input (?:array|list|batch)[^.]{0,32}too (?:long|large|many)",
+        r"(?:maximum|max)\s+(?:number of\s+)?(?:inputs?|texts?|items?|rows?)",
+        r"range of inputs?(?: length)?[^.]{0,24}\[\s*\d+\s*,\s*\d+\s*\]",
+        # zh
+        r"批量[\s\S]{0,8}(?:超|不能|不得|最多|限制|过大)",
+        r"(?:单次|每次|一次)[\s\S]{0,8}(?:最多|不超过|不能超过|不得超过)\s*\d+",
+    )
+)
+
+# Per-item content limits: splitting the request would not help and would mask
+# the real cause, so these disqualify a message even if it also mentions a size.
+_BATCH_SIZE_EXCLUSIONS = tuple(
+    re.compile(pattern, re.IGNORECASE)
+    for pattern in (
+        r"context[\s_-]*(?:length|window)",
+        r"max_tokens|maximum (?:output )?tokens|token limit|too many tokens",
+        r"rate limit|too many requests",
+        r"文本(?:过长|长度)|输入(?:过长|长度超)|内容(?:过长)",
+    )
+)
+
+_STATUS_PATTERN = re.compile(
+    r"(?:http|status(?:\s*code)?)\s*[:=]?\s*(\d{3})\b",
+    re.IGNORECASE,
+)
+
+# "should not be larger than 10", "maximum of 10", "[1, 10]", "最多 10 条"
+_LIMIT_HINT_PATTERNS = tuple(
+    re.compile(pattern, re.IGNORECASE)
+    for pattern in (
+        r"(?:larger|greater|more|bigger)\s+than\s*[:：]?\s*(\d+)",
+        r"(?:at most|no more than|maximum of|max)\s*[:：]?\s*(\d+)",
+        r"\[\s*\d+\s*,\s*(\d+)\s*\]",
+        r"(?:不超过|最多|不能超过|不得超过)\s*(\d+)",
+    )
+)
+
+
+def _exception_status_code(exc: BaseException) -> int | None:
+    """Best-effort HTTP status code for a provider failure.
+
+    Covers both shapes used in this repo: SDK errors carrying ``status_code``
+    (``openai.BadRequestError``) and plain ``Exception``s whose text embeds
+    ``(HTTP 400)`` (the DashScope adapter).
+    """
+    for attr in ("status_code", "http_status", "status"):
+        value = getattr(exc, attr, None)
+        if isinstance(value, int) and 100 <= value < 600:
+            return value
+    response = getattr(exc, "response", None)
+    value = getattr(response, "status_code", None)
+    if isinstance(value, int) and 100 <= value < 600:
+        return value
+    match = _STATUS_PATTERN.search(str(exc))
+    if match:
+        code = int(match.group(1))
+        if 100 <= code < 600:
+            return code
+    return None
+
+
+def _looks_like_batch_size_error(exc: BaseException) -> bool:
+    """Whether ``exc`` says the request carried too many inputs."""
+    message = str(exc)
+    if not message:
+        return False
+    if any(pattern.search(message) for pattern in _BATCH_SIZE_EXCLUSIONS):
+        return False
+    status = _exception_status_code(exc)
+    if status is not None and status not in _BATCH_SIZE_STATUS_CODES:
+        return False
+    return any(pattern.search(message) for pattern in _BATCH_SIZE_PATTERNS)
+
+
+def _extract_batch_limit(exc: BaseException, attempted: int) -> int | None:
+    """Read the provider's stated input limit out of a rejection message.
+
+    Only a value that is a plausible limit for the request just refused
+    (``1 <= limit < attempted``) is returned, so a number quoted for any other
+    reason can never become the new batch size.
+    """
+    message = str(exc)
+    for pattern in _LIMIT_HINT_PATTERNS:
+        for match in pattern.finditer(message):
+            limit = int(match.group(1))
+            if 1 <= limit < attempted:
+                return limit
+    return None
+
+
+def _is_retryable_error(exc: BaseException) -> bool:
+    """Whether re-issuing the identical request could plausibly succeed."""
+    status = _exception_status_code(exc)
+    if status is None:
+        return True
+    if status >= 500 or status in _RETRYABLE_CLIENT_STATUS_CODES:
+        return True
+    return not 400 <= status < 500
 
 
 class AbstractProvider(abc.ABC):
@@ -326,6 +451,9 @@ class EmbeddingProvider(AbstractProvider):
         super().__init__(provider_config)
         self.provider_config = provider_config
         self.provider_settings = provider_settings
+        # Upper bound on the inputs per request, once a provider has rejected a
+        # batch and stated it. None until then (see get_embeddings_batch).
+        self._learned_batch_size: int | None = None
 
     @abc.abstractmethod
     async def get_embedding(self, text: str) -> list[float]:
@@ -345,6 +473,38 @@ class EmbeddingProvider(AbstractProvider):
     async def test(self) -> None:
         await self.get_embedding("astrbot")
 
+    def get_max_batch_size(self) -> int | None:
+        """单次嵌入请求允许携带的最大文本数量。
+
+        Returning ``None`` (the default) means the limit is unknown, which keeps
+        the caller-supplied ``batch_size`` untouched. Adapters whose service
+        documents a fixed limit should override this; a generic OpenAI-compatible
+        endpoint whose limit cannot be inferred can declare it through the
+        ``embedding_max_batch_items`` provider config key instead.
+
+        This is only a *hint* used to avoid a doomed request up front --
+        ``get_embeddings_batch`` additionally recovers from a rejection at
+        runtime, so a wrong or missing value cannot break batching.
+        """
+        raw = (getattr(self, "provider_config", None) or {}).get(
+            "embedding_max_batch_items"
+        )
+        if raw is None or raw == "":
+            return None
+        try:
+            value = int(raw)
+        except (TypeError, ValueError):
+            logger.warning(
+                f"embedding_max_batch_items is not a valid integer: '{raw}', ignored."
+            )
+            return None
+        if value <= 0:
+            logger.warning(
+                f"embedding_max_batch_items must be positive, got {value}, ignored."
+            )
+            return None
+        return value
+
     async def get_embeddings_batch(
         self,
         texts: list[str],
@@ -357,7 +517,7 @@ class EmbeddingProvider(AbstractProvider):
 
         Args:
             texts: 文本列表
-            batch_size: 每批处理的文本数量
+            batch_size: 每批处理的文本数量；超过提供商单次请求上限时会被自动压低
             tasks_limit: 并发任务数量限制
             max_retries: 失败时的最大重试次数
             progress_callback: 进度回调函数，接收参数 (current, total)
@@ -366,32 +526,92 @@ class EmbeddingProvider(AbstractProvider):
             向量列表
 
         """
+        if not texts:
+            return []
+
+        batch_size = max(1, int(batch_size))
+        # A request that carries too many inputs is refused deterministically, so
+        # clamp to whatever limit the provider declares before building any work.
+        declared_cap = self.get_max_batch_size()
+        if declared_cap is not None and batch_size > declared_cap:
+            logger.debug(
+                f"[{type(self).__name__}] batch_size {batch_size} exceeds the "
+                f"provider limit {declared_cap}, using {declared_cap}."
+            )
+            batch_size = declared_cap
+
+        # A single rejection reveals the real limit, so record it and reuse it
+        # for the remaining batches of this call (and later calls on this
+        # instance). Learned values always come from a message that *stated* a
+        # limit; a bare rejection only tightens the size for the current call,
+        # so an unrelated error misread as a size rejection cannot permanently
+        # shrink this provider's batches.
+        learned_cap = getattr(self, "_learned_batch_size", None)
+        cap_state = {"size": batch_size}
+        if isinstance(learned_cap, int) and 0 < learned_cap < cap_state["size"]:
+            cap_state["size"] = learned_cap
+
         semaphore = asyncio.Semaphore(tasks_limit)
         batch_results: dict[int, list[list[float]]] = {}
         failed_batches: list[tuple[int, list[str]]] = []
         completed_count = 0
         total_count = len(texts)
 
+        def note_limit(size: int) -> None:
+            if size < cap_state["size"]:
+                cap_state["size"] = size
+
+        async def embed_slice(slice_texts: list[str]) -> list[list[float]]:
+            """Embed one slice, splitting it when the provider refuses its size."""
+            if len(slice_texts) > cap_state["size"]:
+                # A limit learned earlier in this call already rules this out.
+                return await split_and_embed(slice_texts)
+            for attempt in range(max_retries):
+                try:
+                    return await self.get_embeddings(slice_texts)
+                except Exception as e:
+                    if _looks_like_batch_size_error(e) and len(slice_texts) > 1:
+                        limit = _extract_batch_limit(e, len(slice_texts))
+                        if limit is not None:
+                            self._learned_batch_size = limit
+                            note_limit(limit)
+                        else:
+                            note_limit(len(slice_texts) // 2)
+                        logger.debug(
+                            f"[{type(self).__name__}] provider rejected {len(slice_texts)} "
+                            f"inputs, retrying in smaller batches: {e!s}"
+                        )
+                        return await split_and_embed(slice_texts)
+                    if attempt == max_retries - 1 or not _is_retryable_error(e):
+                        raise
+                    # 等待一段时间后重试，使用指数退避
+                    await asyncio.sleep(2**attempt)
+
+        async def split_and_embed(slice_texts: list[str]) -> list[list[float]]:
+            # Only ever called with len(slice_texts) > cap_state["size"], so a
+            # known limit is honoured exactly (32 inputs against a limit of 10
+            # become 10/10/10/2, not four rounds of halving) and an unknown one
+            # halves. Every piece is strictly smaller than the slice, so the
+            # recursion terminates, and a single rejected text re-raises the
+            # provider's own error instead of splitting forever.
+            step = max(1, min(cap_state["size"], len(slice_texts) - 1))
+            embeddings: list[list[float]] = []
+            for start in range(0, len(slice_texts), step):
+                embeddings.extend(await embed_slice(slice_texts[start : start + step]))
+            return embeddings
+
         async def process_batch(batch_idx: int, batch_texts: list[str]) -> None:
             nonlocal completed_count
             async with semaphore:
-                for attempt in range(max_retries):
-                    try:
-                        batch_embeddings = await self.get_embeddings(batch_texts)
-                        batch_results[batch_idx] = batch_embeddings
-                        completed_count += len(batch_texts)
-                        if progress_callback:
-                            await progress_callback(completed_count, total_count)
-                        return
-                    except Exception as e:
-                        if attempt == max_retries - 1:
-                            # 最后一次重试失败，记录失败的批次
-                            failed_batches.append((batch_idx, batch_texts))
-                            raise Exception(
-                                f"批次 {batch_idx} 处理失败，已重试 {max_retries} 次: {e!s}",
-                            )
-                        # 等待一段时间后重试，使用指数退避
-                        await asyncio.sleep(2**attempt)
+                try:
+                    batch_embeddings = await embed_slice(batch_texts)
+                except Exception as e:
+                    failed_batches.append((batch_idx, batch_texts))
+                    raise Exception(f"批次 {batch_idx} 处理失败: {e!s}") from e
+                batch_results[batch_idx] = batch_embeddings
+                completed_count += len(batch_texts)
+                if progress_callback:
+                    await progress_callback(completed_count, total_count)
 
         tasks = []
         for i in range(0, len(texts), batch_size):
