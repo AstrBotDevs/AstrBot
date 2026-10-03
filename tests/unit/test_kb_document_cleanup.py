@@ -197,3 +197,64 @@ async def test_update_kb_stats_counts_chunks_for_single_kb(kb_db, seeded_kb):
     mock_vec_db.count_documents.assert_awaited_once_with(
         metadata_filter={"kb_id": kb_id1},
     )
+
+
+@pytest.mark.asyncio
+async def test_delete_kb_cleans_documents_and_media(kb_db, seeded_media):
+    """删除知识库时, 其下所有文档和多媒体记录应一并被删除, 不留孤儿。"""
+    kb_id, doc_id, _ = seeded_media
+
+    # 前置: KB / 文档 / media 都存在
+    assert await kb_db.get_kb_by_id(kb_id) is not None
+    assert await kb_db.get_document_by_id(doc_id) is not None
+    assert len(await kb_db.list_media_by_doc(doc_id)) == 2
+
+    await kb_db.delete_kb_by_id(kb_id)
+
+    # KB / 文档 / media 全部删除, 无孤儿残留
+    assert await kb_db.get_kb_by_id(kb_id) is None
+    assert await kb_db.get_document_by_id(doc_id) is None
+    assert await kb_db.list_media_by_doc(doc_id) == []
+
+
+@pytest.mark.asyncio
+async def test_delete_kb_keeps_other_kb_data(kb_db, seeded_media):
+    """删除一个知识库不应影响其他知识库的文档和多媒体记录。"""
+    kb_id_a, doc_id_a, _ = seeded_media
+
+    # 第二个知识库 B, 带文档与 media
+    kb_b = KnowledgeBase(
+        kb_name="KB B", description="", embedding_provider_id="test-embedding"
+    )
+    async with kb_db.get_db() as session, session.begin():
+        session.add(kb_b)
+        await session.flush()
+        kb_id_b = kb_b.kb_id
+    doc_b = KBDocument(
+        kb_id=kb_id_b, doc_name="b.txt", file_type="txt", file_size=1, file_path=""
+    )
+    async with kb_db.get_db() as session, session.begin():
+        session.add(doc_b)
+        await session.flush()
+        doc_id_b = doc_b.doc_id
+    media_b = KBMedia(
+        doc_id=doc_id_b,
+        kb_id=kb_id_b,
+        media_type="image",
+        file_name="b.png",
+        file_path="/tmp/fake/b.png",
+        file_size=1,
+        mime_type="image/png",
+    )
+    async with kb_db.get_db() as session, session.begin():
+        session.add(media_b)
+
+    await kb_db.delete_kb_by_id(kb_id_a)
+
+    # A 全删
+    assert await kb_db.get_kb_by_id(kb_id_a) is None
+    assert await kb_db.get_document_by_id(doc_id_a) is None
+    # B 不受影响
+    assert await kb_db.get_kb_by_id(kb_id_b) is not None
+    assert await kb_db.get_document_by_id(doc_id_b) is not None
+    assert len(await kb_db.list_media_by_doc(doc_id_b)) == 1
