@@ -195,9 +195,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             )
         if llm_resp.completion_text:
             parts.append(TextPart(text=llm_resp.completion_text))
-        if len(parts) == 0:
-            logger.warning("LLM returned empty assistant message with no tool calls.")
-        self.run_context.messages.append(Message(role="assistant", content=parts))
+        # A completed response may intentionally have no assistant content.
+        # Finish the turn without adding an invalid empty message to history.
+        if parts:
+            self.run_context.messages.append(Message(role="assistant", content=parts))
 
         try:
             await self.agent_hooks.on_agent_done(self.run_context, llm_resp)
