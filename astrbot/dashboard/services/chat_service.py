@@ -63,6 +63,16 @@ def sanitize_upload_filename(filename: str | None) -> str:
     return name
 
 
+def unique_attachment_filename(filename: str) -> str:
+    # Pasted screenshots are all named "image.png", so prefix the stored name
+    # to keep uploads apart, and stay within the 255-byte filename limit.
+    prefix = f"{generate_timestamp_id()}_"
+    stem, suffix = os.path.splitext(filename)
+    budget = 255 - len(prefix.encode()) - len(suffix.encode())
+    stem = stem.encode()[: max(budget, 0)].decode(errors="ignore")
+    return f"{prefix}{stem}{suffix}"
+
+
 class LocalUploadFile:
     """Adapt a merged local file to the upload contract save_uploaded_file() consumes.
 
@@ -649,7 +659,9 @@ class ChatService:
             attach_type = "file"
 
         attachments_dir = Path(self.attachments_dir).resolve(strict=False)
-        file_path = (attachments_dir / filename).resolve(strict=False)
+        file_path = (attachments_dir / unique_attachment_filename(filename)).resolve(
+            strict=False
+        )
         if not file_path.is_relative_to(attachments_dir):
             raise ChatServiceError("Invalid filename")
 
@@ -676,6 +688,7 @@ class ChatService:
                         )
                     await asyncio.to_thread(file_path.rename, target_path)
                     file_path = target_path
+                    filename = os.path.splitext(filename)[0] + detected_suffix
         attachment = await self.db.insert_attachment(
             path=str(file_path),
             type=attach_type,
@@ -687,7 +700,8 @@ class ChatService:
 
         return {
             "attachment_id": attachment.attachment_id,
-            "filename": os.path.basename(attachment.path),
+            "filename": filename,
+            "stored_filename": os.path.basename(attachment.path),
             "type": attach_type,
         }
 
