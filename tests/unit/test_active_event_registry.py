@@ -1,3 +1,5 @@
+import gc
+import weakref
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -56,6 +58,58 @@ def test_unregister_removes_agent_stop_callback() -> None:
 
     assert stopped_count == 0
     callback.assert_not_called()
+
+
+def test_unregister_after_session_change_releases_event() -> None:
+    """Session isolation must not leave a completed event in its original bucket."""
+    registry = ActiveEventRegistry()
+    original_umo = "aiocqhttp:GroupMessage:group"
+    event = StubEvent(original_umo)
+    event_ref = weakref.ref(event)
+    registry.register(event)
+    event.unified_msg_origin = "aiocqhttp:GroupMessage:alice_group"
+    registry.unregister(event)
+
+    assert registry.request_agent_stop_all(original_umo) == 0
+    assert registry.request_agent_stop_all(event.unified_msg_origin) == 0
+    del event
+    gc.collect()
+    assert event_ref() is None
+
+
+def test_reregister_moves_event_without_losing_stop_callback() -> None:
+    """Registering again after a session change should leave only one entry."""
+    registry = ActiveEventRegistry()
+    event = StubEvent("old-session")
+    callback = Mock()
+    registry.register(event)
+    registry.register_agent_stop_callback(event, callback)
+    event.unified_msg_origin = "new-session"
+    registry.register(event)
+
+    assert registry.request_agent_stop_all("old-session") == 0
+    assert registry.request_agent_stop_all("new-session") == 1
+    callback.assert_called_once_with()
+    registry.unregister(event)
+    registry.unregister(event)
+    assert registry.request_agent_stop_all("new-session") == 0
+
+
+def test_unregister_changed_session_preserves_other_active_event() -> None:
+    """Removing a completed event must keep its active group peer registered."""
+    registry = ActiveEventRegistry()
+    completed = StubEvent("group")
+    active = StubEvent("group")
+    registry.register(completed)
+    registry.register(active)
+    completed.unified_msg_origin = "alice_group"
+    registry.unregister(completed)
+
+    assert registry.request_agent_stop_all("group") == 1
+    assert completed.extras == {}
+    assert active.extras["agent_stop_requested"] is True
+    registry.unregister(active)
+    assert registry.request_agent_stop_all("group") == 0
 
 
 def test_active_runner_wires_immediate_stop_callback() -> None:
