@@ -61,6 +61,9 @@
       "tempStorage": {
         "title": "Cache",
         "subtitle": "Automatic cleanup threshold for the temporary directory."
+      },
+      "telemetry": {
+        "title": "User Experience Improvement Program"
       }
     },
     "timePreview": {

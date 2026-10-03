@@ -65,7 +65,10 @@
                                 @focusout.capture="scheduleSystemConfigAutoSave"
                             >
                                 <div class="system-config-group__heading">
-                                    <div class="system-config-group__title">{{ group.title }}</div>
+                                    <div>
+                                        <div class="system-config-group__title">{{ group.title }}</div>
+                                        <div class="system-config-group__subtitle" v-if="group.subtitle">{{ group.subtitle }}</div>
+                                    </div>
                                     <div
                                         v-if="group.key === 'runtime' && timezoneTimePreview"
                                         class="timezone-time-preview"
@@ -155,7 +158,12 @@
                                 class="system-config-group"
                                 @focusout.capture="scheduleSystemConfigAutoSave"
                             >
-                                <div class="system-config-group__title">{{ group.title }}</div>
+                                <div class="system-config-group__heading">
+                                    <div>
+                                        <div class="system-config-group__title">{{ group.title }}</div>
+                                        <div class="system-config-group__subtitle" v-if="group.subtitle">{{ group.subtitle }}</div>
+                                    </div>
+                                </div>
                                 <AstrBotConfigV4
                                     :metadata="group.metadata"
                                     :iterable="systemConfigData"
@@ -190,7 +198,12 @@
                                 class="system-config-group"
                                 @focusout.capture="scheduleSystemConfigAutoSave"
                             >
-                                <div class="system-config-group__title">{{ group.title }}</div>
+                                <div class="system-config-group__heading">
+                                    <div>
+                                        <div class="system-config-group__title">{{ group.title }}</div>
+                                        <div class="system-config-group__subtitle" v-if="group.subtitle">{{ group.subtitle }}</div>
+                                    </div>
+                                </div>
                                 <AstrBotConfigV4
                                     :metadata="group.metadata"
                                     :iterable="systemConfigData"
@@ -718,6 +731,10 @@ const timezoneTimePreview = computed(() => {
 const systemConfigGroups = computed(() => {
     const systemSection = systemConfigMetadata.value?.system_group?.metadata?.system || {};
     const systemItems = systemSection.items || {};
+    const groupSubtitle = (key) => {
+        const text = tm(`systemConfig.groups.${key}.subtitle`);
+        return typeof text === 'string' && text.startsWith('[MISSING:') ? '' : text;
+    };
     const createGroup = (key, itemKeys) => {
         const items = {};
         itemKeys.forEach((itemKey) => {
@@ -728,6 +745,9 @@ const systemConfigGroups = computed(() => {
         return {
             key,
             title: tm(`systemConfig.groups.${key}.title`),
+            // Groups without a subtitle must stay empty: tm() returns a
+            // '[MISSING: ...]' placeholder, which must never reach the UI.
+            subtitle: groupSubtitle(key),
             metadata: {
                 [key]: {
                     type: 'object',
@@ -764,12 +784,13 @@ const systemConfigGroups = computed(() => {
         ]),
         createGroup('tempStorage', [
             'temp_dir_max_size'
-        ])
+        ]),
+        createGroup('telemetry', ['disable_metrics'])
     ].filter((group) => Object.keys(group.metadata[group.key].items).length > 0);
 });
 
 const generalSystemConfigGroups = computed(() => systemConfigGroups.value.filter((group) => (
-    group.key === 'runtime' || group.key === 'logs' || group.key === 'tempStorage'
+    group.key === 'runtime' || group.key === 'logs' || group.key === 'tempStorage' || group.key === 'telemetry'
 )));
 const networkSystemConfigGroups = computed(() => systemConfigGroups.value.filter((group) => (
     group.key === 'network'
@@ -1397,6 +1418,15 @@ onUnmounted(() => {
     font-weight: 760;
     letter-spacing: 0;
     line-height: 1.32;
+}
+
+.system-config-group__subtitle {
+    margin-top: 2px;
+    color: rgba(var(--v-theme-on-surface), 0.68);
+    font-size: 0.8rem;
+    font-weight: 500;
+    letter-spacing: 0;
+    line-height: 1.45;
 }
 
 .timezone-time-preview {
