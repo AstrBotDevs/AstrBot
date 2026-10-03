@@ -25,7 +25,7 @@ For tool and Skill configuration, see [Tool Use](./function-calling.md) and [Ski
 
 Choose `Import Persona` from the `…` menu at the top right of the `Persona` page to import a persona JSON file exported from AstrBot.
 
-A format description dialog appears first, and the same information is provided below. Only `.json` files are accepted, with the following fields:
+A format description dialog appears first, and the same information is provided below. The file picker filters for `.json` files, but the import handler does not enforce the extension; the file must contain valid JSON with the following fields:
 
 | Field | Required | Description |
 | --- | --- | --- |
