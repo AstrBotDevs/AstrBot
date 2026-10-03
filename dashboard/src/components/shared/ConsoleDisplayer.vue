@@ -514,6 +514,12 @@ export default {
   --v-theme-surface-variant: 163, 163, 163;
 }
 
+#console-wrapper:fullscreen .log-search-field :deep(.v-field) {
+  --v-theme-surface: 36, 36, 36;
+  --v-theme-surface-variant: 36, 36, 36;
+  --v-theme-on-surface: 255, 255, 255;
+}
+
 .filter-controls {
   display: flex;
   align-items: center;
