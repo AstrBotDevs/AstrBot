@@ -175,8 +175,8 @@
             <h3 class="text-h6 mb-4">{{ t('upload.batchSettings') }}</h3>
             <v-row>
               <v-col cols="12" sm="4">
-                <v-text-field v-model.number="uploadSettings.batch_size" :label="t('upload.batchSize')" hint="每批处理的文本数量"
-                  persistent-hint type="number" variant="outlined" density="compact" />
+                <v-text-field v-model.number="uploadSettings.batch_size" :label="t('upload.batchSize')" hint="每批处理的文本数量，实际值不超过嵌入提供方的 max_batch_size 限制"
+                  persistent-hint type="number" min="1" variant="outlined" density="compact" />
               </v-col>
               <v-col cols="12" sm="4">
                 <v-text-field v-model.number="uploadSettings.tasks_limit" :label="t('upload.tasksLimit')"
