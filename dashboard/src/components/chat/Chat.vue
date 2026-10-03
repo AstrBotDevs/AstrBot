@@ -738,9 +738,17 @@ const threadSelection = reactive<{
   selectedText: "",
 });
 const settingsOpen = ref(false);
-const enableStreaming = ref(true);
-const enableReasoning = ref(true);
-const sendShortcut = ref<"enter" | "shift_enter">("enter");
+const enableStreaming = ref(
+  localStorage.getItem("chat.enableStreaming") !== "false",
+);
+const enableReasoning = ref(
+  localStorage.getItem("chat.enableReasoning") !== "false",
+);
+const sendShortcut = ref<"enter" | "shift_enter">(
+  localStorage.getItem("chat.sendShortcut") === "shift_enter"
+    ? "shift_enter"
+    : "enter",
+);
 const DRAFT_SAVE_DELAY_MS = 300;
 let activeDraftSessionId = currSessionId.value;
 let draftSaveTimer: number | null = null;
@@ -820,6 +828,34 @@ const transportMode = ref<TransportMode>(
   (localStorage.getItem("chat.transportMode") as TransportMode) === "websocket"
     ? "websocket"
     : "sse",
+);
+
+watch(enableStreaming, (enabled) => {
+  localStorage.setItem("chat.enableStreaming", String(enabled));
+});
+
+watch(enableReasoning, (enabled) => {
+  localStorage.setItem("chat.enableReasoning", String(enabled));
+});
+
+watch(sendShortcut, (shortcut) => {
+  localStorage.setItem("chat.sendShortcut", shortcut);
+});
+
+// Chat stays mounted while other pages can update its saved preferences.
+watch(
+  () => props.active,
+  (active) => {
+    if (!active) return;
+    enableStreaming.value =
+      localStorage.getItem("chat.enableStreaming") !== "false";
+    enableReasoning.value =
+      localStorage.getItem("chat.enableReasoning") !== "false";
+    sendShortcut.value =
+      localStorage.getItem("chat.sendShortcut") === "shift_enter"
+        ? "shift_enter"
+        : "enter";
+  },
 );
 
 watch(transportMode, (mode) => {
