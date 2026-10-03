@@ -24,7 +24,7 @@ Repository: [AstrBotDevs/AstrBot-desktop](https://github.com/AstrBotDevs/AstrBot
 
 1. Open [AstrBot-desktop Releases](https://github.com/AstrBotDevs/AstrBot-desktop/releases).
 2. Download the installer for your operating system (e.g. `.exe`, `.dmg`, `.rpm`, `.deb`).
-3. Launch the desktop client after installation and follow the setup wizard to complete initialization.
+3. Launch the desktop client after installation and start using it (since v4.27.3, the desktop client uses passwordless sessions and no longer requires logging in to the WebUI).
 
 ## Difference from Launcher Deployment
 

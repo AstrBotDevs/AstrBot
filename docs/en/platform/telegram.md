@@ -9,11 +9,11 @@
 | --- | --- | --- | --- |
 | Text | Yes | Yes | |
 | Image | Yes | Yes | |
-| Voice | Yes | Yes | |
-| Video | Yes | Yes | |
+| Voice | Yes | Yes | Audio formats are detected from file contents and converted into Record (voice) components (>= v4.27.4) |
+| Video | Yes | Yes | Video notes are converted into Video components (>= v4.27.3) |
 | File | Yes | Yes | |
 
-Proactive message push: Supported.
+Proactive message push: Supported. Partial reply quotes are honored (>= v4.26.8); animated stickers are received via their static thumbnails (>= v4.27.3).
 
 ## 1. Create a Telegram Bot
 

@@ -1,6 +1,8 @@
 # Connecting Model Services
 
-AstrBot supports the native API formats of OpenAI, Google GenAI, and Anthropic. You can connect any model service provider that conforms to one of these three API formats.
+AstrBot supports the native API formats of OpenAI, Google GenAI, and Anthropic. You can connect any model service provider that conforms to one of these three API formats. Additionally, since v4.27.1 AstrBot ships an OpenAI-compatible Responses API provider (`openai_responses`, with `OpenAI Responses` and `DeepSeek Responses` templates; newly created xAI providers use this type by default).
+
+Model requests are retried automatically on transient network errors and retryable 5xx responses (since v4.26.0). The maximum number of attempts per request is configurable via `provider_settings.request_max_retries` (default `5`).
 
 > [!NOTE]
 > If you are located in mainland China, we strongly recommend using **official model providers** or compliant providers that follow local laws and regulations, for example:
@@ -39,3 +41,23 @@ Using DeepSeek as an example, assuming you have registered and logged in to a De
 > Introduced in v4.13.0.
 
 You can use environment variables to load provider API keys. In the provider configuration page, set the API Key field to `$ENV_VARIABLE_NAME`, for example: `$DEEPSEEK_API_KEY`.
+
+## Text-to-Speech (TTS) Providers
+
+AstrBot includes the following text-to-speech (TTS) providers, available when adding a provider on the `Model Providers` page:
+
+| Provider | Description |
+| --- | --- |
+| OpenAI TTS API (`openai_tts_api`) | Official OpenAI TTS interface |
+| Gemini TTS (`gemini_tts`) | Google Gemini TTS interface |
+| Edge TTS (`edge_tts`) | Microsoft Edge TTS, free of charge |
+| FishAudio TTS API (`fishaudio_tts_api`) | FishAudio TTS interface; model configuration supported since v4.26.8 |
+| ElevenLabs TTS API (`elevenlabs_tts_api`) | ElevenLabs TTS interface, added in v4.26.0 |
+| MiMo TTS API (`mimo_tts_api`) | Xiaomi MiMo TTS interface; default model is `mimo-v2.5-tts` since v4.26.8 |
+| MiniMax TTS API (`minimax_tts_api`) | MiniMax TTS interface |
+| Azure TTS (`azure_tts`) | Microsoft Azure Speech |
+| Volcengine TTS (`volcengine_tts`) | Volcengine speech synthesis |
+| DashScope TTS (`dashscope_tts`) | Alibaba Cloud Bailian TTS interface |
+| Genie TTS (`genie_tts`) | Genie TTS interface |
+| GSVI TTS API (`gsvi_tts_api`) | GSVI TTS interface |
+| GPT-SoVITS TTS (`gsv_tts_selfhost`) | GPT-SoVITS self-hosted deployment |
