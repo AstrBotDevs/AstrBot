@@ -577,6 +577,29 @@ const renderMarkdown = (source) => {
   const container = document.createElement("div");
   container.innerHTML = cleanHtml;
 
+  // Generate heading ids so README table-of-contents anchors can resolve.
+  const slugCounts = new Map();
+  container.querySelectorAll("h1, h2, h3, h4, h5, h6").forEach((heading) => {
+    if (heading.id) {
+      slugCounts.set(heading.id, (slugCounts.get(heading.id) || 0) + 1);
+      return;
+    }
+
+    const base = (heading.textContent || "")
+      .trim()
+      .toLowerCase()
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^\p{Letter}\p{Number}\s-]/gu, "")
+      .replace(/\s+/g, "-")
+      .replace(/-+/g, "-");
+    if (!base) return;
+
+    const count = slugCounts.get(base) || 0;
+    slugCounts.set(base, count + 1);
+    heading.id = count === 0 ? base : `${base}-${count}`;
+  });
+
   container.querySelectorAll("a").forEach((link) => {
     const href = link.getAttribute("href") || "";
     if (href.startsWith("http") || href.startsWith("//")) {
@@ -586,6 +609,25 @@ const renderMarkdown = (source) => {
   });
 
   return container.innerHTML;
+};
+
+const handleDocsClick = (event) => {
+  const target = event.target instanceof Element ? event.target : null;
+  const anchor = target?.closest('a[href^="#"]');
+  if (!anchor) return;
+
+  const rawHref = anchor.getAttribute("href");
+  const targetId = rawHref ? decodeURIComponent(rawHref.slice(1)) : "";
+  if (!targetId) return;
+
+  // Scope lookup to the rendered container so the hash router is never touched.
+  const scrollTarget = event.currentTarget.querySelector(
+    `#${CSS.escape(targetId)}`,
+  );
+  if (!scrollTarget) return;
+
+  event.preventDefault();
+  scrollTarget.scrollIntoView({ behavior: "smooth", block: "start" });
 };
 
 const updateHeaderStuckState = () => {
@@ -1040,7 +1082,12 @@ onBeforeUnmount(() => {
           <div v-else-if="readmeEmpty" class="text-medium-emphasis">
             {{ tm("detail.docsEmpty") }}
           </div>
-          <div v-else class="docs-markdown" v-html="renderedReadme"></div>
+          <div
+            v-else
+            class="docs-markdown"
+            v-html="renderedReadme"
+            @click="handleDocsClick"
+          ></div>
         </v-card-text>
       </v-card>
     </section>
@@ -1060,7 +1107,12 @@ onBeforeUnmount(() => {
           <div v-else-if="changelogEmpty" class="text-medium-emphasis">
             {{ tm("detail.changelogEmpty") }}
           </div>
-          <div v-else class="docs-markdown" v-html="renderedChangelog"></div>
+          <div
+            v-else
+            class="docs-markdown"
+            v-html="renderedChangelog"
+            @click="handleDocsClick"
+          ></div>
         </v-card-text>
       </v-card>
     </section>
@@ -1325,6 +1377,7 @@ onBeforeUnmount(() => {
   font-weight: 700;
   line-height: 1.3;
   margin: 1.4em 0 0.6em;
+  scroll-margin-top: calc(var(--v-layout-top, 64px) + 24px);
 }
 
 .docs-markdown :deep(h1:first-child),
