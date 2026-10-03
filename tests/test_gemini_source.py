@@ -407,3 +407,45 @@ async def test_gemini_stream_keeps_reasoning_from_tool_call_chunk(monkeypatch):
 
     final = responses[-1]
     assert final.reasoning_content == "weighing optionsdeciding to call"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+async def test_gemini_query_joins_all_system_messages(monkeypatch, streaming):
+    provider = _gemini_stream_provider()
+    captured = {}
+
+    class _Stop(Exception):
+        pass
+
+    async def fake_prepare_query_config(
+        payloads, tools, tool_choice, system_instruction, *args, **kwargs
+    ):
+        captured["system_instruction"] = system_instruction
+        raise _Stop
+
+    monkeypatch.setattr(provider, "_prepare_query_config", fake_prepare_query_config)
+    payloads = {
+        "messages": [
+            {"role": "system", "content": "You are Aria."},
+            {
+                "role": "system",
+                "content": [
+                    {"type": "text", "text": "File Extract Results: report.pdf"}
+                ],
+            },
+            {"role": "user", "content": "Summarize the file."},
+        ],
+        "model": "gemini-3.7-flash",
+    }
+
+    with pytest.raises(_Stop):
+        if streaming:
+            async for _ in provider._query_stream(payloads=payloads, tools=None):
+                pass
+        else:
+            await provider._query(payloads=payloads, tools=None)
+
+    assert captured["system_instruction"] == (
+        "You are Aria.\n\nFile Extract Results: report.pdf"
+    )

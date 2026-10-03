@@ -179,11 +179,18 @@ class ProviderAnthropic(Provider):
             new_messages: 处理后的消息列表，去除系统提示
 
         """
-        system_prompt = ""
+        system_prompt: list = []
         new_messages = []
         for message in messages:
             if message["role"] == "system":
-                system_prompt = message["content"] or "<empty system prompt>"
+                # Anthropic takes a single system prompt, so collect every system
+                # message as text blocks instead of keeping only the last one
+                # (e.g. file extracts). Block lists are kept as they are.
+                content = message["content"] or "<empty system prompt>"
+                if isinstance(content, list):
+                    system_prompt.extend(content)
+                else:
+                    system_prompt.append({"type": "text", "text": content})
             elif message["role"] == "assistant":
                 blocks = []
                 reasoning_content = ""
