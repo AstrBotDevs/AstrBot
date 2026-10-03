@@ -911,7 +911,8 @@ export default defineComponent({
         console.error("导入人格失败:", error);
         this.showError(
           this.tm("messages.importError", {
-            error: error.message || String(error),
+            error:
+              error.response?.data?.message || error.message || String(error),
           }),
         );
       }
