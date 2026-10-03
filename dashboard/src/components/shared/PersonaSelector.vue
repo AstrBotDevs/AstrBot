@@ -9,6 +9,7 @@
     :labels="labels"
     :show-create-button="true"
     :show-edit-button="true"
+    :clearable="clearable"
     :default-item="defaultPersona"
     item-id-field="persona_id"
     item-name-field="persona_id"
@@ -54,6 +55,10 @@ const props = defineProps({
   buttonText: {
     type: String,
     default: "",
+  },
+  clearable: {
+    type: Boolean,
+    default: false,
   },
 });
 
@@ -113,6 +118,7 @@ const labels = computed(() => ({
   noDescription: tm("personaSelector.noDescription"),
   createButton: tm("personaSelector.createPersona"),
   editButton: tm("personaSelector.editPersona") || "Edit",
+  clearSelection: tm("personaSelector.clearSelection"),
   confirmButton: t("core.common.confirm"),
   cancelButton: t("core.common.cancel"),
   rootFolder: tm("personaSelector.rootFolder") || "全部人格",
