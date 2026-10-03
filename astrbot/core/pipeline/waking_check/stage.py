@@ -111,6 +111,14 @@ class WakingCheckStage(Stage):
                 break
 
         # 检查 wake
+        provider_settings = self.ctx.astrbot_config.get("provider_settings", {})
+        llm_no_reply_prefixes = provider_settings.get("llm_no_reply_prefixes", [])
+        message_matches_no_reply_prefix = any(
+            prefix and event.message_str.startswith(prefix)
+            for prefix in llm_no_reply_prefixes
+        )
+        event.set_extra("_llm_no_reply_prefix", message_matches_no_reply_prefix)
+
         wake_prefixes = self.ctx.astrbot_config["wake_prefix"]
         messages = event.get_messages()
         is_wake = False
