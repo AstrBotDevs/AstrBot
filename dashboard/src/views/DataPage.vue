@@ -14,6 +14,12 @@ const route = useRoute();
 
 const tabs = computed(() => [
   {
+    value: "logs",
+    label: t("core.navigation.dataTabs.logs"),
+    routeName: "Console",
+    icon: Logs,
+  },
+  {
     value: "statistics",
     label: t("core.navigation.dataTabs.statistics"),
     routeName: "Stats",
@@ -26,12 +32,6 @@ const tabs = computed(() => [
     icon: MessageSquareText,
   },
   {
-    value: "logs",
-    label: t("core.navigation.dataTabs.logs"),
-    routeName: "Console",
-    icon: Logs,
-  },
-  {
     value: "trace",
     label: t("core.navigation.dataTabs.trace"),
     routeName: "Trace",
@@ -39,7 +39,7 @@ const tabs = computed(() => [
   },
 ]);
 
-const activeTab = computed(() => String(route.meta.dataTab || "statistics"));
+const activeTab = computed(() => String(route.meta.dataTab || "logs"));
 </script>
 
 <template>
