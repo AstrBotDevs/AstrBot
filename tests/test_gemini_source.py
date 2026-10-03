@@ -428,7 +428,12 @@ async def test_gemini_query_joins_all_system_messages(monkeypatch, streaming):
     payloads = {
         "messages": [
             {"role": "system", "content": "You are Aria."},
-            {"role": "system", "content": "File Extract Results: report.pdf"},
+            {
+                "role": "system",
+                "content": [
+                    {"type": "text", "text": "File Extract Results: report.pdf"}
+                ],
+            },
             {"role": "user", "content": "Summarize the file."},
         ],
         "model": "gemini-3.7-flash",

@@ -648,14 +648,20 @@ class ProviderGoogleGenAI(Provider):
         """非流式请求 Gemini API"""
         # Join every system message; later ones (e.g. file extracts) are
         # otherwise dropped because the conversation only maps user/model turns.
-        system_instruction = (
-            "\n\n".join(
-                msg["content"]
-                for msg in payloads["messages"]
-                if msg["role"] == "system" and msg["content"]
-            )
-            or None
-        )
+        system_texts = []
+        for msg in payloads["messages"]:
+            if msg["role"] != "system":
+                continue
+            content = msg["content"]
+            if isinstance(content, list):
+                content = "\n".join(
+                    part.get("text", "")
+                    for part in content
+                    if isinstance(part, dict) and part.get("type") == "text"
+                )
+            if content:
+                system_texts.append(content)
+        system_instruction = "\n\n".join(system_texts) or None
 
         model = payloads.get("model", self.get_model())
 
@@ -757,14 +763,20 @@ class ProviderGoogleGenAI(Provider):
         """流式请求 Gemini API"""
         # Join every system message; later ones (e.g. file extracts) are
         # otherwise dropped because the conversation only maps user/model turns.
-        system_instruction = (
-            "\n\n".join(
-                msg["content"]
-                for msg in payloads["messages"]
-                if msg["role"] == "system" and msg["content"]
-            )
-            or None
-        )
+        system_texts = []
+        for msg in payloads["messages"]:
+            if msg["role"] != "system":
+                continue
+            content = msg["content"]
+            if isinstance(content, list):
+                content = "\n".join(
+                    part.get("text", "")
+                    for part in content
+                    if isinstance(part, dict) and part.get("type") == "text"
+                )
+            if content:
+                system_texts.append(content)
+        system_instruction = "\n\n".join(system_texts) or None
         model = payloads.get("model", self.get_model())
         conversation = await self._prepare_conversation(payloads)
 
