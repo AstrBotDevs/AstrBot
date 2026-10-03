@@ -214,7 +214,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
         )
         await super().send(MessageChain([]))
 
-    async def send_streaming(self, generator, use_fallback=False) -> None:
+    async def send_streaming(self, generator, use_fallback=False) -> bool:
         """流式发送消息，参考webchat的send_streaming设计"""
         final_data = ""
         raw = self.message_obj.raw_message
@@ -253,7 +253,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                     },
                 )
                 await super().send_streaming(generator, use_fallback)
-                return
+                return True
 
             increment_plain = ""
             last_stream_update_time = 0.0
@@ -298,7 +298,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                 },
             )
             await super().send_streaming(generator, use_fallback)
-            return
+            return True
 
         if self.only_use_webhook_url_to_send and self.webhook_client:
             merged_chain = MessageChain([])
@@ -308,7 +308,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
             await self.webhook_client.send_message_chain(merged_chain)
             await self._mark_stream_complete(stream_id)
             await super().send_streaming(generator, use_fallback)
-            return
+            return True
 
         # 企业微信智能机器人不支持增量发送，因此我们需要在这里将增量内容累积起来，按间隔推送
         increment_plain = ""
@@ -316,7 +316,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
 
         async def enqueue_stream_plain(text: str) -> None:
             if not text:
-                return
+                return True
             await back_queue.put(
                 {
                     "type": "plain",

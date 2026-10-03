@@ -1294,7 +1294,7 @@ class LarkMessageEvent(AstrMessageEvent):
                     )
                 )
                 self._has_send_oper = True
-            return
+            return False
 
         await _flush_and_close_card()
 
@@ -1303,3 +1303,4 @@ class LarkMessageEvent(AstrMessageEvent):
             Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name)
         )
         self._has_send_oper = True
+        return True
