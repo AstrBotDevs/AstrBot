@@ -16,17 +16,32 @@ class ActiveEventRegistry:
 
     def __init__(self) -> None:
         self._events: dict[str, set[AstrMessageEvent]] = defaultdict(set)
+        self._event_origins: dict[AstrMessageEvent, str] = {}
         self._agent_stop_callbacks: dict[AstrMessageEvent, Callable[[], None]] = {}
 
     def register(self, event: AstrMessageEvent) -> None:
-        self._events[event.unified_msg_origin].add(event)
+        umo = event.unified_msg_origin
+        previous_umo = self._event_origins.get(event)
+        if previous_umo is not None and previous_umo != umo:
+            self._remove_from_origin(event, previous_umo)
+        self._events[umo].add(event)
+        self._event_origins[event] = umo
 
     def unregister(self, event: AstrMessageEvent) -> None:
-        umo = event.unified_msg_origin
+        # WakingCheckStage can rewrite the session ID after registration.
+        # Remove the event using its registered origin, not its current origin.
+        umo = self._event_origins.pop(event, None)
         self._agent_stop_callbacks.pop(event, None)
-        self._events[umo].discard(event)
-        if not self._events[umo]:
-            del self._events[umo]
+        if umo is not None:
+            self._remove_from_origin(event, umo)
+
+    def _remove_from_origin(self, event: AstrMessageEvent, umo: str) -> None:
+        """Remove an event and release its bucket when it becomes empty."""
+        events = self._events.get(umo)
+        if events is not None:
+            events.discard(event)
+            if not events:
+                del self._events[umo]
 
     def register_agent_stop_callback(
         self,
