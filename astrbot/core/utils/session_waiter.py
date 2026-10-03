@@ -143,10 +143,9 @@ class SessionWaiter:
 
         try:
             return await self.session_controller.future
-        except Exception as e:
-            self._cleanup(e)
-            raise e
         finally:
+            # Clean up once on success, failure, or cancellation. A shared filter
+            # can have another registration that must not be removed twice.
             self._cleanup()
 
     def _cleanup(self, error: Exception | None = None) -> None:
