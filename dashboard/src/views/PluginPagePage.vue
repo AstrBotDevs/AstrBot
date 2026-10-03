@@ -7,6 +7,7 @@ import { fetchWithAuth } from "@/api/http";
 import { useModuleI18n } from "@/i18n/composables";
 import { usePluginI18n } from "@/utils/pluginI18n";
 import { useCustomizerStore } from "@/stores/customizer";
+import { pluginSidebarState } from "@/composables/usePluginSidebarItems";
 
 const BRIDGE_CHANNEL = "astrbot-plugin-page";
 
@@ -551,7 +552,13 @@ const handleIframeLoad = () => {
   sendIframeContext();
 };
 
+let loadSequence = 0;
+
 const loadPluginPage = async () => {
+  // Sequence guard: a stale response from a previous route must never
+  // mutate view state or the shared plugin sidebar state.
+  const requestSequence = ++loadSequence;
+  const requestedPluginName = pluginName.value;
   loading.value = true;
   errorMessage.value = "";
   plugin.value = null;
@@ -561,7 +568,8 @@ const loadPluginPage = async () => {
   cleanupSSEConnections();
 
   try {
-    const detailResponse = await pluginApi.get(pluginName.value);
+    const detailResponse = await pluginApi.get(requestedPluginName);
+    if (requestSequence !== loadSequence) return;
     if (detailResponse.data?.status === "error") {
       throw new Error(
         detailResponse.data.message || tm("messages.pluginPageLoadFailed"),
@@ -571,15 +579,27 @@ const loadPluginPage = async () => {
     const pluginData = detailResponse.data?.data || null;
     if (!pluginData) {
       errorMessage.value = tm("messages.pluginNotFound");
+      // Heal the stale plugin entry in the shared sidebar state.
+      pluginSidebarState.plugins = pluginSidebarState.plugins.filter(
+        (p) => p.name !== requestedPluginName,
+      );
       return;
     }
 
     if (!pluginData.activated) {
       errorMessage.value = tm("messages.pluginDisabled");
+      // Heal the stale plugin entry in the shared sidebar state.
+      pluginSidebarState.plugins = pluginSidebarState.plugins.map((p) =>
+        p.name === requestedPluginName ? { ...p, activated: false } : p,
+      );
       return;
     }
 
-    const entryResponse = await pluginApi.page(pluginName.value, pageName.value);
+    const entryResponse = await pluginApi.page(
+      requestedPluginName,
+      pageName.value,
+    );
+    if (requestSequence !== loadSequence) return;
     if (entryResponse.data?.status === "error") {
       throw new Error(
         entryResponse.data.message || tm("messages.pluginPageLoadFailed"),
@@ -602,12 +622,15 @@ const loadPluginPage = async () => {
     contentUrl.searchParams.set('theme', themeParam.value);
     iframeSrc.value = contentUrl.pathname + contentUrl.search + contentUrl.hash;
   } catch (error) {
+    if (requestSequence !== loadSequence) return;
     errorMessage.value =
       error?.response?.data?.message ||
       error?.message ||
       tm("messages.pluginPageLoadFailed");
   } finally {
-    loading.value = false;
+    if (requestSequence === loadSequence) {
+      loading.value = false;
+    }
   }
 };
 
