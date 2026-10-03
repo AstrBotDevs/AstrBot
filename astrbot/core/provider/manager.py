@@ -499,6 +499,10 @@ class ProviderManager:
                 from .sources.openai_tts_api_source import (
                     ProviderOpenAITTSAPI as ProviderOpenAITTSAPI,
                 )
+            case "modelbest_voxcpm_tts_api":
+                from .sources.modelbest_voxcpm_tts_source import (
+                    ProviderModelBestVoxCPMTTSAPI as ProviderModelBestVoxCPMTTSAPI,
+                )
             case "mimo_tts_api":
                 from .sources.mimo_tts_api_source import (
                     ProviderMiMoTTSAPI as ProviderMiMoTTSAPI,
