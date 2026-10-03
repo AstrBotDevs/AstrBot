@@ -14,6 +14,12 @@ const AuthRoutes = {
       name: 'Setup',
       path: '/auth/setup',
       component: () => import('@/views/authentication/auth/SetupPage.vue')
+    },
+    {
+      name: 'Onboarding',
+      path: '/auth/onboarding',
+      meta: { requiresAuth: true },
+      component: () => import('@/views/authentication/auth/SetupPage.vue')
     }
   ]
 };

@@ -209,6 +209,18 @@
                         <div class="settings-list-card">
                             <div class="settings-item">
                                 <div class="settings-item__label">
+                                    <div class="settings-item__title">{{ tm('system.onboarding.title') }}</div>
+                                    <div class="settings-item__subtitle">{{ tm('system.onboarding.subtitle') }}</div>
+                                </div>
+                                <div class="settings-item__control">
+                                    <v-btn color="primary" variant="tonal" prepend-icon="mdi-restart" to="/auth/onboarding">
+                                        {{ tm('system.onboarding.button') }}
+                                    </v-btn>
+                                </div>
+                            </div>
+
+                            <div class="settings-item">
+                                <div class="settings-item__label">
                                     <div class="settings-item__title">{{ tm('system.backup.title') }}</div>
                                     <div class="settings-item__subtitle">{{ tm('system.backup.subtitle') }}</div>
                                 </div>
