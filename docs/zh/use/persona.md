@@ -16,7 +16,7 @@ AstrBot 的「人格」（Persona）用于定义机器人的角色设定、系�
 | --- | --- |
 | 人格 ID (`persona_id`) | 人格的唯一标识，不能重复 |
 | 系统提示词 (`system_prompt`) | 发送给模型的系统提示词，用于设定角色与行为 |
-| 预设对话 (`begin_dialogs`) | 可选的预设对话，帮助模型更好地理解角色设定 |
+| 预设对话 (`begin_dialogs`) | 可选的预设对话。条数必须为偶数，按 user / assistant 交替生效（从 user 开始），用于帮助模型更好地理解角色设定 |
 | 工具 / 技能 | 该人格可以使用的工具与技能范围 |
 
 工具与技能的配置说明见 [工具使用 Tools](./function-calling.md) 与 [技能 Skills](./skills.md)。
@@ -31,7 +31,7 @@ AstrBot 的「人格」（Persona）用于定义机器人的角色设定、系�
 | --- | --- | --- |
 | `system_prompt` | 是 | 系统提示词。缺失时导入失败。 |
 | `persona_id` | 否 | 人格 ID。缺省为 `imported_persona`。如果该 ID 已存在，会自动追加 `_imported`；仍然冲突时再追加 `_imported_1`、`_imported_2`，以此类推。 |
-| `begin_dialogs` | 否 | 预设对话列表，缺省为空数组 `[]`。 |
+| `begin_dialogs` | 否 | 预设对话列表，缺省为空数组 `[]`。条数必须为偶数，按 user / assistant 交替生效（从 user 开始）；奇数条会被接口拒绝。 |
 
 最小示例：
 
