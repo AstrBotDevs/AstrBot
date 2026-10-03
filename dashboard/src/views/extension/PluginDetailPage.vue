@@ -578,10 +578,10 @@ const renderMarkdown = (source) => {
   container.innerHTML = cleanHtml;
 
   // Generate heading ids so README table-of-contents anchors can resolve.
-  const slugCounts = new Map();
+  const usedIds = new Set();
   container.querySelectorAll("h1, h2, h3, h4, h5, h6").forEach((heading) => {
     if (heading.id) {
-      slugCounts.set(heading.id, (slugCounts.get(heading.id) || 0) + 1);
+      usedIds.add(heading.id);
       return;
     }
 
@@ -595,9 +595,16 @@ const renderMarkdown = (source) => {
       .replace(/-+/g, "-");
     if (!base) return;
 
-    const count = slugCounts.get(base) || 0;
-    slugCounts.set(base, count + 1);
-    heading.id = count === 0 ? base : `${base}-${count}`;
+    // Increment the suffix until the candidate no longer collides with any
+    // previously assigned id (including ids coming from raw HTML headings).
+    let slug = base;
+    let suffix = 1;
+    while (usedIds.has(slug)) {
+      slug = `${base}-${suffix}`;
+      suffix += 1;
+    }
+    usedIds.add(slug);
+    heading.id = slug;
   });
 
   container.querySelectorAll("a").forEach((link) => {
@@ -616,8 +623,17 @@ const handleDocsClick = (event) => {
   const anchor = target?.closest('a[href^="#"]');
   if (!anchor) return;
 
-  const rawHref = anchor.getAttribute("href");
-  const targetId = rawHref ? decodeURIComponent(rawHref.slice(1)) : "";
+  // Never let a local hash link reach the hash-mode router, even when the
+  // fragment is empty, malformed, or has no matching heading.
+  event.preventDefault();
+
+  const rawHref = anchor.getAttribute("href") || "";
+  let targetId = "";
+  try {
+    targetId = decodeURIComponent(rawHref.slice(1));
+  } catch {
+    return;
+  }
   if (!targetId) return;
 
   // Scope lookup to the rendered container so the hash router is never touched.
@@ -626,7 +642,6 @@ const handleDocsClick = (event) => {
   );
   if (!scrollTarget) return;
 
-  event.preventDefault();
   scrollTarget.scrollIntoView({ behavior: "smooth", block: "start" });
 };
 
