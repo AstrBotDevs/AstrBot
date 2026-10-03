@@ -99,7 +99,7 @@ async def handle_empty_mention(self, event: AstrMessageEvent):
 
 ## 自定义会话 ID 算子
 
-默认情况下，AstrBot 会话控制器会将基于 `sender_id` （发送人的 ID）作为识别不同会话的标识，如果想将一整个群作为一个会话，则需要自定义会话 ID 算子。
+默认情况下，AstrBot 会话控制器会将基于 `unified_msg_origin` （会话 ID）作为识别不同会话的标识，如果只想将一个群的一个或一些用户又或不同群的不同用户作为一个会话，则需要自定义会话 ID 算子。
 
 ```py
 import astrbot.api.message_components as Comp
@@ -114,10 +114,7 @@ from astrbot.core.utils.session_waiter import (
 # ...
 class CustomFilter(SessionFilter):
     def filter(self, event: AstrMessageEvent) -> str:
-        return (
-            event.get_group_id() if event.get_group_id() else event.unified_msg_origin
-        )
-
+        return f"{event.unified_msg_origin}:{event.get_sender_id()}"
 
 await empty_mention_waiter(
     event, session_filter=CustomFilter()
@@ -125,6 +122,6 @@ await empty_mention_waiter(
 # ...
 ```
 
-这样之后，当群内一个用户发送消息后，会话控制器会将这个群作为一个会话，群内其他用户发送的消息也会被认为是同一个会话。
+这样之后，当群内一个用户发送消息后，会话控制器只会将这个群的该用户作为一个会话，群内其他用户发送的消息不会被认为是同一个会话。
 
-甚至，可以使用这个特性来让群内组队！
+甚至，可以使用这个特性来实现私聊组队！
