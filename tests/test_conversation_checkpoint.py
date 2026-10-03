@@ -430,3 +430,119 @@ async def test_empty_response_without_tool_result_skips_history_save():
     )
 
     conversation_manager.update_conversation.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_failed_llm_response_persists_tool_results_of_the_turn():
+    conversation_manager = AsyncMock()
+    stage = InternalAgentSubStage()
+    stage.conv_manager = conversation_manager
+    event = SimpleNamespace(
+        unified_msg_origin="qq:GroupMessage:test",
+        get_extra=lambda _key: None,
+    )
+    tool_call = ToolCall(
+        id="call-1",
+        function=ToolCall.FunctionBody(name="stay_silent", arguments="{}"),
+    )
+    assistant_message = AssistantMessageSegment(tool_calls=[tool_call])
+    tool_message = ToolCallMessageSegment(
+        content="The tool has no return value.",
+        tool_call_id="call-1",
+    )
+    request = ProviderRequest(
+        conversation=Conversation(
+            platform_id="qq",
+            user_id="qq:GroupMessage:test",
+            cid="conversation-1",
+            token_usage=1234,
+        ),
+        tool_calls_result=ToolCallsResult(
+            tool_calls_info=assistant_message,
+            tool_calls_result=[tool_message],
+        ),
+    )
+
+    await stage._save_to_history(
+        event,
+        request,
+        LLMResponse(
+            role="err", completion_text="APIConnectionError: Connection error."
+        ),
+        [
+            Message(role="user", content="run the tool three times"),
+            assistant_message,
+            tool_message,
+        ],
+        runner_stats=None,
+    )
+
+    conversation_manager.update_conversation.assert_awaited_once_with(
+        "qq:GroupMessage:test",
+        "conversation-1",
+        history=[
+            {"role": "user", "content": "run the tool three times"},
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {
+                        "type": "function",
+                        "id": "call-1",
+                        "function": {
+                            "name": "stay_silent",
+                            "arguments": "{}",
+                        },
+                    }
+                ],
+            },
+            {
+                "role": "tool",
+                "content": "The tool has no return value.",
+                "tool_call_id": "call-1",
+            },
+            {
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            "[The upstream request failed before this turn "
+                            "produced a final reply.]"
+                        ),
+                    }
+                ],
+            },
+        ],
+        token_usage=1234,
+    )
+
+
+@pytest.mark.asyncio
+async def test_failed_llm_response_without_tool_result_skips_history_save():
+    conversation_manager = AsyncMock()
+    stage = InternalAgentSubStage()
+    stage.conv_manager = conversation_manager
+    event = SimpleNamespace(
+        unified_msg_origin="qq:GroupMessage:test",
+        get_extra=lambda _key: None,
+    )
+    request = ProviderRequest(
+        conversation=Conversation(
+            platform_id="qq",
+            user_id="qq:GroupMessage:test",
+            cid="conversation-1",
+        )
+    )
+
+    await stage._save_to_history(
+        event,
+        request,
+        LLMResponse(
+            role="err", completion_text="APIConnectionError: Connection error."
+        ),
+        [Message(role="user", content="hello")],
+        runner_stats=None,
+    )
+
+    conversation_manager.update_conversation.assert_not_awaited()
