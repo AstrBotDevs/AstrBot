@@ -1,3 +1,4 @@
+import asyncio
 import csv
 import io
 import json
@@ -79,7 +80,8 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
         "Send message to the user. "
         "Supports various message types including `plain`, `image`, `record`, `video`, `file`, and `mention_user`. "
         "Use this tool to send media files (`image`, `record`, `video`, `file`), "
-        "or when you need to proactively message the user(such as cron job). For other normal text replies, you can output directly and no need to use this tool."
+        "or when you need to proactively message the user(such as cron job). For other normal text replies, you can output directly and no need to use this tool. "
+        "Batch related components in one call. After a successful send, do not send the same message again."
     )
     parameters: dict = Field(
         default_factory=lambda: {
@@ -209,21 +211,58 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
     async def call(
         self, context: ContextWrapper[AstrAgentContext], **kwargs
     ) -> ToolExecResult:
-        # Security: only AstrBot admins can send messages to other sessions.
-        # Non-admin users are always restricted to their own session.
-        # See https://github.com/AstrBotDevs/AstrBot/issues/7822
-        current_session = context.context.event.unified_msg_origin
+        """Send components, suppressing repeated text deliveries within this event.
+
+        Args:
+            context: The current agent run and message event.
+            **kwargs: Message components and an optional target session.
+
+        Returns:
+            A delivery acknowledgement or an error the agent can act on.
+        """
+        event = context.context.event
+        current_session = event.unified_msg_origin
         session = kwargs.get("session") or current_session
-        if session != current_session:
-            if permission_error := check_admin_permission(
-                context, "Send message to another session"
-            ):
-                return permission_error
         messages = kwargs.get("messages")
         if not isinstance(messages, list) or not messages:
             return "error: messages parameter is empty or invalid."
 
+        try:
+            target_session = (
+                MessageSession.from_str(session)
+                if isinstance(session, str)
+                else session
+            )
+        except Exception:
+            # Models sometimes provide only the session ID. Normalize it before
+            # checking permissions, but do not repair malformed full sessions.
+            if isinstance(session, str) and current_session and ":" not in session:
+                try:
+                    cur = MessageSession.from_str(current_session)
+                    target_session = MessageSession(
+                        platform_name=cur.platform_id,
+                        message_type=cur.message_type,
+                        session_id=session,
+                    )
+                except Exception:
+                    return f"error: invalid session: {session}"
+            else:
+                return f"error: invalid session: {session}"
+        if not isinstance(target_session, MessageSession):
+            return f"error: invalid session: {session}"
+
+        # Security: only AstrBot admins can send messages to other sessions.
+        # Non-admin users are always restricted to their own session.
+        # See https://github.com/AstrBotDevs/AstrBot/issues/7822
+        if str(target_session) != current_session:
+            if permission_error := check_admin_permission(
+                context, "Send message to another session"
+            ):
+                return permission_error
         components: list[Comp.BaseMessageComponent] = []
+        # A sandbox file may occur in several components. Resolve/download it
+        # once per call; a later call must still see an updated file or policy.
+        resolved_paths: dict[str, str] = {}
         for idx, msg in enumerate(messages):
             if not isinstance(msg, dict):
                 return f"error: messages[{idx}] should be an object."
@@ -238,60 +277,44 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     if not text:
                         return f"error: messages[{idx}].text is required for plain component."
                     components.append(Comp.Plain(text=text))
-                elif msg_type == "image":
+                elif msg_type in {"image", "record", "video", "file"}:
                     path = msg.get("path")
                     url = msg.get("url")
                     if path:
-                        local_path, _ = await self._resolve_path_from_sandbox(
-                            context, path, component_type="image"
+                        path_key = str(path).strip()
+                        if path_key not in resolved_paths:
+                            (
+                                resolved_paths[path_key],
+                                _,
+                            ) = await self._resolve_path_from_sandbox(
+                                context, path, component_type=msg_type
+                            )
+                        local_path = resolved_paths[path_key]
+                    elif not url:
+                        return f"error: messages[{idx}] must include path or url for {msg_type} component."
+                    if msg_type == "file":
+                        name = (
+                            msg.get("text")
+                            or (_remote_basename(path) if path else "")
+                            or (os.path.basename(url) if url else "")
+                            or "file"
                         )
-                        components.append(Comp.Image.fromFileSystem(path=local_path))
-                    elif url:
-                        components.append(Comp.Image.fromURL(url=url))
-                    else:
-                        return f"error: messages[{idx}] must include path or url for image component."
-                elif msg_type == "record":
-                    path = msg.get("path")
-                    url = msg.get("url")
-                    if path:
-                        local_path, _ = await self._resolve_path_from_sandbox(
-                            context, path, component_type="record"
+                        components.append(
+                            Comp.File(name=name, file=local_path)
+                            if path
+                            else Comp.File(name=name, url=url)
                         )
-                        components.append(Comp.Record.fromFileSystem(path=local_path))
-                    elif url:
-                        components.append(Comp.Record.fromURL(url=url))
                     else:
-                        return f"error: messages[{idx}] must include path or url for record component."
-                elif msg_type == "video":
-                    path = msg.get("path")
-                    url = msg.get("url")
-                    if path:
-                        local_path, _ = await self._resolve_path_from_sandbox(
-                            context, path, component_type="video"
+                        component_class = {
+                            "image": Comp.Image,
+                            "record": Comp.Record,
+                            "video": Comp.Video,
+                        }[msg_type]
+                        components.append(
+                            component_class.fromFileSystem(path=local_path)
+                            if path
+                            else component_class.fromURL(url=url)
                         )
-                        components.append(Comp.Video.fromFileSystem(path=local_path))
-                    elif url:
-                        components.append(Comp.Video.fromURL(url=url))
-                    else:
-                        return f"error: messages[{idx}] must include path or url for video component."
-                elif msg_type == "file":
-                    path = msg.get("path")
-                    url = msg.get("url")
-                    name = (
-                        msg.get("text")
-                        or (_remote_basename(path) if path else "")
-                        or (os.path.basename(url) if url else "")
-                        or "file"
-                    )
-                    if path:
-                        local_path, _ = await self._resolve_path_from_sandbox(
-                            context, path, component_type="file"
-                        )
-                        components.append(Comp.File(name=name, file=local_path))
-                    elif url:
-                        components.append(Comp.File(name=name, url=url))
-                    else:
-                        return f"error: messages[{idx}] must include path or url for file component."
                 elif msg_type == "mention_user":
                     mention_user_id = msg.get("mention_user_id")
                     if not mention_user_id:
@@ -308,59 +331,60 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
             except Exception as exc:
                 return f"error: failed to build messages[{idx}] component: {exc}"
 
-        try:
-            target_session = (
-                MessageSession.from_str(session)
-                if isinstance(session, str)
-                else session
-            )
-        except Exception:
-            # LLM 在 cron 等主动场景下可能只传 session_id（如 oc_xxx），
-            # 而不是完整的三段式 platform_id:message_type:session_id。
-            # 此时用 current_session 的前两段补全。
-            # 注意：这里的session是传入的session参数，实际上是用户输入的session_id
-            # current_session才是完整的三段式session字符串。
-            # 仅当传入字符串不含 ':'（明显是裸 session_id）时才用 current_session 补全，
-            # 避免 LLM 传了带 ':' 但格式错误的目标 session 被错误修复。
-            # issue: https://github.com/AstrBotDevs/AstrBot/issues/7907
-            if isinstance(session, str) and current_session and ":" not in session:
-                try:
-                    cur = MessageSession.from_str(current_session)
-                    target_session = MessageSession(
-                        platform_name=cur.platform_id,
-                        message_type=cur.message_type,
-                        session_id=session,
-                    )
-                except Exception:
-                    return f"error: invalid session: {session}"
-            else:
-                return f"error: invalid session: {session}"
-
         message_chain = MessageChain(chain=components)
-        try:
-            sent = await context.context.context.send_message(
-                target_session,
-                message_chain,
+        # Media paths and URLs can refer to changed content, so only immutable
+        # text/mention chains are deduplicated. Include the target and each
+        # component to preserve distinct mentions, ordering, and sessions.
+        delivery_key = (
+            (
+                str(target_session),
+                json.dumps([comp.toDict() for comp in components], ensure_ascii=False),
             )
-        except Exception as exc:
-            return f"error: failed to send message to session {target_session}: {exc}"
-        if not sent:
-            return f"error: failed to find platform for session {target_session}."
-        if str(target_session) == current_session:
-            context.context.event._has_send_oper = True
-            sent_plain_text = message_chain.get_plain_text().strip()
-            if sent_plain_text:
-                sent_plain_texts = context.context.event.get_extra(
-                    "_send_message_to_user_current_session_plain_texts",
-                    [],
+            if all(isinstance(comp, (Comp.Plain, Comp.At)) for comp in components)
+            else None
+        )
+        send_lock = event.get_extra("_send_message_to_user_lock")
+        if send_lock is None:
+            send_lock = asyncio.Lock()
+            event.set_extra("_send_message_to_user_lock", send_lock)
+        async with send_lock:
+            sent_messages = event.get_extra("_send_message_to_user_sent_messages")
+            if sent_messages is None:
+                sent_messages = set()
+                event.set_extra("_send_message_to_user_sent_messages", sent_messages)
+            if delivery_key is not None and delivery_key in sent_messages:
+                return (
+                    f"Message already sent to session {target_session}. "
+                    "Duplicate delivery skipped. Do not send it again."
                 )
-                if not isinstance(sent_plain_texts, list):
-                    sent_plain_texts = []
-                sent_plain_texts.append(sent_plain_text)
-                context.context.event.set_extra(
-                    "_send_message_to_user_current_session_plain_texts",
-                    sent_plain_texts,
+            try:
+                sent = await context.context.context.send_message(
+                    target_session,
+                    message_chain,
                 )
+            except Exception as exc:
+                return (
+                    f"error: failed to send message to session {target_session}: {exc}"
+                )
+            if not sent:
+                return f"error: failed to find platform for session {target_session}."
+            if delivery_key is not None:
+                sent_messages.add(delivery_key)
+            if str(target_session) == current_session:
+                event._has_send_oper = True
+                sent_plain_text = message_chain.get_plain_text().strip()
+                if sent_plain_text:
+                    sent_plain_texts = event.get_extra(
+                        "_send_message_to_user_current_session_plain_texts",
+                        [],
+                    )
+                    if not isinstance(sent_plain_texts, list):
+                        sent_plain_texts = []
+                    sent_plain_texts.append(sent_plain_text)
+                    event.set_extra(
+                        "_send_message_to_user_current_session_plain_texts",
+                        sent_plain_texts,
+                    )
         return f"Message sent to session {target_session}"
 
 
