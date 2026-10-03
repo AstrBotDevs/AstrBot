@@ -184,7 +184,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
             the image cannot be resolved.
         """
 
-        image_ref = component.url or component.file
+        image_ref = component.path or component.url or component.file
         if not image_ref:
             return None
         image_data = await resolve_media_ref_to_base64_data(
