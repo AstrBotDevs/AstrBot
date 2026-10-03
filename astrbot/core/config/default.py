@@ -137,6 +137,10 @@ DEFAULT_CONFIG = {
     "provider": [],  # models from provider_sources
     "provider_settings": {
         "enable": True,
+        "codex_oauth_usage": {
+            "enabled": True,
+            "source_id": "",
+        },
         "default_image_caption_provider_id": "",
         "image_caption_prompt": "Please describe the image using Chinese.",
         "provider_pool": ["*"],  # "*" 表示使用所有可用的提供者
@@ -1341,6 +1345,30 @@ CONFIG_METADATA_2 = {
                         "proxy": "",
                         "custom_headers": {},
                     },
+                    "ChatGPT/Codex OAuth": {
+                        "id": "openai_oauth",
+                        "provider": "openai",
+                        "type": "openai_oauth_chat_completion",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "api_base": "https://chatgpt.com/backend-api/codex",
+                        "timeout": 120,
+                        "proxy": "",
+                        "custom_headers": {},
+                        "auth_mode": "openai_oauth",
+                        "oauth_provider": "openai",
+                        "oauth_access_token": "",
+                        "oauth_refresh_token": "",
+                        "oauth_expires_at": "",
+                        "oauth_account_email": "",
+                        "oauth_account_id": "",
+                        "oauth_web_search": "disabled",
+                        "oauth_web_search_domains": [],
+                        "oauth_image_model": "",
+                        "oauth_audio_transcription": False,
+                        "oauth_transcription_model": "gpt-4o-transcribe",
+                    },
                     "Google Gemini": {
                         "id": "google_gemini",
                         "provider": "google",
@@ -1715,6 +1743,16 @@ CONFIG_METADATA_2 = {
                         "proxy": "",
                         "custom_headers": {},
                         "custom_extra_body": {},
+                    },
+                    "ChatGPT OAuth STT (Experimental)": {
+                        "id": "openai_oauth_stt",
+                        "provider": "openai",
+                        "type": "openai_oauth_stt",
+                        "provider_type": "speech_to_text",
+                        "enable": False,
+                        "oauth_source_id": "openai_oauth",
+                        "model": "gpt-4o-transcribe",
+                        "timeout": 120,
                     },
                     "Whisper(API)": {
                         "id": "whisper",
@@ -2555,6 +2593,42 @@ CONFIG_METADATA_2 = {
                         "description": "启用图片模态",
                         "type": "bool",
                         "hint": "启用后，将支持返回图片内容。需要模型支持，否则会报错。具体支持模型请查看 Google Gemini 官方网站。温馨提示，如果您需要生成图片，请关闭 `启用群员识别` 配置获得更好的效果。",
+                    },
+                    "oauth_source_id": {
+                        "description": "共享 OAuth 账户来源",
+                        "type": "string",
+                        "hint": "填写已有 ChatGPT/Codex OAuth 服务商来源 ID；共用认证和刷新状态。转录端点需要账户权限。",
+                    },
+                    "oauth_web_search": {
+                        "description": "Codex 原生搜索",
+                        "type": "string",
+                        "options": ["disabled", "cached", "live"],
+                        "hint": "disabled 不自动添加搜索工具，cached 使用缓存，live 允许实时搜索；实际可用性取决于后端权限。",
+                    },
+                    "oauth_web_search_domains": {
+                        "description": "Codex 搜索域名限制",
+                        "type": "list",
+                        "hint": "留空不限制，例如 example.com。",
+                    },
+                    "oauth_image_model": {
+                        "description": "Codex 图像模型请求（实验性）",
+                        "type": "string",
+                        "options": [
+                            "",
+                            "gpt-image-2",
+                            "gpt-image-2.5-flare",
+                            "gpt-image-2.5-sunburst",
+                        ],
+                        "hint": "向图像生成工具请求指定模型，不改变主调用模型；留空由后端选择。后端可能忽略或回退，成功出图不能确认实际采用的模型；可用性取决于账号权限。",
+                    },
+                    "oauth_audio_transcription": {
+                        "description": "转录 OAuth 聊天音频输入",
+                        "type": "bool",
+                        "hint": "实验功能，先转录再交给文本模型；需要账户具有转录权限，失败会明确报错。",
+                    },
+                    "oauth_transcription_model": {
+                        "description": "OAuth 转录模型",
+                        "type": "string",
                     },
                     "gm_native_search": {
                         "description": "启用原生搜索功能",
