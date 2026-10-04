@@ -69,6 +69,21 @@
       "title": "编辑人格"
     }
   },
+  "importDialog": {
+    "title": "导入人格格式说明",
+    "description": "仅支持 AstrBot 导出的人格 JSON 文件，支持的字段如下：",
+    "fieldColumn": "字段",
+    "requiredColumn": "必填",
+    "notesColumn": "说明",
+    "required": "是",
+    "optional": "否",
+    "systemPromptNote": "系统提示词，缺失时将导入失败。",
+    "personaIdNote": "人格 ID。缺省为 imported_persona；若已存在，会自动追加 _imported 后缀，仍冲突时再追加 _imported_1、_imported_2 等。",
+    "beginDialogsNote": "预设对话列表，缺省为空数组。",
+    "exampleTitle": "示例：",
+    "toolsSkillsWarning": "工具（tools）与技能（skills）不会被导入：导入后该人格默认启用全部工具与技能，如需限制请在导入后手动配置。",
+    "chooseFile": "选择文件"
+  },
   "empty": {
     "title": "暂无人格配置",
     "description": "来创建一个吧！",
