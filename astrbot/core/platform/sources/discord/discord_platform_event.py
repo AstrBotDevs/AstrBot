@@ -423,8 +423,15 @@ class DiscordPlatformEvent(AstrMessageEvent):
             content = content[:2000]
         return content, files, view, embeds, reference_message_id
 
-    async def react(self, emoji: str) -> None:
-        """对原消息添加反应"""
+    async def react(self, emoji: str) -> str | None:
+        """Add a reaction to the source message.
+
+        Args:
+            emoji: Emoji to add as a reaction.
+
+        Returns:
+            Always None; Discord does not expose a reaction id here.
+        """
         try:
             if hasattr(self.message_obj, "raw_message") and hasattr(
                 self.message_obj.raw_message,
@@ -434,7 +441,8 @@ class DiscordPlatformEvent(AstrMessageEvent):
                     emoji
                 )
         except Exception as e:
-            logger.error(f"[Discord] 添加反应失败: {e}")
+            logger.error(f"[Discord] Failed to add reaction: {e}")
+        return None
 
     def is_slash_command(self) -> bool:
         """判断是否为斜杠命令"""
