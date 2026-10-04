@@ -120,6 +120,7 @@ class CommandGroupFilter(HandlerFilter):
         )
 
     def equals(self, message_str: str) -> bool:
+        message_str = re.sub(r"\s+", " ", message_str.strip())
         return message_str in self.get_complete_command_names()
 
     def filter(self, event: AstrMessageEvent, cfg: AstrBotConfig) -> bool:

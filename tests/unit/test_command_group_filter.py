@@ -35,6 +35,19 @@ def test_nested_group_matches_whole_words_only():
     assert not child.startswith("tool configure")
 
 
+@pytest.mark.parametrize(
+    "message",
+    ["tool config", "tool   config", "tool\tconfig", "tool\nconfig"],
+)
+def test_nested_group_without_subcommand_shows_help(message):
+    parent = CommandGroupFilter("tool")
+    group = CommandGroupFilter("config", parent_group=parent)
+    event = SimpleNamespace(is_at_or_wake_command=True, message_str=message)
+
+    with pytest.raises(ValueError, match="参数不足"):
+        group.filter(event, {})
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("message", "blocked"),
