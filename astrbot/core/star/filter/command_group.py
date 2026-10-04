@@ -109,7 +109,15 @@ class CommandGroupFilter(HandlerFilter):
         return True
 
     def startswith(self, message_str: str) -> bool:
-        return message_str.startswith(tuple(self.get_complete_command_names()))
+        # Same boundary rule as CommandFilter: the complete name must be the
+        # whole message or end at whitespace, otherwise a "math" group also
+        # claims "mathematics" and intercepts it before any other handler.
+        for name in self.get_complete_command_names():
+            if message_str == name or (
+                message_str.startswith(name) and message_str[len(name)].isspace()
+            ):
+                return True
+        return False
 
     def equals(self, message_str: str) -> bool:
         return message_str in self.get_complete_command_names()
