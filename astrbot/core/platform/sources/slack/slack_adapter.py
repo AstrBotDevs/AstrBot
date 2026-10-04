@@ -212,7 +212,14 @@ class SlackAdapter(Platform):
         return abm
 
     def _parse_blocks(self, blocks: list) -> list:
-        """解析 Slack blocks 格式的消息内容"""
+        """Parse Slack blocks into message components.
+
+        Args:
+            blocks: Slack message blocks.
+
+        Returns:
+            Message components in their original order.
+        """
         message_components = []
 
         for block in blocks:
@@ -222,8 +229,12 @@ class SlackAdapter(Platform):
                 # 处理富文本块
                 elements = block.get("elements", [])
                 for element in elements:
-                    if element.get("type") == "rich_text_section":
-                        # 处理富文本段落
+                    if element.get("type") in (
+                        "rich_text_section",
+                        "rich_text_preformatted",
+                        "rich_text_quote",
+                    ):
+                        # Sections, code blocks, and quotes share inline elements.
                         section_elements = element.get("elements", [])
                         text_parts = []
                         for section_element in section_elements:
@@ -262,6 +273,8 @@ class SlackAdapter(Platform):
                         text_content = "".join(text_parts)
 
                         if text_content.strip():
+                            if element.get("type") != "rich_text_section":
+                                text_content = f"\n{text_content}\n"
                             message_components.append(Plain(text=text_content))
 
                     elif element.get("type") == "rich_text_list":
