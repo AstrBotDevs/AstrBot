@@ -273,7 +273,10 @@ class SlackAdapter(Platform):
 
                         text_content = "".join(text_parts)
 
-                        if text_content.strip():
+                        if text_content and (
+                            text_content.strip()
+                            or element.get("type") != "rich_text_section"
+                        ):
                             message_components.append(Plain(text=text_content))
 
                         if (
