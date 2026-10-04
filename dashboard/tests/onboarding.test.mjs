@@ -5,10 +5,9 @@ import vm from 'node:vm';
 import ts from 'typescript';
 import { computed, nextTick, ref } from 'vue';
 
-const repo = name => `https://github.com/AstrBotDevs/${name}`;
 const ok = data => ({ data: { status: 'ok', data } });
 
-function setup(api = {}, overrides = {}) {
+function setup(overrides = {}) {
   const source = readFileSync(new URL('../src/components/OnboardingSetup.vue', import.meta.url), 'utf8')
     .split('<script setup lang="ts">')[1].split('</script>')[0];
   const ast = ts.createSourceFile('guide.ts', source, ts.ScriptTarget.Latest, true);
@@ -20,16 +19,6 @@ function setup(api = {}, overrides = {}) {
     useModuleI18n: () => ({ tm: key => key }),
     useRouter: () => ({ resolve: path => ({ href: `/astrbot/#${path}` }), push: path => emitted.push(path) }),
     onBeforeRouteLeave: callback => { leave = callback; },
-    pluginApi: {
-      market: async () => ok({
-        first: { repo: repo('first'), name: 'First' },
-        second: { repo: repo('second'), name: 'Second' },
-      }),
-      list: async () => ok([]),
-      validateRepo: async () => ok({}),
-      installGithub: async () => ok({}),
-      ...api,
-    },
     providerApi: { schema: async () => ok({ providers: [{ id: 'model', provider_type: 'chat_completion' }] }) },
     configProfileApi: {
       get: async () => ok({ config: { agent_runner: { runner_type: 'local', config: { model: { provider_id: 'existing' } } } } }),
@@ -40,139 +29,91 @@ function setup(api = {}, overrides = {}) {
   });
   const body = ast.statements.filter(node => !ts.isImportDeclaration(node)).map(node => node.getText(ast)).join('\n');
   vm.runInContext(ts.transpile(body, { target: ts.ScriptTarget.ES2020 }), context);
-  const state = vm.runInContext('({ officialRepo, githubRepo, loadPlugins, togglePlugin, close, skipStep, finish, showWelcome, applying, applyReady, applyTasks, settingsStatus, settingsError, computerForm, completed, plugins, pluginGroups, selected, loading, loadError, busy, step, steps, installedCount, nextStep, loadPlatforms, modelReady, platformReady, platformLoading, configuredPlatforms, configError, modelForm, selectedModel })', context);
-  state.computerForm.value = { ready: true, save: async () => true };
+  const state = vm.runInContext('({ close, skipStep, completed, busy, step, steps, nextStep, loadPlatforms, modelReady, platformReady, platformLoading, configuredPlatforms, configError, modelForm, platformForm, selectedModel })', context);
   return { ...state, emitted, watchers, leave: () => leave() };
 }
 
-test('notice comes first, computer access last, and the market is not loaded during trial', async () => {
-  let requests = 0;
-  const state = setup({ market: async () => { requests++; return ok({}); } });
-  assert.deepEqual(Array.from(state.steps.value), ['guide.notice', 'guide.modelTitle', 'guide.chat', 'guide.platform', 'guide.plugins', 'onboard.step3Title']);
-  assert.equal(state.step.value, 1);
+test('the guide has exactly four steps and no plugin or computer-access workflow', async () => {
+  const state = setup();
+  assert.deepEqual(Array.from(state.steps.value), ['guide.notice', 'guide.modelTitle', 'guide.chat', 'guide.platform']);
   await state.nextStep();
   assert.equal(state.step.value, 2);
-  const changeStep = state.watchers.find(watcher => watcher.source === state.step).callback;
-  changeStep(3);
-  assert.equal(requests, 0);
-  changeStep(5);
-  await new Promise(setImmediate);
-  assert.equal(requests, 1);
+  state.skipStep();
+  assert.equal(state.step.value, 4);
+  state.skipStep();
+  assert.equal(state.completed.value, true);
+  state.skipStep();
+  await state.nextStep();
+  assert.equal(state.step.value, 4);
+  const source = readFileSync(new URL('../src/components/OnboardingSetup.vue', import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /pluginApi|MarketPluginCard|OnboardingComputer|computerForm|applying|applyTasks|loadPlugins|installGithub|computer_use_runtime/);
+  assert.deepEqual([...source.matchAll(/<v-window-item :value="(\d+)"/g)].map(match => match[1]), ['1', '2', '3', '4']);
+  for (const locale of ['zh-CN', 'en-US', 'ja-JP', 'ru-RU']) {
+    const messages = JSON.parse(readFileSync(new URL(`../src/i18n/locales/${locale}/features/welcome.json`, import.meta.url), 'utf8'));
+    assert.equal(messages.guide.step5Hint, undefined);
+    assert.equal(messages.guide.step6Hint, undefined);
+    assert.equal(messages.guide.applyTitle, undefined);
+    assert.equal(messages.onboard.step3Title, undefined);
+  }
 });
 
-test('only canonical GitHub repositories in the official organization are accepted', () => {
-  const { officialRepo } = setup();
-  assert.equal(officialRepo('https://github.com/astrbotdevs/First.git/'), repo('first'));
-  for (const url of [
-    'http://github.com/AstrBotDevs/first', 'https://github.com.evil.test/AstrBotDevs/first',
-    'https://github.com/Other/first', 'https://github.com/AstrBotDevs-evil/first',
-    'https://github.com/AstrBotDevs/first/tree/main', 'https://github.com/AstrBotDevs/first?ref=evil',
-    'https://user@github.com/AstrBotDevs/first', 'javascript:alert(1)', null,
-  ]) assert.equal(officialRepo(url), '', String(url));
+test('adapter save completes the guide only after the saved configuration is confirmed', async () => {
+  for (const enable of [true, false]) {
+    let saved = false;
+    const state = setup({ systemConfigApi: { runtime: async () => ok({ config: { platform: saved ? [{ id: 'new-bot', enable }] : [] } }) } });
+    state.step.value = 4;
+    state.platformForm.value = { newPlatform: async () => {} };
+    await state.nextStep();
+    assert.equal(state.completed.value, false);
+    saved = true;
+    state.platformForm.value = { newPlatform: async () => state.loadPlatforms('new-bot') };
+    await state.nextStep();
+    assert.equal(state.completed.value, true);
+    assert.equal(state.step.value, 4);
+    assert.equal(state.platformLoading.value, false);
+    state.close();
+    assert.deepEqual(state.emitted, ['/dashboard/default']);
+  }
 });
 
-test('community repositories still require canonical HTTPS GitHub URLs', () => {
-  const { githubRepo } = setup();
-  assert.equal(githubRepo('https://github.com/Community/Useful.git/'), 'https://github.com/community/useful');
-  for (const url of [
-    'http://github.com/community/plugin', 'https://github.com.evil.test/community/plugin',
-    'https://github.com/community/plugin/tree/main', 'https://github.com/community/plugin?ref=evil',
-    'https://github.com/community/plugin#main', 'https://user:secret@github.com/community/plugin',
-    'https://github.com/community/plugin%2Fevil', 'https://github.com/-invalid/plugin',
-    'https://github.com/community/..', 'file:///community/plugin', null,
-  ]) assert.equal(githubRepo(url), '', String(url));
+test('failed adapter refresh stays on step four and can complete after retry', async () => {
+  let fail = true;
+  const state = setup({ systemConfigApi: { runtime: async () => fail
+    ? { data: { status: 'error', message: 'Refresh failed' } } : ok({ config: { platform: [{ id: 'new-bot' }] } }) } });
+  state.step.value = 4;
+  await state.loadPlatforms('new-bot');
+  assert.equal(state.completed.value, false);
+  assert.equal(state.configError.value, 'Refresh failed');
+  fail = false;
+  await state.loadPlatforms();
+  assert.equal(state.completed.value, false);
+  await state.nextStep();
+  assert.equal(state.completed.value, true);
 });
 
-test('market entries are deduplicated by repo; name collisions do not count as installed', async () => {
-  const state = setup({
-    market: async () => ok({
-      $meta: { name: 'Market' },
-      first: { name: 'same-name', repo: repo('First') },
-      duplicate: { repo: `${repo('first')}.git` },
-      second: { repo: repo('second') },
-      impostor: { author: 'AstrBotDevs', repo: 'https://github.com/Other/first' },
-    }),
-    list: async () => ok([
-      { name: 'same-name', repo: 'https://github.com/Other/first' },
-      { install_source: { repo: `${repo('second')}.git` } },
-    ]),
-  });
-  await state.loadPlugins();
-  assert.equal(state.plugins.value.length, 3);
-  assert.equal(state.plugins.value[0].installed, false);
-  assert.equal(state.plugins.value[1].installed, true);
-  assert.equal(state.plugins.value[2].official, false);
-  assert.equal(state.selected.value.length, 0);
-});
-
-test('only manually selected visible community recommendations can be installed', async () => {
-  const requests = [];
-  const market = Object.fromEntries(Array.from({ length: 9 }, (_, index) => [String(index), {
-    repo: `https://github.com/community/plugin-${index}`, stars: index * 10, author: 'AstrBotDevs',
-  }]));
-  market.official = { repo: repo('official'), stars: 2 };
-  market.invalid = { repo: 'https://evil.test/AstrBotDevs/plugin', stars: 10000 };
-  market.unknown = { repo: 'https://github.com/community/unknown', stars: 'unknown' };
-  market.duplicate = { repo: 'https://github.com/Community/PLUGIN-8.git', stars: 999 };
-  const state = setup({ market: async () => ok(market), installGithub: async body => { requests.push(body); return ok({}); } });
-  await state.loadPlugins();
-  assert.equal(state.pluginGroups.value[0].items.length, 1);
-  assert.equal(state.pluginGroups.value[0].items[0].repo, repo('official'));
-  const popular = state.pluginGroups.value[1].items;
-  assert.deepEqual(Array.from(popular, item => item.stars), [80, 70, 60, 50, 40, 30]);
-  assert.ok(popular.every(item => !item.official));
-  assert.equal(state.selected.value.length, 0);
-  await state.finish();
-  assert.equal(requests.length, 0);
-  state.applying.value = false;
-  state.selected.value = [popular[0].repo, 'https://github.com/community/plugin-1', 'https://github.com/unlisted/plugin'];
-  await state.finish();
-  assert.equal(requests.length, 1);
-  assert.equal(requests[0].url, popular[0].repo);
-  assert.equal(requests[0].ignore_version_check, false);
-  assert.equal(popular[0].installed, true);
-  assert.equal(state.installedCount.value, 1);
-  await state.finish();
-  assert.equal(requests.length, 1);
-});
-
-test('community installation validates first and preserves rejected or incompatible selections for retry', async () => {
-  const url = 'https://github.com/community/plugin';
-  let valid = false;
-  let compatible = false;
-  let installs = 0;
-  let validations = 0;
-  const state = setup({
-    market: async () => ok({ plugin: { repo: url, stars: 10 } }),
-    validateRepo: async body => {
-      assert.equal(body.url, url);
-      validations++;
-      return valid ? ok({}) : { data: { status: 'error', message: 'Invalid repository' } };
-    },
-    installGithub: async body => {
-      assert.equal(body.url, url);
-      assert.equal(body.ignore_version_check, false);
-      assert.equal(body.download_url, undefined);
-      installs++;
-      return compatible ? ok({}) : { data: { status: 'warning', message: 'Unsupported version' } };
-    },
-  });
-  await state.loadPlugins();
-  state.selected.value = [url];
-  await state.finish();
-  assert.equal(installs, 0);
-  assert.equal(state.plugins.value[0].error, 'Invalid repository');
-  valid = true;
-  await state.finish();
-  assert.equal(state.plugins.value[0].error, 'Unsupported version');
-  assert.equal(state.plugins.value[0].installed, false);
-  assert.deepEqual(Array.from(state.selected.value), [url]);
-  compatible = true;
-  await state.finish();
-  assert.equal(validations, 3);
-  assert.equal(installs, 2);
-  assert.equal(state.plugins.value[0].installed, true);
-  assert.equal(state.selected.value.length, 0);
+test('adapter loading and model saving block skips, duplicate navigation and dismissal', async () => {
+  let resolve;
+  const state = setup({ systemConfigApi: { runtime: () => new Promise(done => { resolve = done; }) } });
+  state.step.value = 4;
+  const pending = state.loadPlatforms();
+  state.skipStep();
+  await state.nextStep();
+  state.close();
+  assert.equal(state.leave(), false);
+  assert.equal(state.completed.value, false);
+  assert.deepEqual(state.emitted, []);
+  resolve(ok({ config: { platform: [] } }));
+  await pending;
+  state.busy.value = true;
+  state.skipStep();
+  await state.nextStep();
+  state.close();
+  assert.equal(state.completed.value, false);
+  assert.equal(state.leave(), false);
+  state.busy.value = false;
+  state.skipStep();
+  assert.equal(state.completed.value, true);
+  assert.equal(state.leave(), true);
 });
 
 test('trial opens embedded ChatUI automatically and keeps it mounted when revisiting steps', () => {
@@ -187,18 +128,10 @@ test('trial opens embedded ChatUI automatically and keeps it mounted when revisi
   assert.match(source, /\.guide-chat :deep\(\.input-container\) \{ width: 100% !important; max-width: 100% !important; margin-inline: 0 !important;/);
 });
 
-test('execution status indicators share a fixed-size prepend container and spacing', () => {
-  const source = readFileSync(new URL('../src/components/OnboardingSetup.vue', import.meta.url), 'utf8');
-  const prepend = source.split('<template #prepend>')[1].split('</template>')[0];
-  assert.match(prepend, /<v-avatar size="24" rounded="0">[\s\S]*<v-progress-circular[\s\S]*<v-icon[\s\S]*<\/v-avatar>/);
-  assert.match(prepend, /<v-icon v-else size="24"/);
-  assert.doesNotMatch(prepend, /class="m[re]-/);
-});
-
 test('all primary footer actions use Next while retaining their handlers', () => {
   const source = readFileSync(new URL('../src/components/OnboardingSetup.vue', import.meta.url), 'utf8');
   const footer = source.split('<footer class="guide-actions">')[1].split('</footer>')[0];
-  for (const handler of ['showWelcome', 'nextStep', 'finish\\(\\)']) {
+  for (const handler of ['nextStep']) {
     assert.match(footer, new RegExp(`@click="${handler}">\\s*\\{\\{ tm\\('guide.next'\\) \\}\\}`));
     assert.match(footer, new RegExp(`<v-btn[^>]*append-icon="mdi-arrow-right"[^>]*@click="${handler}">`));
   }
@@ -216,7 +149,8 @@ test('adapter skip explains ChatUI availability without blocking or saving', () 
   const state = setup();
   state.step.value = 4;
   state.skipStep();
-  assert.equal(state.step.value, 5);
+  assert.equal(state.step.value, 4);
+  assert.equal(state.completed.value, true);
   assert.equal(state.emitted.length, 0);
   for (const locale of ['zh-CN', 'en-US', 'ja-JP', 'ru-RU']) {
     const messages = JSON.parse(readFileSync(new URL(`../src/i18n/locales/${locale}/features/welcome.json`, import.meta.url), 'utf8'));
@@ -227,7 +161,7 @@ test('adapter skip explains ChatUI availability without blocking or saving', () 
 test('the first-step footer can skip the entire guide without configuration writes', () => {
   const source = readFileSync(new URL('../src/components/OnboardingSetup.vue', import.meta.url), 'utf8');
   assert.match(source, /<v-btn v-else[^>]*@click="close">\{\{ tm\('guide.skipAll'\) \}\}/);
-  const state = setup({}, {
+  const state = setup({
     configProfileApi: { update: () => { throw new Error('Skip must not change configuration'); } },
   });
   assert.equal(state.step.value, 1);
@@ -236,15 +170,9 @@ test('the first-step footer can skip the entire guide without configuration writ
   assert.equal(state.modelReady.value, false);
 });
 
-test('onboarding reuses market cards and the settings switch, with the title beside the brand', () => {
+test('onboarding aligns its title, content and actions with the brand', () => {
   const read = path => readFileSync(new URL(`../src/${path}`, import.meta.url), 'utf8');
   const guide = read('components/OnboardingSetup.vue');
-  assert.match(guide, /<MarketPluginCard/);
-  assert.match(guide, /#install-action/);
-  const pluginStep = guide.split('<v-window-item :value="5">')[1].split('</v-window-item>')[0];
-  assert.doesNotMatch(pluginStep, /<v-list-item/);
-  assert.match(read('components/extension/MarketPluginCard.vue'), /<slot name="install-action">[\s\S]*handleInstall\(plugin\)/);
-  assert.match(read('components/OnboardingComputer.vue'), /<v-switch[\s\S]*inset density="compact" hide-details/);
   const header = read('views/authentication/auth/SetupPage.vue').split('class="setup-brand"')[1].split('</div>')[0];
   assert.match(header, /setup-wordmark/);
   assert.match(header, /<h1.*guide.title/);
@@ -256,85 +184,9 @@ test('onboarding reuses market cards and the settings switch, with the title bes
   assert.match(read('components/OnboardingModel.vue'), /\.model-advanced :deep\(\.property-info\), \.model-advanced :deep\(\.config-input\) \{ flex: 0 0 100%; max-width: 100%; padding: 0;/);
 });
 
-test('market-card selection is manual and locked while installing or already installed', async () => {
-  const state = setup();
-  await state.loadPlugins();
-  const plugin = state.plugins.value[0];
-  state.togglePlugin(plugin);
-  assert.deepEqual(Array.from(state.selected.value), [plugin.repo]);
-  state.togglePlugin(plugin);
-  assert.equal(state.selected.value.length, 0);
-  state.busy.value = true;
-  state.togglePlugin(plugin);
-  assert.equal(state.selected.value.length, 0);
-  state.busy.value = false;
-  plugin.installed = true;
-  state.togglePlugin(plugin);
-  assert.equal(state.selected.value.length, 0);
-});
-
-test('market errors remain retryable and never install anything', async () => {
-  let fail = true;
-  const state = setup({ market: async () => fail ? { data: { status: 'error' } } : ok({}) });
-  await state.loadPlugins();
-  assert.equal(state.loadError.value, 'guide.loadFailed');
-  assert.equal(state.loading.value, false);
-  fail = false;
-  await state.loadPlugins();
-  assert.equal(state.loadError.value, '');
-});
-
-test('partial failures stay selected; retry skips successes and never overrides version checks', async () => {
-  const requests = [];
-  let fail = true;
-  const state = setup({ installGithub: async body => {
-    requests.push(body);
-    return body.url === repo('first') && fail
-      ? { data: { status: 'warning', message: 'Unsupported version' } } : ok({});
-  } });
-  await state.loadPlugins();
-  state.step.value = 5;
-  state.selected.value = [repo('first'), repo('second')];
-  await state.finish();
-  assert.equal(state.step.value, 5);
-  assert.equal(state.emitted.length, 0);
-  assert.equal(state.plugins.value[0].error, 'Unsupported version');
-  assert.equal(state.plugins.value[1].installed, true);
-  fail = false;
-  await state.finish();
-  assert.equal(state.step.value, 5);
-  assert.equal(state.emitted.length, 0);
-  assert.equal(state.installedCount.value, 2);
-  assert.deepEqual(requests.map(r => r.url), [repo('first'), repo('second'), repo('first')]);
-  assert.ok(requests.every(r => r.ignore_version_check === false && !r.download_url));
-});
-
-test('an in-flight install blocks duplicate requests, dismissal and route changes', async () => {
-  let resolve;
-  let requests = 0;
-  const state = setup({ installGithub: () => {
-    requests++;
-    return new Promise(done => { resolve = done; });
-  } });
-  await state.loadPlugins();
-  state.selected.value = [repo('first')];
-  const pending = state.finish();
-  await new Promise(setImmediate);
-  await state.finish();
-  state.close();
-  assert.equal(requests, 1);
-  assert.equal(state.leave(), false);
-  assert.equal(state.emitted.length, 0);
-  resolve(ok({}));
-  await pending;
-  assert.equal(state.leave(), true);
-  state.close();
-  assert.deepEqual(state.emitted, ['/dashboard/default']);
-});
-
 test('model form failure stays in place; success selects the saved model instead of the first provider', async () => {
   let saved;
-  const state = setup({}, {
+  const state = setup({
     providerApi: { schema: async () => ok({ providers: [
       { id: 'first', provider_type: 'chat_completion' }, { id: 'chosen', provider_type: 'chat_completion' },
     ] }) },
@@ -510,7 +362,7 @@ test('continuing requires a saved enabled chat model and preserves an existing d
   assert.equal(state.step.value, 3);
   for (const providers of [[], [{ id: 'disabled', provider_type: 'chat_completion', enable: false }],
     [{ id: 'embedding', provider_type: 'embedding', type: 'chat_completion' }]]) {
-    const invalid = setup({}, { providerApi: { schema: async () => ok({ providers }) } });
+    const invalid = setup({ providerApi: { schema: async () => ok({ providers }) } });
     invalid.step.value = 2;
     await invalid.nextStep();
     assert.equal(invalid.step.value, 2);
@@ -521,7 +373,7 @@ test('continuing requires a saved enabled chat model and preserves an existing d
 
 test('an empty default is assigned before trial; save failures stay on the model step', async () => {
   let fail = true;
-  const state = setup({}, {
+  const state = setup({
     providerApi: { schema: async () => ok({ providers: [{ id: 'new', provider_source_id: 'source' }], provider_sources: [{ id: 'source', provider_type: 'chat_completion' }] }) },
     configProfileApi: {
       get: async () => ok({ config: { agent_runner: { runner_type: 'local', config: { model: { provider_id: '' } } } } }),
@@ -543,7 +395,7 @@ test('an empty default is assigned before trial; save failures stay on the model
 
 test('platform metadata failures can be retried without marking configuration complete', async () => {
   let fail = true;
-  const state = setup({}, { systemConfigApi: { runtime: async () => fail
+  const state = setup({ systemConfigApi: { runtime: async () => fail
     ? { data: { status: 'error', message: 'Unavailable' } } : ok({ config: { platform: [{ id: 'bot' }] } }) } });
   await state.loadPlatforms();
   assert.equal(state.platformReady.value, false);
@@ -562,13 +414,14 @@ test('existing adapters are listed and an enabled adapter makes Next ready witho
     { id: 'qq-main', type: 'aiocqhttp', enable: true },
     { id: 'telegram-backup', type: 'telegram', enable: false },
   ];
-  const state = setup({}, { systemConfigApi: { runtime: async () => ok({ config: { platform: platforms } }) } });
+  const state = setup({ systemConfigApi: { runtime: async () => ok({ config: { platform: platforms } }) } });
   await state.loadPlatforms();
   assert.deepEqual(Array.from(state.configuredPlatforms.value, platform => platform.id), ['qq-main', 'telegram-backup']);
   assert.equal(state.platformReady.value, true);
   state.step.value = 4;
   await state.nextStep();
-  assert.equal(state.step.value, 5);
+  assert.equal(state.step.value, 4);
+  assert.equal(state.completed.value, true);
   const source = readFileSync(new URL('../src/components/OnboardingSetup.vue', import.meta.url), 'utf8');
   assert.match(source, /v-for="platform in configuredPlatforms"/);
   assert.match(source, /:title="platform.id" :subtitle="platform.type"/);
@@ -578,7 +431,7 @@ test('existing adapters are listed and an enabled adapter makes Next ready witho
 
 test('disabled-only and malformed adapter configurations do not count as ready', async () => {
   for (const platform of [[{ id: 'disabled', type: 'telegram', enable: false }], [], {}, [null, {}]]) {
-    const state = setup({}, { systemConfigApi: { runtime: async () => ok({ config: { platform } }) } });
+    const state = setup({ systemConfigApi: { runtime: async () => ok({ config: { platform } }) } });
     await state.loadPlatforms();
     assert.equal(state.platformReady.value, false);
     state.step.value = 4;
@@ -644,202 +497,6 @@ test('setup page gates configuration on authentication and completed password se
     assert.equal(ready.value, expectedReady);
     assert.equal(redirected, destination);
   }
-});
-
-function computerSetup(api = {}) {
-  const source = readFileSync(new URL('../src/components/OnboardingComputer.vue', import.meta.url), 'utf8')
-    .split('<script setup lang="ts">')[1].split('</script>')[0];
-  const ast = ts.createSourceFile('computer.ts', source, ts.ScriptTarget.Latest, true);
-  const context = vm.createContext({
-    computed, ref, onMounted() {}, defineProps() {}, defineExpose() {},
-    useModuleI18n: () => ({ tm: key => key }),
-    configProfileApi: {
-      get: async () => ok({ config: { provider_settings: { computer_use_runtime: 'none' } } }),
-      update: async () => { throw new Error('Unexpected permission change'); },
-      ...api,
-    },
-  });
-  const body = ast.statements.filter(node => !ts.isImportDeclaration(node)).map(node => node.getText(ast)).join('\n');
-  vm.runInContext(ts.transpile(body, { target: ts.ScriptTarget.ES2020 }), context);
-  return vm.runInContext('({ load, save, allowed, originalRuntime, error, ready, loading })', context);
-}
-
-test('computer access stays off on a fresh instance and preserves existing local and sandbox configurations', async () => {
-  for (const runtime of [undefined, 'none', 'local', 'sandbox']) {
-    let writes = 0;
-    const state = computerSetup({
-      get: async () => ok({ config: { provider_settings: { computer_use_runtime: runtime } } }),
-      update: async () => { writes++; return ok({}); },
-    });
-    assert.equal(state.allowed.value, false);
-    assert.equal(state.ready.value, false);
-    await state.load();
-    assert.equal(state.allowed.value, ['local', 'sandbox'].includes(runtime));
-    assert.equal(await state.save(), true);
-    assert.equal(writes, 0);
-  }
-});
-
-test('an explicit computer permission change preserves fresh unrelated settings and retries failed writes', async () => {
-  let fail = true;
-  let saved;
-  let reads = 0;
-  const state = computerSetup({
-    get: async () => ok({ config: { revision: ++reads, provider_settings: { computer_use_runtime: 'none', other: 'keep' } } }),
-    update: async (_, config) => {
-      saved = config;
-      return fail ? { data: { status: 'error', message: 'Rejected' } } : ok({});
-    },
-  });
-  await state.load();
-  state.allowed.value = true;
-  assert.equal(saved, undefined);
-  assert.equal(await state.save(), false);
-  assert.equal(state.error.value, 'Rejected');
-  assert.equal(state.allowed.value, true);
-  assert.equal(state.ready.value, true);
-  fail = false;
-  assert.equal(await state.save(), true);
-  assert.equal(saved.revision, 3);
-  assert.deepEqual(saved.provider_settings, { computer_use_runtime: 'local', other: 'keep' });
-  state.allowed.value = false;
-  assert.equal(await state.save(), true);
-  assert.equal(saved.provider_settings.computer_use_runtime, 'none');
-});
-
-test('failed or malformed permission reads cannot write and remain retryable', async () => {
-  let fail = true;
-  const state = computerSetup({ get: async () => fail ? ok({ config: {} }) : ok({ config: { provider_settings: {} } }) });
-  await state.load();
-  assert.equal(state.ready.value, false);
-  assert.equal(await state.save(), false);
-  assert.equal(state.loading.value, false);
-  fail = false;
-  await state.load();
-  assert.equal(state.ready.value, true);
-  assert.equal(state.error.value, '');
-});
-
-test('skipping never saves permissions; finish stays in place on failure and blocks concurrent navigation', async () => {
-  const skipped = setup();
-  skipped.step.value = 6;
-  skipped.computerForm.value = { ready: true, save: () => { throw new Error('Must not save on skip'); } };
-  await skipped.skipStep();
-  assert.deepEqual(skipped.emitted, []);
-  assert.equal(skipped.settingsStatus.value, 'skipped');
-  assert.equal(skipped.applyReady.value, true);
-  assert.equal(skipped.completed.value, false);
-  const state = setup();
-  state.step.value = 2;
-  state.skipStep();
-  assert.equal(state.step.value, 4);
-  state.step.value = 6;
-  let resolve;
-  state.computerForm.value = { ready: true, save: () => new Promise(done => { resolve = done; }) };
-  const pending = state.finish();
-  assert.equal(state.leave(), false);
-  state.skipStep();
-  assert.equal(state.emitted.length, 0);
-  resolve(false);
-  await pending;
-  assert.equal(state.busy.value, false);
-  assert.equal(state.step.value, 6);
-  assert.equal(state.emitted.length, 0);
-  assert.equal(state.completed.value, false);
-  let saves = 0;
-  state.computerForm.value = { ready: true, save: async () => { saves++; return true; } };
-  await state.finish();
-  assert.equal(state.completed.value, false);
-  assert.equal(state.applyReady.value, true);
-  assert.equal(state.emitted.length, 0);
-  assert.equal(state.leave(), true);
-  await state.finish();
-  assert.equal(saves, 1);
-  state.showWelcome();
-  assert.equal(state.completed.value, true);
-  state.close();
-  assert.deepEqual(state.emitted, ['/dashboard/default']);
-});
-
-test('plugin selection survives revisiting the market and installs only after step six', async () => {
-  const requests = [];
-  const state = setup({ installGithub: async body => { requests.push(body.url); return ok({}); } });
-  await state.loadPlugins();
-  state.selected.value = [repo('first')];
-  await state.loadPlugins();
-  assert.deepEqual(Array.from(state.selected.value), [repo('first')]);
-  state.step.value = 5;
-  await state.nextStep();
-  assert.equal(state.step.value, 6);
-  assert.equal(requests.length, 0);
-  await state.finish();
-  assert.equal(state.applying.value, true);
-  assert.equal(state.completed.value, false);
-  assert.deepEqual(requests, [repo('first')]);
-  assert.deepEqual(Array.from(state.applyTasks.value, task => task.status), ['done', 'done']);
-  state.showWelcome();
-  assert.equal(state.completed.value, true);
-});
-
-test('skipping plugins clears the queue; skipping permissions still installs selected plugins without granting access', async () => {
-  for (const skipPlugins of [true, false]) {
-    const requests = [];
-    const state = setup({ installGithub: async body => { requests.push(body.url); return ok({}); } });
-    await state.loadPlugins();
-    state.selected.value = [repo('first')];
-    state.step.value = 5;
-    if (skipPlugins) await state.skipStep();
-    else await state.nextStep();
-    state.computerForm.value = { ready: false, save: () => { throw new Error('Must not save skipped permissions'); } };
-    await state.skipStep();
-    assert.deepEqual(requests, skipPlugins ? [] : [repo('first')]);
-    assert.equal(state.settingsStatus.value, 'skipped');
-    assert.equal(state.applyReady.value, true);
-  }
-});
-
-test('apply failures stay visible, block the welcome screen and retry only unfinished work', async () => {
-  let saves = 0;
-  let rejected = true;
-  const requests = [];
-  const state = setup({ installGithub: async body => {
-    requests.push(body.url);
-    return body.url === repo('second') && rejected ? { data: { status: 'error', message: 'Install rejected' } } : ok({});
-  } });
-  await state.loadPlugins();
-  state.selected.value = [repo('first'), repo('second')];
-  state.computerForm.value = { ready: true, save: async () => { saves++; throw new Error('Settings rejected'); } };
-  await state.finish();
-  assert.equal(state.settingsError.value, 'Settings rejected');
-  assert.equal(requests.length, 0);
-  state.showWelcome();
-  assert.equal(state.completed.value, false);
-  state.computerForm.value = { ready: true, save: async () => { saves++; return true; } };
-  await state.finish();
-  assert.deepEqual(Array.from(state.applyTasks.value, task => task.status), ['done', 'done', 'error']);
-  assert.equal(state.applyTasks.value[2].error, 'Install rejected');
-  state.showWelcome();
-  assert.equal(state.completed.value, false);
-  rejected = false;
-  await state.finish();
-  assert.deepEqual(requests, [repo('first'), repo('second'), repo('second')]);
-  assert.equal(saves, 2);
-  assert.equal(state.applyReady.value, true);
-});
-
-test('skipped permissions remain skipped when retrying a plugin failure, even without loaded permissions', async () => {
-  let fail = true;
-  const state = setup({ installGithub: async () => fail ? { data: { status: 'error', message: 'Offline' } } : ok({}) });
-  await state.loadPlugins();
-  state.selected.value = [repo('first')];
-  state.step.value = 6;
-  state.computerForm.value = { ready: false, save: () => { throw new Error('Must remain skipped'); } };
-  await state.skipStep();
-  assert.equal(state.applyReady.value, false);
-  fail = false;
-  await state.finish();
-  assert.equal(state.applyReady.value, true);
-  assert.equal(state.settingsStatus.value, 'skipped');
 });
 
 test('welcome SVG turns once without changing layout and respects reduced motion', () => {

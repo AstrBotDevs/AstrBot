@@ -75,7 +75,6 @@ const handleOpen = () => {
           :src="plugin?.logo || defaultPluginIcon"
           :alt="plugin.name"
           class="plugin-cover__image"
-          @error="$event.target.getAttribute('src') !== defaultPluginIcon && ($event.target.src = defaultPluginIcon)"
         />
       </div>
 
@@ -177,7 +176,6 @@ const handleOpen = () => {
     </v-card-text>
 
     <v-card-actions
-      class="flex-wrap"
       style="gap: 6px; padding: 8px 12px; padding-top: 0"
       @click.stop
     >
@@ -188,7 +186,7 @@ const handleOpen = () => {
           :chip-style="{ height: '20px' }"
         />
       </div>
-      <div class="d-flex align-center ml-auto" style="gap: 6px">
+      <v-spacer></v-spacer>
       <v-btn
         v-if="plugin?.repo"
         color="secondary"
@@ -202,7 +200,6 @@ const handleOpen = () => {
         <v-icon icon="mdi-github" start size="small"></v-icon>
         {{ tm("buttons.viewRepo") }}
       </v-btn>
-      <slot name="install-action">
       <v-tooltip
         v-if="!plugin?.installed"
         location="top"
@@ -236,8 +233,6 @@ const handleOpen = () => {
       >
         ✓ {{ tm("status.installed") }}
       </v-btn>
-      </slot>
-      </div>
     </v-card-actions>
   </v-card>
 </template>
