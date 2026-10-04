@@ -1,7 +1,7 @@
 # Unreleased
 
 - WebUI onboarding now ends after four steps: usage notice, model setup, inline ChatUI, and messaging platform. Completing or skipping the platform step opens the welcome screen. Removed the plugin recommendations, computer-access step, and batch-application page, including their requests and state. Plugin installation remains under Plugins -> Plugin Marketplace; permissions remain under Config -> AI -> Capabilities -> Agent Computer Use.
-- WebUI onboarding preloads existing model defaults and displays configured messaging adapters, enabling Next when configuration is ready. Refined header and footer spacing, full-width advanced settings, a reduced-motion-aware welcome icon animation.
+- WebUI onboarding prefills existing model defaults and messaging adapters in editable forms instead of a status-only adapter list. Unchanged adapters proceed without writes; edits update the selected adapter without duplicating or automatically enabling it. Refined header and footer spacing, full-width advanced settings, a reduced-motion-aware welcome icon animation.
 
 - Generate numbered original-path notices in the image preparation stage during main-agent construction, including quoted images. After request hooks, apply the same size and format policy only to newly introduced image references and refresh their notices. Skipped and captioned attachments retain explicit status without taking a visual index; animation labels identify frame montages.
 - Raise the model image input cap from 32 MiB to 64 MiB. Larger originals are skipped before reading image bytes, with a model notice retaining their paths and suggesting the file-reading tool or a smaller upload; accepted inputs still produce images strictly below 512 KiB.

@@ -26,20 +26,14 @@
         <v-alert v-if="platformError" type="error" variant="tonal" class="mb-4" role="alert">{{ platformError }}</v-alert>
         <v-progress-linear v-if="platformLoading" indeterminate color="primary" />
         <template v-else-if="!configError">
-          <v-list v-if="configuredPlatforms.length" class="bg-transparent mb-4" role="list">
-            <v-list-item v-for="platform in configuredPlatforms" :key="platform.id" role="listitem"
-              class="guide-platform px-0 py-3 border-b" :title="platform.id" :subtitle="platform.type">
-              <template #prepend>
-                <v-avatar :image="getPlatformIcon(platform.type || platform.id)" size="28" rounded="0" />
-              </template>
-              <template #append>
-                <v-chip :color="platform.enable !== false ? 'success' : undefined" size="small" variant="tonal" class="ml-3">
-                  {{ tm(platform.enable !== false ? 'guide.adapterEnabled' : 'guide.adapterDisabled') }}
-                </v-chip>
-              </template>
-            </v-list-item>
-          </v-list>
-          <AddNewPlatform v-if="!platformReady" ref="platformForm" embedded :show="true" :metadata="platformMetadata"
+          <v-select v-if="configuredPlatforms.length" :model-value="selectedPlatformId" :items="platformChoices"
+            :label="tm('guide.adapter')" variant="outlined" hide-details class="mb-4" :disabled="busy"
+            @update:model-value="selectPlatform" />
+          <div v-if="platformDraft" :inert="busy">
+            <AstrBotConfig :key="selectedPlatformId" :iterable="platformDraft"
+              :metadata="existingPlatformMetadata" metadataKey="platform" />
+          </div>
+          <AddNewPlatform v-else ref="platformForm" embedded :show="true" :metadata="platformMetadata"
             :config_data="platformConfig" @refresh-config="loadPlatforms" @update:busy="busy = $event"
             @show-toast="platformError = $event.type === 'error' ? $event.message : ''" />
         </template>
@@ -59,7 +53,7 @@
       <v-btn v-if="step > 1" variant="text" :disabled="busy || platformLoading"
         :aria-describedby="step === 4 ? 'guide-adapter-skip-hint' : undefined" @click="skipStep">{{ tm('onboard.skip') }}</v-btn>
       <v-btn variant="tonal" color="primary" append-icon="mdi-arrow-right" :loading="busy"
-        :disabled="platformLoading || (step === 2 && !modelForm?.ready) || (step === 3 && !modelReady) || (step === 4 && !platformReady && !platformForm?.canSave)" @click="nextStep">
+        :disabled="platformLoading || (step === 2 && !modelForm?.ready) || (step === 3 && !modelReady) || (step === 4 && (platformDraft ? !platformReady : !platformForm?.canSave))" @click="nextStep">
         {{ tm('guide.next') }}
       </v-btn>
       </template>
@@ -70,9 +64,9 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue';
 import { onBeforeRouteLeave, useRouter } from 'vue-router';
-import { configProfileApi, providerApi, systemConfigApi } from '@/api/v1';
+import { botApi, configProfileApi, providerApi, systemConfigApi } from '@/api/v1';
 import { useModuleI18n } from '@/i18n/composables';
-import { getPlatformIcon } from '@/utils/platformUtils';
+import AstrBotConfig from '@/components/shared/AstrBotConfig.vue';
 import OnboardingModel from '@/components/OnboardingModel.vue';
 import AddNewPlatform from '@/components/platform/AddNewPlatform.vue';
 import StandaloneChat from '@/components/chat/StandaloneChat.vue';
@@ -86,13 +80,26 @@ const modelReady = ref(false);
 const modelForm = ref<InstanceType<typeof OnboardingModel>>();
 const platformForm = ref<InstanceType<typeof AddNewPlatform>>();
 const selectedModel = ref('');
-const platformReady = ref(false);
+const selectedPlatformId = ref('');
+const platformDraft = ref<Record<string, any> | null>(null);
+const platformReady = computed(() => Boolean(selectedPlatformId.value) && platformDraft.value?.id === selectedPlatformId.value);
 const platformLoading = ref(false);
 const platformError = ref('');
-const platformMetadata = ref({});
+const platformMetadata = ref<Record<string, any>>({});
+const existingPlatformMetadata = computed(() => {
+  const metadata = platformMetadata.value.platform_group?.metadata || {};
+  const platform = metadata.platform || {};
+  return { ...metadata, platform: { ...platform, items: {
+    ...platform.items, id: { ...platform.items?.id, invisible: true },
+  } } };
+});
 const platformConfig = ref<Record<string, any>>({});
 const configuredPlatforms = computed(() => Array.isArray(platformConfig.value.platform)
-  ? platformConfig.value.platform.filter((platform: any) => platform?.id) as { id: string; type?: string; enable?: boolean }[] : []);
+  ? platformConfig.value.platform.filter((platform: any) => typeof platform?.id === 'string' && platform.id) as Record<string, any>[] : []);
+const platformChoices = computed(() => [
+  ...configuredPlatforms.value.map(platform => ({ title: `${platform.id} (${platform.type || ''})`, value: platform.id })),
+  { title: tm('guide.newAdapter'), value: '' },
+]);
 const configError = ref('');
 const step = ref(1);
 const completed = ref(false);
@@ -102,8 +109,9 @@ const busy = ref(false);
 async function nextStep() {
   if (busy.value || platformLoading.value || completed.value) return;
   if (step.value !== 2) {
-    if (step.value === 4 && !platformReady.value) {
-      await platformForm.value?.newPlatform();
+    if (step.value === 4) {
+      if (platformDraft.value) await savePlatform();
+      else await platformForm.value?.newPlatform();
       return;
     }
     if (step.value === steps.value.length) showWelcome();
@@ -148,19 +156,48 @@ async function loadPlatforms(savedId?: string) {
   busy.value = false;
   platformError.value = '';
   platformLoading.value = true;
-  platformReady.value = false;
+  platformDraft.value = null;
   configError.value = '';
   try {
     const result = await systemConfigApi.runtime();
     if (result.data.status !== 'ok') throw new Error(result.data.message || tm('onboard.platformLoadFailed'));
     platformConfig.value = result.data.data?.config || {};
     platformMetadata.value = result.data.data?.metadata || {};
-    platformReady.value = configuredPlatforms.value.some(platform => platform.enable !== false);
+    selectPlatform(configuredPlatforms.value.find(platform => platform.id === savedId)?.id ||
+      configuredPlatforms.value.find(platform => platform.enable !== false)?.id || configuredPlatforms.value[0]?.id || '');
     if (savedId && configuredPlatforms.value.some(platform => platform.id === savedId)) showWelcome();
   } catch (error: any) {
     configError.value = error?.response?.data?.message || error?.message || tm('onboard.platformLoadFailed');
   } finally {
     platformLoading.value = false;
+  }
+}
+
+function selectPlatform(id: string) {
+  selectedPlatformId.value = id;
+  platformError.value = '';
+  const platform = configuredPlatforms.value.find(platform => platform.id === id);
+  platformDraft.value = platform ? JSON.parse(JSON.stringify(platform)) : null;
+}
+
+async function savePlatform() {
+  if (!platformReady.value || !platformDraft.value) return;
+  const original = configuredPlatforms.value.find(platform => platform.id === selectedPlatformId.value);
+  if (JSON.stringify(original) === JSON.stringify(platformDraft.value)) {
+    showWelcome();
+    return;
+  }
+  busy.value = true;
+  platformError.value = '';
+  try {
+    const draft = JSON.parse(JSON.stringify(platformDraft.value));
+    const result = await botApi.update(selectedPlatformId.value, draft);
+    if (result.data.status !== 'ok') throw new Error(result.data.message || tm('guide.adapterSaveFailed'));
+    await loadPlatforms(draft.id);
+  } catch (error: any) {
+    platformError.value = error?.response?.data?.message || error?.message || tm('guide.adapterSaveFailed');
+  } finally {
+    busy.value = false;
   }
 }
 
@@ -209,7 +246,6 @@ onBeforeRouteLeave(() => !busy.value && !platformLoading.value);
 .guide-chat :deep(.standalone-composer) { padding-bottom: 0; }
 .guide-chat :deep(.input-area) { padding-inline: 0; }
 .guide-chat :deep(.input-container) { width: 100% !important; max-width: 100% !important; margin-inline: 0 !important; }
-.guide-platform :deep(.v-list-item-title), .guide-platform :deep(.v-list-item-subtitle) { white-space: normal; overflow-wrap: anywhere; }
 .guide-actions { display: flex; flex-shrink: 0; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 0 max(8px, env(safe-area-inset-bottom)); border-top: 1px solid rgba(var(--v-theme-on-surface), .1); background: rgb(var(--v-theme-surface)); z-index: 1; }
 .guide-actions :deep(.v-btn) { letter-spacing: 0; }
 .guide-skip-hint { flex-basis: 100%; margin: 0; text-align: end; overflow-wrap: anywhere; }
