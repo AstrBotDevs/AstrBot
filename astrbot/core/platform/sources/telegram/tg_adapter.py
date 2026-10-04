@@ -472,9 +472,7 @@ class TelegramPlatformAdapter(Platform):
             if update.message.caption and update.message.caption_entities:
                 for entity in update.message.caption_entities:
                     if entity.type == "mention":
-                        name = update.message.caption[
-                            entity.offset + 1 : entity.offset + entity.length
-                        ]
+                        name = update.message.parse_caption_entity(entity)[1:]
                         message.message.append(Comp.At(qq=name, name=name))
 
         message = AstrBotMessage()
@@ -598,6 +596,21 @@ class TelegramPlatformAdapter(Platform):
         if update.message.text:
             # 处理文本消息
             plain_text = update.message.text
+            if update.message.entities:
+                # Entity offsets refer to the original text in UTF-16 code units.
+                text_utf16 = plain_text.encode("utf-16-le")
+                text_parts = []
+                last_end = 0
+                for entity in update.message.entities:
+                    if entity.type == "mention":
+                        name = update.message.parse_entity(entity)[1:]
+                        message.message.append(Comp.At(qq=name, name=name))
+                        if name.lower() == context.bot.username.lower():
+                            text_parts.append(text_utf16[last_end : entity.offset * 2])
+                            last_end = (entity.offset + entity.length) * 2
+                text_parts.append(text_utf16[last_end:])
+                plain_text = b"".join(text_parts).decode("utf-16-le")
+
             if (
                 message.type == MessageType.GROUP_MESSAGE
                 and update.message
@@ -617,20 +630,6 @@ class TelegramPlatformAdapter(Platform):
                         plain_text = command + (
                             f" {command_parts[1]}" if len(command_parts) > 1 else ""
                         )
-
-            if update.message.entities:
-                for entity in update.message.entities:
-                    if entity.type == "mention":
-                        name = plain_text[
-                            entity.offset + 1 : entity.offset + entity.length
-                        ]
-                        message.message.append(Comp.At(qq=name, name=name))
-                        # 如果mention是当前bot则移除；否则保留
-                        if name.lower() == context.bot.username.lower():
-                            plain_text = (
-                                plain_text[: entity.offset]
-                                + plain_text[entity.offset + entity.length :]
-                            )
 
             if plain_text:
                 message.message.append(Comp.Plain(plain_text))

@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from telegram import Message
 
 import astrbot.api.message_components as Comp
 from astrbot.api.platform import Group
@@ -496,6 +497,102 @@ async def test_telegram_reply_without_quote_text_uses_full_message(quote_text):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("text", "entities", "expected", "names"),
+    [
+        ("😀 @test_bot hello", [(3, 9)], "😀  hello", ["test_bot"]),
+        ("😀😀 @test_bot hello", [(5, 9)], "😀😀  hello", ["test_bot"]),
+        ("文字 @test_bot hello", [(3, 9)], "文字  hello", ["test_bot"]),
+        ("@test_bot 😀 hello", [(0, 9)], " 😀 hello", ["test_bot"]),
+        (
+            "😀 @test_bot @alice @test_bot hello",
+            [(3, 9), (13, 6), (20, 9)],
+            "😀  @alice  hello",
+            ["test_bot", "alice", "test_bot"],
+        ),
+        (
+            "/help@test_bot 😀 @test_bot hello",
+            [(18, 9)],
+            "/help 😀  hello",
+            ["test_bot"],
+        ),
+    ],
+)
+async def test_telegram_mentions_use_original_utf16_offsets(
+    text, entities, expected, names
+):
+    adapter = _load_telegram_adapter()(
+        make_platform_config("telegram"), {}, asyncio.Queue()
+    )
+    adapter.client.username = "test_bot"
+    sdk_message = Message.de_json(
+        {
+            "message_id": 1,
+            "date": 0,
+            "chat": {"id": -100123, "type": "supergroup"},
+            "text": text,
+            "entities": [
+                {"type": "mention", "offset": offset, "length": length}
+                for offset, length in entities
+            ],
+        },
+        bot=None,
+    )
+    update = create_mock_update(
+        message_text=text, chat_type="supergroup", entities=sdk_message.entities
+    )
+    update.message.parse_entity = sdk_message.parse_entity
+
+    result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    assert result.message_str == expected
+    assert [part.qq for part in result.message if isinstance(part, Comp.At)] == names
+    assert any(
+        isinstance(part, Comp.At) and part.qq == result.self_id
+        for part in result.message
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("media_type", ["photo", "document", "video"])
+async def test_telegram_media_caption_mention_uses_utf16_offsets(media_type):
+    adapter = _load_telegram_adapter()(
+        make_platform_config("telegram"), {}, asyncio.Queue()
+    )
+    caption = "😀 @test_bot hello"
+    sdk_message = Message.de_json(
+        {
+            "message_id": 1,
+            "date": 0,
+            "chat": {"id": -100123, "type": "supergroup"},
+            "caption": caption,
+            "caption_entities": [{"type": "mention", "offset": 3, "length": 9}],
+        },
+        bot=None,
+    )
+    media = create_mock_file()
+    media.file_name = "example"
+    update = create_mock_update(
+        message_text=None,
+        chat_type="supergroup",
+        caption=caption,
+        caption_entities=sdk_message.caption_entities,
+        **{media_type: [media] if media_type == "photo" else media},
+    )
+    update.message.parse_caption_entity = sdk_message.parse_caption_entity
+
+    result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    assert result.message_str == caption
+    assert any(
+        isinstance(part, Comp.At) and part.qq == result.self_id
+        for part in result.message
+    )
+
+
+@pytest.mark.asyncio
 async def test_telegram_document_caption_populates_message_text_and_plain():
     TelegramPlatformAdapter = _load_telegram_adapter()
     adapter = TelegramPlatformAdapter(
@@ -512,6 +609,7 @@ async def test_telegram_document_caption_populates_message_text_and_plain():
         caption="@alice 请总结这份文档",
         caption_entities=[mention],
     )
+    update.message.parse_caption_entity.return_value = "@alice"
 
     result = await adapter.convert_message(update, _build_context())
 
