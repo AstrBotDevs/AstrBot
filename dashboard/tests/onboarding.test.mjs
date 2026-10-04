@@ -25,11 +25,12 @@ function setup(overrides = {}) {
       update: async () => { throw new Error('Must not overwrite the default'); },
     },
     systemConfigApi: { runtime: async () => ok({ config: { platform: [] }, metadata: {} }) },
+    botApi: { update: async () => { throw new Error('Must not save unchanged adapters'); } },
     ...overrides,
   });
   const body = ast.statements.filter(node => !ts.isImportDeclaration(node)).map(node => node.getText(ast)).join('\n');
   vm.runInContext(ts.transpile(body, { target: ts.ScriptTarget.ES2020 }), context);
-  const state = vm.runInContext('({ close, skipStep, completed, busy, step, steps, nextStep, loadPlatforms, modelReady, platformReady, platformLoading, configuredPlatforms, configError, modelForm, platformForm, selectedModel })', context);
+  const state = vm.runInContext('({ close, skipStep, completed, busy, step, steps, nextStep, loadPlatforms, modelReady, platformReady, platformLoading, configuredPlatforms, configError, modelForm, platformForm, selectedModel, selectedPlatformId, platformDraft, platformError, selectPlatform, platformChoices })', context);
   return { ...state, emitted, watchers, leave: () => leave() };
 }
 
@@ -409,28 +410,103 @@ test('platform metadata failures can be retried without marking configuration co
   assert.equal(state.platformReady.value, false);
 });
 
-test('existing adapters are listed and an enabled adapter makes Next ready without creating another', async () => {
+test('existing adapters prefill editable fields and unchanged Next does not write', async () => {
   const platforms = [
-    { id: 'qq-main', type: 'aiocqhttp', enable: true },
     { id: 'telegram-backup', type: 'telegram', enable: false },
+    { id: 'qq-main', type: 'aiocqhttp', enable: true, ws_reverse_token: 'test-token', nested: { keep: true } },
   ];
   const state = setup({ systemConfigApi: { runtime: async () => ok({ config: { platform: platforms } }) } });
   await state.loadPlatforms();
-  assert.deepEqual(Array.from(state.configuredPlatforms.value, platform => platform.id), ['qq-main', 'telegram-backup']);
+  assert.equal(state.selectedPlatformId.value, 'qq-main');
+  assert.equal(state.platformDraft.value.ws_reverse_token, 'test-token');
+  assert.notEqual(state.platformDraft.value, platforms[1]);
+  state.platformDraft.value.nested.keep = false;
+  assert.equal(platforms[1].nested.keep, true);
+  state.selectPlatform('qq-main');
   assert.equal(state.platformReady.value, true);
   state.step.value = 4;
   await state.nextStep();
   assert.equal(state.step.value, 4);
   assert.equal(state.completed.value, true);
   const source = readFileSync(new URL('../src/components/OnboardingSetup.vue', import.meta.url), 'utf8');
-  assert.match(source, /v-for="platform in configuredPlatforms"/);
-  assert.match(source, /:title="platform.id" :subtitle="platform.type"/);
-  assert.match(source, /guide.adapterEnabled/);
-  assert.match(source, /guide.adapterDisabled/);
+  assert.match(source, /<AstrBotConfig[^>]+:iterable="platformDraft"/);
+  assert.match(source, /@update:model-value="selectPlatform"/);
+  assert.doesNotMatch(source, /guide.adapterEnabled|guide.adapterDisabled|guide-platform/);
 });
 
-test('disabled-only and malformed adapter configurations do not count as ready', async () => {
-  for (const platform of [[{ id: 'disabled', type: 'telegram', enable: false }], [], {}, [null, {}]]) {
+test('disabled adapters are prefilled without being enabled; selection can switch to creation', async () => {
+  const platform = { id: 'disabled', type: 'telegram', enable: false, token: 'test-token' };
+  const state = setup({ systemConfigApi: { runtime: async () => ok({ config: { platform: [platform] } }) } });
+  await state.loadPlatforms();
+  assert.equal(state.platformDraft.value.enable, false);
+  assert.equal(state.platformReady.value, true);
+  assert.equal(state.platformChoices.value.at(-1).value, '');
+  state.selectPlatform('');
+  assert.equal(state.platformDraft.value, null);
+  assert.equal(state.platformReady.value, false);
+  state.selectPlatform('disabled');
+  state.step.value = 4;
+  await state.nextStep();
+  assert.equal(state.completed.value, true);
+  assert.equal(platform.enable, false);
+});
+
+test('adapter edits update the original ID, retain input after errors and confirm the saved configuration', async () => {
+  const platforms = [{ id: 'original', type: 'telegram', token: 'old', enable: false }];
+  const writes = [];
+  let fail = true;
+  const state = setup({
+    systemConfigApi: { runtime: async () => ok({ config: { platform: platforms } }) },
+    botApi: { update: async (id, draft) => {
+      writes.push({ id, draft });
+      if (fail) return { data: { status: 'error', message: 'Save failed' } };
+      platforms[0] = draft;
+      return ok({});
+    } },
+  });
+  await state.loadPlatforms();
+  state.step.value = 4;
+  state.platformDraft.value.token = 'new';
+  await state.nextStep();
+  assert.equal(state.platformError.value, 'Save failed');
+  assert.equal(state.platformDraft.value.token, 'new');
+  assert.equal(state.completed.value, false);
+  assert.equal(state.busy.value, false);
+  assert.equal(platforms[0].token, 'old');
+  fail = false;
+  await state.nextStep();
+  assert.equal(writes.length, 2);
+  assert.equal(writes[1].id, 'original');
+  assert.equal(writes[1].draft.id, 'original');
+  assert.equal(writes[1].draft.enable, false);
+  assert.equal(state.completed.value, true);
+});
+
+test('skipping edited adapters never persists the draft', async () => {
+  const platform = { id: 'existing', type: 'telegram', token: 'old' };
+  const state = setup({ systemConfigApi: { runtime: async () => ok({ config: { platform: [platform] } }) } });
+  await state.loadPlatforms();
+  state.platformDraft.value.token = 'new';
+  state.step.value = 4;
+  state.skipStep();
+  assert.equal(state.completed.value, true);
+  assert.equal(platform.token, 'old');
+});
+
+test('existing adapter IDs cannot be changed through the guide', async () => {
+  const state = setup({ systemConfigApi: { runtime: async () => ok({ config: { platform: [{ id: 'existing' }] } }) } });
+  await state.loadPlatforms();
+  state.step.value = 4;
+  for (const id of ['', 'renamed', 'bad id', 'bad:id', 'bad!id']) {
+    state.platformDraft.value.id = id;
+    assert.equal(state.platformReady.value, false);
+    await state.nextStep();
+    assert.equal(state.completed.value, false);
+  }
+});
+
+test('malformed adapter configurations do not count as ready', async () => {
+  for (const platform of [[], {}, [null, {}, { id: 5 }]]) {
     const state = setup({ systemConfigApi: { runtime: async () => ok({ config: { platform } }) } });
     await state.loadPlatforms();
     assert.equal(state.platformReady.value, false);
