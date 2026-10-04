@@ -9,9 +9,9 @@ CREATE TABLE documents (
 );
 
 ALTER TABLE documents
-ADD COLUMN group_id TEXT GENERATED ALWAYS AS (json_extract(metadata, '$.group_id')) STORED;
+ADD COLUMN group_id TEXT GENERATED ALWAYS AS (json_extract(metadata, '$.group_id')) VIRTUAL;
 ALTER TABLE documents
-ADD COLUMN user_id TEXT GENERATED ALWAYS AS (json_extract(metadata, '$.user_id')) STORED;
+ADD COLUMN user_id TEXT GENERATED ALWAYS AS (json_extract(metadata, '$.user_id')) VIRTUAL;
 
 CREATE INDEX idx_documents_user_id ON documents(user_id);
 CREATE INDEX idx_documents_group_id ON documents(group_id);

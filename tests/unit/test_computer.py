@@ -130,6 +130,21 @@ class TestSecurityRestrictions:
         for cmd in blocked_commands:
             assert _is_safe_command(cmd) is False, f"Command '{cmd}' should be blocked"
 
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            "rm  -rf /",
+            "rm\t-rf /",
+            "  rm   -rf   /tmp  ",
+            "rm\n-rf /home",
+            "sudo\trm -rf /",
+            "killall\npython",
+        ],
+    )
+    def test_is_safe_command_blocked_with_collapsed_whitespace(self, cmd):
+        """连续空白/制表符/换行不能绕过子串匹配。"""
+        assert _is_safe_command(cmd) is False, f"Command {cmd!r} should be blocked"
+
 
 class TestLocalShellComponent:
     """Tests for LocalShellComponent."""

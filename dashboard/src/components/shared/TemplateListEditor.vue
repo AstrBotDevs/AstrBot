@@ -197,16 +197,28 @@ const expandedEntries = ref({})
 const safeText = (val, fallback) => (val && typeof val === 'string' ? val : fallback)
 const addButtonText = computed(() => safeText(t('core.common.templateList.addEntry'), '添加条目'))
 const emptyHintText = computed(() => safeText(t('core.common.templateList.empty'), '暂无条目，请先选择模板并添加。'))
-const defaultValueMap = {
-  int: 0,
-  float: 0.0,
-  bool: false,
-  string: '',
-  text: '',
-  list: [],
-  file: [],
-  object: {},
-  template_list: []
+
+const defaultValueFactories = {
+  int: () => 0,
+  float: () => 0.0,
+  bool: () => false,
+  string: () => '',
+  text: () => '',
+  list: () => [],
+  file: () => [],
+  object: () => ({}),
+  template_list: () => []
+}
+
+function resolveDefaultValue(meta, hasDefault) {
+  if (!hasDefault) {
+    const factory = defaultValueFactories[meta.type]
+    return factory ? factory() : undefined
+  }
+  const value = meta.default
+  // meta.default 也可能本身就是数组/对象，同样要克隆
+  if (value === null || typeof value !== 'object') return value
+  return JSON.parse(JSON.stringify(value))
 }
 
 const templateOptions = computed(() => {
@@ -242,14 +254,14 @@ function buildDefaults(itemsMeta = {}) {
   const result = {}
   for (const [k, meta] of Object.entries(itemsMeta)) {
     if (!meta || !meta.type) continue
-    const fallback = Object.prototype.hasOwnProperty.call(meta, 'default')
-      ? meta.default
-      : defaultValueMap[meta.type]
 
     if (meta.type === 'object') {
       result[k] = buildDefaults(meta.items || {})
     } else {
-      result[k] = fallback
+      result[k] = resolveDefaultValue(
+        meta,
+        Object.prototype.hasOwnProperty.call(meta, 'default')
+      )
     }
   }
   return result
@@ -259,8 +271,6 @@ function applyDefaults(target, itemsMeta = {}) {
   let changed = false
   for (const [k, meta] of Object.entries(itemsMeta)) {
     if (!meta || !meta.type) continue
-    const hasDefault = Object.prototype.hasOwnProperty.call(meta, 'default')
-    const fallback = hasDefault ? meta.default : defaultValueMap[meta.type]
 
     if (meta.type === 'object') {
       if (!target[k] || typeof target[k] !== 'object') {
@@ -272,7 +282,10 @@ function applyDefaults(target, itemsMeta = {}) {
         }
       }
     } else if (!(k in target)) {
-      target[k] = fallback
+      target[k] = resolveDefaultValue(
+        meta,
+        Object.prototype.hasOwnProperty.call(meta, 'default')
+      )
       changed = true
     }
   }

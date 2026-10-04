@@ -300,10 +300,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.tool_schema_mode = tool_schema_mode
         self._tool_schema_param_set = None
         self._skill_like_raw_tool_set = None
-        if tool_schema_mode == "skills_like":
+        if tool_schema_mode == "skills_like" and self.req.func_tool:
             tool_set = self.req.func_tool
-            if not tool_set:
-                return
             self._skill_like_raw_tool_set = tool_set
             light_set = tool_set.get_light_tool_set()
             self._tool_schema_param_set = tool_set.get_param_only_tool_set()

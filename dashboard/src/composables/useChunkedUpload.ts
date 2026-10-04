@@ -143,6 +143,7 @@ export function useChunkedUpload(api: ChunkedUploadApi) {
     }
 
     async function start(f: File): Promise<any> {
+        if (status.value === 'uploading') return undefined;
         file = f;
         cancelled = false;
         status.value = 'uploading';
@@ -166,6 +167,7 @@ export function useChunkedUpload(api: ChunkedUploadApi) {
 
     async function resume(): Promise<any> {
         if (!file) return undefined;
+        if (status.value === 'uploading') return undefined;
         cancelled = false;
         status.value = 'uploading';
         errorMessage.value = '';

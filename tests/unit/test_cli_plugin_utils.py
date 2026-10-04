@@ -2,6 +2,8 @@ from io import BytesIO
 from pathlib import Path
 from zipfile import ZipFile
 
+import pytest
+
 from astrbot.cli.utils.plugin import PluginStatus, build_plug_list, download_repository
 
 
@@ -74,6 +76,69 @@ def test_download_repository_uses_head_without_metadata_lookup(
     assert requested_urls == ["https://github.com/example/plugin/archive/HEAD.zip"]
     assert (target_path / "main.py").read_text(encoding="utf-8") == "VALUE = 1\n"
     assert "default reference HEAD" in capsys.readouterr().out
+
+
+def _archive_client(archive: BytesIO):
+    class ArchiveResponse:
+        content = archive.getvalue()
+
+        def raise_for_status(self):
+            return None
+
+    class ArchiveClient:
+        def __init__(self, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def get(self, url):
+            return ArchiveResponse()
+
+    return ArchiveClient
+
+
+@pytest.mark.parametrize("member", ["../escaped.py", "../../escaped.py", "/tmp/escaped.py"])
+def test_download_repository_rejects_escaping_members(
+    monkeypatch, tmp_path, member
+):
+    """解包前必须拒绝越出临时目录的成员（zip-slip）。"""
+    archive = BytesIO()
+    with ZipFile(archive, "w") as zip_file:
+        zip_file.writestr("plugin-commit/main.py", "VALUE = 1\n")
+        zip_file.writestr(member, "PWNED = True\n")
+
+    monkeypatch.setattr(
+        "astrbot.cli.utils.plugin.httpx.Client", _archive_client(archive)
+    )
+
+    target_path = tmp_path / "plugin"
+    with pytest.raises(ValueError, match="escapes the extraction directory"):
+        download_repository("https://github.com/example/plugin", target_path)
+
+    # 校验发生在 extractall 之前，目标目录不应被创建或写入
+    assert not target_path.exists()
+
+
+def test_download_repository_allows_members_inside_temp_dir(monkeypatch, tmp_path):
+    """正常的相对成员（含子目录）不受影响。"""
+    archive = BytesIO()
+    with ZipFile(archive, "w") as zip_file:
+        zip_file.writestr("plugin-commit/main.py", "VALUE = 1\n")
+        zip_file.writestr("plugin-commit/sub/mod.py", "VALUE = 2\n")
+
+    monkeypatch.setattr(
+        "astrbot.cli.utils.plugin.httpx.Client", _archive_client(archive)
+    )
+
+    target_path = tmp_path / "plugin"
+    download_repository("https://github.com/example/plugin", target_path)
+
+    assert (target_path / "main.py").read_text(encoding="utf-8") == "VALUE = 1\n"
+    assert (target_path / "sub" / "mod.py").read_text(encoding="utf-8") == "VALUE = 2\n"
 
 
 def write_metadata(plugin_dir: Path, name: str, version: str) -> None:

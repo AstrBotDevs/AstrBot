@@ -78,7 +78,8 @@ sys.stdout.write("".join(results))
 
 
 def _is_safe_command(command: str) -> bool:
-    cmd = f" {command.strip().lower()} "
+    # 折叠空白，避免 `rm  -rf` 这类用连续空格绕过子串匹配的写法
+    cmd = f" {' '.join(command.split()).lower()} "
     return not any(pat in cmd for pat in _BLOCKED_COMMAND_PATTERNS)
 
 
@@ -821,7 +822,7 @@ class LocalShellComponent(ShellComponent):
                 session
                 for session in self._sessions.values()
                 if not invalid_only
-                or getattr(session, "permission_check", None) is None
+                or session.permission_check is None
                 or not session.permission_check()
             ]
             for session in sessions:
@@ -879,10 +880,7 @@ class LocalShellComponent(ShellComponent):
                 f"Shell session {session_id} was not found or has expired. "
                 "Start a new shell session."
             )
-        if (
-            getattr(session, "permission_check", None) is None
-            or not session.permission_check()
-        ):
+        if session.permission_check is None or not session.permission_check():
             await self.shutdown_sessions(invalid_only=True)
             raise ValueError(
                 f"Shell session {session_id} expired after a permission change. "

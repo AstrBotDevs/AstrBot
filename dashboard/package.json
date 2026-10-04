@@ -25,6 +25,7 @@
     "axios": "1.13.5",
     "axios-mock-adapter": "^1.22.0",
     "chance": "1.1.11",
+    "d3": "7.9.0",
     "date-fns": "2.30.0",
     "dompurify": "^3.3.2",
     "event-source-polyfill": "^1.0.31",

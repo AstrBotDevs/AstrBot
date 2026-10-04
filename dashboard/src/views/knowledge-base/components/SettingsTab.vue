@@ -276,7 +276,8 @@ const saveSettings = async () => {
       top_k_dense: formData.value.top_k_dense,
       top_k_sparse: formData.value.top_k_sparse,
       // top_m_final: formData.value.top_m_final,
-      rerank_provider_id: formData.value.rerank_provider_id
+      rerank_provider_id: formData.value.rerank_provider_id,
+      embedding_provider_id: formData.value.embedding_provider_id
     })
 
     if (response.data.status === 'ok') {
