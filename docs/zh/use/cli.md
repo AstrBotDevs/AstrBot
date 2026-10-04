@@ -36,11 +36,17 @@ astrbot run
 
 `astrbot init` 会在当前目录创建 AstrBot 所需的数据目录和配置文件。初始化完成后，后续启动只需要执行 `astrbot run`。
 
+如需在无人值守环境（如 CI、脚本化部署）中跳过安装确认提示，可使用：
+
+```bash
+astrbot init -y
+```
+
 ## 顶层指令
 
 | 指令 | 用途 |
 | --- | --- |
-| `astrbot init` | 初始化当前目录为 AstrBot 工作目录。 |
+| `astrbot init` | 初始化当前目录为 AstrBot 工作目录。支持 `-y` / `--yes` 跳过安装确认提示。 |
 | `astrbot run` | 在前台启动 AstrBot。 |
 | `astrbot conf` | 查看或修改常用配置项。 |
 | `astrbot password` | 交互式修改 WebUI 登录密码。 |
@@ -143,6 +149,18 @@ astrbot plug update --proxy https://gh-proxy.example.com/
 
 ```bash
 astrbot plug new my-plugin
+```
+
+### 安装本地插件
+
+支持直接从本地目录安装插件（v4.26.3 起）：
+
+```bash
+# 安装指定目录中的插件
+astrbot plug install /path/to/my-plugin
+
+# 以符号链接（可编辑）方式安装本地目录中的插件，适合本地开发调试
+astrbot plug install my-plugin --local-path /path/to/my-plugin
 ```
 
 ## 帮助

@@ -119,6 +119,7 @@ The values in `support_platforms` must be keys from `ADAPTER_NAME_2_TYPE`. Curre
 - `line`
 - `matrix`
 - `mattermost`
+- `webchat`
 
 ### Declare AstrBot Version Range (Optional)
 

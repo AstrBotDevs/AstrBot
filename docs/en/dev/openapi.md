@@ -50,7 +50,7 @@ Interact with AstrBot's built-in Agent. Supports plugin calls, tool calls, and o
 
 - `POST /api/v1/chat`: send chat message (SSE stream, server generates UUID when `session_id` is omitted)
 - `GET /api/v1/chat/sessions`: list sessions for a specific `username` with pagination
-- `GET /api/v1/configs`: list available config files
+- `GET /api/v1/config-profiles`: list available config profiles
 - `POST /api/v1/file`: upload an attachment for later use in message segments
 
 **Bots and Providers**
@@ -69,12 +69,12 @@ Interact with AstrBot's built-in Agent. Supports plugin calls, tool calls, and o
 
 **Proactive IM Messages**
 
-- `POST /api/v1/im/message`: send a proactive message via UMO
+- `POST /api/v1/im/messages`: send a proactive message via UMO
 - `GET /api/v1/im/bots`: list bot/platform IDs
 
 ## `message` Field Format (Important)
 
-The `message` field in `POST /api/v1/chat` and `POST /api/v1/im/message` supports two formats:
+The `message` field in `POST /api/v1/chat` and `POST /api/v1/im/messages` supports two formats:
 
 1. String: plain text message
 2. Array: message segments (message chain)
@@ -109,7 +109,7 @@ Supported `type` values:
 | `file` | `attachment_id` | - | Generic file segment |
 | `video` | `attachment_id` | - | Video attachment segment |
 
-* The `reply` segment is currently only supported for `/api/v1/chat`, not for `POST /api/v1/im/message`.
+* The `reply` segment is currently only supported for `/api/v1/chat`, not for `POST /api/v1/im/messages`.
 
 Notes:
 
@@ -137,7 +137,7 @@ Notes:
 
 ### `message` Usage in IM Message API
 
-`POST /api/v1/im/message` requires `umo` + `message`.
+`POST /api/v1/im/messages` requires `umo` + `message`.
 
 ```json
 {
