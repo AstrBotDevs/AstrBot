@@ -1,11 +1,17 @@
 import asyncio
-from unittest.mock import AsyncMock
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from slack_sdk.socket_mode.request import SocketModeRequest
 
 from astrbot.api.message_components import At, Plain
+from astrbot.core.pipeline.waking_check.stage import (
+    WakingCheckStage,
+    star_handlers_registry,
+)
 from astrbot.core.platform.sources.slack.slack_adapter import SlackAdapter
+from astrbot.core.star.session_plugin_manager import SessionPluginManager
 from tests.fixtures.helpers import make_platform_config
 
 
@@ -149,3 +155,75 @@ def test_slack_quote_keeps_boundaries_around_mentions(before_mention, after_ment
     assert "".join(c.text for c in components[mention_index + 1 :]) == (
         f"{after_mention}\nNext paragraph"
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("block_type", ["rich_text_section", "rich_text_quote"])
+@pytest.mark.parametrize("text", [" /help", " hello"])
+@pytest.mark.parametrize("mention", ["UOTHER", "UBOT"])
+async def test_slack_leading_mention_preserves_wake_target(
+    block_type, text, mention, monkeypatch
+):
+    adapter = SlackAdapter(
+        make_platform_config("slack", bot_token="xoxb-test", app_token="xapp-test"),
+        {},
+        asyncio.Queue(),
+    )
+    adapter.bot_self_id = "UBOT"
+    adapter.web_client.users_info = AsyncMock(
+        return_value={"user": {"real_name": "Tester"}},
+    )
+    adapter.web_client.conversations_info = AsyncMock(
+        return_value={"channel": {"is_im": False, "name": "test"}},
+    )
+    message = await adapter.convert_message(
+        {
+            "type": "message",
+            "user": "UTEST",
+            "channel": "CTEST",
+            "text": f"<@{mention}>{text}",
+            "blocks": [
+                {
+                    "type": "rich_text",
+                    "elements": [
+                        {
+                            "type": block_type,
+                            "elements": [
+                                {"type": "user", "user_id": mention},
+                                {"type": "text", "text": text},
+                            ],
+                        },
+                    ],
+                },
+            ],
+        },
+    )
+    event = adapter.create_event(message)
+    stage = WakingCheckStage()
+    await stage.initialize(
+        SimpleNamespace(
+            astrbot_config={
+                "admins_id": [],
+                "wake_prefix": ["/"],
+                "platform_settings": {},
+            },
+            astrbot_config_id="test",
+            db_helper=MagicMock(),
+        ),
+    )
+    stage._umo_auto_name_recorder = MagicMock()
+    monkeypatch.setattr(
+        star_handlers_registry,
+        "get_handlers_by_event_type",
+        MagicMock(return_value=[]),
+    )
+    monkeypatch.setattr(
+        SessionPluginManager,
+        "filter_handlers_by_session",
+        AsyncMock(return_value=[]),
+    )
+
+    await stage.process(event)
+
+    assert event.is_wake is (mention == "UBOT")
+    assert event.is_at_or_wake_command is (mention == "UBOT")

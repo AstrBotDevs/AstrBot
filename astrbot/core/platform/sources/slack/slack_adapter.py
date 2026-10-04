@@ -281,7 +281,11 @@ class SlackAdapter(Platform):
                             and len(message_components) > component_start
                         ):
                             # Keep block boundaries outside any inline mentions.
-                            message_components.insert(component_start, Plain(text="\n"))
+                            # Preserve a leading At for the wake target check.
+                            if component_start:
+                                message_components.insert(
+                                    component_start, Plain(text="\n")
+                                )
                             message_components.append(Plain(text="\n"))
 
                     elif element.get("type") == "rich_text_list":
