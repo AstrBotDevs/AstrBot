@@ -103,7 +103,7 @@
     "title": "System",
     "onboarding": {
       "title": "First-run setup",
-      "subtitle": "Revisit models, chat platforms, plugins and computer access without resetting existing settings.",
+      "subtitle": "Revisit models, test ChatUI, and configure messaging platforms without resetting existing settings.",
       "button": "Reopen setup"
     },
     "restart": {
