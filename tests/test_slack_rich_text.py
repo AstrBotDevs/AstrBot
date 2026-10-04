@@ -94,3 +94,58 @@ async def test_slack_rich_text_preserves_body_and_mention(mode, block_type):
         == received.message_str
     )
     assert queue.empty()
+
+
+@pytest.mark.parametrize(
+    ("before_mention", "after_mention"),
+    [
+        ("", "quoted text"),
+        ("quoted before ", " after"),
+        ("quoted text ", ""),
+        ("", ""),
+    ],
+    ids=["mention_first", "mention_middle", "mention_last", "mention_only"],
+)
+def test_slack_quote_keeps_boundaries_around_mentions(before_mention, after_mention):
+    adapter = SlackAdapter(
+        make_platform_config("slack", bot_token="xoxb-test", app_token="xapp-test"),
+        {},
+        asyncio.Queue(),
+    )
+    components = adapter._parse_blocks(
+        [
+            {
+                "type": "rich_text",
+                "elements": [
+                    {
+                        "type": "rich_text_section",
+                        "elements": [{"type": "text", "text": "Question:"}],
+                    },
+                    {
+                        "type": "rich_text_quote",
+                        "elements": [
+                            {"type": "text", "text": before_mention},
+                            {"type": "user", "user_id": "UOTHER"},
+                            {"type": "text", "text": after_mention},
+                        ],
+                    },
+                    {
+                        "type": "rich_text_section",
+                        "elements": [{"type": "text", "text": "Next paragraph"}],
+                    },
+                ],
+            },
+        ],
+    )
+
+    assert "".join(c.text for c in components if isinstance(c, Plain)) == (
+        f"Question:\n{before_mention}{after_mention}\nNext paragraph"
+    )
+    assert [c.qq for c in components if isinstance(c, At)] == ["UOTHER"]
+    mention_index = next(i for i, c in enumerate(components) if isinstance(c, At))
+    assert "".join(c.text for c in components[:mention_index]) == (
+        f"Question:\n{before_mention}"
+    )
+    assert "".join(c.text for c in components[mention_index + 1 :]) == (
+        f"{after_mention}\nNext paragraph"
+    )

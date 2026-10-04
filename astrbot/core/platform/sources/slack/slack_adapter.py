@@ -236,6 +236,7 @@ class SlackAdapter(Platform):
                     ):
                         # Sections, code blocks, and quotes share inline elements.
                         section_elements = element.get("elements", [])
+                        component_start = len(message_components)
                         text_parts = []
                         for section_element in section_elements:
                             element_type = section_element.get("type", "")
@@ -273,9 +274,15 @@ class SlackAdapter(Platform):
                         text_content = "".join(text_parts)
 
                         if text_content.strip():
-                            if element.get("type") != "rich_text_section":
-                                text_content = f"\n{text_content}\n"
                             message_components.append(Plain(text=text_content))
+
+                        if (
+                            element.get("type") != "rich_text_section"
+                            and len(message_components) > component_start
+                        ):
+                            # Keep block boundaries outside any inline mentions.
+                            message_components.insert(component_start, Plain(text="\n"))
+                            message_components.append(Plain(text="\n"))
 
                     elif element.get("type") == "rich_text_list":
                         # 处理列表
