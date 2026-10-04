@@ -2125,7 +2125,10 @@ async function stopCurrentSession() {
      window toolbar. Keep them flush with the content area's top edge. */
   --chat-panel-top-offset: 0px;
   --chat-session-active-bg: #efefef;
-  --chat-page-bg: #fdfcfc;
+  /* The conversation surface uses the card/content background, not the chrome
+     color, so the right content page reads as the floating card next to the
+     chrome-tinted chat sidebar (they used to share #fdfcfc and blended). */
+  --chat-page-bg: rgb(var(--v-theme-containerBg));
   --chat-border: #f2f2f2;
   --chat-muted: rgba(var(--v-theme-on-surface), 0.62);
   --chat-section-label: rgba(var(--v-theme-on-surface), 0.48);
@@ -2598,6 +2601,28 @@ async function stopCurrentSession() {
   position: relative;
   box-sizing: border-box;
   padding-top: 50px;
+}
+
+/* The conversation page floats over the chat sidebar with the exact same
+   ambient shadow as the outer floating card. It needs to stack above the
+   sidebar for the shadow to land on it. Desktop only: on small screens the
+   temporary drawer (z-index 1007) must keep sliding over the content. */
+@media (min-width: 960px) {
+  .chat-main {
+    z-index: 1008;
+    /* Slightly deeper than the outer card's ambient shadow: the card reads
+       thanks to its 6px gaps and the window-edge contrast, while this seam
+       is white-on-white, so it needs the extra notch to stay perceptible. */
+    box-shadow:
+      -1px 0 4px rgba(0, 0, 0, 0.06),
+      -4px 0 20px rgba(0, 0, 0, 0.05);
+  }
+
+  .chat-ui.is-dark .chat-main {
+    box-shadow:
+      -1px 0 4px rgba(0, 0, 0, 0.12),
+      -4px 0 20px rgba(0, 0, 0, 0.1);
+  }
 }
 
 .provider-workspace-shell {

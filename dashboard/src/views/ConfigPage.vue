@@ -1015,6 +1015,7 @@ export default {
   flex-direction: column;
   align-items: center;
   width: 100%;
+  height: 100%;
   margin-top: -8px;
 }
 
@@ -1023,26 +1024,52 @@ export default {
   flex-direction: column;
   align-items: stretch;
   width: min(100%, 940px);
-  padding: 0 18px 48px;
+  height: 100%;
+  min-height: 0;
+  padding: 0 18px 8px;
 }
 
 .config-toolbar-sticky {
-  position: sticky;
-  top: calc(var(--v-layout-top, 64px));
-  z-index: 20;
-  isolation: isolate;
   margin-bottom: 28px;
 }
 
-.config-toolbar-sticky::before {
-  position: absolute;
-  z-index: -1;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: 100%;
-  background: rgb(var(--v-theme-containerBg));
-  content: '';
+/* Pin the toolbar and the section nav: only the right config form scrolls.
+   The height chain is shell -> panel -> content -> workspace -> main. */
+.config-content {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.config-panel .config-content .config-workspace {
+  height: 100%;
+  grid-template-rows: minmax(0, 1fr);
+  align-items: stretch;
+}
+
+/* The nav no longer needs stickiness; the fixed layout keeps it in place. */
+.config-panel .config-content .config-workspace__nav {
+  position: static;
+  top: auto;
+  height: 100%;
+  overflow-y: auto;
+}
+
+.config-panel .config-content .config-workspace__main {
+  height: 100%;
+  overflow-y: auto;
+}
+
+/* On narrow screens the nav becomes a horizontal chips row above the form. */
+@media (max-width: 720px) {
+  .config-panel .config-content .config-workspace {
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .config-panel .config-content .config-workspace__nav {
+    height: auto;
+    overflow-y: hidden;
+  }
 }
 
 /* Embedded in the config drawer: stick to the drawer's top, not the app bar. */
@@ -1106,11 +1133,6 @@ export default {
   width: 100%;
   height: 1px;
   margin-left: 0;
-}
-
-.config-toolbar-separator :is(.v-divider) {
-  border-color: rgba(var(--v-theme-on-surface), 0.1);
-  opacity: 1;
 }
 
 .config-loading {

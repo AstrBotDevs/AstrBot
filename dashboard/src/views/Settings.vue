@@ -124,9 +124,9 @@
                                             density="compact"
                                         />
                                         <v-text-field
-                                            v-model="secondaryColor"
+                                            v-model="chromeColor"
                                             type="color"
-                                            :label="tm('theme.customize.secondary')"
+                                            :label="tm('theme.customize.chrome')"
                                             hide-details
                                             variant="outlined"
                                             density="compact"
@@ -500,6 +500,7 @@ import { copyToClipboard } from '@/utils/clipboard';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import { useTheme } from 'vuetify';
 import { PurpleTheme } from '@/theme/LightTheme';
+import { PurpleThemeDark } from '@/theme/DarkTheme';
 import { useToastStore } from '@/stores/toast';
 import { askForConfirmation, useConfirmDialog } from '@/utils/confirmDialog';
 
@@ -510,13 +511,49 @@ const toastStore = useToastStore();
 const confirmDialog = useConfirmDialog();
 const theme = useTheme();
 
-const getStoredColor = (key, fallback) => {
-    const stored = typeof window !== 'undefined' ? localStorage.getItem(key) : null;
-    return stored || fallback;
+// Colors are stored per theme mode: the pickers always edit the currently
+// active mode (light or dark), and each mode keeps its own foreground and
+// background colors.
+const isDarkMode = computed(() => !!theme.global.current.value?.dark);
+const activeThemeName = computed(() => (isDarkMode.value ? 'PurpleThemeDark' : 'PurpleTheme'));
+const modeStorageKey = (base) => `${base}${isDarkMode.value ? 'Dark' : 'Light'}`;
+const primaryColor = ref('');
+// The background color drives the chrome (sidebar/header/gaps). Unset means
+// the theme's neutral surface; the field shows that surface as a placeholder.
+const defaultChromeColor = () => theme.current.value?.colors?.surface || '#ffffff';
+const chromeColor = ref('');
+let syncingThemeColors = false;
+
+const applyChromeColor = (value, dark) => {
+    const prop = dark ? '--astrbot-chrome-color-dark' : '--astrbot-chrome-color-light';
+    if (value) {
+        document.documentElement.style.setProperty(prop, value);
+    } else {
+        document.documentElement.style.removeProperty(prop);
+    }
 };
 
-const primaryColor = ref(getStoredColor('themePrimary', PurpleTheme.colors.primary));
-const secondaryColor = ref(getStoredColor('themeSecondary', PurpleTheme.colors.secondary));
+const loadModeColors = () => {
+    syncingThemeColors = true;
+    primaryColor.value =
+        localStorage.getItem(modeStorageKey('themePrimary')) ||
+        localStorage.getItem('themePrimary') || // legacy shared key
+        PurpleTheme.colors.primary;
+    chromeColor.value =
+        localStorage.getItem(modeStorageKey('themeChrome')) ||
+        localStorage.getItem('themeChrome') || // legacy shared key
+        defaultChromeColor();
+    syncingThemeColors = false;
+};
+
+loadModeColors();
+watch(isDarkMode, loadModeColors);
+
+watch(chromeColor, (value) => {
+    if (!value || syncingThemeColors) return;
+    localStorage.setItem(modeStorageKey('themeChrome'), value);
+    applyChromeColor(value, isDarkMode.value);
+});
 
 const resolveThemes = () => {
     if (theme?.themes?.value) return theme.themes.value;
@@ -524,31 +561,27 @@ const resolveThemes = () => {
     return null;
 };
 
-const applyThemeColors = (primary, secondary) => {
-    const themes = resolveThemes();
-    if (!themes) return;
-    ['PurpleTheme', 'PurpleThemeDark'].forEach((name) => {
-        const themeDef = themes[name];
-        if (!themeDef?.colors) return;
-        if (primary) themeDef.colors.primary = primary;
-        if (secondary) themeDef.colors.secondary = secondary;
-        if (primary && themeDef.colors.darkprimary) themeDef.colors.darkprimary = primary;
-        if (secondary && themeDef.colors.darksecondary) themeDef.colors.darksecondary = secondary;
-    });
+const applyThemeColors = (primary, themeName) => {
+    const themeDef = resolveThemes()?.[themeName];
+    if (!themeDef?.colors || !primary) return;
+    themeDef.colors.primary = primary;
+    if (themeDef.colors.darkprimary) themeDef.colors.darkprimary = primary;
 };
 
-applyThemeColors(primaryColor.value, secondaryColor.value);
+// Re-apply the stored per-mode colors so this mount reflects them.
+applyThemeColors(
+    localStorage.getItem('themePrimaryLight') || localStorage.getItem('themePrimary'),
+    'PurpleTheme'
+);
+applyThemeColors(
+    localStorage.getItem('themePrimaryDark') || localStorage.getItem('themePrimary'),
+    'PurpleThemeDark'
+);
 
 watch(primaryColor, (value) => {
-    if (!value) return;
-    localStorage.setItem('themePrimary', value);
-    applyThemeColors(value, secondaryColor.value);
-});
-
-watch(secondaryColor, (value) => {
-    if (!value) return;
-    localStorage.setItem('themeSecondary', value);
-    applyThemeColors(primaryColor.value, value);
+    if (!value || syncingThemeColors) return;
+    localStorage.setItem(modeStorageKey('themePrimary'), value);
+    applyThemeColors(value, activeThemeName.value);
 });
 
 const wfr = ref(null);
@@ -1105,11 +1138,14 @@ const openBackupDialog = () => {
 };
 
 const resetThemeColors = () => {
-    primaryColor.value = PurpleTheme.colors.primary;
-    secondaryColor.value = PurpleTheme.colors.secondary;
-    localStorage.removeItem('themePrimary');
-    localStorage.removeItem('themeSecondary');
-    applyThemeColors(primaryColor.value, secondaryColor.value);
+    ['themePrimary', 'themePrimaryLight', 'themePrimaryDark', 'themeSecondary',
+     'themeChrome', 'themeChromeLight', 'themeChromeDark']
+        .forEach((key) => localStorage.removeItem(key));
+    applyThemeColors(PurpleTheme.colors.primary, 'PurpleTheme');
+    applyThemeColors(PurpleThemeDark.colors.primary, 'PurpleThemeDark');
+    applyChromeColor(null, false);
+    applyChromeColor(null, true);
+    loadModeColors();
 };
 
 onMounted(async () => {
@@ -1149,9 +1185,12 @@ onUnmounted(() => {
 .settings-page {
     --settings-border: rgba(17, 24, 39, 0.13);
     --settings-divider: rgba(17, 24, 39, 0.09);
+    display: flex;
+    flex-direction: column;
     width: min(100%, 940px);
+    height: 100%;
     margin: 0 auto;
-    padding: 36px 18px 48px;
+    padding: 36px 18px 8px;
 }
 
 .settings-page__header {
@@ -1170,21 +1209,28 @@ onUnmounted(() => {
 .settings-layout {
     display: grid;
     grid-template-columns: 126px minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
     gap: 34px;
-    align-items: start;
+    align-items: stretch;
+    flex: 1;
+    min-height: 0;
 }
 
 .settings-main {
     min-width: 0;
+    height: 100%;
+    overflow-y: auto;
 }
 
 .settings-nav {
-    position: sticky;
-    top: 76px;
+    /* The layout pins the nav in place; no stickiness needed. */
+    position: static;
     display: flex;
     flex-direction: column;
     gap: 5px;
+    height: 100%;
     padding-top: 2px;
+    overflow-y: auto;
 }
 
 .settings-nav__item {
@@ -1763,7 +1809,7 @@ onUnmounted(() => {
 
 @media (max-width: 720px) {
     .settings-page {
-        padding: 32px 14px 44px;
+        padding: 32px 14px 8px;
     }
 
     .settings-page__header {
@@ -1776,6 +1822,7 @@ onUnmounted(() => {
 
     .settings-layout {
         grid-template-columns: 1fr;
+        grid-template-rows: auto minmax(0, 1fr);
         gap: 22px;
     }
 
@@ -1783,6 +1830,8 @@ onUnmounted(() => {
         position: static;
         flex-flow: row wrap;
         gap: 6px;
+        height: auto;
+        overflow-y: hidden;
     }
 
     .settings-nav__item {

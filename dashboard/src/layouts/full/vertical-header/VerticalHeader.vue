@@ -2075,6 +2075,10 @@ onMounted(async () => {
   flex: 0 1 auto;
 }
 
+.top-header {
+  background: var(--astrbot-chrome-bg, #fdfcfc) !important;
+}
+
 .top-header.chat-mode-header {
   background: var(--astrbot-chrome-bg, #fdfcfc) !important;
   border-bottom: 0;
