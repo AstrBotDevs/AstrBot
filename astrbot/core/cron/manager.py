@@ -2,13 +2,15 @@ import asyncio
 import json
 import re
 from collections.abc import Awaitable, Callable
-from datetime import datetime, timezone
+from datetime import datetime, timedelta
+from datetime import timezone as dt_timezone
 from typing import TYPE_CHECKING, Any
 from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.date import DateTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 
 from astrbot import logger
 from astrbot.core.agent.runners.base import AgentState
@@ -184,10 +186,25 @@ class CronJobManager:
         persistent: bool = True,
         run_once: bool = False,
         run_at: datetime | None = None,
+        interval_seconds: int | None = None,
     ) -> CronJob:
         # If run_once with run_at, store run_at in payload for later reference.
         if run_once and run_at:
             payload = {**payload, "run_at": run_at.isoformat()}
+        interval_anchor_at = None
+        if interval_seconds is not None:
+            interval_anchor_at = datetime.now(dt_timezone.utc)
+            self._build_trigger(
+                CronJob(
+                    name=name,
+                    job_type="active_agent",
+                    cron_expression=cron_expression,
+                    run_once=run_once,
+                    payload=payload,
+                    interval_seconds=interval_seconds,
+                    interval_anchor_at=interval_anchor_at,
+                )
+            )
         job = await self.db.create_cron_job(
             name=name,
             job_type="active_agent",
@@ -198,6 +215,8 @@ class CronJobManager:
             enabled=enabled,
             persistent=persistent,
             run_once=run_once,
+            interval_seconds=interval_seconds,
+            interval_anchor_at=interval_anchor_at,
         )
         if enabled:
             self._schedule_job(job)
@@ -207,8 +226,17 @@ class CronJobManager:
         current_job = await self.db.get_cron_job(job_id)
         if not current_job:
             return None
+        if (
+            "interval_seconds" in kwargs
+            and kwargs["interval_seconds"] != current_job.interval_seconds
+        ):
+            kwargs["interval_anchor_at"] = (
+                datetime.now(dt_timezone.utc)
+                if kwargs["interval_seconds"] is not None
+                else None
+            )
         candidate = current_job.model_copy(update=kwargs)
-        if candidate.enabled:
+        if candidate.enabled or candidate.interval_seconds is not None:
             # Invalid edits must not overwrite the durable job or remove its
             # working schedule. Disabled legacy jobs can still be corrected.
             self._build_trigger(candidate)
@@ -232,7 +260,9 @@ class CronJobManager:
         if self.scheduler.get_job(job_id):
             self.scheduler.remove_job(job_id)
 
-    def _build_trigger(self, job: CronJob) -> CronTrigger | DateTrigger:
+    def _build_trigger(
+        self, job: CronJob
+    ) -> CronTrigger | DateTrigger | IntervalTrigger:
         """Validate a job's timing without modifying stored or scheduled jobs.
 
         Args:
@@ -255,7 +285,33 @@ class CronJobManager:
                         job.timezone,
                         job.job_id,
                     )
-            if job.run_once:
+            if job.interval_seconds is not None:
+                seconds = job.interval_seconds
+                if (
+                    type(seconds) is not int
+                    or not 60 <= seconds <= 2_147_483_647
+                    or seconds % 60
+                ):
+                    raise ValueError(
+                        "interval_seconds must be an integer multiple of 60 "
+                        "between 60 and 2147483647"
+                    )
+                if job.run_once or job.cron_expression or job.payload.get("run_at"):
+                    raise ValueError("interval cannot be combined with cron or run_at")
+                anchor = job.interval_anchor_at
+                if anchor is None:
+                    raise ValueError("interval job missing interval_anchor_at")
+                # SQLite returns naive UTC timestamps. Keep elapsed durations
+                # independent of the display timezone and daylight saving time.
+                if anchor.tzinfo is None:
+                    anchor = anchor.replace(tzinfo=dt_timezone.utc)
+                anchor = anchor.astimezone(dt_timezone.utc)
+                trigger = IntervalTrigger(
+                    seconds=seconds,
+                    start_date=anchor + timedelta(seconds=seconds),
+                    timezone=dt_timezone.utc,
+                )
+            elif job.run_once:
                 run_at_str = None
                 if isinstance(job.payload, dict):
                     run_at_str = job.payload.get("run_at")
@@ -314,7 +370,7 @@ class CronJobManager:
         aps_job = self.scheduler.get_job(job_id)
         if not aps_job or aps_job.next_run_time is None:
             return None
-        return aps_job.next_run_time.astimezone(timezone.utc)
+        return aps_job.next_run_time.astimezone(dt_timezone.utc)
 
     def get_next_run_time(self, job_id: str) -> datetime | None:
         """Read the live next-run time straight from the scheduler.
@@ -347,7 +403,7 @@ class CronJobManager:
         job = await self.db.get_cron_job(job_id)
         if not job or (not job.enabled and not ignore_enabled):
             return
-        start_time = datetime.now(timezone.utc)
+        start_time = datetime.now(dt_timezone.utc)
         await self.db.update_cron_job(
             job_id, status="running", last_run_at=start_time, last_error=None
         )

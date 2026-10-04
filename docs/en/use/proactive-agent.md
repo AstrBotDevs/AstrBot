@@ -14,7 +14,7 @@ The Main Agent can now manage a global **Cron Job List**, setting tasks for its 
 
 - **Self-Wakeup**: AstrBot automatically wakes up at the scheduled time to execute tasks.
 - **Task Feedback**: After execution, AstrBot reports the results back to the task creator.
-- **WebUI Management**: You can view, edit, or delete scheduled tasks in the WebUI under **More Features → Future Tasks**.
+- **WebUI Management**: You can view, edit, or delete scheduled tasks in the WebUI under **Extensions → Future Tasks**.
 
 ### How to Use
 
@@ -28,9 +28,18 @@ The Main Agent has the ability to manage scheduled tasks. You can tell it:
 
 The Main Agent will call built-in scheduling tools to arrange these plans.
 
-You can view and manage all future tasks by expanding **More Features** in the left navigation bar and clicking **Future Tasks** (`/cron`) of the AstrBot WebUI.
+You can view and manage all future tasks under **Extensions → Future Tasks** (`/cron`) in the left sidebar of the AstrBot WebUI.
 
-![](https://files.astrbot.app/docs/source/images/proactive-agent/image-1.png)
+### Fixed-interval tasks
+
+Under **Extensions → Future Tasks**, create or edit a task, select **Interval** for **Execution time**, enter a positive integer and a unit (minutes, hours, or days), and save. Every 40 minutes always means 40 elapsed minutes; every 24 hours always means 24 elapsed hours, including across hour and day boundaries.
+
+- The first run occurs one full interval after saving. Changing the interval starts a new timing period at the time of saving.
+- Restarting, disabling and re-enabling, or editing other fields such as the name or note preserves the original timing anchor. Missed periods during downtime are skipped; execution resumes at the next time on the original schedule.
+- A day means 24 elapsed hours. The local clock time can change across daylight saving transitions. Choose **Daily** for a fixed local time each day.
+- Older interval tasks only contain a Cron expression, so their original input cannot be recovered. After upgrading, they appear as **Custom Cron** and retain their existing Cron schedule. To use a true fixed interval, edit the task, select **Interval**, and enter the intended value again; saving starts a new timing period.
+
+The API represents intervals as `interval_seconds`, accepting positive multiples of 60 up to 2147483647 seconds. The server manages `interval_anchor_at`. An interval cannot be combined with Cron or a one-shot execution time.
 
 ### Supported Platforms
 

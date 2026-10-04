@@ -648,6 +648,16 @@ function scheduleProductLabel(item: any): string {
   if (item.run_once) {
     return tm("card.onceAt", { time: formatTime(item.run_at) });
   }
+  if (item.interval_seconds != null) {
+    const seconds = Number(item.interval_seconds);
+    if (seconds % 86400 === 0) {
+      return tm("card.everyDays", { count: seconds / 86400 });
+    }
+    if (seconds % 3600 === 0) {
+      return tm("card.everyHours", { count: seconds / 3600 });
+    }
+    return tm("card.everyMinutes", { count: seconds / 60 });
+  }
 
   const cron = String(item.cron_expression || "").trim();
   const parts = cron.split(/\s+/);
@@ -656,39 +666,6 @@ function scheduleProductLabel(item: any): string {
   }
 
   const [minute, hour, dayOfMonth, month, dayOfWeek] = parts;
-  const minuteInterval = /^\*\/(\d+)$/.exec(minute);
-  if (
-    minuteInterval &&
-    hour === "*" &&
-    dayOfMonth === "*" &&
-    month === "*" &&
-    dayOfWeek === "*"
-  ) {
-    return tm("card.everyMinutes", { count: Number(minuteInterval[1]) });
-  }
-
-  const hourInterval = /^\*\/(\d+)$/.exec(hour);
-  if (
-    minute === "0" &&
-    hourInterval &&
-    dayOfMonth === "*" &&
-    month === "*" &&
-    dayOfWeek === "*"
-  ) {
-    return tm("card.everyHours", { count: Number(hourInterval[1]) });
-  }
-
-  const dayInterval = /^\*\/(\d+)$/.exec(dayOfMonth);
-  if (
-    minute === "0" &&
-    hour === "0" &&
-    dayInterval &&
-    month === "*" &&
-    dayOfWeek === "*"
-  ) {
-    return tm("card.everyDays", { count: Number(dayInterval[1]) });
-  }
-
   const minuteNumber = Number(minute);
   const hourNumber = Number(hour);
   const dayOfMonthNumber = Number(dayOfMonth);
@@ -1007,16 +984,6 @@ function isCronTime(minute: number, hour: number): boolean {
 
 function buildCronExpression(): string {
   const mode = newJob.value.schedule_mode;
-  if (mode === "interval") {
-    const value = Math.max(1, Number(newJob.value.interval_value || 1));
-    if (newJob.value.interval_unit === "minutes") {
-      return `*/${Math.min(value, 59)} * * * *`;
-    }
-    if (newJob.value.interval_unit === "hours") {
-      return `0 */${Math.min(value, 23)} * * *`;
-    }
-    return `0 0 */${Math.min(value, 31)} * *`;
-  }
   if (mode === "daily") {
     const time = parseTimeParts(newJob.value.daily_time);
     if (!time) return "";
@@ -1055,6 +1022,19 @@ function readScheduleFromJob(job: any) {
   if (job.run_once) {
     return { ...fallback, schedule_mode: "once" as ScheduleMode };
   }
+  if (job.interval_seconds != null) {
+    const seconds = Number(job.interval_seconds);
+    const unit: IntervalUnit = seconds % 86400 === 0
+      ? "days"
+      : seconds % 3600 === 0 ? "hours" : "minutes";
+    const divisor = { minutes: 60, hours: 3600, days: 86400 }[unit];
+    return {
+      ...fallback,
+      schedule_mode: "interval" as ScheduleMode,
+      interval_value: seconds / divisor,
+      interval_unit: unit,
+    };
+  }
 
   const cron = String(job.cron_expression || "").trim();
   const parts = cron.split(/\s+/);
@@ -1071,54 +1051,6 @@ function readScheduleFromJob(job: any) {
   const time = hasCronTime
     ? `${padTimePart(hourNumber)}:${padTimePart(minuteNumber)}`
     : "09:00";
-
-  const minuteInterval = /^\*\/(\d+)$/.exec(minute);
-  if (
-    minuteInterval &&
-    hour === "*" &&
-    dayOfMonth === "*" &&
-    month === "*" &&
-    dayOfWeek === "*"
-  ) {
-    return {
-      ...fallback,
-      schedule_mode: "interval" as ScheduleMode,
-      interval_value: Number(minuteInterval[1]),
-      interval_unit: "minutes" as IntervalUnit,
-    };
-  }
-
-  const hourInterval = /^\*\/(\d+)$/.exec(hour);
-  if (
-    minute === "0" &&
-    hourInterval &&
-    dayOfMonth === "*" &&
-    month === "*" &&
-    dayOfWeek === "*"
-  ) {
-    return {
-      ...fallback,
-      schedule_mode: "interval" as ScheduleMode,
-      interval_value: Number(hourInterval[1]),
-      interval_unit: "hours" as IntervalUnit,
-    };
-  }
-
-  const dayInterval = /^\*\/(\d+)$/.exec(dayOfMonth);
-  if (
-    minute === "0" &&
-    hour === "0" &&
-    dayInterval &&
-    month === "*" &&
-    dayOfWeek === "*"
-  ) {
-    return {
-      ...fallback,
-      schedule_mode: "interval" as ScheduleMode,
-      interval_value: Number(dayInterval[1]),
-      interval_unit: "days" as IntervalUnit,
-    };
-  }
 
   if (hasCronTime && dayOfMonth === "*" && month === "*" && dayOfWeek === "*") {
     return {
@@ -1165,12 +1097,18 @@ function readScheduleFromJob(job: any) {
 
 function buildPayload() {
   const runOnce = newJob.value.schedule_mode === "once";
-  const cronExpression = runOnce ? "" : buildCronExpression();
+  const isInterval = newJob.value.schedule_mode === "interval";
+  const cronExpression = runOnce || isInterval ? "" : buildCronExpression();
+  const intervalSeconds = isInterval
+    ? Number(newJob.value.interval_value) *
+      { minutes: 60, hours: 3600, days: 86400 }[newJob.value.interval_unit]
+    : null;
   return {
     run_once: runOnce,
     name: newJob.value.name.trim(),
     note: newJob.value.note.trim(),
     cron_expression: cronExpression,
+    interval_seconds: intervalSeconds,
     run_at: runOnce ? toIsoDatetime(newJob.value.run_at) : "",
     session: newJob.value.session,
     timezone: newJob.value.timezone,
@@ -1205,7 +1143,10 @@ function validateScheduleFields(): boolean {
     const validUnit = ["minutes", "hours", "days"].includes(
       newJob.value.interval_unit,
     );
-    if (!Number.isInteger(value) || value < 1 || !validUnit) {
+    const seconds = value *
+      { minutes: 60, hours: 3600, days: 86400 }[newJob.value.interval_unit];
+    if (!Number.isInteger(value) || value < 1 || !validUnit ||
+        !Number.isSafeInteger(seconds) || seconds > 2147483647) {
       toast(tm("messages.intervalRequired"), "warning");
       return false;
     }

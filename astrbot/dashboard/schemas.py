@@ -164,7 +164,9 @@ class ChatThreadMessageRequest(OpenModel):
 
 
 class CronJobRequest(OpenModel):
-    pass
+    interval_seconds: int | None = Field(
+        default=None, strict=True, ge=60, le=2_147_483_647, multiple_of=60
+    )
 
 
 class CommandUpdateRequest(BaseModel):

@@ -98,6 +98,16 @@ class SQLiteDatabase(BaseDatabase):
             await self._ensure_platform_message_history_checkpoint_column(conn)
             await self._ensure_chatui_project_workspace_columns(conn)
             await self._ensure_conversation_indexes(conn)
+            result = await conn.execute(text("PRAGMA table_info(cron_jobs)"))
+            cron_columns = {row[1] for row in result.fetchall()}
+            for column, sql_type in (
+                ("interval_seconds", "INTEGER"),
+                ("interval_anchor_at", "DATETIME"),
+            ):
+                if column not in cron_columns:
+                    await conn.execute(
+                        text(f"ALTER TABLE cron_jobs ADD COLUMN {column} {sql_type}")
+                    )
             # The table-level unique constraint already provides an index for UMO
             # lookups. Older schemas also created this redundant explicit index.
             await conn.execute(text("DROP INDEX IF EXISTS ix_umo_aliases_umo"))
@@ -2530,6 +2540,8 @@ class SQLiteDatabase(BaseDatabase):
         job_type: str,
         cron_expression: str | None,
         *,
+        interval_seconds: int | None = None,
+        interval_anchor_at: datetime | None = None,
         timezone: str | None = None,
         payload: dict | None = None,
         description: str | None = None,
@@ -2546,6 +2558,8 @@ class SQLiteDatabase(BaseDatabase):
                     name=name,
                     job_type=job_type,
                     cron_expression=cron_expression,
+                    interval_seconds=interval_seconds,
+                    interval_anchor_at=interval_anchor_at,
                     timezone=timezone,
                     payload=payload or {},
                     description=description,
@@ -2567,6 +2581,8 @@ class SQLiteDatabase(BaseDatabase):
         *,
         name: str | None | object = CRON_FIELD_NOT_SET,
         cron_expression: str | None | object = CRON_FIELD_NOT_SET,
+        interval_seconds: int | None | object = CRON_FIELD_NOT_SET,
+        interval_anchor_at: datetime | None | object = CRON_FIELD_NOT_SET,
         timezone: str | None | object = CRON_FIELD_NOT_SET,
         payload: dict | None | object = CRON_FIELD_NOT_SET,
         description: str | None | object = CRON_FIELD_NOT_SET,
@@ -2585,6 +2601,8 @@ class SQLiteDatabase(BaseDatabase):
                 for key, val in {
                     "name": name,
                     "cron_expression": cron_expression,
+                    "interval_seconds": interval_seconds,
+                    "interval_anchor_at": interval_anchor_at,
                     "timezone": timezone,
                     "payload": payload,
                     "description": description,

@@ -274,7 +274,14 @@ export type CronJobPatchRequest = CronJobRequest;
 
 export type CronJobRequest = {
     name?: string;
+    /**
+     * Five-field Cron expression. Empty for interval or one-shot jobs.
+     */
     cron_expression?: string;
+    /**
+     * Fixed elapsed interval in whole minutes, expressed in seconds. Mutually exclusive with cron_expression and run_once=true/run_at. The server persists a UTC interval_anchor_at and first runs one interval after it. Restart and enable/disable preserve this anchor; changing the interval resets it. Send null to clear an interval when switching to Cron or a one-shot schedule. Omitting this field in a patch preserves the existing interval.
+     */
+    interval_seconds?: (number) | null;
     timezone?: string;
     session?: string;
     note?: string;
@@ -287,7 +294,7 @@ export type CronJobRequest = {
     payload?: {
         [key: string]: unknown;
     };
-    [key: string]: unknown | string | boolean;
+    [key: string]: unknown | string | number | boolean;
 };
 
 export type DynamicConfig = {
