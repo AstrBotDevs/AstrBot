@@ -76,6 +76,10 @@ let updatingDashboardLoading = ref(false);
 let installLoading = ref(false);
 let showAdvancedUpdateSettings = ref(false);
 let restartWaiting = ref(false);
+let restartUnconfirmed = ref(false);
+let restartTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
+let restartDeadline: number | null = null;
+let restartPollGeneration = 0;
 let restartStartTime = ref<number | string | null>(null);
 let restartPollTimer: ReturnType<typeof setInterval> | null = null;
 let restartCompleted = ref(false);
@@ -83,6 +87,7 @@ let restartReloadCountdown = ref(3);
 let restartReloadTimer: ReturnType<typeof setInterval> | null = null;
 const RESTART_FEEDBACK_DELAY_SECONDS = 3;
 const RESTART_START_TIME_POLL_INTERVAL_MS = 2000;
+const RESTART_CONFIRMATION_TIMEOUT_MS = 90_000;
 type DownloadStageStatus = "pending" | "running" | "done" | "error";
 type DownloadStage = {
   status: DownloadStageStatus;
@@ -123,6 +128,7 @@ const createEmptyUpdateProgress = (): UpdateProgress => ({
 });
 let updateProgress = ref<UpdateProgress>(createEmptyUpdateProgress());
 let updateProgressTimer: ReturnType<typeof setInterval> | null = null;
+let updateProgressGeneration = 0;
 const isDesktopReleaseMode = ref(
   typeof window !== "undefined" && !!window.astrbotDesktop?.isDesktop,
 );
@@ -621,6 +627,7 @@ function getStageStatusIcon(status: DownloadStageStatus) {
 }
 
 function stopUpdateProgressPolling() {
+  updateProgressGeneration += 1;
   if (updateProgressTimer) {
     clearInterval(updateProgressTimer);
     updateProgressTimer = null;
@@ -628,6 +635,11 @@ function stopUpdateProgressPolling() {
 }
 
 function stopRestartPolling() {
+  restartPollGeneration += 1;
+  if (restartTimeoutTimer) {
+    clearTimeout(restartTimeoutTimer);
+    restartTimeoutTimer = null;
+  }
   if (restartPollTimer) {
     clearInterval(restartPollTimer);
     restartPollTimer = null;
@@ -644,7 +656,9 @@ function stopRestartReloadTimer() {
 function resetRestartFeedbackState() {
   stopRestartReloadTimer();
   stopRestartPolling();
+  restartDeadline = null;
   restartCompleted.value = false;
+  restartUnconfirmed.value = false;
   restartReloadCountdown.value = RESTART_FEEDBACK_DELAY_SECONDS;
   restartWaiting.value = false;
 }
@@ -654,7 +668,8 @@ async function fetchAstrBotStartTime() {
   const rawStartTime = res.data?.data?.start_time;
   const parsedStartTime =
     typeof rawStartTime === "number" ? rawStartTime : Number(rawStartTime || 0);
-  const startTime = Number.isFinite(parsedStartTime) ? parsedStartTime : 0;
+  if (!Number.isFinite(parsedStartTime) || parsedStartTime <= 0) return null;
+  const startTime = parsedStartTime;
   commonStore.startTime = startTime;
   return startTime;
 }
@@ -677,6 +692,7 @@ function showRestartCompleted() {
   stopUpdateProgressPolling();
   stopRestartReloadTimer();
   restartWaiting.value = false;
+  restartUnconfirmed.value = false;
   restartCompleted.value = true;
   restartReloadCountdown.value = RESTART_FEEDBACK_DELAY_SECONDS;
   updateProgress.value = {
@@ -699,11 +715,18 @@ function waitForAstrBotRestart(
   initialStartTime: number | string | null,
   showWaiting = true,
 ) {
-  if (restartCompleted.value) {
+  if (restartCompleted.value || (restartUnconfirmed.value && showWaiting)) {
     return;
   }
   if (showWaiting && !restartWaiting.value) {
+    restartDeadline ??= Date.now() + RESTART_CONFIRMATION_TIMEOUT_MS;
+    const remaining = restartDeadline - Date.now();
+    if (remaining <= 0) {
+      showRestartUnconfirmed();
+      return;
+    }
     restartWaiting.value = true;
+    restartTimeoutTimer = setTimeout(showRestartUnconfirmed, remaining);
     restartStartTime.value = initialStartTime;
     updateProgress.value = {
       ...updateProgress.value,
@@ -719,29 +742,55 @@ function waitForAstrBotRestart(
 
   restartStartTime.value = initialStartTime;
 
+  const generation = restartPollGeneration;
+  const baseline = Number(initialStartTime);
+  const checkOnce = restartUnconfirmed.value;
+  let polling = false;
   const poll = async () => {
+    if (polling) return;
+    polling = true;
     try {
       const currentStartTime = await fetchAstrBotStartTime();
+      if (generation !== restartPollGeneration) return;
       if (
-        initialStartTime !== null &&
+        Number.isFinite(baseline) &&
+        baseline > 0 &&
         currentStartTime !== null &&
-        currentStartTime !== initialStartTime
+        currentStartTime !== baseline
       ) {
         stopRestartPolling();
         showRestartCompleted();
       }
     } catch (_error) {
       // Backend may be unavailable while the process is restarting.
+    } finally {
+      polling = false;
     }
   };
 
   void poll();
-  restartPollTimer = setInterval(() => {
-    void poll();
-  }, RESTART_START_TIME_POLL_INTERVAL_MS);
+  if (!checkOnce) {
+    restartPollTimer = setInterval(() => {
+      void poll();
+    }, RESTART_START_TIME_POLL_INTERVAL_MS);
+  }
+}
+
+function showRestartUnconfirmed() {
+  stopRestartPolling();
+  stopUpdateProgressPolling();
+  restartWaiting.value = false;
+  restartUnconfirmed.value = true;
+}
+
+function retryRestartCheck() {
+  if (!restartUnconfirmed.value) return;
+  stopRestartPolling();
+  waitForAstrBotRestart(restartStartTime.value, false);
 }
 
 function applyUpdateProgress(payload: UpdateProgress) {
+  if (restartCompleted.value || restartUnconfirmed.value) return;
   if (
     payload.status === "idle" &&
     payload.id === updateProgress.value.id &&
@@ -757,28 +806,31 @@ function applyUpdateProgress(payload: UpdateProgress) {
       ...(payload.stages || {}),
     },
   };
+  if (payload.status === "error") {
+    stopUpdateProgressPolling();
+    stopRestartPolling();
+    restartWaiting.value = false;
+    return;
+  }
   if (payload.stage === "restart") {
     stopUpdateProgressPolling();
     waitForAstrBotRestart(restartStartTime.value);
     return;
   }
-  if (payload.status === "success" || payload.status === "error") {
-    stopUpdateProgressPolling();
-  }
-  if (payload.status === "error") {
-    stopRestartPolling();
-  }
   if (payload.status === "success") {
+    stopUpdateProgressPolling();
     waitForAstrBotRestart(restartStartTime.value);
   }
 }
 
 function startUpdateProgressPolling(progressId: string) {
   stopUpdateProgressPolling();
+  const generation = updateProgressGeneration;
   const poll = () => {
     updatesApi
       .progress(progressId)
       .then((res) => {
+        if (generation !== updateProgressGeneration) return;
         if (res.data?.data) {
           applyUpdateProgress(res.data.data);
         }
@@ -821,6 +873,8 @@ async function switchVersion(targetVersion: string) {
   restartStartTime.value = initialStartTime;
   waitForAstrBotRestart(initialStartTime, false);
   startUpdateProgressPolling(progressId);
+  const feedbackIsCurrent = () =>
+    updateStatusDialog.value && updateProgress.value.id === progressId;
 
   updatesApi
     .core({
@@ -829,10 +883,18 @@ async function switchVersion(targetVersion: string) {
       progress_id: progressId,
     })
     .then((res) => {
+      if (
+        !feedbackIsCurrent() ||
+        restartCompleted.value ||
+        restartUnconfirmed.value
+      ) {
+        return;
+      }
       updateStatus.value = res.data.message || "";
       if (res.data.status === "error") {
         stopUpdateProgressPolling();
         stopRestartPolling();
+        restartWaiting.value = false;
         updateProgress.value = {
           ...updateProgress.value,
           status: "error",
@@ -843,6 +905,13 @@ async function switchVersion(targetVersion: string) {
       }
     })
     .catch((err) => {
+      if (
+        !feedbackIsCurrent() ||
+        restartCompleted.value ||
+        restartUnconfirmed.value
+      ) {
+        return;
+      }
       console.log(err);
       stopUpdateProgressPolling();
       if (!err?.response && restartPollTimer) {
@@ -851,6 +920,7 @@ async function switchVersion(targetVersion: string) {
         return;
       }
       stopRestartPolling();
+      restartWaiting.value = false;
       updateStatus.value = err;
       updateProgress.value = {
         ...updateProgress.value,
@@ -862,6 +932,7 @@ async function switchVersion(targetVersion: string) {
       };
     })
     .finally(() => {
+      if (updateProgress.value.id !== progressId) return;
       installLoading.value = false;
     });
 }
@@ -947,6 +1018,23 @@ onMounted(() => {
 watch(showPreReleases, (value) => {
   if (typeof window === "undefined") return;
   localStorage.setItem(SHOW_PRE_RELEASES_KEY, value ? "true" : "false");
+});
+
+watch(updateStatusDialog, (open) => {
+  if (!open) {
+    stopUpdateProgressPolling();
+    stopRestartPolling();
+    stopRestartReloadTimer();
+  } else if (restartWaiting.value) {
+    restartWaiting.value = false;
+    waitForAstrBotRestart(restartStartTime.value);
+  } else if (restartCompleted.value) {
+    restartCompleted.value = false;
+    showRestartCompleted();
+  } else if (updateProgress.value.status === "running") {
+    waitForAstrBotRestart(restartStartTime.value, false);
+    startUpdateProgressPolling(updateProgress.value.id);
+  }
 });
 
 watch(
@@ -1465,6 +1553,24 @@ onMounted(async () => {
                   <v-icon class="mr-1" size="18">mdi-refresh</v-icon>
                   {{ t("core.header.updateDialog.progress.reloadNow") }}
                 </v-btn>
+              </div>
+
+              <div v-else-if="restartUnconfirmed" class="update-feedback-panel">
+                <v-icon icon="mdi-alert-circle-outline" color="warning" size="46" />
+                <div class="text-subtitle-1 font-weight-medium">
+                  {{ t("core.header.updateDialog.progress.restartUnconfirmed") }}
+                </div>
+                <div class="text-body-2">
+                  {{ t("core.header.updateDialog.progress.restartRecovery") }}
+                </div>
+                <div class="d-flex flex-wrap ga-2 justify-center">
+                  <v-btn variant="tonal" size="small" @click="retryRestartCheck">
+                    {{ t("core.header.updateDialog.progress.checkAgain") }}
+                  </v-btn>
+                  <v-btn variant="text" size="small" @click="reloadAfterUpdate">
+                    {{ t("core.header.updateDialog.progress.reloadNow") }}
+                  </v-btn>
+                </div>
               </div>
 
               <div v-else-if="restartWaiting" class="update-feedback-panel">
