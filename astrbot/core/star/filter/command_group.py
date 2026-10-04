@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from astrbot.core.config import AstrBotConfig
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 
@@ -109,7 +111,13 @@ class CommandGroupFilter(HandlerFilter):
         return True
 
     def startswith(self, message_str: str) -> bool:
-        return message_str.startswith(tuple(self.get_complete_command_names()))
+        # Match whole words only, like CommandFilter, so that "mathematics"
+        # does not match the "math" group.
+        message_str = re.sub(r"\s+", " ", message_str.strip())
+        return any(
+            message_str == name or message_str.startswith(f"{name} ")
+            for name in self.get_complete_command_names()
+        )
 
     def equals(self, message_str: str) -> bool:
         return message_str in self.get_complete_command_names()
