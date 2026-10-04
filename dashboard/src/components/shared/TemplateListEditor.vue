@@ -46,16 +46,17 @@
         class="d-flex align-center justify-space-between entry-header"
         @click="toggleEntry(entryIndex)"
       >
-        <div class="d-flex align-center ga-2">
+        <div class="d-flex align-center ga-2 entry-summary">
           <v-btn
             icon
             size="small"
             variant="text"
+            class="flex-shrink-0"
             :title="expandedEntries[entryIndex] ? (t('core.common.collapse') || '收起') : (t('core.common.expand') || '展开')"
           >
             <v-icon>{{ expandedEntries[entryIndex] ? 'mdi-chevron-down' : 'mdi-chevron-right' }}</v-icon>
           </v-btn>
-          <div class="d-flex flex-column">
+          <div class="d-flex flex-column entry-text">
             <v-list-item-title class="property-name">{{ templateLabel(entry.__template_key) }}</v-list-item-title>
             <v-list-item-subtitle class="property-hint entry-display-text" v-if="templateDisplayText(entry)">
               {{ templateDisplayText(entry) }}
@@ -65,7 +66,7 @@
             </v-list-item-subtitle>
           </div>
         </div>
-        <div class="d-flex align-center ga-1">
+        <div class="d-flex align-center ga-1 flex-shrink-0">
           <v-btn icon size="small" variant="text" color="error" @click.stop="removeEntry(entryIndex)">
             <v-icon>mdi-delete</v-icon>
           </v-btn>
@@ -440,6 +441,28 @@ function hasVisibleItemsAfter(entries, currentIndex, entry) {
 .entry-header {
   cursor: pointer;
   user-select: none;
+  gap: 8px;
+  white-space: normal;
+}
+
+.entry-summary {
+  flex: 1;
+  min-width: 0;
+}
+
+.entry-text {
+  min-width: 0;
+}
+
+.entry-text .property-name,
+.entry-text .property-hint {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.entry-text .property-hint {
+  display: block;
+  -webkit-line-clamp: unset;
 }
 
 .entry-header:hover {

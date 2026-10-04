@@ -1165,10 +1165,10 @@
       "description": "群聊上下文感知",
       "provider_ltm_settings": {
         "group_icl_enable": {
-          "description": "群聊消息记录注入上下文"
+          "description": "采集群聊消息供上下文使用"
         },
         "group_message_max_cnt": {
-          "description": "注入上下文最大消息数量"
+          "description": "最多保留的群聊上下文消息数"
         },
         "image_caption": {
           "description": "自动理解图片",
@@ -1176,7 +1176,7 @@
         },
         "image_caption_provider_id": {
           "description": "群聊图片转述模型",
-          "hint": "用于群聊记录注入上下文的图片理解，与图片转述模型分开配置。"
+          "hint": "用于采集群聊消息时的图片理解，与内置执行器的图片转述模型分别配置。"
         },
         "group_message_history_enable": {
           "description": "持久化群聊消息记录",

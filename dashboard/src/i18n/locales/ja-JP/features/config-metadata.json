@@ -1241,10 +1241,10 @@
       "description": "グループチャットのコンテキスト認識",
       "provider_ltm_settings": {
         "group_icl_enable": {
-          "description": "グループチャット履歴をコンテキストへ注入"
+          "description": "コンテキスト用にグループメッセージを収集"
         },
         "group_message_max_cnt": {
-          "description": "コンテキストへ注入する最大メッセージ数"
+          "description": "保持するグループコンテキストの最大メッセージ数"
         },
         "image_caption": {
           "description": "画像を自動解析",
@@ -1252,7 +1252,7 @@
         },
         "image_caption_provider_id": {
           "description": "グループチャット用画像説明モデル",
-          "hint": "グループチャット履歴をコンテキストへ注入する際の画像認識に使用します。デフォルトの画像説明モデルとは別に設定します。"
+          "hint": "グループメッセージ収集時に画像を説明します。内蔵実行器の画像説明モデルとは個別に設定します。"
         },
         "group_message_history_enable": {
           "description": "グループチャット履歴を永続化",

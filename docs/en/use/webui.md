@@ -6,9 +6,15 @@ The AstrBot admin panel features plugin management, log viewing, visual configur
 
 These paths use the current default sidebar. If you customized it, open `System Settings → Appearance → Customize Sidebar` at the bottom of the sidebar to review or reset the layout.
 
+The customization dialog has two sections: `System / Extensions`. Drag to reorder modules; drag across sections or use the arrows to move built-in modules. Select `Save` to apply changes immediately; settings are stored in the current browser only. Select `Reset to Default` to restore default membership and order.
+
+Saved layouts migrate automatically: `Main Modules` entries are assigned to `System` or `Extensions` by purpose, and `More Features` merges into `Extensions`.
+
+![Sidebar customization](./images/sidebar-customization-en.png)
+
 | Previous entry point or name | Current entry point |
 | --- | --- |
-| Providers → Add Provider → Agent Runner | Config → Select a profile → AI → `…` beside the AI heading → Change execution mode |
+| Providers → Add Provider → Agent Runner | Config → Select a profile → AI → top-right ⋯ → Switch Runner |
 | Data / Dashboard | Data & Logs → Statistics |
 | Conversation Management / Conversations | Data & Logs → Conversations |
 | Logs / Console | Data & Logs → Logs |
@@ -78,12 +84,66 @@ ChatUI supports these common workflows:
 
 ## Visual Configuration
 
-Select `Config` in the sidebar, then choose the profile to edit from the selector at the top. Settings are grouped into sections such as `AI`, `Platform`, and `Plugin`. Use the search control at the top to find a setting.
+Select `Config` in the sidebar, then choose the profile at the top. Settings have five sections:
 
-- In `AI`, built-in AI settings have `Model`, `Persona`, `Capabilities`, and `Advanced` tabs. Use `… → Change execution mode` beside the AI heading to connect a third-party agent.
-- `Platform` contains administrator and message-trigger settings.
-- `Plugin` selects the plugins enabled for this profile. To edit an individual plugin's parameters, open `Extensions` and click that plugin's gear icon (`Extension Config`).
-- `Ext.` contains segmented reply, group chat context, and text-to-image settings (output toggle, word count threshold, rendering strategy, service endpoint, and custom templates).
+- `AI`: the current runner's models, persona, input understanding, knowledge and tools, and context settings. Open the AI page’s top-right `⋯` menu and select `Switch Runner…` to connect an external application. See [Agent Runner](./agent-runner.md) for setup and supported settings.
+- `Messages & Replies`: `Reception & Input`, `Triggers`, `Commands`, `Content Checks`, and `Output` tabs cover message filtering and rate limits, wake rules and proactive replies, built-in commands, safety checks, and reply formatting. Speech recognition is under `Reception & Input`; speech replies are under `Output`.
+- `Sessions & Access`: administrators, session allowlists, permission feedback, session isolation, and persistent group history.
+- `Platform`: `Common Delivery`, `OneBot`, `Lark`, `Telegram`, and `Discord` tabs cover mentions, quotes, forwarded messages, and reaction acknowledgements. Manage platform connections on the `Bots` page.
+- `Plugins`: select the plugins enabled for this profile. Edit individual plugin parameters through the plugin's gear icon on the sidebar `Extensions` page.
+
+The built-in runner’s `Context` tab manages context and sanitization. `Capabilities` manages tool execution, computer use, knowledge-base retrieval, web search, and scheduled-task tools.
+
+![Runner switching menu](./images/config-runner-menu-en.jpg)
+
+![Capabilities](./images/config-capabilities-en.jpg)
+
+![Context](./images/config-context-en.jpg)
+
+After explicitly selecting a chat model under `AI → Models`, click the gear beside its name to open the model editor. Use the custom parameters button inside the editor for optional request parameters such as temperature, token limits, and reasoning effort; add only parameters supported by the model and provider. Automatic model selection has no gear. Saving model settings immediately applies to every profile using that model; model selection and fallback policy still require `Save Configuration`.
+
+The former `AI → Models → Current model parameters` panel is now `AI → Models → Gear beside model name → Custom parameters`. `Providers → Chat → Configured models → Gear` opens the same editor.
+
+In a profile's chat-model and fallback-model selection menus, click the small gear beside a model to open its full settings. Clicking the gear preserves the selection and fallback order; saving model settings immediately affects every profile using that model.
+
+![Model editing entry](./images/config-model-edit-en.png)
+
+Use this mapping to find relocated settings:
+
+| Previous configuration entry | New configuration entry |
+| --- | --- |
+| AI → Current Runner / AI heading ⋯ → Change Execution Mode | AI → top-right ⋯ → Switch Runner |
+| AstrBot Built-in AI | AstrBot Built-in Runner |
+| AI → Common Settings → speech recognition and replies | Messages & Replies → Reception & Input / Output |
+| AI → Common Settings → image processing and quoted-content parsing | AI → Input Understanding |
+| AI → Common Settings → AI Requests | Messages & Replies → Triggers / Commands |
+| AI → Advanced | AI → Context / Capabilities |
+| AI → Context & Execution → Tool Execution | AI → Capabilities → Tool Execution |
+| AI → Context & Execution | AI → Context |
+| Platform → administrators, allowlists, session isolation | Sessions & Access |
+| Platform → wake rules, message filtering, rate limits, built-in commands | Messages & Replies → Triggers / Reception & Input / Commands |
+| Platform → Content Safety, reply text prefix | Messages & Replies → Content Checks / Output |
+| Ext. → segmented replies, text-to-image | Messages & Replies → Output |
+| Ext. / AI → Context & Execution → Group Context | Messages & Replies → Reception & Input → Group Context Collection |
+| AI → Input Understanding → image caption prompt / Messages & Replies → Reception & Input → Shared Image Captioning | Messages & Replies → Reception & Input → Group Context Collection → Image Caption Prompt |
+| Ext. → proactive replies, persistent group history | Messages & Replies → Triggers / Sessions & Access → Sessions & History |
+| AI → resource-management shortcuts | Corresponding sidebar entries for models, personas, knowledge bases, and subagents |
+| Platform → Delivery mentions/quotes, forwarding threshold | Platform → Common Delivery / OneBot |
+| Platform → Feedback reactions | Platform → respective platform tab |
+
+**Reception & Input → Group Context Collection** independently controls group message collection and optional image captioning. Currently only the built-in runner uses these records. Disabling conversational AI or changing runners does not stop collection; turn off the collection switch to stop it. Proactive replies alone do not start collection. Persistent group history has a separate switch under **Sessions & Access → Sessions & History**.
+
+![Group collection remains manageable with conversational AI disabled](./images/config-messages-en.jpg)
+
+**Group Context Collection → Image Caption Prompt**, directly below the group caption model, is shared by the built-in runner and group collection. Large volumes of collected messages, especially image captions, can consume substantial model context. Reduce the maximum retained group context message count to limit usage.
+
+Settings appear directly in tabs, with related parameters shown according to feature switches and execution mode. Search follows the same rules. Hidden settings retain their saved values.
+
+![Configuration grouped by platform](./images/config-platform-en.jpg)
+
+A `Conditional` badge means the current feature combination may affect when a setting applies. Read the explanation below the badge for the conditions. Parameters remain editable and are never automatically disabled or cleared.
+
+![Conditional output-setting explanations](./images/config-effects-en.jpg)
 
 After editing, click the disk icon labeled `Save Configuration` in the lower-right corner and check for a successful save message.
 

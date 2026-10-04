@@ -502,6 +502,7 @@ import { useTheme } from 'vuetify';
 import { PurpleTheme } from '@/theme/LightTheme';
 import { useToastStore } from '@/stores/toast';
 import { askForConfirmation, useConfirmDialog } from '@/utils/confirmDialog';
+import { isConfigFieldVisible } from '@/utils/configVisibility.mjs';
 
 const { tm } = useModuleI18n('features/settings');
 const { tm: tmMeta } = useModuleI18n('features/config-metadata');
@@ -765,7 +766,9 @@ const systemConfigGroups = computed(() => {
         createGroup('tempStorage', [
             'temp_dir_max_size'
         ])
-    ].filter((group) => Object.keys(group.metadata[group.key].items).length > 0);
+    ].filter((group) => Object.entries(group.metadata[group.key].items).some(
+        ([field, item]) => isConfigFieldVisible(item, field, systemConfigData.value)
+    ));
 });
 
 const generalSystemConfigGroups = computed(() => systemConfigGroups.value.filter((group) => (

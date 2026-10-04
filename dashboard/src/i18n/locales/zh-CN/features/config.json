@@ -47,10 +47,10 @@
   },
   "aiSettings": {
     "title": "AI",
-    "enable": "启用 AI",
+    "enable": "启用对话 AI",
     "more": "更多操作",
-    "changeRunner": "更换执行方式",
-    "localSettingsTitle": "AstrBot 内置 AI",
+    "changeRunner": "切换执行器…",
+    "localSettingsTitle": "AstrBot 内置执行器",
     "settingsSuffix": "设置",
     "tabs": {
       "model": "模型",
@@ -60,7 +60,7 @@
     },
     "groups": {
       "model": "模型",
-      "modelHint": "选择内置 AI 使用的对话模型和失败重试策略。",
+      "modelHint": "选择内置执行器使用的对话模型和失败重试策略。",
       "execution": "执行设置",
       "executionHint": "配置工具调用循环和执行过程。",
       "media": "图像与语音",
@@ -77,8 +77,8 @@
       "subtitle": "启用后才会处理需要模型参与的消息。"
     },
     "runnerDialog": {
-      "title": "更换执行方式",
-      "subtitle": "只有在接入外部 AI 应用时才需要更改。大多数用户使用内置 AI 即可。",
+      "title": "切换执行器",
+      "subtitle": "只有在接入外部 AI 应用时才需要更改。大多数用户使用内置执行器即可。",
       "warningPrefix": "切换后会使用新执行方式的默认配置，当前执行方式的配置",
       "warningEmphasis": "不会保留",
       "warningSuffix": "。",
@@ -86,9 +86,9 @@
     },
     "runners": {
       "local": {
-        "title": "内置 AI",
+        "title": "内置执行器",
         "summary": "配置 AstrBot 的 AI 能力，包括模型、人格、知识库和工具。",
-        "description": "使用 AstrBot 内置 AI，支持模型、人格、知识库和工具能力。"
+        "description": "使用 AstrBot 内置执行器，支持模型、人格、知识库和工具能力。"
       },
       "dify": {
         "title": "Dify",
@@ -186,7 +186,7 @@
     "addToConfig": "已加入配置",
     "fileCount": "文件：{count}",
     "done": "完成"
-    },
+  },
   "unsavedChangesWarning": {
     "dialogTitle": "未保存的更改",
     "leavePage": "当前配置有未保存的更改，切换前是否保存？",
@@ -199,5 +199,281 @@
       "confirm": "确定",
       "cancel": "取消"
     }
+  },
+  "hierarchy": {
+    "sections": {
+      "ai_group": "AI",
+      "message_group": "消息与回复",
+      "session_group": "会话与访问控制",
+      "platform_group": "平台",
+      "plugin_group": "插件",
+      "system_group": "系统配置"
+    },
+    "descriptions": {
+      "ai_group": "配置当前执行器及其内部能力。",
+      "message_group": "配置消息接收、触发规则、指令行为、内容检查与输出呈现。",
+      "session_group": "配置管理员、会话访问范围、权限反馈、会话隔离和记录。",
+      "platform_group": "按平台配置发送行为与回应表情。通用发送为各平台共用配置；连接参数在机器人页面管理。",
+      "plugin_group": "选择当前配置文件可以使用的插件。",
+      "system_group": "配置整个 AstrBot 实例的安全、日志、网络和运行环境。"
+    },
+    "tabs": {
+      "runner": "执行器",
+      "request": "AI 请求",
+      "models": "模型指令",
+      "model": "模型",
+      "persona": "人格与提示词",
+      "capabilities": "能力",
+      "context": "上下文",
+      "connection": "连接",
+      "application": "应用与执行",
+      "input": "输入理解",
+      "safety": "内容检查",
+      "output": "输出处理",
+      "access": "访问控制",
+      "trigger": "唤醒与准入",
+      "session": "会话与记录",
+      "security": "WebUI 安全",
+      "logs": "日志",
+      "network": "网络",
+      "runtime": "运行环境",
+      "ai_trigger": "触发规则",
+      "speech": "语音",
+      "message_input": "接收与输入",
+      "commands": "指令行为",
+      "platform_common": "通用发送",
+      "platform_onebot": "OneBot",
+      "platform_lark": "飞书",
+      "platform_telegram": "Telegram",
+      "platform_discord": "Discord"
+    },
+    "currentRunner": "当前执行器",
+    "groups": {
+      "agent_runner": {
+        "title": "执行器",
+        "hint": "选择当前配置文件的 AI 执行器。"
+      },
+      "local_model": {
+        "title": "对话模型",
+        "hint": "配置内置执行器使用的模型、回退和重试。"
+      },
+      "persona": {
+        "title": "人格",
+        "hint": "选择人格及其安全策略。人格中的工具和技能决定它可以使用哪些能力。"
+      },
+      "local_prompt": {
+        "title": "提示词补充",
+        "hint": "配置内置执行器向模型提供的输入信息。"
+      },
+      "knowledgebase": {
+        "title": "知识库检索",
+        "hint": "选择知识库并配置内置执行器的检索策略。"
+      },
+      "websearch": {
+        "title": "网页搜索",
+        "hint": "配置内置执行器的网页搜索工具。"
+      },
+      "agent_computer_use": {
+        "title": "电脑使用",
+        "hint": "配置内置执行器的运行环境、权限与沙箱。"
+      },
+      "proactive_capability": {
+        "title": "定时任务工具",
+        "hint": "允许内置执行器创建定时任务。"
+      },
+      "truncate_and_compress": {
+        "title": "上下文管理",
+        "hint": "配置内置执行器的历史截断和压缩。"
+      },
+      "context_modalities": {
+        "title": "上下文兼容",
+        "hint": "按当前模型能力清理不支持的历史结构。"
+      },
+      "tool_execution": {
+        "title": "工具执行",
+        "hint": "配置调用上限、超时、参数模式和执行过程消息。"
+      },
+      "ai_request": {
+        "title": "AI 额外唤醒",
+        "hint": "通用唤醒后，为 AI 请求设置额外前缀；不替代通用前缀。"
+      },
+      "model_commands": {
+        "title": "模型指令",
+        "hint": "配置 /provider 指令的模型列表行为。"
+      },
+      "group_context": {
+        "title": "群聊上下文采集",
+        "hint": "启用后持续采集群消息，可调用独立模型转述图片；切换执行器或关闭对话 AI 不会停止采集。记录当前仅由内置执行器用于上下文注入。群消息较多，尤其是图片转述较多时，注入的记录可能大量占用模型上下文；可调低“最多保留的群聊上下文消息数”以控制占用。下方图片转述提示词由内置执行器和群聊采集共用。"
+      },
+      "active_reply": {
+        "title": "群聊主动回复",
+        "hint": "按概率触发 AI 请求。当前需要可用的对话模型和已建立的会话；只接入外部应用无法触发。"
+      },
+      "speech_input": {
+        "title": "语音识别",
+        "hint": "使用独立语音模型将输入语音转成文本，不依赖对话执行器。"
+      },
+      "image_input": {
+        "title": "图片处理",
+        "hint": "配置内置执行器的图片转述模型和预处理；共享提示词在消息与回复 → 接收与输入中设置。"
+      },
+      "quoted_input": {
+        "title": "引用与转发解析",
+        "hint": "配置内置执行器输入链路中的引用内容解析限制。"
+      },
+      "content_safety": {
+        "title": "内容检查",
+        "hint": "检查输入内容，并按配置检查模型回复。"
+      },
+      "text_output": {
+        "title": "文本回复",
+        "hint": "设置发送文本时的公共前缀。"
+      },
+      "streaming_output": {
+        "title": "流式回复",
+        "hint": "配置流式输出，以及平台不支持流式回复时的处理策略。"
+      },
+      "reasoning_output": {
+        "title": "思考内容呈现",
+        "hint": "控制内置执行器思考内容的显示。"
+      },
+      "speech_output": {
+        "title": "语音回复",
+        "hint": "使用独立语音模型将 AI 回复转成语音，不依赖对话执行器。"
+      },
+      "segmented_reply": {
+        "title": "分段回复",
+        "hint": "配置分段规则、发送间隔和内容清理。"
+      },
+      "t2i": {
+        "title": "文本转图片",
+        "hint": "将回复文本渲染为图片。"
+      },
+      "permissions": {
+        "title": "管理员与权限",
+        "hint": "配置管理员身份及权限不足时的反馈。"
+      },
+      "whitelist": {
+        "title": "白名单",
+        "hint": "控制哪些会话可以被响应。"
+      },
+      "rate_limit": {
+        "title": "消息限流",
+        "hint": "按会话限制消息处理频率，超限时等待或丢弃。"
+      },
+      "wake": {
+        "title": "通用唤醒",
+        "hint": "配置通用前缀、私聊唤醒、@ 全体唤醒和空 @ 等待行为。"
+      },
+      "message_admission": {
+        "title": "消息过滤",
+        "hint": "控制是否忽略机器人自身发送的消息。"
+      },
+      "session_isolation": {
+        "title": "会话隔离",
+        "hint": "控制群成员是否使用独立的对话上下文。"
+      },
+      "group_history": {
+        "title": "群聊消息记录",
+        "hint": "保存群聊记录；向 AI 注入记录在消息与回复 → 接收与输入 → 群聊上下文采集中设置。"
+      },
+      "platform_delivery": {
+        "title": "通用发送",
+        "hint": "@ 和引用回复使用同一组配置，作用于各平台的普通文本或图文回复；实际呈现取决于平台支持。"
+      },
+      "lark_feedback": {
+        "title": "飞书预回应",
+        "hint": "配置飞书处理消息前的回应表情。"
+      },
+      "telegram_feedback": {
+        "title": "Telegram 预回应",
+        "hint": "配置 Telegram 处理消息前的回应表情。"
+      },
+      "discord_feedback": {
+        "title": "Discord 预回应",
+        "hint": "配置 Discord 处理消息前的回应表情。"
+      },
+      "plugin": {
+        "title": "可用插件",
+        "hint": "选择当前配置文件中允许使用的插件。"
+      },
+      "webui_security": {
+        "title": "WebUI 安全",
+        "hint": "配置 HTTPS、客户端 IP、登录限流和双因素认证。"
+      },
+      "logging": {
+        "title": "日志",
+        "hint": "配置控制台、文件和 Trace 日志。"
+      },
+      "network": {
+        "title": "网络",
+        "hint": "配置代理、直连地址和对外回调地址。"
+      },
+      "dependencies": {
+        "title": "依赖安装",
+        "hint": "配置 Python 依赖安装参数和软件仓库。"
+      },
+      "storage": {
+        "title": "存储",
+        "hint": "限制临时目录占用。"
+      },
+      "time": {
+        "title": "时间",
+        "hint": "配置实例使用的时区。"
+      },
+      "dify_connection": {
+        "title": "连接",
+        "hint": "配置当前执行器支持的连接参数。"
+      },
+      "dify_application": {
+        "title": "应用与执行",
+        "hint": "配置当前外部执行器的应用参数。"
+      },
+      "coze_connection": {
+        "title": "连接",
+        "hint": "配置当前执行器支持的连接参数。"
+      },
+      "coze_application": {
+        "title": "应用与执行",
+        "hint": "配置当前外部执行器的应用参数。"
+      },
+      "dashscope_connection": {
+        "title": "连接",
+        "hint": "配置当前执行器支持的连接参数。"
+      },
+      "dashscope_application": {
+        "title": "应用与执行",
+        "hint": "配置当前外部执行器的应用参数。"
+      },
+      "deerflow_connection": {
+        "title": "连接",
+        "hint": "配置当前执行器支持的连接参数。"
+      },
+      "deerflow_application": {
+        "title": "应用与执行",
+        "hint": "配置当前外部执行器的应用参数。"
+      },
+      "builtin_commands": {
+        "title": "内置指令",
+        "hint": "控制 AstrBot 内置指令是否参与消息处理。"
+      },
+      "onebot_delivery": {
+        "title": "OneBot 合并转发",
+        "hint": "仅用于 OneBot v11（aiocqhttp）。普通回复的文字超过阈值时，打包为合并转发消息。"
+      }
+    }
+  },
+  "effects": {
+    "conditional": "条件生效",
+    "streamingDecoration": "已开启流式回复：实际流式发送时不应用此设置；普通回复及回退为普通发送的回复仍可使用。",
+    "streamingSafety": "已开启流式回复：实际流式发送会跳过回复内容检查；回退为普通发送后才执行检查。",
+    "streamingBuffer": "已开启流式回复：仅非流式执行可合并 Agent 中间消息；流式执行及其普通发送回退不使用此合并。",
+    "streamingPlatform": "已开启流式回复：实际流式发送不经过通用的 @／引用处理，是否显示取决于平台适配器。",
+    "voiceBeforeImage": "已开启语音回复：本次 AI 回复触发语音时不转图片，包括同时输出文字的情况；未触发语音时仍按图片规则处理。",
+    "voiceReasoning": "已开启语音回复：本次 AI 回复触发语音时不显示思考内容，包括同时输出文字的情况。",
+    "voiceDecoration": "已开启语音回复：包含语音的回复不应用通用的 @／引用处理，包括语音与文字同时输出。",
+    "imageBeforeSegments": "已开启文本转图片：本次回复成功转为图片后，文本各段合成一张图片，不再逐段发送文字。",
+    "forwardBeforeSegments": "已开启分段回复：OneBot 回复达到合并转发阈值后，各段打包为转发消息，不再逐段发送。",
+    "forwardDecoration": "OneBot 回复达到合并转发阈值时，不应用通用的 @／引用处理。"
   }
 }

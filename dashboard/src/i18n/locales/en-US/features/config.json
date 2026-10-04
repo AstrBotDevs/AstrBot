@@ -47,10 +47,10 @@
   },
   "aiSettings": {
     "title": "AI",
-    "enable": "Enable AI",
+    "enable": "Enable conversational AI",
     "more": "More actions",
-    "changeRunner": "Change execution mode",
-    "localSettingsTitle": "AstrBot Built-in AI",
+    "changeRunner": "Switch Runner…",
+    "localSettingsTitle": "AstrBot Built-in Runner",
     "settingsSuffix": "Settings",
     "tabs": {
       "model": "Model",
@@ -60,7 +60,7 @@
     },
     "groups": {
       "model": "Model",
-      "modelHint": "Choose the chat models and retry policy used by built-in AI.",
+      "modelHint": "Choose the chat models and retry policy used by built-in runner.",
       "execution": "Execution",
       "executionHint": "Configure the tool-call loop and execution process.",
       "media": "Image and Voice",
@@ -77,8 +77,8 @@
       "subtitle": "Enable AI to process messages that require a model."
     },
     "runnerDialog": {
-      "title": "Change Execution Mode",
-      "subtitle": "Change this only when connecting an external AI application. Built-in AI is suitable for most users.",
+      "title": "Switch Runner",
+      "subtitle": "Change this only when connecting an external AI application. Built-in Runner is suitable for most users.",
       "warningPrefix": "Switching will use the new execution mode's default configuration. The current execution mode's configuration ",
       "warningEmphasis": "will not be retained",
       "warningSuffix": ".",
@@ -86,9 +86,9 @@
     },
     "runners": {
       "local": {
-        "title": "Built-in AI",
+        "title": "Built-in Runner",
         "summary": "Configure AstrBot's AI capabilities, including models, personas, knowledge bases, and tools.",
-        "description": "Use AstrBot's built-in AI with models, personas, knowledge bases, and tools."
+        "description": "Use AstrBot's built-in runner with models, personas, knowledge bases, and tools."
       },
       "dify": {
         "title": "Dify",
@@ -199,5 +199,281 @@
       "confirm": "confirm",
       "cancel": "cancel"
     }
+  },
+  "hierarchy": {
+    "sections": {
+      "ai_group": "AI",
+      "message_group": "Messages & Replies",
+      "session_group": "Sessions & Access",
+      "platform_group": "Platform",
+      "plugin_group": "Plugins",
+      "system_group": "System Configuration"
+    },
+    "descriptions": {
+      "ai_group": "Configure the current runner and its internal capabilities.",
+      "message_group": "Configure message reception, triggers, command behavior, content checks, and output.",
+      "session_group": "Configure administrators, session access, permission feedback, isolation, and records.",
+      "platform_group": "Configure delivery and reactions by platform. Common delivery settings are shared across platforms; manage connection settings on the Bots page.",
+      "plugin_group": "Choose the plugins available to this profile.",
+      "system_group": "Configure security, logs, network, and runtime for the AstrBot instance."
+    },
+    "tabs": {
+      "runner": "Runner",
+      "request": "AI Requests",
+      "models": "Model Commands",
+      "model": "Models",
+      "persona": "Persona & Prompts",
+      "capabilities": "Capabilities",
+      "context": "Context",
+      "connection": "Connection",
+      "application": "Application & Execution",
+      "input": "Input Understanding",
+      "safety": "Content Checks",
+      "output": "Output",
+      "access": "Access",
+      "trigger": "Triggers & Admission",
+      "session": "Sessions & History",
+      "security": "WebUI Security",
+      "logs": "Logs",
+      "network": "Network",
+      "runtime": "Runtime",
+      "ai_trigger": "Triggers",
+      "speech": "Speech",
+      "message_input": "Reception & Input",
+      "commands": "Commands",
+      "platform_common": "Common Delivery",
+      "platform_onebot": "OneBot",
+      "platform_lark": "Lark",
+      "platform_telegram": "Telegram",
+      "platform_discord": "Discord"
+    },
+    "currentRunner": "Current Runner",
+    "groups": {
+      "agent_runner": {
+        "title": "Runner",
+        "hint": "Choose the AI runner for this profile."
+      },
+      "local_model": {
+        "title": "Chat Models",
+        "hint": "Choose the models, fallback order, and retries for the built-in runner."
+      },
+      "persona": {
+        "title": "Persona",
+        "hint": "Choose a persona and its safety policy. Its tool and skill selections control which capabilities it may use."
+      },
+      "local_prompt": {
+        "title": "Prompt Enrichment",
+        "hint": "Configure the information added to requests by the built-in runner."
+      },
+      "knowledgebase": {
+        "title": "Knowledge Retrieval",
+        "hint": "Choose knowledge bases and retrieval settings for the built-in runner."
+      },
+      "websearch": {
+        "title": "Web Search",
+        "hint": "Configure web search tools for the built-in runner."
+      },
+      "agent_computer_use": {
+        "title": "Computer Use",
+        "hint": "Configure the built-in runner environment, permissions, and sandbox."
+      },
+      "proactive_capability": {
+        "title": "Scheduled Task Tools",
+        "hint": "Allow the built-in runner to create scheduled tasks."
+      },
+      "truncate_and_compress": {
+        "title": "Context Management",
+        "hint": "Configure history trimming and compression for the built-in runner."
+      },
+      "context_modalities": {
+        "title": "Context Compatibility",
+        "hint": "Remove history structures unsupported by the current model."
+      },
+      "tool_execution": {
+        "title": "Tool Execution",
+        "hint": "Configure limits, timeouts, schemas, and intermediate messages."
+      },
+      "ai_request": {
+        "title": "Additional AI Wake Rules",
+        "hint": "Require an additional prefix for AI requests after general wake checks; this does not replace the general prefix."
+      },
+      "model_commands": {
+        "title": "Model Commands",
+        "hint": "Configure model listing in the /provider command."
+      },
+      "group_context": {
+        "title": "Group Context Collection",
+        "hint": "Continuously collect group messages and optionally caption images with a separate model. Switching runners or disabling conversational AI does not stop collection. Only the built-in runner currently injects these records into context. Large volumes of group messages, especially image captions, can consume substantial model context; reduce the maximum retained group context message count to limit usage. The caption prompt below is shared by the built-in runner and group collection."
+      },
+      "active_reply": {
+        "title": "Proactive Group Replies",
+        "hint": "Trigger AI requests by probability. Currently requires an available chat model and an existing conversation; connecting only an external application is insufficient."
+      },
+      "speech_input": {
+        "title": "Speech Recognition",
+        "hint": "Convert input speech to text with a separate speech model, independently of the conversation runner."
+      },
+      "image_input": {
+        "title": "Image Processing",
+        "hint": "Configure the built-in runner caption model and preprocessing. Set the shared prompt under Messages & Replies → Reception & Input."
+      },
+      "quoted_input": {
+        "title": "Quoted & Forwarded Content",
+        "hint": "Configure quoted-content parsing limits in the built-in runner input pipeline."
+      },
+      "content_safety": {
+        "title": "Content Checks",
+        "hint": "Check incoming content and optionally model replies."
+      },
+      "text_output": {
+        "title": "Text Replies",
+        "hint": "Set a prefix for outgoing text."
+      },
+      "streaming_output": {
+        "title": "Streaming Replies",
+        "hint": "Configure streaming output and the fallback for platforms without streaming support."
+      },
+      "reasoning_output": {
+        "title": "Reasoning Display",
+        "hint": "Control the display of built-in runner reasoning."
+      },
+      "speech_output": {
+        "title": "Speech Replies",
+        "hint": "Convert AI replies to speech with a separate speech model, independently of the conversation runner."
+      },
+      "segmented_reply": {
+        "title": "Segmented Replies",
+        "hint": "Configure splitting, delivery intervals, and content cleanup."
+      },
+      "t2i": {
+        "title": "Text to Image",
+        "hint": "Render reply text as an image."
+      },
+      "permissions": {
+        "title": "Administrators & Permissions",
+        "hint": "Configure administrator identity and permission-denied feedback."
+      },
+      "whitelist": {
+        "title": "Allowlist",
+        "hint": "Control which sessions may receive responses."
+      },
+      "rate_limit": {
+        "title": "Message Rate Limits",
+        "hint": "Limit processing frequency per session; wait or discard when the limit is exceeded."
+      },
+      "wake": {
+        "title": "General Wake Rules",
+        "hint": "Configure general prefixes, private-message wake rules, @all wakeups, and empty-mention waiting."
+      },
+      "message_admission": {
+        "title": "Message Filtering",
+        "hint": "Control whether messages sent by the bot itself are ignored."
+      },
+      "session_isolation": {
+        "title": "Session Isolation",
+        "hint": "Control whether group members use separate conversation contexts."
+      },
+      "group_history": {
+        "title": "Group Message History",
+        "hint": "Store group messages. Configure AI injection under Messages & Replies → Reception & Input → Group Context Collection."
+      },
+      "platform_delivery": {
+        "title": "Common Delivery",
+        "hint": "Mentions and quotes share one configuration for ordinary text and image replies across platforms. Their presentation depends on platform support."
+      },
+      "lark_feedback": {
+        "title": "Lark Acknowledgements",
+        "hint": "Configure reaction acknowledgements in Lark."
+      },
+      "telegram_feedback": {
+        "title": "Telegram Acknowledgements",
+        "hint": "Configure reaction acknowledgements in Telegram."
+      },
+      "discord_feedback": {
+        "title": "Discord Acknowledgements",
+        "hint": "Configure reaction acknowledgements in Discord."
+      },
+      "plugin": {
+        "title": "Available Plugins",
+        "hint": "Choose the plugins available to this profile."
+      },
+      "webui_security": {
+        "title": "WebUI Security",
+        "hint": "Configure HTTPS, client IP handling, login limits, and two-factor authentication."
+      },
+      "logging": {
+        "title": "Logging",
+        "hint": "Configure console, file, and trace logs."
+      },
+      "network": {
+        "title": "Network",
+        "hint": "Configure proxy, bypass addresses, and public callback URL."
+      },
+      "dependencies": {
+        "title": "Dependency Installation",
+        "hint": "Configure Python package installation and index URL."
+      },
+      "storage": {
+        "title": "Storage",
+        "hint": "Limit temporary-directory usage."
+      },
+      "time": {
+        "title": "Time",
+        "hint": "Configure the instance timezone."
+      },
+      "dify_connection": {
+        "title": "Connection",
+        "hint": "Configure the connection parameters supported by this runner."
+      },
+      "dify_application": {
+        "title": "Application & Execution",
+        "hint": "Configure application parameters for this external runner."
+      },
+      "coze_connection": {
+        "title": "Connection",
+        "hint": "Configure the connection parameters supported by this runner."
+      },
+      "coze_application": {
+        "title": "Application & Execution",
+        "hint": "Configure application parameters for this external runner."
+      },
+      "dashscope_connection": {
+        "title": "Connection",
+        "hint": "Configure the connection parameters supported by this runner."
+      },
+      "dashscope_application": {
+        "title": "Application & Execution",
+        "hint": "Configure application parameters for this external runner."
+      },
+      "deerflow_connection": {
+        "title": "Connection",
+        "hint": "Configure the connection parameters supported by this runner."
+      },
+      "deerflow_application": {
+        "title": "Application & Execution",
+        "hint": "Configure application parameters for this external runner."
+      },
+      "builtin_commands": {
+        "title": "Built-in Commands",
+        "hint": "Control whether AstrBot built-in commands participate in message processing."
+      },
+      "onebot_delivery": {
+        "title": "OneBot Forwarded Messages",
+        "hint": "Only for OneBot v11 (aiocqhttp). Ordinary replies exceeding the text threshold are packaged as forwarded messages."
+      }
+    }
+  },
+  "effects": {
+    "conditional": "Conditional",
+    "streamingDecoration": "Streaming replies are enabled: this setting is skipped during actual streaming delivery. It still applies to ordinary replies and replies that fall back to ordinary delivery.",
+    "streamingSafety": "Streaming replies are enabled: actual streaming delivery bypasses reply content checks. Checks apply after fallback to ordinary delivery.",
+    "streamingBuffer": "Streaming replies are enabled: Agent intermediate messages are merged only during non-streaming execution. Streaming execution and its ordinary-delivery fallback do not use this merge.",
+    "streamingPlatform": "Streaming replies are enabled: actual streaming delivery bypasses generic mentions and quotes; their display depends on the platform adapter.",
+    "voiceBeforeImage": "Speech replies are enabled: an AI reply that triggers speech skips text-to-image, even with simultaneous text output. Replies that do not trigger speech still follow image rules.",
+    "voiceReasoning": "Speech replies are enabled: an AI reply that triggers speech omits reasoning, even with simultaneous text output.",
+    "voiceDecoration": "Speech replies are enabled: replies containing audio bypass generic mentions and quotes, including simultaneous speech and text output.",
+    "imageBeforeSegments": "Text-to-image is enabled: when a reply is successfully rendered as an image, its text segments become one image instead of separate text messages.",
+    "forwardBeforeSegments": "Segmented replies are enabled: OneBot replies exceeding the forward threshold package all segments into a forwarded message instead of sending them separately.",
+    "forwardDecoration": "OneBot replies exceeding the forward threshold bypass generic mentions and quotes."
   }
 }
