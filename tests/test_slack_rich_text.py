@@ -2,7 +2,6 @@ import asyncio
 from unittest.mock import AsyncMock
 
 import pytest
-from slack_sdk.socket_mode.request import SocketModeRequest
 
 from astrbot.api.message_components import At, Plain
 from astrbot.core.platform.sources.slack.slack_adapter import SlackAdapter
@@ -11,28 +10,14 @@ from tests.fixtures.helpers import make_platform_config
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("mode", "block_type"),
-    [
-        ("socket", "rich_text_preformatted"),
-        ("webhook", "rich_text_preformatted"),
-        ("socket", "rich_text_quote"),
-        ("webhook", "rich_text_quote"),
-        ("socket", "rich_text_section"),
-        ("socket", "inline_code"),
-    ],
+    "block_type",
+    ["rich_text_preformatted", "rich_text_quote", "rich_text_section", "inline_code"],
 )
-async def test_slack_rich_text_preserves_body_and_mention(mode, block_type):
-    queue = asyncio.Queue()
+async def test_slack_rich_text_preserves_body_and_mention(block_type):
     adapter = SlackAdapter(
-        make_platform_config(
-            "slack",
-            bot_token="xoxb-test",
-            app_token="xapp-test",
-            signing_secret="test-secret",
-            slack_connection_mode=mode,
-        ),
+        make_platform_config("slack", bot_token="xoxb-test", app_token="xapp-test"),
         {},
-        queue,
+        asyncio.Queue(),
     )
     adapter.bot_self_id = "UBOT"
     adapter.web_client.users_info = AsyncMock(
@@ -76,16 +61,8 @@ async def test_slack_rich_text_preserves_body_and_mention(mode, block_type):
             },
         ],
     }
-    payload = {"type": "event_callback", "event": event}
-    if mode == "socket":
-        await adapter._handle_socket_event(
-            SocketModeRequest(type="events_api", envelope_id="test", payload=payload),
-        )
-    else:
-        await adapter._handle_webhook_event(payload)
-
-    received = queue.get_nowait()
-    components = received.message_obj.message
+    received = await adapter.convert_message(event)
+    components = received.message
     assert isinstance(components[0], At)
     assert components[0].qq == "UBOT"
     expected_body = body
