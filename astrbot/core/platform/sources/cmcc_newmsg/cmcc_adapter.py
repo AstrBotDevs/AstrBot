@@ -47,6 +47,7 @@ from astrbot.api.platform import (
 )
 from astrbot.core.platform.message_session import MessageSesion
 from astrbot.core.platform.platform import PlatformStatus
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
 from .cmcc_event import CmccNewmsgMessageEvent
 
@@ -78,8 +79,9 @@ def _markdown_to_plain(text: str) -> str:
     s = re.sub(r"`([^`]+)`", r"\1", s)
     s = re.sub(r"\*\*([^*]+)\*\*", r"\1", s)
     s = re.sub(r"__([^_]+)__", r"\1", s)
-    s = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", s)
+    # 图片先于链接处理，避免 ![alt](url) 先被链接规则替换成 !alt
     s = re.sub(r"!\[([^\]]*)\]\([^)]+\)", r"\1", s)
+    s = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", s)
     s = re.sub(r"^#{1,6}\s+", "", s, flags=re.M)
     s = re.sub(r"^#{3,6}(.?)", r"\1", s, flags=re.M)
     s = re.sub(r"^\[[^\]]+\]\s*", "", s, flags=re.M)
@@ -439,38 +441,67 @@ class CmccNewmsgPlatformAdapter(Platform):
     async def send_message_chain(self, to: str, chain: MessageChain) -> None:
         if not to:
             raise RuntimeError("cmcc-newmsg 缺少发送目标")
+        # 按消息链顺序发送：文本先缓冲，遇到媒体时先发文本再发媒体
         texts: list[str] = []
+
+        async def flush_text() -> None:
+            if not texts:
+                return
+            text = _markdown_to_plain("".join(texts))
+            texts.clear()
+            if text:
+                await self.send_text(to, text)
+
         for comp in chain.chain:
             if isinstance(comp, Plain):
                 texts.append(comp.text or "")
             elif isinstance(comp, (Image, Record, Video, File)):
+                await flush_text()
                 await self._send_media_component(to, comp)
             # 其他组件(At/Reply 等)暂不支持，忽略
-        text = _markdown_to_plain("".join(texts))
-        if text:
-            await self.send_text(to, text)
+        await flush_text()
+
+    async def _media_to_local_path(self, comp) -> str:
+        """将媒体组件解析为本地文件路径（File 组件没有 convert_to_file_path）。"""
+        if isinstance(comp, File):
+            return await comp.get_file()
+        return await comp.convert_to_file_path()
+
+    @staticmethod
+    def _maybe_cleanup_temp_file(path: str) -> None:
+        """MediaResolver.to_path() 将临时文件的清理责任交给调用方。
+
+        仅清理位于 AstrBot 临时目录内的文件，避免误删用户本地文件。
+        """
+        try:
+            temp_root = os.path.realpath(get_astrbot_temp_path())
+            real = os.path.realpath(path)
+            if real.startswith(temp_root + os.sep) and os.path.exists(real):
+                os.remove(real)
+        except OSError:
+            pass
 
     async def _send_media_component(self, to: str, comp) -> None:
-        try:
-            path = await comp.convert_to_file_path()
-        except Exception as e:
-            logger.error(f"cmcc-newmsg 媒体解析失败: {e!s}")
-            return
+        # 解析或转换失败直接抛出，让上层感知发送失败
+        path = await self._media_to_local_path(comp)
         try:
             media_url, media_type = await self.upload_media(path)
         except Exception as e:
             logger.error(f"cmcc-newmsg 媒体上传失败: {e!s}")
-            return
+            raise
         file_name = os.path.basename(path)
         try:
             size = os.path.getsize(path)
         except OSError:
             size = 0
-        caption = getattr(comp, "text", "") or ""
-        await self.send_media(
-            to, media_url, media_type,
-            file_name=file_name, size=size, caption=str(caption),
-        )
+        caption = str(getattr(comp, "text", "") or "")
+        try:
+            await self.send_media(
+                to, media_url, media_type,
+                file_name=file_name, size=size, caption=caption,
+            )
+        finally:
+            self._maybe_cleanup_temp_file(path)
 
     async def send_by_session(
         self,
