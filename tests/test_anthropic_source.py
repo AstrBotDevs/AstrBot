@@ -84,7 +84,7 @@ def test_anthropic_update_usage_omitted_fields_are_preserved():
 
 def test_merge_request_tools_keeps_provider_and_function_tools():
     function_tools = [
-        {"name": "reverse_image_search", "input_schema": {"type": "object"}},
+        {"name": "demo_tool", "input_schema": {"type": "object"}},
     ]
     server_tool = {"type": "web_search_20250305", "name": "web_search"}
 
@@ -103,7 +103,7 @@ def test_merge_request_tools_prefers_user_declared_entry_on_name_conflict():
 
 
 def test_merge_request_tools_ignores_non_list_value():
-    function_tools = [{"name": "reverse_image_search"}]
+    function_tools = [{"name": "demo_tool"}]
 
     merged = ProviderAnthropic._merge_request_tools("not-a-list", function_tools)
 
@@ -178,8 +178,8 @@ def test_prepare_request_tools_keeps_function_tools_alongside_custom_tools():
     tools = ToolSet()
     tools.add_tool(
         FunctionTool(
-            name="reverse_image_search",
-            description="Search by image",
+            name="demo_tool",
+            description="A demo tool",
             parameters={"type": "object", "properties": {}},
         )
     )
@@ -191,13 +191,13 @@ def test_prepare_request_tools_keeps_function_tools_alongside_custom_tools():
     # function tools AstrBot injects for the same request.
     assert payloads["tools"] == [
         {
-            "name": "reverse_image_search",
+            "name": "demo_tool",
             "input_schema": {
                 "type": "object",
                 "properties": {},
                 "required": [],
             },
-            "description": "Search by image",
+            "description": "A demo tool",
         },
         {"type": "web_search_20250305", "name": "web_search"},
     ]
