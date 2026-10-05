@@ -62,7 +62,7 @@ UPLOAD_TIMEOUT = 120
 
 
 def _gen_message_id() -> str:
-    return "msg_%d_%09d" % (int(time.time() * 1000), random.randint(0, 999999999))
+    return f"msg_{int(time.time() * 1000)}_{random.randint(0, 999999999):09d}"
 
 
 def _mask_key(key: str) -> str:
@@ -211,15 +211,13 @@ class CmccNewmsgPlatformAdapter(Platform):
 
     def meta(self) -> PlatformMetadata:
         return PlatformMetadata(
-            "cmcc_newmsg", "中国移动新消息(5G消息)适配器", self.config.get("id") or "cmcc_newmsg"
+            "cmcc_newmsg",
+            "中国移动新消息(5G消息)适配器",
+            self.config.get("id") or "cmcc_newmsg",
         )
 
     # ------------------------------------------------------------------ run
     async def run(self) -> None:
-        if not self.api_key or not re.match(r"^(ak_|app_)", self.api_key):
-            self.record_error("cmcc-newmsg: API Key 未配置或格式错误(需 ak_/app_ 开头)")
-            logger.error("cmcc-newmsg 平台未启动: API Key 缺失或格式错误")
-            return
 
         retry = 0
         while not self._terminated:
@@ -242,10 +240,21 @@ class CmccNewmsgPlatformAdapter(Platform):
 
     async def _connect_once(self) -> None:
         kwargs = {_HEADER_KW: {"X-API-Key": self.api_key}}
-        logger.info(f"cmcc-newmsg 正在连接 {_mask_key(self.api_key)} @ {self.server_url}")
+        logger.info(
+            f"cmcc-newmsg 正在连接 {_mask_key(self.api_key)} @ {self.server_url}"
+        )
         async with ws_connect(self.server_url, open_timeout=30, **kwargs) as ws:
             self._ws = ws
-            # 认证（服务端会先发 connected，再回 auth_ok）
+            # 认证：连接后立即发送 auth，服务端会先发 connected，再回 auth_ok
+            await ws.send(
+                json.dumps(
+                    {
+                        "type": "auth",
+                        "apiKey": self.api_key,
+                        "version": self.version,
+                    }
+                )
+            )
             auth_deadline = asyncio.get_event_loop().time() + 15
             auth_msg = None
             while True:
@@ -288,7 +297,10 @@ class CmccNewmsgPlatformAdapter(Platform):
         try:
             while True:
                 await asyncio.sleep(HEARTBEAT_INTERVAL)
-                if time.time() - self._last_pong > HEARTBEAT_INTERVAL + HEARTBEAT_TIMEOUT:
+                if (
+                    time.time() - self._last_pong
+                    > HEARTBEAT_INTERVAL + HEARTBEAT_TIMEOUT
+                ):
                     logger.error("cmcc-newmsg 心跳超时，主动断开")
                     await ws.close()
                     return
@@ -337,9 +349,7 @@ class CmccNewmsgPlatformAdapter(Platform):
             user_id=sender_id, nickname=str(msg.get("nickname") or sender_id)
         )
         abm.self_id = self.self_id
-        abm.message_id = str(
-            msg.get("messageId") or msg.get("id") or _gen_message_id()
-        )
+        abm.message_id = str(msg.get("messageId") or msg.get("id") or _gen_message_id())
         ts = msg.get("timestamp")
         try:
             ts_i = int(ts) if ts is not None else 0
@@ -383,11 +393,12 @@ class CmccNewmsgPlatformAdapter(Platform):
             raise RuntimeError(f"文件不存在: {file_path}")
         file_name = os.path.basename(file_path)
         media_type = _media_type_from_name(file_name)
-        size = os.path.getsize(file_path)
         form = aiohttp.FormData()
         with open(file_path, "rb") as f:
             form.add_field(
-                "file", f, filename=file_name,
+                "file",
+                f,
+                filename=file_name,
                 content_type="application/octet-stream",
             )
             form.add_field("apiKey", self.api_key)
@@ -497,8 +508,12 @@ class CmccNewmsgPlatformAdapter(Platform):
         caption = str(getattr(comp, "text", "") or "")
         try:
             await self.send_media(
-                to, media_url, media_type,
-                file_name=file_name, size=size, caption=caption,
+                to,
+                media_url,
+                media_type,
+                file_name=file_name,
+                size=size,
+                caption=caption,
             )
         finally:
             self._maybe_cleanup_temp_file(path)
