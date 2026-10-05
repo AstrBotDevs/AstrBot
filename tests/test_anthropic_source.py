@@ -130,6 +130,22 @@ def test_merge_request_tools_keeps_duplicate_unnamed_entries():
     assert merged == [unnamed, unnamed]
 
 
+def test_merge_request_tools_drops_non_object_entries(caplog):
+    server_tool = {"type": "web_search_20250305", "name": "web_search"}
+
+    with caplog.at_level("WARNING"):
+        merged = ProviderAnthropic._merge_request_tools(
+            [server_tool, "web_search", 42],
+            [],
+        )
+
+    assert merged == [server_tool]
+    assert any(
+        "custom_extra_body.tools entry of type str" in record.getMessage()
+        for record in caplog.records
+    )
+
+
 def test_prepare_request_tools_moves_custom_tools_out_of_extra_body():
     provider = _provider()
     # Custom body parameters must not carry "tools" into the SDK request, because
@@ -200,7 +216,7 @@ def test_prepare_request_tools_without_custom_tools_writes_nothing_extra():
     assert extra_body == {"temperature": 0.4}
 
 
-def test_query_passes_merged_tools_and_no_tools_in_extra_body(monkeypatch):
+def test_query_passes_merged_tools_and_no_tools_in_extra_body():
     """Guard the SDK merge boundary, where the original bug happened.
 
     The streaming path is skipped on purpose: it asserts the SDK stream type, so

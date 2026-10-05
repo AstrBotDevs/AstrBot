@@ -479,8 +479,9 @@ class ProviderAnthropic(Provider):
         DeepSeek's ``{"type": "web_search_20250305", "name": "web_search"}``) in the
         same ``tools`` list as client-side function tools. A declared entry wins when
         names collide, because the provider itself executes it. Duplicate names are
-        collapsed (provider validation rejects repeated names), while entries without
-        a name are kept as-is because some provider-side tools have none.
+        collapsed (provider validation rejects repeated names), entries without a
+        name are kept as-is because some provider-side tools have none, and entries
+        that are not objects are dropped with a warning.
 
         Args:
             custom_tools: ``tools`` declared in ``custom_extra_body``, if any.
@@ -503,7 +504,15 @@ class ProviderAnthropic(Provider):
         ]
         seen_names: set[str] = set()
         for tool in custom_tools:
-            name = tool.get("name") if isinstance(tool, dict) else None
+            if not isinstance(tool, dict):
+                # Forwarding a non-object entry only produces an opaque provider
+                # error, so drop it here where the cause is still known.
+                logger.warning(
+                    "Ignoring invalid custom_extra_body.tools entry of type %s.",
+                    type(tool).__name__,
+                )
+                continue
+            name = tool.get("name")
             if isinstance(name, str):
                 if name in seen_names:
                     continue
