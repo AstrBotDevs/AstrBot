@@ -661,6 +661,13 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         if not llm_resp:
             logger.warning("background task agent got no response")
             return
+        # Set once anything reaches this session, e.g. via send_message_to_user.
+        if not cron_event._has_send_oper:
+            logger.warning(
+                f"Background task {tool_name} (task_id={task_id}) finished, but "
+                "nothing was sent to the user. The result was only saved to the "
+                "conversation history."
+            )
 
     @classmethod
     async def _execute_local(
