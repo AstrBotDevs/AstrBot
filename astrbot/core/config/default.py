@@ -1995,7 +1995,7 @@ CONFIG_METADATA_2 = {
                         "enable": True,
                         "embedding_api_key": "",
                         "embedding_api_base": "",
-                        "embedding_model": "gemini-embedding-exp-03-07",
+                        "embedding_model": "gemini-embedding-001",
                         "embedding_dimensions": 768,
                         "timeout": 20,
                         "proxy": "",
