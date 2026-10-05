@@ -1,5 +1,6 @@
 import asyncio
 import random
+import time
 from typing import Any
 
 import aiohttp
@@ -113,6 +114,7 @@ class MockShipyardSandboxClient:
     async def wait_healthy(self, ship_id: str, session_id: str) -> None:
         """Wait until the sandbox /health endpoint returns 200."""
         attempts = 60
+        deadline = time.monotonic() + attempts
         url = f"{self.sb_url}/health"
         last_status: int | None = None
         last_error: Exception | None = None
@@ -120,6 +122,8 @@ class MockShipyardSandboxClient:
             timeout=aiohttp.ClientTimeout(total=5)
         ) as session:
             for _ in range(attempts):
+                if time.monotonic() >= deadline:
+                    break
                 logger.info(
                     f"Checking health for sandbox {ship_id} on {self.sb_url}..."
                 )
@@ -134,8 +138,8 @@ class MockShipyardSandboxClient:
                     last_error = e
                 await asyncio.sleep(1)
         raise TimeoutError(
-            f"Sandbox {ship_id} on {self.sb_url} did not become healthy after "
-            f"{attempts} attempts (last status: {last_status}, "
+            f"Sandbox {ship_id} on {self.sb_url} did not become healthy within "
+            f"{attempts}s (last status: {last_status}, "
             f"last error: {last_error!r})"
         )
 

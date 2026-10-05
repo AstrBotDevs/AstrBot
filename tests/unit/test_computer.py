@@ -586,6 +586,40 @@ class TestBoxliteWaitHealthy:
         assert len(calls) == 60
 
     @pytest.mark.asyncio
+    async def test_slow_probes_respect_total_deadline(self):
+        mod, cls = self._client_cls()
+        calls = []
+        now = [0.0]
+
+        class _Hang:
+            def __init__(self, *a, **k):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *a):
+                return False
+
+            def get(self, url):
+                calls.append(url)
+                now[0] += 5  # each probe burns the 5s HTTP timeout
+                raise TimeoutError("probe timed out")
+
+        async def fake_sleep(delay):
+            now[0] += delay
+
+        with (
+            patch.object(mod.aiohttp, "ClientSession", _Hang),
+            patch.object(mod.asyncio, "sleep", new=fake_sleep),
+            patch.object(mod.time, "monotonic", new=lambda: now[0]),
+        ):
+            with pytest.raises(TimeoutError):
+                await cls("http://127.0.0.1:1").wait_healthy("s", "x")
+        assert now[0] <= 66
+        assert len(calls) < 60
+
+    @pytest.mark.asyncio
     async def test_connection_errors_raise_timeout(self):
         mod, cls = self._client_cls()
         calls = []
