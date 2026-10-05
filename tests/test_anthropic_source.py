@@ -1,5 +1,6 @@
 from anthropic.types import MessageDeltaUsage, Usage
 
+from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.provider.entities import TokenUsage
 from astrbot.core.provider.sources.anthropic_source import ProviderAnthropic
 
@@ -75,3 +76,100 @@ def test_anthropic_update_usage_omitted_fields_are_preserved():
     assert token_usage.input_other == 5
     assert token_usage.input_cached == 0
     assert token_usage.output == 7
+
+
+def test_merge_request_tools_keeps_provider_and_function_tools():
+    function_tools = [
+        {"name": "reverse_image_search", "input_schema": {"type": "object"}},
+    ]
+    server_tool = {"type": "web_search_20250305", "name": "web_search"}
+
+    merged = ProviderAnthropic._merge_request_tools([server_tool], function_tools)
+
+    assert merged == [*function_tools, server_tool]
+
+
+def test_merge_request_tools_prefers_user_declared_entry_on_name_conflict():
+    function_tools = [{"name": "web_search", "input_schema": {"type": "object"}}]
+    server_tool = {"type": "web_search_20250305", "name": "web_search"}
+
+    merged = ProviderAnthropic._merge_request_tools([server_tool], function_tools)
+
+    assert merged == [server_tool]
+
+
+def test_merge_request_tools_ignores_non_list_value():
+    function_tools = [{"name": "reverse_image_search"}]
+
+    merged = ProviderAnthropic._merge_request_tools("not-a-list", function_tools)
+
+    assert merged == function_tools
+
+
+def test_prepare_request_tools_moves_custom_tools_out_of_extra_body():
+    provider = _provider()
+    # Custom body parameters must not carry "tools" into the SDK request, because
+    # the SDK replaces the whole key and would drop the merged tool list.
+    provider.provider_config = {
+        "custom_extra_body": {
+            "temperature": 0.4,
+            "tools": [{"type": "web_search_20250305", "name": "web_search"}],
+        },
+    }
+    payloads = {}
+
+    extra_body = provider._prepare_request_tools(payloads, None)
+
+    assert payloads["tools"] == [
+        {"type": "web_search_20250305", "name": "web_search"},
+    ]
+    assert payloads["tool_choice"] == {"type": "auto"}
+    assert extra_body == {"temperature": 0.4}
+
+
+def test_prepare_request_tools_keeps_function_tools_alongside_custom_tools():
+    provider = _provider()
+    provider.provider_config = {
+        "custom_extra_body": {
+            "tools": [{"type": "web_search_20250305", "name": "web_search"}],
+        },
+    }
+    tools = ToolSet()
+    tools.add_tool(
+        FunctionTool(
+            name="reverse_image_search",
+            description="Search by image",
+            parameters={"type": "object", "properties": {}},
+        )
+    )
+    payloads = {}
+
+    extra_body = provider._prepare_request_tools(payloads, tools)
+
+    # The regression this guards: a declared provider-side tool must not remove the
+    # function tools AstrBot injects for the same request.
+    assert payloads["tools"] == [
+        {
+            "name": "reverse_image_search",
+            "input_schema": {
+                "type": "object",
+                "properties": {},
+                "required": [],
+            },
+            "description": "Search by image",
+        },
+        {"type": "web_search_20250305", "name": "web_search"},
+    ]
+    assert payloads["tool_choice"] == {"type": "auto"}
+    assert extra_body == {}
+
+
+def test_prepare_request_tools_without_custom_tools_writes_nothing_extra():
+    provider = _provider()
+    provider.provider_config = {"custom_extra_body": {"temperature": 0.4}}
+    payloads = {}
+
+    extra_body = provider._prepare_request_tools(payloads, None)
+
+    assert payloads == {}
+    assert extra_body == {"temperature": 0.4}

@@ -469,6 +469,73 @@ class ProviderAnthropic(Provider):
             token_usage.output = usage.output_tokens
 
     @staticmethod
+    def _merge_request_tools(
+        custom_tools: Any,
+        function_tools: list[dict],
+    ) -> list[dict]:
+        """Merge provider-side tools with locally executed function tools.
+
+        Anthropic-compatible providers accept provider-side tools (for example
+        DeepSeek's ``{"type": "web_search_20250305", "name": "web_search"}``) in the
+        same ``tools`` list as client-side function tools. A declared entry wins when
+        names collide, because the provider itself executes it.
+
+        Args:
+            custom_tools: ``tools`` declared in ``custom_extra_body``, if any.
+            function_tools: Tool schemas generated from the request ToolSet.
+
+        Returns:
+            Merged tool list, deduplicated by tool name.
+        """
+        if not isinstance(custom_tools, list):
+            return function_tools
+        custom_names = {
+            tool.get("name")
+            for tool in custom_tools
+            if isinstance(tool, dict) and isinstance(tool.get("name"), str)
+        }
+        return [
+            tool
+            for tool in function_tools
+            if not isinstance(tool, dict) or tool.get("name") not in custom_names
+        ] + custom_tools
+
+    def _prepare_request_tools(
+        self,
+        payloads: dict,
+        tools: ToolSet | None,
+    ) -> dict:
+        """Build the request tool list and detach it from ``custom_extra_body``.
+
+        The SDK merges ``extra_body`` into the request body with a plain
+        ``{**body, **extra_body}`` update, so a ``tools`` key left in ``extra_body``
+        would replace the injected function tools wholesale. Popping it makes this
+        the single place where ``payloads["tools"]`` is written.
+
+        Args:
+            payloads: Anthropic request payload updated in place.
+            tools: Tools available for this request, if any.
+
+        Returns:
+            The request body parameters to pass to the SDK.
+        """
+        custom_extra_body = self.provider_config.get("custom_extra_body", {})
+        extra_body = (
+            dict(custom_extra_body) if isinstance(custom_extra_body, dict) else {}
+        )
+        function_tools = tools.anthropic_schema() if tools else []
+        merged_tools = self._merge_request_tools(
+            extra_body.pop("tools", None),
+            function_tools,
+        )
+        if merged_tools:
+            payloads["tools"] = merged_tools
+            payloads["tool_choice"] = self._normalize_tool_choice(
+                payloads.get("tool_choice", "auto")
+            )
+        return extra_body
+
+    @staticmethod
     def _normalize_tool_choice(tool_choice) -> dict:
         """将 tool_choice 转换为 Anthropic API 要求的格式
 
@@ -517,14 +584,7 @@ class ProviderAnthropic(Provider):
         request_max_retries: int | None = None,
         conversation_id: str | None = None,
     ) -> LLMResponse:
-        if tools:
-            if tool_list := tools.get_func_desc_anthropic_style():
-                payloads["tools"] = tool_list
-                payloads["tool_choice"] = self._normalize_tool_choice(
-                    payloads.get("tool_choice", "auto")
-                )
-
-        extra_body = self.provider_config.get("custom_extra_body", {})
+        extra_body = self._prepare_request_tools(payloads, tools)
 
         if "max_tokens" not in payloads:
             payloads["max_tokens"] = 65536
@@ -614,13 +674,6 @@ class ProviderAnthropic(Provider):
         request_max_retries: int | None = None,
         conversation_id: str | None = None,
     ) -> AsyncGenerator[LLMResponse, None]:
-        if tools:
-            if tool_list := tools.get_func_desc_anthropic_style():
-                payloads["tools"] = tool_list
-                payloads["tool_choice"] = self._normalize_tool_choice(
-                    payloads.get("tool_choice", "auto")
-                )
-
         # 用于累积工具调用信息
         tool_use_buffer = {}
         # 用于累积最终结果
@@ -628,7 +681,7 @@ class ProviderAnthropic(Provider):
         final_tool_calls = []
         id = None
         usage = TokenUsage()
-        extra_body = self.provider_config.get("custom_extra_body", {})
+        extra_body = self._prepare_request_tools(payloads, tools)
         reasoning_content = ""
         reasoning_signature = ""
 
