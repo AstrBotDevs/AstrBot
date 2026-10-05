@@ -1,15 +1,18 @@
 import asyncio
 import importlib
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from telegram import Message
+from telegram import Message, Update
+from telegram.ext import ApplicationBuilder, ExtBot, MessageHandler, filters
 
 import astrbot.api.message_components as Comp
 from astrbot.api.platform import Group
 from astrbot.core.platform.register import unregister_platform_adapters_by_module
+from astrbot.core.utils.io import DownloadFileHTTPError
 from tests.fixtures.helpers import (
     NoopAwaitable,
     create_mock_file,
@@ -1212,3 +1215,185 @@ async def test_telegram_run_rebuilds_fresh_application_after_recreate_init_failu
     app_two.shutdown.assert_awaited()
     app_three.initialize.assert_awaited()
     app_three.start.assert_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("media_type", ["photo", "document", "video"])
+@pytest.mark.parametrize("failure", ["get_file", "download", "missing_path"])
+@pytest.mark.parametrize("is_reply", [False, True])
+async def test_telegram_unavailable_media_preserves_text(
+    media_type, failure, is_reply, tmp_path
+):
+    module = _load_telegram_module("astrbot.core.platform.sources.telegram.tg_adapter")
+    adapter = module.TelegramPlatformAdapter(
+        make_platform_config("telegram"), {}, asyncio.Queue()
+    )
+    media = create_mock_file("https://api.telegram.org/file/test/attachment")
+    media.file_name = "attachment"
+    download = AsyncMock()
+    if failure == "get_file":
+        media.get_file.side_effect = MockTelegramNetworkError("unavailable")
+    elif failure == "download":
+        download.side_effect = DownloadFileHTTPError("HTTP status code: 404")
+    else:
+        media.get_file.return_value.file_path = None
+    update = create_mock_update(
+        message_text=None,
+        caption="@test_bot Please help",
+        caption_entities=[MagicMock(type="mention")],
+        **{media_type: [media] if media_type == "photo" else media},
+    )
+    update.message.parse_caption_entity.return_value = "@test_bot"
+    if is_reply:
+        update = create_mock_update(
+            message_text="Follow-up question", reply_to_message=update.message
+        )
+    adapter.handle_msg = AsyncMock()
+
+    with (
+        patch.object(module, "get_astrbot_temp_path", return_value=str(tmp_path)),
+        patch.object(module, "download_file", download),
+    ):
+        await adapter.message_handler(update, _build_context())
+
+    adapter.handle_msg.assert_awaited_once()
+    message = adapter.handle_msg.await_args.args[0]
+    if is_reply:
+        assert message.message_str == "Follow-up question"
+        reply = next(part for part in message.message if isinstance(part, Comp.Reply))
+        assert reply.message_str == "@test_bot Please help"
+        parts = reply.chain
+    else:
+        assert message.message_str == "@test_bot Please help"
+        parts = message.message
+    assert any(
+        isinstance(part, Comp.Plain) and part.text == "@test_bot Please help"
+        for part in parts
+    )
+    assert any(isinstance(part, Comp.At) and part.qq == "test_bot" for part in parts)
+    assert not any(
+        isinstance(part, (Comp.Image, Comp.File, Comp.Video)) for part in parts
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("cancelled", [False, True])
+async def test_telegram_failed_download_removes_partial_file(tmp_path, cancelled):
+    module = _load_telegram_module("astrbot.core.platform.sources.telegram.tg_adapter")
+    adapter = module.TelegramPlatformAdapter(
+        make_platform_config("telegram"), {}, asyncio.Queue()
+    )
+    failure = asyncio.CancelledError if cancelled else OSError
+
+    async def interrupted_download(url, path):
+        Path(path).write_bytes(b"partial content")
+        raise failure()
+
+    with (
+        patch.object(module, "get_astrbot_temp_path", return_value=str(tmp_path)),
+        patch.object(module, "download_file", side_effect=interrupted_download),
+        pytest.raises(failure),
+    ):
+        await adapter._download_to_temp("https://api.telegram.org/file/test/photo.jpg")
+
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.asyncio
+async def test_telegram_slow_download_does_not_block_other_updates(tmp_path):
+    module = _load_telegram_module("astrbot.core.platform.sources.telegram.tg_adapter")
+    bot = MagicMock(spec=ExtBot)
+    bot.id = 12345678
+    bot.username = "test_bot"
+    bot.defaults = None
+    bot.initialize = AsyncMock()
+    bot.shutdown = AsyncMock()
+    bot.get_file = AsyncMock(
+        return_value=SimpleNamespace(
+            file_path="https://api.telegram.org/file/test/photo.jpg"
+        )
+    )
+    application = ApplicationBuilder().bot(bot).updater(None).job_queue(None).build()
+    builder = MagicMock()
+    builder.token.return_value.base_url.return_value.base_file_url.return_value.build.return_value = application
+    started = asyncio.Event()
+    release = asyncio.Event()
+    text_delivered = asyncio.Event()
+    delivered = []
+
+    async def slow_download(url, path):
+        started.set()
+        await release.wait()
+        Path(path).write_bytes(b"photo content")
+
+    async def record_message(message):
+        delivered.append(message)
+        if message.message_str == "Unrelated chat text":
+            text_delivered.set()
+
+    with (
+        patch.object(module, "ApplicationBuilder", return_value=builder),
+        patch.object(module, "TelegramMessageHandler", MessageHandler),
+        patch.object(module, "filters", filters),
+        patch.object(module, "get_astrbot_temp_path", return_value=str(tmp_path)),
+        patch.object(module, "download_file", side_effect=slow_download),
+    ):
+        adapter = module.TelegramPlatformAdapter(
+            make_platform_config("telegram"), {}, asyncio.Queue()
+        )
+        adapter.handle_msg = record_message
+        photo_update = Update.de_json(
+            {
+                "update_id": 1,
+                "message": {
+                    "message_id": 1,
+                    "date": 0,
+                    "chat": {"id": 1, "type": "private"},
+                    "from": {"id": 1, "is_bot": False, "first_name": "Sender"},
+                    "photo": [
+                        {
+                            "file_id": "photo",
+                            "file_unique_id": "photo",
+                            "width": 1,
+                            "height": 1,
+                        }
+                    ],
+                    "caption": "Slow photo",
+                },
+            },
+            bot,
+        )
+        text_update = Update.de_json(
+            {
+                "update_id": 2,
+                "message": {
+                    "message_id": 2,
+                    "date": 0,
+                    "chat": {"id": 2, "type": "private"},
+                    "from": {"id": 2, "is_bot": False, "first_name": "Other"},
+                    "text": "Unrelated chat text",
+                },
+            },
+            bot,
+        )
+        async with application:
+            await application.start()
+            try:
+                await application.update_queue.put(photo_update)
+                await asyncio.wait_for(started.wait(), timeout=2)
+                await application.update_queue.put(text_update)
+                await asyncio.wait_for(text_delivered.wait(), timeout=2)
+                assert [message.message_str for message in delivered] == [
+                    "Unrelated chat text"
+                ]
+            finally:
+                release.set()
+                await application.stop()
+        assert [message.message_str for message in delivered] == [
+            "Unrelated chat text",
+            "Slow photo",
+        ]
+        photo = next(
+            part for part in delivered[1].message if isinstance(part, Comp.Image)
+        )
+        assert Path(photo.file).read_bytes() == b"photo content"

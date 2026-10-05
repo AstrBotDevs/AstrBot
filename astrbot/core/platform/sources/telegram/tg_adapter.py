@@ -4,6 +4,7 @@ import re
 import sys
 import uuid
 from contextlib import suppress
+from pathlib import Path
 from typing import cast
 
 from apscheduler.events import EVENT_JOB_ERROR
@@ -144,6 +145,8 @@ class TelegramPlatformAdapter(Platform):
         message_handler = TelegramMessageHandler(
             filters=filters.ALL,
             callback=self.message_handler,
+            # Let the SDK track callbacks without blocking subsequent updates on downloads.
+            block=False,
         )
         self.application.add_handler(message_handler)
         self.client = self.application.bot
@@ -464,13 +467,19 @@ class TelegramPlatformAdapter(Platform):
         Returns:
             Local absolute path of the file.
         """
-        if os.path.isfile(file_path):
-            return file_path
-        file_basename = os.path.basename(file_path)
-        temp_dir = get_astrbot_temp_path()
-        temp_path = os.path.join(temp_dir, f"{uuid.uuid4().hex}_{file_basename}")
-        await download_file(file_path, path=temp_path)
-        return temp_path
+        source_path = Path(file_path)
+        if source_path.is_file():
+            return str(source_path)
+        temp_dir = Path(get_astrbot_temp_path())
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        temp_path = temp_dir / f"{uuid.uuid4().hex}_{source_path.name}"
+        try:
+            await download_file(file_path, path=str(temp_path))
+        except (Exception, asyncio.CancelledError):
+            with suppress(OSError):
+                temp_path.unlink(missing_ok=True)
+            raise
+        return str(temp_path)
 
     async def convert_message(
         self,
@@ -701,17 +710,22 @@ class TelegramPlatformAdapter(Platform):
             _apply_caption()
 
         elif update.message.photo:
-            photo = update.message.photo[-1]  # get the largest photo
-            file = await photo.get_file()
-            file_path = file.file_path
-            if file_path is None:
+            photo = update.message.photo[-1]  # Get the largest photo.
+            try:
+                file = await photo.get_file()
+                if file.file_path is None:
+                    logger.warning(
+                        "Telegram photo has no file_path; skipping attachment."
+                    )
+                else:
+                    temp_path = await self._download_to_temp(file.file_path)
+                    message.message.append(Comp.Image(file=temp_path, url=temp_path))
+            except Exception as exc:
                 logger.warning(
-                    "Telegram photo file_path is None, cannot save the file."
+                    "Telegram photo is unavailable (%s); preserving message text.",
+                    type(exc).__name__,
                 )
-            else:
-                temp_path = await self._download_to_temp(file_path)
-                message.message.append(Comp.Image(file=temp_path, url=temp_path))
-                _apply_caption()
+            _apply_caption()
 
         elif update.message.sticker:
             # 将sticker当作图片处理
@@ -731,32 +745,41 @@ class TelegramPlatformAdapter(Platform):
                 message.message.append(Comp.Plain(sticker_text))
 
         elif update.message.document:
-            file = await update.message.document.get_file()
             file_name = update.message.document.file_name or uuid.uuid4().hex
-            file_path = file.file_path
-            if file_path is None:
+            try:
+                file = await update.message.document.get_file()
+                if file.file_path is None:
+                    logger.warning(
+                        "Telegram document has no file_path; skipping attachment."
+                    )
+                else:
+                    temp_path = await self._download_to_temp(file.file_path)
+                    message.message.append(
+                        Comp.File(file=temp_path, name=file_name, url=temp_path)
+                    )
+            except Exception as exc:
                 logger.warning(
-                    f"Telegram document file_path is None, cannot save the file {file_name}.",
+                    "Telegram document is unavailable (%s); preserving message text.",
+                    type(exc).__name__,
                 )
-            else:
-                temp_path = await self._download_to_temp(file_path)
-                message.message.append(
-                    Comp.File(file=temp_path, name=file_name, url=temp_path)
-                )
-                _apply_caption()
+            _apply_caption()
 
         elif update.message.video:
-            file = await update.message.video.get_file()
-            file_name = update.message.video.file_name or uuid.uuid4().hex
-            file_path = file.file_path
-            if file_path is None:
+            try:
+                file = await update.message.video.get_file()
+                if file.file_path is None:
+                    logger.warning(
+                        "Telegram video has no file_path; skipping attachment."
+                    )
+                else:
+                    temp_path = await self._download_to_temp(file.file_path)
+                    message.message.append(Comp.Video(file=temp_path, path=temp_path))
+            except Exception as exc:
                 logger.warning(
-                    f"Telegram video file_path is None, cannot save the file {file_name}.",
+                    "Telegram video is unavailable (%s); preserving message text.",
+                    type(exc).__name__,
                 )
-            else:
-                temp_path = await self._download_to_temp(file_path)
-                message.message.append(Comp.Video(file=temp_path, path=temp_path))
-                _apply_caption()
+            _apply_caption()
 
         elif update.message.video_note:
             # Video notes carry no file_name and cannot have a caption.
