@@ -14,6 +14,8 @@
 
 When you receive a quoted (reply) message, AstrBot parses the quoted text, images, videos, and files.
 
+In group chats, the bot responds to messages that @ mention it, @ all members (unless disabled), reply to it, or start with a wake prefix such as `/`.
+
 Proactive message push: Supported.
 
 Streaming output: Supported. You must enable the `Create and update cards (cardkit:card:write)` permission for your app in the Lark Developer Console.
@@ -33,7 +35,7 @@ Open the AstrBot management panel, click `Platforms` in the left sidebar, click 
 Under `Creation Method`, select `One-click QR Creation`, choose the China or international edition as needed, then scan the QR code with the Lark mobile app and confirm. After creation succeeds, AstrBot automatically fills in the app's `app_id`, `app_secret`, and domain configuration.
 
 > [!IMPORTANT]
-> In group chats the bot only receives events for messages that @ mention it by default. If you need the bot to receive all group messages, enable the `im:message.group_msg` permission in the Lark Developer Console.
+> In group chats, Lark only pushes messages that @ mention the bot to AstrBot by default. If you need the bot to receive all group messages, enable the `im:message.group_msg` permission in the Lark Developer Console.
 >
 > Replace `<APP_ID>` in the URL below with your Lark app ID, then open it to jump to the permission enablement page:
 >
