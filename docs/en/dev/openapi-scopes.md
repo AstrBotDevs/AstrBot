@@ -180,6 +180,7 @@ Manage conversations and platform-session data.
 | `GET` | `/api/v1/conversations` | — |
 | `POST` | `/api/v1/conversations/batch-delete` | — |
 | `POST` | `/api/v1/conversations/export` | — |
+| `GET` | `/api/v1/conversations/filter-options` | — |
 | `GET` | `/api/v1/conversations/{conversation_id}` | — |
 | `PATCH` | `/api/v1/conversations/{conversation_id}` | — |
 | `DELETE` | `/api/v1/conversations/{conversation_id}` | — |
@@ -206,6 +207,11 @@ Upload and download chat attachments.
 | `POST` | `/api/v1/file` | — |
 | `POST` | `/api/v1/files` | — |
 | `GET` | `/api/v1/files/content` | — |
+| `POST` | `/api/v1/files/upload/abort` | — |
+| `POST` | `/api/v1/files/upload/chunk` | — |
+| `POST` | `/api/v1/files/upload/complete` | — |
+| `POST` | `/api/v1/files/upload/init` | — |
+| `POST` | `/api/v1/files/upload/status` | — |
 | `GET` | `/api/v1/files/{attachment_id}` | — |
 | `DELETE` | `/api/v1/files/{attachment_id}` | — |
 | `GET` | `/api/v1/files/{attachment_id}/content` | — |
@@ -255,6 +261,9 @@ Manage plugins, plugin configuration, plugin sources, and marketplace data.
 | `POST` | `/api/v1/plugins/update` | — |
 | `POST` | `/api/v1/plugins/validate/repo` | — |
 | `POST` | `/api/v1/plugins/version-support/check` | — |
+| `GET` | `/api/v1/plugins/view` | — |
+| `GET` | `/api/v1/plugins/view/assets` | — |
+| `GET` | `/api/v1/plugins/views` | — |
 | `GET` | `/api/v1/plugins/{plugin_id}` | — |
 | `DELETE` | `/api/v1/plugins/{plugin_id}` | — |
 | `GET` | `/api/v1/plugins/{plugin_id}/changelog` | — |
@@ -273,6 +282,9 @@ Manage plugins, plugin configuration, plugin sources, and marketplace data.
 | `POST` | `/api/v1/plugins/{plugin_id}/reload` | — |
 | `POST` | `/api/v1/plugins/{plugin_id}/source` | — |
 | `POST` | `/api/v1/plugins/{plugin_id}/update` | — |
+| `GET` | `/api/v1/plugins/{plugin_id}/views` | — |
+| `GET` | `/api/v1/plugins/{plugin_id}/views/{page_name}` | — |
+| `GET` | `/api/v1/plugins/{plugin_id}/views/{page_name}/assets/{asset_path}` | — |
 
 ## `mcp`
 

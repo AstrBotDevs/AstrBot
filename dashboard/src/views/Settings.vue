@@ -140,21 +140,6 @@
                             </div>
                         </div>
 
-                        <template v-if="!systemConfigLoading">
-                            <div
-                                v-for="group in appearanceSystemConfigGroups"
-                                :key="group.key"
-                                class="system-config-group"
-                                @focusout.capture="scheduleSystemConfigAutoSave"
-                            >
-                                <div class="system-config-group__title">{{ group.title }}</div>
-                                <AstrBotConfigV4
-                                    :metadata="group.metadata"
-                                    :iterable="systemConfigData"
-                                    :metadata-key="group.key"
-                                />
-                            </div>
-                        </template>
                     </div>
                 </section>
 
@@ -658,9 +643,9 @@ const openExternalLink = (url) => {
 };
 
 const openFaqLink = () => {
-    openExternalLink(locale.value === 'en-US'
-        ? 'https://docs.astrbot.app/en/faq.html'
-        : 'https://docs.astrbot.app/faq.html');
+    openExternalLink(locale.value.startsWith('zh-')
+        ? 'https://docs.astrbot.app/faq.html'
+        : 'https://docs.astrbot.app/en/faq.html');
 };
 
 const resourceItems = computed(() => [
@@ -779,21 +764,12 @@ const systemConfigGroups = computed(() => {
         ]),
         createGroup('tempStorage', [
             'temp_dir_max_size'
-        ]),
-        createGroup('t2iRendering', [
-            't2i_strategy',
-            't2i_endpoint',
-            't2i_template',
-            't2i_active_template'
         ])
     ].filter((group) => Object.keys(group.metadata[group.key].items).length > 0);
 });
 
 const generalSystemConfigGroups = computed(() => systemConfigGroups.value.filter((group) => (
     group.key === 'runtime' || group.key === 'logs' || group.key === 'tempStorage'
-)));
-const appearanceSystemConfigGroups = computed(() => systemConfigGroups.value.filter((group) => (
-    group.key === 't2iRendering'
 )));
 const networkSystemConfigGroups = computed(() => systemConfigGroups.value.filter((group) => (
     group.key === 'network'

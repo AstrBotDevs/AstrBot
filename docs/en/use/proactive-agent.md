@@ -14,12 +14,12 @@ The Main Agent can now manage a global **Cron Job List**, setting tasks for its 
 
 - **Self-Wakeup**: AstrBot automatically wakes up at the scheduled time to execute tasks.
 - **Task Feedback**: After execution, AstrBot reports the results back to the task creator.
-- **WebUI Management**: You can view, edit, or delete scheduled tasks in the "Future Tasks" page of the WebUI.
+- **WebUI Management**: You can view, edit, or delete scheduled tasks in the WebUI under **More Features → Future Tasks**.
 
 ### How to Use
 
 > [!TIP]
-> First, ensure that "Proactive Capabilities" is enabled in the configuration.
+> First, select the relevant profile on the `Config` page, open `AI → Capabilities → Proactive Agent`, enable the feature, and click `Save Configuration` at the bottom right.
 
 The Main Agent has the ability to manage scheduled tasks. You can tell it:
 - "Remind me to have a meeting at 8 AM tomorrow."
@@ -28,7 +28,7 @@ The Main Agent has the ability to manage scheduled tasks. You can tell it:
 
 The Main Agent will call built-in scheduling tools to arrange these plans.
 
-You can view and manage all future tasks by clicking **Future Tasks** in the left navigation bar of the AstrBot WebUI.
+You can view and manage all future tasks by expanding **More Features** in the left navigation bar and clicking **Future Tasks** (`/cron`) of the AstrBot WebUI.
 
 ![](https://files.astrbot.app/docs/source/images/proactive-agent/image-1.png)
 

@@ -4,6 +4,12 @@ import {
 } from './routeConstants.mjs';
 import type { RouteLocationNormalized } from 'vue-router';
 
+const redirectToDataTab = (name: string) => (to: RouteLocationNormalized) => ({
+  name,
+  query: to.query,
+  hash: to.hash
+});
+
 const MainRoutes = {
   path: '/main',
   meta: {
@@ -91,9 +97,18 @@ const MainRoutes = {
       ]
     },
     {
-      name: 'PluginPage',
-      path: '/plugin-page/:pluginName/:pageName',
+      name: 'PluginView',
+      path: '/plugin-view/:pluginName/:pageName',
       component: () => import('@/views/PluginPagePage.vue')
+    },
+    {
+      // Legacy alias of the plugin view route.
+      path: '/plugin-page/:pluginName/:pageName',
+      redirect: (to: RouteLocationNormalized) => ({
+        name: 'PluginView',
+        params: to.params,
+        query: to.query,
+      })
     },
     {
       path: '/extension/:pluginId',
@@ -147,16 +162,6 @@ const MainRoutes = {
       redirect: '/settings#system-config'
     },
     {
-      name: 'Stats',
-      path: '/dashboard/default',
-      component: () => import('@/views/stats/StatsPage.vue')
-    },
-    {
-      name: 'Conversation',
-      path: '/conversation',
-      component: () => import('@/views/ConversationPage.vue')
-    },
-    {
       name: 'SessionManagement',
       path: '/session-management',
       component: () => import('@/views/SessionManagementPage.vue')
@@ -167,6 +172,64 @@ const MainRoutes = {
       component: () => import('@/views/PersonaPage.vue')
     },
     {
+      name: 'Data',
+      path: '/data',
+      component: () => import('@/views/DataPage.vue'),
+      redirect: redirectToDataTab('Stats'),
+      children: [
+        {
+          name: 'Stats',
+          path: 'statistics',
+          component: () => import('@/views/stats/StatsPage.vue'),
+          meta: { dataTab: 'statistics' }
+        },
+        {
+          name: 'Conversation',
+          path: 'conversations',
+          component: () => import('@/views/conversation/ConversationWorkspacePage.vue'),
+          meta: { dataTab: 'conversations' }
+        },
+        {
+          name: 'ConversationLegacy',
+          path: 'conversations/legacy',
+          component: () => import('@/views/conversation/LegacyConversationPage.vue'),
+          meta: { dataTab: 'conversations' }
+        },
+        {
+          name: 'Console',
+          path: 'logs',
+          component: () => import('@/views/ConsolePage.vue'),
+          meta: { dataTab: 'logs' }
+        },
+        {
+          name: 'Trace',
+          path: 'trace',
+          component: () => import('@/views/TracePage.vue'),
+          meta: { dataTab: 'trace' }
+        }
+      ]
+    },
+    {
+      path: '/dashboard/default',
+      redirect: redirectToDataTab('Stats')
+    },
+    {
+      path: '/conversation',
+      redirect: redirectToDataTab('Conversation')
+    },
+    {
+      path: '/console',
+      redirect: redirectToDataTab('Console')
+    },
+    {
+      path: '/trace',
+      redirect: redirectToDataTab('Trace')
+    },
+    {
+      path: '/observability',
+      redirect: redirectToDataTab('Stats')
+    },
+    {
       name: 'SubAgent',
       path: '/subagent',
       component: () => import('@/views/SubAgentPage.vue')
@@ -175,16 +238,6 @@ const MainRoutes = {
       name: 'CronJobs',
       path: '/cron',
       component: () => import('@/views/CronJobPage.vue')
-    },
-    {
-      name: 'Console',
-      path: '/console',
-      component: () => import('@/views/ConsolePage.vue')
-    },
-    {
-      name: 'Trace',
-      path: '/trace',
-      component: () => import('@/views/TracePage.vue')
     },
     {
       name: 'NativeKnowledgeBase',

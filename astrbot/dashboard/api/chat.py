@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from astrbot.dashboard.async_utils import run_maybe_async
@@ -16,6 +16,8 @@ from astrbot.dashboard.schemas import (
     ChatThreadMessageRequest,
 )
 from astrbot.dashboard.services.chat_service import (
+    MAX_UPLOAD_FILE_SIZE_BYTES,
+    MAX_UPLOAD_FILE_SIZE_MB,
     ChatService,
     ChatServiceError,
 )
@@ -137,10 +139,19 @@ async def batch_delete_chat_sessions(
 @router.get("/chat/sessions/{session_id}")
 async def get_chat_session(
     session_id: str,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=1000, ge=1, le=1000),
     auth: AuthContext = Depends(require_chat_scope),
     service: ChatService = Depends(get_service),
 ):
-    return await _run(lambda: service.get_session(auth.username, session_id))
+    return await _run(
+        lambda: service.get_session(
+            auth.username,
+            session_id,
+            page=page,
+            page_size=page_size,
+        )
+    )
 
 
 @router.patch("/chat/sessions/{session_id}")
@@ -539,6 +550,11 @@ async def dashboard_post_file(
     service: ChatService = Depends(get_service),
 ):
     try:
+        content_length = int(request.headers.get("content-length") or 0)
+        if content_length > MAX_UPLOAD_FILE_SIZE_BYTES:
+            raise ChatServiceError(
+                f"File too large (limit {MAX_UPLOAD_FILE_SIZE_MB} MB)"
+            )
         upload = await single_upload(request)
         if upload is None:
             raise ChatServiceError("Missing key: file")

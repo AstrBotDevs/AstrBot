@@ -1,12 +1,10 @@
+# Configure Custom Model Parameters
 
-# 配置自定义的模型参数
+You can configure model parameters in the WebUI:
 
-请手动修改位于 `data/cmd_config.json` 下的配置文件。
+1. Open `Providers` and select the provider containing your model.
+2. In its configured models list, click the model name or its settings icon to open the model configuration dialog.
+3. Under `Custom request body parameters` (`custom_extra_body`), add the parameters required by your model, such as `temperature`, `top_p`, or `max_tokens`.
+4. Click `Save`.
 
-找到 `provider`，并找到你想要修改的提供商的模型配置：
-
-![alt text](https://files.astrbot.app/docs/source/images/model-config/image-2.png)
-
-然后在 `model_config` 中添加新的参数即可。
-
-具体的参数请参看对应的提供商的文档。
+Available fields depend on the provider. For example, Gemini exposes its own generation settings instead of the generic `custom_extra_body` field. Refer to your provider's documentation for supported parameters and values.

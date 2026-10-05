@@ -103,7 +103,7 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
         """进行流式请求"""
         try:
             async with (
-                aiohttp.ClientSession() as session,
+                aiohttp.ClientSession(headers=self.request_headers) as session,
                 session.post(
                     self.concat_base_url,
                     headers=self.headers,

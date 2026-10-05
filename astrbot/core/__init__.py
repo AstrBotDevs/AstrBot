@@ -25,7 +25,6 @@ from astrbot.core.utils.t2i.renderer import HtmlRenderer
 from .log import LogBroker, LogManager  # noqa
 from .utils.astrbot_path import get_astrbot_data_path
 
-# 初始化数据存储文件夹
 os.makedirs(get_astrbot_data_path(), exist_ok=True)
 
 DEMO_MODE = os.getenv("DEMO_MODE", "False").strip().lower() in ("true", "1", "t")
@@ -33,13 +32,12 @@ DEMO_MODE = os.getenv("DEMO_MODE", "False").strip().lower() in ("true", "1", "t"
 astrbot_config = AstrBotConfig()
 t2i_base_url = astrbot_config.get("t2i_endpoint", "https://t2i.soulter.top/text2img")
 html_renderer = HtmlRenderer(t2i_base_url)
+"""**Deprecated**. For plugin developers, please use `self.context.html_renderer` instead."""
 logger = LogManager.GetLogger(log_name="astrbot")
 LogManager.configure_logger(logger, astrbot_config)
 LogManager.configure_trace_logger(astrbot_config)
 db_helper = SQLiteDatabase(DB_PATH)
-# 简单的偏好设置存储, 这里后续应该存储到数据库中, 一些部分可以存储到配置中
 sp = SharedPreferences(db_helper=db_helper)
-# 文件令牌服务
 file_token_service = FileTokenService()
 pip_installer = PipInstaller(
     astrbot_config.get("pip_install_arg", ""),
