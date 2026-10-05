@@ -198,6 +198,10 @@ class PlatformManager:
                     from .sources.mattermost.mattermost_adapter import (
                         MattermostPlatformAdapter,  # noqa: F401
                     )
+                case "cmcc_newmsg":
+                    from .sources.cmcc_newmsg.cmcc_adapter import (
+                        CmccNewmsgPlatformAdapter,  # noqa: F401
+                    )
         except (ImportError, ModuleNotFoundError) as e:
             logger.error(
                 f"Failed to load platform adapter {platform_config['type']}: {e}. "
