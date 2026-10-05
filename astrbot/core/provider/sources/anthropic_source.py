@@ -478,7 +478,9 @@ class ProviderAnthropic(Provider):
         Anthropic-compatible providers accept provider-side tools (for example
         DeepSeek's ``{"type": "web_search_20250305", "name": "web_search"}``) in the
         same ``tools`` list as client-side function tools. A declared entry wins when
-        names collide, because the provider itself executes it.
+        names collide, because the provider itself executes it. Duplicate names are
+        collapsed (provider validation rejects repeated names), while entries without
+        a name are kept as-is because some provider-side tools have none.
 
         Args:
             custom_tools: ``tools`` declared in ``custom_extra_body``, if any.
@@ -494,11 +496,20 @@ class ProviderAnthropic(Provider):
             for tool in custom_tools
             if isinstance(tool, dict) and isinstance(tool.get("name"), str)
         }
-        return [
+        merged = [
             tool
             for tool in function_tools
             if not isinstance(tool, dict) or tool.get("name") not in custom_names
-        ] + custom_tools
+        ]
+        seen_names: set[str] = set()
+        for tool in custom_tools:
+            name = tool.get("name") if isinstance(tool, dict) else None
+            if isinstance(name, str):
+                if name in seen_names:
+                    continue
+                seen_names.add(name)
+            merged.append(tool)
+        return merged
 
     def _prepare_request_tools(
         self,

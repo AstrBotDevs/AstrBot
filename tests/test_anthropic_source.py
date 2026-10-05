@@ -1,3 +1,7 @@
+import asyncio
+from types import SimpleNamespace
+
+import pytest
 from anthropic.types import MessageDeltaUsage, Usage
 
 from astrbot.core.agent.tool import FunctionTool, ToolSet
@@ -106,6 +110,26 @@ def test_merge_request_tools_ignores_non_list_value():
     assert merged == function_tools
 
 
+def test_merge_request_tools_collapses_duplicate_declared_entries():
+    server_tool = {"type": "web_search_20250305", "name": "web_search"}
+
+    merged = ProviderAnthropic._merge_request_tools(
+        [server_tool, dict(server_tool)],
+        [],
+    )
+
+    assert merged == [server_tool]
+
+
+def test_merge_request_tools_keeps_duplicate_unnamed_entries():
+    # Provider-side tools without a name cannot be deduplicated and must survive.
+    unnamed = {"type": "computer_20250124"}
+
+    merged = ProviderAnthropic._merge_request_tools([unnamed, dict(unnamed)], [])
+
+    assert merged == [unnamed, unnamed]
+
+
 def test_prepare_request_tools_moves_custom_tools_out_of_extra_body():
     provider = _provider()
     # Custom body parameters must not carry "tools" into the SDK request, because
@@ -123,6 +147,7 @@ def test_prepare_request_tools_moves_custom_tools_out_of_extra_body():
     assert payloads["tools"] == [
         {"type": "web_search_20250305", "name": "web_search"},
     ]
+    # A provider-side tool alone still needs the normalized tool_choice shape.
     assert payloads["tool_choice"] == {"type": "auto"}
     assert extra_body == {"temperature": 0.4}
 
@@ -173,3 +198,45 @@ def test_prepare_request_tools_without_custom_tools_writes_nothing_extra():
 
     assert payloads == {}
     assert extra_body == {"temperature": 0.4}
+
+
+def test_query_passes_merged_tools_and_no_tools_in_extra_body(monkeypatch):
+    """Guard the SDK merge boundary, where the original bug happened.
+
+    The streaming path is skipped on purpose: it asserts the SDK stream type, so
+    it cannot be exercised without a real client.
+    """
+    provider = _provider()
+    provider.provider_config = {
+        "custom_extra_body": {
+            "temperature": 0.4,
+            "tools": [{"type": "web_search_20250305", "name": "web_search"}],
+        },
+    }
+    # _query() reaches _apply_thinking_config(), which needs this instance state
+    # that __init__ would normally provide.
+    provider.thinking_config = {}
+    captured = {}
+
+    async def _create(**kwargs):
+        captured.update(kwargs)
+        raise RuntimeError("stop before the SDK is reached")
+
+    provider.client = SimpleNamespace(
+        messages=SimpleNamespace(create=_create),
+    )
+
+    with pytest.raises(RuntimeError, match="stop before the SDK"):
+        asyncio.run(
+            provider._query(
+                {"messages": [], "model": "deepseek-flash"},
+                None,
+            )
+        )
+
+    assert captured["tools"] == [
+        {"type": "web_search_20250305", "name": "web_search"},
+    ]
+    # extra_body must not carry "tools" any more, or the SDK merge would replace
+    # the merged list with the raw value.
+    assert captured["extra_body"] == {"temperature": 0.4}
