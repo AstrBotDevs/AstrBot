@@ -684,7 +684,7 @@ def test_sanitize_assistant_messages_puts_tool_results_before_user_text():
 class _FakeToolSet:
     """模拟包含工具的 ToolSet"""
 
-    def get_func_desc_anthropic_style(self):
+    def anthropic_schema(self):
         return [{"name": "get_weather", "description": "Get weather"}]
 
     def empty(self):
@@ -694,7 +694,7 @@ class _FakeToolSet:
 class _EmptyToolSet:
     """模拟空工具列表的 ToolSet，用于验证无工具时不设置 tool_choice"""
 
-    def get_func_desc_anthropic_style(self):
+    def anthropic_schema(self):
         return []
 
     def empty(self):
