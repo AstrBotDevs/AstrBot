@@ -369,6 +369,7 @@ class QQOfficialPlatformAdapter(Platform):
             video_file_source,
             file_source,
             file_name,
+            reply_message_id,
         ) = await QQOfficialMessageEvent._parse_to_qqofficial(message_chain)
         if (
             not plain_text
@@ -409,6 +410,8 @@ class QQOfficialPlatformAdapter(Platform):
             }
         if msg_id and not allow_group_proactive_send:
             payload["msg_id"] = msg_id
+        if reply_message_id:
+            payload["message_reference"] = {"message_id": reply_message_id}
         ret: Any = None
         send_helper = SimpleNamespace(bot=self.client)
 
