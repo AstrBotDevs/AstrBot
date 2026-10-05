@@ -111,22 +111,33 @@ class MockShipyardSandboxClient:
             }
 
     async def wait_healthy(self, ship_id: str, session_id: str) -> None:
-        """Mock wait healthy"""
-        loop = 60
-        while loop > 0:
-            try:
+        """Wait until the sandbox /health endpoint returns 200."""
+        attempts = 60
+        url = f"{self.sb_url}/health"
+        last_status: int | None = None
+        last_error: Exception | None = None
+        async with aiohttp.ClientSession(
+            timeout=aiohttp.ClientTimeout(total=5)
+        ) as session:
+            for _ in range(attempts):
                 logger.info(
                     f"Checking health for sandbox {ship_id} on {self.sb_url}..."
                 )
-                url = f"{self.sb_url}/health"
-                async with aiohttp.ClientSession() as session:
+                try:
                     async with session.get(url) as response:
                         if response.status == 200:
                             logger.info(f"Sandbox {ship_id} is healthy")
-                return
-            except Exception:
+                            return
+                        last_status = response.status
+                        last_error = None
+                except Exception as e:
+                    last_error = e
                 await asyncio.sleep(1)
-                loop -= 1
+        raise TimeoutError(
+            f"Sandbox {ship_id} on {self.sb_url} did not become healthy after "
+            f"{attempts} attempts (last status: {last_status}, "
+            f"last error: {last_error!r})"
+        )
 
 
 class BoxliteBooter(ComputerBooter):

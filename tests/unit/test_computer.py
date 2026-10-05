@@ -4,6 +4,7 @@ This module tests the ComputerClient, Booter implementations (local, shipyard, b
 filesystem operations, Python execution, shell execution, and security restrictions.
 """
 
+import asyncio
 import os
 import shlex
 import sys
@@ -508,6 +509,112 @@ class TestBoxliteBooter:
             # Just verify class exists and can be instantiated (boot is async)
             booter = BoxliteBooter.__new__(BoxliteBooter)
             assert booter is not None
+
+
+class TestBoxliteWaitHealthy:
+    """Tests for MockShipyardSandboxClient.wait_healthy."""
+
+    @staticmethod
+    def _client_cls():
+        mods = {
+            "boxlite": MagicMock(),
+            "shipyard": MagicMock(),
+            "shipyard.python": MagicMock(),
+            "shipyard.shell": MagicMock(),
+        }
+        with patch.dict(sys.modules, mods):
+            from astrbot.core.computer.booters import boxlite
+
+            return boxlite, boxlite.MockShipyardSandboxClient
+
+    @staticmethod
+    def _fake_session(outcomes, calls):
+        class _Resp:
+            def __init__(self, status):
+                self.status = status
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *a):
+                return False
+
+        class _Session:
+            def __init__(self, *a, **k):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *a):
+                return False
+
+            def get(self, url):
+                calls.append(url)
+                out = outcomes[min(len(calls) - 1, len(outcomes) - 1)]
+                if isinstance(out, BaseException):
+                    raise out
+                return _Resp(out)
+
+        return _Session
+
+    @pytest.mark.asyncio
+    async def test_waits_until_200(self):
+        mod, cls = self._client_cls()
+        calls = []
+        with (
+            patch.object(
+                mod.aiohttp, "ClientSession", self._fake_session([503, 503, 200], calls)
+            ),
+            patch.object(mod.asyncio, "sleep", new=AsyncMock()),
+        ):
+            await cls("http://127.0.0.1:1").wait_healthy("s", "x")
+        assert len(calls) == 3
+
+    @pytest.mark.asyncio
+    async def test_permanent_503_raises_timeout(self):
+        mod, cls = self._client_cls()
+        calls = []
+        with (
+            patch.object(
+                mod.aiohttp, "ClientSession", self._fake_session([503], calls)
+            ),
+            patch.object(mod.asyncio, "sleep", new=AsyncMock()),
+        ):
+            with pytest.raises(TimeoutError, match="503"):
+                await cls("http://127.0.0.1:1").wait_healthy("s", "x")
+        assert len(calls) == 60
+
+    @pytest.mark.asyncio
+    async def test_connection_errors_raise_timeout(self):
+        mod, cls = self._client_cls()
+        calls = []
+        with (
+            patch.object(
+                mod.aiohttp,
+                "ClientSession",
+                self._fake_session([ConnectionError("refused")], calls),
+            ),
+            patch.object(mod.asyncio, "sleep", new=AsyncMock()),
+        ):
+            with pytest.raises(TimeoutError, match="refused"):
+                await cls("http://127.0.0.1:1").wait_healthy("s", "x")
+
+    @pytest.mark.asyncio
+    async def test_cancellation_propagates(self):
+        mod, cls = self._client_cls()
+        calls = []
+        with (
+            patch.object(
+                mod.aiohttp,
+                "ClientSession",
+                self._fake_session([asyncio.CancelledError()], calls),
+            ),
+            patch.object(mod.asyncio, "sleep", new=AsyncMock()),
+        ):
+            with pytest.raises(asyncio.CancelledError):
+                await cls("http://127.0.0.1:1").wait_healthy("s", "x")
+        assert len(calls) == 1
 
 
 class TestComputerClient:
