@@ -10,6 +10,7 @@ from telegram import Message
 import astrbot.api.message_components as Comp
 from astrbot.api.platform import Group
 from astrbot.core.platform.register import unregister_platform_adapters_by_module
+from astrbot.core.platform.sources.telegram.tg_request import TelegramPollingRequest
 from tests.fixtures.helpers import (
     NoopAwaitable,
     create_mock_file,
@@ -910,6 +911,7 @@ async def test_telegram_run_rebuilds_application_after_repeated_polling_errors()
     builder.token.return_value = builder
     builder.base_url.return_value = builder
     builder.base_file_url.return_value = builder
+    builder.get_updates_request.return_value = builder
     builder.build.side_effect = created_apps
 
     adapter = None
@@ -945,13 +947,17 @@ async def test_telegram_run_rebuilds_application_after_repeated_polling_errors()
         },
     ):
         adapter = TelegramPlatformAdapter(
-            make_platform_config("telegram"),
+            make_platform_config("telegram", telegram_polling_restart_delay=0.1),
             {},
             asyncio.Queue(),
         )
         await adapter.run()
 
     assert builder.build.call_count == 2
+    assert all(
+        isinstance(call.args[0], TelegramPollingRequest)
+        for call in builder.get_updates_request.call_args_list
+    )
     app_one.updater.stop.assert_awaited()
     app_one.bot.delete_my_commands.assert_not_awaited()
     app_one.stop.assert_awaited()
@@ -991,6 +997,7 @@ async def test_telegram_run_rebuilds_fresh_application_after_recreate_init_failu
     builder.token.return_value = builder
     builder.base_url.return_value = builder
     builder.base_file_url.return_value = builder
+    builder.get_updates_request.return_value = builder
     builder.build.side_effect = created_apps
 
     adapter = None
