@@ -17,6 +17,7 @@ These paths use the current default sidebar. If you customized it, open `System 
 | Config → System Config | System Settings → General, Appearance, Network, or Security, depending on the setting |
 | Commands / Command Management | Extensions → Handlers → Command |
 | Standalone MCP / Skills entries | Extensions → MCP Servers / Skills |
+| Welcome page / `/welcome` | Old links open the dashboard; open Getting Started from System Settings → Maintenance → Reopen setup |
 | Custom Rules / Future Tasks / SubAgents | Custom Rules is under the sidebar `System` group; Future Tasks and SubAgents are under the `Extensions` group |
 
 Old log, trace, conversation, and statistics URLs still redirect to the corresponding tabs. Agent runners are now saved in each profile; they are no longer created as model providers. See [Agent Runners](./agent-runner.md) for the setup steps.
@@ -34,34 +35,33 @@ For first-time login, AstrBot generates a random initial password and prints it 
 
 ## Getting Started
 
-Only a new installation with no existing configuration automatically enters Getting Started after account setup. This eligibility survives a restart before account setup and is consumed when setup succeeds. Upgraded installations, password resets, and subsequent logins go to the dashboard, even when model or platform configurations are missing, incomplete, or disabled. It uses the standalone account setup layout, with a step count such as "1 / 4" above the heading. System Settings → Maintenance → Reopen setup opens the guide manually without resetting existing settings.
+On a new AstrBot installation, Getting Started opens after you set up your account. It helps you connect a model and try a conversation. It does not open automatically after an upgrade, a password reset, or a later login.
 
-![Chat model step in Getting Started](/webui-onboarding-en.png)
+### Set Up AstrBot
 
-The guide uses compact top spacing and a gap below the fixed header to separate it from scrolling content. Bottom actions have reduced bottom spacing while respecting device safe areas. Advanced model settings use full-width, single-column fields with descriptions above each input.
+1. **Read the usage notice**, then select Next.
+2. **Connect a model**: choose a provider and enter the API Key, API Base URL, and model name required by your service. You can also use Fetch models to choose a model. Open Advanced Configuration if you need other options, then select Next to save.
+3. **Send a message**: try a conversation on the same page and check that the model replies before continuing. This trial supports text only; attachments, model switching, and voice input are available in regular ChatUI.
+4. **Connect a messaging platform**: choose QQ, Lark, Telegram, or another platform, fill in its connection details, and save. If you only want to chat in your browser, skip this step and use ChatUI. After saving, check the messaging platform to confirm the bot is connected.
 
-1. Before we begin: read the original first-use notice inline, without a separate popup.
-2. Configure a chat model: an available default model and its provider are prefilled, making Next ready immediately. Without a configured default, an existing enabled chat model is selected; disabled entries are not automatically enabled. Alternatively, select a provider, enter credentials and a model name, or use Fetch models. Next saves changes and fills an empty default with the selected model; an existing default is preserved and existing models are not duplicated. Advanced settings start collapsed, and failed saves retain your input.
-3. Say hello to AstrBot: entering this step automatically creates a session and embeds an unframed ChatUI below, without an extra click, navigation, or another tab. Returning to this step preserves the current session. The trial composer only provides text input and Send/Stop; attachment, model/configuration selection, and voice controls remain available in regular ChatUI. Send a message to check the reply, then select Next. Automatically opening a session alone does not verify the connection.
-4. Connect a messaging platform: existing settings are prefilled in an editable form, preferring an enabled adapter. Select another adapter or add a new one from the selector. Next proceeds directly when unchanged; edits update the original adapter without creating a duplicate or automatically enabling disabled entries. With no adapter, select QQ, Lark, Telegram, or another messaging platform, enter its connection details, and select Next to save. Failed saves retain your input; a saved configuration does not verify that the platform is online. A note above the bottom actions explains that ChatUI remains available without an adapter. Skip proceeds without saving adapter settings or opening a confirmation dialog.
+When you finish, select Get started on the welcome screen to open the dashboard.
 
-The guide title sits beside the AstrBot brand. Content, the trial message composer, and bottom actions align with the header's left and right edges. Each subtitle briefly states the configuration purpose. Content scrolls independently while bottom actions remain visible. Primary actions read Next. Back and skip actions retain their labels.
+![Enter your model connection details](/webui-onboarding-en.png)
 
-Account setup cannot be skipped. Skip entire setup at the bottom of the first step goes directly to the dashboard without saving guide settings; it replaces the previous Set up later label. Skip on subsequent steps only skips the current step, proceeding directly to adapters when no model is configured.
+![Try a conversation during setup](/webui-onboarding-trial-en.png)
 
-Reopening step four uses the full platform editor, including Config File, configuration drawers and editable routing rules. Next saves changed routing rules without rewriting an unchanged adapter; Skip discards routing drafts. Changes explicitly saved inside a configuration drawer are saved separately, just as in the platform editor.
+### Skip or Return Later
 
-After completing or skipping step four, the welcome screen plays a single confetti burst from each side; Get started opens the dashboard. The two logo stars follow curved paths from the lower left and upper right, rotating independently in opposite directions with brief fading trails. They settle into the original logo and stop without looping. Models and messaging platforms are saved in their respective steps to support immediate chat testing and connection setup. Reduced-motion preferences disable both star motion and confetti. Regular login does not restart the guide. The guide does not query the plugin marketplace, install plugins, or change computer-access permissions.
+You must finish account setup, but the rest of the guide is optional. Skip entire setup on the first step opens the dashboard. Skip on later steps leaves the current form unsaved. Without a configured model, the chat trial is skipped.
 
-![Trial chat with a text-only composer](/webui-onboarding-trial-en.png)
+To return, open `System Settings → Maintenance → Reopen setup`. Existing model and messaging platform settings are filled in automatically. Continue with those settings or edit and save them; you do not need to create them again.
 
-![Welcome screen after completing setup](/webui-onboarding-welcome-en.png)
+> [!TIP]
+> Reopening the guide does not clear your configuration. Saved settings are kept, and skipping a later step does not undo earlier saves. Selecting Save in a platform's configuration profile editor also takes effect immediately.
 
-![Existing adapter settings prefilled in an editable form](/webui-onboarding-adapter-en.png)
+![Review or edit an existing messaging platform](/webui-onboarding-adapter-en.png)
 
-![Configuration routing available when reopening setup](/webui-onboarding-routes-en.png)
-
-Entry-point mapping: the standalone welcome page and its sidebar item are removed; legacy `/welcome` links redirect to the dashboard. The first-use popup is now the first guide step, and the former plugin and computer-access steps are removed. Manual reentry is under System Settings → Maintenance. Where will you use AstrBot? is now Connect a messaging platform. Install plugins through Extensions → Plugins → AstrBot Plugin Market; manage computer access through Config → AI → Capabilities → Agent Computer Use. Providers and Messaging Platforms remain independently accessible.
+The guide does not install plugins or configure computer access. Install plugins from `Extensions → Plugins → AstrBot Plugin Market`. Computer-access permissions are under `Config → AI → Capabilities → Agent Computer Use`.
 
 ## Two-Factor Authentication
 
