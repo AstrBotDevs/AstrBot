@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { once } from 'node:events';
-import { access, chmod, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { access, chmod, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -112,7 +112,9 @@ test('onboarding against an isolated real AstrBot process', { timeout: 300000 },
     await api('/system-config/runtime');
     browser = await chromium.launch({ headless: true, ...(process.env.ASTRBOT_E2E_BROWSER ? { executablePath: process.env.ASTRBOT_E2E_BROWSER } : {}) });
     const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, locale: 'en-US' });
-    await context.addInitScript(() => localStorage.setItem('astrbot-locale', 'en-US'));
+    await context.addInitScript(() => {
+      if (location.protocol === 'http:') localStorage.setItem('astrbot-locale', 'en-US');
+    });
     page = await context.newPage();
     page.setDefaultTimeout(15000);
     page.on('pageerror', error => errors.push(error.message));
@@ -196,6 +198,8 @@ test('onboarding against an isolated real AstrBot process', { timeout: 300000 },
       const sessionCreated = page.waitForResponse(response => new URL(response.url()).pathname === '/api/v1/chat/sessions/new');
       await page.getByRole('button', { name: 'Next', exact: true }).click();
       chatSessionId = (await (await sessionCreated).json()).data.session_id;
+      assert.equal(await page.locator('.standalone-chat .input-left-actions, .standalone-chat .record-btn, .standalone-chat input[type="file"]').count(), 0);
+      assert.equal(await page.locator('.standalone-chat .input-right-actions button').count(), 1, 'Trial composer only exposes Send/Stop');
       await page.locator('.standalone-chat textarea').fill('Reply with only ASTRBOT_E2E_OK. Do not use tools.');
       await page.locator('.standalone-chat textarea').press('Enter');
       await eventually(async () => {
@@ -204,6 +208,15 @@ test('onboarding against an isolated real AstrBot process', { timeout: 300000 },
       }, 'Real model reply was not persisted', 90000);
       assert.match(await page.locator('.from-bot').innerText(), /ASTRBOT_E2E_OK/);
       assert.ok(page.url().endsWith('#/auth/onboarding'), 'ChatUI must remain embedded');
+      for (const width of [1280, 360]) {
+        await page.setViewportSize({ width, height: 900 });
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+        if (process.env.ASTRBOT_E2E_SCREENSHOT_DIR) {
+          await mkdir(process.env.ASTRBOT_E2E_SCREENSHOT_DIR, { recursive: true, mode: 0o700 });
+          await page.screenshot({ path: join(process.env.ASTRBOT_E2E_SCREENSHOT_DIR, `trial-${width}.png`) });
+        }
+      }
+      await page.setViewportSize({ width: 1280, height: 900 });
       const schema = await api('/providers/schema');
       assert.equal(schema.providers.length, 1);
       const config = (await api('/config-profiles/default')).config;
@@ -212,8 +225,18 @@ test('onboarding against an isolated real AstrBot process', { timeout: 300000 },
       await page.getByRole('button', { name: 'Next', exact: true }).click();
       assert.equal((await api('/chat/sessions')).length, 1, 'Back/Next must preserve the embedded session');
       assert.equal((await api('/providers/schema')).providers.length, 1);
+      await page.getByRole('button', { name: 'Next', exact: true }).click();
+      await page.getByRole('button', { name: 'Skip', exact: true }).click();
+      await page.getByRole('button', { name: 'Get started', exact: true }).click();
+      await page.waitForURL(url => !url.hash.startsWith('#/auth/'));
+      await page.goto(`${base}/#/chat`);
+      await page.reload();
+      await page.locator('.input-left-actions').waitFor();
+      await page.locator('.record-btn').waitFor();
+      assert.ok(await page.locator('.input-right-actions button').count() > 1, 'Regular ChatUI retains its controls');
     });
 
+    await page.goto('about:blank');
     await stopBackend();
     await startBackend();
     assert.equal((await api('/auth/setup-status')).setup_required, false);
