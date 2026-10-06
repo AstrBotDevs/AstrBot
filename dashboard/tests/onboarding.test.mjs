@@ -553,7 +553,7 @@ test('only successful account setup continues onboarding; login and configured i
   const ast = ts.createSourceFile('auth.ts', source, ts.ScriptTarget.Latest, true);
   const body = ast.statements.filter(node => !ts.isImportDeclaration(node)).map(node => node.getText(ast)).join('\n');
   const destinations = [];
-  const session = { username: 'astrbot', token: 'test-token' };
+  const session = { username: 'astrbot', token: 'test-token', onboarding_required: true };
   let actions;
   let fail = false;
   const context = vm.createContext({
@@ -564,19 +564,44 @@ test('only successful account setup continues onboarding; login and configured i
     authApi: { setup: async () => fail ? { data: { status: 'error', message: 'Setup rejected' } } : ok(session) },
   });
   vm.runInContext(ts.transpile(body, { module: ts.ModuleKind.CommonJS }), context);
-  const auth = { ...actions, checkOnboardingCompleted: async () => false };
+  const auth = { ...actions };
   await auth.setup('astrbot', 'test-password', 'test-password');
   assert.equal(destinations.pop(), '/auth/onboarding');
   await auth.finishAuthenticatedSession(session);
   assert.equal(destinations.pop(), '/dashboard/default');
   await auth.finishAuthenticatedSession({ ...session, change_pwd_hint: true }, true);
   assert.equal(destinations.pop(), '/auth/setup');
-  auth.checkOnboardingCompleted = async () => true;
+  session.onboarding_required = false;
   await auth.setup('astrbot', 'test-password', 'test-password');
   assert.equal(destinations.pop(), '/dashboard/default');
   fail = true;
   await assert.rejects(auth.setup('astrbot', 'test-password', 'test-password'));
   assert.deepEqual(destinations, []);
+});
+
+test('automatic onboarding requires an explicit server opt-in from successful setup, never ordinary login', async () => {
+  const source = readFileSync(new URL('../src/stores/auth.ts', import.meta.url), 'utf8');
+  const ast = ts.createSourceFile('auth.ts', source, ts.ScriptTarget.Latest, true);
+  const body = ast.statements.filter(node => !ts.isImportDeclaration(node)).map(node => node.getText(ast)).join('\n');
+  let actions;
+  const destinations = [];
+  const context = vm.createContext({
+    exports: {}, console,
+    defineStore: (_, options) => { actions = options.actions; },
+    router: { push: path => destinations.push(path), replace: path => destinations.push(path) },
+    localStorage: { setItem() {}, removeItem() {} },
+  });
+  vm.runInContext(ts.transpile(body, { module: ts.ModuleKind.CommonJS }), context);
+  for (const eligibility of [undefined, null, false, 'true', 1, true]) {
+    const session = { username: 'tester', token: 'token', onboarding_required: eligibility };
+    await actions.finishAuthenticatedSession(session);
+    assert.equal(destinations.pop(), '/dashboard/default');
+    await actions.finishAuthenticatedSession(session, true);
+    assert.equal(destinations.pop(), eligibility === true ? '/auth/onboarding' : '/dashboard/default');
+    await actions.finishAuthenticatedSession({ ...session, change_pwd_hint: true }, true);
+    assert.equal(destinations.pop(), '/auth/setup');
+  }
+  assert.doesNotMatch(source, /checkOnboardingCompleted|providerApi|systemConfigApi/);
 });
 
 test('setup page gates configuration on authentication and completed password setup', async () => {
@@ -591,6 +616,8 @@ test('setup page gates configuration on authentication and completed password se
     [false, false, true, false, '/auth/login', false],
     [false, false, true, true, undefined, true],
     [false, true, true, false, undefined, true],
+    [false, true, false, false, '/auth/login', false],
+    [false, false, false, true, '/auth/login', false],
   ]) {
     let initialize;
     let redirected;
@@ -604,6 +631,35 @@ test('setup page gates configuration on authentication and completed password se
     await initialize(onboarding, undefined, () => {});
     assert.equal(ready.value, expectedReady);
     assert.equal(redirected, destination);
+  }
+});
+
+test('setup status failures never render onboarding and stale checks cannot redirect after leaving', async () => {
+  const source = readFileSync(new URL('../src/views/authentication/auth/SetupPage.vue', import.meta.url), 'utf8')
+    .split('<script setup lang="ts">')[1].split('</script>')[0];
+  const ast = ts.createSourceFile('setup.ts', source, ts.ScriptTarget.Latest, true);
+  const watcher = ast.statements.find(node => ts.isExpressionStatement(node) && node.getText(ast).startsWith('watch(isOnboarding,'));
+  for (const stale of [false, true]) {
+    for (const failure of [false, true]) {
+      let initialize, cleanup, resolve, reject;
+      const pending = new Promise((yes, no) => { resolve = yes; reject = no; });
+      const destinations = [];
+      const ready = ref(true);
+      vm.runInNewContext(ts.transpile(watcher.getText(ast)), {
+        ready, isOnboarding: true, watch: (_, callback) => { initialize = callback; },
+        authStore: { has_token: () => true },
+        authApi: { setupStatus: () => pending },
+        router: { replace: path => destinations.push(path) },
+      });
+      const check = initialize(true, undefined, callback => { cleanup = callback; });
+      assert.equal(ready.value, false);
+      if (stale) cleanup();
+      if (failure) reject(new Error('Offline'));
+      else resolve({ data: { status: 'error' } });
+      await check;
+      assert.equal(ready.value, false);
+      assert.deepEqual(destinations, stale ? [] : ['/auth/login']);
+    }
   }
 });
 
