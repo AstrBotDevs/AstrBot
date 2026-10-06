@@ -48,6 +48,7 @@ class FakeCoreEvent:
         self._extras: dict[str, Any] = {}
         self._result = None
         self._stopped = False
+        self._has_send_oper = False
 
     def get_platform_name(self):
         return "webchat"
@@ -629,6 +630,10 @@ class TestPlugin(Plugin):
 
         # ctx.messages.send 经由 Context.send_message 主动发送
         context.send_message.assert_awaited_once()
+        # 镜像进程内 event.send()：在飞事件被标记为已发送，管线跳过 LLM 阶段
+        assert event._has_send_oper is True
+        # 处理结束后在飞事件表清空
+        assert bridge._inflight_events == {}
         session, chain = context.send_message.await_args.args
         assert session.platform_id == "webchat"
         assert session.message_type is CoreMessageType.FRIEND_MESSAGE

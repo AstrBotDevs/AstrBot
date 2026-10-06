@@ -26,7 +26,7 @@ from astrbot.core.star.star_handler import (
     star_handlers_registry,
 )
 
-from .convert import apply_sdk_result, to_sdk_event
+from .convert import apply_sdk_result, to_sdk_event, to_umo_string
 from .detect import _BRIDGE_MODULE_PREFIX
 from .detect import is_isolated_legacy_dir as is_isolated_legacy_dir
 from .detect import is_sdk_plugin_dir as is_sdk_plugin_dir
@@ -202,6 +202,10 @@ class SDKPluginBridge:
         self._pending_command_links: list[tuple[str, Any]] = []
         self._web_routes: list[tuple[str, tuple[str, ...]]] = []
         self._views_manifest: dict = {}
+        # Core events currently being served by the Runner, keyed by umo
+        # string. Proactive sends mark them so the pipeline skips the LLM
+        # stage, mirroring in-process event.send().
+        self._inflight_events: dict[str, list[Any]] = {}
 
     async def start(self) -> None:
         """Start the Runner subprocess and register pipeline handlers.
@@ -652,6 +656,11 @@ class SDKPluginBridge:
             )
         return filters
 
+    def _mark_event_sent(self, umo: Any) -> None:
+        """Mirror in-process event.send() on every in-flight event for umo."""
+        for event in self._inflight_events.get(to_umo_string(umo), ()):
+            event._has_send_oper = True
+
     def _make_message_stub(self, handler_id: str) -> Any:
         """Create the async generator bridging pipeline and message invocation.
 
@@ -666,14 +675,23 @@ class SDKPluginBridge:
         async def stub(event, **_kwargs):
             client = bridge._require_client()
             sdk_event = to_sdk_event(event)
-            async for result in client.invoke(handler_id, sdk_event):
-                if result is not None:
-                    apply_sdk_result(
-                        event,
-                        result,
-                        resolve_asset=bridge._require_asset_store().resolve,
-                    )
-                yield
+            key = to_umo_string(sdk_event.umo)
+            bridge._inflight_events.setdefault(key, []).append(event)
+            try:
+                async for result in client.invoke(handler_id, sdk_event):
+                    if result is not None:
+                        apply_sdk_result(
+                            event,
+                            result,
+                            resolve_asset=bridge._require_asset_store().resolve,
+                        )
+                    yield
+            finally:
+                events = bridge._inflight_events.get(key)
+                if events and event in events:
+                    events.remove(event)
+                    if not events:
+                        bridge._inflight_events.pop(key, None)
 
         return stub
 
@@ -823,7 +841,18 @@ class SDKPluginBridge:
                 umo=sdk_event.umo if sdk_event is not None else None,
                 event=sdk_event,
             )
-            return await client.invoke_tool(handler_id, call, kwargs)
+            key = to_umo_string(sdk_event.umo) if sdk_event is not None else None
+            if key is not None:
+                bridge._inflight_events.setdefault(key, []).append(event)
+            try:
+                return await client.invoke_tool(handler_id, call, kwargs)
+            finally:
+                if key is not None:
+                    events = bridge._inflight_events.get(key)
+                    if events and event in events:
+                        events.remove(event)
+                        if not events:
+                            bridge._inflight_events.pop(key, None)
 
         return stub
 
@@ -846,16 +875,25 @@ class SDKPluginBridge:
                 command_path=command_path,
                 arguments=kwargs,
             )
-            async for result in client.invoke(handler_id, sdk_event, **kwargs):
-                if result is not None:
-                    apply_sdk_result(
-                        event,
-                        result,
-                        resolve_asset=bridge._require_asset_store().resolve,
-                    )
-                # Each resume of this generator advances the client stream,
-                # which acknowledges the previous plugin yield.
-                yield
+            key = to_umo_string(sdk_event.umo)
+            bridge._inflight_events.setdefault(key, []).append(event)
+            try:
+                async for result in client.invoke(handler_id, sdk_event, **kwargs):
+                    if result is not None:
+                        apply_sdk_result(
+                            event,
+                            result,
+                            resolve_asset=bridge._require_asset_store().resolve,
+                        )
+                    # Each resume of this generator advances the client stream,
+                    # which acknowledges the previous plugin yield.
+                    yield
+            finally:
+                events = bridge._inflight_events.get(key)
+                if events and event in events:
+                    events.remove(event)
+                    if not events:
+                        bridge._inflight_events.pop(key, None)
 
         return stub
 
@@ -889,7 +927,7 @@ class SDKPluginBridge:
         store = self._require_asset_store()
         services: tuple[HostService, ...] = (
             StorageService(self.plugin_id),
-            MessageSendService(self.context, store),
+            MessageSendService(self.context, store, mark_sent=self._mark_event_sent),
             ConversationReadService(self.context),
             ConversationWriteService(self.context),
             AssetTransferService(store),

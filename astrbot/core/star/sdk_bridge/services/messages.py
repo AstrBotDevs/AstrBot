@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from astrbot_sdk.errors import InvalidRequest, NotFound
@@ -19,15 +20,23 @@ class MessageSendService:
 
     capability_id = "message.send"
 
-    def __init__(self, context: Context, store: AssetStore) -> None:
+    def __init__(
+        self,
+        context: Context,
+        store: AssetStore,
+        mark_sent: Callable[[Any], None] | None = None,
+    ) -> None:
         """Initialize the service.
 
         Args:
             context: AstrBot star context used for platform access.
             store: Asset store used to resolve asset references.
+            mark_sent: Callback marking in-flight events of the session as
+                having sent, mirroring in-process event.send().
         """
         self._context = context
         self._store = store
+        self._mark_sent = mark_sent
 
     async def handle(self, operation: str, payload: dict[str, Any]) -> Any:
         """Serve the send operation."""
@@ -50,4 +59,6 @@ class MessageSendService:
         )
         if not sent:
             raise NotFound(f"platform not found: {umo.platform_id}")
+        if self._mark_sent is not None:
+            self._mark_sent(umo)
         return {"message_id": ""}
