@@ -1934,27 +1934,6 @@ export type SetPluginEnabledByIdResponse = (SuccessEnvelope);
 
 export type SetPluginEnabledByIdError = unknown;
 
-export type ListPluginPagesByIdData = {
-    query: {
-        plugin_id: string;
-    };
-};
-
-export type ListPluginPagesByIdResponse = (SuccessEnvelope);
-
-export type ListPluginPagesByIdError = unknown;
-
-export type GetPluginPageByIdData = {
-    query: {
-        page_name: string;
-        plugin_id: string;
-    };
-};
-
-export type GetPluginPageByIdResponse = (string);
-
-export type GetPluginPageByIdError = unknown;
-
 export type GetPluginData = {
     body?: {
         delete_config?: boolean;
@@ -2285,27 +2264,6 @@ export type DeletePluginSourceByIdResponse = (SuccessEnvelope);
 
 export type DeletePluginSourceByIdError = unknown;
 
-export type ListPluginPagesData = {
-    path: {
-        plugin_id: string;
-    };
-};
-
-export type ListPluginPagesResponse = (SuccessEnvelope);
-
-export type ListPluginPagesError = unknown;
-
-export type GetPluginPageData = {
-    path: {
-        page_name: string;
-        plugin_id: string;
-    };
-};
-
-export type GetPluginPageResponse = (string);
-
-export type GetPluginPageError = unknown;
-
 export type ListPluginViewsByIdData = {
     query: {
         plugin_id: string;
@@ -2366,10 +2324,6 @@ export type GetPluginViewTokenAssetData = {
 export type GetPluginViewTokenAssetResponse = (unknown);
 
 export type GetPluginViewTokenAssetError = (unknown);
-
-export type GetPluginPageBridgeSdkResponse = (string);
-
-export type GetPluginPageBridgeSdkError = unknown;
 
 export type GetPluginExtensionRouteData = {
     path: {

@@ -2159,43 +2159,6 @@ paths:
         "200":
           $ref: "#/components/responses/Ok"
 
-  /api/v1/plugins/pages:
-    get:
-      tags: [Plugin Views]
-      summary: List plugin pages by query ID
-      operationId: listPluginPagesById
-      x-astrbot-scope: plugin
-      parameters:
-        - name: plugin_id
-          in: query
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          $ref: "#/components/responses/Ok"
-
-  /api/v1/plugins/page:
-    get:
-      tags: [Plugin Views]
-      summary: Get plugin page entry HTML by query ID
-      operationId: getPluginPageById
-      x-astrbot-scope: plugin
-      parameters:
-        - name: plugin_id
-          in: query
-          required: true
-          schema:
-            type: string
-        - name: page_name
-          in: query
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          $ref: "#/components/responses/Html"
-
   /api/v1/plugins/{plugin_id}:
     get:
       tags: [Plugins]
@@ -2729,39 +2692,10 @@ paths:
         "200":
           $ref: "#/components/responses/Ok"
 
-  /api/v1/plugins/{plugin_id}/pages:
-    get:
-      tags: [Plugin Views]
-      summary: List plugin pages
-      operationId: listPluginPages
-      x-astrbot-scope: plugin
-      parameters:
-        - $ref: "#/components/parameters/PluginId"
-      responses:
-        "200":
-          $ref: "#/components/responses/Ok"
-
-  /api/v1/plugins/{plugin_id}/pages/{page_name}:
-    get:
-      tags: [Plugin Views]
-      summary: Get plugin page entry HTML
-      operationId: getPluginPage
-      x-astrbot-scope: plugin
-      parameters:
-        - $ref: "#/components/parameters/PluginId"
-        - name: page_name
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          $ref: "#/components/responses/Html"
-
   /api/v1/plugins/views:
     get:
       tags: [Plugin Views]
-      summary: List plugin views by query ID (alias of /plugins/pages)
+      summary: List plugin views by query ID
       operationId: listPluginViewsById
       x-astrbot-scope: plugin
       parameters:
@@ -2777,7 +2711,7 @@ paths:
   /api/v1/plugins/view:
     get:
       tags: [Plugin Views]
-      summary: Get plugin view entry HTML by query ID (alias of /plugins/page)
+      summary: Get plugin view entry HTML by query ID
       operationId: getPluginViewById
       x-astrbot-scope: plugin
       parameters:
@@ -2798,7 +2732,7 @@ paths:
   /api/v1/plugins/{plugin_id}/views:
     get:
       tags: [Plugin Views]
-      summary: List plugin views (alias of /plugins/{plugin_id}/pages)
+      summary: List plugin views
       operationId: listPluginViews
       x-astrbot-scope: plugin
       parameters:
@@ -2810,7 +2744,7 @@ paths:
   /api/v1/plugins/{plugin_id}/views/{page_name}:
     get:
       tags: [Plugin Views]
-      summary: Get plugin view entry HTML (alias of /plugins/{plugin_id}/pages/{page_name})
+      summary: Get plugin view entry HTML
       operationId: getPluginView
       x-astrbot-scope: plugin
       parameters:
@@ -2859,20 +2793,6 @@ paths:
           description: Plugin asset content
         "401":
           description: Missing, invalid, expired, or wrongly scoped token
-
-  /api/v1/plugins/page-bridge-sdk.js:
-    get:
-      tags: [Plugin Views]
-      summary: Get the plugin page bridge SDK
-      operationId: getPluginPageBridgeSdk
-      x-astrbot-scope: plugin
-      responses:
-        "200":
-          description: JavaScript bridge SDK
-          content:
-            application/javascript:
-              schema:
-                type: string
 
   /api/v1/plugins/extensions/{plugin_path}:
     get:

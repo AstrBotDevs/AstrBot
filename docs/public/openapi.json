@@ -116,7 +116,7 @@
       "name": "Plugin Sources"
     },
     {
-      "name": "Plugin Pages"
+      "name": "Plugin Views"
     },
     {
       "name": "MCP"
@@ -3294,108 +3294,6 @@
         "description": "**Required scope:** `plugin`"
       }
     },
-    "/api/v1/plugins/pages": {
-      "get": {
-        "tags": [
-          "Plugin Pages"
-        ],
-        "summary": "List plugin pages by query ID",
-        "operationId": "listPluginPagesById",
-        "x-astrbot-scope": "plugin",
-        "parameters": [
-          {
-            "name": "plugin_id",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/Ok"
-          }
-        },
-        "description": "**Required scope:** `plugin`"
-      }
-    },
-    "/api/v1/plugins/page": {
-      "get": {
-        "tags": [
-          "Plugin Pages"
-        ],
-        "summary": "Get plugin page entry HTML by query ID",
-        "operationId": "getPluginPageById",
-        "x-astrbot-scope": "plugin",
-        "parameters": [
-          {
-            "name": "plugin_id",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "page_name",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/Html"
-          }
-        },
-        "description": "**Required scope:** `plugin`"
-      }
-    },
-    "/api/v1/plugins/page/assets": {
-      "get": {
-        "tags": [
-          "Plugin Pages"
-        ],
-        "summary": "Get a plugin page asset by query ID",
-        "operationId": "getPluginPageAssetById",
-        "x-astrbot-scope": "plugin",
-        "parameters": [
-          {
-            "name": "plugin_id",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "page_name",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "asset_path",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Plugin asset content"
-          }
-        },
-        "description": "**Required scope:** `plugin`"
-      }
-    },
     "/api/v1/plugins/{plugin_id}": {
       "get": {
         "tags": [
@@ -4310,100 +4208,12 @@
         "description": "**Required scope:** `plugin`"
       }
     },
-    "/api/v1/plugins/{plugin_id}/pages": {
-      "get": {
-        "tags": [
-          "Plugin Pages"
-        ],
-        "summary": "List plugin pages",
-        "operationId": "listPluginPages",
-        "x-astrbot-scope": "plugin",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/PluginId"
-          }
-        ],
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/Ok"
-          }
-        },
-        "description": "**Required scope:** `plugin`"
-      }
-    },
-    "/api/v1/plugins/{plugin_id}/pages/{page_name}": {
-      "get": {
-        "tags": [
-          "Plugin Pages"
-        ],
-        "summary": "Get plugin page entry HTML",
-        "operationId": "getPluginPage",
-        "x-astrbot-scope": "plugin",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/PluginId"
-          },
-          {
-            "name": "page_name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/Html"
-          }
-        },
-        "description": "**Required scope:** `plugin`"
-      }
-    },
-    "/api/v1/plugins/{plugin_id}/pages/{page_name}/assets/{asset_path}": {
-      "get": {
-        "tags": [
-          "Plugin Pages"
-        ],
-        "summary": "Get a plugin page asset",
-        "operationId": "getPluginPageAsset",
-        "x-astrbot-scope": "plugin",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/PluginId"
-          },
-          {
-            "name": "page_name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "asset_path",
-            "in": "path",
-            "required": true,
-            "description": "URL-encoded relative asset path.",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Plugin asset content"
-          }
-        },
-        "description": "**Required scope:** `plugin`"
-      }
-    },
     "/api/v1/plugins/views": {
       "get": {
         "tags": [
-          "Plugin Pages"
+          "Plugin Views"
         ],
-        "summary": "List plugin views by query ID (alias of /plugins/pages)",
+        "summary": "List plugin views by query ID",
         "operationId": "listPluginViewsById",
         "x-astrbot-scope": "plugin",
         "parameters": [
@@ -4427,9 +4237,9 @@
     "/api/v1/plugins/view": {
       "get": {
         "tags": [
-          "Plugin Pages"
+          "Plugin Views"
         ],
-        "summary": "Get plugin view entry HTML by query ID (alias of /plugins/page)",
+        "summary": "Get plugin view entry HTML by query ID",
         "operationId": "getPluginViewById",
         "x-astrbot-scope": "plugin",
         "parameters": [
@@ -4458,54 +4268,12 @@
         "description": "**Required scope:** `plugin`"
       }
     },
-    "/api/v1/plugins/view/assets": {
-      "get": {
-        "tags": [
-          "Plugin Pages"
-        ],
-        "summary": "Get a plugin view asset by query ID (alias of /plugins/page/assets)",
-        "operationId": "getPluginViewAssetById",
-        "x-astrbot-scope": "plugin",
-        "parameters": [
-          {
-            "name": "plugin_id",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "page_name",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "asset_path",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Plugin asset content"
-          }
-        },
-        "description": "**Required scope:** `plugin`"
-      }
-    },
     "/api/v1/plugins/{plugin_id}/views": {
       "get": {
         "tags": [
-          "Plugin Pages"
+          "Plugin Views"
         ],
-        "summary": "List plugin views (alias of /plugins/{plugin_id}/pages)",
+        "summary": "List plugin views",
         "operationId": "listPluginViews",
         "x-astrbot-scope": "plugin",
         "parameters": [
@@ -4524,9 +4292,9 @@
     "/api/v1/plugins/{plugin_id}/views/{page_name}": {
       "get": {
         "tags": [
-          "Plugin Pages"
+          "Plugin Views"
         ],
-        "summary": "Get plugin view entry HTML (alias of /plugins/{plugin_id}/pages/{page_name})",
+        "summary": "Get plugin view entry HTML",
         "operationId": "getPluginView",
         "x-astrbot-scope": "plugin",
         "parameters": [
@@ -4550,71 +4318,10 @@
         "description": "**Required scope:** `plugin`"
       }
     },
-    "/api/v1/plugins/{plugin_id}/views/{page_name}/assets/{asset_path}": {
-      "get": {
-        "tags": [
-          "Plugin Pages"
-        ],
-        "summary": "Get a plugin view asset (alias of /plugins/{plugin_id}/pages/{page_name}/assets/{asset_path})",
-        "operationId": "getPluginViewAsset",
-        "x-astrbot-scope": "plugin",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/PluginId"
-          },
-          {
-            "name": "page_name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "asset_path",
-            "in": "path",
-            "required": true,
-            "description": "URL-encoded relative asset path.",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Plugin asset content"
-          }
-        },
-        "description": "**Required scope:** `plugin`"
-      }
-    },
-    "/api/v1/plugins/page-bridge-sdk.js": {
-      "get": {
-        "tags": [
-          "Plugin Pages"
-        ],
-        "summary": "Get the plugin page bridge SDK",
-        "operationId": "getPluginPageBridgeSdk",
-        "x-astrbot-scope": "plugin",
-        "responses": {
-          "200": {
-            "description": "JavaScript bridge SDK",
-            "content": {
-              "application/javascript": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          }
-        },
-        "description": "**Required scope:** `plugin`"
-      }
-    },
     "/api/v1/plugins/extensions/{plugin_path}": {
       "get": {
         "tags": [
-          "Plugin Pages"
+          "Plugin Views"
         ],
         "summary": "Proxy a plugin extension GET route",
         "operationId": "getPluginExtensionRoute",
@@ -4639,7 +4346,7 @@
       },
       "post": {
         "tags": [
-          "Plugin Pages"
+          "Plugin Views"
         ],
         "summary": "Proxy a plugin extension POST route",
         "operationId": "postPluginExtensionRoute",
@@ -4680,7 +4387,7 @@
       },
       "put": {
         "tags": [
-          "Plugin Pages"
+          "Plugin Views"
         ],
         "summary": "Proxy a plugin extension PUT route",
         "operationId": "putPluginExtensionRoute",
@@ -4714,7 +4421,7 @@
       },
       "patch": {
         "tags": [
-          "Plugin Pages"
+          "Plugin Views"
         ],
         "summary": "Proxy a plugin extension PATCH route",
         "operationId": "patchPluginExtensionRoute",
@@ -4748,7 +4455,7 @@
       },
       "delete": {
         "tags": [
-          "Plugin Pages"
+          "Plugin Views"
         ],
         "summary": "Proxy a plugin extension DELETE route",
         "operationId": "deletePluginExtensionRoute",

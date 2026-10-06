@@ -682,18 +682,6 @@ async def delete_plugin_source(
     )
 
 
-@router.get("/plugins/page-bridge-sdk.js")
-async def get_plugin_page_bridge_sdk(
-    request: Request,
-    _auth: AuthContext = Depends(require_plugin_scope),
-    page_service: PluginPageService = Depends(get_page_service),
-):
-    return await _serve_plugin_page_bridge_sdk(
-        request=request,
-        page_service=page_service,
-    )
-
-
 @router.get("/plugins")
 async def list_plugins(
     request: Request,
@@ -882,7 +870,6 @@ async def set_plugin_enabled_by_id(
     )
 
 
-@router.get("/plugins/pages")
 @router.get("/plugins/views")
 async def list_plugin_pages_by_id(
     plugin_id: str = Query(...),
@@ -897,7 +884,6 @@ async def list_plugin_pages_by_id(
     )
 
 
-@router.get("/plugins/page")
 @router.get("/plugins/view")
 async def get_plugin_page_by_id(
     request: Request,
@@ -1156,7 +1142,6 @@ async def update_plugin(
     )
 
 
-@router.get("/plugins/{plugin_id}/pages")
 @router.get("/plugins/{plugin_id}/views")
 async def list_plugin_pages(
     plugin_id: str,
@@ -1171,7 +1156,6 @@ async def list_plugin_pages(
     )
 
 
-@router.get("/plugins/{plugin_id}/pages/{page_name}")
 @router.get("/plugins/{plugin_id}/views/{page_name}")
 async def get_plugin_page(
     plugin_id: str,
