@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
+import stat
 import time
 import uuid
 import zipfile
@@ -10,6 +12,7 @@ from pathlib import Path
 
 from astrbot.core import LogBroker, logger
 from astrbot.core.config.astrbot_config import AstrBotConfig
+from astrbot.core.config.default import VERSION
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_temp_path
 from astrbot.core.utils.storage_cleaner import StorageCleaner
 
@@ -78,8 +81,12 @@ class LogService:
         """Pack the log files and the in-memory logs into a zip archive.
 
         The archive holds the files found by ``StorageCleaner`` (data/logs plus
-        the configured log and trace log files) and the in-memory cache, split
-        into ``memory/logs.txt`` and ``memory/traces.jsonl``.
+        the configured log and trace log files), the in-memory cache split into
+        ``memory/logs.txt`` and ``memory/traces.jsonl``, and ``manifest.json``.
+        Only regular files are packed. Symlinks, files reached through a
+        symlinked directory, special files such as FIFOs and files that go away
+        while packing are skipped and listed in the manifest. Archive names
+        never contain absolute host paths.
 
         Returns:
             Path of the archive in the temp directory. The caller removes it
@@ -93,26 +100,58 @@ class LogService:
             str(item.get("data", "")) for item in cached if item.get("type") != "trace"
         ]
         traces = [item for item in cached if item.get("type") == "trace"]
-        data_dir = Path(get_astrbot_data_path()).resolve()
+        data_dir = Path(get_astrbot_data_path())
         export_dir = Path(get_astrbot_temp_path()) / "log_exports"
         export_dir.mkdir(parents=True, exist_ok=True)
+        # The response removes its archive, except when the download is cancelled.
+        for stale in export_dir.glob("*.zip"):
+            with contextlib.suppress(OSError):
+                if time.time() - stale.stat().st_mtime > 3600:
+                    stale.unlink()
         archive_path = export_dir / f"astrbot-logs-{uuid.uuid4().hex}.zip"
-        log_files = {
-            path.resolve() for path in StorageCleaner(self.config).collect_log_files()
+        manifest = {
+            "astrbot_version": VERSION,
+            "exported_at": time.strftime("%Y-%m-%d %H:%M:%S %z"),
+            "files": [],
+            "skipped": [],
+            "memory_logs": len(logs),
+            "memory_traces": len(traces),
         }
+        used_names: set[str] = set()
         try:
             with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as archive:
-                for file_path in sorted(log_files):
+                for file_path in sorted(
+                    StorageCleaner(self.config).collect_log_files()
+                ):
                     if file_path.is_relative_to(data_dir):
                         arcname = file_path.relative_to(data_dir).as_posix()
                     else:
                         arcname = f"external/{file_path.name}"
+                        index = 2
+                        while arcname in used_names:
+                            arcname = f"external/{index}/{file_path.name}"
+                            index += 1
+                    used_names.add(arcname)
                     try:
+                        # lstat() and the resolve() check keep symlinks from
+                        # pulling in files outside the log locations.
+                        if (
+                            not stat.S_ISREG(file_path.lstat().st_mode)
+                            or file_path.resolve() != file_path
+                        ):
+                            manifest["skipped"].append(
+                                {"name": arcname, "reason": "not a regular file"}
+                            )
+                            continue
                         archive.write(file_path, arcname)
+                        manifest["files"].append(arcname)
                     except OSError as exc:
                         # A log file can be rotated away while we are packing.
-                        logger.warning(
-                            f"Skipped unreadable log file {file_path}: {exc}"
+                        manifest["skipped"].append(
+                            {
+                                "name": arcname,
+                                "reason": exc.strerror or type(exc).__name__,
+                            }
                         )
                 archive.writestr(
                     "memory/logs.txt", "".join(f"{line}\n" for line in logs)
@@ -123,6 +162,9 @@ class LogService:
                         json.dumps(trace, ensure_ascii=False, default=str) + "\n"
                         for trace in traces
                     ),
+                )
+                archive.writestr(
+                    "manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2)
                 )
         except Exception as exc:
             archive_path.unlink(missing_ok=True)

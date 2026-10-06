@@ -2,6 +2,8 @@ import asyncio
 import copy
 import io
 import json
+import os
+import stat
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -4329,9 +4331,13 @@ async def test_v1_log_export_packs_log_files_and_memory_logs(
     external_dir.mkdir()
     (external_dir / "custom.log").write_text("current", encoding="utf-8")
     (external_dir / "custom.1.log").write_text("rotated", encoding="utf-8")
+    other_dir = tmp_path / "other"
+    other_dir.mkdir()
+    (other_dir / "custom.log").write_text("same name", encoding="utf-8")
     service = asgi_app.state.services.logs
     service.config["log_file_enable"] = True
     service.config["log_file_path"] = str(external_dir / "custom.log")
+    service.config["trace_log_path"] = str(other_dir / "custom.log")
     service.log_broker.publish(
         {"level": "INFO", "time": 1.0, "data": "[INFO] hello", "category": "system"}
     )
@@ -4353,15 +4359,74 @@ async def test_v1_log_export_packs_log_files_and_memory_logs(
     assert "astrbot-logs-" in response.headers["content-disposition"]
     with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
         assert sorted(archive.namelist()) == [
+            "external/2/custom.log",
             "external/custom.1.log",
             "external/custom.log",
             "logs/event_loop_watchdog.log",
+            "manifest.json",
             "memory/logs.txt",
             "memory/traces.jsonl",
         ]
-        assert archive.read("external/custom.1.log") == b"rotated"
+        assert archive.read("external/custom.log") == b"current"
+        assert archive.read("external/2/custom.log") == b"same name"
         assert archive.read("logs/event_loop_watchdog.log") == b"watchdog"
         assert archive.read("memory/logs.txt").decode() == "[INFO] hello\n"
         traces = archive.read("memory/traces.jsonl").decode().splitlines()
         assert [json.loads(line)["span_id"] for line in traces] == ["span-1"]
+        manifest = json.loads(archive.read("manifest.json"))
+    assert sorted(manifest["files"]) == [
+        "external/2/custom.log",
+        "external/custom.1.log",
+        "external/custom.log",
+        "logs/event_loop_watchdog.log",
+    ]
+    assert manifest["skipped"] == []
+    assert (manifest["memory_logs"], manifest["memory_traces"]) == (1, 1)
+    assert str(tmp_path) not in json.dumps(manifest)
     assert not any((tmp_path / "data" / "temp" / "log_exports").iterdir())
+
+
+@pytest.mark.asyncio
+async def test_v1_log_export_skips_files_that_are_not_regular(
+    monkeypatch, tmp_path: Path, asgi_client: httpx.AsyncClient
+):
+    """A symlink in the log directory must not pull in a file from elsewhere."""
+    monkeypatch.setenv("ASTRBOT_ROOT", str(tmp_path))
+    logs_dir = tmp_path / "data" / "logs"
+    logs_dir.mkdir(parents=True)
+    (logs_dir / "astrbot.log").write_text("ok", encoding="utf-8")
+    outside = tmp_path / "outside.txt"
+    outside.write_text("not a log", encoding="utf-8")
+    link = logs_dir / "link.log"
+    try:
+        link.symlink_to(outside)
+    except OSError:
+        # No symlink privilege (e.g. Windows without developer mode): report a
+        # regular file as a symlink instead, which takes the same code path.
+        link.write_text("not a log", encoding="utf-8")
+        real_lstat = Path.lstat
+
+        def fake_lstat(self, *args, **kwargs):
+            if self.name == "link.log":
+                return os.stat_result((stat.S_IFLNK | 0o777, 0, 0, 0, 0, 0, 0, 0, 0, 0))
+            return real_lstat(self, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "lstat", fake_lstat)
+
+    response = await asgi_client.get("/api/v1/logs/export", headers=_jwt_headers())
+
+    assert response.status_code == 200
+    with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+        assert "logs/link.log" not in archive.namelist()
+        assert archive.read("logs/astrbot.log") == b"ok"
+        manifest = json.loads(archive.read("manifest.json"))
+    assert manifest["skipped"] == [
+        {"name": "logs/link.log", "reason": "not a regular file"}
+    ]
+
+
+@pytest.mark.asyncio
+async def test_v1_log_export_requires_authentication(asgi_client: httpx.AsyncClient):
+    response = await asgi_client.get("/api/v1/logs/export")
+
+    assert response.status_code == 401
