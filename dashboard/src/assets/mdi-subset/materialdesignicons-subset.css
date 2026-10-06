@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 267 icons */
+/* Auto-generated MDI subset – 266 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -534,10 +534,6 @@
 
 .mdi-github::before {
   content: "\F02A4";
-}
-
-.mdi-hand-heart::before {
-  content: "\F10F1";
 }
 
 .mdi-help-circle-outline::before {
