@@ -3,6 +3,7 @@ import re
 from collections.abc import AsyncGenerator
 from pathlib import Path
 from typing import cast
+from urllib.parse import urlsplit
 
 from slack_sdk.web.async_client import AsyncWebClient
 
@@ -15,6 +16,7 @@ from astrbot.api.message_components import (
     Plain,
 )
 from astrbot.api.platform import Group, MessageMember
+from astrbot.core.utils.media_utils import MediaResolver, file_uri_to_path
 
 
 class SlackMessageEvent(AstrMessageEvent):
@@ -67,12 +69,31 @@ class SlackMessageEvent(AstrMessageEvent):
                 "alt_text": "图片",
             }
         if isinstance(segment, File):
-            # upload file
-            url = segment.url or segment.file
-            response = await web_client.files_upload_v2(
-                file=url,
-                filename=segment.name or "file",
-            )
+            source = segment.url
+            if source:
+                if source.lower().startswith(("http://", "https://")):
+                    # MediaResolver expects lowercase HTTP(S) schemes.
+                    scheme, separator, remainder = source.partition(":")
+                    source = scheme.lower() + separator + remainder
+                else:
+                    scheme = urlsplit(source).scheme
+                    if scheme not in ("", "file") and not Path(source).drive:
+                        raise ValueError("Slack file URLs must use HTTP or HTTPS.")
+                    local_path = Path(file_uri_to_path(source))
+                    if not await asyncio.to_thread(local_path.is_file):
+                        raise ValueError("Slack file upload requires an existing file.")
+                    source = str(local_path.absolute())
+            source = source or await segment.get_file()
+            if not source:
+                raise ValueError(
+                    "Slack file upload requires a URL or an existing file."
+                )
+            # Resolve remote files and clean only resolver-owned temporary files.
+            async with MediaResolver(source).as_path() as resolved:
+                response = await web_client.files_upload_v2(
+                    file=await asyncio.to_thread(resolved.path.read_bytes),
+                    filename=segment.name or "file",
+                )
             if not response["ok"]:
                 logger.error(f"Slack file upload failed: {response['error']}")
                 return {

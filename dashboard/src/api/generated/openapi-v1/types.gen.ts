@@ -2333,6 +2333,75 @@ export type GetPluginPageAssetResponse = (unknown);
 
 export type GetPluginPageAssetError = unknown;
 
+export type ListPluginViewsByIdData = {
+    query: {
+        plugin_id: string;
+    };
+};
+
+export type ListPluginViewsByIdResponse = (SuccessEnvelope);
+
+export type ListPluginViewsByIdError = unknown;
+
+export type GetPluginViewByIdData = {
+    query: {
+        page_name: string;
+        plugin_id: string;
+    };
+};
+
+export type GetPluginViewByIdResponse = (string);
+
+export type GetPluginViewByIdError = unknown;
+
+export type GetPluginViewAssetByIdData = {
+    query: {
+        asset_path: string;
+        page_name: string;
+        plugin_id: string;
+    };
+};
+
+export type GetPluginViewAssetByIdResponse = (unknown);
+
+export type GetPluginViewAssetByIdError = unknown;
+
+export type ListPluginViewsData = {
+    path: {
+        plugin_id: string;
+    };
+};
+
+export type ListPluginViewsResponse = (SuccessEnvelope);
+
+export type ListPluginViewsError = unknown;
+
+export type GetPluginViewData = {
+    path: {
+        page_name: string;
+        plugin_id: string;
+    };
+};
+
+export type GetPluginViewResponse = (string);
+
+export type GetPluginViewError = unknown;
+
+export type GetPluginViewAssetData = {
+    path: {
+        /**
+         * URL-encoded relative asset path.
+         */
+        asset_path: string;
+        page_name: string;
+        plugin_id: string;
+    };
+};
+
+export type GetPluginViewAssetResponse = (unknown);
+
+export type GetPluginViewAssetError = unknown;
+
 export type GetPluginPageBridgeSdkResponse = (string);
 
 export type GetPluginPageBridgeSdkError = unknown;

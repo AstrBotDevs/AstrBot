@@ -1524,7 +1524,17 @@ async def collect_initial_request(
                         if not source_is_local and Path(image_path).is_file():
                             event.track_temporary_local_file(image_path)
                 elif isinstance(comp, Record):
-                    audio_path = await comp.convert_to_file_path()
+                    try:
+                        audio_path = await comp.convert_to_file_path()
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning(
+                            "Voice attachment is unavailable (%s).",
+                            type(exc).__name__,
+                        )
+                        req.extra_user_content_parts.append(
+                            TextPart(text="[Voice unavailable]")
+                        )
+                        continue
                     req.audio_urls.append(audio_path)
                     _append_audio_attachment(req, audio_path)
                 elif isinstance(comp, File):
@@ -1578,7 +1588,17 @@ async def collect_initial_request(
                                     event.track_temporary_local_file(image_path)
                             quoted_image_refs.add(image_path)
                         elif isinstance(reply_comp, Record):
-                            audio_path = await reply_comp.convert_to_file_path()
+                            try:
+                                audio_path = await reply_comp.convert_to_file_path()
+                            except Exception as exc:  # noqa: BLE001
+                                logger.warning(
+                                    "Quoted voice is unavailable (%s).",
+                                    type(exc).__name__,
+                                )
+                                req.extra_user_content_parts.append(
+                                    TextPart(text="[Voice unavailable]")
+                                )
+                                continue
                             req.audio_urls.append(audio_path)
                             _append_quoted_audio_attachment(req, audio_path)
                         elif isinstance(reply_comp, File):

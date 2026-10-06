@@ -99,6 +99,8 @@
     "placeholder": "继续追问这段内容..."
   },
   "conversation": {
+    "loading": "正在加载会话",
+    "loadFailed": "会话列表加载失败",
     "title": "对话",
     "newConversation": "新的聊天",
     "noHistory": "暂无对话历史",

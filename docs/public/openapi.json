@@ -1784,6 +1784,7 @@
         ],
         "summary": "List webchat sessions",
         "operationId": "listChatSessions",
+        "description": "API-key requests return a paginated object and require username. Dashboard requests with page or page_size return the same paginated object (sessions, page, page_size, total), scoped to the authenticated user. Dashboard requests without pagination parameters retain the legacy array response, limited to 100 sessions. Paginated requests default to page 1 and page_size 20, with page_size clamped to 1–100.\n\n**Required scope:** `chat`",
         "x-astrbot-scope": "chat",
         "parameters": [
           {
@@ -1804,8 +1805,7 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        },
-        "description": "**Required scope:** `chat`"
+        }
       }
     },
     "/api/v1/chat/sessions/new": {
@@ -1866,6 +1866,7 @@
           "Chat"
         ],
         "summary": "Get a webchat session and its messages",
+        "description": "Includes session metadata independently of the paginated session list.\n\n**Required scope:** `chat`",
         "operationId": "getChatSession",
         "x-astrbot-scope": "chat",
         "parameters": [
@@ -1896,8 +1897,7 @@
           "200": {
             "$ref": "#/components/responses/Ok"
           }
-        },
-        "description": "**Required scope:** `chat`"
+        }
       },
       "patch": {
         "tags": [
@@ -4367,6 +4367,196 @@
         ],
         "summary": "Get a plugin page asset",
         "operationId": "getPluginPageAsset",
+        "x-astrbot-scope": "plugin",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PluginId"
+          },
+          {
+            "name": "page_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "asset_path",
+            "in": "path",
+            "required": true,
+            "description": "URL-encoded relative asset path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Plugin asset content"
+          }
+        },
+        "description": "**Required scope:** `plugin`"
+      }
+    },
+    "/api/v1/plugins/views": {
+      "get": {
+        "tags": [
+          "Plugin Pages"
+        ],
+        "summary": "List plugin views by query ID (alias of /plugins/pages)",
+        "operationId": "listPluginViewsById",
+        "x-astrbot-scope": "plugin",
+        "parameters": [
+          {
+            "name": "plugin_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `plugin`"
+      }
+    },
+    "/api/v1/plugins/view": {
+      "get": {
+        "tags": [
+          "Plugin Pages"
+        ],
+        "summary": "Get plugin view entry HTML by query ID (alias of /plugins/page)",
+        "operationId": "getPluginViewById",
+        "x-astrbot-scope": "plugin",
+        "parameters": [
+          {
+            "name": "plugin_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page_name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Html"
+          }
+        },
+        "description": "**Required scope:** `plugin`"
+      }
+    },
+    "/api/v1/plugins/view/assets": {
+      "get": {
+        "tags": [
+          "Plugin Pages"
+        ],
+        "summary": "Get a plugin view asset by query ID (alias of /plugins/page/assets)",
+        "operationId": "getPluginViewAssetById",
+        "x-astrbot-scope": "plugin",
+        "parameters": [
+          {
+            "name": "plugin_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page_name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "asset_path",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Plugin asset content"
+          }
+        },
+        "description": "**Required scope:** `plugin`"
+      }
+    },
+    "/api/v1/plugins/{plugin_id}/views": {
+      "get": {
+        "tags": [
+          "Plugin Pages"
+        ],
+        "summary": "List plugin views (alias of /plugins/{plugin_id}/pages)",
+        "operationId": "listPluginViews",
+        "x-astrbot-scope": "plugin",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PluginId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        },
+        "description": "**Required scope:** `plugin`"
+      }
+    },
+    "/api/v1/plugins/{plugin_id}/views/{page_name}": {
+      "get": {
+        "tags": [
+          "Plugin Pages"
+        ],
+        "summary": "Get plugin view entry HTML (alias of /plugins/{plugin_id}/pages/{page_name})",
+        "operationId": "getPluginView",
+        "x-astrbot-scope": "plugin",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PluginId"
+          },
+          {
+            "name": "page_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Html"
+          }
+        },
+        "description": "**Required scope:** `plugin`"
+      }
+    },
+    "/api/v1/plugins/{plugin_id}/views/{page_name}/assets/{asset_path}": {
+      "get": {
+        "tags": [
+          "Plugin Pages"
+        ],
+        "summary": "Get a plugin view asset (alias of /plugins/{plugin_id}/pages/{page_name}/assets/{asset_path})",
+        "operationId": "getPluginViewAsset",
         "x-astrbot-scope": "plugin",
         "parameters": [
           {
