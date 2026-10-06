@@ -116,7 +116,7 @@ If a plugin fails to load, the admin panel will display the error message and pr
 
 ## Data & Logs {#data}
 
-Select `Data & Logs` in the left sidebar to switch between `Logs`, `Statistics`, `Conversations`, and `Trace` from the tabs at the top of one workspace. The `Logs` tab is shown by default.
+Select `Data & Logs` in the left sidebar to switch between `Statistics`, `Conversations`, `Logs`, and `Trace` from the tabs at the top of one workspace. `Statistics` opens by default the first time; afterwards, the page reopens the tab you last used.
 
 ### Statistics
 
