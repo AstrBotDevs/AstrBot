@@ -30,11 +30,11 @@ After starting AstrBot, you can access the admin panel by visiting `http://local
 
 ## Login
 
-For first-time login, AstrBot generates a random initial password and prints it in startup logs. Please read the startup log line containing the WebUI credential and use that password to log in (username is usually `astrbot`).
+For first-time login, AstrBot generates a random initial password and prints it in startup logs. Please read the startup log line containing the WebUI credential and use that password to log in (username is usually `astrbot`). Change the password immediately after logging in.
 
 ## Getting Started
 
-Only a new installation with no existing configuration automatically enters Getting Started after account setup. This eligibility survives a restart before account setup and is consumed when setup succeeds. Upgraded installations, password resets, and subsequent logins go to the dashboard, even when models or platforms are missing or disabled. It uses the standalone account setup layout, with a step count such as "1 / 4" above the heading. Settings → Maintenance → Reopen setup opens the guide manually without resetting existing settings.
+Only a new installation with no existing configuration automatically enters Getting Started after account setup. This eligibility survives a restart before account setup and is consumed when setup succeeds. Upgraded installations, password resets, and subsequent logins go to the dashboard, even when model or platform configurations are missing, incomplete, or disabled. It uses the standalone account setup layout, with a step count such as "1 / 4" above the heading. System Settings → Maintenance → Reopen setup opens the guide manually without resetting existing settings.
 
 ![Chat model step in Getting Started](/webui-onboarding-en.png)
 
@@ -45,7 +45,7 @@ The guide uses compact top spacing and a gap below the fixed header to separate 
 3. Say hello to AstrBot: entering this step automatically creates a session and embeds an unframed ChatUI below, without an extra click, navigation, or another tab. Returning to this step preserves the current session. The trial composer only provides text input and Send/Stop; attachment, model/configuration selection, and voice controls remain available in regular ChatUI. Send a message to check the reply, then select Next. Automatically opening a session alone does not verify the connection.
 4. Connect a messaging platform: existing settings are prefilled in an editable form, preferring an enabled adapter. Select another adapter or add a new one from the selector. Next proceeds directly when unchanged; edits update the original adapter without creating a duplicate or automatically enabling disabled entries. With no adapter, select QQ, Lark, Telegram, or another messaging platform, enter its connection details, and select Next to save. Failed saves retain your input; a saved configuration does not verify that the platform is online. A note above the bottom actions explains that ChatUI remains available without an adapter. Skip proceeds without saving adapter settings or opening a confirmation dialog.
 
-The guide title sits beside the AstrBot brand. Content, the trial message composer, and bottom actions align with the header's left and right edges. Each subtitle briefly states the configuration purpose. Content scrolls independently. Primary actions read Next. Back and skip actions retain their labels.
+The guide title sits beside the AstrBot brand. Content, the trial message composer, and bottom actions align with the header's left and right edges. Each subtitle briefly states the configuration purpose. Content scrolls independently while bottom actions remain visible. Primary actions read Next. Back and skip actions retain their labels.
 
 Account setup cannot be skipped. Skip entire setup at the bottom of the first step goes directly to the dashboard without saving guide settings; it replaces the previous Set up later label. Skip on subsequent steps only skips the current step, proceeding directly to adapters when no model is configured.
 
@@ -61,7 +61,7 @@ After completing or skipping step four, the welcome screen plays a single confet
 
 ![Configuration routing available when reopening setup](/webui-onboarding-routes-en.png)
 
-Entry-point mapping: the standalone welcome page and its sidebar item are removed; legacy `/welcome` links redirect to the dashboard. The first-use popup is now the first guide step, and the former plugin and computer-access steps are removed. Manual reentry is under Settings → Maintenance. Where will you use AstrBot? is now Connect a messaging platform. Install plugins through Plugins -> Plugin Marketplace; manage computer access through Config -> AI -> Capabilities -> Agent Computer Use. Providers and Messaging Platforms remain independently accessible.
+Entry-point mapping: the standalone welcome page and its sidebar item are removed; legacy `/welcome` links redirect to the dashboard. The first-use popup is now the first guide step, and the former plugin and computer-access steps are removed. Manual reentry is under System Settings → Maintenance. Where will you use AstrBot? is now Connect a messaging platform. Install plugins through Extensions → Plugins → AstrBot Plugin Market; manage computer access through Config → AI → Capabilities → Agent Computer Use. Providers and Messaging Platforms remain independently accessible.
 
 ## Two-Factor Authentication
 
@@ -128,7 +128,7 @@ Global settings are under `System Settings` at the bottom of the sidebar:
 - `Appearance`: sidebar and theme.
 - `Network`: HTTP proxy, Python package sources, and GitHub proxy. For the address to use when AstrBot runs in Docker, see [Deploy with Docker](/en/deploy/astrbot/docker.md).
 - `Security`: WebUI HTTPS, login rate limits, and TOTP.
-- `Maintenance`: backup, restore, and restart.
+- `Maintenance`: backup, restore, restart, and Reopen setup.
 - `OpenAPI`: developer access keys.
 
 System configuration changes save automatically. Check for a successful save message and restart AstrBot if the page indicates that a restart is required.
