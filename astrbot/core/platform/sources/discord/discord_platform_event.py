@@ -16,6 +16,7 @@ from astrbot.api.message_components import (
     Plain,
     Record,
     Reply,
+    Video,
 )
 from astrbot.api.platform import (
     AstrBotMessage,
@@ -384,6 +385,19 @@ class DiscordPlatformEvent(AstrMessageEvent):
                     logger.error(
                         "[Discord] 处理语音时发生未知严重错误: %s",
                         describe_media_ref(audio_ref),
+                        exc_info=True,
+                    )
+            elif isinstance(i, Video):
+                try:
+                    path = Path(await i.convert_to_file_path())
+                    video_bytes = await asyncio.to_thread(path.read_bytes)
+                    files.append(
+                        discord.File(BytesIO(video_bytes), filename=path.name),
+                    )
+                except Exception:
+                    logger.warning(
+                        "[Discord] Failed to process video: %s",
+                        describe_media_ref(i.file),
                         exc_info=True,
                     )
             elif isinstance(i, File):

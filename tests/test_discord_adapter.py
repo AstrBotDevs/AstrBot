@@ -1,11 +1,11 @@
 import base64
 from io import BytesIO
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from astrbot.api.message_components import Image, Record
+from astrbot.api.message_components import File, Image, Plain, Record, Video
 from astrbot.api.platform import Group, MessageType
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.sources.discord import (
@@ -24,6 +24,49 @@ _PNG_BYTES = base64.b64decode(
 )
 _WAV_BYTES = b"RIFF\x24\x00\x00\x00WAVEfmt " + b"\x00" * 16
 _WAV_PATH = "/tmp/discord_voice.wav"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("component_type", ["video", "video_url", "file"])
+@pytest.mark.parametrize("with_text", [False, True])
+async def test_discord_sends_video_attachment(
+    tmp_path, monkeypatch, component_type, with_text
+):
+    video_path = tmp_path / "repro.mp4"
+    video_bytes = b"video attachment payload"
+    video_path.write_bytes(video_bytes)
+    if component_type == "video":
+        component = Video.fromFileSystem(str(video_path))
+    elif component_type == "video_url":
+        component = Video.fromURL("https://example.com/repro.mp4")
+        monkeypatch.setattr(
+            Video,
+            "convert_to_file_path",
+            AsyncMock(return_value=str(video_path)),
+        )
+    else:
+        component = File(name=video_path.name, file=str(video_path))
+
+    channel = MagicMock(spec=discord_platform_event.discord.abc.Messageable)
+    channel.send = AsyncMock()
+    event = DiscordPlatformEvent.__new__(DiscordPlatformEvent)
+    event.interaction_followup_webhook = None
+    event._get_channel = AsyncMock(return_value=channel)
+    monkeypatch.setattr(discord_platform_event.AstrMessageEvent, "send", AsyncMock())
+    chain = [Plain("Video test"), component] if with_text else [component]
+
+    await event.send(MessageChain(chain=chain))
+
+    channel.send.assert_awaited_once()
+    kwargs = channel.send.call_args.kwargs
+    assert kwargs.get("content", "") == ("Video test" if with_text else "")
+    assert len(kwargs["files"]) == 1
+    attachment = kwargs["files"][0]
+    try:
+        assert attachment.filename == "repro.mp4"
+        assert attachment.fp.read() == video_bytes
+    finally:
+        attachment.close()
 
 
 @pytest.mark.asyncio
