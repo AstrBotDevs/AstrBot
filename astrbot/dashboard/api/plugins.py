@@ -682,6 +682,18 @@ async def delete_plugin_source(
     )
 
 
+@router.get("/plugins/page-bridge-sdk.js")
+async def get_plugin_page_bridge_sdk(
+    request: Request,
+    _auth: AuthContext = Depends(require_plugin_scope),
+    page_service: PluginPageService = Depends(get_page_service),
+):
+    return await _serve_plugin_page_bridge_sdk(
+        request=request,
+        page_service=page_service,
+    )
+
+
 @router.get("/plugins")
 async def list_plugins(
     request: Request,
@@ -871,6 +883,7 @@ async def set_plugin_enabled_by_id(
 
 
 @router.get("/plugins/views")
+@router.get("/plugins/pages")  # deprecated alias
 async def list_plugin_pages_by_id(
     plugin_id: str = Query(...),
     _auth: AuthContext = Depends(require_plugin_scope),
@@ -885,6 +898,7 @@ async def list_plugin_pages_by_id(
 
 
 @router.get("/plugins/view")
+@router.get("/plugins/page")  # deprecated alias
 async def get_plugin_page_by_id(
     request: Request,
     plugin_id: str = Query(...),
@@ -1143,6 +1157,7 @@ async def update_plugin(
 
 
 @router.get("/plugins/{plugin_id}/views")
+@router.get("/plugins/{plugin_id}/pages")  # deprecated alias
 async def list_plugin_pages(
     plugin_id: str,
     _auth: AuthContext = Depends(require_plugin_scope),
@@ -1157,6 +1172,7 @@ async def list_plugin_pages(
 
 
 @router.get("/plugins/{plugin_id}/views/{page_name}")
+@router.get("/plugins/{plugin_id}/pages/{page_name}")  # deprecated alias
 async def get_plugin_page(
     plugin_id: str,
     page_name: str,

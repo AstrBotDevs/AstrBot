@@ -252,6 +252,9 @@ outline: deep
 | `POST` | `/api/v1/plugins/install/url` | — |
 | `GET` | `/api/v1/plugins/market` | — |
 | `GET` | `/api/v1/plugins/market/categories` | — |
+| `GET` | `/api/v1/plugins/page` | — |
+| `GET` | `/api/v1/plugins/page-bridge-sdk.js` | — |
+| `GET` | `/api/v1/plugins/pages` | — |
 | `GET` | `/api/v1/plugins/readme` | — |
 | `POST` | `/api/v1/plugins/reload` | — |
 | `POST` | `/api/v1/plugins/update` | — |
@@ -270,6 +273,8 @@ outline: deep
 | `GET` | `/api/v1/plugins/{plugin_id}/config/schema` | — |
 | `PATCH` | `/api/v1/plugins/{plugin_id}/enabled` | — |
 | `PUT` | `/api/v1/plugins/{plugin_id}/log-level` | — |
+| `GET` | `/api/v1/plugins/{plugin_id}/pages` | — |
+| `GET` | `/api/v1/plugins/{plugin_id}/pages/{page_name}` | — |
 | `GET` | `/api/v1/plugins/{plugin_id}/readme` | — |
 | `POST` | `/api/v1/plugins/{plugin_id}/reload` | — |
 | `POST` | `/api/v1/plugins/{plugin_id}/source` | — |

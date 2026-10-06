@@ -2274,6 +2274,16 @@ export type ListPluginViewsByIdResponse = (SuccessEnvelope);
 
 export type ListPluginViewsByIdError = unknown;
 
+export type ListPluginPagesByIdData = {
+    query: {
+        plugin_id: string;
+    };
+};
+
+export type ListPluginPagesByIdResponse = (SuccessEnvelope);
+
+export type ListPluginPagesByIdError = unknown;
+
 export type GetPluginViewByIdData = {
     query: {
         page_name: string;
@@ -2285,6 +2295,17 @@ export type GetPluginViewByIdResponse = (string);
 
 export type GetPluginViewByIdError = unknown;
 
+export type GetPluginPageByIdData = {
+    query: {
+        page_name: string;
+        plugin_id: string;
+    };
+};
+
+export type GetPluginPageByIdResponse = (string);
+
+export type GetPluginPageByIdError = unknown;
+
 export type ListPluginViewsData = {
     path: {
         plugin_id: string;
@@ -2294,6 +2315,16 @@ export type ListPluginViewsData = {
 export type ListPluginViewsResponse = (SuccessEnvelope);
 
 export type ListPluginViewsError = unknown;
+
+export type ListPluginPagesData = {
+    path: {
+        plugin_id: string;
+    };
+};
+
+export type ListPluginPagesResponse = (SuccessEnvelope);
+
+export type ListPluginPagesError = unknown;
 
 export type GetPluginViewData = {
     path: {
@@ -2305,6 +2336,17 @@ export type GetPluginViewData = {
 export type GetPluginViewResponse = (string);
 
 export type GetPluginViewError = unknown;
+
+export type GetPluginPageData = {
+    path: {
+        page_name: string;
+        plugin_id: string;
+    };
+};
+
+export type GetPluginPageResponse = (string);
+
+export type GetPluginPageError = unknown;
 
 export type GetPluginViewTokenAssetData = {
     path: {
@@ -2324,6 +2366,10 @@ export type GetPluginViewTokenAssetData = {
 export type GetPluginViewTokenAssetResponse = (unknown);
 
 export type GetPluginViewTokenAssetError = (unknown);
+
+export type GetPluginPageBridgeSdkResponse = (string);
+
+export type GetPluginPageBridgeSdkError = unknown;
 
 export type GetPluginExtensionRouteData = {
     path: {
