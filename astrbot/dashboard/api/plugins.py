@@ -304,30 +304,6 @@ def _plugin_page_payload_response(payload: PluginPageContentPayload):
     )
 
 
-async def _serve_plugin_page_content(
-    *,
-    request: Request,
-    page_service: PluginPageService,
-    username: str | None,
-    plugin_id: str,
-    page_name: str,
-    asset_path: str,
-):
-    try:
-        payload = await page_service.serve_page_content(
-            plugin_name=plugin_id,
-            page_name=page_name,
-            asset_path=asset_path,
-            asset_token=request.query_params.get("asset_token", "").strip(),
-            username=username,
-            locale=_get_request_locale(request),
-            theme=_get_request_theme(request),
-        )
-    except PluginPageServiceError as exc:
-        return _plugin_page_error_response(exc.status_code, exc.public_message)
-    return _plugin_page_payload_response(payload)
-
-
 async def _serve_plugin_page_bridge_sdk(
     *,
     request: Request,
@@ -939,26 +915,6 @@ async def get_plugin_page_by_id(
     )
 
 
-@router.get("/plugins/page/assets")
-@router.get("/plugins/view/assets")
-async def get_plugin_page_asset_by_id(
-    request: Request,
-    plugin_id: str = Query(...),
-    page_name: str = Query(...),
-    asset_path: str = Query(...),
-    auth: AuthContext = Depends(require_plugin_scope),
-    page_service: PluginPageService = Depends(get_page_service),
-):
-    return await _serve_plugin_page_content(
-        request=request,
-        page_service=page_service,
-        username=auth.username,
-        plugin_id=plugin_id,
-        page_name=page_name,
-        asset_path=asset_path,
-    )
-
-
 @router.get("/plugins/{plugin_id}")
 async def get_plugin(
     plugin_id: str,
@@ -1233,26 +1189,6 @@ async def get_plugin_page(
     )
 
 
-@router.get("/plugins/{plugin_id}/pages/{page_name}/assets/{asset_path:path}")
-@router.get("/plugins/{plugin_id}/views/{page_name}/assets/{asset_path:path}")
-async def get_plugin_page_asset(
-    plugin_id: str,
-    page_name: str,
-    asset_path: str,
-    request: Request,
-    auth: AuthContext = Depends(require_plugin_scope),
-    page_service: PluginPageService = Depends(get_page_service),
-):
-    return await _serve_plugin_page_content(
-        request=request,
-        page_service=page_service,
-        username=auth.username,
-        plugin_id=plugin_id,
-        page_name=page_name,
-        asset_path=asset_path,
-    )
-
-
 @router.get("/plugins/{plugin_id}/views/{page_name}/_t/{token}/")
 @router.get("/plugins/{plugin_id}/views/{page_name}/_t/{token}/{asset_path:path}")
 async def get_plugin_view_token_asset(
@@ -1274,11 +1210,10 @@ async def get_plugin_view_token_asset(
             plugin_name=plugin_id,
             page_name=page_name,
             asset_path=asset_path,
-            asset_token=token,
+            asset_token=request.query_params.get("asset_token", "").strip() or token,
             username=username,
             locale=_get_request_locale(request),
             theme=_get_request_theme(request),
-            rewrite_urls=False,
         )
     except PluginPageServiceError as exc:
         return _plugin_page_error_response(exc.status_code, exc.public_message)
@@ -1544,43 +1479,6 @@ async def dashboard_get_plugin_page_bridge_sdk(
     return await _serve_plugin_page_bridge_sdk(
         request=request,
         page_service=page_service,
-    )
-
-
-@legacy_router.get("/api/plugin/page/content/{plugin_id}/{page_name}/")
-async def dashboard_get_plugin_page_entry(
-    plugin_id: str,
-    page_name: str,
-    request: Request,
-    username: str = Depends(require_dashboard_user),
-    page_service: PluginPageService = Depends(get_page_service),
-):
-    return await _serve_plugin_page_content(
-        request=request,
-        page_service=page_service,
-        username=username,
-        plugin_id=plugin_id,
-        page_name=page_name,
-        asset_path="",
-    )
-
-
-@legacy_router.get("/api/plugin/page/content/{plugin_id}/{page_name}/{asset_path:path}")
-async def dashboard_get_plugin_page_asset(
-    plugin_id: str,
-    page_name: str,
-    asset_path: str,
-    request: Request,
-    username: str = Depends(require_dashboard_user),
-    page_service: PluginPageService = Depends(get_page_service),
-):
-    return await _serve_plugin_page_content(
-        request=request,
-        page_service=page_service,
-        username=username,
-        plugin_id=plugin_id,
-        page_name=page_name,
-        asset_path=asset_path,
     )
 
 

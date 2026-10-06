@@ -1955,18 +1955,6 @@ export type GetPluginPageByIdResponse = (string);
 
 export type GetPluginPageByIdError = unknown;
 
-export type GetPluginPageAssetByIdData = {
-    query: {
-        asset_path: string;
-        page_name: string;
-        plugin_id: string;
-    };
-};
-
-export type GetPluginPageAssetByIdResponse = (unknown);
-
-export type GetPluginPageAssetByIdError = unknown;
-
 export type GetPluginData = {
     body?: {
         delete_config?: boolean;
@@ -2318,21 +2306,6 @@ export type GetPluginPageResponse = (string);
 
 export type GetPluginPageError = unknown;
 
-export type GetPluginPageAssetData = {
-    path: {
-        /**
-         * URL-encoded relative asset path.
-         */
-        asset_path: string;
-        page_name: string;
-        plugin_id: string;
-    };
-};
-
-export type GetPluginPageAssetResponse = (unknown);
-
-export type GetPluginPageAssetError = unknown;
-
 export type ListPluginViewsByIdData = {
     query: {
         plugin_id: string;
@@ -2354,18 +2327,6 @@ export type GetPluginViewByIdResponse = (string);
 
 export type GetPluginViewByIdError = unknown;
 
-export type GetPluginViewAssetByIdData = {
-    query: {
-        asset_path: string;
-        page_name: string;
-        plugin_id: string;
-    };
-};
-
-export type GetPluginViewAssetByIdResponse = (unknown);
-
-export type GetPluginViewAssetByIdError = unknown;
-
 export type ListPluginViewsData = {
     path: {
         plugin_id: string;
@@ -2386,21 +2347,6 @@ export type GetPluginViewData = {
 export type GetPluginViewResponse = (string);
 
 export type GetPluginViewError = unknown;
-
-export type GetPluginViewAssetData = {
-    path: {
-        /**
-         * URL-encoded relative asset path.
-         */
-        asset_path: string;
-        page_name: string;
-        plugin_id: string;
-    };
-};
-
-export type GetPluginViewAssetResponse = (unknown);
-
-export type GetPluginViewAssetError = unknown;
 
 export type GetPluginViewTokenAssetData = {
     path: {

@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import cast
-from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
+from urllib.parse import quote, urlencode, urlunsplit
 
 import aiofiles
 import jwt
@@ -34,22 +34,6 @@ PLUGIN_PAGE_BRIDGE_FILE = (
 
 _HTML_ASSET_ATTR_RE = re.compile(
     r"(?P<attr>src|href)=(?P<quote>[\"\'])(?P<url>.*?)(?P=quote)",
-    re.IGNORECASE,
-)
-_CSS_URL_RE = re.compile(
-    r"url\(\s*(?P<quote>[\"\']?)(?P<url>.*?)(?P=quote)\s*\)",
-    re.IGNORECASE,
-)
-_JS_DYNAMIC_IMPORT_RE = re.compile(
-    r"(?P<prefix>\bimport\s*\(\s*)(?P<quote>[\"\'])(?P<url>.*?)(?P=quote)(?P<suffix>\s*\))",
-    re.IGNORECASE,
-)
-_JS_MODULE_FROM_RE = re.compile(
-    r"(?P<prefix>\b(?:import|export)\s+(?:[^;]*?\s+from\s+))(?P<quote>[\"\'])(?P<url>.*?)(?P=quote)",
-    re.IGNORECASE | re.DOTALL,
-)
-_JS_SIDE_EFFECT_IMPORT_RE = re.compile(
-    r"(?P<prefix>\bimport\s+)(?P<quote>[\"\'])(?P<url>[^\"'\r\n]+)(?P=quote)",
     re.IGNORECASE,
 )
 
@@ -360,7 +344,6 @@ class PluginPageService:
         username: str | None,
         locale: str,
         theme: str | None,
-        rewrite_urls: bool = True,
     ) -> PluginPageContentPayload:
         plugin = self.get_plugin_metadata_by_name(plugin_name)
         if not plugin:
@@ -390,45 +373,21 @@ class PluginPageService:
             locale=locale,
             theme=theme,
         )
-        served_asset_path = asset_path or page.entry_file
         suffix = file_path.suffix.lower()
         if suffix == ".html":
             html_text = await self.read_plugin_page_text(file_path)
             return PluginPageContentPayload(
-                content=self.rewrite_plugin_page_html(
+                content=self.process_plugin_page_html(
                     html_text,
-                    plugin_name,
-                    page.name,
-                    served_asset_path,
                     theme=theme,
                     extra_query_params=extra_query_params,
-                    rewrite_urls=rewrite_urls,
                 ),
                 content_type="text/html; charset=utf-8",
             )
-        if rewrite_urls and suffix == ".css":
-            css_text = await self.read_plugin_page_text(file_path)
+        if suffix in {".css", ".js", ".mjs"}:
             return PluginPageContentPayload(
-                content=self.rewrite_plugin_page_css(
-                    css_text,
-                    plugin_name,
-                    page.name,
-                    served_asset_path,
-                    extra_query_params=extra_query_params,
-                ),
-                content_type="text/css; charset=utf-8",
-            )
-        if rewrite_urls and suffix in {".js", ".mjs"}:
-            js_text = await self.read_plugin_page_text(file_path)
-            return PluginPageContentPayload(
-                content=self.rewrite_plugin_page_js(
-                    js_text,
-                    plugin_name,
-                    page.name,
-                    served_asset_path,
-                    extra_query_params=extra_query_params,
-                ),
-                content_type="application/javascript; charset=utf-8",
+                content=await self.read_plugin_page_text(file_path),
+                content_type=self.guess_plugin_page_mime_type(file_path),
             )
         return PluginPageContentPayload(
             content=await self.read_plugin_page_binary(file_path),
@@ -456,12 +415,9 @@ class PluginPageService:
     def normalize_plugin_page_path(
         raw_path: str,
         *,
-        base_dir: str | None = None,
         allow_empty: bool = False,
     ) -> str:
         path = raw_path.replace("\\", "/").strip()
-        if base_dir:
-            path = posixpath.join(base_dir, path)
         normalized = posixpath.normpath(path)
         if normalized in {"", "."}:
             if allow_empty:
@@ -590,92 +546,6 @@ class PluginPageService:
         return target_path
 
     @staticmethod
-    def is_rewritable_asset_url(raw_url: str) -> bool:
-        value = raw_url.strip()
-        lower = value.lower()
-        if not value:
-            return False
-        if value.startswith(("#", "/#")):
-            return False
-        if lower.startswith(
-            (
-                "http://",
-                "https://",
-                "//",
-                "data:",
-                "javascript:",
-                "mailto:",
-                "tel:",
-                "blob:",
-            )
-        ):
-            return False
-        return True
-
-    @staticmethod
-    def resolve_referenced_asset_path(
-        base_asset_path: str,
-        referenced_url: str,
-    ) -> str:
-        parts = urlsplit(referenced_url)
-        referenced_path = parts.path.strip()
-        if not referenced_path:
-            raise ValueError("Plugin Page referenced asset path is empty")
-        base_dir = posixpath.dirname(base_asset_path) if base_asset_path else ""
-        normalized = PluginPageService.normalize_plugin_page_path(
-            referenced_path,
-            base_dir=base_dir,
-        )
-        if not normalized:
-            raise ValueError("Plugin Page referenced asset path is invalid")
-        return normalized
-
-    def build_plugin_page_asset_url(
-        self,
-        plugin_name: str,
-        page_name: str,
-        asset_path: str,
-        original_query: str = "",
-        original_fragment: str = "",
-        extra_query_params: dict[str, str] | None = None,
-    ) -> str:
-        path = self.build_plugin_page_content_path(plugin_name, page_name, asset_path)
-        query_dict = dict(parse_qsl(original_query, keep_blank_values=True))
-        if extra_query_params:
-            for key, value in extra_query_params.items():
-                if value:
-                    query_dict[key] = value
-        query = urlencode(query_dict)
-        return urlunsplit(("", "", path, query, original_fragment))
-
-    @staticmethod
-    def build_plugin_page_content_path(
-        plugin_name: str,
-        page_name: str,
-        asset_path: str = "",
-    ) -> str:
-        encoded_plugin_name = quote(plugin_name, safe="")
-        encoded_page_name = quote(
-            PluginPageService.normalize_plugin_page_name(page_name),
-            safe="",
-        )
-        if not asset_path:
-            return (
-                f"/api/plugin/page/content/{encoded_plugin_name}/{encoded_page_name}/"
-            )
-        safe_asset_path = PluginPageService.normalize_plugin_page_path(
-            asset_path,
-            allow_empty=True,
-        )
-        encoded_path = "/".join(
-            quote(part, safe="") for part in safe_asset_path.split("/")
-        )
-        return (
-            f"/api/plugin/page/content/{encoded_plugin_name}/"
-            f"{encoded_page_name}/{encoded_path}"
-        )
-
-    @staticmethod
     def build_plugin_page_view_content_path(
         plugin_name: str,
         page_name: str,
@@ -714,178 +584,39 @@ class PluginPageService:
         query = urlencode(extra_query_params or {})
         return urlunsplit(("", "", "/api/plugin/page/bridge-sdk.js", query, ""))
 
-    @staticmethod
-    def is_js_relative_module_specifier(raw_url: str) -> bool:
-        value = raw_url.strip()
-        return value.startswith(("./", "../", "/"))
-
-    def rewrite_relative_asset_url(
-        self,
-        raw_url: str,
-        base_asset_path: str,
-        plugin_name: str,
-        page_name: str,
-        extra_query_params: dict[str, str] | None = None,
-    ) -> str | None:
-        candidate = raw_url.strip()
-        if not self.is_rewritable_asset_url(candidate):
-            return None
-        parts = urlsplit(candidate)
-        asset_path = self.resolve_referenced_asset_path(base_asset_path, candidate)
-        return self.build_plugin_page_asset_url(
-            plugin_name,
-            page_name,
-            asset_path,
-            original_query=parts.query,
-            original_fragment=parts.fragment,
-            extra_query_params=extra_query_params,
-        )
-
-    def rewrite_plugin_page_html(
+    def process_plugin_page_html(
         self,
         html_text: str,
-        plugin_name: str,
-        page_name: str,
-        entry_asset_path: str,
         *,
         theme: str | None,
         extra_query_params: dict[str, str] | None = None,
-        rewrite_urls: bool = True,
     ) -> str:
         """Process view HTML before serving.
 
-        Always applies the theme and injects the bridge SDK script. When
-        ``rewrite_urls`` is False (path-token URLs), relative asset attributes
-        are left untouched because the token already travels in the path.
+        Applies the theme and injects (or retargets) the bridge SDK script.
+        Relative asset URLs are left untouched: view assets are served from
+        path-token URLs, so relative references resolve correctly on their own.
         """
 
-        def replace_attr(match: re.Match[str]) -> str:
+        def replace_bridge_url(match: re.Match[str]) -> str:
             raw_url = match.group("url")
-            attr = match.group("attr")
-            quote_char = match.group("quote")
-
-            if raw_url.strip() == "/api/plugin/page/bridge-sdk.js":
-                url = self.get_plugin_page_bridge_sdk_url(extra_query_params)
-                return f"{attr}={quote_char}{url}{quote_char}"
-
-            if not rewrite_urls or not self.is_rewritable_asset_url(raw_url):
+            if raw_url.strip() != "/api/plugin/page/bridge-sdk.js":
                 return match.group(0)
+            url = self.get_plugin_page_bridge_sdk_url(extra_query_params)
+            return f"{match.group('attr')}={match.group('quote')}{url}{match.group('quote')}"
 
-            try:
-                rewritten_url = self.rewrite_relative_asset_url(
-                    raw_url,
-                    entry_asset_path,
-                    plugin_name,
-                    page_name,
-                    extra_query_params=extra_query_params,
-                )
-                if not rewritten_url:
-                    return match.group(0)
-                return f"{attr}={quote_char}{rewritten_url}{quote_char}"
-            except ValueError:
-                return match.group(0)
-
-        rewritten_html = _HTML_ASSET_ATTR_RE.sub(replace_attr, html_text)
+        processed_html = _HTML_ASSET_ATTR_RE.sub(replace_bridge_url, html_text)
         if theme:
-            rewritten_html = self.apply_theme_to_html(rewritten_html, theme)
-        if "/api/plugin/page/bridge-sdk.js" not in rewritten_html:
+            processed_html = self.apply_theme_to_html(processed_html, theme)
+        if "/api/plugin/page/bridge-sdk.js" not in processed_html:
             bridge_tag = f'<script src="{self.get_plugin_page_bridge_sdk_url(extra_query_params)}"></script>'
-            if "</body>" in rewritten_html:
-                rewritten_html = rewritten_html.replace(
+            if "</body>" in processed_html:
+                processed_html = processed_html.replace(
                     "</body>", f"{bridge_tag}</body>", 1
                 )
             else:
-                rewritten_html += bridge_tag
-        return rewritten_html
-
-    def rewrite_plugin_page_css(
-        self,
-        css_text: str,
-        plugin_name: str,
-        page_name: str,
-        css_asset_path: str,
-        extra_query_params: dict[str, str] | None = None,
-    ) -> str:
-        def replace_url(match: re.Match[str]) -> str:
-            raw_url = match.group("url").strip()
-            quote_char = match.group("quote") or ""
-            try:
-                rewritten_url = self.rewrite_relative_asset_url(
-                    raw_url,
-                    css_asset_path,
-                    plugin_name,
-                    page_name,
-                    extra_query_params=extra_query_params,
-                )
-                if not rewritten_url:
-                    return match.group(0)
-                return f"url({quote_char}{rewritten_url}{quote_char})"
-            except ValueError:
-                return match.group(0)
-
-        return _CSS_URL_RE.sub(replace_url, css_text)
-
-    def rewrite_plugin_page_js(
-        self,
-        js_text: str,
-        plugin_name: str,
-        page_name: str,
-        js_asset_path: str,
-        extra_query_params: dict[str, str] | None = None,
-    ) -> str:
-        def rewrite_specifier(raw_url: str) -> str:
-            if not self.is_js_relative_module_specifier(raw_url):
-                return raw_url
-            if not self.is_rewritable_asset_url(raw_url):
-                return raw_url
-            rewritten = self.rewrite_relative_asset_url(
-                raw_url,
-                js_asset_path,
-                plugin_name,
-                page_name,
-                extra_query_params=extra_query_params,
-            )
-            return rewritten or raw_url
-
-        def replace_dynamic(match: re.Match[str]) -> str:
-            raw_url = match.group("url")
-            try:
-                rewritten = rewrite_specifier(raw_url)
-            except ValueError:
-                return match.group(0)
-            return (
-                f"{match.group('prefix')}{match.group('quote')}{rewritten}"
-                f"{match.group('quote')}{match.group('suffix')}"
-            )
-
-        def replace_from(match: re.Match[str]) -> str:
-            raw_url = match.group("url")
-            try:
-                rewritten = rewrite_specifier(raw_url)
-            except ValueError:
-                return match.group(0)
-            return (
-                f"{match.group('prefix')}{match.group('quote')}"
-                f"{rewritten}{match.group('quote')}"
-            )
-
-        rewritten_js = _JS_DYNAMIC_IMPORT_RE.sub(replace_dynamic, js_text)
-        rewritten_js = _JS_MODULE_FROM_RE.sub(replace_from, rewritten_js)
-
-        def replace_side_effect(match: re.Match[str]) -> str:
-            raw_url = match.group("url")
-            if raw_url.startswith(("{", "*")):
-                return match.group(0)
-            try:
-                rewritten = rewrite_specifier(raw_url)
-            except ValueError:
-                return match.group(0)
-            return (
-                f"{match.group('prefix')}{match.group('quote')}"
-                f"{rewritten}{match.group('quote')}"
-            )
-
-        return _JS_SIDE_EFFECT_IMPORT_RE.sub(replace_side_effect, rewritten_js)
+                processed_html += bridge_tag
+        return processed_html
 
     @staticmethod
     async def read_plugin_page_text(file_path: Path) -> str:
@@ -923,21 +654,17 @@ class PluginPageService:
             "title": page.title,
             "i18n_key": f"pages.{page.name}",
         }
-        if include_content_path:
-            if asset_token:
-                page_data["content_path"] = (
-                    self.build_plugin_page_view_content_path(
-                        plugin_name,
-                        page.name,
-                        asset_token,
-                    )
-                    + f"?asset_token={quote(asset_token, safe='')}"
-                )
-            else:
-                page_data["content_path"] = self.build_plugin_page_content_path(
+        if include_content_path and asset_token:
+            page_data["content_path"] = (
+                self.build_plugin_page_view_content_path(
                     plugin_name,
                     page.name,
+                    asset_token,
                 )
+                # Kept as a query echo for view scripts that read the token
+                # from location.search.
+                + f"?asset_token={quote(asset_token, safe='')}"
+            )
         return page_data
 
     async def serialize_plugin_pages(self, plugin: StarMetadata) -> list[dict]:

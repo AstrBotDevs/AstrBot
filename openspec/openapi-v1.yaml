@@ -2196,32 +2196,6 @@ paths:
         "200":
           $ref: "#/components/responses/Html"
 
-  /api/v1/plugins/page/assets:
-    get:
-      tags: [Plugin Views]
-      summary: Get a plugin page asset by query ID
-      operationId: getPluginPageAssetById
-      x-astrbot-scope: plugin
-      parameters:
-        - name: plugin_id
-          in: query
-          required: true
-          schema:
-            type: string
-        - name: page_name
-          in: query
-          required: true
-          schema:
-            type: string
-        - name: asset_path
-          in: query
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          description: Plugin asset content
-
   /api/v1/plugins/{plugin_id}:
     get:
       tags: [Plugins]
@@ -2784,31 +2758,6 @@ paths:
         "200":
           $ref: "#/components/responses/Html"
 
-  /api/v1/plugins/{plugin_id}/pages/{page_name}/assets/{asset_path}:
-    get:
-      tags: [Plugin Views]
-      summary: Get a plugin page asset
-      operationId: getPluginPageAsset
-      x-astrbot-scope: plugin
-      parameters:
-        - $ref: "#/components/parameters/PluginId"
-        - name: page_name
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: asset_path
-          in: path
-          required: true
-          description: URL-encoded relative asset path.
-          schema:
-            type: string
-      responses:
-        "200":
-          description: Plugin asset content
-
-  # Views aliases. "views" is the preferred naming; the /pages routes above
-  # stay valid as aliases.
   /api/v1/plugins/views:
     get:
       tags: [Plugin Views]
@@ -2846,32 +2795,6 @@ paths:
         "200":
           $ref: "#/components/responses/Html"
 
-  /api/v1/plugins/view/assets:
-    get:
-      tags: [Plugin Views]
-      summary: Get a plugin view asset by query ID (alias of /plugins/page/assets)
-      operationId: getPluginViewAssetById
-      x-astrbot-scope: plugin
-      parameters:
-        - name: plugin_id
-          in: query
-          required: true
-          schema:
-            type: string
-        - name: page_name
-          in: query
-          required: true
-          schema:
-            type: string
-        - name: asset_path
-          in: query
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          description: Plugin asset content
-
   /api/v1/plugins/{plugin_id}/views:
     get:
       tags: [Plugin Views]
@@ -2900,29 +2823,6 @@ paths:
       responses:
         "200":
           $ref: "#/components/responses/Html"
-
-  /api/v1/plugins/{plugin_id}/views/{page_name}/assets/{asset_path}:
-    get:
-      tags: [Plugin Views]
-      summary: Get a plugin view asset (alias of /plugins/{plugin_id}/pages/{page_name}/assets/{asset_path})
-      operationId: getPluginViewAsset
-      x-astrbot-scope: plugin
-      parameters:
-        - $ref: "#/components/parameters/PluginId"
-        - name: page_name
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: asset_path
-          in: path
-          required: true
-          description: URL-encoded relative asset path.
-          schema:
-            type: string
-      responses:
-        "200":
-          description: Plugin asset content
 
   /api/v1/plugins/{plugin_id}/views/{page_name}/_t/{token}/{asset_path}:
     get:

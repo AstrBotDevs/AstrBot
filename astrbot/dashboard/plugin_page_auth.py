@@ -1,33 +1,18 @@
-import re
-from urllib.parse import unquote
-
-PLUGIN_PAGE_CONTENT_PREFIX = "/api/plugin/page/content/"
 PLUGIN_PAGE_BRIDGE_PATH = "/api/plugin/page/bridge-sdk.js"
 PLUGIN_PAGE_TOKEN_TYPE = "plugin_page_asset"
 
-# Path-token plugin view assets:
-# /api/v1/plugins/<plugin>/views/<page>/_t/<token>/<asset...>
-# The token travels in the path so relative URLs inside the page inherit it
-# without any server-side content rewriting.
-PLUGIN_PAGE_VIEW_TOKEN_RE = re.compile(
-    r"^/api/v1/plugins/(?P<plugin>[^/]+)/views/(?P<page>[^/]+)"
-    r"/_t/(?P<token>[^/]+)(?:/|$)"
-)
-
 
 class PluginPageAuth:
-    @staticmethod
-    def is_protected_path(path: str) -> bool:
-        return (
-            path.startswith(PLUGIN_PAGE_CONTENT_PREFIX)
-            or path.startswith(PLUGIN_PAGE_BRIDGE_PATH)
-            or PLUGIN_PAGE_VIEW_TOKEN_RE.match(path) is not None
-        )
+    """Auth helpers for plugin view requests handled by the auth middleware.
+
+    View assets authenticate through scoped path tokens validated by the v1
+    route dependency (v1 paths bypass this middleware). Only the shared
+    bridge SDK script still authenticates here, via a query token.
+    """
 
     @staticmethod
-    def extract_view_path_token(path: str) -> str | None:
-        match = PLUGIN_PAGE_VIEW_TOKEN_RE.match(path)
-        return unquote(match.group("token")) if match else None
+    def is_protected_path(path: str) -> bool:
+        return path.startswith(PLUGIN_PAGE_BRIDGE_PATH)
 
     @staticmethod
     def is_asset_token(payload: dict) -> bool:
@@ -38,50 +23,8 @@ class PluginPageAuth:
         query_asset_token = query_params.get("asset_token", "").strip()
         return query_asset_token or None
 
-    @staticmethod
-    def extract_plugin_name_from_path(path: str) -> str | None:
-        view_match = PLUGIN_PAGE_VIEW_TOKEN_RE.match(path)
-        if view_match:
-            return unquote(view_match.group("plugin"))
-        if not path.startswith(PLUGIN_PAGE_CONTENT_PREFIX):
-            return None
-        remainder = path[len(PLUGIN_PAGE_CONTENT_PREFIX) :]
-        plugin_part = remainder.split("/", 1)[0] if remainder else ""
-        return unquote(plugin_part) if plugin_part else None
-
-    @staticmethod
-    def extract_page_name_from_path(path: str) -> str | None:
-        view_match = PLUGIN_PAGE_VIEW_TOKEN_RE.match(path)
-        if view_match:
-            return unquote(view_match.group("page"))
-        if not path.startswith(PLUGIN_PAGE_CONTENT_PREFIX):
-            return None
-        remainder = path[len(PLUGIN_PAGE_CONTENT_PREFIX) :]
-        parts = remainder.split("/", 2)
-        page_part = parts[1] if len(parts) > 1 else ""
-        return unquote(page_part) if page_part else None
-
     @classmethod
     def is_scope_valid(cls, payload: dict, path: str) -> bool:
-        if not cls.is_protected_path(path):
-            return False
-        if path.startswith(PLUGIN_PAGE_BRIDGE_PATH):
-            return True
-
-        token_plugin_name = payload.get("plugin_name")
-        token_page_name = payload.get("page_name")
-        request_plugin_name = cls.extract_plugin_name_from_path(path)
-        request_page_name = cls.extract_page_name_from_path(path)
-        if (
-            not isinstance(token_plugin_name, str)
-            or not token_plugin_name
-            or not isinstance(token_page_name, str)
-            or not token_page_name
-            or not request_plugin_name
-            or not request_page_name
-        ):
-            return False
-        return (
-            token_plugin_name == request_plugin_name
-            and token_page_name == request_page_name
-        )
+        # The bridge SDK is shared across views, so any view token may fetch
+        # it; every other path rejects scoped asset tokens.
+        return cls.is_protected_path(path)
