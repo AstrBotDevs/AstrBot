@@ -9,6 +9,11 @@
   "announcement": {
     "title": "Announcement"
   },
+  "pythonWarning": {
+    "title": "Python version is too low",
+    "description": "Currently running Python {current}, which is below the recommended Python {required} or newer. Older versions may cause some new features and plugins to be unavailable; we recommend upgrading Python and restarting AstrBot.",
+    "unknownVersion": "unknown version"
+  },
   "onboard": {
     "title": "Quick Onboarding",
     "subtitle": "Complete initialization directly on the welcome page.",
