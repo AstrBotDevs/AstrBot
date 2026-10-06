@@ -79,21 +79,26 @@ class Main(star.Star):
                     curr_cid = await self.context.conversation_manager.get_curr_conversation_id(
                         event.unified_msg_origin,
                     )
-                    conversation = None
 
-                    if curr_cid:
-                        conversation = (
-                            await self.context.conversation_manager.get_conversation(
-                                event.unified_msg_origin,
-                                curr_cid,
-                            )
-                        )
-                    else:
+                    if not curr_cid:
                         curr_cid = (
                             await self.context.conversation_manager.new_conversation(
                                 event.unified_msg_origin,
                                 platform_id=event.get_platform_id(),
                             )
+                        )
+
+                    conversation = (
+                        await self.context.conversation_manager.get_conversation(
+                            event.unified_msg_origin,
+                            curr_cid,
+                        )
+                    )
+                    if not conversation:
+                        logger.warning(
+                            f"Conversation {curr_cid} is not readable for "
+                            f"{event.unified_msg_origin}; handling this turn "
+                            "without a conversation."
                         )
 
                     yield event.request_llm(
