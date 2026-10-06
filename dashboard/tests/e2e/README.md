@@ -18,6 +18,7 @@ pnpm test:e2e:onboarding
 Node 20+ is required. `ASTRBOT_E2E_PYTHON` can select an existing Python virtual
 environment; `ASTRBOT_E2E_BROWSER` can select an existing Chromium executable.
 `ASTRBOT_E2E_SCREENSHOT` optionally saves a failure screenshot to an external path.
+`ASTRBOT_E2E_SCREENSHOT_DIR` saves desktop/mobile trial screenshots after a real reply.
 The test uses random local ports and deletes its temporary configuration and
 database on completion, including failed assertions. It never uses the normal
 AstrBot data directory. Do not terminate it with SIGKILL, which prevents cleanup.
@@ -34,4 +35,5 @@ Coverage: initial setup and real browser login, unauthenticated access rejection
 skip-all without configuration writes, adapter form validation, creation, prefill,
 unchanged save, draft discard, persisted edit, welcome exit, process restart,
 and (with credentials) real model creation/default selection, embedded streamed
-reply, session preservation and model/history persistence across restart.
+reply, minimal trial controls versus regular ChatUI, desktop/mobile layout,
+session preservation and model/history persistence across restart.

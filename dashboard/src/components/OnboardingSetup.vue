@@ -19,7 +19,7 @@
       <v-window-item :value="3">
         <div class="guide-trial">
           <div class="guide-chat-model text-body-2 text-medium-emphasis"><v-icon icon="mdi-check-circle-outline" color="success" size="18" /><span>{{ selectedModel }}</span></div>
-          <div v-if="modelReady" class="guide-chat"><StandaloneChat /></div>
+          <div v-if="modelReady" class="guide-chat"><StandaloneChat minimal /></div>
         </div>
       </v-window-item>
       <v-window-item :value="4">
