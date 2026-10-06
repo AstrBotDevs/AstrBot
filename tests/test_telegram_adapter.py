@@ -555,6 +555,63 @@ async def test_telegram_mentions_use_original_utf16_offsets(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("in_caption", [False, True], ids=["text", "photo-caption"])
+@pytest.mark.parametrize(
+    "name", ["ExampleBot", "examplebot", "EXAMPLEBOT", "eXaMpLeBoT", "OtherBot"]
+)
+async def test_telegram_self_mention_is_case_insensitive(in_caption, name):
+    """Normalize self-mention IDs while preserving the original display name.
+
+    Args:
+        in_caption: Whether the mention appears in a photo caption.
+        name: Username spelling used in the incoming mention.
+    """
+    adapter = _load_telegram_adapter()(
+        make_platform_config("telegram"), {}, asyncio.Queue()
+    )
+    context = _build_context()
+    context.bot.username = "ExampleBot"
+    text = f"😀 @{name} hello"
+    sdk_message = Message.de_json(
+        {
+            "message_id": 1,
+            "date": 0,
+            "chat": {"id": -100123, "type": "supergroup"},
+            "caption" if in_caption else "text": text,
+            "caption_entities" if in_caption else "entities": [
+                {"type": "mention", "offset": 3, "length": len(name) + 1}
+            ],
+        },
+        bot=None,
+    )
+    if in_caption:
+        update = create_mock_update(
+            message_text=None,
+            chat_type="supergroup",
+            photo=[create_mock_file()],
+            caption=text,
+            caption_entities=sdk_message.caption_entities,
+        )
+        update.message.parse_caption_entity = sdk_message.parse_caption_entity
+    else:
+        update = create_mock_update(
+            message_text=text, chat_type="supergroup", entities=sdk_message.entities
+        )
+        update.message.parse_entity = sdk_message.parse_entity
+
+    result = await adapter.convert_message(update, context)
+
+    assert result is not None
+    mentions = [part for part in result.message if isinstance(part, Comp.At)]
+    assert len(mentions) == 1
+    is_self = name != "OtherBot"
+    assert mentions[0].qq == ("ExampleBot" if is_self else name)
+    assert mentions[0].name == name
+    assert (mentions[0].qq == result.self_id) is is_self
+    assert result.message_str == (text if in_caption or not is_self else "😀  hello")
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("media_type", ["photo", "document", "video"])
 async def test_telegram_media_caption_mention_uses_utf16_offsets(media_type):
     adapter = _load_telegram_adapter()(
