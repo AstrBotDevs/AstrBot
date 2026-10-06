@@ -125,7 +125,7 @@
         "advancedConfig": "Расширенные настройки...",
         "fields": {
             "name": "Имя",
-            "apiKey": "Base URL",
+            "apiKey": "API Key",
             "baseUrl": "Base URL"
         },
         "hints": {
