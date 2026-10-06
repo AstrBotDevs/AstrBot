@@ -390,10 +390,7 @@ class DiscordPlatformEvent(AstrMessageEvent):
             elif isinstance(i, Video):
                 try:
                     path = Path(await i.convert_to_file_path())
-                    video_bytes = await asyncio.to_thread(path.read_bytes)
-                    files.append(
-                        discord.File(BytesIO(video_bytes), filename=path.name),
-                    )
+                    files.append(discord.File(path, filename=path.name))
                 except Exception:
                     logger.warning(
                         "[Discord] Failed to process video: %s",

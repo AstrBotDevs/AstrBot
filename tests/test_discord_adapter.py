@@ -1,5 +1,5 @@
 import base64
-from io import BytesIO
+from io import BufferedReader, BytesIO
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -64,9 +64,14 @@ async def test_discord_sends_video_attachment(
     attachment = kwargs["files"][0]
     try:
         assert attachment.filename == "repro.mp4"
+        if component_type != "file":
+            assert isinstance(attachment.fp, BufferedReader)
+            assert attachment.fp.tell() == 0
         assert attachment.fp.read() == video_bytes
     finally:
         attachment.close()
+    if component_type != "file":
+        assert attachment.fp.closed
 
 
 @pytest.mark.asyncio
