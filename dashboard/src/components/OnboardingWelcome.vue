@@ -46,20 +46,21 @@ onBeforeUnmount(() => celebrate?.reset());
 </script>
 
 <style scoped>
-.guide-welcome { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; width: 100%; min-height: 360px; padding: 48px 0; text-align: center; overflow-wrap: anywhere; }
+.guide-welcome { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; width: 100%; min-height: 360px; padding: 48px 0; text-align: center; overflow-wrap: anywhere; overflow: clip; }
 .guide-welcome h2 { font-size: 28px; line-height: 1.4; font-weight: 600; letter-spacing: 0; }
 .guide-welcome h2:focus-visible { outline: 2px solid rgb(var(--v-theme-primary)); outline-offset: 6px; }
 .guide-welcome h2, .guide-welcome p { animation: welcome-copy-in .35s ease-out .65s both; }
 .welcome-logo { position: relative; flex-shrink: 0; width: 72px; height: 72px; --flight-distance: clamp(96px, 18vw, 220px); }
-.welcome-star { position: absolute; inset: 0; overflow: visible; fill: #2f86bd; pointer-events: none; animation: welcome-star-arrive 1.1s cubic-bezier(.16, .8, .22, 1) both; }
-.welcome-star--large { --from-x: calc(-1 * var(--flight-distance)); --from-y: var(--flight-distance); }
-.welcome-star--small { --from-x: var(--flight-distance); --from-y: calc(-1 * var(--flight-distance)); animation-delay: 140ms; }
-.welcome-trail { opacity: 0; animation: welcome-trail-fade 1.1s ease-out both; }
+.welcome-star { position: absolute; inset: 0; overflow: visible; fill: #2f86bd; pointer-events: none; animation: welcome-star-arrive 1.3s cubic-bezier(.2, .7, .25, 1) both; }
+.welcome-star--large { --arc-pivot: calc(-1 * var(--flight-distance)); --entry-spin: -210deg; transform-origin: 30px 40px; }
+.welcome-star--small { --arc-pivot: var(--flight-distance); --entry-spin: 150deg; transform-origin: 55px 18px; animation-delay: 140ms; }
+.welcome-trail { opacity: 0; animation: welcome-trail-fade 1.3s ease-out both; }
 .welcome-star--small .welcome-trail { animation-delay: 140ms; }
 @keyframes welcome-star-arrive {
-  0% { opacity: 0; transform: translate(var(--from-x), var(--from-y)) scale(.75); }
+  /* Orbit around a side pivot, then spin each star around its own center. */
+  0% { opacity: 0; transform: translateX(var(--arc-pivot)) rotate(90deg) translateX(calc(-1 * var(--arc-pivot))) rotate(var(--entry-spin)) scale(.75); }
   15% { opacity: 1; }
-  100% { opacity: 1; transform: translate(0, 0) scale(1); }
+  100% { opacity: 1; transform: translateX(var(--arc-pivot)) rotate(0deg) translateX(calc(-1 * var(--arc-pivot))) rotate(0deg) scale(1); }
 }
 @keyframes welcome-trail-fade {
   0%, 75%, 100% { opacity: 0; }

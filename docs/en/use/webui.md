@@ -49,13 +49,17 @@ The guide title sits beside the AstrBot brand. Content, the trial message compos
 
 Account setup cannot be skipped. Skip entire setup at the bottom of the first step goes directly to the dashboard without saving guide settings; it replaces the previous Set up later label. Skip on subsequent steps only skips the current step, proceeding directly to adapters when no model is configured.
 
-After completing or skipping step four, the welcome screen plays a single confetti burst from each side; Get started opens the dashboard. The two logo stars fly in separately like shooting stars: the large star from the lower left and the small star from the upper right, with brief fading trails. They settle into the original logo without rotating or looping. Models and messaging platforms are saved in their respective steps to support immediate chat testing and connection setup. Reduced-motion preferences disable both star motion and confetti. Regular login does not restart the guide. The guide does not query the plugin marketplace, install plugins, or change computer-access permissions.
+Reopening step four uses the full platform editor, including Config File, configuration drawers and editable routing rules. Next saves changed routing rules without rewriting an unchanged adapter; Skip discards routing drafts. Changes explicitly saved inside a configuration drawer are saved separately, just as in the platform editor.
+
+After completing or skipping step four, the welcome screen plays a single confetti burst from each side; Get started opens the dashboard. The two logo stars follow curved paths from the lower left and upper right, rotating independently in opposite directions with brief fading trails. They settle into the original logo and stop without looping. Models and messaging platforms are saved in their respective steps to support immediate chat testing and connection setup. Reduced-motion preferences disable both star motion and confetti. Regular login does not restart the guide. The guide does not query the plugin marketplace, install plugins, or change computer-access permissions.
 
 ![Trial chat with a text-only composer](/webui-onboarding-trial-en.png)
 
 ![Welcome screen after completing setup](/webui-onboarding-welcome-en.png)
 
 ![Existing adapter settings prefilled in an editable form](/webui-onboarding-adapter-en.png)
+
+![Configuration routing available when reopening setup](/webui-onboarding-routes-en.png)
 
 Entry-point mapping: the standalone welcome page and its sidebar item are removed; legacy `/welcome` links redirect to the dashboard. The first-use popup is now the first guide step, and the former plugin and computer-access steps are removed. Manual reentry is under Settings → Maintenance. Where will you use AstrBot? is now Connect a messaging platform. Install plugins through Plugins -> Plugin Marketplace; manage computer access through Config -> AI -> Capabilities -> Agent Computer Use. Providers and Messaging Platforms remain independently accessible.
 

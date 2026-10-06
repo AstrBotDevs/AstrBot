@@ -1,7 +1,8 @@
 # Unreleased
 
 - WebUI onboarding now ends after four steps: usage notice, model setup, inline ChatUI, and messaging platform. Completing or skipping the platform step opens the welcome screen. Removed the plugin recommendations, computer-access step, and batch-application page, including their requests and state. Plugin installation remains under Plugins -> Plugin Marketplace; permissions remain under Config -> AI -> Capabilities -> Agent Computer Use.
-- Replace the welcome logo rotation with separate shooting-star entrances from the lower left and upper right, fading trails, and a static final logo. Respect reduced-motion preferences.
+- Animate the two welcome stars along opposite curved paths with individual rotation, fading trails, and a static final logo. Respect reduced-motion preferences.
+- Restore the full platform editor on onboarding reentry, including configuration drawers and routing rules. Save route-only edits without rewriting the adapter; preserve route drafts after failures and discard them on skip.
 - Limit the onboarding trial composer to text input and Send/Stop. Remove upload, model/configuration selection, and voice controls from the trial only; regular ChatUI keeps its controls.
 - WebUI onboarding prefills existing model defaults and messaging adapters in editable forms instead of a status-only adapter list. Unchanged adapters proceed without writes; edits update the selected adapter without duplicating or automatically enabling it. Refined header and footer spacing, full-width advanced settings, a reduced-motion-aware welcome icon animation.
 

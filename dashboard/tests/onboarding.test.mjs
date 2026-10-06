@@ -31,6 +31,7 @@ function setup(overrides = {}) {
   const body = ast.statements.filter(node => !ts.isImportDeclaration(node)).map(node => node.getText(ast)).join('\n');
   vm.runInContext(ts.transpile(body, { target: ts.ScriptTarget.ES2020 }), context);
   const state = vm.runInContext('({ close, skipStep, completed, busy, step, steps, nextStep, loadPlatforms, modelReady, platformReady, platformLoading, configuredPlatforms, configError, modelForm, platformForm, selectedModel, selectedPlatformId, platformDraft, platformError, selectPlatform, platformChoices })', context);
+  state.platformForm.value = { initialPlatformRoutes: '[]', routesChanged: false, newPlatform: async () => {} };
   return { ...state, emitted, watchers, leave: () => leave() };
 }
 
@@ -429,7 +430,7 @@ test('existing adapters prefill editable fields and unchanged Next does not writ
   assert.equal(state.step.value, 4);
   assert.equal(state.completed.value, true);
   const source = readFileSync(new URL('../src/components/OnboardingSetup.vue', import.meta.url), 'utf8');
-  assert.match(source, /<AstrBotConfig[^>]+:iterable="platformDraft"/);
+  assert.match(source, /<AddNewPlatform[^>]+updating-mode\s+:updating-platform-config="platformDraft"/);
   assert.match(source, /@update:model-value="selectPlatform"/);
   assert.doesNotMatch(source, /guide.adapterEnabled|guide.adapterDisabled|guide-platform/);
 });
@@ -505,6 +506,37 @@ test('existing adapter IDs cannot be changed through the guide', async () => {
   }
 });
 
+test('reopened adapter routes save without rewriting the adapter and retain drafts after failure', async () => {
+  const state = setup({ systemConfigApi: { runtime: async () => ok({ config: { platform: [{ id: 'existing', enable: false }] } }) } });
+  await state.loadPlatforms();
+  state.step.value = 4;
+  let attempts = 0;
+  state.platformForm.value = {
+    initialPlatformRoutes: '[]', routesChanged: true,
+    saveRoutesInternal: async () => { if (++attempts === 1) throw new Error('Route save failed'); },
+  };
+  await state.nextStep();
+  assert.equal(state.platformError.value, 'Route save failed');
+  assert.equal(state.completed.value, false);
+  assert.equal(state.platformForm.value.routesChanged, true);
+  await state.nextStep();
+  assert.equal(attempts, 2);
+  assert.equal(state.completed.value, true);
+});
+
+test('route drafts are discarded on skip and cannot be saved before route loading succeeds', async () => {
+  const state = setup({ systemConfigApi: { runtime: async () => ok({ config: { platform: [{ id: 'existing' }] } }) } });
+  await state.loadPlatforms();
+  state.step.value = 4;
+  state.platformForm.value = { initialPlatformRoutes: null, routesChanged: true,
+    saveRoutesInternal: async () => { throw new Error('Must not save'); } };
+  await state.nextStep();
+  assert.equal(state.completed.value, false);
+  state.platformForm.value.initialPlatformRoutes = '[]';
+  state.skipStep();
+  assert.equal(state.completed.value, true);
+});
+
 test('malformed adapter configurations do not count as ready', async () => {
   for (const platform of [[], {}, [null, {}, { id: 5 }]]) {
     const state = setup({ systemConfigApi: { runtime: async () => ok({ config: { platform } }) } });
@@ -575,19 +607,20 @@ test('setup page gates configuration on authentication and completed password se
   }
 });
 
-test('welcome stars fly in separately from opposite corners and respect reduced motion', () => {
+test('welcome stars follow opposite arcs with individual rotation and respect reduced motion', () => {
   const source = readFileSync(new URL('../src/components/OnboardingWelcome.vue', import.meta.url), 'utf8');
   const logo = readFileSync(new URL('../public/favicon.svg', import.meta.url), 'utf8');
   for (const [, path] of logo.matchAll(/d="(m[^"]+)"/g)) assert.ok(source.includes(path));
   assert.match(source, /class="welcome-logo" aria-hidden="true"/);
   assert.equal((source.match(/width="72" height="72" viewBox="0 0 512 512"/g) || []).length, 2);
-  assert.match(source, /welcome-star--large \{ --from-x: calc\(-1 \* var\(--flight-distance\)\); --from-y: var\(--flight-distance\)/);
-  assert.match(source, /welcome-star--small \{ --from-x: var\(--flight-distance\); --from-y: calc\(-1 \* var\(--flight-distance\)\)/);
-  assert.match(source, /100% \{ opacity: 1; transform: translate\(0, 0\) scale\(1\); \}/);
+  assert.match(source, /welcome-star--large \{ --arc-pivot: calc\(-1 \* var\(--flight-distance\)\); --entry-spin: -210deg; transform-origin: 30px 40px/);
+  assert.match(source, /welcome-star--small \{ --arc-pivot: var\(--flight-distance\); --entry-spin: 150deg; transform-origin: 55px 18px/);
+  assert.match(source, /rotate\(90deg\).*rotate\(var\(--entry-spin\)\)/);
+  assert.match(source, /100% \{ opacity: 1; transform: translateX\(var\(--arc-pivot\)\) rotate\(0deg\) translateX\(calc\(-1 \* var\(--arc-pivot\)\)\) rotate\(0deg\) scale\(1\); \}/);
   assert.match(source, /0%, 75%, 100% \{ opacity: 0; \}/);
   assert.match(source, /welcome-copy-in \.35s ease-out \.65s both/);
   assert.match(source, /@media \(prefers-reduced-motion: reduce\)\s*\{\s*\.welcome-star, \.welcome-trail, \.guide-welcome h2, \.guide-welcome p \{ animation: none; \}/);
-  assert.doesNotMatch(source, /infinite|rotate\(/);
+  assert.doesNotMatch(source, /infinite/);
 });
 
 test('welcome celebrates from both sides once, respects reduced motion and cleans up its canvas', () => {

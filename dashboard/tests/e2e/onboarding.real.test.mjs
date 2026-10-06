@@ -166,7 +166,7 @@ test('onboarding against an isolated real AstrBot process', { timeout: 300000 },
     const beforeUnchanged = writes.length;
     await page.getByRole('button', { name: 'Next', exact: true }).click();
     await page.locator('.guide-welcome').waitFor();
-    assert.equal(writes.slice(beforeUnchanged).some(path => path.includes('/bots')), false);
+    assert.equal(writes.slice(beforeUnchanged).some(path => /bots|config-routes/.test(path)), false);
     await enterAdapter();
     await field('Reverse WebSocket Port').fill(String(editedPort));
     await page.getByRole('button', { name: 'Skip', exact: true }).click();
@@ -182,6 +182,43 @@ test('onboarding against an isolated real AstrBot process', { timeout: 300000 },
     const disk = JSON.parse((await readFile(join(root, 'data/cmd_config.json'), 'utf8')).replace(/^\uFEFF/, ''));
     assert.equal(disk.platform[0].ws_reverse_port, editedPort);
     t.diagnostic('PASS: adapter prefill, unchanged save, discarded draft and persisted edit');
+
+    await enterAdapter();
+    await page.locator('.platform-embedded .v-data-table button').first().click();
+    await page.locator('.config-profile-drawer-content').waitFor();
+    const configInput = page.locator('.config-profile-drawer-content .config-row input:not([readonly]):not([disabled])').filter({ visible: true }).first();
+    await configInput.waitFor();
+    const originalValue = await configInput.inputValue();
+    const editedValue = await configInput.getAttribute('type') === 'number' ? '2' : 'onboarding-edit-check';
+    await configInput.fill(editedValue);
+    assert.equal(await configInput.inputValue(), editedValue);
+    await configInput.fill(originalValue);
+    await page.locator('.config-profile-drawer-header button').click();
+    const originalRoutes = (await api('/config-routes')).routing;
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await page.locator('.route-source-input-row input').last().fill('onboarding-e2e');
+    await page.getByRole('button', { name: 'Skip', exact: true }).click();
+    await page.locator('.guide-welcome').waitFor();
+    assert.deepEqual((await api('/config-routes')).routing, originalRoutes);
+    await enterAdapter();
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await page.locator('.route-source-input-row input').last().fill('onboarding-e2e');
+    const beforeRoutes = writes.length;
+    if (process.env.ASTRBOT_E2E_SCREENSHOT_DIR) {
+      await mkdir(process.env.ASTRBOT_E2E_SCREENSHOT_DIR, { recursive: true, mode: 0o700 });
+      for (const width of [1280, 360]) {
+        await page.setViewportSize({ width, height: 900 });
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+        await page.locator('.route-source-input-row').scrollIntoViewIfNeeded();
+        await page.screenshot({ path: join(process.env.ASTRBOT_E2E_SCREENSHOT_DIR, `adapter-routes-${width}.png`) });
+      }
+      await page.setViewportSize({ width: 1280, height: 900 });
+    }
+    await page.getByRole('button', { name: 'Next', exact: true }).click();
+    await page.locator('.guide-welcome').waitFor();
+    assert.equal((await api('/config-routes')).routing['e2e-onebot:*:onboarding-e2e'], 'default');
+    assert.equal(writes.slice(beforeRoutes).some(path => path.includes('/bots')), false);
+    t.diagnostic('PASS: reopened config drawer is editable; route drafts discard or persist without rewriting the adapter');
 
     await t.test('real model configuration and streamed ChatUI reply', { skip: model ? false : 'Set ASTRBOT_E2E_MODEL_FILE to exercise a real model' }, async () => {
       await page.goto(`${base}/#/auth/onboarding`);
@@ -243,6 +280,7 @@ test('onboarding against an isolated real AstrBot process', { timeout: 300000 },
     bots = (await api('/bots')).bots;
     assert.equal(bots.length, 1);
     assert.equal(bots[0].ws_reverse_port, editedPort);
+    assert.equal((await api('/config-routes')).routing['e2e-onebot:*:onboarding-e2e'], 'default');
     await enterAdapter();
     assert.equal(await field('Reverse WebSocket Port').inputValue(), String(editedPort));
     if (chatSessionId) {
