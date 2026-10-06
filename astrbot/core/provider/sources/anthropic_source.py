@@ -28,7 +28,11 @@ from astrbot.core.utils.network_utils import (
 
 from ..headers import build_conversation_headers, build_provider_headers
 from ..register import register_provider_adapter
-from .request_retry import retry_provider_request, retry_provider_request_context
+from .request_retry import (
+    provider_retry_rate_limits,
+    retry_provider_request,
+    retry_provider_request_context,
+)
 
 
 @register_provider_adapter(
@@ -533,9 +537,21 @@ class ProviderAnthropic(Provider):
         self._sanitize_assistant_messages(payloads)
 
         try:
+            request_client = self.client
+            if not provider_retry_rate_limits.get():
+                request_client = self.client.with_options()
+                sdk_should_retry = request_client._should_retry
+
+                def should_retry(response: httpx.Response) -> bool:
+                    if response.status_code == 429:
+                        return False
+                    return sdk_should_retry(response)
+
+                request_client._should_retry = should_retry
+
             completion = await retry_provider_request(
                 "Anthropic",
-                lambda: self.client.messages.create(
+                lambda: request_client.messages.create(
                     **payloads,
                     stream=False,
                     extra_body=extra_body,
@@ -638,9 +654,21 @@ class ProviderAnthropic(Provider):
         self._apply_thinking_config(payloads)
         self._sanitize_assistant_messages(payloads)
 
+        request_client = self.client
+        if not provider_retry_rate_limits.get():
+            request_client = self.client.with_options()
+            sdk_should_retry = request_client._should_retry
+
+            def should_retry(response: httpx.Response) -> bool:
+                if response.status_code == 429:
+                    return False
+                return sdk_should_retry(response)
+
+            request_client._should_retry = should_retry
+
         async with retry_provider_request_context(
             "Anthropic",
-            lambda: self.client.messages.stream(
+            lambda: request_client.messages.stream(
                 **payloads,
                 extra_body=extra_body,
                 extra_headers=build_conversation_headers(conversation_id),
