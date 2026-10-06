@@ -1645,6 +1645,13 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     yield next_result_task.result()
                 except StopAsyncIteration:
                     return
+            except asyncio.CancelledError:
+                if not next_result_task.done():
+                    next_result_task.cancel()
+                # The reader must finish before its async generator can be closed.
+                await asyncio.gather(next_result_task, return_exceptions=True)
+                await self._close_executor(executor)
+                raise
             finally:
                 if not abort_task.done():
                     abort_task.cancel()

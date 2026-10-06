@@ -10,6 +10,10 @@
     "enabled": "ユーザーの会話を除外しました",
     "disabled": "ユーザーの会話を除外"
   },
+  "search": {
+    "label": "ログを検索",
+    "placeholder": "キーワードでログを絞り込む"
+  },
   "pipInstall": {
     "button": "pip パッケージをインストール",
     "dialogTitle": "pip パッケージをインストール",
