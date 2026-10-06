@@ -5,6 +5,7 @@ import typing as T
 from astrbot import logger
 from astrbot.core.message.message_event_result import CommandResult, MessageEventResult
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.star.session_plugin_manager import SessionPluginManager
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import EventType, star_handlers_registry
 
@@ -92,6 +93,8 @@ async def call_event_hook(
         hook_type,
         plugins_name=event.plugins_name,
     )
+    # 过滤当前会话中通过会话级规则禁用的插件
+    handlers = await SessionPluginManager.filter_handlers_by_session(event, handlers)
     for handler in handlers:
         try:
             assert inspect.iscoroutinefunction(handler.handler)
