@@ -4368,6 +4368,7 @@ async def test_v1_log_export_packs_log_files_and_memory_logs(
             "memory/traces.jsonl",
         ]
         assert archive.read("external/custom.log") == b"current"
+        assert archive.read("external/custom.1.log") == b"rotated"
         assert archive.read("external/2/custom.log") == b"same name"
         assert archive.read("logs/event_loop_watchdog.log") == b"watchdog"
         assert archive.read("memory/logs.txt").decode() == "[INFO] hello\n"
@@ -4423,6 +4424,68 @@ async def test_v1_log_export_skips_files_that_are_not_regular(
     assert manifest["skipped"] == [
         {"name": "logs/link.log", "reason": "not a regular file"}
     ]
+
+
+@pytest.mark.asyncio
+async def test_v1_log_export_keeps_archive_names_unique(
+    monkeypatch, tmp_path: Path, asgi_app, asgi_client: httpx.AsyncClient
+):
+    """Log files never take the names of the generated entries."""
+    monkeypatch.setenv("ASTRBOT_ROOT", str(tmp_path))
+    data_dir = tmp_path / "data"
+    (data_dir / "memory").mkdir(parents=True)
+    (data_dir / "memory" / "logs.txt").write_text("file log", encoding="utf-8")
+    (data_dir / "manifest.json").write_text("trace log", encoding="utf-8")
+    service = asgi_app.state.services.logs
+    service.config["log_file_path"] = "memory/logs.txt"
+    service.config["trace_log_path"] = "manifest.json"
+
+    response = await asgi_client.get("/api/v1/logs/export", headers=_jwt_headers())
+
+    assert response.status_code == 200
+    with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+        names = archive.namelist()
+        assert len(names) == len(set(names))
+        assert archive.read("memory/2/logs.txt") == b"file log"
+        assert archive.read("2/manifest.json") == b"trace log"
+        manifest = json.loads(archive.read("manifest.json"))
+    assert sorted(manifest["files"]) == ["2/manifest.json", "memory/2/logs.txt"]
+
+
+@pytest.mark.asyncio
+async def test_v1_log_export_refuses_when_disk_space_is_short(
+    monkeypatch, tmp_path: Path, asgi_client: httpx.AsyncClient
+):
+    monkeypatch.setenv("ASTRBOT_ROOT", str(tmp_path))
+    logs_dir = tmp_path / "data" / "logs"
+    logs_dir.mkdir(parents=True)
+    (logs_dir / "astrbot.log").write_text("x" * 1024, encoding="utf-8")
+    monkeypatch.setattr(
+        "astrbot.dashboard.services.log_service.shutil.disk_usage",
+        lambda _path: SimpleNamespace(total=2048, used=2048, free=0),
+    )
+
+    response = await asgi_client.get("/api/v1/logs/export", headers=_jwt_headers())
+
+    assert response.status_code == 400
+    assert "disk space" in response.json()["message"]
+    assert not any((tmp_path / "data" / "temp" / "log_exports").iterdir())
+
+
+@pytest.mark.asyncio
+async def test_v1_log_export_runs_one_export_at_a_time(
+    monkeypatch, tmp_path: Path, asgi_app, asgi_client: httpx.AsyncClient
+):
+    monkeypatch.setenv("ASTRBOT_ROOT", str(tmp_path))
+    lock = asgi_app.state.services.logs._export_lock
+    lock.acquire()
+    try:
+        response = await asgi_client.get("/api/v1/logs/export", headers=_jwt_headers())
+    finally:
+        lock.release()
+
+    assert response.status_code == 400
+    assert "already running" in response.json()["message"]
 
 
 @pytest.mark.asyncio

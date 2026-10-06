@@ -28,7 +28,7 @@
   },
   "exportLogs": {
     "button": "Export Logs",
-    "hint": "Packs the log files under data/logs and the recent in-memory logs. Without \"Enable File Logging\", only the in-memory logs are included. Logs may contain chat messages and user IDs, so check them before sharing publicly.",
+    "hint": "Packs the log files under data/logs and the recent in-memory logs. Without \"Enable File Logging\", no new log files are written, so the archive mostly has the in-memory logs. Logs may contain chat messages and user IDs, so check them before sharing publicly.",
     "failed": "Failed to export logs."
   },
   "debugHint": {

@@ -3,7 +3,10 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import os
+import shutil
 import stat
+import threading
 import time
 import uuid
 import zipfile
@@ -25,6 +28,7 @@ class LogService:
     def __init__(self, log_broker: LogBroker, config: AstrBotConfig) -> None:
         self.log_broker = log_broker
         self.config = config
+        self._export_lock = threading.Lock()
 
     @staticmethod
     def format_log_sse(log: dict, ts: float) -> str:
@@ -86,15 +90,19 @@ class LogService:
         Only regular files are packed. Symlinks, files reached through a
         symlinked directory, special files such as FIFOs and files that go away
         while packing are skipped and listed in the manifest. Archive names
-        never contain absolute host paths.
+        never contain absolute host paths and never repeat. Only one export
+        runs at a time.
 
         Returns:
             Path of the archive in the temp directory. The caller removes it
             once it has been sent.
 
         Raises:
-            LogServiceError: If the archive cannot be written.
+            LogServiceError: If another export is running, the temp disk lacks
+                space for the log files, or the archive cannot be written.
         """
+        if not self._export_lock.acquire(blocking=False):
+            raise LogServiceError("Another log export is already running")
         cached = list(self.log_broker.log_cache)
         logs = [
             str(item.get("data", "")) for item in cached if item.get("type") != "trace"
@@ -102,13 +110,8 @@ class LogService:
         traces = [item for item in cached if item.get("type") == "trace"]
         data_dir = Path(get_astrbot_data_path())
         export_dir = Path(get_astrbot_temp_path()) / "log_exports"
-        export_dir.mkdir(parents=True, exist_ok=True)
-        # The response removes its archive, except when the download is cancelled.
-        for stale in export_dir.glob("*.zip"):
-            with contextlib.suppress(OSError):
-                if time.time() - stale.stat().st_mtime > 3600:
-                    stale.unlink()
         archive_path = export_dir / f"astrbot-logs-{uuid.uuid4().hex}.zip"
+        log_files = sorted(StorageCleaner(self.config).collect_log_files())
         manifest = {
             "astrbot_version": VERSION,
             "exported_at": time.strftime("%Y-%m-%d %H:%M:%S %z"),
@@ -117,24 +120,44 @@ class LogService:
             "memory_logs": len(logs),
             "memory_traces": len(traces),
         }
-        used_names: set[str] = set()
+        # Reserve the generated entries so that no log file can take their names.
+        used_names = {"manifest.json", "memory/logs.txt", "memory/traces.jsonl"}
+        # Opening without following symlinks or blocking on FIFOs keeps a file
+        # that is swapped after the lstat() check from getting in.
+        open_flags = (
+            os.O_RDONLY
+            | getattr(os, "O_NOFOLLOW", 0)
+            | getattr(os, "O_NONBLOCK", 0)
+            | getattr(os, "O_BINARY", 0)
+        )
         try:
+            export_dir.mkdir(parents=True, exist_ok=True)
+            # The response removes its archive, except when the download is cancelled.
+            for stale in export_dir.glob("*.zip"):
+                with contextlib.suppress(OSError):
+                    if time.time() - stale.stat().st_mtime > 3600:
+                        stale.unlink()
+            needed_bytes = 0
+            for file_path in log_files:
+                with contextlib.suppress(OSError):
+                    needed_bytes += file_path.lstat().st_size
+            if shutil.disk_usage(export_dir).free < needed_bytes:
+                raise LogServiceError("Not enough free disk space to export logs")
             with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as archive:
-                for file_path in sorted(
-                    StorageCleaner(self.config).collect_log_files()
-                ):
+                for file_path in log_files:
                     if file_path.is_relative_to(data_dir):
-                        arcname = file_path.relative_to(data_dir).as_posix()
+                        base_name = file_path.relative_to(data_dir).as_posix()
                     else:
-                        arcname = f"external/{file_path.name}"
-                        index = 2
-                        while arcname in used_names:
-                            arcname = f"external/{index}/{file_path.name}"
-                            index += 1
+                        base_name = f"external/{file_path.name}"
+                    arcname, index = base_name, 2
+                    while arcname in used_names:
+                        parent, _, name = base_name.rpartition("/")
+                        arcname = (
+                            f"{parent}/{index}/{name}" if parent else f"{index}/{name}"
+                        )
+                        index += 1
                     used_names.add(arcname)
                     try:
-                        # lstat() and the resolve() check keep symlinks from
-                        # pulling in files outside the log locations.
                         if (
                             not stat.S_ISREG(file_path.lstat().st_mode)
                             or file_path.resolve() != file_path
@@ -143,7 +166,24 @@ class LogService:
                                 {"name": arcname, "reason": "not a regular file"}
                             )
                             continue
-                        archive.write(file_path, arcname)
+                        with open(os.open(file_path, open_flags), "rb") as source:
+                            info = os.fstat(source.fileno())
+                            if not stat.S_ISREG(info.st_mode):
+                                manifest["skipped"].append(
+                                    {"name": arcname, "reason": "not a regular file"}
+                                )
+                                continue
+                            entry = zipfile.ZipInfo(
+                                arcname,
+                                max(
+                                    time.localtime(info.st_mtime)[:6],
+                                    (1980, 1, 1, 0, 0, 0),
+                                ),
+                            )
+                            entry.compress_type = zipfile.ZIP_DEFLATED
+                            entry.file_size = info.st_size
+                            with archive.open(entry, "w") as target:
+                                shutil.copyfileobj(source, target)
                         manifest["files"].append(arcname)
                     except OSError as exc:
                         # A log file can be rotated away while we are packing.
@@ -170,6 +210,8 @@ class LogService:
             archive_path.unlink(missing_ok=True)
             logger.error(f"Failed to export logs: {exc}")
             raise LogServiceError(f"Failed to export logs: {exc}") from exc
+        finally:
+            self._export_lock.release()
         return archive_path
 
     def get_trace_settings(self) -> dict:
