@@ -32,7 +32,9 @@ _WAV_PATH = "/tmp/discord_voice.wav"
 async def test_discord_sends_video_attachment(
     tmp_path, monkeypatch, component_type, with_text
 ):
-    video_path = tmp_path / "repro.mp4"
+    video_path = tmp_path / (
+        "media_video_test.mp4" if component_type == "video_url" else "repro.mp4"
+    )
     video_bytes = b"video attachment payload"
     video_path.write_bytes(video_bytes)
     if component_type == "video":
@@ -72,6 +74,39 @@ async def test_discord_sends_video_attachment(
         attachment.close()
     if component_type != "file":
         assert attachment.fp.closed
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("url", "expected_name"),
+    [
+        ("https://example.com/clips/demo.mp4", "demo.mp4"),
+        ("https://example.com/demo.mp4?token=test#preview", "demo.mp4"),
+        ("https://example.com/%E6%B5%8B%E8%AF%95%20video.mp4", "测试 video.mp4"),
+        ("https://example.com", "media_video_test.mp4"),
+        ("https://example.com/clips/?token=test", "media_video_test.mp4"),
+    ],
+)
+async def test_discord_video_url_attachment_filename(
+    tmp_path, monkeypatch, url, expected_name
+):
+    video_path = tmp_path / "media_video_test.mp4"
+    video_path.write_bytes(b"video attachment payload")
+    monkeypatch.setattr(
+        Video, "convert_to_file_path", AsyncMock(return_value=str(video_path))
+    )
+    event = DiscordPlatformEvent.__new__(DiscordPlatformEvent)
+
+    _, files, _, _, _ = await event._parse_to_discord(
+        MessageChain(chain=[Video.fromURL(url)])
+    )
+
+    assert len(files) == 1
+    try:
+        assert files[0].filename == expected_name
+        assert files[0].fp.name == str(video_path)
+    finally:
+        files[0].close()
 
 
 @pytest.mark.asyncio

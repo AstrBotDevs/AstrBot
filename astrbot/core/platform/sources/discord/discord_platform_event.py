@@ -3,6 +3,7 @@ from collections.abc import AsyncGenerator
 from io import BytesIO
 from pathlib import Path
 from typing import cast
+from urllib.parse import unquote, urlparse
 
 import discord
 from discord.types.interactions import ComponentInteractionData
@@ -390,7 +391,13 @@ class DiscordPlatformEvent(AstrMessageEvent):
             elif isinstance(i, Video):
                 try:
                     path = Path(await i.convert_to_file_path())
-                    files.append(discord.File(path, filename=path.name))
+                    filename = path.name
+                    if i.file.startswith(("http://", "https://")):
+                        url_path = unquote(urlparse(i.file).path).replace("\\", "/")
+                        url_filename = url_path.rsplit("/", 1)[-1]
+                        if url_filename not in ("", ".", ".."):
+                            filename = url_filename
+                    files.append(discord.File(path, filename=filename))
                 except Exception:
                     logger.warning(
                         "[Discord] Failed to process video: %s",
