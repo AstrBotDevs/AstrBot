@@ -75,3 +75,42 @@ def test_anthropic_update_usage_omitted_fields_are_preserved():
     assert token_usage.input_other == 5
     assert token_usage.input_cached == 0
     assert token_usage.output == 7
+
+
+def test_anthropic_prepare_payload_keeps_all_system_messages():
+    provider = _provider()
+
+    system_prompt, messages = provider._prepare_payload(
+        [
+            {"role": "system", "content": "You are Aria."},
+            {"role": "system", "content": "File Extract Results: report.pdf"},
+            {"role": "user", "content": "Summarize the file."},
+        ]
+    )
+
+    assert system_prompt == [
+        {"type": "text", "text": "You are Aria."},
+        {"type": "text", "text": "File Extract Results: report.pdf"},
+    ]
+    assert messages == [{"role": "user", "content": "Summarize the file."}]
+
+
+def test_anthropic_prepare_payload_keeps_list_system_blocks():
+    provider = _provider()
+    persona_blocks = [
+        {"type": "text", "text": "Persona block."},
+        {"type": "text", "text": "Style guide."},
+    ]
+
+    system_prompt, _ = provider._prepare_payload(
+        [
+            {"role": "system", "content": persona_blocks},
+            {"role": "system", "content": "File Extract Results: report.pdf"},
+            {"role": "user", "content": "Summarize the file."},
+        ]
+    )
+
+    assert system_prompt == [
+        *persona_blocks,
+        {"type": "text", "text": "File Extract Results: report.pdf"},
+    ]

@@ -646,10 +646,22 @@ class ProviderGoogleGenAI(Provider):
         conversation_id: str | None = None,
     ) -> LLMResponse:
         """非流式请求 Gemini API"""
-        system_instruction = next(
-            (msg["content"] for msg in payloads["messages"] if msg["role"] == "system"),
-            None,
-        )
+        # Join every system message; later ones (e.g. file extracts) are
+        # otherwise dropped because the conversation only maps user/model turns.
+        system_texts = []
+        for msg in payloads["messages"]:
+            if msg["role"] != "system":
+                continue
+            content = msg["content"]
+            if isinstance(content, list):
+                content = "\n".join(
+                    part.get("text", "")
+                    for part in content
+                    if isinstance(part, dict) and part.get("type") == "text"
+                )
+            if content:
+                system_texts.append(content)
+        system_instruction = "\n\n".join(system_texts) or None
 
         model = payloads.get("model", self.get_model())
 
@@ -749,10 +761,22 @@ class ProviderGoogleGenAI(Provider):
         conversation_id: str | None = None,
     ) -> AsyncGenerator[LLMResponse, None]:
         """流式请求 Gemini API"""
-        system_instruction = next(
-            (msg["content"] for msg in payloads["messages"] if msg["role"] == "system"),
-            None,
-        )
+        # Join every system message; later ones (e.g. file extracts) are
+        # otherwise dropped because the conversation only maps user/model turns.
+        system_texts = []
+        for msg in payloads["messages"]:
+            if msg["role"] != "system":
+                continue
+            content = msg["content"]
+            if isinstance(content, list):
+                content = "\n".join(
+                    part.get("text", "")
+                    for part in content
+                    if isinstance(part, dict) and part.get("type") == "text"
+                )
+            if content:
+                system_texts.append(content)
+        system_instruction = "\n\n".join(system_texts) or None
         model = payloads.get("model", self.get_model())
         conversation = await self._prepare_conversation(payloads)
 
