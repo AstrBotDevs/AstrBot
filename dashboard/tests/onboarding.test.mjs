@@ -575,15 +575,19 @@ test('setup page gates configuration on authentication and completed password se
   }
 });
 
-test('welcome SVG turns once without changing layout and respects reduced motion', () => {
+test('welcome stars fly in separately from opposite corners and respect reduced motion', () => {
   const source = readFileSync(new URL('../src/components/OnboardingWelcome.vue', import.meta.url), 'utf8');
-  assert.match(source, /import logo from '\/favicon.svg'/);
-  assert.match(source, /class="welcome-logo" width="72" height="72" alt=""/);
-  assert.match(source, /animation: welcome-logo-turn 2\.8s cubic-bezier/);
-  assert.match(source, /rotate\(-360deg\)/);
-  assert.match(source, /100% \{ opacity: 1; transform: rotate\(0deg\) scale\(1\); \}/);
-  assert.match(source, /@media \(prefers-reduced-motion: reduce\)\s*\{\s*\.welcome-logo \{ animation: none; \}/);
-  assert.doesNotMatch(source, /infinite/);
+  const logo = readFileSync(new URL('../public/favicon.svg', import.meta.url), 'utf8');
+  for (const [, path] of logo.matchAll(/d="(m[^"]+)"/g)) assert.ok(source.includes(path));
+  assert.match(source, /class="welcome-logo" aria-hidden="true"/);
+  assert.equal((source.match(/width="72" height="72" viewBox="0 0 512 512"/g) || []).length, 2);
+  assert.match(source, /welcome-star--large \{ --from-x: calc\(-1 \* var\(--flight-distance\)\); --from-y: var\(--flight-distance\)/);
+  assert.match(source, /welcome-star--small \{ --from-x: var\(--flight-distance\); --from-y: calc\(-1 \* var\(--flight-distance\)\)/);
+  assert.match(source, /100% \{ opacity: 1; transform: translate\(0, 0\) scale\(1\); \}/);
+  assert.match(source, /0%, 75%, 100% \{ opacity: 0; \}/);
+  assert.match(source, /welcome-copy-in \.35s ease-out \.65s both/);
+  assert.match(source, /@media \(prefers-reduced-motion: reduce\)\s*\{\s*\.welcome-star, \.welcome-trail, \.guide-welcome h2, \.guide-welcome p \{ animation: none; \}/);
+  assert.doesNotMatch(source, /infinite|rotate\(/);
 });
 
 test('welcome celebrates from both sides once, respects reduced motion and cleans up its canvas', () => {

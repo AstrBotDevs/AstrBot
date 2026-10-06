@@ -49,7 +49,7 @@ The guide title sits beside the AstrBot brand. Content, the trial message compos
 
 Account setup cannot be skipped. Skip entire setup at the bottom of the first step goes directly to the dashboard without saving guide settings; it replaces the previous Set up later label. Skip on subsequent steps only skips the current step, proceeding directly to adapters when no model is configured.
 
-After completing or skipping step four, the welcome screen plays a single confetti burst from each side; Get started opens the dashboard. Models and messaging platforms are saved in their respective steps to support immediate chat testing and connection setup. The animation respects reduced-motion preferences. Regular login does not restart the guide. The guide does not query the plugin marketplace, install plugins, or change computer-access permissions.
+After completing or skipping step four, the welcome screen plays a single confetti burst from each side; Get started opens the dashboard. The two logo stars fly in separately like shooting stars: the large star from the lower left and the small star from the upper right, with brief fading trails. They settle into the original logo without rotating or looping. Models and messaging platforms are saved in their respective steps to support immediate chat testing and connection setup. Reduced-motion preferences disable both star motion and confetti. Regular login does not restart the guide. The guide does not query the plugin marketplace, install plugins, or change computer-access permissions.
 
 ![Welcome screen after completing setup](/webui-onboarding-welcome-en.png)
 

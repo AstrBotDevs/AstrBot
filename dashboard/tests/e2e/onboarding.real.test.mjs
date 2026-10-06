@@ -1,0 +1,247 @@
+import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
+import { once } from 'node:events';
+import { access, chmod, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { createServer } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
+import { fileURLToPath } from 'node:url';
+import test from 'node:test';
+import { chromium } from 'playwright';
+
+const repo = fileURLToPath(new URL('../../../', import.meta.url));
+const python = process.env.ASTRBOT_E2E_PYTHON || join(repo, '.venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python');
+
+async function freePort() {
+  const server = createServer();
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const port = server.address().port;
+  await new Promise(resolve => server.close(resolve));
+  return port;
+}
+
+async function eventually(check, message, timeout = 15000) {
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    if (await check()) return;
+    await delay(200);
+  }
+  throw new Error(message);
+}
+
+test('onboarding against an isolated real AstrBot process', { timeout: 300000 }, async t => {
+  await access(join(repo, 'dashboard/dist/index.html'));
+  await access(python);
+  const root = await mkdtemp(join(tmpdir(), 'astrbot-onboarding-e2e-'));
+  await chmod(root, 0o700);
+  const port = await freePort();
+  const adapterPort = await freePort();
+  const editedPort = await freePort();
+  const base = `http://127.0.0.1:${port}`;
+  const username = 'onboarding-e2e';
+  const password = `E2e-${randomBytes(18).toString('hex')}`;
+  const adapterToken = randomBytes(24).toString('hex');
+  let token;
+  let backend;
+  let browser;
+  let page;
+  let model;
+  let chatSessionId;
+  const errors = [];
+  const writes = [];
+  const env = { ...process.env, ASTRBOT_ROOT: root, DASHBOARD_HOST: '127.0.0.1', DASHBOARD_PORT: String(port),
+    ASTRBOT_DASHBOARD_SKIP_DEFAULT_PASSWORD_AUTH: 'true', PYTHONDONTWRITEBYTECODE: '1' };
+  delete env.ASTRBOT_RESET_DASHBOARD_PASSWORD;
+  delete env.ASTRBOT_E2E_MODEL_FILE;
+
+  async function api(path, options = {}) {
+    const response = await fetch(`${base}/api/v1${path}`, { ...options, signal: AbortSignal.timeout(10000),
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...options.headers } });
+    assert.equal(response.ok, true, `${path}: HTTP ${response.status}`);
+    const body = await response.json();
+    assert.equal(body.status, 'ok', `${path}: API rejected request`);
+    return body.data;
+  }
+
+  async function stopBackend() {
+    if (!backend || backend.exitCode !== null || backend.signalCode !== null) return;
+    const exited = once(backend, 'exit');
+    backend.kill('SIGTERM');
+    const killTimer = setTimeout(() => backend.kill('SIGKILL'), 10000);
+    try { await exited; } finally { clearTimeout(killTimer); }
+  }
+
+  async function startBackend() {
+    let spawnError;
+    backend = spawn(python, [join(repo, 'main.py'), '--webui-dir', join(repo, 'dashboard/dist')],
+      { cwd: root, env, stdio: 'ignore' });
+    backend.on('error', error => { spawnError = error; });
+    await eventually(async () => {
+      if (spawnError) throw spawnError;
+      assert.equal(backend.exitCode, null, 'AstrBot exited during startup');
+      try { await api('/auth/setup-status'); return true; } catch { return false; }
+    }, 'AstrBot startup timed out', 60000);
+  }
+
+  async function enterAdapter() {
+    await page.goto(`${base}/#/auth/onboarding`);
+    await page.reload();
+    await page.getByRole('button', { name: 'Next', exact: true }).click();
+    await page.getByRole('button', { name: 'Skip', exact: true }).click();
+    await page.getByRole('heading', { name: 'Connect a messaging platform', exact: true }).waitFor();
+    await page.locator('.guide-content .v-progress-linear[aria-hidden="false"]').waitFor({ state: 'hidden' });
+  }
+
+  const field = title => page.locator('.config-row').filter({ has: page.getByText(title, { exact: true }) }).locator('input');
+  try {
+    if (process.env.ASTRBOT_E2E_MODEL_FILE) {
+      model = JSON.parse(await readFile(process.env.ASTRBOT_E2E_MODEL_FILE, 'utf8'));
+      assert.ok(model.api_base && model.api_key && model.model, 'Model file requires api_base, api_key and model');
+    }
+    await startBackend();
+    assert.equal((await api('/auth/setup-status')).setup_required, true);
+    const denied = await fetch(`${base}/api/v1/system-config/runtime`);
+    assert.ok([401, 403].includes(denied.status), 'Anonymous configuration access must be rejected');
+    const account = await api('/auth/setup', { method: 'POST', body: JSON.stringify({ username, password, confirm_password: password }) });
+    token = account.token;
+    assert.ok(token, 'Setup must issue a usable token');
+    assert.equal((await api('/auth/setup-status')).setup_required, false);
+    await api('/system-config/runtime');
+    browser = await chromium.launch({ headless: true, ...(process.env.ASTRBOT_E2E_BROWSER ? { executablePath: process.env.ASTRBOT_E2E_BROWSER } : {}) });
+    const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, locale: 'en-US' });
+    await context.addInitScript(() => localStorage.setItem('astrbot-locale', 'en-US'));
+    page = await context.newPage();
+    page.setDefaultTimeout(15000);
+    page.on('pageerror', error => errors.push(error.message));
+    page.on('request', request => {
+      const url = new URL(request.url());
+      if (url.origin === base && !['GET', 'HEAD', 'OPTIONS'].includes(request.method())) writes.push(url.pathname);
+    });
+    await page.goto(`${base}/#/auth/login`);
+    await page.locator('input[name="username"]').fill(username);
+    await page.locator('input[name="password"]').fill(password);
+    await page.locator('button[type="submit"]').click();
+    await page.waitForURL(url => !url.hash.startsWith('#/auth/login'));
+    t.diagnostic('PASS: real setup, authorization and browser login');
+
+    await page.goto(`${base}/#/auth/onboarding`);
+    const beforeSkip = writes.length;
+    await page.getByRole('button', { name: 'Skip entire setup', exact: true }).click();
+    await page.waitForURL(url => !url.hash.startsWith('#/auth/'));
+    assert.equal(writes.slice(beforeSkip).some(path => /bots|providers|config-profiles/.test(path)), false);
+    assert.equal((await api('/bots')).bots.length, 0);
+    t.diagnostic('PASS: skip entire guide without creating configuration');
+
+    await enterAdapter();
+    await page.locator('.platform-embedded .v-select').first().click();
+    await page.getByText('OneBot v11', { exact: true }).click();
+    await field('Bot Name').fill('');
+    assert.equal(await page.getByRole('button', { name: 'Next', exact: true }).isEnabled(), false);
+    await field('Bot Name').fill('e2e-onebot');
+    await field('Reverse WebSocket Host').fill('127.0.0.1');
+    await field('Reverse WebSocket Port').fill(String(adapterPort));
+    await field('Reverse WebSocket Token').fill(adapterToken);
+    await page.getByRole('button', { name: 'Next', exact: true }).click();
+    await page.locator('.guide-welcome').waitFor();
+    let bots = (await api('/bots')).bots;
+    assert.equal(bots.length, 1);
+    assert.equal(bots[0].id, 'e2e-onebot');
+    assert.equal(bots[0].ws_reverse_port, adapterPort);
+    assert.equal(bots[0].enable, true);
+    await eventually(async () => {
+      try { await fetch(`http://127.0.0.1:${adapterPort}/`, { signal: AbortSignal.timeout(1000) }); return true; } catch { return false; }
+    }, 'Real OneBot listener did not start');
+    await page.getByRole('button', { name: 'Get started', exact: true }).click();
+    await page.waitForURL(url => !url.hash.startsWith('#/auth/'));
+    t.diagnostic('PASS: validation, real adapter creation/listener and welcome exit');
+
+    await enterAdapter();
+    assert.equal(await field('Reverse WebSocket Port').inputValue(), String(adapterPort));
+    assert.equal(await field('Reverse WebSocket Token').inputValue() === adapterToken, true);
+    const beforeUnchanged = writes.length;
+    await page.getByRole('button', { name: 'Next', exact: true }).click();
+    await page.locator('.guide-welcome').waitFor();
+    assert.equal(writes.slice(beforeUnchanged).some(path => path.includes('/bots')), false);
+    await enterAdapter();
+    await field('Reverse WebSocket Port').fill(String(editedPort));
+    await page.getByRole('button', { name: 'Skip', exact: true }).click();
+    await page.locator('.guide-welcome').waitFor();
+    assert.equal((await api('/bots')).bots[0].ws_reverse_port, adapterPort);
+    await enterAdapter();
+    await field('Reverse WebSocket Port').fill(String(editedPort));
+    await page.getByRole('button', { name: 'Next', exact: true }).click();
+    await page.locator('.guide-welcome').waitFor();
+    bots = (await api('/bots')).bots;
+    assert.equal(bots.length, 1);
+    assert.equal(bots[0].ws_reverse_port, editedPort);
+    const disk = JSON.parse((await readFile(join(root, 'data/cmd_config.json'), 'utf8')).replace(/^\uFEFF/, ''));
+    assert.equal(disk.platform[0].ws_reverse_port, editedPort);
+    t.diagnostic('PASS: adapter prefill, unchanged save, discarded draft and persisted edit');
+
+    await t.test('real model configuration and streamed ChatUI reply', { skip: model ? false : 'Set ASTRBOT_E2E_MODEL_FILE to exercise a real model' }, async () => {
+      await page.goto(`${base}/#/auth/onboarding`);
+      await page.reload();
+      await page.getByRole('button', { name: 'Next', exact: true }).click();
+      await page.locator('.model-choices button').filter({ hasText: /OpenAI/ }).first().click();
+      try {
+        await page.getByLabel('API Key', { exact: true }).fill(model.api_key);
+      } catch {
+        throw new Error('Could not fill the API key field; locator details omitted to protect credentials');
+      }
+      await page.getByLabel('API Base URL', { exact: true }).fill(model.api_base);
+      await page.getByLabel('Model name', { exact: true }).fill(model.model);
+      const sessionCreated = page.waitForResponse(response => new URL(response.url()).pathname === '/api/v1/chat/sessions/new');
+      await page.getByRole('button', { name: 'Next', exact: true }).click();
+      chatSessionId = (await (await sessionCreated).json()).data.session_id;
+      await page.locator('.standalone-chat textarea').fill('Reply with only ASTRBOT_E2E_OK. Do not use tools.');
+      await page.locator('.standalone-chat textarea').press('Enter');
+      await eventually(async () => {
+        const session = await api(`/chat/sessions/${chatSessionId}`);
+        return !session.is_running && session.history.some(item => item.sender_id === 'bot' && JSON.stringify(item.content).includes('ASTRBOT_E2E_OK'));
+      }, 'Real model reply was not persisted', 90000);
+      assert.match(await page.locator('.from-bot').innerText(), /ASTRBOT_E2E_OK/);
+      assert.ok(page.url().endsWith('#/auth/onboarding'), 'ChatUI must remain embedded');
+      const schema = await api('/providers/schema');
+      assert.equal(schema.providers.length, 1);
+      const config = (await api('/config-profiles/default')).config;
+      assert.equal(config.agent_runner.config.model.provider_id, schema.providers[0].id);
+      await page.getByRole('button', { name: 'Back', exact: true }).click();
+      await page.getByRole('button', { name: 'Next', exact: true }).click();
+      assert.equal((await api('/chat/sessions')).length, 1, 'Back/Next must preserve the embedded session');
+      assert.equal((await api('/providers/schema')).providers.length, 1);
+    });
+
+    await stopBackend();
+    await startBackend();
+    assert.equal((await api('/auth/setup-status')).setup_required, false);
+    bots = (await api('/bots')).bots;
+    assert.equal(bots.length, 1);
+    assert.equal(bots[0].ws_reverse_port, editedPort);
+    await enterAdapter();
+    assert.equal(await field('Reverse WebSocket Port').inputValue(), String(editedPort));
+    if (chatSessionId) {
+      assert.ok((await api(`/chat/sessions/${chatSessionId}`)).history.some(item => item.sender_id === 'bot' && JSON.stringify(item.content).includes('ASTRBOT_E2E_OK')));
+      await page.goto(`${base}/#/auth/onboarding`);
+      await page.reload();
+      await page.getByRole('button', { name: 'Next', exact: true }).click();
+      await eventually(async () => await page.getByRole('button', { name: 'Next', exact: true }).isEnabled(), 'Existing model was not ready');
+      assert.equal(await page.getByLabel('Model name', { exact: true }).inputValue(), model.model);
+      assert.equal(await page.getByLabel('API Base URL', { exact: true }).inputValue(), model.api_base);
+    }
+    assert.deepEqual(errors, []);
+    t.diagnostic('PASS: configuration survives process restart; browser has no uncaught errors');
+  } catch (error) {
+    if (page && process.env.ASTRBOT_E2E_SCREENSHOT) {
+      await page.screenshot({ path: process.env.ASTRBOT_E2E_SCREENSHOT });
+    }
+    throw error;
+  } finally {
+    try { await browser?.close(); } finally {
+      await stopBackend();
+      await rm(root, { recursive: true, force: true });
+    }
+  }
+});
