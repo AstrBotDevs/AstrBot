@@ -1923,6 +1923,17 @@ export type ReloadPluginByIdResponse = (SuccessEnvelope);
 
 export type ReloadPluginByIdError = unknown;
 
+export type SetPluginRuntimeByIdData = {
+    body: {
+        plugin_id: string;
+        runtime: 'isolated' | 'in-process';
+    };
+};
+
+export type SetPluginRuntimeByIdResponse = (SuccessEnvelope);
+
+export type SetPluginRuntimeByIdError = unknown;
+
 export type SetPluginEnabledByIdData = {
     body: {
         plugin_id: string;

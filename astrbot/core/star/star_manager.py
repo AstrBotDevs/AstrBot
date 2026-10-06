@@ -35,6 +35,7 @@ from astrbot.core.platform.register import unregister_platform_adapters_by_modul
 from astrbot.core.provider.register import llm_tools
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_config_path,
+    get_astrbot_data_path,
     get_astrbot_path,
     get_astrbot_plugin_path,
     get_astrbot_system_tmp_path,
@@ -52,6 +53,7 @@ from .command_management import sync_command_configs
 from .context import Context
 from .error_messages import format_plugin_error
 from .filter.permission import COMMAND_PERMISSION_TYPES, PermissionTypeFilter
+from .sdk_bridge.detect import is_isolated_legacy_dir, is_sdk_plugin_dir
 from .star import star_map, star_registry
 from .star_handler import EventType, star_handlers_registry
 from .updater import PLUGIN_METADATA_FILENAMES, _PluginUpdater
@@ -218,6 +220,12 @@ class PluginManager:
         self.failed_plugin_dict = {}
         """加载失败插件的信息，用于后续可能的热重载"""
 
+        self._sdk_plugin_manager = None
+        """新版 SDK 插件管理器（懒加载，未安装 astrbot-sdk 时保持为 None）"""
+
+        self._runtime_overrides: dict = {}
+        """插件运行环境覆盖（root_dir_name -> "isolated"/"in-process"），在 load() 时刷新"""
+
         self.failed_plugin_info = ""
         if os.getenv("ASTRBOT_RELOAD", "0") == "1":
             asyncio.create_task(self._watch_plugins_changes())
@@ -288,7 +296,7 @@ class PluginManager:
         return classes
 
     @staticmethod
-    def _get_modules(path):
+    def _get_modules(path, runtime_overrides: dict | None = None):
         modules = []
 
         dirs = os.listdir(path)
@@ -298,6 +306,11 @@ class PluginManager:
             if d.startswith((".plugin-install-", ".plugin-upload-", ".plugin-backup-")):
                 continue
             if os.path.isdir(os.path.join(path, d)):
+                if is_sdk_plugin_dir(
+                    os.path.join(path, d),
+                ) or is_isolated_legacy_dir(os.path.join(path, d), runtime_overrides):
+                    # 新版 SDK 插件与声明隔离运行的旧版插件都由桥接器隔离加载
+                    continue
                 if os.path.exists(os.path.join(path, d, "main.py")):
                     module_str = "main"
                 elif os.path.exists(os.path.join(path, d, d + ".py")):
@@ -322,9 +335,11 @@ class PluginManager:
     def _get_plugin_modules(self) -> list[dict]:
         plugins = []
         if os.path.exists(self.plugin_store_path):
-            plugins.extend(self._get_modules(self.plugin_store_path))
+            plugins.extend(
+                self._get_modules(self.plugin_store_path, self._runtime_overrides)
+            )
         if os.path.exists(self.reserved_plugin_path):
-            _p = self._get_modules(self.reserved_plugin_path)
+            _p = self._get_modules(self.reserved_plugin_path, self._runtime_overrides)
             for p in _p:
                 p["reserved"] = True
             plugins.extend(_p)
@@ -833,6 +848,17 @@ class PluginManager:
             "traceback": error_trace,
             "reserved": reserved,
         }
+        if is_sdk_plugin_dir(plugin_dir_path):
+            # New-style SDK plugins always run isolated and cannot switch.
+            record["runtime"] = "isolated"
+            record["can_change_runtime"] = False
+        else:
+            record["runtime"] = (
+                "isolated"
+                if is_isolated_legacy_dir(plugin_dir_path, self._runtime_overrides)
+                else "in-process"
+            )
+            record["can_change_runtime"] = True
         try:
             metadata = self._load_plugin_metadata(plugin_path=plugin_dir_path)
             if metadata:
@@ -1015,6 +1041,79 @@ class PluginManager:
             else:
                 return False, error
 
+    async def set_plugin_runtime(
+        self,
+        root_dir_name: str,
+        runtime: str,
+    ) -> tuple[bool, str | None]:
+        """切换旧版插件的运行环境（进程内 / 隔离）并重载插件。
+
+        用户的覆盖保存在 plugin_runtime_overrides 中，优先于插件
+        metadata.yaml 里的 runtime.isolated 声明。新版 SDK 插件始终隔离
+        运行，不可切换。切回进程内时会删除该插件的隔离 venv
+        （data/plugin_venvs/<目录名>）。
+
+        Args:
+            root_dir_name: 插件目录名。
+            runtime: "isolated"（隔离）或 "in-process"（进程内）。
+
+        Returns:
+            tuple: (success, error_message)。
+        """
+        if runtime not in ("isolated", "in-process"):
+            return False, f"不支持的运行环境: {runtime}"
+        plugin_dir = os.path.join(self.plugin_store_path, root_dir_name)
+        if not os.path.isdir(plugin_dir):
+            return False, f"插件目录不存在: {root_dir_name}"
+        if is_sdk_plugin_dir(plugin_dir):
+            return False, "新版 SDK 插件始终隔离运行，无需切换"
+
+        async with self._pm_lock:
+            overrides = await sp.global_get("plugin_runtime_overrides", {})
+            if not isinstance(overrides, dict):
+                overrides = {}
+            overrides[root_dir_name] = runtime
+            await sp.global_put("plugin_runtime_overrides", overrides)
+            self._runtime_overrides = overrides
+
+            # 停掉当前实例（隔离桥接或进程内）
+            bridge = (
+                self._sdk_plugin_manager.bridges.get(root_dir_name)
+                if self._sdk_plugin_manager is not None
+                else None
+            )
+            if bridge is not None:
+                await self._sdk_plugin_manager.unload(root_dir_name)
+            else:
+                smd = next(
+                    (
+                        metadata
+                        for metadata in star_registry
+                        if metadata.root_dir_name == root_dir_name
+                    ),
+                    None,
+                )
+                if smd is not None:
+                    try:
+                        await self._terminate_plugin(smd)
+                    except Exception:
+                        logger.warning(traceback.format_exc())
+                    if smd.name and smd.module_path:
+                        await self._unbind_plugin(smd.name, smd.module_path)
+
+            if runtime == "in-process":
+                # The isolated venv (data/plugin_venvs/<dir>) is no longer
+                # needed once the plugin runs inside the core process.
+                remove_dir(
+                    str(Path(get_astrbot_data_path()) / "plugin_venvs" / root_dir_name),
+                )
+
+            success, error = await self.load(specified_dir_name=root_dir_name)
+            if success:
+                self.failed_plugin_dict.pop(root_dir_name, None)
+                self._rebuild_failed_plugin_info()
+            return success, error
+
     async def reload(self, specified_plugin_name=None):
         """重新加载插件
 
@@ -1057,6 +1156,14 @@ class PluginManager:
             else:
                 # 只重载指定插件
                 smd = star_map.get(specified_module_path)
+                if smd is not None and specified_module_path.startswith(
+                    "sdk_bridge.",
+                ):
+                    # 桥接插件（SDK / 隔离运行）由 bridge 管理器整体重启；
+                    # 经典的 terminate + load(module_path) 路径不认识它。
+                    if self._sdk_plugin_manager is not None:
+                        await self._sdk_plugin_manager.unload(smd.root_dir_name)
+                    return await self.load(specified_dir_name=smd.root_dir_name)
                 if smd:
                     try:
                         await self._terminate_plugin(smd)
@@ -1095,6 +1202,9 @@ class PluginManager:
         inactivated_plugins = await sp.global_get("inactivated_plugins", [])
         inactivated_llm_tools = await sp.global_get("inactivated_llm_tools", [])
         alter_cmd = await sp.global_get("alter_cmd", {})
+        self._runtime_overrides = await sp.global_get("plugin_runtime_overrides", {})
+        if not isinstance(self._runtime_overrides, dict):
+            self._runtime_overrides = {}
 
         plugin_modules = self._get_plugin_modules()
         if plugin_modules is None:
@@ -1476,10 +1586,118 @@ class PluginManager:
             logger.error(f"Failed to synchronize command configuration: {e!s}")
             logger.error(traceback.format_exc())
 
+        if not specified_module_path:
+            sdk_dirs = []
+            if os.path.isdir(self.plugin_store_path):
+                sdk_dirs = [
+                    d
+                    for d in sorted(os.listdir(self.plugin_store_path))
+                    if is_sdk_plugin_dir(
+                        os.path.join(self.plugin_store_path, d),
+                    )
+                    or is_isolated_legacy_dir(
+                        os.path.join(self.plugin_store_path, d),
+                        self._runtime_overrides,
+                    )
+                ]
+            if specified_dir_name:
+                sdk_dirs = [d for d in sdk_dirs if d == specified_dir_name]
+            if sdk_dirs:
+                has_load_error = (
+                    await self._load_sdk_plugins(sdk_dirs) or has_load_error
+                )
+            has_load_error = (
+                await self._load_external_sdk_plugins(specified_dir_name)
+                or has_load_error
+            )
+
         self._rebuild_failed_plugin_info()
         if has_load_error:
             return False, self.failed_plugin_info
         return True, None
+
+    async def _load_sdk_plugins(self, sdk_dirs: list[str]) -> bool:
+        """加载新版 SDK 插件（schema_version 2，隔离运行）。
+
+        Args:
+            sdk_dirs: 通过 metadata.yaml 识别出的 SDK 插件目录名列表。
+
+        Returns:
+            是否有插件加载失败。
+        """
+        try:
+            from .sdk_bridge import SDKPluginManager
+        except ImportError as e:
+            logger.error(
+                "检测到新版 SDK 插件，但当前环境未安装 astrbot-sdk，跳过加载: %s",
+                e,
+            )
+            return True
+
+        if self._sdk_plugin_manager is None:
+            self._sdk_plugin_manager = SDKPluginManager(
+                self.context,
+                self.plugin_store_path,
+            )
+
+        has_error = False
+        for dir_name in sdk_dirs:
+            try:
+                await self._sdk_plugin_manager.load_all(
+                    specified_dir_name=dir_name,
+                    runtime_overrides=self._runtime_overrides,
+                )
+            except Exception as e:
+                error_trace = traceback.format_exc()
+                logger.error(f"Failed to load SDK plugin {dir_name}: {e!s}")
+                logger.error(error_trace)
+                self.failed_plugin_dict[dir_name] = self._build_failed_plugin_record(
+                    root_dir_name=dir_name,
+                    plugin_dir_path=os.path.join(
+                        self.plugin_store_path,
+                        dir_name,
+                    ),
+                    reserved=False,
+                    error=e,
+                    error_trace=error_trace,
+                )
+                has_error = True
+        return has_error
+
+    async def _load_external_sdk_plugins(
+        self,
+        specified_name: str | None = None,
+    ) -> bool:
+        """加载外部 SDK 插件（Runner 通过 WebSocket 拨入，非本地目录）。
+
+        Args:
+            specified_name: 仅加载该名称的外部插件。
+
+        Returns:
+            是否有插件加载失败。
+        """
+        try:
+            from .sdk_bridge import SDKPluginManager
+        except ImportError:
+            # astrbot-sdk is optional; without it there are no external
+            # plugins to load either.
+            return False
+
+        if self._sdk_plugin_manager is None:
+            self._sdk_plugin_manager = SDKPluginManager(
+                self.context,
+                self.plugin_store_path,
+            )
+
+        try:
+            await self._sdk_plugin_manager.load_external(
+                specified_name=specified_name,
+            )
+        except Exception as e:
+            logger.error(f"Failed to load external SDK plugins: {e!s}")
+            logger.error(traceback.format_exc())
+            return True
+        return False
 
     async def _cleanup_failed_plugin_install(
         self,

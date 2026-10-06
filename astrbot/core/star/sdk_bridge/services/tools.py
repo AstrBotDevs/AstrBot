@@ -1,0 +1,57 @@
+from __future__ import annotations
+
+from typing import Any
+
+from astrbot_sdk.errors import InvalidRequest, NotFound
+from astrbot_sdk.tools import ToolDefinition
+
+from astrbot.core.provider.register import llm_tools
+
+
+class ToolRegisterService:
+    """Serve the llm.tool.register capability for dynamic tool registration."""
+
+    capability_id = "llm.tool.register"
+
+    def __init__(self, make_stub: Any, track: Any) -> None:
+        """Initialize the service.
+
+        Args:
+            make_stub: Factory building the executor stub for a handler ID.
+            track: Callback recording tool names for cleanup on unload.
+        """
+        self._make_stub = make_stub
+        self._track = track
+
+    async def handle(self, operation: str, payload: dict[str, Any]) -> Any:
+        """Serve register/unregister operations."""
+        if operation == "register":
+            definition = payload.get("definition")
+            handler_id = payload.get("handler_id")
+            if not isinstance(definition, ToolDefinition):
+                raise InvalidRequest("register requires a ToolDefinition")
+            if not isinstance(handler_id, str) or not handler_id:
+                raise InvalidRequest("register requires a handler_id")
+            func_args = [
+                {
+                    "type": param.type,
+                    "name": param.name,
+                    "description": param.description,
+                }
+                for param in definition.params
+            ]
+            llm_tools.add_func(
+                definition.name,
+                func_args,
+                definition.description,
+                self._make_stub(handler_id),
+            )
+            self._track(definition.name)
+            return {}
+        if operation == "unregister":
+            name = payload.get("name")
+            if not isinstance(name, str) or not name:
+                raise InvalidRequest("unregister requires a tool name")
+            llm_tools.remove_func(name)
+            return {}
+        raise NotFound(f"unknown tool operation: {operation}")

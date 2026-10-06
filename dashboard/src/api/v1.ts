@@ -1283,6 +1283,13 @@ export const pluginApi = {
       openApiV1.reloadPluginById({ body: { plugin_id: pluginId } }),
     );
   },
+  setRuntime(pluginId: string, runtime: "isolated" | "in-process") {
+    return typed<OpenConfig>(
+      openApiV1.setPluginRuntimeById({
+        body: { plugin_id: pluginId, runtime },
+      }),
+    );
+  },
   setEnabled(pluginId: string, enabled: boolean) {
     return typed<OpenConfig>(
       openApiV1.setPluginEnabledById({

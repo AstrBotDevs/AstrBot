@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 265 icons */
+/* Auto-generated MDI subset – 266 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -266,6 +266,10 @@
 
 .mdi-cog::before {
   content: "\F0493";
+}
+
+.mdi-cog-box::before {
+  content: "\F0494";
 }
 
 .mdi-cog-outline::before {

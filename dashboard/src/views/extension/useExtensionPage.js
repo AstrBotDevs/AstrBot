@@ -1245,6 +1245,23 @@ export const useExtensionPage = (initialTab = "installed") => {
     });
   };
 
+  const setPluginRuntime = async (plugin_name, runtime) => {
+    try {
+      const res = await pluginApi.setRuntime(plugin_name, runtime);
+      if (res.data.status === "error") {
+        toast(res.data.message || tm("messages.runtimeSwitchFailed"), "error");
+        return;
+      }
+      toast(tm("messages.runtimeSwitchSuccess"), "success");
+      await getExtensions();
+    } catch (err) {
+      toast(
+        resolveErrorMessage(err, tm("messages.runtimeSwitchFailed")),
+        "error",
+      );
+    }
+  };
+
   const reloadPlugin = async (plugin_name) => {
     try {
       const res = await pluginApi.reload(plugin_name);
@@ -2630,6 +2647,7 @@ export const useExtensionPage = (initialTab = "installed") => {
     updatePluginLogLevel,
     pluginLogLevelSaving,
     showPluginInfo,
+    setPluginRuntime,
     reloadPlugin,
     viewReadme,
     viewChangelog,

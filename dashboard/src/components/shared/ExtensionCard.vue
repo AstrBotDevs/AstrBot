@@ -40,6 +40,7 @@ const emit = defineEmits([
   "toggle-pin",
   "open-view",
   "change-source",
+  "set-runtime",
 ]);
 
 const attrs = useAttrs();
@@ -90,6 +91,13 @@ const canChangePluginSource = computed(() => {
 });
 
 const showUninstallDialog = ref(false);
+
+const canSwitchRuntime = computed(() => {
+  return props.extension?.runtime_switchable === true;
+});
+
+const showRuntimeDialog = ref(false);
+const selectedRuntime = ref("in-process");
 
 const supportPlatforms = computed(() => {
   const platforms = props.extension?.support_platforms;
@@ -146,6 +154,20 @@ const reloadExtension = () => {
 const changePluginSource = () => {
   if (!canChangePluginSource.value) return;
   emit("change-source", props.extension);
+};
+
+const openRuntimeDialog = () => {
+  if (!canSwitchRuntime.value) return;
+  selectedRuntime.value =
+    props.extension?.runtime === "isolated" ? "isolated" : "in-process";
+  showRuntimeDialog.value = true;
+};
+
+const confirmRuntime = () => {
+  showRuntimeDialog.value = false;
+  if (selectedRuntime.value !== props.extension?.runtime) {
+    emit("set-runtime", props.extension, selectedRuntime.value);
+  }
 };
 
 const uninstallExtension = async () => {
@@ -510,6 +532,27 @@ const openView = () => {
             </template>
           </v-tooltip>
 
+          <v-tooltip
+            location="left"
+            :disabled="canSwitchRuntime"
+            :text="tm('messages.runtimeSwitchDisabled')"
+          >
+            <template v-slot:activator="{ props: tooltipProps }">
+              <div v-bind="tooltipProps">
+                <v-list-item
+                  class="styled-menu-item"
+                  prepend-icon="mdi-cog-box"
+                  :disabled="!canSwitchRuntime"
+                  @click.stop="openRuntimeDialog"
+                >
+                  <v-list-item-title>{{
+                    tm("card.actions.runtimeEnvironment")
+                  }}</v-list-item-title>
+                </v-list-item>
+              </div>
+            </template>
+          </v-tooltip>
+
           <v-list-item
             class="styled-menu-item"
             prepend-icon="mdi-delete"
@@ -528,6 +571,51 @@ const openView = () => {
       </template>
     </v-card-actions>
   </v-card>
+
+  <!-- 运行环境切换对话框 -->
+  <v-dialog v-model="showRuntimeDialog" max-width="480">
+    <v-card>
+      <v-card-title class="text-h3 pa-4 pb-0 pl-6">
+        {{ tm("card.runtime.title") }}
+      </v-card-title>
+      <v-card-text class="pa-4 pl-6">
+        <v-radio-group v-model="selectedRuntime" hide-details>
+          <v-radio value="in-process">
+            <template #label>
+              <div>
+                <div>{{ tm("card.runtime.inProcess") }}</div>
+                <div class="text-caption text-medium-emphasis">
+                  {{ tm("card.runtime.inProcessDesc") }}
+                </div>
+              </div>
+            </template>
+          </v-radio>
+          <v-radio value="isolated" class="mt-2">
+            <template #label>
+              <div>
+                <div>{{ tm("card.runtime.isolated") }}</div>
+                <div class="text-caption text-medium-emphasis">
+                  {{ tm("card.runtime.isolatedDesc") }}
+                </div>
+              </div>
+            </template>
+          </v-radio>
+        </v-radio-group>
+        <v-alert class="mt-3" type="warning" variant="tonal" density="compact">
+          {{ tm("card.runtime.switchWarning") }}
+        </v-alert>
+      </v-card-text>
+      <v-card-actions class="pa-4 pt-0">
+        <v-spacer />
+        <v-btn variant="text" @click="showRuntimeDialog = false">
+          {{ tm("buttons.cancel") }}
+        </v-btn>
+        <v-btn variant="tonal" color="primary" @click.stop="confirmRuntime">
+          {{ tm("buttons.save") }}
+        </v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
 
   <!-- 卸载确认对话框 -->
   <UninstallConfirmDialog

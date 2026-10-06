@@ -27,6 +27,7 @@ from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.filter.permission import PermissionTypeFilter
 from astrbot.core.star.filter.regex import RegexFilter
+from astrbot.core.star.sdk_bridge.detect import is_sdk_plugin_dir
 from astrbot.core.star.star import StarMetadata
 from astrbot.core.star.star_handler import EventType, star_handlers_registry
 from astrbot.core.star.star_manager import (
@@ -163,6 +164,57 @@ class PluginService:
             )
         await self.sync_skills_after_plugin_change()
         return None, "重载成功。"
+
+    async def set_plugin_runtime(self, data: object) -> tuple[None, str]:
+        """Switch a legacy plugin between in-process and isolated runtime.
+
+        Args:
+            data: Mapping with "name" (plugin name) and "runtime"
+                ("isolated" or "in-process").
+
+        Returns:
+            Success message tuple.
+
+        Raises:
+            PluginServiceError: Plugin not found, unsupported runtime, or
+                the switch failed.
+        """
+        self._ensure_not_demo()
+        payload = data if isinstance(data, dict) else {}
+        plugin_name = str(payload.get("name") or "").strip()
+        runtime = str(payload.get("runtime") or "").strip()
+        if runtime not in ("isolated", "in-process"):
+            raise PluginServiceError(
+                f"不支持的运行环境: {runtime}",
+                public_message="不支持的运行环境",
+            )
+        root_dir_name = None
+        for star in self.plugin_manager.context.get_all_stars():
+            if star.name == plugin_name:
+                root_dir_name = star.root_dir_name
+                break
+        if not root_dir_name and os.path.isdir(
+            os.path.join(self.plugin_manager.plugin_store_path, plugin_name),
+        ):
+            # Failed plugins are absent from star_registry; the dashboard
+            # refers to them by directory name.
+            root_dir_name = plugin_name
+        if not root_dir_name:
+            raise PluginServiceError(
+                f"未找到插件: {plugin_name}",
+                public_message="未找到插件",
+            )
+        success, message = await self.plugin_manager.set_plugin_runtime(
+            root_dir_name,
+            runtime,
+        )
+        if not success:
+            raise PluginServiceError(
+                message or "切换运行环境失败",
+                public_message="切换运行环境失败",
+            )
+        await self.sync_skills_after_plugin_change()
+        return None, "运行环境已切换。"
 
     async def list_plugins(
         self,
@@ -628,14 +680,41 @@ class PluginService:
             ]
         )
 
-    @staticmethod
+    def _resolve_runtime_info(self, plugin: StarMetadata) -> tuple[str, bool]:
+        """Resolve a plugin's runtime mode and whether it can be switched.
+
+        Only locally installed legacy plugins can switch between in-process
+        and isolated; new SDK plugins are always isolated, external bridge
+        plugins and reserved builtin plugins are not switchable.
+
+        Args:
+            plugin: Loaded plugin metadata.
+
+        Returns:
+            Tuple of (runtime, runtime_switchable) where runtime is
+            "isolated" or "in-process".
+        """
+        runtime = (
+            "isolated"
+            if str(plugin.module_path or "").startswith("sdk_bridge.")
+            else "in-process"
+        )
+        if plugin.reserved or not plugin.root_dir_name:
+            return runtime, False
+        plugin_dir = Path(self.plugin_manager.plugin_store_path) / plugin.root_dir_name
+        if not plugin_dir.is_dir() or is_sdk_plugin_dir(plugin_dir):
+            return runtime, False
+        return runtime, True
+
     def serialize_plugin_base(
+        self,
         plugin: StarMetadata,
         *,
         logo_url: str | None,
         installed_at: str | None,
         install_source: dict[str, Any] | None,
     ) -> dict:
+        runtime, runtime_switchable = self._resolve_runtime_info(plugin)
         install_method = (
             str(install_source.get("install_method") or "").strip().lower()
             if isinstance(install_source, dict)
@@ -662,6 +741,8 @@ class PluginService:
             "i18n": plugin.i18n,
             "root_dir_name": plugin.root_dir_name,
             "install_source": install_source,
+            "runtime": runtime,
+            "runtime_switchable": runtime_switchable,
             "updates_enabled": updates_enabled,
             "update_disabled_reason": ""
             if updates_enabled

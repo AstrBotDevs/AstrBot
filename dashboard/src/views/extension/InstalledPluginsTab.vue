@@ -112,6 +112,7 @@ const {
   openExtensionConfig,
   updateConfig,
   showPluginInfo,
+  setPluginRuntime,
   reloadPlugin,
   viewReadme,
   viewChangelog,
@@ -314,6 +315,19 @@ const togglePinnedExtension = (extension) => {
               </td>
               <td class="text-right">
                 <v-btn
+                  v-if="
+                    plugin.runtime === 'isolated' && plugin.can_change_runtime
+                  "
+                  size="small"
+                  variant="tonal"
+                  color="warning"
+                  class="mr-2"
+                  prepend-icon="mdi-swap-horizontal"
+                  @click="setPluginRuntime(plugin.dir_name, 'in-process')"
+                >
+                  {{ tm("failedPlugins.switchToInProcess") }}
+                </v-btn>
+                <v-btn
                   size="small"
                   variant="tonal"
                   color="primary"
@@ -383,6 +397,9 @@ const togglePinnedExtension = (extension) => {
               @view-changelog="viewChangelog(extension)"
               @open-view="openPluginView(extension)"
               @change-source="openPluginSourceBindingDialog(extension)"
+              @set-runtime="
+                (ext, runtime) => setPluginRuntime(ext.name, runtime)
+              "
             >
             </ExtensionCard>
           </v-col>

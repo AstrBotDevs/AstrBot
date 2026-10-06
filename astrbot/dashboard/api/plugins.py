@@ -27,6 +27,7 @@ from astrbot.dashboard.schemas import (
     PluginEnabledRequest,
     PluginInstallRequest,
     PluginLogLevelPayload,
+    PluginRuntimeRequest,
     PluginSourceBindRequest,
     PluginSourceRequest,
     PluginUninstallRequest,
@@ -863,6 +864,22 @@ async def reload_plugin_by_id(
     return await _run_service(
         service.reload_plugin({"name": plugin_id}),
         log_label="/api/plugin/reload",
+    )
+
+
+@router.post("/plugins/runtime")
+async def set_plugin_runtime_by_id(
+    payload: PluginRuntimeRequest,
+    _auth: AuthContext = Depends(require_plugin_scope),
+    service: PluginService = Depends(get_service),
+):
+    body = _model_dict(payload)
+    plugin_id = _plugin_id_from_body(body)
+    return await _run_service(
+        service.set_plugin_runtime(
+            {"name": plugin_id, "runtime": body.get("runtime")},
+        ),
+        log_label="/api/plugin/runtime",
     )
 
 

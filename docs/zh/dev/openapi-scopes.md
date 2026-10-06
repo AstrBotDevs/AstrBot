@@ -257,6 +257,7 @@ outline: deep
 | `GET` | `/api/v1/plugins/pages` | — |
 | `GET` | `/api/v1/plugins/readme` | — |
 | `POST` | `/api/v1/plugins/reload` | — |
+| `POST` | `/api/v1/plugins/runtime` | — |
 | `POST` | `/api/v1/plugins/update` | — |
 | `POST` | `/api/v1/plugins/validate/repo` | — |
 | `POST` | `/api/v1/plugins/version-support/check` | — |

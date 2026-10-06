@@ -2136,6 +2136,30 @@ paths:
         "200":
           $ref: "#/components/responses/Ok"
 
+  /api/v1/plugins/runtime:
+    post:
+      tags: [Plugins]
+      summary: Switch a legacy plugin runtime (in-process or isolated)
+      operationId: setPluginRuntimeById
+      x-astrbot-scope: plugin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [plugin_id, runtime]
+              properties:
+                plugin_id:
+                  type: string
+                runtime:
+                  type: string
+                  enum: [isolated, in-process]
+              additionalProperties: false
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
   /api/v1/plugins/enabled:
     patch:
       tags: [Plugins]

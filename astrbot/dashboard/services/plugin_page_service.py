@@ -8,7 +8,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 from urllib.parse import quote, urlencode, urlunsplit
 
 import aiofiles
@@ -87,6 +87,19 @@ class PluginPageService:
             if plugin.name == plugin_name:
                 return plugin
         return None
+
+    def _bridge_for(self, plugin: StarMetadata) -> Any | None:
+        """Return the SDK bridge hosting this plugin, when bridge-hosted.
+
+        Bridge-hosted plugins serve views through the RPC pipeline; the
+        dashboard never reads their view files from disk.
+        """
+        if not (plugin.module_path or "").startswith("sdk_bridge."):
+            return None
+        manager = getattr(self.plugin_manager, "_sdk_plugin_manager", None)
+        if manager is None:
+            return None
+        return manager.bridges.get(plugin.root_dir_name or "")
 
     @staticmethod
     def get_by_path(source: dict | None, key: str):
@@ -351,6 +364,21 @@ class PluginPageService:
         if not plugin.activated:
             raise PluginPageServiceError("Plugin is disabled", status_code=403)
 
+        bridge = self._bridge_for(plugin)
+        if bridge is not None:
+            return await self._serve_bridge_page_content(
+                bridge,
+                plugin,
+                plugin_name=plugin_name,
+                page_name=view_name,
+                asset_path=asset_path,
+                asset_token=asset_token,
+                jwt_secret=jwt_secret,
+                username=username,
+                locale=locale,
+                theme=theme,
+            )
+
         try:
             page = await self.get_plugin_page(plugin, view_name)
             file_path = await self.resolve_plugin_page_file(
@@ -472,6 +500,18 @@ class PluginPageService:
         raise FileNotFoundError("Plugin views root directory does not exist")
 
     async def discover_plugin_pages(self, plugin: StarMetadata) -> list[PluginPage]:
+        bridge = self._bridge_for(plugin)
+        if bridge is not None:
+            # Bridge-hosted plugins report pages through the pipeline.
+            return [
+                PluginPage(
+                    name=self.normalize_plugin_page_name(str(page.get("name", ""))),
+                    title=str(page.get("name", "")),
+                    entry_file=PLUGIN_PAGE_ENTRY_FILE_NAME,
+                )
+                for page in bridge._views_manifest.get("pages") or []
+                if page.get("name")
+            ]
         try:
             pages_root = await self.resolve_plugin_pages_root(plugin)
         except (FileNotFoundError, ValueError):
@@ -544,6 +584,95 @@ class PluginPageService:
         if not await aio_ospath.isfile(str(target_path)):
             raise FileNotFoundError("Plugin view asset not found")
         return target_path
+
+    async def _serve_bridge_page_content(
+        self,
+        bridge: Any,
+        plugin: StarMetadata,
+        *,
+        plugin_name: str,
+        page_name: str,
+        asset_path: str,
+        asset_token: str,
+        jwt_secret: str | None,
+        username: str | None,
+        locale: str,
+        theme: str | None,
+    ) -> PluginPageContentPayload:
+        """Serve one view asset for a bridge-hosted plugin via the pipeline."""
+        try:
+            page = await self.get_plugin_page(plugin, page_name)
+        except (FileNotFoundError, ValueError) as exc:
+            raise PluginPageServiceError(
+                "Plugin Page not found",
+                status_code=404,
+            ) from exc
+
+        served_asset_path = asset_path or page.entry_file
+        try:
+            content_type, content = await self._read_bridge_view_file(
+                bridge,
+                page.name,
+                served_asset_path,
+            )
+        except (FileNotFoundError, ValueError) as exc:
+            raise PluginPageServiceError(
+                "Plugin Page asset not found",
+                status_code=404,
+            ) from exc
+
+        extra_query_params = self.prepare_plugin_page_query_params(
+            plugin_name,
+            page.name,
+            asset_token=asset_token,
+            jwt_secret=jwt_secret,
+            username=username,
+            locale=locale,
+            theme=theme,
+        )
+        suffix = Path(served_asset_path).suffix.lower()
+        if suffix == ".html":
+            return PluginPageContentPayload(
+                content=self.process_plugin_page_html(
+                    content.decode("utf-8", errors="replace"),
+                    theme=theme,
+                    extra_query_params=extra_query_params,
+                ),
+                content_type="text/html; charset=utf-8",
+            )
+        # CSS/JS are served as-is: path-token URLs make relative references
+        # resolve correctly, same as the disk path.
+        if suffix in {".css", ".js", ".mjs"}:
+            return PluginPageContentPayload(
+                content=content.decode("utf-8", errors="replace"),
+                content_type=content_type,
+            )
+        return PluginPageContentPayload(
+            content=content,
+            content_type=content_type,
+        )
+
+    @staticmethod
+    async def _read_bridge_view_file(
+        bridge: Any,
+        page_name: str,
+        asset_path: str,
+    ) -> tuple[str, bytes]:
+        """Stream one view file from the Runner through the pipeline."""
+        client = bridge._require_client()
+        items = [
+            item
+            async for item in client.invoke_views(
+                "read",
+                page_name,
+                asset_path,
+            )
+        ]
+        if not items:
+            raise FileNotFoundError(asset_path)
+        info = items[0].get("info") or {}
+        content = b"".join(item.get("chunk") or b"" for item in items[1:])
+        return str(info.get("content_type") or "application/octet-stream"), content
 
     @staticmethod
     def build_plugin_page_view_content_path(

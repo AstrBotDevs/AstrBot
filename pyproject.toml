@@ -71,6 +71,7 @@ dependencies = [
   "python-docx>=1.2.0",
   "pyotp>=2.9.0",
   "reportlab>=5.0.0",
+  "uv>=0.9",
   "xlrd>=2.0.2",
 ]
 
