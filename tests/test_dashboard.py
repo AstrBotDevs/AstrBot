@@ -1942,9 +1942,68 @@ async def test_plugin_page_entry_returns_signed_content_path(
     assert data["data"]["title"] == PLUGIN_PAGE_DEMO_PAGE_NAME
     assert data["data"]["i18n_key"] == f"pages.{PLUGIN_PAGE_DEMO_PAGE_NAME}"
     assert data["data"]["content_path"].startswith(
-        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/"
+        f"/api/v1/plugins/{PLUGIN_PAGE_DEMO_NAME}/views/{PLUGIN_PAGE_DEMO_PAGE_NAME}/_t/"
     )
     assert "asset_token=" in data["data"]["content_path"]
+
+
+@pytest.mark.asyncio
+async def test_plugin_page_view_token_path_serves_raw_assets(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    registered_plugin_page: StarMetadata,
+):
+    """Path-token view URLs serve assets without content rewriting."""
+    test_client = app.test_client()
+    entry_response = await test_client.get(
+        (
+            f"/api/plugin/page/entry?name={PLUGIN_PAGE_DEMO_NAME}"
+            f"&page={PLUGIN_PAGE_DEMO_PAGE_NAME}"
+        ),
+        headers=authenticated_header,
+    )
+    assert entry_response.status_code == 200
+    content_path = (await entry_response.get_json())["data"]["content_path"]
+
+    # The signed entry document is fetchable anonymously via its path token.
+    anonymous_client = app.test_client()
+    html_response = await anonymous_client.get(content_path)
+    assert html_response.status_code == 200
+    html_text = (await html_response.get_data()).decode("utf-8")
+    assert "Single plugin Page with internal navigation" in html_text
+    # Bridge SDK is still injected and carries the token for its own fetch.
+    bridge_sdk_url = re.search(
+        r'src="([^"]+/bridge-sdk\.js[^"]*)"',
+        html_text,
+    )
+    assert bridge_sdk_url is not None
+    assert "asset_token=" in bridge_sdk_url.group(1)
+    # Relative asset URLs are NOT rewritten on the path-token route.
+    app_js_url = re.search(
+        r'src="([^"]*app\.js[^"]*)"',
+        html_text,
+    )
+    assert app_js_url is not None
+    assert "/api/plugin/page/content/" not in app_js_url.group(1)
+
+    # A relative asset resolves under the path-token prefix and is served raw.
+    asset_response = await anonymous_client.get(urlsplit(content_path).path + "app.js")
+    assert asset_response.status_code == 200
+
+    # A token scoped to another plugin is rejected.
+    other_path = urlsplit(content_path).path.replace(
+        f"/plugins/{PLUGIN_PAGE_DEMO_NAME}/",
+        "/plugins/another_plugin/",
+    )
+    other_response = await anonymous_client.get(other_path)
+    assert other_response.status_code == 401
+
+    # No token at all is rejected.
+    no_token_response = await anonymous_client.get(
+        f"/api/v1/plugins/{PLUGIN_PAGE_DEMO_NAME}/views/"
+        f"{PLUGIN_PAGE_DEMO_PAGE_NAME}/_t//app.js"
+    )
+    assert no_token_response.status_code in (401, 404)
 
 
 @pytest.mark.asyncio

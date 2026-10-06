@@ -1,16 +1,33 @@
+import re
 from urllib.parse import unquote
 
 PLUGIN_PAGE_CONTENT_PREFIX = "/api/plugin/page/content/"
 PLUGIN_PAGE_BRIDGE_PATH = "/api/plugin/page/bridge-sdk.js"
 PLUGIN_PAGE_TOKEN_TYPE = "plugin_page_asset"
 
+# Path-token plugin view assets:
+# /api/v1/plugins/<plugin>/views/<page>/_t/<token>/<asset...>
+# The token travels in the path so relative URLs inside the page inherit it
+# without any server-side content rewriting.
+PLUGIN_PAGE_VIEW_TOKEN_RE = re.compile(
+    r"^/api/v1/plugins/(?P<plugin>[^/]+)/views/(?P<page>[^/]+)"
+    r"/_t/(?P<token>[^/]+)(?:/|$)"
+)
+
 
 class PluginPageAuth:
     @staticmethod
     def is_protected_path(path: str) -> bool:
-        return path.startswith(PLUGIN_PAGE_CONTENT_PREFIX) or path.startswith(
-            PLUGIN_PAGE_BRIDGE_PATH
+        return (
+            path.startswith(PLUGIN_PAGE_CONTENT_PREFIX)
+            or path.startswith(PLUGIN_PAGE_BRIDGE_PATH)
+            or PLUGIN_PAGE_VIEW_TOKEN_RE.match(path) is not None
         )
+
+    @staticmethod
+    def extract_view_path_token(path: str) -> str | None:
+        match = PLUGIN_PAGE_VIEW_TOKEN_RE.match(path)
+        return unquote(match.group("token")) if match else None
 
     @staticmethod
     def is_asset_token(payload: dict) -> bool:
@@ -23,6 +40,9 @@ class PluginPageAuth:
 
     @staticmethod
     def extract_plugin_name_from_path(path: str) -> str | None:
+        view_match = PLUGIN_PAGE_VIEW_TOKEN_RE.match(path)
+        if view_match:
+            return unquote(view_match.group("plugin"))
         if not path.startswith(PLUGIN_PAGE_CONTENT_PREFIX):
             return None
         remainder = path[len(PLUGIN_PAGE_CONTENT_PREFIX) :]
@@ -31,6 +51,9 @@ class PluginPageAuth:
 
     @staticmethod
     def extract_page_name_from_path(path: str) -> str | None:
+        view_match = PLUGIN_PAGE_VIEW_TOKEN_RE.match(path)
+        if view_match:
+            return unquote(view_match.group("page"))
         if not path.startswith(PLUGIN_PAGE_CONTENT_PREFIX):
             return None
         remainder = path[len(PLUGIN_PAGE_CONTENT_PREFIX) :]

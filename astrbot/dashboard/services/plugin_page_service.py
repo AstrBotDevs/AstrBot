@@ -21,7 +21,9 @@ from astrbot.core.star.star import StarMetadata
 from astrbot.core.star.star_manager import PluginManager
 
 PLUGIN_PAGE_ASSET_TOKEN_TYPE = "plugin_page_asset"
-PLUGIN_PAGE_ASSET_TOKEN_TTL_SECONDS = 60
+# Aligned with the dashboard session lifetime (7 days): a plugin view
+# cannot outlive its parent dashboard page anyway.
+PLUGIN_PAGE_ASSET_TOKEN_TTL_SECONDS = 7 * 24 * 60 * 60
 # Directory names that hold plugin views inside a plugin package, in
 # preference order. "views" is preferred; "pages" stays as an alias.
 PLUGIN_PAGE_ROOT_DIR_NAMES = ("views", "pages")
@@ -358,6 +360,7 @@ class PluginPageService:
         username: str | None,
         locale: str,
         theme: str | None,
+        rewrite_urls: bool = True,
     ) -> PluginPageContentPayload:
         plugin = self.get_plugin_metadata_by_name(plugin_name)
         if not plugin:
@@ -399,10 +402,11 @@ class PluginPageService:
                     served_asset_path,
                     theme=theme,
                     extra_query_params=extra_query_params,
+                    rewrite_urls=rewrite_urls,
                 ),
                 content_type="text/html; charset=utf-8",
             )
-        if suffix == ".css":
+        if rewrite_urls and suffix == ".css":
             css_text = await self.read_plugin_page_text(file_path)
             return PluginPageContentPayload(
                 content=self.rewrite_plugin_page_css(
@@ -414,7 +418,7 @@ class PluginPageService:
                 ),
                 content_type="text/css; charset=utf-8",
             )
-        if suffix in {".js", ".mjs"}:
+        if rewrite_urls and suffix in {".js", ".mjs"}:
             js_text = await self.read_plugin_page_text(file_path)
             return PluginPageContentPayload(
                 content=self.rewrite_plugin_page_js(
@@ -672,6 +676,38 @@ class PluginPageService:
         )
 
     @staticmethod
+    def build_plugin_page_view_content_path(
+        plugin_name: str,
+        page_name: str,
+        token: str,
+        asset_path: str = "",
+    ) -> str:
+        """Build a path-token view content URL.
+
+        The token travels in the path so relative URLs inside the view inherit
+        it through normal URL resolution, without content rewriting.
+        """
+        encoded_plugin_name = quote(plugin_name, safe="")
+        encoded_page_name = quote(
+            PluginPageService.normalize_plugin_page_name(page_name),
+            safe="",
+        )
+        base = (
+            f"/api/v1/plugins/{encoded_plugin_name}/views/"
+            f"{encoded_page_name}/_t/{quote(token, safe='')}"
+        )
+        if not asset_path:
+            return base + "/"
+        safe_asset_path = PluginPageService.normalize_plugin_page_path(
+            asset_path,
+            allow_empty=True,
+        )
+        encoded_path = "/".join(
+            quote(part, safe="") for part in safe_asset_path.split("/")
+        )
+        return f"{base}/{encoded_path}"
+
+    @staticmethod
     def get_plugin_page_bridge_sdk_url(
         extra_query_params: dict[str, str] | None = None,
     ) -> str:
@@ -714,7 +750,15 @@ class PluginPageService:
         *,
         theme: str | None,
         extra_query_params: dict[str, str] | None = None,
+        rewrite_urls: bool = True,
     ) -> str:
+        """Process view HTML before serving.
+
+        Always applies the theme and injects the bridge SDK script. When
+        ``rewrite_urls`` is False (path-token URLs), relative asset attributes
+        are left untouched because the token already travels in the path.
+        """
+
         def replace_attr(match: re.Match[str]) -> str:
             raw_url = match.group("url")
             attr = match.group("attr")
@@ -724,7 +768,7 @@ class PluginPageService:
                 url = self.get_plugin_page_bridge_sdk_url(extra_query_params)
                 return f"{attr}={quote_char}{url}{quote_char}"
 
-            if not self.is_rewritable_asset_url(raw_url):
+            if not rewrite_urls or not self.is_rewritable_asset_url(raw_url):
                 return match.group(0)
 
             try:
@@ -880,13 +924,20 @@ class PluginPageService:
             "i18n_key": f"pages.{page.name}",
         }
         if include_content_path:
-            extra_query_params = {"asset_token": asset_token} if asset_token else None
-            page_data["content_path"] = self.build_plugin_page_asset_url(
-                plugin_name,
-                page.name,
-                "",
-                extra_query_params=extra_query_params,
-            )
+            if asset_token:
+                page_data["content_path"] = (
+                    self.build_plugin_page_view_content_path(
+                        plugin_name,
+                        page.name,
+                        asset_token,
+                    )
+                    + f"?asset_token={quote(asset_token, safe='')}"
+                )
+            else:
+                page_data["content_path"] = self.build_plugin_page_content_path(
+                    plugin_name,
+                    page.name,
+                )
         return page_data
 
     async def serialize_plugin_pages(self, plugin: StarMetadata) -> list[dict]:
@@ -916,6 +967,9 @@ class PluginPageService:
         payload = {
             "username": username,
             "token_type": PLUGIN_PAGE_ASSET_TOKEN_TYPE,
+            # Distinguishes long-lived view-session tokens from future
+            # one-shot presigned tokens (e.g. direct downloads).
+            "purpose": "page_session",
             "plugin_name": plugin_name,
             "page_name": page_name,
             "locale": locale,

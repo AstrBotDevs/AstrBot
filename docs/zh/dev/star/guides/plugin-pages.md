@@ -611,15 +611,9 @@ body {
 <img src="./assets/logo.svg" alt="" />
 ```
 
-AstrBot 会重写相对资源路径并追加短期 `asset_token`。不要手动拼接 `/api/plugin/page/content/...`，不要自行追加 `asset_token`，也不要依赖 `..` 逃逸视图根目录。
+AstrBot 通过路径令牌（path token）为视图资源鉴权：入口配置接口返回的 `content_path` 形如 `/api/v1/plugins/<插件>/views/<视图>/_t/<令牌>/`，页面内的相对路径会沿该前缀自然解析并继承令牌，内容按原样返回、不做重写。令牌与 Dashboard 会话同寿命，且只作用于对应插件的对应视图。
 
-会被重写的资源引用包括：
-
-- HTML `src` 和 `href`
-- CSS `url(...)`
-- JavaScript `import`
-- JavaScript `export ... from`
-- JavaScript 动态 `import()`
+不要手动拼接内容 URL，不要自行追加 `asset_token`，也不要依赖 `..` 逃逸视图根目录。旧版 `/api/plugin/page/content/...?asset_token=...` 形式仍可在过渡期内使用。
 
 如果构建 SPA，建议使用 hash routing。静态资源服务按真实文件路径解析；history routing 刷新页面时需要对应路径上真的存在文件。
 

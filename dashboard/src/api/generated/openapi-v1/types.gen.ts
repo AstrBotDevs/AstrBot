@@ -2402,6 +2402,25 @@ export type GetPluginViewAssetResponse = (unknown);
 
 export type GetPluginViewAssetError = unknown;
 
+export type GetPluginViewTokenAssetData = {
+    path: {
+        /**
+         * URL-encoded relative asset path.
+         */
+        asset_path: string;
+        page_name: string;
+        plugin_id: string;
+        /**
+         * Scoped plugin page asset token.
+         */
+        token: string;
+    };
+};
+
+export type GetPluginViewTokenAssetResponse = (unknown);
+
+export type GetPluginViewTokenAssetError = (unknown);
+
 export type GetPluginPageBridgeSdkResponse = (string);
 
 export type GetPluginPageBridgeSdkError = unknown;

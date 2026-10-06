@@ -611,15 +611,9 @@ Use normal relative paths:
 <img src="./assets/logo.svg" alt="" />
 ```
 
-AstrBot rewrites relative asset URLs and appends a short-lived `asset_token`. Do not hardcode `/api/plugin/page/content/...`, append `asset_token` yourself, or rely on `..` to escape the View root.
+AstrBot authenticates view assets with a path token: the `content_path` returned by the entry config endpoint looks like `/api/v1/plugins/<plugin>/views/<view>/_t/<token>/`, and relative URLs inside the page resolve under that prefix and inherit the token through normal URL resolution. Content is served as-is, without rewriting. The token lives as long as the dashboard session and is scoped to exactly that plugin and view.
 
-AstrBot rewrites:
-
-- HTML `src` and `href`
-- CSS `url(...)`
-- JavaScript `import`
-- JavaScript `export ... from`
-- JavaScript dynamic `import()`
+Do not hardcode content URLs, append `asset_token` yourself, or rely on `..` to escape the View root. The legacy `/api/plugin/page/content/...?asset_token=...` form keeps working during the transition period.
 
 If you build a SPA, prefer hash routing. The static asset server resolves real file paths; with history routing, refreshing a page requires a real file at that path.
 
