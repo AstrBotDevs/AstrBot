@@ -1,6 +1,6 @@
 """Tests for astrbot/core/computer module.
 
-This module tests the ComputerClient, Booter implementations (local, shipyard, boxlite),
+This module tests the ComputerClient, Booter implementations (local, shipyard),
 filesystem operations, Python execution, shell execution, and security restrictions.
 """
 
@@ -490,24 +490,6 @@ class TestShipyardBooter:
 
             result = await booter.available()
             assert result is False
-
-
-class TestBoxliteBooter:
-    """Tests for BoxliteBooter."""
-
-    @pytest.mark.asyncio
-    async def test_boxlite_booter_init(self):
-        """Test BoxliteBooter can be instantiated via __new__."""
-        # Need to mock boxlite module before importing
-        mock_boxlite = MagicMock()
-        mock_boxlite.SimpleBox = MagicMock()
-
-        with patch.dict(sys.modules, {"boxlite": mock_boxlite}):
-            from astrbot.core.computer.booters.boxlite import BoxliteBooter
-
-            # Just verify class exists and can be instantiated (boot is async)
-            booter = BoxliteBooter.__new__(BoxliteBooter)
-            assert booter is not None
 
 
 class TestComputerClient:

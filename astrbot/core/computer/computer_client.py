@@ -572,7 +572,7 @@ async def get_booter(
             # Clean up old booter before rebuilding so sandbox resources
             # on Bay (containers, volumes, networks) are not leaked.
             # Only ShipyardNeoBooter supports delete_sandbox; other booters
-            # (local, boxlite, cua, etc.) are not backed by a remote sandbox
+            # (local, cua, etc.) are not backed by a remote sandbox
             # manager and don't need it.
             try:
                 if booter_type == "shipyard_neo":
@@ -633,10 +633,6 @@ async def get_booter(
                 f"os_type={cua_kwargs['os_type']}, ttl={cua_kwargs['ttl']}"
             )
             client = CuaBooter(**cua_kwargs)
-        elif booter_type == "boxlite":
-            from .booters.boxlite import BoxliteBooter
-
-            client = BoxliteBooter()
         else:
             raise ValueError(f"Unknown booter type: {booter_type}")
 
