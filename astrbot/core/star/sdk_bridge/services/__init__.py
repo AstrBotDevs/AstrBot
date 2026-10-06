@@ -11,6 +11,7 @@ from .conversation import (
 )
 from .cron import CronScheduleService
 from .embed import LLMEmbedService
+from .events import EventStateService
 from .kb import KnowledgeBaseService
 from .llm import LLMGenerateService
 from .messages import MessageSendService
@@ -40,6 +41,7 @@ __all__ = [
     "MessageSendService",
     "PersonaWriteService",
     "PluginInspectService",
+    "EventStateService",
     "PlatformRawService",
     "RenderImageService",
     "SessionWaitService",

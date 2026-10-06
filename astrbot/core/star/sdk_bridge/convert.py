@@ -218,6 +218,9 @@ def to_sdk_event(
         timestamp=timestamp,
         command=command,
         is_wake=event.is_wake,
+        # waking_check fills plugins_name before handlers run; legacy plugins
+        # read it off the event, so carry it through the wire extras.
+        extras={"plugins_name": getattr(event, "plugins_name", None)},
     )
 
 

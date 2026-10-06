@@ -667,3 +667,131 @@ class TestPlugin(Plugin):
     with pytest.raises(Exception, match="parent path"):
         await bridge.start()
     await bridge.stop()
+
+
+def test_to_sdk_event_carries_plugins_name_extras() -> None:
+    event = FakeCoreEvent()
+    event.plugins_name = ["meme_manager", "astrbot"]
+
+    sdk_event = to_sdk_event(event)
+
+    assert sdk_event.extras["plugins_name"] == ["meme_manager", "astrbot"]
+
+    event.plugins_name = None
+    assert to_sdk_event(event).extras["plugins_name"] is None
+
+
+class _FakeInflightEvent:
+    """Stand-in for an in-flight Host AstrMessageEvent."""
+
+    def __init__(self) -> None:
+        self.call_llm = False
+        self.calls: list[tuple[str, dict]] = []
+
+    async def send_typing(self) -> None:
+        self.calls.append(("send_typing", {}))
+
+    async def stop_typing(self) -> None:
+        self.calls.append(("stop_typing", {}))
+
+    async def react(self, emoji: str) -> None:
+        self.calls.append(("react", {"emoji": emoji}))
+
+    async def get_group(self, group_id: str | None = None, **_kwargs: Any) -> Any:
+        from astrbot.core.platform.astrbot_message import Group
+
+        self.calls.append(("get_group", {"group_id": group_id}))
+        if group_id is None:
+            return None
+        return Group(group_id=group_id, group_name="G")
+
+
+@pytest.mark.asyncio
+async def test_event_state_service_set_call_llm() -> None:
+    from astrbot.core.star.sdk_bridge.services import EventStateService
+
+    first, second = _FakeInflightEvent(), _FakeInflightEvent()
+    inflight = {"webchat:FriendMessage:user-1": [first, second]}
+    service = EventStateService(inflight)
+
+    await service.handle(
+        "set_call_llm",
+        {"umo": "webchat:FriendMessage:user-1", "value": True},
+    )
+
+    assert first.call_llm is True
+    assert second.call_llm is True
+
+
+@pytest.mark.asyncio
+async def test_event_state_service_call_method() -> None:
+    from astrbot_sdk.errors import InvalidRequest, NotFound
+
+    from astrbot.core.star.sdk_bridge.services import EventStateService
+
+    event = _FakeInflightEvent()
+    service = EventStateService({"webchat:FriendMessage:user-1": [event]})
+
+    await service.handle(
+        "call_method",
+        {"umo": "webchat:FriendMessage:user-1", "method": "send_typing"},
+    )
+    await service.handle(
+        "call_method",
+        {
+            "umo": "webchat:FriendMessage:user-1",
+            "method": "react",
+            "args": {"emoji": "👍"},
+        },
+    )
+    assert event.calls == [
+        ("send_typing", {}),
+        ("react", {"emoji": "👍"}),
+    ]
+
+    result = await service.handle(
+        "call_method",
+        {
+            "umo": "webchat:FriendMessage:user-1",
+            "method": "get_group",
+            "args": {"group_id": "g-1"},
+        },
+    )
+    assert result["result"]["group_id"] == "g-1"
+    assert result["result"]["group_name"] == "G"
+
+    # Methods outside the allowlist never reach the event.
+    with pytest.raises(NotFound):
+        await service.handle(
+            "call_method",
+            {"umo": "webchat:FriendMessage:user-1", "method": "stop_event"},
+        )
+    # Without an in-flight event there is nothing to forward to.
+    with pytest.raises(NotFound):
+        await service.handle(
+            "call_method",
+            {"umo": "webchat:FriendMessage:nobody", "method": "send_typing"},
+        )
+    with pytest.raises(InvalidRequest):
+        await service.handle("call_method", {"method": "send_typing"})
+
+
+def test_snapshot_platform_entry_redacts_config() -> None:
+    from astrbot.core.star.sdk_bridge.snapshot import _platform_entries
+
+    instance = SimpleNamespace(
+        config={"appid": "123", "app_secret": "s3cret", "token": "abc"},
+    )
+    instance.meta = lambda: SimpleNamespace(
+        id="qq-1",
+        name="qq_official",
+        description="d",
+        adapter_display_name="QQ",
+    )
+
+    entries = _platform_entries([instance])
+
+    assert entries[0]["id"] == "qq-1"
+    assert entries[0]["config"]["appid"] == "123"
+    assert entries[0]["config"]["app_secret"] == ""
+    assert entries[0]["config"]["token"] == ""

@@ -68,6 +68,9 @@ def _platform_entries(instances: Any) -> list[dict[str, Any]]:
                 "name": str(meta.name),
                 "description": meta.description,
                 "adapter_display_name": meta.adapter_display_name,
+                # Legacy plugins read platform.config (e.g. the qq_official
+                # appid); ship it redacted like get_config does.
+                "config": _redact(getattr(instance, "config", None) or {}),
             }
         )
     return entries

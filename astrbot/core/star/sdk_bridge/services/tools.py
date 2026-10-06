@@ -6,6 +6,7 @@ from astrbot_sdk.errors import InvalidRequest, NotFound
 from astrbot_sdk.tools import ToolDefinition
 
 from astrbot.core.provider.register import llm_tools
+from astrbot.core.star.star import star_map
 
 
 class ToolRegisterService:
@@ -54,4 +55,13 @@ class ToolRegisterService:
                 raise InvalidRequest("unregister requires a tool name")
             llm_tools.remove_func(name)
             return {}
+        if operation in ("activate", "deactivate"):
+            name = payload.get("name")
+            if not isinstance(name, str) or not name:
+                raise InvalidRequest(f"{operation} requires a tool name")
+            if operation == "activate":
+                activated = await llm_tools.activate_llm_tool_async(name, star_map)
+                return {"activated": bool(activated)}
+            deactivated = await llm_tools.deactivate_llm_tool_async(name)
+            return {"deactivated": bool(deactivated)}
         raise NotFound(f"unknown tool operation: {operation}")

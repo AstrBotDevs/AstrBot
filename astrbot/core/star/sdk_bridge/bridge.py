@@ -44,6 +44,7 @@ from .services import (
     ConversationReadService,
     ConversationWriteService,
     CronScheduleService,
+    EventStateService,
     HostService,
     KnowledgeBaseService,
     LLMEmbedService,
@@ -113,6 +114,7 @@ _LEGACY_GRANT_IDS = (
     "web.route",
     "message.wait",
     "platform.raw",
+    "event.state",
     "config.write",
     "persona.write",
     "cron.schedule",
@@ -933,6 +935,7 @@ class SDKPluginBridge:
             AssetTransferService(store),
             PluginInspectService(),
             PlatformRawService(self.context),
+            EventStateService(self._inflight_events),
             ConfigWriteService(
                 lambda: self._plugin_config,
                 lambda: self.context.astrbot_config_mgr.ucr,
