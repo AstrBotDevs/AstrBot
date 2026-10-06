@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, watch } from "vue";
 import { RouterLink, RouterView, useRoute } from "vue-router";
 import {
   ChartNoAxesColumnIncreasing,
@@ -40,6 +40,16 @@ const tabs = computed(() => [
 ]);
 
 const activeTab = computed(() => String(route.meta.dataTab || "statistics"));
+
+// Remember the last opened tab so the sidebar entry can reopen it.
+watch(
+  activeTab,
+  (value) => {
+    const tab = tabs.value.find((item) => item.value === value);
+    if (tab) localStorage.setItem("data_last_tab", tab.routeName);
+  },
+  { immediate: true },
+);
 </script>
 
 <template>
