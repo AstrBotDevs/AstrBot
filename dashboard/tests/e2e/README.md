@@ -31,7 +31,10 @@ and temporarily saved by AstrBot. Do not commit this file or record network trac
 The caller owns and must delete the input credential file after the run.
 Without this variable, model/chat coverage is explicitly reported as **skipped**.
 
-Coverage: initial setup and real browser login, unauthenticated access rejection,
+Coverage: browser account setup on a fresh installation, restart before setup,
+invalid and repeated setup submissions, no automatic guide after skipping/login,
+manual Settings reentry, legacy welcome redirects, existing empty/adapter-only
+configuration upgrades and password resets without onboarding, unauthenticated access rejection,
 skip-all without configuration writes, adapter form validation, creation, prefill,
 unchanged save, draft discard, persisted edit, reopened configuration drawer editing,
 route-only save/skip and restart persistence, welcome exit, process restart,

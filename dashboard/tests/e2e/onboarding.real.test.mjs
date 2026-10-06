@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { once } from 'node:events';
-import { access, chmod, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { access, chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -105,11 +105,8 @@ test('onboarding against an isolated real AstrBot process', { timeout: 300000 },
     assert.equal((await api('/auth/setup-status')).setup_required, true);
     const denied = await fetch(`${base}/api/v1/system-config/runtime`);
     assert.ok([401, 403].includes(denied.status), 'Anonymous configuration access must be rejected');
-    const account = await api('/auth/setup', { method: 'POST', body: JSON.stringify({ username, password, confirm_password: password }) });
-    token = account.token;
-    assert.ok(token, 'Setup must issue a usable token');
-    assert.equal((await api('/auth/setup-status')).setup_required, false);
-    await api('/system-config/runtime');
+    await stopBackend();
+    await startBackend();
     browser = await chromium.launch({ headless: true, ...(process.env.ASTRBOT_E2E_BROWSER ? { executablePath: process.env.ASTRBOT_E2E_BROWSER } : {}) });
     const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, locale: 'en-US' });
     await context.addInitScript(() => {
@@ -122,12 +119,49 @@ test('onboarding against an isolated real AstrBot process', { timeout: 300000 },
       const url = new URL(request.url());
       if (url.origin === base && !['GET', 'HEAD', 'OPTIONS'].includes(request.method())) writes.push(url.pathname);
     });
+    await page.goto(`${base}/#/auth/onboarding`);
+    await page.getByLabel('New username', { exact: true }).waitFor();
+    assert.ok(page.url().endsWith('#/auth/setup'), 'Anonymous onboarding must go through account setup');
+    const rejectedSetup = await fetch(`${base}/api/v1/auth/setup`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password, confirm_password: 'mismatch' }) });
+    assert.notEqual((await rejectedSetup.json()).status, 'ok');
+    await page.getByLabel('New username', { exact: true }).fill(username);
+    await page.getByLabel('New password', { exact: true }).fill(password);
+    await page.getByLabel('Confirm new password', { exact: true }).fill(password);
+    const setupResponse = page.waitForResponse(response => new URL(response.url()).pathname === '/api/v1/auth/setup' && response.request().method() === 'POST');
+    await page.getByRole('button', { name: 'Complete Setup', exact: true }).click();
+    const account = (await (await setupResponse).json()).data;
+    token = account.token;
+    assert.ok(token, 'Setup must issue a usable token');
+    assert.equal(account.onboarding_required, true);
+    await page.getByRole('button', { name: 'Skip entire setup', exact: true }).waitFor();
+    assert.ok(page.url().endsWith('#/auth/onboarding'));
+    assert.equal((await api('/auth/setup-status')).setup_required, false);
+    const emptyConfig = JSON.parse((await readFile(join(root, 'data/cmd_config.json'), 'utf8')).replace(/^\uFEFF/, ''));
+    const repeatedSetup = await fetch(`${base}/api/v1/auth/setup`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ username, password, confirm_password: password }) });
+    assert.notEqual((await repeatedSetup.json()).status, 'ok', 'A second tab cannot repeat account setup');
+    t.diagnostic('PASS: fresh installation survives pre-setup restart and validation failure; browser setup enters onboarding once');
+
+    await page.getByRole('button', { name: 'Skip entire setup', exact: true }).click();
+    await page.waitForURL(url => url.hash === '#/data/statistics');
+    await page.reload();
+    await page.waitForURL(url => url.hash === '#/data/statistics');
+    await context.clearCookies();
+    await page.evaluate(() => localStorage.clear());
     await page.goto(`${base}/#/auth/login`);
     await page.locator('input[name="username"]').fill(username);
     await page.locator('input[name="password"]').fill(password);
     await page.locator('button[type="submit"]').click();
-    await page.waitForURL(url => !url.hash.startsWith('#/auth/login'));
+    await page.waitForURL(url => url.hash === '#/data/statistics');
     t.diagnostic('PASS: real setup, authorization and browser login');
+
+    await page.goto(`${base}/#/welcome`);
+    await page.reload();
+    await page.waitForURL(url => url.hash === '#/data/statistics');
+    await page.goto(`${base}/#/settings#settings-maintenance`);
+    await page.getByRole('link', { name: 'Reopen setup', exact: true }).click();
+    await page.getByRole('button', { name: 'Skip entire setup', exact: true }).waitFor();
 
     await page.goto(`${base}/#/auth/onboarding`);
     const beforeSkip = writes.length;
@@ -294,6 +328,34 @@ test('onboarding against an isolated real AstrBot process', { timeout: 300000 },
     }
     assert.deepEqual(errors, []);
     t.diagnostic('PASS: configuration survives process restart; browser has no uncaught errors');
+
+    for (const variant of ['legacy-empty', 'legacy-adapter-only', 'password-reset']) {
+      await page.goto('about:blank');
+      await stopBackend();
+      const existing = structuredClone(emptyConfig);
+      if (variant !== 'password-reset') delete existing.dashboard.onboarding_pending;
+      if (variant === 'legacy-adapter-only') existing.platform = [{ ...bots[0], enable: false }];
+      await writeFile(join(root, 'data/cmd_config.json'), JSON.stringify(existing), { mode: 0o600 });
+      env.ASTRBOT_RESET_DASHBOARD_PASSWORD = 'true';
+      await startBackend();
+      delete env.ASTRBOT_RESET_DASHBOARD_PASSWORD;
+      await context.clearCookies();
+      await page.goto(base);
+      await page.evaluate(() => localStorage.clear());
+      await page.goto(`${base}/#/auth/setup`);
+      await page.reload();
+      await page.getByLabel('New username', { exact: true }).fill(username);
+      await page.getByLabel('New password', { exact: true }).fill(password);
+      await page.getByLabel('Confirm new password', { exact: true }).fill(password);
+      const saved = page.waitForResponse(response => new URL(response.url()).pathname === '/api/v1/auth/setup' && response.request().method() === 'POST');
+      await page.getByRole('button', { name: 'Complete Setup', exact: true }).click();
+      const result = (await (await saved).json()).data;
+      assert.equal(result.onboarding_required, false, variant);
+      token = result.token;
+      await page.waitForURL(url => url.hash === '#/data/statistics');
+      assert.equal(await page.locator('.onboarding-setup').count(), 0);
+      t.diagnostic(`PASS: ${variant} changes password without automatic onboarding`);
+    }
   } catch (error) {
     if (page && process.env.ASTRBOT_E2E_SCREENSHOT) {
       await page.screenshot({ path: process.env.ASTRBOT_E2E_SCREENSHOT });

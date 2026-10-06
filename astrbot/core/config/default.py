@@ -267,6 +267,7 @@ DEFAULT_CONFIG = {
         "pbkdf2_password": "",
         "password_storage_upgraded": False,
         "password_change_required": False,
+        "onboarding_pending": False,
         "jwt_secret": "",
         "host": "0.0.0.0",
         "port": 6185,

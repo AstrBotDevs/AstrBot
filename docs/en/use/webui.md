@@ -34,7 +34,7 @@ For first-time login, AstrBot generates a random initial password and prints it 
 
 ## Getting Started
 
-After initial account setup succeeds, instances missing a chat model or platform continue directly to Getting Started. It uses the standalone account setup layout, with a step count such as "1 / 4" above the heading. Configured instances and regular logins go to the dashboard. Settings → Maintenance → Reopen setup opens the guide manually without resetting existing settings.
+Only a new installation with no existing configuration automatically enters Getting Started after account setup. This eligibility survives a restart before account setup and is consumed when setup succeeds. Upgraded installations, password resets, and subsequent logins go to the dashboard, even when models or platforms are missing or disabled. It uses the standalone account setup layout, with a step count such as "1 / 4" above the heading. Settings → Maintenance → Reopen setup opens the guide manually without resetting existing settings.
 
 ![Chat model step in Getting Started](/webui-onboarding-en.png)
 

@@ -1,5 +1,7 @@
 # Unreleased
 
+- Automatically open onboarding only after account setup on a new installation. Existing configurations, upgrades, password resets, and ordinary logins do not trigger it; manual reentry remains available in Settings.
+
 - WebUI onboarding now ends after four steps: usage notice, model setup, inline ChatUI, and messaging platform. Completing or skipping the platform step opens the welcome screen. Removed the plugin recommendations, computer-access step, and batch-application page, including their requests and state. Plugin installation remains under Plugins -> Plugin Marketplace; permissions remain under Config -> AI -> Capabilities -> Agent Computer Use.
 - Animate the two welcome stars along opposite curved paths with individual rotation, fading trails, and a static final logo. Respect reduced-motion preferences.
 - Restore the full platform editor on onboarding reentry, including configuration drawers and routing rules. Save route-only edits without rewriting the adapter; preserve route drafts after failures and discard them on skip.
