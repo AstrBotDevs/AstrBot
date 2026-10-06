@@ -33,7 +33,8 @@ Without this variable, model/chat coverage is explicitly reported as **skipped**
 
 Coverage: initial setup and real browser login, unauthenticated access rejection,
 skip-all without configuration writes, adapter form validation, creation, prefill,
-unchanged save, draft discard, persisted edit, welcome exit, process restart,
+unchanged save, draft discard, persisted edit, reopened configuration drawer editing,
+route-only save/skip and restart persistence, welcome exit, process restart,
 and (with credentials) real model creation/default selection, embedded streamed
 reply, minimal trial controls versus regular ChatUI, desktop/mobile layout,
 session preservation and model/history persistence across restart.

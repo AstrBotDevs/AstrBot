@@ -326,6 +326,7 @@
               </div>
               <div v-else>
                 <v-text-field
+                  v-if="!embedded"
                   :label="tm('createDialog.platformTypeLabel')"
                   variant="outlined"
                   rounded="md"
@@ -903,6 +904,7 @@ export default {
 
       // 平台路由表
       platformRoutes: [],
+      initialPlatformRoutes: null,
       isEditingRoutes: false, // 编辑模式开关
       knownRouteUmos: [],
       knownRouteUmoInfoMap: {},
@@ -934,6 +936,10 @@ export default {
     return { tm };
   },
   computed: {
+    routesChanged() {
+      return this.initialPlatformRoutes !== null &&
+        JSON.stringify(this.platformRoutes) !== this.initialPlatformRoutes;
+    },
     showDialog: {
       get() {
         return this.show;
@@ -1611,6 +1617,7 @@ export default {
 
     // 获取该平台适配器使用的所有配置文件（新版本：直接操作路由表）
     async getPlatformConfigs(platformId) {
+      this.initialPlatformRoutes = null;
       if (!platformId) {
         this.platformRoutes = [];
         return;
@@ -1652,9 +1659,11 @@ export default {
             configId: "default",
           });
         }
+        this.initialPlatformRoutes = JSON.stringify(this.platformRoutes);
       } catch (err) {
         console.error("获取平台路由配置失败:", err);
         this.platformRoutes = [];
+        if (this.embedded) this.showError(err.response?.data?.message || err.message);
       }
     },
 
@@ -1931,6 +1940,7 @@ export default {
       this.getConfigInfoList();
       this.getConfigForPreview(this.selectedAbConfId);
       if (
+        !this.embedded &&
         this.updatingMode &&
         this.updatingPlatformConfig &&
         this.updatingPlatformConfig.id

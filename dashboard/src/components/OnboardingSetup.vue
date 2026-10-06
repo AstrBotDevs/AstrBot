@@ -30,8 +30,9 @@
             :label="tm('guide.adapter')" variant="outlined" hide-details class="mb-4" :disabled="busy"
             @update:model-value="selectPlatform" />
           <div v-if="platformDraft" :inert="busy">
-            <AstrBotConfig :key="selectedPlatformId" :iterable="platformDraft"
-              :metadata="existingPlatformMetadata" metadataKey="platform" />
+            <AddNewPlatform :key="selectedPlatformId" ref="platformForm" embedded :show="true" updating-mode
+              :updating-platform-config="platformDraft" :metadata="existingPlatformMetadata" :config_data="platformConfig"
+              @show-toast="platformError = $event.type === 'error' ? $event.message : ''" />
           </div>
           <AddNewPlatform v-else ref="platformForm" embedded :show="true" :metadata="platformMetadata"
             :config_data="platformConfig" @refresh-config="loadPlatforms" @update:busy="busy = $event"
@@ -53,7 +54,7 @@
       <v-btn v-if="step > 1" variant="text" :disabled="busy || platformLoading"
         :aria-describedby="step === 4 ? 'guide-adapter-skip-hint' : undefined" @click="skipStep">{{ tm('onboard.skip') }}</v-btn>
       <v-btn variant="tonal" color="primary" append-icon="mdi-arrow-right" :loading="busy"
-        :disabled="platformLoading || (step === 2 && !modelForm?.ready) || (step === 3 && !modelReady) || (step === 4 && (platformDraft ? !platformReady : !platformForm?.canSave))" @click="nextStep">
+        :disabled="platformLoading || (step === 2 && !modelForm?.ready) || (step === 3 && !modelReady) || (step === 4 && (platformDraft ? !platformReady || !platformForm?.initialPlatformRoutes : !platformForm?.canSave))" @click="nextStep">
         {{ tm('guide.next') }}
       </v-btn>
       </template>
@@ -66,7 +67,6 @@ import { computed, nextTick, ref, watch } from 'vue';
 import { onBeforeRouteLeave, useRouter } from 'vue-router';
 import { botApi, configProfileApi, providerApi, systemConfigApi } from '@/api/v1';
 import { useModuleI18n } from '@/i18n/composables';
-import AstrBotConfig from '@/components/shared/AstrBotConfig.vue';
 import OnboardingModel from '@/components/OnboardingModel.vue';
 import AddNewPlatform from '@/components/platform/AddNewPlatform.vue';
 import StandaloneChat from '@/components/chat/StandaloneChat.vue';
@@ -89,9 +89,10 @@ const platformMetadata = ref<Record<string, any>>({});
 const existingPlatformMetadata = computed(() => {
   const metadata = platformMetadata.value.platform_group?.metadata || {};
   const platform = metadata.platform || {};
-  return { ...metadata, platform: { ...platform, items: {
+  return { ...platformMetadata.value, platform_group: { ...platformMetadata.value.platform_group, metadata: {
+    ...metadata, platform: { ...platform, items: {
     ...platform.items, id: { ...platform.items?.id, invisible: true },
-  } } };
+  } } } } };
 });
 const platformConfig = ref<Record<string, any>>({});
 const configuredPlatforms = computed(() => Array.isArray(platformConfig.value.platform)
@@ -181,9 +182,11 @@ function selectPlatform(id: string) {
 }
 
 async function savePlatform() {
-  if (!platformReady.value || !platformDraft.value) return;
+  if (!platformReady.value || !platformDraft.value || !platformForm.value?.initialPlatformRoutes) return;
   const original = configuredPlatforms.value.find(platform => platform.id === selectedPlatformId.value);
-  if (JSON.stringify(original) === JSON.stringify(platformDraft.value)) {
+  const adapterChanged = JSON.stringify(original) !== JSON.stringify(platformDraft.value);
+  const routesChanged = platformForm.value.routesChanged;
+  if (!adapterChanged && !routesChanged) {
     showWelcome();
     return;
   }
@@ -191,8 +194,11 @@ async function savePlatform() {
   platformError.value = '';
   try {
     const draft = JSON.parse(JSON.stringify(platformDraft.value));
-    const result = await botApi.update(selectedPlatformId.value, draft);
-    if (result.data.status !== 'ok') throw new Error(result.data.message || tm('guide.adapterSaveFailed'));
+    if (adapterChanged) {
+      const result = await botApi.update(selectedPlatformId.value, draft);
+      if (result.data.status !== 'ok') throw new Error(result.data.message || tm('guide.adapterSaveFailed'));
+    }
+    if (routesChanged) await platformForm.value.saveRoutesInternal();
     await loadPlatforms(draft.id);
   } catch (error: any) {
     platformError.value = error?.response?.data?.message || error?.message || tm('guide.adapterSaveFailed');
