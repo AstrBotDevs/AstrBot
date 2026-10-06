@@ -26,6 +26,11 @@
     "installFailed": "Installation failed.",
     "requestFailed": "Request failed."
   },
+  "exportLogs": {
+    "button": "Export Logs",
+    "hint": "Packs the log files under data/logs and the recent in-memory logs. Without \"Enable File Logging\", only the in-memory logs are included. Logs may contain chat messages and user IDs, so check them before sharing publicly.",
+    "failed": "Failed to export logs."
+  },
   "debugHint": {
     "text": "Debug logs can be enabled in \"Configuration File → System → Console Log Level\""
   }

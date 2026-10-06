@@ -1,6 +1,8 @@
 import asyncio
 import copy
+import io
 import json
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
@@ -4312,3 +4314,54 @@ async def test_v1_platform_webhook_preserves_tuple_response(
     assert response.status_code == 202
     assert response.headers["content-type"] == "text/plain"
     assert response.text == "accepted"
+
+
+@pytest.mark.asyncio
+async def test_v1_log_export_packs_log_files_and_memory_logs(
+    monkeypatch, tmp_path: Path, asgi_app, asgi_client: httpx.AsyncClient
+):
+    """The archive covers data/logs, configured log files elsewhere and memory logs."""
+    monkeypatch.setenv("ASTRBOT_ROOT", str(tmp_path))
+    logs_dir = tmp_path / "data" / "logs"
+    logs_dir.mkdir(parents=True)
+    (logs_dir / "event_loop_watchdog.log").write_text("watchdog", encoding="utf-8")
+    external_dir = tmp_path / "external"
+    external_dir.mkdir()
+    (external_dir / "custom.log").write_text("current", encoding="utf-8")
+    (external_dir / "custom.1.log").write_text("rotated", encoding="utf-8")
+    service = asgi_app.state.services.logs
+    service.config["log_file_enable"] = True
+    service.config["log_file_path"] = str(external_dir / "custom.log")
+    service.log_broker.publish(
+        {"level": "INFO", "time": 1.0, "data": "[INFO] hello", "category": "system"}
+    )
+    service.log_broker.publish(
+        {
+            "type": "trace",
+            "level": "TRACE",
+            "time": 2.0,
+            "span_id": "span-1",
+            "action": "start",
+            "fields": {},
+        }
+    )
+
+    response = await asgi_client.get("/api/v1/logs/export", headers=_jwt_headers())
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/zip"
+    assert "astrbot-logs-" in response.headers["content-disposition"]
+    with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+        assert sorted(archive.namelist()) == [
+            "external/custom.1.log",
+            "external/custom.log",
+            "logs/event_loop_watchdog.log",
+            "memory/logs.txt",
+            "memory/traces.jsonl",
+        ]
+        assert archive.read("external/custom.1.log") == b"rotated"
+        assert archive.read("logs/event_loop_watchdog.log") == b"watchdog"
+        assert archive.read("memory/logs.txt").decode() == "[INFO] hello\n"
+        traces = archive.read("memory/traces.jsonl").decode().splitlines()
+        assert [json.loads(line)["span_id"] for line in traces] == ["span-1"]
+    assert not any((tmp_path / "data" / "temp" / "log_exports").iterdir())

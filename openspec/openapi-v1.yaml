@@ -5141,6 +5141,21 @@ paths:
         "200":
           $ref: "#/components/responses/Text"
 
+  /api/v1/logs/export:
+    get:
+      tags: [Logs]
+      summary: Export log files and in-memory logs as a zip archive
+      operationId: exportLogs
+      x-astrbot-scope: system
+      responses:
+        "200":
+          description: Log archive
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+
   /api/v1/trace/settings:
     get:
       tags: [Logs]

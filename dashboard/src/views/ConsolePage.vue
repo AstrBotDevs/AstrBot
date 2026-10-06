@@ -2,6 +2,7 @@
 import { reactive, ref, watch } from "vue";
 import { PackagePlus } from "@lucide/vue";
 import ConsoleDisplayer from "@/components/shared/ConsoleDisplayer.vue";
+import LogExportButton from "@/components/shared/LogExportButton.vue";
 import { useModuleI18n } from "@/i18n/composables";
 import { useCustomizerStore } from "@/stores/customizer";
 import { updatesApi } from "@/api/v1";
@@ -79,6 +80,7 @@ async function pipInstall() {
             inset
             color="primary"
           />
+          <LogExportButton />
           <v-dialog v-model="pipDialog" width="440">
             <template #activator="{ props }">
               <v-btn
