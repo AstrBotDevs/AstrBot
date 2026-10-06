@@ -182,7 +182,7 @@ const isVuetifyIcon = computed(() => typeof props.item?.icon === 'string');
       </div>
       <div class="plugin-hover-card__row">
         <AppWindow :size="13" class="plugin-hover-card__icon" />
-        <span>{{ t('core.navigation.pluginPageType') }}</span>
+        <span>{{ t('core.navigation.pluginViewType') }}</span>
       </div>
     </div>
   </v-tooltip>
