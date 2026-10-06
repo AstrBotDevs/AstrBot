@@ -4373,7 +4373,7 @@
         }
       }
     },
-    "/api/v1/plugins/{plugin_id}/views/{page_name}": {
+    "/api/v1/plugins/{plugin_id}/views/{view_name}": {
       "get": {
         "tags": [
           "Plugin Views"
@@ -4386,7 +4386,7 @@
             "$ref": "#/components/parameters/PluginId"
           },
           {
-            "name": "page_name",
+            "name": "view_name",
             "in": "path",
             "required": true,
             "schema": {
@@ -4402,13 +4402,13 @@
         "description": "**Required scope:** `plugin`"
       }
     },
-    "/api/v1/plugins/{plugin_id}/pages/{page_name}": {
+    "/api/v1/plugins/{plugin_id}/pages/{view_name}": {
       "get": {
         "tags": [
           "Plugin Views"
         ],
-        "summary": "Get plugin view entry HTML (alias of /plugins/{plugin_id}/views/{page_name})",
-        "description": "Deprecated compatibility alias kept for a transition period. New clients should use /plugins/{plugin_id}/views/{page_name}.\n\n**Required scope:** `plugin`",
+        "summary": "Get plugin view entry HTML (alias of /plugins/{plugin_id}/views/{view_name})",
+        "description": "Deprecated compatibility alias kept for a transition period. New clients should use /plugins/{plugin_id}/views/{view_name}.\n\n**Required scope:** `plugin`",
         "operationId": "getPluginPage",
         "deprecated": true,
         "x-astrbot-scope": "plugin",
@@ -4417,7 +4417,7 @@
             "$ref": "#/components/parameters/PluginId"
           },
           {
-            "name": "page_name",
+            "name": "view_name",
             "in": "path",
             "required": true,
             "schema": {

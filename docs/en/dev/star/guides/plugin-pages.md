@@ -7,7 +7,7 @@ If you only need a small set of editable settings, prefer [`_conf_schema.json`](
 
 ## Directory Layout
 
-Each direct child directory under `views/` is one View. AstrBot only discovers `views/<page_name>/index.html`; directories without `index.html` are ignored.
+Each direct child directory under `views/` is one View. AstrBot only discovers `views/<view_name>/index.html`; directories without `index.html` are ignored.
 
 ```text
 astrbot_plugin_view_demo/
@@ -23,13 +23,13 @@ astrbot_plugin_view_demo/
       └─ index.html
 ```
 
-Use simple directory names for `page_name`, such as `settings` or `bridge-demo`. Do not use an empty name, `.`, `..`, a name starting with `.`, or a name containing `/` or `\`.
+Use simple directory names for `view_name`, such as `settings` or `bridge-demo`. Do not use an empty name, `.`, `..`, a name starting with `.`, or a name containing `/` or `\`.
 
 Users open views from the plugin detail page in the WebUI.
 
 ## Development Flow
 
-1. Create `views/<page_name>/index.html` in the plugin directory.
+1. Create `views/<view_name>/index.html` in the plugin directory.
 2. Use the `window.AstrBotPluginView` bridge from the View.
 3. Register backend APIs with `context.register_web_api()` in `main.py`.
 4. Read requests and return responses with `astrbot.api.web`.
@@ -540,7 +540,7 @@ window.addEventListener("beforeunload", () => {
 
 ## View Internationalization
 
-Plugin Views reuse plugin i18n resource files. Add `views.<page_name>` to `.astrbot-plugin/i18n/<locale>.json`:
+Plugin Views reuse plugin i18n resource files. Add `views.<view_name>` to `.astrbot-plugin/i18n/<locale>.json`:
 
 ```json
 {
@@ -638,7 +638,7 @@ Backend handlers must still validate input. Do not trust paths, filenames, forma
 
 ## Debugging Tips
 
-- View is missing: check that `views/<page_name>/index.html` exists, the plugin is enabled, and the plugin detail page has been refreshed.
+- View is missing: check that `views/<view_name>/index.html` exists, the plugin is enabled, and the plugin detail page has been refreshed.
 - Bridge is missing: make sure your script runs after the bridge SDK is injected; external `type="module"` scripts are recommended.
 - API is not matched: make sure the registered route includes the plugin name prefix, such as `/{PLUGIN_NAME}/stats`, while the View endpoint is `stats`.
 - Query or JSON is empty: pass GET values through `apiGet(endpoint, params)` and POST JSON through `apiPost(endpoint, body)`.

@@ -164,8 +164,8 @@ class PluginPageService:
             return None
 
         plugin_name = payload.get("plugin_name")
-        page_name = payload.get("page_name")
-        if not isinstance(plugin_name, str) or not isinstance(page_name, str):
+        view_name = payload.get("page_name")
+        if not isinstance(plugin_name, str) or not isinstance(view_name, str):
             return None
 
         plugin = self.get_plugin_metadata_by_name(plugin_name)
@@ -193,15 +193,15 @@ class PluginPageService:
         )
         page_title = (
             # "views" is the preferred i18n key prefix; "pages" stays as an alias.
-            self.get_by_path(locale_data, f"views.{page_name}.title")
-            or self.get_by_path(locale_data, f"pages.{page_name}.title")
-            or page_name
+            self.get_by_path(locale_data, f"views.{view_name}.title")
+            or self.get_by_path(locale_data, f"pages.{view_name}.title")
+            or view_name
         )
 
         return {
             "pluginName": plugin.name,
             "displayName": display_name,
-            "pageName": page_name,
+            "pageName": view_name,
             "pageTitle": page_title,
             "locale": resolved_locale,
             "i18n": plugin_i18n,
@@ -212,15 +212,15 @@ class PluginPageService:
         self,
         *,
         plugin_name: str | None,
-        page_name: str | None,
+        view_name: str | None,
         jwt_secret: str | None = None,
         username: str | None,
         locale: str,
     ) -> dict:
         if not plugin_name:
             raise PluginPageServiceError("缺少插件名")
-        if not page_name:
-            raise PluginPageServiceError("缺少 Page 名称")
+        if not view_name:
+            raise PluginPageServiceError("缺少 View 名称")
 
         plugin = self.get_plugin_metadata_by_name(plugin_name)
         if not plugin:
@@ -230,20 +230,20 @@ class PluginPageService:
 
         page = await self.serialize_plugin_page_for_request(
             plugin,
-            page_name,
+            view_name,
             include_content_path=True,
             jwt_secret=jwt_secret,
             username=username,
             locale=locale,
         )
         if not page:
-            raise PluginPageServiceError("插件 Page 不存在")
+            raise PluginPageServiceError("插件 View 不存在")
         return page
 
     async def serialize_plugin_page_for_request(
         self,
         plugin: StarMetadata,
-        page_name: str,
+        view_name: str,
         *,
         include_content_path: bool = False,
         jwt_secret: str | None = None,
@@ -256,7 +256,7 @@ class PluginPageService:
             asset_token = (
                 self.issue_plugin_page_asset_token(
                     plugin_name=plugin_name,
-                    page_name=page_name,
+                    view_name=view_name,
                     jwt_secret=jwt_secret or self._jwt_secret(),
                     username=username,
                     locale=locale,
@@ -265,7 +265,7 @@ class PluginPageService:
             )
         return await self.serialize_plugin_page(
             plugin,
-            page_name,
+            view_name,
             include_content_path=include_content_path,
             asset_token=asset_token,
         )
@@ -273,7 +273,7 @@ class PluginPageService:
     def prepare_plugin_page_query_params(
         self,
         plugin_name: str,
-        page_name: str,
+        view_name: str,
         *,
         asset_token: str,
         jwt_secret: str | None = None,
@@ -285,7 +285,7 @@ class PluginPageService:
             asset_token = (
                 self.issue_plugin_page_asset_token(
                     plugin_name=plugin_name,
-                    page_name=page_name,
+                    view_name=view_name,
                     jwt_secret=jwt_secret or self._jwt_secret(),
                     username=username,
                     locale=locale,
@@ -313,7 +313,7 @@ class PluginPageService:
     ) -> PluginPageContentPayload:
         if not self.bridge_file.is_file():
             raise PluginPageServiceError(
-                "Plugin Page bridge SDK not found",
+                "Plugin view bridge SDK not found",
                 status_code=404,
             )
         bridge_js = await self.read_plugin_page_text(self.bridge_file)
@@ -337,7 +337,7 @@ class PluginPageService:
         self,
         *,
         plugin_name: str,
-        page_name: str,
+        view_name: str,
         asset_path: str,
         asset_token: str,
         jwt_secret: str | None = None,
@@ -352,7 +352,7 @@ class PluginPageService:
             raise PluginPageServiceError("Plugin is disabled", status_code=403)
 
         try:
-            page = await self.get_plugin_page(plugin, page_name)
+            page = await self.get_plugin_page(plugin, view_name)
             file_path = await self.resolve_plugin_page_file(
                 plugin,
                 page.name,
@@ -360,7 +360,7 @@ class PluginPageService:
             )
         except (FileNotFoundError, ValueError) as exc:
             raise PluginPageServiceError(
-                "Plugin Page asset not found",
+                "Plugin view asset not found",
                 status_code=404,
             ) from exc
 
@@ -422,30 +422,30 @@ class PluginPageService:
         if normalized in {"", "."}:
             if allow_empty:
                 return ""
-            raise ValueError("Invalid plugin Page asset path")
+            raise ValueError("Invalid plugin view asset path")
         if (
             normalized.startswith("../")
             or normalized == ".."
             or normalized.startswith("/")
         ):
-            raise ValueError("Invalid plugin Page asset path")
+            raise ValueError("Invalid plugin view asset path")
         return normalized
 
     @staticmethod
     def normalize_plugin_page_name(raw_name: str) -> str:
-        page_name = raw_name.strip()
-        if not page_name:
-            raise ValueError("Invalid plugin Page name")
-        normalized = posixpath.normpath(page_name.replace("\\", "/"))
+        view_name = raw_name.strip()
+        if not view_name:
+            raise ValueError("Invalid plugin view name")
+        normalized = posixpath.normpath(view_name.replace("\\", "/"))
         if (
-            normalized != page_name
+            normalized != view_name
             or normalized in {".", ".."}
             or normalized.startswith(".")
-            or "/" in page_name
-            or "\\" in page_name
+            or "/" in view_name
+            or "\\" in view_name
         ):
-            raise ValueError("Invalid plugin Page name")
-        return page_name
+            raise ValueError("Invalid plugin view name")
+        return view_name
 
     def get_plugin_root_dir(self, plugin: StarMetadata) -> Path:
         if not plugin.root_dir_name:
@@ -488,7 +488,7 @@ class PluginPageService:
 
         for page_dir in page_dirs:
             try:
-                page_name = self.normalize_plugin_page_name(page_dir.name)
+                view_name = self.normalize_plugin_page_name(page_dir.name)
             except ValueError:
                 continue
             entry_path = page_dir / PLUGIN_PAGE_ENTRY_FILE_NAME
@@ -496,8 +496,8 @@ class PluginPageService:
                 continue
             pages.append(
                 PluginPage(
-                    name=page_name,
-                    title=page_name,
+                    name=view_name,
+                    title=view_name,
                     entry_file=PLUGIN_PAGE_ENTRY_FILE_NAME,
                 )
             )
@@ -506,34 +506,34 @@ class PluginPageService:
     async def get_plugin_page(
         self,
         plugin: StarMetadata,
-        page_name: str,
+        view_name: str,
     ) -> PluginPage:
-        normalized_name = self.normalize_plugin_page_name(page_name)
+        normalized_name = self.normalize_plugin_page_name(view_name)
         for page in await self.discover_plugin_pages(plugin):
             if page.name == normalized_name:
                 return page
-        raise FileNotFoundError("Plugin Page entry not found")
+        raise FileNotFoundError("Plugin view entry not found")
 
     async def resolve_plugin_page_root(
         self,
         plugin: StarMetadata,
-        page_name: str,
+        view_name: str,
     ) -> Path:
-        normalized_name = self.normalize_plugin_page_name(page_name)
+        normalized_name = self.normalize_plugin_page_name(view_name)
         pages_root = await self.resolve_plugin_pages_root(plugin)
         page_root = (pages_root / normalized_name).resolve(strict=False)
         page_root.relative_to(pages_root)
         if not await aio_ospath.isdir(str(page_root)):
-            raise FileNotFoundError("Plugin Page root directory does not exist")
+            raise FileNotFoundError("Plugin view root directory does not exist")
         return page_root
 
     async def resolve_plugin_page_file(
         self,
         plugin: StarMetadata,
-        page_name: str,
+        view_name: str,
         asset_path: str,
     ) -> Path:
-        page = await self.get_plugin_page(plugin, page_name)
+        page = await self.get_plugin_page(plugin, view_name)
         page_root = await self.resolve_plugin_page_root(plugin, page.name)
         target_name = (
             self.normalize_plugin_page_path(asset_path, allow_empty=True)
@@ -542,13 +542,13 @@ class PluginPageService:
         target_path = (page_root / target_name).resolve(strict=False)
         target_path.relative_to(page_root)
         if not await aio_ospath.isfile(str(target_path)):
-            raise FileNotFoundError("Plugin Page asset not found")
+            raise FileNotFoundError("Plugin view asset not found")
         return target_path
 
     @staticmethod
     def build_plugin_page_view_content_path(
         plugin_name: str,
-        page_name: str,
+        view_name: str,
         token: str,
         asset_path: str = "",
     ) -> str:
@@ -558,13 +558,13 @@ class PluginPageService:
         it through normal URL resolution, without content rewriting.
         """
         encoded_plugin_name = quote(plugin_name, safe="")
-        encoded_page_name = quote(
-            PluginPageService.normalize_plugin_page_name(page_name),
+        encoded_view_name = quote(
+            PluginPageService.normalize_plugin_page_name(view_name),
             safe="",
         )
         base = (
             f"/api/v1/plugins/{encoded_plugin_name}/views/"
-            f"{encoded_page_name}/_t/{quote(token, safe='')}"
+            f"{encoded_view_name}/_t/{quote(token, safe='')}"
         )
         if not asset_path:
             return base + "/"
@@ -635,7 +635,7 @@ class PluginPageService:
     async def serialize_plugin_page(
         self,
         plugin: StarMetadata,
-        page_name: str,
+        view_name: str,
         *,
         include_content_path: bool = False,
         asset_token: str = "",
@@ -644,7 +644,7 @@ class PluginPageService:
         if not plugin_name:
             return None
         try:
-            page = await self.get_plugin_page(plugin, page_name)
+            page = await self.get_plugin_page(plugin, view_name)
             await self.resolve_plugin_page_file(plugin, page.name, "")
         except (FileNotFoundError, ValueError):
             return None
@@ -679,7 +679,7 @@ class PluginPageService:
         self,
         *,
         plugin_name: str,
-        page_name: str,
+        view_name: str,
         jwt_secret: str | None = None,
         username: str | None,
         locale: str,
@@ -698,7 +698,7 @@ class PluginPageService:
             # one-shot presigned tokens (e.g. direct downloads).
             "purpose": "page_session",
             "plugin_name": plugin_name,
-            "page_name": page_name,
+            "page_name": view_name,
             "locale": locale,
             "iat": now,
             "exp": now + timedelta(seconds=PLUGIN_PAGE_ASSET_TOKEN_TTL_SECONDS),

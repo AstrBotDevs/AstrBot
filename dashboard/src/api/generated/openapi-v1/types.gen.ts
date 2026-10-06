@@ -2328,8 +2328,8 @@ export type ListPluginPagesError = unknown;
 
 export type GetPluginViewData = {
     path: {
-        page_name: string;
         plugin_id: string;
+        view_name: string;
     };
 };
 
@@ -2339,8 +2339,8 @@ export type GetPluginViewError = unknown;
 
 export type GetPluginPageData = {
     path: {
-        page_name: string;
         plugin_id: string;
+        view_name: string;
     };
 };
 
@@ -2354,12 +2354,12 @@ export type GetPluginViewTokenAssetData = {
          * URL-encoded relative asset path.
          */
         asset_path: string;
-        page_name: string;
         plugin_id: string;
         /**
          * Scoped plugin page asset token.
          */
         token: string;
+        view_name: string;
     };
 };
 

@@ -69,7 +69,7 @@ async def require_plugin_view_token(request: Request) -> str:
     token scoped to exactly the plugin and page named in the path.
 
     Args:
-        request: Current FastAPI request with plugin_id/page_name/token path
+        request: Current FastAPI request with plugin_id/view_name/token path
             params.
 
     Returns:
@@ -92,7 +92,7 @@ async def require_plugin_view_token(request: Request) -> str:
     if (
         payload.get("token_type") != PLUGIN_PAGE_ASSET_TOKEN_TYPE
         or payload.get("plugin_name") != request.path_params.get("plugin_id")
-        or payload.get("page_name") != request.path_params.get("page_name")
+        or payload.get("page_name") != request.path_params.get("view_name")
     ):
         raise ApiError("Token 无效", status_code=401)
 
@@ -326,13 +326,13 @@ async def _get_plugin_page_entry_config(
     page_service: PluginPageService,
     username: str | None,
     plugin_id: str | None,
-    page_name: str | None,
+    view_name: str | None,
 ):
     try:
         return ok(
             await page_service.get_plugin_page_entry_config(
                 plugin_name=plugin_id,
-                page_name=page_name,
+                view_name=view_name,
                 username=username,
                 locale=_get_request_locale(request),
             )
@@ -911,7 +911,7 @@ async def get_plugin_page_by_id(
         page_service=page_service,
         username=auth.username,
         plugin_id=plugin_id,
-        page_name=page_name,
+        view_name=page_name,
     )
 
 
@@ -1171,11 +1171,11 @@ async def list_plugin_pages(
     )
 
 
-@router.get("/plugins/{plugin_id}/views/{page_name}")
-@router.get("/plugins/{plugin_id}/pages/{page_name}")  # deprecated alias
+@router.get("/plugins/{plugin_id}/views/{view_name}")
+@router.get("/plugins/{plugin_id}/pages/{view_name}")  # deprecated alias
 async def get_plugin_page(
     plugin_id: str,
-    page_name: str,
+    view_name: str,
     request: Request,
     auth: AuthContext = Depends(require_plugin_scope),
     page_service: PluginPageService = Depends(get_page_service),
@@ -1185,15 +1185,15 @@ async def get_plugin_page(
         page_service=page_service,
         username=auth.username,
         plugin_id=plugin_id,
-        page_name=page_name,
+        view_name=view_name,
     )
 
 
-@router.get("/plugins/{plugin_id}/views/{page_name}/_t/{token}/")
-@router.get("/plugins/{plugin_id}/views/{page_name}/_t/{token}/{asset_path:path}")
+@router.get("/plugins/{plugin_id}/views/{view_name}/_t/{token}/")
+@router.get("/plugins/{plugin_id}/views/{view_name}/_t/{token}/{asset_path:path}")
 async def get_plugin_view_token_asset(
     plugin_id: str,
-    page_name: str,
+    view_name: str,
     token: str,
     request: Request,
     asset_path: str = "",
@@ -1208,7 +1208,7 @@ async def get_plugin_view_token_asset(
     try:
         payload = await page_service.serve_page_content(
             plugin_name=plugin_id,
-            page_name=page_name,
+            view_name=view_name,
             asset_path=asset_path,
             asset_token=request.query_params.get("asset_token", "").strip() or token,
             username=username,
@@ -1268,7 +1268,7 @@ async def dashboard_get_plugin_page_entry_config(
         page_service=page_service,
         username=username,
         plugin_id=request.query_params.get("name"),
-        page_name=request.query_params.get("page"),
+        view_name=request.query_params.get("page"),
     )
 
 

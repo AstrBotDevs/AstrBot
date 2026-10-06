@@ -274,13 +274,13 @@ Manage plugins, plugin configuration, plugin sources, and marketplace data.
 | `PATCH` | `/api/v1/plugins/{plugin_id}/enabled` | — |
 | `PUT` | `/api/v1/plugins/{plugin_id}/log-level` | — |
 | `GET` | `/api/v1/plugins/{plugin_id}/pages` | — |
-| `GET` | `/api/v1/plugins/{plugin_id}/pages/{page_name}` | — |
+| `GET` | `/api/v1/plugins/{plugin_id}/pages/{view_name}` | — |
 | `GET` | `/api/v1/plugins/{plugin_id}/readme` | — |
 | `POST` | `/api/v1/plugins/{plugin_id}/reload` | — |
 | `POST` | `/api/v1/plugins/{plugin_id}/source` | — |
 | `POST` | `/api/v1/plugins/{plugin_id}/update` | — |
 | `GET` | `/api/v1/plugins/{plugin_id}/views` | — |
-| `GET` | `/api/v1/plugins/{plugin_id}/views/{page_name}` | — |
+| `GET` | `/api/v1/plugins/{plugin_id}/views/{view_name}` | — |
 
 ## `mcp`
 

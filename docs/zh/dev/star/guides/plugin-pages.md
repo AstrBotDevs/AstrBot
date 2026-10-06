@@ -7,7 +7,7 @@
 
 ## 目录结构
 
-`views/` 下的每个一级子目录是一个独立视图。AstrBot 只扫描 `views/<page_name>/index.html`，没有 `index.html` 的目录会被忽略。
+`views/` 下的每个一级子目录是一个独立视图。AstrBot 只扫描 `views/<view_name>/index.html`，没有 `index.html` 的目录会被忽略。
 
 ```text
 astrbot_plugin_view_demo/
@@ -23,13 +23,13 @@ astrbot_plugin_view_demo/
       └─ index.html
 ```
 
-`page_name` 应使用简单目录名，例如 `settings`、`bridge-demo`。不要使用空目录名、`.`、`..`、以 `.` 开头的目录名，或包含 `/`、`\` 的名称。
+`view_name` 应使用简单目录名，例如 `settings`、`bridge-demo`。不要使用空目录名、`.`、`..`、以 `.` 开头的目录名，或包含 `/`、`\` 的名称。
 
 用户可以在 WebUI 的插件页点击插件卡片进入插件详情页，然后打开插件声明的可视化视图。
 
 ## 开发流程
 
-1. 在插件目录下创建 `views/<page_name>/index.html`。
+1. 在插件目录下创建 `views/<view_name>/index.html`。
 2. 在视图中通过 `window.AstrBotPluginView` bridge 调用后端能力。
 3. 在 `main.py` 中使用 `context.register_web_api()` 注册插件后端 API。
 4. 后端 handler 使用 `astrbot.api.web` 读取请求并返回响应。
@@ -540,7 +540,7 @@ window.addEventListener("beforeunload", () => {
 
 ##视图国际化
 
-插件可视化视图复用插件 i18n 资源文件。给 `.astrbot-plugin/i18n/<locale>.json` 增加 `views.<page_name>`：
+插件可视化视图复用插件 i18n 资源文件。给 `.astrbot-plugin/i18n/<locale>.json` 增加 `views.<view_name>`：
 
 ```json
 {
@@ -638,7 +638,7 @@ allow-scripts allow-forms allow-downloads
 
 ## 调试建议
 
--视图没出现：检查 `views/<page_name>/index.html` 是否存在、插件是否启用、插件详情页是否已刷新。
+-视图没出现：检查 `views/<view_name>/index.html` 是否存在、插件是否启用、插件详情页是否已刷新。
 - bridge 不存在：确认脚本在 bridge SDK 注入之后运行；推荐使用外部 `type="module"` 脚本。
 - API 未匹配：确认注册路由包含插件名前缀，例如 `/{PLUGIN_NAME}/stats`，而视图端 endpoint 是 `stats`。
 - query 或 JSON 为空：GET 参数放到 `apiGet(endpoint, params)`，POST JSON 放到 `apiPost(endpoint, body)`。

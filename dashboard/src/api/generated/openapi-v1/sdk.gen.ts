@@ -1710,19 +1710,19 @@ export const listPluginPages = <ThrowOnError extends boolean = false>(options: O
 export const getPluginView = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<GetPluginViewData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetPluginViewResponse, GetPluginViewError, ThrowOnError>({
         ...options,
-        url: '/api/v1/plugins/{plugin_id}/views/{page_name}'
+        url: '/api/v1/plugins/{plugin_id}/views/{view_name}'
     });
 };
 
 /**
  * @deprecated
- * Get plugin view entry HTML (alias of /plugins/{plugin_id}/views/{page_name})
- * Deprecated compatibility alias kept for a transition period. New clients should use /plugins/{plugin_id}/views/{page_name}.
+ * Get plugin view entry HTML (alias of /plugins/{plugin_id}/views/{view_name})
+ * Deprecated compatibility alias kept for a transition period. New clients should use /plugins/{plugin_id}/views/{view_name}.
  */
 export const getPluginPage = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<GetPluginPageData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetPluginPageResponse, GetPluginPageError, ThrowOnError>({
         ...options,
-        url: '/api/v1/plugins/{plugin_id}/pages/{page_name}'
+        url: '/api/v1/plugins/{plugin_id}/pages/{view_name}'
     });
 };
 
@@ -1733,7 +1733,7 @@ export const getPluginPage = <ThrowOnError extends boolean = false>(options: Opt
 export const getPluginViewTokenAsset = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<GetPluginViewTokenAssetData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetPluginViewTokenAssetResponse, GetPluginViewTokenAssetError, ThrowOnError>({
         ...options,
-        url: '/api/v1/plugins/{plugin_id}/views/{page_name}/_t/{token}/{asset_path}'
+        url: '/api/v1/plugins/{plugin_id}/views/{view_name}/_t/{token}/{asset_path}'
     });
 };
 
