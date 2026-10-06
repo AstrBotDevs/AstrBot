@@ -186,6 +186,10 @@ class PlatformManager:
                     from .sources.satori.satori_adapter import (
                         SatoriPlatformAdapter,  # noqa: F401
                     )
+                case "sendblue":
+                    from .sources.sendblue.sendblue_adapter import (
+                        SendblueAdapter,  # noqa: F401
+                    )
                 case "line":
                     from .sources.line.line_adapter import (
                         LinePlatformAdapter,  # noqa: F401

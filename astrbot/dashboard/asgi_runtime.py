@@ -189,13 +189,26 @@ class DashboardRequest:
         assert self._files_cache is not None
         return self._files_cache
 
-    async def get_data(self) -> bytes:
-        """Return the raw request body as bytes.
+    async def get_data(self, max_size: int | None = None) -> bytes:
+        """Return the request body, optionally limiting bytes read from the stream.
+
+        Args:
+            max_size: Maximum accepted body size, or None for existing behavior.
 
         Returns:
-            The raw body bytes of the request.
+            Raw request body bytes.
+
+        Raises:
+            ValueError: The streamed body exceeds max_size.
         """
-        return await self._request.body()
+        if max_size is None:
+            return await self._request.body()
+        body = bytearray()
+        async for chunk in self._request.stream():
+            if len(body) + len(chunk) > max_size:
+                raise ValueError("Request body exceeds the size limit")
+            body.extend(chunk)
+        return bytes(body)
 
 
 class DashboardWebSocket:

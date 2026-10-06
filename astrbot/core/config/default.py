@@ -86,6 +86,7 @@ WEBHOOK_SUPPORTED_PLATFORMS = [
     "slack",
     "lark",
     "line",
+    "sendblue",
 ]
 
 # 默认配置
@@ -513,6 +514,18 @@ CONFIG_METADATA_2 = {
                         "slack_webhook_port": 6197,
                         "slack_webhook_path": "/astrbot-slack-webhook/callback",
                     },
+                    "Sendblue": {
+                        "id": "sendblue",
+                        "type": "sendblue",
+                        "enable": True,
+                        "sendblue_api_key": "",
+                        "sendblue_api_secret": "",
+                        "sendblue_signing_secret": "",
+                        "sendblue_from_number": "",
+                        "sendblue_allow_from": [],
+                        "unified_webhook_mode": True,
+                        "webhook_uuid": "",
+                    },
                     "Line": {
                         "id": "line",
                         "type": "line",
@@ -676,6 +689,32 @@ CONFIG_METADATA_2 = {
                         },
                         "show_key": True,
                         "secret": True,
+                    },
+                    "sendblue_api_key": {
+                        "description": "Sendblue API key ID",
+                        "type": "string",
+                        "secret": True,
+                    },
+                    "sendblue_api_secret": {
+                        "description": "Sendblue API secret",
+                        "type": "string",
+                        "secret": True,
+                    },
+                    "sendblue_signing_secret": {
+                        "description": "Sendblue webhook signing secret",
+                        "type": "string",
+                        "secret": True,
+                        "hint": "The shared secret configured on the Sendblue receive webhook.",
+                    },
+                    "sendblue_from_number": {
+                        "description": "Assigned Sendblue line",
+                        "type": "string",
+                        "hint": "E.164 number, e.g. +15555550100. This is not your personal phone.",
+                    },
+                    "sendblue_allow_from": {
+                        "description": "Allowed sender numbers",
+                        "type": "list",
+                        "hint": "E.164 numbers. Empty denies all; * explicitly allows any sender.",
                     },
                     "channel_access_token": {
                         "description": "LINE 频道访问令牌",
