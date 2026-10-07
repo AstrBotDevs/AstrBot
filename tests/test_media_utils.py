@@ -606,6 +606,114 @@ async def test_media_resolver_cleans_http_target_when_download_fails(
     assert not list(tmp_path.iterdir())
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("media_type", ["image", "audio", "file"])
+async def test_media_resolver_rejects_directory_ref(tmp_path, media_type):
+    with pytest.raises(ValueError, match="not a regular file"):
+        await media_utils.MediaResolver(str(tmp_path), media_type=media_type).to_path()
+
+    with pytest.raises(ValueError, match="not a regular file"):
+        await media_utils.MediaResolver(tmp_path.as_uri(), media_type=media_type).to_path()
+
+
+@pytest.mark.asyncio
+async def test_media_resolver_rejects_unresolved_image_url_path():
+    ref = "/api/v1/files/tokens/ddbb1afd-84d9-4b1d-9b0e-5c7e6fe75684"
+
+    with pytest.raises(FileNotFoundError) as excinfo:
+        await media_utils.MediaResolver(ref, media_type="image").to_path()
+
+    assert ref in str(excinfo.value)
+
+
+@pytest.mark.asyncio
+async def test_media_resolver_rejects_missing_image_file_uri(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        await media_utils.MediaResolver(
+            (tmp_path / "missing.png").as_uri(),
+            media_type="image",
+        ).to_path()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("media_type", ["audio", "file"])
+async def test_media_resolver_keeps_pending_path_for_non_image(tmp_path, media_type):
+    # Platforms such as NapCat can hand over a path before the file is readable.
+    missing = str(tmp_path / "not-written-yet.amr")
+
+    resolved = await media_utils.MediaResolver(missing, media_type=media_type).to_path()
+
+    assert resolved == missing
+
+
+@pytest.mark.asyncio
+async def test_record_keeps_pending_local_path_for_platform_races(tmp_path):
+    # The STT stage retries this path until the platform finishes writing it.
+    missing = tmp_path / "not-written-yet.amr"
+
+    resolved = await Record(file=str(missing)).convert_to_file_path()
+
+    assert resolved == str(missing)
+
+
+@pytest.mark.asyncio
+async def test_image_base64_data_degrades_for_unresolved_ref_when_not_strict():
+    ref = "/api/v1/files/tokens/ddbb1afd-84d9-4b1d-9b0e-5c7e6fe75684"
+
+    assert await media_utils.resolve_image_ref_to_base64_data(ref) is None
+    assert await media_utils.MediaResolver(ref, media_type="image").to_data_url() is None
+
+    with pytest.raises(FileNotFoundError):
+        await media_utils.resolve_image_ref_to_base64_data(ref, strict=True)
+
+
+@pytest.mark.asyncio
+async def test_media_resolver_prefers_existing_file_over_base64(tmp_path):
+    # "abcd" is both a valid file name and a valid bare base64 payload.
+    image_path = tmp_path / "abcd"
+    image_path.write_bytes(b"not-really-an-image")
+
+    resolved = await media_utils.MediaResolver(
+        str(image_path),
+        media_type="image",
+    ).to_path()
+
+    assert resolved == str(image_path.resolve())
+
+
+@pytest.mark.asyncio
+async def test_media_resolver_still_materializes_bare_base64_image(tmp_path, monkeypatch):
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    payload = base64.b64encode(b"abcd").decode()
+
+    resolved = await media_utils.MediaResolver(payload, media_type="image").to_path()
+
+    assert Path(resolved).read_bytes() == b"abcd"
+
+
+@pytest.mark.asyncio
+async def test_media_resolver_follows_symlink_to_regular_file(tmp_path):
+    target = tmp_path / "target.png"
+    target.write_bytes(b"png-bytes")
+    link = tmp_path / "link.png"
+    try:
+        link.symlink_to(target)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks are not available in this environment")
+
+    resolved = await media_utils.MediaResolver(str(link), media_type="image").to_path()
+
+    assert resolved == str(link.resolve())
+
+
+def test_describe_media_ref_marks_unresolved_ref():
+    ref = "/api/v1/files/tokens/ddbb1afd-84d9-4b1d-9b0e-5c7e6fe75684"
+
+    assert media_utils.describe_media_ref(ref) == (
+        f"unresolved media ref name={Path(ref).name!r} len={len(ref)}"
+    )
+
+
 def test_describe_media_ref_does_not_include_payload_or_query():
     data_ref = "data:image/png;base64," + "A" * 128
     url_ref = "https://example.com/path/image.png?token=secret"

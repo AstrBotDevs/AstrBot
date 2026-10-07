@@ -538,6 +538,10 @@ class Image(BaseMessageComponent):
         Returns:
             str: 图片的本地路径，以绝对路径表示。
 
+        Raises:
+            FileNotFoundError: 图片引用既不是存在的本地文件，也不是可下载的 URL
+                或合法的 base64 数据。
+
         """
         url = self.url or self.file
         if not url:
