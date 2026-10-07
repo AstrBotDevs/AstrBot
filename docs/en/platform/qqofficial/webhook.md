@@ -17,7 +17,7 @@
 | Video | Yes | Yes | |
 | File | Yes | Yes | |
 
-Sending voice, video, and files is only available in group chats and private chats; in channels, only images are supported.
+Sending voice, video, and files is only available in group chats and message-list private chats; channel chats and channel direct messages only support images.
 
 Proactive message push: Supported.
 
