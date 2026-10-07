@@ -39,6 +39,8 @@ sudo docker exec -it astrbot astrbot password
 sudo docker restart astrbot # 修改后需要重启容器才能生效
 ```
 
+其中第一个 `astrbot` 是容器名，如果你的容器名不同，请相应替换（可通过 `sudo docker ps` 查看容器名）。
+
 如需同时修改用户名，可以加 `--username` 参数：`sudo docker exec -it astrbot astrbot password --username <新用户名>`。
 
 #### uv / pip 软件包部署

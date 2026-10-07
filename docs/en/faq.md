@@ -38,6 +38,8 @@ sudo docker exec -it astrbot astrbot password
 sudo docker restart astrbot # the new password takes effect after a restart
 ```
 
+The first `astrbot` is the container name; replace it with your actual container name (check with `sudo docker ps`).
+
 To also change the username, add the `--username` option: `sudo docker exec -it astrbot astrbot password --username <new-username>`.
 
 #### uv / pip Package Deployment

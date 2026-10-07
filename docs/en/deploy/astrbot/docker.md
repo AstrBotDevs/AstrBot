@@ -133,6 +133,8 @@ If you forget the dashboard password, you can reset it with the built-in AstrBot
 sudo docker exec -it astrbot astrbot password
 ```
 
+The first `astrbot` is the container name; replace it with your actual container name (check with `sudo docker ps`).
+
 Follow the prompt to enter a new password. To also change the username:
 
 ```bash

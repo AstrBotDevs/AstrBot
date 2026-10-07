@@ -149,6 +149,8 @@ docker run -itd -p 6185:6185 -p 6199:6199 -e TZ=Asia/Shanghai -v "${PWD}\data:/A
 sudo docker exec -it astrbot astrbot password
 ```
 
+其中第一个 `astrbot` 是容器名，如果你的容器名不同，请相应替换（可通过 `sudo docker ps` 查看容器名）。
+
 按提示输入新密码即可。如需同时修改用户名：
 
 ```bash
