@@ -147,7 +147,7 @@ class ContextManager:
             messages, tokens, self.config.max_context_tokens
         ):
             logger.warning(
-                f"Context still exceeds max tokens with only the latest round left"
-                f" ({tokens} tokens); sending it as is."
+                "Context still exceeds max tokens with only the latest round left; "
+                "sending it as is."
             )
         return messages
