@@ -273,7 +273,7 @@ class ChunkedUploadService:
                 size = await self._run_file_operation(
                     self._assemble_file, session, Path(dest)
                 )
-                await self._run_file_operation(self._cleanup_session_files, upload_id)
+                await self._cleanup_locked_session(session)
             except asyncio.CancelledError:
                 Path(dest).unlink(missing_ok=True)
                 raise
@@ -369,26 +369,40 @@ class ChunkedUploadService:
         if session is None:
             return
         async with session.lock:
-            await self._run_file_operation(self._cleanup_session_files, upload_id)
+            await self._cleanup_locked_session(session)
 
-    def _cleanup_session_files(self, upload_id: str) -> None:
-        """Remove session files under the session lock in a worker thread.
+    async def _cleanup_locked_session(self, session: UploadSession) -> None:
+        """Delete files off-loop and update the registry on the event-loop thread.
 
         Args:
-            upload_id: Session to remove; missing sessions are ignored.
+            session: Session whose lock is held by the caller.
         """
-        session = self.sessions.get(upload_id)
-        if session is None:
+        if self.sessions.get(session.id) is not session:
             return
-        if session.chunk_dir.exists():
+        if await self._run_file_operation(
+            self._cleanup_session_files, session.chunk_dir
+        ):
+            self.sessions.pop(session.id, None)
+
+    @staticmethod
+    def _cleanup_session_files(chunk_dir: Path) -> bool:
+        """Remove files without accessing the shared session registry.
+
+        Args:
+            chunk_dir: Directory owned by the locked session.
+
+        Returns:
+            Whether the directory is absent or was successfully removed.
+        """
+        if chunk_dir.exists():
             try:
-                shutil.rmtree(session.chunk_dir)
+                shutil.rmtree(chunk_dir)
             except Exception as exc:
-                logger.warning(f"Failed to remove chunk dir {session.chunk_dir}: {exc}")
+                logger.warning(f"Failed to remove chunk dir {chunk_dir}: {exc}")
                 # Keep the session registered so the janitor can retry the
                 # leftover directory instead of forgetting it permanently.
-                return
-        self.sessions.pop(upload_id, None)
+                return False
+        return True
 
     def ensure_cleanup_task_started(self) -> None:
         if self._cleanup_task is None or self._cleanup_task.done():
