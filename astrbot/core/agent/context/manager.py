@@ -3,6 +3,7 @@ from astrbot import logger
 from ..message import Message
 from .compressor import LLMSummaryCompressor, TruncateByTurnsCompressor
 from .config import ContextConfig
+from .round_utils import split_into_rounds
 from .token_counter import EstimateTokenCounter
 from .truncator import ContextTruncator
 
@@ -86,6 +87,11 @@ class ContextManager:
         """
         Compress/truncate the messages.
 
+        If the context still exceeds the limit after compression (for example
+        because the summary request failed), whole rounds are dropped, oldest
+        first, until it fits. The latest round is always kept, even when it
+        alone exceeds the limit.
+
         Args:
             messages: The original message list.
             prev_tokens: The token count before compression.
@@ -109,13 +115,39 @@ class ContextManager:
         )
 
         # last check
-        if self.compressor.should_compress(
+        if not self.compressor.should_compress(
             messages, tokens_after_summary, self.config.max_context_tokens
         ):
-            logger.info(
-                "Context still exceeds max tokens after compression, applying halving truncation..."
-            )
-            # still need compress, truncate by half
-            messages = self.truncator.truncate_by_halving(messages)
+            return messages
 
+        logger.info(
+            "Context still exceeds max tokens after compression, dropping the oldest rounds..."
+        )
+        # Drop whole rounds, oldest first, so that tool calls stay with their
+        # results, and recount after each one. The latest round is the current
+        # request and is always kept.
+        first_non_system = next(
+            (i for i, msg in enumerate(messages) if msg.role != "system"),
+            len(messages),
+        )
+        system_messages = messages[:first_non_system]
+        rounds = [
+            [seg for seg in rnd if isinstance(seg, Message)]
+            for rnd in split_into_rounds(messages[first_non_system:])
+        ]
+        tokens = tokens_after_summary
+        while len(rounds) > 1 and self.compressor.should_compress(
+            messages, tokens, self.config.max_context_tokens
+        ):
+            rounds.pop(0)
+            messages = system_messages + [msg for rnd in rounds for msg in rnd]
+            tokens = self.token_counter.count_tokens(messages)
+
+        if self.compressor.should_compress(
+            messages, tokens, self.config.max_context_tokens
+        ):
+            logger.warning(
+                f"Context still exceeds max tokens with only the latest round left"
+                f" ({tokens} tokens); sending it as is."
+            )
         return messages
