@@ -12,6 +12,11 @@ class CronServiceError(Exception):
     pass
 
 
+# Upper bound of delivery sessions per job, so one schedule cannot fan out
+# into an unbounded number of agent runs.
+_MAX_DELIVERY_SESSIONS = 20
+
+
 class CronService:
     def __init__(self, core_lifecycle: AstrBotCoreLifecycle) -> None:
         self.core_lifecycle = core_lifecycle
@@ -37,6 +42,10 @@ class CronService:
         data["note"] = payload.get("note") or data.get("description") or ""
         data["run_at"] = payload.get("run_at")
         data["run_once"] = data.get("run_once", False)
+        sessions = CronService._normalize_delivery_sessions(payload.get("sessions"))
+        if not sessions and payload.get("session"):
+            sessions = [str(payload.get("session"))]
+        data["sessions"] = sessions
         data.pop("status", None)
         return data
 
@@ -60,7 +69,17 @@ class CronService:
             name = payload.get("name") or "active_agent_task"
             cron_expression = payload.get("cron_expression")
             note = payload.get("note") or payload.get("description") or name
-            session = str(payload.get("session") or "").strip()
+            delivery_sessions = self._normalize_delivery_sessions(
+                payload.get("sessions")
+            )
+            if not delivery_sessions:
+                session = str(payload.get("session") or "").strip()
+                if session:
+                    delivery_sessions = [session]
+            else:
+                # The primary session keeps per-session config lookups and
+                # legacy payload readers working.
+                session = delivery_sessions[0]
             persona_id = payload.get("persona_id")
             provider_id = payload.get("provider_id")
             timezone_name = str(payload.get("timezone") or "").strip()
@@ -86,7 +105,8 @@ class CronService:
 
             run_at_dt = self._parse_optional_run_at(run_at)
             job_payload = {
-                "session": session,
+                "session": delivery_sessions[0] if delivery_sessions else "",
+                "sessions": delivery_sessions,
                 "note": note,
                 "persona_id": persona_id,
                 "provider_id": provider_id,
@@ -198,11 +218,20 @@ class CronService:
         if "payload" in payload and isinstance(payload.get("payload"), dict):
             merged_payload.update(payload["payload"])
 
-        if "session" in payload:
+        if "sessions" in payload:
+            sessions = self._normalize_delivery_sessions(payload.get("sessions"))
+        elif "session" in payload:
             session = str(payload.get("session") or "").strip()
-            if session:
-                merged_payload["session"] = session
+            sessions = [session] if session else []
+        else:
+            sessions = None
+
+        if sessions is not None:
+            if sessions:
+                merged_payload["sessions"] = sessions
+                merged_payload["session"] = sessions[0]
             else:
+                merged_payload.pop("sessions", None)
                 merged_payload.pop("session", None)
 
         self._merge_note(payload, job, merged_payload, updates)
@@ -242,6 +271,28 @@ class CronService:
         updates["run_once"] = next_run_once
         updates["cron_expression"] = next_cron_expression
         updates["payload"] = merged_payload
+
+    @staticmethod
+    def _normalize_delivery_sessions(raw: object) -> list[str]:
+        """Normalize the delivery sessions requested by an API caller.
+
+        Args:
+            raw: Raw sessions value from the request, expected to be a list.
+
+        Returns:
+            Stripped, de-duplicated session strings, capped at
+            ``_MAX_DELIVERY_SESSIONS`` entries. Empty for invalid input.
+        """
+        sessions: list[str] = []
+        if not isinstance(raw, list):
+            return sessions
+        for item in raw:
+            text = str(item or "").strip()
+            if text and text not in sessions:
+                sessions.append(text)
+            if len(sessions) >= _MAX_DELIVERY_SESSIONS:
+                break
+        return sessions
 
     @staticmethod
     def _merge_note(

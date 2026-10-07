@@ -14,6 +14,7 @@ The Main Agent can now manage a global **Cron Job List**, setting tasks for its 
 
 - **Self-Wakeup**: AstrBot automatically wakes up at the scheduled time to execute tasks.
 - **Task Feedback**: After execution, AstrBot reports the results back to the task creator.
+- **Multi-Target Delivery**: The "Deliver to" option in the WebUI supports selecting multiple sessions. When the task triggers, AstrBot executes it once per target session and delivers the result to each one, with each session keeping its own context.
 - **WebUI Management**: You can view, edit, or delete scheduled tasks in the WebUI under **More Features → Future Tasks**.
 
 ### How to Use

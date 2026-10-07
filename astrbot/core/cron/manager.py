@@ -388,39 +388,76 @@ class CronJobManager:
 
     async def _run_active_agent_job(self, job: CronJob, start_time: datetime) -> None:
         payload = job.payload or {}
-        delivery_session_str = str(payload.get("session") or "").strip()
-        session_str = delivery_session_str or str(
-            MessageSession(
-                platform_name="cron",
-                message_type=MessageType.OTHER_MESSAGE,
-                session_id=job.job_id,
-            )
-        )
+        delivery_sessions: list[str] = []
+        for raw in payload.get("sessions") or []:
+            text = str(raw or "").strip()
+            if text and text not in delivery_sessions:
+                delivery_sessions.append(text)
+        if not delivery_sessions:
+            # Legacy rows only carry a single payload["session"].
+            session_fallback = str(payload.get("session") or "").strip()
+            if session_fallback:
+                delivery_sessions = [session_fallback]
         note = payload.get("note") or job.description or job.name
 
-        extras = {
-            "cron_job": {
-                "id": job.job_id,
-                "name": job.name,
-                "type": job.job_type,
-                "run_once": job.run_once,
-                "description": job.description,
-                "note": note,
-                "run_started_at": start_time.isoformat(),
-                "run_at": (
-                    job.payload.get("run_at") if isinstance(job.payload, dict) else None
-                ),
-                "session": delivery_session_str,
-            },
-            "cron_payload": payload,
-        }
-
-        await self._woke_main_agent(
-            message=note,
-            session_str=session_str,
-            extras=extras,
-            delivery_session_str=delivery_session_str,
-        )
+        # Multi-target jobs wake the agent once per delivery session so each
+        # target keeps its own conversation history and receives its own
+        # delivery. Jobs without a delivery session still run once against a
+        # synthetic cron session. A single failing session must not stop the
+        # remaining ones; only a total failure marks the job as failed.
+        targets = delivery_sessions or [""]
+        failures = 0
+        first_exc: Exception | None = None
+        for delivery_session_str in targets:
+            session_str = delivery_session_str or str(
+                MessageSession(
+                    platform_name="cron",
+                    message_type=MessageType.OTHER_MESSAGE,
+                    session_id=job.job_id,
+                )
+            )
+            extras = {
+                "cron_job": {
+                    "id": job.job_id,
+                    "name": job.name,
+                    "type": job.job_type,
+                    "run_once": job.run_once,
+                    "description": job.description,
+                    "note": note,
+                    "run_started_at": start_time.isoformat(),
+                    "run_at": (
+                        job.payload.get("run_at")
+                        if isinstance(job.payload, dict)
+                        else None
+                    ),
+                    "session": delivery_session_str,
+                },
+                "cron_payload": payload,
+            }
+            try:
+                await self._woke_main_agent(
+                    message=note,
+                    session_str=session_str,
+                    extras=extras,
+                    delivery_session_str=delivery_session_str,
+                )
+            except Exception as e:  # noqa: BLE001
+                failures += 1
+                if first_exc is None:
+                    first_exc = e
+                logger.error(
+                    f"Cron job {job.job_id} failed for delivery session "
+                    f"{session_str}: {e!s}",
+                    exc_info=True,
+                )
+        if failures == len(targets):
+            if first_exc is not None and len(targets) == 1:
+                # Single-target jobs keep their original error message.
+                raise first_exc
+            raise RuntimeError(
+                f"Cron job {job.job_id} failed for all "
+                f"{len(targets)} delivery sessions. First error: {first_exc!s}"
+            ) from first_exc
 
     async def _woke_main_agent(
         self,

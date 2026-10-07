@@ -556,6 +556,129 @@ class TestRunActiveAgentJob:
     """Tests for active agent cron job execution."""
 
     @pytest.mark.asyncio
+    async def test_runs_once_per_delivery_session(self, cron_manager):
+        """A multi-target job wakes the agent once per delivery session."""
+        cron_manager._woke_main_agent = AsyncMock()
+        job = CronJob(
+            job_id="multi-job",
+            name="Multi",
+            job_type="active_agent",
+            cron_expression="0 9 * * *",
+            payload={"sessions": ["test:group:1", "test:group:2"]},
+            description="note",
+            enabled=True,
+        )
+
+        await cron_manager._run_active_agent_job(job, datetime.now(timezone.utc))
+
+        assert cron_manager._woke_main_agent.await_count == 2
+        first = cron_manager._woke_main_agent.await_args_list[0].kwargs
+        second = cron_manager._woke_main_agent.await_args_list[1].kwargs
+        assert first["session_str"] == "test:group:1"
+        assert first["delivery_session_str"] == "test:group:1"
+        assert second["session_str"] == "test:group:2"
+        assert second["delivery_session_str"] == "test:group:2"
+
+    @pytest.mark.asyncio
+    async def test_dedupes_delivery_sessions(self, cron_manager):
+        """Duplicate delivery sessions only wake the agent once."""
+        cron_manager._woke_main_agent = AsyncMock()
+        job = CronJob(
+            job_id="dup-job",
+            name="Dup",
+            job_type="active_agent",
+            cron_expression="0 9 * * *",
+            payload={"sessions": ["test:group:1", "test:group:1"]},
+            description="note",
+            enabled=True,
+        )
+
+        await cron_manager._run_active_agent_job(job, datetime.now(timezone.utc))
+
+        assert cron_manager._woke_main_agent.await_count == 1
+
+    @pytest.mark.asyncio
+    async def test_legacy_single_session_payload(self, cron_manager):
+        """Jobs without a sessions list fall back to the single session."""
+        cron_manager._woke_main_agent = AsyncMock()
+        job = CronJob(
+            job_id="legacy-job",
+            name="Legacy",
+            job_type="active_agent",
+            cron_expression="0 9 * * *",
+            payload={"session": "test:group:1"},
+            description="note",
+            enabled=True,
+        )
+
+        await cron_manager._run_active_agent_job(job, datetime.now(timezone.utc))
+
+        assert cron_manager._woke_main_agent.await_count == 1
+        kwargs = cron_manager._woke_main_agent.await_args.kwargs
+        assert kwargs["session_str"] == "test:group:1"
+        assert kwargs["delivery_session_str"] == "test:group:1"
+
+    @pytest.mark.asyncio
+    async def test_without_delivery_session_runs_on_synthetic_session(
+        self, cron_manager
+    ):
+        """Jobs without a delivery session still run once, untargeted."""
+        cron_manager._woke_main_agent = AsyncMock()
+        job = CronJob(
+            job_id="bare-job",
+            name="Bare",
+            job_type="active_agent",
+            cron_expression="0 9 * * *",
+            payload={},
+            description="note",
+            enabled=True,
+        )
+
+        await cron_manager._run_active_agent_job(job, datetime.now(timezone.utc))
+
+        assert cron_manager._woke_main_agent.await_count == 1
+        kwargs = cron_manager._woke_main_agent.await_args.kwargs
+        assert kwargs["session_str"] == "cron:OtherMessage:bare-job"
+        assert kwargs["delivery_session_str"] == ""
+
+    @pytest.mark.asyncio
+    async def test_partial_failure_still_runs_remaining_sessions(self, cron_manager):
+        """A failing session must not stop delivery to the other sessions."""
+        cron_manager._woke_main_agent = AsyncMock(
+            side_effect=[RuntimeError("boom"), None]
+        )
+        job = CronJob(
+            job_id="partial-job",
+            name="Partial",
+            job_type="active_agent",
+            cron_expression="0 9 * * *",
+            payload={"sessions": ["test:group:1", "test:group:2"]},
+            description="note",
+            enabled=True,
+        )
+
+        await cron_manager._run_active_agent_job(job, datetime.now(timezone.utc))
+
+        assert cron_manager._woke_main_agent.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_all_sessions_failed_raises(self, cron_manager):
+        """The job only fails when every delivery session failed."""
+        cron_manager._woke_main_agent = AsyncMock(side_effect=RuntimeError("boom"))
+        job = CronJob(
+            job_id="broken-job",
+            name="Broken",
+            job_type="active_agent",
+            cron_expression="0 9 * * *",
+            payload={"sessions": ["test:group:1", "test:group:2"]},
+            description="note",
+            enabled=True,
+        )
+
+        with pytest.raises(RuntimeError, match="failed for all"):
+            await cron_manager._run_active_agent_job(job, datetime.now(timezone.utc))
+
+    @pytest.mark.asyncio
     @pytest.mark.parametrize(
         ("session_config", "expected_plugins"),
         [

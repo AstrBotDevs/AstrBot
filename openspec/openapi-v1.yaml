@@ -6474,6 +6474,17 @@ components:
           type: string
         session:
           type: string
+          description: >-
+            Legacy single delivery session. Ignored when "sessions" is
+            provided and non-empty.
+        sessions:
+          type: array
+          items:
+            type: string
+          description: >-
+            Delivery sessions for the job. The job wakes the agent once per
+            session and delivers the result to each of them. Takes
+            precedence over "session".
         note:
           type: string
         description:
