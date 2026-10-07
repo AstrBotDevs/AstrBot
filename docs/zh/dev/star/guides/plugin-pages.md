@@ -7,7 +7,7 @@
 
 ## 目录结构
 
-`views/` 下的每个一级子目录是一个独立视图。AstrBot 只扫描 `views/<page_name>/index.html`，没有 `index.html` 的目录会被忽略。
+`views/` 下的每个一级子目录是一个独立视图。AstrBot 只扫描 `views/<view_name>/index.html`，没有 `index.html` 的目录会被忽略。
 
 ```text
 astrbot_plugin_view_demo/
@@ -23,13 +23,13 @@ astrbot_plugin_view_demo/
       └─ index.html
 ```
 
-`page_name` 应使用简单目录名，例如 `settings`、`bridge-demo`。不要使用空目录名、`.`、`..`、以 `.` 开头的目录名，或包含 `/`、`\` 的名称。
+`view_name` 应使用简单目录名，例如 `settings`、`bridge-demo`。不要使用空目录名、`.`、`..`、以 `.` 开头的目录名，或包含 `/`、`\` 的名称。
 
 用户可以在 WebUI 的插件页点击插件卡片进入插件详情页，然后打开插件声明的可视化视图。
 
 ## 开发流程
 
-1. 在插件目录下创建 `views/<page_name>/index.html`。
+1. 在插件目录下创建 `views/<view_name>/index.html`。
 2. 在视图中通过 `window.AstrBotPluginView` bridge 调用后端能力。
 3. 在 `main.py` 中使用 `context.register_web_api()` 注册插件后端 API。
 4. 后端 handler 使用 `astrbot.api.web` 读取请求并返回响应。
@@ -540,7 +540,7 @@ window.addEventListener("beforeunload", () => {
 
 ##视图国际化
 
-插件可视化视图复用插件 i18n 资源文件。给 `.astrbot-plugin/i18n/<locale>.json` 增加 `views.<page_name>`：
+插件可视化视图复用插件 i18n 资源文件。给 `.astrbot-plugin/i18n/<locale>.json` 增加 `views.<view_name>`：
 
 ```json
 {
@@ -611,15 +611,9 @@ body {
 <img src="./assets/logo.svg" alt="" />
 ```
 
-AstrBot 会重写相对资源路径并追加短期 `asset_token`。不要手动拼接 `/api/plugin/page/content/...`，不要自行追加 `asset_token`，也不要依赖 `..` 逃逸视图根目录。
+AstrBot 通过路径令牌（path token）为视图资源鉴权：入口配置接口返回的 `content_path` 形如 `/api/v1/plugins/<插件>/views/<视图>/_t/<令牌>/`，页面内的相对路径会沿该前缀自然解析并继承令牌，内容按原样返回、不做重写。令牌与 Dashboard 会话同寿命，且只作用于对应插件的对应视图。
 
-会被重写的资源引用包括：
-
-- HTML `src` 和 `href`
-- CSS `url(...)`
-- JavaScript `import`
-- JavaScript `export ... from`
-- JavaScript 动态 `import()`
+不要手动拼接内容 URL，不要自行追加 `asset_token`，也不要依赖 `..` 逃逸视图根目录。旧版 `/api/plugin/page/content/...?asset_token=...` 形式已被移除。
 
 如果构建 SPA，建议使用 hash routing。静态资源服务按真实文件路径解析；history routing 刷新页面时需要对应路径上真的存在文件。
 
@@ -644,7 +638,7 @@ allow-scripts allow-forms allow-downloads
 
 ## 调试建议
 
--视图没出现：检查 `views/<page_name>/index.html` 是否存在、插件是否启用、插件详情页是否已刷新。
+-视图没出现：检查 `views/<view_name>/index.html` 是否存在、插件是否启用、插件详情页是否已刷新。
 - bridge 不存在：确认脚本在 bridge SDK 注入之后运行；推荐使用外部 `type="module"` 脚本。
 - API 未匹配：确认注册路由包含插件名前缀，例如 `/{PLUGIN_NAME}/stats`，而视图端 endpoint 是 `stats`。
 - query 或 JSON 为空：GET 参数放到 `apiGet(endpoint, params)`，POST JSON 放到 `apiPost(endpoint, body)`。

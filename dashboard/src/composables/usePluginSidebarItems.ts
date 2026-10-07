@@ -3,7 +3,7 @@ import { pluginApi } from "@/api/v1";
 import type { menu } from "@/layouts/full/vertical-sidebar/sidebarItem";
 
 const DEFAULT_ICON = "mdi-puzzle";
-const GROUP_I18N_KEY = "core.navigation.pluginWebui";
+const GROUP_I18N_KEY = "core.navigation.pluginView";
 const GROUP_ICON = "mdi-puzzle-outline";
 
 interface PluginEntry {

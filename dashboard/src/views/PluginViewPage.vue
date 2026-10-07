@@ -15,7 +15,7 @@ const { tm } = useModuleI18n("features/extension");
 const {
   locale,
   pluginName: pluginDisplayName,
-  pluginPageTitle,
+  pluginViewTitle,
 } = usePluginI18n();
 const customizer = useCustomizerStore();
 
@@ -32,7 +32,7 @@ let iframeMessageOrigin = null;
 const pluginName = computed(() => String(route.params.pluginName || ""));
 const pageName = computed(() => String(route.params.pageName || ""));
 const localizedPageTitle = computed(() =>
-  pluginPageTitle(
+  pluginViewTitle(
     plugin.value,
     page.value || pageName.value,
     page.value?.title || pageName.value || tm("buttons.openPages"),
@@ -551,7 +551,7 @@ const handleIframeLoad = () => {
   sendIframeContext();
 };
 
-const loadPluginPage = async () => {
+const loadPluginView = async () => {
   loading.value = true;
   errorMessage.value = "";
   plugin.value = null;
@@ -564,7 +564,7 @@ const loadPluginPage = async () => {
     const detailResponse = await pluginApi.get(pluginName.value);
     if (detailResponse.data?.status === "error") {
       throw new Error(
-        detailResponse.data.message || tm("messages.pluginPageLoadFailed"),
+        detailResponse.data.message || tm("messages.pluginViewLoadFailed"),
       );
     }
 
@@ -582,7 +582,7 @@ const loadPluginPage = async () => {
     const entryResponse = await pluginApi.page(pluginName.value, pageName.value);
     if (entryResponse.data?.status === "error") {
       throw new Error(
-        entryResponse.data.message || tm("messages.pluginPageLoadFailed"),
+        entryResponse.data.message || tm("messages.pluginViewLoadFailed"),
       );
     }
 
@@ -592,7 +592,7 @@ const loadPluginPage = async () => {
       typeof pageEntry.content_path !== "string" ||
       !pageEntry.content_path.length
     ) {
-      errorMessage.value = tm("messages.pluginPageNotFound");
+      errorMessage.value = tm("messages.pluginViewNotFound");
       return;
     }
 
@@ -605,7 +605,7 @@ const loadPluginPage = async () => {
     errorMessage.value =
       error?.response?.data?.message ||
       error?.message ||
-      tm("messages.pluginPageLoadFailed");
+      tm("messages.pluginViewLoadFailed");
   } finally {
     loading.value = false;
   }
@@ -620,7 +620,7 @@ onBeforeUnmount(() => {
   cleanupSSEConnections();
 });
 
-watch([pluginName, pageName], loadPluginPage, { immediate: true });
+watch([pluginName, pageName], loadPluginView, { immediate: true });
 watch(locale, () => {
   sendIframeContext();
 });
@@ -630,13 +630,13 @@ watch(() => customizer.uiTheme, () => {
 </script>
 
 <template>
-  <div class="plugin-page-page">
-    <div v-if="loading" class="plugin-page-state">
+  <div class="plugin-view-page">
+    <div v-if="loading" class="plugin-view-state">
       <v-progress-circular indeterminate color="primary" />
       <span>{{ tm("status.loading") }}</span>
     </div>
 
-    <div v-else-if="errorMessage" class="plugin-page-state">
+    <div v-else-if="errorMessage" class="plugin-view-state">
       <v-alert type="error" variant="tonal" class="ma-6">
         {{ errorMessage }}
       </v-alert>
@@ -646,7 +646,7 @@ watch(() => customizer.uiTheme, () => {
       v-else
       ref="iframeRef"
       :src="iframeSrc"
-      class="plugin-page-frame"
+      class="plugin-view-frame"
       referrerpolicy="no-referrer"
       sandbox="allow-scripts allow-forms allow-downloads"
       @load="handleIframeLoad"
@@ -655,7 +655,7 @@ watch(() => customizer.uiTheme, () => {
 </template>
 
 <style scoped>
-.plugin-page-page {
+.plugin-view-page {
   position: absolute;
   top: 0;
   left: 0;
@@ -665,14 +665,14 @@ watch(() => customizer.uiTheme, () => {
   flex-direction: column;
 }
 
-.plugin-page-frame {
+.plugin-view-frame {
   width: 100%;
   flex: 1;
   border: 0;
   background: transparent;
 }
 
-.plugin-page-state {
+.plugin-view-state {
   flex: 1;
   display: flex;
   align-items: center;
