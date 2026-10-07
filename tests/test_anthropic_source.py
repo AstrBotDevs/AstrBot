@@ -1,6 +1,11 @@
-from anthropic.types import MessageDeltaUsage, Usage
+from types import SimpleNamespace
 
+import pytest
+from anthropic.types import Message, MessageDeltaUsage, TextBlock, Usage
+
+from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.provider.entities import TokenUsage
+from astrbot.core.provider.func_tool_manager import ToolSet
 from astrbot.core.provider.sources.anthropic_source import ProviderAnthropic
 
 
@@ -75,3 +80,99 @@ def test_anthropic_update_usage_omitted_fields_are_preserved():
     assert token_usage.input_other == 5
     assert token_usage.input_cached == 0
     assert token_usage.output == 7
+
+
+@pytest.mark.asyncio
+async def test_query_merges_custom_server_tools_with_registered_tools():
+    provider = ProviderAnthropic(
+        provider_config={
+            "id": "anthropic-test",
+            "type": "anthropic_chat_completion",
+            "model": "claude-test",
+            "key": ["test-key"],
+            "custom_extra_body": {
+                "tools": [{"type": "web_search_20250305", "name": "web_search"}],
+                "custom_flag": True,
+            },
+        },
+        provider_settings={},
+    )
+
+    captured: dict[str, object] = {}
+
+    class FakeMessages:
+        async def create(self, **kwargs):
+            captured.update(kwargs)
+            return Message(
+                id="msg_1",
+                content=[TextBlock(text="ok", type="text")],
+                model="claude-test",
+                role="assistant",
+                stop_reason="end_turn",
+                stop_sequence=None,
+                type="message",
+                usage=Usage(input_tokens=1, output_tokens=1),
+            )
+
+    provider.client = SimpleNamespace(messages=FakeMessages())
+
+    tool_set = ToolSet(
+        [
+            FunctionTool(
+                name="get_time",
+                description="Get the current time.",
+                parameters={"type": "object", "properties": {}},
+            )
+        ]
+    )
+
+    await provider._query({"model": "claude-test", "messages": []}, tool_set)
+
+    # Server-side tools from the custom body must coexist with the
+    # registered function tools instead of replacing them.
+    assert [tool["name"] for tool in captured["tools"]] == ["get_time", "web_search"]
+    assert "tools" not in captured["extra_body"]
+    assert captured["extra_body"]["custom_flag"] is True
+
+
+@pytest.mark.asyncio
+async def test_query_custom_tools_without_registered_tools_pass_through():
+    provider = ProviderAnthropic(
+        provider_config={
+            "id": "anthropic-test",
+            "type": "anthropic_chat_completion",
+            "model": "claude-test",
+            "key": ["test-key"],
+            "custom_extra_body": {
+                "tools": [{"type": "web_search_20250305", "name": "web_search"}],
+            },
+        },
+        provider_settings={},
+    )
+
+    captured: dict[str, object] = {}
+
+    class FakeMessages:
+        async def create(self, **kwargs):
+            captured.update(kwargs)
+            return Message(
+                id="msg_1",
+                content=[TextBlock(text="ok", type="text")],
+                model="claude-test",
+                role="assistant",
+                stop_reason="end_turn",
+                stop_sequence=None,
+                type="message",
+                usage=Usage(input_tokens=1, output_tokens=1),
+            )
+
+    provider.client = SimpleNamespace(messages=FakeMessages())
+
+    await provider._query({"model": "claude-test", "messages": []}, None)
+
+    # No registered tools: the custom body keeps its previous override
+    # semantics and goes out via extra_body untouched.
+    assert "tools" not in captured
+    assert captured["extra_body"]["tools"] == [
+        {"type": "web_search_20250305", "name": "web_search"}
+    ]

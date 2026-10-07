@@ -525,6 +525,14 @@ class ProviderAnthropic(Provider):
                 )
 
         extra_body = self.provider_config.get("custom_extra_body", {})
+        # Server-side tools declared in the custom body (e.g. web search on
+        # Anthropic-compatible endpoints) must coexist with the registered
+        # function tools: extra_body replaces same-named top-level keys,
+        # which would silently drop them.
+        custom_tools = extra_body.get("tools")
+        if isinstance(custom_tools, list) and isinstance(payloads.get("tools"), list):
+            payloads["tools"] = [*payloads["tools"], *custom_tools]
+            extra_body = {k: v for k, v in extra_body.items() if k != "tools"}
 
         if "max_tokens" not in payloads:
             payloads["max_tokens"] = 65536
@@ -629,6 +637,12 @@ class ProviderAnthropic(Provider):
         id = None
         usage = TokenUsage()
         extra_body = self.provider_config.get("custom_extra_body", {})
+        # See _query: custom server-side tools must not replace the
+        # registered function tools.
+        custom_tools = extra_body.get("tools")
+        if isinstance(custom_tools, list) and isinstance(payloads.get("tools"), list):
+            payloads["tools"] = [*payloads["tools"], *custom_tools]
+            extra_body = {k: v for k, v in extra_body.items() if k != "tools"}
         reasoning_content = ""
         reasoning_signature = ""
 
