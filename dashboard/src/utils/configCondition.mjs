@@ -30,11 +30,55 @@ export function isConfigValueEmpty(value) {
 }
 
 /**
+ * 递归深度相等：对象按键集合比较（顺序无关），数组按元素顺序比较（顺序有意义）。
+ * 用于 condition 未知运算符对象的回退判定。
+ *
+ * @param {*} a
+ * @param {*} b
+ * @returns {boolean}
+ */
+export function deepEqual(a, b) {
+  if (a === b) {
+    return true
+  }
+  if (a === null || b === null || typeof a !== 'object' || typeof b !== 'object') {
+    return false
+  }
+  if (Array.isArray(a) !== Array.isArray(b)) {
+    return false
+  }
+  if (Array.isArray(a)) {
+    if (a.length !== b.length) {
+      return false
+    }
+    for (let i = 0; i < a.length; i++) {
+      if (!deepEqual(a[i], b[i])) {
+        return false
+      }
+    }
+    return true
+  }
+  const keysA = Object.keys(a)
+  if (keysA.length !== Object.keys(b).length) {
+    return false
+  }
+  for (const key of keysA) {
+    if (!Object.prototype.hasOwnProperty.call(b, key)) {
+      return false
+    }
+    if (!deepEqual(a[key], b[key])) {
+      return false
+    }
+  }
+  return true
+}
+
+/**
  * 判断单条 condition 规则是否成立。
  *
  * - expected 为原始值（非对象）：保持旧语义，actualValue 必须严格相等。
  * - expected 为对象：按运算符求值，支持 `empty` / `notEmpty`。
- * - expected 为对象但不含已知运算符：退回深度相等，避免误显/误隐。
+ * - expected 为对象但不含已知运算符：退回深度相等（对象顺序无关、数组顺序有意义），避免误显/误隐。
  *
  * @param {*} actualValue 配置中实际取到的值（缺路径时为 undefined）
  * @param {*} expected condition 中声明的值或运算符对象
@@ -50,8 +94,8 @@ export function conditionRuleMatches(actualValue, expected) {
   if ('notEmpty' in expected) {
     return expected.notEmpty ? !isConfigValueEmpty(actualValue) : isConfigValueEmpty(actualValue)
   }
-  // 未知运算符对象：退回深度相等
-  return JSON.stringify(actualValue) === JSON.stringify(expected)
+  // 未知运算符对象：退回深度相等（对象顺序无关，数组顺序有意义）
+  return deepEqual(actualValue, expected)
 }
 
 /**

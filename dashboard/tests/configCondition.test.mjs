@@ -1,11 +1,11 @@
-import assert from "node:assert/strict";
-import test from "node:test";
+import assert from 'node:assert/strict';
+import test from 'node:test';
 
 import {
   isConfigValueEmpty,
   conditionRuleMatches,
   evaluateCondition,
-} from "../src/utils/configCondition.mjs";
+} from '../src/utils/configCondition.mjs';
 
 // ---- 向后兼容：原始值严格相等 ----
 
@@ -58,11 +58,17 @@ test("notEmpty: false 等价于 empty: true", () => {
   assert.equal(conditionRuleMatches("x", { notEmpty: false }), false);
 });
 
-// ---- 未知运算符对象退回深度相等 ----
+// ---- 未知运算符对象退回深度相等（对象顺序无关、数组顺序有意义）----
 
-test("未知运算符对象退回深度相等，避免误显/误隐", () => {
+test("未知运算符对象退回深度相等，对象键顺序无关、数组顺序有意义", () => {
   assert.equal(conditionRuleMatches({ a: 1 }, { a: 1 }), true);
   assert.equal(conditionRuleMatches({ a: 1 }, { a: 2 }), false);
+  // 键顺序不同但内容相同 → 应判定相等（修复 JSON.stringify 对键顺序敏感）
+  assert.equal(conditionRuleMatches({ b: 2, a: 1 }, { a: 1, b: 2 }), true);
+  assert.equal(conditionRuleMatches({ a: 1, b: 2 }, { b: 2, a: 1 }), true);
+  // 数组顺序有意义 → 顺序不同判定不等（这是正确的）
+  assert.equal(conditionRuleMatches([1, 2], [2, 1]), false);
+  assert.equal(conditionRuleMatches([1, 2], [1, 2]), true);
   assert.equal(conditionRuleMatches("x", {}), false);
 });
 
@@ -91,7 +97,7 @@ test("evaluateCondition 多键全满足才显示，并按键解析实际值", ()
     const keys = key.split(".");
     let cur = iterable;
     for (const k of keys) {
-      if (cur && typeof cur === "object" && k in cur) cur = cur[k];
+      if (cur && typeof cur === 'object' && k in cur) cur = cur[k];
       else return undefined;
     }
     return cur;
