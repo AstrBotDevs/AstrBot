@@ -28,9 +28,36 @@ Set dashboard.host in data/cmd_config.json to enable remote access.
 
 ### 管理面板的密码忘记了
 
-如果你忘记了 AstrBot 管理面板的密码，你可以直接使用CLI工具`astrbot password`来更改密码
+如果你忘记了 AstrBot 管理面板的密码，可以按照部署方式选择对应的方法重置。
 
-另外，你也可以在 `AstrBot/data/cmd_config.json` 配置文件中找到 `"dashboard"` 字段，如下：
+#### Docker 部署
+
+镜像内置了 AstrBot CLI，可以直接在容器内重置密码：
+
+```bash
+sudo docker exec -it astrbot astrbot password
+sudo docker restart astrbot # 修改后需要重启容器才能生效
+```
+
+其中第一个 `astrbot` 是容器名，如果你的容器名不同，请相应替换（可通过 `sudo docker ps` 查看容器名）。
+
+如需同时修改用户名，可以加 `--username` 参数：`sudo docker exec -it astrbot astrbot password --username <新用户名>`。
+
+#### uv / pip 软件包部署
+
+在 AstrBot 工作目录（即 `astrbot init` 初始化的目录）中执行：
+
+```bash
+astrbot password
+```
+
+如需同时修改用户名，可以加 `--username` 参数：`astrbot password --username <新用户名>`。
+
+然后重启 AstrBot 生效。
+
+#### 其他部署方式
+
+对于源码、面板类等没有可用 CLI 的部署方式，可以直接修改配置文件。在 `AstrBot/data/cmd_config.json` 配置文件中找到 `"dashboard"` 字段，如下：
 
 ```json
   "dashboard": {

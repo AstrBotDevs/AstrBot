@@ -27,9 +27,36 @@ Set dashboard.host in data/cmd_config.json to enable remote access.
 
 ### Forgot Dashboard Password
 
-If you forgot your AstrBot dashboard password, you can use the CLI tool `astrbot password` to change the password.
+If you forgot your AstrBot dashboard password, choose the reset method that matches your deployment method.
 
-Another approach you can take is to find the `"dashboard"` field in `AstrBot/data/cmd_config.json`, for example:
+#### Docker Deployment
+
+The image ships with the AstrBot CLI, so you can reset the password inside the container:
+
+```bash
+sudo docker exec -it astrbot astrbot password
+sudo docker restart astrbot # the new password takes effect after a restart
+```
+
+The first `astrbot` is the container name; replace it with your actual container name (check with `sudo docker ps`).
+
+To also change the username, add the `--username` option: `sudo docker exec -it astrbot astrbot password --username <new-username>`.
+
+#### uv / pip Package Deployment
+
+Run the following in the AstrBot working directory (the one initialized with `astrbot init`):
+
+```bash
+astrbot password
+```
+
+To also change the username, add the `--username` option: `astrbot password --username <new-username>`.
+
+Then restart AstrBot for the change to take effect.
+
+#### Other Deployment Methods
+
+For deployments without an available CLI (such as source or panel-based deployments), you can edit the config file directly. Find the `"dashboard"` field in `AstrBot/data/cmd_config.json`, for example:
 
 ```json
   "dashboard": {
