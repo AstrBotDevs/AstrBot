@@ -541,6 +541,8 @@ class Image(BaseMessageComponent):
         Raises:
             FileNotFoundError: 图片引用既不是存在的本地文件，也不是可下载的 URL
                 或合法的 base64 数据。
+            ValueError: 图片引用指向已存在但非普通文件的路径（例如目录），
+                或者 url/file 均为空。
 
         """
         url = self.url or self.file

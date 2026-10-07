@@ -483,7 +483,9 @@ async def _materialize_media_ref(
 
     Raises:
         FileNotFoundError: If an image reference is neither an existing file nor a
-            supported URL or base64 payload, or if a file URI does not exist.
+            supported URL or base64 payload, or if an image file URI does not
+            exist. Audio, video and file references do not raise for a missing
+            path; they return it so the caller can retry later.
         ValueError: If the reference points to an existing path that is not a
             regular file.
     """
