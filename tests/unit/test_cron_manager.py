@@ -1,5 +1,6 @@
 """Tests for CronJobManager."""
 
+import asyncio
 import json
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
@@ -676,6 +677,69 @@ class TestRunActiveAgentJob:
         )
 
         with pytest.raises(RuntimeError, match="failed for all"):
+            await cron_manager._run_active_agent_job(job, datetime.now(timezone.utc))
+
+    @pytest.mark.asyncio
+    async def test_slow_target_does_not_block_later_deliveries(self, cron_manager):
+        """Targets run concurrently so a slow session cannot stall the rest."""
+        started: list[str] = []
+        both_started = asyncio.Event()
+        stalled = False
+
+        async def fake_woke_main_agent(**kwargs):
+            nonlocal stalled
+            started.append(kwargs["delivery_session_str"])
+            if len(started) >= 2:
+                both_started.set()
+            try:
+                await asyncio.wait_for(both_started.wait(), timeout=1)
+            except TimeoutError:
+                # Sequential execution would reach this branch for the first
+                # target because the second one never gets to start.
+                stalled = True
+                raise
+
+        cron_manager._woke_main_agent = fake_woke_main_agent
+        job = CronJob(
+            job_id="parallel-job",
+            name="Parallel",
+            job_type="active_agent",
+            cron_expression="0 9 * * *",
+            payload={"sessions": ["test:group:1", "test:group:2"]},
+            description="note",
+            enabled=True,
+        )
+
+        await cron_manager._run_active_agent_job(job, datetime.now(timezone.utc))
+
+        assert stalled is False
+        assert sorted(started) == ["test:group:1", "test:group:2"]
+
+    @pytest.mark.asyncio
+    async def test_woke_main_agent_raises_on_invalid_session(self, cron_manager):
+        """A malformed target must surface as an error, not a silent skip."""
+        with pytest.raises(ValueError, match="Invalid session"):
+            await cron_manager._woke_main_agent(
+                message="note",
+                session_str="not-a-valid-session",
+                extras={},
+                delivery_session_str="not-a-valid-session",
+            )
+
+    @pytest.mark.asyncio
+    async def test_malformed_delivery_session_marks_job_failed(self, cron_manager):
+        """A job whose only target cannot be parsed is reported as failed."""
+        job = CronJob(
+            job_id="bad-session-job",
+            name="BadSession",
+            job_type="active_agent",
+            cron_expression="0 9 * * *",
+            payload={"sessions": ["not-a-valid-session"]},
+            description="note",
+            enabled=True,
+        )
+
+        with pytest.raises(ValueError, match="Invalid session"):
             await cron_manager._run_active_agent_job(job, datetime.now(timezone.utc))
 
     @pytest.mark.asyncio

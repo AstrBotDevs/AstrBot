@@ -224,15 +224,21 @@ class CronService:
             session = str(payload.get("session") or "").strip()
             sessions = [session] if session else []
         else:
-            sessions = None
+            # Nested payload fields (or the previously stored payload) may
+            # carry sessions too. Normalize them with the same de-duplication
+            # and cap so the scheduler can never fan out to more targets than
+            # the serialized payload exposes.
+            sessions = self._normalize_delivery_sessions(merged_payload.get("sessions"))
+            if not sessions:
+                session = str(merged_payload.get("session") or "").strip()
+                sessions = [session] if session else []
 
-        if sessions is not None:
-            if sessions:
-                merged_payload["sessions"] = sessions
-                merged_payload["session"] = sessions[0]
-            else:
-                merged_payload.pop("sessions", None)
-                merged_payload.pop("session", None)
+        if sessions:
+            merged_payload["sessions"] = sessions
+            merged_payload["session"] = sessions[0]
+        else:
+            merged_payload.pop("sessions", None)
+            merged_payload.pop("session", None)
 
         self._merge_note(payload, job, merged_payload, updates)
 

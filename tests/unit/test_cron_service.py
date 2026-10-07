@@ -251,6 +251,56 @@ async def test_update_job_clears_delivery_sessions() -> None:
     assert "session" not in call_kwargs["payload"]
 
 
+@pytest.mark.asyncio
+async def test_update_job_normalizes_nested_delivery_sessions() -> None:
+    """Sessions supplied inside the nested payload are deduped before saving."""
+    job = _active_job({"note": "old"})
+    updated = _active_job({"note": "old"})
+    cron_manager = SimpleNamespace(
+        db=SimpleNamespace(get_cron_job=AsyncMock(return_value=job)),
+        update_job=AsyncMock(return_value=updated),
+    )
+    service = _make_service(cron_manager)
+
+    await service.update_job(
+        "job-1",
+        {
+            "payload": {
+                "sessions": [
+                    "test:group:1",
+                    " ",
+                    "test:group:1",
+                    "test:group:2",
+                ]
+            }
+        },
+    )
+
+    call_kwargs = cron_manager.update_job.await_args.kwargs
+    assert call_kwargs["payload"]["sessions"] == ["test:group:1", "test:group:2"]
+    assert call_kwargs["payload"]["session"] == "test:group:1"
+
+
+@pytest.mark.asyncio
+async def test_update_job_caps_nested_delivery_sessions() -> None:
+    """Nested payload sessions respect the same target cap as top-level ones."""
+    job = _active_job({"note": "old"})
+    updated = _active_job({"note": "old"})
+    cron_manager = SimpleNamespace(
+        db=SimpleNamespace(get_cron_job=AsyncMock(return_value=job)),
+        update_job=AsyncMock(return_value=updated),
+    )
+    service = _make_service(cron_manager)
+
+    await service.update_job(
+        "job-1",
+        {"payload": {"sessions": [f"test:group:{i}" for i in range(30)]}},
+    )
+
+    call_kwargs = cron_manager.update_job.await_args.kwargs
+    assert len(call_kwargs["payload"]["sessions"]) == 20
+
+
 @pytest.mark.parametrize(
     ("payload", "expected_sessions"),
     [
