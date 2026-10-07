@@ -668,6 +668,46 @@ async def test_image_base64_data_degrades_for_unresolved_ref_when_not_strict():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["directory", "empty"])
+async def test_image_base64_data_degrades_for_non_regular_ref_when_not_strict(
+    tmp_path, kind
+):
+    ref = str(tmp_path) if kind == "directory" else ""
+
+    assert await media_utils.resolve_image_ref_to_base64_data(ref) is None
+    assert await media_utils.MediaResolver(ref, media_type="image").to_data_url() is None
+
+    with pytest.raises(ValueError):
+        await media_utils.resolve_image_ref_to_base64_data(ref, strict=True)
+
+
+@pytest.mark.asyncio
+async def test_media_resolver_materializes_oversized_bare_base64_image(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    # Past the Windows path limit stat() raises ValueError while pathlib's
+    # exists() reports False, so the payload must still be decoded and stored.
+    payload = base64.b64encode(b"\x89PNG\r\n\x1a\n" + b"a" * (30 * 1024)).decode()
+    assert len(payload) > 32767
+
+    resolved = await media_utils.MediaResolver(payload, media_type="image").to_path()
+
+    assert Path(resolved).read_bytes() == base64.b64decode(payload)
+
+
+@pytest.mark.asyncio
+async def test_media_resolver_keeps_oversized_pending_path_for_audio():
+    # An over-long reference is not a usable path, so audio keeps retrying it.
+    # to_path() additionally calls Path.resolve(), which rejects over-long
+    # Windows paths on its own, so assert at the materialization layer.
+    ref = "/api/v1/files/tokens/" + "a" * 40000
+
+    async with media_utils.MediaResolver(ref, media_type="audio").as_path() as resolved:
+        assert resolved.path == Path(ref)
+
+
+@pytest.mark.asyncio
 async def test_media_resolver_prefers_existing_file_over_base64(tmp_path):
     # "abcd" is both a valid file name and a valid bare base64 payload.
     image_path = tmp_path / "abcd"

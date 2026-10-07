@@ -528,7 +528,9 @@ async def _materialize_media_ref(
         path = Path(file_uri_to_path(media_ref))
         try:
             file_stat = path.stat()
-        except OSError:
+        except (OSError, ValueError):
+            # Mirror pathlib's exists(): Windows raises ValueError for over-long
+            # paths and embedded NUL bytes instead of an OSError.
             file_stat = None
         if file_stat is not None and not stat.S_ISREG(file_stat.st_mode):
             raise ValueError(f"media reference is not a regular file: {media_ref}")
@@ -593,7 +595,9 @@ async def _materialize_media_ref(
     path = Path(media_ref)
     try:
         local_stat = path.stat()
-    except OSError:
+    except (OSError, ValueError):
+        # Mirror pathlib's exists(): Windows raises ValueError for over-long
+        # paths and embedded NUL bytes instead of an OSError.
         local_stat = None
     if local_stat is not None:
         if not stat.S_ISREG(local_stat.st_mode):
@@ -859,7 +863,9 @@ class MediaResolver:
             # assembly relies on to skip bad image refs.
             try:
                 resolved = await self._resolve_path(target_format=target_format)
-            except OSError as exc:
+            except (OSError, ValueError) as exc:
+                # ValueError covers non-regular sources, which is_recoverable_image_error
+                # already treats as skippable.
                 if strict or not is_recoverable_image_error(exc):
                     raise
                 return None
