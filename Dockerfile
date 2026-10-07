@@ -29,7 +29,7 @@ RUN python -m pip install uv \
     && uv export --format requirements.txt --output-file requirements.txt --frozen \
     && uv pip install -r requirements.txt --no-cache-dir --system \
     && uv pip install socksio uv pilk --no-cache-dir --system \
-    && uv pip install . --no-deps --no-cache-dir --system \
+    && uv pip install -e . --no-deps --system \
     && touch /AstrBot/.astrbot
 
 EXPOSE 6185
