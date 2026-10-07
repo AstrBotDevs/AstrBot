@@ -31,6 +31,7 @@ from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, TokenUsage, ToolCallsResult
 from astrbot.core.utils.media_utils import (
     describe_media_ref,
+    normalize_image_for_provider,
     resolve_media_ref_to_base64_data,
 )
 from astrbot.core.utils.network_utils import (
@@ -188,7 +189,8 @@ class ProviderOpenAIOfficial(Provider):
             media_type="image",
             strict=mode == "strict",
         )
-        return image_data.to_data_url() if image_data else None
+        normalized = normalize_image_for_provider(image_data)
+        return normalized.to_data_url() if normalized else None
 
     async def _resolve_image_part(
         self,
