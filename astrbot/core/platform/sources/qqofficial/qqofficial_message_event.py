@@ -640,15 +640,30 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             if payload.get("msg_id"):
                 fallback_payload = payload.copy()
                 fallback_payload.pop("msg_id", None)
-                # 主动发送兜底同样去掉引用：引用 id 失效不应阻断正文送达
-                fallback_payload.pop("message_reference", None)
+                # 转主动发送时先保留引用：失败若与引用无关（如 markdown 校验），
+                # 引用上下文仍然有效，不应一并丢弃
                 try:
                     ret = await send_func(fallback_payload)
                     logger.info("[QQOfficial] 使用主动发送接口发送成功。")
                     return ret
                 except _QQOFFICIAL_SEND_API_ERRORS as fallback_err:
-                    err = fallback_err
-                    payload = fallback_payload
+                    if not fallback_payload.get("message_reference"):
+                        err = fallback_err
+                        payload = fallback_payload
+                    else:
+                        # 主动发送仍失败，引用 id 可能已失效；去掉引用最后重试一次，
+                        # 失效引用不应阻断正文送达
+                        retry_payload = fallback_payload.copy()
+                        retry_payload.pop("message_reference", None)
+                        try:
+                            ret = await send_func(retry_payload)
+                            logger.info(
+                                "[QQOfficial] 引用已失效，去掉引用后主动发送成功。"
+                            )
+                            return ret
+                        except _QQOFFICIAL_SEND_API_ERRORS as retry_err:
+                            err = retry_err
+                            payload = retry_payload
 
             if not isinstance(err, botpy.errors.ServerError):
                 raise

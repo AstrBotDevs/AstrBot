@@ -260,6 +260,15 @@ async def test_parse_to_qqofficial_extracts_reply_reference():
     assert parsed[7] == "quoted-1"
 
 
+@pytest.mark.asyncio
+async def test_parse_to_qqofficial_extracts_reply_reference_after_text():
+    parsed = await QQOfficialMessageEvent._parse_to_qqofficial(
+        MessageChain(chain=[Plain("hello"), Reply(id="quoted-1")])
+    )
+
+    assert parsed[7] == "quoted-1"
+
+
 @pytest.mark.parametrize(
     "chain",
     [
@@ -891,6 +900,58 @@ async def test_send_by_session_without_reply_adds_no_message_reference():
 
     kwargs = adapter.client.api.post_group_message.await_args.kwargs
     assert "message_reference" not in kwargs
+
+
+@pytest.mark.asyncio
+async def test_active_send_fallback_keeps_valid_message_reference():
+    calls = []
+
+    async def fake_send(payload):
+        calls.append(dict(payload))
+        if len(calls) == 1:
+            raise botpy.errors.ServerError("passive msg_id expired")
+        return {"id": "sent-active"}
+
+    payload = {
+        "content": "reply text",
+        "msg_type": 0,
+        "msg_id": "passive-1",
+        "message_reference": {"message_id": "quoted-1"},
+    }
+    ret = await QQOfficialMessageEvent._send_with_markdown_fallback(
+        fake_send, payload, "reply text"
+    )
+
+    assert ret == {"id": "sent-active"}
+    assert len(calls) == 2
+    assert "msg_id" not in calls[1]
+    assert calls[1]["message_reference"] == {"message_id": "quoted-1"}
+
+
+@pytest.mark.asyncio
+async def test_active_send_fallback_strips_reference_only_when_retry_fails():
+    calls = []
+
+    async def fake_send(payload):
+        calls.append(dict(payload))
+        if len(calls) < 3:
+            raise botpy.errors.ServerError("reference rejected")
+        return {"id": "sent-no-ref"}
+
+    payload = {
+        "content": "reply text",
+        "msg_type": 0,
+        "msg_id": "passive-1",
+        "message_reference": {"message_id": "quoted-1"},
+    }
+    ret = await QQOfficialMessageEvent._send_with_markdown_fallback(
+        fake_send, payload, "reply text"
+    )
+
+    assert ret == {"id": "sent-no-ref"}
+    assert len(calls) == 3
+    assert calls[1]["message_reference"] == {"message_id": "quoted-1"}
+    assert "message_reference" not in calls[2]
 
 
 @pytest.mark.asyncio
