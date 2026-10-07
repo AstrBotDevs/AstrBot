@@ -11,6 +11,7 @@ import httpx
 import pytest
 import pytest_asyncio
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.date import DateTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
@@ -18,6 +19,7 @@ from fastapi.responses import JSONResponse
 from astrbot.core.cron.manager import CronJobManager
 from astrbot.core.db.po import CronJob
 from astrbot.core.db.sqlite import SQLiteDatabase
+from astrbot.core.tools.cron_tools import FutureTaskTool
 from astrbot.dashboard.api import cron
 from astrbot.dashboard.responses import ApiError
 from astrbot.dashboard.services.cron_service import CronService, CronServiceError
@@ -166,6 +168,60 @@ async def test_interval_persistence_edits_and_restart(interval_store):
     )
     assert changed["interval_anchor_at"] is None
     assert isinstance(manager.scheduler.get_job(job_id).trigger, CronTrigger)
+
+
+@pytest.mark.parametrize(
+    ("switch", "trigger_type"),
+    [
+        ({"cron_expression": "0 9 * * *"}, CronTrigger),
+        ({"run_once": True, "run_at": "2030-01-01T09:00:00+00:00"}, DateTrigger),
+    ],
+)
+@pytest.mark.asyncio
+async def test_future_task_tool_edits_interval_job(
+    interval_store, switch, trigger_type
+):
+    """The agent tool keeps an interval on metadata edits and clears it on switch.
+
+    Args:
+        interval_store: Real database, scheduler, and service.
+        switch: Tool arguments that replace the interval schedule.
+        trigger_type: Scheduler trigger expected after the switch.
+    """
+    db, manager, _ = interval_store
+    job = await manager.add_active_job(
+        name="Reminder",
+        cron_expression=None,
+        payload={"session": "test:private:user", "sender_id": "user-1", "note": "Hi"},
+        interval_seconds=2400,
+    )
+    job_id = job.job_id
+    anchor = (await db.get_cron_job(job_id)).interval_anchor_at
+    next_run = manager.get_next_run_time(job_id)
+    context = SimpleNamespace(
+        context=SimpleNamespace(
+            context=SimpleNamespace(cron_manager=manager),
+            event=SimpleNamespace(
+                unified_msg_origin="test:private:user",
+                get_sender_id=lambda: "user-1",
+            ),
+        )
+    )
+    tool = FutureTaskTool()
+
+    result = await tool.call(context, action="edit", job_id=job_id, name="Renamed")
+    assert result == f"Updated future task {job_id} (Renamed)."
+    stored = await db.get_cron_job(job_id)
+    assert stored.interval_seconds == 2400
+    assert stored.interval_anchor_at == anchor
+    assert manager.get_next_run_time(job_id) == next_run
+
+    result = await tool.call(context, action="edit", job_id=job_id, **switch)
+    assert result == f"Updated future task {job_id} (Renamed)."
+    stored = await db.get_cron_job(job_id)
+    assert stored.interval_seconds is None
+    assert stored.interval_anchor_at is None
+    assert isinstance(manager.scheduler.get_job(job_id).trigger, trigger_type)
 
 
 @pytest.mark.parametrize("invalid", [0, -60, True, 60.0, 90.5, "60", 61, 2**31, 10**30])

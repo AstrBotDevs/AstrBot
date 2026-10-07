@@ -273,12 +273,16 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
                 cron_expression = None
                 payload["run_at"] = run_at_dt.isoformat()
             else:
-                if not cron_expression:
+                # Interval jobs have no Cron expression; keep their interval
+                # unless this edit switches them to Cron.
+                if not cron_expression and job.interval_seconds is None:
                     return "error: cron_expression is required when run_once=false."
                 payload.pop("run_at", None)
 
             updates["run_once"] = run_once
             updates["cron_expression"] = cron_expression
+            if job.interval_seconds is not None and (run_once or cron_expression):
+                updates["interval_seconds"] = None
             updates["payload"] = payload
 
             try:
