@@ -49,6 +49,8 @@ sudo docker restart astrbot # 修改后需要重启容器才能生效
 astrbot password
 ```
 
+如需同时修改用户名，可以加 `--username` 参数：`astrbot password --username <新用户名>`。
+
 然后重启 AstrBot 生效。也可以在启动时重置并在日志中打印新密码：`astrbot run --reset-password`。
 
 #### 其他部署方式
