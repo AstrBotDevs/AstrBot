@@ -50,7 +50,7 @@ astrbot password
 
 To also change the username, add the `--username` option: `astrbot password --username <new-username>`.
 
-Then restart AstrBot for the change to take effect. You can also reset the password at startup and print the new one in the logs: `astrbot run --reset-password`.
+Then restart AstrBot for the change to take effect.
 
 #### Other Deployment Methods
 

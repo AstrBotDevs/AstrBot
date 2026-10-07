@@ -51,7 +51,7 @@ astrbot password
 
 如需同时修改用户名，可以加 `--username` 参数：`astrbot password --username <新用户名>`。
 
-然后重启 AstrBot 生效。也可以在启动时重置并在日志中打印新密码：`astrbot run --reset-password`。
+然后重启 AstrBot 生效。
 
 #### 其他部署方式
 
