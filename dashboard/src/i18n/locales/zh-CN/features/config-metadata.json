@@ -345,6 +345,10 @@
           "files": "仅文件访问",
           "full": "不受限访问"
         },
+        "modeHints": {
+          "files": "可读写整个环境的文件，但不能执行 Shell/Python 代码或联网。",
+          "full": "可读写整个环境的文件，并可执行 Shell/Python 代码和联网。"
+        },
         "unsupportedSelection": "当前策略不受支持",
         "runtimeUnknown": "运行环境信息不可用。",
         "memberWarning": "普通成员已获得联网或整个环境访问权限。",
