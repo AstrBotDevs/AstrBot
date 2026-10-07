@@ -141,6 +141,23 @@ docker run -itd -p 6185:6185 -p 6199:6199 -e TZ=Asia/Shanghai -v "${PWD}\data:/A
 
 接下来，你需要部署任何一个消息平台，才能够实现在消息平台上使用 AstrBot。
 
+## 重置 Dashboard 密码
+
+如果忘记了 Dashboard 密码，可以通过容器内置的 AstrBot CLI 重置：
+
+```bash
+sudo docker exec -it astrbot astrbot password
+```
+
+按提示输入新密码即可。如需同时修改用户名：
+
+```bash
+sudo docker exec -it astrbot astrbot password --username <新用户名>
+```
+
+> [!TIP]
+> 修改后需要重启容器才能生效：`sudo docker restart astrbot`。
+
 ## 在 Docker 中配置 HTTP 代理
 
 AstrBot 的 HTTP 代理在 WebUI：`设置 → 网络 → 代理与依赖源 → HTTP 代理`。填写的地址由 **AstrBot 容器内部**访问，因此 `http://127.0.0.1:7890` 会连到 AstrBot 容器自己，而不是宿主机或其他容器。
