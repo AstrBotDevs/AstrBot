@@ -87,7 +87,9 @@ def test_anthropic_update_usage_omitted_fields_are_preserved():
     assert token_usage.output == 7
 
 
-def _tool_use_stream(partial_json_chunks: list[str]) -> bytes:
+def _tool_use_stream(
+    partial_json_chunks: list[str], start_input: dict | None = None
+) -> bytes:
     events = [
         {
             "type": "message_start",
@@ -109,7 +111,7 @@ def _tool_use_stream(partial_json_chunks: list[str]) -> bytes:
                 "type": "tool_use",
                 "id": "toolu_01",
                 "name": "get_time",
-                "input": {},
+                "input": start_input or {},
             },
         },
         *(
@@ -135,16 +137,18 @@ def _tool_use_stream(partial_json_chunks: list[str]) -> bytes:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("chunks", "expected_args"),
+    ("chunks", "start_input", "expected_args"),
     [
-        ([""], {}),
-        (["", '{"tz": "UTC"}'], {"tz": "UTC"}),
+        ([""], None, {}),
+        ([], None, {}),
+        (["", '{"tz": "UTC"}'], None, {"tz": "UTC"}),
+        ([], {"tz": "UTC"}, {"tz": "UTC"}),
     ],
 )
 async def test_anthropic_stream_keeps_tool_call_with_empty_input(
-    monkeypatch, chunks, expected_args
+    monkeypatch, chunks, start_input, expected_args
 ):
-    body = _tool_use_stream(chunks)
+    body = _tool_use_stream(chunks, start_input)
     transport = sdk_httpx.MockTransport(
         lambda request: sdk_httpx.Response(
             200, headers={"content-type": "text/event-stream"}, content=body

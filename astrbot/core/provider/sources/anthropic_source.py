@@ -665,10 +665,15 @@ class ProviderAnthropic(Provider):
                         )
                     elif event.content_block.type == "tool_use":
                         # 工具使用块开始，初始化缓冲区
+                        # Keep the input from the start event; streamed deltas
+                        # replace it only when they carry JSON.
+                        start_input = event.content_block.input
                         tool_use_buffer[event.index] = {
                             "id": event.content_block.id,
                             "name": event.content_block.name,
-                            "input": {},
+                            "input": start_input
+                            if isinstance(start_input, dict)
+                            else {},
                         }
 
                 elif event.type == "content_block_delta":
