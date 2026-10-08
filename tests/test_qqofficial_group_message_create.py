@@ -1253,3 +1253,42 @@ async def test_webhook_send_by_session_use_markdown_config_false_sends_content()
     assert kwargs["content"] == "webhook plain content"
     assert "markdown" not in kwargs
     assert "msg_type" not in kwargs
+
+
+@pytest.mark.asyncio
+async def test_markdown_fallback_active_retry_markdown_rejected_downgrades_to_plain_content():
+    # The passive send can fail for a non-markdown reason (expired msg_id) and
+    # the active retry then hit the markdown rejection. The downgrade must
+    # cover the active path too, otherwise the message is lost entirely.
+    calls = []
+
+    async def send_func(payload):
+        calls.append(dict(payload))
+        if len(calls) == 1:
+            raise botpy.errors.ServerError("msg_id expired")
+        if len(calls) == 2:
+            raise botpy.errors.ServerError(
+                f"50056 {QQOfficialMessageEvent.MARKDOWN_NOT_ALLOWED_ERROR}"
+            )
+        return {"id": "sent-ok"}
+
+    payload = {
+        "msg_id": "expired-msg",
+        "msg_type": 2,
+        "markdown": {"content": "**md**"},
+        "message_reference": {"message_id": "quoted-1"},
+    }
+
+    ret = await QQOfficialMessageEvent._send_with_markdown_fallback(
+        send_func, payload, "plain fallback"
+    )
+
+    assert ret == {"id": "sent-ok"}
+    assert len(calls) == 3
+    assert calls[0]["msg_id"] == "expired-msg"
+    assert "msg_id" not in calls[1]
+    assert calls[1]["markdown"] == {"content": "**md**"}
+    assert "markdown" not in calls[2]
+    assert calls[2]["content"] == "plain fallback"
+    assert calls[2]["msg_type"] == 0
+    assert calls[2]["message_reference"] == {"message_id": "quoted-1"}

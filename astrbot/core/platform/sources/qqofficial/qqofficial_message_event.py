@@ -696,6 +696,34 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     logger.info("[QQOfficial] 使用主动发送接口发送成功。")
                     return ret
                 except _QQOFFICIAL_SEND_API_ERRORS as fallback_err:
+                    # The passive send may have failed for a non-markdown reason
+                    # (e.g. expired msg_id), so the active retry can still hit the
+                    # markdown rejection. Downgrade to plain content here too,
+                    # otherwise the message is lost entirely.
+                    if (
+                        isinstance(fallback_err, botpy.errors.ServerError)
+                        and QQOfficialMessageEvent.MARKDOWN_NOT_ALLOWED_ERROR
+                        in str(fallback_err)
+                        and fallback_payload.get("markdown")
+                        and plain_text
+                    ):
+                        logger.warning(
+                            "[QQOfficial] Active send markdown rejected, falling back to plain content."
+                        )
+                        downgrade_payload = fallback_payload.copy()
+                        downgrade_payload.pop("markdown", None)
+                        downgrade_payload["content"] = plain_text
+                        if downgrade_payload.get("msg_type") == 2:
+                            downgrade_payload["msg_type"] = 0
+                        if stream:
+                            downgrade_content = cast(
+                                str, downgrade_payload.get("content") or ""
+                            )
+                            if downgrade_content and not downgrade_content.endswith(
+                                "\n"
+                            ):
+                                downgrade_payload["content"] = downgrade_content + "\n"
+                        return await send_func(downgrade_payload)
                     if not fallback_payload.get("message_reference"):
                         raise fallback_err from err
                     # 主动发送仍失败，引用 id 可能已失效；去掉引用最后重试一次，
