@@ -1989,7 +1989,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Resumed server-sent chat stream or an error envelope"
+            "description": "Resumed server-sent chat stream or an error envelope. The initial run_snapshot event includes data.messages in delivery order, with persisted message IDs and timestamps. A final message without an ID is still being generated. data.content remains the combined reply. For non-streaming replies, complete marks the end of a message chain and carries empty data; message_saved then identifies the whole message, including all of its text and attachment components."
           }
         },
         "description": "**Required scope:** `chat`"
