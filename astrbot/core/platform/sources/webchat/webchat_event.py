@@ -148,12 +148,17 @@ class WebChatMessageEvent(AstrMessageEvent):
             else:
                 logger.debug(f"webchat 忽略: {comp.type}")
 
-        if emit_complete:
+        if emit_complete or (
+            not streaming
+            and message.type
+            not in ("reasoning", "tool_call", "tool_call_result", "agent_stats")
+        ):
+            # A non-streaming send is one message, even with multiple components.
             await webchat_queue_mgr.put_back_queue(
                 request_id,
                 {
                     "type": "complete",
-                    "data": data,
+                    "data": data if streaming else "",
                     "streaming": streaming,
                     "chain_type": message.type,
                     "message_id": message_id,
