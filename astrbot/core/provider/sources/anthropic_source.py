@@ -1,4 +1,5 @@
 import base64
+import builtins
 import json
 from collections.abc import AsyncGenerator
 from typing import Any, Literal
@@ -657,7 +658,7 @@ class ProviderAnthropic(Provider):
             merged = {}
             for tool in [*payloads["tools"], *custom_tools]:
                 key = tool.get("name") if isinstance(tool, dict) else None
-                merged[key if key else ("_", id(tool))] = tool
+                merged[key if key else ("_", builtins.id(tool))] = tool
             payloads["tools"] = list(merged.values())
             extra_body = {k: v for k, v in extra_body.items() if k != "tools"}
         reasoning_content = ""

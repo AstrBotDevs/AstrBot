@@ -2,6 +2,7 @@ import json
 from types import SimpleNamespace
 
 import pytest
+from anthropic import BadRequestError
 from anthropic import _base_client as anthropic_base_client
 from anthropic.types import Message, MessageDeltaUsage, TextBlock, Usage
 
@@ -394,3 +395,74 @@ async def test_anthropic_stream_keeps_tool_call_with_empty_input(
         assert response.tools_call_name == ["get_time"]
         assert response.tools_call_args == [expected_args]
         assert response.tools_call_ids == ["toolu_01"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True], ids=["standard", "stream"])
+@pytest.mark.parametrize(
+    "custom_tool",
+    [{}, {"name": ""}, {"name": None}, None, "invalid", 0, False],
+    ids=["missing-name", "empty-name", "null-name", "null", "string", "zero", "false"],
+)
+async def test_malformed_custom_tools_reach_api_validation(
+    monkeypatch, streaming, custom_tool
+):
+    captured = []
+
+    def handle(request):
+        captured.append(json.loads(request.content))
+        return sdk_httpx.Response(
+            400,
+            json={
+                "type": "error",
+                "error": {"type": "invalid_request_error", "message": "Invalid tool"},
+            },
+        )
+
+    monkeypatch.setattr(
+        ProviderAnthropic,
+        "_create_http_client",
+        lambda self, config: sdk_httpx.AsyncClient(
+            transport=sdk_httpx.MockTransport(handle)
+        ),
+    )
+    custom_tools = [custom_tool, {"type": "unnamed"}]
+    provider = ProviderAnthropic(
+        {
+            "id": "test",
+            "type": "anthropic_chat_completion",
+            "key": ["test-key"],
+            "model": "claude-test",
+            "api_base": "https://offline.invalid",
+            "custom_extra_body": {"tools": custom_tools},
+        },
+        {},
+    )
+    tools = ToolSet(
+        [
+            FunctionTool(
+                name="get_time",
+                description="Offline tool schema.",
+                parameters={"type": "object", "properties": {}},
+            )
+        ]
+    )
+    payload = {"model": "claude-test", "messages": [{"role": "user", "content": "hi"}]}
+    try:
+        for _ in range(2):
+            with pytest.raises(BadRequestError):
+                if streaming:
+                    async for _ in provider._query_stream(
+                        payload, tools, request_max_retries=1
+                    ):
+                        pass
+                else:
+                    await provider._query(payload, tools, request_max_retries=1)
+    finally:
+        await provider.terminate()
+
+    assert len(captured) == 2
+    assert captured[0] == captured[1]
+    assert captured[0]["tools"][0]["name"] == "get_time"
+    assert captured[0]["tools"][1:] == custom_tools
+    assert provider.provider_config["custom_extra_body"]["tools"] == custom_tools
