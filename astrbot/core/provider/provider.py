@@ -2,6 +2,7 @@ import abc
 import asyncio
 import os
 from collections.abc import AsyncGenerator
+from contextvars import ContextVar
 from typing import Literal, TypeAlias, Union
 
 from astrbot.core.agent.message import ContentPart, Message, is_checkpoint_message
@@ -15,6 +16,11 @@ from astrbot.core.provider.entities import (
 from astrbot.core.provider.headers import build_provider_headers
 from astrbot.core.provider.register import provider_cls_map
 from astrbot.core.utils.astrbot_path import get_astrbot_path
+
+provider_stats_managed_by_agent: ContextVar[bool] = ContextVar(
+    "provider_stats_managed_by_agent",
+    default=False,
+)
 
 Providers: TypeAlias = Union[
     "Provider",
@@ -209,10 +215,13 @@ class Provider(AbstractProvider):
         return dicts
 
     async def test(self, timeout: float = 45.0) -> None:
-        await asyncio.wait_for(
-            self.text_chat(prompt="REPLY `PONG` ONLY"),
-            timeout=timeout,
-        )
+        from astrbot.core.provider.usage_recorder import usage_scope
+
+        with usage_scope(request_kind="test", origin_type="test"):
+            await asyncio.wait_for(
+                self.text_chat(prompt="REPLY `PONG` ONLY"),
+                timeout=timeout,
+            )
 
 
 class STTProvider(AbstractProvider):

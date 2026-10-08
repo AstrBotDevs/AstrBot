@@ -7,6 +7,7 @@ from astrbot.core.platform.sources.webchat.webchat_event import WebChatMessageEv
 from astrbot.core.platform.sources.wecom_ai_bot.wecomai_event import (
     WecomAIBotMessageEvent,
 )
+from astrbot.core.provider.usage_recorder import event_usage_scope
 from astrbot.core.utils.active_event_registry import active_event_registry
 
 from .bootstrap import ensure_builtin_stages_registered
@@ -88,7 +89,8 @@ class PipelineScheduler:
         """
         active_event_registry.register(event)
         try:
-            await self._process_stages(event)
+            with event_usage_scope(event):
+                await self._process_stages(event)
 
             # 发送一个空消息, 以便于后续的处理
             if isinstance(event, WebChatMessageEvent | WecomAIBotMessageEvent):

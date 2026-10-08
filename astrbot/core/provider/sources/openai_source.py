@@ -728,21 +728,34 @@ class ProviderOpenAIOfficial(Provider):
             return None
         return reasoning_attr
 
-    def _extract_usage(self, usage: CompletionUsage | dict) -> TokenUsage:
-        ptd = getattr(usage, "prompt_tokens_details", None)
-        cached = getattr(ptd, "cached_tokens", 0) if ptd else 0
+    def _extract_usage(self, usage: CompletionUsage | dict) -> TokenUsage | None:
+        getter = (
+            usage.get
+            if isinstance(usage, dict)
+            else lambda key: getattr(usage, key, None)
+        )
+        prompt_tokens = getter("prompt_tokens")
+        completion_tokens = getter("completion_tokens")
+        if prompt_tokens is None and completion_tokens is None:
+            return None
+        is_partial = prompt_tokens is None or completion_tokens is None
+        ptd = getter("prompt_tokens_details")
+        cached = (
+            ptd.get("cached_tokens", 0)
+            if isinstance(ptd, dict)
+            else getattr(ptd, "cached_tokens", 0)
+        )
         cached = (
             cached if isinstance(cached, int) else 0
         )  # ptd.cached_tokens 可能为None
-        prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0  # 安全
-        completion_tokens = getattr(usage, "completion_tokens", 0) or 0
         cached = cached or 0
         prompt_tokens = prompt_tokens or 0
         completion_tokens = completion_tokens or 0
         return TokenUsage(
-            input_other=prompt_tokens - cached,
+            input_other=max(0, prompt_tokens - cached),
             input_cached=cached,
             output=completion_tokens,
+            is_partial=is_partial,
         )
 
     @staticmethod
@@ -948,7 +961,9 @@ class ProviderOpenAIOfficial(Provider):
         llm_response.id = completion.id
 
         llm_response.usage = (
-            self._extract_usage(completion.usage) if completion.usage else TokenUsage()
+            self._extract_usage(completion.usage)
+            if completion.usage is not None
+            else None
         )
 
         return llm_response

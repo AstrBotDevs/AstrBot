@@ -597,18 +597,21 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
             llm_response.role = "tool"
 
         usage = self._field(response, "usage")
-        if usage is not None:
+        has_input = self._field(usage, "input_tokens") is not None
+        has_output = self._field(usage, "output_tokens") is not None
+        if has_input or has_output:
             input_details = self._field(usage, "input_tokens_details")
             cached_tokens = self._field(input_details, "cached_tokens", 0) or 0
             input_tokens = self._field(usage, "input_tokens", 0) or 0
             output_tokens = self._field(usage, "output_tokens", 0) or 0
             llm_response.usage = TokenUsage(
-                input_other=input_tokens - cached_tokens,
+                input_other=max(0, input_tokens - cached_tokens),
                 input_cached=cached_tokens,
                 output=output_tokens,
+                is_partial=not (has_input and has_output),
             )
         else:
-            llm_response.usage = TokenUsage()
+            llm_response.usage = None
 
         has_text = bool((llm_response.completion_text or "").strip())
         has_reasoning = bool((llm_response.reasoning_content or "").strip())

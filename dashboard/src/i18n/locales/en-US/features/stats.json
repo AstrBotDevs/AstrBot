@@ -60,6 +60,13 @@
   "modelTotal": {
     "title": "{range} total model calls",
     "callCount": "{count} calls",
+    "callBreakdown": "Agent {agent} · direct {provider} · test {test} · other {other}",
+    "tokenBreakdown": "Uncached input {input} · cached input {cached} · output {output}",
+    "usageCoverage": "New-call usage coverage {coverage} · {partial} partial · {missing} without usage",
+    "recordedHistory": "New reported {newTokens} · historical records {legacyTokens}",
+    "quotaNote": "Recorded tokens differ from OAuth subscription usage. Missing historical usage cannot be recovered.",
+    "scopeLabel": "Usage scope",
+    "scopeNote": "Calls count observable provider invocations, excluding opaque SDK retries. Tokens come from response usage. Separate tool charges and other clients sharing the account cannot be reconstructed from local records.",
     "avgTtft": "Average TTFT",
     "avgDuration": "Average Response Time",
     "avgTpm": "Average Output TPM",
@@ -69,8 +76,19 @@
     "title": "Model Usage Ranking"
   },
   "sessionRanking": {
-    "title": "{range} Session Model Usage Top 10",
+    "title": "{range} {dimension} Model Usage Top 10",
     "openConversation": "View conversation"
+  },
+  "usageDimensions": {
+    "session": "Session",
+    "source": "Source",
+    "provider": "Provider",
+    "model": "Model",
+    "plugin": "Plugin",
+    "kind": "Call type",
+    "unknownSession": "Unattributed session",
+    "unknownOther": "Unknown",
+    "sameCallsNote": "Each dimension groups the same calls; do not add dimensions together."
   },
   "empty": {
     "platformStats": "No platform message statistics available.",

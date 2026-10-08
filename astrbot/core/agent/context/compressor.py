@@ -273,9 +273,12 @@ class LLMSummaryCompressor:
 
         # Generate summary
         try:
-            response = await self.provider.text_chat(
-                contexts=sanitized_summary_contexts,
-            )
+            from astrbot.core.provider.usage_recorder import usage_scope
+
+            with usage_scope(request_kind="compression"):
+                response = await self.provider.text_chat(
+                    contexts=sanitized_summary_contexts,
+                )
             summary_content = (response.completion_text or "").strip()
         except Exception as e:
             logger.error(f"Failed to generate summary: {e}")
