@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="100%" style="max-width: 32px;">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="2500" height="2500">
   <defs><path id="a" d="M0 0h20.025v31H0z"/></defs>
   <g transform="translate(6 1)" fill="none">
     <mask id="b" fill="#fff"><use href="#a"/></mask>
