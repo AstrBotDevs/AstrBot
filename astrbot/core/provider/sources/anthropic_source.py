@@ -665,10 +665,15 @@ class ProviderAnthropic(Provider):
                         )
                     elif event.content_block.type == "tool_use":
                         # 工具使用块开始，初始化缓冲区
+                        # Keep the input from the start event; streamed deltas
+                        # replace it only when they carry JSON.
+                        start_input = event.content_block.input
                         tool_use_buffer[event.index] = {
                             "id": event.content_block.id,
                             "name": event.content_block.name,
-                            "input": {},
+                            "input": start_input
+                            if isinstance(start_input, dict)
+                            else {},
                         }
 
                 elif event.type == "content_block_delta":
@@ -713,7 +718,8 @@ class ProviderAnthropic(Provider):
                         # 解析完整的工具调用
                         tool_info = tool_use_buffer[event.index]
                         try:
-                            if "input_json" in tool_info:
+                            # 无参数的工具只会收到一个空的 partial_json
+                            if tool_info.get("input_json"):
                                 tool_info["input"] = json.loads(tool_info["input_json"])
 
                             # 添加到最终结果
