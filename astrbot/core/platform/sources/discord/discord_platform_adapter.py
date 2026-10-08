@@ -19,6 +19,7 @@ from astrbot.api.platform import (
     register_platform_adapter,
 )
 from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.platform.platform import PlatformStatus
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.star import star_map
@@ -55,6 +56,7 @@ class DiscordPlatformAdapter(Platform):
         self.activity_name = self.config.get("discord_activity_name", None)
         self.shutdown_event = asyncio.Event()
         self._polling_task = None
+        self._run_task: asyncio.Task | None = None
 
     @override
     async def send_by_session(
@@ -121,7 +123,16 @@ class DiscordPlatformAdapter(Platform):
 
     @override
     async def run(self) -> None:
-        """主要运行逻辑"""
+        """Run the receiver and release its resources on every exit.
+
+        Raises:
+            RuntimeError: The receiver returns or is cancelled without shutdown.
+            Exception: The Discord client fails while receiving messages.
+        """
+        self._run_task = asyncio.current_task()
+        if self.shutdown_event.is_set():
+            self.status = PlatformStatus.STOPPED
+            return
 
         # 初始化回调函数
         async def on_received(message_data) -> None:
@@ -160,20 +171,56 @@ class DiscordPlatformAdapter(Platform):
 
         self.client.on_ready_once_callback = callback
 
+        self._polling_task = asyncio.create_task(self.client.start_polling())
+        shutdown_task = asyncio.create_task(self.shutdown_event.wait())
         try:
-            self._polling_task = asyncio.create_task(self.client.start_polling())
-            await self.shutdown_event.wait()
-        except discord.errors.LoginFailure:
-            logger.error(
-                "[Discord] Login failed. Please check whether the bot token is correct."
+            await asyncio.wait(
+                (self._polling_task, shutdown_task),
+                return_when=asyncio.FIRST_COMPLETED,
             )
-        except discord.errors.ConnectionClosed:
-            logger.warning("[Discord] Connection with Discord has been closed.")
-        except Exception as e:
-            logger.error(
-                f"[Discord] Unexpected error while adapter is running: {e}",
-                exc_info=True,
-            )
+            # A requested shutdown takes precedence over a simultaneous receiver exit.
+            if not self.shutdown_event.is_set():
+                if self._polling_task.cancelled():
+                    raise RuntimeError("Discord receiver was unexpectedly cancelled.")
+                self._polling_task.result()
+                raise RuntimeError("Discord receiver exited unexpectedly.")
+        finally:
+            shutdown_task.cancel()
+            try:
+                await asyncio.gather(shutdown_task, return_exceptions=True)
+                if self.shutdown_event.is_set() and self.enable_command_register:
+                    try:
+                        await asyncio.wait_for(
+                            self.client.sync_commands(
+                                commands=[],
+                                guild_ids=[self.guild_id] if self.guild_id else None,
+                            ),
+                            timeout=10,
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            f"[Discord] Error occurred while cleaning up commands: {e}"
+                        )
+            finally:
+                try:
+                    if not self._polling_task.done():
+                        self._polling_task.cancel()
+                    await asyncio.wait_for(
+                        asyncio.gather(self._polling_task, return_exceptions=True),
+                        timeout=10,
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"[Discord] Error occurred while cancelling polling task: {e}"
+                    )
+                finally:
+                    try:
+                        await asyncio.wait_for(self.client.close(), timeout=10)
+                    except Exception as e:
+                        logger.warning(
+                            f"[Discord] Error occurred while closing client: {e}"
+                        )
+        self.status = PlatformStatus.STOPPED
 
     def _get_message_type(
         self,
@@ -393,40 +440,12 @@ class DiscordPlatformAdapter(Platform):
 
     @override
     async def terminate(self) -> None:
+        """Request shutdown and wait for the run task to finish cleanup."""
         logger.info("[Discord] Shutting down adapter...")
         self.shutdown_event.set()
-        logger.info("[Discord] Cleaning up commands...")
-        if self.enable_command_register and self.client:
-            try:
-                await asyncio.wait_for(
-                    self.client.sync_commands(
-                        commands=[],
-                        guild_ids=[self.guild_id] if self.guild_id else None,
-                    ),
-                    timeout=10,
-                )
-                logger.info("[Discord] Commands cleaned up successfully.")
-            except Exception as e:
-                logger.warning(
-                    f"[Discord] Error occurred while cleaning up commands: {e}"
-                )
-
-        if self._polling_task:
-            self._polling_task.cancel()
-            try:
-                await asyncio.wait_for(self._polling_task, timeout=10)
-            except asyncio.CancelledError:
-                logger.info("[Discord] Polling task cancelled successfully.")
-            except Exception as e:
-                logger.warning(
-                    f"[Discord] Error occurred while cancelling polling task: {e}"
-                )
-        logger.info("[Discord] Closing client connection...")
-        if self.client and hasattr(self.client, "close"):
-            try:
-                await asyncio.wait_for(self.client.close(), timeout=10)
-            except Exception as e:
-                logger.warning(f"[Discord] Error occurred while closing client: {e}")
+        if self._run_task is not None:
+            # The manager records failures; shutdown only waits for resource cleanup.
+            await asyncio.shield(asyncio.gather(self._run_task, return_exceptions=True))
         logger.info("[Discord] Adapter shutdown complete.")
 
     def register_handler(self, handler_info) -> None:
