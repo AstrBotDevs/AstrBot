@@ -9,6 +9,9 @@
 //   { "other_key": { "notEmpty": true } }// other_key 非空时才显示
 //   { "other_key": { "empty": false } }  // 等价于 { "notEmpty": true }
 //
+// 运算符对象必须是"恰好单一 empty / notEmpty 布尔键"的形状；带其它键或值非布尔的对象
+// 一律按字面值走深度相等，避免与真实配置值（恰好含同名键）混淆。
+//
 // 求值结果决定配置项（或整个 section）是否在面板中显示，仅影响 UI，不改变保存值。
 
 /**
@@ -74,11 +77,36 @@ export function deepEqual(a, b) {
 }
 
 /**
+ * 判定 expected 是否为"运算符对象"。
+ *
+ * 仅当对象**恰好**包含一个键、且该键为 `empty` / `notEmpty`、其值为布尔时，才视为运算符；
+ * 其余对象（含额外键、值非布尔、数组、空对象）一律当作字面配置值走深度相等。
+ * 这样可区分"运算符指令"与"恰好带 empty / notEmpty 键的真实配置值"。
+ *
+ * @param {*} expected
+ * @returns {boolean}
+ */
+export function isOperatorObject(expected) {
+  if (expected === null || typeof expected !== 'object' || Array.isArray(expected)) {
+    return false
+  }
+  const keys = Object.keys(expected)
+  if (keys.length !== 1) {
+    return false
+  }
+  const key = keys[0]
+  if (key !== 'empty' && key !== 'notEmpty') {
+    return false
+  }
+  return typeof expected[key] === 'boolean'
+}
+
+/**
  * 判断单条 condition 规则是否成立。
  *
  * - expected 为原始值（非对象）：保持旧语义，actualValue 必须严格相等。
- * - expected 为对象：按运算符求值，支持 `empty` / `notEmpty`。
- * - expected 为对象但不含已知运算符：退回深度相等（对象顺序无关、数组顺序有意义），避免误显/误隐。
+ * - expected 为"运算符对象"（恰好单一 empty / notEmpty 布尔键）：按运算符求值。
+ * - 其它对象 / 数组：退回深度相等（对象键序无关、数组序有意义），避免误显/误隐。
  *
  * @param {*} actualValue 配置中实际取到的值（缺路径时为 undefined）
  * @param {*} expected condition 中声明的值或运算符对象
@@ -88,13 +116,13 @@ export function conditionRuleMatches(actualValue, expected) {
   if (typeof expected !== 'object' || expected === null) {
     return actualValue === expected
   }
-  if ('empty' in expected) {
-    return expected.empty ? isConfigValueEmpty(actualValue) : !isConfigValueEmpty(actualValue)
-  }
-  if ('notEmpty' in expected) {
+  if (isOperatorObject(expected)) {
+    if ('empty' in expected) {
+      return expected.empty ? isConfigValueEmpty(actualValue) : !isConfigValueEmpty(actualValue)
+    }
     return expected.notEmpty ? !isConfigValueEmpty(actualValue) : isConfigValueEmpty(actualValue)
   }
-  // 未知运算符对象：退回深度相等（对象顺序无关，数组顺序有意义）
+  // 字面对象 / 数组：深度相等（对象键序无关，数组序有意义）
   return deepEqual(actualValue, expected)
 }
 

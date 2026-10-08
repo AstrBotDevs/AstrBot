@@ -72,6 +72,19 @@ test("未知运算符对象退回深度相等，对象键顺序无关、数组�
   assert.equal(conditionRuleMatches("x", {}), false);
 });
 
+// ---- 运算符对象 vs 字面对象：含 empty/notEmpty 键但非纯运算符形状时按字面深度相等 ----
+
+test("含 empty/notEmpty 键但非运算符形状的对象按字面深度相等", () => {
+  // 多键对象：即便含 empty 键，也应作为字面对象比较，而非被当作运算符误判
+  assert.equal(conditionRuleMatches({ empty: true, other: 1 }, { empty: true, other: 1 }), true);
+  assert.equal(conditionRuleMatches({ empty: true, other: 1 }, { empty: true }), false);
+  // 运算符值非布尔：{ empty: "yes" } 视为字面对象（深度相等）
+  assert.equal(conditionRuleMatches({ empty: "yes" }, { empty: "yes" }), true);
+  // 纯运算符形状（单一布尔键）仍按运算符求值 —— 回归保护
+  assert.equal(conditionRuleMatches("", { empty: true }), true);
+  assert.equal(conditionRuleMatches("x", { notEmpty: true }), true);
+});
+
 // ---- isConfigValueEmpty ----
 
 test("isConfigValueEmpty 的边界", () => {
