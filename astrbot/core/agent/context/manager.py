@@ -136,12 +136,15 @@ class ContextManager:
             for rnd in split_into_rounds(messages[first_non_system:])
         ]
         tokens = tokens_after_summary
+        dropped_rounds = 0
         while len(rounds) > 1 and self.compressor.should_compress(
             messages, tokens, self.config.max_context_tokens
         ):
             rounds.pop(0)
+            dropped_rounds += 1
             messages = system_messages + [msg for rnd in rounds for msg in rnd]
             tokens = self.token_counter.count_tokens(messages)
+        logger.info(f"Dropped {dropped_rounds} oldest round(s).")
 
         if self.compressor.should_compress(
             messages, tokens, self.config.max_context_tokens
