@@ -169,6 +169,13 @@ class WebChatMessageEvent(AstrMessageEvent):
 
     async def send(self, message: MessageChain | None) -> None:
         message_id = self.message_obj.message_id
+        if message and (reasoning := self.get_extra("_webchat_pending_reasoning")):
+            self.set_extra("_webchat_pending_reasoning", None)
+            await WebChatMessageEvent._send(
+                message_id,
+                MessageChain(type="reasoning").message(reasoning),
+                session_id=self.session_id,
+            )
         follow_up_capture = self.get_extra("_follow_up_captured")
         if message is None and isinstance(follow_up_capture, dict):
             request_id = str(message_id)

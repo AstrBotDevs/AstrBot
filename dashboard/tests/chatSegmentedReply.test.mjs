@@ -19,6 +19,7 @@ const names = new Set([
   "processStreamPayload",
   "processPayload",
   "appendPlain",
+  "appendReasoningPart",
   "markMessageStarted",
   "hasPlainText",
   "payloadText",
@@ -314,6 +315,12 @@ for (const handler of ["sse", "thread"]) {
       streaming: false,
     },
     {
+      name: "non-streaming reasoning stays with the first segment as a thinking part",
+      chunks: ["First.", "Second.", "Third."],
+      streaming: false,
+      reasoning: true,
+    },
+    {
       name: "streaming deltas and the final full text do not duplicate content",
       chunks: ["First.", "Second.", "Third."],
       streaming: true,
@@ -352,6 +359,14 @@ for (const handler of ["sse", "thread"]) {
         }
       };
       let expected = "";
+      if (scenario.reasoning) {
+        receive({
+          type: "plain",
+          chain_type: "reasoning",
+          data: "Thought.",
+          streaming: false,
+        });
+      }
       for (const [index, data] of scenario.chunks.entries()) {
         receive({ type: "plain", data, streaming: scenario.streaming });
         assert.equal(getBots().length, scenario.streaming ? 1 : index + 1);
@@ -372,11 +387,16 @@ for (const handler of ["sse", "thread"]) {
               getBots().flatMap((record) => record.content.message),
             ),
           ),
-          scenario.streaming
-            ? [{ type: "plain", text: expected }]
-            : scenario.chunks
-                .slice(0, index + 1)
-                .map((text) => ({ type: "plain", text })),
+          [
+            ...(scenario.reasoning
+              ? [{ type: "think", think: "Thought." }]
+              : []),
+            ...(scenario.streaming
+              ? [{ type: "plain", text: expected }]
+              : scenario.chunks
+                  .slice(0, index + 1)
+                  .map((text) => ({ type: "plain", text }))),
+          ],
         );
         if (handler !== "thread" && index === 1) {
           const snapshotMessages = JSON.parse(JSON.stringify(getBots()));

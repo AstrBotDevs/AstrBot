@@ -1219,9 +1219,10 @@ class ChatService:
                 if attachment_saved_payload:
                     self._publish_chat_run(run, attachment_saved_payload)
 
+                # Persist reasoning with the next body segment, or at run end.
                 should_save = msg_type == "end" or (
                     msg_type == "complete"
-                    and chain_type not in ("tool_call", "tool_call_result")
+                    and chain_type not in ("reasoning", "tool_call", "tool_call_result")
                 )
 
                 if should_save:

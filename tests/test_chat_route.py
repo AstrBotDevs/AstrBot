@@ -265,8 +265,9 @@ async def test_resumed_stream_starts_with_full_snapshot(chat_service_instance):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("streaming", [False, True])
+@pytest.mark.parametrize("reasoning", [False, True])
 async def test_chat_segments_keep_boundaries_in_snapshots_and_history(
-    chat_service_instance, streaming
+    chat_service_instance, streaming, reasoning
 ):
     service = chat_service_instance
     session_id = "segmented-session"
@@ -284,6 +285,18 @@ async def test_chat_segments_keep_boundaries_in_snapshots_and_history(
     try:
         await anext(stream)
         assert _decode_sse_event(await anext(stream))["type"] == "user_message_saved"
+        if reasoning:
+            await run.back_queue.put(
+                {
+                    "type": "plain",
+                    "chain_type": "reasoning",
+                    "data": "Thought.",
+                    "streaming": streaming,
+                }
+            )
+            thought = _decode_sse_event(await asyncio.wait_for(anext(stream), 1))
+            assert thought["chain_type"] == "reasoning"
+            service.save_bot_message.assert_not_awaited()
         for index, text in enumerate(chunks):
             await chat_service.webchat_queue_mgr.put_back_queue(
                 run.run_id,
@@ -310,6 +323,8 @@ async def test_chat_segments_keep_boundaries_in_snapshots_and_history(
                 if streaming
                 else [{"type": "plain", "text": chunk} for chunk in chunks[: index + 1]]
             )
+            if reasoning:
+                expected_parts.insert(0, {"type": "think", "think": "Thought."})
             resumed = await service.build_chat_run_stream("alice", run.run_id)
             snapshot = _decode_sse_event(await anext(resumed))
             await resumed.aclose()
@@ -328,9 +343,10 @@ async def test_chat_segments_keep_boundaries_in_snapshots_and_history(
                     range(10, index + 11)
                 )
                 assert all(message["created_at"] for message in snapshot_messages)
-            assert service.get_active_chat_runs("alice", session_id)[0][
-                "messages"
-            ] == snapshot_messages
+            assert (
+                service.get_active_chat_runs("alice", session_id)[0]["messages"]
+                == snapshot_messages
+            )
 
         await chat_service.webchat_queue_mgr.put_back_queue(
             run.run_id,
