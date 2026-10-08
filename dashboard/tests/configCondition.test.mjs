@@ -122,18 +122,19 @@ test("evaluateCondition 多键全满足才显示，并按键解析实际值", ()
   assert.equal(evaluateCondition(null, resolve), true);
 });
 
-// ---- 插件真实场景：背景图留空时隐藏 opacity / blur ----
+// ---- 真实场景：可选字段留空时隐藏其依赖项 ----
 
-test("插件场景：page_background 为空时 notEmpty 条件隐藏依赖项", () => {
-  const resolve = (key) => (key === "page_background" ? "" : undefined);
+test("真实场景：可选字段为空时 notEmpty 条件隐藏依赖项", () => {
+  const resolve = (key) => (key === "webhook_url" ? "" : undefined);
   assert.equal(
-    evaluateCondition({ page_background: { notEmpty: true } }, resolve),
+    evaluateCondition({ webhook_url: { notEmpty: true } }, resolve),
     false,
   );
 
-  const resolveSet = (key) => (key === "page_background" ? "bg.png" : undefined);
+  const resolveSet = (key) =>
+    key === "webhook_url" ? "https://example.com/hook" : undefined;
   assert.equal(
-    evaluateCondition({ page_background: { notEmpty: true } }, resolveSet),
+    evaluateCondition({ webhook_url: { notEmpty: true } }, resolveSet),
     true,
   );
 });
