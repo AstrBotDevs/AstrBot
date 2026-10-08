@@ -938,6 +938,10 @@
         "friend_message_needs_wake_prefix": {
           "description": "Private Messages Require Wake Word"
         },
+        "keep_wake_word_in_prompt": {
+          "description": "Preserve Wake Word",
+          "hint": "When enabled, the wake word (wake prefix or @-mention of the bot) is kept as-is in the message content sent to the AI and saved in the conversation history. Command matching is not affected."
+        },
         "reply_prefix": {
           "description": "Reply Text Prefix"
         },

@@ -1035,6 +1035,10 @@
         "friend_message_needs_wake_prefix": {
           "description": "ダイレクトメッセージでウェイクワードを必須にする"
         },
+        "keep_wake_word_in_prompt": {
+          "description": "ウェイクワードを保持",
+          "hint": "有効にすると、ウェイクワード（ウェイクプレフィックスまたはボットへの @ メンション）が AI に送信されるメッセージ内容にそのまま残り、会話履歴にも保存されます。コマンドのマッチングには影響しません。"
+        },
         "reply_prefix": {
           "description": "返信テキストのプレフィックス"
         },

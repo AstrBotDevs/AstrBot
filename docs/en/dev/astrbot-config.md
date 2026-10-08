@@ -240,6 +240,10 @@ In the above item (`empty_mention_waiting`), if waiting is triggered, enabling t
 
 Whether private messages on platforms require a wake prefix. Default is `false`. When enabled, users must use a wake prefix to trigger a bot response in private chats.
 
+#### `platform_settings.keep_wake_word_in_prompt`
+
+Whether to keep the wake word as-is in the message content sent to the AI. Default is `false`. When enabled, the wake word (wake prefix or @ mention of the bot) is preserved in the content the AI receives and in the conversation history, and a wake-word-only message is also passed to the AI as-is. This setting does not affect command matching.
+
 #### `platform_settings.ignore_bot_self_message`
 
 Whether to ignore messages sent by the bot itself. Default is `false`. When enabled, the bot won't process its own messages, preventing infinite loops on some platforms.

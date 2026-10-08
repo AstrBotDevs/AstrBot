@@ -111,9 +111,16 @@ class WakingCheckStage(Stage):
                 break
 
         # 检查 wake
+        keep_wake_word = self.ctx.astrbot_config.get("platform_settings", {}).get(
+            "keep_wake_word_in_prompt",
+            False,
+        )
         wake_prefixes = self.ctx.astrbot_config["wake_prefix"]
         messages = event.get_messages()
         is_wake = False
+        # 本次唤醒消耗掉的用户文本（唤醒前缀或 @ 机器人），
+        # 供后续按配置决定是否原样回填到 AI 请求中。
+        wake_word = ""
         for wake_prefix in wake_prefixes:
             if event.message_str.startswith(wake_prefix):
                 if (
@@ -128,6 +135,7 @@ class WakingCheckStage(Stage):
                 event.is_at_or_wake_command = True
                 event.is_wake = True
                 event.message_str = event.message_str[len(wake_prefix) :].strip()
+                wake_word = wake_prefix
                 break
         if not is_wake:
             # 检查是否有at消息 / at全体成员消息 / 引用了bot的消息
@@ -147,6 +155,9 @@ class WakingCheckStage(Stage):
                     event.is_wake = True
                     wake_prefix = ""
                     event.is_at_or_wake_command = True
+                    if isinstance(message, At) and not isinstance(message, AtAll):
+                        # At 消息段不参与 message_str，这里按 @昵称 形式补回
+                        wake_word = f"@{message.name or message.qq}"
                     break
             # 检查是否是私聊
             if event.is_private_chat() and (
@@ -157,6 +168,8 @@ class WakingCheckStage(Stage):
                 event.is_wake = True
                 event.is_at_or_wake_command = True
                 wake_prefix = ""
+
+        event.set_extra("_wake_word", wake_word if keep_wake_word else "")
 
         # 检查插件的 handler filter
         activated_handlers = []
