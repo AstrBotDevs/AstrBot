@@ -329,6 +329,10 @@
           "files": "File access only",
           "full": "Unrestricted access"
         },
+        "modeHints": {
+          "files": "Read and write all files in the environment, without Shell/Python execution or network access.",
+          "full": "Read and write all files in the environment, with Shell/Python execution and network access."
+        },
         "unsupportedSelection": "Current policy is unsupported",
         "runtimeUnknown": "Runtime information is unavailable.",
         "memberWarning": "Members have network access or file access across the entire environment.",
