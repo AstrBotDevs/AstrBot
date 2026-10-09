@@ -156,7 +156,8 @@
       "reset": "Reset to Default",
       "mainItems": "Main Modules",
       "moreItems": "More Features",
-      "pluginHint": "Plugin pages are generated dynamically from the extension management page; manage them under the Plugins tab"
+      "pluginHint": "Plugin pages are generated dynamically from the extension management page and cannot be modified",
+      "pluginGroup": "Plugin Pages"
     }
   },
   "backup": {

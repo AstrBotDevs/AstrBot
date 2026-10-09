@@ -156,7 +156,8 @@
       "reset": "恢复默认",
       "mainItems": "主要模块",
       "moreItems": "更多功能",
-      "pluginHint": "插件页面由扩展管理页动态生成，请到「插件」页管理"
+      "pluginHint": "插件页面由扩展管理页动态生成，无法修改",
+      "pluginGroup": "插件页面"
     }
   },
   "backup": {

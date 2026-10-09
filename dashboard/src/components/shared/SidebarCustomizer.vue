@@ -106,24 +106,6 @@
                       </v-list-item>
                     </v-list>
                   </template>
-                  <template v-if="group.key === EXTENSION_GROUP_KEY">
-                    <template v-for="entry in extensionPluginEntries" :key="entry.key">
-                      <v-list-item class="mb-1 static-item">
-                        <template v-slot:prepend>
-                          <v-icon v-if="typeof entry.icon === 'string'" :icon="entry.icon" size="small" class="mr-2" />
-                          <component :is="entry.icon" v-else-if="entry.icon" :size="18" class="mr-2" />
-                        </template>
-                        <v-list-item-title>{{ entryTitle(entry) }}</v-list-item-title>
-                        <template v-slot:append>
-                          <v-tooltip :text="t('features.settings.sidebar.customize.pluginHint')" location="left">
-                            <template v-slot:activator="{ props: tooltipProps }">
-                              <v-icon v-bind="tooltipProps" icon="mdi-information-outline" size="small" />
-                            </template>
-                          </v-tooltip>
-                        </template>
-                      </v-list-item>
-                    </template>
-                  </template>
                 </template>
               </v-list>
             </v-col>
@@ -209,6 +191,23 @@
                       </v-list-item>
                     </v-list>
                   </template>
+                </template>
+              </v-list>
+              <div class="customizer-group-header">
+                <span>{{ t('features.settings.sidebar.customize.pluginGroup') }}</span>
+              </div>
+              <div class="customizer-group-hint">
+                {{ t('features.settings.sidebar.customize.pluginHint') }}
+              </div>
+              <v-list density="compact" class="custom-list">
+                <template v-for="entry in extensionPluginEntries" :key="entry.key">
+                  <v-list-item class="mb-1 static-item">
+                    <template v-slot:prepend>
+                      <v-icon v-if="typeof entry.icon === 'string'" :icon="entry.icon" size="small" class="mr-2" />
+                      <component :is="entry.icon" v-else-if="entry.icon" :size="18" class="mr-2" />
+                    </template>
+                    <v-list-item-title>{{ entryTitle(entry) }}</v-list-item-title>
+                  </v-list-item>
                 </template>
               </v-list>
             </v-col>
@@ -610,6 +609,13 @@ onMounted(() => {
   font-weight: 500;
   color: rgba(var(--v-theme-on-surface), 0.6);
   letter-spacing: 0.02em;
+}
+
+/* Read-only plugin group note under the group header. */
+.customizer-group-hint {
+  padding: 0 4px 6px;
+  font-size: 0.75rem;
+  color: rgba(var(--v-theme-on-surface), 0.5);
 }
 
 /* Dynamic plugin entries are not customizable, show them as read-only. */
