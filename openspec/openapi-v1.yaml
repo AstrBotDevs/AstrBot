@@ -5917,7 +5917,6 @@ components:
       additionalProperties: false
 
     MessagePart:
-      description: Chat message content. Server-generated LLM errors include error_code and error_params for client-side localization, with text as a fallback.
       type: object
       required: [type]
       properties:
@@ -5936,14 +5935,6 @@ components:
           type: string
         mime_type:
           type: string
-        error_code:
-          type: string
-          description: Optional server-generated LLM error translation code.
-        error_params:
-          type: object
-          additionalProperties:
-            type: string
-          description: Interpolation values for the error translation.
       additionalProperties: true
 
     ImMessageRequest:

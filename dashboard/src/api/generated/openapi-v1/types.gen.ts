@@ -385,9 +385,6 @@ export type McpServerConfig = {
 
 export type transport = 'stdio' | 'sse' | 'streamable_http';
 
-/**
- * Chat message content. Server-generated LLM errors include error_code and error_params for client-side localization, with text as a fallback.
- */
 export type MessagePart = {
     type: 'text' | 'plain' | 'image' | 'file' | 'audio' | 'record' | 'video' | 'reply';
     text?: string;
@@ -396,16 +393,6 @@ export type MessagePart = {
     filename?: string;
     stored_filename?: string;
     mime_type?: string;
-    /**
-     * Optional server-generated LLM error translation code.
-     */
-    error_code?: string;
-    /**
-     * Interpolation values for the error translation.
-     */
-    error_params?: {
-        [key: string]: (string);
-    };
     [key: string]: unknown | string;
 };
 

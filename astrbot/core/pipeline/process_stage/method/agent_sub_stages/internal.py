@@ -19,7 +19,6 @@ from astrbot.core.astr_main_agent import (
     MainAgentBuildResult,
     _matches_provider_wake_prefix,
     _provider_supports_modality,
-    _set_llm_error_message,
     build_main_agent,
 )
 from astrbot.core.config.agent_runner import resolve_context_compression_config
@@ -162,7 +161,7 @@ class InternalAgentSubStage(Stage):
     async def _send_llm_error_message(
         self, event: AstrMessageEvent, message: object
     ) -> None:
-        await event.send(MessageChain(type="llm_error").message(str(message)))
+        await event.send(MessageChain().message(str(message)))
 
     async def process(
         self, event: AstrMessageEvent, provider_wake_prefix: str
@@ -292,16 +291,7 @@ class InternalAgentSubStage(Stage):
                                 f"LLM 请求失败：Provider API base `{api_base}` "
                                 "因安全原因被拦截，请更换可用的 AI 提供商。"
                             )
-                            logger.error(
-                                "Provider API base %s was blocked for security reasons",
-                                api_base,
-                            )
-                            _set_llm_error_message(
-                                event,
-                                error_message,
-                                "blockedProvider",
-                                api_base=api_base,
-                            )
+                            logger.error(error_message)
                             await self._send_llm_error_message(event, error_message)
                             return
 
@@ -492,13 +482,7 @@ class InternalAgentSubStage(Stage):
             error_text = custom_error_message or (
                 f"Error occurred while processing agent request: {e}"
             )
-            if custom_error_message:
-                await event.send(MessageChain().message(error_text))
-            else:
-                _set_llm_error_message(
-                    event, error_text, "agentRequestFailed", detail=str(e)
-                )
-                await self._send_llm_error_message(event, error_text)
+            await event.send(MessageChain().message(error_text))
         finally:
             if typing_requested:
                 try:

@@ -1,5 +1,4 @@
 import { computed, onBeforeUnmount, reactive, ref, type Ref } from "vue";
-import { useI18n } from "@/i18n/composables";
 import { chatApi, fileApi } from "@/api/v1";
 import { fetchWithAuth } from "@/api/http";
 import type { Session } from "@/composables/useSessions";
@@ -22,8 +21,6 @@ export interface MessagePart {
   type: string;
   text?: string;
   think?: string;
-  error_code?: string;
-  error_params?: Record<string, string | number>;
   message_id?: string | number;
   selected_text?: string;
   embedded_url?: string;
@@ -1234,9 +1231,8 @@ export function useMessages(options: UseMessagesOptions) {
       markMessageStarted(botRecord);
       botRecord.id = data?.id || botRecord.id;
       botRecord.created_at = data?.created_at || botRecord.created_at;
-      if (data?.llm_checkpoint_id !== undefined) {
-        botRecord.llm_checkpoint_id = data.llm_checkpoint_id;
-      }
+      botRecord.llm_checkpoint_id =
+        data?.llm_checkpoint_id || botRecord.llm_checkpoint_id;
       if (data?.refs) {
         messageContent(botRecord).refs = data.refs;
       }
@@ -1249,16 +1245,7 @@ export function useMessages(options: UseMessagesOptions) {
     }
     if (msgType === "error") {
       markMessageStarted(botRecord);
-      if (normalized.error_code) {
-        botRecord.content.message.push({
-          type: "plain",
-          text: String(data),
-          error_code: normalized.error_code,
-          error_params: normalized.error_params || {},
-        });
-      } else {
-        appendPlain(botRecord, `\n\n${String(data)}`);
-      }
+      appendPlain(botRecord, `\n\n${String(data)}`);
       return;
     }
     if (msgType === "complete" || msgType === "break") {
@@ -1406,22 +1393,6 @@ function normalizeSessionProject(value: unknown): ChatSessionProject | null {
     title: project.title,
     emoji: typeof project.emoji === "string" ? project.emoji : undefined,
   };
-}
-
-export function messagePartText(part: MessagePart): string {
-  const codes = [
-    "noProvider",
-    "providerNotFound",
-    "invalidProviderType",
-    "requestFailed",
-    "blockedProvider",
-    "agentRequestFailed",
-  ];
-  if (part.error_code && codes.includes(part.error_code)) {
-    const { t } = useI18n();
-    return t(`features.chat.llmErrors.${part.error_code}`, part.error_params);
-  }
-  return part.text || "";
 }
 
 export function normalizeMessageParts(
@@ -1635,7 +1606,7 @@ export function appendPlain(record: ChatRecord, text: string, append = true) {
   markMessageStarted(record);
   const content = record.content;
   let last = content.message[content.message.length - 1];
-  if (!last || last.type !== "plain" || last.error_code) {
+  if (!last || last.type !== "plain") {
     last = { type: "plain", text: "" };
     content.message.push(last);
   }

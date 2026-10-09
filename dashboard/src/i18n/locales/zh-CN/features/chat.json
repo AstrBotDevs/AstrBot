@@ -4,8 +4,7 @@
     "providerNotFound": "LLM 请求失败：未找到指定的提供商 `{provider}`。请检查提供商配置或重新选择可用模型。",
     "invalidProviderType": "LLM 请求失败：选择的提供商类型无效（{provider_type}），已跳过本次请求。",
     "requestFailed": "LLM 请求失败：{detail}",
-    "blockedProvider": "LLM 请求失败：Provider API base `{api_base}` 因安全原因被拦截，请更换可用的 AI 提供商。",
-    "agentRequestFailed": "处理 Agent 请求时出错：{detail}"
+    "blockedProvider": "LLM 请求失败：Provider API base `{api_base}` 因安全原因被拦截，请更换可用的 AI 提供商。"
   },
   "title": "聊天吧!",
   "subtitle": "与AI助手进行对话",

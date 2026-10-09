@@ -164,22 +164,6 @@ class WebChatMessageEvent(AstrMessageEvent):
 
     async def send(self, message: MessageChain | None) -> None:
         message_id = self.message_obj.message_id
-        if message is not None and message.type == "llm_error":
-            metadata = self.get_extra("_llm_error_i18n") or {}
-            await webchat_queue_mgr.put_back_queue(
-                str(message_id),
-                {
-                    "type": "error",
-                    "data": "".join(
-                        comp.text for comp in message.chain if isinstance(comp, Plain)
-                    ),
-                    "streaming": False,
-                    "message_id": message_id,
-                    **metadata,
-                },
-            )
-            await super().send(MessageChain([]))
-            return
         follow_up_capture = self.get_extra("_follow_up_captured")
         if message is None and isinstance(follow_up_capture, dict):
             request_id = str(message_id)

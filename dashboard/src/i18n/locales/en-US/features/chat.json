@@ -4,8 +4,7 @@
     "providerNotFound": "LLM request failed: Provider `{provider}` was not found. Check the provider configuration or select an available model.",
     "invalidProviderType": "LLM request failed: The selected provider type ({provider_type}) is invalid. This request was skipped.",
     "requestFailed": "LLM request failed: {detail}",
-    "blockedProvider": "LLM request failed: Provider API base `{api_base}` was blocked for security reasons. Use another AI provider.",
-    "agentRequestFailed": "Error occurred while processing agent request: {detail}"
+    "blockedProvider": "LLM request failed: Provider API base `{api_base}` was blocked for security reasons. Use another AI provider."
   },
   "title": "Let's Chat!",
   "subtitle": "Chat with AI Assistant",

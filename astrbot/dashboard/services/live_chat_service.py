@@ -556,7 +556,7 @@ class LiveChatService:
         await self.ensure_chat_subscription(session, session_id, send_json)
 
         back_queue = webchat_queue_mgr.get_or_create_back_queue(message_id, session_id)
-        llm_checkpoint_id: str | None = str(uuid.uuid4())
+        llm_checkpoint_id = str(uuid.uuid4())
 
         pending_bot_message_flusher = None
         try:
@@ -704,15 +704,11 @@ class LiveChatService:
                 outgoing = {"ct": "chat", **result}
                 await self.send_chat_payload(session, outgoing, send_json)
 
-                if result_type in ("plain", "error"):
-                    if result_type == "error":
-                        llm_checkpoint_id = None
+                if result_type == "plain":
                     message_accumulator.add_plain(
                         result_text,
                         chain_type=chain_type,
                         streaming=streaming,
-                        error_code=result.get("error_code"),
-                        error_params=result.get("error_params"),
                     )
                 elif result_type == "image":
                     filename = str(result_text).replace("[IMAGE]", "")

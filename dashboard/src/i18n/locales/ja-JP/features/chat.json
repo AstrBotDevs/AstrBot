@@ -4,8 +4,7 @@
     "providerNotFound": "LLM リクエストに失敗しました：プロバイダー `{provider}` が見つかりません。プロバイダー設定を確認するか、利用可能なモデルを選択してください。",
     "invalidProviderType": "LLM リクエストに失敗しました：選択されたプロバイダーの種類（{provider_type}）が無効なため、このリクエストはスキップされました。",
     "requestFailed": "LLM リクエストに失敗しました：{detail}",
-    "blockedProvider": "LLM リクエストに失敗しました：プロバイダーの API ベース URL `{api_base}` はセキュリティ上の理由でブロックされました。別の AI プロバイダーを使用してください。",
-    "agentRequestFailed": "エージェントのリクエスト処理中にエラーが発生しました：{detail}"
+    "blockedProvider": "LLM リクエストに失敗しました：プロバイダーの API ベース URL `{api_base}` はセキュリティ上の理由でブロックされました。別の AI プロバイダーを使用してください。"
   },
   "title": "チャットしよう！",
   "subtitle": "AI アシスタントと会話",

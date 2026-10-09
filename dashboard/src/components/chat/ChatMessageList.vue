@@ -171,7 +171,7 @@
                         class="threaded-message-content"
                       >
                         <ThreadedMarkdownMessagePart
-                          :text="messagePartText(part)"
+                          :text="localizedMessageText(part.text || '')"
                           :threads="messageThreads(msg)"
                           :refs="resolvedMessageRefs(msg)"
                           :is-dark="isDark"
@@ -183,7 +183,7 @@
 
                       <MarkdownMessagePart
                         v-else-if="part.type === 'plain'"
-                        :content="messagePartText(part)"
+                        :content="localizedMessageText(part.text || '')"
                         :refs="resolvedMessageRefs(msg)"
                         :is-dark="isDark"
                         :custom-html-tags="customMarkdownTags"
@@ -475,7 +475,6 @@ import {
 } from "@/components/chat/attachmentPresentation";
 import {
   displayParts as displayMessageParts,
-  messagePartText,
   messageBlocks as buildMessageBlocks,
   type MessageDisplayBlock,
 } from "@/composables/useMessages";
@@ -698,11 +697,44 @@ function partUrl(part: MessagePart) {
   return "";
 }
 
+// Translate known LLM errors at display time so saved messages follow the UI language.
+function localizedMessageText(text: string): string {
+  const errors: [RegExp, string, string?][] = [
+    [
+      /^LLM 请求失败：未找到任何可用的对话模型（提供商）。请先在 WebUI 中配置并启用可用模型。$/,
+      "noProvider",
+    ],
+    [
+      /^LLM 请求失败：未找到指定的提供商 `(.+)`。请检查提供商配置或重新选择可用模型。$/,
+      "providerNotFound",
+      "provider",
+    ],
+    [
+      /^LLM 请求失败：选择的提供商类型无效（(.+)），已跳过本次请求。$/,
+      "invalidProviderType",
+      "provider_type",
+    ],
+    [
+      /^LLM 请求失败：Provider API base `(.+)` 因安全原因被拦截，请更换可用的 AI 提供商。$/,
+      "blockedProvider",
+      "api_base",
+    ],
+    [/^LLM 请求失败：([\s\S]*)$/, "requestFailed", "detail"],
+  ];
+  for (const [pattern, key, param] of errors) {
+    const match = text.match(pattern);
+    if (match) {
+      return tm(`llmErrors.${key}`, param ? { [param]: match[1] } : undefined);
+    }
+  }
+  return text;
+}
+
 function plainTextFromMessage(message: ChatRecord) {
   return messageParts(message)
     .filter((part) => part.type === "plain" && part.text)
     .map((part) =>
-      isUserMessage(message) ? part.text : messagePartText(part),
+      isUserMessage(message) ? part.text : localizedMessageText(part.text || ""),
     )
     .join("\n");
 }
