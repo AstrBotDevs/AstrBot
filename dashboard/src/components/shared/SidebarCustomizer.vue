@@ -33,74 +33,97 @@
                 @dragover.prevent
                 @drop="handleDropToList($event, 'main')"
               >
-                <template v-for="(item, index) in mainItems" :key="item.title">
-                  <v-list-item
-                    class="mb-1 draggable-item"
-                    draggable="true"
-                    @dragstart="handleDragStart($event, 'main', index)"
-                    @dragover.prevent
-                    @drop.stop="handleDrop($event, 'main', index)"
-                  >
-                    <template v-slot:prepend>
-                      <v-icon v-if="typeof item.icon === 'string'" :icon="item.icon" size="small" class="mr-2" />
-                      <component :is="item.icon" v-else-if="item.icon" :size="18" class="mr-2" />
-                    </template>
-                    <v-list-item-title>{{ t(item.title) }}</v-list-item-title>
-                    <template v-slot:append>
-                      <v-btn
-                        v-if="subDefByLabelKey.has(item.title)"
-                        icon="mdi-arrow-down"
-                        variant="text"
-                        size="x-small"
-                        @click="demoteSubItem(item.title)"
-                      ></v-btn>
-                      <v-btn
-                        v-if="getSubItems(item.title)"
-                        :icon="expandedParents[item.title] ? 'mdi-chevron-down' : 'mdi-chevron-right'"
-                        variant="text"
-                        size="x-small"
-                        @click="toggleParentExpanded(item.title)"
-                      ></v-btn>
-                      <v-btn
-                        icon="mdi-arrow-right"
-                        variant="text"
-                        size="x-small"
-                        @click="moveToMore(index)"
-                      ></v-btn>
-                    </template>
-                  </v-list-item>
-                  <v-list
-                    v-if="expandedParents[item.title] && getSubItems(item.title)"
-                    density="compact"
-                    class="custom-sub-list"
-                    @dragover.prevent
-                    @drop="handleSubDrop($event, getSubItems(item.title).length - 1)"
-                  >
+                <template v-for="group in customizerGroups" :key="group.key">
+                  <div class="customizer-group-header">
+                    <span>{{ t(group.labelKey) }}</span>
+                  </div>
+                  <template v-for="item in itemsByGroup(mainItems, group.key)" :key="item.title">
                     <v-list-item
-                      v-for="(sub, subIndex) in getSubItems(item.title)"
-                      :key="sub.value"
-                      class="mb-1 draggable-item sub-item"
+                      class="mb-1 draggable-item"
                       draggable="true"
-                      @dragstart="handleSubDragStart($event, item.title, subIndex)"
+                      @dragstart="handleDragStart($event, 'main', indexOfItem(mainItems, item))"
                       @dragover.prevent
-                      @drop.stop="handleSubDrop($event, subIndex)"
+                      @drop.stop="handleDrop($event, 'main', indexOfItem(mainItems, item))"
                     >
                       <template v-slot:prepend>
-                        <v-icon v-if="typeof sub.icon === 'string'" :icon="sub.icon" size="small" class="mr-2" />
-                        <component :is="sub.icon" v-else-if="sub.icon" :size="16" class="mr-2" />
+                        <v-icon v-if="typeof item.icon === 'string'" :icon="item.icon" size="small" class="mr-2" />
+                        <component :is="item.icon" v-else-if="item.icon" :size="18" class="mr-2" />
                       </template>
-                      <v-list-item-title class="sub-item-title">{{ t(sub.labelKey) }}</v-list-item-title>
+                      <v-list-item-title>{{ t(item.title) }}</v-list-item-title>
                       <template v-slot:append>
                         <v-btn
-                          v-if="canPromoteSub(sub.value)"
-                          icon="mdi-arrow-up"
+                          v-if="subDefByLabelKey.has(item.title)"
+                          icon="mdi-arrow-down"
                           variant="text"
                           size="x-small"
-                          @click="promoteSubItem(item.title, sub.value)"
+                          @click="demoteSubItem(item.title)"
+                        ></v-btn>
+                        <v-btn
+                          v-if="getSubItems(item.title)"
+                          :icon="expandedParents[item.title] ? 'mdi-chevron-down' : 'mdi-chevron-right'"
+                          variant="text"
+                          size="x-small"
+                          @click="toggleParentExpanded(item.title)"
+                        ></v-btn>
+                        <v-btn
+                          icon="mdi-arrow-right"
+                          variant="text"
+                          size="x-small"
+                          @click="moveToMore(indexOfItem(mainItems, item))"
                         ></v-btn>
                       </template>
                     </v-list-item>
-                  </v-list>
+                    <v-list
+                      v-if="expandedParents[item.title] && getSubItems(item.title)"
+                      density="compact"
+                      class="custom-sub-list"
+                      @dragover.prevent
+                      @drop="handleSubDrop($event, getSubItems(item.title).length - 1)"
+                    >
+                      <v-list-item
+                        v-for="(sub, subIndex) in getSubItems(item.title)"
+                        :key="sub.value"
+                        class="mb-1 draggable-item sub-item"
+                        draggable="true"
+                        @dragstart="handleSubDragStart($event, item.title, subIndex)"
+                        @dragover.prevent
+                        @drop.stop="handleSubDrop($event, subIndex)"
+                      >
+                        <template v-slot:prepend>
+                          <v-icon v-if="typeof sub.icon === 'string'" :icon="sub.icon" size="small" class="mr-2" />
+                          <component :is="sub.icon" v-else-if="sub.icon" :size="16" class="mr-2" />
+                        </template>
+                        <v-list-item-title class="sub-item-title">{{ t(sub.labelKey) }}</v-list-item-title>
+                        <template v-slot:append>
+                          <v-btn
+                            v-if="canPromoteSub(sub.value)"
+                            icon="mdi-arrow-up"
+                            variant="text"
+                            size="x-small"
+                            @click="promoteSubItem(item.title, sub.value)"
+                          ></v-btn>
+                        </template>
+                      </v-list-item>
+                    </v-list>
+                  </template>
+                  <template v-if="group.key === EXTENSION_GROUP_KEY">
+                    <template v-for="entry in extensionPluginEntries" :key="entry.key">
+                      <v-list-item class="mb-1 static-item">
+                        <template v-slot:prepend>
+                          <v-icon v-if="typeof entry.icon === 'string'" :icon="entry.icon" size="small" class="mr-2" />
+                          <component :is="entry.icon" v-else-if="entry.icon" :size="18" class="mr-2" />
+                        </template>
+                        <v-list-item-title>{{ entryTitle(entry) }}</v-list-item-title>
+                        <template v-slot:append>
+                          <v-tooltip :text="t('features.settings.sidebar.customize.pluginHint')" location="left">
+                            <template v-slot:activator="{ props: tooltipProps }">
+                              <v-icon v-bind="tooltipProps" icon="mdi-information-outline" size="small" />
+                            </template>
+                          </v-tooltip>
+                        </template>
+                      </v-list-item>
+                    </template>
+                  </template>
                 </template>
               </v-list>
             </v-col>
@@ -113,74 +136,79 @@
                 @dragover.prevent
                 @drop="handleDropToList($event, 'more')"
               >
-                <template v-for="(item, index) in moreItems" :key="item.title">
-                  <v-list-item
-                    class="mb-1 draggable-item"
-                    draggable="true"
-                    @dragstart="handleDragStart($event, 'more', index)"
-                    @dragover.prevent
-                    @drop.stop="handleDrop($event, 'more', index)"
-                  >
-                    <template v-slot:prepend>
-                      <v-icon v-if="typeof item.icon === 'string'" :icon="item.icon" size="small" class="mr-2" />
-                      <component :is="item.icon" v-else-if="item.icon" :size="18" class="mr-2" />
-                    </template>
-                    <v-list-item-title>{{ t(item.title) }}</v-list-item-title>
-                    <template v-slot:append>
-                      <v-btn
-                        v-if="subDefByLabelKey.has(item.title)"
-                        icon="mdi-arrow-down"
-                        variant="text"
-                        size="x-small"
-                        @click="demoteSubItem(item.title)"
-                      ></v-btn>
-                      <v-btn
-                        v-if="getSubItems(item.title)"
-                        :icon="expandedParents[item.title] ? 'mdi-chevron-down' : 'mdi-chevron-right'"
-                        variant="text"
-                        size="x-small"
-                        @click="toggleParentExpanded(item.title)"
-                      ></v-btn>
-                      <v-btn
-                        icon="mdi-arrow-left"
-                        variant="text"
-                        size="x-small"
-                        @click="moveToMain(index)"
-                      ></v-btn>
-                    </template>
-                  </v-list-item>
-                  <v-list
-                    v-if="expandedParents[item.title] && getSubItems(item.title)"
-                    density="compact"
-                    class="custom-sub-list"
-                    @dragover.prevent
-                    @drop="handleSubDrop($event, getSubItems(item.title).length - 1)"
-                  >
+                <template v-for="group in customizerGroups" :key="group.key">
+                  <div class="customizer-group-header">
+                    <span>{{ t(group.labelKey) }}</span>
+                  </div>
+                  <template v-for="item in itemsByGroup(moreItems, group.key)" :key="item.title">
                     <v-list-item
-                      v-for="(sub, subIndex) in getSubItems(item.title)"
-                      :key="sub.value"
-                      class="mb-1 draggable-item sub-item"
+                      class="mb-1 draggable-item"
                       draggable="true"
-                      @dragstart="handleSubDragStart($event, item.title, subIndex)"
+                      @dragstart="handleDragStart($event, 'more', indexOfItem(moreItems, item))"
                       @dragover.prevent
-                      @drop.stop="handleSubDrop($event, subIndex)"
+                      @drop.stop="handleDrop($event, 'more', indexOfItem(moreItems, item))"
                     >
                       <template v-slot:prepend>
-                        <v-icon v-if="typeof sub.icon === 'string'" :icon="sub.icon" size="small" class="mr-2" />
-                        <component :is="sub.icon" v-else-if="sub.icon" :size="16" class="mr-2" />
+                        <v-icon v-if="typeof item.icon === 'string'" :icon="item.icon" size="small" class="mr-2" />
+                        <component :is="item.icon" v-else-if="item.icon" :size="18" class="mr-2" />
                       </template>
-                      <v-list-item-title class="sub-item-title">{{ t(sub.labelKey) }}</v-list-item-title>
+                      <v-list-item-title>{{ t(item.title) }}</v-list-item-title>
                       <template v-slot:append>
                         <v-btn
-                          v-if="canPromoteSub(sub.value)"
-                          icon="mdi-arrow-up"
+                          v-if="subDefByLabelKey.has(item.title)"
+                          icon="mdi-arrow-down"
                           variant="text"
                           size="x-small"
-                          @click="promoteSubItem(item.title, sub.value)"
+                          @click="demoteSubItem(item.title)"
+                        ></v-btn>
+                        <v-btn
+                          v-if="getSubItems(item.title)"
+                          :icon="expandedParents[item.title] ? 'mdi-chevron-down' : 'mdi-chevron-right'"
+                          variant="text"
+                          size="x-small"
+                          @click="toggleParentExpanded(item.title)"
+                        ></v-btn>
+                        <v-btn
+                          icon="mdi-arrow-left"
+                          variant="text"
+                          size="x-small"
+                          @click="moveToMain(indexOfItem(moreItems, item))"
                         ></v-btn>
                       </template>
                     </v-list-item>
-                  </v-list>
+                    <v-list
+                      v-if="expandedParents[item.title] && getSubItems(item.title)"
+                      density="compact"
+                      class="custom-sub-list"
+                      @dragover.prevent
+                      @drop="handleSubDrop($event, getSubItems(item.title).length - 1)"
+                    >
+                      <v-list-item
+                        v-for="(sub, subIndex) in getSubItems(item.title)"
+                        :key="sub.value"
+                        class="mb-1 draggable-item sub-item"
+                        draggable="true"
+                        @dragstart="handleSubDragStart($event, item.title, subIndex)"
+                        @dragover.prevent
+                        @drop.stop="handleSubDrop($event, subIndex)"
+                      >
+                        <template v-slot:prepend>
+                          <v-icon v-if="typeof sub.icon === 'string'" :icon="sub.icon" size="small" class="mr-2" />
+                          <component :is="sub.icon" v-else-if="sub.icon" :size="16" class="mr-2" />
+                        </template>
+                        <v-list-item-title class="sub-item-title">{{ t(sub.labelKey) }}</v-list-item-title>
+                        <template v-slot:append>
+                          <v-btn
+                            v-if="canPromoteSub(sub.value)"
+                            icon="mdi-arrow-up"
+                            variant="text"
+                            size="x-small"
+                            @click="promoteSubItem(item.title, sub.value)"
+                          ></v-btn>
+                        </template>
+                      </v-list-item>
+                    </v-list>
+                  </template>
                 </template>
               </v-list>
             </v-col>
@@ -210,9 +238,13 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useI18n } from '@/i18n/composables';
-import sidebarItems from '@/layouts/full/vertical-sidebar/sidebarItem';
+import sidebarItems, {
+  SYSTEM_GROUP_KEY,
+  EXTENSION_GROUP_KEY
+} from '@/layouts/full/vertical-sidebar/sidebarItem';
+import { usePluginSidebarItems } from '@/composables/usePluginSidebarItems';
 import { 
   getSidebarCustomization, 
   setSidebarCustomization, 
@@ -238,6 +270,69 @@ const subItemOrder = ref({});
 // Expanded/collapsed state per parent title; sub-route lists are collapsed by default.
 const expandedParents = ref({});
 const draggedSubItem = ref(null);
+
+// The customizer renders both lists grouped under the same headers as the
+// real sidebar, so extension entries stay visibly separated from system ones.
+const customizerGroups = [
+  { key: SYSTEM_GROUP_KEY, labelKey: 'core.navigation.groups.system' },
+  { key: EXTENSION_GROUP_KEY, labelKey: 'core.navigation.groups.extension' }
+];
+
+// Map every first-level item title to the group header it sits under in the
+// default sidebar, so the customizer can render items under their group.
+const itemGroupByTitle = new Map();
+{
+  let currentGroup = SYSTEM_GROUP_KEY;
+  sidebarItems.forEach((item) => {
+    if (item.header) {
+      currentGroup = item.header;
+      return;
+    }
+    itemGroupByTitle.set(item.title, currentGroup);
+  });
+}
+
+function itemsByGroup(list, groupKey) {
+  return list.filter((item) => {
+    let group = itemGroupByTitle.get(item.title);
+    // Promoted sub-routes are not part of the default item map; they render
+    // in the same group as their parent item.
+    if (group === undefined) {
+      const def = subDefByLabelKey.get(item.title);
+      if (def) group = itemGroupByTitle.get(def.parentTitle);
+    }
+    return group === groupKey;
+  });
+}
+
+function indexOfItem(list, item) {
+  return list.findIndex((it) => it.title === item.title);
+}
+
+// Dynamic plugin entries appended to the extension group. They are read-only
+// in the customizer because they are generated from the extension pages.
+const { pluginItems, pluginGroups } = usePluginSidebarItems();
+const extensionPluginEntries = computed(() => {
+  if (localStorage.getItem('sidebar_group_by_plugin') === '1') {
+    return (pluginGroups.value ?? []).map((group) => ({
+      key: `group-${group.title}`,
+      title: group.title,
+      icon: group.icon,
+      isRawTitle: true
+    }));
+  }
+  return (pluginItems.value?.children ?? []).map((child) => ({
+    key: `page-${child.to ?? child.title}`,
+    title: child.title,
+    icon: child.icon,
+    isRawTitle: true
+  }));
+});
+
+// Raw plugin titles are display names, not i18n keys.
+function entryTitle(entry) {
+  return entry.isRawTitle ? entry.title : t(entry.title);
+}
 
 function toggleParentExpanded(parentTitle) {
   expandedParents.value[parentTitle] = !expandedParents.value[parentTitle];
@@ -363,13 +458,15 @@ function handleDrop(event, targetListType, targetIndex) {
   } else {
     moreItems.value.splice(sourceIndex, 1);
   }
-  
-  // Add to target
-  if (targetListType === 'main') {
-    mainItems.value.splice(targetIndex, 0, item);
-  } else {
-    moreItems.value.splice(targetIndex, 0, item);
-  }
+
+  // Insert at the drop position. targetIndex was resolved before the source
+  // removal, so when dragging within the same list the removal shifts it
+  // down by one.
+  const target = targetListType === 'main' ? mainItems.value : moreItems.value;
+  let insertAt = targetIndex;
+  if (sourceListType === targetListType && sourceIndex < insertAt) insertAt -= 1;
+  insertAt = Math.max(0, Math.min(insertAt, target.length));
+  target.splice(insertAt, 0, item);
   
   draggedItem.value = null;
 }
@@ -501,6 +598,25 @@ onMounted(() => {
   border: 1px dashed rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 4px;
   padding: 8px;
+}
+
+/* Group headers mirror the sidebar section headers (e.g. 系统 / 扩展功能). */
+.customizer-group-header {
+  display: flex;
+  align-items: center;
+  padding: 6px 4px 4px;
+  margin-top: 4px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  letter-spacing: 0.02em;
+}
+
+/* Dynamic plugin entries are not customizable, show them as read-only. */
+.static-item {
+  opacity: 0.85;
+  background: rgba(var(--v-theme-on-surface), 0.03);
+  cursor: default;
 }
 
 /* Nested sub-route lists (e.g. the four /data tabs) sit indented under their
