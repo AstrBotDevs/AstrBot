@@ -628,7 +628,7 @@ export type RuntimeInfo = {
      * Local process sandbox startup check, captured when AstrBot starts. It does not verify DNS resolution or every permitted operation.
      */
     sandbox: {
-        backend: ('bubblewrap' | 'seatbelt') | null;
+        backend: ('bubblewrap' | 'seatbelt' | 'appcontainer') | null;
         /**
          * detected means the executable was found and a minimal workspace sandbox launched successfully; missing means the corresponding executable was not found; unavailable means it was found but sandbox startup failed; unsupported means this platform has no Local process sandbox backend. These identifiers are independent of the UI language.
          */
@@ -640,7 +640,7 @@ export type RuntimeInfo = {
     };
 };
 
-export type backend = 'bubblewrap' | 'seatbelt';
+export type backend = 'bubblewrap' | 'seatbelt' | 'appcontainer';
 
 /**
  * detected means the executable was found and a minimal workspace sandbox launched successfully; missing means the corresponding executable was not found; unavailable means it was found but sandbox startup failed; unsupported means this platform has no Local process sandbox backend. These identifiers are independent of the UI language.

@@ -1,3 +1,4 @@
+import sys
 import time
 from datetime import datetime, timedelta
 from types import SimpleNamespace
@@ -27,8 +28,8 @@ def _make_service(db) -> StatService:
         ("Darwin", "arm64", "/usr/bin/sandbox-exec", "seatbelt", "detected"),
         ("Darwin", "x86_64", None, "seatbelt", "missing"),
         ("Darwin", "arm64", "/opt/bin/sandbox-exec", "seatbelt", "missing"),
-        ("Windows", "AMD64", None, None, "unsupported"),
-        ("Windows", "ARM64", None, None, "unsupported"),
+        ("Windows", "AMD64", None, "appcontainer", "detected"),
+        ("Windows", "ARM64", None, "appcontainer", "detected"),
         ("FreeBSD", "", None, None, "unsupported"),
     ],
 )
@@ -66,7 +67,11 @@ def test_runtime_detects_platform_dependencies(
         factory.assert_called_once_with()
         sandbox.run.assert_called_once()
         args, kwargs = sandbox.run.call_args
-        assert args[0] == ["/bin/sh", "-c", ":"]
+        assert args[0] == (
+            [sys.executable, "-I", "-c", "pass"]
+            if system == "Windows"
+            else ["/bin/sh", "-c", ":"]
+        )
         assert args[1].filesystem_scope == "workspace"
         assert args[1].allow_network is False
         assert not args[1].workspace.exists()

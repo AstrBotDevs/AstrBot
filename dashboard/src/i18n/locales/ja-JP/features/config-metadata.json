@@ -422,12 +422,16 @@
           "full": "環境内のすべてのファイルを読み書きでき、Shell/Python の実行とネットワークアクセスが可能です。"
         },
         "unsupportedSelection": "現在のポリシーはサポートされていません",
+        "windowsHostNetworkHint": "Windows では「環境全体」でコードを実行する場合、通信だけを無効にはできません。「ワークスペース」に切り替えると無効にできます。",
         "runtimeUnknown": "実行環境の情報を取得できません。",
         "memberWarning": "一般メンバーにネットワーク接続または環境全体へのアクセスが許可されています。",
         "runtime": {
           "os": "OS",
           "arch": "アーキテクチャ",
           "sandbox": "ローカル隔離",
+          "windowsUnavailable": "{backend} · 準備未完了",
+          "windowsSetupHint": "設定を保存して AstrBot を再起動してください。管理者の承認を求められた場合は、サンドボックスの初期化を許可してください。",
+          "errorDetails": "診断の詳細を表示",
           "unavailableHint": "サンドボックスの起動に失敗したため、制限付きの Shell/Python 実行とワークスペース内のファイル検索に影響があります。以下のエラーを参考に、システムのセキュリティポリシー（Linux の AppArmor やユーザー名前空間の制限など）またはコンテナの制限を確認し、修正後に AstrBot を再起動して再検査してください。",
           "status": {
             "detected": "{backend} · 起動確認済み",

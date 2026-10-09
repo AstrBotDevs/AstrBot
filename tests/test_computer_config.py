@@ -91,7 +91,9 @@ def test_local_permission_validation_does_not_inject_missing_policies():
 
 
 @pytest.mark.parametrize("role", ["member", "admin"])
-@pytest.mark.parametrize("status", ["detected", "missing", "unavailable", "unsupported"])
+@pytest.mark.parametrize(
+    "status", ["detected", "missing", "unavailable", "unsupported"]
+)
 @pytest.mark.parametrize(
     ("scope", "execution", "network", "denied_on"),
     [
@@ -187,6 +189,38 @@ def test_windows_legacy_permissions(old_mode, new_mode, role, change, rejected):
 # ═══════════════════════════════════════════════════════════════
 # _discover_bay_credentials
 # ═══════════════════════════════════════════════════════════════
+
+
+@pytest.mark.parametrize("status", ["detected", "unavailable"])
+def test_windows_appcontainer_policy_can_be_saved_before_restart(status):
+    payload = {
+        "provider_settings": {
+            "computer_use_runtime": "local",
+            "computer_use_local_permissions": {
+                "member": {
+                    "filesystem_scope": "workspace",
+                    "allow_execution": True,
+                    "allow_network": False,
+                }
+            },
+        }
+    }
+    runtime = {
+        "os": "windows",
+        "sandbox": {"backend": "appcontainer", "status": status},
+    }
+    errors, _ = validate_config(
+        payload, CONFIG_METADATA_2, is_core=True, runtime=runtime
+    )
+    assert not errors
+    payload["provider_settings"]["computer_use_local_permissions"]["member"][
+        "filesystem_scope"
+    ] = "host"
+    errors, _ = validate_config(
+        payload, CONFIG_METADATA_2, is_core=True, runtime=runtime
+    )
+    assert len(errors) == 1
+    assert "workspace scope only" in errors[0]
 
 
 class TestDiscoverBayCredentials:

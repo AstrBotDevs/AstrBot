@@ -24,17 +24,21 @@
           {{ tm('runtime.sandbox') }}
         </dt>
         <dd>
-          {{ tm(`runtime.status.${runtime.sandbox.status}`, {
-            backend: runtime.sandbox.backend === 'seatbelt' ? 'Seatbelt' : 'bubblewrap',
-            dependency: runtime.sandbox.backend === 'seatbelt' ? 'sandbox-exec' : 'bwrap'
+          {{ tm(windowsSandbox && sandboxUnavailable ? 'runtime.windowsUnavailable' : `runtime.status.${runtime.sandbox.status}`, {
+            backend: { seatbelt: 'Seatbelt', bubblewrap: 'bubblewrap', appcontainer: 'AppContainer' }[runtime.sandbox.backend],
+            dependency: { seatbelt: 'sandbox-exec', bubblewrap: 'bwrap', appcontainer: 'AppContainer' }[runtime.sandbox.backend]
           }) }}
         </dd>
       </div>
     </dl>
 
     <v-alert v-if="runtime?.sandbox?.status === 'unavailable'" type="warning" variant="tonal" density="compact">
-      <div>{{ tm('runtime.unavailableHint') }}</div>
-      <div v-if="runtime.sandbox.error" class="sandbox-error mt-2">{{ runtime.sandbox.error }}</div>
+      <div>{{ tm(windowsSandbox ? 'runtime.windowsSetupHint' : 'runtime.unavailableHint') }}</div>
+      <details v-if="windowsSandbox && runtime.sandbox.error" class="mt-2">
+        <summary>{{ tm('runtime.errorDetails') }}</summary>
+        <div class="sandbox-error mt-2">{{ runtime.sandbox.error }}</div>
+      </details>
+      <div v-else-if="runtime.sandbox.error" class="sandbox-error mt-2">{{ runtime.sandbox.error }}</div>
     </v-alert>
 
     <v-table class="permission-table">
@@ -114,26 +118,42 @@
           </td>
           <template v-else>
             <td class="permission-toggle">
-              <v-checkbox-btn
-                :model-value="policy(role).allow_execution"
-                :disabled="permissionLocks[role].execution"
-                :aria-label="`${tm(`roles.${role}`)} · ${tm('execution')}`"
-                color="primary"
-                density="compact"
-                @update:model-value="updatePermission(role, { allow_execution: Boolean($event) })"
-              />
-              <LockKeyhole v-if="permissionLocks[role].execution" class="permission-lock" :size="12" aria-hidden="true" />
+              <div class="permission-toggle-control">
+                <v-checkbox-btn
+                  :model-value="policy(role).allow_execution"
+                  :disabled="permissionLocks[role].execution"
+                  :aria-label="`${tm(`roles.${role}`)} · ${tm('execution')}`"
+                  color="primary"
+                  density="compact"
+                  @update:model-value="updatePermission(role, { allow_execution: Boolean($event) })"
+                />
+                <LockKeyhole v-if="permissionLocks[role].execution" class="permission-lock" :size="12" aria-hidden="true" />
+              </div>
             </td>
             <td class="permission-toggle">
-              <v-checkbox-btn
-                :model-value="policy(role).allow_network"
-                :disabled="permissionLocks[role].network"
-                :aria-label="`${tm(`roles.${role}`)} · ${tm('network')}`"
-                color="primary"
-                density="compact"
-                @update:model-value="updatePermission(role, { allow_network: Boolean($event) })"
-              />
-              <LockKeyhole v-if="permissionLocks[role].network" class="permission-lock" :size="12" aria-hidden="true" />
+              <div class="permission-toggle-control">
+                <v-checkbox-btn
+                  :model-value="policy(role).allow_network"
+                  :disabled="permissionLocks[role].network"
+                  :aria-label="`${tm(`roles.${role}`)} · ${tm('network')}`"
+                  color="primary"
+                  density="compact"
+                  @update:model-value="updatePermission(role, { allow_network: Boolean($event) })"
+                />
+                <LockKeyhole v-if="permissionLocks[role].network" class="permission-lock" :size="12" aria-hidden="true" />
+                <v-tooltip
+                  v-if="runtime?.os === 'windows' && policy(role).filesystem_scope === 'host' && policy(role).allow_execution"
+                  :text="tm('windowsHostNetworkHint')"
+                  location="top"
+                  :max-width="320"
+                >
+                  <template #activator="{ props: helpProps }">
+                    <button v-bind="helpProps" type="button" class="scope-help network-help" :aria-label="tm('windowsHostNetworkHint')">
+                      <CircleHelp :size="14" aria-hidden="true" />
+                    </button>
+                  </template>
+                </v-tooltip>
+              </div>
             </td>
             <td>
               <v-select
@@ -218,6 +238,8 @@ const runtime = ref(null)
 const runtimeLoading = ref(true)
 const unsupported = computed(() => runtime.value?.sandbox?.status === 'unsupported')
 const sandboxUnavailable = computed(() => ['missing', 'unavailable'].includes(runtime.value?.sandbox?.status))
+const windowsSandbox = computed(() => runtime.value?.sandbox?.backend === 'appcontainer')
+const sandboxBlocked = computed(() => sandboxUnavailable.value && !windowsSandbox.value)
 const roles = ['member', 'admin']
 const defaults = computed(() => runtime.value?.os === 'windows' ? windowsPermissionDefaults : {
   member: {
@@ -261,10 +283,10 @@ function updatePermission(role, changes) {
     ...policy(role),
     ...changes
   }
-  if (updatedRole.filesystem_scope === 'none' || (sandboxUnavailable.value && changes.filesystem_scope === 'workspace')) {
+  if (updatedRole.filesystem_scope === 'none' || (sandboxBlocked.value && changes.filesystem_scope === 'workspace')) {
     updatedRole.allow_execution = false
   }
-  if (sandboxUnavailable.value && changes.allow_execution === true) {
+  if (sandboxBlocked.value && changes.allow_execution === true) {
     if (updatedRole.filesystem_scope === 'workspace') {
       updatedRole.allow_execution = false
     } else {
@@ -273,6 +295,9 @@ function updatePermission(role, changes) {
   }
   if (!updatedRole.allow_execution) {
     updatedRole.allow_network = false
+  }
+  if (runtime.value?.os === 'windows' && updatedRole.filesystem_scope === 'host' && updatedRole.allow_execution) {
+    updatedRole.allow_network = true
   }
   emit('update:modelValue', {
     ...(props.modelValue || {}),
@@ -290,9 +315,10 @@ const permissionLocks = computed(() => Object.fromEntries(roles.map(role => {
   const current = policy(role)
   return [role, {
     execution: !runtime.value || current.filesystem_scope === 'none' ||
-      (sandboxUnavailable.value && current.filesystem_scope === 'workspace' && !current.allow_execution),
+      (sandboxBlocked.value && current.filesystem_scope === 'workspace' && !current.allow_execution),
     network: !runtime.value || !current.allow_execution ||
-      (sandboxUnavailable.value && current.allow_network)
+      (sandboxBlocked.value && current.allow_network) ||
+      (runtime.value?.os === 'windows' && current.filesystem_scope === 'host')
   }]
 })))
 const accessModes = computed(() => Object.fromEntries(roles.map(role => {
@@ -415,17 +441,25 @@ const memberHasElevatedAccess = computed(() => {
   justify-content: center;
 }
 
-.permission-toggle {
+.permission-toggle-control {
+  display: inline-flex;
   position: relative;
 }
 
 .permission-lock {
   position: absolute;
   top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
+  left: 100%;
+  transform: translateY(-50%);
   color: rgba(var(--v-theme-on-surface), 0.4);
   pointer-events: none;
+}
+
+.network-help {
+  position: absolute;
+  top: 50%;
+  left: calc(100% + 12px);
+  transform: translateY(-50%);
 }
 
 .local-permission-matrix--simple {
