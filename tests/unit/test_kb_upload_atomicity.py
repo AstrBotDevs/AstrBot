@@ -14,6 +14,7 @@ import issues in the astrbot core module chain (same pattern as
 test_kb_manager_resilience.py).
 """
 
+import asyncio
 import sys
 import types
 from contextlib import asynccontextmanager
@@ -107,6 +108,96 @@ def _session_with_begin(execute_side_effect=None):
     session.refresh = AsyncMock()
     session.execute = AsyncMock(side_effect=execute_side_effect)
     return session
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("committed", [False, True])
+async def test_upload_cancellation_respects_metadata_commit(
+    tmp_path: Path, stub_provider_manager_module, committed: bool
+) -> None:
+    """Cancel after insertion or commit and preserve the rollback boundary."""
+    cls = _import_kb_helper()
+    helper = cls.__new__(cls)
+    helper.kb = KnowledgeBase(kb_name="Cancellation", embedding_provider_id="emb")
+    helper.kb_db = MagicMock()
+    helper.vec_db = AsyncMock()
+    helper.kb_medias_dir = tmp_path
+    session = _session_with_begin()
+    helper.kb_db.get_db = _successful_get_db(session)
+    entered = asyncio.Event()
+
+    async def wait_for_cancel(*args, **kwargs):
+        entered.set()
+        await asyncio.Event().wait()
+
+    if committed:
+        session.refresh.side_effect = wait_for_cancel
+    else:
+        helper.vec_db.insert_batch.side_effect = wait_for_cancel
+
+    with patch.object(helper, "_ensure_vec_db", new=AsyncMock()):
+        task = asyncio.create_task(
+            helper.upload_document("test.txt", None, "txt", pre_chunked_text=["hello"])
+        )
+        try:
+            await asyncio.wait_for(entered.wait(), 2)
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+        finally:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
+    if committed:
+        session.commit.assert_awaited_once()
+        helper.vec_db.delete_documents.assert_not_awaited()
+    else:
+        doc_id = helper.vec_db.insert_batch.await_args.kwargs["metadatas"][0][
+            "kb_doc_id"
+        ]
+        helper.vec_db.delete_documents.assert_awaited_once_with(
+            metadata_filters={"kb_doc_id": doc_id}
+        )
+
+
+@pytest.mark.asyncio
+async def test_repeated_cancel_waits_for_rollback(stub_provider_manager_module) -> None:
+    """A second cancellation must not abandon the compensating cleanup task."""
+    cls = _import_kb_helper()
+    helper = cls.__new__(cls)
+    helper.kb = KnowledgeBase(kb_name="Cancellation", embedding_provider_id="emb")
+    helper.vec_db = AsyncMock()
+    helper.vec_db.insert_batch.side_effect = asyncio.CancelledError()
+    entered = asyncio.Event()
+    release = asyncio.Event()
+    finished = asyncio.Event()
+
+    async def cleanup(**kwargs):
+        entered.set()
+        await release.wait()
+        finished.set()
+
+    with (
+        patch.object(helper, "_ensure_vec_db", new=AsyncMock()),
+        patch.object(
+            helper, "_cleanup_failed_upload", new=AsyncMock(side_effect=cleanup)
+        ),
+    ):
+        task = asyncio.create_task(
+            helper.upload_document("test.txt", None, "txt", pre_chunked_text=["hello"])
+        )
+        try:
+            await asyncio.wait_for(entered.wait(), 2)
+            task.cancel()
+            await asyncio.sleep(0)
+            assert not task.done()
+            release.set()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+            assert finished.is_set()
+        finally:
+            release.set()
+            await asyncio.gather(task, return_exceptions=True)
 
 
 async def _make_real_vec_db(tmp_path: Path, dim: int = 4) -> FaissVecDB:

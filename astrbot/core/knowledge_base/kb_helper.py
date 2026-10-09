@@ -494,6 +494,26 @@ class KBHelper:
                     details={"file_name": file_name, "doc_id": doc_id},
                 ) from exc
             return doc
+        except asyncio.CancelledError:
+            if not metadata_committed:
+                # Keep a strong reference and shield compensation from repeated
+                # cancellation. The caller must not finish before rollback does.
+                cleanup_task = asyncio.create_task(
+                    self._cleanup_failed_upload(doc_id=doc_id, media_paths=media_paths)
+                )
+                while not cleanup_task.done():
+                    try:
+                        await asyncio.shield(cleanup_task)
+                    except asyncio.CancelledError:
+                        continue
+                    except Exception:
+                        break
+                if not cleanup_task.cancelled():
+                    try:
+                        cleanup_task.result()
+                    except Exception:
+                        logger.exception("Failed to roll back a cancelled KB upload")
+            raise
         except Exception as e:
             if isinstance(e, KnowledgeBaseUploadError):
                 logger.warning(f"上传文档失败: {e}", extra={"details": e.details})
