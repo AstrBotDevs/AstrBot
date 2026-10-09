@@ -30,6 +30,21 @@ def math_blocks(text):
     ]
 
 
+def outline(text):
+    """(list depth, text) for each paragraph, ignoring display math."""
+    depth = 0
+    result = []
+    tokens = MarkdownIt("commonmark").use(dollarmath_plugin).parse(text)
+    for index, token in enumerate(tokens):
+        if token.type in {"bullet_list_open", "ordered_list_open"}:
+            depth += 1
+        elif token.type in {"bullet_list_close", "ordered_list_close"}:
+            depth -= 1
+        elif token.type == "inline" and tokens[index - 1].type == "paragraph_open":
+            result.append((depth, token.content))
+    return result
+
+
 @pytest.mark.parametrize("marker", ["*", "-", "+", "1.", "123.", "2)"])
 def test_list_math_is_root_block_and_formula_is_unchanged(marker):
     indent = " " * (len(marker) + 1)
@@ -71,9 +86,14 @@ def test_paragraph_and_code_after_lifted_math_keep_their_meaning():
     before = next(t for t in parser.parse(source) if t.type == "fence")
     after = next(t for t in parser.parse(result) if t.type == "fence")
     assert before.content == after.content
-    assert "\nThe result is positive.\n" in result
     assert not any(t.type == "code_block" for t in parser.parse(result))
-    assert "\n1. Follow-up item\n   with a continuation.\n" in result
+    assert math_blocks(result)[0].level == 0
+    # The paragraph, fence and nested list stay inside the (reopened) item.
+    assert outline(result) == [
+        (1, "Example:"),
+        (1, "The result is positive."),
+        (2, "Follow-up item\nwith a continuation."),
+    ]
 
 
 @pytest.mark.parametrize(
@@ -187,3 +207,51 @@ def test_nonstream_send_clears_previous_stream_state():
     assert state.prepare(REPORTED, None) == (normalize_qq_list_math(REPORTED), None)
     final = {"state": 10, "index": 1, "id": "unknown"}
     assert state.prepare("Tail", final) == ("Tail", final)
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        (
+            "1. Item:\n   - Sub:\n     $$x$$\n     after\n     - child\n"
+            "   - sibling\n2. Next\n",
+            [
+                (1, "Item:"),
+                (2, "Sub:"),
+                (2, "after"),
+                (3, "child"),
+                (2, "sibling"),
+                (1, "Next"),
+            ],
+        ),
+        (
+            "- A\n  $$x$$\n  para\n  - nested\n    more\n- B\n",
+            [(1, "A"), (1, "para"), (2, "nested\nmore"), (1, "B")],
+        ),
+        (
+            "* Outer\n  1) Inner\n     $$x$$\n\n     tail\n  2) Second\n* Last\n",
+            [(1, "Outer"), (2, "Inner"), (2, "tail"), (2, "Second"), (1, "Last")],
+        ),
+    ],
+)
+def test_content_after_lifted_math_keeps_its_nesting_depth(source, expected):
+    result = normalize_qq_list_math(source)
+    assert len(math_blocks(result)) == 1
+    assert math_blocks(result)[0].level == 0
+    assert outline(result) == expected
+    assert normalize_qq_list_math(result) == result
+
+
+@pytest.mark.parametrize("quote", ["> ", ">", "> > "])
+def test_list_math_inside_blockquote_is_lifted(quote):
+    source = "".join(
+        quote + line for line in ["- Equation:\n", f"  $${FORMULA}$$\n", "- Next\n"]
+    )
+    result = normalize_qq_list_math(source)
+    tokens = MarkdownIt("commonmark").use(dollarmath_plugin).parse(result)
+    block = next(t for t in tokens if t.type == "math_block")
+    assert block.content == FORMULA
+    # Only the blockquote containers remain around the equation, no list.
+    assert block.level == quote.count(">")
+    assert sum(t.type == "blockquote_open" for t in tokens) == quote.count(">")
+    assert outline(result) == [(1, "Equation:"), (1, "Next")]
