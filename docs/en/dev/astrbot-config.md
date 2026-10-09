@@ -466,6 +466,8 @@ Baidu AI content moderation settings.
 
 List of administrator IDs. Additionally, you can use `/op` and `/deop` commands to add or remove admins.
 
+In WebUI, select the profile used by your bot under `Config`, then open `Access Control → Administrators → Administrator IDs`. Send `/sid` to the bot to get your `UID`.
+
 ### `t2i`
 
 Whether to enable Text-to-Image (T2I) functionality. Default is `false`. When enabled, if a user's message exceeds a certain character count, the bot renders the message as an image to improve readability and prevent spamming. Supports Markdown rendering.

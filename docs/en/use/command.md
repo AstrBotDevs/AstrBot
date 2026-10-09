@@ -47,7 +47,7 @@ In group chats, if `unique_session` is enabled, `/sid` also shows the current gr
 Common uses:
 
 - Add an admin: run `/sid` to get the `UID`, then add it in WebUI under `Config -> Access Control -> Administrators -> Administrator IDs`.
-- Configure allowlists: use `UMO` or group ID to control which sessions can use the bot.
+- Configure allowlists: select the profile used by your bot in `Config`, then add the `UMO` or group ID under `Access Control -> Whitelist -> Whitelist ID List` to control which sessions can use the bot.
 - Configure routing rules: use `UMO` to distinguish different platforms, groups, or private chats.
 
 ### `/name`
