@@ -3,6 +3,7 @@
 import hashlib
 import json
 import os
+from contextlib import AsyncExitStack
 from dataclasses import asdict
 
 import httpx
@@ -95,12 +96,7 @@ class OAuthProviderPlugin(Star):
                 "Manage the plugin provider's OAuth account",
             )
         except BaseException:
-            if self.oauth is not None:
-                await self.oauth.close()
-            if self.provider_class is not None:
-                unregister_provider_adapter(PROVIDER_TYPE, self.provider_class)
-            if self.http is not None:
-                await self.http.aclose()
+            await self.terminate()
             raise
 
     async def load_token(self) -> OAuth2Token | None:
@@ -174,16 +170,22 @@ class OAuthProviderPlugin(Star):
             return error_response("Provider operation failed; check the configuration.")
 
     async def terminate(self) -> None:
-        """Close auth before removing instances; preserve encrypted credentials."""
-        if self.oauth is not None:
-            await self.oauth.close()
-        try:
-            manager = self.context.provider_manager
-            for provider_id, provider in list(manager.inst_map.items()):
-                if type(provider) is self.provider_class:
-                    await manager.terminate_provider(provider_id)
-        finally:
-            if self.provider_class is not None:
-                unregister_provider_adapter(PROVIDER_TYPE, self.provider_class)
+        """Close all owned resources, even if an earlier cleanup fails."""
+        async with AsyncExitStack() as cleanup:
+            # Always attempt instance, registration and HTTP cleanup after auth.
             if self.http is not None:
-                await self.http.aclose()
+                cleanup.push_async_callback(self.http.aclose)
+            if self.provider_class is not None:
+                cleanup.callback(
+                    unregister_provider_adapter, PROVIDER_TYPE, self.provider_class
+                )
+            try:
+                if self.oauth is not None:
+                    await self.oauth.close()
+            finally:
+                manager = self.context.provider_manager
+                for provider_id, provider in reversed(list(manager.inst_map.items())):
+                    if type(provider) is self.provider_class:
+                        cleanup.push_async_callback(
+                            manager.terminate_provider, provider_id
+                        )

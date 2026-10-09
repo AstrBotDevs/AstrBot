@@ -255,12 +255,8 @@ class OAuth2Session:
                     "code_verifier": pending[2],
                 }
             )
-            try:
-                await self._save_token(token)
-            except Exception:
-                raise OAuth2Error("Could not persist OAuth credentials.") from None
             # A new account must never inherit the previous account's refresh token.
-            self._token, self._loaded = token, True
+            await self._persist_token(token)
 
     async def cancel_authorization(self, *, owner: str) -> None:
         """Cancel this user's pending login without disconnecting the account.
@@ -308,15 +304,7 @@ class OAuth2Session:
                 {"grant_type": "refresh_token", "refresh_token": token.refresh_token},
                 previous=token,
             )
-            try:
-                await self._save_token(refreshed)
-            except Exception:
-                # A rotated refresh token cannot safely be retried with the old one.
-                self._token = None
-                raise OAuth2Error(
-                    "Could not persist OAuth credentials; sign in again."
-                ) from None
-            self._token = refreshed
+            await self._persist_token(refreshed)
             return refreshed.access_token
 
     async def authorize_request(self, request: httpx.Request) -> None:
@@ -355,11 +343,7 @@ class OAuth2Session:
         """
         async with self._lock:
             self._pending = None
-            self._token, self._loaded = None, True
-            try:
-                await self._save_token(None)
-            except Exception:
-                raise OAuth2Error("Could not delete OAuth credentials.") from None
+            await self._persist_token(None)
 
     async def close(self) -> None:
         """Disable authentication on plugin unload; retain persisted credentials."""
@@ -367,6 +351,19 @@ class OAuth2Session:
             self._closed = True
             self._pending = None
             self._token = None
+
+    async def _persist_token(self, token: OAuth2Token | None) -> None:
+        """Persist under the session lock, failing closed even on cancellation."""
+        # Never reuse an old, possibly rotated token after a failed/cancelled save.
+        self._token, self._loaded = None, True
+        try:
+            await self._save_token(token)
+        except Exception:
+            action = "delete" if token is None else "persist"
+            raise OAuth2Error(
+                f"Could not {action} OAuth credentials; sign in again."
+            ) from None
+        self._token = token
 
     async def _request_token(
         self, data: dict[str, str], previous: OAuth2Token | None = None
@@ -402,8 +399,7 @@ class OAuth2Session:
                     raise OAuth2Error("Invalid OAuth token response.")
                 if not response.is_success or "error" in payload:
                     if previous is not None and payload.get("error") == "invalid_grant":
-                        self._token, self._loaded = None, True
-                        await self._save_token(None)
+                        await self._persist_token(None)
                         raise OAuth2Error(
                             "OAuth authorization has expired; sign in again."
                         )

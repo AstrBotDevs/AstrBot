@@ -18,7 +18,6 @@ pytestmark = pytest.mark.asyncio
 class MemoryStore:
     def __init__(self, token=None):
         self.token = token
-        self.saved = []
         self.loads = 0
 
     async def load(self):
@@ -27,7 +26,6 @@ class MemoryStore:
 
     async def save(self, token):
         self.token = token
-        self.saved.append(token)
 
 
 def make_session(handler=None, token=None, **kwargs):
@@ -160,6 +158,9 @@ async def test_denial_consumes_attempt_without_echoing_provider_text():
 
 @pytest.mark.parametrize("field,value", [
     ("authorization_endpoint", "http://evil.example/authorize"),
+    ("authorization_endpoint", " https://login.example.com/auth"),
+    ("authorization_endpoint", "https://login.example.com/au\nth"),
+    ("authorization_endpoint", "https://login.example.com/a b"),
     ("token_endpoint", "https://user:secret@example.com/token"),
     ("token_endpoint", "https://@example.com/token"),
     ("token_endpoint", "https://example.com:bad/token"),
@@ -324,16 +325,45 @@ async def test_close_retains_store_but_blocks_old_transport():
             await session.authorize_request(httpx.Request("GET", "https://api.example.com/v1/models"))
 
 
-async def test_storage_errors_are_sanitized_and_refresh_fails_closed():
-    async def fail(*args):
-        raise RuntimeError("PRIVATE_REFRESH_TOKEN")
-    session, _, _, client = make_session(token=OAuth2Token("old", "refresh", 0), save_token=fail)
+@pytest.mark.parametrize("failure", [RuntimeError, asyncio.CancelledError])
+@pytest.mark.parametrize("operation", ["refresh", "login", "disconnect", "invalid_grant"])
+async def test_failed_storage_never_reuses_old_credentials(failure, operation):
+    async def fail(token):
+        raise failure("PRIVATE_REFRESH_TOKEN")
+
+    def invalid_grant(_):
+        return httpx.Response(400, json={"error": "invalid_grant"})
+
+    expired = operation in {"refresh", "invalid_grant"}
+    old = OAuth2Token("old", "refresh", 0 if expired else None)
+    session, store, calls, client = make_session(
+        invalid_grant if operation == "invalid_grant" else None,
+        token=old, save_token=fail,
+    )
     async with client:
-        with pytest.raises(OAuth2Error, match="persist") as error:
-            await session.get_access_token()
-        assert "PRIVATE_REFRESH_TOKEN" not in str(error.value)
+        if not expired:
+            assert await session.get_access_token() == "old"
+        expected = asyncio.CancelledError if failure is asyncio.CancelledError else OAuth2Error
+        with pytest.raises(expected) as error:
+            if operation == "login":
+                await session.complete_authorization(await callback(session), owner="admin")
+            elif operation == "disconnect":
+                await session.disconnect()
+            else:
+                await session.get_access_token()
+        if expected is OAuth2Error:
+            assert "PRIVATE_REFRESH_TOKEN" not in str(error.value)
+        # A failed/cancelled write must not reload or reuse an old rotated token.
         with pytest.raises(OAuth2Error, match="sign-in"):
             await session.get_access_token()
+        assert len(calls) == (0 if operation == "disconnect" else 1)
+        assert store.loads == 1
+
+
+async def test_load_error_is_sanitized():
+    async def fail():
+        raise RuntimeError("PRIVATE_REFRESH_TOKEN")
+
     session, _, _, client = make_session(load_token=fail)
     async with client:
         with pytest.raises(OAuth2Error, match="load") as error:
@@ -345,6 +375,8 @@ async def test_storage_errors_are_sanitized_and_refresh_fails_closed():
     "https://evil.example/v1/models", "http://api.example.com/v1/models",
     "https://api.example.com:444/v1/models", "https://api.example.com/v10/models",
     "https://api.example.com/other",
+    "https://api.example.com/v1/%2e%2e/admin",
+    "https://api.example.com/v1/%5c..%5cadmin",
 ])
 async def test_auth_hook_refuses_other_resources_before_loading_credentials(url):
     session, store, _, client = make_session(token=OAuth2Token("private"))
@@ -486,21 +518,3 @@ async def test_real_openai_sdk_discovery_chat_and_stream_use_current_bearer():
         assert sdk.api_key == "oauth-managed"
         assert len(token_requests) == 1
         assert len(requests) == 3
-
-
-@pytest.mark.parametrize("url", [
-    "https://api.example.com/v1/%2e%2e/admin",
-    "https://api.example.com/v1/%5c..%5cadmin",
-])
-async def test_encoded_api_path_escape_is_rejected(url):
-    session, store, _, client = make_session(token=OAuth2Token("secret"))
-    async with client:
-        with pytest.raises(OAuth2Error, match="outside"):
-            await session.authorize_request(httpx.Request("GET", url))
-        assert store.loads == 0
-
-
-@pytest.mark.parametrize("url", [" https://login.example.com/auth", "https://login.example.com/au\nth", "https://login.example.com/a b"])
-async def test_ambiguous_endpoint_controls_are_rejected(url):
-    with pytest.raises(ValueError):
-        make_session(authorization_endpoint=url)
