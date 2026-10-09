@@ -284,7 +284,16 @@ function processPayload(
 
   if (type === "error") {
     markMessageStarted(botRecord);
-    appendPlain(botRecord, `\n\n${String(data)}`);
+    if (normalized.error_code) {
+      botRecord.content.message.push({
+        type: "plain",
+        text: String(data),
+        error_code: normalized.error_code,
+        error_params: normalized.error_params || {},
+      });
+    } else {
+      appendPlain(botRecord, `\n\n${String(data)}`);
+    }
     return;
   }
 

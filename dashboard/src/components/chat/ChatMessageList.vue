@@ -171,7 +171,7 @@
                         class="threaded-message-content"
                       >
                         <ThreadedMarkdownMessagePart
-                          :text="part.text || ''"
+                          :text="messagePartText(part)"
                           :threads="messageThreads(msg)"
                           :refs="resolvedMessageRefs(msg)"
                           :is-dark="isDark"
@@ -183,7 +183,7 @@
 
                       <MarkdownMessagePart
                         v-else-if="part.type === 'plain'"
-                        :content="part.text || ''"
+                        :content="messagePartText(part)"
                         :refs="resolvedMessageRefs(msg)"
                         :is-dark="isDark"
                         :custom-html-tags="customMarkdownTags"
@@ -475,6 +475,7 @@ import {
 } from "@/components/chat/attachmentPresentation";
 import {
   displayParts as displayMessageParts,
+  messagePartText,
   messageBlocks as buildMessageBlocks,
   type MessageDisplayBlock,
 } from "@/composables/useMessages";
@@ -700,7 +701,9 @@ function partUrl(part: MessagePart) {
 function plainTextFromMessage(message: ChatRecord) {
   return messageParts(message)
     .filter((part) => part.type === "plain" && part.text)
-    .map((part) => part.text)
+    .map((part) =>
+      isUserMessage(message) ? part.text : messagePartText(part),
+    )
     .join("\n");
 }
 

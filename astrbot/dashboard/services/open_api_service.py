@@ -487,11 +487,13 @@ class OpenApiService:
 
                 await send_json(result)
 
-                if msg_type == "plain":
+                if msg_type in ("plain", "error"):
                     message_accumulator.add_plain(
                         result_text,
                         chain_type=chain_type,
                         streaming=streaming,
+                        error_code=result.get("error_code"),
+                        error_params=result.get("error_params"),
                     )
                 elif msg_type in {"image", "record", "file", "video"}:
                     filename = str(result_text).replace(f"[{msg_type.upper()}]", "")

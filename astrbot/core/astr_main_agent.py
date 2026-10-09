@@ -241,7 +241,21 @@ class MainAgentBuildResult:
     reset_coro: Coroutine | None = None
 
 
-def _set_llm_error_message(event: AstrMessageEvent, message: str) -> None:
+def _set_llm_error_message(
+    event: AstrMessageEvent,
+    message: str,
+    code: str,
+    **params: str,
+) -> None:
+    """Store readable fallback text and localization metadata for an LLM error.
+
+    Args:
+        event: Message event receiving the error.
+        message: Fallback text for platforms without localization support.
+        code: Stable error code translated by ChatUI.
+        **params: Values interpolated into the translated message.
+    """
+    event.set_extra("_llm_error_i18n", {"error_code": code, "error_params": params})
     event.set_extra(LLM_ERROR_MESSAGE_EXTRA_KEY, message)
 
 
@@ -265,6 +279,8 @@ async def _select_provider(
             _set_llm_error_message(
                 event,
                 f"LLM 请求失败：未找到指定的提供商 `{sel_provider}`。请检查提供商配置或重新选择可用模型。",
+                "providerNotFound",
+                provider=sel_provider,
             )
             return None
         if not isinstance(provider, Provider):
@@ -274,6 +290,8 @@ async def _select_provider(
             _set_llm_error_message(
                 event,
                 f"LLM 请求失败：选择的提供商类型无效（{type(provider).__name__}），已跳过本次请求。",
+                "invalidProviderType",
+                provider_type=type(provider).__name__,
             )
             return None
         return provider
@@ -283,7 +301,9 @@ async def _select_provider(
         )
     except ValueError as exc:
         logger.error("Error occurred while selecting provider: %s", exc)
-        _set_llm_error_message(event, f"LLM 请求失败：{exc}")
+        _set_llm_error_message(
+            event, f"LLM 请求失败：{exc}", "requestFailed", detail=str(exc)
+        )
         return None
 
 
@@ -1721,6 +1741,7 @@ async def build_main_agent(
             _set_llm_error_message(
                 event,
                 "LLM 请求失败：未找到任何可用的对话模型（提供商）。请先在 WebUI 中配置并启用可用模型。",
+                "noProvider",
             )
         return None
 
