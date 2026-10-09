@@ -19,6 +19,7 @@ from astrbot.core.astr_main_agent import (
     MainAgentBuildResult,
     _matches_provider_wake_prefix,
     _provider_supports_modality,
+    _set_llm_error_message,
     build_main_agent,
 )
 from astrbot.core.config.agent_runner import resolve_context_compression_config
@@ -287,11 +288,14 @@ class InternalAgentSubStage(Stage):
                     api_base = provider.provider_config.get("api_base", "")
                     for host in decoded_blocked:
                         if host in api_base:
-                            error_message = (
-                                f"LLM 请求失败：Provider API base `{api_base}` "
-                                "因安全原因被拦截，请更换可用的 AI 提供商。"
+                            _set_llm_error_message(
+                                event, "blockedProvider", api_base=api_base
                             )
-                            logger.error(error_message)
+                            error_message = event.get_extra(LLM_ERROR_MESSAGE_EXTRA_KEY)
+                            logger.error(
+                                "Provider API base %s was blocked for security reasons",
+                                api_base,
+                            )
                             await self._send_llm_error_message(event, error_message)
                             return
 
