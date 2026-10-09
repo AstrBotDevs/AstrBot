@@ -23,22 +23,38 @@ async def iterate_in_task(
     advance = asyncio.Event()
     results: asyncio.Queue[tuple[bool, T | BaseException]] = asyncio.Queue(maxsize=1)
     finishing = False
+    stop_requested = False
+    terminal: BaseException | None = None
 
     async def produce() -> None:
-        nonlocal finishing
+        nonlocal finishing, terminal
         try:
             while True:
                 await advance.wait()
                 advance.clear()
                 try:
                     value = await anext(generator)
+                except asyncio.CancelledError as error:
+                    if not stop_requested:
+                        terminal = error
+                    current_task = asyncio.current_task()
+                    if current_task is not None:
+                        current_task.uncancel()
+                    break
                 except BaseException as error:
-                    await results.put((False, error))
+                    terminal = error
+                    break
+                if stop_requested:
                     return
                 await results.put((True, value))
         finally:
             finishing = True
-            await generator.aclose()
+            try:
+                await generator.aclose()
+            except BaseException as error:
+                terminal = error
+        if terminal is not None:
+            await results.put((False, terminal))
 
     owner = asyncio.create_task(produce())
     try:
@@ -51,7 +67,27 @@ async def iterate_in_task(
                 raise cast(BaseException, value)
             yield cast(T, value)
     finally:
+        interrupted = False
         if not finishing:
+            stop_requested = True
             owner.cancel()
+        while not owner.done():
+            try:
+                await asyncio.shield(owner)
+            except asyncio.CancelledError:
+                if not owner.done():
+                    interrupted = True
         with suppress(asyncio.CancelledError):
             await owner
+        if (
+            not interrupted
+            and terminal is not None
+            and not isinstance(terminal, StopAsyncIteration)
+        ):
+            raise cast(BaseException, terminal)
+        if not interrupted and not results.empty():
+            succeeded, value = results.get_nowait()
+            if not succeeded and not isinstance(value, StopAsyncIteration):
+                raise cast(BaseException, value)
+        if interrupted:
+            raise asyncio.CancelledError

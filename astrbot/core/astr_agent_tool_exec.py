@@ -6,6 +6,7 @@ import typing as T
 import uuid
 from collections.abc import Sequence
 from collections.abc import Set as AbstractSet
+from contextlib import aclosing
 
 import mcp
 
@@ -50,6 +51,7 @@ from astrbot.core.tools.computer_tools import (
 from astrbot.core.tools.message_tools import SendMessageToUserTool
 from astrbot.core.utils.active_event_registry import active_event_registry
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.async_generator import iterate_in_task
 from astrbot.core.utils.config_number import coerce_int_config
 from astrbot.core.utils.history_saver import persist_agent_history
 from astrbot.core.utils.image_ref_utils import is_supported_image_ref
@@ -145,18 +147,25 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         if isinstance(tool, HandoffTool):
             is_bg = tool_args.pop("background_task", False)
             if is_bg:
-                async for r in cls._execute_handoff_background(
-                    tool, run_context, **tool_args
-                ):
-                    yield r
+                async with aclosing(
+                    cls._execute_handoff_background(tool, run_context, **tool_args)
+                ) as results:
+                    async for r in results:
+                        yield r
                 return
-            async for r in cls._execute_handoff(tool, run_context, **tool_args):
-                yield r
+            async with aclosing(
+                cls._execute_handoff(tool, run_context, **tool_args)
+            ) as results:
+                async for r in results:
+                    yield r
             return
 
         elif isinstance(tool, MCPTool):
-            async for r in cls._execute_mcp(tool, run_context, **tool_args):
-                yield r
+            async with aclosing(
+                cls._execute_mcp(tool, run_context, **tool_args)
+            ) as results:
+                async for r in results:
+                    yield r
             return
 
         elif tool.is_background_task:
@@ -189,8 +198,11 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
             return
         else:
-            async for r in cls._execute_local(tool, run_context, **tool_args):
-                yield r
+            async with aclosing(
+                cls._execute_local(tool, run_context, **tool_args)
+            ) as results:
+                async for r in results:
+                    yield r
             return
 
     @classmethod
@@ -717,46 +729,47 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             method_name=method_name,
             **tool_args,
         )
-        while True:
-            try:
-                resp = await asyncio.wait_for(
-                    anext(wrapper),
-                    timeout=effective_timeout,
-                )
-                if resp is not None:
-                    if isinstance(resp, mcp.types.CallToolResult):
-                        yield resp
+        async with aclosing(wrapper):
+            while True:
+                try:
+                    resp = await asyncio.wait_for(
+                        anext(wrapper),
+                        timeout=effective_timeout,
+                    )
+                    if resp is not None:
+                        if isinstance(resp, mcp.types.CallToolResult):
+                            yield resp
+                        else:
+                            text_content = mcp.types.TextContent(
+                                type="text",
+                                text=str(resp),
+                            )
+                            yield mcp.types.CallToolResult(content=[text_content])
                     else:
-                        text_content = mcp.types.TextContent(
-                            type="text",
-                            text=str(resp),
-                        )
-                        yield mcp.types.CallToolResult(content=[text_content])
-                else:
-                    # NOTE: Tool 在这里直接请求发送消息给用户
-                    # TODO: 是否需要判断 event.get_result() 是否为空?
-                    # 如果为空,则说明没有发送消息给用户,并且返回值为空,将返回一个特殊的 TextContent,其内容如"工具没有返回内容"
-                    if res := run_context.context.event.get_result():
-                        if res.chain:
-                            try:
-                                await event.send(
-                                    MessageChain(
-                                        chain=res.chain,
-                                        type="tool_direct_result",
+                        # NOTE: Tool 在这里直接请求发送消息给用户
+                        # TODO: 是否需要判断 event.get_result() 是否为空?
+                        # 如果为空,则说明没有发送消息给用户,并且返回值为空,将返回一个特殊的 TextContent,其内容如"工具没有返回内容"
+                        if res := run_context.context.event.get_result():
+                            if res.chain:
+                                try:
+                                    await event.send(
+                                        MessageChain(
+                                            chain=res.chain,
+                                            type="tool_direct_result",
+                                        )
                                     )
-                                )
-                            except Exception as e:
-                                logger.error(
-                                    f"Tool 直接发送消息失败: {e}",
-                                    exc_info=True,
-                                )
-                    yield None
-            except asyncio.TimeoutError:
-                raise Exception(
-                    f"tool {tool.name} execution timeout after {effective_timeout} seconds.",
-                )
-            except StopAsyncIteration:
-                break
+                                except Exception as e:
+                                    logger.error(
+                                        f"Tool 直接发送消息失败: {e}",
+                                        exc_info=True,
+                                    )
+                        yield None
+                except asyncio.TimeoutError:
+                    raise Exception(
+                        f"tool {tool.name} execution timeout after {effective_timeout} seconds.",
+                    )
+                except StopAsyncIteration:
+                    break
 
     @classmethod
     async def _execute_mcp(
@@ -840,18 +853,19 @@ async def call_local_llm_tool(
     if inspect.isasyncgen(ready_to_call):
         _has_yielded = False
         try:
-            async for ret in ready_to_call:
-                # 这里逐步执行异步生成器, 对于每个 yield 返回的 ret, 执行下面的代码
-                # 返回值只能是 MessageEventResult 或者 None（无返回值）
-                _has_yielded = True
-                if isinstance(ret, MessageEventResult | CommandResult):
-                    # 如果返回值是 MessageEventResult, 设置结果并继续
-                    event.set_result(ret)
-                    yield
-                else:
-                    # 如果返回值是 None, 则不设置结果并继续
-                    # 继续执行后续阶段
-                    yield ret
+            async with aclosing(iterate_in_task(ready_to_call)) as results:
+                async for ret in results:
+                    # 这里逐步执行异步生成器, 对于每个 yield 返回的 ret, 执行下面的代码
+                    # 返回值只能是 MessageEventResult 或者 None（无返回值）
+                    _has_yielded = True
+                    if isinstance(ret, MessageEventResult | CommandResult):
+                        # 如果返回值是 MessageEventResult, 设置结果并继续
+                        event.set_result(ret)
+                        yield
+                    else:
+                        # 如果返回值是 None, 则不设置结果并继续
+                        # 继续执行后续阶段
+                        yield ret
             if not _has_yielded:
                 # 如果这个异步生成器没有执行到 yield 分支
                 yield

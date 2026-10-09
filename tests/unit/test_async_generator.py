@@ -130,3 +130,158 @@ async def test_exhaustion_waits_without_cancelling_cleanup():
         release.set()
         await asyncio.gather(pending, return_exceptions=True)
         await results.aclose()
+
+
+@pytest.mark.asyncio
+async def test_close_waits_for_async_cleanup_in_owner_task():
+    owners = []
+    cleanup_started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def source():
+        owners.append(asyncio.current_task())
+        try:
+            yield "result"
+        finally:
+            cleanup_started.set()
+            await release.wait()
+            owners.append(asyncio.current_task())
+
+    results = iterate_in_task(source())
+    assert await anext(results) == "result"
+    closing = asyncio.create_task(results.aclose())
+    try:
+        await asyncio.wait_for(cleanup_started.wait(), 1)
+        assert not closing.done()
+        release.set()
+        await asyncio.wait_for(closing, 1)
+        assert len(owners) == 2 and owners[0] is owners[1]
+    finally:
+        release.set()
+        await asyncio.gather(closing, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_empty_generator_finishes_without_pending_task():
+    tasks = set(asyncio.all_tasks())
+
+    async def source():
+        if False:
+            yield
+
+    assert [value async for value in iterate_in_task(source())] == []
+    assert not (set(asyncio.all_tasks()) - tasks)
+
+
+@pytest.mark.asyncio
+async def test_repeated_cancel_does_not_interrupt_owner_cleanup():
+    tasks = set(asyncio.all_tasks())
+    started = asyncio.Event()
+    cleanup_started = asyncio.Event()
+    release = asyncio.Event()
+    closed = []
+
+    async def source():
+        try:
+            started.set()
+            await asyncio.Future()
+            yield "unreachable"
+        finally:
+            cleanup_started.set()
+            await release.wait()
+            closed.append("closed")
+
+    results = iterate_in_task(source())
+    pending = asyncio.create_task(anext(results))
+    try:
+        await asyncio.wait_for(started.wait(), 1)
+        pending.cancel()
+        await asyncio.wait_for(cleanup_started.wait(), 1)
+        pending.cancel()
+        await asyncio.sleep(0)
+        assert not pending.done()
+        release.set()
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(pending, 1)
+        assert closed == ["closed"]
+    finally:
+        release.set()
+        await asyncio.gather(pending, return_exceptions=True)
+        await results.aclose()
+    assert not (set(asyncio.all_tasks()) - tasks)
+
+
+@pytest.mark.asyncio
+async def test_generator_that_yields_after_cancel_is_still_closed():
+    tasks = set(asyncio.all_tasks())
+    started = asyncio.Event()
+    closed = []
+
+    async def source():
+        try:
+            started.set()
+            try:
+                await asyncio.Future()
+            except asyncio.CancelledError:
+                yield "late result"
+        finally:
+            closed.append("closed")
+
+    results = iterate_in_task(source())
+    pending = asyncio.create_task(anext(results))
+    try:
+        await asyncio.wait_for(started.wait(), 1)
+        pending.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(pending, 0.1)
+        assert closed == ["closed"]
+    finally:
+        pending.cancel()
+        await asyncio.gather(pending, return_exceptions=True)
+        await results.aclose()
+    assert not (set(asyncio.all_tasks()) - tasks)
+
+
+@pytest.mark.asyncio
+async def test_source_cancellation_reaches_consumer():
+    error = asyncio.CancelledError("source cancelled itself")
+    closed = []
+
+    async def source():
+        try:
+            raise error
+            yield
+        finally:
+            closed.append("closed")
+
+    results = iterate_in_task(source())
+    try:
+        with pytest.raises(asyncio.CancelledError) as caught:
+            await asyncio.wait_for(anext(results), 0.1)
+        assert caught.value is error
+        assert closed == ["closed"]
+    finally:
+        await results.aclose()
+
+
+@pytest.mark.asyncio
+async def test_source_error_is_delivered_after_cleanup():
+    error = ValueError("source failure")
+    cleanup = []
+
+    async def source():
+        try:
+            raise error
+            yield
+        finally:
+            await asyncio.sleep(0)
+            cleanup.append("closed")
+
+    results = iterate_in_task(source())
+    try:
+        with pytest.raises(ValueError) as caught:
+            await anext(results)
+        assert caught.value is error
+        assert cleanup == ["closed"]
+    finally:
+        await results.aclose()
