@@ -51,7 +51,7 @@ data/workspaces/{normalized_umo}/notes/todo.txt
 
 `local` 模式主要提供以下工具：
 
-- `Shell`：执行本机 shell 命令。Windows 下使用 `cmd.exe` 语义，Linux/macOS 下使用类 Unix shell 语义。
+- `Shell`：执行本机 shell 命令。Windows 下优先使用 PowerShell 7，未安装时使用 Windows PowerShell 5.1；Linux/macOS 下使用类 Unix shell 语义。
 - `Python`：使用 AstrBot 当前 Python 环境执行 Python 代码。
 - `文件读取`：读取 workspace 或允许路径中的文本、图片、表格等文件。
 - `文件写入`：写入 UTF-8 文本文件；相对路径默认落在当前 workspace。

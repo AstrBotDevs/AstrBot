@@ -23,6 +23,10 @@ Shell 优先使用 PowerShell 7，未安装时使用 Windows PowerShell 5.1。�
 
 本机集成测试需显式启用：启动准备完成后，设置 `ASTRBOT_TEST_WINDOWS_SANDBOX=1`，运行 `uv run pytest tests/test_windows_process_sandbox.py`。测试实际进程、工作区外访问拒绝、目录联接、并发身份隔离、只读目录、PowerShell 7/5.1、标准输入、文件搜索、超时清理和输出限制。测试不会请求 UAC。
 
+![Windows Local 初始化提示和整个环境联网说明](/windows-sandbox/network-zh.png)
+
+![Windows Local 工作区模式（关闭联网）](/windows-sandbox/workspace-en.png)
+
 ## 启用沙盒环境
 
 目前，AstrBot 的沙盒环境驱动器支持：

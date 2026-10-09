@@ -23,6 +23,10 @@ Timeouts and termination stop the entire process tree. CPU time, process count, 
 
 Native integration tests are opt-in: after startup preparation, set `ASTRBOT_TEST_WINDOWS_SANDBOX=1` and run `uv run pytest tests/test_windows_process_sandbox.py`. They test real processes, outside-workspace denial, junctions, concurrent identities, read-only roots, PowerShell 7/5.1, stdin, file search, timeout cleanup, and output bounds. The tests never request UAC.
 
+![Windows Local workspace with networking disabled](/windows-sandbox/workspace-en.png)
+
+![Windows host networking explanation](/windows-sandbox/network-zh.png)
+
 ## Enabling the Sandbox Environment
 
 AstrBot currently supports the following sandbox drivers:
