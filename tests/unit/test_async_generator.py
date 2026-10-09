@@ -285,3 +285,43 @@ async def test_source_error_is_delivered_after_cleanup():
         assert cleanup == ["closed"]
     finally:
         await results.aclose()
+
+
+@pytest.mark.asyncio
+async def test_cancel_with_queued_value_and_cleanup_error(monkeypatch):
+    original_queue = asyncio.Queue
+    pending = None
+    queued = asyncio.Event()
+    error = OSError("queued cleanup failure")
+
+    class CancelAfterPut(original_queue):
+        async def get(self):
+            await asyncio.Future()
+
+        async def put(self, item):
+            if item[0]:
+                pending.cancel()
+                queued.set()
+            await super().put(item)
+
+    monkeypatch.setattr(
+        "astrbot.core.utils.async_generator.asyncio.Queue", CancelAfterPut
+    )
+
+    async def source():
+        try:
+            yield "queued result"
+        finally:
+            raise error
+
+    results = iterate_in_task(source())
+    pending = asyncio.create_task(anext(results))
+    try:
+        await asyncio.wait_for(queued.wait(), 1)
+        with pytest.raises(OSError) as caught:
+            await asyncio.wait_for(pending, 0.1)
+        assert caught.value is error
+    finally:
+        pending.cancel()
+        await asyncio.gather(pending, return_exceptions=True)
+        await results.aclose()

@@ -37,9 +37,6 @@ async def iterate_in_task(
                 except asyncio.CancelledError as error:
                     if not stop_requested:
                         terminal = error
-                    current_task = asyncio.current_task()
-                    if current_task is not None:
-                        current_task.uncancel()
                     break
                 except BaseException as error:
                     terminal = error
@@ -54,7 +51,9 @@ async def iterate_in_task(
             except BaseException as error:
                 terminal = error
         if terminal is not None:
-            await results.put((False, terminal))
+            # Closing consumers may leave a value queued; terminal is also read below.
+            with suppress(asyncio.QueueFull):
+                results.put_nowait((False, terminal))
 
     owner = asyncio.create_task(produce())
     try:
