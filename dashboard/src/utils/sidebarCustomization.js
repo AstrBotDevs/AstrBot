@@ -6,6 +6,7 @@ const STORAGE_KEY = 'astrbot_sidebar_customization';
  * @property {string[]} [mainItems] - Ordered titles of the main sidebar items
  * @property {string[]} [moreItems] - Ordered titles of the "more" group items
  * @property {Object<string, string[]>} [subItems] - Ordered sub-route values per parent title
+ * @property {string[]} [promotedSubRoutes] - Sub-route values lifted to first-level sidebar items
  */
 
 /**
@@ -57,6 +58,7 @@ export function clearSidebarCustomization() {
  * @returns {{ mainItems: Array, moreItems: Array, merged?: Array }}
  */
 import { MORE_GROUP_KEY } from "@/layouts/full/vertical-sidebar/sidebarItem";
+import { SIDEBAR_SUB_ITEMS, getSubRoutePath } from "@/utils/sidebarSubItems";
 
 export function resolveSidebarItems(defaultItems, customization, options = {}) {
   const { cloneItems = false, assembleMoreGroup = false } = options;
@@ -99,9 +101,42 @@ export function resolveSidebarItems(defaultItems, customization, options = {}) {
   let mainKeys = hasCustomization ? normalizeKeys(customization.mainItems || []) : [...defaultMain];
   let moreKeys = hasCustomization ? normalizeKeys(customization.moreItems || []) : [...defaultMore];
 
+  // Promoted sub-routes (labelKey titles) are first-level items too; they are
+  // not part of the default item map, so keep them in the lists by their key.
+  // They carry their real route so the sidebar item is navigable and its
+  // active state matches the page.
+  const promotedByKey = new Map();
+  const promotedByValue = new Map();
+  Object.entries(SIDEBAR_SUB_ITEMS).forEach(([parentTitle, subs]) => {
+    subs.forEach(sub => {
+      promotedByKey.set(sub.labelKey, {
+        title: sub.labelKey,
+        icon: sub.icon,
+        parentTitle,
+        to: getSubRoutePath(parentTitle, sub.value)
+      });
+      promotedByValue.set(sub.value, sub.labelKey);
+    });
+  });
+
   if (hasCustomization) {
-    mainKeys = mainKeys.filter(title => all.has(title));
-    moreKeys = moreKeys.filter(title => all.has(title));
+    // Older storage kept promoted items only in promotedSubRoutes; insert
+    // them right after their parent so they still render until re-saved.
+    const present = new Set([...mainKeys, ...moreKeys]);
+    (customization.promotedSubRoutes || []).forEach((value) => {
+      const labelKey = promotedByValue.get(value);
+      if (!labelKey || present.has(labelKey)) return;
+      present.add(labelKey);
+      const def = promotedByKey.get(labelKey);
+      const parentIdx = mainKeys.indexOf(def.parentTitle);
+      if (parentIdx >= 0) mainKeys.splice(parentIdx + 1, 0, labelKey);
+      else mainKeys.push(labelKey);
+    });
+  }
+
+  if (hasCustomization) {
+    mainKeys = mainKeys.filter(title => all.has(title) || promotedByKey.has(title));
+    moreKeys = moreKeys.filter(title => all.has(title) || promotedByKey.has(title));
   }
 
   if (hasCustomization) {
@@ -115,7 +150,7 @@ export function resolveSidebarItems(defaultItems, customization, options = {}) {
     : new Set(defaultMain.concat(defaultMore));
 
   const mainItems = mainKeys
-    .map(title => all.get(title))
+    .map(title => all.get(title) || promotedByKey.get(title))
     .filter(Boolean);
 
   if (hasCustomization) {
@@ -129,7 +164,7 @@ export function resolveSidebarItems(defaultItems, customization, options = {}) {
   }
 
   const moreItems = moreKeys
-    .map(title => all.get(title))
+    .map(title => all.get(title) || promotedByKey.get(title))
     .filter(Boolean);
 
   if (hasCustomization) {
@@ -149,25 +184,42 @@ export function resolveSidebarItems(defaultItems, customization, options = {}) {
     // mainItems always covers every default non-header item (customized ones
     // first, untouched defaults appended), so each segment stays complete.
     const result = [];
-    let segmentTitles = [];
     const placed = new Set();
 
+    // Group the default non-header items into segments between headers so a
+    // promoted sub-route lands in the same segment as its parent.
+    const segments = [];
+    let segmentTitles = new Set();
+    defaultItems.forEach(item => {
+      if (item.header) {
+        if (segmentTitles.size > 0) segments.push(segmentTitles);
+        segmentTitles = new Set();
+      } else {
+        segmentTitles.add(item.title);
+      }
+    });
+    if (segmentTitles.size > 0) segments.push(segmentTitles);
+
+    let segmentIndex = -1;
     const flushSegment = () => {
+      segmentIndex += 1;
+      const current = segments[segmentIndex];
       mainItems.forEach(item => {
-        if (!placed.has(item.title) && segmentTitles.includes(item.title)) {
+        if (placed.has(item.title)) return;
+        const inSegment = current?.has(item.title) ?? false;
+        const promoted = promotedByKey.get(item.title);
+        const matches = inSegment || Boolean(promoted && current?.has(promoted.parentTitle));
+        if (matches) {
           result.push(item);
           placed.add(item.title);
         }
       });
-      segmentTitles = [];
     };
 
     defaultItems.forEach(item => {
       if (item.header) {
-        flushSegment();
         result.push(cloneItems ? { ...item } : item);
-      } else {
-        segmentTitles.push(item.title);
+        flushSegment();
       }
     });
     flushSegment();
@@ -219,7 +271,8 @@ export function applySidebarCustomization(defaultItems) {
       setSidebarCustomization({
         mainItems: normalizedMainKeys,
         moreItems: normalizedMoreKeys,
-        subItems: customization.subItems
+        subItems: customization.subItems,
+        promotedSubRoutes: customization.promotedSubRoutes
       });
     }
   }

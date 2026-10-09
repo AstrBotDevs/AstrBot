@@ -3,6 +3,8 @@ import { useI18n } from '@/i18n/composables';
 import { computed } from 'vue';
 import { useRoute } from 'vue-router';
 import { AppWindow, Pin, PinOff, Puzzle, User } from '@lucide/vue';
+import { getSidebarCustomization } from '@/utils/sidebarCustomization';
+import { findSubRouteDef, getSubRoutePath } from '@/utils/sidebarSubItems';
 
 const props = defineProps({ item: Object, level: Number, rail: Boolean, pinnable: Boolean, pinnedTos: Array });
 const emit = defineEmits(['togglePin']);
@@ -13,6 +15,21 @@ const itemStyle = computed(() => {
   const lvl = props.level ?? 0;
   const indent = props.rail ? '0px' : `${lvl * 24}px`;
   return { '--indent-padding': indent };
+});
+
+// Absolute paths of sub-routes the user lifted to first-level items; those
+// paths must not light up their former parent item anymore.
+const promotedPaths = computed(() => {
+  const values = getSidebarCustomization()?.promotedSubRoutes ?? [];
+  const paths = [];
+  values.forEach((value) => {
+    const def = findSubRouteDef(value);
+    if (def) {
+      const path = getSubRoutePath(def.parentTitle, def.value);
+      if (path) paths.push(path);
+    }
+  });
+  return paths;
 });
 
 const isItemActive = computed(() => {
@@ -26,7 +43,15 @@ const isItemActive = computed(() => {
   if (targetPath === '/') {
     return route.path === targetPath;
   }
-  return route.path === targetPath || route.path.startsWith(`${targetPath}/`);
+  if (route.path === targetPath) return true;
+  if (route.path.startsWith(`${targetPath}/`)) {
+    // A promoted sub-route owns its path now: /data stays inactive while
+    // /data/statistics is active.
+    return !promotedPaths.value.some(
+      (p) => route.path === p || route.path.startsWith(`${p}/`)
+    );
+  }
+  return false;
 });
 
 const itemTitle = computed(() => {

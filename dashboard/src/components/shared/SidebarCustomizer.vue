@@ -48,6 +48,13 @@
                     <v-list-item-title>{{ t(item.title) }}</v-list-item-title>
                     <template v-slot:append>
                       <v-btn
+                        v-if="subDefByLabelKey.has(item.title)"
+                        icon="mdi-arrow-down"
+                        variant="text"
+                        size="x-small"
+                        @click="demoteSubItem(item.title)"
+                      ></v-btn>
+                      <v-btn
                         v-if="getSubItems(item.title)"
                         :icon="expandedParents[item.title] ? 'mdi-chevron-down' : 'mdi-chevron-right'"
                         variant="text"
@@ -83,6 +90,15 @@
                         <component :is="sub.icon" v-else-if="sub.icon" :size="16" class="mr-2" />
                       </template>
                       <v-list-item-title class="sub-item-title">{{ t(sub.labelKey) }}</v-list-item-title>
+                      <template v-slot:append>
+                        <v-btn
+                          v-if="canPromoteSub(sub.value)"
+                          icon="mdi-arrow-up"
+                          variant="text"
+                          size="x-small"
+                          @click="promoteSubItem(item.title, sub.value)"
+                        ></v-btn>
+                      </template>
                     </v-list-item>
                   </v-list>
                 </template>
@@ -111,6 +127,13 @@
                     </template>
                     <v-list-item-title>{{ t(item.title) }}</v-list-item-title>
                     <template v-slot:append>
+                      <v-btn
+                        v-if="subDefByLabelKey.has(item.title)"
+                        icon="mdi-arrow-down"
+                        variant="text"
+                        size="x-small"
+                        @click="demoteSubItem(item.title)"
+                      ></v-btn>
                       <v-btn
                         v-if="getSubItems(item.title)"
                         :icon="expandedParents[item.title] ? 'mdi-chevron-down' : 'mdi-chevron-right'"
@@ -147,6 +170,15 @@
                         <component :is="sub.icon" v-else-if="sub.icon" :size="16" class="mr-2" />
                       </template>
                       <v-list-item-title class="sub-item-title">{{ t(sub.labelKey) }}</v-list-item-title>
+                      <template v-slot:append>
+                        <v-btn
+                          v-if="canPromoteSub(sub.value)"
+                          icon="mdi-arrow-up"
+                          variant="text"
+                          size="x-small"
+                          @click="promoteSubItem(item.title, sub.value)"
+                        ></v-btn>
+                      </template>
                     </v-list-item>
                   </v-list>
                 </template>
@@ -187,9 +219,15 @@ import {
   clearSidebarCustomization,
   resolveSidebarItems
 } from '@/utils/sidebarCustomization';
-import { SIDEBAR_SUB_ITEMS } from '@/utils/sidebarSubItems';
+import { SIDEBAR_SUB_ITEMS, findSubRouteDef, getSubRoutePath } from '@/utils/sidebarSubItems';
 
 const { t } = useI18n();
+
+// Sub-route definition lookup by labelKey, for promoted (first-level) items.
+const subDefByLabelKey = new Map();
+Object.entries(SIDEBAR_SUB_ITEMS).forEach(([parentTitle, subs]) => {
+  subs.forEach((sub) => subDefByLabelKey.set(sub.labelKey, { ...sub, parentTitle }));
+});
 
 const dialog = ref(false);
 const mainItems = ref([]);
@@ -209,8 +247,47 @@ function getSubItems(parentTitle) {
   const defaults = SIDEBAR_SUB_ITEMS[parentTitle];
   if (!defaults) return null;
   const order = subItemOrder.value[parentTitle] || defaults.map((item) => item.value);
+  if (order.length === 0) return null;
   const byValue = new Map(defaults.map((item) => [item.value, item]));
   return order.map((value) => byValue.get(value)).filter(Boolean);
+}
+
+// A sub-route can be lifted to a first-level item only when its parent hosts
+// real routes (data/extension); providers tabs have no route to point at.
+function canPromoteSub(value) {
+  const def = findSubRouteDef(value);
+  return def ? Boolean(getSubRoutePath(def.parentTitle, def.value)) : false;
+}
+
+// Lift a sub-route out of its parent's list into the first-level list that
+// hosts the parent, right after it. The item can then be dragged anywhere.
+function promoteSubItem(parentTitle, value) {
+  const order = subItemOrder.value[parentTitle];
+  if (order) {
+    const idx = order.indexOf(value);
+    if (idx >= 0) order.splice(idx, 1);
+  }
+  const def = SIDEBAR_SUB_ITEMS[parentTitle].find((s) => s.value === value);
+  if (!def) return;
+  const promotedItem = { title: def.labelKey, icon: def.icon };
+  const target = mainItems.value.some((it) => it.title === parentTitle)
+    ? mainItems.value
+    : moreItems.value;
+  const parentIdx = target.findIndex((it) => it.title === parentTitle);
+  if (parentIdx >= 0) target.splice(parentIdx + 1, 0, promotedItem);
+  else target.push(promotedItem);
+}
+
+// Move a promoted sub-route back under its parent's list (appended last).
+function demoteSubItem(labelKey) {
+  const info = subDefByLabelKey.get(labelKey);
+  if (!info) return;
+  const idxMain = mainItems.value.findIndex((it) => it.title === labelKey);
+  if (idxMain >= 0) mainItems.value.splice(idxMain, 1);
+  const idxMore = moreItems.value.findIndex((it) => it.title === labelKey);
+  if (idxMore >= 0) moreItems.value.splice(idxMore, 1);
+  const order = subItemOrder.value[info.parentTitle];
+  if (order && !order.includes(info.value)) order.push(info.value);
 }
 
 function initializeItems() {
@@ -222,17 +299,39 @@ function initializeItems() {
   mainItems.value = resolvedMain;
   moreItems.value = resolvedMore;
 
+  const promoted = new Set(customization?.promotedSubRoutes ?? []);
   const nextOrder = {};
   Object.keys(SIDEBAR_SUB_ITEMS).forEach((parentTitle) => {
     const custom = customization?.subItems?.[parentTitle];
-    nextOrder[parentTitle] =
+    const order =
       Array.isArray(custom) && custom.length > 0
         ? [...custom]
         : SIDEBAR_SUB_ITEMS[parentTitle].map((item) => item.value);
+    nextOrder[parentTitle] = order.filter((value) => !promoted.has(value));
   });
   subItemOrder.value = nextOrder;
   // Start collapsed whenever the dialog opens.
   expandedParents.value = {};
+
+  // Resolved lists already carry promoted sub-routes at their stored position
+  // (resolveSidebarItems keeps labelKey titles). For storage written before
+  // that change, fall back to placing them right after their parent.
+  (customization?.promotedSubRoutes ?? []).forEach((value) => {
+    const def = findSubRouteDef(value);
+    if (!def) return;
+    const labelKey = def.labelKey;
+    const inLists =
+      mainItems.value.some((it) => it.title === labelKey) ||
+      moreItems.value.some((it) => it.title === labelKey);
+    if (inLists) return;
+    const item = { title: def.labelKey, icon: def.icon };
+    const target = mainItems.value.some((it) => it.title === def.parentTitle)
+      ? mainItems.value
+      : moreItems.value;
+    const parentIdx = target.findIndex((it) => it.title === def.parentTitle);
+    if (parentIdx >= 0) target.splice(parentIdx + 1, 0, item);
+    else target.push(item);
+  });
 }
 
 function openDialog() {
@@ -334,17 +433,39 @@ function moveToMain(index) {
 }
 
 function saveCustomization() {
+  // Promoted sub-routes stay in the lists at their dragged position; the
+  // separate promotedSubRoutes array is just an ordered marker for them.
+  const mainTitles = [];
+  const moreTitles = [];
+  const promotedSubRoutes = [];
+  [mainItems.value, moreItems.value].forEach((list, listIndex) => {
+    list.forEach((item) => {
+      const info = subDefByLabelKey.get(item.title);
+      if (info) promotedSubRoutes.push(info.value);
+      if (listIndex === 0) mainTitles.push(item.title);
+      else moreTitles.push(item.title);
+    });
+  });
+  const promotedSet = new Set(promotedSubRoutes);
+  const subItems = {};
+  Object.keys(subItemOrder.value).forEach((parentTitle) => {
+    subItems[parentTitle] = subItemOrder.value[parentTitle].filter(
+      (value) => !promotedSet.has(value)
+    );
+  });
+
   const config = {
-    mainItems: mainItems.value.map(item => item.title),
-    moreItems: moreItems.value.map(item => item.title),
-    subItems: { ...subItemOrder.value }
+    mainItems: mainTitles,
+    moreItems: moreTitles,
+    subItems,
+    promotedSubRoutes
   };
-  
+
   setSidebarCustomization(config);
-  
+
   // Notify the sidebar to reload
   window.dispatchEvent(new CustomEvent('sidebar-customization-changed'));
-  
+
   dialog.value = false;
 }
 

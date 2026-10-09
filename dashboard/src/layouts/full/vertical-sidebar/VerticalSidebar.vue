@@ -24,11 +24,15 @@ const { pluginItems, pluginGroups } = usePluginSidebarItems();
 const customizedSidebarItems = computed(() => applySidebarCustomization(sidebarItems));
 
 function buildSidebarMenu() {
+  // Promoted sub-routes are already part of the customized list at their
+  // stored position (resolveSidebarItems keeps labelKey titles in place).
+  const items = customizedSidebarItems.value;
+
   // Plugin pages are flattened into the extension group section.
   const tail = groupByPlugin.value
     ? pluginGroups.value
     : (pluginItems.value?.children ?? []);
-  return [...customizedSidebarItems.value, ...tail];
+  return [...items, ...tail];
 }
 
 // Rebuild the menu when the user saves sidebar customization in Settings.

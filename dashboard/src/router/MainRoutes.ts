@@ -41,15 +41,17 @@ const MainRoutes = {
           path: '',
           redirect: (to: RouteLocationNormalized) => {
             // When the user customized the sub-route order, opening /extension
-            // lands on the first tab in that order.
+            // lands on the first tab in that order (promoted sub-routes are
+            // skipped because they now live at the first level).
             const customization = getSidebarCustomization();
             const customOrder = customization?.subItems?.['core.navigation.extension'];
             if (Array.isArray(customOrder) && customOrder.length > 0) {
+              const promoted = new Set(customization?.promotedSubRoutes ?? []);
               const first = resolveSubItemOrder(
                 'core.navigation.extension',
                 SIDEBAR_SUB_ITEMS['core.navigation.extension'],
                 customization
-              )[0];
+              ).find((item) => !promoted.has(item.value));
               if (first?.routeName) {
                 return { name: first.routeName, query: to.query };
               }
@@ -195,16 +197,18 @@ const MainRoutes = {
       path: '/data',
       component: () => import('@/views/DataPage.vue'),
       // Reopen the last visited tab, or the first customized tab when the user
-      // reordered the data sub-routes in the sidebar customizer.
+      // reordered the data sub-routes in the sidebar customizer (promoted
+      // sub-routes are skipped because they now live at the first level).
       redirect: (to: RouteLocationNormalized) => {
         const customization = getSidebarCustomization();
         const customOrder = customization?.subItems?.['core.navigation.data'];
         if (Array.isArray(customOrder) && customOrder.length > 0) {
+          const promoted = new Set(customization?.promotedSubRoutes ?? []);
           const first = resolveSubItemOrder(
             'core.navigation.data',
             SIDEBAR_SUB_ITEMS['core.navigation.data'],
             customization
-          )[0];
+          ).find((item) => !promoted.has(item.value));
           if (first?.routeName) return redirectToDataTab(first.routeName)(to);
         }
         const lastTab = localStorage.getItem('data_last_tab');

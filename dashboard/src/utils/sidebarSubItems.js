@@ -91,3 +91,41 @@ export const SIDEBAR_SUB_ITEMS = {
     },
   ],
 };
+
+// Value -> { ...subItem, parentTitle } lookup for promoted sub-routes.
+const SUB_DEF_BY_VALUE = new Map();
+Object.entries(SIDEBAR_SUB_ITEMS).forEach(([parentTitle, subs]) => {
+  subs.forEach((sub) => SUB_DEF_BY_VALUE.set(sub.value, { ...sub, parentTitle }));
+});
+
+// URL prefixes of parents that actually host sub-routes; providers tabs are
+// in-page state switches (no routes), so they cannot be promoted.
+const SUB_ROUTE_PREFIX = {
+  'core.navigation.data': '/data',
+  'core.navigation.extension': '/extension',
+};
+
+/**
+ * Find the sub-route definition (with its parent title) by value.
+ * @param {string} value
+ * @returns {{ value: string, labelKey: string, icon: any, routeName?: string, parentTitle: string } | null}
+ */
+export function findSubRouteDef(value) {
+  return SUB_DEF_BY_VALUE.get(value) || null;
+}
+
+/**
+ * Absolute route path for a promoted sub-route, or null when the parent hosts
+ * no routes (providers) so promotion is unsupported.
+ * @param {string} parentTitle
+ * @param {string} value
+ * @returns {string|null}
+ */
+export function getSubRoutePath(parentTitle, value) {
+  const prefix = SUB_ROUTE_PREFIX[parentTitle];
+  if (!prefix) return null;
+  if (parentTitle === 'core.navigation.extension' && value === 'installed') {
+    return `${prefix}/plugins`;
+  }
+  return `${prefix}/${value}`;
+}
