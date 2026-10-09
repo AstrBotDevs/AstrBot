@@ -98,16 +98,6 @@
                     </div>
                     <div class="settings-section__content">
                         <div class="settings-list-card">
-                            <div class="settings-item">
-                                <div class="settings-item__label">
-                                    <div class="settings-item__title">{{ tm('sidebar.customize.title') }}</div>
-                                    <div class="settings-item__subtitle">{{ tm('sidebar.customize.subtitle') }}</div>
-                                </div>
-                                <div class="settings-item__control">
-                                    <SidebarCustomizer />
-                                </div>
-                            </div>
-
                             <div class="settings-item settings-item--color">
                                 <div class="settings-item__label">
                                     <div class="settings-item__title">{{ tm('theme.customize.title') }}</div>
@@ -490,7 +480,6 @@ import { apiKeyApi, systemConfigApi } from '@/api/v1';
 import AstrBotConfigV4 from '@/components/shared/AstrBotConfigV4.vue';
 import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
 import ProxySelector from '@/components/shared/ProxySelector.vue';
-import SidebarCustomizer from '@/components/shared/SidebarCustomizer.vue';
 import BackupDialog from '@/components/shared/BackupDialog.vue';
 import StorageCleanupPanel from '@/components/shared/StorageCleanupPanel.vue';
 import DashboardTwoFactorDialog from '@/components/shared/DashboardTwoFactorDialog.vue';
