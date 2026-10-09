@@ -24,7 +24,12 @@
           <div
             v-if="isUserMessage(msg) && userAttachmentParts(msg).length"
             class="sent-attachments"
-            :class="{ 'images-only': hasImageOnlyAttachments(msg) }"
+            :class="{
+              'images-only': hasImageOnlyAttachments(msg),
+              'has-media': userAttachmentParts(msg).some(
+                (part) => part.type === 'record' || part.type === 'video',
+              ),
+            }"
           >
             <template
               v-for="(part, attachmentIndex) in userAttachmentParts(msg)"
@@ -981,6 +986,11 @@ function formatDuration(seconds: number) {
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: thin;
+}
+
+.sent-attachments.has-media {
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .sent-attachment-card {
