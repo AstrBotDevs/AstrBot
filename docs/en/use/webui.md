@@ -79,12 +79,25 @@ ChatUI supports these common workflows:
 
 ## Visual Configuration
 
-Select `Config` in the sidebar, then choose the profile to edit from the selector at the top. Settings are grouped into sections such as `AI`, `Platform`, and `Plugin`. Use the search control at the top to find a setting. The profile selector, search button, and section navigation stay fixed while only the configuration pane on the right scrolls.
+Select `Config` in the sidebar, then choose the profile to edit from the selector at the top. Sections appear in this order: `AI`, `Platforms & Messages`, `Access Control`, `Plugin`, and `Ext.`. Use the search control at the top to find a setting. The profile selector, search button, and section navigation stay fixed while only the configuration pane on the right scrolls.
 
 - In `AI`, built-in AI settings have `Model`, `Persona`, `Capabilities`, and `Advanced` tabs. Use `… → Change execution mode` beside the AI heading to connect a third-party agent.
-- `Platform` contains administrator and message-trigger settings.
+- `Access Control` contains administrator IDs and the session whitelist, including whitelist logs and administrator exemptions.
+- `Platforms & Messages` contains message-trigger, session-isolation, and delivery settings.
 - `Plugin` selects the plugins enabled for this profile. To edit an individual plugin's parameters, open `Extensions` and click that plugin's gear icon (`Extension Config`).
 - `Ext.` contains segmented reply, group chat context, and text-to-image settings (output toggle, word count threshold, rendering strategy, service endpoint, and custom templates).
+
+| Previous location | Current location |
+| --- | --- |
+| Platform | Platforms & Messages |
+| Platform → General → Administrator IDs | Access Control → Administrators → Administrator IDs |
+| Platform → Whitelist | Access Control → Whitelist |
+
+![Access Control](./images/config-access-control-en.jpg)
+
+After selecting an explicit model, click the gear beside the selector to open its settings dialog. Gears are also available in model and fallback-model menus. Clicking a gear does not change the selection or fallback order. Saving model settings immediately affects every profile using that model; the current profile's model selection still requires `Save Configuration`. Automatic selection has no gear beside the selector.
+
+![Model settings shortcut](./images/config-model-settings-en.jpg)
 
 After editing, click the disk icon labeled `Save Configuration` in the lower-right corner and check for a successful save message.
 
