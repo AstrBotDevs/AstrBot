@@ -963,6 +963,8 @@ class LocalShellComponent(ShellComponent):
         with session.output_lock:
             session.output_file.close()
         if session.sandboxed and (close := getattr(session.process, "close", None)):
+            # The native waiter must finish before its process handle is closed.
+            await session.wait_task
             await asyncio.to_thread(close)
 
 

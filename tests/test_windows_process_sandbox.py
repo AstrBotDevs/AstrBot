@@ -276,6 +276,60 @@ def test_native_failed_launch_releases_process_and_acl(
     assert [acl.GetAce(i) for i in range(acl.GetAceCount())] == original_aces
 
 
+def test_native_concurrent_close(native_sandbox, tmp_path, monkeypatch):
+    import threading
+    from concurrent.futures import ThreadPoolExecutor, TimeoutError
+
+    import psutil
+    import win32security
+
+    from astrbot.core.computer.process_sandbox import SandboxSpec
+
+    acl = win32security.GetNamedSecurityInfo(
+        str(tmp_path), 1, win32security.DACL_SECURITY_INFORMATION
+    ).GetSecurityDescriptorDacl()
+    original_aces = [acl.GetAce(i) for i in range(acl.GetAceCount())]
+    process = native_sandbox._spawn(
+        [sys.executable, "-c", "import time; time.sleep(60)"], SandboxSpec(tmp_path)
+    )
+    entered, release = threading.Event(), threading.Event()
+    kill = process.kill
+
+    def pause_first_close():
+        kill()
+        if not entered.is_set():
+            entered.set()
+            assert release.wait(5)
+
+    monkeypatch.setattr(process, "kill", pause_first_close)
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            first = pool.submit(process.close)
+            try:
+                assert entered.wait(5)
+                second = pool.submit(process.close)
+                # Without serialization, the second close releases the handles
+                # while the first close is still about to wait on them.
+                try:
+                    second.result(timeout=0.2)
+                except TimeoutError:
+                    pass
+            finally:
+                release.set()
+            first.result(timeout=5)
+            second.result(timeout=5)
+        process.kill()
+        assert process.returncode is not None
+        assert not psutil.pid_exists(process.pid)
+        acl = win32security.GetNamedSecurityInfo(
+            str(tmp_path), 1, win32security.DACL_SECURITY_INFORMATION
+        ).GetSecurityDescriptorDacl()
+        assert [acl.GetAce(i) for i in range(acl.GetAceCount())] == original_aces
+    finally:
+        release.set()
+        process.close()
+
+
 def test_native_external_roots_and_junction(native_sandbox, tmp_path):
     from astrbot.core.computer.local_file_security import open_file_in_allowed_roots
     from astrbot.core.computer.process_sandbox import SandboxSpec

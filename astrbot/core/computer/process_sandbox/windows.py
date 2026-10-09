@@ -313,6 +313,7 @@ class WindowsSandboxProcess:
         self._resources = resources
         self._returncode = None
         self._closed = False
+        self._handle_lock = threading.RLock()
 
     @property
     def returncode(self) -> int | None:
@@ -321,12 +322,13 @@ class WindowsSandboxProcess:
         Returns:
             The Windows exit code once the process handle is signaled.
         """
-        if (
-            self._returncode is None
-            and win32event.WaitForSingleObject(self.process, 0) == 0
-        ):
-            self._returncode = win32process.GetExitCodeProcess(self.process)
-        return self._returncode
+        with self._handle_lock:
+            if (
+                self._returncode is None
+                and win32event.WaitForSingleObject(self.process, 0) == 0
+            ):
+                self._returncode = win32process.GetExitCodeProcess(self.process)
+            return self._returncode
 
     async def wait(self) -> int:
         """Wait for the leader and terminate any remaining job descendants.
@@ -359,18 +361,21 @@ class WindowsSandboxProcess:
 
     def kill(self) -> None:
         """Force termination of every process belonging to this job."""
-        if not self._closed:
-            win32job.TerminateJobObject(self.job, 1)
+        with self._handle_lock:
+            if not self._closed:
+                win32job.TerminateJobObject(self.job, 1)
 
     def close(self) -> None:
         """Release resources after output readers have finished."""
-        if self._closed:
-            return
-        self.kill()
-        win32event.WaitForSingleObject(self.process, win32event.INFINITE)
-        self._returncode = self.returncode
-        self._closed = True
-        self._resources.close()
+        # Polling, termination, and cleanup can overlap on different threads.
+        with self._handle_lock:
+            if self._closed:
+                return
+            self.kill()
+            win32event.WaitForSingleObject(self.process, win32event.INFINITE)
+            self._returncode = self.returncode
+            self._closed = True
+            self._resources.close()
 
 
 class AppContainerProcessSandbox(ProcessSandbox):
