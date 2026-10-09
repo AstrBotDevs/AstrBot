@@ -268,8 +268,9 @@ function processPayload(
     markMessageStarted(botRecord);
     botRecord.id = data?.id || botRecord.id;
     botRecord.created_at = data?.created_at || botRecord.created_at;
-    botRecord.llm_checkpoint_id =
-      data?.llm_checkpoint_id || botRecord.llm_checkpoint_id;
+    if (data?.llm_checkpoint_id !== undefined) {
+      botRecord.llm_checkpoint_id = data.llm_checkpoint_id;
+    }
     if (data?.refs) {
       botRecord.content.refs = data.refs;
     }
