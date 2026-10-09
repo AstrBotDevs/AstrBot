@@ -630,10 +630,15 @@ function toggleSidebar() {
   text-transform: none;
 }
 
-.sidebar-footer-btn:hover,
-.sidebar-footer-btn.v-btn--active {
+.sidebar-footer-btn:hover {
   background: rgba(var(--v-theme-on-surface), 0.08) !important;
   color: rgb(var(--v-theme-on-surface));
+}
+
+/* Match the navigation items with a primary-colored active background and label. */
+.sidebar-footer-btn.v-btn--active {
+  background: rgba(var(--v-theme-primary), 0.09) !important;
+  color: rgb(var(--v-theme-primary)) !important;
 }
 
 /* Icon-to-label spacing matches the nav items above (10px); the v-btn grid
