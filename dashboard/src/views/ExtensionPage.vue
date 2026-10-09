@@ -378,8 +378,8 @@ const updateDialogPluginLogo = computed(() => {
         ></div>
         <v-btn
           variant="text"
-          prepend-icon="mdi-github"
-          href="https://github.com/AstrBotDevs/AstrBot_Plugins_Collection"
+          prepend-icon="mdi-upload"
+          href="https://cloud.astrbot.app"
           target="_blank"
           color="primary"
           class="text-none"
