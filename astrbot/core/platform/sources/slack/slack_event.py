@@ -116,6 +116,7 @@ class SlackMessageEvent(AstrMessageEvent):
         message_chain: MessageChain,
         web_client: AsyncWebClient,
         channel_id: str | None = None,
+        plain_texts: set[str] | None = None,
     ):
         """Build Slack blocks and upload audio to the destination conversation.
 
@@ -123,12 +124,18 @@ class SlackMessageEvent(AstrMessageEvent):
             message_chain: Message components to send.
             web_client: Slack client used for uploads.
             channel_id: Destination channel or user ID, required for audio uploads.
+            plain_texts: Text already included in the reply, possibly sent separately.
 
         Returns:
             Blocks and fallback text. Both are empty for audio-only uploads.
         """
         blocks = []
         text_content = ""
+        plain_texts = (plain_texts or set()) | {
+            segment.text
+            for segment in message_chain.chain
+            if isinstance(segment, Plain)
+        }
 
         for segment in message_chain.chain:
             if isinstance(segment, Plain):
@@ -153,10 +160,11 @@ class SlackMessageEvent(AstrMessageEvent):
                         raise RuntimeError(response.get("error", "Audio upload failed"))
                 except Exception:
                     logger.warning(
-                        "Slack audio upload failed; sending text instead.",
+                        "Slack audio upload failed.",
                         exc_info=True,
                     )
-                    text_content += segment.text or "[Audio]"
+                    if segment.text not in plain_texts:
+                        text_content += segment.text or "[Audio]"
             else:
                 # 如果有文本内容，先添加文本块
                 if text_content.strip():
@@ -185,10 +193,18 @@ class SlackMessageEvent(AstrMessageEvent):
         return blocks, "" if blocks else text_content
 
     async def send(self, message: MessageChain) -> None:
+        # RespondStage sends audio separately from the remaining dual-output text.
+        result = self.get_result()
+        plain_texts = {
+            segment.text
+            for segment in message.chain + (result.chain if result else [])
+            if isinstance(segment, Plain)
+        }
         blocks, text = await SlackMessageEvent._parse_slack_blocks(
             message,
             self.web_client,
             channel_id=self.get_group_id() or self.get_sender_id(),
+            plain_texts=plain_texts,
         )
         if not blocks and not text.strip():
             await super().send(message)
@@ -221,7 +237,7 @@ class SlackMessageEvent(AstrMessageEvent):
                     parts.append(f" [文件: {segment.name}] ")
                 elif isinstance(segment, Image):
                     parts.append(" [图片] ")
-                elif isinstance(segment, Record):
+                elif isinstance(segment, Record) and segment.text not in plain_texts:
                     parts.append(segment.text or "[Audio]")
             fallback_text = "".join(parts)
 

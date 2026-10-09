@@ -4,13 +4,15 @@ from unittest.mock import AsyncMock
 import pytest
 
 from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.api.message_components import Record
+from astrbot.api.message_components import Plain, Record
 from astrbot.api.platform import (
     AstrBotMessage,
     MessageMember,
     MessageType,
     PlatformMetadata,
 )
+from astrbot.core.message.message_event_result import MessageEventResult
+from astrbot.core.pipeline.respond.stage import RespondStage
 from astrbot.core.platform.sources.slack.slack_event import SlackMessageEvent
 
 
@@ -61,13 +63,25 @@ async def test_slack_tts_uploads_audio_without_empty_messages(slack_event, audio
 
 
 @pytest.mark.asyncio
-async def test_slack_tts_upload_failure_preserves_source_text(slack_event, audio_path):
+@pytest.mark.parametrize("dual_output", [False, True])
+async def test_slack_tts_upload_failure_preserves_source_text(
+    slack_event, audio_path, monkeypatch, dual_output
+):
     client = slack_event.web_client
     client.files_upload_v2.side_effect = RuntimeError("upload failed")
-
-    await slack_event.send(
-        MessageChain([Record(file=str(audio_path), text="Speech test.")])
+    chain = [Record(file=str(audio_path), text="Speech test.")]
+    if dual_output:
+        chain.append(Plain("Speech test."))
+    slack_event.set_result(MessageEventResult(chain=chain))
+    stage = RespondStage()
+    stage.platform_settings = {}
+    stage.enable_seg = False
+    monkeypatch.setattr(
+        "astrbot.core.pipeline.respond.stage.call_event_hook",
+        AsyncMock(return_value=False),
     )
+
+    await stage.process(slack_event)
 
     client.files_upload_v2.assert_awaited_once()
     client.chat_postMessage.assert_awaited_once()
