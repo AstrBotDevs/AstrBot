@@ -7,6 +7,22 @@
 
 ![](https://files.astrbot.app/docs/source/images/astrbot-agent-sandbox/image.png)
 
+## Windows 原生 Local 隔离
+
+Windows 10/11（含家庭版）可在“配置文件 → AI 配置 → 能力 → 使用电脑能力”中选择 `Computer Use Runtime = local`，为相应角色选择工作区文件访问并开启代码执行。不需要 WSL、Hyper-V 或 Docker。Windows 原有角色默认权限保持不变；允许主机文件访问、执行和联网的组合仍属于完全信任模式。
+
+启用 Local 后重启 AstrBot。启动时会为 Python、PowerShell 运行时准备只读权限，并实际启动 AppContainer 检查可用性。如果受保护的安装目录需要授权，本次启动最多请求一次 UAC。运行时权限会保留，后续启动通常无需再次授权。取消或准备失败会禁用受限执行并显示原因；工具调用不会再次弹窗，也不会降级为无隔离执行。需要重试时重启 AstrBot。工作区及工具额外授权目录需由运行 AstrBot 的账户拥有管理权限。
+
+界面显示“AppContainer · 尚未就绪”时，按提示保存配置并重启，必要时允许管理员授权；具体错误可展开“查看诊断详情”。“整个环境”下执行代码时，联网项保持勾选并锁定。悬停锁旁的问号可查看 Windows 限制说明；切换到“工作区”后可关闭联网。
+
+每次受限执行使用独立的 AppContainer 身份，并通过 Job Object 管理进程树。工作区和明确授权的目录获得临时权限，会话清理时撤销。Windows 自身允许的系统资源及只读运行时仍可见。这是 ACL 权限边界，并非 bubblewrap 的文件系统命名空间：操作系统层面不会隐藏或重新映射路径。联网开关控制 AppContainer 网络能力；允许联网不保证能访问 localhost。“主机文件访问 + 执行 + 禁止联网”的组合不受支持，会明确拒绝。
+
+Shell 优先使用 PowerShell 7，未安装时使用 Windows PowerShell 5.1。受限 Shell 从 `Workspace:\` 启动，这是指向真实工作区的 PowerShell 驱动器；相对路径 cmdlet 和 Python 子进程无需父目录授权即可工作。原生程序需使用相对路径或真实文件路径，不能接收 `Workspace:\` 路径。因父目录不可访问，可能出现 `InitializeDefaultDrives` 警告，应另行检查命令结果。绝对路径 cmdlet 失败时，可改用工作区相对路径或 Python 工具。这些差异会告知 agent。
+
+超时或终止会结束整个进程树。已限制 CPU 时间、进程数量、提交内存和捕获输出；目前没有实现 Windows 下的单文件大小、打开文件数量限制。管道会话支持输入和轮询，不支持控制台中断，需要时使用会话终止。安装器、GUI、用户配置集集成，以及依赖不受限 COM/注册表访问的程序可能无法运行。缓存和生成文件应放在工作区，不要通过受限工具向 AstrBot 运行时安装依赖。
+
+本机集成测试需显式启用：启动准备完成后，设置 `ASTRBOT_TEST_WINDOWS_SANDBOX=1`，运行 `uv run pytest tests/test_windows_process_sandbox.py`。测试实际进程、工作区外访问拒绝、目录联接、并发身份隔离、只读目录、PowerShell 7/5.1、标准输入、文件搜索、超时清理和输出限制。测试不会请求 UAC。
+
 ## 启用沙盒环境
 
 目前，AstrBot 的沙盒环境驱动器支持：

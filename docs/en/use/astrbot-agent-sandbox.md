@@ -7,6 +7,22 @@ Starting from version `v4.12.0`, AstrBot introduced the Agent sandbox environmen
 
 ![](https://files.astrbot.app/docs/source/images/astrbot-agent-sandbox/image.png)
 
+## Native Windows Local isolation
+
+For native Windows 10/11 (including Home), select `Computer Use Runtime = local` in **Config → AI → Capabilities → Agent Computer Use**, then choose workspace filesystem access and enable execution for the appropriate role. No WSL, Hyper-V, or Docker is required. Existing Windows role defaults remain unchanged; host access with execution and networking is still full trust.
+
+Restart after enabling Local. At startup, AstrBot prepares read-only access to its Python and PowerShell runtimes and probes AppContainer execution. If protected installation directories require authorization, it makes at most one UAC request during that startup. These runtime grants persist, so subsequent startups normally need no prompt. Cancellation or failure disables restricted execution with an error; tools never prompt again or silently run without isolation. To retry, restart AstrBot. Workspace and extra tool directories must already be manageable by the account running AstrBot.
+
+When the UI shows “AppContainer · Not ready”, save the configuration and restart, allowing administrator approval if prompted. Expand “View diagnostic details” for the underlying error. Executing with entire-environment access keeps networking checked and locked. Hover over the question mark beside the lock for the Windows-specific explanation; switch to workspace access to disable networking.
+
+Restricted processes use a separate AppContainer identity for each execution and a Job Object for the process tree. Workspace and explicitly authorized directories receive temporary access grants, removed on session cleanup. System resources permitted by Windows and the read-only runtimes remain visible. This is an ACL boundary, not bubblewrap's filesystem namespace: paths are not hidden or remapped at the OS level. The network toggle controls AppContainer network capabilities; enabling it does not guarantee localhost access. Host filesystem access combined with disabled networking is unsupported and is rejected.
+
+PowerShell 7 is preferred; Windows PowerShell 5.1 is the fallback. Restricted shells start at `Workspace:\`, a PowerShell drive pointing to the real workspace, so ordinary relative-path cmdlets and Python subprocesses work without granting access to parent directories. Native programs need relative or real filesystem paths, not `Workspace:\` paths. An `InitializeDefaultDrives` warning may appear because parent directories are inaccessible; check the command result separately. If an absolute-path cmdlet fails, use a workspace-relative path or the Python tool. These differences are included in the agent's instructions.
+
+Timeouts and termination stop the entire process tree. CPU time, process count, committed memory, and captured output are bounded; Windows has no equivalent here for the per-file size and open-file limits. Pipe sessions support input and polling, but console interrupts are unavailable. Use session termination when needed. Installers, GUI programs, user-profile integrations, and programs that require unrestricted COM/registry access may not work. Keep caches and generated files in the workspace; do not install into AstrBot's runtime from a restricted tool.
+
+Native integration tests are opt-in: after startup preparation, set `ASTRBOT_TEST_WINDOWS_SANDBOX=1` and run `uv run pytest tests/test_windows_process_sandbox.py`. They test real processes, outside-workspace denial, junctions, concurrent identities, read-only roots, PowerShell 7/5.1, stdin, file search, timeout cleanup, and output bounds. The tests never request UAC.
+
 ## Enabling the Sandbox Environment
 
 AstrBot currently supports the following sandbox drivers:
