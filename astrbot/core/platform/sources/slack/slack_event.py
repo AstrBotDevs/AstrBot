@@ -10,6 +10,7 @@ from slack_sdk.web.async_client import AsyncWebClient
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import (
+    At,
     BaseMessageComponent,
     File,
     Image,
@@ -121,6 +122,8 @@ class SlackMessageEvent(AstrMessageEvent):
         for segment in message_chain.chain:
             if isinstance(segment, Plain):
                 text_content += segment.text
+            elif isinstance(segment, At):
+                text_content += f"<@{segment.qq}>"
             else:
                 # 如果有文本内容，先添加文本块
                 if text_content.strip():
@@ -175,6 +178,8 @@ class SlackMessageEvent(AstrMessageEvent):
             for segment in message.chain:
                 if isinstance(segment, Plain):
                     parts.append(segment.text)
+                elif isinstance(segment, At):
+                    parts.append(f"<@{segment.qq}>")
                 elif isinstance(segment, File):
                     parts.append(f" [文件: {segment.name}] ")
                 elif isinstance(segment, Image):
