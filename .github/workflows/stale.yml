@@ -1,4 +1,4 @@
-# 标记并关闭长期不活跃的 Issue 和 PR
+# 自动关闭不活跃或不符合规范的 Issue 和 PR
 # 文档: https://github.com/actions/stale
 name: Close stale issues and PRs
 
@@ -17,6 +17,7 @@ jobs:
       pull-requests: write
 
     steps:
+      # 标记并关闭长期不活跃的 Issue 和 PR
       - uses: actions/stale@v11
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
@@ -77,4 +78,40 @@ jobs:
 
 
           # 有更新/评论自动移除 stale 标签并重新计时
+          remove-stale-when-updated: true
+
+      # 无归类标签的 issue
+      - uses: actions/stale@v11
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          operations-per-run: 200
+
+          # 只处理 Issue，禁用 PR
+          days-before-pr-stale: -1
+          days-before-pr-close: -1
+
+          # 3 天无活动标记 needs-triage，再 7 天关闭
+          days-before-issue-stale: 3
+          days-before-issue-close: 7
+          stale-issue-label: 'needs-triage'
+          # 处理没有下列标签的 issue
+          exempt-issue-labels: 'pinned,security,help wanted,wontfix,stale,bug,enhancement,question,documentation,invalid'
+
+          stale-issue-message: |
+            This issue has not been categorized (no bug/enhancement/question label) and will be closed in 7 day.
+            Please add an appropriate label or provide more information.
+
+            ---
+
+            该 Issue 提交后未被归类，7 天后将自动关闭。
+            请使用提供的提交模板重新提交或添加合适的标签并补充信息。
+          close-issue-message: |
+            This issue was closed because it was not categorized.
+            Feel free to reopen with more details.
+
+            ---
+
+            该 Issue 因未归类已自动关闭。可补充信息后重新打开。
+
+          # 有更新/评论自动移除 needs-triage 标签并重新计时
           remove-stale-when-updated: true
