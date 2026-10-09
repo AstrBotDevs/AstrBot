@@ -79,7 +79,7 @@ ChatUI supports these common workflows:
 
 ## Visual Configuration
 
-Select `Config` in the sidebar, then choose the profile to edit from the selector at the top. Settings are grouped into sections such as `AI`, `Platform`, and `Plugin`. Use the search control at the top to find a setting.
+Select `Config` in the sidebar, then choose the profile to edit from the selector at the top. Settings are grouped into sections such as `AI`, `Platform`, and `Plugin`. Use the search control at the top to find a setting. The profile selector, search button, and section navigation stay fixed while only the configuration pane on the right scrolls.
 
 - In `AI`, built-in AI settings have `Model`, `Persona`, `Capabilities`, and `Advanced` tabs. Use `… → Change execution mode` beside the AI heading to connect a third-party agent.
 - `Platform` contains administrator and message-trigger settings.
@@ -93,6 +93,8 @@ Use the `{}` icon labeled `Edit Configuration File` to edit the current profile 
 ### System Settings
 
 Global settings are under `System Settings` at the bottom of the sidebar:
+
+The page title and section navigation stay fixed while only the settings pane on the right scrolls.
 
 - `General`: timezone, external callback address, logs, and cache.
 - `Appearance`: theme colors.

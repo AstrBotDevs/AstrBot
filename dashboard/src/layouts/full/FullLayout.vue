@@ -32,7 +32,9 @@ const isViewportLockedRoute = computed(
   () =>
     isCurrentChatRoute.value ||
     isProviderPageRoute.value ||
-    isPlatformPageRoute.value,
+    isPlatformPageRoute.value ||
+    route.path === "/config" ||
+    route.path === "/settings",
 );
 const isFullScreenRoute = computed(
   () => isCurrentChatRoute.value || isPluginViewRoute.value,
@@ -208,15 +210,19 @@ onMounted(() => {
   padding: 0 !important;
   overflow: hidden;
   border-left: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+  border-right: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.1);
   border-radius: 12px;
 }
 
 /* On small screens there is no permanent sidebar to separate from, so the
-   card's left edge treatments would only read as stray lines. */
+   card's edge treatments would only read as stray lines. */
 @media (max-width: 959.98px) {
   :global(.page-wrapper) {
     --astrbot-content-gap: 0px;
     border-left: 0;
+    border-right: 0;
+    border-bottom: 0;
     border-radius: 0;
   }
 }
