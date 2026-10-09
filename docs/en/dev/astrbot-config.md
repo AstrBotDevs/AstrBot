@@ -177,6 +177,8 @@ Fixed prefix string when replying to messages. Default is empty.
 
 Message forwarding threshold. When the reply content exceeds a certain number of characters, the bot will fold the message into a QQ group "forwarded message" to prevent spamming.
 
+In WebUI, select the profile used by your bot and open `Access Control → Whitelist` to manage the following whitelist settings.
+
 #### `platform_settings.enable_id_white_list`
 
 Whether to enable the ID whitelist. Default is `true`. When enabled, only messages from IDs in the whitelist will be processed.

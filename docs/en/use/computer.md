@@ -92,7 +92,7 @@ If `Require AstrBot admin permission` is disabled, regular users behave much clo
 
 Admin IDs can be configured in:
 
-- `Config -> Platform -> General -> Administrator IDs`
+- `Config -> Access Control -> Administrators -> Administrator IDs`
 
 Users can get their own ID with `/sid`.
 

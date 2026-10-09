@@ -1,5 +1,10 @@
 # Unreleased
 
+- WebUI: Add model settings shortcuts beside selected models and inside model/fallback menus. Model edits save immediately for all profiles using that model.
+- WebUI: Move **Platform → General → Administrator IDs** to **Access Control → Administrators**, and **Platform → Whitelist** to **Access Control → Whitelist**. Rename Platform to Platforms & Messages. Order sections as AI, Platforms & Messages, Access Control, Plugin, and Extensions; remove the “configuration” suffix from section labels.
+- WebUI：模型选择器旁及模型、回退模型菜单内新增设置齿轮，模型设置保存后立即影响引用它的所有配置文件。
+- WebUI：**平台配置 → 基本 → 管理员 ID** 移至 **访问控制 → 管理员**，**平台配置 → 白名单** 移至 **访问控制 → 白名单**；平台分区改名为平台与消息；分区顺序调整为 AI、平台与消息、访问控制、插件、扩展功能，分区名称去掉“配置”后缀。
+
 - Generate numbered original-path notices in the image preparation stage during main-agent construction, including quoted images. After request hooks, apply the same size and format policy only to newly introduced image references and refresh their notices. Skipped and captioned attachments retain explicit status without taking a visual index; animation labels identify frame montages.
 - Raise the model image input cap from 32 MiB to 64 MiB. Larger originals are skipped before reading image bytes, with a model notice retaining their paths and suggesting the file-reading tool or a smaller upload; accepted inputs still produce images strictly below 512 KiB.
 - Local Agent input images are always prepared as JPEG/PNG files strictly below 512 KiB. Compliant local images are reused without copying. Transparent previews retain PNG alpha; animations become 3×3 montages. Original attachment paths remain available to tools, and event-owned previews are deleted after use without a shared conversion cache.

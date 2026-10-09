@@ -15,7 +15,7 @@ AstrBot 内置的网页搜索功能依赖大模型提供 `函数调用` 能力�
 
 AstrBot 当前支持 7 种网页搜索源接入方式：`Tavily`、`BoCha`、`百度 AI 搜索`、`Brave`、`Firecrawl`、`Exa`、`AnySearch`。
 
-进入 `配置文件`，选择要修改的配置文件，在 `AI 配置 → 能力 → 网页搜索` 中启用网页搜索，您可选择 `Tavily`、`BoCha`、`百度 AI 搜索`、`Brave`、`Firecrawl` 、`Exa` 或`AnySearch`。填写所需参数后，点击右下角的 `保存配置`。
+进入 `配置文件`，选择要修改的配置文件，在 `AI → 能力 → 网页搜索` 中启用网页搜索，您可选择 `Tavily`、`BoCha`、`百度 AI 搜索`、`Brave`、`Firecrawl` 、`Exa` 或`AnySearch`。填写所需参数后，点击右下角的 `保存配置`。
 
 ### Tavily
 

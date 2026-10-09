@@ -237,7 +237,7 @@
         },
         "computer_use_require_admin": {
           "description": "Require Admin Permission for Sandbox",
-          "hint": "When enabled, AstrBot admin permission is required to use remote sandbox capabilities. Admins can be added in Platform Config. Use the /sid command to view admin IDs."
+          "hint": "When enabled, AstrBot admin permission is required to use remote sandbox capabilities. Add admins under Config -> Access Control -> Administrators -> Administrator IDs. Send /sid to the bot to get the ID."
         },
         "sandbox": {
           "booter": {
@@ -506,7 +506,7 @@
     }
   },
   "platform_group": {
-    "name": "Platform",
+    "name": "Platforms & Messages",
     "platform": {
       "description": "Message Platform Adapters",
       "app_id": {
@@ -927,9 +927,6 @@
     },
     "general": {
       "description": "General",
-      "admins_id": {
-        "description": "Administrator IDs"
-      },
       "platform_settings": {
         "unique_session": {
           "description": "Isolate Conversation",
@@ -960,29 +957,6 @@
       "disable_builtin_commands": {
         "description": "Disable Built-in Commands",
         "hint": "Disable all built-in AstrBot commands such as help, sid, new, etc."
-      }
-    },
-    "whitelist": {
-      "description": "Whitelist",
-      "platform_settings": {
-        "enable_id_white_list": {
-          "description": "Enable Whitelist",
-          "hint": "When enabled, only sessions in the whitelist will be responded to. If the whitelist is empty, the whitelist is disabled and all IDs are allowed."
-        },
-        "id_whitelist": {
-          "description": "Whitelist ID List",
-          "hint": "Use /sid to get IDs. If the list is empty, it means whitelist is disabled (all IDs are in the whitelist)."
-        },
-        "id_whitelist_log": {
-          "description": "Output Logs",
-          "hint": "When enabled, INFO level logs will be output when a message doesn't pass the whitelist."
-        },
-        "wl_ignore_admin_on_group": {
-          "description": "Administrator Group Messages Bypass ID Whitelist"
-        },
-        "wl_ignore_admin_on_friend": {
-          "description": "Administrator Private Messages Bypass ID Whitelist"
-        }
       }
     },
     "rate_limit": {
@@ -1079,6 +1053,39 @@
               "hint": "Enter Unicode emoji symbols, e.g., 👍, 🤔, ⏳"
             }
           }
+        }
+      }
+    }
+  },
+  "access_group": {
+    "name": "Access Control",
+    "admins": {
+      "description": "Administrators",
+      "admins_id": {
+        "description": "Administrator IDs",
+        "hint": "Send the /sid command to the bot to get the ID."
+      }
+    },
+    "whitelist": {
+      "description": "Whitelist",
+      "platform_settings": {
+        "enable_id_white_list": {
+          "description": "Enable Whitelist",
+          "hint": "When enabled, only sessions in the whitelist will be responded to."
+        },
+        "id_whitelist": {
+          "description": "Whitelist ID List",
+          "hint": "Send the /sid command to the bot to get the ID. An empty list disables the whitelist."
+        },
+        "id_whitelist_log": {
+          "description": "Log Blocked Messages",
+          "hint": "Log messages that fail whitelist checks."
+        },
+        "wl_ignore_admin_on_group": {
+          "description": "Administrator Group Messages Bypass ID Whitelist"
+        },
+        "wl_ignore_admin_on_friend": {
+          "description": "Administrator Private Messages Bypass ID Whitelist"
         }
       }
     }
