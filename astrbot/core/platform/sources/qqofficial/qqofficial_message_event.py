@@ -29,6 +29,9 @@ from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import At, File, Image, Plain, Record, Video
 from astrbot.api.platform import AstrBotMessage, Group, PlatformMetadata
+from astrbot.core.platform.sources.qqofficial.qq_markdown_math import (
+    QQMarkdownMathState,
+)
 from astrbot.core.platform.sources.qqofficial.qqofficial_chunked_upload import (
     QQOFFICIAL_CHUNKED_UPLOAD_THRESHOLD,
     QQOfficialChunkedUploader,
@@ -437,6 +440,16 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
         # 根据消息链的 use_markdown_ 标记决定发送模式
         use_md = getattr(self.send_buffer, "use_markdown_", None)
+        math_state = getattr(self, "_qq_markdown_math_state", None)
+        if math_state is None:
+            math_state = QQMarkdownMathState()
+            self._qq_markdown_math_state = math_state
+        if use_md is False:
+            math_state.clear()
+        else:
+            # QQ clips the right edge of display equations inside lists.
+            # Keep streaming deltas intact; relayout the complete final card.
+            plain_text, stream = math_state.prepare(plain_text, stream)
         if use_md is False:
             payload: dict = {
                 "content": plain_text,
