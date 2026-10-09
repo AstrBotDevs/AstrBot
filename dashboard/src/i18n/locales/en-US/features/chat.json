@@ -239,6 +239,8 @@
     "close": "Close"
   },
   "errors": {
+    "messageProcessingFailed": "Message processing failed. Check the AstrBot logs and try again.",
+    "ffmpegNotFound": "Audio processing failed: FFmpeg was not found in the AstrBot runtime environment. Install FFmpeg and ensure it is in PATH, then try again.",
     "sendMessageFailed": "Failed to send message, please try again",
     "createSessionFailed": "Failed to create session, please refresh the page"
   },

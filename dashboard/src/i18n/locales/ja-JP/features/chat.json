@@ -239,6 +239,8 @@
     "close": "閉じる"
   },
   "errors": {
+    "messageProcessingFailed": "メッセージの処理に失敗しました。AstrBot のログを確認してから、もう一度お試しください。",
+    "ffmpegNotFound": "音声の処理に失敗しました：AstrBot の実行環境に FFmpeg が見つかりません。FFmpeg をインストールし、PATH に追加してから、もう一度お試しください。",
     "sendMessageFailed": "メッセージの送信に失敗しました。もう一度お試しください",
     "createSessionFailed": "セッションの作成に失敗しました。ページを再読み込みしてください"
   },
