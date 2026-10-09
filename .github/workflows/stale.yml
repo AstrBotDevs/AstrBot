@@ -1,20 +1,12 @@
-# 本工作流用于标记并关闭长期不活跃的 Issue。
-# 目前仅针对带 `bug` 标签的 Issue 生效，不会处理 PR。
-#
+# 标记并关闭长期不活跃的 Issue 和 PR
 # 文档: https://github.com/actions/stale
-name: Mark stale bug issues
+name: Close stale issues and PRs
 
 on:
   schedule:
     # 每天 UTC 08:30 执行 (北京时间 16:30)
     - cron: '30 8 * * *'
   workflow_dispatch:
-    inputs:
-      dry-run:
-        description: '仅预览, 不实际执行 (Dry run mode)'
-        required: false
-        default: true
-        type: boolean
 
 jobs:
   stale:
@@ -22,6 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       issues: write
+      pull-requests: write
 
     steps:
       - uses: actions/stale@v11
@@ -29,28 +22,23 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           operations-per-run: 200
 
-          # 只处理带 bug 标签的 Issue
-          any-of-labels: 'bug'
-
-          # 不处理 PR
-          days-before-pr-stale: -1
-          days-before-pr-close: -1
-
-          # 不活跃判定与关闭策略: 先标记 stale, 再延迟关闭
+          # Issue 策略
+          # 60 天无活动标记 stale, 再过 30 天关闭
           days-before-issue-stale: 60
           days-before-issue-close: 30
-
           stale-issue-label: 'stale'
+          # 豁免标签 (此标签不会自动关闭)
+          exempt-issue-labels: 'pinned,security,help wanted,wontfix'
+
           stale-issue-message: |
             This issue has been automatically marked as **stale** because it has not had any activity.
-            It will be closed in a certain period of time if no further activity occurs.
+            It will be closed in 30 days if no further activity occurs.
             If this issue is still relevant, please leave a comment.
 
             ---
 
-            该 Issue 已较长时间无活动, 已被标记为 `stale`。
-            如无后续活动, 将在一段时间后自动关闭。
-            如仍需跟进, 请回复评论。
+            该 Issue 已 60 天无活动, 已被标记为 `stale`。
+            如 30 天内无后续活动, 将自动关闭。如仍需跟进, 请回复评论。
           close-issue-message: |
             This issue has been automatically closed due to inactivity.
             If the problem still exists, feel free to reopen or create a new issue with updated information.
@@ -60,6 +48,33 @@ jobs:
             该 Issue 因长期无活动已自动关闭。
             如问题仍存在, 欢迎补充复现信息并重新打开或新建 Issue。
 
-          remove-stale-when-updated: true
 
-          debug-only: ${{ github.event_name == 'workflow_dispatch' && inputs.dry-run }}
+          # PR 策略
+          # 60 天无活动标记 stale, 再过 30 天关闭
+          days-before-pr-stale: 60
+          days-before-pr-close: 30
+          stale-pr-label: 'stale'
+          # 豁免标签 (此标签不会自动关闭)
+          exempt-pr-labels: 'dependencies,security'
+          exempt-draft-pr: true
+
+          stale-pr-message: |
+            This PR has been automatically marked as **stale** because it has not had any activity.
+            It will be closed in 30 days if no further activity occurs.
+            Please push updates or ping a maintainer for review.
+
+            ---
+
+            该 PR 已 60 天无更新, 已被标记为 `stale`。
+            如 30 天内无后续活动, 将自动关闭。请更新代码或联系维护者 review。
+          close-pr-message: |
+            This PR has been automatically closed due to inactivity.
+            Feel free to reopen once the changes are complete.
+
+            ---
+
+            该 PR 因长期无更新已自动关闭。完成修改后可重新打开。
+
+
+          # 有更新/评论自动移除 stale 标签并重新计时
+          remove-stale-when-updated: true
