@@ -3,6 +3,7 @@ import copy
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import botpy.errors
 import botpy.message
 import pytest
 
@@ -167,3 +168,82 @@ async def test_real_multiframe_stream_restarts_snapshot_index():
     assert transport.frames[-1]["stream"]["state"] == 10
     assert transport.frames[-1]["stream"]["reset"] is True
     assert list(transport.cards.values()) == [normalize_qq_list_math(SOURCE + "\n")]
+
+
+class LimitedTransport(Transport):
+    """Mimics QQ: oversized frames and unterminated final md frames fail."""
+
+    LIMIT = 4096
+
+    def accept(self, payload):
+        stream = payload.get("stream") or {}
+        text = (
+            (payload.get("markdown") or {}).get("content")
+            or payload.get("content")
+            or ""
+        )
+        if stream and len(text.encode("utf-8")) > self.LIMIT:
+            raise botpy.errors.ServerError("流式消息分片过长，请拆分发送")
+        if stream.get("state") == 10 and not text.endswith("\n"):
+            raise botpy.errors.ServerError("流式消息md分片需要\\n结束")
+        return super().accept(payload)
+
+
+LONG_SOURCE = "".join(
+    f"{n}. 第 {n} 步推导：\n   $$\\sigma_{{{n}}} = \\frac{{1}}{{R_x - L^2}}$$\n"
+    for n in range(1, 120)
+)
+
+
+@pytest.mark.asyncio
+async def test_long_relayout_snapshot_is_split_into_accepted_frames():
+    transport = LimitedTransport()
+    event = make_event(transport)
+    assert len(LONG_SOURCE.encode("utf-8")) > transport.LIMIT
+
+    async def generate():
+        step = 1500
+        for start in range(0, len(LONG_SOURCE), step):
+            if start:
+                await asyncio.sleep(1.05)
+            yield MessageChain(
+                [Plain(text=LONG_SOURCE[start : start + step])], use_markdown_=True
+            )
+
+    await event.send_streaming(generate())
+    expected = normalize_qq_list_math(LONG_SOURCE + "\n")
+    assert expected != LONG_SOURCE + "\n"
+    assert list(transport.cards.values()) == [expected]
+    resets = [i for i, f in enumerate(transport.frames) if f["stream"].get("reset")]
+    assert len(resets) == 1
+    tail = transport.frames[resets[0] :]
+    assert len(tail) > 1
+    assert [f["stream"]["index"] for f in tail] == list(range(1, len(tail) + 1))
+    assert [f["stream"]["state"] for f in tail] == [1] * (len(tail) - 1) + [10]
+
+
+@pytest.mark.asyncio
+async def test_oversized_stream_delta_is_split_and_cursor_advances():
+    transport = LimitedTransport()
+    event = make_event(transport)
+    big = "长句子测试。" * 900 + "\n"
+    assert len(big.encode("utf-8")) > transport.LIMIT
+
+    async def generate():
+        yield MessageChain([Plain(text=big)], use_markdown_=False)
+        await asyncio.sleep(1.05)
+        yield MessageChain([Plain(text="end")], use_markdown_=False)
+
+    await event.send_streaming(generate())
+    assert list(transport.cards.values()) == [big + "end\n"]
+    indexes = [f["stream"]["index"] for f in transport.frames]
+    assert indexes == list(range(len(indexes)))
+    assert transport.frames[-1]["stream"]["state"] == 10
+
+
+def test_split_stream_text_respects_byte_budget():
+    text = "a\n" + "公式" * 700 + "\n" + "b" * 10 + "\n"
+    pieces = QQOfficialMessageEvent._split_stream_text(text, 1000)
+    assert "".join(pieces) == text
+    assert all(len(p.encode("utf-8")) <= 1000 for p in pieces)
+    assert QQOfficialMessageEvent._split_stream_text("short", 1000) == ["short"]
