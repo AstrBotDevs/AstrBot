@@ -17,6 +17,7 @@ These paths use the current default sidebar. If you customized it, open `System 
 | Config → System Config | System Settings → General, Appearance, Network, or Security, depending on the setting |
 | Commands / Command Management | Extensions → Handlers → Command |
 | Standalone MCP / Skills entries | Extensions → MCP Servers / Skills |
+| Welcome page / `/welcome` | Old links open the dashboard; open Getting Started from System Settings → Maintenance → Reopen setup |
 | Custom Rules / Future Tasks / SubAgents | Custom Rules is under the sidebar `System` group; Future Tasks and SubAgents are under the `Extensions` group |
 
 Old log, trace, conversation, and statistics URLs still redirect to the corresponding tabs. Agent runners are now saved in each profile; they are no longer created as model providers. See [Agent Runners](./agent-runner.md) for the setup steps.
@@ -30,7 +31,37 @@ After starting AstrBot, you can access the admin panel by visiting `http://local
 
 ## Login
 
-For first-time login, AstrBot generates a random initial password and prints it in startup logs. Please read the startup log line containing the WebUI credential and use that password to log in (username is usually `astrbot`).
+For first-time login, AstrBot generates a random initial password and prints it in startup logs. Please read the startup log line containing the WebUI credential and use that password to log in (username is usually `astrbot`). Change the password immediately after logging in.
+
+## Getting Started
+
+On a new AstrBot installation, Getting Started opens after you set up your account. It helps you connect a model and try a conversation. It does not open automatically after an upgrade, a password reset, or a later login.
+
+### Set Up AstrBot
+
+1. **Read the usage notice**, then select Next.
+2. **Connect a model**: choose a provider and enter the API Key, API Base URL, and model name required by your service. You can also use Fetch models to choose a model. Open Advanced Configuration if you need other options, then select Next to save.
+3. **Send a message**: try a conversation on the same page and check that the model replies before continuing. This trial supports text only; attachments, model switching, and voice input are available in regular ChatUI.
+4. **Connect a messaging platform**: choose QQ, Lark, Telegram, or another platform, fill in its connection details, and save. If you only want to chat in your browser, skip this step and use ChatUI. After saving, check the messaging platform to confirm the bot is connected.
+
+When you finish, select Get started on the welcome screen to open the dashboard.
+
+![Enter your model connection details](/webui-onboarding-en.png)
+
+![Try a conversation during setup](/webui-onboarding-trial-en.png)
+
+### Skip or Return Later
+
+You must finish account setup, but the rest of the guide is optional. Skip entire setup on the first step opens the dashboard. Skip on later steps leaves the current form unsaved. Without a configured model, the chat trial is skipped.
+
+To return, open `System Settings → Maintenance → Reopen setup`. Existing model and messaging platform settings are filled in automatically. Continue with those settings or edit and save them; you do not need to create them again.
+
+> [!TIP]
+> Reopening the guide does not clear your configuration. Saved settings are kept, and skipping a later step does not undo earlier saves. Selecting Save in a platform's configuration profile editor also takes effect immediately.
+
+![Review or edit an existing messaging platform](/webui-onboarding-adapter-en.png)
+
+The guide does not install plugins or configure computer access. Install plugins from `Extensions → Plugins → AstrBot Plugin Market`. Computer-access permissions are under `Config → AI → Capabilities → Agent Computer Use`.
 
 ## Two-Factor Authentication
 
@@ -97,7 +128,7 @@ Global settings are under `System Settings` at the bottom of the sidebar:
 - `Appearance`: sidebar and theme.
 - `Network`: HTTP proxy, Python package sources, and GitHub proxy. For the address to use when AstrBot runs in Docker, see [Deploy with Docker](/en/deploy/astrbot/docker.md).
 - `Security`: WebUI HTTPS, login rate limits, and TOTP.
-- `Maintenance`: backup, restore, and restart.
+- `Maintenance`: backup, restore, restart, and Reopen setup.
 - `OpenAPI`: developer access keys.
 
 System configuration changes save automatically. Check for a successful save message and restart AstrBot if the page indicates that a restart is required.

@@ -101,6 +101,11 @@
   },
   "system": {
     "title": "System",
+    "onboarding": {
+      "title": "First-run setup",
+      "subtitle": "Revisit models, test ChatUI, and configure messaging platforms without resetting existing settings.",
+      "button": "Reopen setup"
+    },
     "restart": {
       "title": "Restart",
       "subtitle": "Restart AstrBot",

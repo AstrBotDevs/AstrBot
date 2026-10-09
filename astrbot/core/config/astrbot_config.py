@@ -65,7 +65,9 @@ class AstrBotConfig(dict):
 
         if not self.check_exist():
             """不存在时载入默认配置"""
-            self.update(default_config)
+            self.update(copy.deepcopy(default_config))
+            if default_config is DEFAULT_CONFIG:
+                self["dashboard"]["onboarding_pending"] = True
             self.save_config(indent=4)
             object.__setattr__(self, "first_deploy", True)  # 标记第一次部署
 

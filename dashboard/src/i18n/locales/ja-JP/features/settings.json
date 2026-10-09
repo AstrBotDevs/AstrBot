@@ -101,6 +101,11 @@
   },
   "system": {
     "title": "システム",
+    "onboarding": {
+      "title": "初回セットアップ",
+      "subtitle": "既存の設定を保持したまま、モデルの再設定、ChatUI のテスト、メッセージプラットフォームの設定を行います。",
+      "button": "セットアップを再開"
+    },
     "restart": {
       "title": "再起動",
       "subtitle": "AstrBot を再起動",
