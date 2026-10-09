@@ -1487,8 +1487,8 @@ async def collect_initial_request(
                     )
                 )
                 if conversation is None:
-                    _set_llm_error_message(
-                        event,
+                    event.set_extra(
+                        LLM_ERROR_MESSAGE_EXTRA_KEY,
                         "The requested conversation no longer exists. Please send a new message.",
                     )
                     return None, None

@@ -430,7 +430,6 @@ class OpenApiService:
                         "selected_provider": selected_provider,
                         "selected_model": selected_model,
                         "flags": flags,
-                        "locale": post_data.get("locale"),
                         "message_id": message_id,
                         "_api_key_allow_admin_role": allow_admin_username,
                     },
