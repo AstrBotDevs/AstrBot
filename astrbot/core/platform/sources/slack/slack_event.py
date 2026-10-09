@@ -15,6 +15,7 @@ from astrbot.api.message_components import (
     File,
     Image,
     Plain,
+    Record,
 )
 from astrbot.api.platform import Group, MessageMember
 from astrbot.core.utils.media_utils import MediaResolver, file_uri_to_path
@@ -114,8 +115,18 @@ class SlackMessageEvent(AstrMessageEvent):
     async def _parse_slack_blocks(
         message_chain: MessageChain,
         web_client: AsyncWebClient,
+        channel_id: str | None = None,
     ):
-        """解析成 Slack 块格式"""
+        """Build Slack blocks and upload audio to the destination conversation.
+
+        Args:
+            message_chain: Message components to send.
+            web_client: Slack client used for uploads.
+            channel_id: Destination channel or user ID, required for audio uploads.
+
+        Returns:
+            Blocks and fallback text. Both are empty for audio-only uploads.
+        """
         blocks = []
         text_content = ""
 
@@ -124,6 +135,28 @@ class SlackMessageEvent(AstrMessageEvent):
                 text_content += segment.text
             elif isinstance(segment, At):
                 text_content += f"<@{segment.qq}>"
+            elif isinstance(segment, Record):
+                try:
+                    if not channel_id:
+                        raise ValueError("Slack audio upload requires a destination.")
+                    path = Path(await segment.convert_to_file_path())
+                    # File uploads require a conversation ID, not a user ID.
+                    if channel_id.startswith(("U", "W")):
+                        response = await web_client.conversations_open(users=channel_id)
+                        channel_id = response["channel"]["id"]
+                    response = await web_client.files_upload_v2(
+                        file=await asyncio.to_thread(path.read_bytes),
+                        filename=path.name,
+                        channel=channel_id,
+                    )
+                    if not response["ok"]:
+                        raise RuntimeError(response.get("error", "Audio upload failed"))
+                except Exception:
+                    logger.warning(
+                        "Slack audio upload failed; sending text instead.",
+                        exc_info=True,
+                    )
+                    text_content += segment.text or "[Audio]"
             else:
                 # 如果有文本内容，先添加文本块
                 if text_content.strip():
@@ -155,7 +188,11 @@ class SlackMessageEvent(AstrMessageEvent):
         blocks, text = await SlackMessageEvent._parse_slack_blocks(
             message,
             self.web_client,
+            channel_id=self.get_group_id() or self.get_sender_id(),
         )
+        if not blocks and not text.strip():
+            await super().send(message)
+            return
 
         try:
             if self.get_group_id():
@@ -184,6 +221,8 @@ class SlackMessageEvent(AstrMessageEvent):
                     parts.append(f" [文件: {segment.name}] ")
                 elif isinstance(segment, Image):
                     parts.append(" [图片] ")
+                elif isinstance(segment, Record):
+                    parts.append(segment.text or "[Audio]")
             fallback_text = "".join(parts)
 
             if self.get_group_id():

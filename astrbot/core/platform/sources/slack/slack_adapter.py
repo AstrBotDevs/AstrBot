@@ -83,19 +83,21 @@ class SlackAdapter(Platform):
         session: MessageSesion,
         message_chain: MessageChain,
     ) -> None:
+        channel_id = session.session_id
+        if session.message_type == MessageType.GROUP_MESSAGE:
+            channel_id = channel_id.split("_")[-1]
         blocks, text = await SlackMessageEvent._parse_slack_blocks(
             message_chain=message_chain,
             web_client=self.web_client,
+            channel_id=channel_id,
         )
+        if not blocks and not text.strip():
+            await super().send_by_session(session, message_chain)
+            return
 
         try:
             if session.message_type == MessageType.GROUP_MESSAGE:
                 # 发送到频道
-                channel_id = (
-                    session.session_id.split("_")[-1]
-                    if "_" in session.session_id
-                    else session.session_id
-                )
                 await self.web_client.chat_postMessage(
                     channel=channel_id,
                     text=text,
